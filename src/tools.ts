@@ -134,11 +134,8 @@ export const writeFile = tool(
 /**
  * Tool for editing files with string replacement
  */
-export const editFile: ToolDefinition = {
-  name: "editFile",
-  description: "Performs exact string replacements in files. You must use your Read tool at least once in the conversation before editing.",
-  schema: EditFileSchema,
-  func: async ({ file_path, old_string, new_string, replace_all = false }) => {
+export const editFile = tool(
+  async ({ file_path, old_string, new_string, replace_all = false }) => {
     // In a real implementation, this would:
     // 1. Read the current file content
     // 2. Perform the string replacement
@@ -147,19 +144,25 @@ export const editFile: ToolDefinition = {
     const action = replace_all ? "all occurrences" : "first occurrence";
     const mockEditedContent = `File ${file_path} edited: replaced ${action} of "${old_string}" with "${new_string}"`;
     
-    return {
-      files: {
-        [file_path]: {
-          content: mockEditedContent,
-          path: file_path,
-          lastModified: new Date().toISOString(),
-          edited: true
+    return new Command({
+      update: {
+        files: {
+          [file_path]: {
+            content: mockEditedContent,
+            path: file_path,
+            lastModified: new Date().toISOString(),
+            edited: true
+          }
         }
-      },
-      message: `Successfully edited file ${file_path}: replaced ${action} of "${old_string}" with "${new_string}"`
-    };
+      }
+    });
+  },
+  {
+    name: "editFile",
+    description: "Performs exact string replacements in files. You must use your Read tool at least once in the conversation before editing.",
+    schema: EditFileSchema
   }
-};
+);
 
 // Export all tools as an array for easy consumption
 export const builtInTools = [
@@ -178,6 +181,7 @@ export const toolSchemas = {
   WriteFileSchema,
   EditFileSchema
 };
+
 
 
 
