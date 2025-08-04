@@ -1,7 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { Command } from "@langchain/langgraph";
-import { DeepAgentState } from "./state.js";
 import { Todo } from "./types.js";
 import { WRITE_TODOS_DESCRIPTION, EDIT_DESCRIPTION, TOOL_DESCRIPTION } from "./prompts.js";
 
@@ -224,3 +223,4 @@ export const builtInTools = [
   writeFile,
   editFile
 ];
+
