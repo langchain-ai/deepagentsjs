@@ -120,7 +120,7 @@ export const readFile = tool(
   },
   {
     name: "readFile", 
-    description: TOOL_DESCRIPTION,
+    description: "Reads a file from the local filesystem",
     schema: ReadFileSchema
   }
 );
@@ -221,6 +221,7 @@ export const builtInTools = [
   writeFile,
   editFile
 ];
+
 
 
 
