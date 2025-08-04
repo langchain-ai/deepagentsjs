@@ -81,26 +81,29 @@ export const ls = tool(
 /**
  * Tool for reading file contents
  */
-export const readFile: ToolDefinition = {
-  name: "readFile",
-  description: "Reads a file from the local filesystem. You can access any file directly by using this tool.",
-  schema: ReadFileSchema,
-  func: async ({ file_path, line_offset = 1, limit = 2000 }) => {
+export const readFile = tool(
+  async ({ file_path, line_offset = 1, limit = 2000 }) => {
     // Simulate file reading - in a real implementation this would use fs
     const mockContent = `Mock file content for ${file_path} (lines ${line_offset}-${line_offset + limit - 1}):\n// This would contain actual file contents\n// Implementation would use fs.readFileSync or similar`;
     
-    return {
-      files: {
-        [file_path]: {
-          content: mockContent,
-          path: file_path,
-          lastModified: new Date().toISOString()
+    return new Command({
+      update: {
+        files: {
+          [file_path]: {
+            content: mockContent,
+            path: file_path,
+            lastModified: new Date().toISOString()
+          }
         }
-      },
-      message: `Successfully read file: ${file_path}`
-    };
+      }
+    });
+  },
+  {
+    name: "readFile",
+    description: "Reads a file from the local filesystem. You can access any file directly by using this tool.",
+    schema: ReadFileSchema
   }
-};
+);
 
 /**
  * Tool for writing content to files
@@ -172,6 +175,7 @@ export const toolSchemas = {
   WriteFileSchema,
   EditFileSchema
 };
+
 
 
 
