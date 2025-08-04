@@ -201,7 +201,7 @@ export const writeFile = tool(
  * Tool for editing files with string replacement
  */
 export const editFile = tool(
-  async ({ file_path, old_string, new_string, replace_all = false }: z.infer<typeof EditFileSchema>): Promise<Command> => {
+  async ({ file_path, old_string, new_string, replace_all = false }, config): Promise<Command> => {
     try {
       // In a real implementation, this would:
       // 1. Read the current file content
@@ -219,7 +219,13 @@ export const editFile = tool(
               lastModified: new Date().toISOString(),
               edited: true
             }
-          }
+          },
+          messages: [
+            new ToolMessage({
+              content: `Successfully edited file: ${file_path}`,
+              tool_call_id: config.toolCall.id,
+            })
+          ]
         }
       });
     } catch (error) {
@@ -232,7 +238,13 @@ export const editFile = tool(
               lastModified: new Date().toISOString(),
               error: true
             }
-          }
+          },
+          messages: [
+            new ToolMessage({
+              content: `Error editing file ${file_path}: ${error}`,
+              tool_call_id: config.toolCall.id,
+            })
+          ]
         }
       });
     }
@@ -252,6 +264,7 @@ export const builtInTools = [
   writeFile,
   editFile
 ];
+
 
 
 
