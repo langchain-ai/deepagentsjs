@@ -32,33 +32,28 @@ const EditFileSchema = z.object({
   replace_all: z.boolean().optional().describe("Replace all occurrences instead of requiring uniqueness")
 });
 
-// Tool interface that matches LangGraph's tool pattern
-interface ToolDefinition {
-  name: string;
-  description: string;
-  schema: z.ZodSchema;
-  func: (input: any) => Promise<any>;
-}
-
 /**
  * Tool for creating and managing todo lists
  */
-export const writeTodos: ToolDefinition = {
-  name: "writeTodos",
-  description: "Use this tool to create and manage a structured task list for your current work session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.",
-  schema: WriteTodosSchema,
-  func: async ({ todos }) => {
+export const writeTodos = tool(
+  async ({ todos }) => {
     const todoItems = todos.map((todo: any) => ({
       content: todo.content,
       status: todo.status
     }));
 
-    return {
-      todos: todoItems,
-      message: `Successfully updated todo list with ${todos.length} items`
-    };
+    return new Command({
+      update: {
+        todos: todoItems
+      }
+    });
+  },
+  {
+    name: "writeTodos",
+    description: "Use this tool to create and manage a structured task list for your current work session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.",
+    schema: WriteTodosSchema
   }
-};
+);
 
 /**
  * Tool for listing directory contents
@@ -175,5 +170,6 @@ export const toolSchemas = {
   WriteFileSchema,
   EditFileSchema
 };
+
 
 
