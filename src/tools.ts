@@ -93,7 +93,7 @@ export const ls = tool(
  * Tool for reading file contents
  */
 export const readFile = tool(
-  async ({ file_path, line_offset = 1, limit = 2000 }: z.infer<typeof ReadFileSchema>): Promise<Command> => {
+  async ({ file_path, line_offset = 1, limit = 2000 }, config): Promise<Command> => {
     try {
       // Simulate file reading - in a real implementation this would use fs
       const mockContent = `// Mock file content for ${file_path}\n// This would contain actual file contents\n// Line ${line_offset} onwards, up to ${limit} lines`;
@@ -107,7 +107,13 @@ export const readFile = tool(
               path: file_path,
               lastModified: new Date().toISOString()
             }
-          }
+          },
+          messages: [
+            new ToolMessage({
+              content: `Successfully read file: ${file_path}`,
+              tool_call_id: config.toolCall.id,
+            })
+          ]
         }
       });
     } catch (error) {
@@ -120,7 +126,13 @@ export const readFile = tool(
               lastModified: new Date().toISOString(),
               error: true
             }
-          }
+          },
+          messages: [
+            new ToolMessage({
+              content: `Error reading file ${file_path}: ${error}`,
+              tool_call_id: config.toolCall.id,
+            })
+          ]
         }
       });
     }
@@ -228,6 +240,7 @@ export const builtInTools = [
   writeFile,
   editFile
 ];
+
 
 
 
