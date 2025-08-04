@@ -96,18 +96,7 @@ export const readFile = tool(
 export const writeFile = tool(
   async ({ file_path, content }) => {
     // Simulate file writing - in a real implementation this would use fs
-    return new Command({
-      update: {
-        files: {
-          [file_path]: {
-            content: content,
-            path: file_path,
-            lastModified: new Date().toISOString(),
-            written: true
-          }
-        }
-      }
-    });
+    return `Successfully wrote ${content.length} characters to file: ${file_path}`;
   },
   {
     name: "writeFile",
@@ -166,6 +155,7 @@ export const toolSchemas = {
   WriteFileSchema,
   EditFileSchema
 };
+
 
 
 
