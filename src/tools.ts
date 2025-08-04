@@ -58,11 +58,8 @@ export const writeTodos = tool(
 /**
  * Tool for listing directory contents
  */
-export const ls: ToolDefinition = {
-  name: "ls",
-  description: "List contents of a directory",
-  schema: LsSchema,
-  func: async ({ path = "." }) => {
+export const ls = tool(
+  async ({ path = "." }) => {
     // Simulate file system listing - in a real implementation this would use fs
     const mockFiles = [
       "package.json",
@@ -73,8 +70,13 @@ export const ls: ToolDefinition = {
     ];
     
     return `Contents of ${path}:\n${mockFiles.join('\n')}`;
+  },
+  {
+    name: "ls",
+    description: "List contents of a directory",
+    schema: LsSchema
   }
-};
+);
 
 /**
  * Tool for reading file contents
@@ -170,6 +172,7 @@ export const toolSchemas = {
   WriteFileSchema,
   EditFileSchema
 };
+
 
 
 
