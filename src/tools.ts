@@ -37,7 +37,7 @@ const EditFileSchema = z.object({
  * Tool for creating and managing todo lists
  */
 export const writeTodos = tool(
-  async ({ todos }: z.infer<typeof WriteTodosSchema>): Promise<Command> => {
+  async ({ todos }, config): Promise<Command> => {
     const todoItems = todos.map(todo => ({
       content: todo.content,
       status: todo.status
@@ -45,7 +45,13 @@ export const writeTodos = tool(
 
     return new Command({
       update: {
-        todos: todoItems
+        todos: todoItems,
+        messages: [
+          new ToolMessage({
+            content: `Successfully updated todo list with ${todos.length} items`,
+            tool_call_id: config.toolCall.id,
+          })
+        ]
       }
     });
   },
@@ -222,6 +228,7 @@ export const builtInTools = [
   writeFile,
   editFile
 ];
+
 
 
 
