@@ -208,7 +208,7 @@ export const editFile = tool(
   },
   {
     name: "editFile",
-    description: EDIT_DESCRIPTION,
+    description: "Performs exact string replacements in files",
     schema: EditFileSchema
   }
 );
@@ -221,6 +221,7 @@ export const builtInTools = [
   writeFile,
   editFile
 ];
+
 
 
 
