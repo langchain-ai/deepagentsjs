@@ -37,7 +37,7 @@ export type LanguageModelLike = BaseLanguageModel | string;
  * Generic type for tools
  * Mirrors Python's tool type flexibility
  */
-export type ToolLike = BaseTool | Function | Record<string, any>;
+export type ToolLike = StructuredTool | Function | Record<string, any>;
 
 /**
  * Generic constraint for state schemas
@@ -148,4 +148,5 @@ export interface CommandUpdate {
 export interface Command {
   update: CommandUpdate;
 }
+
 
