@@ -116,20 +116,7 @@ export const editFile = tool(
     // 3. Write the updated content back
     
     const action = replace_all ? "all occurrences" : "first occurrence";
-    const mockEditedContent = `File ${file_path} edited: replaced ${action} of "${old_string}" with "${new_string}"`;
-    
-    return new Command({
-      update: {
-        files: {
-          [file_path]: {
-            content: mockEditedContent,
-            path: file_path,
-            lastModified: new Date().toISOString(),
-            edited: true
-          }
-        }
-      }
-    });
+    return `Successfully edited file ${file_path}: replaced ${action} of "${old_string}" with "${new_string}"`;
   },
   {
     name: "editFile",
@@ -155,6 +142,7 @@ export const toolSchemas = {
   WriteFileSchema,
   EditFileSchema
 };
+
 
 
 
