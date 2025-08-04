@@ -1,7 +1,5 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { Command } from "@langchain/langgraph";
-import { ToolMessage } from "@langchain/core/messages";
 
 // Schema definitions for tool inputs
 const WriteTodosSchema = z.object({
@@ -37,27 +35,17 @@ const EditFileSchema = z.object({
  * Tool for creating and managing todo lists
  */
 export const writeTodos = tool(
-  async ({ todos }, config): Promise<Command> => {
+  async ({ todos }) => {
     const todoItems = todos.map(todo => ({
       content: todo.content,
       status: todo.status
     }));
 
-    return new Command({
-      update: {
-        todos: todoItems,
-        messages: [
-          new ToolMessage({
-            content: `Successfully updated todo list with ${todos.length} items`,
-            tool_call_id: config.toolCall.id,
-          })
-        ]
-      }
-    });
+    return `Successfully updated todo list with ${todos.length} items: ${todoItems.map(t => `${t.status}: ${t.content}`).join(', ')}`;
   },
   {
     name: "writeTodos",
-    description: "Use this tool to create and manage a structured task list for your current work session",
+    description: "Use this tool to create and manage a structured task list for your current work session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.",
     schema: WriteTodosSchema
   }
 );
@@ -66,21 +54,17 @@ export const writeTodos = tool(
  * Tool for listing directory contents
  */
 export const ls = tool(
-  async ({ path = "." }: z.infer<typeof LsSchema>): Promise<string> => {
-    try {
-      // Simulate file system listing - in a real implementation this would use fs
-      const mockFiles = [
-        "package.json",
-        "tsconfig.json", 
-        "src/",
-        "node_modules/",
-        "README.md"
-      ];
-      
-      return `Contents of ${path}:\n${mockFiles.join('\n')}`;
-    } catch (error) {
-      return `Error listing directory ${path}: ${error}`;
-    }
+  async ({ path = "." }) => {
+    // Simulate file system listing - in a real implementation this would use fs
+    const mockFiles = [
+      "package.json",
+      "tsconfig.json", 
+      "src/",
+      "node_modules/",
+      "README.md"
+    ];
+    
+    return `Contents of ${path}:\n${mockFiles.join('\n')}`;
   },
   {
     name: "ls",
@@ -93,53 +77,15 @@ export const ls = tool(
  * Tool for reading file contents
  */
 export const readFile = tool(
-  async ({ file_path, line_offset = 1, limit = 2000 }, config): Promise<Command> => {
-    try {
-      // Simulate file reading - in a real implementation this would use fs
-      const mockContent = `// Mock file content for ${file_path}\n// This would contain actual file contents\n// Line ${line_offset} onwards, up to ${limit} lines`;
-      
-      // Store file content in state using Command
-      return new Command({
-        update: {
-          files: {
-            [file_path]: {
-              content: mockContent,
-              path: file_path,
-              lastModified: new Date().toISOString()
-            }
-          },
-          messages: [
-            new ToolMessage({
-              content: `Successfully read file: ${file_path}`,
-              tool_call_id: config.toolCall.id,
-            })
-          ]
-        }
-      });
-    } catch (error) {
-      return new Command({
-        update: {
-          files: {
-            [file_path]: {
-              content: `Error reading file: ${error}`,
-              path: file_path,
-              lastModified: new Date().toISOString(),
-              error: true
-            }
-          },
-          messages: [
-            new ToolMessage({
-              content: `Error reading file ${file_path}: ${error}`,
-              tool_call_id: config.toolCall.id,
-            })
-          ]
-        }
-      });
-    }
+  async ({ file_path, line_offset = 1, limit = 2000 }) => {
+    // Simulate file reading - in a real implementation this would use fs
+    const mockContent = `Mock file content for ${file_path} (lines ${line_offset}-${line_offset + limit - 1}):\n// This would contain actual file contents\n// Implementation would use fs.readFileSync or similar`;
+    
+    return mockContent;
   },
   {
     name: "readFile", 
-    description: "Reads a file from the local filesystem",
+    description: "Reads a file from the local filesystem. You can access any file directly by using this tool.",
     schema: ReadFileSchema
   }
 );
@@ -148,47 +94,9 @@ export const readFile = tool(
  * Tool for writing content to files
  */
 export const writeFile = tool(
-  async ({ file_path, content }, config): Promise<Command> => {
-    try {
-      // Simulate file writing - in a real implementation this would use fs
-      return new Command({
-        update: {
-          files: {
-            [file_path]: {
-              content: content,
-              path: file_path,
-              lastModified: new Date().toISOString(),
-              written: true
-            }
-          },
-          messages: [
-            new ToolMessage({
-              content: `Successfully wrote file: ${file_path}`,
-              tool_call_id: config.toolCall.id,
-            })
-          ]
-        }
-      });
-    } catch (error) {
-      return new Command({
-        update: {
-          files: {
-            [file_path]: {
-              content: `Error writing file: ${error}`,
-              path: file_path,
-              lastModified: new Date().toISOString(),
-              error: true
-            }
-          },
-          messages: [
-            new ToolMessage({
-              content: `Error writing file ${file_path}: ${error}`,
-              tool_call_id: config.toolCall.id,
-            })
-          ]
-        }
-      });
-    }
+  async ({ file_path, content }) => {
+    // Simulate file writing - in a real implementation this would use fs
+    return `Successfully wrote ${content.length} characters to file: ${file_path}`;
   },
   {
     name: "writeFile",
@@ -201,57 +109,18 @@ export const writeFile = tool(
  * Tool for editing files with string replacement
  */
 export const editFile = tool(
-  async ({ file_path, old_string, new_string, replace_all = false }, config): Promise<Command> => {
-    try {
-      // In a real implementation, this would:
-      // 1. Read the current file content
-      // 2. Perform the string replacement
-      // 3. Write the updated content back
-      
-      const mockEditedContent = `// File ${file_path} edited\n// Replaced "${old_string}" with "${new_string}"\n// Replace all: ${replace_all}`;
-      
-      return new Command({
-        update: {
-          files: {
-            [file_path]: {
-              content: mockEditedContent,
-              path: file_path,
-              lastModified: new Date().toISOString(),
-              edited: true
-            }
-          },
-          messages: [
-            new ToolMessage({
-              content: `Successfully edited file: ${file_path}`,
-              tool_call_id: config.toolCall.id,
-            })
-          ]
-        }
-      });
-    } catch (error) {
-      return new Command({
-        update: {
-          files: {
-            [file_path]: {
-              content: `Error editing file: ${error}`,
-              path: file_path,
-              lastModified: new Date().toISOString(),
-              error: true
-            }
-          },
-          messages: [
-            new ToolMessage({
-              content: `Error editing file ${file_path}: ${error}`,
-              tool_call_id: config.toolCall.id,
-            })
-          ]
-        }
-      });
-    }
+  async ({ file_path, old_string, new_string, replace_all = false }) => {
+    // In a real implementation, this would:
+    // 1. Read the current file content
+    // 2. Perform the string replacement
+    // 3. Write the updated content back
+    
+    const action = replace_all ? "all occurrences" : "first occurrence";
+    return `Successfully edited file ${file_path}: replaced ${action} of "${old_string}" with "${new_string}"`;
   },
   {
     name: "editFile",
-    description: "Performs exact string replacements in files",
+    description: "Performs exact string replacements in files. You must use your Read tool at least once in the conversation before editing.",
     schema: EditFileSchema
   }
 );
@@ -264,6 +133,7 @@ export const builtInTools = [
   writeFile,
   editFile
 ];
+
 
 
 
