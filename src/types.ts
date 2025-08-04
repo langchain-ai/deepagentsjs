@@ -1,4 +1,4 @@
-import { BaseTool } from "@langchain/core/tools";
+import { StructuredTool } from "@langchain/core/tools";
 import { BaseLanguageModel } from "@langchain/core/language_models/base";
 
 /**
@@ -148,3 +148,4 @@ export interface CommandUpdate {
 export interface Command {
   update: CommandUpdate;
 }
+
