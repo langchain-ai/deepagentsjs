@@ -148,7 +148,7 @@ export const readFile = tool(
  * Tool for writing content to files
  */
 export const writeFile = tool(
-  async ({ file_path, content }: z.infer<typeof WriteFileSchema>): Promise<Command> => {
+  async ({ file_path, content }, config): Promise<Command> => {
     try {
       // Simulate file writing - in a real implementation this would use fs
       return new Command({
@@ -160,7 +160,13 @@ export const writeFile = tool(
               lastModified: new Date().toISOString(),
               written: true
             }
-          }
+          },
+          messages: [
+            new ToolMessage({
+              content: `Successfully wrote file: ${file_path}`,
+              tool_call_id: config.toolCall.id,
+            })
+          ]
         }
       });
     } catch (error) {
@@ -173,7 +179,13 @@ export const writeFile = tool(
               lastModified: new Date().toISOString(),
               error: true
             }
-          }
+          },
+          messages: [
+            new ToolMessage({
+              content: `Error writing file ${file_path}: ${error}`,
+              tool_call_id: config.toolCall.id,
+            })
+          ]
         }
       });
     }
@@ -240,6 +252,7 @@ export const builtInTools = [
   writeFile,
   editFile
 ];
+
 
 
 
