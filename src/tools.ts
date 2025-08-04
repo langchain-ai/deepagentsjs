@@ -1,3 +1,4 @@
+import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
 // Schema definitions for tool inputs
@@ -173,3 +174,4 @@ export const toolSchemas = {
   WriteFileSchema,
   EditFileSchema
 };
+
