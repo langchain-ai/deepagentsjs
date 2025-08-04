@@ -81,17 +81,7 @@ export const readFile = tool(
     // Simulate file reading - in a real implementation this would use fs
     const mockContent = `Mock file content for ${file_path} (lines ${line_offset}-${line_offset + limit - 1}):\n// This would contain actual file contents\n// Implementation would use fs.readFileSync or similar`;
     
-    return new Command({
-      update: {
-        files: {
-          [file_path]: {
-            content: mockContent,
-            path: file_path,
-            lastModified: new Date().toISOString()
-          }
-        }
-      }
-    });
+    return mockContent;
   },
   {
     name: "readFile",
@@ -176,6 +166,7 @@ export const toolSchemas = {
   WriteFileSchema,
   EditFileSchema
 };
+
 
 
 
