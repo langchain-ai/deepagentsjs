@@ -37,7 +37,7 @@ const EditFileSchema = z.object({
  */
 export const writeTodos = tool(
   async ({ todos }: z.infer<typeof WriteTodosSchema>): Promise<Command> => {
-    const todoItems: Todo[] = todos.map(todo => ({
+    const todoItems = todos.map(todo => ({
       content: todo.content,
       status: todo.status
     }));
@@ -50,7 +50,7 @@ export const writeTodos = tool(
   },
   {
     name: "writeTodos",
-    description: WRITE_TODOS_DESCRIPTION,
+    description: "Use this tool to create and manage a structured task list for your current work session",
     schema: WriteTodosSchema
   }
 );
@@ -221,6 +221,7 @@ export const builtInTools = [
   writeFile,
   editFile
 ];
+
 
 
 
