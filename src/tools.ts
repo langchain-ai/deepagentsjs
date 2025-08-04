@@ -108,25 +108,28 @@ export const readFile = tool(
 /**
  * Tool for writing content to files
  */
-export const writeFile: ToolDefinition = {
-  name: "writeFile",
-  description: "Write content to a file",
-  schema: WriteFileSchema,
-  func: async ({ file_path, content }) => {
+export const writeFile = tool(
+  async ({ file_path, content }) => {
     // Simulate file writing - in a real implementation this would use fs
-    return {
-      files: {
-        [file_path]: {
-          content: content,
-          path: file_path,
-          lastModified: new Date().toISOString(),
-          written: true
+    return new Command({
+      update: {
+        files: {
+          [file_path]: {
+            content: content,
+            path: file_path,
+            lastModified: new Date().toISOString(),
+            written: true
+          }
         }
-      },
-      message: `Successfully wrote ${content.length} characters to file: ${file_path}`
-    };
+      }
+    });
+  },
+  {
+    name: "writeFile",
+    description: "Write content to a file",
+    schema: WriteFileSchema
   }
-};
+);
 
 /**
  * Tool for editing files with string replacement
@@ -175,6 +178,7 @@ export const toolSchemas = {
   WriteFileSchema,
   EditFileSchema
 };
+
 
 
 
