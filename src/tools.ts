@@ -1,8 +1,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { Command } from "@langchain/langgraph";
 
-// Simple schema definitions for tool inputs
+// Schema definitions for tool inputs
 const WriteTodosSchema = z.object({
   todos: z.array(z.object({
     content: z.string(),
@@ -37,15 +36,14 @@ const EditFileSchema = z.object({
  */
 export const writeTodos = tool(
   async ({ todos }) => {
-    return new Command({
-      update: {
-        todos: todos
-      }
-    });
+    // Return state update command for todos
+    return {
+      todos: todos
+    };
   },
   {
     name: "writeTodos",
-    description: "Create and manage a structured task list",
+    description: "Create and manage a structured task list for tracking progress",
     schema: WriteTodosSchema
   }
 );
@@ -55,6 +53,7 @@ export const writeTodos = tool(
  */
 export const ls = tool(
   async ({ path = "." }) => {
+    // Simulate directory listing
     const mockFiles = ["package.json", "tsconfig.json", "src/", "README.md"];
     return `Contents of ${path}:\n${mockFiles.join('\n')}`;
   },
@@ -70,22 +69,21 @@ export const ls = tool(
  */
 export const readFile = tool(
   async ({ file_path, line_offset = 1, limit = 2000 }) => {
-    const mockContent = `Mock content for ${file_path}`;
-    return new Command({
-      update: {
-        files: {
-          [file_path]: {
-            content: mockContent,
-            path: file_path,
-            lastModified: new Date().toISOString()
-          }
+    // Simulate file reading and return state update
+    const mockContent = `Mock content for ${file_path} (lines ${line_offset}-${line_offset + limit})`;
+    return {
+      files: {
+        [file_path]: {
+          content: mockContent,
+          path: file_path,
+          lastModified: new Date().toISOString()
         }
       }
-    });
+    };
   },
   {
     name: "readFile",
-    description: "Read file contents",
+    description: "Read file contents from the filesystem",
     schema: ReadFileSchema
   }
 );
@@ -95,17 +93,17 @@ export const readFile = tool(
  */
 export const writeFile = tool(
   async ({ file_path, content }) => {
-    return new Command({
-      update: {
-        files: {
-          [file_path]: {
-            content: content,
-            path: file_path,
-            lastModified: new Date().toISOString()
-          }
+    // Simulate file writing and return state update
+    return {
+      files: {
+        [file_path]: {
+          content: content,
+          path: file_path,
+          lastModified: new Date().toISOString(),
+          written: true
         }
       }
-    });
+    };
   },
   {
     name: "writeFile",
@@ -119,22 +117,22 @@ export const writeFile = tool(
  */
 export const editFile = tool(
   async ({ file_path, old_string, new_string, replace_all = false }) => {
-    const mockEditedContent = `Edited ${file_path}: replaced "${old_string}" with "${new_string}"`;
-    return new Command({
-      update: {
-        files: {
-          [file_path]: {
-            content: mockEditedContent,
-            path: file_path,
-            lastModified: new Date().toISOString()
-          }
+    // Simulate file editing and return state update
+    const mockEditedContent = `File ${file_path} edited: replaced "${old_string}" with "${new_string}" (replace_all: ${replace_all})`;
+    return {
+      files: {
+        [file_path]: {
+          content: mockEditedContent,
+          path: file_path,
+          lastModified: new Date().toISOString(),
+          edited: true
         }
       }
-    });
+    };
   },
   {
     name: "editFile",
-    description: "Edit files with string replacement",
+    description: "Edit files with exact string replacement",
     schema: EditFileSchema
   }
 );
@@ -147,5 +145,6 @@ export const builtInTools = [
   writeFile,
   editFile
 ];
+
 
 
