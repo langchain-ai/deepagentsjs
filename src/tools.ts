@@ -1,8 +1,6 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { Command } from "@langchain/langgraph";
-import { Todo } from "./types.js";
-import { WRITE_TODOS_DESCRIPTION, EDIT_DESCRIPTION, TOOL_DESCRIPTION } from "./prompts.js";
 
 // Schema definitions for tool inputs
 const WriteTodosSchema = z.object({
@@ -223,6 +221,7 @@ export const builtInTools = [
   writeFile,
   editFile
 ];
+
 
 
 
