@@ -41,11 +41,7 @@ export const writeTodos = tool(
       status: todo.status
     }));
 
-    return new Command({
-      update: {
-        todos: todoItems
-      }
-    });
+    return `Successfully updated todo list with ${todos.length} items: ${todoItems.map(t => `${t.status}: ${t.content}`).join(', ')}`;
   },
   {
     name: "writeTodos",
@@ -180,6 +176,7 @@ export const toolSchemas = {
   WriteFileSchema,
   EditFileSchema
 };
+
 
 
 
