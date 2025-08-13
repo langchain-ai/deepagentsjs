@@ -16,6 +16,7 @@ import { z } from "zod";
 import type { LanguageModelLike, SubAgent } from "./types.js";
 import { getDefaultModel } from "./model.js";
 import { writeTodos, readFile, writeFile, editFile, ls } from "./tools.js";
+import { TASK_DESCRIPTION_PREFIX, TASK_DESCRIPTION_SUFFIX } from "./prompts.js";
 
 /**
  * Built-in tools map for tool resolution by name
@@ -48,77 +49,82 @@ export function createTaskTool<
     stateSchema,
   } = inputs;
 
-  // Create agents map from subagents array
-  const agentsMap = new Map<string, SubAgent>();
-  for (const subagent of subagents) {
-    agentsMap.set(subagent.name, subagent);
-  }
-
   // Combine built-in tools with provided tools for tool resolution
   const allTools = { ...BUILTIN_TOOLS, ...tools };
 
+  // Pre-create all agents like Python does
+  const agentsMap = new Map<string, any>();
+  for (const subagent of subagents) {
+    // Resolve tools by name for this subagent
+    const subagentTools: StructuredTool[] = [];
+    if (subagent.tools) {
+      for (const toolName of subagent.tools) {
+        const resolvedTool = allTools[toolName];
+        if (resolvedTool) {
+          subagentTools.push(resolvedTool);
+        } else {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `Warning: Tool '${toolName}' not found for agent '${subagent.name}'`,
+          );
+        }
+      }
+    } else {
+      // If no tools specified, use all tools like Python does
+      subagentTools.push(...Object.values(allTools));
+    }
+
+    // Create react agent for the subagent (pre-create like Python)
+    const reactAgent = createReactAgent({
+      llm: model,
+      tools: subagentTools,
+      stateSchema,
+      messageModifier: subagent.prompt,
+    });
+
+    agentsMap.set(subagent.name, reactAgent);
+  }
+
   return tool(
     async (
-      input: { agent_name: string; task: string },
+      input: { description: string; subagent_type: string },
       config: ToolRunnableConfig,
     ) => {
-      const { agent_name, task } = input;
+      const { description, subagent_type } = input;
 
-      // Get the subagent configuration
-      const subagent = agentsMap.get(agent_name);
-      if (!subagent) {
-        return `Error: Agent '${agent_name}' not found. Available agents: ${Array.from(agentsMap.keys()).join(", ")}`;
-      }
-
-      // Resolve tools by name for this subagent
-      const subagentTools: StructuredTool[] = [];
-      if (subagent.tools) {
-        for (const toolName of subagent.tools) {
-          const resolvedTool = allTools[toolName];
-          if (resolvedTool) {
-            subagentTools.push(resolvedTool);
-          } else {
-            // eslint-disable-next-line no-console
-            console.warn(
-              `Warning: Tool '${toolName}' not found for agent '${agent_name}'`,
-            );
-          }
-        }
+      // Get the pre-created agent
+      const reactAgent = agentsMap.get(subagent_type);
+      if (!reactAgent) {
+        return `Error: Agent '${subagent_type}' not found. Available agents: ${Array.from(agentsMap.keys()).join(", ")}`;
       }
 
       try {
-        // Create react agent for the subagent
-        const reactAgent = createReactAgent({
-          llm: model,
-          tools: subagentTools,
-          stateSchema,
-          messageModifier: subagent.prompt,
-        });
-
         // Get current state for context
         const currentState = getCurrentTaskInput<z.infer<typeof stateSchema>>();
 
+        // Modify state messages like Python does
+        const modifiedState = {
+          ...currentState,
+          messages: [
+            {
+              role: "user",
+              content: description,
+            },
+          ],
+        };
+
         // Execute the subagent with the task
-        const result = await reactAgent.invoke(
-          {
-            ...currentState,
-            messages: [
-              {
-                role: "user",
-                content: task,
-              },
-            ],
-          },
-          config,
-        );
+        const result = await reactAgent.invoke(modifiedState, config);
 
         // Use Command for state updates and navigation between agents
+        // Return the result using Command to properly handle subgraph state
         return new Command({
           update: {
-            ...result,
+            files: result.files || {},
             messages: [
               new ToolMessage({
-                content: `Completed task '${task}' using agent '${agent_name}'. Result: ${JSON.stringify(result.messages?.slice(-1)[0]?.content || "Task completed")}`,
+                content:
+                  result.messages?.slice(-1)[0]?.content || "Task completed",
                 tool_call_id: config.toolCall?.id as string,
               }),
             ],
@@ -132,7 +138,7 @@ export function createTaskTool<
           update: {
             messages: [
               new ToolMessage({
-                content: `Error executing task '${task}' with agent '${agent_name}': ${errorMessage}`,
+                content: `Error executing task '${description}' with agent '${subagent_type}': ${errorMessage}`,
                 tool_call_id: config.toolCall?.id as string,
               }),
             ],
@@ -142,16 +148,20 @@ export function createTaskTool<
     },
     {
       name: "task",
-      description: `Execute a task using a specialized sub-agent. Available agents: ${subagents.map((a) => `${a.name} - ${a.description}`).join("; ")}`,
+      description:
+        TASK_DESCRIPTION_PREFIX.replace(
+          "{other_agents}",
+          subagents.map((a) => `- ${a.name}: ${a.description}`).join("\n"),
+        ) + TASK_DESCRIPTION_SUFFIX,
       schema: z.object({
-        agent_name: z
+        description: z
+          .string()
+          .describe("The task to execute with the selected agent"),
+        subagent_type: z
           .string()
           .describe(
             `Name of the agent to use. Available: ${subagents.map((a) => a.name).join(", ")}`,
           ),
-        task: z
-          .string()
-          .describe("The task to execute with the selected agent"),
       }),
     },
   );
