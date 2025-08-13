@@ -40,13 +40,15 @@
   "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "dependencies": {
     "@langchain/anthropic": "^0.3.25",
-    "@langchain/core": "^0.3.66",
+    "@langchain/core": "^0.3.70",
     "@langchain/langgraph": "^0.4.2",
+    "@langchain/langgraph-checkpoint": "^0.1.0",
     "zod": "^3.25.32"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.1.0",
     "@eslint/js": "^9.19.0",
+    "@langchain/langgraph-cli": "^0.0.58",
     "@langchain/tavily": "^0.1.4",
     "@tsconfig/recommended": "^1.0.8",
     "@types/node": "^22.13.5",

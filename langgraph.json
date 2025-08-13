@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "research": "./examples/research-agent.ts:agent"
+  },
+  "env": ".env"
+}
