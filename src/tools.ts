@@ -23,7 +23,7 @@ import { DeepAgentStateType } from "./types.js";
  */
 export const writeTodos = tool(
   (input, config: ToolRunnableConfig) => {
-    return {
+    return new Command({
       update: {
         todos: input.todos,
         messages: [
@@ -33,7 +33,7 @@ export const writeTodos = tool(
           }),
         ],
       },
-    };
+    });
   },
   {
     name: "write_todos",
