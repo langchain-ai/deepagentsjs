@@ -12,7 +12,7 @@ import {
   GLOB_DESCRIPTION,
   GREP_DESCRIPTION,
   STR_REPLACE_EDIT_DESCRIPTION,
-} from "../examples/coding/prompts.js";
+} from "./prompts.js";
 
 const globAsync = promisify(nodeGlob);
 
@@ -20,7 +20,7 @@ export interface ToolState {
   [key: string]: any;
 }
 
-export function ls(dirPath: string = ".", state?: ToolState): string[] {
+export function ls(dirPath: string = ".", _state?: ToolState): string[] {
   try {
     if (!fs.existsSync(dirPath)) {
       return [`Error: Path '${dirPath}' does not exist`];
@@ -42,7 +42,7 @@ export function readFile(
   filePath: string,
   offset: number = 0,
   limit: number = 2000,
-  state?: ToolState,
+  _state?: ToolState,
 ): string {
   try {
     if (!fs.existsSync(filePath)) {
@@ -96,7 +96,7 @@ export function readFile(
 export function writeFile(
   filePath: string,
   content: string,
-  state?: ToolState,
+  _state?: ToolState,
 ): string {
   try {
     const dir = path.dirname(filePath);
@@ -117,7 +117,7 @@ export async function glob(
   maxResults: number = 100,
   includeDirs: boolean = false,
   recursive: boolean = true,
-  state?: ToolState,
+  _state?: ToolState,
 ): Promise<string> {
   try {
     if (!fs.existsSync(basePath)) {
@@ -138,7 +138,7 @@ export async function glob(
     const matches = await globAsync(pattern, options);
     const results: string[] = [];
 
-    for (const match of matches) {
+    for (const match of matches as string[]) {
       if (results.length >= maxResults) break;
 
       const matchStat = fs.statSync(match);
@@ -179,7 +179,7 @@ export function grep(
   caseSensitive: boolean = false,
   contextLines: number = 0,
   regex: boolean = false,
-  state?: ToolState,
+  _state?: ToolState,
 ): Promise<string> {
   return new Promise((resolve) => {
     try {
@@ -292,7 +292,7 @@ export function strReplaceBasedEditToolFunction(
   viewRange?: [number, number],
   fileText?: string,
   insertLine?: number,
-  state?: ToolState,
+  _state?: ToolState,
 ): string {
   try {
     const pathObj = path.resolve(filePath);
