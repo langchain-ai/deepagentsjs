@@ -58,7 +58,7 @@ export function createDeepAgent<
     instructions,
     model = getDefaultModel(),
     subagents = [],
-    postModelHook = undefined,
+    postModelHook,
   } = params;
 
   const stateSchema = params.stateSchema

@@ -56,7 +56,7 @@ export interface CreateDeepAgentParams<
   stateSchema?: StateSchema;
   postModelHook?: (
     state: DeepAgentStateType,
-    model?: LanguageModelLike,
+    model: LanguageModelLike,
   ) => Promise<DeepAgentStateType>;
 }
 
