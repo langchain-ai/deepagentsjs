@@ -54,6 +54,7 @@ export interface CreateDeepAgentParams<
   model?: LanguageModelLike;
   subagents?: SubAgent[];
   stateSchema?: StateSchema;
+  isLocalFileSystem?: boolean;
   postModelHook?: (
     state: DeepAgentStateType,
     model: LanguageModelLike,
