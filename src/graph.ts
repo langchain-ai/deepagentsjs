@@ -12,6 +12,14 @@ import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { createTaskTool } from "./subAgent.js";
 import { getDefaultModel } from "./model.js";
 import { writeTodos, readFile, writeFile, editFile, ls } from "./tools.js";
+import {
+  localLsTool,
+  localReadFileTool,
+  localWriteFileTool,
+  localGlobTool,
+  localGrepTool,
+  strReplaceBasedEditTool,
+} from "./local_tools.js";
 import type { CreateDeepAgentParams } from "./types.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
@@ -34,7 +42,7 @@ It is critical that you mark todos as completed as soon as you are done with a t
 - When doing web search, prefer to use the \`task\` tool in order to reduce context usage.`;
 
 /**
- * Built-in tools that are always available in Deep Agents
+ * Built-in tools that are always available in Deep Agents (mock filesystem)
  */
 const BUILTIN_TOOLS: StructuredTool[] = [
   writeTodos,
@@ -42,6 +50,19 @@ const BUILTIN_TOOLS: StructuredTool[] = [
   writeFile,
   editFile,
   ls,
+];
+
+/**
+ * Local filesystem tools
+ */
+const LOCAL_BUILTIN_TOOLS: StructuredTool[] = [
+  writeTodos,
+  localReadFileTool,
+  localWriteFileTool,
+  strReplaceBasedEditTool,
+  localLsTool,
+  localGlobTool,
+  localGrepTool,
 ];
 
 /**
@@ -58,6 +79,7 @@ export function createDeepAgent<
     instructions,
     model = getDefaultModel(),
     subagents = [],
+    isLocalFileSystem = false,
     postModelHook,
   } = params;
 
@@ -65,8 +87,11 @@ export function createDeepAgent<
     ? DeepAgentState.extend(params.stateSchema.shape)
     : DeepAgentState;
 
+  // Choose tools based on filesystem type
+  const builtinTools = isLocalFileSystem ? LOCAL_BUILTIN_TOOLS : BUILTIN_TOOLS;
+
   // Combine built-in tools with provided tools
-  const allTools: StructuredTool[] = [...BUILTIN_TOOLS, ...tools];
+  const allTools: StructuredTool[] = [...builtinTools, ...tools];
   // Create task tool using createTaskTool() if subagents are provided
   if (subagents.length > 0) {
     // Create tools map for task tool creation
