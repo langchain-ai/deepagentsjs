@@ -24,7 +24,7 @@ export function createCodingAgentPostModelHook() {
    */
   async function postModelHook(
     state: StateType,
-    model?: any,
+    _model?: any,
   ): Promise<StateType> {
     // Get the last message from the state
     const messages = state.messages || [];

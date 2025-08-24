@@ -128,9 +128,15 @@ export const httpRequest = tool(
       const response = await fetch(url, fetchOptions);
       const responseData = await response.text();
 
+      // Convert headers to plain object
+      const headersObj: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        headersObj[key] = value;
+      });
+
       return {
         status: response.status,
-        headers: Object.fromEntries(response.headers.entries()),
+        headers: headersObj,
         data: responseData,
       };
     } catch (error) {

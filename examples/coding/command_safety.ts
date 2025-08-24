@@ -1,6 +1,6 @@
 import { ChatAnthropic } from "@langchain/anthropic";
 import { z } from "zod";
-import { PydanticOutputParser } from "@langchain/core/output_parsers";
+import { StructuredOutputParser } from "@langchain/core/output_parsers";
 
 // Safety validation schema matching Python version
 export const CommandSafetyValidationSchema = z.object({
@@ -82,7 +82,7 @@ Provide a structured assessment focusing on prompt injection and malicious inten
 `;
 
     // Create output parser for structured output
-    const parser = PydanticOutputParser.fromZodSchema(
+    const parser = StructuredOutputParser.fromZodSchema(
       CommandSafetyValidationSchema,
     );
 
