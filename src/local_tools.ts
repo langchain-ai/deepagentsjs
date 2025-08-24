@@ -6,6 +6,13 @@ import { glob as nodeGlob } from "glob";
 import { tool } from "@langchain/core/tools";
 import { ToolMessage } from "@langchain/core/messages";
 import { z } from "zod";
+import {
+  TOOL_DESCRIPTION,
+  WRITE_DESCRIPTION,
+  GLOB_DESCRIPTION,
+  GREP_DESCRIPTION,
+  STR_REPLACE_EDIT_DESCRIPTION,
+} from "../examples/coding/prompts.js";
 
 const globAsync = promisify(nodeGlob);
 
@@ -460,7 +467,7 @@ export const localReadFileTool = tool(
   },
   {
     name: "read_file",
-    description: "Read a file from the local filesystem",
+    description: TOOL_DESCRIPTION,
     schema: z.object({
       file_path: z.string().describe("Absolute path to the file to read"),
       offset: z
@@ -487,7 +494,7 @@ export const localWriteFileTool = tool(
   },
   {
     name: "write_file",
-    description: "Write content to a file in the local filesystem",
+    description: WRITE_DESCRIPTION,
     schema: z.object({
       file_path: z.string().describe("Absolute path to the file to write"),
       content: z.string().describe("Content to write to the file"),
@@ -524,8 +531,7 @@ export const strReplaceBasedEditTool = tool(
   },
   {
     name: "str_replace_based_edit_tool",
-    description:
-      "Versatile file editor with view, create, edit, and insert capabilities",
+    description: STR_REPLACE_EDIT_DESCRIPTION,
     schema: z.object({
       command: z
         .enum(["view", "str_replace", "create", "insert"])
@@ -573,7 +579,7 @@ export const localGlobTool = tool(
   },
   {
     name: "glob",
-    description: "Find files matching a glob pattern in the local filesystem",
+    description: GLOB_DESCRIPTION,
     schema: z.object({
       pattern: z.string().describe("Glob pattern to match files"),
       base_path: z
@@ -624,7 +630,7 @@ export const localGrepTool = tool(
   },
   {
     name: "grep",
-    description: "Search for text patterns in files using ripgrep",
+    description: GREP_DESCRIPTION,
     schema: z.object({
       pattern: z.string().describe("Text pattern to search for"),
       files: z
