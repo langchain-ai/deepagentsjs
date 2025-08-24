@@ -1,5 +1,5 @@
 export function get_coding_instructions(): string {
-    return `
+  return `
 
 # System Prompt
 

@@ -22,7 +22,8 @@ Be constructive and educational in your feedback. Focus on helping improve the c
 
 const code_reviewer_agent: SubAgent = {
   name: "code-reviewer",
-  description: "Expert code reviewer that analyzes code in any programming language for quality, security, performance, and best practices. Use this when you need detailed code analysis and improvement suggestions.",
+  description:
+    "Expert code reviewer that analyzes code in any programming language for quality, security, performance, and best practices. Use this when you need detailed code analysis and improvement suggestions.",
   prompt: code_reviewer_prompt,
   tools: ["execute_bash"],
 };
@@ -48,7 +49,8 @@ Always verify that your tests can run successfully and provide meaningful feedba
 
 const test_generator_agent: SubAgent = {
   name: "test-generator",
-  description: "Expert test engineer that creates comprehensive test suites for any programming language. Use when you need to generate thorough test suites for your code.",
+  description:
+    "Expert test engineer that creates comprehensive test suites for any programming language. Use when you need to generate thorough test suites for your code.",
   prompt: test_generator_prompt,
   tools: ["execute_bash"],
 };

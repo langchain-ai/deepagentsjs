@@ -23,6 +23,7 @@ python 04_file_handling.py
 ## Topics Covered
 
 ### Basics
+
 - Variables and data types
 - String operations
 - Conditional statements
@@ -30,6 +31,7 @@ python 04_file_handling.py
 - User input
 
 ### Data Structures
+
 - Lists and list comprehensions
 - Tuples and unpacking
 - Dictionaries and operations
@@ -37,15 +39,17 @@ python 04_file_handling.py
 - Nested data structures
 
 ### Functions
+
 - Function definition and parameters
 - Default parameters
-- *args and **kwargs
+- \*args and \*\*kwargs
 - Lambda functions
 - Decorators
 - Recursion
 - Generators
 
 ### File Handling
+
 - Reading and writing files
 - JSON operations
 - CSV handling
@@ -56,6 +60,7 @@ python 04_file_handling.py
 ## Practice Exercises
 
 Try modifying the code examples to:
+
 - Add new functionality
 - Handle edge cases
 - Combine concepts from different tutorials

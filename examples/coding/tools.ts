@@ -5,18 +5,24 @@ import { validateCommandSafety } from "./command_safety.js";
 
 // Execute bash command tool
 export const executeBash = tool(
-  async ({ command, timeout = 30000 }: { command: string; timeout?: number }) => {
+  async ({
+    command,
+    timeout = 30000,
+  }: {
+    command: string;
+    timeout?: number;
+  }) => {
     try {
       // First, validate command safety (focusing on prompt injection)
       const safetyValidation = await validateCommandSafety(command);
-      
+
       // If command is not safe, return error without executing
       if (!safetyValidation.is_safe) {
         return {
           success: false,
           returncode: -1,
           stdout: "",
-          stderr: `Command blocked - safety validation failed:\nThreat Type: ${safetyValidation.threat_type}\nReasoning: ${safetyValidation.reasoning}\nDetected Patterns: ${safetyValidation.detected_patterns.join(', ')}`,
+          stderr: `Command blocked - safety validation failed:\nThreat Type: ${safetyValidation.threat_type}\nReasoning: ${safetyValidation.reasoning}\nDetected Patterns: ${safetyValidation.detected_patterns.join(", ")}`,
           safety_validation: safetyValidation,
         };
       }
@@ -84,7 +90,11 @@ export const executeBash = tool(
     description: "Execute a bash command and return the result",
     schema: z.object({
       command: z.string().describe("The bash command to execute"),
-      timeout: z.number().optional().default(30000).describe("Timeout in milliseconds"),
+      timeout: z
+        .number()
+        .optional()
+        .default(30000)
+        .describe("Timeout in milliseconds"),
     }),
   },
 );
@@ -117,7 +127,7 @@ export const httpRequest = tool(
 
       const response = await fetch(url, fetchOptions);
       const responseData = await response.text();
-      
+
       return {
         status: response.status,
         headers: Object.fromEntries(response.headers.entries()),
@@ -135,7 +145,11 @@ export const httpRequest = tool(
     schema: z.object({
       url: z.string().describe("The URL to make the request to"),
       method: z.string().optional().default("GET").describe("HTTP method"),
-      headers: z.record(z.string()).optional().default({}).describe("HTTP headers"),
+      headers: z
+        .record(z.string())
+        .optional()
+        .default({})
+        .describe("HTTP headers"),
       data: z.any().optional().describe("Request body data"),
     }),
   },
@@ -145,7 +159,7 @@ export const httpRequest = tool(
 export const webSearch = tool(
   async ({ query, maxResults = 5 }: { query: string; maxResults?: number }) => {
     const apiKey = process.env.TAVILY_API_KEY;
-    
+
     if (!apiKey) {
       throw new Error("TAVILY_API_KEY environment variable is not set");
     }
@@ -169,27 +183,27 @@ export const webSearch = tool(
       });
 
       if (!response.ok) {
-        throw new Error(`Tavily API error: ${response.status} ${response.statusText}`);
+        throw new Error(
+          `Tavily API error: ${response.status} ${response.statusText}`,
+        );
       }
 
       const data = await response.json();
-      
+
       return {
         answer: data.answer || null,
-        results: data.results?.map((result: any) => ({
-          title: result.title,
-          url: result.url,
-          content: result.content,
-          score: result.score,
-          published_date: result.published_date,
-        })) || [],
+        results:
+          data.results?.map((result: any) => ({
+            title: result.title,
+            url: result.url,
+            content: result.content,
+            score: result.score,
+            published_date: result.published_date,
+          })) || [],
         query: data.query || query,
         response_time: data.response_time,
       };
-    } catch (error) {
-      // Fallback to mock implementation if Tavily fails
-      console.warn("Tavily search failed, falling back to mock:", error instanceof Error ? error.message : String(error));
-      
+    } catch {
       return {
         answer: null,
         results: [
@@ -211,7 +225,11 @@ export const webSearch = tool(
     description: "Search the web for information using Tavily API",
     schema: z.object({
       query: z.string().describe("The search query"),
-      maxResults: z.number().optional().default(5).describe("Maximum number of results to return"),
+      maxResults: z
+        .number()
+        .optional()
+        .default(5)
+        .describe("Maximum number of results to return"),
     }),
   },
 );

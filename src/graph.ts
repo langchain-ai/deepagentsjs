@@ -12,7 +12,14 @@ import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { createTaskTool } from "./subAgent.js";
 import { getDefaultModel } from "./model.js";
 import { writeTodos, readFile, writeFile, editFile, ls } from "./tools.js";
-import { localLsTool, localReadFileTool, localWriteFileTool, localGlobTool, localGrepTool, strReplaceBasedEditTool } from "./local_tools.js";
+import {
+  localLsTool,
+  localReadFileTool,
+  localWriteFileTool,
+  localGlobTool,
+  localGrepTool,
+  strReplaceBasedEditTool,
+} from "./local_tools.js";
 import type { CreateDeepAgentParams } from "./types.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
@@ -58,7 +65,6 @@ const LOCAL_BUILTIN_TOOLS: StructuredTool[] = [
   localGrepTool,
 ];
 
-
 /**
  * Create a Deep Agent with TypeScript types for all parameters.
  * Combines built-in tools with provided tools, creates task tool using createTaskTool(),
@@ -83,7 +89,7 @@ export function createDeepAgent<
 
   // Choose tools based on filesystem type
   const builtinTools = isLocalFileSystem ? LOCAL_BUILTIN_TOOLS : BUILTIN_TOOLS;
-  
+
   // Combine built-in tools with provided tools
   const allTools: StructuredTool[] = [...builtinTools, ...tools];
   // Create task tool using createTaskTool() if subagents are provided

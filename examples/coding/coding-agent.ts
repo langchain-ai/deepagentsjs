@@ -1,5 +1,5 @@
 /* eslint-disable no-console */
-import { createDeepAgent, type SubAgent } from "../../src/index.js";
+import { createDeepAgent } from "../../src/index.js";
 import "dotenv/config";
 import { code_reviewer_agent, test_generator_agent } from "./subagents.js";
 import { get_coding_instructions } from "./coding_instructions.js";
@@ -15,7 +15,6 @@ if (process.env.LANGCHAIN_TRACING_V2 !== "false") {
   }
 }
 
-
 const codingInstructions = get_coding_instructions();
 const postModelHook = createCodingAgentPostModelHook();
 
@@ -28,6 +27,5 @@ const agent = createDeepAgent({
   postModelHook: postModelHook,
   stateSchema: CodingAgentState,
 }).withConfig({ recursionLimit: 1000 });
-
 
 export { agent, executeBash, httpRequest, webSearch };

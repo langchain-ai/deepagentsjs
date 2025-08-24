@@ -5,12 +5,23 @@ import { PydanticOutputParser } from "@langchain/core/output_parsers";
 // Safety validation schema matching Python version
 export const CommandSafetyValidationSchema = z.object({
   is_safe: z.boolean().describe("Whether the command is safe to execute"),
-  threat_type: z.string().describe("Type of threat: PROMPT_INJECTION, MALICIOUS_COMMAND, or SAFE"),
-  reasoning: z.string().describe("Explanation of why the command is considered unsafe or safe"),
-  detected_patterns: z.array(z.string()).describe("List of prompt injection patterns or malicious attempts detected").default([]),
+  threat_type: z
+    .string()
+    .describe("Type of threat: PROMPT_INJECTION, MALICIOUS_COMMAND, or SAFE"),
+  reasoning: z
+    .string()
+    .describe("Explanation of why the command is considered unsafe or safe"),
+  detected_patterns: z
+    .array(z.string())
+    .describe(
+      "List of prompt injection patterns or malicious attempts detected",
+    )
+    .default([]),
 });
 
-export type CommandSafetyValidation = z.infer<typeof CommandSafetyValidationSchema>;
+export type CommandSafetyValidation = z.infer<
+  typeof CommandSafetyValidationSchema
+>;
 
 // Initialize Anthropic client
 let anthropicClient: ChatAnthropic | null = null;
@@ -23,25 +34,27 @@ try {
       anthropicApiKey: anthropicApiKey,
     });
   }
-} catch (error) {
-  console.warn("Failed to initialize Anthropic client:", error);
+} catch {
   anthropicClient = null;
 }
 
 /**
  * Validate if a shell command is safe to execute, focusing on prompt injection detection.
- * 
+ *
  * @param command - The shell command to validate
  * @returns CommandSafetyValidation object with safety assessment
  */
-export async function validateCommandSafety(command: string): Promise<CommandSafetyValidation> {
+export async function validateCommandSafety(
+  command: string,
+): Promise<CommandSafetyValidation> {
   try {
     // Check if Anthropic client is available
     if (anthropicClient === null) {
       return {
         is_safe: false,
         threat_type: "MALICIOUS_COMMAND",
-        reasoning: "Anthropic API key not configured. Cannot validate command safety.",
+        reasoning:
+          "Anthropic API key not configured. Cannot validate command safety.",
         detected_patterns: ["API_KEY_MISSING"],
       };
     }
@@ -69,11 +82,13 @@ Provide a structured assessment focusing on prompt injection and malicious inten
 `;
 
     // Create output parser for structured output
-    const parser = PydanticOutputParser.fromZodSchema(CommandSafetyValidationSchema);
+    const parser = PydanticOutputParser.fromZodSchema(
+      CommandSafetyValidationSchema,
+    );
 
     // Use LangChain to call Claude with structured output
     const response = await anthropicClient.invoke(
-      `${safetyPrompt}\n\n${parser.getFormatInstructions()}`
+      `${safetyPrompt}\n\n${parser.getFormatInstructions()}`,
     );
 
     // Parse the response using the parser
