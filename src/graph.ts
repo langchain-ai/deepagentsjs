@@ -12,7 +12,7 @@ import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { createTaskTool } from "./subAgent.js";
 import { getDefaultModel } from "./model.js";
 import { writeTodos, readFile, writeFile, editFile, ls } from "./tools.js";
-import { localLsTool, localReadFileTool, localWriteFileTool, localEditFileTool, localGlobTool, localGrepTool } from "./local_tools.js";
+import { localLsTool, localReadFileTool, localWriteFileTool, localGlobTool, localGrepTool, strReplaceBasedEditTool } from "./local_tools.js";
 import type { CreateDeepAgentParams } from "./types.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
@@ -52,7 +52,7 @@ const LOCAL_BUILTIN_TOOLS: StructuredTool[] = [
   writeTodos,
   localReadFileTool,
   localWriteFileTool,
-  localEditFileTool,
+  strReplaceBasedEditTool,
   localLsTool,
   localGlobTool,
   localGrepTool,

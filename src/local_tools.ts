@@ -265,7 +265,7 @@ export function grep(
   });
 }
 
-export function strReplaceBasedEditTool(
+export function strReplaceBasedEditToolFunction(
   command: "view" | "str_replace" | "create" | "insert",
   filePath: string,
   oldStr?: string,
@@ -472,13 +472,25 @@ export const localWriteFileTool = tool(
   },
 );
 
-export const localEditFileTool = tool(
-  (input: { file_path: string; old_string: string; new_string: string }, config) => {
-    const result = strReplaceBasedEditTool(
-      "str_replace",
-      input.file_path,
-      input.old_string,
-      input.new_string
+
+export const strReplaceBasedEditTool = tool(
+  (input: {
+    command: "view" | "str_replace" | "create" | "insert";
+    path: string;
+    view_range?: [number, number];
+    old_str?: string;
+    new_str?: string;
+    file_text?: string;
+    insert_line?: number;
+  }, config) => {
+    const result = strReplaceBasedEditToolFunction(
+      input.command,
+      input.path,
+      input.old_str,
+      input.new_str,
+      input.view_range,
+      input.file_text,
+      input.insert_line
     );
     return new ToolMessage({
       content: result,
@@ -486,12 +498,16 @@ export const localEditFileTool = tool(
     });
   },
   {
-    name: "edit_file",
-    description: "Edit a file in the local filesystem by replacing text",
+    name: "str_replace_based_edit_tool",
+    description: "Versatile file editor with view, create, edit, and insert capabilities",
     schema: z.object({
-      file_path: z.string().describe("Absolute path to the file to edit"),
-      old_string: z.string().describe("String to be replaced (must match exactly)"),
-      new_string: z.string().describe("String to replace with"),
+      command: z.enum(["view", "str_replace", "create", "insert"]).describe("Action to perform"),
+      path: z.string().describe("Absolute path to the file"),
+      view_range: z.tuple([z.number(), z.number()]).optional().describe("Line range for view command [start, end]"),
+      old_str: z.string().optional().describe("String to replace (required for str_replace)"),
+      new_str: z.string().optional().describe("Replacement string (required for str_replace and insert)"),
+      file_text: z.string().optional().describe("Content for new file (required for create)"),
+      insert_line: z.number().optional().describe("Line number to insert at (required for insert)"),
     }),
   },
 );

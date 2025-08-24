@@ -16,7 +16,7 @@ import {
   TOOL_DESCRIPTION,
 } from "./prompts.js";
 import { DeepAgentStateType } from "./types.js";
-import * as localTools from "../local_tools.js";
+import * as localTools from "./local_tools.js";
 
 /**
  * Write todos tool - manages todo list with Command return
