@@ -58,6 +58,7 @@ export function createDeepAgent<
     instructions,
     model = getDefaultModel(),
     subagents = [],
+    postModelHook = undefined,
   } = params;
 
   const stateSchema = params.stateSchema
@@ -96,5 +97,6 @@ export function createDeepAgent<
     tools: allTools,
     stateSchema,
     messageModifier: finalInstructions,
+    postModelHook,
   });
 }
