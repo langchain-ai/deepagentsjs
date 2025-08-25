@@ -11,7 +11,7 @@ import {
 export function createInterruptHook(
   toolConfigs: ToolInterruptConfig,
   messagePrefix: string = "Tool execution requires approval",
-): (state: DeepAgentStateType) => Promise<DeepAgentStateType | void> {
+): (state: DeepAgentStateType) => Promise<Partial<DeepAgentStateType> | void> {
   /**
    * Create a post model hook that handles interrupts using native LangGraph schemas.
    *
@@ -22,7 +22,7 @@ export function createInterruptHook(
 
   return async function interruptHook(
     state: DeepAgentStateType,
-  ): Promise<DeepAgentStateType | void> {
+  ): Promise<Partial<DeepAgentStateType> | void> {
     const messages = state.messages || [];
     if (!messages.length) {
       return;

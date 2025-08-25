@@ -47,7 +47,7 @@ export type LanguageModelLike = Runnable<
 export type PostModelHook = (
   state: DeepAgentStateType,
   model: LanguageModelLike,
-) => Promise<DeepAgentStateType>;
+) => Promise<Partial<DeepAgentStateType> | void>;
 
 export type ToolInterruptConfig = Record<string, HumanInterruptConfig>;
 
