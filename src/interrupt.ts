@@ -5,7 +5,7 @@ import type {
 import { interrupt } from "@langchain/langgraph";
 import { isAIMessage, AIMessage } from "@langchain/core/messages";
 import type { ToolCall } from "@langchain/core/messages/tool";
-import { HumanInterrupt, HumanResponse } from "@langchain/langgraph/prebuilt";
+import { HumanInterrupt, HumanResponse, ActionRequest } from "@langchain/langgraph/prebuilt";
 
 export function createInterruptHook(
   toolConfigs: ToolInterruptConfig,
@@ -85,8 +85,8 @@ export function createInterruptHook(
 
       if (response.type === "accept") {
         approvedToolCalls.push(toolCall);
-      } else if (response.type === "edit" && response.args && typeof response.args === "object" && response.args !== null && "args" in response.args) {
-        const edited = response.args;
+      } else if (response.type === "edit" && response.args) {
+        const edited = response.args as ActionRequest;
         const newToolCall = {
           name: toolCall.name,
           args: edited.args,
