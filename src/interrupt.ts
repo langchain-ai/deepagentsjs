@@ -5,7 +5,7 @@ import type {
   HumanResponse
 } from "./types.js";
 import { interrupt } from "@langchain/langgraph";
-import { isAIMessage } from "@langchain/core/messages";
+import { isAIMessage, AIMessage } from "@langchain/core/messages";
 import type { ToolCall } from "@langchain/core/messages/tool";
 
 export function createInterruptHook(
@@ -105,6 +105,7 @@ export function createInterruptHook(
     return { messages: [updatedLastMessage] } as Partial<DeepAgentStateType>;
   };
 }
+
 
 
 
