@@ -30,14 +30,14 @@ export function createInterruptHook(
       return state;
     }
 
-    const lastMessage = messages[messages.length - 1] as AIMessage;
-    if (!lastMessage.tool_calls || !lastMessage.tool_calls.length) {
+    const lastMessage = messages[messages.length - 1];
+    if (!isAIMessage(lastMessage) || !lastMessage.tool_calls || !lastMessage.tool_calls.length) {
       return state;
     }
 
     // Separate tool calls that need interrupts from those that don't
-    const interruptToolCalls: any[] = [];
-    const autoApprovedToolCalls: any[] = [];
+    const interruptToolCalls: ToolCall[] = [];
+    const autoApprovedToolCalls: ToolCall[] = [];
 
     for (const toolCall of lastMessage.tool_calls) {
       const toolName = toolCall.name;
@@ -106,4 +106,5 @@ export function createInterruptHook(
     return { ...state, messages: updatedMessages as typeof messages };
   };
 }
+
 
