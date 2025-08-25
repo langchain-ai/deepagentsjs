@@ -104,11 +104,10 @@ export function createInterruptHook(
       tool_calls: approvedToolCalls,
     };
 
-    const updatedMessages = [...messages.slice(0, -1), updatedLastMessage];
-
-    return { ...state, messages: updatedMessages as typeof messages };
+    return { messages: [updatedLastMessage] };
   };
 }
+
 
 
 
