@@ -1,12 +1,11 @@
 import type {
   DeepAgentStateType,
   ToolInterruptConfig,
-  HumanInterrupt,
-  HumanResponse,
 } from "./types.js";
 import { interrupt } from "@langchain/langgraph";
 import { isAIMessage, AIMessage } from "@langchain/core/messages";
 import type { ToolCall } from "@langchain/core/messages/tool";
+import { HumanInterrupt, HumanResponse } from "@langchain/langgraph/prebuilt";
 
 export function createInterruptHook(
   toolConfigs: ToolInterruptConfig,
@@ -86,7 +85,7 @@ export function createInterruptHook(
 
       if (response.type === "accept") {
         approvedToolCalls.push(toolCall);
-      } else if (response.type === "edit" && response.args) {
+      } else if (response.type === "edit" && response.args && typeof response.args === "object" && response.args !== null && "args" in response.args) {
         const edited = response.args;
         const newToolCall = {
           name: toolCall.name,
@@ -97,8 +96,8 @@ export function createInterruptHook(
       } else if (response.type === "ignore") {
         continue;
       } else if (response.type === "response") {
-        // Handle response type - for now, treat as accept
-        approvedToolCalls.push(toolCall);
+        // continue here since it's a direct feedback
+        continue;
       } else {
         throw new Error(`Unknown response type: ${response.type}`);
       }

@@ -15,6 +15,7 @@ import type { StructuredTool } from "@langchain/core/tools";
 import type { DeepAgentState } from "./state.js";
 import { z } from "zod";
 import { Runnable } from "@langchain/core/runnables";
+import type { HumanInterruptConfig } from "@langchain/langgraph/prebuilt";
 
 export type InferZodObjectShape<T> =
   T extends z.ZodObject<infer Shape> ? Shape : never;
@@ -48,30 +49,8 @@ export type PostModelHook = (
   model: LanguageModelLike,
 ) => Promise<DeepAgentStateType>;
 
-export interface HumanInterruptConfig {
-  allowIgnore?: boolean;
-  allowRespond?: boolean;
-  allowEdit?: boolean;
-  allowAccept?: boolean;
-}
 
 export type ToolInterruptConfig = Record<string, HumanInterruptConfig>;
-
-export interface ActionRequest {
-  action: string;
-  args: Record<string, unknown>;
-}
-
-export interface HumanInterrupt {
-  action_request: ActionRequest;
-  config: HumanInterruptConfig;
-  description: string;
-}
-
-export interface HumanResponse {
-  type: "accept" | "edit" | "ignore" | "response";
-  args?: ActionRequest;
-}
 
 export interface CreateDeepAgentParams<
   StateSchema extends z.ZodObject<any, any, any, any, any>,
