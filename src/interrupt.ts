@@ -11,7 +11,7 @@ import type { ToolCall } from "@langchain/core/messages/tool";
 export function createInterruptHook(
   toolConfigs: ToolInterruptConfig,
   messagePrefix: string = "Tool execution requires approval",
-): (state: DeepAgentStateType) => Promise<DeepAgentStateType> {
+): (state: DeepAgentStateType) => Promise<Partial<DeepAgentStateType>> {
   /**
    * Create a post model hook that handles interrupts using native LangGraph schemas.
    *
@@ -105,6 +105,7 @@ export function createInterruptHook(
     return { messages: [updatedLastMessage] } as Partial<DeepAgentStateType>;
   };
 }
+
 
 
 
