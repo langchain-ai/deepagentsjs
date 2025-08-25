@@ -73,7 +73,7 @@ export function createInterruptHook(
       requests.push(request);
     }
 
-    const responses: HumanResponse[] = await interrupt(requests);
+    const responses: HumanResponse[] = await interrupt<HumanInterrupt[], HumanResponse[]>(requests);
 
     for (let i = 0; i < responses.length; i++) {
       const response = responses[i];
@@ -106,5 +106,6 @@ export function createInterruptHook(
     return { ...state, messages: updatedMessages as typeof messages };
   };
 }
+
 
 
