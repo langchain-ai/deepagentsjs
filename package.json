@@ -41,7 +41,7 @@
   "dependencies": {
     "@langchain/anthropic": "^0.3.25",
     "@langchain/core": "^0.3.66",
-    "@langchain/langgraph": "^0.4.2",
+    "@langchain/langgraph": "^0.4.6",
     "zod": "^3.25.32"
   },
   "devDependencies": {

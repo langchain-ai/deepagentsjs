@@ -149,13 +149,33 @@
     p-retry "4"
     uuid "^9.0.0"
 
-"@langchain/langgraph@>=0.2.53", "@langchain/langgraph@^0.4.2":
+"@langchain/langgraph-sdk@~0.0.109":
+  version "0.0.109"
+  resolved "https://registry.yarnpkg.com/@langchain/langgraph-sdk/-/langgraph-sdk-0.0.109.tgz#9265e097bb411b87524095c07e2c5d2d4ea85133"
+  integrity sha512-UpjL0c681CJqvKxgWD8o9fwUXRZzcDfsz8EcJ2PkXFxQFKRLe4QKZMtBr4OKFTR94pJtlOuTVla4OV5I5w+mdQ==
+  dependencies:
+    "@types/json-schema" "^7.0.15"
+    p-queue "^6.6.2"
+    p-retry "4"
+    uuid "^9.0.0"
+
+"@langchain/langgraph@>=0.2.53":
   version "0.4.2"
   resolved "https://registry.yarnpkg.com/@langchain/langgraph/-/langgraph-0.4.2.tgz#77e3ae59c465685b2ac2126077bbff17d95c3cff"
   integrity sha512-QAxeBIjamn2T2hlqCi+qC8k3Bv/bE/j0VGA+qR+z8NizSbGeD2uftqAYIrk3YtYLWIwk0kIICKcmTz8dKIWzog==
   dependencies:
     "@langchain/langgraph-checkpoint" "^0.1.0"
     "@langchain/langgraph-sdk" "~0.0.105"
+    uuid "^10.0.0"
+    zod "^3.25.32"
+
+"@langchain/langgraph@^0.4.6":
+  version "0.4.6"
+  resolved "https://registry.yarnpkg.com/@langchain/langgraph/-/langgraph-0.4.6.tgz#503bbc3ead1597ed85da297d9449d355a0986705"
+  integrity sha512-4ivuy6PWMvgE7mOByePdJ88Mk7JpoC+nZ6SB0g9qhX3oZtIA5d3Fswtcr5hgS3XlYaTtr5hJRYdXBehZ3JNX3Q==
+  dependencies:
+    "@langchain/langgraph-checkpoint" "^0.1.0"
+    "@langchain/langgraph-sdk" "~0.0.109"
     uuid "^10.0.0"
     zod "^3.25.32"
 
