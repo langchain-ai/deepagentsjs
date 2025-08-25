@@ -1,13 +1,11 @@
 import type { 
-  HumanInterruptConfig, 
   DeepAgentStateType, 
   ToolInterruptConfig,
-  ActionRequest,
   HumanInterrupt,
   HumanResponse
 } from "./types.js";
 import { interrupt } from "@langchain/langgraph";
-import { AIMessage, isAIMessage } from "@langchain/core/messages";
+import { isAIMessage } from "@langchain/core/messages";
 import type { ToolCall } from "@langchain/core/messages/tool";
 
 export function createInterruptHook(
@@ -107,6 +105,7 @@ export function createInterruptHook(
     return { messages: [updatedLastMessage] };
   };
 }
+
 
 
 
