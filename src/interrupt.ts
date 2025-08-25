@@ -102,9 +102,10 @@ export function createInterruptHook(
       tool_calls: approvedToolCalls,
     });
 
-    return { messages: [updatedLastMessage] } as Partial<DeepAgentStateType>;
+    return { messages: [updatedLastMessage] };
   };
 }
+
 
 
 
