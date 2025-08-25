@@ -22,7 +22,7 @@ export function createInterruptHook(
 
   return async function interruptHook(
     state: DeepAgentStateType,
-  ): Promise<DeepAgentStateType> {
+  ): Promise<Partial<DeepAgentStateType>> {
     const messages = state.messages || [];
     if (!messages.length) {
       return state;
@@ -105,6 +105,7 @@ export function createInterruptHook(
     return { messages: [updatedLastMessage] } as Partial<DeepAgentStateType>;
   };
 }
+
 
 
 
