@@ -101,7 +101,7 @@ export function createDeepAgent<
     );
   }
 
-  let selectedPostModelHook: typeof postModelHook;
+  let selectedPostModelHook: PostModelHook | undefined;
   if (postModelHook !== undefined) {
     selectedPostModelHook = postModelHook;
   } else if (Object.keys(interruptConfig).length > 0) {
@@ -119,4 +119,5 @@ export function createDeepAgent<
     postModelHook: selectedPostModelHook,
   });
 }
+
 
