@@ -1,7 +1,3 @@
-/**
- * Interrupt configuration functionality for deep agents using LangGraph prebuilts.
- */
-
 import type { HumanInterruptConfig } from "./types.js";
 import type { DeepAgentStateType } from "./types.js";
 import { interrupt } from "@langchain/langgraph";
@@ -40,9 +36,6 @@ export function createInterruptHook(
   return async function interruptHook(
     state: DeepAgentStateType,
   ): Promise<DeepAgentStateType> {
-    /**
-     * Post model hook that checks for tool calls and triggers interrupts if needed.
-     */
     const messages = state.messages || [];
     if (!messages.length) {
       return state;
@@ -66,14 +59,12 @@ export function createInterruptHook(
       }
     }
 
-    // If no interrupts needed, return early
     if (!interruptToolCalls.length) {
       return state;
     }
 
     const approvedToolCalls = [...autoApprovedToolCalls];
 
-    // Process all tool calls that need interrupts in parallel
     const requests: HumanInterrupt[] = [];
 
     for (const toolCall of interruptToolCalls) {
@@ -93,7 +84,6 @@ export function createInterruptHook(
       requests.push(request);
     }
 
-    // Use LangGraph's interrupt function
     const responses: HumanResponse[] = await interrupt(requests);
 
     for (let i = 0; i < responses.length; i++) {
@@ -111,14 +101,12 @@ export function createInterruptHook(
         };
         approvedToolCalls.push(newToolCall);
       } else if (response.type === "ignore") {
-        // Skip this tool call
         continue;
       } else {
         throw new Error(`Unknown response type: ${response.type}`);
       }
     }
 
-    // Update the last message with approved tool calls
     const updatedLastMessage = {
       ...lastMessage,
       tool_calls: approvedToolCalls,
