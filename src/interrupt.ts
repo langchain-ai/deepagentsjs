@@ -102,9 +102,13 @@ export function createInterruptHook(
       tool_calls: approvedToolCalls,
     });
 
-    return { messages: [updatedLastMessage] };
+    return {
+      ...state,
+      messages: [...state.messages.slice(0, -1), updatedLastMessage],
+    };
   };
 }
+
 
 
 
