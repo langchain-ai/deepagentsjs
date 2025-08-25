@@ -105,7 +105,7 @@ export function createInterruptHook(
     }
 
     const updatedLastMessage = new AIMessage({
-      content: lastMessage.content,
+      ...lastMessage,
       tool_calls: approvedToolCalls,
     });
 
