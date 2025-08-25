@@ -91,6 +91,9 @@ export function createInterruptHook(
         approvedToolCalls.push(newToolCall);
       } else if (response.type === "ignore") {
         continue;
+      } else if (response.type === "response") {
+        // Handle response type - for now, treat as accept
+        approvedToolCalls.push(toolCall);
       } else {
         throw new Error(`Unknown response type: ${response.type}`);
       }
@@ -106,6 +109,7 @@ export function createInterruptHook(
     return { ...state, messages: updatedMessages as typeof messages };
   };
 }
+
 
 
 
