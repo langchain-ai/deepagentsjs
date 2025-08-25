@@ -11,7 +11,7 @@ import {
 export function createInterruptHook(
   toolConfigs: ToolInterruptConfig,
   messagePrefix: string = "Tool execution requires approval",
-): (state: DeepAgentStateType) => Promise<DeepAgentStateType> {
+): (state: DeepAgentStateType) => Promise<DeepAgentStateType | void> {
   /**
    * Create a post model hook that handles interrupts using native LangGraph schemas.
    *
@@ -22,10 +22,10 @@ export function createInterruptHook(
 
   return async function interruptHook(
     state: DeepAgentStateType,
-  ): Promise<DeepAgentStateType> {
+  ): Promise<DeepAgentStateType | void> {
     const messages = state.messages || [];
     if (!messages.length) {
-      return state;
+      return;
     }
 
     const lastMessage = messages[messages.length - 1];
@@ -34,7 +34,7 @@ export function createInterruptHook(
       !lastMessage.tool_calls ||
       !lastMessage.tool_calls.length
     ) {
-      return state;
+      return;
     }
 
     // Separate tool calls that need interrupts from those that don't
@@ -51,7 +51,7 @@ export function createInterruptHook(
     }
 
     if (!interruptToolCalls.length) {
-      return state;
+      return;
     }
 
     const approvedToolCalls = [...autoApprovedToolCalls];
@@ -108,9 +108,6 @@ export function createInterruptHook(
       tool_calls: approvedToolCalls,
     });
 
-    return {
-      ...state,
-      messages: [...state.messages.slice(0, -1), updatedLastMessage],
-    };
+    return { messages: [updatedLastMessage] };
   };
 }
