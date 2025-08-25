@@ -81,10 +81,7 @@ export interface CreateDeepAgentParams<
   model?: LanguageModelLike;
   subagents?: SubAgent[];
   stateSchema?: StateSchema;
-  postModelHook?: (
-    state: DeepAgentStateType,
-    model: LanguageModelLike,
-  ) => Promise<DeepAgentStateType>;
+  postModelHook?: PostModelHook;
   interruptConfig?: ToolInterruptConfig;
 }
 
@@ -96,5 +93,6 @@ export interface CreateTaskToolParams<
   model?: LanguageModelLike;
   stateSchema?: StateSchema;
 }
+
 
 
