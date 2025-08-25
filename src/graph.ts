@@ -16,6 +16,7 @@ import type { CreateDeepAgentParams } from "./types.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { DeepAgentState } from "./state.js";
+import { createInterruptHook } from "./interrupt.js";
 
 /**
  * Base prompt that provides instructions about available tools
@@ -59,6 +60,7 @@ export function createDeepAgent<
     model = getDefaultModel(),
     subagents = [],
     postModelHook,
+    interruptConfig = {},
   } = params;
 
   const stateSchema = params.stateSchema
@@ -91,12 +93,29 @@ export function createDeepAgent<
     ? instructions + BASE_PROMPT
     : BASE_PROMPT;
 
+  // Should never be the case that both are specified
+  if (postModelHook && Object.keys(interruptConfig).length > 0) {
+    throw new Error(
+      "Cannot specify both postModelHook and interruptConfig together. " +
+        "Use either interruptConfig for tool interrupts or postModelHook for custom post-processing.",
+    );
+  }
+
+  let selectedPostModelHook: typeof postModelHook;
+  if (postModelHook !== undefined) {
+    selectedPostModelHook = postModelHook;
+  } else if (Object.keys(interruptConfig).length > 0) {
+    selectedPostModelHook = createInterruptHook(interruptConfig);
+  } else {
+    selectedPostModelHook = undefined;
+  }
+
   // Return createReactAgent with proper configuration
   return createReactAgent({
     llm: model,
     tools: allTools,
     stateSchema,
     messageModifier: finalInstructions,
-    postModelHook,
+    postModelHook: selectedPostModelHook,
   });
 }
