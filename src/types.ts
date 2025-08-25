@@ -44,10 +44,6 @@ export type LanguageModelLike = Runnable<
   LanguageModelOutput
 >;
 
-/**
- * Human interrupt configuration for controlling tool approvals
- * Equivalent to Python's HumanInterruptConfig
- */
 export interface HumanInterruptConfig {
   allowIgnore?: boolean;
   allowRespond?: boolean;
@@ -55,9 +51,6 @@ export interface HumanInterruptConfig {
   allowAccept?: boolean;
 }
 
-/**
- * Parameters for createDeepAgent function with TypeScript types
- */
 export interface CreateDeepAgentParams<
   StateSchema extends z.ZodObject<any, any, any, any, any>,
 > {
@@ -73,9 +66,6 @@ export interface CreateDeepAgentParams<
   interruptConfig?: ToolInterruptConfig;
 }
 
-/**
- * Parameters for createTaskTool function
- */
 export interface CreateTaskToolParams<
   StateSchema extends z.ZodObject<any, any, any, any, any>,
 > {
