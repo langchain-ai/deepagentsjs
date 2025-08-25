@@ -1,8 +1,8 @@
-import type { 
-  DeepAgentStateType, 
+import type {
+  DeepAgentStateType,
   ToolInterruptConfig,
   HumanInterrupt,
-  HumanResponse
+  HumanResponse,
 } from "./types.js";
 import { interrupt } from "@langchain/langgraph";
 import { isAIMessage, AIMessage } from "@langchain/core/messages";
@@ -29,7 +29,11 @@ export function createInterruptHook(
     }
 
     const lastMessage = messages[messages.length - 1];
-    if (!isAIMessage(lastMessage) || !lastMessage.tool_calls || !lastMessage.tool_calls.length) {
+    if (
+      !isAIMessage(lastMessage) ||
+      !lastMessage.tool_calls ||
+      !lastMessage.tool_calls.length
+    ) {
       return state;
     }
 
@@ -71,7 +75,10 @@ export function createInterruptHook(
       requests.push(request);
     }
 
-    const responses: HumanResponse[] = await interrupt<HumanInterrupt[], HumanResponse[]>(requests);
+    const responses: HumanResponse[] = await interrupt<
+      HumanInterrupt[],
+      HumanResponse[]
+    >(requests);
 
     for (let i = 0; i < responses.length; i++) {
       const response = responses[i];
@@ -108,18 +115,3 @@ export function createInterruptHook(
     };
   };
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
