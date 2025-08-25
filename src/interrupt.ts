@@ -75,7 +75,7 @@ export function createInterruptHook(
       requests.push(request);
     }
 
-    const responses: HumanResponse[] = await interrupt<
+    const responses = await interrupt<
       HumanInterrupt[],
       HumanResponse[]
     >(requests);
