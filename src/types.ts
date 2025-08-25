@@ -15,7 +15,6 @@ import type { StructuredTool } from "@langchain/core/tools";
 import type { DeepAgentState } from "./state.js";
 import { z } from "zod";
 import { Runnable } from "@langchain/core/runnables";
-import type { ToolInterruptConfig } from "./interrupt.js";
 
 export type InferZodObjectShape<T> =
   T extends z.ZodObject<infer Shape> ? Shape : never;
@@ -74,3 +73,4 @@ export interface CreateTaskToolParams<
   model?: LanguageModelLike;
   stateSchema?: StateSchema;
 }
+
