@@ -43,11 +43,34 @@ export type LanguageModelLike = Runnable<
   LanguageModelOutput
 >;
 
+export type PostModelHook = (
+  state: DeepAgentStateType,
+  model: LanguageModelLike,
+) => Promise<DeepAgentStateType>;
+
 export interface HumanInterruptConfig {
   allowIgnore?: boolean;
   allowRespond?: boolean;
   allowEdit?: boolean;
   allowAccept?: boolean;
+}
+
+export type ToolInterruptConfig = Record<string, HumanInterruptConfig>;
+
+export interface ActionRequest {
+  action: string;
+  args: Record<string, unknown>;
+}
+
+export interface HumanInterrupt {
+  action_request: ActionRequest;
+  config: HumanInterruptConfig;
+  description: string;
+}
+
+export interface HumanResponse {
+  type: "accept" | "edit" | "ignore" | "response";
+  args?: ActionRequest;
 }
 
 export interface CreateDeepAgentParams<
@@ -73,4 +96,5 @@ export interface CreateTaskToolParams<
   model?: LanguageModelLike;
   stateSchema?: StateSchema;
 }
+
 
