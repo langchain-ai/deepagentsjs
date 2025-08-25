@@ -97,14 +97,15 @@ export function createInterruptHook(
       }
     }
 
-    const updatedLastMessage = {
-      ...lastMessage,
+    const updatedLastMessage = new AIMessage({
+      content: lastMessage.content,
       tool_calls: approvedToolCalls,
-    };
+    });
 
     return { messages: [updatedLastMessage] } as Partial<DeepAgentStateType>;
   };
 }
+
 
 
 
