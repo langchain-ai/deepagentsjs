@@ -15,6 +15,7 @@ import type { StructuredTool } from "@langchain/core/tools";
 import type { DeepAgentState } from "./state.js";
 import { z } from "zod";
 import { Runnable } from "@langchain/core/runnables";
+import type { ToolInterruptConfig } from "./interrupt.js";
 
 export type InferZodObjectShape<T> =
   T extends z.ZodObject<infer Shape> ? Shape : never;
@@ -44,6 +45,17 @@ export type LanguageModelLike = Runnable<
 >;
 
 /**
+ * Human interrupt configuration for controlling tool approvals
+ * Equivalent to Python's HumanInterruptConfig
+ */
+export interface HumanInterruptConfig {
+  allowIgnore?: boolean;
+  allowRespond?: boolean;
+  allowEdit?: boolean;
+  allowAccept?: boolean;
+}
+
+/**
  * Parameters for createDeepAgent function with TypeScript types
  */
 export interface CreateDeepAgentParams<
@@ -59,6 +71,7 @@ export interface CreateDeepAgentParams<
     state: DeepAgentStateType,
     model: LanguageModelLike,
   ) => Promise<DeepAgentStateType>;
+  interruptConfig?: ToolInterruptConfig;
 }
 
 /**

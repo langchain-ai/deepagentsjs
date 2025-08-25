@@ -1,0 +1,135 @@
+/**
+ * Interrupt configuration functionality for deep agents using LangGraph prebuilts.
+ */
+
+import type { HumanInterruptConfig } from "./types.js";
+import type { DeepAgentStateType } from "./types.js";
+import { interrupt } from "@langchain/langgraph";
+import { AIMessage } from "@langchain/core/messages";
+
+export type ToolInterruptConfig = Record<string, HumanInterruptConfig>;
+
+export interface ActionRequest {
+  action: string;
+  args: any;
+}
+
+export interface HumanInterrupt {
+  action_request: ActionRequest;
+  config: HumanInterruptConfig;
+  description: string;
+}
+
+export interface HumanResponse {
+  type: "accept" | "edit" | "ignore";
+  args?: ActionRequest;
+}
+
+export function createInterruptHook(
+  toolConfigs: ToolInterruptConfig,
+  messagePrefix: string = "Tool execution requires approval",
+): (state: DeepAgentStateType, model?: any) => Promise<DeepAgentStateType> {
+  /**
+   * Create a post model hook that handles interrupts using native LangGraph schemas.
+   * 
+   * Args:
+   *   toolConfigs: Record mapping tool names to HumanInterruptConfig objects
+   *   messagePrefix: Optional message prefix for interrupt descriptions
+   */
+
+  return async function interruptHook(
+    state: DeepAgentStateType,
+    model?: any,
+  ): Promise<DeepAgentStateType> {
+    /**
+     * Post model hook that checks for tool calls and triggers interrupts if needed.
+     */
+    const messages = state.messages || [];
+    if (!messages.length) {
+      return state;
+    }
+
+    const lastMessage = messages[messages.length - 1] as AIMessage;
+    if (!lastMessage.tool_calls || !lastMessage.tool_calls.length) {
+      return state;
+    }
+
+    // Separate tool calls that need interrupts from those that don't
+    const interruptToolCalls: any[] = [];
+    const autoApprovedToolCalls: any[] = [];
+
+    for (const toolCall of lastMessage.tool_calls) {
+      const toolName = toolCall.name;
+      if (toolName in toolConfigs) {
+        interruptToolCalls.push(toolCall);
+      } else {
+        autoApprovedToolCalls.push(toolCall);
+      }
+    }
+
+    // If no interrupts needed, return early
+    if (!interruptToolCalls.length) {
+      return state;
+    }
+
+    const approvedToolCalls = [...autoApprovedToolCalls];
+
+    // Process all tool calls that need interrupts in parallel
+    const requests: HumanInterrupt[] = [];
+
+    for (const toolCall of interruptToolCalls) {
+      const toolName = toolCall.name;
+      const toolArgs = toolCall.args;
+      const description = `${messagePrefix}\n\nTool: ${toolName}\nArgs: ${JSON.stringify(toolArgs, null, 2)}`;
+      const toolConfig = toolConfigs[toolName];
+
+      const request: HumanInterrupt = {
+        action_request: {
+          action: toolName,
+          args: toolArgs,
+        },
+        config: toolConfig,
+        description: description,
+      };
+      requests.push(request);
+    }
+
+    // Use LangGraph's interrupt function
+    const responses: HumanResponse[] = await interrupt(requests);
+
+    for (let i = 0; i < responses.length; i++) {
+      const response = responses[i];
+      const toolCall = interruptToolCalls[i];
+
+      if (response.type === "accept") {
+        approvedToolCalls.push(toolCall);
+      } else if (response.type === "edit" && response.args) {
+        const edited = response.args;
+        const newToolCall = {
+          name: toolCall.name,
+          args: edited.args,
+          id: toolCall.id,
+        };
+        approvedToolCalls.push(newToolCall);
+      } else if (response.type === "ignore") {
+        // Skip this tool call
+        continue;
+      } else {
+        throw new Error(`Unknown response type: ${response.type}`);
+      }
+    }
+
+    // Update the last message with approved tool calls
+    const updatedLastMessage = {
+      ...lastMessage,
+      tool_calls: approvedToolCalls,
+    };
+
+    const updatedMessages = [
+      ...messages.slice(0, -1),
+      updatedLastMessage,
+    ];
+
+    return { ...state, messages: updatedMessages as typeof messages };
+  };
+}
