@@ -1,11 +1,12 @@
-import type {
-  DeepAgentStateType,
-  ToolInterruptConfig,
-} from "./types.js";
+import type { DeepAgentStateType, ToolInterruptConfig } from "./types.js";
 import { interrupt } from "@langchain/langgraph";
 import { isAIMessage, AIMessage } from "@langchain/core/messages";
 import type { ToolCall } from "@langchain/core/messages/tool";
-import { HumanInterrupt, HumanResponse, ActionRequest } from "@langchain/langgraph/prebuilt";
+import {
+  HumanInterrupt,
+  HumanResponse,
+  ActionRequest,
+} from "@langchain/langgraph/prebuilt";
 
 export function createInterruptHook(
   toolConfigs: ToolInterruptConfig,
@@ -74,10 +75,9 @@ export function createInterruptHook(
       requests.push(request);
     }
 
-    const responses = await interrupt<
-      HumanInterrupt[],
-      HumanResponse[]
-    >(requests);
+    const responses = await interrupt<HumanInterrupt[], HumanResponse[]>(
+      requests,
+    );
 
     for (let i = 0; i < responses.length; i++) {
       const response = responses[i];

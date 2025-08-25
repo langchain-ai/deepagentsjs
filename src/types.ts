@@ -49,7 +49,6 @@ export type PostModelHook = (
   model: LanguageModelLike,
 ) => Promise<DeepAgentStateType>;
 
-
 export type ToolInterruptConfig = Record<string, HumanInterruptConfig>;
 
 export interface CreateDeepAgentParams<
