@@ -1,25 +1,14 @@
-import type { HumanInterruptConfig } from "./types.js";
-import type { DeepAgentStateType } from "./types.js";
+import type { 
+  HumanInterruptConfig, 
+  DeepAgentStateType, 
+  ToolInterruptConfig,
+  ActionRequest,
+  HumanInterrupt,
+  HumanResponse
+} from "./types.js";
 import { interrupt } from "@langchain/langgraph";
-import { AIMessage } from "@langchain/core/messages";
-
-export type ToolInterruptConfig = Record<string, HumanInterruptConfig>;
-
-export interface ActionRequest {
-  action: string;
-  args: any;
-}
-
-export interface HumanInterrupt {
-  action_request: ActionRequest;
-  config: HumanInterruptConfig;
-  description: string;
-}
-
-export interface HumanResponse {
-  type: "accept" | "edit" | "ignore";
-  args?: ActionRequest;
-}
+import { AIMessage, isAIMessage } from "@langchain/core/messages";
+import type { ToolCall } from "@langchain/core/messages/tool";
 
 export function createInterruptHook(
   toolConfigs: ToolInterruptConfig,
@@ -117,3 +106,4 @@ export function createInterruptHook(
     return { ...state, messages: updatedMessages as typeof messages };
   };
 }
+
