@@ -12,7 +12,7 @@ import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { createTaskTool } from "./subAgent.js";
 import { getDefaultModel } from "./model.js";
 import { writeTodos, readFile, writeFile, editFile, ls } from "./tools.js";
-import type { CreateDeepAgentParams } from "./types.js";
+import type { CreateDeepAgentParams, PostModelHook } from "./types.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { DeepAgentState } from "./state.js";
@@ -119,3 +119,4 @@ export function createDeepAgent<
     postModelHook: selectedPostModelHook,
   });
 }
+
