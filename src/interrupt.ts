@@ -28,10 +28,10 @@ export interface HumanResponse {
 export function createInterruptHook(
   toolConfigs: ToolInterruptConfig,
   messagePrefix: string = "Tool execution requires approval",
-): (state: DeepAgentStateType, model?: any) => Promise<DeepAgentStateType> {
+): (state: DeepAgentStateType) => Promise<DeepAgentStateType> {
   /**
    * Create a post model hook that handles interrupts using native LangGraph schemas.
-   * 
+   *
    * Args:
    *   toolConfigs: Record mapping tool names to HumanInterruptConfig objects
    *   messagePrefix: Optional message prefix for interrupt descriptions
@@ -39,7 +39,6 @@ export function createInterruptHook(
 
   return async function interruptHook(
     state: DeepAgentStateType,
-    model?: any,
   ): Promise<DeepAgentStateType> {
     /**
      * Post model hook that checks for tool calls and triggers interrupts if needed.
@@ -125,10 +124,7 @@ export function createInterruptHook(
       tool_calls: approvedToolCalls,
     };
 
-    const updatedMessages = [
-      ...messages.slice(0, -1),
-      updatedLastMessage,
-    ];
+    const updatedMessages = [...messages.slice(0, -1), updatedLastMessage];
 
     return { ...state, messages: updatedMessages as typeof messages };
   };

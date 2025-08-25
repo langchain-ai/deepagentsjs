@@ -122,7 +122,7 @@ export function createDeepAgent<
   if (postModelHook && Object.keys(interruptConfig).length > 0) {
     throw new Error(
       "Cannot specify both postModelHook and interruptConfig together. " +
-      "Use either interruptConfig for tool interrupts or postModelHook for custom post-processing."
+        "Use either interruptConfig for tool interrupts or postModelHook for custom post-processing.",
     );
   }
 
