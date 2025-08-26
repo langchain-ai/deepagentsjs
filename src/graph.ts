@@ -69,7 +69,9 @@ export function createDeepAgent<
     : DeepAgentState;
 
   // Combine built-in tools with provided tools (unless skipBuiltinTools is true)
-  const allTools: StructuredTool[] = skipBuiltinTools ? tools : [...BUILTIN_TOOLS, ...tools];
+  const allTools: StructuredTool[] = skipBuiltinTools
+    ? tools
+    : [...BUILTIN_TOOLS, ...tools];
   // Create task tool using createTaskTool() if subagents are provided
   if (subagents.length > 0) {
     // Create tools map for task tool creation
