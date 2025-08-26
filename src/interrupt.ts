@@ -95,9 +95,6 @@ export function createInterruptHook(
         approvedToolCalls.push(newToolCall);
       } else if (response.type === "ignore") {
         continue;
-      } else if (response.type === "response") {
-        // continue here since it's a direct feedback
-        continue;
       } else {
         throw new Error(`Unknown response type: ${response.type}`);
       }
