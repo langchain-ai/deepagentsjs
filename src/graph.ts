@@ -51,8 +51,6 @@ const BUILTIN_TOOLS: StructuredTool[] = [
  * and returns createReactAgent with proper configuration.
  * Ensures exact parameter matching and behavior with Python version.
  *
- * @param params.builtinTools - If provided, only the specified built-in tools are included.
- *                              If not provided, all built-in tools are included.
  */
 export function createDeepAgent<
   StateSchema extends z.ZodObject<any, any, any, any, any>,
