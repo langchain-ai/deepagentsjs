@@ -50,7 +50,7 @@ const BUILTIN_TOOLS: StructuredTool[] = [
  * Combines built-in tools with provided tools, creates task tool using createTaskTool(),
  * and returns createReactAgent with proper configuration.
  * Ensures exact parameter matching and behavior with Python version.
- * 
+ *
  * @param params.builtinTools - If provided, only the specified built-in tools are included.
  *                              If not provided, all built-in tools are included.
  */
@@ -72,8 +72,8 @@ export function createDeepAgent<
     : DeepAgentState;
 
   // Filter built-in tools if builtinTools parameter is provided
-  const selectedBuiltinTools = builtinTools 
-    ? BUILTIN_TOOLS.filter(tool => builtinTools.includes(tool.name))
+  const selectedBuiltinTools = builtinTools
+    ? BUILTIN_TOOLS.filter((tool) => builtinTools.includes(tool.name))
     : BUILTIN_TOOLS;
 
   // Combine built-in tools with provided tools
