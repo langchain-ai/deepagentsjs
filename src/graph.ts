@@ -50,6 +50,9 @@ const BUILTIN_TOOLS: StructuredTool[] = [
  * Combines built-in tools with provided tools, creates task tool using createTaskTool(),
  * and returns createReactAgent with proper configuration.
  * Ensures exact parameter matching and behavior with Python version.
+ * 
+ * @param params.builtinTools - If provided, only the specified built-in tools are included.
+ *                              If not provided, all built-in tools are included.
  */
 export function createDeepAgent<
   StateSchema extends z.ZodObject<any, any, any, any, any>,
@@ -61,14 +64,20 @@ export function createDeepAgent<
     subagents = [],
     postModelHook,
     interruptConfig = {},
+    builtinTools,
   } = params;
 
   const stateSchema = params.stateSchema
     ? DeepAgentState.extend(params.stateSchema.shape)
     : DeepAgentState;
 
+  // Filter built-in tools if builtinTools parameter is provided
+  const selectedBuiltinTools = builtinTools 
+    ? BUILTIN_TOOLS.filter(tool => builtinTools.includes(tool.name))
+    : BUILTIN_TOOLS;
+
   // Combine built-in tools with provided tools
-  const allTools: StructuredTool[] = [...BUILTIN_TOOLS, ...tools];
+  const allTools: StructuredTool[] = [...selectedBuiltinTools, ...tools];
   // Create task tool using createTaskTool() if subagents are provided
   if (subagents.length > 0) {
     // Create tools map for task tool creation
