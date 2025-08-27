@@ -71,7 +71,9 @@ export function createDeepAgent<
 
   // Filter built-in tools if builtinTools parameter is provided
   const selectedBuiltinTools = builtinTools
-    ? BUILTIN_TOOLS.filter((tool) => builtinTools.some((bt) => bt === tool.name))
+    ? BUILTIN_TOOLS.filter((tool) =>
+        builtinTools.some((bt) => bt === tool.name),
+      )
     : BUILTIN_TOOLS;
 
   // Combine built-in tools with provided tools
