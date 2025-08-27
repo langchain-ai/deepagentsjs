@@ -66,9 +66,6 @@ export interface CreateDeepAgentParams<
   model?: LanguageModelLike;
   subagents?: SubAgent[];
   stateSchema?: StateSchema;
-  /**
-   * An optional schema for the context.
-   */
   contextSchema?: ContextSchema;
   postModelHook?: PostModelHook;
   interruptConfig?: ToolInterruptConfig;
