@@ -14,7 +14,6 @@ import { getDefaultModel } from "./model.js";
 import { writeTodos, readFile, writeFile, editFile, ls } from "./tools.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import type {
-  CreateDeepAgentParams,
   PostModelHook,
   AnyAnnotationRoot,
   CreateDeepAgentParams,
