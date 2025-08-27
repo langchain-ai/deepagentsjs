@@ -61,6 +61,7 @@ export interface CreateDeepAgentParams<
   stateSchema?: StateSchema;
   postModelHook?: PostModelHook;
   interruptConfig?: ToolInterruptConfig;
+  builtinTools?: string[];
 }
 
 export interface CreateTaskToolParams<
