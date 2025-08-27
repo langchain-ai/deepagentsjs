@@ -12,10 +12,11 @@ import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { createTaskTool } from "./subAgent.js";
 import { getDefaultModel } from "./model.js";
 import { writeTodos, readFile, writeFile, editFile, ls } from "./tools.js";
-import type { CreateDeepAgentParams } from "./types.js";
+import type { AnyAnnotationRoot, CreateDeepAgentParams } from "./types.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { DeepAgentState } from "./state.js";
+import { InteropZodObject } from "@langchain/core/utils/types";
 
 /**
  * Base prompt that provides instructions about available tools
@@ -52,13 +53,17 @@ const BUILTIN_TOOLS: StructuredTool[] = [
  */
 export function createDeepAgent<
   StateSchema extends z.ZodObject<any, any, any, any, any>,
->(params: CreateDeepAgentParams<StateSchema> = {}) {
+  ContextSchema extends
+    | AnyAnnotationRoot
+    | InteropZodObject = AnyAnnotationRoot,
+>(params: CreateDeepAgentParams<StateSchema, ContextSchema> = {}) {
   const {
     tools = [],
     instructions,
     model = getDefaultModel(),
     subagents = [],
     postModelHook,
+    contextSchema,
   } = params;
 
   const stateSchema = params.stateSchema
@@ -92,11 +97,16 @@ export function createDeepAgent<
     : BASE_PROMPT;
 
   // Return createReactAgent with proper configuration
-  return createReactAgent({
+  return createReactAgent<
+    typeof stateSchema,
+    Record<string, any>,
+    ContextSchema
+  >({
     llm: model,
     tools: allTools,
     stateSchema,
     messageModifier: finalInstructions,
     postModelHook,
+    contextSchema,
   });
 }

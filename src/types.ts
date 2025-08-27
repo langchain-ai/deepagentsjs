@@ -15,6 +15,10 @@ import type { StructuredTool } from "@langchain/core/tools";
 import type { DeepAgentState } from "./state.js";
 import { z } from "zod";
 import { Runnable } from "@langchain/core/runnables";
+import { AnnotationRoot } from "@langchain/langgraph";
+import { InteropZodObject } from "@langchain/core/utils/types";
+
+export type AnyAnnotationRoot = AnnotationRoot<any>;
 
 export type InferZodObjectShape<T> =
   T extends z.ZodObject<infer Shape> ? Shape : never;
@@ -48,6 +52,9 @@ export type LanguageModelLike = Runnable<
  */
 export interface CreateDeepAgentParams<
   StateSchema extends z.ZodObject<any, any, any, any, any>,
+  ContextSchema extends
+    | AnyAnnotationRoot
+    | InteropZodObject = AnyAnnotationRoot,
 > {
   tools?: StructuredTool[];
   instructions?: string;
@@ -58,6 +65,10 @@ export interface CreateDeepAgentParams<
     state: DeepAgentStateType,
     model: LanguageModelLike,
   ) => Promise<DeepAgentStateType>;
+  /**
+   * An optional schema for the context.
+   */
+  contextSchema?: ContextSchema;
 }
 
 /**
