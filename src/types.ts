@@ -17,6 +17,7 @@ import { z } from "zod";
 import { Runnable } from "@langchain/core/runnables";
 import { AnnotationRoot } from "@langchain/langgraph";
 import { InteropZodObject } from "@langchain/core/utils/types";
+import type { HumanInterruptConfig } from "@langchain/langgraph/prebuilt";
 
 export type AnyAnnotationRoot = AnnotationRoot<any>;
 
@@ -47,9 +48,13 @@ export type LanguageModelLike = Runnable<
   LanguageModelOutput
 >;
 
-/**
- * Parameters for createDeepAgent function with TypeScript types
- */
+export type PostModelHook = (
+  state: DeepAgentStateType,
+  model: LanguageModelLike,
+) => Promise<Partial<DeepAgentStateType> | void>;
+
+export type ToolInterruptConfig = Record<string, HumanInterruptConfig>;
+
 export interface CreateDeepAgentParams<
   StateSchema extends z.ZodObject<any, any, any, any, any>,
   ContextSchema extends
@@ -61,19 +66,14 @@ export interface CreateDeepAgentParams<
   model?: LanguageModelLike;
   subagents?: SubAgent[];
   stateSchema?: StateSchema;
-  postModelHook?: (
-    state: DeepAgentStateType,
-    model: LanguageModelLike,
-  ) => Promise<DeepAgentStateType>;
   /**
    * An optional schema for the context.
    */
   contextSchema?: ContextSchema;
+  postModelHook?: PostModelHook;
+  interruptConfig?: ToolInterruptConfig;
 }
 
-/**
- * Parameters for createTaskTool function
- */
 export interface CreateTaskToolParams<
   StateSchema extends z.ZodObject<any, any, any, any, any>,
 > {

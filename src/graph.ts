@@ -12,11 +12,12 @@ import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { createTaskTool } from "./subAgent.js";
 import { getDefaultModel } from "./model.js";
 import { writeTodos, readFile, writeFile, editFile, ls } from "./tools.js";
-import type { AnyAnnotationRoot, CreateDeepAgentParams } from "./types.js";
+import { InteropZodObject } from "@langchain/core/utils/types";
+import type { CreateDeepAgentParams, PostModelHook, AnyAnnotationRoot, CreateDeepAgentParams } from "./types.js";
 import type { StructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { DeepAgentState } from "./state.js";
-import { InteropZodObject } from "@langchain/core/utils/types";
+import { createInterruptHook } from "./interrupt.js";
 
 /**
  * Base prompt that provides instructions about available tools
@@ -64,6 +65,7 @@ export function createDeepAgent<
     subagents = [],
     postModelHook,
     contextSchema,
+    interruptConfig = {},
   } = params;
 
   const stateSchema = params.stateSchema
@@ -96,6 +98,23 @@ export function createDeepAgent<
     ? instructions + BASE_PROMPT
     : BASE_PROMPT;
 
+  // Should never be the case that both are specified
+  if (postModelHook && Object.keys(interruptConfig).length > 0) {
+    throw new Error(
+      "Cannot specify both postModelHook and interruptConfig together. " +
+        "Use either interruptConfig for tool interrupts or postModelHook for custom post-processing.",
+    );
+  }
+
+  let selectedPostModelHook: PostModelHook | undefined;
+  if (postModelHook !== undefined) {
+    selectedPostModelHook = postModelHook;
+  } else if (Object.keys(interruptConfig).length > 0) {
+    selectedPostModelHook = createInterruptHook(interruptConfig);
+  } else {
+    selectedPostModelHook = undefined;
+  }
+
   // Return createReactAgent with proper configuration
   return createReactAgent<
     typeof stateSchema,
@@ -106,7 +125,7 @@ export function createDeepAgent<
     tools: allTools,
     stateSchema,
     messageModifier: finalInstructions,
-    postModelHook,
     contextSchema,
+    postModelHook: selectedPostModelHook,
   });
 }
