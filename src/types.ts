@@ -15,7 +15,11 @@ import type { StructuredTool } from "@langchain/core/tools";
 import type { DeepAgentState } from "./state.js";
 import { z } from "zod";
 import { Runnable } from "@langchain/core/runnables";
+import { AnnotationRoot } from "@langchain/langgraph";
+import { InteropZodObject } from "@langchain/core/utils/types";
 import type { HumanInterruptConfig } from "@langchain/langgraph/prebuilt";
+
+export type AnyAnnotationRoot = AnnotationRoot<any>;
 
 export type InferZodObjectShape<T> =
   T extends z.ZodObject<infer Shape> ? Shape : never;
@@ -53,12 +57,16 @@ export type ToolInterruptConfig = Record<string, HumanInterruptConfig>;
 
 export interface CreateDeepAgentParams<
   StateSchema extends z.ZodObject<any, any, any, any, any>,
+  ContextSchema extends
+    | AnyAnnotationRoot
+    | InteropZodObject = AnyAnnotationRoot,
 > {
   tools?: StructuredTool[];
   instructions?: string;
   model?: LanguageModelLike;
   subagents?: SubAgent[];
   stateSchema?: StateSchema;
+  contextSchema?: ContextSchema;
   postModelHook?: PostModelHook;
   interruptConfig?: ToolInterruptConfig;
   builtinTools?: string[];
