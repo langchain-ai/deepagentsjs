@@ -53,7 +53,10 @@ export type PostModelHook = (
   model: LanguageModelLike,
 ) => Promise<Partial<DeepAgentStateType> | void>;
 
-export type ToolInterruptConfig = Record<string, HumanInterruptConfig | boolean>;
+export type ToolInterruptConfig = Record<
+  string,
+  HumanInterruptConfig | boolean
+>;
 
 export interface CreateDeepAgentParams<
   StateSchema extends z.ZodObject<any, any, any, any, any>,

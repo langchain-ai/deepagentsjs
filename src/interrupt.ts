@@ -22,9 +22,13 @@ export function createInterruptHook(
    */
 
   Object.entries(toolConfigs).forEach(([tool, interruptConfig]) => {
-    if (interruptConfig && typeof interruptConfig === 'object' && interruptConfig.allow_ignore) {
+    if (
+      interruptConfig &&
+      typeof interruptConfig === "object" &&
+      interruptConfig.allow_ignore
+    ) {
       throw new Error(
-        `For ${tool} we get allow_ignore = true - we currently don't support ignore.`
+        `For ${tool} we get allow_ignore = true - we currently don't support ignore.`,
       );
     }
   });
@@ -66,7 +70,7 @@ export function createInterruptHook(
 
     if (interruptToolCalls.length > 1) {
       throw new Error(
-        "Right now, interrupt hook only works when one tool requires interrupts"
+        "Right now, interrupt hook only works when one tool requires interrupts",
       );
     }
 
@@ -75,7 +79,7 @@ export function createInterruptHook(
     const toolArgs = toolCall.args;
     const description = `${messagePrefix}\n\nTool: ${toolName}\nArgs: ${JSON.stringify(toolArgs, null, 2)}`;
     const toolConfig = toolConfigs[toolName];
-    
+
     const defaultToolConfig: HumanInterruptConfig = {
       allow_accept: true,
       allow_edit: true,
@@ -88,18 +92,16 @@ export function createInterruptHook(
         action: toolName,
         args: toolArgs,
       },
-      config: typeof toolConfig === 'object' ? toolConfig : defaultToolConfig,
+      config: typeof toolConfig === "object" ? toolConfig : defaultToolConfig,
       description: description,
     };
 
     const responses: HumanResponse[] = await interrupt([request]);
 
     if (responses.length !== 1) {
-      throw new Error(
-        `Expected a list of one response, got ${responses}`
-      );
+      throw new Error(`Expected a list of one response, got ${responses}`);
     }
-    
+
     const response = responses[0];
 
     if (response.type === "accept") {
