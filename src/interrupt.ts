@@ -96,8 +96,8 @@ export function createInterruptHook(
       description: description,
     };
 
-    const responses: HumanResponse[] = await interrupt([request]);
-
+    const res: HumanResponse | HumanResponse[] = await interrupt([request]);
+    const responses = Array.isArray(res) ? res : [res];
     if (responses.length !== 1) {
       throw new Error(`Expected a list of one response, got ${responses}`);
     }
