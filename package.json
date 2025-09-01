@@ -42,6 +42,8 @@
     "@langchain/anthropic": "^0.3.25",
     "@langchain/core": "^0.3.66",
     "@langchain/langgraph": "^0.4.6",
+    "@langchain/langgraph-cli": "^0.0.63",
+    "deepagents": "^0.0.2",
     "zod": "^3.25.32"
   },
   "devDependencies": {

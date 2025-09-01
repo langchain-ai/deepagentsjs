@@ -35,6 +35,7 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+**/.env
 
 # vercel
 .vercel
@@ -43,9 +44,32 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+
+# Logs
+logs/
+*.log
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Package manager files
+pnpm-lock.yaml
+package-lock.json
+
 credentials.json
 
 # LangGraph API
 .langgraph_api
 
+# Claude project files
 **/.claude/settings.local.json
+.claude/
+**/CLAUDE.md
