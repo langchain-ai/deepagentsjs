@@ -6,10 +6,7 @@
  */
 
 export { createDeepAgent } from "./graph.js";
-export { getDefaultModel } from "./model.js";
 export { createTaskTool } from "./subAgent.js";
-export { writeTodos, readFile, writeFile, editFile, ls } from "./tools.js";
-export { DeepAgentState, fileReducer } from "./state.js";
 export {
   WRITE_TODOS_DESCRIPTION,
   TASK_DESCRIPTION_PREFIX,
@@ -19,9 +16,6 @@ export {
 } from "./prompts.js";
 export type {
   SubAgent,
-  Todo,
-  DeepAgentStateType,
   CreateDeepAgentParams,
   CreateTaskToolParams,
-  TodoStatus,
 } from "./types.js";

@@ -6,77 +6,34 @@
  * TypeScript interfaces and types including StateSchemaType, SubAgent, Todo,
  * and proper generic types for state schemas.
  */
-
-import type {
-  BaseLanguageModelInput,
-  LanguageModelOutput,
-} from "@langchain/core/language_models/base";
-import type { StructuredTool } from "@langchain/core/tools";
-import type { DeepAgentState } from "./state.js";
 import { z } from "zod";
-import { Runnable } from "@langchain/core/runnables";
-import { AnnotationRoot } from "@langchain/langgraph";
-import { InteropZodObject } from "@langchain/core/utils/types";
-import type { HumanInterruptConfig } from "@langchain/langgraph/prebuilt";
-
-export type AnyAnnotationRoot = AnnotationRoot<any>;
-
-export type InferZodObjectShape<T> =
-  T extends z.ZodObject<infer Shape> ? Shape : never;
+import type { HumanInTheLoopMiddlewareConfig } from "langchain/middleware";
+import type { StructuredTool } from "@langchain/core/tools";
+import type { LanguageModelLike } from "@langchain/core/language_models/base";
+import type { InferInteropZodInput } from "@langchain/core/utils/types";
 
 /**
  * SubAgent interface matching Python's TypedDict structure
  */
-export interface SubAgent {
-  name: string;
-  description: string;
-  prompt: string;
-  tools?: string[];
-}
+export const SubAgentSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  prompt: z.string(),
+  tools: z.array(z.string()).optional(),
+});
+export type SubAgent = InferInteropZodInput<typeof SubAgentSchema>;
 
-export type TodoStatus = "pending" | "in_progress" | "completed";
-
-export interface Todo {
-  content: string;
-  status: TodoStatus;
-}
-
-export type DeepAgentStateType = z.infer<typeof DeepAgentState>;
-
-export type LanguageModelLike = Runnable<
-  BaseLanguageModelInput,
-  LanguageModelOutput
->;
-
-export type PostModelHook = (
-  state: DeepAgentStateType,
-  model: LanguageModelLike,
-) => Promise<Partial<DeepAgentStateType> | void>;
-
-export type ToolInterruptConfig = Record<
-  string,
-  HumanInterruptConfig | boolean
->;
-
-export interface CreateDeepAgentParams<
-  StateSchema extends z.ZodObject<any, any, any, any, any>,
-  ContextSchema extends
-    | AnyAnnotationRoot
-    | InteropZodObject = AnyAnnotationRoot,
-> {
+export interface CreateDeepAgentParams {
   tools?: StructuredTool[];
   instructions?: string;
-  model?: LanguageModelLike;
+  model?: LanguageModelLike | string;
   subagents?: SubAgent[];
-  stateSchema?: StateSchema;
-  contextSchema?: ContextSchema;
-  postModelHook?: PostModelHook;
-  interruptConfig?: ToolInterruptConfig;
+  interruptConfig?: NonNullable<HumanInTheLoopMiddlewareConfig>["toolConfigs"];
   builtinTools?: string[];
 }
 
 export interface CreateTaskToolParams<
-  StateSchema extends z.ZodObject<any, any, any, any, any>,
+  StateSchema extends z.ZodObject,
 > {
   subagents: SubAgent[];
   tools?: Record<string, StructuredTool>;

@@ -1,9 +1,10 @@
 /* eslint-disable no-console */
-import { createDeepAgent, type SubAgent } from "../../src/index.js";
-import { tool } from "@langchain/core/tools";
-import { z } from "zod";
 import "dotenv/config";
+import { z } from "zod";
+import { tool } from "langchain";
 import { TavilySearch } from "@langchain/tavily";
+
+import { createDeepAgent, type SubAgent } from "../../src/index.js";
 
 type Topic = "general" | "news" | "finance";
 
@@ -32,7 +33,7 @@ const internetSearch = tool(
       includeRawContent,
       topic,
     });
-    const tavilyResponse = await tavilySearch.invoke({ query });
+    const tavilyResponse = await tavilySearch._call({ query });
 
     return tavilyResponse;
   },
@@ -198,13 +199,13 @@ const agent = createDeepAgent({
   tools: [internetSearch],
   instructions: researchInstructions,
   subagents: [critiqueSubAgent, researchSubAgent],
-}).withConfig({ recursionLimit: 1000 });
+});
 
 // Invoke the agent
 async function main() {
   const result = await agent.invoke({
     messages: [{ role: "user", content: "what is langgraph?" }],
-  });
+  }, { recursionLimit: 1000 });
   console.log(result);
 }
 

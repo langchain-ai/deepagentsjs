@@ -6,60 +6,41 @@
  * Implements mock filesystem operations using state.files similar to Python version.
  */
 
+import { createMiddleware, AgentMiddleware } from "langchain";
 import { tool, ToolRunnableConfig } from "@langchain/core/tools";
 import { ToolMessage } from "@langchain/core/messages";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import { z } from "zod";
 import {
-  WRITE_TODOS_DESCRIPTION,
   EDIT_DESCRIPTION,
   TOOL_DESCRIPTION,
-} from "./prompts.js";
-import { DeepAgentStateType } from "./types.js";
+} from "../prompts.js";
 
-/**
- * Write todos tool - manages todo list with Command return
- * Uses getCurrentTaskInput() instead of Python's InjectedState
- */
-export const writeTodos = tool(
-  (input, config: ToolRunnableConfig) => {
-    return new Command({
-      update: {
-        todos: input.todos,
-        messages: [
-          new ToolMessage({
-            content: `Updated todo list to ${JSON.stringify(input.todos)}`,
-            tool_call_id: config.toolCall?.id as string,
-          }),
-        ],
-      },
-    });
+export type { AgentMiddleware };
+
+const stateSchema = z.object({
+  files: z.record(z.string(), z.string()),
+});
+export type FsMiddlewareState = z.infer<typeof stateSchema>;
+
+export const fsMiddleware = createMiddleware({
+  name: "fsMiddleware",
+  stateSchema,
+  modifyModelRequest: async (request) => {
+    return {
+      ...request,
+      tools: [...request.tools, ls, readFile, writeFile, editFile],
+    }
   },
-  {
-    name: "write_todos",
-    description: WRITE_TODOS_DESCRIPTION,
-    schema: z.object({
-      todos: z
-        .array(
-          z.object({
-            content: z.string().describe("Content of the todo item"),
-            status: z
-              .enum(["pending", "in_progress", "completed"])
-              .describe("Status of the todo"),
-          }),
-        )
-        .describe("List of todo items to update"),
-    }),
-  },
-);
+});
 
 /**
  * List files tool - returns list of files from state.files
  * Equivalent to Python's ls function
  */
-export const ls = tool(
+const ls = tool(
   () => {
-    const state = getCurrentTaskInput<DeepAgentStateType>();
+    const state = getCurrentTaskInput<FsMiddlewareState>();
     const files = state.files || {};
     return Object.keys(files);
   },
@@ -74,9 +55,9 @@ export const ls = tool(
  * Read file tool - reads from mock filesystem in state.files
  * Matches Python read_file function behavior exactly
  */
-export const readFile = tool(
+const readFile = tool(
   (input: { file_path: string; offset?: number; limit?: number }) => {
-    const state = getCurrentTaskInput<DeepAgentStateType>();
+    const state = getCurrentTaskInput<FsMiddlewareState>();
     const mockFilesystem = state.files || {};
     const { file_path, offset = 0, limit = 2000 } = input;
 
@@ -144,12 +125,12 @@ export const readFile = tool(
  * Write file tool - writes to mock filesystem with Command return
  * Matches Python write_file function behavior exactly
  */
-export const writeFile = tool(
+const writeFile = tool(
   (
     input: { file_path: string; content: string },
     config: ToolRunnableConfig,
   ) => {
-    const state = getCurrentTaskInput<DeepAgentStateType>();
+    const state = getCurrentTaskInput<FsMiddlewareState>();
     const files = { ...(state.files || {}) };
     files[input.file_path] = input.content;
 
@@ -179,7 +160,7 @@ export const writeFile = tool(
  * Edit file tool - edits files in mock filesystem with Command return
  * Matches Python edit_file function behavior exactly
  */
-export const editFile = tool(
+const editFile = tool(
   (
     input: {
       file_path: string;
@@ -189,7 +170,7 @@ export const editFile = tool(
     },
     config: ToolRunnableConfig,
   ) => {
-    const state = getCurrentTaskInput<DeepAgentStateType>();
+    const state = getCurrentTaskInput<FsMiddlewareState>();
     const mockFilesystem = { ...(state.files || {}) };
     const { file_path, old_string, new_string, replace_all = false } = input;
 

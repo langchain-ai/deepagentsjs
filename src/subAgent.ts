@@ -7,51 +7,31 @@
  * and returns a tool function that uses createReactAgent for sub-agents.
  */
 
-import { tool, StructuredTool } from "@langchain/core/tools";
-import { ToolMessage } from "@langchain/core/messages";
-import { Command, getCurrentTaskInput } from "@langchain/langgraph";
-import { ToolRunnableConfig } from "@langchain/core/tools";
-import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { z } from "zod";
-import type { LanguageModelLike, SubAgent } from "./types.js";
-import { getDefaultModel } from "./model.js";
-import { writeTodos, readFile, writeFile, editFile, ls } from "./tools.js";
-import { TASK_DESCRIPTION_PREFIX, TASK_DESCRIPTION_SUFFIX } from "./prompts.js";
+import { createAgent, ToolMessage } from "langchain";
+import { tool, StructuredTool } from "@langchain/core/tools";
+import type { LanguageModelLike } from "@langchain/core/language_models/base";
+import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 
-/**
- * Built-in tools map for tool resolution by name
- */
-const BUILTIN_TOOLS: Record<string, StructuredTool> = {
-  write_todos: writeTodos,
-  read_file: readFile,
-  write_file: writeFile,
-  edit_file: editFile,
-  ls: ls,
-};
+import { TASK_DESCRIPTION_PREFIX, TASK_DESCRIPTION_SUFFIX } from "./prompts.js";
+import { fsMiddleware, todoMiddleware } from "./middleware/index.js";
+import type { SubAgent } from "./types.js";
 
 /**
  * Create task tool function that creates agents map, handles tool resolution by name,
  * and returns a tool function that uses createReactAgent for sub-agents.
  * Uses Command for state updates and navigation between agents.
  */
-export function createTaskTool<
-  StateSchema extends z.ZodObject<any, any, any, any, any>,
->(inputs: {
+export function createTaskTool(inputs: {
   subagents: SubAgent[];
   tools: Record<string, StructuredTool>;
-  model: LanguageModelLike;
-  stateSchema: StateSchema;
-}) {
+  model: LanguageModelLike | string;
+}): StructuredTool {
   const {
     subagents,
     tools = {},
-    model = getDefaultModel(),
-    stateSchema,
+    model = "openai:gpt-4o-mini",
   } = inputs;
-
-  // Combine built-in tools with provided tools for tool resolution
-  const allTools = { ...BUILTIN_TOOLS, ...tools };
-
   // Pre-create all agents like Python does
   const agentsMap = new Map<string, any>();
   for (const subagent of subagents) {
@@ -59,7 +39,7 @@ export function createTaskTool<
     const subagentTools: StructuredTool[] = [];
     if (subagent.tools) {
       for (const toolName of subagent.tools) {
-        const resolvedTool = allTools[toolName];
+        const resolvedTool = tools[toolName];
         if (resolvedTool) {
           subagentTools.push(resolvedTool);
         } else {
@@ -71,15 +51,15 @@ export function createTaskTool<
       }
     } else {
       // If no tools specified, use all tools like Python does
-      subagentTools.push(...Object.values(allTools));
+      subagentTools.push(...Object.values(tools));
     }
 
     // Create react agent for the subagent (pre-create like Python)
-    const reactAgent = createReactAgent({
-      llm: model,
+    const reactAgent = createAgent({
+      ...(typeof model === "string" ? { model } : { llm: model }),
       tools: subagentTools,
-      stateSchema,
-      messageModifier: subagent.prompt,
+      prompt: subagent.prompt,
+      middleware: [fsMiddleware, todoMiddleware],
     });
 
     agentsMap.set(subagent.name, reactAgent);
@@ -88,7 +68,7 @@ export function createTaskTool<
   return tool(
     async (
       input: { description: string; subagent_type: string },
-      config: ToolRunnableConfig,
+      config,
     ) => {
       const { description, subagent_type } = input;
 
@@ -100,7 +80,7 @@ export function createTaskTool<
 
       try {
         // Get current state for context
-        const currentState = getCurrentTaskInput<z.infer<typeof stateSchema>>();
+        const currentState = getCurrentTaskInput<any>();
 
         // Modify state messages like Python does
         const modifiedState = {
