@@ -8,8 +8,8 @@
  */
 
 import { z } from "zod";
-import { createAgent, ToolMessage } from "langchain";
-import { tool, StructuredTool } from "@langchain/core/tools";
+import { createAgent, ToolMessage, tool } from "langchain";
+import type { StructuredTool } from "@langchain/core/tools";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 

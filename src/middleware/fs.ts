@@ -6,9 +6,7 @@
  * Implements mock filesystem operations using state.files similar to Python version.
  */
 
-import { createMiddleware, AgentMiddleware } from "langchain";
-import { tool, ToolRunnableConfig } from "@langchain/core/tools";
-import { ToolMessage } from "@langchain/core/messages";
+import { createMiddleware, AgentMiddleware, tool, ToolMessage } from "langchain";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import { z } from "zod";
 import {
@@ -128,7 +126,7 @@ const readFile = tool(
 const writeFile = tool(
   (
     input: { file_path: string; content: string },
-    config: ToolRunnableConfig,
+    config,
   ) => {
     const state = getCurrentTaskInput<FsMiddlewareState>();
     const files = { ...(state.files || {}) };
@@ -168,7 +166,7 @@ const editFile = tool(
       new_string: string;
       replace_all?: boolean;
     },
-    config: ToolRunnableConfig,
+    config,
   ) => {
     const state = getCurrentTaskInput<FsMiddlewareState>();
     const mockFilesystem = { ...(state.files || {}) };
