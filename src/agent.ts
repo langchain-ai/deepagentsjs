@@ -14,6 +14,7 @@ import type { StructuredTool } from "@langchain/core/tools";
 import { createTaskTool } from "./subAgent.js";
 import type { CreateDeepAgentParams } from "./types.js";
 import { fsMiddleware, todoMiddleware } from "./middleware/index.js";
+
 /**
  * Base prompt that provides instructions about available tools
  * Ported from Python implementation to ensure consistent behavior
@@ -71,11 +72,11 @@ export function createDeepAgent(params: CreateDeepAgentParams = {} as CreateDeep
   }
 
   return createAgent({
-    ...(typeof model === "string" ? { model } : { llm: model }),
+    model,
     prompt: finalInstructions,
     tools: allTools,
     middleware: [fsMiddleware, todoMiddleware, humanInTheLoopMiddleware({
-      toolConfigs: interruptConfig
-    })],
-  })
+      interruptOn: interruptConfig
+    })] as const
+  });
 }

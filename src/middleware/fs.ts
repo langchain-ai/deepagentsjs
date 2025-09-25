@@ -16,21 +16,18 @@ import {
 
 export type { AgentMiddleware };
 
+const systemMessage = `## Filesystem Tools \`ls\`, \`read_file\`, \`write_file\`, \`edit_file\`
+
+You have access to a local, private filesystem which you can interact with using these tools.
+- ls: list all files in the local filesystem
+- read_file: read a file from the local filesystem
+- write_file: write to a file in the local filesystem
+- edit_file: edit a file in the local filesystem`
+
 const stateSchema = z.object({
-  files: z.record(z.string(), z.string()),
+  files: z.record(z.string(), z.string()).default({}),
 });
 export type FsMiddlewareState = z.infer<typeof stateSchema>;
-
-export const fsMiddleware = createMiddleware({
-  name: "fsMiddleware",
-  stateSchema,
-  modifyModelRequest: async (request) => {
-    return {
-      ...request,
-      tools: [...request.tools, ls, readFile, writeFile, editFile],
-    }
-  },
-});
 
 /**
  * List files tool - returns list of files from state.files
@@ -249,3 +246,15 @@ const editFile = tool(
     }),
   },
 );
+
+export const fsMiddleware = createMiddleware({
+  name: "fsMiddleware",
+  stateSchema,
+  tools: [ls, readFile, writeFile, editFile],
+  modifyModelRequest: (request) => {
+    return {
+      ...request,
+      systemMessage: request.systemMessage + systemMessage,
+    }
+  },
+});

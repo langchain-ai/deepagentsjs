@@ -5,7 +5,7 @@
  * This implementation maintains 1:1 compatibility with the Python version.
  */
 
-export { createDeepAgent } from "./graph.js";
+export { createDeepAgent } from "./agent.js";
 export { createTaskTool } from "./subAgent.js";
 export {
   WRITE_TODOS_DESCRIPTION,

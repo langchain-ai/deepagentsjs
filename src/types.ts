@@ -28,7 +28,7 @@ export interface CreateDeepAgentParams {
   instructions?: string;
   model?: LanguageModelLike | string;
   subagents?: SubAgent[];
-  interruptConfig?: NonNullable<HumanInTheLoopMiddlewareConfig>["toolConfigs"];
+  interruptConfig?: NonNullable<HumanInTheLoopMiddlewareConfig>["interruptOn"];
   builtinTools?: string[];
 }
 

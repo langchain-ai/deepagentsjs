@@ -3,6 +3,7 @@ import "dotenv/config";
 import { z } from "zod";
 import { tool } from "langchain";
 import { TavilySearch } from "@langchain/tavily";
+import { ChatAnthropic } from "@langchain/anthropic";
 
 import { createDeepAgent, type SubAgent } from "../../src/index.js";
 
@@ -196,6 +197,10 @@ Use this to run an internet search for a given query. You can specify the number
 
 // Create the agent
 const agent = createDeepAgent({
+  model: new ChatAnthropic({
+    model: "claude-3-5-sonnet-20240620",
+    temperature: 0,
+  }),
   tools: [internetSearch],
   instructions: researchInstructions,
   subagents: [critiqueSubAgent, researchSubAgent],
@@ -205,8 +210,17 @@ const agent = createDeepAgent({
 async function main() {
   const result = await agent.invoke({
     messages: [{ role: "user", content: "what is langgraph?" }],
-  }, { recursionLimit: 1000 });
-  console.log(result);
+  }, { recursionLimit: 1000 }) as unknown as {
+    /**
+     * ToDo(@christian-bromann): fix type inference
+     */
+    todos: {content: string; status: string}[];
+    files: Record<string, string>;
+  };
+
+  console.log("🎉 Finished!")
+  console.log(`\n\nAgent ToDo List:\n${result.todos.map((todo) => ` - ${todo.content} (${todo.status})`).join("\n")}`);
+  console.log(`\n\nAgent Files:\n${Object.entries(result.files).map(([key, value]) => ` - ${key}: ${value}`).join("\n")}`);
 }
 
 export { agent, internetSearch };
