@@ -52,14 +52,7 @@ const writeTodos = tool(
     description: WRITE_TODOS_DESCRIPTION,
     schema: z.object({
       todos: z
-        .array(
-          z.object({
-            content: z.string().describe("Content of the todo item"),
-            status: z
-              .enum(["pending", "in_progress", "completed"])
-              .describe("Status of the todo"),
-          }),
-        )
+        .array(TodoSchema)
         .describe("List of todo items to update"),
     }),
   },
@@ -72,7 +65,7 @@ export const todoMiddleware = createMiddleware({
   modifyModelRequest: (request) => {
     return {
       ...request,
-      systemMessage: request.systemMessage + systemPrompt,
+      systemPrompt: request.systemPrompt + systemPrompt,
     }
   },
 });

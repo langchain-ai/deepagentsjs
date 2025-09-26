@@ -73,7 +73,7 @@ export function createDeepAgent(params: CreateDeepAgentParams = {} as CreateDeep
 
   return createAgent({
     model,
-    prompt: finalInstructions,
+    systemPrompt: finalInstructions,
     tools: allTools,
     middleware: [fsMiddleware, todoMiddleware, humanInTheLoopMiddleware({
       interruptOn: interruptConfig

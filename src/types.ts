@@ -18,7 +18,7 @@ import type { InferInteropZodInput } from "@langchain/core/utils/types";
 export const SubAgentSchema = z.object({
   name: z.string(),
   description: z.string(),
-  prompt: z.string(),
+  systemPrompt: z.string(),
   tools: z.array(z.string()).optional(),
 });
 export type SubAgent = InferInteropZodInput<typeof SubAgentSchema>;

@@ -238,8 +238,10 @@
   dependencies:
     "@anthropic-ai/sdk" "^0.56.0"
 
-"@langchain/core@file:../langchainjs/libs/langchain-core":
-  version "1.0.0-alpha.5"
+"@langchain/core@alpha":
+  version "1.0.0-alpha.6"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-1.0.0-alpha.6.tgz#21e6f4a670f8871c76d5b980e599f8f31b424d17"
+  integrity sha512-YjYKpz72A6cSS+gwxahpGMT3MhUu7eYR8GpvkcXWbIGTGcuAlPhfVuiQbxtelbIm/cMetp+ZCNhfTd48L3/KqA==
   dependencies:
     "@cfworker/json-schema" "^4.0.2"
     ansi-styles "^5.0.0"
@@ -286,7 +288,7 @@
   dependencies:
     zod "^3.25.32"
 
-"@langchain/textsplitters@workspace:*":
+"@langchain/textsplitters@1.0.0-alpha.1":
   version "1.0.0-alpha.1"
   resolved "https://registry.yarnpkg.com/@langchain/textsplitters/-/textsplitters-1.0.0-alpha.1.tgz#4aa4e0d1cfa767b123de7c2685eb2d7c9d589873"
   integrity sha512-PcSVR/WSaGR7mz71mrw6f5f6bAFvV+DkYnuvGhK7/Rkg/Nr78XW+gTP8SDkX57yLoDI0AMaIIFArT++FnTsgSg==
@@ -1569,12 +1571,14 @@ keyv@^4.5.4:
   dependencies:
     json-buffer "3.0.1"
 
-"langchain@file:../langchainjs/libs/langchain":
-  version "1.0.0-alpha.6"
+langchain@alpha:
+  version "1.0.0-alpha.7"
+  resolved "https://registry.yarnpkg.com/langchain/-/langchain-1.0.0-alpha.7.tgz#555fb807c66da15e7f7194d8ffc923b069877064"
+  integrity sha512-//BrQQclwaUbXmnSTboocU73PsHn15L5ctF7Mouea2+hAQClsW4271VQ9V8stxqTiEe5/yrvTi5auyzvsa7okg==
   dependencies:
     "@langchain/langgraph" next
     "@langchain/langgraph-checkpoint" "^0.1.1"
-    "@langchain/textsplitters" "workspace:*"
+    "@langchain/textsplitters" "1.0.0-alpha.1"
     js-yaml "^4.1.0"
     jsonpointer "^5.0.1"
     openapi-types "^12.1.3"

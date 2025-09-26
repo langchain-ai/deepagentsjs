@@ -16,7 +16,7 @@ import {
 
 export type { AgentMiddleware };
 
-const systemMessage = `## Filesystem Tools \`ls\`, \`read_file\`, \`write_file\`, \`edit_file\`
+const systemPrompt = `## Filesystem Tools \`ls\`, \`read_file\`, \`write_file\`, \`edit_file\`
 
 You have access to a local, private filesystem which you can interact with using these tools.
 - ls: list all files in the local filesystem
@@ -254,7 +254,7 @@ export const fsMiddleware = createMiddleware({
   modifyModelRequest: (request) => {
     return {
       ...request,
-      systemMessage: request.systemMessage + systemMessage,
+      systemPrompt: request.systemPrompt + systemPrompt,
     }
   },
 });
