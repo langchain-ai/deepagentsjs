@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { createMiddleware, tool, ToolMessage, AgentMiddleware } from "langchain";
+import {
+  createMiddleware,
+  tool,
+  ToolMessage,
+  AgentMiddleware,
+} from "langchain";
 import { Command } from "@langchain/langgraph";
 import { WRITE_TODOS_DESCRIPTION } from "../prompts.js";
 
@@ -17,12 +22,12 @@ Writing todos takes time and tokens, use it when it is helpful for managing comp
 
 ## Important To-Do List Usage Notes to Remember
 - The \`write_todos\` tool should never be called multiple times in parallel.
-- Don't be afraid to revise the To-Do list as you go. New information may reveal new tasks that need to be done, or old tasks that are irrelevant.`
+- Don't be afraid to revise the To-Do list as you go. New information may reveal new tasks that need to be done, or old tasks that are irrelevant.`;
 
 export const TodoStatus = z.enum(["pending", "in_progress", "completed"]);
 export const TodoSchema = z.object({
   content: z.string(),
-  status: TodoStatus
+  status: TodoStatus,
 });
 export const TodoMiddlewareState = z.object({
   todos: z.array(TodoSchema).default([]),
@@ -51,11 +56,9 @@ const writeTodos = tool(
     name: "write_todos",
     description: WRITE_TODOS_DESCRIPTION,
     schema: z.object({
-      todos: z
-        .array(TodoSchema)
-        .describe("List of todo items to update"),
+      todos: z.array(TodoSchema).describe("List of todo items to update"),
     }),
-  },
+  }
 );
 
 export const todoMiddleware = createMiddleware({
@@ -66,6 +69,6 @@ export const todoMiddleware = createMiddleware({
     return {
       ...request,
       systemPrompt: request.systemPrompt + systemPrompt,
-    }
+    };
   },
 });

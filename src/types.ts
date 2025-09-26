@@ -32,9 +32,7 @@ export interface CreateDeepAgentParams {
   builtinTools?: string[];
 }
 
-export interface CreateTaskToolParams<
-  StateSchema extends z.ZodObject,
-> {
+export interface CreateTaskToolParams<StateSchema extends z.ZodObject> {
   subagents: SubAgent[];
   tools?: Record<string, StructuredTool>;
   model?: LanguageModelLike;

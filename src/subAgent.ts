@@ -27,11 +27,7 @@ export function createTaskTool(inputs: {
   tools: Record<string, StructuredTool>;
   model: LanguageModelLike | string;
 }): StructuredTool {
-  const {
-    subagents,
-    tools = {},
-    model = "openai:gpt-4o-mini",
-  } = inputs;
+  const { subagents, tools = {}, model = "openai:gpt-4o-mini" } = inputs;
   // Pre-create all agents like Python does
   const agentsMap = new Map<string, any>();
   for (const subagent of subagents) {
@@ -45,7 +41,7 @@ export function createTaskTool(inputs: {
         } else {
           // eslint-disable-next-line no-console
           console.warn(
-            `Warning: Tool '${toolName}' not found for agent '${subagent.name}'`,
+            `Warning: Tool '${toolName}' not found for agent '${subagent.name}'`
           );
         }
       }
@@ -66,10 +62,7 @@ export function createTaskTool(inputs: {
   }
 
   return tool(
-    async (
-      input: { description: string; subagent_type: string },
-      config,
-    ) => {
+    async (input: { description: string; subagent_type: string }, config) => {
       const { description, subagent_type } = input;
 
       // Get the pre-created agent
@@ -131,7 +124,7 @@ export function createTaskTool(inputs: {
       description:
         TASK_DESCRIPTION_PREFIX.replace(
           "{other_agents}",
-          subagents.map((a) => `- ${a.name}: ${a.description}`).join("\n"),
+          subagents.map((a) => `- ${a.name}: ${a.description}`).join("\n")
         ) + TASK_DESCRIPTION_SUFFIX,
       schema: z.object({
         description: z
@@ -140,9 +133,9 @@ export function createTaskTool(inputs: {
         subagent_type: z
           .string()
           .describe(
-            `Name of the agent to use. Available: ${subagents.map((a) => a.name).join(", ")}`,
+            `Name of the agent to use. Available: ${subagents.map((a) => a.name).join(", ")}`
           ),
       }),
-    },
+    }
   );
 }

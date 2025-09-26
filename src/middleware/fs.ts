@@ -6,13 +6,15 @@
  * Implements mock filesystem operations using state.files similar to Python version.
  */
 
-import { createMiddleware, AgentMiddleware, tool, ToolMessage } from "langchain";
+import {
+  createMiddleware,
+  AgentMiddleware,
+  tool,
+  ToolMessage,
+} from "langchain";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import { z } from "zod";
-import {
-  EDIT_DESCRIPTION,
-  TOOL_DESCRIPTION,
-} from "../prompts.js";
+import { EDIT_DESCRIPTION, TOOL_DESCRIPTION } from "../prompts.js";
 
 export type { AgentMiddleware };
 
@@ -22,7 +24,7 @@ You have access to a local, private filesystem which you can interact with using
 - ls: list all files in the local filesystem
 - read_file: read a file from the local filesystem
 - write_file: write to a file in the local filesystem
-- edit_file: edit a file in the local filesystem`
+- edit_file: edit a file in the local filesystem`;
 
 const stateSchema = z.object({
   files: z.record(z.string(), z.string()).default({}),
@@ -43,7 +45,7 @@ const ls = tool(
     name: "ls",
     description: "List all files in the mock filesystem",
     schema: z.object({}),
-  },
+  }
 );
 
 /**
@@ -113,7 +115,7 @@ const readFile = tool(
         .default(2000)
         .describe("Maximum number of lines to read"),
     }),
-  },
+  }
 );
 
 /**
@@ -121,10 +123,7 @@ const readFile = tool(
  * Matches Python write_file function behavior exactly
  */
 const writeFile = tool(
-  (
-    input: { file_path: string; content: string },
-    config,
-  ) => {
+  (input: { file_path: string; content: string }, config) => {
     const state = getCurrentTaskInput<FsMiddlewareState>();
     const files = { ...(state.files || {}) };
     files[input.file_path] = input.content;
@@ -148,7 +147,7 @@ const writeFile = tool(
       file_path: z.string().describe("Absolute path to the file to write"),
       content: z.string().describe("Content to write to the file"),
     }),
-  },
+  }
 );
 
 /**
@@ -163,7 +162,7 @@ const editFile = tool(
       new_string: string;
       replace_all?: boolean;
     },
-    config,
+    config
   ) => {
     const state = getCurrentTaskInput<FsMiddlewareState>();
     const mockFilesystem = { ...(state.files || {}) };
@@ -186,7 +185,7 @@ const editFile = tool(
     if (!replace_all) {
       const escapedOldString = old_string.replace(
         /[.*+?^${}()|[\]\\]/g,
-        "\\$&",
+        "\\$&"
       );
       const occurrences = (
         content.match(new RegExp(escapedOldString, "g")) || []
@@ -204,11 +203,11 @@ const editFile = tool(
     if (replace_all) {
       const escapedOldString = old_string.replace(
         /[.*+?^${}()|[\]\\]/g,
-        "\\$&",
+        "\\$&"
       );
       newContent = content.replace(
         new RegExp(escapedOldString, "g"),
-        new_string,
+        new_string
       );
     } else {
       newContent = content.replace(old_string, new_string);
@@ -244,7 +243,7 @@ const editFile = tool(
         .default(false)
         .describe("Whether to replace all occurrences"),
     }),
-  },
+  }
 );
 
 export const fsMiddleware = createMiddleware({
@@ -255,6 +254,6 @@ export const fsMiddleware = createMiddleware({
     return {
       ...request,
       systemPrompt: request.systemPrompt + systemPrompt,
-    }
+    };
   },
 });

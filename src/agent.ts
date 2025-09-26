@@ -8,7 +8,10 @@
  */
 
 import { createAgent } from "langchain";
-import { humanInTheLoopMiddleware, anthropicPromptCachingMiddleware } from "langchain";
+import {
+  humanInTheLoopMiddleware,
+  anthropicPromptCachingMiddleware,
+} from "langchain";
 import type { StructuredTool } from "@langchain/core/tools";
 
 import { createTaskTool } from "./subAgent.js";
@@ -38,15 +41,17 @@ It is critical that you mark todos as completed as soon as you are done with a t
  * Ensures exact parameter matching and behavior with Python version.
  *
  */
-export function createDeepAgent(params: CreateDeepAgentParams = {} as CreateDeepAgentParams): ReturnType<typeof createAgent> {
+export function createDeepAgent(
+  params: CreateDeepAgentParams = {} as CreateDeepAgentParams
+): ReturnType<typeof createAgent> {
   const {
     subagents = [],
     tools = [],
     model = "openai:gpt-4o-mini",
     interruptConfig = {},
-    instructions
+    instructions,
   } = params;
-  
+
   // Combine instructions with base prompt like Python implementation
   const finalInstructions = instructions
     ? instructions + BASE_PROMPT
@@ -75,10 +80,15 @@ export function createDeepAgent(params: CreateDeepAgentParams = {} as CreateDeep
     model,
     systemPrompt: finalInstructions,
     tools: allTools,
-    middleware: [fsMiddleware, todoMiddleware, anthropicPromptCachingMiddleware({
-      unsupportedModelBehavior: "ignore"
-    }), humanInTheLoopMiddleware({
-      interruptOn: interruptConfig
-    })] as const
+    middleware: [
+      fsMiddleware,
+      todoMiddleware,
+      anthropicPromptCachingMiddleware({
+        unsupportedModelBehavior: "ignore",
+      }),
+      humanInTheLoopMiddleware({
+        interruptOn: interruptConfig,
+      }),
+    ] as const,
   });
 }
