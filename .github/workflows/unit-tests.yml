@@ -31,10 +31,10 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ matrix.node-version }}
-          cache: "yarn"
+          cache: "pnpm"
       - name: Install dependencies
-        run: yarn install --immutable --mode=skip-build
+        run: pnpm install --immutable --mode=skip-build
       - name: Build project
-        run: yarn build
+        run: pnpm build
       - name: Run tests
-        run: yarn test
+        run: pnpm test
