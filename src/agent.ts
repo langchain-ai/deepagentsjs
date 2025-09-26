@@ -8,7 +8,7 @@
  */
 
 import { createAgent } from "langchain";
-import { humanInTheLoopMiddleware } from "langchain/middleware";
+import { humanInTheLoopMiddleware, anthropicPromptCachingMiddleware } from "langchain";
 import type { StructuredTool } from "@langchain/core/tools";
 
 import { createTaskTool } from "./subAgent.js";
@@ -75,7 +75,9 @@ export function createDeepAgent(params: CreateDeepAgentParams = {} as CreateDeep
     model,
     systemPrompt: finalInstructions,
     tools: allTools,
-    middleware: [fsMiddleware, todoMiddleware, humanInTheLoopMiddleware({
+    middleware: [fsMiddleware, todoMiddleware, anthropicPromptCachingMiddleware({
+      unsupportedModelBehavior: "ignore"
+    }), humanInTheLoopMiddleware({
       interruptOn: interruptConfig
     })] as const
   });
