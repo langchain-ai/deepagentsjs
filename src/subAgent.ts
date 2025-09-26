@@ -58,7 +58,7 @@ export function createTaskTool(inputs: {
     const reactAgent = createAgent({
       ...(typeof model === "string" ? { model } : { llm: model }),
       tools: subagentTools,
-      systemPrompt: subagent.prompt,
+      systemPrompt: subagent.systemPrompt,
       middleware: [fsMiddleware, todoMiddleware],
     });
 
