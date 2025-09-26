@@ -6,8 +6,8 @@
   "types": "dist/index.d.ts",
   "type": "module",
   "scripts": {
-    "build": "yarn clean && tsc",
-    "build:examples": "yarn clean && tsc -p examples.tsconfig.json",
+    "build": "pnpm clean && tsc",
+    "build:examples": "tsc -p ./examples/tsconfig.json",
     "build:watch": "tsc --watch",
     "dev": "tsc --watch",
     "clean": "rm -rf dist dist-examples || true",
@@ -16,7 +16,7 @@
     "lint:fix": "eslint src/**/*.ts examples/**/*.ts --fix",
     "format": "prettier --write \"src/**/*.{ts,js,json,md}\" \"examples/**/*.{ts,js,json,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,js,json,md}\" \"examples/**/*.{ts,js,json,md}\"",
-    "prepublishOnly": "yarn build",
+    "prepublishOnly": "pnpm build",
     "test": "echo \"Error: no test specified\" && exit 0",
     "start": "node dist/index.js"
   },
@@ -46,25 +46,25 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.1.0",
-    "@eslint/js": "^9.19.0",
-    "@langchain/tavily": "^0.1.4",
+    "@eslint/eslintrc": "^3.3.1",
+    "@eslint/js": "^9.36.0",
+    "@langchain/tavily": "^0.1.5",
     "@tsconfig/recommended": "^1.0.10",
-    "@types/node": "^22.13.5",
-    "dotenv": "^17.2.1",
-    "eslint": "^9.19.0",
-    "eslint-config-prettier": "^8.8.0",
-    "eslint-plugin-import": "^2.27.5",
+    "@types/node": "^24.5.2",
+    "dotenv": "^17.2.2",
+    "eslint": "^9.36.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-no-instanceof": "^1.0.1",
-    "eslint-plugin-prettier": "^4.2.1",
-    "globals": "^15.0.0",
+    "eslint-plugin-prettier": "^5.5.4",
+    "globals": "^16.4.0",
     "prettier": "^3.6.2",
-    "tsx": "^4.20.5",
+    "tsx": "^4.20.6",
     "typescript": "^5.9.2",
-    "typescript-eslint": "^8.22.0"
+    "typescript-eslint": "^8.44.1"
   },
   "files": [
     "dist/**/*"
   ],
-  "packageManager": "yarn@1.22.22"
+  "packageManager": "pnpm@10.14.0+sha512.ad27a79641b49c3e481a16a805baa71817a04bbe06a38d17e60e2eaee83f6a146c6a688125f5792e48dd5ba30e7da52a5cda4c3992b9ccf333f9ce223af84748"
 }

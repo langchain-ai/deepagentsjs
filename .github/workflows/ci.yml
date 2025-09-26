@@ -23,11 +23,11 @@ jobs:
     name: Check formatting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
       - name: Enable Corepack
         run: corepack enable
       - name: Use Node.js 18.x
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
         with:
           node-version-file: .nvmrc
           cache: "yarn"
@@ -40,11 +40,11 @@ jobs:
     name: Check linting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
       - name: Enable Corepack
         run: corepack enable
       - name: Use Node.js 18.x
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
         with:
           node-version-file: .nvmrc
           cache: "yarn"
@@ -57,11 +57,11 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
       - name: Enable Corepack
         run: corepack enable
-      - name: Use Node.js 18.x
-        uses: actions/setup-node@v3
+      - name: Use Node.js
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
         with:
           node-version-file: .nvmrc
           cache: "yarn"
@@ -74,11 +74,11 @@ jobs:
     name: Build examples
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
       - name: Enable Corepack
         run: corepack enable
       - name: Use Node.js 18.x
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
         with:
           node-version-file: .nvmrc
           cache: "yarn"
@@ -91,7 +91,7 @@ jobs:
     name: Check README spelling
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
       - uses: codespell-project/actions-codespell@v2
         with:
           ignore_words_file: .codespellignore
@@ -101,8 +101,8 @@ jobs:
     name: Check code spelling
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: codespell-project/actions-codespell@v2
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - uses: codespell-project/actions-codespell@406322ec52dd7b488e48c1c4b82e2a8b3a1bf630
         with:
           ignore_words_file: .codespellignore
           path: apps/open-swe/src
