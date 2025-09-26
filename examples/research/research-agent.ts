@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 import "dotenv/config";
 import { z } from "zod";
-import { tool } from "langchain";
+import { tool, HumanMessage } from "langchain";
 import { TavilySearch } from "@langchain/tavily";
 import { ChatAnthropic } from "@langchain/anthropic";
 
@@ -34,6 +34,8 @@ const internetSearch = tool(
       includeRawContent,
       topic,
     });
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore - Type instantiation is excessively deep and possibly infinite.
     const tavilyResponse = await tavilySearch._call({ query });
 
     return tavilyResponse;
@@ -209,12 +211,12 @@ const agent = createDeepAgent({
 // Invoke the agent
 async function main() {
   const result = await agent.invoke({
-    messages: [{ role: "user", content: "what is langgraph?" }],
+    messages: [new HumanMessage("what is langgraph?")],
   }, { recursionLimit: 1000 }) as unknown as {
     /**
      * ToDo(@christian-bromann): fix type inference
      */
-    todos: {content: string; status: string}[];
+    todos: { content: string; status: string }[];
     files: Record<string, string>;
   };
 
@@ -222,8 +224,6 @@ async function main() {
   console.log(`\n\nAgent ToDo List:\n${result.todos.map((todo) => ` - ${todo.content} (${todo.status})`).join("\n")}`);
   console.log(`\n\nAgent Files:\n${Object.entries(result.files).map(([key, value]) => ` - ${key}: ${value}`).join("\n")}`);
 }
-
-export { agent, internetSearch };
 
 // Run if this file is executed directly
 if (import.meta.url === `file://${process.argv[1]}`) {
