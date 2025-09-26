@@ -42,7 +42,7 @@ It is critical that you mark todos as completed as soon as you are done with a t
  *
  */
 export function createDeepAgent(
-  params: CreateDeepAgentParams = {} as CreateDeepAgentParams
+  params: CreateDeepAgentParams = {} as CreateDeepAgentParams,
 ): ReturnType<typeof createAgent> {
   const {
     subagents = [],

@@ -45,7 +45,7 @@ const ls = tool(
     name: "ls",
     description: "List all files in the mock filesystem",
     schema: z.object({}),
-  }
+  },
 );
 
 /**
@@ -115,7 +115,7 @@ const readFile = tool(
         .default(2000)
         .describe("Maximum number of lines to read"),
     }),
-  }
+  },
 );
 
 /**
@@ -147,7 +147,7 @@ const writeFile = tool(
       file_path: z.string().describe("Absolute path to the file to write"),
       content: z.string().describe("Content to write to the file"),
     }),
-  }
+  },
 );
 
 /**
@@ -162,7 +162,7 @@ const editFile = tool(
       new_string: string;
       replace_all?: boolean;
     },
-    config
+    config,
   ) => {
     const state = getCurrentTaskInput<FsMiddlewareState>();
     const mockFilesystem = { ...(state.files || {}) };
@@ -185,7 +185,7 @@ const editFile = tool(
     if (!replace_all) {
       const escapedOldString = old_string.replace(
         /[.*+?^${}()|[\]\\]/g,
-        "\\$&"
+        "\\$&",
       );
       const occurrences = (
         content.match(new RegExp(escapedOldString, "g")) || []
@@ -203,11 +203,11 @@ const editFile = tool(
     if (replace_all) {
       const escapedOldString = old_string.replace(
         /[.*+?^${}()|[\]\\]/g,
-        "\\$&"
+        "\\$&",
       );
       newContent = content.replace(
         new RegExp(escapedOldString, "g"),
-        new_string
+        new_string,
       );
     } else {
       newContent = content.replace(old_string, new_string);
@@ -243,7 +243,7 @@ const editFile = tool(
         .default(false)
         .describe("Whether to replace all occurrences"),
     }),
-  }
+  },
 );
 
 export const fsMiddleware = createMiddleware({

@@ -58,7 +58,7 @@ const writeTodos = tool(
     schema: z.object({
       todos: z.array(TodoSchema).describe("List of todo items to update"),
     }),
-  }
+  },
 );
 
 export const todoMiddleware = createMiddleware({

@@ -210,9 +210,12 @@ const agent = createDeepAgent({
 
 // Invoke the agent
 async function main() {
-  const result = await agent.invoke({
-    messages: [new HumanMessage("what is langgraph?")],
-  }, { recursionLimit: 1000 }) as unknown as {
+  const result = (await agent.invoke(
+    {
+      messages: [new HumanMessage("what is langgraph?")],
+    },
+    { recursionLimit: 1000 },
+  )) as unknown as {
     /**
      * ToDo(@christian-bromann): fix type inference
      */
@@ -220,9 +223,15 @@ async function main() {
     files: Record<string, string>;
   };
 
-  console.log("🎉 Finished!")
-  console.log(`\n\nAgent ToDo List:\n${result.todos.map((todo) => ` - ${todo.content} (${todo.status})`).join("\n")}`);
-  console.log(`\n\nAgent Files:\n${Object.entries(result.files).map(([key, value]) => ` - ${key}: ${value}`).join("\n")}`);
+  console.log("🎉 Finished!");
+  console.log(
+    `\n\nAgent ToDo List:\n${result.todos.map((todo) => ` - ${todo.content} (${todo.status})`).join("\n")}`,
+  );
+  console.log(
+    `\n\nAgent Files:\n${Object.entries(result.files)
+      .map(([key, value]) => ` - ${key}: ${value}`)
+      .join("\n")}`,
+  );
 }
 
 // Run if this file is executed directly
