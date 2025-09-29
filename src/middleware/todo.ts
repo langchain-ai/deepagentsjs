@@ -47,6 +47,7 @@ const writeTodos = tool(
           new ToolMessage({
             content: `Updated todo list to ${JSON.stringify(todos)}`,
             tool_call_id: config.toolCall?.id as string,
+            name: "write_todos",
           }),
         ],
       },

@@ -99,6 +99,7 @@ export function createTaskTool(inputs: {
                 content:
                   result.messages?.slice(-1)[0]?.content || "Task completed",
                 tool_call_id: config.toolCall?.id as string,
+                name: subagent_type,
               }),
             ],
           },
@@ -113,6 +114,7 @@ export function createTaskTool(inputs: {
               new ToolMessage({
                 content: `Error executing task '${description}' with agent '${subagent_type}': ${errorMessage}`,
                 tool_call_id: config.toolCall?.id as string,
+                name: subagent_type,
               }),
             ],
           },

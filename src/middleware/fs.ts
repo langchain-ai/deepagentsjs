@@ -135,6 +135,7 @@ const writeFile = tool(
           new ToolMessage({
             content: `Updated file ${input.file_path}`,
             tool_call_id: config.toolCall?.id as string,
+            name: "write_file",
           }),
         ],
       },
@@ -223,6 +224,7 @@ const editFile = tool(
           new ToolMessage({
             content: `Updated file ${file_path}`,
             tool_call_id: config.toolCall?.id as string,
+            name: "edit_file",
           }),
         ],
       },
