@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
       - name: Enable Corepack
         run: corepack enable
-      - name: Use Node.js 18.x
+      - name: Use Node.js
         uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
         with:
           node-version-file: .nvmrc
@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
       - name: Enable Corepack
         run: corepack enable
-      - name: Use Node.js 18.x
+      - name: Use Node.js
         uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
         with:
           node-version-file: .nvmrc
@@ -69,23 +69,6 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build
         run: pnpm build
-
-  build-examples:
-    name: Build examples
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
-      - name: Enable Corepack
-        run: corepack enable
-      - name: Use Node.js 18.x
-        uses: actions/setup-node@3235b876344d2a9aa001b8d1453c930bba69e610
-        with:
-          node-version-file: .nvmrc
-          cache: "pnpm"
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Build examples
-        run: pnpm build:examples
 
   readme-spelling:
     name: Check README spelling

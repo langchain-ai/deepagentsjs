@@ -61,7 +61,7 @@ const internetSearch = tool(
         .default(false)
         .describe("Whether to include raw content"),
     }),
-  }
+  },
 );
 
 const subResearchPrompt = `You are a dedicated researcher. Your job is to conduct research based on the users questions.
@@ -214,7 +214,7 @@ async function main() {
     {
       messages: [new HumanMessage("what is langgraph?")],
     },
-    { recursionLimit: 1000 }
+    { recursionLimit: 1000 },
   )) as unknown as {
     /**
      * ToDo(@christian-bromann): fix type inference
@@ -225,12 +225,12 @@ async function main() {
 
   console.log("🎉 Finished!");
   console.log(
-    `\n\nAgent ToDo List:\n${result.todos.map((todo) => ` - ${todo.content} (${todo.status})`).join("\n")}`
+    `\n\nAgent ToDo List:\n${result.todos.map((todo) => ` - ${todo.content} (${todo.status})`).join("\n")}`,
   );
   console.log(
     `\n\nAgent Files:\n${Object.entries(result.files)
       .map(([key, value]) => ` - ${key}: ${value}`)
-      .join("\n")}`
+      .join("\n")}`,
   );
 }
 
