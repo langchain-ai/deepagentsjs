@@ -7,6 +7,7 @@
  * and proper generic types for state schemas.
  */
 import { z } from "zod";
+import type { AgentMiddleware } from "langchain";
 import type { HumanInTheLoopMiddlewareConfig } from "langchain/middleware";
 import type { StructuredTool } from "@langchain/core/tools";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
@@ -20,6 +21,9 @@ export const SubAgentSchema = z.object({
   description: z.string(),
   prompt: z.string(),
   tools: z.array(z.string()).optional(),
+  // Optional per-subagent model: can be either a model instance or a record of model name to model instance
+  model: z.union([z.custom<LanguageModelLike>(), z.string()]).optional(),
+  middleware: z.array(z.custom<AgentMiddleware>()).optional(),
 });
 export type SubAgent = InferInteropZodInput<typeof SubAgentSchema>;
 

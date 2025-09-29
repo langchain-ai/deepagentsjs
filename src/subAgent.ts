@@ -41,7 +41,7 @@ export function createTaskTool(inputs: {
         } else {
           // eslint-disable-next-line no-console
           console.warn(
-            `Warning: Tool '${toolName}' not found for agent '${subagent.name}'`,
+            `Warning: Tool '${toolName}' not found for agent '${subagent.name}'`
           );
         }
       }
@@ -52,10 +52,14 @@ export function createTaskTool(inputs: {
 
     // Create react agent for the subagent (pre-create like Python)
     const reactAgent = createAgent({
-      ...(typeof model === "string" ? { model } : { llm: model }),
+      model: subagent.model ?? model,
       tools: subagentTools,
       systemPrompt: subagent.prompt,
-      middleware: [fsMiddleware, todoMiddleware],
+      middleware: [
+        fsMiddleware,
+        todoMiddleware,
+        ...(subagent.middleware ?? []),
+      ],
     });
 
     agentsMap.set(subagent.name, reactAgent);
@@ -124,7 +128,7 @@ export function createTaskTool(inputs: {
       description:
         TASK_DESCRIPTION_PREFIX.replace(
           "{other_agents}",
-          subagents.map((a) => `- ${a.name}: ${a.description}`).join("\n"),
+          subagents.map((a) => `- ${a.name}: ${a.description}`).join("\n")
         ) + TASK_DESCRIPTION_SUFFIX,
       schema: z.object({
         description: z
@@ -133,9 +137,9 @@ export function createTaskTool(inputs: {
         subagent_type: z
           .string()
           .describe(
-            `Name of the agent to use. Available: ${subagents.map((a) => a.name).join(", ")}`,
+            `Name of the agent to use. Available: ${subagents.map((a) => a.name).join(", ")}`
           ),
       }),
-    },
+    }
   );
 }
