@@ -32,7 +32,7 @@ jobs:
           node-version-file: .nvmrc
           cache: "pnpm"
       - name: Install dependencies
-        run: pnpm install --immutable --mode=skip-build
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Check formatting
         run: pnpm format:check
 
@@ -49,7 +49,7 @@ jobs:
           node-version-file: .nvmrc
           cache: "pnpm"
       - name: Install dependencies
-        run: pnpm install --immutable --mode=skip-build
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Check linting
         run: pnpm run lint
 
@@ -66,7 +66,7 @@ jobs:
           node-version-file: .nvmrc
           cache: "pnpm"
       - name: Install dependencies
-        run: pnpm install --immutable --mode=skip-build
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build
         run: pnpm build
 
@@ -83,7 +83,7 @@ jobs:
           node-version-file: .nvmrc
           cache: "pnpm"
       - name: Install dependencies
-        run: pnpm install --immutable --mode=skip-build
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Build examples
         run: pnpm build:examples
 
@@ -105,4 +105,4 @@ jobs:
       - uses: codespell-project/actions-codespell@406322ec52dd7b488e48c1c4b82e2a8b3a1bf630
         with:
           ignore_words_file: .codespellignore
-          path: apps/open-swe/src
+          path: src
