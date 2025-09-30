@@ -99,7 +99,7 @@ Things to check:
 const critiqueSubAgent: SubAgent = {
   name: "critique-agent",
   description:
-    "Used to critique the final report. Give this agent some infomration about how you want it to critique the report.",
+    "Used to critique the final report. Give this agent some information about how you want it to critique the report.",
   prompt: subCritiquePrompt,
 };
 
