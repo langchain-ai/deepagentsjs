@@ -52,10 +52,14 @@ export function createTaskTool(inputs: {
 
     // Create react agent for the subagent (pre-create like Python)
     const reactAgent = createAgent({
-      ...(typeof model === "string" ? { model } : { llm: model }),
+      model: subagent.model ?? model,
       tools: subagentTools,
       systemPrompt: subagent.prompt,
-      middleware: [fsMiddleware, todoMiddleware],
+      middleware: [
+        fsMiddleware,
+        todoMiddleware,
+        ...(subagent.middleware ?? []),
+      ],
     });
 
     agentsMap.set(subagent.name, reactAgent);
