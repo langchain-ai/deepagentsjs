@@ -11,12 +11,26 @@ import { createAgent } from "langchain";
 import {
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
+  ResponseFormatUndefined,
+  AnyAnnotationRoot,
+  AgentMiddleware,
+  ReactAgent,
 } from "langchain";
 import type { StructuredTool } from "@langchain/core/tools";
 
 import { createTaskTool } from "./subAgent.js";
 import type { CreateDeepAgentParams } from "./types.js";
 import { fsMiddleware, todoMiddleware } from "./middleware/index.js";
+
+/**
+ * This needs to be exported to types can be inferred properly
+ */
+export type {
+  ResponseFormatUndefined,
+  AnyAnnotationRoot,
+  AgentMiddleware,
+  ReactAgent,
+};
 
 /**
  * Base prompt that provides instructions about available tools
@@ -42,8 +56,8 @@ It is critical that you mark todos as completed as soon as you are done with a t
  *
  */
 export function createDeepAgent(
-  params: CreateDeepAgentParams = {} as CreateDeepAgentParams,
-): ReturnType<typeof createAgent> {
+  params: CreateDeepAgentParams = {} as CreateDeepAgentParams
+) {
   const {
     subagents = [],
     tools = [],

@@ -61,7 +61,7 @@ const internetSearch = tool(
         .default(false)
         .describe("Whether to include raw content"),
     }),
-  },
+  }
 );
 
 const subResearchPrompt = `You are a dedicated researcher. Your job is to conduct research based on the users questions.
@@ -200,7 +200,7 @@ Use this to run an internet search for a given query. You can specify the number
 // Create the agent
 const agent = createDeepAgent({
   model: new ChatAnthropic({
-    model: "claude-3-5-sonnet-20240620",
+    model: "claude-sonnet-4-20250514",
     temperature: 0,
   }),
   tools: [internetSearch],
@@ -210,27 +210,21 @@ const agent = createDeepAgent({
 
 // Invoke the agent
 async function main() {
-  const result = (await agent.invoke(
+  const result = await agent.invoke(
     {
       messages: [new HumanMessage("what is langgraph?")],
     },
-    { recursionLimit: 1000 },
-  )) as unknown as {
-    /**
-     * ToDo(@christian-bromann): fix type inference
-     */
-    todos: { content: string; status: string }[];
-    files: Record<string, string>;
-  };
+    { recursionLimit: 1000 }
+  );
 
   console.log("🎉 Finished!");
   console.log(
-    `\n\nAgent ToDo List:\n${result.todos.map((todo) => ` - ${todo.content} (${todo.status})`).join("\n")}`,
+    `\n\nAgent ToDo List:\n${result.todos.map((todo) => ` - ${todo.content} (${todo.status})`).join("\n")}`
   );
   console.log(
     `\n\nAgent Files:\n${Object.entries(result.files)
       .map(([key, value]) => ` - ${key}: ${value}`)
-      .join("\n")}`,
+      .join("\n")}`
   );
 }
 
