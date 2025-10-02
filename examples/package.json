@@ -1,0 +1,8 @@
+{
+  "name": "examples",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "deepagents": "workspace:*"
+  }
+}

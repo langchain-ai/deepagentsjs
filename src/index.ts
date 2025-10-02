@@ -19,3 +19,4 @@ export type {
   CreateDeepAgentParams,
   CreateTaskToolParams,
 } from "./types.js";
+export * from "./middleware/index.js";

@@ -5,7 +5,7 @@ import { tool, HumanMessage } from "langchain";
 import { TavilySearch } from "@langchain/tavily";
 import { ChatAnthropic } from "@langchain/anthropic";
 
-import { createDeepAgent, type SubAgent } from "../../src/index.js";
+import { createDeepAgent, type SubAgent } from "deepagents";
 
 type Topic = "general" | "news" | "finance";
 
