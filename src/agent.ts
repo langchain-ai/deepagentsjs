@@ -1,108 +1,189 @@
 /**
  * Main createDeepAgent function for Deep Agents
  *
- * Main entry point for creating deep agents with TypeScript types for all parameters:
- * tools, instructions, model, subagents, and stateSchema. Combines built-in tools with
- * provided tools, creates task tool using createTaskTool(), and returns createReactAgent
- * with proper configuration. Ensures exact parameter matching and behavior with Python version.
+ * Main entry point for creating deep agents with middleware-based architecture.
+ * Matches Python's create_deep_agent function with full feature parity.
  */
 
 import { createAgent } from "langchain";
 import {
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
-  ResponseFormatUndefined,
-  AnyAnnotationRoot,
-  AgentMiddleware,
-  ReactAgent,
+  todoListMiddleware,
+  summarizationMiddleware,
+  type AgentMiddleware,
+  type ReactAgent,
+  type InterruptOnConfig,
 } from "langchain";
 import type { StructuredTool } from "@langchain/core/tools";
+import type { LanguageModelLike } from "@langchain/core/language_models/base";
+import type {
+  BaseCheckpointSaver,
+  BaseStore,
+} from "@langchain/langgraph-checkpoint";
 
-import { createTaskTool } from "./subAgent.js";
-import type { CreateDeepAgentParams } from "./types.js";
-import { fsMiddleware, todoMiddleware } from "./middleware/index.js";
+import {
+  createFilesystemMiddleware,
+  createSubAgentMiddleware,
+  createPatchToolCallsMiddleware,
+  type SubAgent,
+} from "./middleware/index.js";
 
 /**
- * This needs to be exported to types can be inferred properly
+ * Configuration parameters for creating a Deep Agent
+ * Matches Python's create_deep_agent parameters
  */
-export type {
-  ResponseFormatUndefined,
-  AnyAnnotationRoot,
-  AgentMiddleware,
-  ReactAgent,
-};
+export interface CreateDeepAgentParams<StateSchema = any, ContextSchema = any> {
+  /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
+  model?: LanguageModelLike | string;
+  /** Tools the agent should have access to */
+  tools?: StructuredTool[];
+  /** Custom system prompt for the agent. This will be combined with the base agent prompt */
+  systemPrompt?: string;
+  /** Custom middleware to apply after standard middleware */
+  middleware?: AgentMiddleware[];
+  /** List of subagent specifications for task delegation */
+  subagents?: SubAgent[];
+  /** Structured output response format for the agent */
+  responseFormat?: any; // ResponseFormat type is complex, using any for now
+  /** Optional schema for custom agent state */
+  stateSchema?: StateSchema;
+  /** Optional schema for context (not persisted between invocations) */
+  contextSchema?: ContextSchema;
+  /** Optional checkpointer for persisting agent state between runs */
+  checkpointer?: BaseCheckpointSaver | boolean;
+  /** Optional store for persisting longterm memories */
+  store?: BaseStore;
+  /** Whether to use longterm memory - requires a store to be provided */
+  useLongtermMemory?: boolean;
+  /** Optional interrupt configuration mapping tool names to interrupt configs */
+  interruptOn?: Record<string, boolean | InterruptOnConfig>;
+  /** The name of the agent */
+  name?: string;
+}
 
 /**
  * Base prompt that provides instructions about available tools
  * Ported from Python implementation to ensure consistent behavior
  */
-const BASE_PROMPT = `You have access to a number of standard tools
-
-## \`write_todos\`
-
-You have access to the \`write_todos\` tools to help you manage and plan tasks. Use these tools VERY frequently to ensure that you are tracking your tasks and giving the user visibility into your progress.
-These tools are also EXTREMELY helpful for planning tasks, and for breaking down larger complex tasks into smaller steps. If you do not use this tool when planning, you may forget to do important tasks - and that is unacceptable.
-
-It is critical that you mark todos as completed as soon as you are done with a task. Do not batch up multiple tasks before marking them as completed.
-## \`task\`
-
-- When doing web search, prefer to use the \`task\` tool in order to reduce context usage.`;
+const BASE_PROMPT = `In order to complete the objective that the user asks of you, you have access to a number of standard tools.`;
 
 /**
- * Create a Deep Agent with TypeScript types for all parameters.
- * Combines built-in tools with provided tools, creates task tool using createTaskTool(),
- * and returns createReactAgent with proper configuration.
- * Ensures exact parameter matching and behavior with Python version.
+ * Create a Deep Agent with middleware-based architecture.
  *
+ * Matches Python's create_deep_agent function, using middleware for all features:
+ * - Todo management (todoListMiddleware)
+ * - Filesystem tools (createFilesystemMiddleware)
+ * - Subagent delegation (createSubAgentMiddleware)
+ * - Conversation summarization (summarizationMiddleware)
+ * - Prompt caching (anthropicPromptCachingMiddleware)
+ * - Tool call patching (createPatchToolCallsMiddleware)
+ * - Human-in-the-loop (humanInTheLoopMiddleware) - optional
+ *
+ * @param params Configuration parameters for the agent
+ * @returns ReactAgent instance ready for invocation
  */
-export function createDeepAgent(
-  params: CreateDeepAgentParams = {} as CreateDeepAgentParams
-) {
+export function createDeepAgent<StateSchema = any, ContextSchema = any>(
+  params: CreateDeepAgentParams<
+    StateSchema,
+    ContextSchema
+  > = {} as CreateDeepAgentParams<StateSchema, ContextSchema>
+): ReactAgent<any, any, any, any> {
   const {
-    subagents = [],
+    model = "claude-sonnet-4-5-20250929", // Match Python default
     tools = [],
-    model = "openai:gpt-4o-mini",
-    interruptConfig = {},
-    instructions,
+    systemPrompt,
+    middleware: customMiddleware = [],
+    subagents = [],
+    responseFormat,
+    stateSchema,
+    contextSchema,
+    checkpointer,
+    store,
+    useLongtermMemory = false,
+    interruptOn,
+    name,
   } = params;
 
-  // Combine instructions with base prompt like Python implementation
-  const finalInstructions = instructions
-    ? instructions + BASE_PROMPT
+  // Combine system prompt with base prompt like Python implementation
+  const finalSystemPrompt = systemPrompt
+    ? `${systemPrompt}\n\n${BASE_PROMPT}`
     : BASE_PROMPT;
 
-  // Create task tool using createTaskTool() if subagents are provided
-  const allTools: StructuredTool[] = [...tools];
-  if (subagents.length > 0) {
-    // Create tools map for task tool creation
-    const toolsMap: Record<string, StructuredTool> = {};
-    for (const tool of tools) {
-      if (tool.name) {
-        toolsMap[tool.name] = tool;
-      }
-    }
+  // Build default middleware stack for subagents
+  // Subagents get: todo + fs + summarization + caching + patch
+  const defaultSubagentMiddleware: AgentMiddleware[] = [
+    todoListMiddleware(),
+    createFilesystemMiddleware({
+      longTermMemory: useLongtermMemory,
+      store,
+    }),
+    summarizationMiddleware({
+      model: model as any,
+    }),
+    anthropicPromptCachingMiddleware({
+      unsupportedModelBehavior: "ignore",
+    }),
+    createPatchToolCallsMiddleware(),
+  ];
 
-    const taskTool = createTaskTool({
+  // Build main middleware stack matching Python's order:
+  // 1. Todo list middleware
+  // 2. Filesystem middleware
+  // 3. Subagent middleware
+  // 4. Summarization middleware
+  // 5. Anthropic prompt caching middleware
+  // 6. Patch tool calls middleware
+  // 7. Human-in-the-loop middleware (if configured)
+  // 8. Custom middleware
+  const middleware: AgentMiddleware[] = [
+    todoListMiddleware(),
+    createFilesystemMiddleware({
+      longTermMemory: useLongtermMemory,
+      store,
+    }),
+    createSubAgentMiddleware({
+      defaultModel: model,
+      defaultTools: tools as any,
+      defaultMiddleware: defaultSubagentMiddleware,
+      defaultInterruptOn: interruptOn || null,
       subagents,
-      tools: toolsMap,
-      model,
-    });
-    allTools.push(taskTool);
+      generalPurposeAgent: true,
+    }),
+    summarizationMiddleware({
+      model: model as any,
+    }),
+    anthropicPromptCachingMiddleware({
+      unsupportedModelBehavior: "ignore",
+    }),
+    createPatchToolCallsMiddleware(),
+  ];
+
+  // Add human-in-the-loop middleware if interrupt config provided
+  if (interruptOn) {
+    middleware.push(
+      humanInTheLoopMiddleware({
+        interruptOn,
+      })
+    );
   }
 
+  // Add custom middleware last (after all built-in middleware)
+  middleware.push(...customMiddleware);
+
+  // Create and return agent with all parameters
+  // Note: Python sets recursion_limit to 1000 via .with_config()
+  // In TypeScript, recursionLimit should be passed to invoke/stream methods via config parameter
   return createAgent({
     model,
-    systemPrompt: finalInstructions,
-    tools: allTools,
-    middleware: [
-      fsMiddleware,
-      todoMiddleware,
-      anthropicPromptCachingMiddleware({
-        unsupportedModelBehavior: "ignore",
-      }),
-      humanInTheLoopMiddleware({
-        interruptOn: interruptConfig,
-      }),
-    ] as const,
-  });
+    systemPrompt: finalSystemPrompt,
+    tools: tools as any,
+    middleware: middleware as any,
+    responseFormat,
+    stateSchema: stateSchema as any,
+    contextSchema: contextSchema as any,
+    checkpointer,
+    store,
+    name,
+  } as any);
 }

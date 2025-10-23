@@ -5,17 +5,18 @@
  * This implementation maintains 1:1 compatibility with the Python version.
  */
 
-export { createDeepAgent } from "./agent.js";
-export { createTaskTool } from "./subAgent.js";
+export { createDeepAgent, type CreateDeepAgentParams } from "./agent.js";
+
+// Export middleware
 export {
-  WRITE_TODOS_DESCRIPTION,
-  TASK_DESCRIPTION_PREFIX,
-  TASK_DESCRIPTION_SUFFIX,
-  EDIT_DESCRIPTION,
-  TOOL_DESCRIPTION,
-} from "./prompts.js";
-export type {
-  SubAgent,
-  CreateDeepAgentParams,
-  CreateTaskToolParams,
-} from "./types.js";
+  createFilesystemMiddleware,
+  FilesystemMiddleware,
+  createSubAgentMiddleware,
+  SubAgentMiddleware,
+  createPatchToolCallsMiddleware,
+  type FilesystemMiddlewareOptions,
+  type SubAgentMiddlewareOptions,
+  type SubAgent,
+  type CompiledSubAgent,
+  type FileData,
+} from "./middleware/index.js";
