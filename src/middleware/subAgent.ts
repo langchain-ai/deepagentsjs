@@ -152,7 +152,7 @@ export function createTaskTool({
   subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
   taskDescription?: string;
-}): StructuredTool {
+}): [StructuredTool, { subgraphs: any[] }] {
   const { subagentGraphs, subagentDescriptions } = _getSubagents({
     defaultModel,
     defaultTools,
@@ -229,36 +229,39 @@ export function createTaskTool({
   }
 
   // Create the task tool
-  return tool(
-    async (input: { description: string; subagent_type: string }, config) => {
-      const toolCallId = config.toolCall?.id;
+  return [
+    tool(
+      async (input: { description: string; subagent_type: string }, config) => {
+        const toolCallId = config.toolCall?.id;
 
-      if (!toolCallId) {
-        throw new Error("Tool call ID is required for subagent invocation");
+        if (!toolCallId) {
+          throw new Error("Tool call ID is required for subagent invocation");
+        }
+
+        const { subagent, subagentState } = _validateAndPrepareState(
+          input.subagent_type,
+          input.description,
+          config
+        );
+
+        const result = await subagent.invoke(subagentState);
+        return _returnCommandWithStateUpdate(result, toolCallId);
+      },
+      {
+        name: "task",
+        description: finalTaskDescription,
+        schema: z.object({
+          description: z
+            .string()
+            .describe("Detailed task description for the subagent to perform"),
+          subagent_type: z
+            .string()
+            .describe("Type of subagent to use for this task"),
+        }),
       }
-
-      const { subagent, subagentState } = _validateAndPrepareState(
-        input.subagent_type,
-        input.description,
-        config
-      );
-
-      const result = await subagent.invoke(subagentState);
-      return _returnCommandWithStateUpdate(result, toolCallId);
-    },
-    {
-      name: "task",
-      description: finalTaskDescription,
-      schema: z.object({
-        description: z
-          .string()
-          .describe("Detailed task description for the subagent to perform"),
-        subagent_type: z
-          .string()
-          .describe("Type of subagent to use for this task"),
-      }),
-    }
-  );
+    ),
+    { subgraphs: Object.values(subagentGraphs).map((graph) => graph.graph) },
+  ];
 }
 
 /**
@@ -287,7 +290,7 @@ export const subAgentMiddleware = ({
   generalPurposeAgent?: boolean;
   taskDescription?: string;
 }): AgentMiddleware => {
-  const taskTool = createTaskTool({
+  const [taskTool, toolNodeOptions] = createTaskTool({
     defaultModel,
     defaultTools,
     defaultMiddleware,
@@ -300,6 +303,7 @@ export const subAgentMiddleware = ({
   return createMiddleware({
     name: "subAgentMiddleware",
     tools: [taskTool],
+    toolNodeOptions,
     wrapModelCall: async (request, handler) => {
       if (systemPrompt) {
         request.systemPrompt = request.systemPrompt

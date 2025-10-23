@@ -30,7 +30,6 @@ export type { ResponseFormatUndefined, AgentMiddleware, ReactAgent };
 
 /**
  * Base prompt that provides instructions about available tools
- * Ported from Python implementation to ensure consistent behavior
  */
 const BASE_PROMPT = `You have access to a number of standard tools
 
@@ -49,7 +48,6 @@ It is critical that you mark todos as completed as soon as you are done with a t
  * Combines built-in tools with provided tools, creates task tool using createTaskTool(),
  * and returns createReactAgent with proper configuration.
  * Ensures exact parameter matching and behavior with Python version.
- *
  */
 export function createDeepAgent(
   params: CreateDeepAgentParams = {} as CreateDeepAgentParams

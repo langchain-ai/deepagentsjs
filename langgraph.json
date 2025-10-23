@@ -1,6 +1,8 @@
 {
   "graphs": {
-    "research": "./examples/research/research-agent.ts:agent"
+    "research": "./examples/research/research-agent.ts:agent",
+    "tools": "./examples/research/tools.ts:agent",
+    "middleware": "./examples/research/middleware.ts:agent"
   },
   "env": ".env"
 }
