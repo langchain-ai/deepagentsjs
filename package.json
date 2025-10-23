@@ -39,16 +39,18 @@
   },
   "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "dependencies": {
-    "@langchain/anthropic": "alpha",
-    "@langchain/core": "alpha",
-    "@langchain/langgraph": "next",
-    "langchain": "alpha",
-    "zod": "^4.1.11"
+    "@langchain/anthropic": "^1.0.0",
+    "@langchain/core": "^1.0.1",
+    "@langchain/langgraph": "^1.0.0",
+    "dedent": "^1.7.0",
+    "langchain": "^1.0.1",
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.1.0",
     "@eslint/js": "^9.19.0",
-    "@langchain/tavily": "^0.1.4",
+    "@langchain/langgraph-cli": "^1.0.0",
+    "@langchain/tavily": "^1.0.0",
     "@tsconfig/recommended": "^1.0.10",
     "@types/node": "^22.13.5",
     "dotenv": "^17.2.1",
@@ -66,5 +68,8 @@
   "files": [
     "dist/**/*"
   ],
+  "resolutions": {
+    "zod": "3.25.76"
+  },
   "packageManager": "yarn@1.22.22"
 }

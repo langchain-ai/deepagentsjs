@@ -1,48 +1,24 @@
-/* eslint-disable no-console */
-import "dotenv/config";
 import { z } from "zod";
-import { tool, HumanMessage } from "langchain";
+import { tool } from "langchain";
 import { TavilySearch } from "@langchain/tavily";
 import { ChatAnthropic } from "@langchain/anthropic";
-
-import { createDeepAgent, type SubAgent } from "../../src/index.js";
-
-type Topic = "general" | "news" | "finance";
+import { createDeepAgent, SubAgent } from "../../src/index.js";
 
 // Search tool to use to do research
 const internetSearch = tool(
-  async ({
-    query,
-    maxResults = 5,
-    topic = "general" as Topic,
-    includeRawContent = false,
-  }: {
-    query: string;
-    maxResults?: number;
-    topic?: Topic;
-    includeRawContent?: boolean;
-  }) => {
-    /**
-     * Run a web search
-     */
-
-    // Note: You'll need to install and import tavily-js or similar package
-    // For now, this is a placeholder that shows the structure
+  async ({ query, maxResults, topic, includeRawContent }) => {
     const tavilySearch = new TavilySearch({
       maxResults,
-      tavilyApiKey: process.env.TAVILY_API_KEY,
       includeRawContent,
       topic,
     });
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore - Type instantiation is excessively deep and possibly infinite.
-    const tavilyResponse = await tavilySearch._call({ query });
 
-    return tavilyResponse;
+    return await tavilySearch.invoke({ query });
   },
   {
     name: "internet_search",
     description: "Run a web search",
+
     schema: z.object({
       query: z.string().describe("The search query"),
       maxResults: z
@@ -64,21 +40,21 @@ const internetSearch = tool(
   }
 );
 
-const subResearchPrompt = `You are a dedicated researcher. Your job is to conduct research based on the users questions.
+const SUB_RESEARCH_PROMPT = `You are a dedicated researcher. Your job is to conduct research based on the users questions.
 
 Conduct thorough research and then reply to the user with a detailed answer to their question
 
-only your FINAL answer will be passed on to the user. They will have NO knowledge of anything except your final message, so your final report should be your final message!`;
+Only your FINAL answer will be passed on to the user. They will have NO knowledge of anything except your final message, so your final report should be your final message!`;
 
 const researchSubAgent: SubAgent = {
   name: "research-agent",
   description:
     "Used to research more in depth questions. Only give this researcher one topic at a time. Do not pass multiple sub questions to this researcher. Instead, you should break down a large topic into the necessary components, and then call multiple research agents in parallel, one for each sub question.",
-  prompt: subResearchPrompt,
-  tools: ["internet_search"],
+  systemPrompt: SUB_RESEARCH_PROMPT,
+  tools: [internetSearch],
 };
 
-const subCritiquePrompt = `You are a dedicated editor. You are being tasked to critique a report.
+const CRITIQUE_PROMPT = `You are a dedicated editor. You are being tasked to critique a report.
 
 You can find the report at \`final_report.md\`.
 
@@ -104,11 +80,12 @@ const critiqueSubAgent: SubAgent = {
   name: "critique-agent",
   description:
     "Used to critique the final report. Give this agent some infomration about how you want it to critique the report.",
-  prompt: subCritiquePrompt,
+  systemPrompt: CRITIQUE_PROMPT,
+  tools: [],
 };
 
 // Prompt prefix to steer the agent to be an expert researcher
-const researchInstructions = `You are an expert researcher. Your job is to conduct thorough research, and then write a polished report.
+const SYSTEM_PROMPT = `You are an expert researcher. Your job is to conduct thorough research, and then write a polished report.
 
 The first thing you should do is to write the original user question to \`question.txt\` so you have a record of it.
 
@@ -198,37 +175,12 @@ Use this to run an internet search for a given query. You can specify the number
 `;
 
 // Create the agent
-const agent = createDeepAgent({
+export const agent = createDeepAgent({
   model: new ChatAnthropic({
     model: "claude-sonnet-4-20250514",
     temperature: 0,
   }),
   tools: [internetSearch],
-  instructions: researchInstructions,
+  instructions: SYSTEM_PROMPT,
   subagents: [critiqueSubAgent, researchSubAgent],
 });
-
-// Invoke the agent
-async function main() {
-  const result = await agent.invoke(
-    {
-      messages: [new HumanMessage("what is langgraph?")],
-    },
-    { recursionLimit: 1000 }
-  );
-
-  console.log("🎉 Finished!");
-  console.log(
-    `\n\nAgent ToDo List:\n${result.todos.map((todo) => ` - ${todo.content} (${todo.status})`).join("\n")}`
-  );
-  console.log(
-    `\n\nAgent Files:\n${Object.entries(result.files)
-      .map(([key, value]) => ` - ${key}: ${value}`)
-      .join("\n")}`
-  );
-}
-
-// Run if this file is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main();
-}

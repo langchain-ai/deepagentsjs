@@ -1,7 +1,0 @@
-{
-  "dependencies": ["../"],
-  "graphs": {
-    "research": "./research-agent.ts:agent"
-  },
-  "env": ".env"
-}

@@ -7,37 +7,22 @@
  * and proper generic types for state schemas.
  */
 import { z } from "zod";
-import type { AgentMiddleware } from "langchain";
-import type { HumanInTheLoopMiddlewareConfig } from "langchain/middleware";
+import type { HumanInTheLoopMiddlewareConfig } from "langchain";
 import type { StructuredTool } from "@langchain/core/tools";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
-import type { InferInteropZodInput } from "@langchain/core/utils/types";
-
-/**
- * SubAgent interface matching Python's TypedDict structure
- */
-export const SubAgentSchema = z.object({
-  name: z.string(),
-  description: z.string(),
-  prompt: z.string(),
-  tools: z.array(z.string()).optional(),
-  // Optional per-subagent model: can be either a model instance or a record of model name to model instance
-  model: z.union([z.custom<LanguageModelLike>(), z.string()]).optional(),
-  middleware: z.array(z.custom<AgentMiddleware>()).optional(),
-});
-export type SubAgent = InferInteropZodInput<typeof SubAgentSchema>;
+import type { CompiledSubAgent, SubAgent } from "./middleware/subAgent.js";
 
 export interface CreateDeepAgentParams {
   tools?: StructuredTool[];
   instructions?: string;
-  model?: LanguageModelLike | string;
+  model: LanguageModelLike;
   subagents?: SubAgent[];
   interruptConfig?: NonNullable<HumanInTheLoopMiddlewareConfig>["interruptOn"];
   builtinTools?: string[];
 }
 
-export interface CreateTaskToolParams<StateSchema extends z.ZodObject> {
-  subagents: SubAgent[];
+export interface CreateTaskToolParams<StateSchema extends z.ZodSchema> {
+  subagents: (SubAgent | CompiledSubAgent)[];
   tools?: Record<string, StructuredTool>;
   model?: LanguageModelLike;
   stateSchema?: StateSchema;

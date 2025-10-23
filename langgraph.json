@@ -1,0 +1,6 @@
+{
+  "graphs": {
+    "research": "./examples/research/research-agent.ts:agent"
+  },
+  "env": ".env"
+}

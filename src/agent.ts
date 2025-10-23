@@ -7,30 +7,26 @@
  * with proper configuration. Ensures exact parameter matching and behavior with Python version.
  */
 
-import { createAgent } from "langchain";
+import { createAgent, summarizationMiddleware } from "langchain";
 import {
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
   ResponseFormatUndefined,
-  AnyAnnotationRoot,
+  todoListMiddleware,
   AgentMiddleware,
   ReactAgent,
 } from "langchain";
-import type { StructuredTool } from "@langchain/core/tools";
 
-import { createTaskTool } from "./subAgent.js";
 import type { CreateDeepAgentParams } from "./types.js";
-import { fsMiddleware, todoMiddleware } from "./middleware/index.js";
+import { subAgentMiddleware } from "./middleware/subAgent.js";
+import { fsMiddleware } from "./middleware/fs.js";
+import { patchToolCallsMiddleware } from "./middleware/patchToolCalls.js";
+import { BaseLanguageModel } from "@langchain/core/language_models/base";
 
 /**
  * This needs to be exported to types can be inferred properly
  */
-export type {
-  ResponseFormatUndefined,
-  AnyAnnotationRoot,
-  AgentMiddleware,
-  ReactAgent,
-};
+export type { ResponseFormatUndefined, AgentMiddleware, ReactAgent };
 
 /**
  * Base prompt that provides instructions about available tools
@@ -57,11 +53,11 @@ It is critical that you mark todos as completed as soon as you are done with a t
  */
 export function createDeepAgent(
   params: CreateDeepAgentParams = {} as CreateDeepAgentParams
-) {
+): ReactAgent {
   const {
     subagents = [],
     tools = [],
-    model = "openai:gpt-4o-mini",
+    model,
     interruptConfig = {},
     instructions,
   } = params;
@@ -71,38 +67,29 @@ export function createDeepAgent(
     ? instructions + BASE_PROMPT
     : BASE_PROMPT;
 
-  // Create task tool using createTaskTool() if subagents are provided
-  const allTools: StructuredTool[] = [...tools];
-  if (subagents.length > 0) {
-    // Create tools map for task tool creation
-    const toolsMap: Record<string, StructuredTool> = {};
-    for (const tool of tools) {
-      if (tool.name) {
-        toolsMap[tool.name] = tool;
-      }
-    }
-
-    const taskTool = createTaskTool({
+  const deepAgentMiddleware = [
+    todoListMiddleware,
+    fsMiddleware,
+    subAgentMiddleware({
+      defaultModel: model,
+      defaultTools: tools,
       subagents,
-      tools: toolsMap,
-      model,
-    });
-    allTools.push(taskTool);
-  }
+      defaultInterruptOn: interruptConfig,
+    }),
+    summarizationMiddleware({
+      model: model as BaseLanguageModel,
+      maxTokensBeforeSummary: 170_000,
+      messagesToKeep: 6,
+    }),
+    anthropicPromptCachingMiddleware({ unsupportedModelBehavior: "ignore" }),
+    humanInTheLoopMiddleware({ interruptOn: interruptConfig }),
+    patchToolCallsMiddleware,
+  ] as const;
 
   return createAgent({
     model,
     systemPrompt: finalInstructions,
-    tools: allTools,
-    middleware: [
-      fsMiddleware,
-      todoMiddleware,
-      anthropicPromptCachingMiddleware({
-        unsupportedModelBehavior: "ignore",
-      }),
-      humanInTheLoopMiddleware({
-        interruptOn: interruptConfig,
-      }),
-    ] as const,
+    tools,
+    middleware: deepAgentMiddleware,
   });
 }
