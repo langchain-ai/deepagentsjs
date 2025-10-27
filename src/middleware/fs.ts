@@ -13,10 +13,15 @@ import {
   tool,
   ToolMessage,
 } from "langchain";
-import { Command, getCurrentTaskInput, getConfig } from "@langchain/langgraph";
-import { withLangGraph } from "@langchain/langgraph/zod";
+import {
+  Command,
+  getCurrentTaskInput,
+  getConfig,
+  isCommand,
+} from "@langchain/langgraph";
 import type { BaseStore, Item } from "@langchain/langgraph";
 import { z as z3 } from "zod/v3";
+import { withLangGraph } from "@langchain/langgraph/zod";
 
 const MEMORIES_PREFIX = "/memories/";
 const EMPTY_CONTENT_WARNING =
@@ -287,20 +292,16 @@ function convertFileDataToStoreItem(
   };
 }
 
-// const stateSchema = z3.object({
-//   files: withLangGraph(
-//     z3.record(z3.string(), FileDataSchema).default(() => ({})),
-//     {
-//       reducer: {
-//         fn: fileDataReducer,
-//         schema: z3.record(z3.string(), FileDataSchema.nullable()),
-//       },
-//     }
-//   ),
-// });
-
 const stateSchema = z3.object({
-  files: z3.record(z3.string(), FileDataSchema).default(() => ({})),
+  files: withLangGraph(
+    z3.record(z3.string(), FileDataSchema).default(() => ({})),
+    {
+      reducer: {
+        fn: fileDataReducer,
+        schema: z3.record(z3.string(), FileDataSchema.nullable()),
+      },
+    }
+  ),
 });
 
 export type FsMiddlewareState = z3.infer<typeof stateSchema>;
@@ -394,7 +395,7 @@ function createLsTool(
 
   if (longTermMemory && store) {
     return tool(
-      async (input: { path?: string }, config) => {
+      async (input, config) => {
         const state = getCurrentTaskInput<FsMiddlewareState>(config);
         const filesDict = state.files || {};
         let files = Object.keys(filesDict);
@@ -490,12 +491,9 @@ function createReadFileTool(
     });
   }
 
-  if (longTermMemory && store) {
+  if (longTermMemory) {
     return tool(
-      async (
-        input: { file_path: string; offset?: number; limit?: number },
-        config
-      ) => {
+      async (input, config) => {
         const filePath = validatePath(input.file_path);
         const offset = input.offset ?? DEFAULT_READ_OFFSET;
         const limit = input.limit ?? DEFAULT_READ_LIMIT;
@@ -503,7 +501,7 @@ function createReadFileTool(
         if (hasMemoriesPrefix(filePath)) {
           const strippedFilePath = stripMemoriesPrefix(filePath);
           const namespace = getNamespace();
-          const item = await store.get(namespace, strippedFilePath);
+          const item = await store?.get(namespace, strippedFilePath);
           if (!item) {
             return `Error: File '${filePath}' not found`;
           }
@@ -540,7 +538,7 @@ function createReadFileTool(
   }
 
   return tool(
-    (input: { file_path: string; offset?: number; limit?: number }, config) => {
+    (input, config) => {
       const filePath = validatePath(input.file_path);
       const offset = input.offset ?? DEFAULT_READ_OFFSET;
       const limit = input.limit ?? DEFAULT_READ_LIMIT;
@@ -552,33 +550,25 @@ function createReadFileTool(
       }
       const fileData = mockFilesystem[filePath];
 
-      function readFileDataContent(
-        fileData: FileData,
-        offset: number,
-        limit: number
-      ): string {
-        const content = fileDataToString(fileData);
-        const emptyMsg = checkEmptyContent(content);
-        if (emptyMsg) {
-          return emptyMsg;
-        }
-
-        const lines = content.split("\n");
-        const startIdx = offset;
-        const endIdx = Math.min(startIdx + limit, lines.length);
-
-        if (startIdx >= lines.length) {
-          return `Error: Line offset ${offset} exceeds file length (${lines.length} lines)`;
-        }
-
-        const selectedLines = lines.slice(startIdx, endIdx);
-        return formatContentWithLineNumbers(selectedLines, {
-          formatStyle: "tab",
-          startLine: startIdx + 1,
-        });
+      const content = fileDataToString(fileData);
+      const emptyMsg = checkEmptyContent(content);
+      if (emptyMsg) {
+        return emptyMsg;
       }
 
-      return readFileDataContent(fileData, offset, limit);
+      const lines = content.split("\n");
+      const startIdx = offset;
+      const endIdx = Math.min(startIdx + limit, lines.length);
+
+      if (startIdx >= lines.length) {
+        return `Error: Line offset ${offset} exceeds file length (${lines.length} lines)`;
+      }
+
+      const selectedLines = lines.slice(startIdx, endIdx);
+      return formatContentWithLineNumbers(selectedLines, {
+        formatStyle: "tab",
+        startLine: startIdx + 1,
+      });
     },
     {
       name: "read_file",
@@ -617,7 +607,7 @@ function createWriteFileTool(
 
   if (longTermMemory && store) {
     return tool(
-      async (input: { file_path: string; content: string }, config) => {
+      async (input, config) => {
         const filePath = validatePath(input.file_path);
 
         if (hasMemoriesPrefix(filePath)) {
@@ -668,7 +658,7 @@ function createWriteFileTool(
   }
 
   return tool(
-    (input: { file_path: string; content: string }, config) => {
+    (input, config) => {
       const filePath = validatePath(input.file_path);
       const state = getCurrentTaskInput<FsMiddlewareState>(config);
       const mockFilesystem = state.files || {};
@@ -753,15 +743,7 @@ function createEditFileTool(
 
   if (longTermMemory && store) {
     return tool(
-      async (
-        input: {
-          file_path: string;
-          old_string: string;
-          new_string: string;
-          replace_all?: boolean;
-        },
-        config
-      ) => {
+      async (input, config) => {
         const filePath = validatePath(input.file_path);
         const replaceAll = input.replace_all ?? false;
         const isLongtermMemory = hasMemoriesPrefix(filePath);
@@ -846,15 +828,7 @@ function createEditFileTool(
   }
 
   return tool(
-    (
-      input: {
-        file_path: string;
-        old_string: string;
-        new_string: string;
-        replace_all?: boolean;
-      },
-      config
-    ) => {
+    (input, config) => {
       const filePath = validatePath(input.file_path);
       const replaceAll = input.replace_all ?? false;
 
@@ -970,7 +944,7 @@ export function createFilesystemMiddleware(
 
   return createMiddleware({
     name: "fsMiddleware",
-    stateSchema: stateSchema,
+    stateSchema,
     tools,
     // Add filesystem system prompt to model calls
     wrapModelCall: async (request, handler) => {
@@ -1002,7 +976,10 @@ export function createFilesystemMiddleware(
       const result = await handler(request);
 
       // Check if result is too large and evict to filesystem
-      if (result instanceof ToolMessage && typeof result.content === "string") {
+      if (
+        ToolMessage.isInstance(result) &&
+        typeof result.content === "string"
+      ) {
         const contentLength = result.content.length;
         // Approximate: 4 chars per token
         if (contentLength > 4 * toolTokenLimitBeforeEvict) {
@@ -1036,7 +1013,7 @@ export function createFilesystemMiddleware(
             },
           });
         }
-      } else if (result instanceof Command && result.update) {
+      } else if (isCommand(result) && result.update) {
         // Handle Command results with messages
         const update = result.update as Record<string, unknown>;
         const messageUpdates = (update.messages as unknown[]) || [];
@@ -1095,17 +1072,15 @@ export function createFilesystemMiddleware(
 
       return result;
     },
-    // Validate store availability if longterm memory is enabled
-    beforeAgent: (_state, runtime) => {
-      console.log(runtime);
-      console.log(runtime.store);
-      if (longTermMemory === true && !runtime.store) {
-        throw new Error(
-          "Longterm memory is enabled, but no store is available"
-        );
-      }
-      return;
-    },
+    // // Validate store availability if longterm memory is enabled
+    // beforeAgent: () => {
+    //   if (longTermMemory === true && !store) {
+    //     throw new Error(
+    //       "Longterm memory is enabled, but no store is available"
+    //     );
+    //   }
+    //   return;
+    // },
   });
 }
 

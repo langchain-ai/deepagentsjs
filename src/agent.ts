@@ -1,12 +1,5 @@
-/**
- * Main createDeepAgent function for Deep Agents
- *
- * Main entry point for creating deep agents with middleware-based architecture.
- * Matches Python's create_deep_agent function with full feature parity.
- */
-
-import { createAgent } from "langchain";
 import {
+  createAgent,
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
   todoListMiddleware,
@@ -28,12 +21,18 @@ import {
   createPatchToolCallsMiddleware,
   type SubAgent,
 } from "./middleware/index.js";
+import { InteropZodObject } from "@langchain/core/utils/types";
+import { AnnotationRoot } from "@langchain/langgraph";
 
 /**
  * Configuration parameters for creating a Deep Agent
  * Matches Python's create_deep_agent parameters
  */
-export interface CreateDeepAgentParams<StateSchema = any, ContextSchema = any> {
+export interface CreateDeepAgentParams<
+  ContextSchema extends
+    | AnnotationRoot<any>
+    | InteropZodObject = AnnotationRoot<any>,
+> {
   /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
   model?: LanguageModelLike | string;
   /** Tools the agent should have access to */
@@ -46,8 +45,6 @@ export interface CreateDeepAgentParams<StateSchema = any, ContextSchema = any> {
   subagents?: SubAgent[];
   /** Structured output response format for the agent */
   responseFormat?: any; // ResponseFormat type is complex, using any for now
-  /** Optional schema for custom agent state */
-  stateSchema?: StateSchema;
   /** Optional schema for context (not persisted between invocations) */
   contextSchema?: ContextSchema;
   /** Optional checkpointer for persisting agent state between runs */
@@ -62,10 +59,6 @@ export interface CreateDeepAgentParams<StateSchema = any, ContextSchema = any> {
   name?: string;
 }
 
-/**
- * Base prompt that provides instructions about available tools
- * Ported from Python implementation to ensure consistent behavior
- */
 const BASE_PROMPT = `In order to complete the objective that the user asks of you, you have access to a number of standard tools.`;
 
 /**
@@ -83,20 +76,20 @@ const BASE_PROMPT = `In order to complete the objective that the user asks of yo
  * @param params Configuration parameters for the agent
  * @returns ReactAgent instance ready for invocation
  */
-export function createDeepAgent<StateSchema = any, ContextSchema = any>(
-  params: CreateDeepAgentParams<
-    StateSchema,
-    ContextSchema
-  > = {} as CreateDeepAgentParams<StateSchema, ContextSchema>
-): ReactAgent<any, any, any, any> {
+export function createDeepAgent<
+  ContextSchema extends
+    | AnnotationRoot<any>
+    | InteropZodObject = AnnotationRoot<any>,
+>(
+  params: CreateDeepAgentParams<ContextSchema> = {}
+): ReactAgent<any, any, ContextSchema, any> {
   const {
-    model = "claude-sonnet-4-5-20250929", // Match Python default
+    model = "claude-sonnet-4-5-20250929",
     tools = [],
     systemPrompt,
     middleware: customMiddleware = [],
     subagents = [],
     responseFormat,
-    stateSchema,
     contextSchema,
     checkpointer,
     store,
@@ -110,80 +103,74 @@ export function createDeepAgent<StateSchema = any, ContextSchema = any>(
     ? `${systemPrompt}\n\n${BASE_PROMPT}`
     : BASE_PROMPT;
 
-  // Build default middleware stack for subagents
-  // Subagents get: todo + fs + summarization + caching + patch
-  const defaultSubagentMiddleware: AgentMiddleware[] = [
-    todoListMiddleware(),
-    createFilesystemMiddleware({
-      longTermMemory: useLongtermMemory,
-      store,
-    }),
-    summarizationMiddleware({
-      model: model as any,
-    }),
-    anthropicPromptCachingMiddleware({
-      unsupportedModelBehavior: "ignore",
-    }),
-    createPatchToolCallsMiddleware(),
-  ];
-
-  // Build main middleware stack matching Python's order:
-  // 1. Todo list middleware
-  // 2. Filesystem middleware
-  // 3. Subagent middleware
-  // 4. Summarization middleware
-  // 5. Anthropic prompt caching middleware
-  // 6. Patch tool calls middleware
-  // 7. Human-in-the-loop middleware (if configured)
-  // 8. Custom middleware
   const middleware: AgentMiddleware[] = [
+    // Provides todo list management capabilities for tracking tasks
     todoListMiddleware(),
+    // Enables filesystem operations and optional long-term memory storage
     createFilesystemMiddleware({
       longTermMemory: useLongtermMemory,
       store,
     }),
+    // Enables delegation to specialized subagents for complex tasks
     createSubAgentMiddleware({
       defaultModel: model,
-      defaultTools: tools as any,
-      defaultMiddleware: defaultSubagentMiddleware,
-      defaultInterruptOn: interruptOn || null,
+      defaultTools: tools,
+      defaultMiddleware: [
+        // Subagent middleware: Todo list management
+        todoListMiddleware(),
+        // Subagent middleware: Filesystem operations
+        createFilesystemMiddleware({
+          longTermMemory: useLongtermMemory,
+          store,
+        }),
+        // Subagent middleware: Automatic conversation summarization when token limits are approached
+        summarizationMiddleware({
+          model,
+          maxTokensBeforeSummary: 170000,
+          messagesToKeep: 6,
+        }),
+        // Subagent middleware: Anthropic prompt caching for improved performance
+        anthropicPromptCachingMiddleware({
+          unsupportedModelBehavior: "ignore",
+        }),
+        // Subagent middleware: Patches tool calls for compatibility
+        createPatchToolCallsMiddleware(),
+      ],
+      defaultInterruptOn: interruptOn,
       subagents,
       generalPurposeAgent: true,
     }),
+    // Automatically summarizes conversation history when token limits are approached
     summarizationMiddleware({
-      model: model as any,
+      model,
+      maxTokensBeforeSummary: 170000,
+      messagesToKeep: 6,
     }),
+    // Enables Anthropic prompt caching for improved performance and reduced costs
     anthropicPromptCachingMiddleware({
       unsupportedModelBehavior: "ignore",
     }),
+    // Patches tool calls to ensure compatibility across different model providers
     createPatchToolCallsMiddleware(),
   ];
 
   // Add human-in-the-loop middleware if interrupt config provided
   if (interruptOn) {
-    middleware.push(
-      humanInTheLoopMiddleware({
-        interruptOn,
-      })
-    );
+    middleware.push(humanInTheLoopMiddleware({ interruptOn }));
   }
 
   // Add custom middleware last (after all built-in middleware)
   middleware.push(...customMiddleware);
 
-  // Create and return agent with all parameters
-  // Note: Python sets recursion_limit to 1000 via .with_config()
-  // In TypeScript, recursionLimit should be passed to invoke/stream methods via config parameter
   return createAgent({
     model,
     systemPrompt: finalSystemPrompt,
-    tools: tools as any,
-    middleware: middleware as any,
+    tools,
+    middleware,
     responseFormat,
-    stateSchema: stateSchema as any,
-    contextSchema: contextSchema as any,
+    contextSchema,
     checkpointer,
     store,
     name,
-  } as any);
+  });
 }

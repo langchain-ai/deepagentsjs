@@ -1,11 +1,4 @@
-/**
- * Middleware for providing subagents to an agent via a `task` tool.
- *
- * TypeScript port of Python's SubAgentMiddleware with full feature parity.
- * Provides task tool for spawning ephemeral subagents with isolated context.
- */
-
-import { z } from "zod";
+import { z } from "zod/v3";
 import {
   createMiddleware,
   createAgent,
@@ -15,6 +8,7 @@ import {
   humanInTheLoopMiddleware,
   type InterruptOnConfig,
   type ReactAgent,
+  StructuredTool,
 } from "langchain";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
@@ -34,10 +28,12 @@ const DEFAULT_GENERAL_PURPOSE_DESCRIPTION =
   "General-purpose agent for researching complex questions, searching for files and content, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you. This agent has access to all tools as the main agent.";
 
 // Comprehensive task tool description from Python
-const TASK_TOOL_DESCRIPTION = `Launch an ephemeral subagent to handle complex, multi-step independent tasks with isolated context windows.
+function getTaskToolDescription(subagentDescriptions: string[]): string {
+  return `
+Launch an ephemeral subagent to handle complex, multi-step independent tasks with isolated context windows.
 
 Available agent types and the tools they have access to:
-{available_agents}
+${subagentDescriptions.join("\n")}
 
 When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
 
@@ -142,7 +138,9 @@ user: "Hello"
 Since the user is greeting, use the greeting-responder agent to respond with a friendly joke
 </commentary>
 assistant: "I'm going to use the Task tool to launch with the greeting-responder agent"
-</example>`;
+</example>
+  `.trim();
+}
 
 const TASK_SYSTEM_PROMPT = `## \`task\` (subagent spawner)
 
@@ -183,22 +181,13 @@ export interface SubAgent {
   /** The system prompt to use for the agent */
   systemPrompt: string;
   /** The tools to use for the agent (tool instances, not names). Defaults to defaultTools */
-  tools?: unknown[];
+  tools?: StructuredTool[];
   /** The model for the agent. Defaults to default_model */
   model?: LanguageModelLike | string;
   /** Additional middleware to append after default_middleware */
   middleware?: AgentMiddleware[];
   /** The tool configs to use for the agent */
   interruptOn?: Record<string, boolean | InterruptOnConfig>;
-}
-
-export interface CompiledSubAgent {
-  /** The name of the agent */
-  name: string;
-  /** The description of the agent */
-  description: string;
-  /** The Runnable to use for the agent (can be ReactAgent or any Runnable) */
-  runnable: ReactAgent<any, any, any, any> | Runnable;
 }
 
 /**
@@ -246,10 +235,10 @@ function returnCommandWithStateUpdate(
  */
 function getSubagents(options: {
   defaultModel: LanguageModelLike | string;
-  defaultTools: unknown[];
+  defaultTools: StructuredTool[];
   defaultMiddleware: AgentMiddleware[] | null;
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
-  subagents: Array<SubAgent | CompiledSubAgent>;
+  subagents: Array<SubAgent>;
   generalPurposeAgent: boolean;
 }): {
   agents: Record<string, ReactAgent<any, any, any, any> | Runnable>;
@@ -291,31 +280,22 @@ function getSubagents(options: {
   }
 
   // Process custom subagents
-  for (const agent of subagents) {
-    subagentDescriptions.push(`- ${agent.name}: ${agent.description}`);
+  for (const agentParams of subagents) {
+    subagentDescriptions.push(
+      `- ${agentParams.name}: ${agentParams.description}`
+    );
 
-    // Check if it's a pre-compiled agent
-    if ("runnable" in agent) {
-      const compiledAgent = agent as CompiledSubAgent;
-      agents[compiledAgent.name] = compiledAgent.runnable;
-      continue;
-    }
-
-    const subAgent = agent as SubAgent;
-    const tools = subAgent.tools || defaultTools;
-    const subagentModel = subAgent.model || defaultModel;
-
-    const middleware = subAgent.middleware
-      ? [...defaultSubagentMiddleware, ...subAgent.middleware]
+    const middleware = agentParams.middleware
+      ? [...defaultSubagentMiddleware, ...agentParams.middleware]
       : [...defaultSubagentMiddleware];
 
-    const interruptOn = subAgent.interruptOn || defaultInterruptOn;
+    const interruptOn = agentParams.interruptOn || defaultInterruptOn;
     if (interruptOn) middleware.push(humanInTheLoopMiddleware({ interruptOn }));
 
-    agents[subAgent.name] = createAgent({
-      model: subagentModel,
-      systemPrompt: subAgent.systemPrompt,
-      tools: tools as any,
+    agents[agentParams.name] = createAgent({
+      model: agentParams.model ?? defaultModel,
+      systemPrompt: agentParams.systemPrompt,
+      tools: agentParams.tools ?? defaultTools,
       middleware,
       checkpointer: false,
     });
@@ -329,10 +309,10 @@ function getSubagents(options: {
  */
 function createTaskTool(options: {
   defaultModel: LanguageModelLike | string;
-  defaultTools: unknown[];
+  defaultTools: StructuredTool[];
   defaultMiddleware: AgentMiddleware[] | null;
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
-  subagents: Array<SubAgent | CompiledSubAgent>;
+  subagents: Array<SubAgent>;
   generalPurposeAgent: boolean;
   taskDescription: string | null;
 }) {
@@ -356,21 +336,9 @@ function createTaskTool(options: {
       generalPurposeAgent,
     });
 
-  const subagentDescriptionStr = subagentDescriptions.join("\n");
-
-  // Use custom description if provided, otherwise use default template
-  let finalTaskDescription = taskDescription;
-  if (finalTaskDescription === null) {
-    finalTaskDescription = TASK_TOOL_DESCRIPTION.replace(
-      "{available_agents}",
-      subagentDescriptionStr
-    );
-  } else if (finalTaskDescription.includes("{available_agents}")) {
-    finalTaskDescription = finalTaskDescription.replace(
-      "{available_agents}",
-      subagentDescriptionStr
-    );
-  }
+  const finalTaskDescription = taskDescription
+    ? taskDescription
+    : getTaskToolDescription(subagentDescriptions);
 
   return tool(
     async (
@@ -433,13 +401,13 @@ export interface SubAgentMiddlewareOptions {
   /** The model to use for subagents */
   defaultModel: LanguageModelLike | string;
   /** The tools to use for the default general-purpose subagent */
-  defaultTools?: unknown[];
+  defaultTools?: StructuredTool[];
   /** Default middleware to apply to all subagents */
   defaultMiddleware?: AgentMiddleware[] | null;
   /** The tool configs for the default general-purpose subagent */
   defaultInterruptOn?: Record<string, boolean | InterruptOnConfig> | null;
   /** A list of additional subagents to provide to the agent */
-  subagents?: Array<SubAgent | CompiledSubAgent>;
+  subagents?: Array<SubAgent>;
   /** Full system prompt override */
   systemPrompt?: string | null;
   /** Whether to include the general-purpose agent */
@@ -494,6 +462,3 @@ export function createSubAgentMiddleware(
     },
   });
 }
-
-// Export for compatibility
-export { createSubAgentMiddleware as SubAgentMiddleware };

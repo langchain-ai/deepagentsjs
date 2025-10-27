@@ -1,20 +1,11 @@
-/**
- * Middleware to patch dangling tool calls in the messages history.
- *
- * This middleware ensures that every tool call in an AI message has a corresponding
- * ToolMessage response. If a tool call is "dangling" (no response), it adds a synthetic
- * ToolMessage indicating the tool call was cancelled.
- */
-
-import { createMiddleware, AgentMiddleware } from "langchain";
 import {
+  createMiddleware,
+  AgentMiddleware,
   ToolMessage,
-  RemoveMessage,
   AIMessage,
-} from "@langchain/core/messages";
+} from "langchain";
+import { RemoveMessage } from "@langchain/core/messages";
 import { REMOVE_ALL_MESSAGES } from "@langchain/langgraph";
-
-export type { AgentMiddleware };
 
 /**
  * Create middleware that patches dangling tool calls in the messages history.
