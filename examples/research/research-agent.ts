@@ -74,7 +74,7 @@ const researchSubAgent: SubAgent = {
   name: "research-agent",
   description:
     "Used to research more in depth questions. Only give this researcher one topic at a time. Do not pass multiple sub questions to this researcher. Instead, you should break down a large topic into the necessary components, and then call multiple research agents in parallel, one for each sub question.",
-  prompt: subResearchPrompt,
+  systemPrompt: subResearchPrompt,
   tools: ["internet_search"],
 };
 
@@ -104,7 +104,7 @@ const critiqueSubAgent: SubAgent = {
   name: "critique-agent",
   description:
     "Used to critique the final report. Give this agent some infomration about how you want it to critique the report.",
-  prompt: subCritiquePrompt,
+  systemPrompt: subCritiquePrompt,
 };
 
 // Prompt prefix to steer the agent to be an expert researcher
@@ -204,7 +204,7 @@ const agent = createDeepAgent({
     temperature: 0,
   }),
   tools: [internetSearch],
-  instructions: researchInstructions,
+  systemPrompt: researchInstructions,
   subagents: [critiqueSubAgent, researchSubAgent],
 });
 

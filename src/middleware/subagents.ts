@@ -181,7 +181,7 @@ export interface SubAgent {
   /** The description of the agent */
   description: string;
   /** The system prompt to use for the agent */
-  system_prompt: string;
+  systemPrompt: string;
   /** The tools to use for the agent (tool instances, not names). Defaults to defaultTools */
   tools?: unknown[];
   /** The model for the agent. Defaults to default_model */
@@ -189,7 +189,7 @@ export interface SubAgent {
   /** Additional middleware to append after default_middleware */
   middleware?: AgentMiddleware[];
   /** The tool configs to use for the agent */
-  interrupt_on?: Record<string, boolean | InterruptOnConfig>;
+  interruptOn?: Record<string, boolean | InterruptOnConfig>;
 }
 
 export interface CompiledSubAgent {
@@ -309,14 +309,12 @@ function getSubagents(options: {
       ? [...defaultSubagentMiddleware, ...subAgent.middleware]
       : [...defaultSubagentMiddleware];
 
-    const interruptOn = subAgent.interrupt_on || defaultInterruptOn;
-    if (interruptOn) {
-      middleware.push(humanInTheLoopMiddleware({ interruptOn }));
-    }
+    const interruptOn = subAgent.interruptOn || defaultInterruptOn;
+    if (interruptOn) middleware.push(humanInTheLoopMiddleware({ interruptOn }));
 
     agents[subAgent.name] = createAgent({
       model: subagentModel,
-      systemPrompt: subAgent.system_prompt,
+      systemPrompt: subAgent.systemPrompt,
       tools: tools as any,
       middleware,
       checkpointer: false,

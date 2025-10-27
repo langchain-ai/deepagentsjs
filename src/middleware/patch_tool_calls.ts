@@ -7,7 +7,11 @@
  */
 
 import { createMiddleware, AgentMiddleware } from "langchain";
-import { ToolMessage, RemoveMessage } from "@langchain/core/messages";
+import {
+  ToolMessage,
+  RemoveMessage,
+  AIMessage,
+} from "@langchain/core/messages";
 import { REMOVE_ALL_MESSAGES } from "@langchain/langgraph";
 
 export type { AgentMiddleware };
@@ -50,16 +54,14 @@ export function createPatchToolCallsMiddleware(): AgentMiddleware {
         patchedMessages.push(msg);
 
         // Check if this is an AI message with tool calls
-        if (msg._getType() === "ai" && (msg as any).tool_calls) {
-          const toolCalls = (msg as any).tool_calls;
-
-          for (const toolCall of toolCalls) {
+        if (AIMessage.isInstance(msg) && msg.tool_calls != null) {
+          for (const toolCall of msg.tool_calls) {
             // Look for a corresponding ToolMessage in the messages after this one
             const correspondingToolMsg = messages
               .slice(i)
               .find(
-                (m: any) =>
-                  m._getType() === "tool" && m.tool_call_id === toolCall.id
+                (m) =>
+                  ToolMessage.isInstance(m) && m.tool_call_id === toolCall.id
               );
 
             if (!correspondingToolMsg) {
@@ -69,7 +71,7 @@ export function createPatchToolCallsMiddleware(): AgentMiddleware {
                 new ToolMessage({
                   content: toolMsg,
                   name: toolCall.name,
-                  tool_call_id: toolCall.id,
+                  tool_call_id: toolCall.id!,
                 })
               );
             }
