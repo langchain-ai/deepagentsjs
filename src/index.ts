@@ -17,6 +17,15 @@ export {
   EDIT_DESCRIPTION,
   TOOL_DESCRIPTION,
 } from "./prompts.js";
+export {
+  formatStreamedMessage,
+  isLLMTokenChunk,
+  extractTodosFromUpdate,
+  extractFilesFromUpdate,
+  processStream,
+  TokenAccumulator,
+  StreamingPresets,
+} from "./streaming.js";
 export type {
   SubAgent,
   Todo,
@@ -25,3 +34,9 @@ export type {
   CreateTaskToolParams,
   TodoStatus,
 } from "./types.js";
+export type {
+  StreamMode,
+  DeepAgentStreamConfig,
+  StreamedUpdate,
+  StreamHandler,
+} from "./streaming.js";
