@@ -75,7 +75,7 @@ const researchSubAgent: SubAgent = {
   description:
     "Used to research more in depth questions. Only give this researcher one topic at a time. Do not pass multiple sub questions to this researcher. Instead, you should break down a large topic into the necessary components, and then call multiple research agents in parallel, one for each sub question.",
   systemPrompt: subResearchPrompt,
-  tools: ["internet_search"],
+  tools: [internetSearch],
 };
 
 const subCritiquePrompt = `You are a dedicated editor. You are being tasked to critique a report.
@@ -198,7 +198,7 @@ Use this to run an internet search for a given query. You can specify the number
 `;
 
 // Create the agent
-const agent = createDeepAgent({
+export const agent = createDeepAgent({
   model: new ChatAnthropic({
     model: "claude-sonnet-4-20250514",
     temperature: 0,
@@ -208,27 +208,27 @@ const agent = createDeepAgent({
   subagents: [critiqueSubAgent, researchSubAgent],
 });
 
-// Invoke the agent
-async function main() {
-  const result = await agent.invoke(
-    {
-      messages: [new HumanMessage("what is langgraph?")],
-    },
-    { recursionLimit: 1000 }
-  );
+// // Invoke the agent
+// async function main() {
+//   const result = await agent.invoke(
+//     {
+//       messages: [new HumanMessage("what is langgraph?")],
+//     },
+//     { recursionLimit: 1000 }
+//   );
 
-  console.log("🎉 Finished!");
-  console.log(
-    `\n\nAgent ToDo List:\n${result.todos.map((todo) => ` - ${todo.content} (${todo.status})`).join("\n")}`
-  );
-  console.log(
-    `\n\nAgent Files:\n${Object.entries(result.files)
-      .map(([key, value]) => ` - ${key}: ${value}`)
-      .join("\n")}`
-  );
-}
+//   console.log("🎉 Finished!");
+//   console.log(
+//     `\n\nAgent ToDo List:\n${result.todos.map((todo) => ` - ${todo.content} (${todo.status})`).join("\n")}`
+//   );
+//   console.log(
+//     `\n\nAgent Files:\n${Object.entries(result.files)
+//       .map(([key, value]) => ` - ${key}: ${value}`)
+//       .join("\n")}`
+//   );
+// }
 
-// Run if this file is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main();
-}
+// // Run if this file is executed directly
+// if (import.meta.url === `file://${process.argv[1]}`) {
+//   main();
+// }
