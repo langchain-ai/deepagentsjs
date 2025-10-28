@@ -19,9 +19,10 @@ import {
   getConfig,
   isCommand,
 } from "@langchain/langgraph";
-import type { BaseStore, Item } from "@langchain/langgraph";
+import type { Item, Runtime } from "@langchain/langgraph";
 import { z as z3 } from "zod/v3";
 import { withLangGraph } from "@langchain/langgraph/zod";
+import { RunnableConfig } from "@langchain/core/runnables";
 
 const MEMORIES_PREFIX = "/memories/";
 const EMPTY_CONTENT_WARNING =
@@ -378,13 +379,22 @@ Here are the first 10 lines of the result:
 {content_sample}
 `;
 
+function assertStore(
+  config: RunnableConfig
+): asserts config is RunnableConfig & {
+  store: Exclude<Runtime["store"], undefined>;
+} {
+  if (!("store" in config) || config.store == null) {
+    throw new Error("Missing store when long term memory is enabled");
+  }
+}
+
 /**
  * Generate the ls (list files) tool.
  */
 function createLsTool(
   customDescription: string | null,
-  longTermMemory: boolean,
-  store?: BaseStore
+  longTermMemory: boolean
 ) {
   let toolDescription = LIST_FILES_TOOL_DESCRIPTION;
   if (customDescription) {
@@ -393,44 +403,22 @@ function createLsTool(
     toolDescription += LIST_FILES_TOOL_DESCRIPTION_LONGTERM_SUPPLEMENT;
   }
 
-  if (longTermMemory && store) {
-    return tool(
-      async (input, config) => {
-        const state = getCurrentTaskInput<FsMiddlewareState>(config);
-        const filesDict = state.files || {};
-        let files = Object.keys(filesDict);
+  return tool(
+    async (input: { path?: string }, config) => {
+      const state = getCurrentTaskInput<FsMiddlewareState>(config);
+      const filesDict = state.files || {};
+      let files = Object.keys(filesDict);
 
-        // Add filenames from longterm memory
+      if (longTermMemory) {
+        assertStore(config);
+
         const namespace = getNamespace();
-        const longtermFiles = await store.search(namespace);
+        const longtermFiles = await config.store.search(namespace);
         const longtermFilesPrefixed = longtermFiles.map((f) =>
           appendMemoriesPrefix(f.key)
         );
         files = files.concat(longtermFilesPrefixed);
-
-        // Filter by path if specified
-        if (input.path) {
-          const normalizedPath = validatePath(input.path);
-          files = files.filter((f) => f.startsWith(normalizedPath));
-        }
-
-        return files;
-      },
-      {
-        name: "ls",
-        description: toolDescription,
-        schema: z3.object({
-          path: z3.string().optional().describe("Optional path to filter by"),
-        }),
       }
-    );
-  }
-
-  return tool(
-    (input: { path?: string }, config) => {
-      const state = getCurrentTaskInput<FsMiddlewareState>(config);
-      const filesDict = state.files || {};
-      let files = Object.keys(filesDict);
 
       // Filter by path if specified
       if (input.path) {
@@ -455,8 +443,7 @@ function createLsTool(
  */
 function createReadFileTool(
   customDescription: string | null,
-  longTermMemory: boolean,
-  store?: BaseStore
+  longTermMemory: boolean
 ) {
   let toolDescription = READ_FILE_TOOL_DESCRIPTION;
   if (customDescription) {
@@ -491,84 +478,34 @@ function createReadFileTool(
     });
   }
 
-  if (longTermMemory) {
-    return tool(
-      async (input, config) => {
-        const filePath = validatePath(input.file_path);
-        const offset = input.offset ?? DEFAULT_READ_OFFSET;
-        const limit = input.limit ?? DEFAULT_READ_LIMIT;
+  return tool(
+    async (input, config) => {
+      const filePath = validatePath(input.file_path);
+      const offset = input.offset ?? DEFAULT_READ_OFFSET;
+      const limit = input.limit ?? DEFAULT_READ_LIMIT;
+
+      if (longTermMemory) {
+        assertStore(config);
 
         if (hasMemoriesPrefix(filePath)) {
           const strippedFilePath = stripMemoriesPrefix(filePath);
           const namespace = getNamespace();
-          const item = await store?.get(namespace, strippedFilePath);
-          if (!item) {
-            return `Error: File '${filePath}' not found`;
-          }
+          const item = await config.store?.get(namespace, strippedFilePath);
+          if (!item) return `Error: File '${filePath}' not found`;
+
           const fileData = convertStoreItemToFileData(item);
           return readFileDataContent(fileData, offset, limit);
         }
-
-        const state = getCurrentTaskInput<FsMiddlewareState>(config);
-        const mockFilesystem = state.files || {};
-        if (!(filePath in mockFilesystem)) {
-          return `Error: File '${filePath}' not found`;
-        }
-        const fileData = mockFilesystem[filePath];
-        return readFileDataContent(fileData, offset, limit);
-      },
-      {
-        name: "read_file",
-        description: toolDescription,
-        schema: z3.object({
-          file_path: z3.string().describe("Absolute path to the file to read"),
-          offset: z3
-            .number()
-            .optional()
-            .default(DEFAULT_READ_OFFSET)
-            .describe("Line offset to start reading from"),
-          limit: z3
-            .number()
-            .optional()
-            .default(DEFAULT_READ_LIMIT)
-            .describe("Maximum number of lines to read"),
-        }),
       }
-    );
-  }
-
-  return tool(
-    (input, config) => {
-      const filePath = validatePath(input.file_path);
-      const offset = input.offset ?? DEFAULT_READ_OFFSET;
-      const limit = input.limit ?? DEFAULT_READ_LIMIT;
 
       const state = getCurrentTaskInput<FsMiddlewareState>(config);
       const mockFilesystem = state.files || {};
       if (!(filePath in mockFilesystem)) {
         return `Error: File '${filePath}' not found`;
       }
+
       const fileData = mockFilesystem[filePath];
-
-      const content = fileDataToString(fileData);
-      const emptyMsg = checkEmptyContent(content);
-      if (emptyMsg) {
-        return emptyMsg;
-      }
-
-      const lines = content.split("\n");
-      const startIdx = offset;
-      const endIdx = Math.min(startIdx + limit, lines.length);
-
-      if (startIdx >= lines.length) {
-        return `Error: Line offset ${offset} exceeds file length (${lines.length} lines)`;
-      }
-
-      const selectedLines = lines.slice(startIdx, endIdx);
-      return formatContentWithLineNumbers(selectedLines, {
-        formatStyle: "tab",
-        startLine: startIdx + 1,
-      });
+      return readFileDataContent(fileData, offset, limit);
     },
     {
       name: "read_file",
@@ -595,8 +532,7 @@ function createReadFileTool(
  */
 function createWriteFileTool(
   customDescription: string | null,
-  longTermMemory: boolean,
-  store?: BaseStore
+  longTermMemory: boolean
 ) {
   let toolDescription = WRITE_FILE_TOOL_DESCRIPTION;
   if (customDescription) {
@@ -605,61 +541,30 @@ function createWriteFileTool(
     toolDescription += WRITE_FILE_TOOL_DESCRIPTION_LONGTERM_SUPPLEMENT;
   }
 
-  if (longTermMemory && store) {
-    return tool(
-      async (input, config) => {
-        const filePath = validatePath(input.file_path);
+  return tool(
+    async (input, config) => {
+      const filePath = validatePath(input.file_path);
+
+      if (longTermMemory) {
+        assertStore(config);
 
         if (hasMemoriesPrefix(filePath)) {
           const strippedFilePath = stripMemoriesPrefix(filePath);
           const namespace = getNamespace();
-          const existing = await store.get(namespace, strippedFilePath);
+          const existing = await config.store.get(namespace, strippedFilePath);
           if (existing) {
             return `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`;
           }
           const newFileData = createFileData(input.content);
-          await store.put(
+          await config.store.put(
             namespace,
             strippedFilePath,
             convertFileDataToStoreItem(newFileData)
           );
           return `Updated longterm memories file ${filePath}`;
         }
-
-        const state = getCurrentTaskInput<FsMiddlewareState>(config);
-        const mockFilesystem = state.files || {};
-        if (filePath in mockFilesystem) {
-          return `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`;
-        }
-
-        const newFileData = createFileData(input.content);
-        return new Command({
-          update: {
-            files: { [filePath]: newFileData },
-            messages: [
-              new ToolMessage({
-                content: `Updated file ${filePath}`,
-                tool_call_id: config.toolCall?.id as string,
-                name: "write_file",
-              }),
-            ],
-          },
-        });
-      },
-      {
-        name: "write_file",
-        description: toolDescription,
-        schema: z3.object({
-          file_path: z3.string().describe("Absolute path to the file to write"),
-          content: z3.string().describe("Content to write to the file"),
-        }),
       }
-    );
-  }
 
-  return tool(
-    (input, config) => {
-      const filePath = validatePath(input.file_path);
       const state = getCurrentTaskInput<FsMiddlewareState>(config);
       const mockFilesystem = state.files || {};
 
@@ -697,8 +602,7 @@ function createWriteFileTool(
  */
 function createEditFileTool(
   customDescription: string | null,
-  longTermMemory: boolean,
-  store?: BaseStore
+  longTermMemory: boolean
 ) {
   let toolDescription = EDIT_FILE_TOOL_DESCRIPTION;
   if (customDescription) {
@@ -741,103 +645,32 @@ function createEditFileTool(
     return { fileData: newFileData, message: resultMsg };
   }
 
-  if (longTermMemory && store) {
-    return tool(
-      async (input, config) => {
-        const filePath = validatePath(input.file_path);
-        const replaceAll = input.replace_all ?? false;
-        const isLongtermMemory = hasMemoriesPrefix(filePath);
-
-        let fileData: FileData;
-
-        // Retrieve file data from appropriate storage
-        if (isLongtermMemory) {
-          const strippedFilePath = stripMemoriesPrefix(filePath);
-          const namespace = getNamespace();
-          const item = await store.get(namespace, strippedFilePath);
-          if (!item) {
-            return `Error: File '${filePath}' not found`;
-          }
-          fileData = convertStoreItemToFileData(item);
-        } else {
-          const state = getCurrentTaskInput<FsMiddlewareState>(config);
-          const mockFilesystem = state.files || {};
-          if (!(filePath in mockFilesystem)) {
-            return `Error: File '${filePath}' not found`;
-          }
-          fileData = mockFilesystem[filePath];
-        }
-
-        // Perform the edit
-        const result = performFileEdit(
-          fileData,
-          input.old_string,
-          input.new_string,
-          replaceAll
-        );
-
-        if (typeof result === "string") {
-          return result; // Error message
-        }
-
-        const { fileData: newFileData, message: resultMsg } = result;
-        const fullMsg = `${resultMsg} in '${filePath}'`;
-
-        // Save to appropriate storage
-        if (isLongtermMemory) {
-          const strippedFilePath = stripMemoriesPrefix(filePath);
-          const namespace = getNamespace();
-          await store.put(
-            namespace,
-            strippedFilePath,
-            convertFileDataToStoreItem(newFileData)
-          );
-          return fullMsg;
-        }
-
-        return new Command({
-          update: {
-            files: { [filePath]: newFileData },
-            messages: [
-              new ToolMessage({
-                content: fullMsg,
-                tool_call_id: config.toolCall?.id as string,
-                name: "edit_file",
-              }),
-            ],
-          },
-        });
-      },
-      {
-        name: "edit_file",
-        description: toolDescription,
-        schema: z3.object({
-          file_path: z3.string().describe("Absolute path to the file to edit"),
-          old_string: z3
-            .string()
-            .describe("String to be replaced (must match exactly)"),
-          new_string: z3.string().describe("String to replace with"),
-          replace_all: z3
-            .boolean()
-            .optional()
-            .default(false)
-            .describe("Whether to replace all occurrences"),
-        }),
-      }
-    );
-  }
-
   return tool(
-    (input, config) => {
+    async (input, config) => {
       const filePath = validatePath(input.file_path);
       const replaceAll = input.replace_all ?? false;
 
-      const state = getCurrentTaskInput<FsMiddlewareState>(config);
-      const mockFilesystem = state.files || {};
-      if (!(filePath in mockFilesystem)) {
-        return `Error: File '${filePath}' not found`;
-      }
-      const fileData = mockFilesystem[filePath];
+      const fileData: FileData | string = await (async () => {
+        if (longTermMemory) {
+          assertStore(config);
+
+          if (hasMemoriesPrefix(filePath)) {
+            const strippedFilePath = stripMemoriesPrefix(filePath);
+            const namespace = getNamespace();
+            const item = await config.store.get(namespace, strippedFilePath);
+            if (!item) return `Error: File '${filePath}' not found`;
+            return convertStoreItemToFileData(item);
+          }
+        }
+
+        const state = getCurrentTaskInput<FsMiddlewareState>(config);
+        const mockFilesystem = state.files || {};
+        if (!(filePath in mockFilesystem))
+          return `Error: File '${filePath}' not found`;
+        return mockFilesystem[filePath] as FileData;
+      })();
+
+      if (typeof fileData === "string") return fileData; // Error message
 
       // Perform the edit
       const result = performFileEdit(
@@ -853,6 +686,21 @@ function createEditFileTool(
 
       const { fileData: newFileData, message: resultMsg } = result;
       const fullMsg = `${resultMsg} in '${filePath}'`;
+
+      if (longTermMemory) {
+        assertStore(config);
+
+        if (hasMemoriesPrefix(filePath)) {
+          const strippedFilePath = stripMemoriesPrefix(filePath);
+          const namespace = getNamespace();
+          await config.store.put(
+            namespace,
+            strippedFilePath,
+            convertFileDataToStoreItem(newFileData)
+          );
+          return fullMsg;
+        }
+      }
 
       return new Command({
         update: {
@@ -898,8 +746,6 @@ export interface FilesystemMiddlewareOptions {
   customToolDescriptions?: Record<string, string> | null;
   /** Optional token limit before evicting a tool result to the filesystem (default: 20000 tokens, ~80KB) */
   toolTokenLimitBeforeEvict?: number | null;
-  /** Optional store for longterm memory */
-  store?: BaseStore;
 }
 
 /**
@@ -913,7 +759,6 @@ export function createFilesystemMiddleware(
     systemPrompt: customSystemPrompt = null,
     customToolDescriptions = null,
     toolTokenLimitBeforeEvict = 20000,
-    store,
   } = options;
 
   let systemPrompt = FILESYSTEM_SYSTEM_PROMPT;
@@ -924,21 +769,18 @@ export function createFilesystemMiddleware(
   }
 
   const tools = [
-    createLsTool(customToolDescriptions?.ls ?? null, longTermMemory, store),
+    createLsTool(customToolDescriptions?.ls ?? null, longTermMemory),
     createReadFileTool(
       customToolDescriptions?.read_file ?? null,
-      longTermMemory,
-      store
+      longTermMemory
     ),
     createWriteFileTool(
       customToolDescriptions?.write_file ?? null,
-      longTermMemory,
-      store
+      longTermMemory
     ),
     createEditFileTool(
       customToolDescriptions?.edit_file ?? null,
-      longTermMemory,
-      store
+      longTermMemory
     ),
   ];
 
