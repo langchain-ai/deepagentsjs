@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 import "dotenv/config";
-import { z } from "zod";
-import { tool, HumanMessage } from "langchain";
+import { z } from "zod/v4";
+import { tool } from "langchain";
 import { TavilySearch } from "@langchain/tavily";
 import { ChatAnthropic } from "@langchain/anthropic";
 

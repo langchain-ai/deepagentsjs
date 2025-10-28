@@ -20,8 +20,8 @@ import {
   isCommand,
 } from "@langchain/langgraph";
 import type { BaseStore, Item } from "@langchain/langgraph";
-import { z as z3 } from "zod/v3";
-import { withLangGraph } from "@langchain/langgraph/zod";
+import { z } from "zod/v4";
+import { registry } from "@langchain/langgraph/zod";
 
 const MEMORIES_PREFIX = "/memories/";
 const EMPTY_CONTENT_WARNING =
@@ -34,13 +34,13 @@ const DEFAULT_READ_LIMIT = 2000;
 /**
  * Zod v3 schema for FileData
  */
-const FileDataSchema = z3.object({
-  content: z3.array(z3.string()),
-  created_at: z3.string(),
-  modified_at: z3.string(),
+const FileDataSchema = z.object({
+  content: z.array(z.string()),
+  created_at: z.string(),
+  modified_at: z.string(),
 });
 
-export type FileData = z3.infer<typeof FileDataSchema>;
+export type FileData = z.infer<typeof FileDataSchema>;
 
 /**
  * Merge file updates with support for deletions.
@@ -292,19 +292,17 @@ function convertFileDataToStoreItem(
   };
 }
 
-const stateSchema = z3.object({
-  files: withLangGraph(
-    z3.record(z3.string(), FileDataSchema).default(() => ({})),
-    {
-      reducer: {
-        fn: fileDataReducer,
-        schema: z3.record(z3.string(), FileDataSchema.nullable()),
-      },
-    }
-  ),
+const stateSchema = z.object({
+  files: z.record(z.string(), FileDataSchema).register(registry, {
+    default: () => ({}),
+    reducer: {
+      fn: fileDataReducer,
+      schema: z.record(z.string(), FileDataSchema.nullable()),
+    },
+  }),
 });
 
-export type FsMiddlewareState = z3.infer<typeof stateSchema>;
+export type FsMiddlewareState = z.infer<typeof stateSchema>;
 
 const LIST_FILES_TOOL_DESCRIPTION = `Lists all files in the filesystem, optionally filtering by directory.
 
@@ -419,8 +417,8 @@ function createLsTool(
       {
         name: "ls",
         description: toolDescription,
-        schema: z3.object({
-          path: z3.string().optional().describe("Optional path to filter by"),
+        schema: z.object({
+          path: z.string().optional().describe("Optional path to filter by"),
         }),
       }
     );
@@ -443,8 +441,8 @@ function createLsTool(
     {
       name: "ls",
       description: toolDescription,
-      schema: z3.object({
-        path: z3.string().optional().describe("Optional path to filter by"),
+      schema: z.object({
+        path: z.string().optional().describe("Optional path to filter by"),
       }),
     }
   );
@@ -520,14 +518,14 @@ function createReadFileTool(
       {
         name: "read_file",
         description: toolDescription,
-        schema: z3.object({
-          file_path: z3.string().describe("Absolute path to the file to read"),
-          offset: z3
+        schema: z.object({
+          file_path: z.string().describe("Absolute path to the file to read"),
+          offset: z
             .number()
             .optional()
             .default(DEFAULT_READ_OFFSET)
             .describe("Line offset to start reading from"),
-          limit: z3
+          limit: z
             .number()
             .optional()
             .default(DEFAULT_READ_LIMIT)
@@ -573,14 +571,14 @@ function createReadFileTool(
     {
       name: "read_file",
       description: toolDescription,
-      schema: z3.object({
-        file_path: z3.string().describe("Absolute path to the file to read"),
-        offset: z3
+      schema: z.object({
+        file_path: z.string().describe("Absolute path to the file to read"),
+        offset: z
           .number()
           .optional()
           .default(DEFAULT_READ_OFFSET)
           .describe("Line offset to start reading from"),
-        limit: z3
+        limit: z
           .number()
           .optional()
           .default(DEFAULT_READ_LIMIT)
@@ -649,9 +647,9 @@ function createWriteFileTool(
       {
         name: "write_file",
         description: toolDescription,
-        schema: z3.object({
-          file_path: z3.string().describe("Absolute path to the file to write"),
-          content: z3.string().describe("Content to write to the file"),
+        schema: z.object({
+          file_path: z.string().describe("Absolute path to the file to write"),
+          content: z.string().describe("Content to write to the file"),
         }),
       }
     );
@@ -684,9 +682,9 @@ function createWriteFileTool(
     {
       name: "write_file",
       description: toolDescription,
-      schema: z3.object({
-        file_path: z3.string().describe("Absolute path to the file to write"),
-        content: z3.string().describe("Content to write to the file"),
+      schema: z.object({
+        file_path: z.string().describe("Absolute path to the file to write"),
+        content: z.string().describe("Content to write to the file"),
       }),
     }
   );
@@ -811,13 +809,13 @@ function createEditFileTool(
       {
         name: "edit_file",
         description: toolDescription,
-        schema: z3.object({
-          file_path: z3.string().describe("Absolute path to the file to edit"),
-          old_string: z3
+        schema: z.object({
+          file_path: z.string().describe("Absolute path to the file to edit"),
+          old_string: z
             .string()
             .describe("String to be replaced (must match exactly)"),
-          new_string: z3.string().describe("String to replace with"),
-          replace_all: z3
+          new_string: z.string().describe("String to replace with"),
+          replace_all: z
             .boolean()
             .optional()
             .default(false)
@@ -870,13 +868,13 @@ function createEditFileTool(
     {
       name: "edit_file",
       description: toolDescription,
-      schema: z3.object({
-        file_path: z3.string().describe("Absolute path to the file to edit"),
-        old_string: z3
+      schema: z.object({
+        file_path: z.string().describe("Absolute path to the file to edit"),
+        old_string: z
           .string()
           .describe("String to be replaced (must match exactly)"),
-        new_string: z3.string().describe("String to replace with"),
-        replace_all: z3
+        new_string: z.string().describe("String to replace with"),
+        replace_all: z
           .boolean()
           .optional()
           .default(false)
