@@ -9,11 +9,12 @@ import {
   getWeather,
   getSoccerScores,
 } from "../utils.js";
+import type { InterruptOnConfig } from "langchain";
 
-const SAMPLE_TOOL_CONFIG = {
+const SAMPLE_TOOL_CONFIG: Record<string, boolean | InterruptOnConfig> = {
   sample_tool: true,
   get_weather: false,
-  get_soccer_scores: { allowed_decisions: ["approve", "reject"] },
+  get_soccer_scores: { allowedDecisions: ["approve", "reject"] },
 };
 
 describe("Human-in-the-Loop (HITL) Integration Tests", () => {
@@ -123,71 +124,61 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
     }
   );
 
-  it(
-    "should handle HITL with subagents",
-    { timeout: 120000 },
-    async () => {
-      const checkpointer = new MemorySaver();
-      const agent = createDeepAgent({
-        tools: [sampleTool, getWeather, getSoccerScores],
-        interruptOn: SAMPLE_TOOL_CONFIG,
-        checkpointer,
-      });
+  it("should handle HITL with subagents", { timeout: 120000 }, async () => {
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      tools: [sampleTool, getWeather, getSoccerScores],
+      interruptOn: SAMPLE_TOOL_CONFIG,
+      checkpointer,
+    });
 
-      const config = { configurable: { thread_id: uuidv4() } };
-      assertAllDeepAgentQualities(agent);
+    const config = { configurable: { thread_id: uuidv4() } };
+    assertAllDeepAgentQualities(agent);
 
-      // First invocation - use subagent which should also interrupt
-      const result = await agent.invoke(
-        {
-          messages: [
-            {
-              role: "user",
-              content:
-                "Use the task tool to kick off the general-purpose subagent. Tell it to call the sample tool, get the weather in New York and get scores for the latest soccer games in parallel",
-            },
-          ],
-        },
-        config
-      );
-
-      // Check that task tool was called
-      const agentMessages = result.messages.filter(
-        (msg: any) => msg._getType() === "ai"
-      );
-      const toolCalls = agentMessages.flatMap(
-        (msg: any) => msg.tool_calls || []
-      );
-      expect(toolCalls.some((tc: any) => tc.name === "task")).toBe(true);
-
-      // Subagent should have interrupts too
-      expect(result.__interrupt__).toBeDefined();
-
-      // Resume with approvals
-      const result2 = await agent.invoke(
-        new Command({
-          resume: {
-            decisions: [{ type: "approve" }, { type: "approve" }],
+    // First invocation - use subagent which should also interrupt
+    const result = await agent.invoke(
+      {
+        messages: [
+          {
+            role: "user",
+            content:
+              "Use the task tool to kick off the general-purpose subagent. Tell it to call the sample tool, get the weather in New York and get scores for the latest soccer games in parallel",
           },
-        }),
-        config
-      );
+        ],
+      },
+      config
+    );
 
-      // Verify tools were executed
-      const toolResults = result2.messages.filter(
-        (msg: any) => msg._getType() === "tool"
-      );
-      expect(toolResults.some((tr: any) => tr.name === "sample_tool")).toBe(
-        true
-      );
-      expect(toolResults.some((tr: any) => tr.name === "get_weather")).toBe(
-        true
-      );
-      expect(
-        toolResults.some((tr: any) => tr.name === "get_soccer_scores")
-      ).toBe(true);
-    }
-  );
+    // Check that task tool was called
+    const agentMessages = result.messages.filter(
+      (msg: any) => msg._getType() === "ai"
+    );
+    const toolCalls = agentMessages.flatMap((msg: any) => msg.tool_calls || []);
+    expect(toolCalls.some((tc: any) => tc.name === "task")).toBe(true);
+
+    // Subagent should have interrupts too
+    expect(result.__interrupt__).toBeDefined();
+
+    // Resume with approvals
+    const result2 = await agent.invoke(
+      new Command({
+        resume: {
+          decisions: [{ type: "approve" }, { type: "approve" }],
+        },
+      }),
+      config
+    );
+
+    // Verify tools were executed
+    const toolResults = result2.messages.filter(
+      (msg: any) => msg._getType() === "tool"
+    );
+    expect(toolResults.some((tr: any) => tr.name === "sample_tool")).toBe(true);
+    expect(toolResults.some((tr: any) => tr.name === "get_weather")).toBe(true);
+    expect(toolResults.some((tr: any) => tr.name === "get_soccer_scores")).toBe(
+      true
+    );
+  });
 
   it(
     "should use custom interrupt_on config for subagents",
@@ -207,9 +198,9 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
           {
             name: "custom_weather_agent",
             description: "Agent that gets weather with custom interrupt config",
-            system_prompt: "Use get_weather tool to get weather information",
+            systemPrompt: "Use get_weather tool to get weather information",
             tools: [getWeather],
-            interrupt_on: customInterruptConfig,
+            interruptOn: customInterruptConfig,
           },
         ],
       });

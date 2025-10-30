@@ -19,7 +19,7 @@ import {
 } from "../utils.js";
 
 describe("Filesystem Middleware Integration Tests", () => {
-  it.only.each([{ longTermMemory: false }, { longTermMemory: true }])(
+  it.each([{ longTermMemory: false }, { longTermMemory: true }])(
     "should override filesystem system prompt (%s)",
     { timeout: 60000 },
     async ({ longTermMemory }) => {
@@ -42,7 +42,7 @@ describe("Filesystem Middleware Integration Tests", () => {
     }
   );
 
-  it.only.each([{ longTermMemory: false }, { longTermMemory: true }])(
+  it.each([{ longTermMemory: false }, { longTermMemory: true }])(
     "should override filesystem tool descriptions (%s)",
     { timeout: 60000 },
     async ({ longTermMemory }) => {
@@ -429,7 +429,7 @@ describe("Filesystem Middleware Integration Tests", () => {
             toolTokenLimitBeforeEvict: 100, // Very low limit to trigger eviction
           }),
         ],
-        tools: [getNflStandings] as any,
+        tools: [getNflStandings],
       });
 
       const response = await agent.invoke({

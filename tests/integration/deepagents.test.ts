@@ -1,5 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { createAgent } from "langchain";
 import { HumanMessage } from "@langchain/core/messages";
 import { createDeepAgent } from "../../src/index.js";
 import {
@@ -177,25 +176,25 @@ describe("DeepAgents Integration Tests", () => {
     "should create deep agent with custom subagents",
     { timeout: 60000 },
     async () => {
-      const subagents = [
-        {
-          name: "weather_agent",
-          description: "Use this agent to get the weather",
-          systemPrompt: "You are a weather agent.",
-          tools: [getWeather],
-          model: SAMPLE_MODEL,
-        },
-        {
-          name: "soccer_agent",
-          description: "Use this agent to get the latest soccer scores",
-          runnable: createAgent({
+      const agent = createDeepAgent({
+        tools: [sampleTool],
+        subagents: [
+          {
+            name: "weather_agent",
+            description: "Use this agent to get the weather",
+            systemPrompt: "You are a weather agent.",
+            tools: [getWeather],
             model: SAMPLE_MODEL,
+          },
+          {
+            name: "soccer_agent",
+            description: "Use this agent to get the latest soccer scores",
             tools: [getSoccerScores],
+            model: SAMPLE_MODEL,
             systemPrompt: "You are a soccer agent.",
-          }),
-        },
-      ];
-      const agent = createDeepAgent({ tools: [sampleTool], subagents });
+          },
+        ],
+      });
       assertAllDeepAgentQualities(agent);
 
       const result = await agent.invoke({

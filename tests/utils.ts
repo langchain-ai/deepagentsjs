@@ -11,7 +11,7 @@ export function assertAllDeepAgentQualities(
   agent: ReactAgent<any, any, any, any>
 ) {
   // Check state channels
-  const channels = Object.keys((agent as any).graph?.channels || {});
+  const channels = Object.keys(agent.graph?.channels || {});
   if (!channels.includes("todos")) {
     throw new Error(
       `Expected agent to have 'todos' channel, got: ${channels.join(", ")}`
