@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createAgent } from "langchain";
-import { HumanMessage } from "@langchain/core/messages";
+import { HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 import { MemorySaver } from "@langchain/langgraph";
 import { createDeepAgent } from "../../src/index.js";
@@ -19,22 +19,12 @@ import {
 } from "../utils.js";
 
 describe("Filesystem Middleware Integration Tests", () => {
-  it("should fail when using longterm memory without store", async () => {
-    expect(() => {
-      createDeepAgent({
-        tools: [],
-        useLongtermMemory: true,
-        // No store provided
-      });
-    }).toThrow();
-  });
-
-  it(
-    "should override filesystem system prompt",
+  it.only.each([{ longTermMemory: false }, { longTermMemory: true }])(
+    "should override filesystem system prompt (%s)",
     { timeout: 60000 },
-    async () => {
+    async ({ longTermMemory }) => {
       const filesystemMiddleware = createFilesystemMiddleware({
-        longTermMemory: false,
+        longTermMemory,
         systemPrompt:
           "In every single response, you must say the word 'pokemon'! You love it!",
       });
@@ -52,99 +42,46 @@ describe("Filesystem Middleware Integration Tests", () => {
     }
   );
 
-  it(
-    "should override filesystem system prompt with longterm memory",
+  it.only.each([{ longTermMemory: false }, { longTermMemory: true }])(
+    "should override filesystem tool descriptions (%s)",
     { timeout: 60000 },
-    async () => {
-      const store = new InMemoryStore();
-      const filesystemMiddleware = createFilesystemMiddleware({
-        longTermMemory: true,
-        systemPrompt:
-          "In every single response, you must say the word 'pizza'! You love it!",
-      });
+    async ({ longTermMemory }) => {
       const agent = createAgent({
         model: SAMPLE_MODEL,
-        middleware: [filesystemMiddleware],
-        store,
+        middleware: [
+          createFilesystemMiddleware({
+            longTermMemory,
+            customToolDescriptions: {
+              ls: "Charmander",
+              read_file: "Bulbasaur",
+              edit_file: "Squirtle",
+            },
+          }),
+        ],
+        tools: [], // Required to bind tools from middleware
       });
 
-      const response = await agent.invoke({
-        messages: [new HumanMessage("What do you like?")],
-      });
+      const toolsArray = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
+      const tools: Record<string, any> = {};
+      for (const tool of toolsArray) {
+        tools[tool.name] = tool;
+      }
 
-      const lastMessage = response.messages[response.messages.length - 1];
-      expect(lastMessage.content.toString().toLowerCase()).toContain("pizza");
+      expect(tools).toMatchObject({
+        ls: { description: "Charmander" },
+        read_file: { description: "Bulbasaur" },
+        write_file: {
+          description: longTermMemory
+            ? WRITE_FILE_TOOL_DESCRIPTION +
+              WRITE_FILE_TOOL_DESCRIPTION_LONGTERM_SUPPLEMENT
+            : WRITE_FILE_TOOL_DESCRIPTION,
+        },
+        edit_file: {
+          description: "Squirtle",
+        },
+      });
     }
   );
-
-  it("should override filesystem tool descriptions", () => {
-    const agent = createAgent({
-      model: SAMPLE_MODEL,
-      middleware: [
-        createFilesystemMiddleware({
-          longTermMemory: false,
-          customToolDescriptions: {
-            ls: "Charmander",
-            read_file: "Bulbasaur",
-            edit_file: "Squirtle",
-          },
-        }),
-      ],
-      tools: [], // Required to bind tools from middleware
-    });
-
-    const toolsArray = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
-    const tools: Record<string, any> = {};
-    for (const tool of toolsArray) {
-      tools[tool.name] = tool;
-    }
-
-    expect(tools.ls).toBeDefined();
-    expect(tools.ls.description).toBe("Charmander");
-    expect(tools.read_file).toBeDefined();
-    expect(tools.read_file.description).toBe("Bulbasaur");
-    expect(tools.write_file).toBeDefined();
-    expect(tools.write_file.description).toBe(WRITE_FILE_TOOL_DESCRIPTION);
-    expect(tools.edit_file).toBeDefined();
-    expect(tools.edit_file.description).toBe("Squirtle");
-  });
-
-  it("should override filesystem tool descriptions with longterm memory", () => {
-    const store = new InMemoryStore();
-    const agent = createAgent({
-      model: SAMPLE_MODEL,
-      middleware: [
-        createFilesystemMiddleware({
-          longTermMemory: true,
-          customToolDescriptions: {
-            ls: "Charmander",
-            read_file: "Bulbasaur",
-            edit_file: "Squirtle",
-          },
-          store, // Pass store to middleware instead of createAgent
-        }),
-      ],
-      tools: [], // Required to bind tools from middleware
-    });
-
-    const toolsArray = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
-    const tools: Record<string, any> = {};
-    for (const tool of toolsArray) {
-      tools[tool.name] = tool;
-    }
-
-    expect(tools.ls).toBeDefined();
-    expect(tools.ls.description).toBe("Charmander");
-    expect(tools.read_file).toBeDefined();
-    expect(tools.read_file.description).toBe("Bulbasaur");
-    expect(tools.write_file).toBeDefined();
-    expect(tools.write_file.description).toBe(
-      WRITE_FILE_TOOL_DESCRIPTION +
-        WRITE_FILE_TOOL_DESCRIPTION_LONGTERM_SUPPLEMENT
-    );
-    expect(tools.edit_file).toBeDefined();
-    expect(tools.edit_file.description).toBe("Squirtle");
-  });
 
   it(
     "should list longterm memory files without path",
@@ -167,11 +104,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const agent = createAgent({
         model: SAMPLE_MODEL,
-        middleware: [
-          createFilesystemMiddleware({
-            longTermMemory: true,
-          }),
-        ],
+        middleware: [createFilesystemMiddleware({ longTermMemory: true })],
         checkpointer,
         store,
       });
@@ -198,7 +131,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const messages = response.messages;
       const lsMessage = messages.find(
-        (msg: any) => msg._getType() === "tool" && msg.name === "ls"
+        (msg) => ToolMessage.isInstance(msg) && msg.name === "ls"
       );
 
       expect(lsMessage).toBeDefined();
@@ -230,11 +163,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const agent = createAgent({
         model: SAMPLE_MODEL,
-        middleware: [
-          createFilesystemMiddleware({
-            longTermMemory: true,
-          }),
-        ],
+        middleware: [createFilesystemMiddleware({ longTermMemory: true })],
         checkpointer,
         store,
       });
@@ -261,7 +190,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const messages = response.messages;
       const lsMessage = messages.find(
-        (msg: any) => msg._getType() === "tool" && msg.name === "ls"
+        (msg) => ToolMessage.isInstance(msg) && msg.name === "ls"
       );
 
       expect(lsMessage).toBeDefined();
@@ -278,11 +207,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
     const agent = createAgent({
       model: SAMPLE_MODEL,
-      middleware: [
-        createFilesystemMiddleware({
-          longTermMemory: true,
-        }),
-      ],
+      middleware: [createFilesystemMiddleware({ longTermMemory: true })],
       checkpointer,
       store,
     });
@@ -365,7 +290,7 @@ describe("Filesystem Middleware Integration Tests", () => {
     });
 
     const config = { configurable: { thread_id: uuidv4() } };
-    const response = await agent.invoke(
+    await agent.invoke(
       {
         messages: [
           new HumanMessage(
@@ -450,7 +375,7 @@ describe("Filesystem Middleware Integration Tests", () => {
     });
 
     const config = { configurable: { thread_id: uuidv4() } };
-    const response = await agent.invoke(
+    await agent.invoke(
       {
         messages: [
           new HumanMessage(

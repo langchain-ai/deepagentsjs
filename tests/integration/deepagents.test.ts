@@ -68,7 +68,7 @@ describe("DeepAgents Integration Tests", () => {
         {
           name: "weather_agent",
           description: "Use this agent to get the weather",
-          system_prompt: "You are a weather agent.",
+          systemPrompt: "You are a weather agent.",
           tools: [getWeather],
           model: SAMPLE_MODEL,
         },
@@ -104,7 +104,7 @@ describe("DeepAgents Integration Tests", () => {
         {
           name: "weather_agent",
           description: "Use this agent to get the weather",
-          system_prompt: "You are a weather agent.",
+          systemPrompt: "You are a weather agent.",
           tools: [getWeather],
           model: SAMPLE_MODEL,
         },
@@ -144,7 +144,7 @@ describe("DeepAgents Integration Tests", () => {
         {
           name: "weather_agent",
           description: "Use this agent to get the weather",
-          system_prompt: "You are a weather agent.",
+          systemPrompt: "You are a weather agent.",
           tools: [],
           model: SAMPLE_MODEL,
           middleware: [WeatherToolMiddleware],
@@ -181,7 +181,7 @@ describe("DeepAgents Integration Tests", () => {
         {
           name: "weather_agent",
           description: "Use this agent to get the weather",
-          system_prompt: "You are a weather agent.",
+          systemPrompt: "You are a weather agent.",
           tools: [getWeather],
           model: SAMPLE_MODEL,
         },
@@ -190,7 +190,7 @@ describe("DeepAgents Integration Tests", () => {
           description: "Use this agent to get the latest soccer scores",
           runnable: createAgent({
             model: SAMPLE_MODEL,
-            tools: [getSoccerScores] as any,
+            tools: [getSoccerScores],
             systemPrompt: "You are a soccer agent.",
           }),
         },
@@ -237,7 +237,7 @@ describe("DeepAgents Integration Tests", () => {
           name: "basketball_info_agent",
           description:
             "Use this agent to get surface level info on any basketball topic",
-          system_prompt: "You are a basketball info agent.",
+          systemPrompt: "You are a basketball info agent.",
           middleware: [ResearchMiddlewareWithTools],
         },
       ];
@@ -287,7 +287,7 @@ describe("DeepAgents Integration Tests", () => {
           name: "basketball_info_agent",
           description:
             "Use this agent to get surface level info on any basketball topic",
-          system_prompt: "You are a basketball info agent.",
+          systemPrompt: "You are a basketball info agent.",
         },
       ];
       const agent = createDeepAgent({ tools: [sampleTool], subagents });

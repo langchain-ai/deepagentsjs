@@ -1,4 +1,4 @@
-import { tool, createMiddleware, type AgentMiddleware } from "langchain";
+import { tool, createMiddleware } from "langchain";
 import { ToolMessage } from "@langchain/core/messages";
 import { Command, Annotation } from "@langchain/langgraph";
 import type { ReactAgent } from "langchain";
@@ -7,24 +7,39 @@ import { z } from "zod";
 /**
  * Assert that an agent has all the expected deep agent qualities
  */
-export function assertAllDeepAgentQualities(agent: ReactAgent<any, any, any, any>) {
+export function assertAllDeepAgentQualities(
+  agent: ReactAgent<any, any, any, any>
+) {
   // Check state channels
   const channels = Object.keys((agent as any).graph?.channels || {});
   if (!channels.includes("todos")) {
-    throw new Error(`Expected agent to have 'todos' channel, got: ${channels.join(", ")}`);
+    throw new Error(
+      `Expected agent to have 'todos' channel, got: ${channels.join(", ")}`
+    );
   }
   if (!channels.includes("files")) {
-    throw new Error(`Expected agent to have 'files' channel, got: ${channels.join(", ")}`);
+    throw new Error(
+      `Expected agent to have 'files' channel, got: ${channels.join(", ")}`
+    );
   }
 
   // Check tools
   const tools = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
   const toolNames = tools.map((t: any) => t.name);
 
-  const expectedTools = ["write_todos", "ls", "read_file", "write_file", "edit_file", "task"];
+  const expectedTools = [
+    "write_todos",
+    "ls",
+    "read_file",
+    "write_file",
+    "edit_file",
+    "task",
+  ];
   for (const toolName of expectedTools) {
     if (!toolNames.includes(toolName)) {
-      throw new Error(`Expected agent to have '${toolName}' tool, got: ${toolNames.join(", ")}`);
+      throw new Error(
+        `Expected agent to have '${toolName}' tool, got: ${toolNames.join(", ")}`
+      );
     }
   }
 }
@@ -40,7 +55,10 @@ export const SAMPLE_MODEL = "claude-sonnet-4-5-20250929";
 
 export const getPremierLeagueStandings = tool(
   async (input: Record<string, never>, config) => {
-    const longToolMsg = "This is a long tool message that should be evicted to the filesystem.\n".repeat(300);
+    const longToolMsg =
+      "This is a long tool message that should be evicted to the filesystem.\n".repeat(
+        300
+      );
     return new Command({
       update: {
         messages: [
@@ -69,7 +87,10 @@ export const getPremierLeagueStandings = tool(
 
 export const getLaLigaStandings = tool(
   async (input: Record<string, never>, config) => {
-    const longToolMsg = "This is a long tool message that should be evicted to the filesystem.\n".repeat(300);
+    const longToolMsg =
+      "This is a long tool message that should be evicted to the filesystem.\n".repeat(
+        300
+      );
     return new Command({
       update: {
         messages: [
@@ -90,22 +111,28 @@ export const getLaLigaStandings = tool(
 
 export const getNbaStandings = tool(
   () => {
-    return "Sample text that is too long to fit in the token limit\n".repeat(10000);
+    return "Sample text that is too long to fit in the token limit\n".repeat(
+      10000
+    );
   },
   {
     name: "get_nba_standings",
-    description: "Use this tool to get a comprehensive report on the NBA standings",
+    description:
+      "Use this tool to get a comprehensive report on the NBA standings",
     schema: z.object({}),
   }
 );
 
 export const getNflStandings = tool(
   () => {
-    return "Sample text that is too long to fit in the token limit\n".repeat(100);
+    return "Sample text that is too long to fit in the token limit\n".repeat(
+      100
+    );
   },
   {
     name: "get_nfl_standings",
-    description: "Use this tool to get a comprehensive report on the NFL standings",
+    description:
+      "Use this tool to get a comprehensive report on the NFL standings",
     schema: z.object({}),
   }
 );
@@ -171,7 +198,8 @@ export const researchBasketball = tool(
   },
   {
     name: "research_basketball",
-    description: "Use this tool to conduct research into basketball and save it to state",
+    description:
+      "Use this tool to conduct research into basketball and save it to state",
     schema: z.object({
       topic: z.string(),
     }),

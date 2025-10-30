@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { createAgent } from "langchain";
+import { createAgent, createMiddleware } from "langchain";
 import { HumanMessage } from "@langchain/core/messages";
-import { ChatAnthropic } from "@langchain/anthropic";
-import {
-  createSubAgentMiddleware,
-  WeatherToolMiddleware,
-} from "../../src/index.js";
+import { createSubAgentMiddleware } from "../../src/index.js";
 import { SAMPLE_MODEL, getWeather, getSoccerScores } from "../utils.js";
+
+const WeatherToolMiddleware = createMiddleware({
+  name: "weatherToolMiddleware",
+  tools: [getWeather],
+});
 
 /**
  * Helper to extract all tool calls from agent response
@@ -51,155 +52,137 @@ async function assertExpectedSubgraphActions(
 }
 
 describe("Subagent Middleware Integration Tests", () => {
-  it(
-    "should invoke general-purpose subagent",
-    { timeout: 60000 },
-    async () => {
-      const agent = createAgent({
-        model: SAMPLE_MODEL,
-        systemPrompt:
-          "Use the general-purpose subagent to get the weather in a city.",
-        middleware: [
-          createSubAgentMiddleware({
-            defaultModel: SAMPLE_MODEL,
-            defaultTools: [getWeather] as any,
-          }),
-        ],
-      });
+  it("should invoke general-purpose subagent", { timeout: 60000 }, async () => {
+    const agent = createAgent({
+      model: SAMPLE_MODEL,
+      systemPrompt:
+        "Use the general-purpose subagent to get the weather in a city.",
+      middleware: [
+        createSubAgentMiddleware({
+          defaultModel: SAMPLE_MODEL,
+          defaultTools: [getWeather] as any,
+        }),
+      ],
+    });
 
-      // Check that task tool is available
-      const toolsNode = (agent as any).nodes?.tools;
-      const tools =
-        toolsNode?.bound?._tools_by_name || toolsNode?._tools_by_name;
-      expect(tools.task).toBeDefined();
+    // Check that task tool is available
+    const toolsNode = (agent as any).nodes?.tools;
+    const tools = toolsNode?.bound?._tools_by_name || toolsNode?._tools_by_name;
+    expect(tools.task).toBeDefined();
 
-      const response = await agent.invoke({
-        messages: [new HumanMessage("What is the weather in Tokyo?")],
-      });
+    const response = await agent.invoke({
+      messages: [new HumanMessage("What is the weather in Tokyo?")],
+    });
 
-      const toolCalls = extractToolCalls(response);
-      const taskCall = toolCalls.find((tc) => tc.name === "task");
+    const toolCalls = extractToolCalls(response);
+    const taskCall = toolCalls.find((tc) => tc.name === "task");
 
-      expect(taskCall).toBeDefined();
-      expect(taskCall!.args.subagent_type).toBe("general-purpose");
-    }
-  );
+    expect(taskCall).toBeDefined();
+    expect(taskCall!.args.subagent_type).toBe("general-purpose");
+  });
 
-  it(
-    "should invoke defined subagent",
-    { timeout: 60000 },
-    async () => {
-      const agent = createAgent({
-        model: SAMPLE_MODEL,
-        systemPrompt: "Use the task tool to call a subagent.",
-        middleware: [
-          createSubAgentMiddleware({
-            defaultModel: SAMPLE_MODEL,
-            defaultTools: [],
-            subagents: [
-              {
-                name: "weather",
-                description: "This subagent can get weather in cities.",
-                system_prompt:
-                  "Use the get_weather tool to get the weather in a city.",
-                tools: [getWeather],
-              },
-            ],
-          }),
-        ],
-      });
+  it("should invoke defined subagent", { timeout: 60000 }, async () => {
+    const agent = createAgent({
+      model: SAMPLE_MODEL,
+      systemPrompt: "Use the task tool to call a subagent.",
+      middleware: [
+        createSubAgentMiddleware({
+          defaultModel: SAMPLE_MODEL,
+          defaultTools: [],
+          subagents: [
+            {
+              name: "weather",
+              description: "This subagent can get weather in cities.",
+              systemPrompt:
+                "Use the get_weather tool to get the weather in a city.",
+              tools: [getWeather],
+            },
+          ],
+        }),
+      ],
+    });
 
-      // Check that task tool is available
-      const toolsNode = (agent as any).nodes?.tools;
-      const tools =
-        toolsNode?.bound?._tools_by_name || toolsNode?._tools_by_name;
-      expect(tools.task).toBeDefined();
+    // Check that task tool is available
+    const toolsNode = (agent as any).nodes?.tools;
+    const tools = toolsNode?.bound?._tools_by_name || toolsNode?._tools_by_name;
+    expect(tools.task).toBeDefined();
 
-      const response = await agent.invoke({
-        messages: [new HumanMessage("What is the weather in Tokyo?")],
-      });
+    const response = await agent.invoke({
+      messages: [new HumanMessage("What is the weather in Tokyo?")],
+    });
 
-      const toolCalls = extractToolCalls(response);
-      const taskCall = toolCalls.find((tc) => tc.name === "task");
+    const toolCalls = extractToolCalls(response);
+    const taskCall = toolCalls.find((tc) => tc.name === "task");
 
-      expect(taskCall).toBeDefined();
-      expect(taskCall!.args.subagent_type).toBe("weather");
-    }
-  );
+    expect(taskCall).toBeDefined();
+    expect(taskCall!.args.subagent_type).toBe("weather");
+  });
 
-  it(
-    "should make tool calls within subagent",
-    { timeout: 60000 },
-    async () => {
-      const agent = createAgent({
-        model: SAMPLE_MODEL,
-        systemPrompt: "Use the task tool to call a subagent.",
-        middleware: [
-          createSubAgentMiddleware({
-            defaultModel: SAMPLE_MODEL,
-            defaultTools: [],
-            subagents: [
-              {
-                name: "weather",
-                description: "This subagent can get weather in cities.",
-                system_prompt:
-                  "Use the get_weather tool to get the weather in a city.",
-                tools: [getWeather],
-              },
-            ],
-          }),
-        ],
-      });
+  it("should make tool calls within subagent", { timeout: 60000 }, async () => {
+    const agent = createAgent({
+      model: SAMPLE_MODEL,
+      systemPrompt: "Use the task tool to call a subagent.",
+      middleware: [
+        createSubAgentMiddleware({
+          defaultModel: SAMPLE_MODEL,
+          defaultTools: [],
+          subagents: [
+            {
+              name: "weather",
+              description: "This subagent can get weather in cities.",
+              systemPrompt:
+                "Use the get_weather tool to get the weather in a city.",
+              tools: [getWeather],
+            },
+          ],
+        }),
+      ],
+    });
 
-      const expectedToolCalls = [
-        { name: "task", args: { subagent_type: "weather" } },
-        { name: "get_weather" },
-      ];
+    const expectedToolCalls = [
+      { name: "task", args: { subagent_type: "weather" } },
+      { name: "get_weather" },
+    ];
 
-      await assertExpectedSubgraphActions(expectedToolCalls, agent, {
-        messages: [new HumanMessage("What is the weather in Tokyo?")],
-      });
-    }
-  );
+    await assertExpectedSubgraphActions(expectedToolCalls, agent, {
+      messages: [new HumanMessage("What is the weather in Tokyo?")],
+    });
+  });
 
-  it(
-    "should use custom model in subagent",
-    { timeout: 60000 },
-    async () => {
-      const agent = createAgent({
-        model: SAMPLE_MODEL,
-        systemPrompt: "Use the task tool to call a subagent.",
-        middleware: [
-          createSubAgentMiddleware({
-            defaultModel: SAMPLE_MODEL,
-            defaultTools: [],
-            subagents: [
-              {
-                name: "weather",
-                description: "This subagent can get weather in cities.",
-                system_prompt:
-                  "Use the get_weather tool to get the weather in a city.",
-                tools: [getWeather],
-                model: "gpt-4.1", // Custom model for subagent
-              },
-            ],
-          }),
-        ],
-      });
+  it("should use custom model in subagent", { timeout: 60000 }, async () => {
+    const agent = createAgent({
+      model: SAMPLE_MODEL,
+      systemPrompt: "Use the task tool to call a subagent.",
+      middleware: [
+        createSubAgentMiddleware({
+          defaultModel: SAMPLE_MODEL,
+          defaultTools: [],
+          subagents: [
+            {
+              name: "weather",
+              description: "This subagent can get weather in cities.",
+              systemPrompt:
+                "Use the get_weather tool to get the weather in a city.",
+              tools: [getWeather],
+              model: "gpt-4.1", // Custom model for subagent
+            },
+          ],
+        }),
+      ],
+    });
 
-      const expectedToolCalls = [
-        {
-          name: "task",
-          args: { subagent_type: "weather" },
-        },
-        { name: "get_weather" },
-      ];
+    const expectedToolCalls = [
+      {
+        name: "task",
+        args: { subagent_type: "weather" },
+      },
+      { name: "get_weather" },
+    ];
 
-      await assertExpectedSubgraphActions(expectedToolCalls, agent, {
-        messages: [new HumanMessage("What is the weather in Tokyo?")],
-      });
-    }
-  );
+    await assertExpectedSubgraphActions(expectedToolCalls, agent, {
+      messages: [new HumanMessage("What is the weather in Tokyo?")],
+    });
+  });
 
   it(
     "should use custom middleware in subagent",
@@ -216,7 +199,7 @@ describe("Subagent Middleware Integration Tests", () => {
               {
                 name: "weather",
                 description: "This subagent can get weather in cities.",
-                system_prompt:
+                systemPrompt:
                   "Use the get_weather tool to get the weather in a city.",
                 tools: [], // No tools directly, only via middleware
                 model: "gpt-4.1",
@@ -295,13 +278,13 @@ describe("Subagent Middleware Integration Tests", () => {
               {
                 name: "weather",
                 description: "Get weather information",
-                system_prompt: "Use get_weather tool",
+                systemPrompt: "Use get_weather tool",
                 tools: [getWeather],
               },
               {
                 name: "soccer",
                 description: "Get soccer scores",
-                system_prompt: "Use get_soccer_scores tool",
+                systemPrompt: "Use get_soccer_scores tool",
                 tools: [getSoccerScores],
               },
             ],
