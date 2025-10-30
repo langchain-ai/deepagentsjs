@@ -200,7 +200,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       expect(lsMessage).toBeDefined();
       const lsContent = lsMessage!.content.toString();
       expect(lsContent).toContain("/pokemon/squirtle.txt");
-      expect(lsContent).toContain("/memories/pokemon/charmander.txt");
+      expect(lsContent).not.toContain("/memories/pokemon/charmander.txt");
       expect(lsContent).not.toContain("/pizza.txt");
     }
   );
