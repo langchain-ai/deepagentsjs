@@ -6,11 +6,8 @@
   "types": "dist/index.d.ts",
   "type": "module",
   "scripts": {
-    "build": "pnpm clean && tsc",
-    "build:examples": "pnpm clean && tsc -p examples.tsconfig.json",
-    "build:watch": "tsc --watch",
+    "build": "tsdown",
     "dev": "tsc --watch",
-    "clean": "rm -rf dist dist-examples || true",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/**/*.ts examples/**/*.ts",
     "lint:fix": "eslint src/**/*.ts examples/**/*.ts --fix",
@@ -49,9 +46,9 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
-    "@langchain/openai": "^1.0.0",
     "@eslint/eslintrc": "^3.1.0",
     "@eslint/js": "^9.19.0",
+    "@langchain/openai": "^1.0.0",
     "@langchain/tavily": "^0.1.4",
     "@tsconfig/recommended": "^1.0.10",
     "@types/node": "^22.13.5",
@@ -64,6 +61,7 @@
     "eslint-plugin-prettier": "^4.2.1",
     "globals": "^15.0.0",
     "prettier": "^3.6.2",
+    "tsdown": "^0.15.12",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.22.0",
