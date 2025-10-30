@@ -57,8 +57,8 @@ describe("Filesystem Middleware Integration Tests", () => {
               edit_file: "Squirtle",
             },
           }),
-        ],
-        tools: [], // Required to bind tools from middleware
+        ] as const,
+        tools: [],
       });
 
       const toolsArray = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
@@ -104,7 +104,9 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const agent = createAgent({
         model: SAMPLE_MODEL,
-        middleware: [createFilesystemMiddleware({ longTermMemory: true })],
+        middleware: [
+          createFilesystemMiddleware({ longTermMemory: true }),
+        ] as const,
         checkpointer,
         store,
       });
@@ -163,7 +165,9 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const agent = createAgent({
         model: SAMPLE_MODEL,
-        middleware: [createFilesystemMiddleware({ longTermMemory: true })],
+        middleware: [
+          createFilesystemMiddleware({ longTermMemory: true }),
+        ] as const,
         checkpointer,
         store,
       });
@@ -207,7 +211,9 @@ describe("Filesystem Middleware Integration Tests", () => {
 
     const agent = createAgent({
       model: SAMPLE_MODEL,
-      middleware: [createFilesystemMiddleware({ longTermMemory: true })],
+      middleware: [
+        createFilesystemMiddleware({ longTermMemory: true }),
+      ] as const,
       checkpointer,
       store,
     });
@@ -428,7 +434,7 @@ describe("Filesystem Middleware Integration Tests", () => {
             longTermMemory: false,
             toolTokenLimitBeforeEvict: 100, // Very low limit to trigger eviction
           }),
-        ],
+        ] as const,
         tools: [getNflStandings],
       });
 
