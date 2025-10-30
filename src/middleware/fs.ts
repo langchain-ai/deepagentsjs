@@ -7,12 +7,7 @@
  * - Tool result eviction for large outputs
  */
 
-import {
-  createMiddleware,
-  AgentMiddleware,
-  tool,
-  ToolMessage,
-} from "langchain";
+import { createMiddleware, tool, ToolMessage } from "langchain";
 import {
   Command,
   getCurrentTaskInput,
@@ -753,7 +748,7 @@ export interface FilesystemMiddlewareOptions {
  */
 export function createFilesystemMiddleware(
   options: FilesystemMiddlewareOptions = {}
-): AgentMiddleware {
+) {
   const {
     longTermMemory = false,
     systemPrompt: customSystemPrompt = null,
