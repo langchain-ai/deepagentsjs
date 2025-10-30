@@ -22,7 +22,7 @@ const DEFAULT_SUBAGENT_PROMPT =
   "In order to complete the objective that the user asks of you, you have access to a number of standard tools.";
 
 // State keys that should be excluded when passing state to subagents
-const EXCLUDED_STATE_KEYS = ["messages", "todos"] as const;
+const EXCLUDED_STATE_KEYS = ["messages", "todos", "jumpTo"] as const;
 
 const DEFAULT_GENERAL_PURPOSE_DESCRIPTION =
   "General-purpose agent for researching complex questions, searching for files and content, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you. This agent has access to all tools as the main agent.";
