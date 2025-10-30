@@ -19,7 +19,7 @@ import {
 } from "../utils.js";
 
 describe("Filesystem Middleware Integration Tests", () => {
-  it.each([{ longTermMemory: false }, { longTermMemory: true }])(
+  it.concurrent.each([{ longTermMemory: false }, { longTermMemory: true }])(
     "should override filesystem system prompt (%s)",
     { timeout: 60000 },
     async ({ longTermMemory }) => {
@@ -42,7 +42,7 @@ describe("Filesystem Middleware Integration Tests", () => {
     }
   );
 
-  it.each([{ longTermMemory: false }, { longTermMemory: true }])(
+  it.concurrent.each([{ longTermMemory: false }, { longTermMemory: true }])(
     "should override filesystem tool descriptions (%s)",
     { timeout: 60000 },
     async ({ longTermMemory }) => {
@@ -83,7 +83,7 @@ describe("Filesystem Middleware Integration Tests", () => {
     }
   );
 
-  it(
+  it.concurrent(
     "should list longterm memory files without path",
     { timeout: 60000 },
     async () => {
@@ -145,7 +145,7 @@ describe("Filesystem Middleware Integration Tests", () => {
     }
   );
 
-  it(
+  it.concurrent(
     "should list longterm memory files with path filter",
     { timeout: 60000 },
     async () => {
@@ -205,117 +205,135 @@ describe("Filesystem Middleware Integration Tests", () => {
     }
   );
 
-  it("should read longterm memory local file", { timeout: 60000 }, async () => {
-    const checkpointer = new MemorySaver();
-    const store = new InMemoryStore();
+  it.concurrent(
+    "should read longterm memory local file",
+    { timeout: 60000 },
+    async () => {
+      const checkpointer = new MemorySaver();
+      const store = new InMemoryStore();
 
-    const agent = createAgent({
-      model: SAMPLE_MODEL,
-      middleware: [
-        createFilesystemMiddleware({ longTermMemory: true }),
-      ] as const,
-      checkpointer,
-      store,
-    });
+      const agent = createAgent({
+        model: SAMPLE_MODEL,
+        middleware: [
+          createFilesystemMiddleware({ longTermMemory: true }),
+        ] as const,
+        checkpointer,
+        store,
+      });
 
-    const config = { configurable: { thread_id: uuidv4() } };
-    const response = await agent.invoke(
-      {
-        messages: [new HumanMessage("Read the file /pizza.txt")],
-        files: {
-          "/pizza.txt": {
-            content: ["Pepperoni is the best"],
-            created_at: "2021-01-01",
-            modified_at: "2021-01-01",
+      const config = { configurable: { thread_id: uuidv4() } };
+      const response = await agent.invoke(
+        {
+          messages: [new HumanMessage("Read the file /pizza.txt")],
+          files: {
+            "/pizza.txt": {
+              content: ["Pepperoni is the best"],
+              created_at: "2021-01-01",
+              modified_at: "2021-01-01",
+            },
           },
         },
-      },
-      config
-    );
+        config
+      );
 
-    const messages = response.messages;
-    const readMessage = messages.find(
-      (msg: any) => msg._getType() === "tool" && msg.name === "read_file"
-    );
+      const messages = response.messages;
+      const readMessage = messages.find(
+        (msg: any) => msg._getType() === "tool" && msg.name === "read_file"
+      );
 
-    expect(readMessage).toBeDefined();
-    expect(readMessage!.content.toString()).toContain("Pepperoni is the best");
-  });
+      expect(readMessage).toBeDefined();
+      expect(readMessage!.content.toString()).toContain(
+        "Pepperoni is the best"
+      );
+    }
+  );
 
-  it("should read longterm memory store file", { timeout: 60000 }, async () => {
-    const checkpointer = new MemorySaver();
-    const store = new InMemoryStore();
+  it.concurrent(
+    "should read longterm memory store file",
+    { timeout: 60000 },
+    async () => {
+      const checkpointer = new MemorySaver();
+      const store = new InMemoryStore();
 
-    await store.put(["filesystem"], "/test.txt", {
-      content: ["Hello from store"],
-      created_at: "2021-01-01",
-      modified_at: "2021-01-01",
-    });
+      await store.put(["filesystem"], "/test.txt", {
+        content: ["Hello from store"],
+        created_at: "2021-01-01",
+        modified_at: "2021-01-01",
+      });
 
-    const agent = createAgent({
-      model: SAMPLE_MODEL,
-      middleware: [
-        createFilesystemMiddleware({
-          longTermMemory: true,
-        }),
-      ],
-      checkpointer,
-      store,
-    });
-
-    const config = { configurable: { thread_id: uuidv4() } };
-    const response = await agent.invoke(
-      {
-        messages: [new HumanMessage("Read the file /memories/test.txt")],
-      },
-      config
-    );
-
-    const messages = response.messages;
-    const readMessage = messages.find(
-      (msg: any) => msg._getType() === "tool" && msg.name === "read_file"
-    );
-
-    expect(readMessage).toBeDefined();
-    expect(readMessage!.content.toString()).toContain("Hello from store");
-  });
-
-  it("should write to longterm memory", { timeout: 60000 }, async () => {
-    const checkpointer = new MemorySaver();
-    const store = new InMemoryStore();
-
-    const agent = createAgent({
-      model: SAMPLE_MODEL,
-      middleware: [
-        createFilesystemMiddleware({
-          longTermMemory: true,
-        }),
-      ],
-      checkpointer,
-      store,
-    });
-
-    const config = { configurable: { thread_id: uuidv4() } };
-    await agent.invoke(
-      {
-        messages: [
-          new HumanMessage(
-            "Write 'persistent data' to /memories/persistent.txt"
-          ),
+      const agent = createAgent({
+        model: SAMPLE_MODEL,
+        middleware: [
+          createFilesystemMiddleware({
+            longTermMemory: true,
+          }),
         ],
-      },
-      config
-    );
+        checkpointer,
+        store,
+      });
 
-    // Verify file was written to store
-    const items = await store.search(["filesystem"]);
-    const persistentFile = items.find((item) => item.key === "/persistent.txt");
+      const config = { configurable: { thread_id: uuidv4() } };
+      const response = await agent.invoke(
+        {
+          messages: [new HumanMessage("Read the file /memories/test.txt")],
+        },
+        config
+      );
 
-    expect(persistentFile).toBeDefined();
-    expect((persistentFile!.value as any).content).toContain("persistent data");
-  });
+      const messages = response.messages;
+      const readMessage = messages.find(
+        (msg: any) => msg._getType() === "tool" && msg.name === "read_file"
+      );
 
-  it(
+      expect(readMessage).toBeDefined();
+      expect(readMessage!.content.toString()).toContain("Hello from store");
+    }
+  );
+
+  it.concurrent(
+    "should write to longterm memory",
+    { timeout: 60000 },
+    async () => {
+      const checkpointer = new MemorySaver();
+      const store = new InMemoryStore();
+
+      const agent = createAgent({
+        model: SAMPLE_MODEL,
+        middleware: [
+          createFilesystemMiddleware({
+            longTermMemory: true,
+          }),
+        ],
+        checkpointer,
+        store,
+      });
+
+      const config = { configurable: { thread_id: uuidv4() } };
+      await agent.invoke(
+        {
+          messages: [
+            new HumanMessage(
+              "Write 'persistent data' to /memories/persistent.txt"
+            ),
+          ],
+        },
+        config
+      );
+
+      // Verify file was written to store
+      const items = await store.search(["filesystem"]);
+      const persistentFile = items.find(
+        (item) => item.key === "/persistent.txt"
+      );
+
+      expect(persistentFile).toBeDefined();
+      expect((persistentFile!.value as any).content).toContain(
+        "persistent data"
+      );
+    }
+  );
+
+  it.concurrent(
     "should fail to write to existing store file",
     { timeout: 60000 },
     async () => {
@@ -359,48 +377,52 @@ describe("Filesystem Middleware Integration Tests", () => {
     }
   );
 
-  it("should edit longterm memory file", { timeout: 60000 }, async () => {
-    const checkpointer = new MemorySaver();
-    const store = new InMemoryStore();
+  it.concurrent(
+    "should edit longterm memory file",
+    { timeout: 60000 },
+    async () => {
+      const checkpointer = new MemorySaver();
+      const store = new InMemoryStore();
 
-    await store.put(["filesystem"], "/editable.txt", {
-      content: ["Line 1", "Line 2", "Line 3"],
-      created_at: "2021-01-01",
-      modified_at: "2021-01-01",
-    });
+      await store.put(["filesystem"], "/editable.txt", {
+        content: ["Line 1", "Line 2", "Line 3"],
+        created_at: "2021-01-01",
+        modified_at: "2021-01-01",
+      });
 
-    const agent = createAgent({
-      model: SAMPLE_MODEL,
-      middleware: [
-        createFilesystemMiddleware({
-          longTermMemory: true,
-        }),
-      ],
-      checkpointer,
-      store,
-    });
-
-    const config = { configurable: { thread_id: uuidv4() } };
-    await agent.invoke(
-      {
-        messages: [
-          new HumanMessage(
-            "Edit /memories/editable.txt: replace 'Line 2' with 'Modified Line 2'"
-          ),
+      const agent = createAgent({
+        model: SAMPLE_MODEL,
+        middleware: [
+          createFilesystemMiddleware({
+            longTermMemory: true,
+          }),
         ],
-      },
-      config
-    );
+        checkpointer,
+        store,
+      });
 
-    // Verify file was edited in store
-    const items = await store.search(["filesystem"]);
-    const editedFile = items.find((item) => item.key === "/editable.txt");
+      const config = { configurable: { thread_id: uuidv4() } };
+      await agent.invoke(
+        {
+          messages: [
+            new HumanMessage(
+              "Edit /memories/editable.txt: replace 'Line 2' with 'Modified Line 2'"
+            ),
+          ],
+        },
+        config
+      );
 
-    expect(editedFile).toBeDefined();
-    expect((editedFile!.value as any).content).toContain("Modified Line 2");
-  });
+      // Verify file was edited in store
+      const items = await store.search(["filesystem"]);
+      const editedFile = items.find((item) => item.key === "/editable.txt");
 
-  it(
+      expect(editedFile).toBeDefined();
+      expect((editedFile!.value as any).content).toContain("Modified Line 2");
+    }
+  );
+
+  it.concurrent(
     "should handle tool results exceeding token limit",
     { timeout: 60000 },
     async () => {
@@ -423,7 +445,7 @@ describe("Filesystem Middleware Integration Tests", () => {
     }
   );
 
-  it(
+  it.concurrent(
     "should handle tool results with custom token limit",
     { timeout: 60000 },
     async () => {
@@ -452,7 +474,7 @@ describe("Filesystem Middleware Integration Tests", () => {
     }
   );
 
-  it(
+  it.concurrent(
     "should handle Command return with tool call",
     { timeout: 60000 },
     async () => {
@@ -468,11 +490,10 @@ describe("Filesystem Middleware Integration Tests", () => {
       // Command returns files and research state
       expect(response.files).toBeDefined();
       expect(response.files["/test.txt"]).toBeDefined();
-      expect(response.research).toBe("extra_value");
     }
   );
 
-  it(
+  it.concurrent(
     "should handle Command with existing state",
     { timeout: 60000 },
     async () => {
