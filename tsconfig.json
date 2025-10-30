@@ -22,6 +22,6 @@
     "resolveJsonModule": true,
     "isolatedModules": true
   },
-  "include": ["src/**/*.ts", "src/*.ts"],
+  "include": ["src/**/*.ts", "src/*.ts", "tests/**/*.ts", "tests/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
