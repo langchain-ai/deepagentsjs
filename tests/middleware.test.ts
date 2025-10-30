@@ -317,11 +317,11 @@ describe("PatchToolCallsMiddleware", () => {
     expect(updatedMessages[0]).toBe(inputMessages[0]);
     expect(updatedMessages[1]).toBe(inputMessages[1]);
     expect(updatedMessages[2]).toBe(inputMessages[2]);
-    expect(updatedMessages[3]._getType()).toBe("tool");
+    expect(updatedMessages[3].type).toBe("tool");
     expect((updatedMessages[3] as any).tool_call_id).toBe("123");
     expect(updatedMessages[4]).toBe(inputMessages[3]);
     expect(updatedMessages[5]).toBe(inputMessages[4]);
-    expect(updatedMessages[6]._getType()).toBe("tool");
+    expect(updatedMessages[6].type).toBe("tool");
     expect((updatedMessages[6] as any).tool_call_id).toBe("456");
     expect(updatedMessages[7]).toBe(inputMessages[5]);
   });
