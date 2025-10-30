@@ -198,13 +198,15 @@ export const researchBasketball = tool(
 
 // Research state
 const ResearchStateSchema = z.object({
-  research: withLangGraph(z.string(), {
-    reducer: {
-      fn: (left, right) => right || left || "",
-      schema: z.string().nullable(),
-    },
-    default: () => "",
-  }),
+  research: withLangGraph(
+    z.string().default(() => ""),
+    {
+      reducer: {
+        fn: (left, right) => right || left || "",
+        schema: z.string().nullable(),
+      },
+    }
+  ),
 });
 
 export const ResearchMiddleware = createMiddleware({
@@ -225,13 +227,15 @@ export const SampleMiddlewareWithTools = createMiddleware({
 
 // Sample state
 const SampleStateSchema = z.object({
-  sample_input: withLangGraph(z.string(), {
-    reducer: {
-      fn: (left, right) => right || left || "",
-      schema: z.string().nullable(),
-    },
-    default: () => "",
-  }),
+  sample_input: withLangGraph(
+    z.string().default(() => ""),
+    {
+      reducer: {
+        fn: (left, right) => right || left || "",
+        schema: z.string().nullable(),
+      },
+    }
+  ),
 });
 
 export const SampleMiddlewareWithToolsAndState = createMiddleware({

@@ -107,10 +107,7 @@ export function createDeepAgent<
     // Provides todo list management capabilities for tracking tasks
     todoListMiddleware(),
     // Enables filesystem operations and optional long-term memory storage
-    createFilesystemMiddleware({
-      longTermMemory: useLongtermMemory,
-      store,
-    }),
+    createFilesystemMiddleware({ longTermMemory: useLongtermMemory }),
     // Enables delegation to specialized subagents for complex tasks
     createSubAgentMiddleware({
       defaultModel: model,
@@ -121,11 +118,11 @@ export function createDeepAgent<
         // Subagent middleware: Filesystem operations
         createFilesystemMiddleware({
           longTermMemory: useLongtermMemory,
-          store,
         }),
         // Subagent middleware: Automatic conversation summarization when token limits are approached
         summarizationMiddleware({
-          model,
+          // TODO: make sure that the summarization middleware accepts a string model name
+          model: model as any,
           maxTokensBeforeSummary: 170000,
           messagesToKeep: 6,
         }),
@@ -142,7 +139,8 @@ export function createDeepAgent<
     }),
     // Automatically summarizes conversation history when token limits are approached
     summarizationMiddleware({
-      model,
+      // TODO: make sure that the summarization middleware accepts a string model name
+      model: model as any,
       maxTokensBeforeSummary: 170000,
       messagesToKeep: 6,
     }),

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { HumanMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { createDeepAgent } from "../../src/index.js";
 import {
   SAMPLE_MODEL,
@@ -13,53 +13,47 @@ import {
   getSoccerScores,
   getWeather,
   sampleTool,
+  extractToolsFromAgent,
 } from "../utils.js";
 
 describe("DeepAgents Integration Tests", () => {
-  it("should create a base deep agent", () => {
+  it.concurrent("should create a base deep agent", () => {
     const agent = createDeepAgent();
     assertAllDeepAgentQualities(agent);
   });
 
-  it("should create deep agent with tool", () => {
+  it.concurrent("should create deep agent with tool", () => {
     const agent = createDeepAgent({ tools: [sampleTool] });
     assertAllDeepAgentQualities(agent);
 
-    const toolsNode = (agent as any).nodes?.tools;
-    const toolNames = Object.keys(
-      toolsNode?.bound?._tools_by_name || toolsNode?._tools_by_name || {}
-    );
+    const toolNames = Object.keys(extractToolsFromAgent(agent));
     expect(toolNames).toContain("sample_tool");
   });
 
-  it("should create deep agent with middleware with tool", () => {
+  it.concurrent("should create deep agent with middleware with tool", () => {
     const agent = createDeepAgent({ middleware: [SampleMiddlewareWithTools] });
     assertAllDeepAgentQualities(agent);
 
-    const toolsNode = (agent as any).nodes?.tools;
-    const toolNames = Object.keys(
-      toolsNode?.bound?._tools_by_name || toolsNode?._tools_by_name || {}
-    );
+    const toolNames = Object.keys(extractToolsFromAgent(agent));
     expect(toolNames).toContain("sample_tool");
   });
 
-  it("should create deep agent with middleware with tool and state", () => {
-    const agent = createDeepAgent({
-      middleware: [SampleMiddlewareWithToolsAndState],
-    });
-    assertAllDeepAgentQualities(agent);
+  it.concurrent(
+    "should create deep agent with middleware with tool and state",
+    () => {
+      const agent = createDeepAgent({
+        middleware: [SampleMiddlewareWithToolsAndState],
+      });
+      assertAllDeepAgentQualities(agent);
 
-    const toolsNode = (agent as any).nodes?.tools;
-    const toolNames = Object.keys(
-      toolsNode?.bound?._tools_by_name || toolsNode?._tools_by_name || {}
-    );
-    expect(toolNames).toContain("sample_tool");
+      const toolNames = Object.keys(extractToolsFromAgent(agent));
+      expect(toolNames).toContain("sample_tool");
 
-    const streamChannels = Object.keys((agent as any).streamChannels || {});
-    expect(streamChannels).toContain("sample_input");
-  });
+      expect(agent.graph.streamChannels).toContain("sample_input");
+    }
+  );
 
-  it(
+  it.concurrent(
     "should create deep agent with subagents",
     { timeout: 60000 },
     async () => {
@@ -79,8 +73,8 @@ describe("DeepAgents Integration Tests", () => {
         messages: [new HumanMessage("What is the weather in Tokyo?")],
       });
 
-      const agentMessages = result.messages.filter(
-        (msg: any) => msg._getType() === "ai"
+      const agentMessages = result.messages.filter((msg: any) =>
+        AIMessage.isInstance(msg)
       );
       const toolCalls = agentMessages.flatMap(
         (msg: any) => msg.tool_calls || []
@@ -95,7 +89,7 @@ describe("DeepAgents Integration Tests", () => {
     }
   );
 
-  it(
+  it.concurrent(
     "should create deep agent with subagents and general purpose",
     { timeout: 60000 },
     async () => {
@@ -119,8 +113,8 @@ describe("DeepAgents Integration Tests", () => {
         ],
       });
 
-      const agentMessages = result.messages.filter(
-        (msg: any) => msg._getType() === "ai"
+      const agentMessages = result.messages.filter((msg: any) =>
+        AIMessage.isInstance(msg)
       );
       const toolCalls = agentMessages.flatMap(
         (msg: any) => msg.tool_calls || []
@@ -135,7 +129,7 @@ describe("DeepAgents Integration Tests", () => {
     }
   );
 
-  it(
+  it.concurrent(
     "should create deep agent with subagents with middleware",
     { timeout: 60000 },
     async () => {
@@ -156,8 +150,8 @@ describe("DeepAgents Integration Tests", () => {
         messages: [new HumanMessage("What is the weather in Tokyo?")],
       });
 
-      const agentMessages = result.messages.filter(
-        (msg: any) => msg._getType() === "ai"
+      const agentMessages = result.messages.filter((msg: any) =>
+        AIMessage.isInstance(msg)
       );
       const toolCalls = agentMessages.flatMap(
         (msg: any) => msg.tool_calls || []
@@ -172,7 +166,7 @@ describe("DeepAgents Integration Tests", () => {
     }
   );
 
-  it(
+  it.concurrent(
     "should create deep agent with custom subagents",
     { timeout: 60000 },
     async () => {
@@ -205,8 +199,8 @@ describe("DeepAgents Integration Tests", () => {
         ],
       });
 
-      const agentMessages = result.messages.filter(
-        (msg: any) => msg._getType() === "ai"
+      const agentMessages = result.messages.filter((msg: any) =>
+        AIMessage.isInstance(msg)
       );
       const toolCalls = agentMessages.flatMap(
         (msg: any) => msg.tool_calls || []
@@ -227,7 +221,7 @@ describe("DeepAgents Integration Tests", () => {
     }
   );
 
-  it(
+  it.concurrent(
     "should create deep agent with extended state and subagents",
     { timeout: 60000 },
     async () => {
@@ -246,9 +240,7 @@ describe("DeepAgents Integration Tests", () => {
         middleware: [ResearchMiddleware],
       });
       assertAllDeepAgentQualities(agent);
-
-      const streamChannels = Object.keys((agent as any).streamChannels || {});
-      expect(streamChannels).toContain("research");
+      expect(agent.graph.streamChannels).toContain("research");
 
       const result = await agent.invoke(
         {
@@ -259,8 +251,8 @@ describe("DeepAgents Integration Tests", () => {
         { recursionLimit: 100 }
       );
 
-      const agentMessages = result.messages.filter(
-        (msg: any) => msg._getType() === "ai"
+      const agentMessages = result.messages.filter((msg: any) =>
+        AIMessage.isInstance(msg)
       );
       const toolCalls = agentMessages.flatMap(
         (msg: any) => msg.tool_calls || []
@@ -277,7 +269,7 @@ describe("DeepAgents Integration Tests", () => {
     }
   );
 
-  it(
+  it.concurrent(
     "should create deep agent with subagents no tools",
     { timeout: 60000 },
     async () => {
@@ -303,8 +295,8 @@ describe("DeepAgents Integration Tests", () => {
         { recursionLimit: 100 }
       );
 
-      const agentMessages = result.messages.filter(
-        (msg: any) => msg._getType() === "ai"
+      const agentMessages = result.messages.filter((msg: any) =>
+        AIMessage.isInstance(msg)
       );
       const toolCalls = agentMessages.flatMap(
         (msg: any) => msg.tool_calls || []
