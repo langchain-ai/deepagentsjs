@@ -49,6 +49,7 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
+    "@langchain/openai": "^1.0.0",
     "@eslint/eslintrc": "^3.1.0",
     "@eslint/js": "^9.19.0",
     "@langchain/tavily": "^0.1.4",

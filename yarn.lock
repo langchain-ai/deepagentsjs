@@ -407,6 +407,15 @@
     "@langchain/langgraph-sdk" "~1.0.0"
     uuid "^10.0.0"
 
+"@langchain/openai@^1.0.0":
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-1.0.0.tgz#03b15312286b30ce0149f6052620c6c95b4387bc"
+  integrity sha512-olKEUIjb3HBOiD/NR056iGJz4wiN6HhQ/u65YmGWYadWWoKOcGwheBw/FE0x6SH4zDlI3QmP+vMhuQoaww19BQ==
+  dependencies:
+    js-tiktoken "^1.0.12"
+    openai "^6.3.0"
+    zod "^3.25.76 || ^4"
+
 "@langchain/tavily@^0.1.4":
   version "0.1.5"
   resolved "https://registry.yarnpkg.com/@langchain/tavily/-/tavily-0.1.5.tgz#b8c86cdd1f4af1c9397a1899b840527a38646b2b"
@@ -2136,6 +2145,11 @@ object.values@^1.2.1:
     call-bound "^1.0.3"
     define-properties "^1.2.1"
     es-object-atoms "^1.0.0"
+
+openai@^6.3.0:
+  version "6.7.0"
+  resolved "https://registry.yarnpkg.com/openai/-/openai-6.7.0.tgz#86c3add2a14fba23307ed4c5b9ba7f6cb48c0262"
+  integrity sha512-mgSQXa3O/UXTbA8qFzoa7aydbXBJR5dbLQXCRapAOtoNT+v69sLdKMZzgiakpqhclRnhPggPAXoniVGn2kMY2A==
 
 optionator@^0.9.3:
   version "0.9.4"

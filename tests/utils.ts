@@ -1,9 +1,9 @@
 import { tool, createMiddleware } from "langchain";
 import { ToolMessage } from "@langchain/core/messages";
-import { Command, Annotation } from "@langchain/langgraph";
-import type { ReactAgent } from "langchain";
-import { z } from "zod";
-
+import { Command } from "@langchain/langgraph";
+import type { ReactAgent, StructuredTool } from "langchain";
+import { z } from "zod/v3";
+import { withLangGraph } from "@langchain/langgraph/zod";
 /**
  * Assert that an agent has all the expected deep agent qualities
  */
@@ -54,7 +54,7 @@ export const SAMPLE_MODEL = "claude-sonnet-4-5-20250929";
  */
 
 export const getPremierLeagueStandings = tool(
-  async (input: Record<string, never>, config) => {
+  async (_, config) => {
     const longToolMsg =
       "This is a long tool message that should be evicted to the filesystem.\n".repeat(
         300
@@ -74,7 +74,6 @@ export const getPremierLeagueStandings = tool(
             modified_at: "2021-01-01",
           },
         },
-        research: "extra_value",
       },
     });
   },
@@ -86,7 +85,7 @@ export const getPremierLeagueStandings = tool(
 );
 
 export const getLaLigaStandings = tool(
-  async (input: Record<string, never>, config) => {
+  async (_, config) => {
     const longToolMsg =
       "This is a long tool message that should be evicted to the filesystem.\n".repeat(
         300
@@ -138,22 +137,16 @@ export const getNflStandings = tool(
 );
 
 export const getWeather = tool(
-  (input: { location: string }) => {
-    return `The weather in ${input.location} is sunny.`;
-  },
+  (input) => `The weather in ${input.location} is sunny.`,
   {
     name: "get_weather",
     description: "Use this tool to get the weather",
-    schema: z.object({
-      location: z.string(),
-    }),
+    schema: z.object({ location: z.string() }),
   }
 );
 
 export const getSoccerScores = tool(
-  (input: { team: string }) => {
-    return `The latest soccer scores for ${input.team} are 2-1.`;
-  },
+  (input) => `The latest soccer scores for ${input.team} are 2-1.`,
   {
     name: "get_soccer_scores",
     description: "Use this tool to get the latest soccer scores",
@@ -163,24 +156,19 @@ export const getSoccerScores = tool(
   }
 );
 
-export const sampleTool = tool(
-  (input: { sample_input: string }) => {
-    return input.sample_input;
-  },
-  {
-    name: "sample_tool",
-    description: "Sample tool",
-    schema: z.object({
-      sample_input: z.string(),
-    }),
-  }
-);
+export const sampleTool = tool((input) => input.sample_input, {
+  name: "sample_tool",
+  description: "Sample tool",
+  schema: z.object({
+    sample_input: z.string(),
+  }),
+});
 
 export const TOY_BASKETBALL_RESEARCH =
   "Lebron James is the best basketball player of all time with over 40k points and 21 seasons in the NBA.";
 
 export const researchBasketball = tool(
-  async (input: { topic: string }, config) => {
+  async (input, config) => {
     const state = (config as any).state || {};
     const currentResearch = state.research || "";
     const research = `${currentResearch}\n\nResearching on ${input.topic}... Done! ${TOY_BASKETBALL_RESEARCH}`;
@@ -200,9 +188,7 @@ export const researchBasketball = tool(
     name: "research_basketball",
     description:
       "Use this tool to conduct research into basketball and save it to state",
-    schema: z.object({
-      topic: z.string(),
-    }),
+    schema: z.object({ topic: z.string() }),
   }
 );
 
@@ -211,21 +197,24 @@ export const researchBasketball = tool(
  */
 
 // Research state
-const ResearchStateSchema = Annotation.Root({
-  research: Annotation<string>({
-    reducer: (left, right) => right || left || "",
+const ResearchStateSchema = z.object({
+  research: withLangGraph(z.string(), {
+    reducer: {
+      fn: (left, right) => right || left || "",
+      schema: z.string().nullable(),
+    },
     default: () => "",
   }),
 });
 
 export const ResearchMiddleware = createMiddleware({
   name: "ResearchMiddleware",
-  stateSchema: ResearchStateSchema as any,
+  stateSchema: ResearchStateSchema,
 });
 
 export const ResearchMiddlewareWithTools = createMiddleware({
   name: "ResearchMiddlewareWithTools",
-  stateSchema: ResearchStateSchema as any,
+  stateSchema: ResearchStateSchema,
   tools: [researchBasketball],
 });
 
@@ -235,16 +224,19 @@ export const SampleMiddlewareWithTools = createMiddleware({
 });
 
 // Sample state
-const SampleStateSchema = Annotation.Root({
-  sample_input: Annotation<string>({
-    reducer: (left, right) => right || left || "",
+const SampleStateSchema = z.object({
+  sample_input: withLangGraph(z.string(), {
+    reducer: {
+      fn: (left, right) => right || left || "",
+      schema: z.string().nullable(),
+    },
     default: () => "",
   }),
 });
 
 export const SampleMiddlewareWithToolsAndState = createMiddleware({
   name: "SampleMiddlewareWithToolsAndState",
-  stateSchema: SampleStateSchema as any,
+  stateSchema: SampleStateSchema,
   tools: [sampleTool],
 });
 
@@ -252,3 +244,14 @@ export const WeatherToolMiddleware = createMiddleware({
   name: "WeatherToolMiddleware",
   tools: [getWeather],
 });
+
+export function extractToolsFromAgent(agent: ReactAgent) {
+  const graph = agent.graph;
+  const toolsNode = graph.nodes?.tools.bound as unknown as {
+    tools: StructuredTool[];
+  };
+
+  return Object.fromEntries(
+    (toolsNode.tools ?? []).map((tool) => [tool.name, tool])
+  );
+}
