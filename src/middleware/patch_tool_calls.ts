@@ -52,7 +52,7 @@ export function createPatchToolCallsMiddleware(): AgentMiddleware {
               .slice(i)
               .find(
                 (m) =>
-                  ToolMessage.isInstance(m) && m.tool_call_id === toolCall.id
+                  ToolMessage.isInstance(m) && m.tool_call_id === toolCall.id,
               );
 
             if (!correspondingToolMsg) {
@@ -63,7 +63,7 @@ export function createPatchToolCallsMiddleware(): AgentMiddleware {
                   content: toolMsg,
                   name: toolCall.name,
                   tool_call_id: toolCall.id!,
-                })
+                }),
               );
             }
           }

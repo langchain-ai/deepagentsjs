@@ -47,7 +47,7 @@ export type FileData = z3.infer<typeof FileDataSchema>;
  */
 function fileDataReducer(
   left: Record<string, FileData> | undefined,
-  right: Record<string, FileData | null>
+  right: Record<string, FileData | null>,
 ): Record<string, FileData> {
   if (left === undefined) {
     const result: Record<string, FileData> = {};
@@ -79,7 +79,7 @@ function fileDataReducer(
  */
 function validatePath(
   path: string,
-  options?: { allowedPrefixes?: string[] }
+  options?: { allowedPrefixes?: string[] },
 ): string {
   if (path.includes("..") || path.startsWith("~")) {
     throw new Error(`Path traversal not allowed: ${path}`);
@@ -96,11 +96,11 @@ function validatePath(
 
   if (options?.allowedPrefixes) {
     const hasAllowedPrefix = options.allowedPrefixes.some((prefix) =>
-      normalized.startsWith(prefix)
+      normalized.startsWith(prefix),
     );
     if (!hasAllowedPrefix) {
       throw new Error(
-        `Path must start with one of ${options.allowedPrefixes.join(", ")}: ${path}`
+        `Path must start with one of ${options.allowedPrefixes.join(", ")}: ${path}`,
       );
     }
   }
@@ -119,7 +119,7 @@ function formatContentWithLineNumbers(
   options: {
     formatStyle?: "pipe" | "tab";
     startLine?: number;
-  } = {}
+  } = {},
 ): string {
   const { formatStyle = "pipe", startLine = 1 } = options;
 
@@ -140,7 +140,7 @@ function formatContentWithLineNumbers(
   return lines
     .map(
       (line, i) =>
-        `${(i + startLine).toString().padStart(LINE_NUMBER_WIDTH)}\t${line.slice(0, MAX_LINE_LENGTH)}`
+        `${(i + startLine).toString().padStart(LINE_NUMBER_WIDTH)}\t${line.slice(0, MAX_LINE_LENGTH)}`,
     )
     .join("\n");
 }
@@ -150,7 +150,7 @@ function formatContentWithLineNumbers(
  */
 function createFileData(
   content: string | string[],
-  options?: { createdAt?: string }
+  options?: { createdAt?: string },
 ): FileData {
   const lines = typeof content === "string" ? content.split("\n") : content;
   const now = new Date().toISOString();
@@ -167,7 +167,7 @@ function createFileData(
  */
 function updateFileData(
   fileData: FileData,
-  content: string | string[]
+  content: string | string[],
 ): FileData {
   const lines = typeof content === "string" ? content.split("\n") : content;
   const now = new Date().toISOString();
@@ -254,17 +254,17 @@ function convertStoreItemToFileData(storeItem: Item): FileData {
 
   if (!Array.isArray(value.content)) {
     throw new Error(
-      `Store item does not contain valid content field. Got: ${Object.keys(value).join(", ")}`
+      `Store item does not contain valid content field. Got: ${Object.keys(value).join(", ")}`,
     );
   }
   if (typeof value.created_at !== "string") {
     throw new Error(
-      `Store item does not contain valid created_at field. Got: ${Object.keys(value).join(", ")}`
+      `Store item does not contain valid created_at field. Got: ${Object.keys(value).join(", ")}`,
     );
   }
   if (typeof value.modified_at !== "string") {
     throw new Error(
-      `Store item does not contain valid modified_at field. Got: ${Object.keys(value).join(", ")}`
+      `Store item does not contain valid modified_at field. Got: ${Object.keys(value).join(", ")}`,
     );
   }
 
@@ -279,7 +279,7 @@ function convertStoreItemToFileData(storeItem: Item): FileData {
  * Convert FileData to a dict suitable for store.put().
  */
 function convertFileDataToStoreItem(
-  fileData: FileData
+  fileData: FileData,
 ): Record<string, unknown> {
   return {
     content: fileData.content,
@@ -296,7 +296,7 @@ const stateSchema = z3.object({
         fn: fileDataReducer,
         schema: z3.record(z3.string(), FileDataSchema.nullable()),
       },
-    }
+    },
   ),
 });
 
@@ -375,7 +375,7 @@ Here are the first 10 lines of the result:
 `;
 
 function assertStore(
-  config: RunnableConfig
+  config: RunnableConfig,
 ): asserts config is RunnableConfig & {
   store: Exclude<Runtime["store"], undefined>;
 } {
@@ -389,7 +389,7 @@ function assertStore(
  */
 function createLsTool(
   customDescription: string | null,
-  longTermMemory: boolean
+  longTermMemory: boolean,
 ) {
   let toolDescription = LIST_FILES_TOOL_DESCRIPTION;
   if (customDescription) {
@@ -410,7 +410,7 @@ function createLsTool(
         const namespace = getNamespace();
         const longtermFiles = await config.store.search(namespace);
         const longtermFilesPrefixed = longtermFiles.map((f) =>
-          appendMemoriesPrefix(f.key)
+          appendMemoriesPrefix(f.key),
         );
         files = files.concat(longtermFilesPrefixed);
       }
@@ -429,7 +429,7 @@ function createLsTool(
       schema: z3.object({
         path: z3.string().optional().describe("Optional path to filter by"),
       }),
-    }
+    },
   );
 }
 
@@ -438,7 +438,7 @@ function createLsTool(
  */
 function createReadFileTool(
   customDescription: string | null,
-  longTermMemory: boolean
+  longTermMemory: boolean,
 ) {
   let toolDescription = READ_FILE_TOOL_DESCRIPTION;
   if (customDescription) {
@@ -450,7 +450,7 @@ function createReadFileTool(
   function readFileDataContent(
     fileData: FileData,
     offset: number,
-    limit: number
+    limit: number,
   ): string {
     const content = fileDataToString(fileData);
     const emptyMsg = checkEmptyContent(content);
@@ -518,7 +518,7 @@ function createReadFileTool(
           .default(DEFAULT_READ_LIMIT)
           .describe("Maximum number of lines to read"),
       }),
-    }
+    },
   );
 }
 
@@ -527,7 +527,7 @@ function createReadFileTool(
  */
 function createWriteFileTool(
   customDescription: string | null,
-  longTermMemory: boolean
+  longTermMemory: boolean,
 ) {
   let toolDescription = WRITE_FILE_TOOL_DESCRIPTION;
   if (customDescription) {
@@ -554,7 +554,7 @@ function createWriteFileTool(
           await config.store.put(
             namespace,
             strippedFilePath,
-            convertFileDataToStoreItem(newFileData)
+            convertFileDataToStoreItem(newFileData),
           );
           return `Updated longterm memories file ${filePath}`;
         }
@@ -588,7 +588,7 @@ function createWriteFileTool(
         file_path: z3.string().describe("Absolute path to the file to write"),
         content: z3.string().describe("Content to write to the file"),
       }),
-    }
+    },
   );
 }
 
@@ -597,7 +597,7 @@ function createWriteFileTool(
  */
 function createEditFileTool(
   customDescription: string | null,
-  longTermMemory: boolean
+  longTermMemory: boolean,
 ) {
   let toolDescription = EDIT_FILE_TOOL_DESCRIPTION;
   if (customDescription) {
@@ -610,12 +610,12 @@ function createEditFileTool(
     fileData: FileData,
     oldString: string,
     newString: string,
-    replaceAll: boolean
+    replaceAll: boolean,
   ): { fileData: FileData; message: string } | string {
     const content = fileDataToString(fileData);
     const occurrences = (
       content.match(
-        new RegExp(oldString.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")
+        new RegExp(oldString.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"),
       ) || []
     ).length;
 
@@ -630,9 +630,9 @@ function createEditFileTool(
     const newContent = content.replace(
       new RegExp(
         oldString.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-        replaceAll ? "g" : ""
+        replaceAll ? "g" : "",
       ),
-      newString
+      newString,
     );
     const newFileData = updateFileData(fileData, newContent);
     const resultMsg = `Successfully replaced ${occurrences} instance(s) of the string`;
@@ -672,7 +672,7 @@ function createEditFileTool(
         fileData,
         input.old_string,
         input.new_string,
-        replaceAll
+        replaceAll,
       );
 
       if (typeof result === "string") {
@@ -691,7 +691,7 @@ function createEditFileTool(
           await config.store.put(
             namespace,
             strippedFilePath,
-            convertFileDataToStoreItem(newFileData)
+            convertFileDataToStoreItem(newFileData),
           );
           return fullMsg;
         }
@@ -725,7 +725,7 @@ function createEditFileTool(
           .default(false)
           .describe("Whether to replace all occurrences"),
       }),
-    }
+    },
   );
 }
 
@@ -747,7 +747,7 @@ export interface FilesystemMiddlewareOptions {
  * Create filesystem middleware with all tools and features.
  */
 export function createFilesystemMiddleware(
-  options: FilesystemMiddlewareOptions = {}
+  options: FilesystemMiddlewareOptions = {},
 ) {
   const {
     longTermMemory = false,
@@ -767,15 +767,15 @@ export function createFilesystemMiddleware(
     createLsTool(customToolDescriptions?.ls ?? null, longTermMemory),
     createReadFileTool(
       customToolDescriptions?.read_file ?? null,
-      longTermMemory
+      longTermMemory,
     ),
     createWriteFileTool(
       customToolDescriptions?.write_file ?? null,
-      longTermMemory
+      longTermMemory,
     ),
     createEditFileTool(
       customToolDescriptions?.edit_file ?? null,
-      longTermMemory
+      longTermMemory,
     ),
   ];
 
@@ -832,7 +832,7 @@ export function createFilesystemMiddleware(
 
           const evictedMessage = TOO_LARGE_TOOL_MSG.replace(
             "{tool_call_id}",
-            request.toolCall.id || ""
+            request.toolCall.id || "",
           )
             .replace("{file_path}", filePath)
             .replace("{content_sample}", contentSample);
@@ -874,12 +874,12 @@ export function createFilesystemMiddleware(
                 {
                   formatStyle: "tab",
                   startLine: 1,
-                }
+                },
               );
 
               const evictedMessage = TOO_LARGE_TOOL_MSG.replace(
                 "{tool_call_id}",
-                message.tool_call_id || ""
+                message.tool_call_id || "",
               )
                 .replace("{file_path}", filePath)
                 .replace("{content_sample}", contentSample);
@@ -889,7 +889,7 @@ export function createFilesystemMiddleware(
                   content: evictedMessage,
                   tool_call_id: message.tool_call_id || "",
                   name: message.name || "",
-                })
+                }),
               );
               fileUpdates[filePath] = fileData;
               continue;

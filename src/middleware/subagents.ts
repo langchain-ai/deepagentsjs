@@ -194,7 +194,7 @@ export interface SubAgent {
  * Filter state to exclude certain keys when passing to subagents
  */
 function filterStateForSubagent(
-  state: Record<string, unknown>
+  state: Record<string, unknown>,
 ): Record<string, unknown> {
   const filtered: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(state)) {
@@ -210,7 +210,7 @@ function filterStateForSubagent(
  */
 function returnCommandWithStateUpdate(
   result: Record<string, unknown>,
-  toolCallId: string
+  toolCallId: string,
 ): Command {
   const stateUpdate = filterStateForSubagent(result);
   const messages = result.messages as Array<{ content: string }>;
@@ -262,7 +262,7 @@ function getSubagents(options: {
     const generalPurposeMiddleware = [...defaultSubagentMiddleware];
     if (defaultInterruptOn) {
       generalPurposeMiddleware.push(
-        humanInTheLoopMiddleware({ interruptOn: defaultInterruptOn })
+        humanInTheLoopMiddleware({ interruptOn: defaultInterruptOn }),
       );
     }
 
@@ -275,14 +275,14 @@ function getSubagents(options: {
 
     agents["general-purpose"] = generalPurposeSubagent;
     subagentDescriptions.push(
-      `- general-purpose: ${DEFAULT_GENERAL_PURPOSE_DESCRIPTION}`
+      `- general-purpose: ${DEFAULT_GENERAL_PURPOSE_DESCRIPTION}`,
     );
   }
 
   // Process custom subagents
   for (const agentParams of subagents) {
     subagentDescriptions.push(
-      `- ${agentParams.name}: ${agentParams.description}`
+      `- ${agentParams.name}: ${agentParams.description}`,
     );
 
     const middleware = agentParams.middleware
@@ -343,7 +343,7 @@ function createTaskTool(options: {
   return tool(
     async (
       input: { description: string; subagent_type: string },
-      config
+      config,
     ): Promise<Command | string> => {
       const { description, subagent_type } = input;
 
@@ -353,7 +353,7 @@ function createTaskTool(options: {
           .map((k) => `\`${k}\``)
           .join(", ");
         throw new Error(
-          `Error: invoked agent of type ${subagent_type}, the only allowed types are ${allowedTypes}`
+          `Error: invoked agent of type ${subagent_type}, the only allowed types are ${allowedTypes}`,
         );
       }
 
@@ -387,10 +387,10 @@ function createTaskTool(options: {
         subagent_type: z
           .string()
           .describe(
-            `Name of the agent to use. Available: ${Object.keys(subagentGraphs).join(", ")}`
+            `Name of the agent to use. Available: ${Object.keys(subagentGraphs).join(", ")}`,
           ),
       }),
-    }
+    },
   );
 }
 
@@ -420,7 +420,7 @@ export interface SubAgentMiddlewareOptions {
  * Create subagent middleware with task tool
  */
 export function createSubAgentMiddleware(
-  options: SubAgentMiddlewareOptions
+  options: SubAgentMiddlewareOptions,
 ): AgentMiddleware {
   const {
     defaultModel,
