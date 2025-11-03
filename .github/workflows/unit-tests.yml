@@ -37,8 +37,8 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: "pnpm"
       - name: Install dependencies
-        run: yarn install --immutable --mode=skip-build
+        run: pnpm install
       - name: Build project
-        run: yarn build
+        run: pnpm build
       - name: Run tests
-        run: yarn test
+        run: pnpm test

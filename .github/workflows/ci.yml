@@ -30,15 +30,15 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: 10
-      - name: Use Node.js 18.x
+      - name: Use Node.js
         uses: actions/setup-node@v3
         with:
           node-version-file: .nvmrc
           cache: "pnpm"
       - name: Install dependencies
-        run: yarn install --immutable --mode=skip-build
+        run: pnpm install
       - name: Check formatting
-        run: yarn format:check
+        run: pnpm format:check
 
   lint:
     name: Check linting
@@ -51,15 +51,15 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: 10
-      - name: Use Node.js 18.x
+      - name: Use Node.js
         uses: actions/setup-node@v3
         with:
           node-version-file: .nvmrc
           cache: "pnpm"
       - name: Install dependencies
-        run: yarn install --immutable --mode=skip-build
+        run: pnpm install
       - name: Check linting
-        run: yarn run lint
+        run: pnpm run lint
 
   build:
     name: Build
@@ -72,36 +72,15 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: 10
-      - name: Use Node.js 18.x
+      - name: Use Node.js
         uses: actions/setup-node@v3
         with:
           node-version-file: .nvmrc
           cache: "pnpm"
       - name: Install dependencies
-        run: yarn install --immutable --mode=skip-build
+        run: pnpm install
       - name: Build
-        run: yarn build
-
-  build-examples:
-    name: Build examples
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Enable Corepack
-        run: corepack enable
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - name: Use Node.js 18.x
-        uses: actions/setup-node@v3
-        with:
-          node-version-file: .nvmrc
-          cache: "pnpm"
-      - name: Install dependencies
-        run: yarn install --immutable --mode=skip-build
-      - name: Build examples
-        run: yarn build:examples
+        run: pnpm build
 
   readme-spelling:
     name: Check README spelling
