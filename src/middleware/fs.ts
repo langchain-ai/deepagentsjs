@@ -508,12 +508,12 @@ function createReadFileTool(
       schema: z3.object({
         file_path: z3.string().describe("Absolute path to the file to read"),
         offset: z3
-          .number()
+          .number({ coerce: true })
           .optional()
           .default(DEFAULT_READ_OFFSET)
           .describe("Line offset to start reading from"),
         limit: z3
-          .number()
+          .number({ coerce: true })
           .optional()
           .default(DEFAULT_READ_LIMIT)
           .describe("Maximum number of lines to read"),
