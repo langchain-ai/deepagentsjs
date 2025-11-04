@@ -77,11 +77,6 @@ async function main() {
     },
   );
 
-  console.log("Research Complete!");
-  console.log(
-    "\nNote: Files are stored in the persistent store and accessible across all threads",
-  );
-
   const threadId2 = uuidv4();
   await agent.invoke(
     {

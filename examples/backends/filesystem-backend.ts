@@ -38,9 +38,7 @@ export const agent = createDeepAgent({
 });
 
 async function main() {
-  console.log(`Working directory: ${workspaceDir}\n`);
-
-  const result = await agent.invoke(
+  await agent.invoke(
     {
       messages: [
         new HumanMessage(
@@ -50,9 +48,6 @@ async function main() {
     },
     { recursionLimit: 50 },
   );
-
-  console.log("\n✅ Coding task complete!");
-  console.log(`\nFiles written to: ${workspaceDir}`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

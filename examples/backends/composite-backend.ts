@@ -97,9 +97,6 @@ async function main() {
     },
   );
 
-  console.log("Research Complete!");
-  console.log(`Thread ID: ${threadId}`);
-
   const threadId2 = uuidv4();
   await agent.invoke(
     {

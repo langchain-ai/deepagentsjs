@@ -54,21 +54,13 @@ export const agent = createDeepAgent({
 });
 
 async function main() {
-  const result = await agent.invoke(
+  await agent.invoke(
     {
       messages: [
         new HumanMessage("Research the latest trends in AI agents for 2025"),
       ],
     },
     { recursionLimit: 50 },
-  );
-
-  console.log("Research Complete!");
-  console.log("\nFiles created:");
-  console.log(
-    Object.keys(result.files || {})
-      .map((key) => `  - ${key}`)
-      .join("\n"),
   );
 }
 
