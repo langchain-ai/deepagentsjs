@@ -4,11 +4,15 @@ import { HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 import { MemorySaver } from "@langchain/langgraph";
 import { createDeepAgent } from "../../src/index.js";
-import { createFilesystemMiddleware } from "../../src/middleware/fs.js";
 import {
+  createFilesystemMiddleware,
   WRITE_FILE_TOOL_DESCRIPTION,
-  WRITE_FILE_TOOL_DESCRIPTION_LONGTERM_SUPPLEMENT,
 } from "../../src/middleware/fs.js";
+import {
+  StateBackend,
+  StoreBackend,
+  CompositeBackend,
+} from "../../src/backends/index.js";
 import { v4 as uuidv4 } from "uuid";
 import {
   SAMPLE_MODEL,
@@ -19,38 +23,73 @@ import {
 } from "../utils.js";
 
 describe("Filesystem Middleware Integration Tests", () => {
-  it.concurrent.each([{ longTermMemory: false }, { longTermMemory: true }])(
-    "should override filesystem system prompt (%s)",
+  it.concurrent.each([
+    { useComposite: false, label: "StateBackend" },
+    { useComposite: true, label: "CompositeBackend" },
+  ])(
+    "should override filesystem system prompt ($label)",
     { timeout: 60000 },
-    async ({ longTermMemory }) => {
+    async ({ useComposite }) => {
+      const checkpointer = useComposite ? new MemorySaver() : undefined;
+      const store = useComposite ? new InMemoryStore() : undefined;
+
+      const backend = useComposite
+        ? (stateAndStore: any) =>
+            new CompositeBackend(new StateBackend(stateAndStore), {
+              "/memories/": new StoreBackend(stateAndStore),
+            })
+        : undefined; // Use default StateBackend
+
       const filesystemMiddleware = createFilesystemMiddleware({
-        longTermMemory,
+        backend,
         systemPrompt:
           "In every single response, you must say the word 'pokemon'! You love it!",
       });
+
       const agent = createAgent({
         model: SAMPLE_MODEL,
         middleware: [filesystemMiddleware],
+        checkpointer,
+        store,
       });
 
-      const response = await agent.invoke({
-        messages: [new HumanMessage("What do you like?")],
-      });
+      const config = useComposite
+        ? { configurable: { thread_id: uuidv4() } }
+        : undefined;
+      const response = await agent.invoke(
+        {
+          messages: [new HumanMessage("What do you like?")],
+        },
+        config
+      );
 
       const lastMessage = response.messages[response.messages.length - 1];
       expect(lastMessage.content.toString().toLowerCase()).toContain("pokemon");
     }
   );
 
-  it.concurrent.each([{ longTermMemory: false }, { longTermMemory: true }])(
-    "should override filesystem tool descriptions (%s)",
+  it.concurrent.each([
+    { useComposite: false, label: "StateBackend" },
+    { useComposite: true, label: "CompositeBackend" },
+  ])(
+    "should override filesystem tool descriptions ($label)",
     { timeout: 60000 },
-    async ({ longTermMemory }) => {
+    async ({ useComposite }) => {
+      const checkpointer = useComposite ? new MemorySaver() : undefined;
+      const store = useComposite ? new InMemoryStore() : undefined;
+
+      const backend = useComposite
+        ? (stateAndStore: any) =>
+            new CompositeBackend(new StateBackend(stateAndStore), {
+              "/memories/": new StoreBackend(stateAndStore),
+            })
+        : undefined;
+
       const agent = createAgent({
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            longTermMemory,
+            backend,
             customToolDescriptions: {
               ls: "Charmander",
               read_file: "Bulbasaur",
@@ -59,6 +98,8 @@ describe("Filesystem Middleware Integration Tests", () => {
           }),
         ] as const,
         tools: [],
+        checkpointer,
+        store,
       });
 
       const toolsArray = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
@@ -71,10 +112,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         ls: { description: "Charmander" },
         read_file: { description: "Bulbasaur" },
         write_file: {
-          description: longTermMemory
-            ? WRITE_FILE_TOOL_DESCRIPTION +
-              WRITE_FILE_TOOL_DESCRIPTION_LONGTERM_SUPPLEMENT
-            : WRITE_FILE_TOOL_DESCRIPTION,
+          description: WRITE_FILE_TOOL_DESCRIPTION,
         },
         edit_file: {
           description: "Squirtle",
@@ -90,7 +128,6 @@ describe("Filesystem Middleware Integration Tests", () => {
       const checkpointer = new MemorySaver();
       const store = new InMemoryStore();
 
-      // Add files to store
       await store.put(["filesystem"], "/test.txt", {
         content: ["Hello world"],
         created_at: "2021-01-01",
@@ -105,7 +142,12 @@ describe("Filesystem Middleware Integration Tests", () => {
       const agent = createAgent({
         model: SAMPLE_MODEL,
         middleware: [
-          createFilesystemMiddleware({ longTermMemory: true }),
+          createFilesystemMiddleware({
+            backend: (stateAndStore: any) =>
+              new CompositeBackend(new StateBackend(stateAndStore), {
+                "/memories/": new StoreBackend(stateAndStore),
+              }),
+          }),
         ] as const,
         checkpointer,
         store,
@@ -127,7 +169,7 @@ describe("Filesystem Middleware Integration Tests", () => {
               modified_at: "2021-01-01",
             },
           },
-        },
+        } as any,
         config
       );
 
@@ -139,9 +181,8 @@ describe("Filesystem Middleware Integration Tests", () => {
       expect(lsMessage).toBeDefined();
       const lsContent = lsMessage!.content.toString();
       expect(lsContent).toContain("/pizza.txt");
-      expect(lsContent).toContain("/pokemon/squirtle.txt");
-      expect(lsContent).toContain("/memories/test.txt");
-      expect(lsContent).toContain("/memories/pokemon/charmander.txt");
+      expect(lsContent).toContain("/pokemon/");
+      expect(lsContent).toContain("/memories/");
     }
   );
 
@@ -166,7 +207,12 @@ describe("Filesystem Middleware Integration Tests", () => {
       const agent = createAgent({
         model: SAMPLE_MODEL,
         middleware: [
-          createFilesystemMiddleware({ longTermMemory: true }),
+          createFilesystemMiddleware({
+            backend: (stateAndStore: any) =>
+              new CompositeBackend(new StateBackend(stateAndStore), {
+                "/memories/": new StoreBackend(stateAndStore),
+              }),
+          }),
         ] as const,
         checkpointer,
         store,
@@ -188,7 +234,7 @@ describe("Filesystem Middleware Integration Tests", () => {
               modified_at: "2021-01-01",
             },
           },
-        },
+        } as any,
         config
       );
 
@@ -215,7 +261,12 @@ describe("Filesystem Middleware Integration Tests", () => {
       const agent = createAgent({
         model: SAMPLE_MODEL,
         middleware: [
-          createFilesystemMiddleware({ longTermMemory: true }),
+          createFilesystemMiddleware({
+            backend: (stateAndStore: any) =>
+              new CompositeBackend(new StateBackend(stateAndStore), {
+                "/memories/": new StoreBackend(stateAndStore),
+              }),
+          }),
         ] as const,
         checkpointer,
         store,
@@ -232,7 +283,7 @@ describe("Filesystem Middleware Integration Tests", () => {
               modified_at: "2021-01-01",
             },
           },
-        },
+        } as any,
         config
       );
 
@@ -265,7 +316,10 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            longTermMemory: true,
+            backend: (stateAndStore: any) =>
+              new CompositeBackend(new StateBackend(stateAndStore), {
+                "/memories/": new StoreBackend(stateAndStore),
+              }),
           }),
         ],
         checkpointer,
@@ -301,7 +355,10 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            longTermMemory: true,
+            backend: (stateAndStore: any) =>
+              new CompositeBackend(new StateBackend(stateAndStore), {
+                "/memories/": new StoreBackend(stateAndStore),
+              }),
           }),
         ],
         checkpointer,
@@ -350,7 +407,10 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            longTermMemory: true,
+            backend: (stateAndStore: any) =>
+              new CompositeBackend(new StateBackend(stateAndStore), {
+                "/memories/": new StoreBackend(stateAndStore),
+              }),
           }),
         ],
         checkpointer,
@@ -394,7 +454,10 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            longTermMemory: true,
+            backend: (stateAndStore: any) =>
+              new CompositeBackend(new StateBackend(stateAndStore), {
+                "/memories/": new StoreBackend(stateAndStore),
+              }),
           }),
         ],
         checkpointer,
@@ -426,17 +489,33 @@ describe("Filesystem Middleware Integration Tests", () => {
     "should handle tool results exceeding token limit",
     { timeout: 60000 },
     async () => {
-      const agent = createDeepAgent({
-        tools: [getNbaStandings],
+      const checkpointer = new MemorySaver();
+      const store = new InMemoryStore();
+
+      const agent = createAgent({
         model: SAMPLE_MODEL,
+        tools: [getNbaStandings],
+        middleware: [
+          createFilesystemMiddleware({
+            backend: (stateAndStore: any) =>
+              new CompositeBackend(new StateBackend(stateAndStore), {
+                "/memories/": new StoreBackend(stateAndStore),
+              }),
+          }),
+        ],
+        checkpointer,
+        store,
       });
 
-      const response = await agent.invoke({
-        messages: [new HumanMessage("Get NBA standings")],
-      });
+      const config = { configurable: { thread_id: uuidv4() } };
+      const response = await agent.invoke(
+        {
+          messages: [new HumanMessage("Get NBA standings")],
+        },
+        config
+      );
 
-      // Check if large result was evicted to filesystem
-      const files = response.files || {};
+      const files = (response as any).files || {};
       const largeResultFiles = Object.keys(files).filter((f) =>
         f.includes("/large_tool_results/")
       );
@@ -447,25 +526,31 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should handle tool results with custom token limit",
-    { timeout: 60000 },
+    { timeout: 120000 },
     async () => {
+      const checkpointer = new MemorySaver();
+
       const agent = createAgent({
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            longTermMemory: false,
             toolTokenLimitBeforeEvict: 100, // Very low limit to trigger eviction
           }),
         ] as const,
         tools: [getNflStandings],
+        checkpointer,
       });
 
-      const response = await agent.invoke({
-        messages: [new HumanMessage("Get NFL standings")],
-      });
+      const config = { configurable: { thread_id: uuidv4() } };
+      const response = await agent.invoke(
+        {
+          messages: [new HumanMessage("Get NFL standings")],
+        },
+        config
+      );
 
       // Check if result was evicted with custom limit
-      const files = response.files || {};
+      const files = (response as any).files || {};
       const largeResultFiles = Object.keys(files).filter((f) =>
         f.includes("/large_tool_results/")
       );

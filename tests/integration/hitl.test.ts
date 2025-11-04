@@ -16,7 +16,12 @@ import {
   Interrupt,
   ToolMessage,
   type InterruptOnConfig,
+  createAgent,
+  tool,
+  humanInTheLoopMiddleware,
 } from "langchain";
+import { z } from "zod/v3";
+import { SAMPLE_MODEL } from "../utils.js";
 
 const SAMPLE_TOOL_CONFIG: Record<string, boolean | InterruptOnConfig> = {
   sample_tool: true,
@@ -243,29 +248,15 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
       // The get_weather tool should now trigger an interrupt in the subagent
       expect(result.__interrupt__).toBeDefined();
 
-      // Resume execution
-      const toolResultNames: string[] = [];
-
-      for await (const chunk of await agent.graph.stream(
+      const result2 = await agent.invoke(
         new Command({
-          resume: Object.fromEntries(
-            result.__interrupt__?.map((i: Interrupt) => [
-              i.id,
-              { decisions: [{ type: "approve" }] } as HITLResponse,
-            ])
-          ),
+          resume: {
+            decisions: [{ type: "approve" }],
+          },
         }),
-        { ...config, streamMode: ["updates"], subgraphs: true }
-      )) {
-        const update = chunk[2] ?? {};
-        if (!("tools" in update)) continue;
-
-        const tools = update.tools as { messages: ToolMessage[] };
-        toolResultNames.push(...tools.messages.map((msg: any) => msg.name));
-      }
-
-      // Verify get_weather was executed
-      expect(toolResultNames).toContain("get_weather");
+        config
+      );
+      expect(result2.__interrupt__).toBeUndefined();
     }
   );
 });

@@ -21,6 +21,11 @@ import {
   createPatchToolCallsMiddleware,
   type SubAgent,
 } from "./middleware/index.js";
+import {
+  StateBackend,
+  StoreBackend,
+  CompositeBackend,
+} from "./backends/index.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { AnnotationRoot } from "@langchain/langgraph";
 
@@ -103,11 +108,19 @@ export function createDeepAgent<
     ? `${systemPrompt}\n\n${BASE_PROMPT}`
     : BASE_PROMPT;
 
+  // Create backend configuration for filesystem middleware
+  const filesystemBackend = useLongtermMemory
+    ? (config: any) =>
+        new CompositeBackend(new StateBackend(config), {
+          "/memories/": new StoreBackend(config),
+        })
+    : undefined; // Use default StateBackend
+
   const middleware: AgentMiddleware[] = [
     // Provides todo list management capabilities for tracking tasks
     todoListMiddleware(),
     // Enables filesystem operations and optional long-term memory storage
-    createFilesystemMiddleware({ longTermMemory: useLongtermMemory }),
+    createFilesystemMiddleware({ backend: filesystemBackend }),
     // Enables delegation to specialized subagents for complex tasks
     createSubAgentMiddleware({
       defaultModel: model,
@@ -117,7 +130,7 @@ export function createDeepAgent<
         todoListMiddleware(),
         // Subagent middleware: Filesystem operations
         createFilesystemMiddleware({
-          longTermMemory: useLongtermMemory,
+          backend: filesystemBackend,
         }),
         // Subagent middleware: Automatic conversation summarization when token limits are approached
         summarizationMiddleware({
