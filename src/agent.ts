@@ -86,7 +86,7 @@ export function createDeepAgent<
     | AnnotationRoot<any>
     | InteropZodObject = AnnotationRoot<any>,
 >(
-  params: CreateDeepAgentParams<ContextSchema> = {}
+  params: CreateDeepAgentParams<ContextSchema> = {},
 ): ReactAgent<any, any, ContextSchema, any> {
   const {
     model = "claude-sonnet-4-5-20250929",

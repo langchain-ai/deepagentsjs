@@ -1,7 +1,6 @@
-/* eslint-disable no-console */
 import "dotenv/config";
 import { z } from "zod";
-import { tool, HumanMessage } from "langchain";
+import { tool } from "langchain";
 import { TavilySearch } from "@langchain/tavily";
 import { ChatAnthropic } from "@langchain/anthropic";
 
@@ -61,7 +60,7 @@ const internetSearch = tool(
         .default(false)
         .describe("Whether to include raw content"),
     }),
-  }
+  },
 );
 
 const subResearchPrompt = `You are a dedicated researcher. Your job is to conduct research based on the users questions.
