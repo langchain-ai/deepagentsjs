@@ -21,12 +21,7 @@ import {
   createPatchToolCallsMiddleware,
   type SubAgent,
 } from "./middleware/index.js";
-import {
-  StateBackend,
-  StoreBackend,
-  CompositeBackend,
-  type BackendProtocol,
-} from "./backends/index.js";
+import { StateBackend, type BackendProtocol } from "./backends/index.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { AnnotationRoot } from "@langchain/langgraph";
 
@@ -60,17 +55,11 @@ export interface CreateDeepAgentParams<
   /**
    * Optional backend for filesystem operations.
    * Can be either a backend instance or a factory function that creates one.
-   * If provided, this will be used instead of useLongtermMemory.
    * The factory receives a config object with state and store.
    */
   backend?:
     | BackendProtocol
-    | ((config: { state: any; store?: BaseStore }) => BackendProtocol);
-  /**
-   * @deprecated Use 'backend' parameter instead.
-   * Whether to use longterm memory - requires a store to be provided
-   */
-  useLongtermMemory?: boolean;
+    | ((config: { state: unknown; store?: BaseStore }) => BackendProtocol);
   /** Optional interrupt configuration mapping tool names to interrupt configs */
   interruptOn?: Record<string, boolean | InterruptOnConfig>;
   /** The name of the agent */
@@ -112,7 +101,6 @@ export function createDeepAgent<
     checkpointer,
     store,
     backend,
-    useLongtermMemory = false,
     interruptOn,
     name,
   } = params;
@@ -123,15 +111,11 @@ export function createDeepAgent<
     : BASE_PROMPT;
 
   // Create backend configuration for filesystem middleware
-  // Priority: backend parameter > useLongtermMemory flag > default StateBackend
+  // If no backend is provided, use a factory that creates a StateBackend
   const filesystemBackend = backend
     ? backend
-    : useLongtermMemory
-      ? (config: any) =>
-          new CompositeBackend(new StateBackend(config), {
-            "/memories/": new StoreBackend(config),
-          })
-      : undefined; // Use default StateBackend
+    : (config: { state: unknown; store?: BaseStore }) =>
+        new StateBackend(config);
 
   const middleware: AgentMiddleware[] = [
     // Provides todo list management capabilities for tracking tasks

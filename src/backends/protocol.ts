@@ -6,6 +6,8 @@
  * database, etc.) and provide a uniform interface for file operations.
  */
 
+import type { BaseStore } from "@langchain/langgraph-checkpoint";
+
 /**
  * Structured file listing info.
  *
@@ -190,9 +192,9 @@ export interface BackendProtocol {
  */
 export interface StateAndStore {
   /** Current agent state with files, messages, etc. */
-  state: any;
+  state: unknown;
   /** Optional BaseStore for persistent cross-conversation storage */
-  store?: any;
+  store?: BaseStore;
   /** Optional assistant ID for per-assistant isolation in store */
   assistantId?: string;
 }

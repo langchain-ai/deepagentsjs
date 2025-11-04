@@ -27,6 +27,8 @@ import {
   performStringReplacement,
 } from "./utils.js";
 
+const SUPPORTS_NOFOLLOW = fsSync.constants.O_NOFOLLOW !== undefined;
+
 /**
  * Backend that reads and writes files directly from the filesystem.
  *
@@ -189,23 +191,31 @@ export class FilesystemBackend implements BackendProtocol {
   ): Promise<string> {
     try {
       const resolvedPath = this.resolvePath(filePath);
-      const stat = await fs.stat(resolvedPath);
 
-      if (!stat.isFile()) {
-        return `Error: File '${filePath}' not found`;
-      }
-
-      // Try to open with O_NOFOLLOW for security
       let content: string;
-      try {
+
+      if (SUPPORTS_NOFOLLOW) {
+        const stat = await fs.stat(resolvedPath);
+        if (!stat.isFile()) {
+          return `Error: File '${filePath}' not found`;
+        }
         const fd = await fs.open(
           resolvedPath,
-          fsSync.constants.O_RDONLY | (fsSync.constants.O_NOFOLLOW || 0),
+          fsSync.constants.O_RDONLY | fsSync.constants.O_NOFOLLOW,
         );
-        content = await fd.readFile({ encoding: "utf-8" });
-        await fd.close();
-      } catch {
-        // Fallback to normal open if O_NOFOLLOW fails
+        try {
+          content = await fd.readFile({ encoding: "utf-8" });
+        } finally {
+          await fd.close();
+        }
+      } else {
+        const stat = await fs.lstat(resolvedPath);
+        if (stat.isSymbolicLink()) {
+          return `Error: Symlinks are not allowed: ${filePath}`;
+        }
+        if (!stat.isFile()) {
+          return `Error: File '${filePath}' not found`;
+        }
         content = await fs.readFile(resolvedPath, "utf-8");
       }
 
@@ -237,9 +247,13 @@ export class FilesystemBackend implements BackendProtocol {
     try {
       const resolvedPath = this.resolvePath(filePath);
 
-      // Check if file already exists
       try {
-        await fs.stat(resolvedPath);
+        const stat = await fs.lstat(resolvedPath);
+        if (stat.isSymbolicLink()) {
+          return {
+            error: `Cannot write to ${filePath} because it is a symlink. Symlinks are not allowed.`,
+          };
+        }
         return {
           error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
         };
@@ -247,22 +261,22 @@ export class FilesystemBackend implements BackendProtocol {
         // File doesn't exist, good to proceed
       }
 
-      // Create parent directories
       await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
 
-      // Write with O_NOFOLLOW if available
-      try {
+      if (SUPPORTS_NOFOLLOW) {
         const flags =
           fsSync.constants.O_WRONLY |
           fsSync.constants.O_CREAT |
           fsSync.constants.O_TRUNC |
-          (fsSync.constants.O_NOFOLLOW || 0);
+          fsSync.constants.O_NOFOLLOW;
 
         const fd = await fs.open(resolvedPath, flags, 0o644);
-        await fd.writeFile(content, "utf-8");
-        await fd.close();
-      } catch {
-        // Fallback without O_NOFOLLOW
+        try {
+          await fd.writeFile(content, "utf-8");
+        } finally {
+          await fd.close();
+        }
+      } else {
         await fs.writeFile(resolvedPath, content, "utf-8");
       }
 
@@ -284,22 +298,32 @@ export class FilesystemBackend implements BackendProtocol {
   ): Promise<EditResult> {
     try {
       const resolvedPath = this.resolvePath(filePath);
-      const stat = await fs.stat(resolvedPath);
 
-      if (!stat.isFile()) {
-        return { error: `Error: File '${filePath}' not found` };
-      }
-
-      // Read securely
       let content: string;
-      try {
+
+      if (SUPPORTS_NOFOLLOW) {
+        const stat = await fs.stat(resolvedPath);
+        if (!stat.isFile()) {
+          return { error: `Error: File '${filePath}' not found` };
+        }
+
         const fd = await fs.open(
           resolvedPath,
-          fsSync.constants.O_RDONLY | (fsSync.constants.O_NOFOLLOW || 0),
+          fsSync.constants.O_RDONLY | fsSync.constants.O_NOFOLLOW,
         );
-        content = await fd.readFile({ encoding: "utf-8" });
-        await fd.close();
-      } catch {
+        try {
+          content = await fd.readFile({ encoding: "utf-8" });
+        } finally {
+          await fd.close();
+        }
+      } else {
+        const stat = await fs.lstat(resolvedPath);
+        if (stat.isSymbolicLink()) {
+          return { error: `Error: Symlinks are not allowed: ${filePath}` };
+        }
+        if (!stat.isFile()) {
+          return { error: `Error: File '${filePath}' not found` };
+        }
         content = await fs.readFile(resolvedPath, "utf-8");
       }
 
@@ -317,16 +341,19 @@ export class FilesystemBackend implements BackendProtocol {
       const [newContent, occurrences] = result;
 
       // Write securely
-      try {
+      if (SUPPORTS_NOFOLLOW) {
         const flags =
           fsSync.constants.O_WRONLY |
           fsSync.constants.O_TRUNC |
-          (fsSync.constants.O_NOFOLLOW || 0);
+          fsSync.constants.O_NOFOLLOW;
 
         const fd = await fs.open(resolvedPath, flags);
-        await fd.writeFile(newContent, "utf-8");
-        await fd.close();
-      } catch {
+        try {
+          await fd.writeFile(newContent, "utf-8");
+        } finally {
+          await fd.close();
+        }
+      } else {
         await fs.writeFile(resolvedPath, newContent, "utf-8");
       }
 
