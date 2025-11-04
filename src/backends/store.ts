@@ -86,7 +86,7 @@ export class StoreBackend implements BackendProtocol {
       typeof value.modified_at !== "string"
     ) {
       throw new Error(
-        `Store item does not contain valid FileData fields. Got keys: ${Object.keys(value).join(", ")}`
+        `Store item does not contain valid FileData fields. Got keys: ${Object.keys(value).join(", ")}`,
       );
     }
 
@@ -126,7 +126,7 @@ export class StoreBackend implements BackendProtocol {
       query?: string;
       filter?: Record<string, any>;
       pageSize?: number;
-    } = {}
+    } = {},
   ): Promise<Item[]> {
     const { query, filter, pageSize = 100 } = options;
     const allItems: Item[] = [];
@@ -236,7 +236,7 @@ export class StoreBackend implements BackendProtocol {
   async read(
     filePath: string,
     offset: number = 0,
-    limit: number = 2000
+    limit: number = 2000,
   ): Promise<string> {
     const store = this.getStore();
     const namespace = this.getNamespace();
@@ -285,7 +285,7 @@ export class StoreBackend implements BackendProtocol {
     filePath: string,
     oldString: string,
     newString: string,
-    replaceAll: boolean = false
+    replaceAll: boolean = false,
   ): Promise<EditResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
@@ -303,7 +303,7 @@ export class StoreBackend implements BackendProtocol {
         content,
         oldString,
         newString,
-        replaceAll
+        replaceAll,
       );
 
       if (typeof result === "string") {
@@ -328,7 +328,7 @@ export class StoreBackend implements BackendProtocol {
   async grepRaw(
     pattern: string,
     path: string = "/",
-    glob: string | null = null
+    glob: string | null = null,
   ): Promise<GrepMatch[] | string> {
     const store = this.getStore();
     const namespace = this.getNamespace();

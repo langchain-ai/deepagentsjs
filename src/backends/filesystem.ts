@@ -44,7 +44,7 @@ export class FilesystemBackend implements BackendProtocol {
       rootDir?: string;
       virtualMode?: boolean;
       maxFileSizeMb?: number;
-    } = {}
+    } = {},
   ) {
     const { rootDir, virtualMode = false, maxFileSizeMb = 10 } = options;
     this.cwd = rootDir ? path.resolve(rootDir) : process.cwd();
@@ -185,7 +185,7 @@ export class FilesystemBackend implements BackendProtocol {
   async read(
     filePath: string,
     offset: number = 0,
-    limit: number = 2000
+    limit: number = 2000,
   ): Promise<string> {
     try {
       const resolvedPath = this.resolvePath(filePath);
@@ -200,7 +200,7 @@ export class FilesystemBackend implements BackendProtocol {
       try {
         const fd = await fs.open(
           resolvedPath,
-          fsSync.constants.O_RDONLY | (fsSync.constants.O_NOFOLLOW || 0)
+          fsSync.constants.O_RDONLY | (fsSync.constants.O_NOFOLLOW || 0),
         );
         content = await fd.readFile({ encoding: "utf-8" });
         await fd.close();
@@ -280,7 +280,7 @@ export class FilesystemBackend implements BackendProtocol {
     filePath: string,
     oldString: string,
     newString: string,
-    replaceAll: boolean = false
+    replaceAll: boolean = false,
   ): Promise<EditResult> {
     try {
       const resolvedPath = this.resolvePath(filePath);
@@ -295,7 +295,7 @@ export class FilesystemBackend implements BackendProtocol {
       try {
         const fd = await fs.open(
           resolvedPath,
-          fsSync.constants.O_RDONLY | (fsSync.constants.O_NOFOLLOW || 0)
+          fsSync.constants.O_RDONLY | (fsSync.constants.O_NOFOLLOW || 0),
         );
         content = await fd.readFile({ encoding: "utf-8" });
         await fd.close();
@@ -307,7 +307,7 @@ export class FilesystemBackend implements BackendProtocol {
         content,
         oldString,
         newString,
-        replaceAll
+        replaceAll,
       );
 
       if (typeof result === "string") {
@@ -342,7 +342,7 @@ export class FilesystemBackend implements BackendProtocol {
   async grepRaw(
     pattern: string,
     dirPath: string = "/",
-    glob: string | null = null
+    glob: string | null = null,
   ): Promise<GrepMatch[] | string> {
     // Validate regex
     try {
@@ -387,7 +387,7 @@ export class FilesystemBackend implements BackendProtocol {
   private async ripgrepSearch(
     pattern: string,
     baseFull: string,
-    includeGlob: string | null
+    includeGlob: string | null,
   ): Promise<Record<string, Array<[number, string]>> | null> {
     return new Promise((resolve) => {
       const args = ["--json"];
@@ -464,7 +464,7 @@ export class FilesystemBackend implements BackendProtocol {
   private async pythonSearch(
     pattern: string,
     baseFull: string,
-    includeGlob: string | null
+    includeGlob: string | null,
   ): Promise<Record<string, Array<[number, string]>>> {
     let regex: RegExp;
     try {
@@ -541,7 +541,7 @@ export class FilesystemBackend implements BackendProtocol {
    */
   async globInfo(
     pattern: string,
-    searchPath: string = "/"
+    searchPath: string = "/",
   ): Promise<FileInfo[]> {
     if (pattern.startsWith("/")) {
       pattern = pattern.substring(1);

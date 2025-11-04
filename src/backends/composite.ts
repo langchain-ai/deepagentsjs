@@ -26,14 +26,14 @@ export class CompositeBackend implements BackendProtocol {
 
   constructor(
     defaultBackend: BackendProtocol,
-    routes: Record<string, BackendProtocol>
+    routes: Record<string, BackendProtocol>,
   ) {
     this.default = defaultBackend;
     this.routes = routes;
 
     // Sort routes by length (longest first) for correct prefix matching
     this.sortedRoutes = Object.entries(routes).sort(
-      (a, b) => b[0].length - a[0].length
+      (a, b) => b[0].length - a[0].length,
     );
   }
 
@@ -122,7 +122,7 @@ export class CompositeBackend implements BackendProtocol {
   async read(
     filePath: string,
     offset: number = 0,
-    limit: number = 2000
+    limit: number = 2000,
   ): Promise<string> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
     return await backend.read(strippedKey, offset, limit);
@@ -134,7 +134,7 @@ export class CompositeBackend implements BackendProtocol {
   async grepRaw(
     pattern: string,
     path: string = "/",
-    glob: string | null = null
+    glob: string | null = null,
   ): Promise<GrepMatch[] | string> {
     // If path targets a specific route, search only that backend
     for (const [routePrefix, backend] of this.sortedRoutes) {
@@ -177,7 +177,7 @@ export class CompositeBackend implements BackendProtocol {
         ...raw.map((m) => ({
           ...m,
           path: routePrefix.slice(0, -1) + m.path,
-        }))
+        })),
       );
     }
 
@@ -214,7 +214,7 @@ export class CompositeBackend implements BackendProtocol {
         ...infos.map((fi) => ({
           ...fi,
           path: routePrefix.slice(0, -1) + fi.path,
-        }))
+        })),
       );
     }
 
@@ -248,7 +248,7 @@ export class CompositeBackend implements BackendProtocol {
     filePath: string,
     oldString: string,
     newString: string,
-    replaceAll: boolean = false
+    replaceAll: boolean = false,
   ): Promise<EditResult> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
     return await backend.edit(strippedKey, oldString, newString, replaceAll);

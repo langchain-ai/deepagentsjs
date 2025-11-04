@@ -123,7 +123,7 @@ export interface BackendProtocol {
   read(
     filePath: string,
     offset?: number,
-    limit?: number
+    limit?: number,
   ): string | Promise<string>;
 
   /**
@@ -139,7 +139,7 @@ export interface BackendProtocol {
   grepRaw(
     pattern: string,
     path?: string | null,
-    glob?: string | null
+    glob?: string | null,
   ): GrepMatch[] | string | Promise<GrepMatch[] | string>;
 
   /**
@@ -173,7 +173,7 @@ export interface BackendProtocol {
     filePath: string,
     oldString: string,
     newString: string,
-    replaceAll?: boolean
+    replaceAll?: boolean,
   ): EditResult | Promise<EditResult>;
 }
 

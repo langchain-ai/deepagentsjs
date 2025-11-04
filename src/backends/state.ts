@@ -43,7 +43,10 @@ export class StateBackend implements BackendProtocol {
    * Get files from current state.
    */
   private getFiles(): Record<string, FileData> {
-    return ((this.stateAndStore.state as any).files as Record<string, FileData>) || {};
+    return (
+      ((this.stateAndStore.state as any).files as Record<string, FileData>) ||
+      {}
+    );
   }
 
   /**
@@ -149,7 +152,7 @@ export class StateBackend implements BackendProtocol {
     filePath: string,
     oldString: string,
     newString: string,
-    replaceAll: boolean = false
+    replaceAll: boolean = false,
   ): EditResult {
     const files = this.getFiles();
     const fileData = files[filePath];
@@ -163,7 +166,7 @@ export class StateBackend implements BackendProtocol {
       content,
       oldString,
       newString,
-      replaceAll
+      replaceAll,
     );
 
     if (typeof result === "string") {
@@ -185,7 +188,7 @@ export class StateBackend implements BackendProtocol {
   grepRaw(
     pattern: string,
     path: string = "/",
-    glob: string | null = null
+    glob: string | null = null,
   ): GrepMatch[] | string {
     const files = this.getFiles();
     return grepMatchesFromFiles(files, pattern, path, glob);

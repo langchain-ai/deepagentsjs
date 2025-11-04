@@ -39,7 +39,7 @@ export function sanitizeToolCallId(toolCallId: string): string {
  */
 export function formatContentWithLineNumbers(
   content: string | string[],
-  startLine: number = 1
+  startLine: number = 1,
 ): string {
   let lines: string[];
   if (typeof content === "string") {
@@ -58,7 +58,7 @@ export function formatContentWithLineNumbers(
 
     if (line.length <= MAX_LINE_LENGTH) {
       resultLines.push(
-        `${lineNum.toString().padStart(LINE_NUMBER_WIDTH)}\t${line}`
+        `${lineNum.toString().padStart(LINE_NUMBER_WIDTH)}\t${line}`,
       );
     } else {
       // Split long line into chunks with continuation markers
@@ -70,13 +70,13 @@ export function formatContentWithLineNumbers(
         if (chunkIdx === 0) {
           // First chunk: use normal line number
           resultLines.push(
-            `${lineNum.toString().padStart(LINE_NUMBER_WIDTH)}\t${chunk}`
+            `${lineNum.toString().padStart(LINE_NUMBER_WIDTH)}\t${chunk}`,
           );
         } else {
           // Continuation chunks: use decimal notation (e.g., 5.1, 5.2)
           const continuationMarker = `${lineNum}.${chunkIdx}`;
           resultLines.push(
-            `${continuationMarker.padStart(LINE_NUMBER_WIDTH)}\t${chunk}`
+            `${continuationMarker.padStart(LINE_NUMBER_WIDTH)}\t${chunk}`,
           );
         }
       }
@@ -156,7 +156,7 @@ export function updateFileData(fileData: FileData, content: string): FileData {
 export function formatReadResponse(
   fileData: FileData,
   offset: number,
-  limit: number
+  limit: number,
 ): string {
   const content = fileDataToString(fileData);
   const emptyMsg = checkEmptyContent(content);
@@ -189,7 +189,7 @@ export function performStringReplacement(
   content: string,
   oldString: string,
   newString: string,
-  replaceAll: boolean
+  replaceAll: boolean,
 ): [string, number] | string {
   // Use split to count occurrences (simpler than regex)
   const occurrences = content.split(oldString).length - 1;
@@ -213,13 +213,13 @@ export function performStringReplacement(
  * Truncate list or string result if it exceeds token limit (rough estimate: 4 chars/token).
  */
 export function truncateIfTooLong(
-  result: string[] | string
+  result: string[] | string,
 ): string[] | string {
   if (Array.isArray(result)) {
     const totalChars = result.reduce((sum, item) => sum + item.length, 0);
     if (totalChars > TOOL_RESULT_TOKEN_LIMIT * 4) {
       const truncateAt = Math.floor(
-        (result.length * TOOL_RESULT_TOKEN_LIMIT * 4) / totalChars
+        (result.length * TOOL_RESULT_TOKEN_LIMIT * 4) / totalChars,
       );
       return [...result.slice(0, truncateAt), TRUNCATION_GUIDANCE];
     }
@@ -277,7 +277,7 @@ export function validatePath(path: string | null | undefined): string {
 export function globSearchFiles(
   files: Record<string, FileData>,
   pattern: string,
-  path: string = "/"
+  path: string = "/",
 ): string {
   let normalizedPath: string;
   try {
@@ -287,7 +287,7 @@ export function globSearchFiles(
   }
 
   const filtered = Object.fromEntries(
-    Object.entries(files).filter(([fp]) => fp.startsWith(normalizedPath))
+    Object.entries(files).filter(([fp]) => fp.startsWith(normalizedPath)),
   );
 
   // Respect standard glob semantics:
@@ -335,7 +335,7 @@ export function globSearchFiles(
  */
 export function formatGrepResults(
   results: Record<string, Array<[number, string]>>,
-  outputMode: "files_with_matches" | "content" | "count"
+  outputMode: "files_with_matches" | "content" | "count",
 ): string {
   if (outputMode === "files_with_matches") {
     return Object.keys(results).sort().join("\n");
@@ -381,7 +381,7 @@ export function grepSearchFiles(
   pattern: string,
   path: string | null = null,
   glob: string | null = null,
-  outputMode: "files_with_matches" | "content" | "count" = "files_with_matches"
+  outputMode: "files_with_matches" | "content" | "count" = "files_with_matches",
 ): string {
   let regex: RegExp;
   try {
@@ -398,14 +398,14 @@ export function grepSearchFiles(
   }
 
   let filtered = Object.fromEntries(
-    Object.entries(files).filter(([fp]) => fp.startsWith(normalizedPath))
+    Object.entries(files).filter(([fp]) => fp.startsWith(normalizedPath)),
   );
 
   if (glob) {
     filtered = Object.fromEntries(
       Object.entries(filtered).filter(([fp]) =>
-        micromatch.isMatch(basename(fp), glob, { dot: true, nobrace: false })
-      )
+        micromatch.isMatch(basename(fp), glob, { dot: true, nobrace: false }),
+      ),
     );
   }
 
@@ -442,7 +442,7 @@ export function grepMatchesFromFiles(
   files: Record<string, FileData>,
   pattern: string,
   path: string | null = null,
-  glob: string | null = null
+  glob: string | null = null,
 ): GrepMatch[] | string {
   let regex: RegExp;
   try {
@@ -459,14 +459,14 @@ export function grepMatchesFromFiles(
   }
 
   let filtered = Object.fromEntries(
-    Object.entries(files).filter(([fp]) => fp.startsWith(normalizedPath))
+    Object.entries(files).filter(([fp]) => fp.startsWith(normalizedPath)),
   );
 
   if (glob) {
     filtered = Object.fromEntries(
       Object.entries(filtered).filter(([fp]) =>
-        micromatch.isMatch(basename(fp), glob, { dot: true, nobrace: false })
-      )
+        micromatch.isMatch(basename(fp), glob, { dot: true, nobrace: false }),
+      ),
     );
   }
 
@@ -488,7 +488,7 @@ export function grepMatchesFromFiles(
  * Group structured matches into the legacy dict form used by formatters.
  */
 export function buildGrepResultsDict(
-  matches: GrepMatch[]
+  matches: GrepMatch[],
 ): Record<string, Array<[number, string]>> {
   const grouped: Record<string, Array<[number, string]>> = {};
   for (const m of matches) {
@@ -505,7 +505,7 @@ export function buildGrepResultsDict(
  */
 export function formatGrepMatches(
   matches: GrepMatch[],
-  outputMode: "files_with_matches" | "content" | "count"
+  outputMode: "files_with_matches" | "content" | "count",
 ): string {
   if (matches.length === 0) {
     return "No matches found";
