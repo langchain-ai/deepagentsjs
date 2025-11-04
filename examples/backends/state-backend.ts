@@ -8,13 +8,7 @@ import { HumanMessage } from "@langchain/core/messages";
 import { createDeepAgent, StateBackend } from "../../src/index.js";
 
 const internetSearch = tool(
-  async ({
-    query,
-    maxResults = 5,
-  }: {
-    query: string;
-    maxResults?: number;
-  }) => {
+  async ({ query, maxResults = 5 }: { query: string; maxResults?: number }) => {
     const tavilySearch = new TavilySearch({
       maxResults,
       tavilyApiKey: process.env.TAVILY_API_KEY,
@@ -38,7 +32,7 @@ const internetSearch = tool(
   },
 );
 
-const systemPrompt = `You are a research assistant using in-memory storage.
+const systemPrompt = `You are a research assistant.
 
 Your files are stored in memory and will be lost when the conversation ends.
 
