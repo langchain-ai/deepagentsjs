@@ -18,7 +18,7 @@ const WeatherToolMiddleware = createMiddleware({
  * Helper to extract all tool calls from agent response
  */
 function extractAllToolCalls(
-  response: any
+  response: any,
 ): Array<{ name: string; args: Record<string, any>; model?: string }> {
   const messages = response.messages || [];
   const aiMessages = messages.filter((msg: any) => AIMessage.isInstance(msg));
@@ -27,7 +27,7 @@ function extractAllToolCalls(
       name: toolCall.name,
       args: toolCall.args,
       model: msg.response_metadata?.model_name || undefined,
-    }))
+    })),
   );
 }
 
@@ -42,7 +42,7 @@ async function assertExpectedSubgraphActions(
     model?: string;
   }>,
   agent: ReactAgent,
-  input: any
+  input: any,
 ) {
   const actualToolCalls: Array<{
     name: string;
@@ -70,7 +70,7 @@ async function assertExpectedSubgraphActions(
         name: toolCall.name,
         args: toolCall.args,
         model: lastAiMessage.response_metadata?.model_name || undefined,
-      }))
+      })),
     );
   }
 
@@ -107,7 +107,7 @@ describe("Subagent Middleware Integration Tests", () => {
 
       expect(taskCall).toBeDefined();
       expect(taskCall!.args.subagent_type).toBe("general-purpose");
-    }
+    },
   );
 
   it.concurrent(
@@ -147,7 +147,7 @@ describe("Subagent Middleware Integration Tests", () => {
 
       expect(taskCall).toBeDefined();
       expect(taskCall!.args.subagent_type).toBe("weather");
-    }
+    },
   );
 
   it.concurrent(
@@ -182,7 +182,7 @@ describe("Subagent Middleware Integration Tests", () => {
       await assertExpectedSubgraphActions(expectedToolCalls, agent, {
         messages: [new HumanMessage("What is the weather in Tokyo?")],
       });
-    }
+    },
   );
 
   it.concurrent(
@@ -218,7 +218,7 @@ describe("Subagent Middleware Integration Tests", () => {
       await assertExpectedSubgraphActions(expectedToolCalls, agent, {
         messages: [new HumanMessage("What is the weather in Tokyo?")],
       });
-    }
+    },
   );
 
   it.concurrent(
@@ -255,7 +255,7 @@ describe("Subagent Middleware Integration Tests", () => {
       await assertExpectedSubgraphActions(expectedToolCalls, agent, {
         messages: [new HumanMessage("What is the weather in Tokyo?")],
       });
-    }
+    },
   );
 
   it.concurrent(
@@ -305,6 +305,100 @@ describe("Subagent Middleware Integration Tests", () => {
       const toolCalls2 = extractAllToolCalls(response2);
       const taskCall2 = toolCalls2.find((tc) => tc.name === "task");
       expect(taskCall2?.args.subagent_type).toBe("soccer");
-    }
+    },
+  );
+
+  it.concurrent(
+    "should initialize subagent middleware with default settings",
+    { timeout: 60000 },
+    async () => {
+      const middleware = createSubAgentMiddleware({
+        defaultModel: SAMPLE_MODEL,
+        defaultTools: [],
+        subagents: [],
+      });
+
+      expect(middleware).toBeDefined();
+      expect(middleware.name).toBe("subAgentMiddleware");
+      expect(middleware.tools).toBeDefined();
+      expect(middleware.tools).toHaveLength(1);
+      expect(middleware.tools![0].name).toBe("task");
+
+      const agent = createAgent({
+        model: SAMPLE_MODEL,
+        middleware: [middleware],
+      });
+
+      const tools = extractToolsFromAgent(agent);
+      expect(tools.task).toBeDefined();
+      expect(tools.task.description).toContain("general-purpose");
+    },
+  );
+
+  it.concurrent(
+    "should initialize general-purpose subagent with default tools",
+    { timeout: 60000 },
+    async () => {
+      const agent = createAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt: "Use the general-purpose subagent to call tools.",
+        middleware: [
+          createSubAgentMiddleware({
+            defaultModel: SAMPLE_MODEL,
+            defaultTools: [getWeather, getSoccerScores],
+          }),
+        ],
+      });
+
+      const response = await agent.invoke({
+        messages: [
+          new HumanMessage(
+            "Use the general-purpose subagent to get the weather in Tokyo",
+          ),
+        ],
+      });
+
+      const toolCalls = extractAllToolCalls(response);
+      const taskCall = toolCalls.find((tc) => tc.name === "task");
+
+      expect(taskCall).toBeDefined();
+      expect(taskCall!.args.subagent_type).toBe("general-purpose");
+    },
+  );
+
+  it.concurrent(
+    "should use custom system prompt in general-purpose subagent",
+    { timeout: 60000 },
+    async () => {
+      const customPrompt =
+        "You are a specialized assistant. In every response, you must include the word 'specialized'.";
+
+      const agent = createAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt:
+          "Use the general-purpose subagent to answer the user's question.",
+        middleware: [
+          createSubAgentMiddleware({
+            defaultModel: SAMPLE_MODEL,
+            defaultTools: [],
+            systemPrompt: customPrompt,
+          }),
+        ],
+      });
+
+      const response = await agent.invoke({
+        messages: [
+          new HumanMessage(
+            "Use the general-purpose subagent to tell me about your capabilities",
+          ),
+        ],
+      });
+
+      const toolCalls = extractAllToolCalls(response);
+      const taskCall = toolCalls.find((tc) => tc.name === "task");
+      expect(taskCall).toBeDefined();
+      expect(taskCall!.args.subagent_type).toBe("general-purpose");
+      expect(response.messages.length).toBeGreaterThan(0);
+    },
   );
 });

@@ -10,7 +10,6 @@ export { createDeepAgent, type CreateDeepAgentParams } from "./agent.js";
 // Export middleware
 export {
   createFilesystemMiddleware,
-  FilesystemMiddleware,
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
   type FilesystemMiddlewareOptions,
@@ -18,3 +17,17 @@ export {
   type SubAgent,
   type FileData,
 } from "./middleware/index.js";
+
+// Export backends
+export {
+  StateBackend,
+  StoreBackend,
+  FilesystemBackend,
+  CompositeBackend,
+  type BackendProtocol,
+  type BackendFactory,
+  type FileInfo,
+  type GrepMatch,
+  type WriteResult,
+  type EditResult,
+} from "./backends/index.js";

@@ -1,7 +1,5 @@
 export {
-  fsMiddleware,
   createFilesystemMiddleware,
-  FilesystemMiddleware,
   type FilesystemMiddlewareOptions,
   type FileData,
 } from "./fs.js";

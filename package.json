@@ -1,6 +1,6 @@
 {
   "name": "deepagents",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.3",
   "description": "Deep Agents - a library for building controllable AI agents with LangGraph",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -42,7 +42,9 @@
     "@langchain/anthropic": "^1.0.0",
     "@langchain/core": "^1.0.0",
     "@langchain/langgraph": "^1.0.0",
+    "fast-glob": "^3.3.3",
     "langchain": "^1.0.0",
+    "micromatch": "^4.0.8",
     "zod": "^4.1.11"
   },
   "devDependencies": {
@@ -51,6 +53,7 @@
     "@langchain/openai": "^1.0.0",
     "@langchain/tavily": "^0.1.4",
     "@tsconfig/recommended": "^1.0.10",
+    "@types/micromatch": "^4.0.10",
     "@types/node": "^22.13.5",
     "@vitest/ui": "^2.1.8",
     "dotenv": "^17.2.1",

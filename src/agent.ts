@@ -21,6 +21,7 @@ import {
   createPatchToolCallsMiddleware,
   type SubAgent,
 } from "./middleware/index.js";
+import { StateBackend, type BackendProtocol } from "./backends/index.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { AnnotationRoot } from "@langchain/langgraph";
 
@@ -51,8 +52,14 @@ export interface CreateDeepAgentParams<
   checkpointer?: BaseCheckpointSaver | boolean;
   /** Optional store for persisting longterm memories */
   store?: BaseStore;
-  /** Whether to use longterm memory - requires a store to be provided */
-  useLongtermMemory?: boolean;
+  /**
+   * Optional backend for filesystem operations.
+   * Can be either a backend instance or a factory function that creates one.
+   * The factory receives a config object with state and store.
+   */
+  backend?:
+    | BackendProtocol
+    | ((config: { state: unknown; store?: BaseStore }) => BackendProtocol);
   /** Optional interrupt configuration mapping tool names to interrupt configs */
   interruptOn?: Record<string, boolean | InterruptOnConfig>;
   /** The name of the agent */
@@ -93,7 +100,7 @@ export function createDeepAgent<
     contextSchema,
     checkpointer,
     store,
-    useLongtermMemory = false,
+    backend,
     interruptOn,
     name,
   } = params;
@@ -103,11 +110,18 @@ export function createDeepAgent<
     ? `${systemPrompt}\n\n${BASE_PROMPT}`
     : BASE_PROMPT;
 
+  // Create backend configuration for filesystem middleware
+  // If no backend is provided, use a factory that creates a StateBackend
+  const filesystemBackend = backend
+    ? backend
+    : (config: { state: unknown; store?: BaseStore }) =>
+        new StateBackend(config);
+
   const middleware: AgentMiddleware[] = [
     // Provides todo list management capabilities for tracking tasks
     todoListMiddleware(),
     // Enables filesystem operations and optional long-term memory storage
-    createFilesystemMiddleware({ longTermMemory: useLongtermMemory }),
+    createFilesystemMiddleware({ backend: filesystemBackend }),
     // Enables delegation to specialized subagents for complex tasks
     createSubAgentMiddleware({
       defaultModel: model,
@@ -117,7 +131,7 @@ export function createDeepAgent<
         todoListMiddleware(),
         // Subagent middleware: Filesystem operations
         createFilesystemMiddleware({
-          longTermMemory: useLongtermMemory,
+          backend: filesystemBackend,
         }),
         // Subagent middleware: Automatic conversation summarization when token limits are approached
         summarizationMiddleware({

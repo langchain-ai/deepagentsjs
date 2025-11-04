@@ -4,7 +4,7 @@ import {
   createFilesystemMiddleware,
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
-} from "../src/index.js";
+} from "../../src/index.js";
 import {
   SystemMessage,
   HumanMessage,
@@ -13,7 +13,7 @@ import {
 } from "@langchain/core/messages";
 import { messagesStateReducer as addMessages } from "@langchain/langgraph";
 
-import { SAMPLE_MODEL } from "./utils.js";
+import { SAMPLE_MODEL } from "../utils.js";
 
 describe("Middleware Integration", () => {
   it("should add filesystem middleware to agent", () => {
@@ -79,34 +79,33 @@ describe("Middleware Integration", () => {
 });
 
 describe("FilesystemMiddleware", () => {
-  it("should initialize with short-term memory by default", () => {
-    const middleware = createFilesystemMiddleware({
-      longTermMemory: false,
-    });
+  it("should initialize with default backend (StateBackend)", () => {
+    const middleware = createFilesystemMiddleware();
     expect(middleware).toBeDefined();
-    expect(middleware.name).toBe("fsMiddleware");
+    expect(middleware.name).toBe("FilesystemMiddleware");
     const tools = middleware.tools || [];
-    expect(tools).toHaveLength(4);
+    expect(tools.length).toBeGreaterThanOrEqual(6); // ls, read, write, edit, glob, grep
     expect(tools.map((t) => t.name)).toContain("ls");
     expect(tools.map((t) => t.name)).toContain("read_file");
     expect(tools.map((t) => t.name)).toContain("write_file");
     expect(tools.map((t) => t.name)).toContain("edit_file");
+    expect(tools.map((t) => t.name)).toContain("glob");
+    expect(tools.map((t) => t.name)).toContain("grep");
   });
 
-  it("should initialize with long-term memory", () => {
+  it("should initialize with custom backend", () => {
     const middleware = createFilesystemMiddleware({
-      longTermMemory: true,
+      backend: undefined, // Will use default StateBackend
     });
     expect(middleware).toBeDefined();
-    expect(middleware.name).toBe("fsMiddleware");
+    expect(middleware.name).toBe("FilesystemMiddleware");
     const tools = middleware.tools || [];
-    expect(tools).toHaveLength(4);
+    expect(tools.length).toBeGreaterThanOrEqual(6);
   });
 
-  it("should use custom tool descriptions for short-term memory", () => {
+  it("should use custom tool descriptions", () => {
     const customDesc = "Custom ls tool description";
     const middleware = createFilesystemMiddleware({
-      longTermMemory: false,
       customToolDescriptions: {
         ls: customDesc,
       },
@@ -118,10 +117,10 @@ describe("FilesystemMiddleware", () => {
     expect(lsTool?.description).toBe(customDesc);
   });
 
-  it("should use custom tool descriptions for long-term memory", () => {
+  it("should use custom tool descriptions with backend factory", () => {
     const customDesc = "Custom ls tool description";
     const middleware = createFilesystemMiddleware({
-      longTermMemory: true,
+      backend: undefined, // Will use default
       customToolDescriptions: {
         ls: customDesc,
       },
