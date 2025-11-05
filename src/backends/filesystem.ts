@@ -105,7 +105,9 @@ export class FilesystemBackend implements BackendProtocol {
       const entries = await fs.readdir(resolvedPath, { withFileTypes: true });
       const results: FileInfo[] = [];
 
-      const cwdStr = this.cwd.endsWith("/") ? this.cwd : this.cwd + "/";
+      const cwdStr = this.cwd.endsWith(path.sep)
+        ? this.cwd
+        : this.cwd + path.sep;
 
       for (const entry of entries) {
         const fullPath = path.join(resolvedPath, entry.name);
@@ -126,25 +128,25 @@ export class FilesystemBackend implements BackendProtocol {
               });
             } else if (isDir) {
               results.push({
-                path: fullPath + "/",
+                path: fullPath + path.sep,
                 is_dir: true,
                 size: 0,
                 modified_at: entryStat.mtime.toISOString(),
               });
             }
           } else {
-            // Virtual mode: strip cwd prefix
             let relativePath: string;
             if (fullPath.startsWith(cwdStr)) {
               relativePath = fullPath.substring(cwdStr.length);
             } else if (fullPath.startsWith(this.cwd)) {
               relativePath = fullPath
                 .substring(this.cwd.length)
-                .replace(/^\//, "");
+                .replace(/^[\/\\]/, "");
             } else {
               relativePath = fullPath;
             }
 
+            relativePath = relativePath.split(path.sep).join("/");
             const virtPath = "/" + relativePath;
 
             if (isFile) {
@@ -454,7 +456,8 @@ export class FilesystemBackend implements BackendProtocol {
                 const resolved = path.resolve(ftext);
                 const relative = path.relative(this.cwd, resolved);
                 if (relative.startsWith("..")) continue;
-                virtPath = "/" + relative;
+                const normalizedRelative = relative.split(path.sep).join("/");
+                virtPath = "/" + normalizedRelative;
               } catch {
                 continue;
               }
@@ -540,7 +543,8 @@ export class FilesystemBackend implements BackendProtocol {
               try {
                 const relative = path.relative(this.cwd, fp);
                 if (relative.startsWith("..")) continue;
-                virtPath = "/" + relative;
+                const normalizedRelative = relative.split(path.sep).join("/");
+                virtPath = "/" + normalizedRelative;
               } catch {
                 continue;
               }
@@ -610,7 +614,9 @@ export class FilesystemBackend implements BackendProtocol {
               modified_at: stat.mtime.toISOString(),
             });
           } else {
-            const cwdStr = this.cwd.endsWith("/") ? this.cwd : this.cwd + "/";
+            const cwdStr = this.cwd.endsWith(path.sep)
+              ? this.cwd
+              : this.cwd + path.sep;
             let relativePath: string;
 
             if (matchedPath.startsWith(cwdStr)) {
@@ -618,11 +624,12 @@ export class FilesystemBackend implements BackendProtocol {
             } else if (matchedPath.startsWith(this.cwd)) {
               relativePath = matchedPath
                 .substring(this.cwd.length)
-                .replace(/^\//, "");
+                .replace(/^[\/\\]/, "");
             } else {
               relativePath = matchedPath;
             }
 
+            relativePath = relativePath.split(path.sep).join("/");
             const virt = "/" + relativePath;
             results.push({
               path: virt,
