@@ -606,9 +606,14 @@ export class FilesystemBackend implements BackendProtocol {
           const stat = await fs.stat(matchedPath);
           if (!stat.isFile()) continue;
 
+          // Normalize fast-glob paths to platform separators
+          // fast-glob returns forward slashes on all platforms, but we need
+          // platform-native separators for path comparisons on Windows
+          const normalizedPath = matchedPath.split("/").join(path.sep);
+
           if (!this.virtualMode) {
             results.push({
-              path: matchedPath,
+              path: normalizedPath,
               is_dir: false,
               size: stat.size,
               modified_at: stat.mtime.toISOString(),
@@ -619,14 +624,14 @@ export class FilesystemBackend implements BackendProtocol {
               : this.cwd + path.sep;
             let relativePath: string;
 
-            if (matchedPath.startsWith(cwdStr)) {
-              relativePath = matchedPath.substring(cwdStr.length);
-            } else if (matchedPath.startsWith(this.cwd)) {
-              relativePath = matchedPath
+            if (normalizedPath.startsWith(cwdStr)) {
+              relativePath = normalizedPath.substring(cwdStr.length);
+            } else if (normalizedPath.startsWith(this.cwd)) {
+              relativePath = normalizedPath
                 .substring(this.cwd.length)
                 .replace(/^[/\\]/, "");
             } else {
-              relativePath = matchedPath;
+              relativePath = normalizedPath;
             }
 
             relativePath = relativePath.split(path.sep).join("/");
