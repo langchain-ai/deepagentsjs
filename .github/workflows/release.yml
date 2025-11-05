@@ -39,6 +39,9 @@ jobs:
 
       - name: Run Tests
         run: pnpm test
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Create Release Pull Request or Publish to npm
         id: changesets
