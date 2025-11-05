@@ -297,7 +297,6 @@ function getSubagents(options: {
       systemPrompt: agentParams.systemPrompt,
       tools: agentParams.tools ?? defaultTools,
       middleware,
-      checkpointer: false,
     });
   }
 
