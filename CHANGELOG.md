@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.1.0
+
+### Minor Changes
+
+- 39c64e1: Bumping to 1.1.0 because there was an old published version of 1.0.0 which was deprecated
+
 ## 1.0.0
 
 ### Major Changes
