@@ -36,6 +36,9 @@ importers:
       '@eslint/js':
         specifier: ^9.19.0
         version: 9.38.0
+      '@langchain/langgraph-checkpoint':
+        specifier: ^0.0.13
+        version: 0.0.13(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))
       '@langchain/openai':
         specifier: ^1.0.0
         version: 1.0.0(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))
@@ -51,6 +54,9 @@ importers:
       '@types/node':
         specifier: ^22.13.5
         version: 22.18.13
+      '@types/uuid':
+        specifier: ^10.0.0
+        version: 10.0.0
       '@vitest/ui':
         specifier: ^2.1.8
         version: 2.1.9(vitest@2.1.9)
@@ -90,6 +96,9 @@ importers:
       typescript-eslint:
         specifier: ^8.22.0
         version: 8.46.2(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)
+      uuid:
+        specifier: ^11.0.5
+        version: 11.1.0
       vitest:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.18.13)(@vitest/ui@2.1.9)
@@ -516,6 +525,12 @@ packages:
   '@langchain/core@1.0.2':
     resolution: {integrity: sha512-6mOn4bZyO6XT0GGrEijRtMVrmYJGZ8y1BcwyTPDptFz38lP0CEzrKEYB++h+u3TEcAd3eO25l1aGw/zVlVgw2Q==}
     engines: {node: '>=20'}
+
+  '@langchain/langgraph-checkpoint@0.0.13':
+    resolution: {integrity: sha512-amdmBcNT8a9xP2VwcEWxqArng4gtRDcnVyVI4DsQIo1Aaz8e8+hH17zSwrUF3pt1pIYztngIfYnBOim31mtKMg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@langchain/core': '>=0.2.31 <0.4.0'
 
   '@langchain/langgraph-checkpoint@1.0.0':
     resolution: {integrity: sha512-xrclBGvNCXDmi0Nz28t3vjpxSH6UYx6w5XAXSiiB1WEdc2xD2iY/a913I3x3a31XpInUW/GGfXXfePfaghV54A==}
@@ -2108,6 +2123,10 @@ packages:
     resolution: {integrity: sha512-8XkAphELsDnEGrDxUOHB3RGvXz6TeuYSGEZBOjtTtPm2lwhGBjLgOzLHB63IUWfBpNucQjND6d3AOudO+H3RWQ==}
     hasBin: true
 
+  uuid@11.1.0:
+    resolution: {integrity: sha512-0/A9rDy9P7cJ+8w1c9WD9V//9Wj15Ce2MPz8Ri6032usz+NfePxx5AcN3bN+r6ZL6jEo066/yNYB3tn4pQEx+A==}
+    hasBin: true
+
   uuid@9.0.1:
     resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
     hasBin: true
@@ -2509,6 +2528,11 @@ snapshots:
       - '@opentelemetry/exporter-trace-otlp-proto'
       - '@opentelemetry/sdk-trace-base'
       - openai
+
+  '@langchain/langgraph-checkpoint@0.0.13(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))':
+    dependencies:
+      '@langchain/core': 1.0.2(openai@6.7.0(zod@4.1.12))
+      uuid: 10.0.0
 
   '@langchain/langgraph-checkpoint@1.0.0(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))':
     dependencies:
@@ -4246,6 +4270,8 @@ snapshots:
       punycode: 2.3.1
 
   uuid@10.0.0: {}
+
+  uuid@11.1.0: {}
 
   uuid@9.0.1: {}
 
