@@ -58,7 +58,7 @@ describe("FilesystemBackend", () => {
     const paths = new Set(infos.map((i) => i.path));
     expect(paths.has(f1)).toBe(true);
     expect(paths.has(f2)).toBe(false);
-    expect(paths.has(path.join(root, "dir") + "/")).toBe(true);
+    expect(paths.has(path.join(root, "dir") + path.sep)).toBe(true);
 
     const txt = await backend.read(f1);
     expect(txt).toContain("hello fs");
@@ -200,13 +200,13 @@ describe("FilesystemBackend", () => {
     const rootListing = await backend.lsInfo(root);
     const rootPaths = rootListing.map((fi) => fi.path);
     expect(rootPaths).toContain(path.join(root, "file1.txt"));
-    expect(rootPaths).toContain(path.join(root, "subdir") + "/");
+    expect(rootPaths).toContain(path.join(root, "subdir") + path.sep);
     expect(rootPaths).not.toContain(path.join(root, "subdir", "file2.txt"));
 
     const subdirListing = await backend.lsInfo(path.join(root, "subdir"));
     const subdirPaths = subdirListing.map((fi) => fi.path);
     expect(subdirPaths).toContain(path.join(root, "subdir", "file2.txt"));
-    expect(subdirPaths).toContain(path.join(root, "subdir", "nested") + "/");
+    expect(subdirPaths).toContain(path.join(root, "subdir", "nested") + path.sep);
     expect(subdirPaths).not.toContain(
       path.join(root, "subdir", "nested", "file3.txt")
     );

@@ -141,7 +141,7 @@ export class FilesystemBackend implements BackendProtocol {
             } else if (fullPath.startsWith(this.cwd)) {
               relativePath = fullPath
                 .substring(this.cwd.length)
-                .replace(/^[\/\\]/, "");
+                .replace(/^[/\\]/, "");
             } else {
               relativePath = fullPath;
             }
@@ -624,7 +624,7 @@ export class FilesystemBackend implements BackendProtocol {
             } else if (matchedPath.startsWith(this.cwd)) {
               relativePath = matchedPath
                 .substring(this.cwd.length)
-                .replace(/^[\/\\]/, "");
+                .replace(/^[/\\]/, "");
             } else {
               relativePath = matchedPath;
             }
