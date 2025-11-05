@@ -1,5 +1,5 @@
 {
-  "extends": "@tsconfig/recommended",
+  "extends": "@tsconfig/recommended/tsconfig.json",
   "compilerOptions": {
     "target": "ES2021",
     "lib": ["ES2023", "DOM"],
@@ -17,11 +17,10 @@
     "strict": true,
     "strictFunctionTypes": false,
     "outDir": "dist",
-    "rootDir": "src",
     "types": ["node"],
     "resolveJsonModule": true,
     "isolatedModules": true
   },
-  "include": ["src/**/*.ts", "src/*.ts"],
+  "include": ["src/**/*.ts", "src/*.ts", "tests/**/*.ts", "tests/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
