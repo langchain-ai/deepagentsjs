@@ -42,3 +42,6 @@ jobs:
         run: pnpm build
       - name: Run tests
         run: pnpm test
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
