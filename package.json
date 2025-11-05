@@ -50,11 +50,13 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.1.0",
     "@eslint/js": "^9.19.0",
+    "@langchain/langgraph-checkpoint": "^0.0.13",
     "@langchain/openai": "^1.0.0",
     "@langchain/tavily": "^0.1.4",
     "@tsconfig/recommended": "^1.0.10",
     "@types/micromatch": "^4.0.10",
     "@types/node": "^22.13.5",
+    "@types/uuid": "^10.0.0",
     "@vitest/ui": "^2.1.8",
     "dotenv": "^17.2.1",
     "eslint": "^9.19.0",
@@ -68,6 +70,7 @@
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.22.0",
+    "uuid": "^11.0.5",
     "vitest": "^2.1.8"
   },
   "files": [
