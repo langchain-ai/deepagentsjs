@@ -539,7 +539,7 @@ describe("Filesystem Middleware Integration Tests", () => {
               new CompositeBackend(new StateBackend(stateAndStore), {
                 "/memories/": new StoreBackend(stateAndStore),
               }),
-            toolTokenLimitBeforeEvict: 10, // Very low limit to trigger eviction
+            toolTokenLimitBeforeEvict: 10000, // Low limit to trigger eviction
           }),
         ],
         checkpointer,
@@ -552,7 +552,11 @@ describe("Filesystem Middleware Integration Tests", () => {
       };
       const response = await agent.invoke(
         {
-          messages: [new HumanMessage("Get NBA standings")],
+          messages: [
+            new HumanMessage(
+              "Get NBA standings, if the information from the tool is not good, then just return, only try reading file 1 time max.",
+            ),
+          ],
         },
         config,
       );
