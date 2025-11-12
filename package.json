@@ -44,7 +44,7 @@
     "@langchain/core": "^1.0.0",
     "@langchain/langgraph": "^1.0.0",
     "fast-glob": "^3.3.3",
-    "langchain": "^1.0.0",
+    "langchain": "^1.0.4",
     "micromatch": "^4.0.8",
     "zod": "^4.1.11"
   },

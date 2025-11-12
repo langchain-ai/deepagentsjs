@@ -9,7 +9,7 @@ import {
   type InterruptOnConfig,
 } from "langchain";
 import type { StructuredTool } from "@langchain/core/tools";
-import type { LanguageModelLike } from "@langchain/core/language_models/base";
+import type { BaseLanguageModel } from "@langchain/core/language_models/base";
 import type {
   BaseCheckpointSaver,
   BaseStore,
@@ -35,7 +35,7 @@ export interface CreateDeepAgentParams<
     | InteropZodObject = AnnotationRoot<any>,
 > {
   /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
-  model?: LanguageModelLike | string;
+  model?: BaseLanguageModel | string;
   /** Tools the agent should have access to */
   tools?: StructuredTool[];
   /** Custom system prompt for the agent. This will be combined with the base agent prompt */
@@ -135,8 +135,7 @@ export function createDeepAgent<
         }),
         // Subagent middleware: Automatic conversation summarization when token limits are approached
         summarizationMiddleware({
-          // TODO: make sure that the summarization middleware accepts a string model name
-          model: model as any,
+          model,
           maxTokensBeforeSummary: 170000,
           messagesToKeep: 6,
         }),
@@ -153,8 +152,7 @@ export function createDeepAgent<
     }),
     // Automatically summarizes conversation history when token limits are approached
     summarizationMiddleware({
-      // TODO: make sure that the summarization middleware accepts a string model name
-      model: model as any,
+      model,
       maxTokensBeforeSummary: 170000,
       messagesToKeep: 6,
     }),

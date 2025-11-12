@@ -21,8 +21,8 @@ importers:
         specifier: ^3.3.3
         version: 3.3.3
       langchain:
-        specifier: ^1.0.0
-        version: 1.0.2(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))(openai@6.7.0(zod@4.1.12))
+        specifier: ^1.0.4
+        version: 1.0.4(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))(openai@6.7.0(zod@4.1.12))
       micromatch:
         specifier: ^4.0.8
         version: 4.0.8
@@ -1767,11 +1767,11 @@ packages:
   keyv@4.5.4:
     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
 
-  langchain@1.0.2:
-    resolution: {integrity: sha512-He/xvjVl8DHESvdaW6Dpyba72OaLCAfS2CyOm1aWrlJ4C38dKXyTIxphtld8hiii6MWX7qMSmu2EaUwWBx2STg==}
+  langchain@1.0.4:
+    resolution: {integrity: sha512-g7z2kKvnXOecybbVGHfI2ZmdmP309mxC1FYlq6WC/7RsKgX5MwY9gBjwK16mpKOaozOD9QCo1Ia7o2UcUBRb9Q==}
     engines: {node: '>=20'}
     peerDependencies:
-      '@langchain/core': ^1.0.0
+      '@langchain/core': ^1.0.3
 
   langsmith@0.3.76:
     resolution: {integrity: sha512-JIRyT+InuaaMxq3dhXVOAkedAsugY5TOEAJrI87UuIfJVgV2i7K/lPI4+jNtakaYL9gIKbIwpXHBMpb8rrRgOg==}
@@ -4194,7 +4194,7 @@ snapshots:
     dependencies:
       json-buffer: 3.0.1
 
-  langchain@1.0.2(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))(openai@6.7.0(zod@4.1.12)):
+  langchain@1.0.4(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))(openai@6.7.0(zod@4.1.12)):
     dependencies:
       '@langchain/core': 1.0.2(openai@6.7.0(zod@4.1.12))
       '@langchain/langgraph': 1.0.1(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))(zod@4.1.12)
