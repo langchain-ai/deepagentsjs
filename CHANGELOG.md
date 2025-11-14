@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.1.1
+
+### Patch Changes
+
+- dbdef4c: thread config options to subagents
+
 ## 1.1.0
 
 ### Minor Changes
