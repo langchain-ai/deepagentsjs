@@ -364,7 +364,7 @@ function createTaskTool(options: {
       subagentState.messages = [new HumanMessage({ content: description })];
 
       // Invoke the subagent
-      const result = (await subagent.invoke(subagentState)) as Record<
+      const result = (await subagent.invoke(subagentState, config)) as Record<
         string,
         unknown
       >;
