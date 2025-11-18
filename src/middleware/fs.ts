@@ -531,6 +531,7 @@ export function createFilesystemMiddleware(
 
             let hasLargeResults = false;
             const accumulatedFiles: Record<string, FileData> = {
+              ...(request.state?.files || {}),
               ...(update.files || {}),
             };
             const processedMessages: ToolMessage[] = [];
