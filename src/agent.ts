@@ -136,8 +136,8 @@ export function createDeepAgent<
         // Subagent middleware: Automatic conversation summarization when token limits are approached
         summarizationMiddleware({
           model,
-          maxTokensBeforeSummary: 170000,
-          messagesToKeep: 6,
+          trigger: { tokens: 170_000 },
+          keep: { messages: 6 },
         }),
         // Subagent middleware: Anthropic prompt caching for improved performance
         anthropicPromptCachingMiddleware({
@@ -153,8 +153,8 @@ export function createDeepAgent<
     // Automatically summarizes conversation history when token limits are approached
     summarizationMiddleware({
       model,
-      maxTokensBeforeSummary: 170000,
-      messagesToKeep: 6,
+      trigger: { tokens: 170_000 },
+      keep: { messages: 6 },
     }),
     // Enables Anthropic prompt caching for improved performance and reduced costs
     anthropicPromptCachingMiddleware({
