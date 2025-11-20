@@ -1,5 +1,12 @@
 # deepagents
 
+## 1.1.2
+
+### Patch Changes
+
+- c346110: Fix warnings being shown when creating deep agent
+- 3b3e703: fix(store): make sure `getNamespace` can be overriden
+
 ## 1.1.1
 
 ### Patch Changes
