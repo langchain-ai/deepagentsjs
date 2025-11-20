@@ -58,7 +58,7 @@ export class StoreBackend implements BackendProtocol {
    * [assistant_id, "filesystem"] to provide per-assistant isolation.
    * Otherwise return ["filesystem"].
    */
-  private getNamespace(): string[] {
+  protected getNamespace(): string[] {
     const namespace = "filesystem";
     const assistantId = this.stateAndStore.assistantId;
 
