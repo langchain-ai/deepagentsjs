@@ -238,20 +238,27 @@ export class StoreBackend implements BackendProtocol {
     offset: number = 0,
     limit: number = 2000,
   ): Promise<string> {
-    const store = this.getStore();
-    const namespace = this.getNamespace();
-    const item = await store.get(namespace, filePath);
-
-    if (!item) {
-      return `Error: File '${filePath}' not found`;
-    }
-
     try {
-      const fileData = this.convertStoreItemToFileData(item);
+      const fileData = await this.readRaw(filePath);
       return formatReadResponse(fileData, offset, limit);
     } catch (e: any) {
       return `Error: ${e.message}`;
     }
+  }
+
+  /**
+   * Read file content as raw FileData.
+   *
+   * @param filePath - Absolute file path
+   * @returns Raw file content as FileData
+   */
+  async readRaw(filePath: string): Promise<FileData> {
+    const store = this.getStore();
+    const namespace = this.getNamespace();
+    const item = await store.get(namespace, filePath);
+
+    if (!item) throw new Error(`File '${filePath}' not found`);
+    return this.convertStoreItemToFileData(item);
   }
 
   /**

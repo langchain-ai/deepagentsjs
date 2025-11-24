@@ -40,14 +40,14 @@ importers:
         specifier: ^9.19.0
         version: 9.38.0
       '@langchain/langgraph-checkpoint':
-        specifier: ^0.0.13
-        version: 0.0.13(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))
+        specifier: ^1.0.0
+        version: 1.0.0(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))
       '@langchain/openai':
         specifier: ^1.0.0
         version: 1.0.0(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))
       '@langchain/tavily':
-        specifier: ^0.1.4
-        version: 0.1.5(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))
+        specifier: ^1.0.0
+        version: 1.0.0(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))
       '@tsconfig/recommended':
         specifier: ^1.0.10
         version: 1.0.11
@@ -593,12 +593,6 @@ packages:
     resolution: {integrity: sha512-6mOn4bZyO6XT0GGrEijRtMVrmYJGZ8y1BcwyTPDptFz38lP0CEzrKEYB++h+u3TEcAd3eO25l1aGw/zVlVgw2Q==}
     engines: {node: '>=20'}
 
-  '@langchain/langgraph-checkpoint@0.0.13':
-    resolution: {integrity: sha512-amdmBcNT8a9xP2VwcEWxqArng4gtRDcnVyVI4DsQIo1Aaz8e8+hH17zSwrUF3pt1pIYztngIfYnBOim31mtKMg==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      '@langchain/core': '>=0.2.31 <0.4.0'
-
   '@langchain/langgraph-checkpoint@1.0.0':
     resolution: {integrity: sha512-xrclBGvNCXDmi0Nz28t3vjpxSH6UYx6w5XAXSiiB1WEdc2xD2iY/a913I3x3a31XpInUW/GGfXXfePfaghV54A==}
     engines: {node: '>=18'}
@@ -636,11 +630,11 @@ packages:
     peerDependencies:
       '@langchain/core': ^1.0.0
 
-  '@langchain/tavily@0.1.5':
-    resolution: {integrity: sha512-6C8hb3d6YjlGJPdPFfaNlrUS0h6blQx4cRzCKeDdCvixcghzV8llAmuzvJSmAyALprFfvKtj+1NJb4ttj1iZ/A==}
-    engines: {node: '>=18'}
+  '@langchain/tavily@1.0.0':
+    resolution: {integrity: sha512-kE3E1bTYtp4km7YLQM/lKOZW2yANFNsg4Fk33j11uAGcUGKN2skKzpEe4qgF34wRxMi4G4r7Qmpji2j+v24IaA==}
+    engines: {node: '>=20'}
     peerDependencies:
-      '@langchain/core': '>=0.3.58 <0.4.0'
+      '@langchain/core': ^1.0.0
 
   '@manypkg/find-root@1.1.0':
     resolution: {integrity: sha512-mki5uBvhHzO8kYYix/WRy2WX8S3B5wdVSc9D6KcU5lQNglP2yt58/VfLuAK49glRXChosY8ap2oJ1qgma3GUVA==}
@@ -2477,9 +2471,6 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
-  zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
-
   zod@4.1.12:
     resolution: {integrity: sha512-JInaHOamG8pt5+Ey8kGmdcAcg3OL9reK8ltczgHTAwNhMys/6ThXHityHxVV2p3fkw/c+MAvBHFVYHFZDmjMCQ==}
 
@@ -2931,11 +2922,6 @@ snapshots:
       - '@opentelemetry/sdk-trace-base'
       - openai
 
-  '@langchain/langgraph-checkpoint@0.0.13(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))':
-    dependencies:
-      '@langchain/core': 1.0.2(openai@6.7.0(zod@4.1.12))
-      uuid: 10.0.0
-
   '@langchain/langgraph-checkpoint@1.0.0(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))':
     dependencies:
       '@langchain/core': 1.0.2(openai@6.7.0(zod@4.1.12))
@@ -2969,10 +2955,10 @@ snapshots:
     transitivePeerDependencies:
       - ws
 
-  '@langchain/tavily@0.1.5(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))':
+  '@langchain/tavily@1.0.0(@langchain/core@1.0.2(openai@6.7.0(zod@4.1.12)))':
     dependencies:
       '@langchain/core': 1.0.2(openai@6.7.0(zod@4.1.12))
-      zod: 3.25.76
+      zod: 4.1.12
 
   '@manypkg/find-root@1.1.0':
     dependencies:
@@ -4959,7 +4945,5 @@ snapshots:
   word-wrap@1.2.5: {}
 
   yocto-queue@0.1.0: {}
-
-  zod@3.25.76: {}
 
   zod@4.1.12: {}

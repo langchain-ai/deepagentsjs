@@ -125,6 +125,20 @@ export class StateBackend implements BackendProtocol {
   }
 
   /**
+   * Read file content as raw FileData.
+   *
+   * @param filePath - Absolute file path
+   * @returns Raw file content as FileData
+   */
+  readRaw(filePath: string): FileData {
+    const files = this.getFiles();
+    const fileData = files[filePath];
+
+    if (!fileData) throw new Error(`File '${filePath}' not found`);
+    return fileData;
+  }
+
+  /**
    * Create a new file with content.
    * Returns WriteResult with filesUpdate to update LangGraph state.
    */

@@ -65,16 +65,12 @@ export const agent = createDeepAgent({
 async function main() {
   const threadId = uuidv4();
 
+  const message = new HumanMessage(
+    "Research the latest trends in AI agents for 2025",
+  );
   await agent.invoke(
-    {
-      messages: [
-        new HumanMessage("Research the latest trends in AI agents for 2025"),
-      ],
-    },
-    {
-      recursionLimit: 50,
-      configurable: { thread_id: threadId },
-    },
+    { messages: [message] },
+    { recursionLimit: 50, configurable: { thread_id: threadId } },
   );
 
   const threadId2 = uuidv4();

@@ -108,8 +108,12 @@ export const GREP_TOOL_DESCRIPTION =
  */
 function createLsTool(
   backend: BackendProtocol | BackendFactory,
-  customDescription: string | null,
+  options: {
+    customDescription: string | null;
+    events: FilesystemEvents | undefined;
+  },
 ) {
+  const { customDescription } = options;
   return tool(
     async (input, config) => {
       const stateAndStore: StateAndStore = {
@@ -155,8 +159,12 @@ function createLsTool(
  */
 function createReadFileTool(
   backend: BackendProtocol | BackendFactory,
-  customDescription: string | null,
+  options: {
+    customDescription: string | null;
+    events: FilesystemEvents | undefined;
+  },
 ) {
+  const { customDescription } = options;
   return tool(
     async (input, config) => {
       const stateAndStore: StateAndStore = {
@@ -194,8 +202,12 @@ function createReadFileTool(
  */
 function createWriteFileTool(
   backend: BackendProtocol | BackendFactory,
-  customDescription: string | null,
+  options: {
+    customDescription: string | null;
+    events: FilesystemEvents | undefined;
+  },
 ) {
+  const { customDescription, events } = options;
   return tool(
     async (input, config) => {
       const stateAndStore: StateAndStore = {
@@ -204,32 +216,40 @@ function createWriteFileTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const { file_path, content } = input;
-      const result = await awaitIfPromise(
-        resolvedBackend.write(file_path, content),
-      );
+      const result = await resolvedBackend.write(file_path, content);
 
       if (result.error) {
         return result.error;
       }
 
+      const resolved =
+        (await events?.onWrite?.(file_path, resolvedBackend)) ?? undefined;
+
+      const metadata = await (async () => {
+        if (resolved?.kind === "metadata") return resolved.data;
+        if (resolved?.kind === "raw-contents") {
+          const content = await resolvedBackend.readRaw(file_path);
+          return { ...content };
+        }
+
+        return undefined;
+      })();
+
       // If filesUpdate is present, return Command to update state
+      const message = new ToolMessage({
+        content: `Successfully wrote to '${file_path}'`,
+        tool_call_id: config.toolCall?.id as string,
+        name: "write_file",
+        metadata,
+      });
+
       if (result.filesUpdate) {
         return new Command({
-          update: {
-            files: result.filesUpdate,
-            messages: [
-              new ToolMessage({
-                content: `Successfully wrote to '${file_path}'`,
-                tool_call_id: config.toolCall?.id as string,
-                name: "write_file",
-              }),
-            ],
-          },
+          update: { files: result.filesUpdate, messages: [message] },
         });
       }
 
-      // External storage (filesUpdate is null)
-      return `Successfully wrote to '${file_path}'`;
+      return message;
     },
     {
       name: "write_file",
@@ -247,8 +267,12 @@ function createWriteFileTool(
  */
 function createEditFileTool(
   backend: BackendProtocol | BackendFactory,
-  customDescription: string | null,
+  options: {
+    customDescription: string | null;
+    events: FilesystemEvents | undefined;
+  },
 ) {
+  const { customDescription, events } = options;
   return tool(
     async (input, config) => {
       const stateAndStore: StateAndStore = {
@@ -265,21 +289,30 @@ function createEditFileTool(
         return result.error;
       }
 
-      const message = `Successfully replaced ${result.occurrences} occurrence(s) in '${file_path}'`;
+      const resolved =
+        (await events?.onWrite?.(file_path, resolvedBackend)) ?? undefined;
+
+      const metadata = await (async () => {
+        if (resolved?.kind === "metadata") return resolved.data;
+        if (resolved?.kind === "raw-contents") {
+          const content = await resolvedBackend.readRaw(file_path);
+          return { ...content };
+        }
+
+        return undefined;
+      })();
+
+      const message = new ToolMessage({
+        content: `Successfully replaced ${result.occurrences} occurrence(s) in '${file_path}'`,
+        tool_call_id: config.toolCall?.id as string,
+        name: "edit_file",
+        metadata,
+      });
 
       // If filesUpdate is present, return Command to update state
       if (result.filesUpdate) {
         return new Command({
-          update: {
-            files: result.filesUpdate,
-            messages: [
-              new ToolMessage({
-                content: message,
-                tool_call_id: config.toolCall?.id as string,
-                name: "edit_file",
-              }),
-            ],
-          },
+          update: { files: result.filesUpdate, messages: [message] },
         });
       }
 
@@ -310,8 +343,12 @@ function createEditFileTool(
  */
 function createGlobTool(
   backend: BackendProtocol | BackendFactory,
-  customDescription: string | null,
+  options: {
+    customDescription: string | null;
+    events: FilesystemEvents | undefined;
+  },
 ) {
+  const { customDescription } = options;
   return tool(
     async (input, config) => {
       const stateAndStore: StateAndStore = {
@@ -350,8 +387,12 @@ function createGlobTool(
  */
 function createGrepTool(
   backend: BackendProtocol | BackendFactory,
-  customDescription: string | null,
+  options: {
+    customDescription: string | null;
+    events: FilesystemEvents | undefined;
+  },
 ) {
+  const { customDescription } = options;
   return tool(
     async (input, config) => {
       const stateAndStore: StateAndStore = {
@@ -406,6 +447,17 @@ function createGrepTool(
   );
 }
 
+export type FilesystemEventResponse =
+  | { kind: "raw-contents" }
+  | { kind: "metadata"; data: Record<string, unknown> };
+
+export interface FilesystemEvents {
+  onWrite?: (
+    path: string,
+    backend: BackendProtocol,
+  ) => void | FilesystemEventResponse | Promise<void | FilesystemEventResponse>;
+}
+
 /**
  * Options for creating filesystem middleware.
  */
@@ -418,6 +470,8 @@ export interface FilesystemMiddlewareOptions {
   customToolDescriptions?: Record<string, string> | null;
   /** Optional token limit before evicting a tool result to the filesystem (default: 20000 tokens, ~80KB) */
   toolTokenLimitBeforeEvict?: number | null;
+  /** Filesystem events callbacks */
+  events?: FilesystemEvents;
 }
 
 /**
@@ -431,17 +485,36 @@ export function createFilesystemMiddleware(
     systemPrompt: customSystemPrompt = null,
     customToolDescriptions = null,
     toolTokenLimitBeforeEvict = 20000,
+    events = undefined,
   } = options;
 
   const systemPrompt = customSystemPrompt || FILESYSTEM_SYSTEM_PROMPT;
 
   const tools = [
-    createLsTool(backend, customToolDescriptions?.ls ?? null),
-    createReadFileTool(backend, customToolDescriptions?.read_file ?? null),
-    createWriteFileTool(backend, customToolDescriptions?.write_file ?? null),
-    createEditFileTool(backend, customToolDescriptions?.edit_file ?? null),
-    createGlobTool(backend, customToolDescriptions?.glob ?? null),
-    createGrepTool(backend, customToolDescriptions?.grep ?? null),
+    createLsTool(backend, {
+      customDescription: customToolDescriptions?.ls ?? null,
+      events,
+    }),
+    createReadFileTool(backend, {
+      customDescription: customToolDescriptions?.read_file ?? null,
+      events,
+    }),
+    createWriteFileTool(backend, {
+      customDescription: customToolDescriptions?.write_file ?? null,
+      events,
+    }),
+    createEditFileTool(backend, {
+      customDescription: customToolDescriptions?.edit_file ?? null,
+      events,
+    }),
+    createGlobTool(backend, {
+      customDescription: customToolDescriptions?.glob ?? null,
+      events,
+    }),
+    createGrepTool(backend, {
+      customDescription: customToolDescriptions?.grep ?? null,
+      events,
+    }),
   ];
 
   const FilesystemStateSchema = z3.object({

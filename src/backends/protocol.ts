@@ -129,6 +129,14 @@ export interface BackendProtocol {
   ): string | Promise<string>;
 
   /**
+   * Read file content as raw FileData.
+   *
+   * @param filePath - Absolute file path
+   * @returns Raw file content as FileData
+   */
+  readRaw(filePath: string): FileData | Promise<FileData>;
+
+  /**
    * Structured search results or error string for invalid input.
    *
    * Searches file contents for a regex pattern.
