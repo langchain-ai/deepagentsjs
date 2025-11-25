@@ -1,5 +1,16 @@
 # deepagents
 
+## 1.2.0
+
+### Minor Changes
+
+- 73445c2: Add readRaw method to filesystem backend protocol
+
+### Patch Changes
+
+- c346110: Fix warnings being shown when creating deep agent
+- 3b3e703: fix(store): make sure `getNamespace` can be overriden
+
 ## 1.1.1
 
 ### Patch Changes
