@@ -202,6 +202,7 @@ export const agent = createDeepAgent({
     model: "claude-sonnet-4-20250514",
     temperature: 0,
   }),
+
   tools: [internetSearch],
   systemPrompt: researchInstructions,
   subagents: [critiqueSubAgent, researchSubAgent],
