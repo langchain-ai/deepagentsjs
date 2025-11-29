@@ -8,6 +8,8 @@
 
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 
+type MaybePromise<T> = T | Promise<T>;
+
 /**
  * Structured file listing info.
  *
@@ -68,6 +70,8 @@ export interface WriteResult {
    * External backends set null (already persisted to disk/S3/database/etc).
    */
   filesUpdate?: Record<string, FileData> | null;
+  /** Metadata for the write operation, attached to the ToolMessage */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -89,6 +93,8 @@ export interface EditResult {
   filesUpdate?: Record<string, FileData> | null;
   /** Number of replacements made, undefined on failure */
   occurrences?: number;
+  /** Metadata for the edit operation, attached to the ToolMessage */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -112,7 +118,7 @@ export interface BackendProtocol {
    * @param path - Absolute path to directory
    * @returns List of FileInfo objects for files and directories directly in the directory
    */
-  lsInfo(path: string): FileInfo[] | Promise<FileInfo[]>;
+  lsInfo(path: string): MaybePromise<FileInfo[]>;
 
   /**
    * Read file content with line numbers or an error string.
@@ -122,11 +128,7 @@ export interface BackendProtocol {
    * @param limit - Maximum number of lines to read, default 2000
    * @returns Formatted file content with line numbers, or error message
    */
-  read(
-    filePath: string,
-    offset?: number,
-    limit?: number,
-  ): string | Promise<string>;
+  read(filePath: string, offset?: number, limit?: number): MaybePromise<string>;
 
   /**
    * Read file content as raw FileData.
@@ -134,7 +136,7 @@ export interface BackendProtocol {
    * @param filePath - Absolute file path
    * @returns Raw file content as FileData
    */
-  readRaw(filePath: string): FileData | Promise<FileData>;
+  readRaw(filePath: string): MaybePromise<FileData>;
 
   /**
    * Structured search results or error string for invalid input.
@@ -150,7 +152,7 @@ export interface BackendProtocol {
     pattern: string,
     path?: string | null,
     glob?: string | null,
-  ): GrepMatch[] | string | Promise<GrepMatch[] | string>;
+  ): MaybePromise<GrepMatch[] | string>;
 
   /**
    * Structured glob matching returning FileInfo objects.
@@ -159,7 +161,7 @@ export interface BackendProtocol {
    * @param path - Base path to search from (default: "/")
    * @returns List of FileInfo objects matching the pattern
    */
-  globInfo(pattern: string, path?: string): FileInfo[] | Promise<FileInfo[]>;
+  globInfo(pattern: string, path?: string): MaybePromise<FileInfo[]>;
 
   /**
    * Create a new file.
@@ -168,7 +170,7 @@ export interface BackendProtocol {
    * @param content - File content as string
    * @returns WriteResult with error populated on failure
    */
-  write(filePath: string, content: string): WriteResult | Promise<WriteResult>;
+  write(filePath: string, content: string): MaybePromise<WriteResult>;
 
   /**
    * Edit a file by replacing string occurrences.
@@ -184,7 +186,7 @@ export interface BackendProtocol {
     oldString: string,
     newString: string,
     replaceAll?: boolean,
-  ): EditResult | Promise<EditResult>;
+  ): MaybePromise<EditResult>;
 }
 
 /**
