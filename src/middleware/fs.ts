@@ -74,13 +74,6 @@ function getBackend(
   return backend;
 }
 
-/**
- * Helper to await if Promise, otherwise return value directly.
- */
-async function awaitIfPromise<T>(value: T | Promise<T>): Promise<T> {
-  return value;
-}
-
 // System prompts
 const FILESYSTEM_SYSTEM_PROMPT = `You have access to a virtual filesystem. All file paths must start with a /.
 
@@ -122,7 +115,7 @@ function createLsTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const path = input.path || "/";
-      const infos = await awaitIfPromise(resolvedBackend.lsInfo(path));
+      const infos = await resolvedBackend.lsInfo(path);
 
       if (infos.length === 0) {
         return `No files found in ${path}`;
@@ -173,9 +166,7 @@ function createReadFileTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const { file_path, offset = 0, limit = 2000 } = input;
-      return await awaitIfPromise(
-        resolvedBackend.read(file_path, offset, limit),
-      );
+      return await resolvedBackend.read(file_path, offset, limit);
     },
     {
       name: "read_file",
@@ -281,8 +272,11 @@ function createEditFileTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const { file_path, old_string, new_string, replace_all = false } = input;
-      const result = await awaitIfPromise(
-        resolvedBackend.edit(file_path, old_string, new_string, replace_all),
+      const result = await resolvedBackend.edit(
+        file_path,
+        old_string,
+        new_string,
+        replace_all,
       );
 
       if (result.error) {
@@ -357,9 +351,7 @@ function createGlobTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const { pattern, path = "/" } = input;
-      const infos = await awaitIfPromise(
-        resolvedBackend.globInfo(pattern, path),
-      );
+      const infos = await resolvedBackend.globInfo(pattern, path);
 
       if (infos.length === 0) {
         return `No files found matching pattern '${pattern}'`;
@@ -401,9 +393,7 @@ function createGrepTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const { pattern, path = "/", glob = null } = input;
-      const result = await awaitIfPromise(
-        resolvedBackend.grepRaw(pattern, path, glob),
-      );
+      const result = await resolvedBackend.grepRaw(pattern, path, glob);
 
       // If string, it's an error
       if (typeof result === "string") {
@@ -559,8 +549,9 @@ export function createFilesystemMiddleware(
               );
               const evictPath = `/large_tool_results/${sanitizedId}`;
 
-              const writeResult = await awaitIfPromise(
-                resolvedBackend.write(evictPath, msg.content),
+              const writeResult = await resolvedBackend.write(
+                evictPath,
+                msg.content,
               );
 
               if (writeResult.error) {
