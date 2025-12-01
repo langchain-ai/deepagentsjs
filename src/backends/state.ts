@@ -154,7 +154,7 @@ export class StateBackend implements BackendProtocol {
     const newFileData = createFileData(content);
     return {
       path: filePath,
-      filesUpdate: { [filePath]: newFileData },
+      filesUpdate: { ...files, ...{ [filePath]: newFileData } },
     };
   }
 
@@ -191,7 +191,7 @@ export class StateBackend implements BackendProtocol {
     const newFileData = updateFileData(fileData, newContent);
     return {
       path: filePath,
-      filesUpdate: { [filePath]: newFileData },
+      filesUpdate: { ...files, ...{ [filePath]: newFileData } },
       occurrences: occurrences,
     };
   }
