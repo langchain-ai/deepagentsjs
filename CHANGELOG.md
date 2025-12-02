@@ -1,5 +1,12 @@
 # deepagents
 
+## 1.3.0
+
+### Minor Changes
+
+- 6b914ba: Add CompiledSubAgent back to `createDeepAgent`
+- 94b71fb: Allow passing `metadata` to the resulting ToolMessage when editing or saving a file
+
 ## 1.2.0
 
 ### Minor Changes
