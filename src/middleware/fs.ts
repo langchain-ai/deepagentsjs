@@ -74,13 +74,6 @@ function getBackend(
   return backend;
 }
 
-/**
- * Helper to await if Promise, otherwise return value directly.
- */
-async function awaitIfPromise<T>(value: T | Promise<T>): Promise<T> {
-  return value;
-}
-
 // System prompts
 const FILESYSTEM_SYSTEM_PROMPT = `You have access to a virtual filesystem. All file paths must start with a /.
 
@@ -108,10 +101,7 @@ export const GREP_TOOL_DESCRIPTION =
  */
 function createLsTool(
   backend: BackendProtocol | BackendFactory,
-  options: {
-    customDescription: string | null;
-    events: FilesystemEvents | undefined;
-  },
+  options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
   return tool(
@@ -122,7 +112,7 @@ function createLsTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const path = input.path || "/";
-      const infos = await awaitIfPromise(resolvedBackend.lsInfo(path));
+      const infos = await resolvedBackend.lsInfo(path);
 
       if (infos.length === 0) {
         return `No files found in ${path}`;
@@ -159,10 +149,7 @@ function createLsTool(
  */
 function createReadFileTool(
   backend: BackendProtocol | BackendFactory,
-  options: {
-    customDescription: string | null;
-    events: FilesystemEvents | undefined;
-  },
+  options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
   return tool(
@@ -173,9 +160,7 @@ function createReadFileTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const { file_path, offset = 0, limit = 2000 } = input;
-      return await awaitIfPromise(
-        resolvedBackend.read(file_path, offset, limit),
-      );
+      return await resolvedBackend.read(file_path, offset, limit);
     },
     {
       name: "read_file",
@@ -202,12 +187,9 @@ function createReadFileTool(
  */
 function createWriteFileTool(
   backend: BackendProtocol | BackendFactory,
-  options: {
-    customDescription: string | null;
-    events: FilesystemEvents | undefined;
-  },
+  options: { customDescription: string | undefined },
 ) {
-  const { customDescription, events } = options;
+  const { customDescription } = options;
   return tool(
     async (input, config) => {
       const stateAndStore: StateAndStore = {
@@ -222,25 +204,12 @@ function createWriteFileTool(
         return result.error;
       }
 
-      const resolved =
-        (await events?.onWrite?.(file_path, resolvedBackend)) ?? undefined;
-
-      const metadata = await (async () => {
-        if (resolved?.kind === "metadata") return resolved.data;
-        if (resolved?.kind === "raw-contents") {
-          const content = await resolvedBackend.readRaw(file_path);
-          return { ...content };
-        }
-
-        return undefined;
-      })();
-
       // If filesUpdate is present, return Command to update state
       const message = new ToolMessage({
         content: `Successfully wrote to '${file_path}'`,
         tool_call_id: config.toolCall?.id as string,
         name: "write_file",
-        metadata,
+        metadata: result.metadata,
       });
 
       if (result.filesUpdate) {
@@ -267,12 +236,9 @@ function createWriteFileTool(
  */
 function createEditFileTool(
   backend: BackendProtocol | BackendFactory,
-  options: {
-    customDescription: string | null;
-    events: FilesystemEvents | undefined;
-  },
+  options: { customDescription: string | undefined },
 ) {
-  const { customDescription, events } = options;
+  const { customDescription } = options;
   return tool(
     async (input, config) => {
       const stateAndStore: StateAndStore = {
@@ -281,32 +247,22 @@ function createEditFileTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const { file_path, old_string, new_string, replace_all = false } = input;
-      const result = await awaitIfPromise(
-        resolvedBackend.edit(file_path, old_string, new_string, replace_all),
+      const result = await resolvedBackend.edit(
+        file_path,
+        old_string,
+        new_string,
+        replace_all,
       );
 
       if (result.error) {
         return result.error;
       }
 
-      const resolved =
-        (await events?.onWrite?.(file_path, resolvedBackend)) ?? undefined;
-
-      const metadata = await (async () => {
-        if (resolved?.kind === "metadata") return resolved.data;
-        if (resolved?.kind === "raw-contents") {
-          const content = await resolvedBackend.readRaw(file_path);
-          return { ...content };
-        }
-
-        return undefined;
-      })();
-
       const message = new ToolMessage({
         content: `Successfully replaced ${result.occurrences} occurrence(s) in '${file_path}'`,
         tool_call_id: config.toolCall?.id as string,
         name: "edit_file",
-        metadata,
+        metadata: result.metadata,
       });
 
       // If filesUpdate is present, return Command to update state
@@ -343,10 +299,7 @@ function createEditFileTool(
  */
 function createGlobTool(
   backend: BackendProtocol | BackendFactory,
-  options: {
-    customDescription: string | null;
-    events: FilesystemEvents | undefined;
-  },
+  options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
   return tool(
@@ -357,9 +310,7 @@ function createGlobTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const { pattern, path = "/" } = input;
-      const infos = await awaitIfPromise(
-        resolvedBackend.globInfo(pattern, path),
-      );
+      const infos = await resolvedBackend.globInfo(pattern, path);
 
       if (infos.length === 0) {
         return `No files found matching pattern '${pattern}'`;
@@ -387,10 +338,7 @@ function createGlobTool(
  */
 function createGrepTool(
   backend: BackendProtocol | BackendFactory,
-  options: {
-    customDescription: string | null;
-    events: FilesystemEvents | undefined;
-  },
+  options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
   return tool(
@@ -401,9 +349,7 @@ function createGrepTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const { pattern, path = "/", glob = null } = input;
-      const result = await awaitIfPromise(
-        resolvedBackend.grepRaw(pattern, path, glob),
-      );
+      const result = await resolvedBackend.grepRaw(pattern, path, glob);
 
       // If string, it's an error
       if (typeof result === "string") {
@@ -447,17 +393,6 @@ function createGrepTool(
   );
 }
 
-export type FilesystemEventResponse =
-  | { kind: "raw-contents" }
-  | { kind: "metadata"; data: Record<string, unknown> };
-
-export interface FilesystemEvents {
-  onWrite?: (
-    path: string,
-    backend: BackendProtocol,
-  ) => void | FilesystemEventResponse | Promise<void | FilesystemEventResponse>;
-}
-
 /**
  * Options for creating filesystem middleware.
  */
@@ -470,8 +405,6 @@ export interface FilesystemMiddlewareOptions {
   customToolDescriptions?: Record<string, string> | null;
   /** Optional token limit before evicting a tool result to the filesystem (default: 20000 tokens, ~80KB) */
   toolTokenLimitBeforeEvict?: number | null;
-  /** Filesystem events callbacks */
-  events?: FilesystemEvents;
 }
 
 /**
@@ -485,35 +418,28 @@ export function createFilesystemMiddleware(
     systemPrompt: customSystemPrompt = null,
     customToolDescriptions = null,
     toolTokenLimitBeforeEvict = 20000,
-    events = undefined,
   } = options;
 
   const systemPrompt = customSystemPrompt || FILESYSTEM_SYSTEM_PROMPT;
 
   const tools = [
     createLsTool(backend, {
-      customDescription: customToolDescriptions?.ls ?? null,
-      events,
+      customDescription: customToolDescriptions?.ls,
     }),
     createReadFileTool(backend, {
-      customDescription: customToolDescriptions?.read_file ?? null,
-      events,
+      customDescription: customToolDescriptions?.read_file,
     }),
     createWriteFileTool(backend, {
-      customDescription: customToolDescriptions?.write_file ?? null,
-      events,
+      customDescription: customToolDescriptions?.write_file,
     }),
     createEditFileTool(backend, {
-      customDescription: customToolDescriptions?.edit_file ?? null,
-      events,
+      customDescription: customToolDescriptions?.edit_file,
     }),
     createGlobTool(backend, {
-      customDescription: customToolDescriptions?.glob ?? null,
-      events,
+      customDescription: customToolDescriptions?.glob,
     }),
     createGrepTool(backend, {
-      customDescription: customToolDescriptions?.grep ?? null,
-      events,
+      customDescription: customToolDescriptions?.grep,
     }),
   ];
 
@@ -559,8 +485,9 @@ export function createFilesystemMiddleware(
               );
               const evictPath = `/large_tool_results/${sanitizedId}`;
 
-              const writeResult = await awaitIfPromise(
-                resolvedBackend.write(evictPath, msg.content),
+              const writeResult = await resolvedBackend.write(
+                evictPath,
+                msg.content,
               );
 
               if (writeResult.error) {
