@@ -259,6 +259,45 @@ describe("Subagent Middleware Integration Tests", () => {
   );
 
   it.concurrent(
+    "should use pre-compiled subagent",
+    { timeout: 60000 },
+    async () => {
+      const customSubagent = createAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt: "Use the get_weather tool to get the weather in a city.",
+        tools: [getWeather],
+      });
+
+      const agent = createAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt: "Use the task tool to call a subagent.",
+        middleware: [
+          createSubAgentMiddleware({
+            defaultModel: SAMPLE_MODEL,
+            defaultTools: [],
+            subagents: [
+              {
+                name: "weather",
+                description: "This subagent can get weather in cities.",
+                runnable: customSubagent,
+              },
+            ],
+          }),
+        ],
+      });
+
+      const expectedToolCalls = [
+        { name: "task", args: { subagent_type: "weather" } },
+        { name: "get_weather" },
+      ];
+
+      await assertExpectedSubgraphActions(expectedToolCalls, agent, {
+        messages: [new HumanMessage("What is the weather in Tokyo?")],
+      });
+    },
+  );
+
+  it.concurrent(
     "should handle multiple subagents without middleware accumulation",
     { timeout: 120000 },
     async () => {
