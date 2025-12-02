@@ -171,6 +171,18 @@ When NOT to use the task tool:
 - You should use the \`task\` tool whenever you have a complex task that will take multiple steps, and is independent from other tasks that the agent needs to complete. These agents are highly competent and efficient.`;
 
 /**
+ * Type definitions for pre-compiled agents.
+ */
+export interface CompiledSubAgent {
+  /** The name of the agent */
+  name: string;
+  /** The description of the agent */
+  description: string;
+  /** The agent instance */
+  runnable: ReactAgent<any, any, any, any> | Runnable;
+}
+
+/**
  * Type definitions for subagents
  */
 export interface SubAgent {
@@ -238,7 +250,7 @@ function getSubagents(options: {
   defaultTools: StructuredTool[];
   defaultMiddleware: AgentMiddleware[] | null;
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
-  subagents: Array<SubAgent>;
+  subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
 }): {
   agents: Record<string, ReactAgent<any, any, any, any> | Runnable>;
@@ -285,19 +297,24 @@ function getSubagents(options: {
       `- ${agentParams.name}: ${agentParams.description}`,
     );
 
-    const middleware = agentParams.middleware
-      ? [...defaultSubagentMiddleware, ...agentParams.middleware]
-      : [...defaultSubagentMiddleware];
+    if ("runnable" in agentParams) {
+      agents[agentParams.name] = agentParams.runnable;
+    } else {
+      const middleware = agentParams.middleware
+        ? [...defaultSubagentMiddleware, ...agentParams.middleware]
+        : [...defaultSubagentMiddleware];
 
-    const interruptOn = agentParams.interruptOn || defaultInterruptOn;
-    if (interruptOn) middleware.push(humanInTheLoopMiddleware({ interruptOn }));
+      const interruptOn = agentParams.interruptOn || defaultInterruptOn;
+      if (interruptOn)
+        middleware.push(humanInTheLoopMiddleware({ interruptOn }));
 
-    agents[agentParams.name] = createAgent({
-      model: agentParams.model ?? defaultModel,
-      systemPrompt: agentParams.systemPrompt,
-      tools: agentParams.tools ?? defaultTools,
-      middleware,
-    });
+      agents[agentParams.name] = createAgent({
+        model: agentParams.model ?? defaultModel,
+        systemPrompt: agentParams.systemPrompt,
+        tools: agentParams.tools ?? defaultTools,
+        middleware,
+      });
+    }
   }
 
   return { agents, descriptions: subagentDescriptions };
@@ -311,7 +328,7 @@ function createTaskTool(options: {
   defaultTools: StructuredTool[];
   defaultMiddleware: AgentMiddleware[] | null;
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
-  subagents: Array<SubAgent>;
+  subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
   taskDescription: string | null;
 }) {
@@ -406,7 +423,7 @@ export interface SubAgentMiddlewareOptions {
   /** The tool configs for the default general-purpose subagent */
   defaultInterruptOn?: Record<string, boolean | InterruptOnConfig> | null;
   /** A list of additional subagents to provide to the agent */
-  subagents?: Array<SubAgent>;
+  subagents?: (SubAgent | CompiledSubAgent)[];
   /** Full system prompt override */
   systemPrompt?: string | null;
   /** Whether to include the general-purpose agent */

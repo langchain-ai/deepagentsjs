@@ -15,6 +15,7 @@ export {
   type FilesystemMiddlewareOptions,
   type SubAgentMiddlewareOptions,
   type SubAgent,
+  type CompiledSubAgent,
   type FileData,
 } from "./middleware/index.js";
 

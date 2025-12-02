@@ -24,6 +24,7 @@ import {
 import { StateBackend, type BackendProtocol } from "./backends/index.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { AnnotationRoot } from "@langchain/langgraph";
+import { CompiledSubAgent } from "./middleware/subagents.js";
 
 /**
  * Configuration parameters for creating a Deep Agent
@@ -43,7 +44,7 @@ export interface CreateDeepAgentParams<
   /** Custom middleware to apply after standard middleware */
   middleware?: AgentMiddleware[];
   /** List of subagent specifications for task delegation */
-  subagents?: SubAgent[];
+  subagents?: (SubAgent | CompiledSubAgent)[];
   /** Structured output response format for the agent */
   responseFormat?: any; // ResponseFormat type is complex, using any for now
   /** Optional schema for context (not persisted between invocations) */
