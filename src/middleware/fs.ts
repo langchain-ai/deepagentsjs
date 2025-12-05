@@ -59,6 +59,21 @@ function fileDataReducer(
 }
 
 /**
+ * Shared filesystem state schema.
+ * Defined at module level to ensure the same object identity is used across all agents,
+ * preventing "Channel already exists with different type" errors when multiple agents
+ * use createFilesystemMiddleware.
+ */
+const FilesystemStateSchema = z3.object({
+  files: withLangGraph(z3.record(z3.string(), FileDataSchema).default({}), {
+    reducer: {
+      fn: fileDataReducer,
+      schema: z3.record(z3.string(), FileDataSchema.nullable()),
+    },
+  }),
+});
+
+/**
  * Resolve backend from factory or instance.
  *
  * @param backend - Backend instance or factory function
@@ -442,15 +457,6 @@ export function createFilesystemMiddleware(
       customDescription: customToolDescriptions?.grep,
     }),
   ];
-
-  const FilesystemStateSchema = z3.object({
-    files: withLangGraph(z3.record(z3.string(), FileDataSchema).default({}), {
-      reducer: {
-        fn: fileDataReducer,
-        schema: z3.record(z3.string(), FileDataSchema.nullable()),
-      },
-    }),
-  });
 
   return createMiddleware({
     name: "FilesystemMiddleware",
