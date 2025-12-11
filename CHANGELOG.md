@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.3.1
+
+### Patch Changes
+
+- 27c4211: Fix 'Channel "files" already exists with a different type.' error due to different schema identity
+
 ## 1.3.0
 
 ### Minor Changes
