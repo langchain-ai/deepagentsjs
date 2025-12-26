@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { createDeepAgent } from "../../src/index.js";
 import {
   SAMPLE_MODEL,
@@ -311,6 +311,23 @@ describe("DeepAgents Integration Tests", () => {
       ).toBe(true);
     }
   );
+
+  it.concurrent("should create deep agent with string system prompt", () => {
+    const agent = createDeepAgent({
+      systemPrompt: "You are a helpful assistant specializing in math.",
+    });
+    assertAllDeepAgentQualities(agent);
+  });
+
+  it.concurrent("should create deep agent with SystemMessage system prompt", () => {
+    const systemMessage = new SystemMessage(
+      "You are a helpful assistant specializing in science."
+    );
+    const agent = createDeepAgent({
+      systemPrompt: systemMessage,
+    });
+    assertAllDeepAgentQualities(agent);
+  });
 
   // Note: response_format with ToolStrategy is not yet available in LangChain TS v1
   // Skipping test_response_format_tool_strategy for now

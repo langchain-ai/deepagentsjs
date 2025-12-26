@@ -14,6 +14,7 @@ import type {
   BaseCheckpointSaver,
   BaseStore,
 } from "@langchain/langgraph-checkpoint";
+import { SystemMessage } from "@langchain/core/messages";
 
 import {
   createFilesystemMiddleware,
@@ -31,16 +32,15 @@ import { CompiledSubAgent } from "./middleware/subagents.js";
  * Matches Python's create_deep_agent parameters
  */
 export interface CreateDeepAgentParams<
-  ContextSchema extends
-    | AnnotationRoot<any>
-    | InteropZodObject = AnnotationRoot<any>,
+  ContextSchema extends AnnotationRoot<any> | InteropZodObject =
+    AnnotationRoot<any>,
 > {
   /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
   model?: BaseLanguageModel | string;
   /** Tools the agent should have access to */
   tools?: StructuredTool[];
   /** Custom system prompt for the agent. This will be combined with the base agent prompt */
-  systemPrompt?: string;
+  systemPrompt?: string | SystemMessage;
   /** Custom middleware to apply after standard middleware */
   middleware?: AgentMiddleware[];
   /** List of subagent specifications for task delegation */
@@ -85,9 +85,8 @@ const BASE_PROMPT = `In order to complete the objective that the user asks of yo
  * @returns ReactAgent instance ready for invocation
  */
 export function createDeepAgent<
-  ContextSchema extends
-    | AnnotationRoot<any>
-    | InteropZodObject = AnnotationRoot<any>,
+  ContextSchema extends AnnotationRoot<any> | InteropZodObject =
+    AnnotationRoot<any>,
 >(
   params: CreateDeepAgentParams<ContextSchema> = {},
 ): ReactAgent<any, any, ContextSchema, any> {
@@ -106,9 +105,16 @@ export function createDeepAgent<
     name,
   } = params;
 
+  // Extract content from SystemMessage if provided, otherwise use string directly
+  const customPromptContent = systemPrompt
+    ? systemPrompt instanceof SystemMessage
+      ? systemPrompt.content
+      : systemPrompt
+    : undefined;
+
   // Combine system prompt with base prompt like Python implementation
-  const finalSystemPrompt = systemPrompt
-    ? `${systemPrompt}\n\n${BASE_PROMPT}`
+  const finalSystemPrompt = customPromptContent
+    ? `${customPromptContent}\n\n${BASE_PROMPT}`
     : BASE_PROMPT;
 
   // Create backend configuration for filesystem middleware
