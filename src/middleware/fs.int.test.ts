@@ -3,23 +3,23 @@ import { createAgent } from "langchain";
 import { HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 import { MemorySaver } from "@langchain/langgraph";
-import { createDeepAgent } from "../../src/index.js";
+import { createDeepAgent } from "../index.js";
 import {
   createFilesystemMiddleware,
   WRITE_FILE_TOOL_DESCRIPTION,
-} from "../../src/middleware/fs.js";
+} from "./fs.js";
 import {
   StateBackend,
   StoreBackend,
   CompositeBackend,
-} from "../../src/backends/index.js";
+} from "../backends/index.js";
 import { v4 as uuidv4 } from "uuid";
 import {
   SAMPLE_MODEL,
   getPremierLeagueStandings,
   getLaLigaStandings,
   getNbaStandings,
-} from "../utils.js";
+} from "../testing/utils.js";
 
 describe("Filesystem Middleware Integration Tests", () => {
   it.concurrent.each([

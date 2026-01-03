@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { BaseSandbox } from "../../../src/backends/sandbox.js";
+import { BaseSandbox } from "./sandbox.js";
 import type {
   ExecuteResponse,
   FileDownloadResponse,
   FileUploadResponse,
-} from "../../../src/backends/protocol.js";
+} from "./protocol.js";
 
 /**
  * Mock implementation of BaseSandbox for testing.
@@ -12,10 +12,10 @@ import type {
  */
 class MockSandbox extends BaseSandbox {
   readonly id = "mock-sandbox-1";
-  
+
   // Store for simulating file operations
   private files: Map<string, string> = new Map();
-  
+
   // Track executed commands for assertions
   public executedCommands: string[] = [];
 
@@ -25,69 +25,92 @@ class MockSandbox extends BaseSandbox {
     // Simulate ls command
     if (command.includes("fs.readdirSync")) {
       const files = Array.from(this.files.keys());
-      const output = files.map(f => JSON.stringify({
-        path: f,
-        size: this.files.get(f)!.length,
-        mtime: Date.now(),
-        isDir: false,
-      })).join("\n");
+      const output = files
+        .map((f) =>
+          JSON.stringify({
+            path: f,
+            size: this.files.get(f)!.length,
+            mtime: Date.now(),
+            isDir: false,
+          }),
+        )
+        .join("\n");
       return { output, exitCode: 0, truncated: false };
     }
 
     // Simulate read command
-    if (command.includes("fs.readFileSync") && command.includes("split('\\\\n')")) {
+    if (
+      command.includes("fs.readFileSync") &&
+      command.includes("split('\\\\n')")
+    ) {
       const pathMatch = command.match(/atob\('([^']+)'\)/);
       if (pathMatch) {
         const filePath = atob(pathMatch[1]);
         const content = this.files.get(filePath);
         if (!content) {
-          return { output: "Error: File not found", exitCode: 1, truncated: false };
+          return {
+            output: "Error: File not found",
+            exitCode: 1,
+            truncated: false,
+          };
         }
         const lines = content.split("\n");
-        const output = lines.map((line, i) => `     ${i + 1}\t${line}`).join("\n");
+        const output = lines
+          .map((line, i) => `     ${i + 1}\t${line}`)
+          .join("\n");
         return { output, exitCode: 0, truncated: false };
       }
     }
 
     // Simulate write command
-    if (command.includes("fs.writeFileSync") && command.includes("fs.existsSync")) {
+    if (
+      command.includes("fs.writeFileSync") &&
+      command.includes("fs.existsSync")
+    ) {
       const matches = command.match(/atob\('([^']+)'\)/g);
       if (matches && matches.length >= 2) {
         const filePath = atob(matches[0].match(/atob\('([^']+)'\)/)![1]);
         const content = atob(matches[1].match(/atob\('([^']+)'\)/)![1]);
-        
+
         if (this.files.has(filePath)) {
-          return { output: "Error: File already exists", exitCode: 1, truncated: false };
+          return {
+            output: "Error: File already exists",
+            exitCode: 1,
+            truncated: false,
+          };
         }
-        
+
         this.files.set(filePath, content);
         return { output: "OK", exitCode: 0, truncated: false };
       }
     }
 
     // Simulate edit command
-    if (command.includes("fs.writeFileSync") && command.includes("replaceAll")) {
+    if (
+      command.includes("fs.writeFileSync") &&
+      command.includes("replaceAll")
+    ) {
       const matches = command.match(/atob\('([^']+)'\)/g);
       if (matches && matches.length >= 3) {
         const filePath = atob(matches[0].match(/atob\('([^']+)'\)/)![1]);
         const oldStr = atob(matches[1].match(/atob\('([^']+)'\)/)![1]);
         const newStr = atob(matches[2].match(/atob\('([^']+)'\)/)![1]);
-        
+
         const content = this.files.get(filePath);
         if (!content) {
           return { output: "", exitCode: 3, truncated: false };
         }
-        
+
         const count = content.split(oldStr).length - 1;
         if (count === 0) {
           return { output: "", exitCode: 1, truncated: false };
         }
-        
+
         const replaceAll = command.includes("replaceAll = true");
         if (count > 1 && !replaceAll) {
           return { output: "", exitCode: 2, truncated: false };
         }
-        
+
         const newContent = content.split(oldStr).join(newStr);
         this.files.set(filePath, newContent);
         return { output: String(count), exitCode: 0, truncated: false };
@@ -99,36 +122,49 @@ class MockSandbox extends BaseSandbox {
       const matches = command.match(/atob\('([^']+)'\)/g);
       if (matches && matches.length >= 2) {
         const pattern = atob(matches[1].match(/atob\('([^']+)'\)/)![1]);
-        const regex = new RegExp(pattern.replace(/\*\*/g, ".*").replace(/\*/g, "[^/]*"));
-        
-        const matchingFiles = Array.from(this.files.keys()).filter(f => regex.test(f));
-        const output = matchingFiles.map(f => JSON.stringify({
-          path: f,
-          size: this.files.get(f)!.length,
-          mtime: Date.now(),
-          isDir: false,
-        })).join("\n");
+        const regex = new RegExp(
+          pattern.replace(/\*\*/g, ".*").replace(/\*/g, "[^/]*"),
+        );
+
+        const matchingFiles = Array.from(this.files.keys()).filter((f) =>
+          regex.test(f),
+        );
+        const output = matchingFiles
+          .map((f) =>
+            JSON.stringify({
+              path: f,
+              size: this.files.get(f)!.length,
+              mtime: Date.now(),
+              isDir: false,
+            }),
+          )
+          .join("\n");
         return { output, exitCode: 0, truncated: false };
       }
     }
 
     // Simulate grep command
-    if (command.includes("new RegExp(pattern)") && command.includes("walkDir")) {
+    if (
+      command.includes("new RegExp(pattern)") &&
+      command.includes("walkDir")
+    ) {
       const matches = command.match(/atob\('([^']+)'\)/g);
       if (matches) {
         const pattern = atob(matches[0].match(/atob\('([^']+)'\)/)![1]);
         const regex = new RegExp(pattern);
-        
+
         const results: string[] = [];
         for (const [filePath, content] of this.files) {
           const lines = content.split("\n");
           for (let i = 0; i < lines.length; i++) {
             if (regex.test(lines[i])) {
-              results.push(JSON.stringify({
-                path: filePath,
-                line: i + 1,
-                text: lines[i],
-              }));
+              results.push(
+                JSON.stringify({
+                  path: filePath,
+                  line: i + 1,
+                  text: lines[i],
+                }),
+              );
             }
           }
         }
@@ -184,15 +220,15 @@ class MockSandbox extends BaseSandbox {
 describe("BaseSandbox", () => {
   describe("isSandboxBackend type guard", () => {
     it("should return true for sandbox backends", async () => {
-      const { isSandboxBackend } = await import("../../../src/backends/protocol.js");
+      const { isSandboxBackend } = await import("./protocol.js");
       const sandbox = new MockSandbox();
       expect(isSandboxBackend(sandbox)).toBe(true);
     });
 
     it("should return false for non-sandbox backends", async () => {
-      const { isSandboxBackend } = await import("../../../src/backends/protocol.js");
-      const { StateBackend } = await import("../../../src/backends/state.js");
-      
+      const { isSandboxBackend } = await import("./protocol.js");
+      const { StateBackend } = await import("./state.js");
+
       const stateAndStore = { state: { files: {} }, store: undefined };
       const stateBackend = new StateBackend(stateAndStore);
       expect(isSandboxBackend(stateBackend)).toBe(false);
@@ -205,7 +241,7 @@ describe("BaseSandbox", () => {
       sandbox.addFile("/test.txt", "content");
       sandbox.addFile("/dir/nested.txt", "nested");
 
-      const result = await sandbox.lsInfo("/");
+      await sandbox.lsInfo("/");
       expect(sandbox.executedCommands.length).toBeGreaterThan(0);
       expect(sandbox.executedCommands[0]).toContain("node -e");
     });
@@ -341,7 +377,11 @@ describe("BaseSandbox", () => {
     it("should search files via execute", async () => {
       const sandbox = new MockSandbox();
       sandbox.execute = vi.fn().mockResolvedValue({
-        output: JSON.stringify({ path: "/test.txt", line: 1, text: "hello world" }),
+        output: JSON.stringify({
+          path: "/test.txt",
+          line: 1,
+          text: "hello world",
+        }),
         exitCode: 0,
         truncated: false,
       });
@@ -374,8 +414,18 @@ describe("BaseSandbox", () => {
       const sandbox = new MockSandbox();
       sandbox.execute = vi.fn().mockResolvedValue({
         output: [
-          JSON.stringify({ path: "test.py", size: 100, mtime: Date.now(), isDir: false }),
-          JSON.stringify({ path: "main.py", size: 200, mtime: Date.now(), isDir: false }),
+          JSON.stringify({
+            path: "test.py",
+            size: 100,
+            mtime: Date.now(),
+            isDir: false,
+          }),
+          JSON.stringify({
+            path: "main.py",
+            size: 200,
+            mtime: Date.now(),
+            isDir: false,
+          }),
         ].join("\n"),
         exitCode: 0,
         truncated: false,
@@ -383,8 +433,8 @@ describe("BaseSandbox", () => {
 
       const result = await sandbox.globInfo("*.py", "/");
       expect(result.length).toBe(2);
-      expect(result.some(f => f.path === "test.py")).toBe(true);
-      expect(result.some(f => f.path === "main.py")).toBe(true);
+      expect(result.some((f) => f.path === "test.py")).toBe(true);
+      expect(result.some((f) => f.path === "main.py")).toBe(true);
     });
 
     it("should return empty array for no matches", async () => {
@@ -427,7 +477,7 @@ describe("BaseSandbox", () => {
       expect(result[0].path).toBe("/test.txt");
       expect(result[0].error).toBeNull();
       expect(result[0].content).not.toBeNull();
-      
+
       const content = new TextDecoder().decode(result[0].content!);
       expect(content).toBe("test content");
     });
@@ -466,8 +516,9 @@ describe("BaseSandbox", () => {
         truncated: false,
       });
 
-      await expect(sandbox.readRaw("/nonexistent.txt")).rejects.toThrow("not found");
+      await expect(sandbox.readRaw("/nonexistent.txt")).rejects.toThrow(
+        "not found",
+      );
     });
   });
 });
-

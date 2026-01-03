@@ -1,13 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { createAgent, createMiddleware, ReactAgent } from "langchain";
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
-import { createSubAgentMiddleware } from "../../src/index.js";
+import { createSubAgentMiddleware } from "../index.js";
 import {
   SAMPLE_MODEL,
   getWeather,
   getSoccerScores,
   extractToolsFromAgent,
-} from "../utils.js";
+} from "../testing/utils.js";
 
 const WeatherToolMiddleware = createMiddleware({
   name: "weatherToolMiddleware",

@@ -2,11 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import {
-  listSkills,
-  parseSkillMetadata,
-  type SkillMetadata,
-} from "../../../src/skills/loader.js";
+import { listSkills, parseSkillMetadata } from "./loader.js";
 
 describe("Skill Loader Module", () => {
   let tempDir: string;
@@ -34,7 +30,7 @@ describe("Skill Loader Module", () => {
     baseDir: string,
     skillName: string,
     frontmatter: Record<string, string>,
-    body = "# Skill Instructions\n\nUse this skill when..."
+    body = "# Skill Instructions\n\nUse this skill when...",
   ): string {
     const skillDir = path.join(baseDir, skillName);
     fs.mkdirSync(skillDir, { recursive: true });
@@ -58,7 +54,7 @@ describe("Skill Loader Module", () => {
 
       const result = parseSkillMetadata(
         path.join(userSkillsDir, "web-research", "SKILL.md"),
-        "user"
+        "user",
       );
 
       expect(result).not.toBeNull();
@@ -73,12 +69,12 @@ describe("Skill Loader Module", () => {
       fs.mkdirSync(skillDir, { recursive: true });
       fs.writeFileSync(
         path.join(skillDir, "SKILL.md"),
-        "# No Frontmatter\n\nJust content"
+        "# No Frontmatter\n\nJust content",
       );
 
       const result = parseSkillMetadata(
         path.join(skillDir, "SKILL.md"),
-        "user"
+        "user",
       );
 
       expect(result).toBeNull();
@@ -91,7 +87,7 @@ describe("Skill Loader Module", () => {
 
       const result = parseSkillMetadata(
         path.join(userSkillsDir, "missing-name", "SKILL.md"),
-        "user"
+        "user",
       );
 
       expect(result).toBeNull();
@@ -104,7 +100,7 @@ describe("Skill Loader Module", () => {
 
       const result = parseSkillMetadata(
         path.join(userSkillsDir, "missing-desc", "SKILL.md"),
-        "user"
+        "user",
       );
 
       expect(result).toBeNull();
@@ -128,7 +124,7 @@ allowed-tools: read_file write_file
 
       const result = parseSkillMetadata(
         path.join(skillDir, "SKILL.md"),
-        "project"
+        "project",
       );
 
       expect(result).not.toBeNull();
@@ -147,7 +143,7 @@ allowed-tools: read_file write_file
 
       const result = parseSkillMetadata(
         path.join(userSkillsDir, "long-desc", "SKILL.md"),
-        "user"
+        "user",
       );
 
       expect(result).not.toBeNull();
@@ -163,7 +159,7 @@ allowed-tools: read_file write_file
       // Should still parse, just with a warning
       const result = parseSkillMetadata(
         path.join(userSkillsDir, "my-skill", "SKILL.md"),
-        "user"
+        "user",
       );
 
       expect(result).not.toBeNull();
@@ -197,7 +193,10 @@ allowed-tools: read_file write_file
       const result = listSkills({ userSkillsDir });
 
       expect(result).toHaveLength(2);
-      expect(result.map((s) => s.name).sort()).toEqual(["skill-one", "skill-two"]);
+      expect(result.map((s) => s.name).sort()).toEqual([
+        "skill-one",
+        "skill-two",
+      ]);
       expect(result.every((s) => s.source === "user")).toBe(true);
     });
 
@@ -228,7 +227,9 @@ allowed-tools: read_file write_file
 
       expect(result).toHaveLength(2);
       expect(result.find((s) => s.name === "user-skill")?.source).toBe("user");
-      expect(result.find((s) => s.name === "project-skill")?.source).toBe("project");
+      expect(result.find((s) => s.name === "project-skill")?.source).toBe(
+        "project",
+      );
     });
 
     it("should allow project skills to override user skills with same name", () => {
@@ -279,7 +280,7 @@ allowed-tools: read_file write_file
       fs.mkdirSync(invalidDir, { recursive: true });
       fs.writeFileSync(
         path.join(invalidDir, "SKILL.md"),
-        "---\ninvalid: yaml: format:\n---\n"
+        "---\ninvalid: yaml: format:\n---\n",
       );
 
       const result = listSkills({ userSkillsDir });
@@ -323,7 +324,10 @@ allowed-tools: read_file write_file
       const result = listSkills({ userSkillsDir });
 
       expect(result).toHaveLength(2);
-      expect(result.map((s) => s.name).sort()).toEqual(["valid-one", "valid-two"]);
+      expect(result.map((s) => s.name).sort()).toEqual([
+        "valid-one",
+        "valid-two",
+      ]);
     });
 
     it("should load user skills first then project skills", () => {
@@ -343,4 +347,3 @@ allowed-tools: read_file write_file
     });
   });
 });
-

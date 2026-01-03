@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { StoreBackend } from "../../../src/backends/store.js";
+import { StoreBackend } from "./store.js";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 
 /**
@@ -37,7 +37,7 @@ describe("StoreBackend", () => {
       "/docs/readme.md",
       "hello",
       "hi",
-      false
+      false,
     );
     expect(editResult).toBeDefined();
     expect(editResult.error).toBeUndefined();
@@ -124,7 +124,7 @@ describe("StoreBackend", () => {
     const listing2 = await backend.lsInfo("/dir");
     expect(listing1.length).toBe(listing2.length);
     expect(listing1.map((fi) => fi.path)).toEqual(
-      listing2.map((fi) => fi.path)
+      listing2.map((fi) => fi.path),
     );
   });
 
@@ -207,7 +207,7 @@ describe("StoreBackend", () => {
 
     const content = await backend.read("/empty.txt");
     expect(content).toContain(
-      "System reminder: File exists but has empty contents"
+      "System reminder: File exists but has empty contents",
     );
   });
 
@@ -259,7 +259,9 @@ describe("StoreBackend", () => {
       const backend = new StoreBackend(stateAndStore);
 
       const binaryContent = new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f]); // "Hello"
-      const files: Array<[string, Uint8Array]> = [["/hello.txt", binaryContent]];
+      const files: Array<[string, Uint8Array]> = [
+        ["/hello.txt", binaryContent],
+      ];
 
       const result = await backend.uploadFiles(files);
       expect(result[0].error).toBeNull();
@@ -303,12 +305,15 @@ describe("StoreBackend", () => {
 
       await backend.write("/exists.txt", "I exist");
 
-      const result = await backend.downloadFiles(["/exists.txt", "/missing.txt"]);
+      const result = await backend.downloadFiles([
+        "/exists.txt",
+        "/missing.txt",
+      ]);
       expect(result).toHaveLength(2);
-      
+
       expect(result[0].error).toBeNull();
       expect(result[0].content).not.toBeNull();
-      
+
       expect(result[1].error).toBe("file_not_found");
       expect(result[1].content).toBeNull();
     });
@@ -316,9 +321,7 @@ describe("StoreBackend", () => {
 
   it("should handle large tool result interception via middleware", async () => {
     const { store, config } = makeConfig();
-    const { createFilesystemMiddleware } = await import(
-      "../../../src/middleware/fs.js"
-    );
+    const { createFilesystemMiddleware } = await import("../middleware/fs.js");
     const { ToolMessage } = await import("@langchain/core/messages");
 
     const middleware = createFilesystemMiddleware({
@@ -343,7 +346,7 @@ describe("StoreBackend", () => {
         state: { files: {}, messages: [] },
         runtime: {},
       },
-      mockToolFn
+      mockToolFn,
     );
 
     expect(result).toBeInstanceOf(ToolMessage);
@@ -352,7 +355,7 @@ describe("StoreBackend", () => {
 
     const storedContent = await store.get(
       ["filesystem"],
-      "/large_tool_results/test_456"
+      "/large_tool_results/test_456",
     );
     expect(storedContent).toBeDefined();
     expect((storedContent!.value as any).content).toEqual([largeContent]);
