@@ -51,7 +51,7 @@ export function createPatchToolCallsMiddleware(): AgentMiddleware {
             const correspondingToolMsg = messages
               .slice(i)
               .find(
-                (m) =>
+                (m: any) =>
                   ToolMessage.isInstance(m) && m.tool_call_id === toolCall.id,
               );
 

@@ -6,7 +6,9 @@ import type {
   BackendProtocol,
   EditResult,
   FileData,
+  FileDownloadResponse,
   FileInfo,
+  FileUploadResponse,
   GrepMatch,
   StateAndStore,
   WriteResult,
@@ -232,5 +234,64 @@ export class StateBackend implements BackendProtocol {
       });
     }
     return infos;
+  }
+
+  /**
+   * Upload multiple files.
+   *
+   * Note: Since LangGraph state must be updated via Command objects,
+   * the caller must apply filesUpdate via Command after calling this method.
+   *
+   * @param files - List of [path, content] tuples to upload
+   * @returns List of FileUploadResponse objects, one per input file
+   */
+  uploadFiles(
+    files: Array<[string, Uint8Array]>,
+  ): FileUploadResponse[] & { filesUpdate?: Record<string, FileData> } {
+    const responses: FileUploadResponse[] = [];
+    const updates: Record<string, FileData> = {};
+
+    for (const [path, content] of files) {
+      try {
+        const contentStr = new TextDecoder().decode(content);
+        const fileData = createFileData(contentStr);
+        updates[path] = fileData;
+        responses.push({ path, error: null });
+      } catch {
+        responses.push({ path, error: "invalid_path" });
+      }
+    }
+
+    // Attach filesUpdate for the caller to apply via Command
+    const result = responses as FileUploadResponse[] & {
+      filesUpdate?: Record<string, FileData>;
+    };
+    result.filesUpdate = updates;
+    return result;
+  }
+
+  /**
+   * Download multiple files.
+   *
+   * @param paths - List of file paths to download
+   * @returns List of FileDownloadResponse objects, one per input path
+   */
+  downloadFiles(paths: string[]): FileDownloadResponse[] {
+    const files = this.getFiles();
+    const responses: FileDownloadResponse[] = [];
+
+    for (const path of paths) {
+      const fileData = files[path];
+      if (!fileData) {
+        responses.push({ path, content: null, error: "file_not_found" });
+        continue;
+      }
+
+      const contentStr = fileDataToString(fileData);
+      const content = new TextEncoder().encode(contentStr);
+      responses.push({ path, content, error: null });
+    }
+
+    return responses;
   }
 }
