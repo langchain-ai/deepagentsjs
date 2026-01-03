@@ -8,7 +8,7 @@
 
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 
-type MaybePromise<T> = T | Promise<T>;
+export type MaybePromise<T> = T | Promise<T>;
 
 /**
  * Structured file listing info.
@@ -95,6 +95,50 @@ export interface EditResult {
   occurrences?: number;
   /** Metadata for the edit operation, attached to the ToolMessage */
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * Result of code execution.
+ * Simplified schema optimized for LLM consumption.
+ */
+export interface ExecuteResponse {
+  /** Combined stdout and stderr output of the executed command */
+  output: string;
+  /** The process exit code. 0 indicates success, non-zero indicates failure */
+  exitCode: number | null;
+  /** Whether the output was truncated due to backend limitations */
+  truncated: boolean;
+}
+
+/**
+ * Standardized error codes for file upload/download operations.
+ */
+export type FileOperationError =
+  | "file_not_found"
+  | "permission_denied"
+  | "is_directory"
+  | "invalid_path";
+
+/**
+ * Result of a single file download operation.
+ */
+export interface FileDownloadResponse {
+  /** The file path that was requested */
+  path: string;
+  /** File contents as Uint8Array on success, null on failure */
+  content: Uint8Array | null;
+  /** Standardized error code on failure, null on success */
+  error: FileOperationError | null;
+}
+
+/**
+ * Result of a single file upload operation.
+ */
+export interface FileUploadResponse {
+  /** The file path that was requested */
+  path: string;
+  /** Standardized error code on failure, null on success */
+  error: FileOperationError | null;
 }
 
 /**
@@ -187,6 +231,57 @@ export interface BackendProtocol {
     newString: string,
     replaceAll?: boolean,
   ): MaybePromise<EditResult>;
+
+  /**
+   * Upload multiple files.
+   *
+   * @param files - List of [path, content] tuples to upload
+   * @returns List of FileUploadResponse objects, one per input file
+   */
+  uploadFiles(
+    files: Array<[string, Uint8Array]>,
+  ): MaybePromise<FileUploadResponse[]>;
+
+  /**
+   * Download multiple files.
+   *
+   * @param paths - List of file paths to download
+   * @returns List of FileDownloadResponse objects, one per input path
+   */
+  downloadFiles(paths: string[]): MaybePromise<FileDownloadResponse[]>;
+}
+
+/**
+ * Protocol for sandboxed backends with isolated runtime.
+ * Sandboxed backends run in isolated environments (e.g., containers)
+ * and communicate via defined interfaces.
+ */
+export interface SandboxBackendProtocol extends BackendProtocol {
+  /**
+   * Execute a command in the sandbox.
+   *
+   * @param command - Full shell command string to execute
+   * @returns ExecuteResponse with combined output, exit code, and truncation flag
+   */
+  execute(command: string): MaybePromise<ExecuteResponse>;
+
+  /** Unique identifier for the sandbox backend instance */
+  readonly id: string;
+}
+
+/**
+ * Type guard to check if a backend supports execution.
+ *
+ * @param backend - Backend instance to check
+ * @returns True if the backend implements SandboxBackendProtocol
+ */
+export function isSandboxBackend(
+  backend: BackendProtocol,
+): backend is SandboxBackendProtocol {
+  return (
+    typeof (backend as SandboxBackendProtocol).execute === "function" &&
+    typeof (backend as SandboxBackendProtocol).id === "string"
+  );
 }
 
 /**

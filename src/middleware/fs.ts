@@ -16,6 +16,7 @@ import type {
   FileData,
   StateAndStore,
 } from "../backends/protocol.js";
+import { isSandboxBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
 import { sanitizeToolCallId } from "../backends/utils.js";
 
@@ -110,6 +111,33 @@ export const GLOB_TOOL_DESCRIPTION =
   "Find files matching a glob pattern (e.g., '**/*.py' for all Python files)";
 export const GREP_TOOL_DESCRIPTION =
   "Search for a regex pattern in files. Returns matching files and line numbers";
+export const EXECUTE_TOOL_DESCRIPTION = `Executes a given command in the sandbox environment with proper handling and security measures.
+
+Before executing the command, please follow these steps:
+
+1. Directory Verification:
+   - If the command will create new directories or files, first use the ls tool to verify the parent directory exists
+
+2. Command Execution:
+   - Always quote file paths that contain spaces with double quotes
+   - Commands run in an isolated sandbox environment
+   - Returns combined stdout/stderr output with exit code
+
+Usage notes:
+  - The command parameter is required
+  - If the output is very large, it may be truncated
+  - IMPORTANT: Avoid using search commands like find and grep. Use the grep, glob tools instead.
+  - Avoid read tools like cat, head, tail - use read_file instead.
+  - Use '&&' to chain dependent commands, ';' for independent commands
+  - Try to use absolute paths to avoid cd`;
+
+// System prompt for execution capability
+export const EXECUTION_SYSTEM_PROMPT = `## Execute Tool \`execute\`
+
+You have access to an \`execute\` tool for running shell commands in a sandboxed environment.
+Use this tool to run commands, scripts, tests, builds, and other shell operations.
+
+- execute: run a shell command in the sandbox (returns output and exit code)`;
 
 /**
  * Create ls tool using backend.
@@ -409,6 +437,57 @@ function createGrepTool(
 }
 
 /**
+ * Create execute tool using backend.
+ */
+function createExecuteTool(
+  backend: BackendProtocol | BackendFactory,
+  options: { customDescription: string | undefined },
+) {
+  const { customDescription } = options;
+  return tool(
+    async (input, config) => {
+      const stateAndStore: StateAndStore = {
+        state: getCurrentTaskInput(config),
+        store: (config as any).store,
+      };
+      const resolvedBackend = getBackend(backend, stateAndStore);
+
+      // Runtime check - fail gracefully if not supported
+      if (!isSandboxBackend(resolvedBackend)) {
+        return (
+          "Error: Execution not available. This agent's backend " +
+          "does not support command execution (SandboxBackendProtocol). " +
+          "To use the execute tool, provide a backend that implements SandboxBackendProtocol."
+        );
+      }
+
+      const result = await resolvedBackend.execute(input.command);
+
+      // Format output for LLM consumption
+      const parts = [result.output];
+
+      if (result.exitCode !== null) {
+        const status = result.exitCode === 0 ? "succeeded" : "failed";
+        parts.push(`\n[Command ${status} with exit code ${result.exitCode}]`);
+      }
+
+      if (result.truncated) {
+        parts.push("\n[Output was truncated due to size limits]");
+      }
+
+      return parts.join("");
+    },
+    {
+      name: "execute",
+      description: customDescription || EXECUTE_TOOL_DESCRIPTION,
+      schema: z3.object({
+        command: z3.string().describe("The shell command to execute"),
+      }),
+    },
+  );
+}
+
+/**
  * Options for creating filesystem middleware.
  */
 export interface FilesystemMiddlewareOptions {
@@ -435,9 +514,10 @@ export function createFilesystemMiddleware(
     toolTokenLimitBeforeEvict = 20000,
   } = options;
 
-  const systemPrompt = customSystemPrompt || FILESYSTEM_SYSTEM_PROMPT;
+  const baseSystemPrompt = customSystemPrompt || FILESYSTEM_SYSTEM_PROMPT;
 
-  const tools = [
+  // All tools including execute (execute will be filtered at runtime if backend doesn't support it)
+  const allTools = [
     createLsTool(backend, {
       customDescription: customToolDescriptions?.ls,
     }),
@@ -456,21 +536,44 @@ export function createFilesystemMiddleware(
     createGrepTool(backend, {
       customDescription: customToolDescriptions?.grep,
     }),
+    createExecuteTool(backend, {
+      customDescription: customToolDescriptions?.execute,
+    }),
   ];
 
   return createMiddleware({
     name: "FilesystemMiddleware",
     stateSchema: FilesystemStateSchema as any,
-    tools,
-    wrapModelCall: systemPrompt
-      ? async (request, handler: any) => {
-          const currentSystemPrompt = request.systemPrompt || "";
-          const newSystemPrompt = currentSystemPrompt
-            ? `${currentSystemPrompt}\n\n${systemPrompt}`
-            : systemPrompt;
-          return handler({ ...request, systemPrompt: newSystemPrompt });
-        }
-      : undefined,
+    tools: allTools,
+    wrapModelCall: async (request: any, handler: any) => {
+      // Check if backend supports execution
+      const stateAndStore: StateAndStore = {
+        state: request.state || {},
+        store: request.config?.store,
+      };
+      const resolvedBackend = getBackend(backend, stateAndStore);
+      const supportsExecution = isSandboxBackend(resolvedBackend);
+
+      // Filter tools based on backend capabilities
+      let tools = request.tools;
+      if (!supportsExecution) {
+        tools = tools.filter((t: { name: string }) => t.name !== "execute");
+      }
+
+      // Build system prompt - add execution instructions if available
+      let systemPrompt = baseSystemPrompt;
+      if (supportsExecution) {
+        systemPrompt = `${systemPrompt}\n\n${EXECUTION_SYSTEM_PROMPT}`;
+      }
+
+      // Combine with existing system prompt
+      const currentSystemPrompt = request.systemPrompt || "";
+      const newSystemPrompt = currentSystemPrompt
+        ? `${currentSystemPrompt}\n\n${systemPrompt}`
+        : systemPrompt;
+
+      return handler({ ...request, tools, systemPrompt: newSystemPrompt });
+    },
     wrapToolCall: toolTokenLimitBeforeEvict
       ? ((async (request: any, handler: any) => {
           const result = await handler(request);

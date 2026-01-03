@@ -230,6 +230,90 @@ describe("StoreBackend", () => {
     expect(defaultItems.some((item) => item.key === "/test.txt")).toBe(false);
   });
 
+  describe("uploadFiles", () => {
+    it("should upload files to store", async () => {
+      const { stateAndStore } = makeConfig();
+      const backend = new StoreBackend(stateAndStore);
+
+      const files: Array<[string, Uint8Array]> = [
+        ["/file1.txt", new TextEncoder().encode("content1")],
+        ["/file2.txt", new TextEncoder().encode("content2")],
+      ];
+
+      const result = await backend.uploadFiles(files);
+      expect(result).toHaveLength(2);
+      expect(result[0].path).toBe("/file1.txt");
+      expect(result[0].error).toBeNull();
+      expect(result[1].path).toBe("/file2.txt");
+      expect(result[1].error).toBeNull();
+
+      // Verify files are stored
+      const content1 = await backend.read("/file1.txt");
+      expect(content1).toContain("content1");
+      const content2 = await backend.read("/file2.txt");
+      expect(content2).toContain("content2");
+    });
+
+    it("should handle binary content", async () => {
+      const { stateAndStore } = makeConfig();
+      const backend = new StoreBackend(stateAndStore);
+
+      const binaryContent = new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f]); // "Hello"
+      const files: Array<[string, Uint8Array]> = [["/hello.txt", binaryContent]];
+
+      const result = await backend.uploadFiles(files);
+      expect(result[0].error).toBeNull();
+
+      const content = await backend.read("/hello.txt");
+      expect(content).toContain("Hello");
+    });
+  });
+
+  describe("downloadFiles", () => {
+    it("should download existing files as Uint8Array", async () => {
+      const { stateAndStore } = makeConfig();
+      const backend = new StoreBackend(stateAndStore);
+
+      await backend.write("/test.txt", "test content");
+
+      const result = await backend.downloadFiles(["/test.txt"]);
+      expect(result).toHaveLength(1);
+      expect(result[0].path).toBe("/test.txt");
+      expect(result[0].error).toBeNull();
+      expect(result[0].content).not.toBeNull();
+
+      const content = new TextDecoder().decode(result[0].content!);
+      expect(content).toBe("test content");
+    });
+
+    it("should return file_not_found for missing files", async () => {
+      const { stateAndStore } = makeConfig();
+      const backend = new StoreBackend(stateAndStore);
+
+      const result = await backend.downloadFiles(["/nonexistent.txt"]);
+      expect(result).toHaveLength(1);
+      expect(result[0].path).toBe("/nonexistent.txt");
+      expect(result[0].content).toBeNull();
+      expect(result[0].error).toBe("file_not_found");
+    });
+
+    it("should handle multiple files with mixed results", async () => {
+      const { stateAndStore } = makeConfig();
+      const backend = new StoreBackend(stateAndStore);
+
+      await backend.write("/exists.txt", "I exist");
+
+      const result = await backend.downloadFiles(["/exists.txt", "/missing.txt"]);
+      expect(result).toHaveLength(2);
+      
+      expect(result[0].error).toBeNull();
+      expect(result[0].content).not.toBeNull();
+      
+      expect(result[1].error).toBe("file_not_found");
+      expect(result[1].content).toBeNull();
+    });
+  });
+
   it("should handle large tool result interception via middleware", async () => {
     const { store, config } = makeConfig();
     const { createFilesystemMiddleware } = await import(

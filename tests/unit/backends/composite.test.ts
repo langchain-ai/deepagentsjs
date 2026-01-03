@@ -9,6 +9,40 @@ import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import * as path from "path";
 import * as os from "os";
+import type {
+  BackendProtocol,
+  ExecuteResponse,
+  FileDownloadResponse,
+  FileUploadResponse,
+  SandboxBackendProtocol,
+} from "../../../src/backends/protocol.js";
+
+/**
+ * Mock sandbox backend for testing execute delegation
+ */
+class MockSandboxBackend implements SandboxBackendProtocol {
+  readonly id = "mock-sandbox";
+  public lastCommand: string | null = null;
+
+  async execute(command: string): Promise<ExecuteResponse> {
+    this.lastCommand = command;
+    return { output: `Executed: ${command}`, exitCode: 0, truncated: false };
+  }
+
+  lsInfo() { return []; }
+  read() { return ""; }
+  readRaw() { return { content: [], created_at: "", modified_at: "" }; }
+  grepRaw() { return []; }
+  globInfo() { return []; }
+  write() { return { path: "" }; }
+  edit() { return { path: "" }; }
+  uploadFiles(files: Array<[string, Uint8Array]>): FileUploadResponse[] {
+    return files.map(([path]) => ({ path, error: null }));
+  }
+  downloadFiles(paths: string[]): FileDownloadResponse[] {
+    return paths.map(path => ({ path, content: new Uint8Array(), error: null }));
+  }
+}
 
 vi.mock("@langchain/langgraph", async (importOriginal) => {
   const actual = await importOriginal();
@@ -527,5 +561,133 @@ describe("CompositeBackend", () => {
     } finally {
       await removeDir(tmpDir);
     }
+  });
+
+  describe("execute", () => {
+    it("should delegate execute to default sandbox backend", async () => {
+      const mockSandbox = new MockSandboxBackend();
+      const { stateAndStore } = makeConfig();
+      
+      const composite = new CompositeBackend(mockSandbox, {
+        "/store/": new StoreBackend(stateAndStore),
+      });
+
+      const result = await composite.execute("echo hello");
+      expect(result.output).toBe("Executed: echo hello");
+      expect(result.exitCode).toBe(0);
+      expect(mockSandbox.lastCommand).toBe("echo hello");
+    });
+
+    it("should throw error when default backend is not sandbox", () => {
+      const { stateAndStore } = makeConfig();
+
+      const composite = new CompositeBackend(new StateBackend(stateAndStore), {
+        "/store/": new StoreBackend(stateAndStore),
+      });
+
+      expect(() => composite.execute("echo hello")).toThrow(
+        "doesn't support command execution",
+      );
+    });
+  });
+
+  describe("uploadFiles", () => {
+    it("should route uploads to correct backend based on path", async () => {
+      const { state, stateAndStore } = makeConfig();
+      
+      const composite = new CompositeBackend(new StateBackend(stateAndStore), {
+        "/store/": new StoreBackend(stateAndStore),
+      });
+
+      const files: Array<[string, Uint8Array]> = [
+        ["/local.txt", new TextEncoder().encode("local content")],
+        ["/store/remote.txt", new TextEncoder().encode("remote content")],
+      ];
+
+      const result = await composite.uploadFiles(files);
+      expect(result).toHaveLength(2);
+      expect(result[0].path).toBe("/local.txt");
+      expect(result[0].error).toBeNull();
+      expect(result[1].path).toBe("/store/remote.txt");
+      expect(result[1].error).toBeNull();
+    });
+
+    it("should batch uploads by backend", async () => {
+      const { stateAndStore } = makeConfig();
+      
+      const composite = new CompositeBackend(new StateBackend(stateAndStore), {
+        "/store/": new StoreBackend(stateAndStore),
+      });
+
+      const files: Array<[string, Uint8Array]> = [
+        ["/a.txt", new TextEncoder().encode("a")],
+        ["/store/b.txt", new TextEncoder().encode("b")],
+        ["/c.txt", new TextEncoder().encode("c")],
+        ["/store/d.txt", new TextEncoder().encode("d")],
+      ];
+
+      const result = await composite.uploadFiles(files);
+      expect(result).toHaveLength(4);
+      
+      // Check all succeeded
+      for (const r of result) {
+        expect(r.error).toBeNull();
+      }
+      
+      // Check original paths preserved
+      expect(result[0].path).toBe("/a.txt");
+      expect(result[1].path).toBe("/store/b.txt");
+      expect(result[2].path).toBe("/c.txt");
+      expect(result[3].path).toBe("/store/d.txt");
+    });
+  });
+
+  describe("downloadFiles", () => {
+    it("should route downloads to correct backend based on path", async () => {
+      const { state, stateAndStore } = makeConfig();
+      
+      const composite = new CompositeBackend(new StateBackend(stateAndStore), {
+        "/store/": new StoreBackend(stateAndStore),
+      });
+
+      // Write to both backends
+      const writeRes = await composite.write("/local.txt", "local content");
+      if (writeRes.filesUpdate) {
+        Object.assign(state.files, writeRes.filesUpdate);
+      }
+      await composite.write("/store/remote.txt", "remote content");
+
+      const result = await composite.downloadFiles(["/local.txt", "/store/remote.txt"]);
+      expect(result).toHaveLength(2);
+      
+      expect(result[0].path).toBe("/local.txt");
+      expect(result[0].error).toBeNull();
+      expect(new TextDecoder().decode(result[0].content!)).toBe("local content");
+      
+      expect(result[1].path).toBe("/store/remote.txt");
+      expect(result[1].error).toBeNull();
+      expect(new TextDecoder().decode(result[1].content!)).toBe("remote content");
+    });
+
+    it("should handle mixed results across backends", async () => {
+      const { state, stateAndStore } = makeConfig();
+      
+      const composite = new CompositeBackend(new StateBackend(stateAndStore), {
+        "/store/": new StoreBackend(stateAndStore),
+      });
+
+      // Only write to state backend
+      const writeRes = await composite.write("/exists.txt", "I exist");
+      if (writeRes.filesUpdate) {
+        Object.assign(state.files, writeRes.filesUpdate);
+      }
+
+      const result = await composite.downloadFiles(["/exists.txt", "/missing.txt", "/store/missing.txt"]);
+      expect(result).toHaveLength(3);
+      
+      expect(result[0].error).toBeNull();
+      expect(result[1].error).toBe("file_not_found");
+      expect(result[2].error).toBe("file_not_found");
+    });
   });
 });

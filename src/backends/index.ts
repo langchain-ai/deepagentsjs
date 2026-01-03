@@ -14,12 +14,25 @@ export type {
   WriteResult,
   EditResult,
   StateAndStore,
+  // Sandbox execution types
+  ExecuteResponse,
+  FileOperationError,
+  FileDownloadResponse,
+  FileUploadResponse,
+  SandboxBackendProtocol,
+  MaybePromise,
 } from "./protocol.js";
+
+// Export type guard
+export { isSandboxBackend } from "./protocol.js";
 
 export { StateBackend } from "./state.js";
 export { StoreBackend } from "./store.js";
 export { FilesystemBackend } from "./filesystem.js";
 export { CompositeBackend } from "./composite.js";
+
+// Export BaseSandbox abstract class
+export { BaseSandbox } from "./sandbox.js";
 
 // Re-export utils for convenience
 export * from "./utils.js";

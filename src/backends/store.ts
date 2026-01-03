@@ -7,7 +7,9 @@ import type {
   BackendProtocol,
   EditResult,
   FileData,
+  FileDownloadResponse,
   FileInfo,
+  FileUploadResponse,
   GrepMatch,
   StateAndStore,
   WriteResult,
@@ -390,5 +392,64 @@ export class StoreBackend implements BackendProtocol {
       });
     }
     return infos;
+  }
+
+  /**
+   * Upload multiple files.
+   *
+   * @param files - List of [path, content] tuples to upload
+   * @returns List of FileUploadResponse objects, one per input file
+   */
+  async uploadFiles(
+    files: Array<[string, Uint8Array]>,
+  ): Promise<FileUploadResponse[]> {
+    const store = this.getStore();
+    const namespace = this.getNamespace();
+    const responses: FileUploadResponse[] = [];
+
+    for (const [path, content] of files) {
+      try {
+        const contentStr = new TextDecoder().decode(content);
+        const fileData = createFileData(contentStr);
+        const storeValue = this.convertFileDataToStoreValue(fileData);
+        await store.put(namespace, path, storeValue);
+        responses.push({ path, error: null });
+      } catch {
+        responses.push({ path, error: "invalid_path" });
+      }
+    }
+
+    return responses;
+  }
+
+  /**
+   * Download multiple files.
+   *
+   * @param paths - List of file paths to download
+   * @returns List of FileDownloadResponse objects, one per input path
+   */
+  async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
+    const store = this.getStore();
+    const namespace = this.getNamespace();
+    const responses: FileDownloadResponse[] = [];
+
+    for (const path of paths) {
+      try {
+        const item = await store.get(namespace, path);
+        if (!item) {
+          responses.push({ path, content: null, error: "file_not_found" });
+          continue;
+        }
+
+        const fileData = this.convertStoreItemToFileData(item);
+        const contentStr = fileDataToString(fileData);
+        const content = new TextEncoder().encode(contentStr);
+        responses.push({ path, content, error: null });
+      } catch {
+        responses.push({ path, content: null, error: "file_not_found" });
+      }
+    }
+
+    return responses;
   }
 }

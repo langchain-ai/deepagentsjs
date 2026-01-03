@@ -5,11 +5,15 @@
 import type {
   BackendProtocol,
   EditResult,
+  ExecuteResponse,
   FileData,
+  FileDownloadResponse,
   FileInfo,
+  FileUploadResponse,
   GrepMatch,
   WriteResult,
 } from "./protocol.js";
+import { isSandboxBackend } from "./protocol.js";
 
 /**
  * Backend that routes file operations to different backends based on path prefix.
@@ -264,5 +268,110 @@ export class CompositeBackend implements BackendProtocol {
   ): Promise<EditResult> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
     return await backend.edit(strippedKey, oldString, newString, replaceAll);
+  }
+
+  /**
+   * Execute a command via the default backend.
+   * Execution is not path-specific, so it always delegates to the default backend.
+   *
+   * @param command - Full shell command string to execute
+   * @returns ExecuteResponse with combined output, exit code, and truncation flag
+   * @throws Error if the default backend doesn't support command execution
+   */
+  execute(command: string): Promise<ExecuteResponse> {
+    if (!isSandboxBackend(this.default)) {
+      throw new Error(
+        "Default backend doesn't support command execution (SandboxBackendProtocol). " +
+          "To enable execution, provide a default backend that implements SandboxBackendProtocol.",
+      );
+    }
+    return Promise.resolve(this.default.execute(command));
+  }
+
+  /**
+   * Upload multiple files, batching by backend for efficiency.
+   *
+   * @param files - List of [path, content] tuples to upload
+   * @returns List of FileUploadResponse objects, one per input file
+   */
+  async uploadFiles(
+    files: Array<[string, Uint8Array]>,
+  ): Promise<FileUploadResponse[]> {
+    const results: Array<FileUploadResponse | null> = new Array(
+      files.length,
+    ).fill(null);
+    const batchesByBackend = new Map<
+      BackendProtocol,
+      Array<{ idx: number; path: string; content: Uint8Array }>
+    >();
+
+    for (let idx = 0; idx < files.length; idx++) {
+      const [path, content] = files[idx];
+      const [backend, strippedPath] = this.getBackendAndKey(path);
+
+      if (!batchesByBackend.has(backend)) {
+        batchesByBackend.set(backend, []);
+      }
+      batchesByBackend.get(backend)!.push({ idx, path: strippedPath, content });
+    }
+
+    for (const [backend, batch] of batchesByBackend) {
+      const batchFiles = batch.map(
+        (b) => [b.path, b.content] as [string, Uint8Array],
+      );
+      const batchResponses = await backend.uploadFiles(batchFiles);
+
+      for (let i = 0; i < batch.length; i++) {
+        const originalIdx = batch[i].idx;
+        results[originalIdx] = {
+          path: files[originalIdx][0], // Original path
+          error: batchResponses[i]?.error ?? null,
+        };
+      }
+    }
+
+    return results as FileUploadResponse[];
+  }
+
+  /**
+   * Download multiple files, batching by backend for efficiency.
+   *
+   * @param paths - List of file paths to download
+   * @returns List of FileDownloadResponse objects, one per input path
+   */
+  async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
+    const results: Array<FileDownloadResponse | null> = new Array(
+      paths.length,
+    ).fill(null);
+    const batchesByBackend = new Map<
+      BackendProtocol,
+      Array<{ idx: number; path: string }>
+    >();
+
+    for (let idx = 0; idx < paths.length; idx++) {
+      const path = paths[idx];
+      const [backend, strippedPath] = this.getBackendAndKey(path);
+
+      if (!batchesByBackend.has(backend)) {
+        batchesByBackend.set(backend, []);
+      }
+      batchesByBackend.get(backend)!.push({ idx, path: strippedPath });
+    }
+
+    for (const [backend, batch] of batchesByBackend) {
+      const batchPaths = batch.map((b) => b.path);
+      const batchResponses = await backend.downloadFiles(batchPaths);
+
+      for (let i = 0; i < batch.length; i++) {
+        const originalIdx = batch[i].idx;
+        results[originalIdx] = {
+          path: paths[originalIdx], // Original path
+          content: batchResponses[i]?.content ?? null,
+          error: batchResponses[i]?.error ?? null,
+        };
+      }
+    }
+
+    return results as FileDownloadResponse[];
   }
 }

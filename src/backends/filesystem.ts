@@ -8,17 +8,20 @@
  *   and optional glob include filtering, while preserving virtual path behavior
  */
 
-import * as fs from "fs/promises";
-import * as fsSync from "fs";
-import * as path from "path";
-import { spawn } from "child_process";
+import fs from "node:fs/promises";
+import fsSync from "node:fs";
+import path from "node:path";
+import { spawn } from "node:child_process";
+
 import fg from "fast-glob";
 import micromatch from "micromatch";
 import type {
   BackendProtocol,
   EditResult,
   FileData,
+  FileDownloadResponse,
   FileInfo,
+  FileUploadResponse,
   GrepMatch,
   WriteResult,
 } from "./protocol.js";
@@ -695,5 +698,88 @@ export class FilesystemBackend implements BackendProtocol {
 
     results.sort((a, b) => a.path.localeCompare(b.path));
     return results;
+  }
+
+  /**
+   * Upload multiple files to the filesystem.
+   *
+   * @param files - List of [path, content] tuples to upload
+   * @returns List of FileUploadResponse objects, one per input file
+   */
+  async uploadFiles(
+    files: Array<[string, Uint8Array]>,
+  ): Promise<FileUploadResponse[]> {
+    const responses: FileUploadResponse[] = [];
+
+    for (const [filePath, content] of files) {
+      try {
+        const resolvedPath = this.resolvePath(filePath);
+
+        // Ensure parent directory exists
+        await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
+
+        // Write file
+        await fs.writeFile(resolvedPath, content);
+        responses.push({ path: filePath, error: null });
+      } catch (e: any) {
+        if (e.code === "ENOENT") {
+          responses.push({ path: filePath, error: "file_not_found" });
+        } else if (e.code === "EACCES") {
+          responses.push({ path: filePath, error: "permission_denied" });
+        } else if (e.code === "EISDIR") {
+          responses.push({ path: filePath, error: "is_directory" });
+        } else {
+          responses.push({ path: filePath, error: "invalid_path" });
+        }
+      }
+    }
+
+    return responses;
+  }
+
+  /**
+   * Download multiple files from the filesystem.
+   *
+   * @param paths - List of file paths to download
+   * @returns List of FileDownloadResponse objects, one per input path
+   */
+  async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
+    const responses: FileDownloadResponse[] = [];
+
+    for (const filePath of paths) {
+      try {
+        const resolvedPath = this.resolvePath(filePath);
+        const content = await fs.readFile(resolvedPath);
+        responses.push({ path: filePath, content, error: null });
+      } catch (e: any) {
+        if (e.code === "ENOENT") {
+          responses.push({
+            path: filePath,
+            content: null,
+            error: "file_not_found",
+          });
+        } else if (e.code === "EACCES") {
+          responses.push({
+            path: filePath,
+            content: null,
+            error: "permission_denied",
+          });
+        } else if (e.code === "EISDIR") {
+          responses.push({
+            path: filePath,
+            content: null,
+            error: "is_directory",
+          });
+        } else {
+          responses.push({
+            path: filePath,
+            content: null,
+            error: "invalid_path",
+          });
+        }
+      }
+    }
+
+    return responses;
   }
 }

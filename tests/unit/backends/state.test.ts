@@ -226,12 +226,99 @@ describe("StateBackend", () => {
 
     const content = backend.read("/empty.txt");
     expect(content).toContain(
-      "System reminder: File exists but has empty contents"
+      "System reminder: File exists but has empty contents",
     );
   });
 
+  describe("uploadFiles", () => {
+    it("should upload files and return filesUpdate", () => {
+      const { stateAndStore } = makeConfig();
+      const backend = new StateBackend(stateAndStore);
+
+      const files: Array<[string, Uint8Array]> = [
+        ["/file1.txt", new TextEncoder().encode("content1")],
+        ["/file2.txt", new TextEncoder().encode("content2")],
+      ];
+
+      const result = backend.uploadFiles(files);
+      expect(result).toHaveLength(2);
+      expect(result[0].path).toBe("/file1.txt");
+      expect(result[0].error).toBeNull();
+      expect(result[1].path).toBe("/file2.txt");
+      expect(result[1].error).toBeNull();
+
+      // Check filesUpdate is attached
+      expect((result as any).filesUpdate).toBeDefined();
+      expect((result as any).filesUpdate["/file1.txt"]).toBeDefined();
+      expect((result as any).filesUpdate["/file2.txt"]).toBeDefined();
+    });
+
+    it("should handle binary content", () => {
+      const { stateAndStore } = makeConfig();
+      const backend = new StateBackend(stateAndStore);
+
+      const binaryContent = new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f]); // "Hello"
+      const files: Array<[string, Uint8Array]> = [
+        ["/hello.txt", binaryContent],
+      ];
+
+      const result = backend.uploadFiles(files);
+      expect(result[0].error).toBeNull();
+      expect((result as any).filesUpdate["/hello.txt"].content).toEqual([
+        "Hello",
+      ]);
+    });
+  });
+
+  describe("downloadFiles", () => {
+    it("should download existing files as Uint8Array", () => {
+      const { state, stateAndStore } = makeConfig();
+      const backend = new StateBackend(stateAndStore);
+
+      const writeRes = backend.write("/test.txt", "test content");
+      Object.assign(state.files, writeRes.filesUpdate);
+
+      const result = backend.downloadFiles(["/test.txt"]);
+      expect(result).toHaveLength(1);
+      expect(result[0].path).toBe("/test.txt");
+      expect(result[0].error).toBeNull();
+      expect(result[0].content).not.toBeNull();
+
+      const content = new TextDecoder().decode(result[0].content!);
+      expect(content).toBe("test content");
+    });
+
+    it("should return file_not_found for missing files", () => {
+      const { stateAndStore } = makeConfig();
+      const backend = new StateBackend(stateAndStore);
+
+      const result = backend.downloadFiles(["/nonexistent.txt"]);
+      expect(result).toHaveLength(1);
+      expect(result[0].path).toBe("/nonexistent.txt");
+      expect(result[0].content).toBeNull();
+      expect(result[0].error).toBe("file_not_found");
+    });
+
+    it("should handle multiple files with mixed results", () => {
+      const { state, stateAndStore } = makeConfig();
+      const backend = new StateBackend(stateAndStore);
+
+      const writeRes = backend.write("/exists.txt", "I exist");
+      Object.assign(state.files, writeRes.filesUpdate);
+
+      const result = backend.downloadFiles(["/exists.txt", "/missing.txt"]);
+      expect(result).toHaveLength(2);
+
+      expect(result[0].error).toBeNull();
+      expect(result[0].content).not.toBeNull();
+
+      expect(result[1].error).toBe("file_not_found");
+      expect(result[1].content).toBeNull();
+    });
+  });
+
   it("should handle large tool result interception via middleware", async () => {
-    const { stateAndStore, config } = makeConfig();
+    const { config } = makeConfig();
     const { createFilesystemMiddleware } = await import(
       "../../../src/middleware/fs.js"
     );
@@ -257,22 +344,22 @@ describe("StateBackend", () => {
         state: { files: {}, messages: [] },
         runtime: {},
       },
-      mockToolFn
+      mockToolFn,
     );
 
     expect(result).toBeInstanceOf(Command);
     expect(result.update.files).toBeDefined();
     expect(result.update.files["/large_tool_results/test_123"]).toBeDefined();
     expect(result.update.files["/large_tool_results/test_123"].content).toEqual(
-      [largeContent]
+      [largeContent],
     );
 
     expect(result.update.messages).toHaveLength(1);
     expect(result.update.messages[0].content).toContain(
-      "Tool result too large"
+      "Tool result too large",
     );
     expect(result.update.messages[0].content).toContain(
-      "/large_tool_results/test_123"
+      "/large_tool_results/test_123",
     );
   });
 });

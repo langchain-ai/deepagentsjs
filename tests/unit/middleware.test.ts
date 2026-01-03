@@ -93,6 +93,12 @@ describe("FilesystemMiddleware", () => {
     expect(tools.map((t) => t.name)).toContain("grep");
   });
 
+  it("should include execute tool in tools list", () => {
+    const middleware = createFilesystemMiddleware();
+    const tools = middleware.tools || [];
+    expect(tools.map((t) => t.name)).toContain("execute");
+  });
+
   it("should initialize with custom backend", () => {
     const middleware = createFilesystemMiddleware({
       backend: undefined, // Will use default StateBackend
@@ -155,6 +161,81 @@ describe("SubAgentMiddleware", () => {
     const tools = middleware.tools || [];
     expect(tools).toHaveLength(1);
     expect(tools[0].name).toBe("task");
+  });
+});
+
+describe("Execute Tool", () => {
+  it("should include execute tool description", () => {
+    const middleware = createFilesystemMiddleware();
+    const tools = middleware.tools || [];
+    const executeTool = tools.find((t) => t.name === "execute");
+    expect(executeTool).toBeDefined();
+    expect(executeTool?.description).toContain("sandbox");
+    expect(executeTool?.description).toContain("command");
+  });
+
+  it("should export EXECUTE_TOOL_DESCRIPTION constant", async () => {
+    const { EXECUTE_TOOL_DESCRIPTION } = await import("../../src/middleware/fs.js");
+    expect(EXECUTE_TOOL_DESCRIPTION).toBeDefined();
+    expect(EXECUTE_TOOL_DESCRIPTION).toContain("sandbox");
+  });
+
+  it("should export EXECUTION_SYSTEM_PROMPT constant", async () => {
+    const { EXECUTION_SYSTEM_PROMPT } = await import("../../src/middleware/fs.js");
+    expect(EXECUTION_SYSTEM_PROMPT).toBeDefined();
+    expect(EXECUTION_SYSTEM_PROMPT).toContain("execute");
+  });
+});
+
+describe("isSandboxBackend type guard", () => {
+  it("should return true for backends with execute and id", async () => {
+    const { isSandboxBackend } = await import("../../src/backends/protocol.js");
+    
+    const mockSandbox = {
+      execute: () => ({ output: "", exitCode: 0, truncated: false }),
+      id: "test-sandbox",
+      lsInfo: () => [],
+      read: () => "",
+      readRaw: () => ({ content: [], created_at: "", modified_at: "" }),
+      grepRaw: () => [],
+      globInfo: () => [],
+      write: () => ({}),
+      edit: () => ({}),
+      uploadFiles: () => [],
+      downloadFiles: () => [],
+    };
+
+    expect(isSandboxBackend(mockSandbox)).toBe(true);
+  });
+
+  it("should return false for backends without execute", async () => {
+    const { isSandboxBackend } = await import("../../src/backends/protocol.js");
+    const { StateBackend } = await import("../../src/backends/state.js");
+    
+    const stateAndStore = { state: { files: {} }, store: undefined };
+    const stateBackend = new StateBackend(stateAndStore);
+    
+    expect(isSandboxBackend(stateBackend)).toBe(false);
+  });
+
+  it("should return false for backends without id", async () => {
+    const { isSandboxBackend } = await import("../../src/backends/protocol.js");
+    
+    const mockBackend = {
+      execute: () => ({ output: "", exitCode: 0, truncated: false }),
+      // Missing id
+      lsInfo: () => [],
+      read: () => "",
+      readRaw: () => ({ content: [], created_at: "", modified_at: "" }),
+      grepRaw: () => [],
+      globInfo: () => [],
+      write: () => ({}),
+      edit: () => ({}),
+      uploadFiles: () => [],
+      downloadFiles: () => [],
+    };
+
+    expect(isSandboxBackend(mockBackend as any)).toBe(false);
   });
 });
 
