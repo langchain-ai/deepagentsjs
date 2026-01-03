@@ -12,7 +12,7 @@ import {
   CompositeBackend,
   StateBackend,
   StoreBackend,
-} from "../../src/index.js";
+} from "deepagents";
 
 const internetSearch = tool(
   async ({ query, maxResults = 5 }: { query: string; maxResults?: number }) => {

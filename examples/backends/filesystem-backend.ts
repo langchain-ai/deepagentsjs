@@ -3,7 +3,7 @@ import { ChatAnthropic } from "@langchain/anthropic";
 import { HumanMessage } from "@langchain/core/messages";
 import * as path from "path";
 
-import { createDeepAgent, FilesystemBackend } from "../../src/index.js";
+import { createDeepAgent, FilesystemBackend } from "deepagents";
 
 const systemPrompt = `You are an expert coding assistant with access to the real filesystem.
 
