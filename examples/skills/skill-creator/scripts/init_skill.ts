@@ -1,4 +1,5 @@
 #!/usr/bin/env npx tsx
+/* eslint-disable no-console */
 /**
  * Initialize a new skill directory with template files.
  *
