@@ -12,7 +12,9 @@ describe("Agent Memory Middleware", () => {
   let projectAgentDir: string;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "deepagents-memory-mw-test-"));
+    tempDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "deepagents-memory-mw-test-"),
+    );
 
     // Create user and project agent directories
     userAgentDir = path.join(tempDir, ".deepagents", "test-agent");
@@ -34,15 +36,19 @@ describe("Agent Memory Middleware", () => {
         fs.mkdirSync(dir, { recursive: true });
         return dir;
       },
-      getUserAgentMdPath: (name: string) => path.join(tempDir, ".deepagents", name, "agent.md"),
-      getProjectAgentMdPath: () => path.join(tempDir, "project", ".deepagents", "agent.md"),
-      getUserSkillsDir: (name: string) => path.join(tempDir, ".deepagents", name, "skills"),
+      getUserAgentMdPath: (name: string) =>
+        path.join(tempDir, ".deepagents", name, "agent.md"),
+      getProjectAgentMdPath: () =>
+        path.join(tempDir, "project", ".deepagents", "agent.md"),
+      getUserSkillsDir: (name: string) =>
+        path.join(tempDir, ".deepagents", name, "skills"),
       ensureUserSkillsDir: (name: string) => {
         const dir = path.join(tempDir, ".deepagents", name, "skills");
         fs.mkdirSync(dir, { recursive: true });
         return dir;
       },
-      getProjectSkillsDir: () => path.join(tempDir, "project", ".deepagents", "skills"),
+      getProjectSkillsDir: () =>
+        path.join(tempDir, "project", ".deepagents", "skills"),
       ensureProjectSkillsDir: () => {
         const dir = path.join(tempDir, "project", ".deepagents", "skills");
         fs.mkdirSync(dir, { recursive: true });
@@ -83,11 +89,9 @@ describe("Agent Memory Middleware", () => {
 
   describe("beforeAgent hook", () => {
     it("should load user memory from agent.md", () => {
-      const userMemoryContent = "# User Preferences\n\n- Be concise\n- Use TypeScript";
-      fs.writeFileSync(
-        path.join(userAgentDir, "agent.md"),
-        userMemoryContent
-      );
+      const userMemoryContent =
+        "# User Preferences\n\n- Be concise\n- Use TypeScript";
+      fs.writeFileSync(path.join(userAgentDir, "agent.md"), userMemoryContent);
 
       const middleware = createAgentMemoryMiddleware({
         settings: mockSettings,
@@ -101,10 +105,11 @@ describe("Agent Memory Middleware", () => {
     });
 
     it("should load project memory from agent.md", () => {
-      const projectMemoryContent = "# Project Instructions\n\n- Use FastAPI\n- Write tests";
+      const projectMemoryContent =
+        "# Project Instructions\n\n- Use FastAPI\n- Write tests";
       fs.writeFileSync(
         path.join(projectAgentDir, "agent.md"),
-        projectMemoryContent
+        projectMemoryContent,
       );
 
       const middleware = createAgentMemoryMiddleware({
@@ -123,7 +128,10 @@ describe("Agent Memory Middleware", () => {
       const projectMemoryContent = "Project memory content";
 
       fs.writeFileSync(path.join(userAgentDir, "agent.md"), userMemoryContent);
-      fs.writeFileSync(path.join(projectAgentDir, "agent.md"), projectMemoryContent);
+      fs.writeFileSync(
+        path.join(projectAgentDir, "agent.md"),
+        projectMemoryContent,
+      );
 
       const middleware = createAgentMemoryMiddleware({
         settings: mockSettings,
@@ -207,7 +215,7 @@ describe("Agent Memory Middleware", () => {
           systemPrompt: "",
           state: stateUpdate,
         },
-        handler
+        handler,
       );
 
       expect(capturedRequest.systemPrompt).toContain("<user_memory>");
@@ -217,7 +225,10 @@ describe("Agent Memory Middleware", () => {
 
     it("should inject project memory content into system prompt", async () => {
       const projectMemoryContent = "Project instructions here";
-      fs.writeFileSync(path.join(projectAgentDir, "agent.md"), projectMemoryContent);
+      fs.writeFileSync(
+        path.join(projectAgentDir, "agent.md"),
+        projectMemoryContent,
+      );
 
       const middleware = createAgentMemoryMiddleware({
         settings: mockSettings,
@@ -237,7 +248,7 @@ describe("Agent Memory Middleware", () => {
           systemPrompt: "",
           state: stateUpdate,
         },
-        handler
+        handler,
       );
 
       expect(capturedRequest.systemPrompt).toContain("<project_memory>");
@@ -262,11 +273,13 @@ describe("Agent Memory Middleware", () => {
           systemPrompt: "",
           state: {},
         },
-        handler
+        handler,
       );
 
       expect(capturedRequest.systemPrompt).toContain("## Long-term Memory");
-      expect(capturedRequest.systemPrompt).toContain("When to CHECK/READ memories");
+      expect(capturedRequest.systemPrompt).toContain(
+        "When to CHECK/READ memories",
+      );
       expect(capturedRequest.systemPrompt).toContain("When to update memories");
     });
 
@@ -287,10 +300,12 @@ describe("Agent Memory Middleware", () => {
           systemPrompt: "You are a helpful coding assistant.",
           state: {},
         },
-        handler
+        handler,
       );
 
-      expect(capturedRequest.systemPrompt).toContain("You are a helpful coding assistant.");
+      expect(capturedRequest.systemPrompt).toContain(
+        "You are a helpful coding assistant.",
+      );
     });
 
     it("should show placeholder when no memory files exist", async () => {
@@ -310,7 +325,7 @@ describe("Agent Memory Middleware", () => {
           systemPrompt: "",
           state: {},
         },
-        handler
+        handler,
       );
 
       expect(capturedRequest.systemPrompt).toContain("(No user agent.md)");
@@ -323,7 +338,10 @@ describe("Agent Memory Middleware", () => {
       const projectMemoryContent = "My project";
 
       fs.writeFileSync(path.join(userAgentDir, "agent.md"), userMemoryContent);
-      fs.writeFileSync(path.join(projectAgentDir, "agent.md"), projectMemoryContent);
+      fs.writeFileSync(
+        path.join(projectAgentDir, "agent.md"),
+        projectMemoryContent,
+      );
 
       const middleware = createAgentMemoryMiddleware({
         settings: mockSettings,
@@ -344,7 +362,7 @@ describe("Agent Memory Middleware", () => {
           systemPrompt: "",
           state: stateUpdate,
         },
-        handler
+        handler,
       );
 
       expect(capturedRequest.systemPrompt).toContain("USER: My preferences");
@@ -352,4 +370,3 @@ describe("Agent Memory Middleware", () => {
     });
   });
 });
-

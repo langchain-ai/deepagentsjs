@@ -28,18 +28,36 @@ class MockSandboxBackend implements SandboxBackendProtocol {
     return { output: `Executed: ${command}`, exitCode: 0, truncated: false };
   }
 
-  lsInfo() { return []; }
-  read() { return ""; }
-  readRaw() { return { content: [], created_at: "", modified_at: "" }; }
-  grepRaw() { return []; }
-  globInfo() { return []; }
-  write() { return { path: "" }; }
-  edit() { return { path: "" }; }
+  lsInfo() {
+    return [];
+  }
+  read() {
+    return "";
+  }
+  readRaw() {
+    return { content: [], created_at: "", modified_at: "" };
+  }
+  grepRaw() {
+    return [];
+  }
+  globInfo() {
+    return [];
+  }
+  write() {
+    return { path: "" };
+  }
+  edit() {
+    return { path: "" };
+  }
   uploadFiles(files: Array<[string, Uint8Array]>): FileUploadResponse[] {
     return files.map(([path]) => ({ path, error: null }));
   }
   downloadFiles(paths: string[]): FileDownloadResponse[] {
-    return paths.map(path => ({ path, content: new Uint8Array(), error: null }));
+    return paths.map((path) => ({
+      path,
+      content: new Uint8Array(),
+      error: null,
+    }));
   }
 }
 
@@ -160,7 +178,7 @@ describe("CompositeBackend", () => {
 
     const resMem = await composite.write(
       "/memories/important.md",
-      "long-term memory"
+      "long-term memory",
     );
     expect(resMem.filesUpdate).toBeNull();
     expect(resMem.path).toBe("/important.md");
@@ -171,7 +189,7 @@ describe("CompositeBackend", () => {
 
     const resCache = await composite.write(
       "/cache/session.json",
-      "cached session"
+      "cached session",
     );
     expect(resCache.filesUpdate).toBeNull();
     expect(resCache.path).toBe("/session.json");
@@ -201,14 +219,14 @@ describe("CompositeBackend", () => {
 
     const globResults = await composite.globInfo("**/*.md", "/");
     expect(globResults.some((i) => i.path === "/memories/important.md")).toBe(
-      true
+      true,
     );
 
     const editRes = await composite.edit(
       "/memories/important.md",
       "long-term",
       "persistent",
-      false
+      false,
     );
     expect(editRes.error).toBeUndefined();
     expect(editRes.occurrences).toBe(1);
@@ -309,15 +327,13 @@ describe("CompositeBackend", () => {
     const listing1 = await composite.lsInfo("/store/");
     const listing2 = await composite.lsInfo("/store");
     expect(listing1.map((fi) => fi.path)).toEqual(
-      listing2.map((fi) => fi.path)
+      listing2.map((fi) => fi.path),
     );
   });
 
   it("should handle large tool result interception with default route", async () => {
     const { config } = makeConfig();
-    const { createFilesystemMiddleware } = await import(
-      "../middleware/fs.js"
-    );
+    const { createFilesystemMiddleware } = await import("../middleware/fs.js");
     const { ToolMessage } = await import("@langchain/core/messages");
     const { Command } = await import("@langchain/langgraph");
 
@@ -346,27 +362,25 @@ describe("CompositeBackend", () => {
         state: { files: {}, messages: [] },
         runtime: {},
       },
-      mockToolFn
+      mockToolFn,
     );
 
     expect(result).toBeInstanceOf(Command);
     expect(result.update.files).toBeDefined();
     expect(result.update.files["/large_tool_results/test_789"]).toBeDefined();
     expect(result.update.files["/large_tool_results/test_789"].content).toEqual(
-      [largeContent]
+      [largeContent],
     );
 
     expect(result.update.messages).toHaveLength(1);
     expect(result.update.messages[0].content).toContain(
-      "Tool result too large"
+      "Tool result too large",
     );
   });
 
   it("should handle large tool result interception routed to store", async () => {
     const { config } = makeConfig();
-    const { createFilesystemMiddleware } = await import(
-      "../middleware/fs.js"
-    );
+    const { createFilesystemMiddleware } = await import("../middleware/fs.js");
     const { ToolMessage } = await import("@langchain/core/messages");
 
     const middleware = createFilesystemMiddleware({
@@ -394,7 +408,7 @@ describe("CompositeBackend", () => {
         state: { files: {}, messages: [] },
         runtime: {},
       },
-      mockToolFn
+      mockToolFn,
     );
 
     expect(result).toBeInstanceOf(ToolMessage);
@@ -403,7 +417,7 @@ describe("CompositeBackend", () => {
 
     const storedContent = await config.store.get(
       ["filesystem"],
-      "/test_routed_123"
+      "/test_routed_123",
     );
     expect(storedContent).toBeDefined();
     expect((storedContent!.value as any).content).toEqual([largeContent]);
@@ -473,7 +487,7 @@ describe("CompositeBackend", () => {
 
     const res2 = await composite.write(
       "/memories/important.txt",
-      "routed store content"
+      "routed store content",
     );
     expect(res2.error).toBeUndefined();
     expect(res2.path).toBe("/important.txt");
@@ -499,7 +513,7 @@ describe("CompositeBackend", () => {
     expect(Array.isArray(matches2)).toBe(true);
     if (Array.isArray(matches2)) {
       expect(matches2.some((m) => m.path === "/memories/important.txt")).toBe(
-        true
+        true,
       );
     }
   });
@@ -566,7 +580,7 @@ describe("CompositeBackend", () => {
     it("should delegate execute to default sandbox backend", async () => {
       const mockSandbox = new MockSandboxBackend();
       const { stateAndStore } = makeConfig();
-      
+
       const composite = new CompositeBackend(mockSandbox, {
         "/store/": new StoreBackend(stateAndStore),
       });
@@ -593,7 +607,7 @@ describe("CompositeBackend", () => {
   describe("uploadFiles", () => {
     it("should route uploads to correct backend based on path", async () => {
       const { stateAndStore } = makeConfig();
-      
+
       const composite = new CompositeBackend(new StateBackend(stateAndStore), {
         "/store/": new StoreBackend(stateAndStore),
       });
@@ -613,7 +627,7 @@ describe("CompositeBackend", () => {
 
     it("should batch uploads by backend", async () => {
       const { stateAndStore } = makeConfig();
-      
+
       const composite = new CompositeBackend(new StateBackend(stateAndStore), {
         "/store/": new StoreBackend(stateAndStore),
       });
@@ -627,12 +641,12 @@ describe("CompositeBackend", () => {
 
       const result = await composite.uploadFiles(files);
       expect(result).toHaveLength(4);
-      
+
       // Check all succeeded
       for (const r of result) {
         expect(r.error).toBeNull();
       }
-      
+
       // Check original paths preserved
       expect(result[0].path).toBe("/a.txt");
       expect(result[1].path).toBe("/store/b.txt");
@@ -644,7 +658,7 @@ describe("CompositeBackend", () => {
   describe("downloadFiles", () => {
     it("should route downloads to correct backend based on path", async () => {
       const { state, stateAndStore } = makeConfig();
-      
+
       const composite = new CompositeBackend(new StateBackend(stateAndStore), {
         "/store/": new StoreBackend(stateAndStore),
       });
@@ -656,21 +670,28 @@ describe("CompositeBackend", () => {
       }
       await composite.write("/store/remote.txt", "remote content");
 
-      const result = await composite.downloadFiles(["/local.txt", "/store/remote.txt"]);
+      const result = await composite.downloadFiles([
+        "/local.txt",
+        "/store/remote.txt",
+      ]);
       expect(result).toHaveLength(2);
-      
+
       expect(result[0].path).toBe("/local.txt");
       expect(result[0].error).toBeNull();
-      expect(new TextDecoder().decode(result[0].content!)).toBe("local content");
-      
+      expect(new TextDecoder().decode(result[0].content!)).toBe(
+        "local content",
+      );
+
       expect(result[1].path).toBe("/store/remote.txt");
       expect(result[1].error).toBeNull();
-      expect(new TextDecoder().decode(result[1].content!)).toBe("remote content");
+      expect(new TextDecoder().decode(result[1].content!)).toBe(
+        "remote content",
+      );
     });
 
     it("should handle mixed results across backends", async () => {
       const { state, stateAndStore } = makeConfig();
-      
+
       const composite = new CompositeBackend(new StateBackend(stateAndStore), {
         "/store/": new StoreBackend(stateAndStore),
       });
@@ -681,9 +702,13 @@ describe("CompositeBackend", () => {
         Object.assign(state.files, writeRes.filesUpdate);
       }
 
-      const result = await composite.downloadFiles(["/exists.txt", "/missing.txt", "/store/missing.txt"]);
+      const result = await composite.downloadFiles([
+        "/exists.txt",
+        "/missing.txt",
+        "/store/missing.txt",
+      ]);
       expect(result).toHaveLength(3);
-      
+
       expect(result[0].error).toBeNull();
       expect(result[1].error).toBe("file_not_found");
       expect(result[2].error).toBe("file_not_found");

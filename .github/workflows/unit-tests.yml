@@ -38,8 +38,10 @@ jobs:
         run: pnpm install
       - name: Build project
         run: pnpm build
-      - name: Run tests
+      - name: Run Unit Tests
         run: pnpm test
+      - name: Run Integration Tests
+        run: pnpm test:int
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

@@ -190,7 +190,7 @@ describe("Execute Tool", () => {
 describe("isSandboxBackend type guard", () => {
   it("should return true for backends with execute and id", async () => {
     const { isSandboxBackend } = await import("../backends/protocol.js");
-    
+
     const mockSandbox = {
       execute: () => ({ output: "", exitCode: 0, truncated: false }),
       id: "test-sandbox",
@@ -211,16 +211,16 @@ describe("isSandboxBackend type guard", () => {
   it("should return false for backends without execute", async () => {
     const { isSandboxBackend } = await import("../backends/protocol.js");
     const { StateBackend } = await import("../backends/state.js");
-    
+
     const stateAndStore = { state: { files: {} }, store: undefined };
     const stateBackend = new StateBackend(stateAndStore);
-    
+
     expect(isSandboxBackend(stateBackend)).toBe(false);
   });
 
   it("should return false for backends without id", async () => {
     const { isSandboxBackend } = await import("../backends/protocol.js");
-    
+
     const mockBackend = {
       execute: () => ({ output: "", exitCode: 0, truncated: false }),
       // Missing id
@@ -254,7 +254,7 @@ describe("PatchToolCallsMiddleware", () => {
     expect(stateUpdate.messages).toHaveLength(3);
     expect(stateUpdate.messages[0]._getType()).toBe("remove");
     expect(stateUpdate.messages[1].content).toBe(
-      "You are a helpful assistant."
+      "You are a helpful assistant.",
     );
     expect(stateUpdate.messages[2].content).toBe("Hello, how are you?");
   });
