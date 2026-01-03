@@ -65,7 +65,7 @@ describe("Skill Loader Module", () => {
       expect(result!.name).toBe("web-research");
       expect(result!.description).toBe("Research the web for information");
       expect(result!.source).toBe("user");
-      expect(result!.path).toContain("web-research/SKILL.md");
+      expect(result!.path).toContain(path.join("web-research", "SKILL.md"));
     });
 
     it("should return null for missing frontmatter", () => {
