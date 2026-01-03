@@ -220,4 +220,3 @@ export function createSettings(options: SettingsOptions = {}): Settings {
     },
   };
 }
-
