@@ -5,7 +5,7 @@ import { TavilySearch } from "@langchain/tavily";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { HumanMessage } from "@langchain/core/messages";
 
-import { createDeepAgent, StateBackend } from "../../src/index.js";
+import { createDeepAgent, StateBackend } from "deepagents";
 
 const internetSearch = tool(
   async ({ query, maxResults = 5 }: { query: string; maxResults?: number }) => {
