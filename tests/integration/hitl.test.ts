@@ -11,17 +11,10 @@ import {
 import {
   AIMessage,
   HITLRequest,
-  HITLResponse,
   HumanMessage,
-  Interrupt,
   ToolMessage,
   type InterruptOnConfig,
-  createAgent,
-  tool,
-  humanInTheLoopMiddleware,
 } from "langchain";
-import { z } from "zod/v3";
-import { SAMPLE_MODEL } from "../utils.js";
 
 const SAMPLE_TOOL_CONFIG: Record<string, boolean | InterruptOnConfig> = {
   sample_tool: true,
