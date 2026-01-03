@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { createSettings } from "../../src/config.js";
-import { listSkills } from "../../src/skills/loader.js";
-import { createSkillsMiddleware } from "../../src/middleware/skills.js";
-import { createAgentMemoryMiddleware } from "../../src/middleware/agent-memory.js";
+import { createSettings } from "../config.js";
+import { listSkills } from "./loader.js";
+import { createSkillsMiddleware } from "../middleware/skills.js";
+import { createAgentMemoryMiddleware } from "../middleware/agent-memory.js";
 
 describe("Skills Integration Tests", () => {
   let tempDir: string;

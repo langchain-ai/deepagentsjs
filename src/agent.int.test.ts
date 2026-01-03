@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
-import { createDeepAgent } from "../../src/index.js";
+import { createDeepAgent } from "./index.js";
 import {
   SAMPLE_MODEL,
   TOY_BASKETBALL_RESEARCH,
@@ -14,7 +14,7 @@ import {
   getWeather,
   sampleTool,
   extractToolsFromAgent,
-} from "../utils.js";
+} from "./testing/utils.js";
 
 describe("DeepAgents Integration Tests", () => {
   it.concurrent("should create a base deep agent", () => {

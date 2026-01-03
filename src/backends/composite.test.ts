@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { CompositeBackend } from "../../../src/backends/composite.js";
-import { StateBackend } from "../../../src/backends/state.js";
-import { StoreBackend } from "../../../src/backends/store.js";
-import { FilesystemBackend } from "../../../src/backends/filesystem.js";
+import { CompositeBackend } from "./composite.js";
+import { StateBackend } from "./state.js";
+import { StoreBackend } from "./store.js";
+import { FilesystemBackend } from "./filesystem.js";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 import { getCurrentTaskInput } from "@langchain/langgraph";
 import * as fs from "fs/promises";
@@ -10,12 +10,11 @@ import * as fsSync from "fs";
 import * as path from "path";
 import * as os from "os";
 import type {
-  BackendProtocol,
   ExecuteResponse,
   FileDownloadResponse,
   FileUploadResponse,
   SandboxBackendProtocol,
-} from "../../../src/backends/protocol.js";
+} from "./protocol.js";
 
 /**
  * Mock sandbox backend for testing execute delegation
@@ -65,7 +64,7 @@ function createTempDir(): string {
 async function removeDir(dirPath: string) {
   try {
     await fs.rm(dirPath, { recursive: true, force: true });
-  } catch (err) {
+  } catch {
     // Ignore errors during cleanup
   }
 }
@@ -315,9 +314,9 @@ describe("CompositeBackend", () => {
   });
 
   it("should handle large tool result interception with default route", async () => {
-    const { stateAndStore, config } = makeConfig();
+    const { config } = makeConfig();
     const { createFilesystemMiddleware } = await import(
-      "../../../src/middleware/fs.js"
+      "../middleware/fs.js"
     );
     const { ToolMessage } = await import("@langchain/core/messages");
     const { Command } = await import("@langchain/langgraph");
@@ -364,9 +363,9 @@ describe("CompositeBackend", () => {
   });
 
   it("should handle large tool result interception routed to store", async () => {
-    const { stateAndStore, config, store } = makeConfig();
+    const { config } = makeConfig();
     const { createFilesystemMiddleware } = await import(
-      "../../../src/middleware/fs.js"
+      "../middleware/fs.js"
     );
     const { ToolMessage } = await import("@langchain/core/messages");
 
@@ -593,7 +592,7 @@ describe("CompositeBackend", () => {
 
   describe("uploadFiles", () => {
     it("should route uploads to correct backend based on path", async () => {
-      const { state, stateAndStore } = makeConfig();
+      const { stateAndStore } = makeConfig();
       
       const composite = new CompositeBackend(new StateBackend(stateAndStore), {
         "/store/": new StoreBackend(stateAndStore),

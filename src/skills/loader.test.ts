@@ -5,8 +5,7 @@ import os from "node:os";
 import {
   listSkills,
   parseSkillMetadata,
-  type SkillMetadata,
-} from "../../../src/skills/loader.js";
+} from "./loader.js";
 
 describe("Skill Loader Module", () => {
   let tempDir: string;
