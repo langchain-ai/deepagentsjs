@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { StoreBackend } from "../../../src/backends/store.js";
+import { StoreBackend } from "./store.js";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 
 /**
@@ -317,7 +317,7 @@ describe("StoreBackend", () => {
   it("should handle large tool result interception via middleware", async () => {
     const { store, config } = makeConfig();
     const { createFilesystemMiddleware } = await import(
-      "../../../src/middleware/fs.js"
+      "../middleware/fs.js"
     );
     const { ToolMessage } = await import("@langchain/core/messages");
 

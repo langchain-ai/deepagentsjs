@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { listSkills, parseSkillMetadata } from "../../../src/skills/loader.js";
+import { listSkills, parseSkillMetadata } from "./loader.js";
 
 describe("Skill Loader Module", () => {
   let tempDir: string;

@@ -6,7 +6,7 @@ import {
   createSettings,
   findProjectRoot,
   type Settings,
-} from "../../src/config.js";
+} from "./config.js";
 
 describe("Config Module", () => {
   let tempDir: string;

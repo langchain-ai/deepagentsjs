@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { createAgentMemoryMiddleware, type AgentMemoryMiddlewareOptions } from "../../../src/middleware/agent-memory.js";
-import { createSettings, type Settings } from "../../../src/config.js";
+import { createAgentMemoryMiddleware } from "./agent-memory.js";
+import type { Settings } from "../config.js";
 
 describe("Agent Memory Middleware", () => {
   let tempDir: string;

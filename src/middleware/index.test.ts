@@ -4,7 +4,7 @@ import {
   createFilesystemMiddleware,
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
-} from "../../src/index.js";
+} from "../index.js";
 import {
   SystemMessage,
   HumanMessage,
@@ -13,7 +13,7 @@ import {
 } from "@langchain/core/messages";
 import { messagesStateReducer as addMessages } from "@langchain/langgraph";
 
-import { SAMPLE_MODEL } from "../utils.js";
+import { SAMPLE_MODEL } from "../testing/utils.js";
 
 describe("Middleware Integration", () => {
   it("should add filesystem middleware to agent", () => {
@@ -175,13 +175,13 @@ describe("Execute Tool", () => {
   });
 
   it("should export EXECUTE_TOOL_DESCRIPTION constant", async () => {
-    const { EXECUTE_TOOL_DESCRIPTION } = await import("../../src/middleware/fs.js");
+    const { EXECUTE_TOOL_DESCRIPTION } = await import("./fs.js");
     expect(EXECUTE_TOOL_DESCRIPTION).toBeDefined();
     expect(EXECUTE_TOOL_DESCRIPTION).toContain("sandbox");
   });
 
   it("should export EXECUTION_SYSTEM_PROMPT constant", async () => {
-    const { EXECUTION_SYSTEM_PROMPT } = await import("../../src/middleware/fs.js");
+    const { EXECUTION_SYSTEM_PROMPT } = await import("./fs.js");
     expect(EXECUTION_SYSTEM_PROMPT).toBeDefined();
     expect(EXECUTION_SYSTEM_PROMPT).toContain("execute");
   });
@@ -189,7 +189,7 @@ describe("Execute Tool", () => {
 
 describe("isSandboxBackend type guard", () => {
   it("should return true for backends with execute and id", async () => {
-    const { isSandboxBackend } = await import("../../src/backends/protocol.js");
+    const { isSandboxBackend } = await import("../backends/protocol.js");
     
     const mockSandbox = {
       execute: () => ({ output: "", exitCode: 0, truncated: false }),
@@ -209,8 +209,8 @@ describe("isSandboxBackend type guard", () => {
   });
 
   it("should return false for backends without execute", async () => {
-    const { isSandboxBackend } = await import("../../src/backends/protocol.js");
-    const { StateBackend } = await import("../../src/backends/state.js");
+    const { isSandboxBackend } = await import("../backends/protocol.js");
+    const { StateBackend } = await import("../backends/state.js");
     
     const stateAndStore = { state: { files: {} }, store: undefined };
     const stateBackend = new StateBackend(stateAndStore);
@@ -219,7 +219,7 @@ describe("isSandboxBackend type guard", () => {
   });
 
   it("should return false for backends without id", async () => {
-    const { isSandboxBackend } = await import("../../src/backends/protocol.js");
+    const { isSandboxBackend } = await import("../backends/protocol.js");
     
     const mockBackend = {
       execute: () => ({ output: "", exitCode: 0, truncated: false }),
