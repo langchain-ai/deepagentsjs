@@ -16,7 +16,7 @@
     "format": "prettier --write \"src/**/*.{ts,js,json,md}\" \"examples/**/*.{ts,js,json,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,js,json,md}\" \"examples/**/*.{ts,js,json,md}\"",
     "prepublishOnly": "pnpm build",
-    "test": "pnpm lint && vitest run",
+    "test": "pnpm format:check && pnpm lint && vitest run",
     "test:unit": "vitest run",
     "test:int": "vitest run --mode int",
     "test:watch": "vitest",

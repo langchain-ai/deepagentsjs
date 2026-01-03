@@ -203,4 +203,3 @@ describe("isSandboxBackend", () => {
     expect(isSandboxBackend(backendWithBadId as any)).toBe(false);
   });
 });
-

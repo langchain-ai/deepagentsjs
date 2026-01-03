@@ -8,18 +8,18 @@ import { withLangGraph } from "@langchain/langgraph/zod";
  * Assert that an agent has all the expected deep agent qualities
  */
 export function assertAllDeepAgentQualities(
-  agent: ReactAgent<any, any, any, any>
+  agent: ReactAgent<any, any, any, any>,
 ) {
   // Check state channels
   const channels = Object.keys(agent.graph?.channels || {});
   if (!channels.includes("todos")) {
     throw new Error(
-      `Expected agent to have 'todos' channel, got: ${channels.join(", ")}`
+      `Expected agent to have 'todos' channel, got: ${channels.join(", ")}`,
     );
   }
   if (!channels.includes("files")) {
     throw new Error(
-      `Expected agent to have 'files' channel, got: ${channels.join(", ")}`
+      `Expected agent to have 'files' channel, got: ${channels.join(", ")}`,
     );
   }
 
@@ -38,7 +38,7 @@ export function assertAllDeepAgentQualities(
   for (const toolName of expectedTools) {
     if (!toolNames.includes(toolName)) {
       throw new Error(
-        `Expected agent to have '${toolName}' tool, got: ${toolNames.join(", ")}`
+        `Expected agent to have '${toolName}' tool, got: ${toolNames.join(", ")}`,
       );
     }
   }
@@ -57,7 +57,7 @@ export const getPremierLeagueStandings = tool(
   async (_, config) => {
     const longToolMsg =
       "This is a long tool message that should be evicted to the filesystem.\n".repeat(
-        300
+        300,
       );
     return new Command({
       update: {
@@ -81,14 +81,14 @@ export const getPremierLeagueStandings = tool(
     name: "get_premier_league_standings",
     description: "Use this tool to get premier league standings",
     schema: z.object({}),
-  }
+  },
 );
 
 export const getLaLigaStandings = tool(
   async (_, config) => {
     const longToolMsg =
       "This is a long tool message that should be evicted to the filesystem.\n".repeat(
-        300
+        300,
       );
     return new Command({
       update: {
@@ -105,13 +105,13 @@ export const getLaLigaStandings = tool(
     name: "get_la_liga_standings",
     description: "Use this tool to get la liga standings",
     schema: z.object({}),
-  }
+  },
 );
 
 export const getNbaStandings = tool(
   () => {
     return "Sample text that is too long to fit in the token limit\n".repeat(
-      10000
+      10000,
     );
   },
   {
@@ -119,13 +119,13 @@ export const getNbaStandings = tool(
     description:
       "Use this tool to get a comprehensive report on the NBA standings",
     schema: z.object({}),
-  }
+  },
 );
 
 export const getNflStandings = tool(
   () => {
     return "Sample text that is too long to fit in the token limit\n".repeat(
-      100
+      100,
     );
   },
   {
@@ -133,7 +133,7 @@ export const getNflStandings = tool(
     description:
       "Use this tool to get a comprehensive report on the NFL standings",
     schema: z.object({}),
-  }
+  },
 );
 
 export const getWeather = tool(
@@ -142,7 +142,7 @@ export const getWeather = tool(
     name: "get_weather",
     description: "Use this tool to get the weather",
     schema: z.object({ location: z.string() }),
-  }
+  },
 );
 
 export const getSoccerScores = tool(
@@ -153,7 +153,7 @@ export const getSoccerScores = tool(
     schema: z.object({
       team: z.string(),
     }),
-  }
+  },
 );
 
 export const sampleTool = tool((input) => input.sample_input, {
@@ -189,7 +189,7 @@ export const researchBasketball = tool(
     description:
       "Use this tool to conduct research into basketball and save it to state",
     schema: z.object({ topic: z.string() }),
-  }
+  },
 );
 
 /**
@@ -205,7 +205,7 @@ const ResearchStateSchema = z.object({
         fn: (left, right) => right || left || "",
         schema: z.string().nullable(),
       },
-    }
+    },
   ),
 });
 
@@ -234,7 +234,7 @@ const SampleStateSchema = z.object({
         fn: (left, right) => right || left || "",
         schema: z.string().nullable(),
       },
-    }
+    },
   ),
 });
 
@@ -256,6 +256,6 @@ export function extractToolsFromAgent(agent: ReactAgent) {
   };
 
   return Object.fromEntries(
-    (toolsNode.tools ?? []).map((tool) => [tool.name, tool])
+    (toolsNode.tools ?? []).map((tool) => [tool.name, tool]),
   );
 }

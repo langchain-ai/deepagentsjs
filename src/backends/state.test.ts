@@ -319,9 +319,7 @@ describe("StateBackend", () => {
 
   it("should handle large tool result interception via middleware", async () => {
     const { config } = makeConfig();
-    const { createFilesystemMiddleware } = await import(
-      "../middleware/fs.js"
-    );
+    const { createFilesystemMiddleware } = await import("../middleware/fs.js");
 
     const middleware = createFilesystemMiddleware({
       toolTokenLimitBeforeEvict: 1000,
