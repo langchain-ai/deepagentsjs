@@ -17,4 +17,3 @@ export {
 } from "./loader.js";
 
 export type { SkillMetadata, ListSkillsOptions } from "./loader.js";
-

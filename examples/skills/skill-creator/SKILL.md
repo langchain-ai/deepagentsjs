@@ -98,4 +98,3 @@ The validation script checks:
 - Skill naming conventions (hyphen-case, max 64 characters)
 - Description completeness (max 1024 characters)
 - Required fields: `name` and `description`
-

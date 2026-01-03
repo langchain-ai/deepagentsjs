@@ -247,15 +247,12 @@ export function parseSkillMetadata(
       description: descriptionStr,
       path: skillMdPath,
       source,
-      license: frontmatter.license
-        ? String(frontmatter.license)
-        : undefined,
+      license: frontmatter.license ? String(frontmatter.license) : undefined,
       compatibility: frontmatter.compatibility
         ? String(frontmatter.compatibility)
         : undefined,
       metadata:
-        frontmatter.metadata &&
-        typeof frontmatter.metadata === "object"
+        frontmatter.metadata && typeof frontmatter.metadata === "object"
           ? (frontmatter.metadata as Record<string, string>)
           : undefined,
       allowedTools: frontmatter["allowed-tools"]
@@ -379,7 +376,10 @@ export function listSkills(options: ListSkillsOptions): SkillMetadata[] {
 
   // Load project skills second (override/augment)
   if (options.projectSkillsDir) {
-    const projectSkills = listSkillsFromDir(options.projectSkillsDir, "project");
+    const projectSkills = listSkillsFromDir(
+      options.projectSkillsDir,
+      "project",
+    );
     for (const skill of projectSkills) {
       // Project skills override user skills with the same name
       allSkills.set(skill.name, skill);
@@ -388,4 +388,3 @@ export function listSkills(options: ListSkillsOptions): SkillMetadata[] {
 
   return Array.from(allSkills.values());
 }
-
