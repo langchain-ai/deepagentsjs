@@ -5,7 +5,7 @@ permissions:
 
 on:
   pull_request:
-    types: [opened, edited, synchronize]
+    types: [opened, edited, synchronize, reopened]
 
 jobs:
   lint-pr-title:

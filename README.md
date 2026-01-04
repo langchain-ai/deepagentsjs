@@ -1,10 +1,18 @@
 # 🧠 Deep Agents
 
-<div align="center">
+Using an LLM to call tools in a loop is the simplest form of an agent.
+This architecture, however, can yield agents that are "shallow" and fail to plan and act over longer, more complex tasks.
+
+Applications like "Deep Research", "Manus", and "Claude Code" have gotten around this limitation by implementing a combination of four things:
+a **planning tool**, **sub agents**, access to a **file system**, and a **detailed prompt**.
+
+> 💡 **Tip:** Looking for the Python version of this package? See [here: langchain-ai/deepagents](https://github.com/langchain-ai/deepagents)
+
+<!-- TODO: Add image here -->
 
 ![Deep Agents](deep_agents.png)
 
-**A TypeScript library for building controllable, long-horizon AI agents with LangGraph**
+**Acknowledgements: This project was primarily inspired by Claude Code, and initially was largely an attempt to see what made Claude Code general purpose, and make it even more so.**
 
 [![npm version](https://img.shields.io/npm/v/deepagents.svg)](https://www.npmjs.com/package/deepagents)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -51,255 +59,539 @@ Applications like **Deep Research**, **Manus**, and **Claude Code** have overcom
 Install using your preferred package manager:
 
 ```bash
-# Using Yarn
-yarn add deepagents
-
-# Using npm
+# npm
 npm install deepagents
 
-# Using pnpm
+# yarn
+yarn add deepagents
+
+# pnpm
 pnpm add deepagents
 ```
 
----
+## Usage
 
-## 🏁 Quick Start
+(To run the example below, you will need to `npm install @langchain/tavily`).
 
-```typescript
-import { createDeepAgent } from 'deepagents';
-
-// Create a Deep Agent
-const agent = createDeepAgent({
-  tools: [/* your tools */],
-  instructions: 'You are a helpful AI assistant...',
-});
-
-// Run the agent
-const result = await agent.invoke({
-  messages: [{ role: 'user', content: 'Your task here' }],
-});
-
-console.log(result);
-```
-
-### With Streaming
+Make sure to set `TAVILY_API_KEY` in your environment. You can generate one [here](https://www.tavily.com/).
 
 ```typescript
-import { createDeepAgent, StreamingPresets } from 'deepagents';
+import { tool } from "langchain";
+import { TavilySearch } from "@langchain/tavily";
+import { createDeepAgent } from "deepagents";
+import { z } from "zod";
 
-const agent = createDeepAgent({
-  tools: [/* your tools */],
-  instructions: 'You are a helpful AI assistant...',
-});
-
-// Stream state updates in real-time
-const stream = await agent.stream(
-  { messages: [{ role: 'user', content: 'Your task here' }] },
-  { streamMode: 'updates' }
+// Web search tool
+const internetSearch = tool(
+  async ({
+    query,
+    maxResults = 5,
+    topic = "general",
+    includeRawContent = false,
+  }: {
+    query: string;
+    maxResults?: number;
+    topic?: "general" | "news" | "finance";
+    includeRawContent?: boolean;
+  }) => {
+    const tavilySearch = new TavilySearch({
+      maxResults,
+      tavilyApiKey: process.env.TAVILY_API_KEY,
+      includeRawContent,
+      topic,
+    });
+    return await tavilySearch._call({ query });
+  },
+  {
+    name: "internet_search",
+    description: "Run a web search",
+    schema: z.object({
+      query: z.string().describe("The search query"),
+      maxResults: z
+        .number()
+        .optional()
+        .default(5)
+        .describe("Maximum number of results to return"),
+      topic: z
+        .enum(["general", "news", "finance"])
+        .optional()
+        .default("general")
+        .describe("Search topic category"),
+      includeRawContent: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Whether to include raw content"),
+    }),
+  },
 );
 
-for await (const update of stream) {
-  console.log('Update:', update);
+// System prompt to steer the agent to be an expert researcher
+const researchInstructions = `You are an expert researcher. Your job is to conduct thorough research, and then write a polished report.
+
+You have access to an internet search tool as your primary means of gathering information.
+
+## \`internet_search\`
+
+Use this to run an internet search for a given query. You can specify the max number of results to return, the topic, and whether raw content should be included.
+`;
+
+// Create the deep agent
+const agent = createDeepAgent({
+  tools: [internetSearch],
+  systemPrompt: researchInstructions,
+});
+
+// Invoke the agent
+const result = await agent.invoke({
+  messages: [{ role: "user", content: "What is langgraph?" }],
+});
+```
+
+See [examples/research/research-agent.ts](examples/research/research-agent.ts) for a more complex example.
+
+The agent created with `createDeepAgent` is just a LangGraph graph - so you can interact with it (streaming, human-in-the-loop, memory, studio)
+in the same way you would any LangGraph agent.
+
+## Core Capabilities
+
+**Planning & Task Decomposition**
+
+Deep Agents include a built-in `write_todos` tool that enables agents to break down complex tasks into discrete steps, track progress, and adapt plans as new information emerges.
+
+**Context Management**
+
+File system tools (`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`) allow agents to offload large context to memory, preventing context window overflow and enabling work with variable-length tool results.
+
+**Subagent Spawning**
+
+A built-in `task` tool enables agents to spawn specialized subagents for context isolation. This keeps the main agent's context clean while still going deep on specific subtasks.
+
+**Long-term Memory**
+
+Extend agents with persistent memory across threads using LangGraph's Store. Agents can save and retrieve information from previous conversations.
+
+## Customizing Deep Agents
+
+There are several parameters you can pass to `createDeepAgent` to create your own custom deep agent.
+
+### `model`
+
+By default, `deepagents` uses `"claude-sonnet-4-5-20250929"`. You can customize this by passing any [LangChain model object](https://js.langchain.com/docs/integrations/chat/).
+
+```typescript
+import { ChatAnthropic } from "@langchain/anthropic";
+import { ChatOpenAI } from "@langchain/openai";
+import { createDeepAgent } from "deepagents";
+
+// Using Anthropic
+const agent = createDeepAgent({
+  model: new ChatAnthropic({
+    model: "claude-sonnet-4-20250514",
+    temperature: 0,
+  }),
+});
+
+// Using OpenAI
+const agent2 = createDeepAgent({
+  model: new ChatOpenAI({
+    model: "gpt-5",
+    temperature: 0,
+  }),
+});
+```
+
+### `systemPrompt`
+
+Deep Agents come with a built-in system prompt. This is relatively detailed prompt that is heavily based on and inspired by [attempts](https://github.com/kn1026/cc/blob/main/claudecode.md) to [replicate](https://github.com/asgeirtj/system_prompts_leaks/blob/main/Anthropic/claude-code.md)
+Claude Code's system prompt. It was made more general purpose than Claude Code's system prompt. The default prompt contains detailed instructions for how to use the built-in planning tool, file system tools, and sub agents.
+
+Each deep agent tailored to a use case should include a custom system prompt specific to that use case as well. The importance of prompting for creating a successful deep agent cannot be overstated.
+
+```typescript
+import { createDeepAgent } from "deepagents";
+
+const researchInstructions = `You are an expert researcher. Your job is to conduct thorough research, and then write a polished report.`;
+
+const agent = createDeepAgent({
+  systemPrompt: researchInstructions,
+});
+```
+
+### `tools`
+
+Just like with tool-calling agents, you can provide a deep agent with a set of tools that it has access to.
+
+```typescript
+import { tool } from "langchain";
+import { TavilySearch } from "@langchain/tavily";
+import { createDeepAgent } from "deepagents";
+import { z } from "zod";
+
+const internetSearch = tool(
+  async ({
+    query,
+    maxResults = 5,
+    topic = "general",
+    includeRawContent = false,
+  }: {
+    query: string;
+    maxResults?: number;
+    topic?: "general" | "news" | "finance";
+    includeRawContent?: boolean;
+  }) => {
+    const tavilySearch = new TavilySearch({
+      maxResults,
+      tavilyApiKey: process.env.TAVILY_API_KEY,
+      includeRawContent,
+      topic,
+    });
+    return await tavilySearch._call({ query });
+  },
+  {
+    name: "internet_search",
+    description: "Run a web search",
+    schema: z.object({
+      query: z.string().describe("The search query"),
+      maxResults: z.number().optional().default(5),
+      topic: z
+        .enum(["general", "news", "finance"])
+        .optional()
+        .default("general"),
+      includeRawContent: z.boolean().optional().default(false),
+    }),
+  },
+);
+
+const agent = createDeepAgent({
+  tools: [internetSearch],
+});
+```
+
+### `middleware`
+
+`createDeepAgent` is implemented with middleware that can be customized. You can provide additional middleware to extend functionality, add tools, or implement custom hooks.
+
+```typescript
+import { tool } from "langchain";
+import { createDeepAgent } from "deepagents";
+import type { AgentMiddleware } from "langchain";
+import { z } from "zod";
+
+const getWeather = tool(
+  async ({ city }: { city: string }) => {
+    return `The weather in ${city} is sunny.`;
+  },
+  {
+    name: "get_weather",
+    description: "Get the weather in a city.",
+    schema: z.object({
+      city: z.string().describe("The city to get weather for"),
+    }),
+  },
+);
+
+const getTemperature = tool(
+  async ({ city }: { city: string }) => {
+    return `The temperature in ${city} is 70 degrees Fahrenheit.`;
+  },
+  {
+    name: "get_temperature",
+    description: "Get the temperature in a city.",
+    schema: z.object({
+      city: z.string().describe("The city to get temperature for"),
+    }),
+  },
+);
+
+class WeatherMiddleware implements AgentMiddleware {
+  tools = [getWeather, getTemperature];
+}
+
+const agent = createDeepAgent({
+  model: "claude-sonnet-4-20250514",
+  middleware: [new WeatherMiddleware()],
+});
+```
+
+### `subagents`
+
+A main feature of Deep Agents is their ability to spawn subagents. You can specify custom subagents that your agent can hand off work to in the subagents parameter. Sub agents are useful for context quarantine (to help not pollute the overall context of the main agent) as well as custom instructions.
+
+`subagents` should be a list of objects that follow the `SubAgent` interface:
+
+```typescript
+interface SubAgent {
+  name: string;
+  description: string;
+  systemPrompt: string;
+  tools?: StructuredTool[];
+  model?: LanguageModelLike | string;
+  middleware?: AgentMiddleware[];
+  interruptOn?: Record<string, boolean | InterruptOnConfig>;
 }
 ```
 
-### With Sub-Agents
+**SubAgent fields:**
+
+- **name**: This is the name of the subagent, and how the main agent will call the subagent
+- **description**: This is the description of the subagent that is shown to the main agent
+- **systemPrompt**: This is the prompt used for the subagent
+- **tools**: This is the list of tools that the subagent has access to.
+- **model**: Optional model name or model instance.
+- **middleware**: Additional middleware to attach to the subagent. See [here](https://docs.langchain.com/oss/typescript/langchain/middleware) for an introduction into middleware and how it works with createAgent.
+- **interruptOn**: A custom interrupt config that specifies human-in-the-loop interactions for your tools.
+
+#### Using SubAgent
 
 ```typescript
-import { createDeepAgent, type SubAgent } from 'deepagents';
+import { tool } from "langchain";
+import { TavilySearch } from "@langchain/tavily";
+import { createDeepAgent, type SubAgent } from "deepagents";
+import { z } from "zod";
 
-const researchAgent: SubAgent = {
-  name: 'researcher',
-  description: 'Conducts in-depth research',
-  prompt: 'You are a research specialist...',
-  tools: ['search', 'read_file', 'write_file'],
+const internetSearch = tool(
+  async ({
+    query,
+    maxResults = 5,
+    topic = "general",
+    includeRawContent = false,
+  }: {
+    query: string;
+    maxResults?: number;
+    topic?: "general" | "news" | "finance";
+    includeRawContent?: boolean;
+  }) => {
+    const tavilySearch = new TavilySearch({
+      maxResults,
+      tavilyApiKey: process.env.TAVILY_API_KEY,
+      includeRawContent,
+      topic,
+    });
+    return await tavilySearch._call({ query });
+  },
+  {
+    name: "internet_search",
+    description: "Run a web search",
+    schema: z.object({
+      query: z.string(),
+      maxResults: z.number().optional().default(5),
+      topic: z
+        .enum(["general", "news", "finance"])
+        .optional()
+        .default("general"),
+      includeRawContent: z.boolean().optional().default(false),
+    }),
+  },
+);
+
+const researchSubagent: SubAgent = {
+  name: "research-agent",
+  description: "Used to research more in depth questions",
+  systemPrompt: "You are a great researcher",
+  tools: [internetSearch],
+  model: "gpt-4o", // Optional override, defaults to main agent model
 };
 
+const subagents = [researchSubagent];
+
 const agent = createDeepAgent({
-  tools: [searchTool],
-  instructions: 'You coordinate research projects...',
-  subagents: [researchAgent],
-});
-
-const result = await agent.invoke({
-  messages: [{ role: 'user', content: 'Research LangGraph' }],
+  model: "claude-sonnet-4-20250514",
+  subagents: subagents,
 });
 ```
 
----
+### `interruptOn`
 
-## 📚 Documentation
+A common reality for agents is that some tool operations may be sensitive and require human approval before execution. Deep Agents supports human-in-the-loop workflows through LangGraph's interrupt capabilities. You can configure which tools require approval using a checkpointer.
 
-For comprehensive guides, API references, and advanced usage:
+These tool configs are passed to our prebuilt [HITL middleware](https://docs.langchain.com/oss/typescript/langchain/middleware#human-in-the-loop) so that the agent pauses execution and waits for feedback from the user before executing configured tools.
 
-- **[Official Documentation](https://docs.langchain.com/labs/deep-agents/overview)**
-- **[API Reference](https://docs.langchain.com/labs/deep-agents/api)**
-- **[Examples](./examples)** - Real-world implementation examples
-
-### Available Examples
-
-- **[research-agent.ts](./examples/research/research-agent.ts)** - Complete research agent with critique sub-agent
-- **[streaming-basic.ts](./examples/streaming-basic.ts)** - Basic streaming patterns and modes
-- **[streaming-advanced.ts](./examples/streaming-advanced.ts)** - Advanced streaming with sub-agents and progress tracking
-
----
-
-## 🌊 Streaming Capabilities
-
-Deep Agents supports all LangGraph streaming modes since it's built on `createReactAgent`:
-
-### Streaming Modes
-
-1. **`values`** - Stream full state after each node execution
-2. **`updates`** - Stream delta updates after each node (recommended for efficiency)
-3. **`messages`** - Stream LLM tokens in real-time (requires @langchain/langgraph>=0.2.20)
-4. **`debug`** - Stream debug information about execution
-5. **`custom`** - Stream custom data from within nodes
-6. **Multiple modes** - Combine modes for comprehensive observability
-
-### Basic Usage
-
-**Stream state updates:**
 ```typescript
-const stream = await agent.stream(
-  { messages: [{ role: 'user', content: 'Your task' }] },
-  { streamMode: 'updates' }
+import { tool } from "langchain";
+import { createDeepAgent } from "deepagents";
+import { z } from "zod";
+
+const getWeather = tool(
+  async ({ city }: { city: string }) => {
+    return `The weather in ${city} is sunny.`;
+  },
+  {
+    name: "get_weather",
+    description: "Get the weather in a city.",
+    schema: z.object({
+      city: z.string(),
+    }),
+  },
 );
 
-for await (const update of stream) {
-  console.log('Node update:', update);
-}
-```
-
-**Stream LLM tokens (real-time):**
-```typescript
-const stream = await agent.stream(
-  { messages: [{ role: 'user', content: 'Explain LangGraph' }] },
-  { streamMode: 'messages' }
-);
-
-for await (const [message, _metadata] of stream) {
-  if (message.content) {
-    process.stdout.write(message.content);
-  }
-}
-```
-
-**Stream multiple modes:**
-```typescript
-const stream = await agent.stream(
-  { messages: [{ role: 'user', content: 'Research topic' }] },
-  { streamMode: ['updates', 'messages', 'debug'] }
-);
-
-for await (const [mode, data] of stream) {
-  console.log(`[${mode}]:`, data);
-}
-```
-
-### Helper Utilities
-
-Deep Agents provides streaming utilities for common patterns:
-
-```typescript
-import { 
-  processStream, 
-  StreamingPresets, 
-  TokenAccumulator 
-} from 'deepagents';
-
-// Use preset configurations
-const stream = await agent.stream(input, StreamingPresets.PRODUCTION);
-
-// Process stream with custom handlers
-await processStream(stream, {
-  onTodosUpdate: (todos) => {
-    console.log('✓ Todos:', todos.map(t => `${t.status}: ${t.content}`));
-  },
-  onFilesUpdate: (files) => {
-    console.log('✓ Files:', Object.keys(files));
-  },
-  onToken: (token) => {
-    process.stdout.write(token);
-  },
-  onComplete: (finalState) => {
-    console.log('\n✓ Complete!', finalState);
-  },
-});
-
-// Accumulate tokens for later use
-const accumulator = new TokenAccumulator();
-for await (const [message] of stream) {
-  if (message.content) {
-    accumulator.add(message.content);
-  }
-}
-console.log('Full response:', accumulator.getText());
-```
-
-### Streaming Presets
-
-```typescript
-StreamingPresets.FULL_STATE      // { streamMode: "values" }
-StreamingPresets.UPDATES_ONLY    // { streamMode: "updates" }
-StreamingPresets.LLM_TOKENS      // { streamMode: "messages" }
-StreamingPresets.ALL             // { streamMode: ["values", "updates", "messages"] }
-StreamingPresets.PRODUCTION      // { streamMode: ["updates", "messages"] }
-```
-
-### Advanced: Streaming from Sub-Agents
-
-Sub-agent executions are automatically streamed as part of the parent agent's stream:
-
-```typescript
 const agent = createDeepAgent({
-  tools: [searchTool],
-  subagents: [researchSubAgent, writerSubAgent],
-  instructions: 'You coordinate research...',
+  model: "claude-sonnet-4-20250514",
+  tools: [getWeather],
+  interruptOn: {
+    get_weather: {
+      allowedDecisions: ["approve", "edit", "reject"],
+    },
+  },
 });
-
-const stream = await agent.stream(
-  { messages: [{ role: 'user', content: 'Research and write report' }] },
-  { streamMode: 'updates' }
-);
-
-for await (const update of stream) {
-  // Updates include both main agent and sub-agent activities
-  if (update.todos) console.log('Todos updated');
-  if (update.files) console.log('Files updated');
-  if (update.messages) console.log('Messages updated');
-}
 ```
 
-See [examples/streaming-basic.ts](./examples/streaming-basic.ts) and [examples/streaming-advanced.ts](./examples/streaming-advanced.ts) for complete demonstrations.
+### `backend`
 
----
+Deep Agents use backends to manage file system operations and memory storage. You can configure different backends depending on your needs:
 
-## 📚 Documentation
+```typescript
+import {
+  createDeepAgent,
+  StateBackend,
+  StoreBackend,
+  FilesystemBackend,
+  CompositeBackend,
+} from "deepagents";
+import { MemorySaver } from "@langchain/langgraph";
+import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 
-For comprehensive guides, API references, and advanced usage:
+// Default: StateBackend (in-memory, ephemeral)
+const agent1 = createDeepAgent({
+  // No backend specified - uses StateBackend by default
+});
 
-- **[Official Documentation](https://docs.langchain.com/labs/deep-agents/overview)**
-- **[API Reference](https://docs.langchain.com/labs/deep-agents/api)**
-- **[Streaming Guide](./STREAMING.md)** - Complete streaming documentation with examples
-- **[Examples](./examples)** - Real-world implementation examples
+// StoreBackend: Persistent storage using LangGraph Store
+const agent2 = createDeepAgent({
+  backend: (config) => new StoreBackend(config),
+  store: new InMemoryStore(), // Provide a store
+  checkpointer: new MemorySaver(), // Optional: for conversation persistence
+});
 
----
+// FilesystemBackend: Store files on actual filesystem
+const agent3 = createDeepAgent({
+  backend: (config) => new FilesystemBackend({ rootDir: "./agent-workspace" }),
+});
 
-## 🔗 Related Projects
+// CompositeBackend: Combine multiple backends
+const agent4 = createDeepAgent({
+  backend: (config) =>
+    new CompositeBackend({
+      state: new StateBackend(config),
+      store: config.store ? new StoreBackend(config) : undefined,
+    }),
+  store: new InMemoryStore(),
+  checkpointer: new MemorySaver(),
+});
+```
 
-- **[LangChain](https://github.com/langchain-ai/langchainjs)** - Building applications with LLMs
-- **[LangGraph](https://github.com/langchain-ai/langgraphjs)** - Building stateful, multi-actor applications
-- **[Deep Agents (Python)](https://github.com/hwchase17/deepagents)** - Python implementation
+See [examples/backends/](examples/backends/) for detailed examples of each backend type.
 
----
+## Deep Agents Middleware
 
-## 🙏 Acknowledgments
+Deep Agents are built with a modular middleware architecture. As a reminder, Deep Agents have access to:
 
-Built with ❤️ by the [LangChain](https://github.com/langchain-ai) team.
+- A planning tool
+- A filesystem for storing context and long-term memories
+- The ability to spawn subagents
 
-<div align="center">
+Each of these features is implemented as separate middleware. When you create a deep agent with `createDeepAgent`, we automatically attach **todoListMiddleware**, **FilesystemMiddleware** and **SubAgentMiddleware** to your agent.
 
-**[⬆ Back to Top](#-deep-agents)**
+Middleware is a composable concept, and you can choose to add as many or as few middleware to an agent depending on your use case. That means that you can also use any of the aforementioned middleware independently!
 
-</div>
+### TodoListMiddleware
+
+Planning is integral to solving complex problems. If you've used claude code recently, you'll notice how it writes out a To-Do list before tackling complex, multi-part tasks. You'll also notice how it can adapt and update this To-Do list on the fly as more information comes in.
+
+**todoListMiddleware** provides your agent with a tool specifically for updating this To-Do list. Before, and while it executes a multi-part task, the agent is prompted to use the write_todos tool to keep track of what its doing, and what still needs to be done.
+
+```typescript
+import { createAgent, todoListMiddleware } from "langchain";
+
+// todoListMiddleware is included by default in createDeepAgent
+// You can customize it if building a custom agent
+const agent = createAgent({
+  model: "claude-sonnet-4-20250514",
+  middleware: [
+    todoListMiddleware({
+      // Optional: Custom addition to the system prompt
+      systemPrompt: "Use the write_todos tool to...",
+    }),
+  ],
+});
+```
+
+### FilesystemMiddleware
+
+Context engineering is one of the main challenges in building effective agents. This can be particularly hard when using tools that can return variable length results (ex. web_search, rag), as long ToolResults can quickly fill up your context window.
+
+**FilesystemMiddleware** provides tools to your agent to interact with both short-term and long-term memory:
+
+- **ls**: List the files in your filesystem
+- **read_file**: Read an entire file, or a certain number of lines from a file
+- **write_file**: Write a new file to your filesystem
+- **edit_file**: Edit an existing file in your filesystem
+- **glob**: Find files matching a pattern
+- **grep**: Search for text within files
+
+```typescript
+import { createAgent } from "langchain";
+import { createFilesystemMiddleware } from "deepagents";
+
+// FilesystemMiddleware is included by default in createDeepAgent
+// You can customize it if building a custom agent
+const agent = createAgent({
+  model: "claude-sonnet-4-20250514",
+  middleware: [
+    createFilesystemMiddleware({
+      backend: ..., // Optional: customize storage backend
+      systemPrompt: "Write to the filesystem when...", // Optional custom system prompt override
+      customToolDescriptions: {
+        ls: "Use the ls tool when...",
+        read_file: "Use the read_file tool to...",
+      }, // Optional: Custom descriptions for filesystem tools
+    }),
+  ],
+});
+```
+
+### SubAgentMiddleware
+
+Handing off tasks to subagents is a great way to isolate context, keeping the context window of the main (supervisor) agent clean while still going deep on a task. The subagents middleware allows you supply subagents through a task tool.
+
+A subagent is defined with a name, description, system prompt, and tools. You can also provide a subagent with a custom model, or with additional middleware. This can be particularly useful when you want to give the subagent an additional state key to share with the main agent.
+
+```typescript
+import { tool } from "langchain";
+import { createAgent } from "langchain";
+import { createSubAgentMiddleware, type SubAgent } from "deepagents";
+import { z } from "zod";
+
+const getWeather = tool(
+  async ({ city }: { city: string }) => {
+    return `The weather in ${city} is sunny.`;
+  },
+  {
+    name: "get_weather",
+    description: "Get the weather in a city.",
+    schema: z.object({
+      city: z.string(),
+    }),
+  },
+);
+
+const weatherSubagent: SubAgent = {
+  name: "weather",
+  description: "This subagent can get weather in cities.",
+  systemPrompt: "Use the get_weather tool to get the weather in a city.",
+  tools: [getWeather],
+  model: "gpt-4o",
+  middleware: [],
+};
+
+const agent = createAgent({
+  model: "claude-sonnet-4-20250514",
+  middleware: [
+    createSubAgentMiddleware({
+      defaultModel: "claude-sonnet-4-20250514",
+      defaultTools: [],
+      subagents: [weatherSubagent],
+    }),
+  ],
+});
+```

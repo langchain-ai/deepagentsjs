@@ -5,38 +5,30 @@
  * This implementation maintains 1:1 compatibility with the Python version.
  */
 
-export { createDeepAgent } from "./graph.js";
-export { getDefaultModel } from "./model.js";
-export { createTaskTool } from "./subAgent.js";
-export { writeTodos, readFile, writeFile, editFile, ls } from "./tools.js";
-export { DeepAgentState, fileReducer } from "./state.js";
+export { createDeepAgent, type CreateDeepAgentParams } from "./agent.js";
+
+// Export middleware
 export {
-  WRITE_TODOS_DESCRIPTION,
-  TASK_DESCRIPTION_PREFIX,
-  TASK_DESCRIPTION_SUFFIX,
-  EDIT_DESCRIPTION,
-  TOOL_DESCRIPTION,
-} from "./prompts.js";
+  createFilesystemMiddleware,
+  createSubAgentMiddleware,
+  createPatchToolCallsMiddleware,
+  type FilesystemMiddlewareOptions,
+  type SubAgentMiddlewareOptions,
+  type SubAgent,
+  type CompiledSubAgent,
+  type FileData,
+} from "./middleware/index.js";
+
+// Export backends
 export {
-  formatStreamedMessage,
-  isLLMTokenChunk,
-  extractTodosFromUpdate,
-  extractFilesFromUpdate,
-  processStream,
-  TokenAccumulator,
-  StreamingPresets,
-} from "./streaming.js";
-export type {
-  SubAgent,
-  Todo,
-  DeepAgentStateType,
-  CreateDeepAgentParams,
-  CreateTaskToolParams,
-  TodoStatus,
-} from "./types.js";
-export type {
-  StreamMode,
-  DeepAgentStreamConfig,
-  StreamedUpdate,
-  StreamHandler,
-} from "./streaming.js";
+  StateBackend,
+  StoreBackend,
+  FilesystemBackend,
+  CompositeBackend,
+  type BackendProtocol,
+  type BackendFactory,
+  type FileInfo,
+  type GrepMatch,
+  type WriteResult,
+  type EditResult,
+} from "./backends/index.js";
