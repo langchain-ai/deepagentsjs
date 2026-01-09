@@ -1,0 +1,18 @@
+# Ignore build artifacts
+dist/.build/
+dist/platforms/
+
+# Ignore development files
+scripts/
+src/
+tests/
+*.ts
+!*.d.ts
+tsconfig.json
+tsdown.config.ts
+vitest.config.ts
+.tsdown/
+
+# Ignore other dev files
+CONTRIBUTING.md
+.gitignore

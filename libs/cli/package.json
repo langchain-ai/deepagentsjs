@@ -1,0 +1,79 @@
+{
+  "name": "deepagents-cli",
+  "version": "0.0.14",
+  "description": "DeepAgents CLI - AI Coding Assistant for your terminal",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "deepagents": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/*.js",
+    "dist/*.d.ts",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "clean": "rm -rf dist/ .tsdown/",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build",
+    "build:cli": "tsx scripts/build.ts",
+    "build:cli:linux-x64": "tsx scripts/build.ts --platform linux-x64",
+    "build:cli:linux-arm64": "tsx scripts/build.ts --platform linux-arm64",
+    "build:cli:darwin-x64": "tsx scripts/build.ts --platform darwin-x64",
+    "build:cli:darwin-arm64": "tsx scripts/build.ts --platform darwin-arm64",
+    "build:cli:win32-x64": "tsx scripts/build.ts --platform win32-x64",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/langchain-ai/deepagentsjs.git",
+    "directory": "libs/cli"
+  },
+  "keywords": [
+    "deepagents",
+    "cli",
+    "ai",
+    "coding-assistant",
+    "langchain",
+    "langgraph",
+    "terminal"
+  ],
+  "author": "LangChain",
+  "bugs": {
+    "url": "https://github.com/langchain-ai/deepagentsjs/issues"
+  },
+  "homepage": "https://github.com/langchain-ai/deepagentsjs/tree/main/libs/cli#readme",
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "@deepagents-cli/linux-x64": "0.0.14",
+    "@deepagents-cli/linux-arm64": "0.0.14",
+    "@deepagents-cli/darwin-x64": "0.0.14",
+    "@deepagents-cli/darwin-arm64": "0.0.14",
+    "@deepagents-cli/win32-x64": "0.0.14"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^22.0.0",
+    "fs-extra": "^11.3.0",
+    "tsdown": "^0.15.12",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.16"
+  }
+}
