@@ -63,7 +63,7 @@
     "@tsconfig/recommended": "^1.0.10",
     "@types/micromatch": "^4.0.10",
     "@types/node": "^25.0.3",
-    "@types/uuid": "^10.0.0",
+    "@types/uuid": "^11.0.0",
     "@vitest/coverage-v8": "^4.0.16",
     "@vitest/ui": "^4.0.16",
     "dotenv": "^17.2.1",
