@@ -6,7 +6,7 @@ import { ChatAnthropic } from "@langchain/anthropic";
 import { HumanMessage } from "@langchain/core/messages";
 import { MemorySaver, InMemoryStore } from "@langchain/langgraph-checkpoint";
 
-import { createDeepAgent, StoreBackend } from "../../src/index.js";
+import { createDeepAgent, StoreBackend } from "deepagents";
 import { v4 as uuidv4 } from "uuid";
 
 const internetSearch = tool(

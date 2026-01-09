@@ -27,7 +27,7 @@ import {
   createSkillsMiddleware,
   createAgentMemoryMiddleware,
   listSkills,
-} from "../../src/index.js";
+} from "deepagents";
 
 // Configuration
 const AGENT_NAME = "my-agent";
