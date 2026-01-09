@@ -1,11 +1,13 @@
 import js from "@eslint/js";
 import globals from "globals";
-import { defineConfig } from "typescript-eslint";
+import { defineConfig } from "eslint/config";
+import { configs } from "typescript-eslint";
 
-export default defineConfig(
+export default defineConfig([
   { ignores: ["**/dist", "**/dist-examples", "**/node_modules"] },
+  js.configs.recommended,
+  ...configs.recommended,
   {
-    extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
       ecmaVersion: 2020,
@@ -25,4 +27,4 @@ export default defineConfig(
       "no-console": ["error"],
     },
   },
-);
+]);
