@@ -7,7 +7,11 @@
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { getBinaryPath, getUnsupportedPlatformMessage, getPlatformKey } from "./index.js";
+import {
+  getBinaryPath,
+  getUnsupportedPlatformMessage,
+  getPlatformKey,
+} from "./index.js";
 
 /**
  * Main entry point
@@ -53,7 +57,9 @@ async function main(): Promise<void> {
   child.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
     if (signal) {
       // Process was killed by a signal
-      process.exit(128 + (signal === "SIGINT" ? 2 : signal === "SIGTERM" ? 15 : 1));
+      process.exit(
+        128 + (signal === "SIGINT" ? 2 : signal === "SIGTERM" ? 15 : 1),
+      );
     }
     process.exit(code ?? 0);
   });

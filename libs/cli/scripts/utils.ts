@@ -112,7 +112,11 @@ export type LogLevel = "info" | "success" | "warn" | "error" | "debug";
 /**
  * Colored log output
  */
-export function log(level: LogLevel, message: string, ...args: unknown[]): void {
+export function log(
+  level: LogLevel,
+  message: string,
+  ...args: unknown[]
+): void {
   const prefix = {
     info: `${COLORS.blue}ℹ${COLORS.reset}`,
     success: `${COLORS.green}✓${COLORS.reset}`,
@@ -137,7 +141,7 @@ export function log(level: LogLevel, message: string, ...args: unknown[]): void 
  */
 export function logStep(step: number, total: number, message: string): void {
   console.log(
-    `\n${COLORS.cyan}[${step}/${total}]${COLORS.reset} ${COLORS.bold}${message}${COLORS.reset}`
+    `\n${COLORS.cyan}[${step}/${total}]${COLORS.reset} ${COLORS.bold}${message}${COLORS.reset}`,
   );
 }
 
@@ -152,7 +156,7 @@ export interface ExecResult {
 
 export async function execCommand(
   command: string,
-  options: ExecOptions = {}
+  options: ExecOptions = {},
 ): Promise<ExecResult> {
   try {
     const { stdout, stderr } = await execAsync(command, {
@@ -161,7 +165,11 @@ export async function execCommand(
     });
     return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode: 0 };
   } catch (error) {
-    const execError = error as { stdout?: string; stderr?: string; code?: number };
+    const execError = error as {
+      stdout?: string;
+      stderr?: string;
+      code?: number;
+    };
     return {
       stdout: execError.stdout?.trim() ?? "",
       stderr: execError.stderr?.trim() ?? "",
@@ -175,7 +183,7 @@ export async function execCommand(
  */
 export async function execWithOutput(
   command: string,
-  cwd?: string
+  cwd?: string,
 ): Promise<number> {
   const { spawn } = await import("node:child_process");
 
@@ -257,7 +265,7 @@ export async function copy(src: string, dest: string): Promise<void> {
 export async function writeJson(
   filePath: string,
   data: unknown,
-  spaces = 2
+  spaces = 2,
 ): Promise<void> {
   await fsExtra.writeJson(filePath, data, { spaces });
 }
@@ -272,7 +280,10 @@ export async function readJson<T = unknown>(filePath: string): Promise<T> {
 /**
  * Write text to a file
  */
-export async function writeFile(filePath: string, content: string): Promise<void> {
+export async function writeFile(
+  filePath: string,
+  content: string,
+): Promise<void> {
   await nodeFs.writeFile(filePath, content, "utf-8");
 }
 

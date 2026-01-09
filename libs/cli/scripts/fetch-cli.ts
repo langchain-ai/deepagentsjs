@@ -42,7 +42,7 @@ export async function fetchLatestVersion(): Promise<string> {
 
   if (!response.ok) {
     throw new Error(
-      `Failed to fetch from PyPI: ${response.status} ${response.statusText}`
+      `Failed to fetch from PyPI: ${response.status} ${response.statusText}`,
     );
   }
 
@@ -61,7 +61,7 @@ export async function getAvailableVersions(): Promise<string[]> {
 
   if (!response.ok) {
     throw new Error(
-      `Failed to fetch from PyPI: ${response.status} ${response.statusText}`
+      `Failed to fetch from PyPI: ${response.status} ${response.statusText}`,
     );
   }
 
@@ -97,10 +97,7 @@ export async function findPythonExecutable(): Promise<string> {
             (major === MIN_PYTHON_VERSION.major &&
               minor >= MIN_PYTHON_VERSION.minor)
           ) {
-            log(
-              "success",
-              `Found Python ${major}.${minor} at: ${candidate}`
-            );
+            log("success", `Found Python ${major}.${minor} at: ${candidate}`);
             return candidate;
           }
         }
@@ -115,7 +112,7 @@ export async function findPythonExecutable(): Promise<string> {
       `Please install Python ${MIN_PYTHON_VERSION.major}.${MIN_PYTHON_VERSION.minor} or higher:\n` +
       `  macOS:   brew install python@3.11\n` +
       `  Ubuntu:  sudo apt install python3.11 python3.11-venv\n` +
-      `  Windows: Download from https://python.org`
+      `  Windows: Download from https://python.org`,
   );
 }
 
@@ -174,7 +171,7 @@ export async function upgradePip(venvDir: string): Promise<void> {
  */
 export async function installCli(
   venvDir: string,
-  version: string
+  version: string,
 ): Promise<void> {
   log("info", `Installing deepagents-cli==${version}...`);
 
@@ -182,7 +179,7 @@ export async function installCli(
   const packageSpec = `deepagents-cli==${version}`;
 
   const exitCode = await execWithOutput(
-    `"${pip}" install "${packageSpec}" --no-cache-dir`
+    `"${pip}" install "${packageSpec}" --no-cache-dir`,
   );
 
   if (exitCode !== 0) {
@@ -202,11 +199,14 @@ export async function upgradeDeepagentsCore(venvDir: string): Promise<void> {
   const pip = getPipPath(venvDir);
 
   const exitCode = await execWithOutput(
-    `"${pip}" install --upgrade deepagents --no-cache-dir`
+    `"${pip}" install --upgrade deepagents --no-cache-dir`,
   );
 
   if (exitCode !== 0) {
-    log("warn", "Failed to upgrade deepagents core, continuing with installed version");
+    log(
+      "warn",
+      "Failed to upgrade deepagents core, continuing with installed version",
+    );
     return;
   }
 
@@ -232,7 +232,7 @@ export async function verifyInstallation(venvDir: string): Promise<boolean> {
  */
 export async function downloadCli(
   version: string,
-  targetDir: string
+  targetDir: string,
 ): Promise<string> {
   const startTime = Date.now();
   const venvDir = path.join(targetDir, ".venv");

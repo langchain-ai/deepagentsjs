@@ -48,7 +48,7 @@ interface PlatformPackageJson {
  */
 function generatePackageJson(
   platform: PlatformConfig,
-  version: string
+  version: string,
 ): PlatformPackageJson {
   return {
     name: `@deepagents-cli/${platform.name}`,
@@ -123,7 +123,7 @@ export async function createPlatformPackage(
   platform: PlatformConfig,
   version: string,
   binaryPath: string,
-  outputDir: string
+  outputDir: string,
 ): Promise<string> {
   const packageDir = path.join(outputDir, platform.name);
   const binDir = path.join(packageDir, "bin");
@@ -169,7 +169,7 @@ export async function createPlatformPackage(
 export async function createAllPlatformPackages(
   version: string,
   binariesDir: string,
-  outputDir: string
+  outputDir: string,
 ): Promise<Map<string, string>> {
   const results = new Map<string, string>();
   const total = PLATFORMS.length;
@@ -185,7 +185,7 @@ export async function createAllPlatformPackages(
       binariesDir,
       platform.name,
       "dist",
-      platform.binaryName
+      platform.binaryName,
     );
 
     // Check if binary exists for this platform
@@ -200,7 +200,7 @@ export async function createAllPlatformPackages(
         platform,
         version,
         binaryPath,
-        outputDir
+        outputDir,
       );
       results.set(platform.name, packageDir);
     } catch (error) {
@@ -218,7 +218,7 @@ export async function createAllPlatformPackages(
  * Validate a platform package
  */
 export async function validatePlatformPackage(
-  packageDir: string
+  packageDir: string,
 ): Promise<boolean> {
   const checks = [
     { path: "package.json", type: "file" },

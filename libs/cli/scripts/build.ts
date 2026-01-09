@@ -60,7 +60,8 @@ function parseBuildOptions(): BuildOptions {
   return {
     version: typeof args.version === "string" ? args.version : undefined,
     platform: typeof args.platform === "string" ? args.platform : undefined,
-    outputDir: typeof args["output-dir"] === "string" ? args["output-dir"] : undefined,
+    outputDir:
+      typeof args["output-dir"] === "string" ? args["output-dir"] : undefined,
     skipDownload: args["skip-download"] === true,
     clean: args.clean === true,
   };
@@ -71,7 +72,7 @@ function parseBuildOptions(): BuildOptions {
  */
 async function updateMainPackageVersion(
   packageJsonPath: string,
-  version: string
+  version: string,
 ): Promise<void> {
   const packageJson = await readJson<Record<string, unknown>>(packageJsonPath);
   packageJson.version = version;
@@ -101,7 +102,8 @@ async function build(options: BuildOptions = {}): Promise<void> {
   console.log("━".repeat(50));
 
   // Determine target platform
-  const targetPlatformName = options.platform ?? `${process.platform}-${process.arch}`;
+  const targetPlatformName =
+    options.platform ?? `${process.platform}-${process.arch}`;
   const targetPlatform = getPlatformConfig(targetPlatformName);
 
   if (!targetPlatform) {

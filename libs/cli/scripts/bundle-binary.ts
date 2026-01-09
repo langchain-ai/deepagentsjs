@@ -151,18 +151,18 @@ hidden_imports = [
 # Collect data files
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
-datas = []
+data_files = []
 
 # Add deepagents_cli data files (like default_agent_prompt.md)
 try:
-    datas += collect_data_files("deepagents_cli")
+    data_files += collect_data_files("deepagents_cli")
 except Exception:
     pass
 
 # Add any .md files from deepagents_cli
 import glob as glob_module
 for md_file in glob_module.glob(os.path.join(site_packages, "deepagents_cli", "*.md")):
-    datas.append((md_file, "deepagents_cli"))
+    data_files.append((md_file, "deepagents_cli"))
 
 # Collect additional submodules
 try:
@@ -180,7 +180,7 @@ a = Analysis(
     [entry_point],
     pathex=[site_packages],
     binaries=[],
-    datas=datas,
+    datas=data_files,
     hiddenimports=list(set(hidden_imports)),  # Remove duplicates
     hookspath=[],
     hooksconfig={},
