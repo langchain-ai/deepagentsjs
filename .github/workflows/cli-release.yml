@@ -30,6 +30,9 @@ on:
     # Check for new PyPI releases daily at 6:00 AM UTC
     - cron: '0 6 * * *'
 
+permissions:
+  contents: read
+
 # Ensure only one release workflow runs at a time
 concurrency:
   group: cli-release
