@@ -276,7 +276,7 @@ async function installPyInstaller(venvDir: string): Promise<void> {
 
   const pip = getPipPath(venvDir);
   const exitCode = await execWithOutput(
-    `"${pip}" install pyinstaller --no-cache-dir`
+    `"${pip}" install pyinstaller --no-cache-dir`,
   );
 
   if (exitCode !== 0) {
@@ -292,7 +292,7 @@ async function installPyInstaller(venvDir: string): Promise<void> {
 async function runPyInstaller(
   venvDir: string,
   specPath: string,
-  outputDir: string
+  outputDir: string,
 ): Promise<void> {
   log("info", "Running PyInstaller (this may take several minutes)...");
 
@@ -365,7 +365,7 @@ export async function bundleBinary(options: BundleOptions): Promise<string> {
  */
 export function getBinaryOutputPath(
   outputDir: string,
-  platform: PlatformConfig
+  platform: PlatformConfig,
 ): string {
   return path.join(outputDir, "dist", platform.binaryName);
 }

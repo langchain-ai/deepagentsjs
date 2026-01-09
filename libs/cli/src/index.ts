@@ -100,7 +100,14 @@ function tryResolveBinaryPath(platformInfo: PlatformInfo): string | null {
     // pnpm workspace layout
     path.join(__dirname, "..", "..", packageName, "bin", binaryName),
     // Local development - platforms folder
-    path.join(__dirname, "..", "platforms", getPlatformKey(), "bin", binaryName),
+    path.join(
+      __dirname,
+      "..",
+      "platforms",
+      getPlatformKey(),
+      "bin",
+      binaryName,
+    ),
   ];
 
   for (const searchPath of searchPaths) {
