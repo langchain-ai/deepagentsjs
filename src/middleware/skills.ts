@@ -27,7 +27,7 @@
  */
 
 import { z } from "zod";
-import type { AgentMiddleware } from "langchain/agents/middleware/types";
+import type { AgentMiddleware } from "langchain";
 import { listSkills, type SkillMetadata } from "../skills/loader.js";
 
 /**
@@ -57,7 +57,7 @@ const SkillsStateSchema = z.object({
         source: z.enum(["user", "project"]),
         license: z.string().optional(),
         compatibility: z.string().optional(),
-        metadata: z.record(z.string()).optional(),
+        metadata: z.record(z.string(), z.string()).optional(),
         allowedTools: z.string().optional(),
       }),
     )
@@ -200,7 +200,7 @@ export function createSkillsMiddleware(
     name: "SkillsMiddleware",
     stateSchema: SkillsStateSchema as any,
 
-    beforeAgent(state: any) {
+    beforeAgent() {
       // We re-load skills on every new interaction with the agent to capture
       // any changes in the skills directories.
       const skills = listSkills({

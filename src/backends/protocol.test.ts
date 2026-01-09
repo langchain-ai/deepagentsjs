@@ -7,7 +7,7 @@ import {
   type FileOperationError,
   type FileDownloadResponse,
   type FileUploadResponse,
-} from "../../../src/backends/protocol.js";
+} from "./protocol.js";
 
 describe("Protocol Types", () => {
   describe("ExecuteResponse", () => {
@@ -203,4 +203,3 @@ describe("isSandboxBackend", () => {
     expect(isSandboxBackend(backendWithBadId as any)).toBe(false);
   });
 });
-

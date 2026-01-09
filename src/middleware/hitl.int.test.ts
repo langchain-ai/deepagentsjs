@@ -1,13 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { MemorySaver, Command } from "@langchain/langgraph";
 import { v4 as uuidv4 } from "uuid";
-import { createDeepAgent } from "../../src/index.js";
+import { createDeepAgent } from "../index.js";
 import {
   assertAllDeepAgentQualities,
   sampleTool,
   getWeather,
   getSoccerScores,
-} from "../utils.js";
+} from "../testing/utils.js";
 import {
   AIMessage,
   HITLRequest,

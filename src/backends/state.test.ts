@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { StateBackend } from "../../../src/backends/state.js";
-import type { FileData } from "../../../src/backends/protocol.js";
+import { StateBackend } from "./state.js";
+import type { FileData } from "./protocol.js";
 import { getCurrentTaskInput, Command } from "@langchain/langgraph";
 import { ToolMessage } from "@langchain/core/messages";
 
@@ -319,9 +319,7 @@ describe("StateBackend", () => {
 
   it("should handle large tool result interception via middleware", async () => {
     const { config } = makeConfig();
-    const { createFilesystemMiddleware } = await import(
-      "../../../src/middleware/fs.js"
-    );
+    const { createFilesystemMiddleware } = await import("../middleware/fs.js");
 
     const middleware = createFilesystemMiddleware({
       toolTokenLimitBeforeEvict: 1000,

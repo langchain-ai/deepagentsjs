@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
-import { createDeepAgent } from "../../src/index.js";
+import { createDeepAgent } from "./index.js";
 import {
   SAMPLE_MODEL,
   TOY_BASKETBALL_RESEARCH,
@@ -14,7 +14,7 @@ import {
   getWeather,
   sampleTool,
   extractToolsFromAgent,
-} from "../utils.js";
+} from "./testing/utils.js";
 
 describe("DeepAgents Integration Tests", () => {
   it.concurrent("should create a base deep agent", () => {
@@ -50,12 +50,12 @@ describe("DeepAgents Integration Tests", () => {
       expect(toolNames).toContain("sample_tool");
 
       expect(agent.graph.streamChannels).toContain("sample_input");
-    }
+    },
   );
 
   it.concurrent(
     "should create deep agent with subagents",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const subagents = [
         {
@@ -74,24 +74,24 @@ describe("DeepAgents Integration Tests", () => {
       });
 
       const agentMessages = result.messages.filter((msg: any) =>
-        AIMessage.isInstance(msg)
+        AIMessage.isInstance(msg),
       );
       const toolCalls = agentMessages.flatMap(
-        (msg: any) => msg.tool_calls || []
+        (msg: any) => msg.tool_calls || [],
       );
 
       expect(
         toolCalls.some(
           (tc: any) =>
-            tc.name === "task" && tc.args?.subagent_type === "weather_agent"
-        )
+            tc.name === "task" && tc.args?.subagent_type === "weather_agent",
+        ),
       ).toBe(true);
-    }
+    },
   );
 
   it.concurrent(
     "should create deep agent with subagents and general purpose",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const subagents = [
         {
@@ -108,30 +108,30 @@ describe("DeepAgents Integration Tests", () => {
       const result = await agent.invoke({
         messages: [
           new HumanMessage(
-            "Use the general purpose subagent to call the sample tool"
+            "Use the general purpose subagent to call the sample tool",
           ),
         ],
       });
 
       const agentMessages = result.messages.filter((msg: any) =>
-        AIMessage.isInstance(msg)
+        AIMessage.isInstance(msg),
       );
       const toolCalls = agentMessages.flatMap(
-        (msg: any) => msg.tool_calls || []
+        (msg: any) => msg.tool_calls || [],
       );
 
       expect(
         toolCalls.some(
           (tc: any) =>
-            tc.name === "task" && tc.args?.subagent_type === "general-purpose"
-        )
+            tc.name === "task" && tc.args?.subagent_type === "general-purpose",
+        ),
       ).toBe(true);
-    }
+    },
   );
 
   it.concurrent(
     "should create deep agent with subagents with middleware",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const subagents = [
         {
@@ -151,24 +151,24 @@ describe("DeepAgents Integration Tests", () => {
       });
 
       const agentMessages = result.messages.filter((msg: any) =>
-        AIMessage.isInstance(msg)
+        AIMessage.isInstance(msg),
       );
       const toolCalls = agentMessages.flatMap(
-        (msg: any) => msg.tool_calls || []
+        (msg: any) => msg.tool_calls || [],
       );
 
       expect(
         toolCalls.some(
           (tc: any) =>
-            tc.name === "task" && tc.args?.subagent_type === "weather_agent"
-        )
+            tc.name === "task" && tc.args?.subagent_type === "weather_agent",
+        ),
       ).toBe(true);
-    }
+    },
   );
 
   it.concurrent(
     "should create deep agent with custom subagents",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const agent = createDeepAgent({
         tools: [sampleTool],
@@ -194,36 +194,36 @@ describe("DeepAgents Integration Tests", () => {
       const result = await agent.invoke({
         messages: [
           new HumanMessage(
-            "Look up the weather in Tokyo, and the latest scores for Manchester City!"
+            "Look up the weather in Tokyo, and the latest scores for Manchester City!",
           ),
         ],
       });
 
       const agentMessages = result.messages.filter((msg: any) =>
-        AIMessage.isInstance(msg)
+        AIMessage.isInstance(msg),
       );
       const toolCalls = agentMessages.flatMap(
-        (msg: any) => msg.tool_calls || []
+        (msg: any) => msg.tool_calls || [],
       );
 
       expect(
         toolCalls.some(
           (tc: any) =>
-            tc.name === "task" && tc.args?.subagent_type === "weather_agent"
-        )
+            tc.name === "task" && tc.args?.subagent_type === "weather_agent",
+        ),
       ).toBe(true);
       expect(
         toolCalls.some(
           (tc: any) =>
-            tc.name === "task" && tc.args?.subagent_type === "soccer_agent"
-        )
+            tc.name === "task" && tc.args?.subagent_type === "soccer_agent",
+        ),
       ).toBe(true);
-    }
+    },
   );
 
   it.concurrent(
     "should create deep agent with extended state and subagents",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const subagents = [
         {
@@ -248,30 +248,30 @@ describe("DeepAgents Integration Tests", () => {
             new HumanMessage("Get surface level info on lebron james"),
           ],
         },
-        { recursionLimit: 100 }
+        { recursionLimit: 100 },
       );
 
       const agentMessages = result.messages.filter((msg: any) =>
-        AIMessage.isInstance(msg)
+        AIMessage.isInstance(msg),
       );
       const toolCalls = agentMessages.flatMap(
-        (msg: any) => msg.tool_calls || []
+        (msg: any) => msg.tool_calls || [],
       );
 
       expect(
         toolCalls.some(
           (tc: any) =>
             tc.name === "task" &&
-            tc.args?.subagent_type === "basketball_info_agent"
-        )
+            tc.args?.subagent_type === "basketball_info_agent",
+        ),
       ).toBe(true);
       expect(result.research).toContain(TOY_BASKETBALL_RESEARCH);
-    }
+    },
   );
 
   it.concurrent(
     "should create deep agent with subagents no tools",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const subagents = [
         {
@@ -288,28 +288,28 @@ describe("DeepAgents Integration Tests", () => {
         {
           messages: [
             new HumanMessage(
-              "Use the basketball info subagent to call the sample tool"
+              "Use the basketball info subagent to call the sample tool",
             ),
           ],
         },
-        { recursionLimit: 100 }
+        { recursionLimit: 100 },
       );
 
       const agentMessages = result.messages.filter((msg: any) =>
-        AIMessage.isInstance(msg)
+        AIMessage.isInstance(msg),
       );
       const toolCalls = agentMessages.flatMap(
-        (msg: any) => msg.tool_calls || []
+        (msg: any) => msg.tool_calls || [],
       );
 
       expect(
         toolCalls.some(
           (tc: any) =>
             tc.name === "task" &&
-            tc.args?.subagent_type === "basketball_info_agent"
-        )
+            tc.args?.subagent_type === "basketball_info_agent",
+        ),
       ).toBe(true);
-    }
+    },
   );
 
   // Note: response_format with ToolStrategy is not yet available in LangChain TS v1

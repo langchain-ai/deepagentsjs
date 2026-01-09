@@ -2,11 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import {
-  createSettings,
-  findProjectRoot,
-  type Settings,
-} from "../../src/config.js";
+import { createSettings, findProjectRoot, type Settings } from "./config.js";
 
 describe("Config Module", () => {
   let tempDir: string;

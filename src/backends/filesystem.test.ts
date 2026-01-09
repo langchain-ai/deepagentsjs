@@ -3,7 +3,7 @@ import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import * as path from "path";
 import * as os from "os";
-import { FilesystemBackend } from "../../../src/backends/filesystem.js";
+import { FilesystemBackend } from "./filesystem.js";
 
 /**
  * Helper to write a file with automatic parent directory creation
