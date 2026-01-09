@@ -3,6 +3,8 @@
 [![npm version](https://badge.fury.io/js/deepagents-cli.svg)](https://www.npmjs.com/package/deepagents-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+> ⚠️ **Experimental**: This package is highly experimental and under active development. APIs, features, and behavior may change entirely in future releases without notice.
+
 **DeepAgents CLI** - An AI coding assistant that runs in your terminal, powered by [DeepAgents](https://github.com/langchain-ai/deepagents).
 
 This package wraps the Python [deepagents-cli](https://pypi.org/project/deepagents-cli/) as platform-specific binaries, allowing you to use the full-featured CLI without installing Python.
