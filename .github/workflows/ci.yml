@@ -97,6 +97,7 @@ jobs:
       - name: Run Unit Tests
         run: pnpm test
       - name: Run Integration Tests
+        if: github.actor != 'dependabot[bot]'
         run: pnpm test:int
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
