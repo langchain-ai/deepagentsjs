@@ -183,7 +183,10 @@ describe("CompositeBackend", () => {
     expect(resMem.filesUpdate).toBeNull();
     expect(resMem.path).toBe("/important.md");
 
-    const resArchive = await composite.write("/archive/old.log", "archived log");
+    const resArchive = await composite.write(
+      "/archive/old.log",
+      "archived log",
+    );
     expect(resArchive.filesUpdate).toBeNull();
     expect(resArchive.path).toBe("/old.log");
 
