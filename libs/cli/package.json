@@ -1,6 +1,6 @@
 {
   "name": "deepagents-cli",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "description": "DeepAgents CLI - AI Coding Assistant for your terminal",
   "license": "MIT",
   "type": "module",
@@ -61,7 +61,7 @@
     "node": ">=18"
   },
   "optionalDependencies": {
-    "@deepagents-cli/linux-arm64": "0.0.14"
+    "@deepagents-cli/darwin-arm64": "0.0.14"
   },
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",
