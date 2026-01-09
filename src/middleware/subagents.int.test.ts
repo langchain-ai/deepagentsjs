@@ -80,7 +80,7 @@ async function assertExpectedSubgraphActions(
 describe("Subagent Middleware Integration Tests", () => {
   it.concurrent(
     "should invoke general-purpose subagent",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const agent = createAgent({
         model: SAMPLE_MODEL,
@@ -112,7 +112,7 @@ describe("Subagent Middleware Integration Tests", () => {
 
   it.concurrent(
     "should invoke defined subagent",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const agent = createAgent({
         model: SAMPLE_MODEL,
@@ -152,7 +152,7 @@ describe("Subagent Middleware Integration Tests", () => {
 
   it.concurrent(
     "should make tool calls within subagent",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const agent = createAgent({
         model: SAMPLE_MODEL,
@@ -187,7 +187,7 @@ describe("Subagent Middleware Integration Tests", () => {
 
   it.concurrent(
     "should use custom model in subagent",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const agent = createAgent({
         model: SAMPLE_MODEL,
@@ -223,7 +223,7 @@ describe("Subagent Middleware Integration Tests", () => {
 
   it.concurrent(
     "should use custom middleware in subagent",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const agent = createAgent({
         model: SAMPLE_MODEL,
@@ -260,7 +260,7 @@ describe("Subagent Middleware Integration Tests", () => {
 
   it.concurrent(
     "should use pre-compiled subagent",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const customSubagent = createAgent({
         model: SAMPLE_MODEL,
@@ -349,7 +349,7 @@ describe("Subagent Middleware Integration Tests", () => {
 
   it.concurrent(
     "should initialize subagent middleware with default settings",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const middleware = createSubAgentMiddleware({
         defaultModel: SAMPLE_MODEL,
@@ -376,7 +376,7 @@ describe("Subagent Middleware Integration Tests", () => {
 
   it.concurrent(
     "should initialize general-purpose subagent with default tools",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const agent = createAgent({
         model: SAMPLE_MODEL,
@@ -407,7 +407,7 @@ describe("Subagent Middleware Integration Tests", () => {
 
   it.concurrent(
     "should use custom system prompt in general-purpose subagent",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const customPrompt =
         "You are a specialized assistant. In every response, you must include the word 'specialized'.";

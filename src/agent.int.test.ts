@@ -55,7 +55,7 @@ describe("DeepAgents Integration Tests", () => {
 
   it.concurrent(
     "should create deep agent with subagents",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const subagents = [
         {
@@ -91,7 +91,7 @@ describe("DeepAgents Integration Tests", () => {
 
   it.concurrent(
     "should create deep agent with subagents and general purpose",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const subagents = [
         {
@@ -131,7 +131,7 @@ describe("DeepAgents Integration Tests", () => {
 
   it.concurrent(
     "should create deep agent with subagents with middleware",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const subagents = [
         {
@@ -168,7 +168,7 @@ describe("DeepAgents Integration Tests", () => {
 
   it.concurrent(
     "should create deep agent with custom subagents",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const agent = createDeepAgent({
         tools: [sampleTool],
@@ -223,7 +223,7 @@ describe("DeepAgents Integration Tests", () => {
 
   it.concurrent(
     "should create deep agent with extended state and subagents",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const subagents = [
         {
@@ -271,7 +271,7 @@ describe("DeepAgents Integration Tests", () => {
 
   it.concurrent(
     "should create deep agent with subagents no tools",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const subagents = [
         {

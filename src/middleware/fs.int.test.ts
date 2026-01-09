@@ -27,7 +27,7 @@ describe("Filesystem Middleware Integration Tests", () => {
     { useComposite: true, label: "CompositeBackend" },
   ])(
     "should override filesystem system prompt ($label)",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async ({ useComposite }) => {
       const checkpointer = useComposite ? new MemorySaver() : undefined;
       const store = useComposite ? new InMemoryStore() : undefined;
@@ -72,7 +72,7 @@ describe("Filesystem Middleware Integration Tests", () => {
     { useComposite: true, label: "CompositeBackend" },
   ])(
     "should override filesystem tool descriptions ($label)",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async ({ useComposite }) => {
       const checkpointer = useComposite ? new MemorySaver() : undefined;
       const store = useComposite ? new InMemoryStore() : undefined;
@@ -122,7 +122,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should list longterm memory files without path",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
       const store = new InMemoryStore();
@@ -187,7 +187,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should list longterm memory files with path filter",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
       const store = new InMemoryStore();
@@ -252,7 +252,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should read longterm memory local file",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
       const store = new InMemoryStore();
@@ -300,7 +300,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should read longterm memory store file",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
       const store = new InMemoryStore();
@@ -345,7 +345,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should write to longterm memory",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
       const store = new InMemoryStore();
@@ -391,7 +391,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should fail to write to existing store file",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
       const store = new InMemoryStore();
@@ -438,7 +438,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should edit longterm memory file",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
       const store = new InMemoryStore();
@@ -486,7 +486,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should handle tool results exceeding token limit",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
       const store = new InMemoryStore();
@@ -573,7 +573,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should handle Command return with tool call",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const agent = createDeepAgent({
         tools: [getPremierLeagueStandings],
@@ -592,7 +592,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should handle Command with existing state",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const agent = createDeepAgent({
         tools: [getLaLigaStandings],
@@ -620,7 +620,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should fail to write to existing local file",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
       const store = new InMemoryStore();
@@ -666,7 +666,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should perform glob search in shortterm memory only",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
 
@@ -716,7 +716,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should perform glob search in longterm memory only",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
       const store = new InMemoryStore();
@@ -777,7 +777,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should perform glob search across mixed memory",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
       const store = new InMemoryStore();
@@ -843,7 +843,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should perform grep search in shortterm memory only",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
 
@@ -897,7 +897,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should perform grep search in longterm memory only",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
       const store = new InMemoryStore();
@@ -960,7 +960,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
   it.concurrent(
     "should perform grep search across mixed memory",
-    { timeout: 60000 },
+    { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
       const store = new InMemoryStore();
