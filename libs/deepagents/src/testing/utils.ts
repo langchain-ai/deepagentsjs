@@ -7,8 +7,7 @@ import {
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
 import { Command } from "@langchain/langgraph";
-import { z } from "zod/v3";
-import { withLangGraph } from "@langchain/langgraph/zod";
+import { z } from "zod/v4";
 
 /**
  * required for type inference
@@ -210,15 +209,15 @@ export const researchBasketball = tool(
 
 // Research state
 const ResearchStateSchema = z.object({
-  research: withLangGraph(
-    z.string().default(() => ""),
-    {
+  research: z
+    .string()
+    .default("")
+    .meta({
       reducer: {
-        fn: (left, right) => right || left || "",
+        fn: (left: string, right: string | null) => right || left || "",
         schema: z.string().nullable(),
       },
-    },
-  ),
+    }),
 });
 
 export const ResearchMiddleware = createMiddleware({
@@ -239,15 +238,15 @@ export const SampleMiddlewareWithTools = createMiddleware({
 
 // Sample state
 const SampleStateSchema = z.object({
-  sample_input: withLangGraph(
-    z.string().default(() => ""),
-    {
+  sample_input: z
+    .string()
+    .default("")
+    .meta({
       reducer: {
-        fn: (left, right) => right || left || "",
+        fn: (left: string, right: string | null) => right || left || "",
         schema: z.string().nullable(),
       },
-    },
-  ),
+    }),
 });
 
 export const SampleMiddlewareWithToolsAndState = createMiddleware({
