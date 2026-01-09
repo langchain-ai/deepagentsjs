@@ -6,6 +6,7 @@ import {
   summarizationMiddleware,
   type AgentMiddleware,
   type InterruptOnConfig,
+  type MiddlewareTypeConfig as _MiddlewareTypeConfig,
   type ReactAgent as _ReactAgent,
   type CreateAgentParams as _CreateAgentParams,
   type AgentTypeConfig as _AgentTypeConfig,
@@ -24,8 +25,7 @@ import {
   type SubAgent,
 } from "./middleware/index.js";
 import { StateBackend, type BackendProtocol } from "./backends/index.js";
-import { InteropZodObject } from "@langchain/core/utils/types";
-import { AnnotationRoot } from "@langchain/langgraph";
+import { InteropZodObject, InteropZodType } from "@langchain/core/utils/types";
 import { CompiledSubAgent } from "./middleware/subagents.js";
 
 /**
@@ -42,8 +42,9 @@ import type * as _Command from "@langchain/langgraph";
  * Matches Python's create_deep_agent parameters
  */
 export interface CreateDeepAgentParams<
-  ContextSchema extends AnnotationRoot<any> | InteropZodObject =
-    AnnotationRoot<any>,
+  StructuredResponseType extends Record<string, any> = Record<string, any>,
+  ContextSchema extends InteropZodObject = InteropZodObject,
+  ResponseFormatType = InteropZodType<StructuredResponseType>,
 > {
   /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
   model?: BaseLanguageModel | string;
@@ -56,7 +57,7 @@ export interface CreateDeepAgentParams<
   /** List of subagent specifications for task delegation */
   subagents?: (SubAgent | CompiledSubAgent)[];
   /** Structured output response format for the agent */
-  responseFormat?: any; // ResponseFormat type is complex, using any for now
+  responseFormat?: ResponseFormatType; // ResponseFormat type is complex, using any for now
   /** Optional schema for context (not persisted between invocations) */
   contextSchema?: ContextSchema;
   /** Optional checkpointer for persisting agent state between runs */
@@ -95,8 +96,17 @@ const BASE_PROMPT = `In order to complete the objective that the user asks of yo
  * @returns ReactAgent instance ready for invocation
  */
 export function createDeepAgent<
-  ContextSchema extends InteropZodObject = InteropZodObject,
->(params: CreateDeepAgentParams<ContextSchema> = {}) {
+  StructuredResponseFormat extends Record<string, any>,
+  StateSchema extends InteropZodObject,
+  ContextSchema extends InteropZodObject,
+  TMiddleware extends readonly AgentMiddleware[] = readonly AgentMiddleware[],
+>(
+  params: CreateDeepAgentParams<
+    StructuredResponseFormat,
+    ContextSchema,
+    any
+  > = {},
+) {
   const {
     model = "claude-sonnet-4-5-20250929",
     tools = [],
@@ -121,7 +131,7 @@ export function createDeepAgent<
   // If no backend is provided, use a factory that creates a StateBackend
   const filesystemBackend = backend
     ? backend
-    : (config: { state: unknown; store?: BaseStore }) =>
+    : (config: { state: StateSchema; store?: BaseStore }) =>
         new StateBackend(config);
 
   const middleware = [
@@ -177,16 +187,21 @@ export function createDeepAgent<
   }
 
   // Add custom middleware last (after all built-in middleware)
-  middleware.push(...customMiddleware);
+  middleware.push(...(customMiddleware as unknown as TMiddleware));
 
   // Note: Recursion limit of 1000 (matching Python behavior) should be passed
   // at invocation time: agent.invoke(input, { recursionLimit: 1000 })
-  return createAgent({
+  return createAgent<
+    StructuredResponseFormat,
+    StateSchema,
+    ContextSchema,
+    TMiddleware
+  >({
     model,
     systemPrompt: finalSystemPrompt,
     tools,
     middleware,
-    responseFormat,
+    responseFormat: responseFormat,
     contextSchema,
     checkpointer,
     store,
