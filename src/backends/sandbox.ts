@@ -200,7 +200,7 @@ const fs = require('fs');
 const filePath = atob('${pathB64}');
 const oldStr = atob('${oldB64}');
 const newStr = atob('${newB64}');
-const replaceAll = ${replaceAll};
+const replaceAll = ${Boolean(replaceAll)};
 
 let text;
 try {
