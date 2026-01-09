@@ -1,8 +1,11 @@
 import {
   createMiddleware,
-  AgentMiddleware,
   ToolMessage,
   AIMessage,
+  /**
+   * required for type inference
+   */
+  type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
 import { RemoveMessage } from "@langchain/core/messages";
 import { REMOVE_ALL_MESSAGES } from "@langchain/langgraph";
@@ -27,7 +30,7 @@ import { REMOVE_ALL_MESSAGES } from "@langchain/langgraph";
  * });
  * ```
  */
-export function createPatchToolCallsMiddleware(): AgentMiddleware {
+export function createPatchToolCallsMiddleware() {
   return createMiddleware({
     name: "patchToolCallsMiddleware",
     beforeAgent: async (state) => {

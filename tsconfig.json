@@ -1,5 +1,6 @@
 {
   "extends": "@tsconfig/recommended/tsconfig.json",
+  "files": [],
   "compilerOptions": {
     "target": "ES2021",
     "lib": ["ES2023", "DOM"],
@@ -16,11 +17,17 @@
     "allowJs": true,
     "strict": true,
     "strictFunctionTypes": false,
-    "outDir": "dist",
     "types": ["node"],
     "resolveJsonModule": true,
     "isolatedModules": true
   },
-  "include": ["src/**/*.ts", "src/*.ts", "tests/**/*.ts", "tests/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "coverage",
+    "examples",
+    "libs",
+    "sandbox-workspace",
+    "eslint.config.js"
+  ]
 }

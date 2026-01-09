@@ -1,15 +1,26 @@
-import { tool, createMiddleware } from "langchain";
-import { ToolMessage } from "@langchain/core/messages";
+import {
+  tool,
+  createMiddleware,
+  ReactAgent,
+  StructuredTool,
+  ToolMessage,
+  type AgentMiddleware as _AgentMiddleware,
+} from "langchain";
 import { Command } from "@langchain/langgraph";
-import type { ReactAgent, StructuredTool } from "langchain";
-import { z } from "zod/v3";
-import { withLangGraph } from "@langchain/langgraph/zod";
+import { z } from "zod/v4";
+
+/**
+ * required for type inference
+ */
+import type * as _zodTypes from "@langchain/core/utils/types";
+import type * as _zodMeta from "@langchain/langgraph/zod";
+import type * as _messages from "@langchain/core/messages";
+import type * as _tools from "@langchain/core/tools";
+
 /**
  * Assert that an agent has all the expected deep agent qualities
  */
-export function assertAllDeepAgentQualities(
-  agent: ReactAgent<any, any, any, any>,
-) {
+export function assertAllDeepAgentQualities(agent: ReactAgent<any>) {
   // Check state channels
   const channels = Object.keys(agent.graph?.channels || {});
   if (!channels.includes("todos")) {
@@ -198,15 +209,15 @@ export const researchBasketball = tool(
 
 // Research state
 const ResearchStateSchema = z.object({
-  research: withLangGraph(
-    z.string().default(() => ""),
-    {
+  research: z
+    .string()
+    .default("")
+    .meta({
       reducer: {
-        fn: (left, right) => right || left || "",
+        fn: (left: string, right: string | null) => right || left || "",
         schema: z.string().nullable(),
       },
-    },
-  ),
+    }),
 });
 
 export const ResearchMiddleware = createMiddleware({
@@ -227,15 +238,15 @@ export const SampleMiddlewareWithTools = createMiddleware({
 
 // Sample state
 const SampleStateSchema = z.object({
-  sample_input: withLangGraph(
-    z.string().default(() => ""),
-    {
+  sample_input: z
+    .string()
+    .default("")
+    .meta({
       reducer: {
-        fn: (left, right) => right || left || "",
+        fn: (left: string, right: string | null) => right || left || "",
         schema: z.string().nullable(),
       },
-    },
-  ),
+    }),
 });
 
 export const SampleMiddlewareWithToolsAndState = createMiddleware({

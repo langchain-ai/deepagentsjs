@@ -27,7 +27,7 @@
  */
 
 import { z } from "zod";
-import type { AgentMiddleware } from "langchain";
+import { type AgentMiddleware, createMiddleware } from "langchain";
 import { listSkills, type SkillMetadata } from "../skills/loader.js";
 
 /**
@@ -196,7 +196,7 @@ export function createSkillsMiddleware(
   // Store display paths for prompts
   const userSkillsDisplay = `~/.deepagents/${assistantId}/skills`;
 
-  return {
+  return createMiddleware({
     name: "SkillsMiddleware",
     stateSchema: SkillsStateSchema as any,
 
@@ -240,5 +240,5 @@ export function createSkillsMiddleware(
 
       return handler({ ...request, systemPrompt: newSystemPrompt });
     },
-  };
+  });
 }

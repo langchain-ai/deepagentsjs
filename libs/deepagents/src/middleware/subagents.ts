@@ -22,7 +22,9 @@ const DEFAULT_SUBAGENT_PROMPT =
   "In order to complete the objective that the user asks of you, you have access to a number of standard tools.";
 
 // State keys that should be excluded when passing state to subagents
-const EXCLUDED_STATE_KEYS = ["messages", "todos", "jumpTo"] as const;
+// NOTE: "files" is excluded to prevent concurrent subagents from writing to
+// the files channel simultaneously (which causes LastValue errors in LangGraph)
+const EXCLUDED_STATE_KEYS = ["messages", "todos", "jumpTo", "files"] as const;
 
 const DEFAULT_GENERAL_PURPOSE_DESCRIPTION =
   "General-purpose agent for researching complex questions, searching for files and content, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you. This agent has access to all tools as the main agent.";
@@ -179,7 +181,7 @@ export interface CompiledSubAgent {
   /** The description of the agent */
   description: string;
   /** The agent instance */
-  runnable: ReactAgent<any, any, any, any> | Runnable;
+  runnable: ReactAgent | Runnable;
 }
 
 /**
@@ -253,7 +255,7 @@ function getSubagents(options: {
   subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
 }): {
-  agents: Record<string, ReactAgent<any, any, any, any> | Runnable>;
+  agents: Record<string, ReactAgent | Runnable>;
   descriptions: string[];
 } {
   const {
@@ -266,7 +268,7 @@ function getSubagents(options: {
   } = options;
 
   const defaultSubagentMiddleware = defaultMiddleware || [];
-  const agents: Record<string, ReactAgent<any, any, any, any> | Runnable> = {};
+  const agents: Record<string, ReactAgent | Runnable> = {};
   const subagentDescriptions: string[] = [];
 
   // Create general-purpose agent if enabled

@@ -5,8 +5,10 @@ import {
   todoListMiddleware,
   summarizationMiddleware,
   type AgentMiddleware,
-  type ReactAgent,
   type InterruptOnConfig,
+  type ReactAgent as _ReactAgent,
+  type CreateAgentParams as _CreateAgentParams,
+  type AgentTypeConfig as _AgentTypeConfig,
 } from "langchain";
 import type { StructuredTool } from "@langchain/core/tools";
 import type { BaseLanguageModel } from "@langchain/core/language_models/base";
@@ -27,13 +29,21 @@ import { AnnotationRoot } from "@langchain/langgraph";
 import { CompiledSubAgent } from "./middleware/subagents.js";
 
 /**
+ * required for type inference
+ */
+import type * as _zodTypes from "@langchain/core/utils/types";
+import type * as _zodMeta from "@langchain/langgraph/zod";
+import type * as _messages from "@langchain/core/messages";
+import type * as _tools from "@langchain/core/tools";
+import type * as _Command from "@langchain/langgraph";
+
+/**
  * Configuration parameters for creating a Deep Agent
  * Matches Python's create_deep_agent parameters
  */
 export interface CreateDeepAgentParams<
-  ContextSchema extends
-    | AnnotationRoot<any>
-    | InteropZodObject = AnnotationRoot<any>,
+  ContextSchema extends AnnotationRoot<any> | InteropZodObject =
+    AnnotationRoot<any>,
 > {
   /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
   model?: BaseLanguageModel | string;
@@ -85,12 +95,8 @@ const BASE_PROMPT = `In order to complete the objective that the user asks of yo
  * @returns ReactAgent instance ready for invocation
  */
 export function createDeepAgent<
-  ContextSchema extends
-    | AnnotationRoot<any>
-    | InteropZodObject = AnnotationRoot<any>,
->(
-  params: CreateDeepAgentParams<ContextSchema> = {},
-): ReactAgent<any, any, ContextSchema, any> {
+  ContextSchema extends InteropZodObject = InteropZodObject,
+>(params: CreateDeepAgentParams<ContextSchema> = {}) {
   const {
     model = "claude-sonnet-4-5-20250929",
     tools = [],
@@ -118,7 +124,7 @@ export function createDeepAgent<
     : (config: { state: unknown; store?: BaseStore }) =>
         new StateBackend(config);
 
-  const middleware: AgentMiddleware[] = [
+  const middleware = [
     // Provides todo list management capabilities for tracking tasks
     todoListMiddleware(),
     // Enables filesystem operations and optional long-term memory storage
