@@ -53,3 +53,6 @@ credentials.json
 # Agent OS
 agent-os
 .claude
+
+# Sandbox workspace directory - created at runtime
+sandbox-workspace/

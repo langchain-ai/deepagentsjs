@@ -440,6 +440,77 @@ const agent4 = createDeepAgent({
 
 See [examples/backends/](examples/backends/) for detailed examples of each backend type.
 
+### Sandbox Execution
+
+For agents that need to run shell commands, you can create a sandbox backend by extending `BaseSandbox`. This enables the `execute` tool which allows agents to run arbitrary shell commands in an isolated environment.
+
+```typescript
+import {
+  createDeepAgent,
+  BaseSandbox,
+  type ExecuteResponse,
+  type FileUploadResponse,
+  type FileDownloadResponse,
+} from "deepagents";
+import { spawn } from "child_process";
+
+// Create a concrete sandbox by extending BaseSandbox
+class LocalShellSandbox extends BaseSandbox {
+  readonly id = "local-shell";
+  private readonly workingDirectory: string;
+
+  constructor(workingDirectory: string) {
+    super();
+    this.workingDirectory = workingDirectory;
+  }
+
+  // Only execute() is required - BaseSandbox implements all file operations
+  async execute(command: string): Promise<ExecuteResponse> {
+    return new Promise((resolve) => {
+      const child = spawn("/bin/bash", ["-c", command], {
+        cwd: this.workingDirectory,
+      });
+
+      const chunks: string[] = [];
+      child.stdout.on("data", (data) => chunks.push(data.toString()));
+      child.stderr.on("data", (data) => chunks.push(data.toString()));
+
+      child.on("close", (exitCode) => {
+        resolve({
+          output: chunks.join(""),
+          exitCode,
+          truncated: false,
+        });
+      });
+    });
+  }
+
+  async uploadFiles(
+    files: Array<[string, Uint8Array]>,
+  ): Promise<FileUploadResponse[]> {
+    // Implement file upload logic
+    return files.map(([path]) => ({ path, error: null }));
+  }
+
+  async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
+    // Implement file download logic
+    return paths.map((path) => ({ path, content: null, error: "file_not_found" }));
+  }
+}
+
+// Use the sandbox with your agent
+const sandbox = new LocalShellSandbox("./workspace");
+
+const agent = createDeepAgent({
+  backend: sandbox,
+  systemPrompt: "You can run shell commands using the execute tool.",
+});
+```
+
+When using a sandbox backend, the agent gains access to an `execute` tool that can run shell commands. The tool automatically returns the command output, exit code, and whether the output was truncated.
+
+See [examples/sandbox/local-sandbox.ts](examples/sandbox/local-sandbox.ts) for a complete implementation.
+
 ## Deep Agents Middleware
 
 Deep Agents are built with a modular middleware architecture. As a reminder, Deep Agents have access to:
@@ -486,6 +557,7 @@ Context engineering is one of the main challenges in building effective agents. 
 - **edit_file**: Edit an existing file in your filesystem
 - **glob**: Find files matching a pattern
 - **grep**: Search for text within files
+- **execute**: Run shell commands (only available when using a `SandboxBackendProtocol`)
 
 ```typescript
 import { createAgent } from "langchain";
