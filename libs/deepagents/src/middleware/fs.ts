@@ -564,7 +564,7 @@ export function createFilesystemMiddleware(
       const stateAndStore: StateAndStore = {
         state: request.state || {},
         // @ts-expect-error - request.config is incorrect typed
-        store: request.config.store,
+        store: request.config.store ?? request.runtime.store,
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const supportsExecution = isSandboxBackend(resolvedBackend);
@@ -602,7 +602,7 @@ export function createFilesystemMiddleware(
               const stateAndStore: StateAndStore = {
                 state: request.state || {},
                 // @ts-expect-error - request.config is incorrect typed
-                store: request.config.store,
+                store: request.config.store ?? request.runtime.store,
               };
               const resolvedBackend = getBackend(backend, stateAndStore);
               const sanitizedId = sanitizeToolCallId(
