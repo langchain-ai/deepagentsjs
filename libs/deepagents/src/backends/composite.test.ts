@@ -183,9 +183,9 @@ describe("CompositeBackend", () => {
     expect(resMem.filesUpdate).toBeNull();
     expect(resMem.path).toBe("/important.md");
 
-    const resArch = await composite.write("/archive/old.log", "archived log");
-    expect(resArch.filesUpdate).toBeNull();
-    expect(resArch.path).toBe("/old.log");
+    const resArchive = await composite.write("/archive/old.log", "archived log");
+    expect(resArchive.filesUpdate).toBeNull();
+    expect(resArchive.path).toBe("/old.log");
 
     const resCache = await composite.write(
       "/cache/session.json",
