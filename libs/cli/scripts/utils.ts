@@ -183,16 +183,13 @@ export async function execCommand(
  */
 export async function execWithOutput(
   command: string,
+  args: string[] = [],
   cwd?: string,
 ): Promise<number> {
   const { spawn } = await import("node:child_process");
 
   return new Promise((resolve) => {
-    const isWindows = process.platform === "win32";
-    const shell = isWindows ? "cmd.exe" : "/bin/sh";
-    const shellFlag = isWindows ? "/c" : "-c";
-
-    const child = spawn(shell, [shellFlag, command], {
+    const child = spawn(command, args, {
       cwd,
       stdio: "inherit",
       env: process.env,

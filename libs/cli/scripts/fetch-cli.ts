@@ -178,9 +178,11 @@ export async function installCli(
   const pip = getPipPath(venvDir);
   const packageSpec = `deepagents-cli==${version}`;
 
-  const exitCode = await execWithOutput(
-    `"${pip}" install "${packageSpec}" --no-cache-dir`,
-  );
+  const exitCode = await execWithOutput(pip, [
+    "install",
+    packageSpec,
+    "--no-cache-dir",
+  ]);
 
   if (exitCode !== 0) {
     throw new Error(`Failed to install deepagents-cli==${version}`);
@@ -198,9 +200,12 @@ export async function upgradeDeepagentsCore(venvDir: string): Promise<void> {
 
   const pip = getPipPath(venvDir);
 
-  const exitCode = await execWithOutput(
-    `"${pip}" install --upgrade deepagents --no-cache-dir`,
-  );
+  const exitCode = await execWithOutput(pip, [
+    "install",
+    "--upgrade",
+    "deepagents",
+    "--no-cache-dir",
+  ]);
 
   if (exitCode !== 0) {
     log(
@@ -211,7 +216,7 @@ export async function upgradeDeepagentsCore(venvDir: string): Promise<void> {
   }
 
   // Show the installed version
-  await execWithOutput(`"${pip}" show deepagents | grep Version`);
+  await execWithOutput(pip, ["show", "deepagents"]);
   log("success", "Upgraded deepagents core to latest version");
 }
 
@@ -222,7 +227,7 @@ export async function verifyInstallation(venvDir: string): Promise<boolean> {
   log("debug", "Verifying installation...");
 
   const pip = getPipPath(venvDir);
-  const exitCode = await execWithOutput(`"${pip}" show deepagents-cli`);
+  const exitCode = await execWithOutput(pip, ["show", "deepagents-cli"]);
 
   return exitCode === 0;
 }
