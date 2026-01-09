@@ -118,7 +118,8 @@ function buildReadCommand(
 ): string {
   const pathB64 = btoa(filePath);
   // Coerce offset and limit to safe non-negative integers before embedding in the shell command.
-  const safeOffset = Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0;
+  const safeOffset =
+    Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0;
   const safeLimit =
     Number.isFinite(limit) && limit > 0 && limit < Number.MAX_SAFE_INTEGER
       ? Math.floor(limit)
