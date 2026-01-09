@@ -31,9 +31,8 @@ import { CompiledSubAgent } from "./middleware/subagents.js";
  * Matches Python's create_deep_agent parameters
  */
 export interface CreateDeepAgentParams<
-  ContextSchema extends
-    | AnnotationRoot<any>
-    | InteropZodObject = AnnotationRoot<any>,
+  ContextSchema extends AnnotationRoot<any> | InteropZodObject =
+    AnnotationRoot<any>,
 > {
   /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
   model?: BaseLanguageModel | string;
@@ -85,9 +84,8 @@ const BASE_PROMPT = `In order to complete the objective that the user asks of yo
  * @returns ReactAgent instance ready for invocation
  */
 export function createDeepAgent<
-  ContextSchema extends
-    | AnnotationRoot<any>
-    | InteropZodObject = AnnotationRoot<any>,
+  ContextSchema extends AnnotationRoot<any> | InteropZodObject =
+    AnnotationRoot<any>,
 >(
   params: CreateDeepAgentParams<ContextSchema> = {},
 ): ReactAgent<any, any, ContextSchema, any> {
