@@ -10,6 +10,7 @@ This skill provides access to arXiv, a free distribution service and open-access
 ## When to Use This Skill
 
 Use this skill when you need to:
+
 - Find preprints and recent research papers before journal publication
 - Search for papers in computational biology, bioinformatics, or systems biology
 - Access mathematical or statistical methods papers relevant to biology
@@ -31,22 +32,26 @@ npx tsx [YOUR_SKILLS_DIR]/arxiv-search/arxiv_search.ts "your search query" [--ma
 Replace `[YOUR_SKILLS_DIR]` with the absolute skills directory path from your system prompt (e.g., `~/.deepagents/agent/skills` or the full absolute path).
 
 **Arguments:**
+
 - `query` (required): The search query string (e.g., "neural networks protein structure", "single cell RNA-seq")
 - `--max-papers` (optional): Maximum number of papers to retrieve (default: 10)
 
 ### Examples
 
 Search for machine learning papers:
+
 ```bash
 npx tsx ~/.deepagents/agent/skills/arxiv-search/arxiv_search.ts "deep learning drug discovery" --max-papers 5
 ```
 
 Search for computational biology papers:
+
 ```bash
 npx tsx ~/.deepagents/agent/skills/arxiv-search/arxiv_search.ts "protein folding prediction"
 ```
 
 Search for bioinformatics methods:
+
 ```bash
 npx tsx ~/.deepagents/agent/skills/arxiv-search/arxiv_search.ts "genome assembly algorithms"
 ```
@@ -54,6 +59,7 @@ npx tsx ~/.deepagents/agent/skills/arxiv-search/arxiv_search.ts "genome assembly
 ## Output Format
 
 The script returns formatted results with:
+
 - **Title**: Paper title
 - **Summary**: Abstract/summary text
 
