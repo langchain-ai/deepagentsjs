@@ -14,7 +14,6 @@ import {
 } from "langchain";
 import { Command, isCommand, getCurrentTaskInput } from "@langchain/langgraph";
 import { z } from "zod/v4";
-import { withLangGraph } from "@langchain/langgraph/zod";
 import type {
   BackendProtocol,
   BackendFactory,
