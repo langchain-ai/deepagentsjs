@@ -52,11 +52,7 @@ credentials.json
 
 # Agent OS
 agent-os
-<<<<<<< HEAD
 .claude
 
 # Sandbox workspace directory - created at runtime
 sandbox-workspace/
-=======
-.claude
->>>>>>> fcff28d (feat: catch up with Python)
