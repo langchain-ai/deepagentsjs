@@ -17,8 +17,7 @@
     "test:int": "vitest run --mode int",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage",
-    "release": "pnpm build && changeset publish"
+    "test:coverage": "vitest run --coverage"
   },
   "repository": {
     "type": "git",
@@ -49,7 +48,6 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.29.7",
     "@langchain/langgraph-checkpoint": "^1.0.0",
     "@langchain/openai": "^1.0.0",
     "@langchain/tavily": "^1.0.0",
