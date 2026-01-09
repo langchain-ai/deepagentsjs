@@ -260,7 +260,7 @@ export const WeatherToolMiddleware = createMiddleware({
   tools: [getWeather],
 });
 
-export function extractToolsFromAgent(agent: ReactAgent) {
+export function extractToolsFromAgent(agent: ReactAgent<any>) {
   const graph = agent.graph;
   const toolsNode = graph.nodes?.tools.bound as unknown as {
     tools: StructuredTool[];

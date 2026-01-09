@@ -27,4 +27,10 @@ export default defineConfig([
       "no-console": ["error"],
     },
   },
+  {
+    files: ["libs/cli/scripts/**/*.ts", "libs/cli/src/cli.ts"],
+    rules: {
+      "no-console": "off",
+    },
+  },
 ]);

@@ -1,0 +1,336 @@
+# CLI Release Workflow
+#
+# This workflow builds and publishes the deepagents-cli npm package.
+# It wraps the Python deepagents-cli from PyPI as platform-specific binaries.
+#
+# Triggers:
+#   - Manual dispatch with optional version override
+#   - Daily schedule to check for new PyPI releases
+#
+# Jobs:
+#   1. check-version: Determine if a new build is needed
+#   2. build: Build binaries for each platform (matrix)
+#   3. publish: Publish all packages to npm
+
+name: CLI Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (leave empty for latest from PyPI)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry run (skip publishing)'
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    # Check for new PyPI releases daily at 6:00 AM UTC
+    - cron: '0 6 * * *'
+
+permissions:
+  contents: read
+
+# Ensure only one release workflow runs at a time
+concurrency:
+  group: cli-release
+  cancel-in-progress: false
+
+jobs:
+  # ==========================================================================
+  # Job 1: Check if a new version needs to be built
+  # ==========================================================================
+  check-version:
+    name: Check Version
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      version: ${{ steps.check.outputs.version }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for new version
+        id: check
+        run: |
+          set -e
+          
+          # Get latest PyPI version
+          echo "Fetching latest version from PyPI..."
+          PYPI_VERSION=$(curl -s https://pypi.org/pypi/deepagents-cli/json | jq -r '.info.version')
+          echo "PyPI version: $PYPI_VERSION"
+          
+          # Get current npm version (may not exist yet)
+          echo "Checking npm version..."
+          NPM_VERSION=$(npm view deepagents-cli version 2>/dev/null || echo "0.0.0")
+          echo "npm version: $NPM_VERSION"
+          
+          # Manual override takes precedence
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+            echo "Using manual version override: $VERSION"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          elif [ "$PYPI_VERSION" != "$NPM_VERSION" ]; then
+            echo "New version available: $PYPI_VERSION (current: $NPM_VERSION)"
+            echo "version=$PYPI_VERSION" >> $GITHUB_OUTPUT
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "No new version available"
+            echo "version=$PYPI_VERSION" >> $GITHUB_OUTPUT
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Summary
+        run: |
+          echo "### Version Check Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ steps.check.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Should Build | ${{ steps.check.outputs.should_build }} |" >> $GITHUB_STEP_SUMMARY
+
+  # ==========================================================================
+  # Job 2: Build binaries for each platform
+  # ==========================================================================
+  build:
+    name: Build (${{ matrix.platform }})
+    needs: check-version
+    if: needs.check-version.outputs.should_build == 'true'
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x64
+            os: ubuntu-latest
+            python-version: "3.11"
+          - platform: linux-arm64
+            os: ubuntu-24.04-arm
+            python-version: "3.11"
+          - platform: darwin-x64
+            os: macos-13
+            python-version: "3.11"
+          - platform: darwin-arm64
+            os: macos-14
+            python-version: "3.11"
+          - platform: win32-x64
+            os: windows-latest
+            python-version: "3.11"
+    
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install
+        working-directory: libs/cli
+
+      - name: Build CLI binary
+        run: |
+          pnpm run build:cli \
+            --platform ${{ matrix.platform }} \
+            --version ${{ needs.check-version.outputs.version }}
+        working-directory: libs/cli
+        env:
+          # Increase Node.js heap size for PyInstaller
+          NODE_OPTIONS: "--max-old-space-size=4096"
+
+      - name: List build output
+        run: |
+          echo "Build output:"
+          ls -la dist/platforms/${{ matrix.platform }}/ || true
+          ls -la dist/platforms/${{ matrix.platform }}/bin/ || true
+        working-directory: libs/cli
+        shell: bash
+
+      - name: Upload platform package
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.platform }}
+          path: libs/cli/dist/platforms/${{ matrix.platform }}/
+          retention-days: 7
+          if-no-files-found: error
+
+  # ==========================================================================
+  # Job 3: Publish all packages to npm
+  # ==========================================================================
+  publish:
+    name: Publish to npm
+    needs: [check-version, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Download all platform packages
+        uses: actions/download-artifact@v4
+        with:
+          path: libs/cli/dist/platforms/
+          pattern: cli-*
+          merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: |
+          echo "Downloaded artifacts:"
+          find libs/cli/dist/platforms -type f | head -50
+
+      - name: Install dependencies
+        run: pnpm install
+        working-directory: libs/cli
+
+      - name: Build main package
+        run: pnpm run build
+        working-directory: libs/cli
+
+      - name: Update versions
+        run: |
+          VERSION="${{ needs.check-version.outputs.version }}"
+          echo "Setting version to $VERSION"
+          
+          # Update main package version
+          cd libs/cli
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          
+          # Update platform package versions
+          for platform in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
+            if [ -d "dist/platforms/$platform" ]; then
+              echo "Updating $platform to version $VERSION"
+              cd "dist/platforms/$platform"
+              npm version "$VERSION" --no-git-tag-version --allow-same-version
+              cd - > /dev/null
+            else
+              echo "Warning: Platform $platform not found"
+            fi
+          done
+
+      - name: Publish platform packages
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          for platform in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
+            if [ -d "libs/cli/dist/platforms/$platform" ]; then
+              echo "Publishing @deepagents-cli/$platform..."
+              cd "libs/cli/dist/platforms/$platform"
+              
+              # Try to publish, continue on error (may already exist)
+              npm publish --access public || echo "Warning: Failed to publish $platform (may already exist)"
+              
+              cd - > /dev/null
+            fi
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish main package
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          echo "Publishing deepagents-cli..."
+          npm publish --access public
+        working-directory: libs/cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Dry run summary
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "### Dry Run - Would have published:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- deepagents-cli@${{ needs.check-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          for platform in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
+            echo "- @deepagents-cli/$platform@${{ needs.check-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          done
+
+      - name: Publish summary
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          echo "### Published Packages" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Version: ${{ needs.check-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Package | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| deepagents-cli | ✅ Published |" >> $GITHUB_STEP_SUMMARY
+          for platform in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
+            echo "| @deepagents-cli/$platform | ✅ Published |" >> $GITHUB_STEP_SUMMARY
+          done
+
+  # ==========================================================================
+  # Job 4: Create GitHub Release (optional)
+  # ==========================================================================
+  release:
+    name: Create Release
+    needs: [check-version, publish]
+    if: ${{ github.event.inputs.dry_run != 'true' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: cli-v${{ needs.check-version.outputs.version }}
+          name: deepagents-cli v${{ needs.check-version.outputs.version }}
+          body: |
+            ## deepagents-cli v${{ needs.check-version.outputs.version }}
+            
+            This release wraps [deepagents-cli ${{ needs.check-version.outputs.version }}](https://pypi.org/project/deepagents-cli/${{ needs.check-version.outputs.version }}/) from PyPI.
+            
+            ### Installation
+            
+            ```bash
+            npm install -g deepagents-cli
+            ```
+            
+            ### Supported Platforms
+            
+            - Linux x64
+            - Linux ARM64
+            - macOS Intel (x64)
+            - macOS Apple Silicon (ARM64)
+            - Windows x64
+            
+            ### Links
+            
+            - [npm package](https://www.npmjs.com/package/deepagents-cli)
+            - [PyPI package](https://pypi.org/project/deepagents-cli/)
+            - [Documentation](https://github.com/langchain-ai/deepagentsjs/tree/main/libs/cli)
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
