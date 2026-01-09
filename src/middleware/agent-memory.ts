@@ -9,7 +9,7 @@
 
 import fs from "node:fs";
 import { z } from "zod";
-import type { AgentMiddleware } from "langchain/agents/middleware/types";
+import type { AgentMiddleware } from "langchain";
 import type { Settings } from "../config.js";
 
 /**
