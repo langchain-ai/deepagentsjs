@@ -11,8 +11,8 @@
     "clean": "rm -rf dist/ .tsdown/",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/**/*.ts examples/**/*.ts",
-    "lint:fix": "eslint src/**/*.ts examples/**/*.ts --fix",
+    "lint": "eslint src/**/*.ts tests/**/*.ts examples/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts tests/**/*.ts examples/**/*.ts --fix",
     "format": "prettier --write \"src/**/*.{ts,js,json,md}\" \"examples/**/*.{ts,js,json,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,js,json,md}\" \"examples/**/*.{ts,js,json,md}\"",
     "prepublishOnly": "pnpm build",
@@ -48,6 +48,7 @@
     "fast-glob": "^3.3.3",
     "langchain": "^1.0.4",
     "micromatch": "^4.0.8",
+    "yaml": "^2.8.2",
     "zod": "^4.1.11"
   },
   "devDependencies": {
