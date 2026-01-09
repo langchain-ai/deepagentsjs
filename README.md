@@ -494,7 +494,11 @@ class LocalShellSandbox extends BaseSandbox {
 
   async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
     // Implement file download logic
-    return paths.map((path) => ({ path, content: null, error: "file_not_found" }));
+    return paths.map((path) => ({
+      path,
+      content: null,
+      error: "file_not_found",
+    }));
   }
 }
 
