@@ -1,0 +1,15 @@
+{
+  "name": "examples",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "deepagents": "workspace:*",
+    "@langchain/tavily": "^1.2.0",
+    "@langchain/anthropic": "^1.3.7",
+    "@langchain/core": "^1.1.12",
+    "@langchain/langgraph-checkpoint": "^1.0.0"
+  }
+}

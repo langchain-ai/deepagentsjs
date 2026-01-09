@@ -27,7 +27,7 @@ import {
   type ExecuteResponse,
   type FileUploadResponse,
   type FileDownloadResponse,
-} from "../../src/index.js";
+} from "deepagents";
 
 /**
  * LocalShellSandbox - A concrete sandbox implementation for local shell execution.

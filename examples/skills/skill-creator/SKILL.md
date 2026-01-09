@@ -18,7 +18,7 @@ equipped with procedural knowledge and domain expertise.
 
 In deepagents CLI, skills are stored in `~/.deepagents/<agent>/skills/` where `<agent>` is your agent configuration name (default is `agent`). For example, with the default configuration, skills live at:
 
-```
+```txt
 ~/.deepagents/agent/skills/
 ├── skill-name-1/
 │   └── SKILL.md
@@ -46,7 +46,7 @@ The context window is a public good. Skills share the context window with everyt
 
 Every skill consists of a required SKILL.md file and optional bundled resources:
 
-```
+```txt
 skill-name/
 ├── SKILL.md (required)
 │   ├── YAML frontmatter metadata (required)
