@@ -117,13 +117,19 @@ function buildReadCommand(
   limit: number,
 ): string {
   const pathB64 = btoa(filePath);
+  // Coerce offset and limit to safe non-negative integers before embedding in the shell command.
+  const safeOffset = Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0;
+  const safeLimit =
+    Number.isFinite(limit) && limit > 0 && limit < Number.MAX_SAFE_INTEGER
+      ? Math.floor(limit)
+      : 0;
 
   return `node -e "
 const fs = require('fs');
 
 const filePath = atob('${pathB64}');
-const offset = ${offset};
-const limit = ${limit};
+const offset = ${safeOffset};
+const limit = ${safeLimit};
 
 if (!fs.existsSync(filePath)) {
   console.log('Error: File not found');
