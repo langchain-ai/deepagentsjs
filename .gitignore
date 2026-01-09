@@ -49,3 +49,10 @@ credentials.json
 .langgraph_api
 
 **/.claude/settings.local.json
+
+# Agent OS
+agent-os
+.claude
+
+# Sandbox workspace directory - created at runtime
+sandbox-workspace/

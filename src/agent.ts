@@ -173,6 +173,8 @@ export function createDeepAgent<
   // Add custom middleware last (after all built-in middleware)
   middleware.push(...customMiddleware);
 
+  // Note: Recursion limit of 1000 (matching Python behavior) should be passed
+  // at invocation time: agent.invoke(input, { recursionLimit: 1000 })
   return createAgent({
     model,
     systemPrompt: finalSystemPrompt,

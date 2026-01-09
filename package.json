@@ -5,6 +5,7 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "type": "module",
   "scripts": {
     "build": "tsdown",
     "clean": "rm -rf dist/ .tsdown/",
@@ -60,7 +61,8 @@
     "@types/micromatch": "^4.0.10",
     "@types/node": "^22.13.5",
     "@types/uuid": "^10.0.0",
-    "@vitest/ui": "^2.1.8",
+    "@vitest/coverage-v8": "^4.0.16",
+    "@vitest/ui": "^4.0.16",
     "dotenv": "^17.2.1",
     "eslint": "^9.19.0",
     "eslint-config-prettier": "^8.8.0",
@@ -74,7 +76,7 @@
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.22.0",
     "uuid": "^11.0.5",
-    "vitest": "^2.1.8"
+    "vitest": "^4.0.16"
   },
   "exports": {
     ".": {
@@ -91,5 +93,6 @@
   },
   "files": [
     "dist/**/*"
-  ]
+  ],
+  "packageManager": "pnpm@10.26.2+sha512.0e308ff2005fc7410366f154f625f6631ab2b16b1d2e70238444dd6ae9d630a8482d92a451144debc492416896ed16f7b114a86ec68b8404b2443869e68ffda6"
 }
