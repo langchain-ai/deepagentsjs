@@ -6,9 +6,14 @@
  * - Tool result eviction for large outputs
  */
 
-import { createMiddleware, tool, ToolMessage } from "langchain";
+import {
+  createMiddleware,
+  tool,
+  ToolMessage,
+  type AgentMiddleware as _AgentMiddleware,
+} from "langchain";
 import { Command, isCommand, getCurrentTaskInput } from "@langchain/langgraph";
-import { z as z3 } from "zod/v3";
+import { z } from "zod/v4";
 import { withLangGraph } from "@langchain/langgraph/zod";
 import type {
   BackendProtocol,
@@ -21,12 +26,19 @@ import { StateBackend } from "../backends/state.js";
 import { sanitizeToolCallId } from "../backends/utils.js";
 
 /**
+ * required for type inference
+ */
+import type * as _zodTypes from "@langchain/core/utils/types";
+import type * as _zodMeta from "@langchain/langgraph/zod";
+import type * as _messages from "@langchain/core/messages";
+
+/**
  * Zod v3 schema for FileData (re-export from backends)
  */
-const FileDataSchema = z3.object({
-  content: z3.array(z3.string()),
-  created_at: z3.string(),
-  modified_at: z3.string(),
+const FileDataSchema = z.object({
+  content: z.array(z.string()),
+  created_at: z.string(),
+  modified_at: z.string(),
 });
 
 export type { FileData };
@@ -65,13 +77,16 @@ function fileDataReducer(
  * preventing "Channel already exists with different type" errors when multiple agents
  * use createFilesystemMiddleware.
  */
-const FilesystemStateSchema = z3.object({
-  files: withLangGraph(z3.record(z3.string(), FileDataSchema).default({}), {
-    reducer: {
-      fn: fileDataReducer,
-      schema: z3.record(z3.string(), FileDataSchema.nullable()),
-    },
-  }),
+const FilesystemStateSchema = z.object({
+  files: z
+    .record(z.string(), FileDataSchema)
+    .default({})
+    .meta({
+      reducer: {
+        fn: fileDataReducer,
+        schema: z.record(z.string(), FileDataSchema.nullable()),
+      },
+    }),
 });
 
 /**
@@ -176,8 +191,8 @@ function createLsTool(
     {
       name: "ls",
       description: customDescription || LS_TOOL_DESCRIPTION,
-      schema: z3.object({
-        path: z3
+      schema: z.object({
+        path: z
           .string()
           .optional()
           .default("/")
@@ -208,15 +223,15 @@ function createReadFileTool(
     {
       name: "read_file",
       description: customDescription || READ_FILE_TOOL_DESCRIPTION,
-      schema: z3.object({
-        file_path: z3.string().describe("Absolute path to the file to read"),
-        offset: z3
-          .number({ coerce: true })
+      schema: z.object({
+        file_path: z.string().describe("Absolute path to the file to read"),
+        offset: z.coerce
+          .number()
           .optional()
           .default(0)
           .describe("Line offset to start reading from (0-indexed)"),
-        limit: z3
-          .number({ coerce: true })
+        limit: z.coerce
+          .number()
           .optional()
           .default(2000)
           .describe("Maximum number of lines to read"),
@@ -266,9 +281,9 @@ function createWriteFileTool(
     {
       name: "write_file",
       description: customDescription || WRITE_FILE_TOOL_DESCRIPTION,
-      schema: z3.object({
-        file_path: z3.string().describe("Absolute path to the file to write"),
-        content: z3.string().describe("Content to write to the file"),
+      schema: z.object({
+        file_path: z.string().describe("Absolute path to the file to write"),
+        content: z.string().describe("Content to write to the file"),
       }),
     },
   );
@@ -321,13 +336,13 @@ function createEditFileTool(
     {
       name: "edit_file",
       description: customDescription || EDIT_FILE_TOOL_DESCRIPTION,
-      schema: z3.object({
-        file_path: z3.string().describe("Absolute path to the file to edit"),
-        old_string: z3
+      schema: z.object({
+        file_path: z.string().describe("Absolute path to the file to edit"),
+        old_string: z
           .string()
           .describe("String to be replaced (must match exactly)"),
-        new_string: z3.string().describe("String to replace with"),
-        replace_all: z3
+        new_string: z.string().describe("String to replace with"),
+        replace_all: z
           .boolean()
           .optional()
           .default(false)
@@ -364,9 +379,9 @@ function createGlobTool(
     {
       name: "glob",
       description: customDescription || GLOB_TOOL_DESCRIPTION,
-      schema: z3.object({
-        pattern: z3.string().describe("Glob pattern (e.g., '*.py', '**/*.ts')"),
-        path: z3
+      schema: z.object({
+        pattern: z.string().describe("Glob pattern (e.g., '*.py', '**/*.ts')"),
+        path: z
           .string()
           .optional()
           .default("/")
@@ -419,14 +434,14 @@ function createGrepTool(
     {
       name: "grep",
       description: customDescription || GREP_TOOL_DESCRIPTION,
-      schema: z3.object({
-        pattern: z3.string().describe("Regex pattern to search for"),
-        path: z3
+      schema: z.object({
+        pattern: z.string().describe("Regex pattern to search for"),
+        path: z
           .string()
           .optional()
           .default("/")
           .describe("Base path to search from (default: /)"),
-        glob: z3
+        glob: z
           .string()
           .optional()
           .nullable()
@@ -480,8 +495,8 @@ function createExecuteTool(
     {
       name: "execute",
       description: customDescription || EXECUTE_TOOL_DESCRIPTION,
-      schema: z3.object({
-        command: z3.string().describe("The shell command to execute"),
+      schema: z.object({
+        command: z.string().describe("The shell command to execute"),
       }),
     },
   );
@@ -543,13 +558,14 @@ export function createFilesystemMiddleware(
 
   return createMiddleware({
     name: "FilesystemMiddleware",
-    stateSchema: FilesystemStateSchema as any,
+    stateSchema: FilesystemStateSchema,
     tools: allTools,
-    wrapModelCall: async (request: any, handler: any) => {
+    wrapModelCall: async (request, handler) => {
       // Check if backend supports execution
       const stateAndStore: StateAndStore = {
         state: request.state || {},
-        store: request.config?.store,
+        // @ts-expect-error - request.config is incorrect typed
+        store: request.config.store,
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const supportsExecution = isSandboxBackend(resolvedBackend);
@@ -575,7 +591,7 @@ export function createFilesystemMiddleware(
       return handler({ ...request, tools, systemPrompt: newSystemPrompt });
     },
     wrapToolCall: toolTokenLimitBeforeEvict
-      ? ((async (request: any, handler: any) => {
+      ? async (request, handler) => {
           const result = await handler(request);
 
           async function processToolMessage(msg: ToolMessage) {
@@ -586,7 +602,8 @@ export function createFilesystemMiddleware(
               // Build StateAndStore from request
               const stateAndStore: StateAndStore = {
                 state: request.state || {},
-                store: request.config?.store,
+                // @ts-expect-error - request.config is incorrect typed
+                store: request.config.store,
               };
               const resolvedBackend = getBackend(backend, stateAndStore);
               const sanitizedId = sanitizeToolCallId(
@@ -670,7 +687,7 @@ export function createFilesystemMiddleware(
           }
 
           return result;
-        }) as any)
+        }
       : undefined,
   });
 }

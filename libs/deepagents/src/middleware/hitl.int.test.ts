@@ -1,13 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { MemorySaver, Command } from "@langchain/langgraph";
 import { v4 as uuidv4 } from "uuid";
-import { createDeepAgent } from "../index.js";
-import {
-  assertAllDeepAgentQualities,
-  sampleTool,
-  getWeather,
-  getSoccerScores,
-} from "../testing/utils.js";
+
+import { MemorySaver, Command } from "@langchain/langgraph";
 import {
   AIMessage,
   HITLRequest,
@@ -15,6 +9,14 @@ import {
   ToolMessage,
   type InterruptOnConfig,
 } from "langchain";
+
+import { createDeepAgent } from "../index.js";
+import {
+  assertAllDeepAgentQualities,
+  sampleTool,
+  getWeather,
+  getSoccerScores,
+} from "../testing/utils.js";
 
 const SAMPLE_TOOL_CONFIG: Record<string, boolean | InterruptOnConfig> = {
   sample_tool: true,
@@ -69,7 +71,7 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
       expect(result.__interrupt__).toBeDefined();
       expect(result.__interrupt__).toHaveLength(1);
 
-      const interrupts = result.__interrupt__[0].value as HITLRequest;
+      const interrupts = result.__interrupt__?.[0].value as HITLRequest;
       const actionRequests = interrupts.actionRequests;
 
       expect(actionRequests).toHaveLength(2);

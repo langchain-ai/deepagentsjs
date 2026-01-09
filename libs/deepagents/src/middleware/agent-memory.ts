@@ -9,7 +9,14 @@
 
 import fs from "node:fs";
 import { z } from "zod";
-import type { AgentMiddleware } from "langchain";
+import {
+  createMiddleware,
+  /**
+   * required for type inference
+   */
+  type AgentMiddleware as _AgentMiddleware,
+} from "langchain";
+
 import type { Settings } from "../config.js";
 
 /**
@@ -179,7 +186,7 @@ write_file '{project_deepagents_dir}/agent.md' ...  # Create project memory file
  */
 export function createAgentMemoryMiddleware(
   options: AgentMemoryMiddlewareOptions,
-): AgentMiddleware {
+) {
   const { settings, assistantId, systemPromptTemplate } = options;
 
   // Compute paths
@@ -200,7 +207,7 @@ export function createAgentMemoryMiddleware(
 
   const template = systemPromptTemplate || DEFAULT_MEMORY_TEMPLATE;
 
-  return {
+  return createMiddleware({
     name: "AgentMemoryMiddleware",
     stateSchema: AgentMemoryStateSchema as any,
 
@@ -263,5 +270,5 @@ export function createAgentMemoryMiddleware(
 
       return handler({ ...request, systemPrompt });
     },
-  };
+  });
 }

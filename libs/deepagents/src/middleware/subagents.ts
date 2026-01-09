@@ -179,7 +179,7 @@ export interface CompiledSubAgent {
   /** The description of the agent */
   description: string;
   /** The agent instance */
-  runnable: ReactAgent<any, any, any, any> | Runnable;
+  runnable: ReactAgent | Runnable;
 }
 
 /**
@@ -253,7 +253,7 @@ function getSubagents(options: {
   subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
 }): {
-  agents: Record<string, ReactAgent<any, any, any, any> | Runnable>;
+  agents: Record<string, ReactAgent | Runnable>;
   descriptions: string[];
 } {
   const {
@@ -266,7 +266,7 @@ function getSubagents(options: {
   } = options;
 
   const defaultSubagentMiddleware = defaultMiddleware || [];
-  const agents: Record<string, ReactAgent<any, any, any, any> | Runnable> = {};
+  const agents: Record<string, ReactAgent | Runnable> = {};
   const subagentDescriptions: string[] = [];
 
   // Create general-purpose agent if enabled
