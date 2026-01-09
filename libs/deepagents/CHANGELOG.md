@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.4.0
+
+### Minor Changes
+
+- [#98](https://github.com/langchain-ai/deepagentsjs/pull/98) [`321ecf3`](https://github.com/langchain-ai/deepagentsjs/commit/321ecf3193be01fd2173123307f43a41f8d2edf5) Thanks [@christian-bromann](https://github.com/christian-bromann)! - chore(deepagents): properly infer types from createAgent, also fix "Channel "files" already exists with a different type." bug
+
 ## 1.3.1
 
 ### Patch Changes
