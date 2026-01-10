@@ -633,7 +633,7 @@ export function createFilesystemMiddleware(
             return { message: msg, filesUpdate: null };
           }
 
-          if (result instanceof ToolMessage) {
+          if (ToolMessage.isInstance(result)) {
             const processed = await processToolMessage(result);
 
             if (processed.filesUpdate) {
@@ -661,7 +661,7 @@ export function createFilesystemMiddleware(
             const processedMessages: ToolMessage[] = [];
 
             for (const msg of update.messages) {
-              if (msg instanceof ToolMessage) {
+              if (ToolMessage.isInstance(msg)) {
                 const processed = await processToolMessage(msg);
                 processedMessages.push(processed.message);
 

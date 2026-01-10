@@ -9,6 +9,10 @@ export default defineConfig([
     sourcemap: true,
     outDir: "dist",
     outExtensions: () => ({ js: ".js" }),
+    // Externalize @langchain/core to prevent bundling duplicate copies.
+    // This fixes instanceof checks (e.g. AIMessageChunk) failing when
+    // providers like Ollama construct chunks from a different module instance.
+    external: [/^@langchain\/core/],
   },
   {
     entry: ["./src/index.ts"],
@@ -18,5 +22,7 @@ export default defineConfig([
     sourcemap: true,
     outDir: "dist",
     outExtensions: () => ({ js: ".cjs" }),
+    // Externalize @langchain/core to prevent bundling duplicate copies.
+    external: [/^@langchain\/core/],
   },
 ]);

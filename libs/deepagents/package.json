@@ -49,6 +49,7 @@
   },
   "devDependencies": {
     "@langchain/langgraph-checkpoint": "^1.0.0",
+    "@langchain/ollama": "^1.1.0",
     "@langchain/openai": "^1.2.1",
     "@langchain/tavily": "^1.2.0",
     "@tsconfig/recommended": "^1.0.13",
