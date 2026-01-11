@@ -33,9 +33,6 @@ Applications like **Deep Research**, **Manus**, and **Claude Code** have overcom
 
 **Deep Agents** is a TypeScript package that implements these patterns in a general-purpose way, enabling you to easily create sophisticated agents for your applications.
 
-> [!TIP]
-> Looking for the Python version? Check out [hwchase17/deepagents](https://github.com/langchain-ai/deepagents)
-
 ## ✨ Features
 
 - 🎯 **Task Planning & Decomposition** - Break complex tasks into manageable steps
