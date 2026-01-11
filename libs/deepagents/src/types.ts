@@ -6,6 +6,7 @@ import type {
   AgentTypeConfig as _AgentTypeConfig,
   InferMiddlewareStates,
   ResponseFormat,
+  SystemMessage,
 } from "langchain";
 import type {
   ClientTool,
@@ -97,7 +98,7 @@ export interface CreateDeepAgentParams<
   /** Tools the agent should have access to */
   tools?: TTools | StructuredTool[];
   /** Custom system prompt for the agent. This will be combined with the base agent prompt */
-  systemPrompt?: string;
+  systemPrompt?: string | SystemMessage;
   /** Custom middleware to apply after standard middleware */
   middleware?: TMiddleware;
   /** List of subagent specifications for task delegation */
