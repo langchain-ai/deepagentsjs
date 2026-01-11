@@ -6,9 +6,9 @@ This architecture, however, can yield agents that are "shallow" and fail to plan
 Applications like "Deep Research", "Manus", and "Claude Code" have gotten around this limitation by implementing a combination of four things:
 a **planning tool**, **sub agents**, access to a **file system**, and a **detailed prompt**.
 
-> 💡 **Tip:** Looking for the Python version of this package? See [here: langchain-ai/deepagents](https://github.com/langchain-ai/deepagents)
+> 💡 **Tip:** Looking for the Python version of this package? See [langchain-ai/deepagents](https://github.com/langchain-ai/deepagents)
 
-![Deep Agents](./assets/deep_agents.png)
+![Deep Agents](https://blog.langchain.com/content/images/2025/07/Screenshot-2025-07-30-at-9.08.32-AM.png)
 
 `deepagents` is a TypeScript package that implements these in a general purpose way so that you can easily create a Deep Agent for your application.
 
