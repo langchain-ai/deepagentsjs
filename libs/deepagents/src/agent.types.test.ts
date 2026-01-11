@@ -14,6 +14,7 @@ import { createMiddleware } from "langchain";
 import { z } from "zod/v4";
 import { createDeepAgent } from "./agent.js";
 import type { MergedDeepAgentState } from "./types.js";
+import type { FileData } from "./backends/protocol.js";
 
 // Test middleware with research state
 const ResearchStateSchema = z.object({
@@ -95,6 +96,15 @@ describe("createDeepAgent type inference", () => {
       expectTypeOf(result.research).toEqualTypeOf<string>();
       expectTypeOf(result).toHaveProperty("counter");
       expectTypeOf(result.counter).toEqualTypeOf<number>();
+      expectTypeOf(result).toHaveProperty("files");
+      expectTypeOf(result.files).toEqualTypeOf<Record<string, FileData>>();
+      expectTypeOf(result).toHaveProperty("todos");
+      expectTypeOf(result.todos).toEqualTypeOf<
+        {
+          content: string;
+          status: "pending" | "in_progress" | "completed";
+        }[]
+      >();
 
       // Should also have messages
       expectTypeOf(result).toHaveProperty("messages");

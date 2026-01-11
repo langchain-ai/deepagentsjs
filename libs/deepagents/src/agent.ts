@@ -7,7 +7,7 @@ import {
   type AgentMiddleware,
   type ReactAgent,
   type CreateAgentParams as _CreateAgentParams,
-  type AgentTypeConfig as _AgentTypeConfig,
+  type AgentTypeConfig,
   type ResponseFormat,
 } from "langchain";
 import type {
@@ -30,6 +30,12 @@ import type {
   CreateDeepAgentParams,
   FlattenSubAgentMiddleware,
 } from "./types.js";
+
+/**
+ * required for type inference
+ */
+import type * as _messages from "@langchain/core/messages";
+import type * as _Command from "@langchain/langgraph";
 
 const BASE_PROMPT = `In order to complete the objective that the user asks of you, you have access to a number of standard tools.`;
 
@@ -159,9 +165,15 @@ export function createDeepAgent<
     }),
     // Patches tool calls to ensure compatibility across different model providers
     createPatchToolCallsMiddleware(),
-    // Add human-in-the-loop middleware if interrupt config provided
-    ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
   ] as const;
+
+  // Add human-in-the-loop middleware if interrupt config provided
+  if (interruptOn) {
+    // builtInMiddleware is typed as readonly to enable type inference
+    // however, we need to push to it to add the middleware, so let's ignore the type error
+    // @ts-expect-error - builtInMiddleware is readonly
+    builtInMiddleware.push(humanInTheLoopMiddleware({ interruptOn }));
+  }
 
   // Combine built-in middleware with custom middleware
   // The custom middleware is typed as TMiddleware to preserve type information
@@ -187,6 +199,7 @@ export function createDeepAgent<
   // Combine custom middleware with flattened subagent middleware for complete type inference
   // This ensures InferMiddlewareStates captures state from both sources
   type AllMiddleware = readonly [
+    ...typeof builtInMiddleware,
     ...TMiddleware,
     ...FlattenSubAgentMiddleware<TSubagents>,
   ];
@@ -198,6 +211,6 @@ export function createDeepAgent<
   // - Middleware: AllMiddleware (custom + subagent middleware for state inference)
   // - Tools: TTools
   return agent as unknown as ReactAgent<
-    _AgentTypeConfig<TResponse, undefined, ContextSchema, AllMiddleware, TTools>
+    AgentTypeConfig<TResponse, undefined, ContextSchema, AllMiddleware, TTools>
   >;
 }
