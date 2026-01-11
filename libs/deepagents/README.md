@@ -18,7 +18,7 @@ a **planning tool**, **sub agents**, access to a **file system**, and a **detail
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 
-[Documentation](https://docs.langchain.com/labs/deep-agents/overview) | [Examples](./examples) | [Report Bug](https://github.com/langchain-ai/deepagentsjs/issues) | [Request Feature](https://github.com/langchain-ai/deepagentsjs/issues)
+[Documentation](https://docs.langchain.com/oss/javascript/deepagents/overview) | [Examples](./examples) | [Report Bug](https://github.com/langchain-ai/deepagentsjs/issues) | [Request Feature](https://github.com/langchain-ai/deepagentsjs/issues)
 
 ## 📖 Overview
 
