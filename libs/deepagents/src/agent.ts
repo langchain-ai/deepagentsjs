@@ -4,6 +4,7 @@ import {
   anthropicPromptCachingMiddleware,
   todoListMiddleware,
   summarizationMiddleware,
+  SystemMessage,
   type AgentMiddleware,
   type ReactAgent,
   type CreateAgentParams as _CreateAgentParams,
@@ -109,7 +110,19 @@ export function createDeepAgent<
 
   // Combine system prompt with base prompt like Python implementation
   const finalSystemPrompt = systemPrompt
-    ? `${systemPrompt}\n\n${BASE_PROMPT}`
+    ? typeof systemPrompt === "string"
+      ? `${systemPrompt}\n\n${BASE_PROMPT}`
+      : new SystemMessage({
+          content: [
+            {
+              type: "text",
+              text: BASE_PROMPT,
+            },
+            ...(typeof systemPrompt.content === "string"
+              ? [{ type: "text", text: systemPrompt.content }]
+              : systemPrompt.content),
+          ],
+        })
     : BASE_PROMPT;
 
   // Create backend configuration for filesystem middleware
