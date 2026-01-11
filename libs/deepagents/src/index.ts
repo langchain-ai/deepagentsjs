@@ -5,7 +5,8 @@
  * This implementation maintains 1:1 compatibility with the Python version.
  */
 
-export { createDeepAgent, type CreateDeepAgentParams } from "./agent.js";
+export { createDeepAgent } from "./agent.js";
+export type { CreateDeepAgentParams, MergedDeepAgentState } from "./types.js";
 
 // Export config
 export {

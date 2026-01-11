@@ -27,8 +27,13 @@
  */
 
 import { z } from "zod";
-import { type AgentMiddleware, createMiddleware } from "langchain";
+import { createMiddleware } from "langchain";
 import { listSkills, type SkillMetadata } from "../skills/loader.js";
+
+/**
+ * required for type inference
+ */
+import type { AgentMiddleware as _AgentMiddleware } from "langchain";
 
 /**
  * Options for the skills middleware.
@@ -188,9 +193,7 @@ function formatSkillsList(
  * @param options - Configuration options
  * @returns AgentMiddleware for skills loading and injection
  */
-export function createSkillsMiddleware(
-  options: SkillsMiddlewareOptions,
-): AgentMiddleware {
+export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
   const { skillsDir, assistantId, projectSkillsDir } = options;
 
   // Store display paths for prompts

@@ -5,17 +5,17 @@ import {
   todoListMiddleware,
   summarizationMiddleware,
   type AgentMiddleware,
-  type InterruptOnConfig,
-  type ReactAgent as _ReactAgent,
+  type ReactAgent,
   type CreateAgentParams as _CreateAgentParams,
-  type AgentTypeConfig as _AgentTypeConfig,
+  type AgentTypeConfig,
+  type ResponseFormat,
 } from "langchain";
-import type { StructuredTool } from "@langchain/core/tools";
-import type { BaseLanguageModel } from "@langchain/core/language_models/base";
 import type {
-  BaseCheckpointSaver,
-  BaseStore,
-} from "@langchain/langgraph-checkpoint";
+  ClientTool,
+  ServerTool,
+  StructuredTool,
+} from "@langchain/core/tools";
+import type { BaseStore } from "@langchain/langgraph-checkpoint";
 
 import {
   createFilesystemMiddleware,
@@ -23,59 +23,19 @@ import {
   createPatchToolCallsMiddleware,
   type SubAgent,
 } from "./middleware/index.js";
-import { StateBackend, type BackendProtocol } from "./backends/index.js";
+import { StateBackend } from "./backends/index.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
-import { AnnotationRoot } from "@langchain/langgraph";
 import { CompiledSubAgent } from "./middleware/subagents.js";
+import type {
+  CreateDeepAgentParams,
+  FlattenSubAgentMiddleware,
+} from "./types.js";
 
 /**
  * required for type inference
  */
-import type * as _zodTypes from "@langchain/core/utils/types";
-import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
-import type * as _tools from "@langchain/core/tools";
 import type * as _Command from "@langchain/langgraph";
-
-/**
- * Configuration parameters for creating a Deep Agent
- * Matches Python's create_deep_agent parameters
- */
-export interface CreateDeepAgentParams<
-  ContextSchema extends AnnotationRoot<any> | InteropZodObject =
-    AnnotationRoot<any>,
-> {
-  /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
-  model?: BaseLanguageModel | string;
-  /** Tools the agent should have access to */
-  tools?: StructuredTool[];
-  /** Custom system prompt for the agent. This will be combined with the base agent prompt */
-  systemPrompt?: string;
-  /** Custom middleware to apply after standard middleware */
-  middleware?: AgentMiddleware[];
-  /** List of subagent specifications for task delegation */
-  subagents?: (SubAgent | CompiledSubAgent)[];
-  /** Structured output response format for the agent */
-  responseFormat?: any; // ResponseFormat type is complex, using any for now
-  /** Optional schema for context (not persisted between invocations) */
-  contextSchema?: ContextSchema;
-  /** Optional checkpointer for persisting agent state between runs */
-  checkpointer?: BaseCheckpointSaver | boolean;
-  /** Optional store for persisting longterm memories */
-  store?: BaseStore;
-  /**
-   * Optional backend for filesystem operations.
-   * Can be either a backend instance or a factory function that creates one.
-   * The factory receives a config object with state and store.
-   */
-  backend?:
-    | BackendProtocol
-    | ((config: { state: unknown; store?: BaseStore }) => BackendProtocol);
-  /** Optional interrupt configuration mapping tool names to interrupt configs */
-  interruptOn?: Record<string, boolean | InterruptOnConfig>;
-  /** The name of the agent */
-  name?: string;
-}
 
 const BASE_PROMPT = `In order to complete the objective that the user asks of you, you have access to a number of standard tools.`;
 
@@ -92,11 +52,46 @@ const BASE_PROMPT = `In order to complete the objective that the user asks of yo
  * - Human-in-the-loop (humanInTheLoopMiddleware) - optional
  *
  * @param params Configuration parameters for the agent
- * @returns ReactAgent instance ready for invocation
+ * @returns ReactAgent instance ready for invocation with properly inferred state types
+ *
+ * @example
+ * ```typescript
+ * // Middleware with custom state
+ * const ResearchMiddleware = createMiddleware({
+ *   name: "ResearchMiddleware",
+ *   stateSchema: z.object({ research: z.string().default("") }),
+ * });
+ *
+ * const agent = createDeepAgent({
+ *   middleware: [ResearchMiddleware],
+ * });
+ *
+ * const result = await agent.invoke({ messages: [...] });
+ * // result.research is properly typed as string
+ * ```
  */
 export function createDeepAgent<
+  TResponse extends ResponseFormat = ResponseFormat,
   ContextSchema extends InteropZodObject = InteropZodObject,
->(params: CreateDeepAgentParams<ContextSchema> = {}) {
+  const TMiddleware extends readonly AgentMiddleware[] = readonly [],
+  const TSubagents extends readonly (SubAgent | CompiledSubAgent)[] =
+    readonly [],
+  const TTools extends readonly (ClientTool | ServerTool)[] = readonly [],
+>(
+  params: CreateDeepAgentParams<
+    TResponse,
+    ContextSchema,
+    TMiddleware,
+    TSubagents,
+    TTools
+  > = {} as CreateDeepAgentParams<
+    TResponse,
+    ContextSchema,
+    TMiddleware,
+    TSubagents,
+    TTools
+  >,
+) {
   const {
     model = "claude-sonnet-4-5-20250929",
     tools = [],
@@ -124,7 +119,8 @@ export function createDeepAgent<
     : (config: { state: unknown; store?: BaseStore }) =>
         new StateBackend(config);
 
-  const middleware = [
+  // Built-in middleware array
+  const builtInMiddleware = [
     // Provides todo list management capabilities for tracking tasks
     todoListMiddleware(),
     // Enables filesystem operations and optional long-term memory storage
@@ -132,7 +128,7 @@ export function createDeepAgent<
     // Enables delegation to specialized subagents for complex tasks
     createSubAgentMiddleware({
       defaultModel: model,
-      defaultTools: tools,
+      defaultTools: tools as StructuredTool[],
       defaultMiddleware: [
         // Subagent middleware: Todo list management
         todoListMiddleware(),
@@ -154,7 +150,7 @@ export function createDeepAgent<
         createPatchToolCallsMiddleware(),
       ],
       defaultInterruptOn: interruptOn,
-      subagents,
+      subagents: subagents as unknown as (SubAgent | CompiledSubAgent)[],
       generalPurposeAgent: true,
     }),
     // Automatically summarizes conversation history when token limits are approached
@@ -169,27 +165,52 @@ export function createDeepAgent<
     }),
     // Patches tool calls to ensure compatibility across different model providers
     createPatchToolCallsMiddleware(),
-  ];
+  ] as const;
 
   // Add human-in-the-loop middleware if interrupt config provided
   if (interruptOn) {
-    middleware.push(humanInTheLoopMiddleware({ interruptOn }));
+    // builtInMiddleware is typed as readonly to enable type inference
+    // however, we need to push to it to add the middleware, so let's ignore the type error
+    // @ts-expect-error - builtInMiddleware is readonly
+    builtInMiddleware.push(humanInTheLoopMiddleware({ interruptOn }));
   }
 
-  // Add custom middleware last (after all built-in middleware)
-  middleware.push(...customMiddleware);
+  // Combine built-in middleware with custom middleware
+  // The custom middleware is typed as TMiddleware to preserve type information
+  const allMiddleware = [
+    ...builtInMiddleware,
+    ...(customMiddleware as unknown as TMiddleware),
+  ] as const;
 
   // Note: Recursion limit of 1000 (matching Python behavior) should be passed
   // at invocation time: agent.invoke(input, { recursionLimit: 1000 })
-  return createAgent({
+  const agent = createAgent({
     model,
     systemPrompt: finalSystemPrompt,
-    tools,
-    middleware,
-    responseFormat,
+    tools: tools as StructuredTool[],
+    middleware: allMiddleware as unknown as AgentMiddleware[],
+    responseFormat: responseFormat as ResponseFormat,
     contextSchema,
     checkpointer,
     store,
     name,
   });
+
+  // Combine custom middleware with flattened subagent middleware for complete type inference
+  // This ensures InferMiddlewareStates captures state from both sources
+  type AllMiddleware = readonly [
+    ...typeof builtInMiddleware,
+    ...TMiddleware,
+    ...FlattenSubAgentMiddleware<TSubagents>,
+  ];
+
+  // Return as ReactAgent with proper AgentTypeConfig
+  // - Response: TResponse (from responseFormat parameter)
+  // - State: undefined (state comes from middleware)
+  // - Context: ContextSchema
+  // - Middleware: AllMiddleware (custom + subagent middleware for state inference)
+  // - Tools: TTools
+  return agent as unknown as ReactAgent<
+    AgentTypeConfig<TResponse, undefined, ContextSchema, AllMiddleware, TTools>
+  >;
 }

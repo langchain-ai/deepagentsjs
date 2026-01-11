@@ -148,8 +148,8 @@ describe("SubAgentMiddleware", () => {
     expect(middleware.name).toBe("subAgentMiddleware");
     const tools = middleware.tools || [];
     expect(tools).toHaveLength(1);
-    expect(tools[0].name).toBe("task");
-    expect(tools[0].description).toContain("general-purpose");
+    expect(tools[0]?.name).toBe("task");
+    expect(tools[0]?.description).toContain("general-purpose");
   });
 
   it("should initialize with default tools", () => {
@@ -160,7 +160,7 @@ describe("SubAgentMiddleware", () => {
     expect(middleware).toBeDefined();
     const tools = middleware.tools || [];
     expect(tools).toHaveLength(1);
-    expect(tools[0].name).toBe("task");
+    expect(tools[0]?.name).toBe("task");
   });
 });
 

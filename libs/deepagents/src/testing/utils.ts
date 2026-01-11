@@ -19,8 +19,11 @@ import type * as _tools from "@langchain/core/tools";
 
 /**
  * Assert that an agent has all the expected deep agent qualities
+ * Accepts any object with a graph property (compatible with ReactAgent and DeepAgent types)
  */
-export function assertAllDeepAgentQualities(agent: ReactAgent<any>) {
+export function assertAllDeepAgentQualities(agent: {
+  graph: ReactAgent["graph"];
+}) {
   // Check state channels
   const channels = Object.keys(agent.graph?.channels || {});
   if (!channels.includes("todos")) {
@@ -260,7 +263,9 @@ export const WeatherToolMiddleware = createMiddleware({
   tools: [getWeather],
 });
 
-export function extractToolsFromAgent(agent: ReactAgent<any>) {
+export function extractToolsFromAgent(agent: {
+  graph: ReactAgent<any>["graph"];
+}) {
   const graph = agent.graph;
   const toolsNode = graph.nodes?.tools.bound as unknown as {
     tools: StructuredTool[];
