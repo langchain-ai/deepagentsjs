@@ -2,6 +2,7 @@ import js from "@eslint/js";
 import globals from "globals";
 import { defineConfig } from "eslint/config";
 import { configs } from "typescript-eslint";
+import noInstanceof from "eslint-plugin-no-instanceof";
 
 export default defineConfig([
   { ignores: ["**/dist", "**/dist-examples", "**/node_modules"] },
@@ -9,6 +10,9 @@ export default defineConfig([
   ...configs.recommended,
   {
     files: ["**/*.{ts,tsx}"],
+    plugins: {
+      "no-instanceof": noInstanceof,
+    },
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.node,
@@ -25,6 +29,7 @@ export default defineConfig([
         },
       ],
       "no-console": ["error"],
+      "no-instanceof/no-instanceof": "error",
     },
   },
   {

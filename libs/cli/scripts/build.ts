@@ -252,9 +252,11 @@ async function main(): Promise<void> {
     const options = parseBuildOptions();
     await build(options);
   } catch (error) {
+    // eslint-disable-next-line no-instanceof/no-instanceof
     const message = error instanceof Error ? error.message : String(error);
     console.error(`\n❌ Build failed: ${message}\n`);
 
+    // eslint-disable-next-line no-instanceof/no-instanceof
     if (error instanceof Error && error.stack) {
       console.error(error.stack);
     }

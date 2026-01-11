@@ -204,6 +204,7 @@ export async function createAllPlatformPackages(
       );
       results.set(platform.name, packageDir);
     } catch (error) {
+      // eslint-disable-next-line no-instanceof/no-instanceof
       const message = error instanceof Error ? error.message : String(error);
       log("error", `Failed to create package for ${platform.name}: ${message}`);
     }

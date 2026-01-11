@@ -299,6 +299,7 @@ async function main(): Promise<void> {
 
     console.log(`\n✅ Ready! Virtual environment: ${venvDir}\n`);
   } catch (error) {
+    // eslint-disable-next-line no-instanceof/no-instanceof
     const message = error instanceof Error ? error.message : String(error);
     log("error", `Failed: ${message}`);
     process.exit(1);
