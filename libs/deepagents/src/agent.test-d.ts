@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expectTypeOf } from "vitest";
-import { createMiddleware } from "langchain";
+import { createMiddleware, SystemMessage } from "langchain";
 import { z } from "zod/v4";
 import { createDeepAgent } from "./agent.js";
 import type { MergedDeepAgentState } from "./types.js";
@@ -53,7 +53,23 @@ const CounterMiddleware = createMiddleware({
   stateSchema: CounterStateSchema,
 });
 
-describe("createDeepAgent type inference", () => {
+describe("createDeepAgent types", () => {
+  it("should allow systemPrompt to be a string or SystemMessage", () => {
+    createDeepAgent({
+      systemPrompt: "Hello, world!",
+    });
+    createDeepAgent({
+      systemPrompt: new SystemMessage({
+        content: [
+          {
+            type: "text",
+            text: "Hello, world!",
+          },
+        ],
+      }),
+    });
+  });
+
   describe("MergedDeepAgentState helper type", () => {
     it("should correctly merge middleware states", () => {
       type TestMiddleware = readonly [
