@@ -199,7 +199,7 @@ export interface SubAgent {
   /** The model for the agent. Defaults to default_model */
   model?: LanguageModelLike | string;
   /** Additional middleware to append after default_middleware */
-  middleware?: AgentMiddleware[];
+  middleware?: readonly AgentMiddleware[];
   /** The tool configs to use for the agent */
   interruptOn?: Record<string, boolean | InterruptOnConfig>;
 }
@@ -437,9 +437,7 @@ export interface SubAgentMiddlewareOptions {
 /**
  * Create subagent middleware with task tool
  */
-export function createSubAgentMiddleware(
-  options: SubAgentMiddlewareOptions,
-): AgentMiddleware {
+export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
   const {
     defaultModel,
     defaultTools = [],
