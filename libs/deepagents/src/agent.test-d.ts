@@ -10,10 +10,21 @@
  */
 
 import { describe, it, expectTypeOf } from "vitest";
-import { createMiddleware, SystemMessage } from "langchain";
+import {
+  createAgent,
+  createMiddleware,
+  InferAgentMiddleware,
+  SystemMessage,
+} from "langchain";
 import { z } from "zod/v4";
 import { createDeepAgent } from "./agent.js";
-import type { MergedDeepAgentState } from "./types.js";
+import type {
+  MergedDeepAgentState,
+  InferSubagentByName,
+  InferDeepAgentSubagents,
+  InferCompiledSubagents,
+  InferRegularSubagents,
+} from "./types.js";
 import type { FileData } from "./backends/protocol.js";
 
 // Test middleware with research state
@@ -51,6 +62,15 @@ const CounterStateSchema = z.object({
 const CounterMiddleware = createMiddleware({
   name: "CounterMiddleware",
   stateSchema: CounterStateSchema,
+});
+
+const MemoryStateSchema = z.object({
+  memorySystem: z.string().default(""),
+});
+
+const MemoryMiddleware = createMiddleware({
+  name: "MemoryMiddleware",
+  stateSchema: MemoryStateSchema,
 });
 
 describe("createDeepAgent types", () => {
@@ -112,6 +132,7 @@ describe("createDeepAgent types", () => {
       expectTypeOf(result.research).toEqualTypeOf<string>();
       expectTypeOf(result).toHaveProperty("counter");
       expectTypeOf(result.counter).toEqualTypeOf<number>();
+      // should have built-in state
       expectTypeOf(result).toHaveProperty("files");
       expectTypeOf(result.files).toEqualTypeOf<Record<string, FileData>>();
       expectTypeOf(result).toHaveProperty("todos");
@@ -160,6 +181,92 @@ describe("createDeepAgent types", () => {
       // Verify research is specifically string, not any
       expectTypeOf(result.research).not.toBeAny();
       expectTypeOf(result.research).toBeString();
+    });
+  });
+
+  describe("DeepAgent type", () => {
+    it("should correctly infer the type of the agent", () => {
+      const agent = createDeepAgent({});
+      expectTypeOf(agent).toHaveProperty("~deepAgentTypes");
+      expectTypeOf(agent["~deepAgentTypes"]).toHaveProperty("Subagents");
+      expectTypeOf(agent["~deepAgentTypes"].Subagents).toEqualTypeOf<
+        readonly []
+      >();
+    });
+
+    it("can infer the type of the subagent", () => {
+      const _agent = createDeepAgent({
+        subagents: [
+          {
+            name: "Subagent1",
+            description: "Subagent1 description",
+            systemPrompt: "Subagent1 system prompt",
+            middleware: [CounterMiddleware],
+          },
+        ],
+      });
+      const subagent1 = {} as InferSubagentByName<typeof _agent, "Subagent1">;
+      expectTypeOf(subagent1).toHaveProperty("name");
+      expectTypeOf(subagent1.name).toEqualTypeOf<"Subagent1">();
+      expectTypeOf(subagent1).toHaveProperty("description");
+      expectTypeOf(
+        subagent1.description,
+      ).toEqualTypeOf<"Subagent1 description">();
+      expectTypeOf(
+        subagent1.systemPrompt,
+      ).toEqualTypeOf<"Subagent1 system prompt">();
+    });
+
+    it("can infer the type of a createAgent sub agent", () => {
+      const _agent = createDeepAgent({
+        subagents: [
+          {
+            name: "Subagent2",
+            description: "Subagent2 description",
+            systemPrompt: "Subagent2 system prompt",
+          },
+          {
+            name: "Subagent1",
+            description: "Subagent1 description",
+            runnable: createAgent({
+              name: "Subagent1",
+              model: "claude-sonnet-4-20250514",
+              description: "Subagent1 description",
+              systemPrompt: "Subagent1 system prompt",
+              middleware: [MemoryMiddleware],
+            }),
+          },
+        ],
+      });
+
+      const subagent1 = {} as InferSubagentByName<typeof _agent, "Subagent1">;
+      expectTypeOf(subagent1).toHaveProperty("name");
+      expectTypeOf(subagent1.name).toEqualTypeOf<"Subagent1">();
+      expectTypeOf(subagent1).toHaveProperty("description");
+      expectTypeOf(
+        subagent1.description,
+      ).toEqualTypeOf<"Subagent1 description">();
+
+      // InferDeepAgentSubagents returns the full subagents tuple
+      type AllSubagents = InferDeepAgentSubagents<typeof _agent>;
+      expectTypeOf<AllSubagents[0]>().toHaveProperty("systemPrompt");
+      expectTypeOf<AllSubagents[1]>().toHaveProperty("runnable");
+
+      // InferCompiledSubagents extracts only subagents with `runnable`
+      type Compiled = InferCompiledSubagents<typeof _agent>;
+      expectTypeOf<Compiled>().toHaveProperty("runnable");
+      expectTypeOf<Compiled["name"]>().toEqualTypeOf<"Subagent1">();
+
+      type CompiledMiddleware = InferAgentMiddleware<Compiled["runnable"]>;
+      expectTypeOf<CompiledMiddleware[0]>().toHaveProperty("stateSchema");
+      expectTypeOf<CompiledMiddleware[0]["stateSchema"]>().toExtend<
+        typeof MemoryStateSchema | undefined
+      >();
+
+      // InferRegularSubagents extracts only subagents without `runnable`
+      type Regular = InferRegularSubagents<typeof _agent>;
+      expectTypeOf<Regular>().toHaveProperty("systemPrompt");
+      expectTypeOf<Regular["name"]>().toEqualTypeOf<"Subagent2">();
     });
   });
 });

@@ -6,7 +6,23 @@
  */
 
 export { createDeepAgent } from "./agent.js";
-export type { CreateDeepAgentParams, MergedDeepAgentState } from "./types.js";
+export type {
+  CreateDeepAgentParams,
+  MergedDeepAgentState,
+  // DeepAgent type bag and helper types
+  DeepAgent,
+  DeepAgentTypeConfig,
+  DefaultDeepAgentTypeConfig,
+  ResolveDeepAgentTypeConfig,
+  InferDeepAgentType,
+  InferDeepAgentSubagents,
+  InferSubagentByName,
+  InferSubagentReactAgentType,
+  // Subagent middleware extraction types
+  ExtractSubAgentMiddleware,
+  FlattenSubAgentMiddleware,
+  InferSubAgentMiddlewareStates,
+} from "./types.js";
 
 // Export config
 export {

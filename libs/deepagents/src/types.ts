@@ -1,12 +1,13 @@
 import type {
   AgentMiddleware,
   InterruptOnConfig,
-  ReactAgent as _ReactAgent,
+  ReactAgent,
   CreateAgentParams as _CreateAgentParams,
-  AgentTypeConfig as _AgentTypeConfig,
+  AgentTypeConfig,
   InferMiddlewareStates,
   ResponseFormat,
   SystemMessage,
+  ResponseFormatUndefined,
 } from "langchain";
 import type {
   ClientTool,
@@ -24,6 +25,10 @@ import type { BackendProtocol } from "./backends/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type { AnnotationRoot } from "@langchain/langgraph";
 import type { CompiledSubAgent } from "./middleware/subagents.js";
+
+// LangChain uses AnyAnnotationRoot internally but doesn't export it
+// We use AnnotationRoot<any> as a compatible equivalent
+type AnyAnnotationRoot = AnnotationRoot<any>;
 
 /**
  * Helper type to extract middleware from a SubAgent definition
@@ -68,6 +73,226 @@ export type MergedDeepAgentState<
   TSubagents extends readonly (SubAgent | CompiledSubAgent)[],
 > = InferMiddlewareStates<TMiddleware> &
   InferSubAgentMiddlewareStates<TSubagents>;
+
+/**
+ * Type bag that extends AgentTypeConfig with subagent type information.
+ *
+ * This interface bundles all the generic type parameters used throughout the deep agent system
+ * including subagent types for type-safe streaming and delegation.
+ *
+ * @typeParam TResponse - The structured response type when using `responseFormat`.
+ * @typeParam TState - The custom state schema type.
+ * @typeParam TContext - The context schema type.
+ * @typeParam TMiddleware - The middleware array type.
+ * @typeParam TTools - The combined tools type.
+ * @typeParam TSubagents - The subagents array type for type-safe streaming.
+ *
+ * @example
+ * ```typescript
+ * const agent = createDeepAgent({
+ *   middleware: [ResearchMiddleware],
+ *   subagents: [
+ *     { name: "researcher", description: "...", middleware: [CounterMiddleware] }
+ *   ] as const,
+ * });
+ *
+ * // Type inference for streaming
+ * type Types = InferDeepAgentType<typeof agent, "Subagents">;
+ * ```
+ */
+export interface DeepAgentTypeConfig<
+  TResponse extends Record<string, any> | ResponseFormatUndefined =
+    | Record<string, any>
+    | ResponseFormatUndefined,
+  TState extends AnyAnnotationRoot | InteropZodObject | undefined =
+    | AnyAnnotationRoot
+    | InteropZodObject
+    | undefined,
+  TContext extends AnyAnnotationRoot | InteropZodObject =
+    | AnyAnnotationRoot
+    | InteropZodObject,
+  TMiddleware extends readonly AgentMiddleware[] = readonly AgentMiddleware[],
+  TTools extends readonly (ClientTool | ServerTool)[] = readonly (
+    | ClientTool
+    | ServerTool
+  )[],
+  TSubagents extends readonly (SubAgent | CompiledSubAgent)[] = readonly (
+    | SubAgent
+    | CompiledSubAgent
+  )[],
+> extends AgentTypeConfig<TResponse, TState, TContext, TMiddleware, TTools> {
+  /** The subagents array type for type-safe streaming */
+  Subagents: TSubagents;
+}
+
+/**
+ * Default type configuration for deep agents.
+ * Used when no explicit type parameters are provided.
+ */
+export interface DefaultDeepAgentTypeConfig extends DeepAgentTypeConfig {
+  Response: Record<string, any>;
+  State: undefined;
+  Context: AnyAnnotationRoot;
+  Middleware: readonly AgentMiddleware[];
+  Tools: readonly (ClientTool | ServerTool)[];
+  Subagents: readonly (SubAgent | CompiledSubAgent)[];
+}
+
+/**
+ * DeepAgent extends ReactAgent with additional subagent type information.
+ *
+ * This type wraps ReactAgent but includes the DeepAgentTypeConfig which
+ * contains subagent types for type-safe streaming and delegation.
+ *
+ * @typeParam TTypes - The DeepAgentTypeConfig containing all type parameters
+ *
+ * @example
+ * ```typescript
+ * const agent: DeepAgent<DeepAgentTypeConfig<...>> = createDeepAgent({ ... });
+ *
+ * // Access subagent types for streaming
+ * type Subagents = InferDeepAgentSubagents<typeof agent>;
+ * ```
+ */
+export type DeepAgent<
+  TTypes extends DeepAgentTypeConfig = DeepAgentTypeConfig,
+> = ReactAgent<TTypes> & {
+  /** Type brand for DeepAgent type inference */
+  readonly "~deepAgentTypes": TTypes;
+};
+
+/**
+ * Helper type to resolve a DeepAgentTypeConfig from either:
+ * - A DeepAgentTypeConfig directly
+ * - A DeepAgent instance (using `typeof agent`)
+ *
+ * @example
+ * ```typescript
+ * const agent = createDeepAgent({ ... });
+ * type Types = ResolveDeepAgentTypeConfig<typeof agent>;
+ * ```
+ */
+export type ResolveDeepAgentTypeConfig<T> = T extends {
+  "~deepAgentTypes": infer Types;
+}
+  ? Types extends DeepAgentTypeConfig
+    ? Types
+    : never
+  : T extends DeepAgentTypeConfig
+    ? T
+    : never;
+
+/**
+ * Helper type to extract any property from a DeepAgentTypeConfig or DeepAgent.
+ *
+ * @typeParam T - The DeepAgentTypeConfig or DeepAgent to extract from
+ * @typeParam K - The property key to extract
+ *
+ * @example
+ * ```typescript
+ * const agent = createDeepAgent({ subagents: [...] });
+ * type Subagents = InferDeepAgentType<typeof agent, "Subagents">;
+ * ```
+ */
+export type InferDeepAgentType<
+  T,
+  K extends keyof DeepAgentTypeConfig,
+> = ResolveDeepAgentTypeConfig<T>[K];
+
+/**
+ * Shorthand helper to extract the Subagents type from a DeepAgentTypeConfig or DeepAgent.
+ *
+ * @example
+ * ```typescript
+ * const agent = createDeepAgent({ subagents: [subagent1, subagent2] });
+ * type Subagents = InferDeepAgentSubagents<typeof agent>;
+ * ```
+ */
+export type InferDeepAgentSubagents<T> = InferDeepAgentType<T, "Subagents">;
+
+/**
+ * Helper type to extract CompiledSubAgent (subagents with `runnable`) from a DeepAgent.
+ * Uses Extract to filter for subagents that have a `runnable` property.
+ *
+ * @example
+ * ```typescript
+ * const agent = createDeepAgent({ subagents: [subagent1, compiledSubagent] });
+ * type CompiledSubagents = InferCompiledSubagents<typeof agent>;
+ * // Result: the subagent type that has `runnable` property
+ * ```
+ */
+export type InferCompiledSubagents<T> = Extract<
+  InferDeepAgentSubagents<T>[number],
+  { runnable: unknown }
+>;
+
+/**
+ * Helper type to extract SubAgent (subagents with `middleware`) from a DeepAgent.
+ * Uses Extract to filter for subagents that have a `middleware` property but no `runnable`.
+ *
+ * @example
+ * ```typescript
+ * const agent = createDeepAgent({ subagents: [subagent1, compiledSubagent] });
+ * type RegularSubagents = InferRegularSubagents<typeof agent>;
+ * // Result: the subagent type that has `middleware` property
+ * ```
+ */
+export type InferRegularSubagents<T> = Exclude<
+  InferDeepAgentSubagents<T>[number],
+  { runnable: unknown }
+>;
+
+/**
+ * Helper type to extract a subagent by name from a DeepAgent.
+ *
+ * @typeParam T - The DeepAgent to extract from
+ * @typeParam TName - The name of the subagent to extract
+ *
+ * @example
+ * ```typescript
+ * const agent = createDeepAgent({
+ *   subagents: [
+ *     { name: "researcher", description: "...", middleware: [ResearchMiddleware] }
+ *   ] as const,
+ * });
+ *
+ * type ResearcherAgent = InferSubagentByName<typeof agent, "researcher">;
+ * ```
+ */
+export type InferSubagentByName<T, TName extends string> =
+  InferDeepAgentSubagents<T> extends readonly (infer SA)[]
+    ? SA extends { name: TName }
+      ? SA
+      : never
+    : never;
+
+/**
+ * Helper type to extract the ReactAgent type from a subagent definition.
+ * This is useful for type-safe streaming of subagent events.
+ *
+ * @typeParam TSubagent - The subagent definition
+ *
+ * @example
+ * ```typescript
+ * type SubagentMiddleware = ExtractSubAgentMiddleware<typeof subagent>;
+ * type SubagentState = InferMiddlewareStates<SubagentMiddleware>;
+ * ```
+ */
+export type InferSubagentReactAgentType<
+  TSubagent extends SubAgent | CompiledSubAgent,
+> = TSubagent extends CompiledSubAgent
+  ? TSubagent["runnable"]
+  : TSubagent extends SubAgent
+    ? ReactAgent<
+        AgentTypeConfig<
+          ResponseFormatUndefined,
+          undefined,
+          AnyAnnotationRoot,
+          ExtractSubAgentMiddleware<TSubagent>,
+          readonly []
+        >
+      >
+    : never;
 
 /**
  * Configuration parameters for creating a Deep Agent
