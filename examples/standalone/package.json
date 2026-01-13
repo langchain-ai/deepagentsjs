@@ -3,7 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "backend:composite": "tsx backends/composite-backend.ts",
+    "backend:filesystem": "tsx backends/filesystem-backend.ts",
+    "backend:state": "tsx backends/state-backend.ts",
+    "backend:store": "tsx backends/store-backend.ts",
+    "research": "tsx research/research-agent.ts",
+    "sandbox": "tsx sandbox/local-sandbox.ts",
+    "skills-memory": "tsx skills-memory/skills-memory-agent.ts"
   },
   "dependencies": {
     "deepagents": "workspace:*",
@@ -18,7 +25,6 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
-    "@tsconfig/recommended": "^1.0.10",
     "@types/node": "^25.0.3",
     "@types/uuid": "^11.0.0",
     "typescript": "^5.9.2"
