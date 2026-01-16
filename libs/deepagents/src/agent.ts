@@ -19,6 +19,7 @@ import {
   createFilesystemMiddleware,
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
+  createMemoryMiddleware,
   type SubAgent,
 } from "./middleware/index.js";
 import { StateBackend } from "./backends/index.js";
@@ -105,6 +106,7 @@ export function createDeepAgent<
     backend,
     interruptOn,
     name,
+    memory,
   } = params;
 
   // Combine system prompt with base prompt like Python implementation
@@ -177,6 +179,15 @@ export function createDeepAgent<
     }),
     // Patches tool calls to ensure compatibility across different model providers
     createPatchToolCallsMiddleware(),
+    // Add memory middleware if memory sources provided
+    ...(memory != null && memory.length > 0
+      ? [
+          createMemoryMiddleware({
+            backend: filesystemBackend,
+            sources: memory,
+          }),
+        ]
+      : []),
   ] as const;
 
   // Add human-in-the-loop middleware if interrupt config provided
