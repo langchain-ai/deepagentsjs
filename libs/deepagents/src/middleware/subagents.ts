@@ -22,10 +22,20 @@ export type { AgentMiddleware };
 const DEFAULT_SUBAGENT_PROMPT =
   "In order to complete the objective that the user asks of you, you have access to a number of standard tools.";
 
-// State keys that should be excluded when passing state to subagents
-// NOTE: "files" is excluded to prevent concurrent subagents from writing to
-// the files channel simultaneously (which causes LastValue errors in LangGraph)
-const EXCLUDED_STATE_KEYS = ["messages", "todos", "jumpTo", "files"] as const;
+// State keys that are excluded when passing state to subagents and when returning
+// updates from subagents.
+// When returning updates:
+// 1. The messages key is handled explicitly to ensure only the final message is included
+// 2. The todos and structuredResponse keys are excluded as they do not have a defined reducer
+//    and no clear meaning for returning them from a subagent to the main agent.
+// 3. The files key is excluded to prevent concurrent subagents from writing to the files
+//    channel simultaneously (which causes LastValue errors in LangGraph).
+const EXCLUDED_STATE_KEYS = [
+  "messages",
+  "todos",
+  "structuredResponse",
+  "files",
+] as const;
 
 const DEFAULT_GENERAL_PURPOSE_DESCRIPTION =
   "General-purpose agent for researching complex questions, searching for files and content, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you. This agent has access to all tools as the main agent.";

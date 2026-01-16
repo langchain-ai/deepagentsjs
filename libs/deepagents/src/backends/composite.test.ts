@@ -34,9 +34,6 @@ class MockSandboxBackend implements SandboxBackendProtocol {
   read() {
     return "";
   }
-  readRaw() {
-    return { content: [], created_at: "", modified_at: "" };
-  }
   grepRaw() {
     return [];
   }

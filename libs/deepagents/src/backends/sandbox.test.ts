@@ -492,33 +492,4 @@ describe("BaseSandbox", () => {
       expect(result[0].error).toBe("file_not_found");
     });
   });
-
-  describe("readRaw", () => {
-    it("should parse read output to FileData", async () => {
-      const sandbox = new MockSandbox();
-      sandbox.execute = vi.fn().mockResolvedValue({
-        output: "     1\tline1\n     2\tline2\n     3\tline3",
-        exitCode: 0,
-        truncated: false,
-      });
-
-      const result = await sandbox.readRaw("/test.txt");
-      expect(result.content).toEqual(["line1", "line2", "line3"]);
-      expect(result.created_at).toBeDefined();
-      expect(result.modified_at).toBeDefined();
-    });
-
-    it("should throw for non-existent files", async () => {
-      const sandbox = new MockSandbox();
-      sandbox.execute = vi.fn().mockResolvedValue({
-        output: "",
-        exitCode: 1,
-        truncated: false,
-      });
-
-      await expect(sandbox.readRaw("/nonexistent.txt")).rejects.toThrow(
-        "not found",
-      );
-    });
-  });
 });

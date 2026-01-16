@@ -63,12 +63,6 @@ describe("FilesystemBackend", () => {
     const txt = await backend.read(f1);
     expect(txt).toContain("hello fs");
 
-    // Test readRaw alongside read
-    const rawData = await backend.readRaw(f1);
-    expect(rawData.content).toEqual(["hello fs"]);
-    expect(rawData.created_at).toBeDefined();
-    expect(rawData.modified_at).toBeDefined();
-
     const editMsg = await backend.edit(f1, "fs", "filesystem", false);
     expect(editMsg).toBeDefined();
     expect(editMsg.error).toBeUndefined();
@@ -113,12 +107,6 @@ describe("FilesystemBackend", () => {
     const txt = await backend.read("/a.txt");
     expect(txt).toContain("hello virtual");
 
-    // Test readRaw alongside read
-    const rawData = await backend.readRaw("/a.txt");
-    expect(rawData.content).toEqual(["hello virtual"]);
-    expect(rawData.created_at).toBeDefined();
-    expect(rawData.modified_at).toBeDefined();
-
     const editMsg = await backend.edit("/a.txt", "virtual", "virt", false);
     expect(editMsg).toBeDefined();
     expect(editMsg.error).toBeUndefined();
@@ -144,11 +132,6 @@ describe("FilesystemBackend", () => {
     const traversalError = await backend.read("/../a.txt");
     expect(traversalError).toContain("Error");
     expect(traversalError).toContain("Path traversal not allowed");
-
-    // Test readRaw also rejects path traversal
-    await expect(backend.readRaw("/../a.txt")).rejects.toThrow(
-      "Path traversal not allowed",
-    );
   });
 
   it("should list nested directories correctly in virtual mode", async () => {
@@ -282,16 +265,11 @@ describe("FilesystemBackend", () => {
     const readContent = await backend.read("/large_file.txt");
     expect(readContent).toContain(largeContent.substring(0, 100));
 
-    // Test readRaw alongside read for large files
-    const rawData = await backend.readRaw("/large_file.txt");
-    expect(rawData.content).toEqual([largeContent]);
-    expect(rawData.content[0]).toHaveLength(10000);
-
     const savedFile = path.join(root, "large_file.txt");
     expect(fsSync.existsSync(savedFile)).toBe(true);
   });
 
-  it("should test readRaw with multiline content", async () => {
+  it("should read multiline content", async () => {
     const root = tmpDir;
     const filePath = path.join(root, "multiline.txt");
     await writeFile(filePath, "line1\nline2\nline3");
@@ -305,22 +283,9 @@ describe("FilesystemBackend", () => {
     expect(txt).toContain("line1");
     expect(txt).toContain("line2");
     expect(txt).toContain("line3");
-
-    // Test readRaw alongside read
-    const rawData = await backend.readRaw(filePath);
-    expect(rawData.content).toEqual(["line1", "line2", "line3"]);
-    expect(rawData.created_at).toBeDefined();
-    expect(rawData.modified_at).toBeDefined();
-    expect(typeof rawData.created_at).toBe("string");
-    expect(typeof rawData.modified_at).toBe("string");
-    // Verify timestamps are valid ISO 8601
-    expect(new Date(rawData.created_at).toISOString()).toBe(rawData.created_at);
-    expect(new Date(rawData.modified_at).toISOString()).toBe(
-      rawData.modified_at,
-    );
   });
 
-  it("should handle empty files with read and readRaw", async () => {
+  it("should handle empty files", async () => {
     const root = tmpDir;
     const filePath = path.join(root, "empty.txt");
     await writeFile(filePath, "");
@@ -332,10 +297,6 @@ describe("FilesystemBackend", () => {
 
     const txt = await backend.read(filePath);
     expect(txt).toContain("empty contents");
-
-    // Test readRaw handles empty files
-    const rawData = await backend.readRaw(filePath);
-    expect(rawData.content).toEqual([""]);
   });
 
   it("should handle files with trailing newlines", async () => {
@@ -351,10 +312,6 @@ describe("FilesystemBackend", () => {
     const txt = await backend.read(filePath);
     expect(txt).toContain("line1");
     expect(txt).toContain("line2");
-
-    // Test readRaw preserves trailing newline as empty string
-    const rawData = await backend.readRaw(filePath);
-    expect(rawData.content).toEqual(["line1", "line2", ""]);
   });
 
   it("should handle unicode content", async () => {
@@ -371,10 +328,6 @@ describe("FilesystemBackend", () => {
     expect(txt).toContain("Hello 世界");
     expect(txt).toContain("🚀 emoji");
     expect(txt).toContain("Ω omega");
-
-    // Test readRaw handles unicode properly
-    const rawData = await backend.readRaw(filePath);
-    expect(rawData.content).toEqual(["Hello 世界", "🚀 emoji", "Ω omega"]);
   });
 
   it("should handle non-existent files consistently", async () => {
@@ -388,9 +341,6 @@ describe("FilesystemBackend", () => {
 
     const readResult = await backend.read(nonexistentPath);
     expect(readResult).toContain("Error");
-
-    // readRaw should throw an error
-    await expect(backend.readRaw(nonexistentPath)).rejects.toThrow();
   });
 
   it("should handle symlinks securely", async () => {
@@ -413,8 +363,5 @@ describe("FilesystemBackend", () => {
 
     const readResult = await backend.read(symlinkFile);
     expect(readResult).toContain("Error");
-
-    // readRaw should also reject symlinks
-    await expect(backend.readRaw(symlinkFile)).rejects.toThrow();
   });
 });

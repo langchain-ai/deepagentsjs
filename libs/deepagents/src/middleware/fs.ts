@@ -216,7 +216,7 @@ function createReadFileTool(
         store: (config as any).store,
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
-      const { file_path, offset = 0, limit = 2000 } = input;
+      const { file_path, offset = 0, limit = 500 } = input;
       return await resolvedBackend.read(file_path, offset, limit);
     },
     {
@@ -232,7 +232,7 @@ function createReadFileTool(
         limit: z.coerce
           .number()
           .optional()
-          .default(2000)
+          .default(500)
           .describe("Maximum number of lines to read"),
       }),
     },

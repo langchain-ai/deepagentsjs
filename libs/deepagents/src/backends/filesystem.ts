@@ -18,7 +18,6 @@ import micromatch from "micromatch";
 import type {
   BackendProtocol,
   EditResult,
-  FileData,
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
@@ -193,7 +192,7 @@ export class FilesystemBackend implements BackendProtocol {
   async read(
     filePath: string,
     offset: number = 0,
-    limit: number = 2000,
+    limit: number = 500,
   ): Promise<string> {
     try {
       const resolvedPath = this.resolvePath(filePath);
@@ -243,46 +242,6 @@ export class FilesystemBackend implements BackendProtocol {
     } catch (e: any) {
       return `Error reading file '${filePath}': ${e.message}`;
     }
-  }
-
-  /**
-   * Read file content as raw FileData.
-   *
-   * @param filePath - Absolute file path
-   * @returns Raw file content as FileData
-   */
-  async readRaw(filePath: string): Promise<FileData> {
-    const resolvedPath = this.resolvePath(filePath);
-
-    let content: string;
-    let stat: fsSync.Stats;
-
-    if (SUPPORTS_NOFOLLOW) {
-      stat = await fs.stat(resolvedPath);
-      if (!stat.isFile()) throw new Error(`File '${filePath}' not found`);
-      const fd = await fs.open(
-        resolvedPath,
-        fsSync.constants.O_RDONLY | fsSync.constants.O_NOFOLLOW,
-      );
-      try {
-        content = await fd.readFile({ encoding: "utf-8" });
-      } finally {
-        await fd.close();
-      }
-    } else {
-      stat = await fs.lstat(resolvedPath);
-      if (stat.isSymbolicLink()) {
-        throw new Error(`Symlinks are not allowed: ${filePath}`);
-      }
-      if (!stat.isFile()) throw new Error(`File '${filePath}' not found`);
-      content = await fs.readFile(resolvedPath, "utf-8");
-    }
-
-    return {
-      content: content.split("\n"),
-      created_at: stat.ctime.toISOString(),
-      modified_at: stat.mtime.toISOString(),
-    };
   }
 
   /**

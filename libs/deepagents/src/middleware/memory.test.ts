@@ -156,7 +156,9 @@ describe("createMemoryMiddleware", () => {
 
       expect(mockHandler).toHaveBeenCalled();
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      expect(modifiedRequest.systemPrompt).toContain("Agent Memory");
+      expect(modifiedRequest.systemPrompt).toContain("<agent_memory>");
+      expect(modifiedRequest.systemPrompt).toContain("</agent_memory>");
+      expect(modifiedRequest.systemPrompt).toContain("<memory_guidelines>");
       expect(modifiedRequest.systemPrompt).toContain("User memory content");
       expect(modifiedRequest.systemPrompt).toContain("Project memory content");
       expect(modifiedRequest.systemPrompt).toContain("~/.deepagents/AGENTS.md");
