@@ -6,9 +6,6 @@ import {
   summarizationMiddleware,
   SystemMessage,
   type AgentMiddleware,
-  type ReactAgent,
-  type CreateAgentParams as _CreateAgentParams,
-  type AgentTypeConfig,
   type ResponseFormat,
 } from "langchain";
 import type {
@@ -29,6 +26,8 @@ import { InteropZodObject } from "@langchain/core/utils/types";
 import { CompiledSubAgent } from "./middleware/subagents.js";
 import type {
   CreateDeepAgentParams,
+  DeepAgent,
+  DeepAgentTypeConfig,
   FlattenSubAgentMiddleware,
 } from "./types.js";
 
@@ -217,13 +216,21 @@ export function createDeepAgent<
     ...FlattenSubAgentMiddleware<TSubagents>,
   ];
 
-  // Return as ReactAgent with proper AgentTypeConfig
+  // Return as DeepAgent with proper DeepAgentTypeConfig
   // - Response: TResponse (from responseFormat parameter)
   // - State: undefined (state comes from middleware)
   // - Context: ContextSchema
-  // - Middleware: AllMiddleware (custom + subagent middleware for state inference)
+  // - Middleware: AllMiddleware (built-in + custom + subagent middleware for state inference)
   // - Tools: TTools
-  return agent as unknown as ReactAgent<
-    AgentTypeConfig<TResponse, undefined, ContextSchema, AllMiddleware, TTools>
+  // - Subagents: TSubagents (for type-safe streaming)
+  return agent as unknown as DeepAgent<
+    DeepAgentTypeConfig<
+      TResponse,
+      undefined,
+      ContextSchema,
+      AllMiddleware,
+      TTools,
+      TSubagents
+    >
   >;
 }

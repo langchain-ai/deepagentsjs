@@ -6,6 +6,7 @@ import {
   tool,
   ToolMessage,
   humanInTheLoopMiddleware,
+  SystemMessage,
   type InterruptOnConfig,
   type ReactAgent,
   StructuredTool,
@@ -174,14 +175,19 @@ When NOT to use the task tool:
 
 /**
  * Type definitions for pre-compiled agents.
+ *
+ * @typeParam TRunnable - The type of the runnable (ReactAgent or Runnable).
+ *   When using `createAgent`, this preserves the middleware types for type inference.
  */
-export interface CompiledSubAgent {
+export interface CompiledSubAgent<
+  TRunnable extends ReactAgent | Runnable = ReactAgent | Runnable,
+> {
   /** The name of the agent */
   name: string;
   /** The description of the agent */
   description: string;
   /** The agent instance */
-  runnable: ReactAgent | Runnable;
+  runnable: TRunnable;
 }
 
 /**
@@ -464,14 +470,11 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     tools: [taskTool],
     wrapModelCall: async (request, handler) => {
       if (systemPrompt !== null) {
-        const currentPrompt = request.systemPrompt || "";
-        const newPrompt = currentPrompt
-          ? `${currentPrompt}\n\n${systemPrompt}`
-          : systemPrompt;
-
         return handler({
           ...request,
-          systemPrompt: newPrompt,
+          systemMessage: request.systemMessage.concat(
+            new SystemMessage({ content: systemPrompt }),
+          ),
         });
       }
       return handler(request);
