@@ -6,6 +6,7 @@ import { createSettings } from "../config.js";
 import { listSkills } from "./loader.js";
 import { createSkillsMiddleware } from "../middleware/skills.js";
 import { createAgentMemoryMiddleware } from "../middleware/agent-memory.js";
+import { FilesystemBackend } from "../backends/filesystem.js";
 
 describe("Skills Integration Tests", () => {
   let tempDir: string;
@@ -51,38 +52,42 @@ Use this skill when the user asks about integration testing.
 `;
       fs.writeFileSync(path.join(skillDir, "SKILL.md"), skillContent);
 
-      // Step 3: Create settings and middleware
+      // Step 3: Create settings and middleware with new backend-agnostic API
       const settings = createSettings({ startPath: projectDir });
       expect(settings.hasProject).toBe(true);
 
+      const projectSkillsDir = settings.getProjectSkillsDir()!;
+      const userSkillsDir = path.join(tempDir, "user-skills");
+      fs.mkdirSync(userSkillsDir, { recursive: true });
+
       const middleware = createSkillsMiddleware({
-        skillsDir: path.join(tempDir, "user-skills"), // Empty user skills
-        assistantId: "test-agent",
-        projectSkillsDir: settings.getProjectSkillsDir()!,
+        backend: new FilesystemBackend({ rootDir: "/" }),
+        sources: [userSkillsDir, projectSkillsDir],
       });
 
-      // Step 4: Load skills via beforeAgent
-      const stateUpdate = middleware.beforeAgent!({});
+      // Step 4: Load skills via beforeAgent (now async)
+      // @ts-expect-error - typing issue in LangChain
+      const stateUpdate = await middleware.beforeAgent?.({});
       expect(stateUpdate!.skillsMetadata).toHaveLength(1);
       expect(stateUpdate!.skillsMetadata[0].name).toBe("my-skill");
-      expect(stateUpdate!.skillsMetadata[0].source).toBe("project");
 
       // Step 5: Verify skills are injected into system prompt
       let capturedPrompt = "";
-      await middleware.wrapModelCall!(
+      const mockHandler = (req: any) => {
+        capturedPrompt = req.systemPrompt;
+        return { response: "ok" };
+      };
+      middleware.wrapModelCall!(
         {
           systemPrompt: "Base prompt",
           state: stateUpdate,
-        },
-        (req: any) => {
-          capturedPrompt = req.systemPrompt;
-          return Promise.resolve({ messages: [] });
-        },
+        } as any,
+        mockHandler as any,
       );
 
       expect(capturedPrompt).toContain("my-skill");
       expect(capturedPrompt).toContain("A test skill for integration testing");
-      expect(capturedPrompt).toContain("Project Skills:");
+      expect(capturedPrompt).toContain("Skills Sources:");
     });
 
     it("should allow project skill to override user skill with same name", async () => {
@@ -204,11 +209,18 @@ description: Test skill
         ensureProjectDeepagentsDir: () => path.join(projectDir, ".deepagents"),
       };
 
-      // Create both middleware
+      // Create user skills directory
+      const userSkillsDir = path.join(
+        userDeepagentsDir,
+        "test-agent",
+        "skills",
+      );
+      fs.mkdirSync(userSkillsDir, { recursive: true });
+
+      // Create both middleware using new backend-agnostic API
       const skillsMiddleware = createSkillsMiddleware({
-        skillsDir: path.join(userDeepagentsDir, "test-agent", "skills"),
-        assistantId: "test-agent",
-        projectSkillsDir: mockSettings.getProjectSkillsDir(),
+        backend: new FilesystemBackend({ rootDir: "/" }),
+        sources: [userSkillsDir, mockSettings.getProjectSkillsDir()],
       });
 
       const memoryMiddleware = createAgentMemoryMiddleware({
@@ -216,9 +228,11 @@ description: Test skill
         assistantId: "test-agent",
       });
 
-      // Run beforeAgent for both
-      const skillsState = skillsMiddleware.beforeAgent!({});
-      const memoryState = memoryMiddleware.beforeAgent!({});
+      // Run beforeAgent for both (skills is now async)
+      // @ts-expect-error - typing issue in LangChain
+      const skillsState = await skillsMiddleware.beforeAgent?.({});
+      // @ts-expect-error - typing issue in LangChain
+      const memoryState = memoryMiddleware.beforeAgent?.({});
 
       // Combine states
       const combinedState = { ...skillsState, ...memoryState };
@@ -227,25 +241,25 @@ description: Test skill
       let finalPrompt = "";
 
       // First, memory middleware
-      await memoryMiddleware.wrapModelCall!(
+      memoryMiddleware.wrapModelCall!(
         {
           systemPrompt: "Base prompt",
           state: combinedState,
-        },
-        async (req: any) => {
+        } as any,
+        ((req: any) => {
           // Then, skills middleware
-          await skillsMiddleware.wrapModelCall!(
+          skillsMiddleware.wrapModelCall!(
             {
               systemPrompt: req.systemPrompt,
               state: combinedState,
-            },
-            (innerReq: any) => {
+            } as any,
+            ((innerReq: any) => {
               finalPrompt = innerReq.systemPrompt;
-              return Promise.resolve({ messages: [] });
-            },
+              return { response: "ok" };
+            }) as any,
           );
-          return { messages: [] };
-        },
+          return { response: "ok" };
+        }) as any,
       );
 
       // Verify both are present
