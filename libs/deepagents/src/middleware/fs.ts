@@ -13,6 +13,7 @@ import {
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
 import { Command, isCommand, getCurrentTaskInput } from "@langchain/langgraph";
+import { withLangGraph } from "@langchain/langgraph/zod";
 import { z } from "zod/v4";
 import type {
   BackendProtocol,
@@ -77,15 +78,12 @@ function fileDataReducer(
  * use createFilesystemMiddleware.
  */
 const FilesystemStateSchema = z.object({
-  files: z
-    .record(z.string(), FileDataSchema)
-    .default({})
-    .meta({
-      reducer: {
-        fn: fileDataReducer,
-        schema: z.record(z.string(), FileDataSchema.nullable()),
-      },
-    }),
+  files: withLangGraph(z.record(z.string(), FileDataSchema).default({}), {
+    reducer: {
+      fn: fileDataReducer,
+      schema: z.record(z.string(), FileDataSchema.nullable()),
+    },
+  }),
 });
 
 /**
