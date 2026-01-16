@@ -14,3 +14,14 @@ export {
   createMemoryMiddleware,
   type MemoryMiddlewareOptions,
 } from "./memory.js";
+
+// Skills middleware - backend-agnostic (matches Python's SkillsMiddleware interface)
+export {
+  createSkillsMiddleware,
+  type SkillsMiddlewareOptions,
+  type SkillMetadata,
+  // Constants
+  MAX_SKILL_FILE_SIZE,
+  MAX_SKILL_NAME_LENGTH,
+  MAX_SKILL_DESCRIPTION_LENGTH,
+} from "./skills.js";
