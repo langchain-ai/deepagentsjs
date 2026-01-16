@@ -348,4 +348,11 @@ export interface CreateDeepAgentParams<
   interruptOn?: Record<string, boolean | InterruptOnConfig>;
   /** The name of the agent */
   name?: string;
+  /**
+   * Optional list of memory file paths (AGENTS.md files) to load
+   * (e.g., ["~/.deepagents/AGENTS.md", "./.deepagents/AGENTS.md"]).
+   * Display names are automatically derived from paths.
+   * Memory is loaded at agent startup and added into the system prompt.
+   */
+  memory?: string[];
 }
