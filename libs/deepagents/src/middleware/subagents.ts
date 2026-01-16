@@ -258,7 +258,7 @@ function getSubagents(options: {
   defaultTools: StructuredTool[];
   defaultMiddleware: AgentMiddleware[] | null;
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
-  subagents: (SubAgent | CompiledSubAgent<any>)[];
+  subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
 }): {
   agents: Record<string, ReactAgent | Runnable>;
@@ -336,7 +336,7 @@ function createTaskTool(options: {
   defaultTools: StructuredTool[];
   defaultMiddleware: AgentMiddleware[] | null;
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
-  subagents: (SubAgent | CompiledSubAgent<any>)[];
+  subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
   taskDescription: string | null;
 }) {
@@ -431,7 +431,7 @@ export interface SubAgentMiddlewareOptions {
   /** The tool configs for the default general-purpose subagent */
   defaultInterruptOn?: Record<string, boolean | InterruptOnConfig> | null;
   /** A list of additional subagents to provide to the agent */
-  subagents?: (SubAgent | CompiledSubAgent<any>)[];
+  subagents?: (SubAgent | CompiledSubAgent)[];
   /** Full system prompt override */
   systemPrompt?: string | null;
   /** Whether to include the general-purpose agent */

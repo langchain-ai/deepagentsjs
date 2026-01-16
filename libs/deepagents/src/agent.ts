@@ -74,7 +74,7 @@ export function createDeepAgent<
   TResponse extends ResponseFormat = ResponseFormat,
   ContextSchema extends InteropZodObject = InteropZodObject,
   const TMiddleware extends readonly AgentMiddleware[] = readonly [],
-  const TSubagents extends readonly (SubAgent | CompiledSubAgent<any>)[] =
+  const TSubagents extends readonly (SubAgent | CompiledSubAgent)[] =
     readonly [],
   const TTools extends readonly (ClientTool | ServerTool)[] = readonly [],
 >(
@@ -162,7 +162,7 @@ export function createDeepAgent<
         createPatchToolCallsMiddleware(),
       ],
       defaultInterruptOn: interruptOn,
-      subagents: subagents as unknown as (SubAgent | CompiledSubAgent<any>)[],
+      subagents: subagents as unknown as (SubAgent | CompiledSubAgent)[],
       generalPurposeAgent: true,
     }),
     // Automatically summarizes conversation history when token limits are approached
