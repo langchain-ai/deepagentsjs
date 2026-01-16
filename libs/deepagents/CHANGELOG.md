@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.4.2
+
+### Patch Changes
+
+- [`c77537a`](https://github.com/langchain-ai/deepagentsjs/commit/c77537abeb9d02104c938cdf13b3774cd8b1bd03) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): define type bag to better type extraction
+
 ## 1.4.1
 
 ### Patch Changes
