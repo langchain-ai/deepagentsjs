@@ -196,7 +196,6 @@ describe("isSandboxBackend type guard", () => {
       id: "test-sandbox",
       lsInfo: () => [],
       read: () => "",
-      readRaw: () => ({ content: [], created_at: "", modified_at: "" }),
       grepRaw: () => [],
       globInfo: () => [],
       write: () => ({}),
@@ -226,7 +225,6 @@ describe("isSandboxBackend type guard", () => {
       // Missing id
       lsInfo: () => [],
       read: () => "",
-      readRaw: () => ({ content: [], created_at: "", modified_at: "" }),
       grepRaw: () => [],
       globInfo: () => [],
       write: () => ({}),

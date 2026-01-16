@@ -6,7 +6,6 @@ import type {
   BackendProtocol,
   EditResult,
   ExecuteResponse,
-  FileData,
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
@@ -127,21 +126,10 @@ export class CompositeBackend implements BackendProtocol {
   async read(
     filePath: string,
     offset: number = 0,
-    limit: number = 2000,
+    limit: number = 500,
   ): Promise<string> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
     return await backend.read(strippedKey, offset, limit);
-  }
-
-  /**
-   * Read file content as raw FileData.
-   *
-   * @param filePath - Absolute file path
-   * @returns Raw file content as FileData
-   */
-  async readRaw(filePath: string): Promise<FileData> {
-    const [backend, strippedKey] = this.getBackendAndKey(filePath);
-    return await backend.readRaw(strippedKey);
   }
 
   /**

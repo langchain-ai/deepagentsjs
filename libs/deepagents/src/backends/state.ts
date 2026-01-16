@@ -115,7 +115,7 @@ export class StateBackend implements BackendProtocol {
    * @param limit - Maximum number of lines to read
    * @returns Formatted file content with line numbers, or error message
    */
-  read(filePath: string, offset: number = 0, limit: number = 2000): string {
+  read(filePath: string, offset: number = 0, limit: number = 500): string {
     const files = this.getFiles();
     const fileData = files[filePath];
 
@@ -124,20 +124,6 @@ export class StateBackend implements BackendProtocol {
     }
 
     return formatReadResponse(fileData, offset, limit);
-  }
-
-  /**
-   * Read file content as raw FileData.
-   *
-   * @param filePath - Absolute file path
-   * @returns Raw file content as FileData
-   */
-  readRaw(filePath: string): FileData {
-    const files = this.getFiles();
-    const fileData = files[filePath];
-
-    if (!fileData) throw new Error(`File '${filePath}' not found`);
-    return fileData;
   }
 
   /**

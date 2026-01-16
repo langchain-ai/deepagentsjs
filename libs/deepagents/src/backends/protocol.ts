@@ -169,18 +169,10 @@ export interface BackendProtocol {
    *
    * @param filePath - Absolute file path
    * @param offset - Line offset to start reading from (0-indexed), default 0
-   * @param limit - Maximum number of lines to read, default 2000
+   * @param limit - Maximum number of lines to read, default 500
    * @returns Formatted file content with line numbers, or error message
    */
   read(filePath: string, offset?: number, limit?: number): MaybePromise<string>;
-
-  /**
-   * Read file content as raw FileData.
-   *
-   * @param filePath - Absolute file path
-   * @returns Raw file content as FileData
-   */
-  readRaw(filePath: string): MaybePromise<FileData>;
 
   /**
    * Structured search results or error string for invalid input.
