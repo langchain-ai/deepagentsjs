@@ -1,0 +1,7 @@
+{
+  "node_version": "22",
+  "graphs": {
+    "basic-agent": "./src/examples/basic/agent.ts:agent"
+  },
+  "env": ".env"
+}

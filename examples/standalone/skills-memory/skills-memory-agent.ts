@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Skills + Memory Agent Example
  *
@@ -153,4 +152,6 @@ async function main() {
   );
 }
 
-main().catch(console.error);
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
+}

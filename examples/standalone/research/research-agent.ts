@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { z } from "zod";
-import { tool } from "langchain";
+import { tool, HumanMessage } from "langchain";
 import { TavilySearch } from "@langchain/tavily";
 import { ChatAnthropic } from "@langchain/anthropic";
 
@@ -208,27 +208,27 @@ export const agent = createDeepAgent({
   subagents: [critiqueSubAgent, researchSubAgent],
 });
 
-// // Invoke the agent
-// async function main() {
-//   const result = await agent.invoke(
-//     {
-//       messages: [new HumanMessage("what is langgraph?")],
-//     },
-//     { recursionLimit: 1000 }
-//   );
+// Invoke the agent example
+async function main() {
+  const result = await agent.invoke(
+    {
+      messages: [new HumanMessage("what is langgraph?")],
+    },
+    { recursionLimit: 1000 },
+  );
 
-//   console.log("🎉 Finished!");
-//   console.log(
-//     `\n\nAgent ToDo List:\n${result.todos.map((todo) => ` - ${todo.content} (${todo.status})`).join("\n")}`
-//   );
-//   console.log(
-//     `\n\nAgent Files:\n${Object.entries(result.files)
-//       .map(([key, value]) => ` - ${key}: ${value}`)
-//       .join("\n")}`
-//   );
-// }
+  console.log("🎉 Finished!");
+  console.log(
+    `\n\nAgent ToDo List:\n${result.todos.map((todo) => ` - ${todo.content} (${todo.status})`).join("\n")}`,
+  );
+  console.log(
+    `\n\nAgent Files:\n${Object.entries(result.files)
+      .map(([key, value]) => ` - ${key}: ${value}`)
+      .join("\n")}`,
+  );
+}
 
-// // Run if this file is executed directly
-// if (import.meta.url === `file://${process.argv[1]}`) {
-//   main();
-// }
+// Run if this file is executed directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
+}

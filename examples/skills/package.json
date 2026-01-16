@@ -1,0 +1,16 @@
+{
+  "name": "examples-skills",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "skill-creator": "tsx skill-creator/skill-creator.ts"
+  },
+  "dependencies": {
+    "deepagents": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "typescript": "^5.9.2"
+  }
+}

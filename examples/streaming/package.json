@@ -1,0 +1,40 @@
+{
+  "name": "@examples/ui-react",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "run-p dev:client dev:server",
+    "dev:client": "vite",
+    "dev:server": "langgraphjs dev --no-browser",
+    "build:internal": "tsc -b && vite build",
+    "format": "prettier --write src",
+    "lint": "prettier --check src",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.1.12",
+    "@langchain/langgraph": "^1.0.15",
+    "@langchain/langgraph-sdk": "^1.5.2",
+    "@langchain/openai": "^1.2.1",
+    "deepagents": "workspace:*",
+    "langchain": "^1.2.7",
+    "lucide-react": "^0.561.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "use-stick-to-bottom": "^1.0.44",
+    "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "@langchain/langgraph-cli": "^1.1.11",
+    "@tailwindcss/vite": "^4.1.8",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.4.1",
+    "npm-run-all2": "^8.0.4",
+    "prettier": "^2.8.3",
+    "tailwindcss": "^4.1.8",
+    "tsx": "^4.19.3",
+    "typescript": "^5.4.5",
+    "vite": "^7.0.0"
+  }
+}

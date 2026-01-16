@@ -33,7 +33,11 @@ export default defineConfig([
     },
   },
   {
-    files: ["libs/cli/scripts/**/*.ts", "libs/cli/src/cli.ts"],
+    files: [
+      "libs/cli/scripts/**/*.ts",
+      "libs/cli/src/cli.ts",
+      "examples/**/*.ts",
+    ],
     rules: {
       "no-console": "off",
     },

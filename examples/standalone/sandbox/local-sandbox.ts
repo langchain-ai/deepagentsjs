@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Local Shell Sandbox Example
  *
@@ -267,25 +266,33 @@ export const agent = createDeepAgent({
   backend: sandbox,
 });
 
-console.log(`🚀 Starting sandbox agent with workspace: ${workspaceDir}\n`);
-const result = await agent.invoke(
-  {
-    messages: [
-      new HumanMessage(
-        `Create a simple Node.js project with a hello.js file that prints "Hello from DeepAgents!".
-          Then run it with node to verify it works.
-          Finally, show me the output.`,
-      ),
-    ],
-  },
-  { recursionLimit: 50 },
-);
+// Invoke the agent example
+async function main() {
+  console.log(`🚀 Starting sandbox agent with workspace: ${workspaceDir}\n`);
+  const result = await agent.invoke(
+    {
+      messages: [
+        new HumanMessage(
+          `Create a simple Node.js project with a hello.js file that prints "Hello from DeepAgents!".
+            Then run it with node to verify it works.
+            Finally, show me the output.`,
+        ),
+      ],
+    },
+    { recursionLimit: 50 },
+  );
 
-// Show the final AI response
-const messages = result.messages;
-const lastAIMessage = messages.findLast(AIMessage.isInstance);
+  // Show the final AI response
+  const messages = result.messages;
+  const lastAIMessage = messages.findLast(AIMessage.isInstance);
 
-if (lastAIMessage) {
-  console.log("\n📝 Agent Response:\n");
-  console.log(lastAIMessage.content);
+  if (lastAIMessage) {
+    console.log("\n📝 Agent Response:\n");
+    console.log(lastAIMessage.content);
+  }
+}
+
+// Run if this file is executed directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
 }
