@@ -32,12 +32,21 @@ export {
   type SettingsOptions,
 } from "./config.js";
 
-// Export middleware
+// Export middleware (matches Python's interface)
 export {
   createFilesystemMiddleware,
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
   createMemoryMiddleware,
+  // Skills middleware - matches Python's SkillsMiddleware interface
+  createSkillsMiddleware,
+  type SkillsMiddlewareOptions,
+  type SkillMetadata,
+  // Skills constants
+  MAX_SKILL_FILE_SIZE,
+  MAX_SKILL_NAME_LENGTH,
+  MAX_SKILL_DESCRIPTION_LENGTH,
+  // Other middleware types
   type FilesystemMiddlewareOptions,
   type SubAgentMiddlewareOptions,
   type MemoryMiddlewareOptions,
@@ -46,26 +55,17 @@ export {
   type FileData,
 } from "./middleware/index.js";
 
-// Export skills middleware
-export {
-  createSkillsMiddleware,
-  type SkillsMiddlewareOptions,
-} from "./middleware/skills.js";
-
 // Export agent memory middleware
 export {
   createAgentMemoryMiddleware,
   type AgentMemoryMiddlewareOptions,
 } from "./middleware/agent-memory.js";
 
-// Export skills loader
+// Export skills loader (utility functions for direct filesystem access)
 export {
   listSkills,
   parseSkillMetadata,
-  MAX_SKILL_FILE_SIZE,
-  MAX_SKILL_NAME_LENGTH,
-  MAX_SKILL_DESCRIPTION_LENGTH,
-  type SkillMetadata,
+  type SkillMetadata as LoaderSkillMetadata,
   type ListSkillsOptions,
 } from "./skills/index.js";
 

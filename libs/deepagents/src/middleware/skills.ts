@@ -1,52 +1,111 @@
+/* eslint-disable no-console */
 /**
- * Middleware for loading and exposing agent skills to the system prompt.
+ * Backend-agnostic skills middleware for loading agent skills from any backend.
  *
- * This middleware implements Anthropic's "Agent Skills" pattern with progressive disclosure:
- * 1. Parse YAML frontmatter from SKILL.md files at session start
- * 2. Inject skills metadata (name + description) into system prompt
- * 3. Agent reads full SKILL.md content when relevant to a task
+ * This middleware implements Anthropic's agent skills pattern with progressive disclosure,
+ * loading skills from backend storage via configurable sources.
  *
- * Skills directory structure (per-agent + project):
- * User-level: ~/.deepagents/{AGENT_NAME}/skills/
- * Project-level: {PROJECT_ROOT}/.deepagents/skills/
+ * ## Architecture
  *
- * @example
+ * Skills are loaded from one or more **sources** - paths in a backend where skills are
+ * organized. Sources are loaded in order, with later sources overriding earlier ones
+ * when skills have the same name (last one wins). This enables layering: base -> user
+ * -> project -> team skills.
+ *
+ * The middleware uses backend APIs exclusively (no direct filesystem access), making it
+ * portable across different storage backends (filesystem, state, remote storage, etc.).
+ *
+ * ## Usage
+ *
+ * ```typescript
+ * import { createSkillsMiddleware, FilesystemBackend } from "@anthropic/deepagents";
+ *
+ * const middleware = createSkillsMiddleware({
+ *   backend: new FilesystemBackend({ rootDir: "/" }),
+ *   sources: [
+ *     "/skills/user/",
+ *     "/skills/project/",
+ *   ],
+ * });
+ *
+ * const agent = createDeepAgent({ middleware: [middleware] });
  * ```
- * ~/.deepagents/{AGENT_NAME}/skills/
- * ├── web-research/
- * │   ├── SKILL.md        # Required: YAML frontmatter + instructions
- * │   └── helper.py       # Optional: supporting files
- * ├── code-review/
- * │   ├── SKILL.md
- * │   └── checklist.md
  *
- * .deepagents/skills/
- * ├── project-specific/
- * │   └── SKILL.md        # Project-specific skills
+ * Or use the `skills` parameter on createDeepAgent:
+ *
+ * ```typescript
+ * const agent = createDeepAgent({
+ *   skills: ["/skills/user/", "/skills/project/"],
+ * });
  * ```
  */
 
 import { z } from "zod";
-import { createMiddleware } from "langchain";
-import { listSkills, type SkillMetadata } from "../skills/loader.js";
+import yaml from "yaml";
+import {
+  createMiddleware,
+  /**
+   * required for type inference
+   */
+  type AgentMiddleware as _AgentMiddleware,
+} from "langchain";
+
+import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
+import type { StateBackend } from "../backends/state.js";
+import type { BaseStore } from "@langchain/langgraph-checkpoint";
+
+// Security: Maximum size for SKILL.md files to prevent DoS attacks (10MB)
+export const MAX_SKILL_FILE_SIZE = 10 * 1024 * 1024;
+
+// Agent Skills specification constraints (https://agentskills.io/specification)
+export const MAX_SKILL_NAME_LENGTH = 64;
+export const MAX_SKILL_DESCRIPTION_LENGTH = 1024;
 
 /**
- * required for type inference
+ * Metadata for a skill per Agent Skills specification.
  */
-import type { AgentMiddleware as _AgentMiddleware } from "langchain";
+export interface SkillMetadata {
+  /** Skill identifier (max 64 chars, lowercase alphanumeric and hyphens) */
+  name: string;
+
+  /** What the skill does (max 1024 chars) */
+  description: string;
+
+  /** Path to the SKILL.md file in the backend */
+  path: string;
+
+  /** License name or reference to bundled license file */
+  license?: string | null;
+
+  /** Environment requirements (max 500 chars) */
+  compatibility?: string | null;
+
+  /** Arbitrary key-value mapping for additional metadata */
+  metadata?: Record<string, string>;
+
+  /** List of pre-approved tools (experimental) */
+  allowedTools?: string[];
+}
 
 /**
  * Options for the skills middleware.
  */
 export interface SkillsMiddlewareOptions {
-  /** Path to the user-level skills directory (per-agent) */
-  skillsDir: string;
+  /**
+   * Backend instance or factory function for file operations.
+   * Use a factory for StateBackend since it requires runtime state.
+   */
+  backend:
+    | BackendProtocol
+    | BackendFactory
+    | ((config: { state: unknown; store?: BaseStore }) => StateBackend);
 
-  /** The agent identifier for path references in prompts */
-  assistantId: string;
-
-  /** Optional path to project-level skills directory */
-  projectSkillsDir?: string;
+  /**
+   * List of skill source paths to load (e.g., ["/skills/user/", "/skills/project/"]).
+   * Paths must use POSIX conventions (forward slashes).
+   * Later sources override earlier ones for skills with the same name (last one wins).
+   */
+  sources: string[];
 }
 
 /**
@@ -59,11 +118,10 @@ const SkillsStateSchema = z.object({
         name: z.string(),
         description: z.string(),
         path: z.string(),
-        source: z.enum(["user", "project"]),
-        license: z.string().optional(),
-        compatibility: z.string().optional(),
+        license: z.string().nullable().optional(),
+        compatibility: z.string().nullable().optional(),
         metadata: z.record(z.string(), z.string()).optional(),
-        allowedTools: z.string().optional(),
+        allowedTools: z.array(z.string()).optional(),
       }),
     )
     .optional(),
@@ -73,7 +131,6 @@ const SkillsStateSchema = z.object({
  * Skills System Documentation prompt template.
  */
 const SKILLS_SYSTEM_PROMPT = `
-
 ## Skills System
 
 You have access to a skills library that provides specialized capabilities and domain knowledge.
@@ -118,118 +175,312 @@ Remember: Skills are tools to make you more capable and consistent. When in doub
 `;
 
 /**
- * Format skills locations for display in system prompt.
+ * Validate skill name per Agent Skills specification.
  */
-function formatSkillsLocations(
-  userSkillsDisplay: string,
-  projectSkillsDir?: string,
-): string {
-  const locations = [`**User Skills**: \`${userSkillsDisplay}\``];
-  if (projectSkillsDir) {
-    locations.push(
-      `**Project Skills**: \`${projectSkillsDir}\` (overrides user skills)`,
+function validateSkillName(
+  name: string,
+  directoryName: string,
+): { valid: boolean; error: string } {
+  if (!name) {
+    return { valid: false, error: "name is required" };
+  }
+  if (name.length > MAX_SKILL_NAME_LENGTH) {
+    return { valid: false, error: "name exceeds 64 characters" };
+  }
+  // Pattern: lowercase alphanumeric, single hyphens between segments, no start/end hyphen
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) {
+    return {
+      valid: false,
+      error: "name must be lowercase alphanumeric with single hyphens only",
+    };
+  }
+  if (name !== directoryName) {
+    return {
+      valid: false,
+      error: `name '${name}' must match directory name '${directoryName}'`,
+    };
+  }
+  return { valid: true, error: "" };
+}
+
+/**
+ * Parse YAML frontmatter from SKILL.md content.
+ */
+function parseSkillMetadataFromContent(
+  content: string,
+  skillPath: string,
+  directoryName: string,
+): SkillMetadata | null {
+  if (content.length > MAX_SKILL_FILE_SIZE) {
+    console.warn(
+      `Skipping ${skillPath}: content too large (${content.length} bytes)`,
+    );
+    return null;
+  }
+
+  // Match YAML frontmatter between --- delimiters
+  const frontmatterPattern = /^---\s*\n([\s\S]*?)\n---\s*\n/;
+  const match = content.match(frontmatterPattern);
+
+  if (!match) {
+    console.warn(`Skipping ${skillPath}: no valid YAML frontmatter found`);
+    return null;
+  }
+
+  const frontmatterStr = match[1];
+
+  // Parse YAML
+  let frontmatterData: Record<string, unknown>;
+  try {
+    frontmatterData = yaml.parse(frontmatterStr);
+  } catch (e) {
+    console.warn(`Invalid YAML in ${skillPath}:`, e);
+    return null;
+  }
+
+  if (!frontmatterData || typeof frontmatterData !== "object") {
+    console.warn(`Skipping ${skillPath}: frontmatter is not a mapping`);
+    return null;
+  }
+
+  // Validate required fields
+  const name = frontmatterData.name as string | undefined;
+  const description = frontmatterData.description as string | undefined;
+
+  if (!name || !description) {
+    console.warn(
+      `Skipping ${skillPath}: missing required 'name' or 'description'`,
+    );
+    return null;
+  }
+
+  // Validate name format per spec (warn but continue for backwards compatibility)
+  const validation = validateSkillName(String(name), directoryName);
+  if (!validation.valid) {
+    console.warn(
+      `Skill '${name}' in ${skillPath} does not follow Agent Skills specification: ${validation.error}. Consider renaming for spec compliance.`,
     );
   }
-  return locations.join("\n");
+
+  // Validate description length per spec (max 1024 chars)
+  let descriptionStr = String(description).trim();
+  if (descriptionStr.length > MAX_SKILL_DESCRIPTION_LENGTH) {
+    console.warn(
+      `Description exceeds ${MAX_SKILL_DESCRIPTION_LENGTH} characters in ${skillPath}, truncating`,
+    );
+    descriptionStr = descriptionStr.slice(0, MAX_SKILL_DESCRIPTION_LENGTH);
+  }
+
+  // Parse allowed-tools
+  const allowedToolsStr = frontmatterData["allowed-tools"] as
+    | string
+    | undefined;
+  const allowedTools = allowedToolsStr ? allowedToolsStr.split(" ") : [];
+
+  return {
+    name: String(name),
+    description: descriptionStr,
+    path: skillPath,
+    metadata: (frontmatterData.metadata as Record<string, string>) || {},
+    license:
+      typeof frontmatterData.license === "string"
+        ? frontmatterData.license.trim() || null
+        : null,
+    compatibility:
+      typeof frontmatterData.compatibility === "string"
+        ? frontmatterData.compatibility.trim() || null
+        : null,
+    allowedTools,
+  };
+}
+
+/**
+ * List all skills from a backend source.
+ */
+async function listSkillsFromBackend(
+  backend: BackendProtocol,
+  sourcePath: string,
+): Promise<SkillMetadata[]> {
+  const skills: SkillMetadata[] = [];
+
+  // Normalize path to ensure it ends with /
+  const normalizedPath = sourcePath.endsWith("/")
+    ? sourcePath
+    : `${sourcePath}/`;
+
+  // List directories in the source path using lsInfo
+  let fileInfos: { path: string; is_dir?: boolean }[];
+  try {
+    fileInfos = await backend.lsInfo(normalizedPath);
+  } catch {
+    // Source path doesn't exist or can't be listed
+    return [];
+  }
+
+  // Convert FileInfo[] to entries format
+  const entries = fileInfos.map((info) => ({
+    name: info.path.replace(/\/$/, "").split("/").pop() || "",
+    type: (info.is_dir ? "directory" : "file") as "file" | "directory",
+  }));
+
+  // Look for subdirectories containing SKILL.md
+  for (const entry of entries) {
+    if (entry.type !== "directory") {
+      continue;
+    }
+
+    const skillMdPath = `${normalizedPath}${entry.name}/SKILL.md`;
+
+    // Try to download the SKILL.md file
+    const results = await backend.downloadFiles([skillMdPath]);
+    if (results.length !== 1) {
+      continue;
+    }
+
+    const response = results[0];
+    if (response.error != null || response.content == null) {
+      continue;
+    }
+
+    // Decode content and parse metadata
+    const content = new TextDecoder().decode(response.content);
+    const metadata = parseSkillMetadataFromContent(
+      content,
+      skillMdPath,
+      entry.name,
+    );
+
+    if (metadata) {
+      skills.push(metadata);
+    }
+  }
+
+  return skills;
+}
+
+/**
+ * Format skills locations for display in system prompt.
+ */
+function formatSkillsLocations(sources: string[]): string {
+  if (sources.length === 0) {
+    return "**Skills Sources:** None configured";
+  }
+
+  const lines = ["**Skills Sources:**"];
+  for (const source of sources) {
+    lines.push(`- \`${source}\``);
+  }
+  return lines.join("\n");
 }
 
 /**
  * Format skills metadata for display in system prompt.
  */
-function formatSkillsList(
-  skills: SkillMetadata[],
-  userSkillsDisplay: string,
-  projectSkillsDir?: string,
-): string {
+function formatSkillsList(skills: SkillMetadata[], sources: string[]): string {
   if (skills.length === 0) {
-    const locations = [userSkillsDisplay];
-    if (projectSkillsDir) {
-      locations.push(projectSkillsDir);
-    }
-    return `(No skills available yet. You can create skills in ${locations.join(" or ")})`;
+    return `(No skills available yet. Skills can be created in ${sources.join(" or ")})`;
   }
-
-  // Group skills by source
-  const userSkills = skills.filter((s) => s.source === "user");
-  const projectSkills = skills.filter((s) => s.source === "project");
 
   const lines: string[] = [];
-
-  // Show user skills
-  if (userSkills.length > 0) {
-    lines.push("**User Skills:**");
-    for (const skill of userSkills) {
-      lines.push(`- **${skill.name}**: ${skill.description}`);
-      lines.push(`  → Read \`${skill.path}\` for full instructions`);
-    }
-    lines.push("");
-  }
-
-  // Show project skills
-  if (projectSkills.length > 0) {
-    lines.push("**Project Skills:**");
-    for (const skill of projectSkills) {
-      lines.push(`- **${skill.name}**: ${skill.description}`);
-      lines.push(`  → Read \`${skill.path}\` for full instructions`);
-    }
+  for (const skill of skills) {
+    lines.push(`- **${skill.name}**: ${skill.description}`);
+    lines.push(`  → Read \`${skill.path}\` for full instructions`);
   }
 
   return lines.join("\n");
 }
 
 /**
- * Create middleware for loading and exposing agent skills.
+ * Create backend-agnostic middleware for loading and exposing agent skills.
  *
- * This middleware implements Anthropic's agent skills pattern:
- * - Loads skills metadata (name, description) from YAML frontmatter at session start
- * - Injects skills list into system prompt for discoverability
- * - Agent reads full SKILL.md content when a skill is relevant (progressive disclosure)
- *
- * Supports both user-level and project-level skills:
- * - User skills: ~/.deepagents/{AGENT_NAME}/skills/
- * - Project skills: {PROJECT_ROOT}/.deepagents/skills/
- * - Project skills override user skills with the same name
+ * This middleware loads skills from configurable backend sources and injects
+ * skill metadata into the system prompt. It implements the progressive disclosure
+ * pattern: skill names and descriptions are shown in the prompt, but the agent
+ * reads full SKILL.md content only when needed.
  *
  * @param options - Configuration options
  * @returns AgentMiddleware for skills loading and injection
+ *
+ * @example
+ * ```typescript
+ * const middleware = createSkillsMiddleware({
+ *   backend: new FilesystemBackend({ rootDir: "/" }),
+ *   sources: ["/skills/user/", "/skills/project/"],
+ * });
+ * ```
  */
 export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
-  const { skillsDir, assistantId, projectSkillsDir } = options;
+  const { backend, sources } = options;
 
-  // Store display paths for prompts
-  const userSkillsDisplay = `~/.deepagents/${assistantId}/skills`;
+  // Closure variable to store loaded skills - wrapModelCall can access this
+  // directly since beforeAgent state updates aren't immediately available
+  let loadedSkills: SkillMetadata[] = [];
+
+  /**
+   * Resolve backend from instance or factory.
+   */
+  function getBackend(state: unknown): BackendProtocol {
+    if (typeof backend === "function") {
+      return backend({ state }) as BackendProtocol;
+    }
+    return backend;
+  }
 
   return createMiddleware({
     name: "SkillsMiddleware",
-    stateSchema: SkillsStateSchema as any,
+    stateSchema: SkillsStateSchema,
 
-    beforeAgent() {
-      // We re-load skills on every new interaction with the agent to capture
-      // any changes in the skills directories.
-      const skills = listSkills({
-        userSkillsDir: skillsDir,
-        projectSkillsDir: projectSkillsDir,
-      });
-      return { skillsMetadata: skills };
+    async beforeAgent(state) {
+      // Skip if already loaded (check both closure and state)
+      if (loadedSkills.length > 0) {
+        return undefined;
+      }
+      if ("skillsMetadata" in state && state.skillsMetadata != null) {
+        // Restore from state (e.g., after checkpoint restore)
+        loadedSkills = state.skillsMetadata as SkillMetadata[];
+        return undefined;
+      }
+
+      const resolvedBackend = getBackend(state);
+      const allSkills: Map<string, SkillMetadata> = new Map();
+
+      // Load skills from each source in order (later sources override earlier)
+      for (const sourcePath of sources) {
+        try {
+          const skills = await listSkillsFromBackend(
+            resolvedBackend,
+            sourcePath,
+          );
+          for (const skill of skills) {
+            allSkills.set(skill.name, skill);
+          }
+        } catch (error) {
+          // Log but continue - individual source failures shouldn't break everything
+          console.debug(
+            `[BackendSkillsMiddleware] Failed to load skills from ${sourcePath}:`,
+            error,
+          );
+        }
+      }
+
+      // Store in closure for immediate access by wrapModelCall
+      loadedSkills = Array.from(allSkills.values());
+
+      return { skillsMetadata: loadedSkills };
     },
 
-    wrapModelCall(request: any, handler: any) {
-      // Get skills metadata from state
+    wrapModelCall(request, handler) {
+      // Use closure variable which is populated by beforeAgent
+      // Fall back to state for checkpoint restore scenarios
       const skillsMetadata: SkillMetadata[] =
-        request.state?.skillsMetadata || [];
+        loadedSkills.length > 0
+          ? loadedSkills
+          : (request.state?.skillsMetadata as SkillMetadata[]) || [];
 
-      // Format skills locations and list
-      const skillsLocations = formatSkillsLocations(
-        userSkillsDisplay,
-        projectSkillsDir,
-      );
-      const skillsList = formatSkillsList(
-        skillsMetadata,
-        userSkillsDisplay,
-        projectSkillsDir,
-      );
+      // Format skills section
+      const skillsLocations = formatSkillsLocations(sources);
+      const skillsList = formatSkillsList(skillsMetadata, sources);
 
-      // Format the skills documentation
       const skillsSection = SKILLS_SYSTEM_PROMPT.replace(
         "{skills_locations}",
         skillsLocations,

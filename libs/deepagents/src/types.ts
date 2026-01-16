@@ -355,4 +355,35 @@ export interface CreateDeepAgentParams<
    * Memory is loaded at agent startup and added into the system prompt.
    */
   memory?: string[];
+  /**
+   * Optional list of skill source paths (e.g., `["/skills/user/", "/skills/project/"]`).
+   *
+   * Paths use POSIX conventions (forward slashes) and are relative to the backend's root.
+   * Later sources override earlier ones for skills with the same name (last one wins).
+   *
+   * @example
+   * ```typescript
+   * // With FilesystemBackend - skills loaded from disk
+   * const agent = await createDeepAgent({
+   *   backend: new FilesystemBackend({ rootDir: "/home/user/.deepagents" }),
+   *   skills: ["/skills/"],
+   * });
+   *
+   * // With StateBackend - skills provided in state
+   * const agent = await createDeepAgent({
+   *   skills: ["/skills/"],
+   * });
+   * const result = await agent.invoke({
+   *   messages: [...],
+   *   files: {
+   *     "/skills/my-skill/SKILL.md": {
+   *       content: ["---", "name: my-skill", "description: ...", "---", "# My Skill"],
+   *       created_at: new Date().toISOString(),
+   *       modified_at: new Date().toISOString(),
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  skills?: string[];
 }

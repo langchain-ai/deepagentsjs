@@ -20,6 +20,7 @@ import {
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
   createMemoryMiddleware,
+  createSkillsMiddleware,
   type SubAgent,
 } from "./middleware/index.js";
 import { StateBackend } from "./backends/index.js";
@@ -107,6 +108,7 @@ export function createDeepAgent<
     interruptOn,
     name,
     memory,
+    skills,
   } = params;
 
   // Combine system prompt with base prompt like Python implementation
@@ -133,10 +135,23 @@ export function createDeepAgent<
     : (config: { state: unknown; store?: BaseStore }) =>
         new StateBackend(config);
 
+  // Add skills middleware if skill sources provided
+  const skillsMiddleware =
+    skills != null && skills.length > 0
+      ? [
+          createSkillsMiddleware({
+            backend: filesystemBackend,
+            sources: skills,
+          }),
+        ]
+      : [];
+
   // Built-in middleware array
   const builtInMiddleware = [
     // Provides todo list management capabilities for tracking tasks
     todoListMiddleware(),
+    // Add skills middleware if skill sources provided
+    ...skillsMiddleware,
     // Enables filesystem operations and optional long-term memory storage
     createFilesystemMiddleware({ backend: filesystemBackend }),
     // Enables delegation to specialized subagents for complex tasks
@@ -146,6 +161,8 @@ export function createDeepAgent<
       defaultMiddleware: [
         // Subagent middleware: Todo list management
         todoListMiddleware(),
+        // Subagent middleware: Skills (if provided)
+        ...skillsMiddleware,
         // Subagent middleware: Filesystem operations
         createFilesystemMiddleware({
           backend: filesystemBackend,
