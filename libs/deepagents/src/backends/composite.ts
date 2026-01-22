@@ -6,6 +6,7 @@ import type {
   BackendProtocol,
   EditResult,
   ExecuteResponse,
+  FileData,
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
@@ -130,6 +131,17 @@ export class CompositeBackend implements BackendProtocol {
   ): Promise<string> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
     return await backend.read(strippedKey, offset, limit);
+  }
+
+  /**
+   * Read file content as raw FileData.
+   *
+   * @param filePath - Absolute file path
+   * @returns Raw file content as FileData
+   */
+  async readRaw(filePath: string): Promise<FileData> {
+    const [backend, strippedKey] = this.getBackendAndKey(filePath);
+    return await backend.readRaw(strippedKey);
   }
 
   /**
@@ -304,6 +316,10 @@ export class CompositeBackend implements BackendProtocol {
     }
 
     for (const [backend, batch] of batchesByBackend) {
+      if (!backend.uploadFiles) {
+        throw new Error("Backend does not support uploadFiles");
+      }
+
       const batchFiles = batch.map(
         (b) => [b.path, b.content] as [string, Uint8Array],
       );
@@ -347,6 +363,10 @@ export class CompositeBackend implements BackendProtocol {
     }
 
     for (const [backend, batch] of batchesByBackend) {
+      if (!backend.downloadFiles) {
+        throw new Error("Backend does not support downloadFiles");
+      }
+
       const batchPaths = batch.map((b) => b.path);
       const batchResponses = await backend.downloadFiles(batchPaths);
 

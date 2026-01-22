@@ -11,6 +11,7 @@
 import type {
   EditResult,
   ExecuteResponse,
+  FileData,
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
@@ -392,6 +393,38 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     }
 
     return result.output;
+  }
+
+  /**
+   * Read file content as raw FileData.
+   *
+   * @param filePath - Absolute file path
+   * @returns Raw file content as FileData
+   */
+  async readRaw(filePath: string): Promise<FileData> {
+    const command = buildReadCommand(filePath, 0, Number.MAX_SAFE_INTEGER);
+    const result = await this.execute(command);
+
+    if (result.exitCode !== 0) {
+      throw new Error(`File '${filePath}' not found`);
+    }
+
+    // Parse the line-numbered output back to content
+    const lines: string[] = [];
+    for (const line of result.output.split("\n")) {
+      // Format is "    123\tContent"
+      const tabIndex = line.indexOf("\t");
+      if (tabIndex !== -1) {
+        lines.push(line.substring(tabIndex + 1));
+      }
+    }
+
+    const now = new Date().toISOString();
+    return {
+      content: lines,
+      created_at: now,
+      modified_at: now,
+    };
   }
 
   /**
