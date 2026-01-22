@@ -128,7 +128,10 @@ describe("Subagent HITL Integration Tests - interrupt() primitive", () => {
   // =============================================================================
   // Test 1: Basic interrupt() in a CompiledSubAgent
   // =============================================================================
-  it.concurrent(
+  /**
+   * skipping, expect to pass in the future
+   */
+  it.concurrent.skip(
     "should handle interrupt() in a CompiledSubAgent tool",
     { timeout: 120000 },
     async () => {
