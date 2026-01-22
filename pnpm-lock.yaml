@@ -146,8 +146,8 @@ importers:
         specifier: ^3.3.3
         version: 3.3.3
       langchain:
-        specifier: ^1.2.11
-        version: 1.2.11(@langchain/core@1.1.16(openai@6.16.0(zod@4.3.5)))(openai@6.16.0(zod@4.3.5))
+        specifier: ^1.2.12
+        version: 1.2.12(@langchain/core@1.1.16(openai@6.16.0(zod@4.3.5)))(openai@6.16.0(zod@4.3.5))
       micromatch:
         specifier: ^4.0.8
         version: 4.0.8
@@ -1844,8 +1844,8 @@ packages:
   keyv@4.5.4:
     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
 
-  langchain@1.2.11:
-    resolution: {integrity: sha512-vLDlibIbcaVt+H4Jw4lDCrHnSCGhcg/U5oELp9tdfoCkGpuDsrU9qv1wW0WW+ClypLCEbWiD5qJ+IqrOm6UiBQ==}
+  langchain@1.2.12:
+    resolution: {integrity: sha512-08UubBUAU6scuHBlz7O1b4FQQd4YArt/M+nH5FH3cRj2UF64ii8LqfnxopZvTnXYzw8HBurd3v0n738njqzPRg==}
     engines: {node: '>=20'}
     peerDependencies:
       '@langchain/core': 1.1.16
@@ -4375,7 +4375,7 @@ snapshots:
     dependencies:
       json-buffer: 3.0.1
 
-  langchain@1.2.11(@langchain/core@1.1.16(openai@6.16.0(zod@4.3.5)))(openai@6.16.0(zod@4.3.5)):
+  langchain@1.2.12(@langchain/core@1.1.16(openai@6.16.0(zod@4.3.5)))(openai@6.16.0(zod@4.3.5)):
     dependencies:
       '@langchain/core': 1.1.16(openai@6.16.0(zod@4.3.5))
       '@langchain/langgraph': 1.1.1(@langchain/core@1.1.16(openai@6.16.0(zod@4.3.5)))(zod@4.3.5)

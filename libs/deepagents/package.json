@@ -42,7 +42,7 @@
     "@langchain/core": "^1.1.16",
     "@langchain/langgraph": "^1.1.1",
     "fast-glob": "^3.3.3",
-    "langchain": "^1.2.11",
+    "langchain": "^1.2.12",
     "micromatch": "^4.0.8",
     "yaml": "^2.8.2",
     "zod": "^4.3.5"

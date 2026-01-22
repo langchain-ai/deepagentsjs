@@ -332,18 +332,28 @@ async function listSkillsFromBackend(
     const skillMdPath = `${normalizedPath}${entry.name}/SKILL.md`;
 
     // Try to download the SKILL.md file
-    const results = await backend.downloadFiles([skillMdPath]);
-    if (results.length !== 1) {
-      continue;
-    }
+    let content: string;
+    if (backend.downloadFiles) {
+      const results = await backend.downloadFiles([skillMdPath]);
+      if (results.length !== 1) {
+        continue;
+      }
 
-    const response = results[0];
-    if (response.error != null || response.content == null) {
-      continue;
-    }
+      const response = results[0];
+      if (response.error != null || response.content == null) {
+        continue;
+      }
 
-    // Decode content and parse metadata
-    const content = new TextDecoder().decode(response.content);
+      // Decode content
+      content = new TextDecoder().decode(response.content);
+    } else {
+      // Fall back to read if downloadFiles is not available
+      const readResult = await backend.read(skillMdPath);
+      if (readResult.startsWith("Error:")) {
+        continue;
+      }
+      content = readResult;
+    }
     const metadata = parseSkillMetadataFromContent(
       content,
       skillMdPath,

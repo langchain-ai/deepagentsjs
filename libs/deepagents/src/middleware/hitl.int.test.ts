@@ -254,4 +254,80 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
       expect(result.messages.length).toBeGreaterThan(0);
     },
   );
+
+  it.concurrent(
+    "should properly propagate HITL interrupts from subagents without TypeError",
+    { timeout: 120000 },
+    async () => {
+      // This test specifically verifies the fix for the issue where
+      // GraphInterrupt.interrupts was undefined when propagating from subagents,
+      // causing "Cannot read properties of undefined (reading 'length')" error
+
+      const checkpointer = new MemorySaver();
+      const agent = createDeepAgent({
+        tools: [sampleTool],
+        interruptOn: { sample_tool: true },
+        checkpointer,
+      });
+
+      const config = { configurable: { thread_id: uuidv4() } };
+
+      // Invoke with a task that will use the subagent which has HITL
+      // The subagent should interrupt, and this interrupt should propagate
+      // properly to the parent graph without causing a TypeError
+      const result = await agent.invoke(
+        {
+          messages: [
+            new HumanMessage(
+              "Use the task tool with the general-purpose subagent to call the sample_tool",
+            ),
+          ],
+        },
+        config,
+      );
+
+      // Verify the agent called the task tool
+      const aiMessages = result.messages.filter((msg: any) =>
+        AIMessage.isInstance(msg),
+      );
+      const toolCalls = aiMessages.flatMap(
+        (msg: any) => msg.tool_calls || [],
+      );
+      expect(toolCalls.some((tc: any) => tc.name === "task")).toBe(true);
+
+      // Verify interrupt was properly propagated from the subagent
+      expect(result.__interrupt__).toBeDefined();
+      expect(result.__interrupt__).toHaveLength(1);
+
+      // Verify the interrupt has the correct HITL structure
+      const interrupt = result.__interrupt__?.[0];
+      expect(interrupt).toBeDefined();
+      expect(interrupt!.value).toBeDefined();
+
+      const hitlRequest = interrupt!.value as HITLRequest;
+      expect(hitlRequest.actionRequests).toBeDefined();
+      expect(hitlRequest.actionRequests.length).toBeGreaterThan(0);
+      expect(hitlRequest.reviewConfigs).toBeDefined();
+      expect(hitlRequest.reviewConfigs.length).toBeGreaterThan(0);
+
+      // Verify we can resume successfully
+      const resumeResult = await agent.invoke(
+        new Command({
+          resume: {
+            decisions: [{ type: "approve" }],
+          },
+        }),
+        config,
+      );
+
+      // After resume, there should be no more interrupts
+      expect(resumeResult.__interrupt__).toBeUndefined();
+
+      // The tool should have been executed
+      const toolMessages = resumeResult.messages.filter(
+        (msg: any) => msg._getType() === "tool",
+      );
+      expect(toolMessages.length).toBeGreaterThan(0);
+    },
+  );
 });
