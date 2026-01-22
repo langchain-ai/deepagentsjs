@@ -290,9 +290,7 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
       const aiMessages = result.messages.filter((msg: any) =>
         AIMessage.isInstance(msg),
       );
-      const toolCalls = aiMessages.flatMap(
-        (msg: any) => msg.tool_calls || [],
-      );
+      const toolCalls = aiMessages.flatMap((msg: any) => msg.tool_calls || []);
       expect(toolCalls.some((tc: any) => tc.name === "task")).toBe(true);
 
       // Verify interrupt was properly propagated from the subagent

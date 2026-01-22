@@ -59,9 +59,7 @@ async function assertExpectedSubgraphActions(
     if (!("model_request" in update)) continue;
     const messages = update.model_request.messages as BaseMessage[];
 
-    const lastAiMessage = messages
-      .filter(AIMessage.isInstance)
-      .at(-1);
+    const lastAiMessage = messages.filter(AIMessage.isInstance).at(-1);
 
     if (!lastAiMessage) continue;
 
