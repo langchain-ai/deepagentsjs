@@ -411,7 +411,9 @@ This skill has no valid frontmatter.`;
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
       // Should not have "Allowed tools:" line for skills without allowed tools
-      const allowedToolsCount = (modifiedRequest.systemPrompt.match(/Allowed tools:/g) || []).length;
+      const allowedToolsCount = (
+        modifiedRequest.systemPrompt.match(/Allowed tools:/g) || []
+      ).length;
       expect(allowedToolsCount).toBe(0);
     });
 

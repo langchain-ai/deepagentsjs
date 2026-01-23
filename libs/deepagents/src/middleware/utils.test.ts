@@ -16,9 +16,13 @@ describe("appendToSystemMessage", () => {
   });
 
   it("should append text to string content with double newline", () => {
-    const original = new SystemMessage({ content: "You are a helpful assistant." });
+    const original = new SystemMessage({
+      content: "You are a helpful assistant.",
+    });
     const result = appendToSystemMessage(original, "Always be concise.");
-    expect(result.content).toBe("You are a helpful assistant.\n\nAlways be concise.");
+    expect(result.content).toBe(
+      "You are a helpful assistant.\n\nAlways be concise.",
+    );
   });
 
   it("should handle empty original content", () => {
@@ -40,7 +44,10 @@ describe("appendToSystemMessage", () => {
     const original = new SystemMessage({ content: [] });
     const result = appendToSystemMessage(original, "New content");
     expect(Array.isArray(result.content)).toBe(true);
-    expect((result.content as any[])[0]).toEqual({ type: "text", text: "New content" });
+    expect((result.content as any[])[0]).toEqual({
+      type: "text",
+      text: "New content",
+    });
   });
 });
 
@@ -59,8 +66,13 @@ describe("prependToSystemMessage", () => {
 
   it("should prepend text to string content with double newline", () => {
     const original = new SystemMessage({ content: "Always be concise." });
-    const result = prependToSystemMessage(original, "You are a helpful assistant.");
-    expect(result.content).toBe("You are a helpful assistant.\n\nAlways be concise.");
+    const result = prependToSystemMessage(
+      original,
+      "You are a helpful assistant.",
+    );
+    expect(result.content).toBe(
+      "You are a helpful assistant.\n\nAlways be concise.",
+    );
   });
 
   it("should handle empty original content", () => {
@@ -76,6 +88,9 @@ describe("prependToSystemMessage", () => {
     const result = prependToSystemMessage(original, "Prepended content");
     expect(Array.isArray(result.content)).toBe(true);
     expect((result.content as any[]).length).toBe(2);
-    expect((result.content as any[])[0]).toEqual({ type: "text", text: "Prepended content\n\n" });
+    expect((result.content as any[])[0]).toEqual({
+      type: "text",
+      text: "Prepended content\n\n",
+    });
   });
 });

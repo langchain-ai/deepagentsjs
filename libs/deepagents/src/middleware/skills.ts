@@ -381,12 +381,13 @@ function formatSkillsLocations(sources: string[]): string {
   for (let i = 0; i < sources.length; i++) {
     const sourcePath = sources[i];
     // Extract a friendly name from the path (last non-empty component)
-    const name = sourcePath
-      .replace(/\/$/, "")
-      .split("/")
-      .filter(Boolean)
-      .pop()
-      ?.replace(/^./, (c) => c.toUpperCase()) || "Skills";
+    const name =
+      sourcePath
+        .replace(/\/$/, "")
+        .split("/")
+        .filter(Boolean)
+        .pop()
+        ?.replace(/^./, (c) => c.toUpperCase()) || "Skills";
     const suffix = i === sources.length - 1 ? " (higher priority)" : "";
     lines.push(`**${name} Skills**: \`${sourcePath}\`${suffix}`);
   }
