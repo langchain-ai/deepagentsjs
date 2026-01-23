@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.5.1
+
+### Patch Changes
+
+- [#133](https://github.com/langchain-ai/deepagentsjs/pull/133) [`0fa85f6`](https://github.com/langchain-ai/deepagentsjs/commit/0fa85f61695af4ad6cdea4549c798e8219448bbb) Thanks [@christian-bromann](https://github.com/christian-bromann)! - chore(deepagents): update deps
+
 ## 1.5.0
 
 ### Minor Changes

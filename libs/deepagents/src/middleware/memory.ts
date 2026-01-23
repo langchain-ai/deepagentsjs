@@ -194,6 +194,15 @@ async function loadMemoryFromBackend(
   backend: BackendProtocol,
   path: string,
 ): Promise<string | null> {
+  // Use downloadFiles if available, otherwise fall back to read
+  if (!backend.downloadFiles) {
+    const content = await backend.read(path);
+    if (content.startsWith("Error:")) {
+      return null;
+    }
+    return content;
+  }
+
   const results = await backend.downloadFiles([path]);
 
   // Should get exactly one response for one path

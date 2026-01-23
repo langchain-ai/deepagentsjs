@@ -175,6 +175,14 @@ export interface BackendProtocol {
   read(filePath: string, offset?: number, limit?: number): MaybePromise<string>;
 
   /**
+   * Read file content as raw FileData.
+   *
+   * @param filePath - Absolute file path
+   * @returns Raw file content as FileData
+   */
+  readRaw(filePath: string): MaybePromise<FileData>;
+
+  /**
    * Structured search results or error string for invalid input.
    *
    * Searches file contents for a regex pattern.
@@ -226,21 +234,23 @@ export interface BackendProtocol {
 
   /**
    * Upload multiple files.
+   * Optional - backends that don't support file upload can omit this.
    *
    * @param files - List of [path, content] tuples to upload
    * @returns List of FileUploadResponse objects, one per input file
    */
-  uploadFiles(
+  uploadFiles?(
     files: Array<[string, Uint8Array]>,
   ): MaybePromise<FileUploadResponse[]>;
 
   /**
    * Download multiple files.
+   * Optional - backends that don't support file download can omit this.
    *
    * @param paths - List of file paths to download
    * @returns List of FileDownloadResponse objects, one per input path
    */
-  downloadFiles(paths: string[]): MaybePromise<FileDownloadResponse[]>;
+  downloadFiles?(paths: string[]): MaybePromise<FileDownloadResponse[]>;
 }
 
 /**
