@@ -22,7 +22,98 @@ import type {
 } from "../backends/protocol.js";
 import { isSandboxBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
-import { sanitizeToolCallId } from "../backends/utils.js";
+import {
+  sanitizeToolCallId,
+  formatContentWithLineNumbers,
+} from "../backends/utils.js";
+
+/**
+ * Tools that should be excluded from the large result eviction logic.
+ *
+ * This array contains tools that should NOT have their results evicted to the filesystem
+ * when they exceed token limits. Tools are excluded for different reasons:
+ *
+ * 1. Tools with built-in truncation (ls, glob, grep):
+ *    These tools truncate their own output when it becomes too large. When these tools
+ *    produce truncated output due to many matches, it typically indicates the query
+ *    needs refinement rather than full result preservation. In such cases, the truncated
+ *    matches are potentially more like noise and the LLM should be prompted to narrow
+ *    its search criteria instead.
+ *
+ * 2. Tools with problematic truncation behavior (read_file):
+ *    read_file is tricky to handle as the failure mode here is single long lines
+ *    (e.g., imagine a jsonl file with very long payloads on each line). If we try to
+ *    truncate the result of read_file, the agent may then attempt to re-read the
+ *    truncated file using read_file again, which won't help.
+ *
+ * 3. Tools that never exceed limits (edit_file, write_file):
+ *    These tools return minimal confirmation messages and are never expected to produce
+ *    output large enough to exceed token limits, so checking them would be unnecessary.
+ */
+export const TOOLS_EXCLUDED_FROM_EVICTION = [
+  "ls",
+  "glob",
+  "grep",
+  "read_file",
+  "edit_file",
+  "write_file",
+] as const;
+
+/**
+ * Approximate number of characters per token for truncation calculations.
+ * Using 4 chars per token as a conservative approximation (actual ratio varies by content)
+ * This errs on the high side to avoid premature eviction of content that might fit.
+ */
+export const NUM_CHARS_PER_TOKEN = 4;
+
+/**
+ * Message template for evicted tool results.
+ */
+const TOO_LARGE_TOOL_MSG = `Tool result too large, the result of this tool call {tool_call_id} was saved in the filesystem at this path: {file_path}
+You can read the result from the filesystem by using the read_file tool, but make sure to only read part of the result at a time.
+You can do this by specifying an offset and limit in the read_file tool call.
+For example, to read the first 100 lines, you can use the read_file tool with offset=0 and limit=100.
+
+Here is a preview showing the head and tail of the result (lines of the form
+... [N lines truncated] ...
+indicate omitted lines in the middle of the content):
+
+{content_sample}`;
+
+/**
+ * Create a preview of content showing head and tail with truncation marker.
+ *
+ * @param contentStr - The full content string to preview.
+ * @param headLines - Number of lines to show from the start (default: 5).
+ * @param tailLines - Number of lines to show from the end (default: 5).
+ * @returns Formatted preview string with line numbers.
+ */
+export function createContentPreview(
+  contentStr: string,
+  headLines: number = 5,
+  tailLines: number = 5,
+): string {
+  const lines = contentStr.split("\n");
+
+  if (lines.length <= headLines + tailLines) {
+    // If file is small enough, show all lines
+    const previewLines = lines.map((line) => line.substring(0, 1000));
+    return formatContentWithLineNumbers(previewLines, 1);
+  }
+
+  // Show head and tail with truncation marker
+  const head = lines.slice(0, headLines).map((line) => line.substring(0, 1000));
+  const tail = lines.slice(-tailLines).map((line) => line.substring(0, 1000));
+
+  const headSample = formatContentWithLineNumbers(head, 1);
+  const truncationNotice = `\n... [${lines.length - headLines - tailLines} lines truncated] ...\n`;
+  const tailSample = formatContentWithLineNumbers(
+    tail,
+    lines.length - tailLines + 1,
+  );
+
+  return headSample + truncationNotice + tailSample;
+}
 
 /**
  * required for type inference
@@ -105,7 +196,10 @@ function getBackend(
 }
 
 // System prompts
-const FILESYSTEM_SYSTEM_PROMPT = `You have access to a virtual filesystem. All file paths must start with a /.
+const FILESYSTEM_SYSTEM_PROMPT = `## Filesystem Tools \`ls\`, \`read_file\`, \`write_file\`, \`edit_file\`, \`glob\`, \`grep\`
+
+You have access to a filesystem which you can interact with using these tools.
+All file paths must start with a /.
 
 - ls: list files in a directory (requires absolute path)
 - read_file: read a file from the filesystem
@@ -114,36 +208,105 @@ const FILESYSTEM_SYSTEM_PROMPT = `You have access to a virtual filesystem. All f
 - glob: find files matching a pattern (e.g., "**/*.py")
 - grep: search for text within files`;
 
-// Tool descriptions
-export const LS_TOOL_DESCRIPTION = "List files and directories in a directory";
-export const READ_FILE_TOOL_DESCRIPTION = "Read the contents of a file";
-export const WRITE_FILE_TOOL_DESCRIPTION =
-  "Write content to a new file. Returns an error if the file already exists";
-export const EDIT_FILE_TOOL_DESCRIPTION =
-  "Edit a file by replacing a specific string with a new string";
-export const GLOB_TOOL_DESCRIPTION =
-  "Find files matching a glob pattern (e.g., '**/*.py' for all Python files)";
-export const GREP_TOOL_DESCRIPTION =
-  "Search for a regex pattern in files. Returns matching files and line numbers";
-export const EXECUTE_TOOL_DESCRIPTION = `Executes a given command in the sandbox environment with proper handling and security measures.
+// Tool descriptions - ported from Python for comprehensive LLM guidance
+export const LS_TOOL_DESCRIPTION = `Lists all files in a directory.
 
+This is useful for exploring the filesystem and finding the right file to read or edit.
+You should almost ALWAYS use this tool before using the read_file or edit_file tools.`;
+
+export const READ_FILE_TOOL_DESCRIPTION = `Reads a file from the filesystem.
+
+Assume this tool is able to read all files. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
+
+Usage:
+- By default, it reads up to 500 lines starting from the beginning of the file
+- **IMPORTANT for large files and codebase exploration**: Use pagination with offset and limit parameters to avoid context overflow
+  - First scan: read_file(path, limit=100) to see file structure
+  - Read more sections: read_file(path, offset=100, limit=200) for next 200 lines
+  - Only omit limit (read full file) when necessary for editing
+- Specify offset and limit: read_file(path, offset=0, limit=100) reads first 100 lines
+- Results are returned using cat -n format, with line numbers starting at 1
+- Lines longer than 10,000 characters will be split into multiple lines with continuation markers (e.g., 5.1, 5.2, etc.). When you specify a limit, these continuation lines count towards the limit.
+- You have the capability to call multiple tools in a single response. It is always better to speculatively read multiple files as a batch that are potentially useful.
+- If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents.
+- You should ALWAYS make sure a file has been read before editing it.`;
+
+export const WRITE_FILE_TOOL_DESCRIPTION = `Writes to a new file in the filesystem.
+
+Usage:
+- The write_file tool will create a new file.
+- Prefer to edit existing files (with the edit_file tool) over creating new ones when possible.`;
+
+export const EDIT_FILE_TOOL_DESCRIPTION = `Performs exact string replacements in files.
+
+Usage:
+- You must read the file before editing. This tool will error if you attempt an edit without reading the file first.
+- When editing, preserve the exact indentation (tabs/spaces) from the read output. Never include line number prefixes in old_string or new_string.
+- ALWAYS prefer editing existing files over creating new ones.
+- Only use emojis if the user explicitly requests it.`;
+
+export const GLOB_TOOL_DESCRIPTION = `Find files matching a glob pattern.
+
+Supports standard glob patterns: \`*\` (any characters), \`**\` (any directories), \`?\` (single character).
+Returns a list of absolute file paths that match the pattern.
+
+Examples:
+- \`**/*.py\` - Find all Python files
+- \`*.txt\` - Find all text files in root
+- \`/subdir/**/*.md\` - Find all markdown files under /subdir`;
+
+export const GREP_TOOL_DESCRIPTION = `Search for a text pattern across files.
+
+Searches for literal text (not regex) and returns matching files or content based on output_mode.
+
+Examples:
+- Search all files: \`grep(pattern="TODO")\`
+- Search Python files only: \`grep(pattern="import", glob="*.py")\`
+- Show matching lines: \`grep(pattern="error", output_mode="content")\``;
+export const EXECUTE_TOOL_DESCRIPTION = `Executes a shell command in an isolated sandbox environment.
+
+Usage:
+Executes a given command in the sandbox environment with proper handling and security measures.
 Before executing the command, please follow these steps:
 
 1. Directory Verification:
-   - If the command will create new directories or files, first use the ls tool to verify the parent directory exists
+   - If the command will create new directories or files, first use the ls tool to verify the parent directory exists and is the correct location
+   - For example, before running "mkdir foo/bar", first use ls to check that "foo" exists and is the intended parent directory
 
 2. Command Execution:
-   - Always quote file paths that contain spaces with double quotes
-   - Commands run in an isolated sandbox environment
-   - Returns combined stdout/stderr output with exit code
+   - Always quote file paths that contain spaces with double quotes (e.g., cd "path with spaces/file.txt")
+   - Examples of proper quoting:
+     - cd "/Users/name/My Documents" (correct)
+     - cd /Users/name/My Documents (incorrect - will fail)
+     - python "/path/with spaces/script.py" (correct)
+     - python /path/with spaces/script.py (incorrect - will fail)
+   - After ensuring proper quoting, execute the command
+   - Capture the output of the command
 
 Usage notes:
-  - The command parameter is required
+  - Commands run in an isolated sandbox environment
+  - Returns combined stdout/stderr output with exit code
   - If the output is very large, it may be truncated
-  - IMPORTANT: Avoid using search commands like find and grep. Use the grep, glob tools instead.
-  - Avoid read tools like cat, head, tail - use read_file instead.
-  - Use '&&' to chain dependent commands, ';' for independent commands
-  - Try to use absolute paths to avoid cd`;
+  - VERY IMPORTANT: You MUST avoid using search commands like find and grep. Instead use the grep, glob tools to search. You MUST avoid read tools like cat, head, tail, and use read_file to read files.
+  - When issuing multiple commands, use the ';' or '&&' operator to separate them. DO NOT use newlines (newlines are ok in quoted strings)
+    - Use '&&' when commands depend on each other (e.g., "mkdir dir && cd dir")
+    - Use ';' only when you need to run commands sequentially but don't care if earlier commands fail
+  - Try to maintain your current working directory throughout the session by using absolute paths and avoiding usage of cd
+
+Examples:
+  Good examples:
+    - execute(command="pytest /foo/bar/tests")
+    - execute(command="python /path/to/script.py")
+    - execute(command="npm install && npm test")
+
+  Bad examples (avoid these):
+    - execute(command="cd /foo/bar && pytest tests")  # Use absolute path instead
+    - execute(command="cat file.txt")  # Use read_file tool instead
+    - execute(command="find . -name '*.py'")  # Use glob tool instead
+    - execute(command="grep -r 'pattern' .")  # Use grep tool instead
+
+Note: This tool is only available if the backend supports execution (SandboxBackendProtocol).
+If execution is not supported, the tool will return an error message.`;
 
 // System prompt for execution capability
 export const EXECUTION_SYSTEM_PROMPT = `## Execute Tool \`execute\`
@@ -589,104 +752,136 @@ export function createFilesystemMiddleware(
 
       return handler({ ...request, tools, systemPrompt: newSystemPrompt });
     },
-    wrapToolCall: toolTokenLimitBeforeEvict
-      ? async (request, handler) => {
-          const result = await handler(request);
+    wrapToolCall: async (request, handler) => {
+      // Return early if eviction is disabled
+      if (!toolTokenLimitBeforeEvict) {
+        return handler(request);
+      }
 
-          async function processToolMessage(msg: ToolMessage) {
-            if (
-              typeof msg.content === "string" &&
-              msg.content.length > toolTokenLimitBeforeEvict! * 4
-            ) {
-              // Build StateAndStore from request
-              const stateAndStore: StateAndStore = {
-                state: request.state || {},
-                // @ts-expect-error - request.config is incorrect typed
-                store: request.config?.store,
-              };
-              const resolvedBackend = getBackend(backend, stateAndStore);
-              const sanitizedId = sanitizeToolCallId(
-                request.toolCall?.id || msg.tool_call_id,
-              );
-              const evictPath = `/large_tool_results/${sanitizedId}`;
+      // Check if this tool is excluded from eviction
+      const toolName = request.toolCall?.name;
+      if (
+        toolName &&
+        TOOLS_EXCLUDED_FROM_EVICTION.includes(
+          toolName as (typeof TOOLS_EXCLUDED_FROM_EVICTION)[number],
+        )
+      ) {
+        return handler(request);
+      }
 
-              const writeResult = await resolvedBackend.write(
-                evictPath,
-                msg.content,
-              );
+      const result = await handler(request);
 
-              if (writeResult.error) {
-                return { message: msg, filesUpdate: null };
-              }
+      async function processToolMessage(
+        msg: ToolMessage,
+        toolTokenLimitBeforeEvict: number,
+      ) {
+        if (
+          typeof msg.content === "string" &&
+          msg.content.length > toolTokenLimitBeforeEvict * NUM_CHARS_PER_TOKEN
+        ) {
+          // Build StateAndStore from request
+          const stateAndStore: StateAndStore = {
+            state: request.state || {},
+            // @ts-expect-error - request.config is incorrect typed
+            store: request.config?.store,
+          };
+          const resolvedBackend = getBackend(backend, stateAndStore);
+          const sanitizedId = sanitizeToolCallId(
+            request.toolCall?.id || msg.tool_call_id,
+          );
+          const evictPath = `/large_tool_results/${sanitizedId}`;
 
-              const truncatedMessage = new ToolMessage({
-                content: `Tool result too large (${Math.round(msg.content.length / 4)} tokens). Content saved to ${evictPath}`,
-                tool_call_id: msg.tool_call_id,
-                name: msg.name,
-              });
+          const writeResult = await resolvedBackend.write(
+            evictPath,
+            msg.content,
+          );
 
-              return {
-                message: truncatedMessage,
-                filesUpdate: writeResult.filesUpdate,
-              };
-            }
+          if (writeResult.error) {
             return { message: msg, filesUpdate: null };
           }
 
-          if (ToolMessage.isInstance(result)) {
-            const processed = await processToolMessage(result);
+          // Create preview showing head and tail of the result
+          const contentSample = createContentPreview(msg.content);
+          const replacementText = TOO_LARGE_TOOL_MSG.replace(
+            "{tool_call_id}",
+            msg.tool_call_id,
+          )
+            .replace("{file_path}", evictPath)
+            .replace("{content_sample}", contentSample);
 
-            if (processed.filesUpdate) {
-              return new Command({
-                update: {
-                  files: processed.filesUpdate,
-                  messages: [processed.message],
-                },
-              });
-            }
+          const truncatedMessage = new ToolMessage({
+            content: replacementText,
+            tool_call_id: msg.tool_call_id,
+            name: msg.name,
+          });
 
-            return processed.message;
-          }
+          return {
+            message: truncatedMessage,
+            filesUpdate: writeResult.filesUpdate,
+          };
+        }
+        return { message: msg, filesUpdate: null };
+      }
 
-          if (isCommand(result)) {
-            const update = result.update as any;
-            if (!update?.messages) {
-              return result;
-            }
+      if (ToolMessage.isInstance(result)) {
+        const processed = await processToolMessage(
+          result,
+          toolTokenLimitBeforeEvict,
+        );
 
-            let hasLargeResults = false;
-            const accumulatedFiles: Record<string, FileData> = {
-              ...(update.files || {}),
-            };
-            const processedMessages: ToolMessage[] = [];
+        if (processed.filesUpdate) {
+          return new Command({
+            update: {
+              files: processed.filesUpdate,
+              messages: [processed.message],
+            },
+          });
+        }
 
-            for (const msg of update.messages) {
-              if (ToolMessage.isInstance(msg)) {
-                const processed = await processToolMessage(msg);
-                processedMessages.push(processed.message);
+        return processed.message;
+      }
 
-                if (processed.filesUpdate) {
-                  hasLargeResults = true;
-                  Object.assign(accumulatedFiles, processed.filesUpdate);
-                }
-              } else {
-                processedMessages.push(msg);
-              }
-            }
-
-            if (hasLargeResults) {
-              return new Command({
-                update: {
-                  ...update,
-                  messages: processedMessages,
-                  files: accumulatedFiles,
-                },
-              });
-            }
-          }
-
+      if (isCommand(result)) {
+        const update = result.update as any;
+        if (!update?.messages) {
           return result;
         }
-      : undefined,
+
+        let hasLargeResults = false;
+        const accumulatedFiles: Record<string, FileData> = update.files
+          ? { ...update.files }
+          : {};
+        const processedMessages: ToolMessage[] = [];
+
+        for (const msg of update.messages) {
+          if (ToolMessage.isInstance(msg)) {
+            const processed = await processToolMessage(
+              msg,
+              toolTokenLimitBeforeEvict,
+            );
+            processedMessages.push(processed.message);
+
+            if (processed.filesUpdate) {
+              hasLargeResults = true;
+              Object.assign(accumulatedFiles, processed.filesUpdate);
+            }
+          } else {
+            processedMessages.push(msg);
+          }
+        }
+
+        if (hasLargeResults) {
+          return new Command({
+            update: {
+              ...update,
+              messages: processedMessages,
+              files: accumulatedFiles,
+            },
+          });
+        }
+      }
+
+      return result;
+    },
   });
 }

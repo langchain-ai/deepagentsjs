@@ -5,6 +5,30 @@
  * and injects it into the system prompt. Memory is loaded from:
  * - User memory: ~/.deepagents/{agent_name}/agent.md
  * - Project memory: {project_root}/.deepagents/agent.md
+ *
+ * @deprecated Use `createMemoryMiddleware` from `./memory.js` instead.
+ * This middleware uses direct filesystem access (Node.js fs module) which is not
+ * portable across backends. The `createMemoryMiddleware` function uses the
+ * `BackendProtocol` abstraction and follows the AGENTS.md specification.
+ *
+ * Migration example:
+ * ```typescript
+ * // Before (deprecated):
+ * import { createAgentMemoryMiddleware } from "./agent-memory.js";
+ * const middleware = createAgentMemoryMiddleware({ settings, assistantId });
+ *
+ * // After (recommended):
+ * import { createMemoryMiddleware } from "./memory.js";
+ * import { FilesystemBackend } from "../backends/filesystem.js";
+ *
+ * const middleware = createMemoryMiddleware({
+ *   backend: new FilesystemBackend({ rootDir: "/" }),
+ *   sources: [
+ *     `~/.deepagents/${assistantId}/AGENTS.md`,
+ *     `${projectRoot}/.deepagents/AGENTS.md`,
+ *   ],
+ * });
+ * ```
  */
 
 import fs from "node:fs";
@@ -183,6 +207,9 @@ write_file '{project_deepagents_dir}/agent.md' ...  # Create project memory file
  *
  * @param options - Configuration options
  * @returns AgentMiddleware for memory loading and injection
+ *
+ * @deprecated Use `createMemoryMiddleware` from `./memory.js` instead.
+ * This function uses direct filesystem access which limits portability.
  */
 export function createAgentMemoryMiddleware(
   options: AgentMemoryMiddlewareOptions,

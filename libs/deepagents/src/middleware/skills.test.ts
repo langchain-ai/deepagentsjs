@@ -335,6 +335,86 @@ This skill has no valid frontmatter.`;
       expect(modifiedRequest.systemPrompt).toContain("No skills available yet");
     });
 
+    it("should show priority indicator for last source", () => {
+      const middleware = createSkillsMiddleware({
+        backend: createMockBackend({ files: {}, directories: {} }),
+        sources: ["/skills/user/", "/skills/project/"],
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request: any = {
+        systemPrompt: "Base prompt",
+        state: { skillsMetadata: [] },
+      };
+
+      middleware.wrapModelCall!(request, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      // Last source should have "higher priority" indicator
+      expect(modifiedRequest.systemPrompt).toContain("(higher priority)");
+      // Should show project source with priority
+      expect(modifiedRequest.systemPrompt).toContain("Project Skills");
+      expect(modifiedRequest.systemPrompt).toContain("/skills/project/");
+    });
+
+    it("should show allowed tools for skills that have them", () => {
+      const middleware = createSkillsMiddleware({
+        backend: createMockBackend({ files: {}, directories: {} }),
+        sources: ["/skills/user/"],
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request: any = {
+        systemPrompt: "Base prompt",
+        state: {
+          skillsMetadata: [
+            {
+              name: "web-research",
+              description: "Research the web",
+              path: "/skills/user/web-research/SKILL.md",
+              allowedTools: ["search_web", "fetch_url"],
+            },
+          ],
+        },
+      };
+
+      middleware.wrapModelCall!(request, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      expect(modifiedRequest.systemPrompt).toContain("Allowed tools:");
+      expect(modifiedRequest.systemPrompt).toContain("search_web");
+      expect(modifiedRequest.systemPrompt).toContain("fetch_url");
+    });
+
+    it("should not show allowed tools line if skill has no allowed tools", () => {
+      const middleware = createSkillsMiddleware({
+        backend: createMockBackend({ files: {}, directories: {} }),
+        sources: ["/skills/user/"],
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request: any = {
+        systemPrompt: "Base prompt",
+        state: {
+          skillsMetadata: [
+            {
+              name: "basic-skill",
+              description: "A basic skill",
+              path: "/skills/user/basic-skill/SKILL.md",
+              allowedTools: [],
+            },
+          ],
+        },
+      };
+
+      middleware.wrapModelCall!(request, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      // Should not have "Allowed tools:" line for skills without allowed tools
+      const allowedToolsCount = (modifiedRequest.systemPrompt.match(/Allowed tools:/g) || []).length;
+      expect(allowedToolsCount).toBe(0);
+    });
+
     it("should append skills section to existing system prompt", () => {
       const middleware = createSkillsMiddleware({
         backend: createMockBackend({ files: {}, directories: {} }),

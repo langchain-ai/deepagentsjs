@@ -237,11 +237,27 @@ export function truncateIfTooLong(
 }
 
 /**
- * Validate and normalize a path.
+ * Validate and normalize a directory path.
+ *
+ * Ensures paths are safe to use by preventing directory traversal attacks
+ * and enforcing consistent formatting. All paths are normalized to use
+ * forward slashes and start with a leading slash.
+ *
+ * This function is designed for virtual filesystem paths and rejects
+ * Windows absolute paths (e.g., C:/..., F:/...) to maintain consistency
+ * and prevent path format ambiguity.
  *
  * @param path - Path to validate
  * @returns Normalized path starting with / and ending with /
  * @throws Error if path is invalid
+ *
+ * @example
+ * ```typescript
+ * validatePath("foo/bar")  // Returns: "/foo/bar/"
+ * validatePath("/./foo//bar")  // Returns: "/foo/bar/"
+ * validatePath("../etc/passwd")  // Throws: Path traversal not allowed
+ * validatePath("C:\\Users\\file")  // Throws: Windows absolute paths not supported
+ * ```
  */
 export function validatePath(path: string | null | undefined): string {
   const pathStr = path || "/";
@@ -253,6 +269,78 @@ export function validatePath(path: string | null | undefined): string {
 
   if (!normalized.endsWith("/")) {
     normalized += "/";
+  }
+
+  return normalized;
+}
+
+/**
+ * Validate and normalize a file path for security.
+ *
+ * Ensures paths are safe to use by preventing directory traversal attacks
+ * and enforcing consistent formatting. All paths are normalized to use
+ * forward slashes and start with a leading slash.
+ *
+ * This function is designed for virtual filesystem paths and rejects
+ * Windows absolute paths (e.g., C:/..., F:/...) to maintain consistency
+ * and prevent path format ambiguity.
+ *
+ * @param path - The path to validate and normalize.
+ * @param allowedPrefixes - Optional list of allowed path prefixes. If provided,
+ *                          the normalized path must start with one of these prefixes.
+ * @returns Normalized canonical path starting with `/` and using forward slashes.
+ * @throws Error if path contains traversal sequences (`..` or `~`), is a Windows
+ *         absolute path (e.g., C:/...), or does not start with an allowed prefix
+ *         when `allowedPrefixes` is specified.
+ *
+ * @example
+ * ```typescript
+ * validateFilePath("foo/bar")  // Returns: "/foo/bar"
+ * validateFilePath("/./foo//bar")  // Returns: "/foo/bar"
+ * validateFilePath("../etc/passwd")  // Throws: Path traversal not allowed
+ * validateFilePath("C:\\Users\\file.txt")  // Throws: Windows absolute paths not supported
+ * validateFilePath("/data/file.txt", ["/data/"])  // Returns: "/data/file.txt"
+ * validateFilePath("/etc/file.txt", ["/data/"])  // Throws: Path must start with...
+ * ```
+ */
+export function validateFilePath(
+  path: string,
+  allowedPrefixes?: string[],
+): string {
+  // Check for path traversal
+  if (path.includes("..") || path.startsWith("~")) {
+    throw new Error(`Path traversal not allowed: ${path}`);
+  }
+
+  // Reject Windows absolute paths (e.g., C:\..., D:/...)
+  // This maintains consistency in virtual filesystem paths
+  if (/^[a-zA-Z]:/.test(path)) {
+    throw new Error(
+      `Windows absolute paths are not supported: ${path}. Please use virtual paths starting with / (e.g., /workspace/file.txt)`,
+    );
+  }
+
+  // Normalize path separators and remove redundant slashes
+  let normalized = path.replace(/\\/g, "/");
+
+  // Remove redundant path components (./foo becomes foo, foo//bar becomes foo/bar)
+  const parts: string[] = [];
+  for (const part of normalized.split("/")) {
+    if (part === "." || part === "") {
+      continue;
+    }
+    parts.push(part);
+  }
+  normalized = "/" + parts.join("/");
+
+  // Check allowed prefixes if provided
+  if (
+    allowedPrefixes &&
+    !allowedPrefixes.some((prefix) => normalized.startsWith(prefix))
+  ) {
+    throw new Error(
+      `Path must start with one of ${JSON.stringify(allowedPrefixes)}: ${path}`,
+    );
   }
 
   return normalized;
