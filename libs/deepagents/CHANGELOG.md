@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.6.0
+
+### Minor Changes
+
+- [`10c4e8b`](https://github.com/langchain-ai/deepagentsjs/commit/10c4e8b6f805cf682daf4227efc2a98372002fa0) Thanks [@christian-bromann](https://github.com/christian-bromann)! - feat(deepagents): align JS implementation with Python deepagents
+
 ## 1.5.1
 
 ### Patch Changes
