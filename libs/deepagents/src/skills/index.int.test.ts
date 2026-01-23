@@ -87,7 +87,8 @@ Use this skill when the user asks about integration testing.
 
       expect(capturedPrompt).toContain("my-skill");
       expect(capturedPrompt).toContain("A test skill for integration testing");
-      expect(capturedPrompt).toContain("Skills Sources:");
+      // Check for the new format with priority indicator
+      expect(capturedPrompt).toContain("(higher priority)");
     });
 
     it("should allow project skill to override user skill with same name", async () => {

@@ -370,30 +370,46 @@ async function listSkillsFromBackend(
 
 /**
  * Format skills locations for display in system prompt.
+ * Shows priority indicator for the last source (highest priority).
  */
 function formatSkillsLocations(sources: string[]): string {
   if (sources.length === 0) {
     return "**Skills Sources:** None configured";
   }
 
-  const lines = ["**Skills Sources:**"];
-  for (const source of sources) {
-    lines.push(`- \`${source}\``);
+  const lines: string[] = [];
+  for (let i = 0; i < sources.length; i++) {
+    const sourcePath = sources[i];
+    // Extract a friendly name from the path (last non-empty component)
+    const name =
+      sourcePath
+        .replace(/\/$/, "")
+        .split("/")
+        .filter(Boolean)
+        .pop()
+        ?.replace(/^./, (c) => c.toUpperCase()) || "Skills";
+    const suffix = i === sources.length - 1 ? " (higher priority)" : "";
+    lines.push(`**${name} Skills**: \`${sourcePath}\`${suffix}`);
   }
   return lines.join("\n");
 }
 
 /**
  * Format skills metadata for display in system prompt.
+ * Shows allowed tools for each skill if specified.
  */
 function formatSkillsList(skills: SkillMetadata[], sources: string[]): string {
   if (skills.length === 0) {
-    return `(No skills available yet. Skills can be created in ${sources.join(" or ")})`;
+    const paths = sources.map((s) => `\`${s}\``).join(" or ");
+    return `(No skills available yet. You can create skills in ${paths})`;
   }
 
   const lines: string[] = [];
   for (const skill of skills) {
     lines.push(`- **${skill.name}**: ${skill.description}`);
+    if (skill.allowedTools && skill.allowedTools.length > 0) {
+      lines.push(`  → Allowed tools: ${skill.allowedTools.join(", ")}`);
+    }
     lines.push(`  → Read \`${skill.path}\` for full instructions`);
   }
 

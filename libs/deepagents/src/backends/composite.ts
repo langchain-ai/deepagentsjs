@@ -297,9 +297,10 @@ export class CompositeBackend implements BackendProtocol {
   async uploadFiles(
     files: Array<[string, Uint8Array]>,
   ): Promise<FileUploadResponse[]> {
-    const results: Array<FileUploadResponse | null> = new Array(
-      files.length,
-    ).fill(null);
+    const results: Array<FileUploadResponse | null> = Array.from(
+      { length: files.length },
+      () => null,
+    );
     const batchesByBackend = new Map<
       BackendProtocol,
       Array<{ idx: number; path: string; content: Uint8Array }>
@@ -344,9 +345,10 @@ export class CompositeBackend implements BackendProtocol {
    * @returns List of FileDownloadResponse objects, one per input path
    */
   async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
-    const results: Array<FileDownloadResponse | null> = new Array(
-      paths.length,
-    ).fill(null);
+    const results: Array<FileDownloadResponse | null> = Array.from(
+      { length: paths.length },
+      () => null,
+    );
     const batchesByBackend = new Map<
       BackendProtocol,
       Array<{ idx: number; path: string }>
