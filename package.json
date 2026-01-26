@@ -41,6 +41,7 @@
   "devDependencies": {
     "@changesets/changelog-github": "^0.5.2",
     "@changesets/cli": "^2.29.8",
+    "@claude-agent-system/core": "^1.0.0",
     "@eslint/eslintrc": "^3.3.3",
     "@eslint/js": "^9.39.2",
     "@tsconfig/recommended": "^1.0.13",
@@ -55,5 +56,8 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.52.0"
   },
-  "packageManager": "pnpm@10.27.0"
+  "packageManager": "pnpm@10.27.0",
+  "dependencies": {
+    "deepagents": "^1.6.0"
+  }
 }
