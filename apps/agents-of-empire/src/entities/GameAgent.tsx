@@ -2,7 +2,7 @@ import { useRef, useEffect, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Group, Vector3, Color, Euler } from "three";
 import { Text } from "@react-three/drei";
-import { useGameStore, type AgentState, type GameAgent as GameAgentType } from "../store/gameStore";
+import { useGameStore, useAgentsShallow, type AgentState, type GameAgent as GameAgentType } from "../store/gameStore";
 
 // ============================================================================
 // Agent State Visual Configurations
@@ -287,7 +287,7 @@ interface AgentPoolProps {
 }
 
 export function AgentPool({ onAgentClick }: AgentPoolProps) {
-  const agents = useGameStore((state) => state.agents);
+  const agents = useAgentsShallow() as Map<string, GameAgentType>;
   const selectedAgentIds = useGameStore((state) => state.selectedAgentIds);
   const hoverAgentId = useGameStore((state) => state.hoverAgentId);
 

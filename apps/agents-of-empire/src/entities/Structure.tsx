@@ -1,8 +1,8 @@
-import { useRef } from "react";
+import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Group, Color } from "three";
 import { Text } from "@react-three/drei";
-import { useGameStore, type Structure as StructureType } from "../store/gameStore";
+import { useGameStore, useStructuresShallow, type Structure as StructureType } from "../store/gameStore";
 
 // ============================================================================
 // Structure Visual Configurations
@@ -205,7 +205,8 @@ interface StructurePoolProps {
 }
 
 export function StructurePool({ onStructureClick }: StructurePoolProps) {
-  const structures = useGameStore((state) => Array.from(state.structures.values()));
+  const structuresMap = useStructuresShallow() as Map<string, StructureType>;
+  const structures = useMemo(() => Array.from(structuresMap.values()), [structuresMap]);
 
   return (
     <>

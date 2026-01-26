@@ -1,7 +1,10 @@
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback, useEffect, useMemo } from "react";
 import { useThree } from "@react-three/fiber";
 import { Vector3, Raycaster, Plane, Camera } from "three";
-import { useGameStore } from "../store/gameStore";
+import { useGameStore, useAgentsShallow, type GameAgent } from "../store/gameStore";
+
+// Get selectedAgentIds from store for checking selection state
+const getSelectedAgentIds = () => useGameStore.getState().selectedAgentIds;
 
 // ============================================================================
 // Selection Box Types
@@ -31,7 +34,9 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
   const mouse = useRef(new Vector3());
   const groundPlane = useRef(new Plane(new Vector3(0, 1, 0), 0));
 
-  const agents = useGameStore((state) => state.agents);
+  const agentsMap = useAgentsShallow() as Map<string, GameAgent>;
+  const agents = useMemo(() => Array.from(agentsMap.values()), [agentsMap]);
+  const selectedAgentIds = useGameStore((state) => state.selectedAgentIds);
   const selectAgent = useGameStore((state) => state.selectAgent);
   const toggleAgentSelection = useGameStore((state) => state.toggleAgentSelection);
   const selectAgentsInBox = useGameStore((state) => state.selectAgentsInBox);
@@ -109,7 +114,7 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
           if (e.shiftKey) {
             // Shift + click = toggle selection
             toggleAgentSelection(agentId);
-          } else if (!agents.get(agentId)?.selectedAgentIds) {
+          } else if (!selectedAgentIds.has(agentId)) {
             // Single click - select this agent, deselect others
             clearSelection();
             selectAgent(agentId);

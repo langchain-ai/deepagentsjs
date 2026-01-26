@@ -1,6 +1,6 @@
 import { useMemo, useRef, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
-import { InstancedMesh, Vector3, Color } from "three";
+import { InstancedMesh, Vector3, Color, Object3D } from "three";
 import { useGameStore } from "../store/gameStore";
 
 // ============================================================================
@@ -74,7 +74,7 @@ export function WorldGrid({ width = 50, height = 50 }: WorldGridProps) {
   }, [width, height]);
 
   const instanceCount = width * height;
-  const dummy = useMemo(() => new Vector3(), []);
+  const dummy = useMemo(() => new Object3D(), []);
 
   // Update instances
   useFrame(() => {
@@ -89,8 +89,9 @@ export function WorldGrid({ width = 50, height = 50 }: WorldGridProps) {
         const tile = tiles.get(key);
 
         if (tile) {
-          dummy.set(x + 0.5, -0.1, z + 0.5);
-          meshRef.current.setMatrixAt(index, dummy.elements);
+          dummy.position.set(x + 0.5, -0.1, z + 0.5);
+          dummy.updateMatrix();
+          meshRef.current.setMatrixAt(index, dummy.matrix);
 
           // Set color based on tile type
           switch (tile.type) {

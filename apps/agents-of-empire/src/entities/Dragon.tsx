@@ -1,8 +1,8 @@
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useCallback, useState, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Group, Vector3, Color } from "three";
 import { Text } from "@react-three/drei";
-import { useGameStore, useDragonsShallow, type Dragon as DragonType } from "../store/gameStore";
+import { useGameStore, useAgentsShallow, useDragonsShallow, type GameAgent, type Dragon as DragonType } from "../store/gameStore";
 
 // ============================================================================
 // Dragon Types Configuration
@@ -338,7 +338,7 @@ interface DragonPoolProps {
 }
 
 export function DragonPool({ onDragonClick }: DragonPoolProps) {
-  const dragonsMap = useDragonsShallow();
+  const dragonsMap = useDragonsShallow() as Map<string, DragonType>;
 
   // Convert Map to array with memoization
   const dragons = useMemo(() => Array.from(dragonsMap.values()), [dragonsMap]);
@@ -361,8 +361,9 @@ export function DragonPool({ onDragonClick }: DragonPoolProps) {
 // ============================================================================
 
 export function useCombat() {
-  const agents = useGameStore((state) => state.agents);
-  const dragons = useGameStore((state) => state.dragons);
+  const agentsMap = useAgentsShallow() as Map<string, GameAgent>;
+  const dragonsMap = useDragonsShallow() as Map<string, DragonType>;
+  // Actions are stable references, safe to select individually
   const updateAgent = useGameStore((state) => state.updateAgent);
   const updateDragon = useGameStore((state) => state.updateDragon);
   const damageDragon = useGameStore((state) => state.damageDragon);
@@ -372,8 +373,8 @@ export function useCombat() {
   // Agent attacks dragon
   const attackDragon = useCallback(
     (agentId: string, dragonId: string) => {
-      const agent = agents.get(agentId);
-      const dragon = dragons.get(dragonId);
+      const agent = agentsMap.get(agentId);
+      const dragon = dragonsMap.get(dragonId);
 
       if (!agent || !dragon) return;
 
@@ -416,7 +417,7 @@ export function useCombat() {
 
       return { damage, defeated: false, dragonDamage };
     },
-    [agents, dragons, damageDragon, removeDragon, setAgentState, updateAgent]
+    [agentsMap, dragonsMap, damageDragon, removeDragon, setAgentState, updateAgent]
   );
 
   // Auto-resolve combat (simulated retry logic)
@@ -504,5 +505,3 @@ export function DragonSpawnEffect({ position, type, onComplete }: DragonSpawnEff
     </group>
   );
 }
-
-import React from "react";
