@@ -57,4 +57,18 @@ agent-os
 # Sandbox workspace directory - created at runtime
 sandbox-workspace/
 
+# Vercel
 .vercel
+
+# Debug/test scripts and screenshots
+test_*.py
+*_test.py
+*_screenshot.png
+*_screenshot.py
+debug_*.py
+screenshot_*.py
+clean_*.py
+final_*.py
+current_*.png
+final_*.png
+game_*.png
