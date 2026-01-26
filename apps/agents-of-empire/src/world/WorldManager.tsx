@@ -90,11 +90,7 @@ export function WorldGrid({ width = 50, height = 50 }: WorldGridProps) {
 
         if (tile) {
           dummy.set(x + 0.5, -0.1, z + 0.5);
-          meshRef.current.setMatrixAt(index, {
-            position: dummy,
-            rotation: [0, 0, 0],
-            scale: [1, 1, 1],
-          } as any);
+          meshRef.current.setMatrixAt(index, dummy.elements);
 
           // Set color based on tile type
           switch (tile.type) {

@@ -1,4 +1,8 @@
 packages:
-  - "libs/*"
-  - "examples"
-  - "apps/*"
+  - libs/*
+  - examples
+  - apps/*
+
+ignoredBuiltDependencies:
+  - '@claude-agent-system/core'
+  - esbuild

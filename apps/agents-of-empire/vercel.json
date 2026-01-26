@@ -1,0 +1,9 @@
+{
+  "buildCommand": "cd ../.. && pnpm install --filter=agents-of-empire && pnpm --filter=agents-of-empire build",
+  "outputDirectory": "dist",
+  "installCommand": "pnpm install",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

@@ -2,7 +2,7 @@ import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Group, Vector3, Color } from "three";
 import { Text } from "@react-three/drei";
-import { useGameStore, type Dragon as DragonType } from "../store/gameStore";
+import { useGameStore, useDragonsShallow, type Dragon as DragonType } from "../store/gameStore";
 
 // ============================================================================
 // Dragon Types Configuration
@@ -338,7 +338,10 @@ interface DragonPoolProps {
 }
 
 export function DragonPool({ onDragonClick }: DragonPoolProps) {
-  const dragons = useGameStore((state) => Array.from(state.dragons.values()));
+  const dragonsMap = useDragonsShallow();
+
+  // Convert Map to array with memoization
+  const dragons = useMemo(() => Array.from(dragonsMap.values()), [dragonsMap]);
 
   return (
     <>
