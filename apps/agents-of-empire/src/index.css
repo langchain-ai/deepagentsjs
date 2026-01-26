@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'MedievalSharp', cursive, serif;
+  overflow: hidden;
+  background-color: #1a1a2e;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+}
+
+/* Custom scrollbar for panels */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(244, 208, 63, 0.5);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(244, 208, 63, 0.8);
+}
+
+/* Selection box styles */
+.selection-box {
+  border: 2px solid #f4d03f;
+  background-color: rgba(244, 208, 63, 0.1);
+  position: absolute;
+  pointer-events: none;
+}
