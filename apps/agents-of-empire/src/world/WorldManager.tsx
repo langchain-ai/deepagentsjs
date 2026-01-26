@@ -1,7 +1,7 @@
 import { useMemo, useRef, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import { InstancedMesh, Vector3, Color, Object3D } from "three";
-import { useGameStore } from "../store/gameStore";
+import { useGameStore, useTilesShallow } from "../store/gameStore";
 
 // ============================================================================
 // Types
@@ -63,7 +63,14 @@ interface WorldGridProps {
 
 export function WorldGrid({ width = 50, height = 50 }: WorldGridProps) {
   const meshRef = useRef<InstancedMesh>(null);
-  const tiles = useGameStore((state) => state.tiles);
+  const tilesMap = useTilesShallow() as Map<string, { type: string; walkable: boolean; x: number; z: number }>;
+  // Use a ref to store tiles for useFrame to avoid re-renders
+  const tilesRef = useRef(tilesMap);
+
+  // Update ref when tiles change
+  useEffect(() => {
+    tilesRef.current = tilesMap;
+  }, [tilesMap]);
 
   // Initialize tiles if not already done
   useEffect(() => {
@@ -82,6 +89,7 @@ export function WorldGrid({ width = 50, height = 50 }: WorldGridProps) {
 
     const color = new Color();
     let index = 0;
+    const tiles = tilesRef.current; // Use ref value to avoid subscription
 
     for (let x = 0; x < width; x++) {
       for (let z = 0; z < height; z++) {
@@ -258,7 +266,7 @@ export function findPath(
 // ============================================================================
 
 export function useWorldManager() {
-  const tiles = useGameStore((state) => state.tiles);
+  const tiles = useTilesShallow() as Map<string, { type: string; walkable: boolean; x: number; z: number }>;
   const worldSize = useGameStore((state) => state.worldSize);
   const setTile = useGameStore((state) => state.setTile);
 

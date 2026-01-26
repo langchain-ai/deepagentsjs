@@ -643,6 +643,7 @@ export const useAgentsShallow = () => useGameStore((state) => state.agents, shal
 export const useDragonsShallow = () => useGameStore((state) => state.dragons, shallow);
 export const useStructuresShallow = () => useGameStore((state) => state.structures, shallow);
 export const useQuestsShallow = () => useGameStore((state) => state.quests, shallow);
+export const useTilesShallow = () => useGameStore((state) => state.tiles, shallow);
 
 // Selection Set
 export const useSelection = () => useGameStore((state) => state.selectedAgentIds);

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useGameStore, type TileType } from "../store/gameStore";
+import { useGameStore, useTilesShallow, type TileType } from "../store/gameStore";
 
 // ============================================================================
 // Terrain Generation Types
@@ -162,7 +162,7 @@ interface TerrainProps {
 
 export function Terrain({ config }: TerrainProps) {
   const initializeWorld = useGameStore((state) => state.initializeWorld);
-  const tiles = useGameStore((state) => state.tiles);
+  const tiles = useTilesShallow() as Map<string, { type: string; walkable: boolean; x: number; z: number }>;
 
   useEffect(() => {
     // Only initialize if tiles are empty
