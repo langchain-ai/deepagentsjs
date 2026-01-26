@@ -30,11 +30,15 @@ const DEFAULT_SUBAGENT_PROMPT =
 //    and no clear meaning for returning them from a subagent to the main agent.
 // 3. The files key is excluded to prevent concurrent subagents from writing to the files
 //    channel simultaneously (which causes LastValue errors in LangGraph).
+// 4. The skillsMetadata key is excluded for the same reason as files - it uses implicit
+//    LastValue (no custom reducer) and parallel subagents returning it simultaneously
+//    causes "LastValue can only receive one value per step" errors.
 const EXCLUDED_STATE_KEYS = [
   "messages",
   "todos",
   "structuredResponse",
   "files",
+  "skillsMetadata",
 ] as const;
 
 const DEFAULT_GENERAL_PURPOSE_DESCRIPTION =
