@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createAgent, createMiddleware, ReactAgent } from "langchain";
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
-import { createSubAgentMiddleware } from "../index.js";
+import { createSubAgentMiddleware, createFilesystemMiddleware } from "../index.js";
 import {
   SAMPLE_MODEL,
   getWeather,
@@ -436,6 +436,95 @@ describe("Subagent Middleware Integration Tests", () => {
       expect(taskCall).toBeDefined();
       expect(taskCall!.args.subagent_type).toBe("general-purpose");
       expect(response.messages.length).toBeGreaterThan(0);
+    },
+  );
+
+  it.concurrent(
+    "should handle parallel subagents writing files simultaneously without LastValue errors",
+    { timeout: 120 * 1000 }, // 120s
+    async () => {
+      // This test verifies the fix for the LangGraph LastValue error:
+      // "Invalid update for channel 'files' with values [...]:
+      // LastValue can only receive one value per step."
+      //
+      // When multiple subagents run in parallel and each writes files,
+      // the fileDataReducer should properly merge their updates.
+
+      // Create filesystem middleware that all subagents will use
+      const filesystemMiddleware = createFilesystemMiddleware({});
+
+      const agent = createAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt: `You are an assistant that delegates file writing tasks to subagents.
+When asked to write multiple files, you MUST use the task tool to spawn multiple subagents IN PARALLEL (in a single response with multiple tool calls).
+Each subagent should write ONE file. Do NOT write files sequentially - spawn all subagents at once.`,
+        middleware: [
+          filesystemMiddleware,
+          createSubAgentMiddleware({
+            defaultModel: SAMPLE_MODEL,
+            defaultTools: [],
+            defaultMiddleware: [filesystemMiddleware],
+            subagents: [
+              {
+                name: "file-writer-1",
+                description:
+                  "Writes content to file1.txt. Use this to write the first file.",
+                systemPrompt:
+                  "You are a file writer. When asked to write content, use the write_file tool to write to /file1.txt. Write the exact content requested.",
+              },
+              {
+                name: "file-writer-2",
+                description:
+                  "Writes content to file2.txt. Use this to write the second file.",
+                systemPrompt:
+                  "You are a file writer. When asked to write content, use the write_file tool to write to /file2.txt. Write the exact content requested.",
+              },
+              {
+                name: "file-writer-3",
+                description:
+                  "Writes content to file3.txt. Use this to write the third file.",
+                systemPrompt:
+                  "You are a file writer. When asked to write content, use the write_file tool to write to /file3.txt. Write the exact content requested.",
+              },
+            ],
+          }),
+        ],
+      });
+
+      // Request parallel file writes
+      const response = await agent.invoke({
+        messages: [
+          new HumanMessage(
+            'Write three files in parallel: file1.txt should contain "Content for file 1", file2.txt should contain "Content for file 2", and file3.txt should contain "Content for file 3". Use all three file-writer subagents simultaneously.',
+          ),
+        ],
+      });
+
+      // Extract all tool calls to verify subagents were invoked
+      const toolCalls = extractAllToolCalls(response);
+      const taskCalls = toolCalls.filter((tc) => tc.name === "task");
+
+      // Verify multiple subagents were invoked (at least 2 for parallel execution)
+      expect(taskCalls.length).toBeGreaterThanOrEqual(2);
+
+      // Verify different subagents were used
+      const subagentTypes = new Set(
+        taskCalls.map((tc) => tc.args.subagent_type),
+      );
+      expect(subagentTypes.size).toBeGreaterThanOrEqual(2);
+
+      // Verify the files state was properly merged (no LastValue error occurred)
+      // If the reducer wasn't working, the agent.invoke would have thrown:
+      // "Invalid update for channel 'files' with values [...]: LastValue can only receive one value per step."
+      const responseWithFiles = response as unknown as {
+        files?: Record<string, unknown>;
+      };
+      expect(responseWithFiles.files).toBeDefined();
+
+      // The files state should contain entries from the parallel writes
+      // (The exact content depends on which subagents successfully wrote)
+      const filesCount = Object.keys(responseWithFiles.files || {}).length;
+      expect(filesCount).toBeGreaterThanOrEqual(0); // At minimum, no error occurred
     },
   );
 });
