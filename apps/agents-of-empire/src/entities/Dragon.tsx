@@ -338,10 +338,10 @@ interface DragonPoolProps {
 }
 
 export function DragonPool({ onDragonClick }: DragonPoolProps) {
-  const dragonsMap = useDragonsShallow() as Map<string, DragonType>;
+  const dragonsMap = useDragonsShallow() as Record<string, DragonType>;
 
-  // Convert Map to array with memoization
-  const dragons = useMemo(() => Array.from(dragonsMap.values()), [dragonsMap]);
+  // Convert object to array with memoization
+  const dragons = useMemo(() => Object.values(dragonsMap), [dragonsMap]);
 
   return (
     <>
@@ -361,8 +361,8 @@ export function DragonPool({ onDragonClick }: DragonPoolProps) {
 // ============================================================================
 
 export function useCombat() {
-  const agentsMap = useAgentsShallow() as Map<string, GameAgent>;
-  const dragonsMap = useDragonsShallow() as Map<string, DragonType>;
+  const agentsMap = useAgentsShallow() as Record<string, GameAgent>;
+  const dragonsMap = useDragonsShallow() as Record<string, DragonType>;
   // Actions are stable references, safe to select individually
   const updateAgent = useGameStore((state) => state.updateAgent);
   const updateDragon = useGameStore((state) => state.updateDragon);
@@ -373,8 +373,8 @@ export function useCombat() {
   // Agent attacks dragon
   const attackDragon = useCallback(
     (agentId: string, dragonId: string) => {
-      const agent = agentsMap.get(agentId);
-      const dragon = dragonsMap.get(dragonId);
+      const agent = agentsMap[agentId];
+      const dragon = dragonsMap[dragonId];
 
       if (!agent || !dragon) return;
 
@@ -387,7 +387,7 @@ export function useCombat() {
       damageDragon(dragonId, damage);
 
       // Check if dragon is defeated
-      const updatedDragon = useGameStore.getState().dragons.get(dragonId);
+      const updatedDragon = useGameStore.getState().dragons[dragonId];
       if (updatedDragon && updatedDragon.health <= 0) {
         // Dragon defeated!
         removeDragon(dragonId);
@@ -409,7 +409,7 @@ export function useCombat() {
       });
 
       // Check if agent is defeated
-      const updatedAgent = useGameStore.getState().agents.get(agentId);
+      const updatedAgent = useGameStore.getState().agents[agentId];
       if (updatedAgent && updatedAgent.health <= 0) {
         setAgentState(agentId, "ERROR");
         updateAgent(agentId, { currentTask: "Defeated..." });

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { immer } from "zustand/middleware/immer";
 import { v4 as uuidv4 } from "uuid";
 
 // ============================================================================
@@ -88,23 +89,23 @@ export interface Tile {
 interface GameState {
   // World
   worldSize: { width: number; height: number };
-  tiles: Map<string, Tile>;
+  tiles: Record<string, Tile>;
 
   // Agents
-  agents: Map<string, GameAgent>;
+  agents: Record<string, GameAgent>;
   selectedAgentIds: Set<string>;
   agentCount: number; // Cached count for UI
 
   // Dragons (errors)
-  dragons: Map<string, Dragon>;
+  dragons: Record<string, Dragon>;
   dragonCount: number; // Cached count for UI
 
   // Structures
-  structures: Map<string, Structure>;
+  structures: Record<string, Structure>;
   structureCount: number; // Cached count for UI
 
   // Quests
-  quests: Map<string, Quest>;
+  quests: Record<string, Quest>;
   questCount: number; // Cached count for UI
   completedQuestCount: number; // Cached count for UI
 
@@ -213,53 +214,56 @@ interface GameActions {
 
 type GameStore = GameState & GameActions;
 
-export const useGameStore = create<GameStore>((set, get) => ({
-  // Initial State
-  worldSize: { width: 50, height: 50 },
-  tiles: new Map(),
-  agents: new Map(),
-  selectedAgentIds: new Set(),
-  agentCount: 0,
-  dragons: new Map(),
-  dragonCount: 0,
-  structures: new Map(),
-  structureCount: 0,
-  quests: new Map(),
-  questCount: 0,
-  completedQuestCount: 0,
-  cameraPosition: { x: 25, y: 30, z: 25 },
-  cameraTarget: { x: 0, y: 0, z: 0 },
-  zoom: 1,
-  isDragging: false,
-  dragStart: null,
-  dragEnd: null,
-  hoverAgentId: null,
-  contextMenuOpen: false,
-  contextMenuPosition: null,
-  contextMenuAgentId: null,
-  activeGoalId: null,
+export const useGameStore = create<GameStore>()(
+  immer((set, get) => ({
+    // Initial State
+    worldSize: { width: 50, height: 50 },
+    tiles: {},
+    agents: {},
+    selectedAgentIds: new Set(),
+    agentCount: 0,
+    dragons: {},
+    dragonCount: 0,
+    structures: {},
+    structureCount: 0,
+    quests: {},
+    questCount: 0,
+    completedQuestCount: 0,
+    cameraPosition: { x: 25, y: 30, z: 25 },
+    cameraTarget: { x: 0, y: 0, z: 0 },
+    zoom: 1,
+    isDragging: false,
+    dragStart: null,
+    dragEnd: null,
+    hoverAgentId: null,
+    contextMenuOpen: false,
+    contextMenuPosition: null,
+    contextMenuAgentId: null,
+    activeGoalId: null,
 
   // World Actions
   initializeWorld: (width, height) => {
-    const tiles = new Map<string, Tile>();
-    for (let x = 0; x < width; x++) {
-      for (let z = 0; z < height; z++) {
-        const key = `${x},${z}`;
-        const type: TileType = Math.random() < 0.05 ? "stone" : "grass";
-        tiles.set(key, { x, z, type, walkable: type !== "water" });
+    set((state) => {
+      state.worldSize = { width, height };
+      state.tiles = {};
+      for (let x = 0; x < width; x++) {
+        for (let z = 0; z < height; z++) {
+          const key = `${x},${z}`;
+          const type: TileType = Math.random() < 0.05 ? "stone" : "grass";
+          state.tiles[key] = { x, z, type, walkable: type !== "water" };
+        }
       }
-    }
-    set({ worldSize: { width, height }, tiles });
+    });
   },
 
   setTile: (x, z, tileUpdates) => {
     const key = `${x},${z}`;
-    const { tiles } = get();
-    const existing = tiles.get(key);
-    if (existing) {
-      tiles.set(key, { ...existing, ...tileUpdates });
-      set({ tiles: new Map(tiles) });
-    }
+    set((state) => {
+      const existing = state.tiles[key];
+      if (existing) {
+        Object.assign(state.tiles[key], tileUpdates);
+      }
+    });
   },
 
   // Agent Actions
@@ -284,56 +288,42 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastToolCall: null,
     };
 
-    set((state) => ({
-      agents: new Map(state.agents).set(id, agent),
-      agentCount: state.agentCount + 1,
-    }));
+    set((state) => {
+      state.agents[id] = agent;
+      state.agentCount = state.agentCount + 1;
 
-    // If this is a subagent, link it to parent
-    if (parentId) {
-      const { agents } = get();
-      const parent = agents.get(parentId);
-      if (parent) {
-        parent.childrenIds.push(id);
-        const updatedAgents = new Map(agents);
-        updatedAgents.set(parentId, { ...parent });
-        set({ agents: updatedAgents });
+      // If this is a subagent, link it to parent
+      if (parentId && state.agents[parentId]) {
+        state.agents[parentId].childrenIds.push(id);
       }
-    }
+    });
 
     return agent;
   },
 
   removeAgent: (id) => {
     set((state) => {
-      const agents = new Map(state.agents);
-      const selectedAgentIds = new Set(state.selectedAgentIds);
+      const agent = state.agents[id];
 
       // Remove from parent's children
-      const agent = agents.get(id);
-      if (agent?.parentId) {
-        const parent = agents.get(agent.parentId);
-        if (parent) {
-          parent.childrenIds = parent.childrenIds.filter((childId) => childId !== id);
-          agents.set(agent.parentId, { ...parent });
-        }
+      if (agent?.parentId && state.agents[agent.parentId]) {
+        state.agents[agent.parentId].childrenIds = state.agents[agent.parentId].childrenIds.filter(
+          (childId) => childId !== id
+        );
       }
 
-      agents.delete(id);
-      selectedAgentIds.delete(id);
-
-      return { agents, selectedAgentIds, agentCount: Math.max(0, state.agentCount - 1) };
+      delete state.agents[id];
+      state.selectedAgentIds.delete(id);
+      state.agentCount = Math.max(0, state.agentCount - 1);
     });
   },
 
   updateAgent: (id, updates) => {
     set((state) => {
-      const agents = new Map(state.agents);
-      const agent = agents.get(id);
+      const agent = state.agents[id];
       if (agent) {
-        agents.set(id, { ...agent, ...updates });
+        Object.assign(state.agents[id], updates);
       }
-      return { agents };
     });
   },
 
@@ -359,15 +349,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   addToolToInventory: (agentId, tool) => {
     set((state) => {
-      const agents = new Map(state.agents);
-      const agent = agents.get(agentId);
+      const agent = state.agents[agentId];
       if (agent) {
-        agents.set(agentId, {
-          ...agent,
-          inventory: [...agent.inventory, tool],
-        });
+        state.agents[agentId].inventory = [...agent.inventory, tool];
       }
-      return { agents };
     });
   },
 
@@ -377,41 +362,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Selection Actions
   selectAgent: (id) => {
-    set((state) => ({
-      selectedAgentIds: new Set(state.selectedAgentIds).add(id),
-    }));
+    set((state) => {
+      state.selectedAgentIds.add(id);
+    });
   },
 
   deselectAgent: (id) => {
     set((state) => {
-      const selected = new Set(state.selectedAgentIds);
-      selected.delete(id);
-      return { selectedAgentIds: selected };
+      state.selectedAgentIds.delete(id);
     });
   },
 
   toggleAgentSelection: (id) => {
     set((state) => {
-      const selected = new Set(state.selectedAgentIds);
-      if (selected.has(id)) {
-        selected.delete(id);
+      if (state.selectedAgentIds.has(id)) {
+        state.selectedAgentIds.delete(id);
       } else {
-        selected.add(id);
+        state.selectedAgentIds.add(id);
       }
-      return { selectedAgentIds: selected };
     });
   },
 
   selectAgentsInBox: (minX, minZ, maxX, maxZ) => {
     set((state) => {
       const selected = new Set<string>();
-      for (const [id, agent] of state.agents) {
+      for (const id in state.agents) {
+        const agent = state.agents[id];
         const [x, , z] = agent.position;
         if (x >= minX && x <= maxX && z >= minZ && z <= maxZ) {
           selected.add(id);
         }
       }
-      return { selectedAgentIds: selected };
+      state.selectedAgentIds = selected;
     });
   },
 
@@ -420,9 +402,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   selectAllAgents: () => {
-    set((state) => ({
-      selectedAgentIds: new Set(state.agents.keys()),
-    }));
+    set((state) => {
+      state.selectedAgentIds = new Set(Object.keys(state.agents));
+    });
   },
 
   // Dragon Actions
@@ -439,42 +421,36 @@ export const useGameStore = create<GameStore>((set, get) => ({
       targetAgentId,
     };
 
-    set((state) => ({
-      dragons: new Map(state.dragons).set(id, dragon),
-      dragonCount: state.dragonCount + 1,
-    }));
+    set((state) => {
+      state.dragons[id] = dragon;
+      state.dragonCount = state.dragonCount + 1;
+    });
 
     return dragon;
   },
 
   removeDragon: (id) => {
     set((state) => {
-      const dragons = new Map(state.dragons);
-      dragons.delete(id);
-      return { dragons, dragonCount: Math.max(0, state.dragonCount - 1) };
+      delete state.dragons[id];
+      state.dragonCount = Math.max(0, state.dragonCount - 1);
     });
   },
 
   updateDragon: (id, updates) => {
     set((state) => {
-      const dragons = new Map(state.dragons);
-      const dragon = dragons.get(id);
+      const dragon = state.dragons[id];
       if (dragon) {
-        dragons.set(id, { ...dragon, ...updates });
+        Object.assign(state.dragons[id], updates);
       }
-      return { dragons };
     });
   },
 
   damageDragon: (id, damage) => {
     set((state) => {
-      const dragons = new Map(state.dragons);
-      const dragon = dragons.get(id);
+      const dragon = state.dragons[id];
       if (dragon) {
-        const newHealth = Math.max(0, dragon.health - damage);
-        dragons.set(id, { ...dragon, health: newHealth });
+        state.dragons[id].health = Math.max(0, dragon.health - damage);
       }
-      return { dragons };
     });
   },
 
@@ -482,29 +458,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
   addStructure: (structure) => {
     const id = uuidv4();
     const newStructure: Structure = { ...structure, id };
-    set((state) => ({
-      structures: new Map(state.structures).set(id, newStructure),
-      structureCount: state.structureCount + 1,
-    }));
+    set((state) => {
+      state.structures[id] = newStructure;
+      state.structureCount = state.structureCount + 1;
+    });
     return newStructure;
   },
 
   removeStructure: (id) => {
     set((state) => {
-      const structures = new Map(state.structures);
-      structures.delete(id);
-      return { structures, structureCount: Math.max(0, state.structureCount - 1) };
+      delete state.structures[id];
+      state.structureCount = Math.max(0, state.structureCount - 1);
     });
   },
 
   updateStructure: (id, updates) => {
     set((state) => {
-      const structures = new Map(state.structures);
-      const structure = structures.get(id);
+      const structure = state.structures[id];
       if (structure) {
-        structures.set(id, { ...structure, ...updates });
+        Object.assign(state.structures[id], updates);
       }
-      return { structures };
     });
   },
 
@@ -513,29 +486,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const id = uuidv4();
     const newQuest: Quest = { ...quest, id };
     const isNewCompleted = newQuest.status === "completed";
-    set((state) => ({
-      quests: new Map(state.quests).set(id, newQuest),
-      questCount: state.questCount + 1,
-      completedQuestCount: state.completedQuestCount + (isNewCompleted ? 1 : 0),
-    }));
+    set((state) => {
+      state.quests[id] = newQuest;
+      state.questCount = state.questCount + 1;
+      state.completedQuestCount = state.completedQuestCount + (isNewCompleted ? 1 : 0);
+    });
     return newQuest;
   },
 
   updateQuest: (id, updates) => {
     set((state) => {
-      const quests = new Map(state.quests);
-      const quest = quests.get(id);
+      const quest = state.quests[id];
       if (quest) {
         const oldCompleted = quest.status === "completed";
-        quests.set(id, { ...quest, ...updates });
+        Object.assign(state.quests[id], updates);
         const newCompleted = (updates.status ?? quest.status) === "completed";
         const completedDelta = newCompleted ? 1 : 0 - (oldCompleted ? 1 : 0);
-        return {
-          quests,
-          completedQuestCount: Math.max(0, state.completedQuestCount + completedDelta),
-        };
+        state.completedQuestCount = Math.max(0, state.completedQuestCount + completedDelta);
       }
-      return { quests };
     });
   },
 
@@ -604,17 +572,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Batch updates
   updateMultipleAgents: (updates) => {
     set((state) => {
-      const agents = new Map(state.agents);
       for (const { id, changes } of updates) {
-        const agent = agents.get(id);
+        const agent = state.agents[id];
         if (agent) {
-          agents.set(id, { ...agent, ...changes });
+          Object.assign(state.agents[id], changes);
         }
       }
-      return { agents };
     });
   },
-}));
+})));
 
 // ============================================================================
 // Selector Hooks
@@ -643,16 +609,15 @@ export const useAgentsShallow = () => useGameStore((state) => state.agents, shal
 export const useDragonsShallow = () => useGameStore((state) => state.dragons, shallow);
 export const useStructuresShallow = () => useGameStore((state) => state.structures, shallow);
 export const useQuestsShallow = () => useGameStore((state) => state.quests, shallow);
+export const useTilesShallow = () => useGameStore((state) => state.tiles, shallow);
 
 // Selection Set
 export const useSelection = () => useGameStore((state) => state.selectedAgentIds);
 
-// Camera state with shallow comparison
-export const useCamera = () => useGameStore((state) => ({
-  position: state.cameraPosition,
-  target: state.cameraTarget,
-  zoom: state.zoom,
-  setPosition: state.setCameraPosition,
-  setTarget: state.setCameraTarget,
-  setZoom: state.setZoom,
-}), shallow);
+// Camera state selectors - return stable values to avoid infinite loops
+export const useCameraPosition = () => useGameStore((state) => state.cameraPosition);
+export const useCameraTarget = () => useGameStore((state) => state.cameraTarget);
+export const useZoom = () => useGameStore((state) => state.zoom);
+export const useSetCameraPosition = () => useGameStore((state) => state.setCameraPosition);
+export const useSetCameraTarget = () => useGameStore((state) => state.setCameraTarget);
+export const useSetZoom = () => useGameStore((state) => state.setZoom);

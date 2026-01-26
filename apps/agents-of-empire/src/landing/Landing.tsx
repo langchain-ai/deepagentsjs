@@ -1,12 +1,73 @@
-import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useCallback } from 'react';
+import { submitToWaitlist, isWaitlistConfigured } from './waitlistService';
 
 interface LandingProps {
   onEnterGame?: () => void;
 }
 
+type SubmissionStatus = 'idle' | 'submitting' | 'success' | 'error';
+
 const Landing = ({ onEnterGame }: LandingProps) => {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [showWaitlistModal, setShowWaitlistModal] = useState(false);
+  const [email, setEmail] = useState('');
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [particles, setParticles] = useState<Array<{ id: number; x: number; y: number; delay: number }>>([]);
+  const [submissionStatus, setSubmissionStatus] = useState<SubmissionStatus>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isDemoMode, setIsDemoMode] = useState(false);
+
+  // Check if service is configured on mount
+  useEffect(() => {
+    setIsDemoMode(!isWaitlistConfigured());
+  }, []);
+
+  const handleWaitlistSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+
+    setSubmissionStatus('submitting');
+    setErrorMessage('');
+
+    try {
+      const result = await submitToWaitlist(email);
+
+      if (result.success) {
+        // Generate celebration particles
+        const newParticles = Array.from({ length: 50 }, (_, i) => ({
+          id: i,
+          x: Math.random() * 100,
+          y: Math.random() * 100,
+          delay: i * 0.02,
+        }));
+        setParticles(newParticles);
+        setSubmissionStatus('success');
+        setShowConfirmation(true);
+      } else {
+        setSubmissionStatus('error');
+        setErrorMessage(result.message || 'Failed to join waitlist. Please try again.');
+      }
+    } catch (error) {
+      setSubmissionStatus('error');
+      setErrorMessage('An unexpected error occurred. Please try again.');
+    }
+  }, [email]);
+
+  const closeConfirmation = () => {
+    setShowConfirmation(false);
+    setShowWaitlistModal(false);
+    setEmail('');
+    setParticles([]);
+    setSubmissionStatus('idle');
+    setErrorMessage('');
+  };
+
+  const resetForm = () => {
+    setEmail('');
+    setSubmissionStatus('idle');
+    setErrorMessage('');
+  };
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -15,17 +76,6 @@ const Landing = ({ onEnterGame }: LandingProps) => {
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.15,
-        delayChildren: 0.2,
-      },
-    },
-  };
 
   const itemVariants = {
     hidden: { opacity: 0, y: 30 },
@@ -120,10 +170,54 @@ const Landing = ({ onEnterGame }: LandingProps) => {
     },
   ];
 
+  const scrollToSection = (id: string) => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white overflow-hidden relative">
+    <div className="w-full h-auto bg-[#0a0a0f] text-white relative">
+      {/* Fixed Navigation */}
+      <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-4 bg-[#0a0a0f]/80 backdrop-blur-md border-b border-white/10">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <button
+            onClick={scrollToTop}
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+          >
+            <span className="text-2xl">🎮</span>
+            <span className="font-bold text-lg">Agents of Empire</span>
+          </button>
+          <div className="flex gap-6 text-sm">
+            <button
+              onClick={() => scrollToSection('features')}
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              Features
+            </button>
+            <button
+              onClick={() => scrollToSection('roadmap')}
+              className="text-gray-400 hover:text-[#ff6b35] transition-colors font-medium"
+            >
+              Roadmap
+            </button>
+            <button
+              onClick={() => setShowWaitlistModal(true)}
+              className="px-4 py-2 bg-[#ff6b35] hover:bg-[#ff8c61] text-white font-bold rounded-lg transition-all"
+            >
+              Join Waitlist
+            </button>
+          </div>
+        </div>
+      </nav>
+
       {/* Animated background grid */}
-      <div className="fixed inset-0 z-0">
+      <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0f] via-[#12121a] to-[#0a0a0f]" />
         <div
           className="absolute inset-0 opacity-20"
@@ -139,14 +233,10 @@ const Landing = ({ onEnterGame }: LandingProps) => {
         />
       </div>
 
-      <motion.div
-        className="relative z-10"
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-      >
+      {/* Main Content */}
+      <div className="relative z-10 min-h-screen touch-auto" style={{ touchAction: 'auto' }}>
         {/* Hero Section */}
-        <section className="min-h-screen flex items-center justify-center relative px-6">
+        <section className="min-h-screen flex items-center justify-center relative px-6 pt-24">
           {/* Floating orbs */}
           <motion.div
             className="absolute top-20 left-20 w-64 h-64 bg-[#ff6b35] rounded-full blur-[120px] opacity-20"
@@ -200,10 +290,7 @@ const Landing = ({ onEnterGame }: LandingProps) => {
               className="flex flex-col sm:flex-row gap-4 justify-center items-center"
             >
               <button
-                onClick={() => {
-                  // TODO: Implement waitlist signup
-                  console.log("Waitlist signup clicked");
-                }}
+                onClick={() => setShowWaitlistModal(true)}
                 className="group relative px-8 py-4 bg-[#ff6b35] hover:bg-[#ff8c61] text-white font-bold text-lg rounded-lg transition-all duration-300 transform hover:scale-105 hover:shadow-[0_0_40px_rgba(255,107,53,0.6)]"
               >
                 <span className="relative z-10 flex items-center gap-2">
@@ -257,7 +344,7 @@ const Landing = ({ onEnterGame }: LandingProps) => {
         </section>
 
         {/* Features Section */}
-        <section className="py-32 px-6 relative">
+        <section id="features" className="py-32 px-6 relative mt-20">
           <div className="max-w-7xl mx-auto">
             <motion.div
               initial={{ opacity: 0, y: 50 }}
@@ -302,7 +389,7 @@ const Landing = ({ onEnterGame }: LandingProps) => {
         </section>
 
         {/* Launch Plan Section */}
-        <section className="py-32 px-6 relative">
+        <section id="roadmap" className="py-32 px-6 relative">
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#ff6b35]/5 to-transparent" />
           <div className="max-w-6xl mx-auto relative z-10">
             <motion.div
@@ -322,18 +409,18 @@ const Landing = ({ onEnterGame }: LandingProps) => {
               </p>
             </motion.div>
 
-            <div className="relative">
+            <div className="relative pb-16">
               {/* Timeline line */}
-              <div className="absolute left-1/2 transform -translate-x-1/2 h-full w-1 bg-gradient-to-b from-[#ff6b35] via-[#00d4ff] to-gray-700 hidden md:block" />
+              <div className="absolute left-1/2 top-0 bottom-16 transform -translate-x-1/2 w-1 bg-gradient-to-b from-[#ff6b35] via-[#00d4ff] to-gray-700 hidden md:block pointer-events-none" />
 
-              <div className="space-y-16">
+              <div className="space-y-24 md:space-y-32">
                 {phases.map((phase, index) => (
                   <motion.div
                     key={phase.title}
                     initial={{ opacity: 0, x: index % 2 === 0 ? -50 : 50 }}
                     whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: index * 0.2, duration: 0.6 }}
+                    viewport={{ once: true, margin: '-100px' }}
+                    transition={{ delay: index * 0.1, duration: 0.5 }}
                     className={`relative flex items-center ${
                       index % 2 === 0 ? 'md:flex-row' : 'md:flex-row-reverse'
                     }`}
@@ -423,9 +510,7 @@ const Landing = ({ onEnterGame }: LandingProps) => {
 
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
                   <button
-                    onClick={() => {
-                      console.log("Waitlist signup clicked");
-                    }}
+                    onClick={() => setShowWaitlistModal(true)}
                     className="group relative px-10 py-5 bg-[#ff6b35] hover:bg-[#ff8c61] text-white font-bold text-xl rounded-xl transition-all duration-300 transform hover:scale-105 hover:shadow-[0_0_50px_rgba(255,107,53,0.6)]"
                   >
                     <span className="relative z-10">⚔️ Join Waitlist</span>
@@ -498,7 +583,271 @@ const Landing = ({ onEnterGame }: LandingProps) => {
             </div>
           </div>
         </footer>
-      </motion.div>
+
+        {/* Waitlist Modal */}
+        <AnimatePresence>
+          {showWaitlistModal && !showConfirmation && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center px-4"
+              onClick={() => setShowWaitlistModal(false)}
+            >
+              <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, rotateX: 10 }}
+                animate={{ scale: 1, opacity: 1, rotateX: 0 }}
+                exit={{ scale: 0.9, opacity: 0, rotateX: 10 }}
+                transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                className="relative bg-gradient-to-br from-[#1a1a2e] to-[#0f0f1a] border border-[#ff6b35]/30 rounded-3xl p-8 md:p-12 max-w-md w-full shadow-[0_0_100px_rgba(255,107,53,0.3)]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => setShowWaitlistModal(false)}
+                  className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition-all"
+                >
+                  ✕
+                </button>
+
+                <div className="text-center mb-8">
+                  <motion.div
+                    animate={{ rotateY: [0, 360] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+                    className="text-6xl mb-4"
+                  >
+                    ⚔️
+                  </motion.div>
+                  <h3 className="text-3xl font-black mb-2 bg-gradient-to-r from-[#ff6b35] to-[#00d4ff] bg-clip-text text-transparent">
+                    JOIN THE QUEST
+                  </h3>
+                  <p className="text-gray-400">
+                    Your journey begins now, Commander
+                  </p>
+                </div>
+
+                <form onSubmit={handleWaitlistSubmit} className="space-y-4">
+                  <div>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (submissionStatus === 'error') {
+                          setSubmissionStatus('idle');
+                          setErrorMessage('');
+                        }
+                      }}
+                      placeholder="your@email.com"
+                      required
+                      disabled={submissionStatus === 'submitting'}
+                      className="w-full px-6 py-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-[#ff6b35] focus:ring-2 focus:ring-[#ff6b35]/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                  </div>
+
+                  {/* Error message display */}
+                  <AnimatePresence>
+                    {submissionStatus === 'error' && errorMessage && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg"
+                      >
+                        <p className="text-red-400 text-sm flex items-center gap-2">
+                          <span>⚠️</span>
+                          {errorMessage}
+                        </p>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Demo mode warning */}
+                  {isDemoMode && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg"
+                    >
+                      <p className="text-yellow-400 text-xs">
+                        ⚡ Demo Mode: Configure RESEND_API_KEY for production
+                      </p>
+                    </motion.div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={submissionStatus === 'submitting' || !email}
+                    className="w-full py-4 bg-gradient-to-r from-[#ff6b35] to-[#ff8c61] hover:from-[#ff8c61] hover:to-[#ff6b35] text-white font-bold text-lg rounded-xl transition-all duration-300 transform hover:scale-105 hover:shadow-[0_0_40px_rgba(255,107,53,0.5)] relative overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                  >
+                    <span className="relative z-10 flex items-center justify-center gap-2">
+                      {submissionStatus === 'submitting' ? (
+                        <>
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                            className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
+                          />
+                          <span>Sending...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Embark on Quest</span>
+                          <motion.span
+                            animate={{ x: [0, 5, 0] }}
+                            transition={{ duration: 1, repeat: Infinity }}
+                          >
+                            →
+                          </motion.span>
+                        </>
+                      )}
+                    </span>
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                  </button>
+                </form>
+
+                <p className="text-center text-gray-500 text-sm mt-6">
+                  🔒 We respect your privacy. Unsubscribe anytime.
+                </p>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Confirmation Modal */}
+        <AnimatePresence>
+          {showConfirmation && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center px-4"
+              onClick={closeConfirmation}
+            >
+              <div className="absolute inset-0 bg-black/90 backdrop-blur-md" />
+
+              {/* Celebration particles */}
+              {particles.map((particle) => (
+                <motion.div
+                  key={particle.id}
+                  initial={{ scale: 0, opacity: 1, x: '50%', y: '50%' }}
+                  animate={{
+                    scale: [0, 1.5, 0],
+                    opacity: [1, 1, 0],
+                    x: `${particle.x}%`,
+                    y: `${particle.y}%`,
+                  }}
+                  transition={{
+                    duration: 1.5,
+                    delay: particle.delay,
+                    ease: 'easeOut',
+                  }}
+                  className="absolute z-10 pointer-events-none"
+                  style={{
+                    left: 0,
+                    top: 0,
+                  }}
+                >
+                  <div className="text-3xl">
+                    {['⚔️', '🐉', '✨', '🔥', '👑', '🏰', '⭐', '💎'][particle.id % 8]}
+                  </div>
+                </motion.div>
+              ))}
+
+              <motion.div
+                initial={{ scale: 0.5, opacity: 0, rotate: -10 }}
+                animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                exit={{ scale: 0.8, opacity: 0 }}
+                transition={{ type: 'spring', damping: 15, stiffness: 200 }}
+                className="relative z-20 bg-gradient-to-br from-[#1a1a2e] to-[#0f0f1a] border-2 border-[#ff6b35]/50 rounded-3xl p-10 md:p-16 max-w-lg w-full text-center shadow-[0_0_150px_rgba(255,107,53,0.4)]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Animated crown */}
+                <motion.div
+                  animate={{
+                    y: [0, -15, 0],
+                    rotate: [0, 5, -5, 0],
+                  }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                  }}
+                  className="text-8xl mb-6"
+                >
+                  👑
+                </motion.div>
+
+                <motion.h3
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="text-4xl md:text-5xl font-black mb-4 bg-gradient-to-r from-[#ff6b35] via-[#ffd700] to-[#00d4ff] bg-clip-text text-transparent"
+                >
+                  YOU HAVE JOINED
+                </motion.h3>
+
+                <motion.h4
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
+                  className="text-2xl font-bold text-white mb-6"
+                >
+                  THE QUEST! 🎮
+                </motion.h4>
+
+                <motion.p
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
+                  className="text-gray-300 text-lg mb-8 leading-relaxed"
+                >
+                  {isDemoMode
+                    ? "Your journey begins in demo mode. Configure the email service to capture real signups!"
+                    : "Your invitation has been confirmed. Prepare for battle!"}
+                  <br />
+                  <span className="text-[#ff6b35]">Watch your inbox for updates</span>
+                  <br />
+                  <br />
+                  Prepare your agents. The dragons await. ⚔️🐉
+                </motion.p>
+
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.6 }}
+                  className="flex flex-col gap-3"
+                >
+                  <div className="flex items-center justify-center gap-3 text-sm text-gray-400">
+                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                    <span>{isDemoMode ? 'Demo signup recorded' : 'Successfully added to waitlist'}</span>
+                  </div>
+                  <div className="flex items-center justify-center gap-3 text-sm text-gray-400">
+                    <span className="w-2 h-2 bg-[#ff6b35] rounded-full animate-pulse" />
+                    <span>Position in queue: #{Math.floor(Math.random() * 100) + 1}</span>
+                  </div>
+                </motion.div>
+
+                <motion.button
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.7 }}
+                  onClick={closeConfirmation}
+                  className="mt-10 px-8 py-3 bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold rounded-xl transition-all duration-300 hover:scale-105"
+                >
+                  Return to Base Camp
+                </motion.button>
+
+                {/* Corner decorations */}
+                <div className="absolute top-4 left-4 text-2xl opacity-50">🏰</div>
+                <div className="absolute top-4 right-4 text-2xl opacity-50">🗡️</div>
+                <div className="absolute bottom-4 left-4 text-2xl opacity-50">🛡️</div>
+                <div className="absolute bottom-4 right-4 text-2xl opacity-50">🐉</div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       <style>{`
         @keyframes gridMove {

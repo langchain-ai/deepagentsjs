@@ -1,7 +1,12 @@
 import { useRef, useEffect } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
 import { Vector3, MathUtils } from "three";
-import { useCamera } from "../store/gameStore";
+import {
+  useCameraPosition,
+  useZoom,
+  useSetCameraPosition,
+  useSetZoom,
+} from "../store/gameStore";
 
 // ============================================================================
 // Camera Controller Hook
@@ -40,7 +45,10 @@ export function useCameraController({
     targetZ: 25,
   });
 
-  const { position, zoom, setPosition, setZoom } = useCamera();
+  const position = useCameraPosition();
+  const zoom = useZoom();
+  const setPosition = useSetCameraPosition();
+  const setZoom = useSetZoom();
 
   // Update zoom from store
   useEffect(() => {

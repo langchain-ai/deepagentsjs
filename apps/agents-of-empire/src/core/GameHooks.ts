@@ -1,7 +1,7 @@
-import { useRef, useCallback, useState } from "react";
+import { useRef, useCallback, useState, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Vector3 } from "three";
-import { useGameStore, type AgentState } from "../store/gameStore";
+import { useGameStore, useAgentsShallow, useDragonsShallow, useQuestsShallow, type AgentState } from "../store/gameStore";
 
 // ============================================================================
 // Game Configuration
@@ -29,8 +29,8 @@ export function useGame(config: GameConfig = DEFAULT_CONFIG) {
   const tickAccumulator = useRef(0);
   const tickInterval = 1000 / tickRate;
 
-  const agents = useGameStore((state) => state.agents);
-  const dragons = useGameStore((state) => state.dragons);
+  // Don't subscribe to agents/dragons - use getState() in useFrame instead
+  // This prevents infinite re-renders inside Canvas
   const updateAgent = useGameStore((state) => state.updateAgent);
   const updateDragon = useGameStore((state) => state.updateDragon);
 
@@ -48,8 +48,13 @@ export function useGame(config: GameConfig = DEFAULT_CONFIG) {
 
   // Single game tick
   const gameTick = useCallback((now: number) => {
+    // Use getState() to get current values without subscribing
+    const agents = useGameStore.getState().agents;
+    const dragons = useGameStore.getState().dragons;
+
     // Update agent positions
-    for (const [id, agent] of agents) {
+    for (const id in agents) {
+      const agent = agents[id];
       if (agent.targetPosition) {
         moveAgentTowardsTarget(agent, now);
       }
@@ -59,10 +64,11 @@ export function useGame(config: GameConfig = DEFAULT_CONFIG) {
     }
 
     // Update dragon AI
-    for (const [id, dragon] of dragons) {
+    for (const id in dragons) {
+      const dragon = dragons[id];
       updateDragonAI(dragon, now);
     }
-  }, [agents, dragons]);
+  }, []);
 
   // Move agent towards target
   const moveAgentTowardsTarget = useCallback((agent: any, now: number) => {
@@ -147,7 +153,7 @@ export function useGame(config: GameConfig = DEFAULT_CONFIG) {
   const updateDragonAI = useCallback((dragon: any, now: number) => {
     // Simple AI: move toward target agent if exists
     if (dragon.targetAgentId) {
-      const agent = useGameStore.getState().agents.get(dragon.targetAgentId);
+      const agent = useGameStore.getState().agents[dragon.targetAgentId];
       if (agent) {
         const dragonPos = new Vector3(...dragon.position);
         const agentPos = new Vector3(...agent.position);
@@ -208,19 +214,19 @@ export function useGameTime() {
 // ============================================================================()
 
 export function useGameStats() {
-  const agents = useGameStore((state) => Array.from(state.agents.values()));
-  const dragons = useGameStore((state) => Array.from(state.dragons.values()));
-  const quests = useGameStore((state) => Array.from(state.quests.values()));
+  const agents = useAgentsShallow() as Record<string, any>;
+  const dragons = useDragonsShallow() as Record<string, any>;
+  const quests = useQuestsShallow() as Record<string, any>;
 
   const stats = {
-    totalAgents: agents.length,
-    activeAgents: agents.filter((a) => a.state !== "IDLE").length,
-    idleAgents: agents.filter((a) => a.state === "IDLE").length,
-    totalDragons: dragons.length,
-    activeQuests: quests.filter((q) => q.status === "in_progress").length,
-    completedQuests: quests.filter((q) => q.status === "completed").length,
-    averageLevel: agents.length > 0
-      ? agents.reduce((sum, a) => sum + a.level, 0) / agents.length
+    totalAgents: Object.keys(agents).length,
+    activeAgents: Object.values(agents).filter((a) => a.state !== "IDLE").length,
+    idleAgents: Object.values(agents).filter((a) => a.state === "IDLE").length,
+    totalDragons: Object.keys(dragons).length,
+    activeQuests: Object.values(quests).filter((q) => q.status === "in_progress").length,
+    completedQuests: Object.values(quests).filter((q) => q.status === "completed").length,
+    averageLevel: Object.keys(agents).length > 0
+      ? Object.values(agents).reduce((sum: number, a: any) => sum + a.level, 0) / Object.keys(agents).length
       : 0,
   };
 

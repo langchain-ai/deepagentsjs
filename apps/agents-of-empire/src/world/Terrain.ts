@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useGameStore, type TileType } from "../store/gameStore";
+import { useGameStore, useTilesShallow, type TileType } from "../store/gameStore";
 
 // ============================================================================
 // Terrain Generation Types
@@ -103,10 +103,10 @@ class ValueNoise {
 // Terrain Generator
 // ============================================================================
 
-export function generateTerrain(config: TerrainConfig): Map<string, { x: number; z: number; type: TileType; walkable: boolean }> {
+export function generateTerrain(config: TerrainConfig): Record<string, { x: number; z: number; type: TileType; walkable: boolean }> {
   const { width, height, seed = 12345 } = config;
   const noise = new ValueNoise(seed, Math.max(width, height));
-  const tiles = new Map();
+  const tiles: Record<string, { x: number; z: number; type: TileType; walkable: boolean }> = {};
 
   for (let x = 0; x < width; x++) {
     for (let z = 0; z < height; z++) {
@@ -145,7 +145,7 @@ export function generateTerrain(config: TerrainConfig): Map<string, { x: number;
       }
 
       const key = `${x},${z}`;
-      tiles.set(key, { x, z, type, walkable });
+      tiles[key] = { x, z, type, walkable };
     }
   }
 
@@ -162,11 +162,11 @@ interface TerrainProps {
 
 export function Terrain({ config }: TerrainProps) {
   const initializeWorld = useGameStore((state) => state.initializeWorld);
-  const tiles = useGameStore((state) => state.tiles);
+  const tiles = useTilesShallow() as Record<string, { type: string; walkable: boolean; x: number; z: number }>;
 
   useEffect(() => {
     // Only initialize if tiles are empty
-    if (tiles.size === 0) {
+    if (Object.keys(tiles).length === 0) {
       const defaultConfig: TerrainConfig = {
         width: 50,
         height: 50,
@@ -175,14 +175,14 @@ export function Terrain({ config }: TerrainProps) {
 
       const generatedTiles = generateTerrain(config ?? defaultConfig);
 
-      // Convert to Map and initialize store
-      const tilesMap = new Map();
-      for (const [key, tile] of generatedTiles) {
-        tilesMap.set(key, tile);
+      // Convert to object and initialize store
+      const tilesRecord: Record<string, { x: number; z: number; type: string; walkable: boolean }> = {};
+      for (const key in generatedTiles) {
+        tilesRecord[key] = generatedTiles[key];
       }
 
       // Update the store's tiles directly
-      useGameStore.setState({ tiles: tilesMap });
+      useGameStore.setState({ tiles: tilesRecord });
 
       // Also initialize world size
       const finalConfig = config ?? defaultConfig;

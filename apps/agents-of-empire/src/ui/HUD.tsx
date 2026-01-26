@@ -21,10 +21,10 @@ export function Minimap({ width = 200, height = 200 }: MinimapProps) {
   const selectedAgentIds = useSelection();
   const worldSize = useGameStore((state) => state.worldSize);
 
-  // Convert Maps to arrays with useMemo to prevent infinite re-renders
-  const agents = useMemo(() => Array.from(agentsMap.values()), [agentsMap]);
-  const dragons = useMemo(() => Array.from(dragonsMap.values()), [dragonsMap]);
-  const structures = useMemo(() => Array.from(structuresMap.values()), [structuresMap]);
+  // Convert Records to arrays with useMemo to prevent infinite re-renders
+  const agents = useMemo(() => Object.values(agentsMap), [agentsMap]);
+  const dragons = useMemo(() => Object.values(dragonsMap), [dragonsMap]);
+  const structures = useMemo(() => Object.values(structuresMap), [structuresMap]);
 
   const scale = width / worldSize.width;
 
@@ -110,11 +110,11 @@ export function AgentPanel({ className = "" }: AgentPanelProps) {
   const updateAgent = useGameStore((state) => state.updateAgent);
   const clearSelection = useGameStore((state) => state.clearSelection);
 
-  // Convert Set and Map to array with memoization
+  // Convert Set and Record to array with memoization
   const selectedAgents = useMemo(() => {
     const agents: GameAgent[] = [];
     for (const id of selectedAgentIds) {
-      const agent = agentsMap.get(id);
+      const agent = agentsMap[id];
       if (agent) agents.push(agent);
     }
     return agents;
@@ -227,7 +227,7 @@ interface InventoryPanelProps {
 }
 
 export function InventoryPanel({ agentId, onClose }: InventoryPanelProps) {
-  const agent = useGameStore((state) => state.agents.get(agentId));
+  const agent = useGameStore((state) => state.agents[agentId]);
   const equipTool = useGameStore((state) => state.equipTool);
   const unequipTool = useGameStore((state) => state.unequipTool);
 
@@ -309,8 +309,8 @@ export function QuestTracker({ className = "" }: QuestTrackerProps) {
   const assignQuestToAgents = useGameStore((state) => state.assignQuestToAgents);
   const selectedAgentIds = useSelection();
 
-  // Convert Map to array with useMemo to prevent infinite re-renders
-  const quests = useMemo(() => Array.from(questsMap.values()), [questsMap]);
+  // Convert Record to array with useMemo to prevent infinite re-renders
+  const quests = useMemo(() => Object.values(questsMap), [questsMap]);
 
   return (
     <motion.div
@@ -382,7 +382,7 @@ interface ContextMenuProps {
 }
 
 export function ContextMenu({ agentId, position, onClose }: ContextMenuProps) {
-  const agent = useGameStore((state) => state.agents.get(agentId));
+  const agent = useGameStore((state) => state.agents[agentId]);
   const closeContextMenu = useGameStore((state) => state.closeContextMenu);
   const contextMenuOpen = useGameStore((state) => state.contextMenuOpen);
   const dragonsMap = useGameStore((state) => state.dragons, shallow);
@@ -394,7 +394,7 @@ export function ContextMenu({ agentId, position, onClose }: ContextMenuProps) {
 
   // Find nearby dragons with memoization
   const dragons = useMemo(() => {
-    return Array.from(dragonsMap.values()).filter(
+    return Object.values(dragonsMap).filter(
       (dragon) =>
         Math.abs(dragon.position[0] - agent.position[0]) < 5 &&
         Math.abs(dragon.position[2] - agent.position[2]) < 5

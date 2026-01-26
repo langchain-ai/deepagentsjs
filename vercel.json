@@ -1,0 +1,9 @@
+{
+  "buildCommand": "pnpm --filter=agents-of-empire build",
+  "outputDirectory": "apps/agents-of-empire/dist",
+  "installCommand": "pnpm install",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
