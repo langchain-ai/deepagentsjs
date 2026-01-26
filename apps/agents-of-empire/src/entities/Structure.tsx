@@ -205,8 +205,8 @@ interface StructurePoolProps {
 }
 
 export function StructurePool({ onStructureClick }: StructurePoolProps) {
-  const structuresMap = useStructuresShallow() as Map<string, StructureType>;
-  const structures = useMemo(() => Array.from(structuresMap.values()), [structuresMap]);
+  const structuresMap = useStructuresShallow() as Record<string, StructureType>;
+  const structures = useMemo(() => Object.values(structuresMap), [structuresMap]);
 
   return (
     <>

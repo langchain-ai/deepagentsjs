@@ -34,8 +34,8 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
   const mouse = useRef(new Vector3());
   const groundPlane = useRef(new Plane(new Vector3(0, 1, 0), 0));
 
-  const agentsMap = useAgentsShallow() as Map<string, GameAgent>;
-  const agents = useMemo(() => Array.from(agentsMap.values()), [agentsMap]);
+  const agentsMap = useAgentsShallow() as Record<string, GameAgent>;
+  const agents = useMemo(() => Object.values(agentsMap), [agentsMap]);
   const selectedAgentIds = useGameStore((state) => state.selectedAgentIds);
   const selectAgent = useGameStore((state) => state.selectAgent);
   const toggleAgentSelection = useGameStore((state) => state.toggleAgentSelection);
@@ -81,13 +81,13 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
       // Check intersection with agent positions
       const agentHits: Array<{ id: string; distance: number }> = [];
 
-      for (const [id, agent] of agents) {
+      for (const agent of agents) {
         const agentPos = new Vector3(...agent.position);
         const distance = agentPos.distanceTo(raycaster.current.ray.origin);
 
         // Simple proximity check (agent radius ~1 unit)
         if (distance < 3) {
-          agentHits.push({ id, distance });
+          agentHits.push({ id: agent.id, distance });
         }
       }
 

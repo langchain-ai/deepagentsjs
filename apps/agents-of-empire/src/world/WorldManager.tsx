@@ -63,7 +63,7 @@ interface WorldGridProps {
 
 export function WorldGrid({ width = 50, height = 50 }: WorldGridProps) {
   const meshRef = useRef<InstancedMesh>(null);
-  const tilesMap = useTilesShallow() as Map<string, { type: string; walkable: boolean; x: number; z: number }>;
+  const tilesMap = useTilesShallow() as Record<string, { type: string; walkable: boolean; x: number; z: number }>;
   // Use a ref to store tiles for useFrame to avoid re-renders
   const tilesRef = useRef(tilesMap);
 
@@ -75,7 +75,7 @@ export function WorldGrid({ width = 50, height = 50 }: WorldGridProps) {
   // Initialize tiles if not already done
   useEffect(() => {
     const state = useGameStore.getState();
-    if (state.tiles.size === 0) {
+    if (Object.keys(state.tiles).length === 0) {
       state.initializeWorld(width, height);
     }
   }, [width, height]);
@@ -94,7 +94,7 @@ export function WorldGrid({ width = 50, height = 50 }: WorldGridProps) {
     for (let x = 0; x < width; x++) {
       for (let z = 0; z < height; z++) {
         const key = `${x},${z}`;
-        const tile = tiles.get(key);
+        const tile = tiles[key];
 
         if (tile) {
           dummy.position.set(x + 0.5, -0.1, z + 0.5);
@@ -155,7 +155,7 @@ export function findPath(
   startZ: number,
   endX: number,
   endZ: number,
-  tiles: Map<string, { walkable: boolean }>,
+  tiles: Record<string, { walkable: boolean }>,
   width: number,
   height: number
 ): [number, number][] | null {
@@ -222,7 +222,7 @@ export function findPath(
       const key = `${neighbor.x},${neighbor.z}`;
 
       // Check if walkable
-      const tile = tiles.get(key);
+      const tile = tiles[key];
       if (!tile || !tile.walkable) {
         continue;
       }
@@ -266,7 +266,7 @@ export function findPath(
 // ============================================================================
 
 export function useWorldManager() {
-  const tiles = useTilesShallow() as Map<string, { type: string; walkable: boolean; x: number; z: number }>;
+  const tiles = useTilesShallow() as Record<string, { type: string; walkable: boolean; x: number; z: number }>;
   const worldSize = useGameStore((state) => state.worldSize);
   const setTile = useGameStore((state) => state.setTile);
 
@@ -287,12 +287,12 @@ export function useWorldManager() {
 
     // Get tile at position
     getTileAt: (x: number, z: number) => {
-      return tiles.get(`${x},${z}`);
+      return tiles[`${x},${z}`];
     },
 
     // Check if position is walkable
     isWalkable: (x: number, z: number) => {
-      const tile = tiles.get(`${x},${z}`);
+      const tile = tiles[`${x},${z}`];
       return tile?.walkable ?? false;
     },
 

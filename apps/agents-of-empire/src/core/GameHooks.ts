@@ -53,7 +53,8 @@ export function useGame(config: GameConfig = DEFAULT_CONFIG) {
     const dragons = useGameStore.getState().dragons;
 
     // Update agent positions
-    for (const [id, agent] of agents) {
+    for (const id in agents) {
+      const agent = agents[id];
       if (agent.targetPosition) {
         moveAgentTowardsTarget(agent, now);
       }
@@ -63,7 +64,8 @@ export function useGame(config: GameConfig = DEFAULT_CONFIG) {
     }
 
     // Update dragon AI
-    for (const [id, dragon] of dragons) {
+    for (const id in dragons) {
+      const dragon = dragons[id];
       updateDragonAI(dragon, now);
     }
   }, []);
@@ -151,7 +153,7 @@ export function useGame(config: GameConfig = DEFAULT_CONFIG) {
   const updateDragonAI = useCallback((dragon: any, now: number) => {
     // Simple AI: move toward target agent if exists
     if (dragon.targetAgentId) {
-      const agent = useGameStore.getState().agents.get(dragon.targetAgentId);
+      const agent = useGameStore.getState().agents[dragon.targetAgentId];
       if (agent) {
         const dragonPos = new Vector3(...dragon.position);
         const agentPos = new Vector3(...agent.position);
@@ -212,19 +214,19 @@ export function useGameTime() {
 // ============================================================================()
 
 export function useGameStats() {
-  const agentsMap = useAgentsShallow() as Map<string, any>;
-  const dragonsMap = useDragonsShallow() as Map<string, any>;
-  const questsMap = useQuestsShallow() as Map<string, any>;
+  const agents = useAgentsShallow() as Record<string, any>;
+  const dragons = useDragonsShallow() as Record<string, any>;
+  const quests = useQuestsShallow() as Record<string, any>;
 
   const stats = {
-    totalAgents: agentsMap.size,
-    activeAgents: Array.from(agentsMap.values()).filter((a) => a.state !== "IDLE").length,
-    idleAgents: Array.from(agentsMap.values()).filter((a) => a.state === "IDLE").length,
-    totalDragons: dragonsMap.size,
-    activeQuests: Array.from(questsMap.values()).filter((q) => q.status === "in_progress").length,
-    completedQuests: Array.from(questsMap.values()).filter((q) => q.status === "completed").length,
-    averageLevel: agentsMap.size > 0
-      ? Array.from(agentsMap.values()).reduce((sum: number, a: any) => sum + a.level, 0) / agentsMap.size
+    totalAgents: Object.keys(agents).length,
+    activeAgents: Object.values(agents).filter((a) => a.state !== "IDLE").length,
+    idleAgents: Object.values(agents).filter((a) => a.state === "IDLE").length,
+    totalDragons: Object.keys(dragons).length,
+    activeQuests: Object.values(quests).filter((q) => q.status === "in_progress").length,
+    completedQuests: Object.values(quests).filter((q) => q.status === "completed").length,
+    averageLevel: Object.keys(agents).length > 0
+      ? Object.values(agents).reduce((sum: number, a: any) => sum + a.level, 0) / Object.keys(agents).length
       : 0,
   };
 

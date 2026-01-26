@@ -237,7 +237,7 @@ export function GameAgentVisual({
 // ============================================================================
 
 export function useAgentMovement(agentId: string) {
-  const agent = useGameStore((state) => state.agents.get(agentId));
+  const agent = useGameStore((state) => state.agents[agentId]);
   const updateAgent = useGameStore((state) => state.updateAgent);
   const setAgentPosition = useGameStore((state) => state.setAgentPosition);
 
@@ -287,14 +287,14 @@ interface AgentPoolProps {
 }
 
 export function AgentPool({ onAgentClick }: AgentPoolProps) {
-  const agents = useAgentsShallow() as Map<string, GameAgentType>;
+  const agents = useAgentsShallow() as Record<string, GameAgentType>;
   const selectedAgentIds = useGameStore((state) => state.selectedAgentIds);
   const hoverAgentId = useGameStore((state) => state.hoverAgentId);
 
   const setHoverAgent = useGameStore((state) => state.setHoverAgent);
 
-  // Convert agents Map to array for rendering
-  const agentsArray = useMemo(() => Array.from(agents.values()), [agents]);
+  // Convert agents object to array for rendering
+  const agentsArray = useMemo(() => Object.values(agents), [agents]);
 
   return (
     <>
