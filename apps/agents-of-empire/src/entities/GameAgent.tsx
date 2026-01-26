@@ -313,10 +313,10 @@ export function AgentPool({ onAgentClick }: AgentPoolProps) {
       ))}
 
       {/* Connection lines between parent and child agents */}
-      {agents
+      {agentsArray
         .filter((agent) => agent.parentId)
         .map((agent) => {
-          const parent = agents.find((a) => a.id === agent.parentId);
+          const parent = agentsArray.find((a) => a.id === agent.parentId);
           if (!parent) return null;
 
           const startPos = new Vector3(...parent.position);

@@ -219,7 +219,17 @@ const Landing = ({ onEnterGame }: LandingProps) => {
               </button>
 
               <button
-                onClick={onEnterGame}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log("Enter Game button clicked");
+                  if (onEnterGame) {
+                    onEnterGame();
+                  } else {
+                    console.error("onEnterGame is not defined");
+                  }
+                }}
                 className="px-8 py-4 bg-transparent border-2 border-white/20 hover:border-[#00d4ff] text-white font-bold text-lg rounded-lg transition-all duration-300 hover:shadow-[0_0_30px_rgba(0,212,255,0.3)]"
               >
                 🎮 Enter the Game
@@ -422,7 +432,17 @@ const Landing = ({ onEnterGame }: LandingProps) => {
                   </button>
 
                   <button
-                    onClick={onEnterGame}
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log("Launch Demo button clicked");
+                      if (onEnterGame) {
+                        onEnterGame();
+                      } else {
+                        console.error("onEnterGame is not defined");
+                      }
+                    }}
                     className="px-10 py-5 bg-white/5 hover:bg-white/10 border-2 border-white/20 hover:border-[#00d4ff] text-white font-bold text-xl rounded-xl transition-all duration-300"
                   >
                     🎮 Launch Demo

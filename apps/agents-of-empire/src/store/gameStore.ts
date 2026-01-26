@@ -618,7 +618,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
 // ============================================================================
 // Selector Hooks
-// ============================================================================()
+// ============================================================================
 
 import { shallow } from "zustand/shallow";
 
@@ -633,11 +633,9 @@ export const useCompletedQuestCount = () => useGameStore((state) => state.comple
 export const useAgent = (id: string) =>
   useGameStore((state) => state.agents.get(id));
 
-// Selected agents (returns array of selected agent objects)
-export const useSelectedAgents = () =>
-  useGameStore((state) =>
-    Array.from(state.selectedAgentIds).map((id) => state.agents.get(id)).filter(Boolean)
-  );
+// Selected agents - return Set and Map for stable reference
+export const useSelectedAgentIds = () => useGameStore((state) => state.selectedAgentIds);
+export const useAgentsMap = () => useGameStore((state) => state.agents);
 
 // These selectors use shallow comparison for the Map reference itself
 // Components should use useMemo to convert to arrays when needed

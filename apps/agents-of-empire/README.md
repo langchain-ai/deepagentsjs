@@ -47,13 +47,37 @@ pnpm install
 pnpm dev
 ```
 
-The app will be available at `http://localhost:3000`.
+The app will be available at `http://localhost:3000` (or another port if 3000 is in use).
+
+**Note:** The app opens with a stunning landing page showcasing the game's features and launch roadmap. Click "🎮 Enter the Game" to access the 3D RTS interface.
 
 ### Build
 
 ```bash
 pnpm build
 ```
+
+## Landing Page
+
+The app opens with an immersive landing page featuring:
+
+- **Hero Section**: Bold gaming aesthetic with "Starcraft for AI Agents" tagline
+- **Features Grid**: Six key features showcased with emoji icons
+  - RTS-Style Controls
+  - Agent Visualization
+  - Battle Dragons
+  - Equip Tools
+  - Strategic Map
+  - Real-Time Coordination
+- **Launch Roadmap**: Interactive timeline showing development phases
+  - MVP (8 weeks) - Active
+  - Enhancement (6 weeks)
+  - Advanced Features (8 weeks)
+  - Multiplayer (12 weeks)
+- **Dark Gaming Theme**: Vibrant orange (#ff6b35) and cyan (#00d4ff) accents on dark background
+- **Framer Motion Animations**: Smooth scroll reveals, hover effects, and staggered animations
+- **Responsive Design**: Works on desktop, tablet, and mobile
+- **Interactive Background**: Animated perspective grid with floating gradient orbs
 
 ## Controls
 
@@ -130,6 +154,8 @@ apps/agents-of-empire/
 │   │   └── HUD.tsx                 # UI panels
 │   ├── bridge/
 │   │   └── AgentBridge.ts          # Deep Agents integration
+│   ├── landing/
+│   │   └── Landing.tsx             # Marketing landing page
 │   ├── store/
 │   │   └── gameStore.ts            # Zustand state
 │   ├── App.tsx

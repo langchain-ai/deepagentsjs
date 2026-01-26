@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { shallow } from "zustand/shallow";
-import { useGameStore, useSelectedAgents, useAgentsShallow, useQuestsShallow, useSelection, useAgentCount, useDragonCount, useQuestCount, useCompletedQuestCount } from "../store/gameStore";
+import { useGameStore, useSelectedAgentIds, useAgentsMap, useAgentsShallow, useQuestsShallow, useSelection, useAgentCount, useDragonCount, useQuestCount, useCompletedQuestCount } from "../store/gameStore";
 import { useAgentBridgeContext } from "../bridge/AgentBridge";
 import { useCombat } from "../entities/Dragon";
 
@@ -105,9 +105,20 @@ interface AgentPanelProps {
 }
 
 export function AgentPanel({ className = "" }: AgentPanelProps) {
-  const selectedAgents = useSelectedAgents();
+  const selectedAgentIds = useSelectedAgentIds();
+  const agentsMap = useAgentsMap();
   const updateAgent = useGameStore((state) => state.updateAgent);
   const clearSelection = useGameStore((state) => state.clearSelection);
+
+  // Convert Set and Map to array with memoization
+  const selectedAgents = useMemo(() => {
+    const agents: GameAgent[] = [];
+    for (const id of selectedAgentIds) {
+      const agent = agentsMap.get(id);
+      if (agent) agents.push(agent);
+    }
+    return agents;
+  }, [selectedAgentIds, agentsMap]);
 
   if (selectedAgents.length === 0) {
     return (
