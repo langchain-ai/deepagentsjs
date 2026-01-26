@@ -12,7 +12,13 @@ import {
   ToolMessage,
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
-import { Command, isCommand, getCurrentTaskInput } from "@langchain/langgraph";
+import {
+  Command,
+  isCommand,
+  getCurrentTaskInput,
+  StateSchema,
+  ReducedValue,
+} from "@langchain/langgraph";
 import { z } from "zod/v4";
 import type {
   BackendProtocol,
