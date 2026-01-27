@@ -113,6 +113,10 @@ interface GameState {
   cameraPosition: { x: number; y: number; z: number };
   cameraTarget: { x: number; y: number; z: number };
   zoom: number;
+  cameraRotation: number; // Rotation angle around Y axis in radians
+  cameraRotationTarget: number; // Target rotation for smooth transitions
+  cameraElevation: number; // Elevation angle from horizontal in radians
+  cameraElevationTarget: number; // Target elevation for smooth transitions
 
   // UI State
   isDragging: boolean;
@@ -198,6 +202,8 @@ interface GameActions {
   setCameraPosition: (position: { x: number; y: number; z: number }) => void;
   setCameraTarget: (target: { x: number; y: number; z: number }) => void;
   setZoom: (zoom: number) => void;
+  setCameraRotation: (rotation: number) => void;
+  setCameraElevation: (elevation: number) => void;
 
   // UI
   startDrag: (position: { x: number; y: number }) => void;
@@ -241,6 +247,10 @@ export const useGameStore = create<GameStore>()(
     cameraPosition: { x: 25, y: 30, z: 25 },
     cameraTarget: { x: 0, y: 0, z: 0 },
     zoom: 1,
+    cameraRotation: Math.PI / 4, // 45 degrees default
+    cameraRotationTarget: Math.PI / 4,
+    cameraElevation: Math.asin(Math.tan(Math.PI / 6)), // ~35.26 degrees (true isometric)
+    cameraElevationTarget: Math.asin(Math.tan(Math.PI / 6)),
     isDragging: false,
     dragStart: null,
     dragEnd: null,
@@ -589,6 +599,20 @@ export const useGameStore = create<GameStore>()(
     set({ zoom: Math.max(0.5, Math.min(3, zoom)) });
   },
 
+  setCameraRotation: (rotation) => {
+    set({
+      cameraRotation: rotation,
+      cameraRotationTarget: rotation,
+    });
+  },
+
+  setCameraElevation: (elevation) => {
+    set({
+      cameraElevation: elevation,
+      cameraElevationTarget: elevation,
+    });
+  },
+
   // UI Actions
   startDrag: (position) => {
     set({ isDragging: true, dragStart: position, dragEnd: position });
@@ -704,3 +728,9 @@ export const useZoom = () => useGameStore((state) => state.zoom);
 export const useSetCameraPosition = () => useGameStore((state) => state.setCameraPosition);
 export const useSetCameraTarget = () => useGameStore((state) => state.setCameraTarget);
 export const useSetZoom = () => useGameStore((state) => state.setZoom);
+export const useCameraRotation = () => useGameStore((state) => state.cameraRotation);
+export const useCameraRotationTarget = () => useGameStore((state) => state.cameraRotationTarget);
+export const useCameraElevation = () => useGameStore((state) => state.cameraElevation);
+export const useCameraElevationTarget = () => useGameStore((state) => state.cameraElevationTarget);
+export const useSetCameraRotation = () => useGameStore((state) => state.setCameraRotation);
+export const useSetCameraElevation = () => useGameStore((state) => state.setCameraElevation);

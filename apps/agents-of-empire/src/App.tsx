@@ -244,7 +244,7 @@ export default function App() {
           <>
             <Canvas
               shadows
-              camera={{ position: [40, 40, 40], fov: 50 }}
+              camera={{ position: [0, 30, 0], fov: 50 }}
               gl={{ antialias: true, alpha: false }}
             >
               <GameScene />

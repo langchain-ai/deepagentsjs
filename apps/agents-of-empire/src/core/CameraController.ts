@@ -6,6 +6,12 @@ import {
   useZoom,
   useSetCameraPosition,
   useSetZoom,
+  useCameraRotation,
+  useCameraRotationTarget,
+  useCameraElevation,
+  useCameraElevationTarget,
+  useSetCameraRotation,
+  useSetCameraElevation,
 } from "../store/gameStore";
 
 // ============================================================================
@@ -17,71 +23,109 @@ interface CameraControllerProps {
   maxZoom?: number;
   zoomSpeed?: number;
   panSpeed?: number;
-  rotation?: number; // In radians, default is Math.PI / 4 for isometric
-  elevation?: number; // In radians, default is ~0.615 for classic isometric
+  rotationSpeed?: number;
+  elevationSpeed?: number;
+  damping?: number; // Smoothness factor (0-1), higher = smoother
 }
 
+// Constants for isometric camera
+const DEFAULT_ROTATION = Math.PI / 4; // 45 degrees
+const DEFAULT_ELEVATION = Math.asin(Math.tan(Math.PI / 6)); // ~35.26 degrees (true isometric)
+const MIN_ELEVATION = Math.PI / 8; // 22.5 degrees minimum
+const MAX_ELEVATION = Math.PI / 3; // 60 degrees maximum
+const DISTANCE_BASE = 40; // Base distance from target
+
 /**
- * CameraController - Manages the isometric RTS camera
+ * useCameraController - Manages the isometric RTS camera
  *
  * Features:
- * - Orthographic projection for isometric view
+ * - Isometric projection with 45-degree default angle
+ * - Fully rotational camera around the scene
+ * - Smooth damping for all camera movements
  * - Zoom with scroll wheel
- * - Pan with edge scrolling or middle-click drag
- * - Smooth damping for all movements
+ * - Pan with edge scrolling, middle-click drag, or WASD/arrow keys
+ * - Rotate with Q/E keys or right-click drag
+ * - Adjust elevation with Home/End keys
  */
 export function useCameraController({
   minZoom = 0.5,
   maxZoom = 3,
   zoomSpeed = 0.001,
   panSpeed = 0.01,
-  rotation = Math.PI / 4,
-  elevation = Math.asin(Math.tan(Math.PI / 6)),
+  rotationSpeed = 0.02,
+  elevationSpeed = 0.01,
+  damping = 0.1,
 }: CameraControllerProps = {}) {
   const { camera, gl } = useThree();
-  const controlsRef = useRef<{ zoom: number; targetX: number; targetZ: number }>({
-    zoom: 1,
-    targetX: 25,
-    targetZ: 25,
-  });
 
+  // Get current state from store
   const position = useCameraPosition();
   const zoom = useZoom();
+  const rotation = useCameraRotation();
+  const rotationTarget = useCameraRotationTarget();
+  const elevation = useCameraElevation();
+  const elevationTarget = useCameraElevationTarget();
+
+  // Get setters
   const setPosition = useSetCameraPosition();
   const setZoom = useSetZoom();
+  const setRotation = useSetCameraRotation();
+  const setElevation = useSetCameraElevation();
 
-  // Update zoom from store
-  useEffect(() => {
-    controlsRef.current.zoom = zoom;
-  }, [zoom]);
+  // Local ref for smooth interpolation values
+  const smoothRef = useRef<{
+    currentX: number;
+    currentZ: number;
+    currentZoom: number;
+    currentRotation: number;
+    currentElevation: number;
+  }>({
+    currentX: position.x,
+    currentZ: position.z,
+    currentZoom: zoom,
+    currentRotation: rotation,
+    currentElevation: elevation,
+  });
 
-  // Update position from store
+  // Update smooth values when target changes (for direct set operations)
   useEffect(() => {
-    controlsRef.current.targetX = position.x;
-    controlsRef.current.targetZ = position.z;
+    smoothRef.current.currentX = position.x;
+    smoothRef.current.currentZ = position.z;
   }, [position]);
 
-  // Handle keyboard input for panning
+  // Handle keyboard input for camera control
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const panAmount = 2 / controlsRef.current.zoom;
+      // Get current smooth zoom for panning calculations
+      const currentZoom = smoothRef.current.currentZoom;
+      const panAmount = 2 / currentZoom;
 
       switch (e.key) {
         case "ArrowLeft":
         case "a":
-          setPosition({
-            x: Math.max(0, position.x - panAmount),
-            y: position.y,
-            z: position.z,
-          });
+          // Rotate camera if holding Shift, otherwise pan
+          if (e.shiftKey) {
+            setRotation(rotationTarget + rotationSpeed);
+          } else {
+            setPosition({
+              x: Math.max(0, position.x - panAmount),
+              y: position.y,
+              z: position.z,
+            });
+          }
           break;
         case "ArrowRight":
         case "d":
-          setPosition({
-            x: position.x + panAmount,
-            y: position.y,
-            z: position.z,
-          });
+          // Rotate camera if holding Shift, otherwise pan
+          if (e.shiftKey) {
+            setRotation(rotationTarget - rotationSpeed);
+          } else {
+            setPosition({
+              x: position.x + panAmount,
+              y: position.y,
+              z: position.z,
+            });
+          }
           break;
         case "ArrowUp":
         case "w":
@@ -99,12 +143,30 @@ export function useCameraController({
             z: position.z + panAmount,
           });
           break;
+        case "q":
+        case "Q":
+          // Rotate left
+          setRotation(rotationTarget + rotationSpeed);
+          break;
+        case "e":
+        case "E":
+          // Rotate right
+          setRotation(rotationTarget - rotationSpeed);
+          break;
+        case "Home":
+          // Increase elevation
+          setElevation(Math.min(MAX_ELEVATION, elevationTarget + elevationSpeed));
+          break;
+        case "End":
+          // Decrease elevation
+          setElevation(Math.max(MIN_ELEVATION, elevationTarget - elevationSpeed));
+          break;
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [position, setPosition]);
+  }, [position, rotationTarget, elevationTarget, setPosition, setRotation, setElevation, rotationSpeed, elevationSpeed]);
 
   // Handle mouse wheel for zooming
   useEffect(() => {
@@ -112,11 +174,11 @@ export function useCameraController({
       e.preventDefault();
       const delta = -e.deltaY * zoomSpeed;
       const newZoom = MathUtils.clamp(
-        controlsRef.current.zoom + delta * controlsRef.current.zoom,
+        smoothRef.current.currentZoom + delta * smoothRef.current.currentZoom,
         minZoom,
         maxZoom
       );
-      controlsRef.current.zoom = newZoom;
+      smoothRef.current.currentZoom = newZoom;
       setZoom(newZoom);
     };
 
@@ -125,65 +187,103 @@ export function useCameraController({
     return () => canvas.removeEventListener("wheel", handleWheel);
   }, [gl, zoomSpeed, minZoom, maxZoom, setZoom]);
 
-  // Handle middle mouse drag for panning
+  // Handle middle mouse drag for panning and right mouse drag for rotation
   useEffect(() => {
-    let isDragging = false;
+    let isPanning = false;
+    let isRotating = false;
     let lastX = 0;
-    let lastZ = 0;
+    let lastY = 0;
 
     const handleMouseDown = (e: MouseEvent) => {
       if (e.button === 1) {
-        // Middle mouse button
-        isDragging = true;
+        // Middle mouse button - pan
+        isPanning = true;
         lastX = e.clientX;
-        lastZ = e.clientY;
+        lastY = e.clientY;
+        e.preventDefault();
+      } else if (e.button === 2) {
+        // Right mouse button - rotate
+        isRotating = true;
+        lastX = e.clientX;
+        lastY = e.clientY;
         e.preventDefault();
       }
     };
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging) return;
+      if (isPanning) {
+        const deltaX = e.clientX - lastX;
+        const deltaY = e.clientY - lastY;
 
-      const deltaX = e.clientX - lastX;
-      const deltaZ = e.clientY - lastZ;
+        // Convert screen delta to world delta based on current rotation
+        const currentRotation = smoothRef.current.currentRotation;
+        const panAmount = 0.05 / smoothRef.current.currentZoom;
 
-      // Convert screen delta to world delta
-      const panAmount = 0.05 / controlsRef.current.zoom;
+        // Calculate pan direction based on camera rotation
+        const cos = Math.cos(currentRotation);
+        const sin = Math.sin(currentRotation);
 
-      const worldDeltaX = (deltaX - deltaZ) * panAmount;
-      const worldDeltaZ = (deltaX + deltaZ) * panAmount * 0.5;
+        const worldDeltaX = (deltaX * cos - deltaY * sin) * panAmount;
+        const worldDeltaZ = (deltaX * sin + deltaY * cos) * panAmount;
 
-      const newX = Math.max(0, position.x - worldDeltaX);
-      const newZ = Math.max(0, position.z - worldDeltaZ);
+        const newX = Math.max(0, position.x - worldDeltaX);
+        const newZ = Math.max(0, position.z - worldDeltaZ);
 
-      controlsRef.current.targetX = newX;
-      controlsRef.current.targetZ = newZ;
-      setPosition({ x: newX, y: position.y, z: newZ });
+        smoothRef.current.currentX = newX;
+        smoothRef.current.currentZ = newZ;
+        setPosition({ x: newX, y: position.y, z: newZ });
 
-      lastX = e.clientX;
-      lastZ = e.clientY;
+        lastX = e.clientX;
+        lastY = e.clientY;
+      } else if (isRotating) {
+        const deltaX = e.clientX - lastX;
+        const deltaY = e.clientY - lastY;
+
+        // Horizontal movement = rotation
+        const newRotation = rotationTarget + deltaX * rotationSpeed * 0.5;
+        setRotation(newRotation);
+
+        // Vertical movement = elevation
+        const newElevation = MathUtils.clamp(
+          elevationTarget - deltaY * elevationSpeed * 0.5,
+          MIN_ELEVATION,
+          MAX_ELEVATION
+        );
+        setElevation(newElevation);
+
+        lastX = e.clientX;
+        lastY = e.clientY;
+      }
     };
 
     const handleMouseUp = () => {
-      isDragging = false;
+      isPanning = false;
+      isRotating = false;
+    };
+
+    const handleContextMenu = (e: Event) => {
+      // Prevent context menu on right-click
+      e.preventDefault();
     };
 
     const canvas = gl.domElement;
     canvas.addEventListener("mousedown", handleMouseDown);
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
+    canvas.addEventListener("contextmenu", handleContextMenu);
 
     return () => {
       canvas.removeEventListener("mousedown", handleMouseDown);
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
+      canvas.removeEventListener("contextmenu", handleContextMenu);
     };
-  }, [gl, position, setPosition]);
+  }, [gl, position, rotationTarget, elevationTarget, setPosition, setRotation, setElevation, rotationSpeed, elevationSpeed]);
 
   // Edge scrolling
   useEffect(() => {
     const EDGE_THRESHOLD = 20;
-    const EDGE_SPEED = 0.5 / controlsRef.current.zoom;
+    const EDGE_SPEED = 0.5 / smoothRef.current.currentZoom;
 
     let edgeX = 0;
     let edgeZ = 0;
@@ -208,10 +308,21 @@ export function useCameraController({
     let animationFrameId: number;
     const updateEdgeScroll = () => {
       if (edgeX !== 0 || edgeZ !== 0) {
-        const newX = Math.max(0, position.x + edgeX * EDGE_SPEED);
-        const newZ = Math.max(0, position.z + edgeZ * EDGE_SPEED);
-        controlsRef.current.targetX = newX;
-        controlsRef.current.targetZ = newZ;
+        const currentRotation = smoothRef.current.currentRotation;
+        const panAmount = EDGE_SPEED;
+
+        // Calculate pan direction based on camera rotation
+        const cos = Math.cos(currentRotation);
+        const sin = Math.sin(currentRotation);
+
+        const worldDeltaX = (edgeX * cos - edgeZ * sin) * panAmount;
+        const worldDeltaZ = (edgeX * sin + edgeZ * cos) * panAmount;
+
+        const newX = Math.max(0, position.x + worldDeltaX);
+        const newZ = Math.max(0, position.z + worldDeltaZ);
+
+        smoothRef.current.currentX = newX;
+        smoothRef.current.currentZ = newZ;
         setPosition({ x: newX, y: position.y, z: newZ });
       }
       animationFrameId = requestAnimationFrame(updateEdgeScroll);
@@ -225,28 +336,42 @@ export function useCameraController({
     };
   }, [position, setPosition]);
 
-  // Update camera position each frame
+  // Update camera position each frame with smooth damping
   useFrame(() => {
-    const zoom = controlsRef.current.zoom;
+    // Smoothly interpolate all values towards targets
+    const smoothFactor = 1 - Math.pow(1 - damping, 1 / 60); // Frame-rate independent
+
+    // Interpolate position
+    smoothRef.current.currentX += (position.x - smoothRef.current.currentX) * smoothFactor;
+    smoothRef.current.currentZ += (position.z - smoothRef.current.currentZ) * smoothFactor;
+
+    // Interpolate zoom
+    smoothRef.current.currentZoom += (zoom - smoothRef.current.currentZoom) * smoothFactor;
+
+    // Interpolate rotation
+    smoothRef.current.currentRotation += (rotationTarget - smoothRef.current.currentRotation) * smoothFactor;
+
+    // Interpolate elevation
+    smoothRef.current.currentElevation += (elevationTarget - smoothRef.current.currentElevation) * smoothFactor;
 
     // Calculate isometric camera position
-    // In isometric view, camera is rotated 45 degrees around Y
-    // and elevated ~30-35 degrees from horizontal
-    const distance = 40 / zoom;
+    const distance = DISTANCE_BASE / smoothRef.current.currentZoom;
+    const currentRotation = smoothRef.current.currentRotation;
+    const currentElevation = smoothRef.current.currentElevation;
 
-    const camX = controlsRef.current.targetX + distance * Math.sin(rotation);
-    const camY = distance * Math.sin(elevation);
-    const camZ = controlsRef.current.targetZ + distance * Math.cos(rotation);
+    const camX = smoothRef.current.currentX + distance * Math.sin(currentRotation) * Math.cos(currentElevation);
+    const camY = distance * Math.sin(currentElevation);
+    const camZ = smoothRef.current.currentZ + distance * Math.cos(currentRotation) * Math.cos(currentElevation);
 
     camera.position.set(camX, camY, camZ);
     camera.lookAt(
-      controlsRef.current.targetX,
+      smoothRef.current.currentX,
       0,
-      controlsRef.current.targetZ
+      smoothRef.current.currentZ
     );
   });
 
-  return controlsRef;
+  return smoothRef;
 }
 
 // ============================================================================
