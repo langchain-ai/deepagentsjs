@@ -129,7 +129,7 @@ export function InitialAgents({ count = 100 }: InitialAgentsProps) {
     hasInitialized.current = true;
 
     // Spawn initial agents in grid pattern for better distribution
-    const { spawnAgentBatch } = useGameStore.getState();
+    const { spawnAgentBatch, spawnAgent } = useGameStore.getState();
     const newAgents = spawnAgentBatch?.(count, [25, 0, 25], "grid");
 
     // Add default tools to agents
@@ -145,6 +145,44 @@ export function InitialAgents({ count = 100 }: InitialAgentsProps) {
         equippedTool: defaultTools[Math.floor(Math.random() * defaultTools.length)],
       });
     });
+
+    // Spawn some subagents to test parent-child connection lines
+    // Create 5 parent agents with subagents
+    if (newAgents && newAgents.length >= 10) {
+      const parentAgents = newAgents.slice(0, 5);
+      parentAgents.forEach((parent: GameAgent) => {
+        // Spawn 2 subagents per parent
+        for (let i = 0; i < 2; i++) {
+          const subagent = spawnAgent?.(
+            `${parent.name}-Sub-${i + 1}`,
+            [
+              parent.position[0] + (Math.random() - 0.5) * 3,
+              0,
+              parent.position[2] + (Math.random() - 0.5) * 3,
+            ],
+            null,
+            parent.id // This sets the parent-child relationship
+          );
+          if (subagent) {
+            useGameStore.getState().updateAgent(subagent.id, {
+              inventory: [...defaultTools],
+              equippedTool: defaultTools[Math.floor(Math.random() * defaultTools.length)],
+            });
+          }
+        }
+      });
+    }
+
+    // Set some agents to WORKING state to test collaboration lines
+    if (newAgents && newAgents.length >= 20) {
+      // Set agents 10-14 to WORKING state (they are near each other from grid pattern)
+      for (let i = 10; i < 15; i++) {
+        useGameStore.getState().updateAgent(newAgents[i].id, {
+          state: "WORKING",
+          currentTask: "Collaborating on task...",
+        });
+      }
+    }
   }, [count]);
 
   return null;

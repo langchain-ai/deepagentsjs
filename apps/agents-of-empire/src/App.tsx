@@ -10,6 +10,7 @@ import { InitialAgents, useAgentPool } from "./entities/AgentPool";
 import { AgentPool } from "./entities/GameAgent";
 import { DragonPool } from "./entities/Dragon";
 import { StructurePool } from "./entities/Structure";
+import { ConnectionLines, ConnectionLegend } from "./entities/ConnectionLines";
 import { HUD } from "./ui/HUD";
 import { useGameStore } from "./store/gameStore";
 import Landing from "./landing/Landing";
@@ -151,6 +152,8 @@ function GameScene() {
       <InitialAgents count={100} />
       <AgentPool onAgentClick={(agentId) => console.log("Agent clicked:", agentId)} />
 
+      <ConnectionLines enabled={true} maxConnections={100} />
+
       <DragonPool />
       <StructurePool />
 
@@ -254,6 +257,7 @@ export default function App() {
 
             <HUD />
             <SelectionBoxOverlay />
+            <ConnectionLegend position="top-right" />
           </>
         )}
       </Suspense>
