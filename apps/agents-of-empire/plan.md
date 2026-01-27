@@ -622,12 +622,55 @@ function handleStreamEvent(event: StreamEvent) {
 - [ ] Error occurs → Dragon spawns
 
 ### Phase 3 Completion
-- [ ] Select agent → Agent panel shows details
-- [ ] Open inventory → See tools available
+- [x] Select agent → Agent panel shows details
+- [x] Open inventory → See tools available with RPG-style representation
+- [x] Tools show icons, names, descriptions, and rarity levels (common, rare, epic, legendary)
+- [x] Rarity filter tabs for organizing inventory
+- [x] Visual equipped tool indicator with ToolIcon component
 - [ ] Drag tool to agent → Agent equips tool
 - [ ] Create goal → Goal structure appears on map
 - [ ] Assign agent to goal → Agent moves to goal and shows working
-- [ ] Minimap → Shows all agents and structures
+- [x] Minimap → Shows all agents and structures
+
+### Inventory System Implementation (INV-001) - Completed 2025-01-27
+
+**Files Created:**
+- `src/ui/ToolCard.tsx` - Tool representation components:
+  - `ToolIcon` - Displays tool icon with rarity-based styling
+  - `RarityBadge` - Shows rarity level (common/rare/epic/legendary)
+  - `ToolCard` - Full RPG-style card with hover tooltips
+  - `ToolListItem` - Compact list item for inventory
+  - `TOOL_TYPE_CONFIG` - Tool type configuration (icons, colors, labels)
+  - `RARITY_CONFIG` - Rarity configuration (colors, gradients, glow effects)
+
+**Features Implemented:**
+1. Tool Icons - Each tool type has a unique icon and color:
+   - Search (🔍) - Blue
+   - Code Executor (⚒️) - Red
+   - File Reader (📜) - Green
+   - Web Fetcher (🌐) - Purple
+   - Subagent (🧙) - Orange
+
+2. Rarity Levels - Visual distinction for each rarity:
+   - Common (#95a5a6) - Gray/steel appearance
+   - Rare (#3498db) - Blue with glow
+   - Epic (#9b59b6) - Purple with shine effect
+   - Legendary (#f4d03f) - Gold with strong glow
+
+3. Enhanced InventoryPanel:
+   - Currently equipped tool display
+   - Rarity filter tabs (All, Common, Rare, Epic, Legendary)
+   - Count badges showing tools per rarity
+   - List view with ToolListItem components
+   - Tool types legend
+   - Equip/Unequip functionality
+
+4. Visual Effects:
+   - Glow effects based on rarity
+   - Hover tooltips
+   - Shine animation for epic/legendary tools
+   - Smooth transitions with Framer Motion
+   - Selection indicators for equipped tools
 
 ### Phase 4 Completion
 - [ ] Agent encounters error → Dragon spawns nearby
