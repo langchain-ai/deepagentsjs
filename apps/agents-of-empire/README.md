@@ -106,6 +106,8 @@ The app opens with an immersive landing page featuring:
 - [x] 3D agent characters
 - [x] States: IDLE, THINKING, MOVING, WORKING, ERROR, COMPLETING
 - [x] Status indicators, animations
+- [x] **Instanced rendering for 100+ agents at 60 FPS** (AG-001)
+- [x] **LOD system for distant agents**
 
 ### Phase 2: Agent Bridge ✅
 - [x] AgentBridge for Deep Agents integration
@@ -146,8 +148,8 @@ apps/agents-of-empire/
 │   │   ├── WorldManager.ts         # Terrain, pathfinding
 │   │   └── Terrain.ts              # Procedural generation
 │   ├── entities/
-│   │   ├── GameAgent.tsx           # Agent visualization
-│   │   ├── AgentPool.ts            # Agent spawning
+│   │   ├── GameAgent.tsx           # Agent visualization (w/ instanced rendering)
+│   │   ├── AgentPool.ts            # Agent spawning (grid/random/circle patterns)
 │   │   ├── Dragon.tsx              # Enemy dragons
 │   │   └── Structure.tsx           # Buildings
 │   ├── ui/

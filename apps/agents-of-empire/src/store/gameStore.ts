@@ -143,6 +143,11 @@ interface GameActions {
     agentRef?: any,
     parentId?: string
   ) => GameAgent;
+  spawnAgentBatch: (
+    count: number,
+    basePosition?: [number, number, number],
+    pattern?: "random" | "grid" | "circle"
+  ) => GameAgent[];
   removeAgent: (id: string) => void;
   updateAgent: (id: string, updates: Partial<GameAgent>) => void;
   setAgentState: (id: string, state: AgentState) => void;
@@ -299,6 +304,54 @@ export const useGameStore = create<GameStore>()(
     });
 
     return agent;
+  },
+
+  spawnAgentBatch: (count, basePosition, pattern) => {
+    const base = basePosition || [25, 0, 25];
+    const spawnPattern = pattern || "grid";
+    const agents: GameAgent[] = [];
+    const spawnRadius = 20;
+
+    if (spawnPattern === "grid") {
+      // Grid pattern for organized deployment
+      const gridSize = Math.ceil(Math.sqrt(count));
+      const spacing = 2;
+      const offset = (gridSize * spacing) / 2;
+
+      for (let i = 0; i < count; i++) {
+        const row = Math.floor(i / gridSize);
+        const col = i % gridSize;
+        const position: [number, number, number] = [
+          base[0] + col * spacing - offset,
+          base[1],
+          base[2] + row * spacing - offset,
+        ];
+        agents.push(get().spawnAgent(`Agent-${i + 1}`, position));
+      }
+    } else if (spawnPattern === "circle") {
+      // Circle pattern for defensive formation
+      for (let i = 0; i < count; i++) {
+        const angle = (i / count) * Math.PI * 2;
+        const position: [number, number, number] = [
+          base[0] + Math.cos(angle) * spawnRadius,
+          base[1],
+          base[2] + Math.sin(angle) * spawnRadius,
+        ];
+        agents.push(get().spawnAgent(`Agent-${i + 1}`, position));
+      }
+    } else {
+      // Random pattern (default)
+      for (let i = 0; i < count; i++) {
+        const position: [number, number, number] = [
+          base[0] + (Math.random() - 0.5) * spawnRadius * 2,
+          base[1],
+          base[2] + (Math.random() - 0.5) * spawnRadius * 2,
+        ];
+        agents.push(get().spawnAgent(`Agent-${i + 1}`, position));
+      }
+    }
+
+    return agents;
   },
 
   removeAgent: (id) => {

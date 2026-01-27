@@ -148,7 +148,7 @@ function GameScene() {
       <WorldGrid />
       <GroundPlane />
 
-      <InitialAgents count={5} />
+      <InitialAgents count={100} />
       <AgentPool onAgentClick={(agentId) => console.log("Agent clicked:", agentId)} />
 
       <DragonPool />

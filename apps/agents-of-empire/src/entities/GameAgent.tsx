@@ -1,7 +1,7 @@
-import { useRef, useEffect, useMemo } from "react";
+import { useRef, useEffect, useMemo, useState, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Group, Vector3, Color, Euler } from "three";
-import { Text } from "@react-three/drei";
+import { Group, Vector3, Color, Object3D, InstancedMesh } from "three";
+import { Text, Limit } from "@react-three/drei";
 import { useGameStore, useAgentsShallow, type AgentState, type GameAgent as GameAgentType } from "../store/gameStore";
 
 // ============================================================================
@@ -28,10 +28,6 @@ const AGENT_STATE_EMISSIVE: Record<AgentState, string> = {
   COMBAT: "#c0392b",
 };
 
-// ============================================================================
-// Agent State Icons (emojis for now, could be textures)
-// ============================================================================
-
 const AGENT_STATE_ICONS: Record<AgentState, string> = {
   IDLE: "💤",
   THINKING: "🤔",
@@ -43,7 +39,19 @@ const AGENT_STATE_ICONS: Record<AgentState, string> = {
 };
 
 // ============================================================================
-// Agent Visual Component
+// Performance Configuration
+// ============================================================================
+
+const MAX_AGENTS = 500;
+const AGENT_BODY_HEIGHT = 1.5;
+const AGENT_SCALE = 0.8;
+
+// ============================================================================
+// Agent State Icons (emojis for now, could be textures)
+// ============================================================================
+
+// ============================================================================
+// Individual Agent Component (for selected/hovered agents only)
 // ============================================================================
 
 interface GameAgentVisualProps {
@@ -102,9 +110,13 @@ export function GameAgentVisual({
 
     // Hover effect
     if (isHovered || isSelected) {
-      groupRef.current.position.y = Math.sin(time * 3) * 0.2 + 0.5;
+      if (groupRef.current) {
+        groupRef.current.position.y = Math.sin(time * 3) * 0.2 + 0.5;
+      }
     } else {
-      groupRef.current.position.y = 0;
+      if (groupRef.current) {
+        groupRef.current.position.y = 0;
+      }
     }
   });
 
@@ -225,10 +237,277 @@ export function GameAgentVisual({
           </mesh>
         </group>
       )}
-
-      {/* Connection line to parent (for subagents) */}
-      {agent.parentId && null /* Rendered separately in pool */}
     </group>
+  );
+}
+
+// ============================================================================
+// Instanced Agent Renderer - For high performance rendering of 100+ agents
+// ============================================================================
+
+interface InstancedAgentRendererProps {
+  agents: GameAgentType[];
+  selectedAgentIds: Set<string>;
+  hoverAgentId: string | null;
+  onAgentClick: (agentId: string) => void;
+  onAgentHover: (agentId: string | null) => void;
+}
+
+export function InstancedAgentRenderer({
+  agents,
+  selectedAgentIds,
+  hoverAgentId,
+  onAgentClick,
+  onAgentHover,
+}: InstancedAgentRendererProps) {
+  const bodyMeshRef = useRef<InstancedMesh>(null);
+  const headMeshRef = useRef<InstancedMesh>(null);
+  const dummy = useMemo(() => new Object3D(), []);
+  const color = useMemo(() => new Color(), []);
+
+  // Agent data maps for quick lookup
+  const agentMap = useMemo(() => {
+    const map = new Map<string, GameAgentType>();
+    for (const agent of agents) {
+      map.set(agent.id, agent);
+    }
+    return map;
+  }, [agents]);
+
+  // Get IDs of agents that need individual rendering (selected or hovered)
+  const specialAgentIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const id of selectedAgentIds) {
+      ids.add(id);
+    }
+    if (hoverAgentId) {
+      ids.add(hoverAgentId);
+    }
+    return ids;
+  }, [selectedAgentIds, hoverAgentId]);
+
+  // Filter agents for instanced rendering (excluding selected/hovered)
+  const instancedAgents = useMemo(() => {
+    return agents.filter((agent) => !specialAgentIds.has(agent.id));
+  }, [agents, specialAgentIds]);
+
+  // Update instanced meshes
+  useFrame(() => {
+    if (!bodyMeshRef.current || !headMeshRef.current) return;
+
+    let index = 0;
+
+    for (const agent of instancedAgents) {
+      const [x, y, z] = agent.position;
+
+      // Body instance
+      dummy.position.set(x, y + 0.5, z);
+      dummy.scale.setScalar(AGENT_SCALE);
+      dummy.updateMatrix();
+      bodyMeshRef.current.setMatrixAt(index, dummy.matrix);
+
+      // Color based on state
+      color.set(AGENT_STATE_COLORS[agent.state]);
+      bodyMeshRef.current.setColorAt(index, color);
+
+      // Head instance (slightly above body)
+      dummy.position.set(x, y + 1.2, z);
+      dummy.scale.setScalar(AGENT_SCALE * 0.6);
+      dummy.updateMatrix();
+      headMeshRef.current.setMatrixAt(index, dummy.matrix);
+
+      // Head color matches body
+      headMeshRef.current.setColorAt(index, color);
+
+      index++;
+    }
+
+    bodyMeshRef.current.instanceMatrix.needsUpdate = true;
+    if (bodyMeshRef.current.instanceColor) {
+      bodyMeshRef.current.instanceColor.needsUpdate = true;
+    }
+    headMeshRef.current.instanceMatrix.needsUpdate = true;
+    if (headMeshRef.current.instanceColor) {
+      headMeshRef.current.instanceColor.needsUpdate = true;
+    }
+  });
+
+  // Handle click on instanced agents
+  const handleClick = (event: any) => {
+    event.stopPropagation();
+    const instanceId = event.instanceId;
+    if (instanceId !== undefined && instancedAgents[instanceId]) {
+      onAgentClick(instancedAgents[instanceId].id);
+    }
+  };
+
+  const handlePointerMove = (event: any) => {
+    const instanceId = event.instanceId;
+    if (instanceId !== undefined && instancedAgents[instanceId]) {
+      onAgentHover(instancedAgents[instanceId].id);
+    } else {
+      onAgentHover(null);
+    }
+  };
+
+  return (
+    <>
+      {/* Instanced body meshes */}
+      <instancedMesh
+        ref={bodyMeshRef}
+        args={[undefined, undefined, instancedAgents.length]}
+        castShadow
+        receiveShadow
+        onClick={handleClick}
+        onPointerMove={handlePointerMove}
+        onPointerOut={() => onAgentHover(null)}
+      >
+        <boxGeometry args={[0.8, 1, 0.5]} />
+        <meshStandardMaterial />
+      </instancedMesh>
+
+      {/* Instanced head meshes */}
+      <instancedMesh
+        ref={headMeshRef}
+        args={[undefined, undefined, instancedAgents.length]}
+        castShadow
+        onClick={handleClick}
+        onPointerMove={handlePointerMove}
+      >
+        <boxGeometry args={[0.5, 0.5, 0.5]} />
+        <meshStandardMaterial />
+      </instancedMesh>
+    </>
+  );
+}
+
+// ============================================================================
+// LOD Agent Renderer - Uses InstancedRenderer for far agents
+// ============================================================================
+
+interface LODAgentRendererProps {
+  agents: GameAgentType[];
+  selectedAgentIds: Set<string>;
+  hoverAgentId: string | null;
+  onAgentClick: (agentId: string) => void;
+  onAgentHover: (agentId: string | null) => void;
+}
+
+export function LODAgentRenderer({
+  agents,
+  selectedAgentIds,
+  hoverAgentId,
+  onAgentClick,
+  onAgentHover,
+}: LODAgentRendererProps) {
+  // Agents that need detailed rendering (selected, hovered, or nearby)
+  const [nearbyAgents, setNearbyAgents] = useState<GameAgentType[]>([]);
+  const [cameraPosition, setCameraPosition] = useState(new Vector3(40, 40, 40));
+
+  // Update camera position for LOD calculation
+  useFrame((state) => {
+    if (state.camera.position.distanceTo(cameraPosition) > 1) {
+      setCameraPosition(state.camera.position.clone());
+    }
+  });
+
+  // Calculate which agents should be rendered in detail
+  useEffect(() => {
+    const NEAR_THRESHOLD = 30; // Distance threshold for detailed rendering
+    const detailed: GameAgentType[] = [];
+
+    for (const agent of agents) {
+      const agentPos = new Vector3(...agent.position);
+      const distance = agentPos.distanceTo(cameraPosition);
+
+      // Always render selected/hovered agents in detail
+      if (selectedAgentIds.has(agent.id) || hoverAgentId === agent.id) {
+        detailed.push(agent);
+      }
+      // Render nearby agents in detail
+      else if (distance < NEAR_THRESHOLD) {
+        detailed.push(agent);
+      }
+    }
+
+    setNearbyAgents(detailed);
+  }, [agents, selectedAgentIds, hoverAgentId, cameraPosition]);
+
+  // Agents to render as instances (far away, not selected/hovered)
+  const instancedAgentIds = useMemo(() => {
+    const detailedIds = new Set(nearbyAgents.map((a) => a.id));
+    return agents.filter((a) => !detailedIds.has(a.id));
+  }, [agents, nearbyAgents]);
+
+  return (
+    <>
+      {/* Instanced rendering for far agents */}
+      <InstancedAgentRenderer
+        agents={instancedAgentIds}
+        selectedAgentIds={selectedAgentIds}
+        hoverAgentId={hoverAgentId}
+        onAgentClick={onAgentClick}
+        onAgentHover={onAgentHover}
+      />
+
+      {/* Detailed rendering for nearby/selected agents */}
+      {nearbyAgents.map((agent) => (
+        <GameAgentVisual
+          key={agent.id}
+          agent={agent}
+          isSelected={selectedAgentIds.has(agent.id)}
+          isHovered={hoverAgentId === agent.id}
+          onPointerOver={() => onAgentHover(agent.id)}
+          onPointerOut={() => onAgentHover(null)}
+          onClick={() => onAgentClick(agent.id)}
+        />
+      ))}
+    </>
+  );
+}
+
+// ============================================================================
+// Agent Pool Component - Renders all agents with LOD
+// ============================================================================
+
+interface AgentPoolProps {
+  onAgentClick?: (agentId: string) => void;
+}
+
+export function AgentPool({ onAgentClick }: AgentPoolProps) {
+  const agents = useAgentsShallow() as Record<string, GameAgentType>;
+  const selectedAgentIds = useGameStore((state) => state.selectedAgentIds);
+  const hoverAgentId = useGameStore((state) => state.hoverAgentId);
+  const setHoverAgent = useGameStore((state) => state.setHoverAgent);
+
+  // Convert agents object to array for rendering
+  const agentsArray = useMemo(() => Object.values(agents), [agents]);
+
+  // Handle agent click
+  const handleAgentClick = useCallback(
+    (agentId: string) => {
+      onAgentClick?.(agentId);
+    },
+    [onAgentClick]
+  );
+
+  // Handle agent hover
+  const handleAgentHover = useCallback(
+    (agentId: string | null) => {
+      setHoverAgent(agentId);
+    },
+    [setHoverAgent]
+  );
+
+  // Use LOD renderer for performance
+  return (
+    <LODAgentRenderer
+      agents={agentsArray}
+      selectedAgentIds={selectedAgentIds}
+      hoverAgentId={hoverAgentId}
+      onAgentClick={handleAgentClick}
+      onAgentHover={handleAgentHover}
+    />
   );
 }
 
@@ -279,77 +558,6 @@ export function useAgentMovement(agentId: string) {
 }
 
 // ============================================================================
-// Agent Pool Component - Renders all agents
-// ============================================================================
-
-interface AgentPoolProps {
-  onAgentClick?: (agentId: string) => void;
-}
-
-export function AgentPool({ onAgentClick }: AgentPoolProps) {
-  const agents = useAgentsShallow() as Record<string, GameAgentType>;
-  const selectedAgentIds = useGameStore((state) => state.selectedAgentIds);
-  const hoverAgentId = useGameStore((state) => state.hoverAgentId);
-
-  const setHoverAgent = useGameStore((state) => state.setHoverAgent);
-
-  // Convert agents object to array for rendering
-  const agentsArray = useMemo(() => Object.values(agents), [agents]);
-
-  return (
-    <>
-      {agentsArray.map((agent) => (
-        <GameAgentVisual
-          key={agent.id}
-          agent={agent}
-          isSelected={selectedAgentIds.has(agent.id)}
-          isHovered={hoverAgentId === agent.id}
-          onPointerOver={() => setHoverAgent(agent.id)}
-          onPointerOut={() => setHoverAgent(null)}
-          onClick={() => {
-            onAgentClick?.(agent.id);
-          }}
-        />
-      ))}
-
-      {/* Connection lines between parent and child agents */}
-      {agentsArray
-        .filter((agent) => agent.parentId)
-        .map((agent) => {
-          const parent = agentsArray.find((a) => a.id === agent.parentId);
-          if (!parent) return null;
-
-          const startPos = new Vector3(...parent.position);
-          const endPos = new Vector3(...agent.position);
-          const midPos = startPos.clone().add(endPos).multiplyScalar(0.5).add(new Vector3(0, 2, 0));
-
-          return (
-            <group key={`connection-${agent.id}-${agent.parentId}`}>
-              {/* Curved line */}
-              <mesh>
-                <tubeGeometry
-                  args={[
-                    new THREE.CatmullRomCurve3([
-                      startPos,
-                      midPos,
-                      endPos,
-                    ]),
-                    8,
-                    0.02,
-                    4,
-                    false,
-                  ]}
-                />
-                <meshBasicMaterial color="#9b59b6" transparent opacity={0.5} />
-              </mesh>
-            </group>
-          );
-        })}
-    </>
-  );
-}
-
-// ============================================================================
 // Agent Spawn Effect Component
 // ============================================================================
 
@@ -360,8 +568,8 @@ interface AgentSpawnEffectProps {
 
 export function AgentSpawnEffect({ position, onComplete }: AgentSpawnEffectProps) {
   const meshRef = useRef<Group>(null);
-  const [scale, setScale] = React.useState(0);
-  const [opacity, setOpacity] = React.useState(1);
+  const [scale, setScale] = useState(0);
+  const [opacity, setOpacity] = useState(1);
 
   useFrame((state) => {
     if (!meshRef.current) return;
