@@ -157,7 +157,7 @@ The interface treats agent workflows as military campaigns:
 
 | ID | Requirement | Priority | Acceptance Criteria |
 |----|-------------|----------|---------------------|
-| UI-001 | RTS-style HUD layout | P0 | Minimap (top-right), agent panel (bottom-left), goals (top-left) |
+| UI-001 | RTS-style HUD layout | P0 | Minimap (top-right), agent panel (bottom-left), goals (top-left) | ✅ Implemented |
 | UI-002 | Context-sensitive tooltips | P1 | Hover over any element shows description |
 | UI-003 | Smooth panel animations | P1 | Fade/slide transitions using Framer Motion |
 | UI-004 | Keyboard shortcuts | P2 | Standard RTS shortcuts (ctrl-a select all, etc.) |
