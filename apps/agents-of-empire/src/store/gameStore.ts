@@ -667,6 +667,7 @@ export const useGameStore = create<GameStore>()(
   },
 
   openContextMenu: (position, agentId) => {
+    console.log("[gameStore] openContextMenu called", { position, agentId });
     set({
       contextMenuOpen: true,
       contextMenuPosition: position,

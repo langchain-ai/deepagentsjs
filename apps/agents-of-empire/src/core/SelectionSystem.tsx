@@ -228,6 +228,19 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
       // Check if clicking on a structure
       const structureHit = getStructureAtScreenPos(x, y);
 
+      // Debug logging for right-click
+      if (e.button === 2) {
+        console.log("[SelectionSystem] Right-click detected", {
+          clientX: e.clientX,
+          clientY: e.clientY,
+          rectLeft: rect.left,
+          rectTop: rect.top,
+          x, y,
+          agentId,
+          structureHit: structureHit?.id || null,
+        });
+      }
+
       if (e.button === 0) {
         // Left click
         if (agentId) {
@@ -373,6 +386,12 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
     const canvas = camera.domElement || document.querySelector("canvas");
 
     if (canvas) {
+      console.log("[SelectionSystem] Attaching event listeners to canvas", {
+        hasDomElement: !!camera.domElement,
+        canvasFound: !!canvas,
+        canvasId: (canvas as HTMLElement).id,
+      });
+
       canvas.addEventListener("mousedown", handleMouseDown);
       canvas.addEventListener("mousemove", handleMouseMove);
       canvas.addEventListener("mouseup", handleMouseUp);
@@ -384,6 +403,8 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
         canvas.removeEventListener("mouseup", handleMouseUp);
         canvas.removeEventListener("contextmenu", handleContextMenu);
       };
+    } else {
+      console.error("[SelectionSystem] No canvas found for event listeners!");
     }
   }, [camera, handleMouseDown, handleMouseMove, handleMouseUp, handleContextMenu]);
 
