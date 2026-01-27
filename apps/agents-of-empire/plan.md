@@ -317,10 +317,19 @@ apps/agents-of-empire/
    - Handle `subgraphs: true` for subagent tracking
    - Event filtering and throttling
 
-3. **State Visualization**
-   - Map agent states to animations (IDLE, THINKING, MOVING, WORKING, ERROR)
-   - Update agent status indicators in real-time
-   - Show tool execution animations
+3. **State Visualization** ([DA-003](https://github.com/DavinciDreams/deepagentsjs/issues/32)) - COMPLETED
+   - [x] Map agent states to animations (IDLE, THINKING, MOVING, WORKING, ERROR, COMPLETING)
+   - [x] Update agent status indicators in real-time
+   - [x] Show tool execution animations
+   - [x] Enhanced visual effects per state (colors, animations, icons)
+   - [x] Smooth transitions between states
+   - [x] State color coding with glow effects
+   - [x] ERROR state: Shake/jitter animation with red sparks
+   - [x] COMPLETING state: Celebration particles with expanding ring
+   - [x] MOVING state: Green trail effect behind agent
+   - [x] WORKING state: Tool swing animation with orange glow
+   - [x] THINKING state: Purple pulsing glow
+   - [x] IDLE state: Gentle blue bob animation
 
 4. **Subagent Visualization**
    - Spawn visual subagents near parent
