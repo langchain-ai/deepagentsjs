@@ -10,12 +10,16 @@ export type AgentState = "IDLE" | "THINKING" | "MOVING" | "WORKING" | "ERROR" | 
 
 export type ToolType = "search" | "code_executor" | "file_reader" | "web_fetcher" | "subagent";
 
+export type Rarity = "common" | "rare" | "epic" | "legendary";
+
 export interface Tool {
   id: string;
   name: string;
   type: ToolType;
   icon: string;
   description: string;
+  rarity: Rarity;
+  power?: number; // Optional power stat for gameplay
 }
 
 export interface GameAgent {
@@ -299,7 +303,7 @@ export const useGameStore = create<GameStore>()(
       health: 100,
       maxHealth: 100,
       equippedTool: null,
-      inventory: [],
+      inventory: getStarterTools(),
       currentTask: "Awaiting orders...",
       agentRef,
       parentId: parentId || null,
