@@ -167,16 +167,17 @@ function GameScene() {
 // ============================================================================()
 
 function SelectionBoxOverlay() {
-  const isDragging = useGameStore((state) => state.isDragging);
-  const dragStart = useGameStore((state) => state.dragStart);
-  const dragEnd = useGameStore((state) => state.dragEnd);
+  const selectionBox = useGameStore((state) => state.selectionBox);
 
-  if (!isDragging || !dragStart || !dragEnd) return null;
+  if (!selectionBox || !selectionBox.active) return null;
 
-  const x = Math.min(dragStart.x, dragEnd.x);
-  const y = Math.min(dragStart.y, dragEnd.y);
-  const width = Math.abs(dragEnd.x - dragStart.x);
-  const height = Math.abs(dragEnd.y - dragStart.y);
+  const x = Math.min(selectionBox.startX, selectionBox.endX);
+  const y = Math.min(selectionBox.startY, selectionBox.endY);
+  const width = Math.abs(selectionBox.endX - selectionBox.startX);
+  const height = Math.abs(selectionBox.endY - selectionBox.startY);
+
+  // Don't render if box is too small (less than 5 pixels)
+  if (width < 5 && height < 5) return null;
 
   return (
     <div
@@ -186,6 +187,7 @@ function SelectionBoxOverlay() {
         top: y,
         width,
         height,
+        pointerEvents: "none",
       }}
     />
   );

@@ -118,6 +118,7 @@ interface GameState {
   isDragging: boolean;
   dragStart: { x: number; y: number } | null;
   dragEnd: { x: number; y: number } | null;
+  selectionBox: { startX: number; startY: number; endX: number; endY: number; active: boolean } | null;
   hoverAgentId: string | null;
   contextMenuOpen: boolean;
   contextMenuPosition: { x: number; y: number } | null;
@@ -202,6 +203,9 @@ interface GameActions {
   startDrag: (position: { x: number; y: number }) => void;
   updateDrag: (position: { x: number; y: number }) => void;
   endDrag: () => void;
+  startSelectionBox: (startX: number, startY: number) => void;
+  updateSelectionBox: (endX: number, endY: number) => void;
+  endSelectionBox: () => void;
   setHoverAgent: (id: string | null) => void;
   openContextMenu: (position: { x: number; y: number }, agentId: string) => void;
   closeContextMenu: () => void;
@@ -240,6 +244,7 @@ export const useGameStore = create<GameStore>()(
     isDragging: false,
     dragStart: null,
     dragEnd: null,
+    selectionBox: null,
     hoverAgentId: null,
     contextMenuOpen: false,
     contextMenuPosition: null,
@@ -595,6 +600,31 @@ export const useGameStore = create<GameStore>()(
 
   endDrag: () => {
     set({ isDragging: false, dragStart: null, dragEnd: null });
+  },
+
+  startSelectionBox: (startX, startY) => {
+    set({
+      selectionBox: {
+        startX,
+        startY,
+        endX: startX,
+        endY: startY,
+        active: true,
+      },
+    });
+  },
+
+  updateSelectionBox: (endX, endY) => {
+    set((state) => {
+      if (state.selectionBox) {
+        state.selectionBox.endX = endX;
+        state.selectionBox.endY = endY;
+      }
+    });
+  },
+
+  endSelectionBox: () => {
+    set({ selectionBox: null });
   },
 
   setHoverAgent: (id) => {
