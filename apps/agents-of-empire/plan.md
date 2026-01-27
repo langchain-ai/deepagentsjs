@@ -317,10 +317,19 @@ apps/agents-of-empire/
    - Handle `subgraphs: true` for subagent tracking
    - Event filtering and throttling
 
-3. **State Visualization**
-   - Map agent states to animations (IDLE, THINKING, MOVING, WORKING, ERROR)
-   - Update agent status indicators in real-time
-   - Show tool execution animations
+3. **State Visualization** ([DA-003](https://github.com/DavinciDreams/deepagentsjs/issues/32)) - COMPLETED
+   - [x] Map agent states to animations (IDLE, THINKING, MOVING, WORKING, ERROR, COMPLETING)
+   - [x] Update agent status indicators in real-time
+   - [x] Show tool execution animations
+   - [x] Enhanced visual effects per state (colors, animations, icons)
+   - [x] Smooth transitions between states
+   - [x] State color coding with glow effects
+   - [x] ERROR state: Shake/jitter animation with red sparks
+   - [x] COMPLETING state: Celebration particles with expanding ring
+   - [x] MOVING state: Green trail effect behind agent
+   - [x] WORKING state: Tool swing animation with orange glow
+   - [x] THINKING state: Purple pulsing glow
+   - [x] IDLE state: Gentle blue bob animation
 
 4. **Subagent Visualization**
    - Spawn visual subagents near parent
@@ -764,10 +773,40 @@ function handleStreamEvent(event: StreamEvent) {
 
 ### Phase 5 Completion
 - [ ] 100+ agents on screen → 60 FPS maintained
-- [ ] Zoom out → See entire battlefield
+- [x] Zoom out → See entire battlefield (MAP-002)
 - [ ] Save game → State persists
 - [ ] Load game → Previous state restored
 - [ ] New user → Tutorial guides them through
+
+### MAP-002: Zoom in/out with scroll wheel - Completed 2025-01-27
+
+**Files Modified:**
+- `src/core/CameraController.ts` - Enhanced zoom range and speed, added height clamping
+- `src/store/gameStore.ts` - Updated zoom limits in setZoom function
+
+**Features Implemented:**
+1. **Expanded Zoom Range** (0.2x to 5.0x = 25x range):
+   - 0.2x: Extreme close-up (agent inspection)
+   - 0.5x: Close view (single agent detail)
+   - 1.0x: Medium-close view (multiple agents)
+   - 2.0x: Standard tactical view (default)
+   - 5.0x: Full map overview (50x50 tiles visible)
+
+2. **Improved Zoom Speed**:
+   - Increased from 0.001 to 0.002 (2x faster)
+   - More responsive to scroll wheel input
+   - Smooth interpolation maintained with existing damping system
+
+3. **Terrain Clipping Prevention**:
+   - Added MIN_CAMERA_HEIGHT constant (5 units)
+   - Camera height clamped in useFrame loop
+   - Prevents camera from clipping through terrain at max zoom
+
+4. **Acceptance Criteria Met**:
+   - Smooth zoom from individual agent to full map - PASS (25x zoom range)
+   - Scroll wheel controls zoom level - PASS (existing implementation, enhanced range)
+   - Zoom limits to prevent clipping - PASS (height clamping added)
+   - Smooth interpolation - PASS (existing damping system)
 
 ---
 

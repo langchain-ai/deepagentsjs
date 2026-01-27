@@ -128,6 +128,7 @@ interface GameState {
   dragEnd: { x: number; y: number } | null;
   selectionBox: { startX: number; startY: number; endX: number; endY: number; active: boolean } | null;
   hoverAgentId: string | null;
+  hoverStructureId: string | null;
   contextMenuOpen: boolean;
   contextMenuPosition: { x: number; y: number } | null;
   contextMenuAgentId: string | null;
@@ -217,6 +218,7 @@ interface GameActions {
   updateSelectionBox: (endX: number, endY: number) => void;
   endSelectionBox: () => void;
   setHoverAgent: (id: string | null) => void;
+  setHoveredStructure: (id: string | null) => void;
   openContextMenu: (position: { x: number; y: number }, agentId: string) => void;
   closeContextMenu: () => void;
 
@@ -260,6 +262,7 @@ export const useGameStore = create<GameStore>()(
     dragEnd: null,
     selectionBox: null,
     hoverAgentId: null,
+    hoverStructureId: null,
     contextMenuOpen: false,
     contextMenuPosition: null,
     contextMenuAgentId: null,
@@ -600,7 +603,7 @@ export const useGameStore = create<GameStore>()(
   },
 
   setZoom: (zoom) => {
-    set({ zoom: Math.max(0.5, Math.min(3, zoom)) });
+    set({ zoom: Math.max(0.2, Math.min(5.0, zoom)) });
   },
 
   setCameraRotation: (rotation) => {
@@ -657,6 +660,10 @@ export const useGameStore = create<GameStore>()(
 
   setHoverAgent: (id) => {
     set({ hoverAgentId: id });
+  },
+
+  setHoveredStructure: (id) => {
+    set({ hoverStructureId: id });
   },
 
   openContextMenu: (position, agentId) => {

@@ -5,6 +5,7 @@ import { useGame, useGameTime, useGameStats } from "./core/Game";
 import { CameraController } from "./core/CameraController";
 import { SelectionSystem } from "./core/SelectionSystem";
 import { WorldGrid, GroundPlane } from "./world/WorldManager";
+import { type Structure } from "./store/gameStore";
 import { Terrain } from "./world/Terrain";
 import { InitialAgents, useAgentPool } from "./entities/AgentPool";
 import { AgentPool } from "./entities/GameAgent";
@@ -149,36 +150,85 @@ function GameScene() {
   const dragStart = useGameStore((state) => state.dragStart);
   const dragEnd = useGameStore((state) => state.dragEnd);
 
-  // Handle ground click for movement
-  const handleGroundClick = useCallback(
-    (position: [number, number, number]) => {
-      const selectedAgents = useGameStore.getState().selectedAgentIds;
+  // Move agents to a target position in formation
+  const moveAgentsToPosition = useCallback(
+    (targetPosition: [number, number, number], agentIds: string[]) => {
+      if (agentIds.length === 0) return;
 
-      if (selectedAgents.size === 0) return;
-
-      // Move all selected agents to target
       const targets: [number, number, number][] = [];
-      const count = selectedAgents.size;
+      const count = agentIds.length;
 
       for (let i = 0; i < count; i++) {
         const angle = (i / count) * Math.PI * 2;
         const radius = Math.max(1, Math.sqrt(count) * 0.5);
         targets.push([
-          position[0] + Math.cos(angle) * radius,
-          position[1],
-          position[2] + Math.sin(angle) * radius,
+          targetPosition[0] + Math.cos(angle) * radius,
+          targetPosition[1],
+          targetPosition[2] + Math.sin(angle) * radius,
         ]);
       }
 
       let i = 0;
-      for (const agentId of selectedAgents) {
+      for (const agentId of agentIds) {
         useGameStore.getState().updateAgent(agentId, {
           targetPosition: targets[i],
           state: "MOVING",
-          currentTask: "Moving...",
+          currentTask: `Moving to ${targetPosition[0]}, ${targetPosition[2]}...`,
         });
         i++;
       }
+    },
+    []
+  );
+
+  // Handle ground click for movement
+  const handleGroundClick = useCallback(
+    (position: [number, number, number]) => {
+      const selectedAgents = Array.from(useGameStore.getState().selectedAgentIds);
+      if (selectedAgents.length === 0) return;
+      moveAgentsToPosition(position, selectedAgents);
+    },
+    [moveAgentsToPosition]
+  );
+
+  // Handle structure click (select structure or show info)
+  const handleStructureClick = useCallback(
+    (structureId: string, structure: Structure) => {
+      console.log("Structure clicked:", structure.name, structureId);
+      // Could show structure info panel here
+    },
+    []
+  );
+
+  // Handle structure right-click - assign selected agents to goal
+  const handleStructureRightClick = useCallback(
+    (structureId: string, structure: Structure) => {
+      const selectedAgents = Array.from(useGameStore.getState().selectedAgentIds);
+
+      if (selectedAgents.length === 0) {
+        console.log("No agents selected to assign to", structure.name);
+        return;
+      }
+
+      console.log(`Assigning ${selectedAgents.length} agents to ${structure.name}`);
+
+      // Move agents to the structure's position
+      moveAgentsToPosition(structure.position, selectedAgents);
+
+      // Update agent tasks to reflect assignment to this goal
+      for (const agentId of selectedAgents) {
+        useGameStore.getState().updateAgent(agentId, {
+          currentTask: `Assigned to ${structure.name}`,
+        });
+      }
+    },
+    [moveAgentsToPosition]
+  );
+
+  // Handle structure hover
+  const handleStructureHovered = useCallback(
+    (structureId: string | null) => {
+      // Could show tooltip or status here
     },
     []
   );
@@ -199,11 +249,17 @@ function GameScene() {
       <ConnectionLines enabled={true} maxConnections={100} />
 
       <DragonPool />
-      <StructurePool />
+      <StructurePool
+        onStructureClick={handleStructureClick}
+        onStructureRightClick={handleStructureRightClick}
+      />
 
       <SelectionSystem
         onAgentsSelected={(ids) => console.log("Selected:", ids)}
         onGroundClicked={handleGroundClick}
+        onStructureClicked={handleStructureClick}
+        onStructureRightClicked={handleStructureRightClick}
+        onStructureHovered={handleStructureHovered}
       />
     </>
   );

@@ -1,7 +1,7 @@
 import { useRef, useCallback, useEffect, useMemo } from "react";
 import { useThree } from "@react-three/fiber";
-import { Vector3, Raycaster, Plane, Camera } from "three";
-import { useGameStore, useAgentsShallow, type GameAgent } from "../store/gameStore";
+import { Vector3, Raycaster, Plane, Camera, Sphere } from "three";
+import { useGameStore, useAgentsShallow, useStructuresShallow, type GameAgent, type Structure } from "../store/gameStore";
 
 // Get selectedAgentIds from store for checking selection state
 const getSelectedAgentIds = () => useGameStore.getState().selectedAgentIds;
@@ -26,6 +26,9 @@ interface SelectionSystemOptions {
   onAgentsSelected?: (agentIds: string[]) => void;
   onGroundClicked?: (position: [number, number, number]) => void;
   onAgentRightClicked?: (agentId: string, position: { x: number; y: number }) => void;
+  onStructureClicked?: (structureId: string, structure: Structure) => void;
+  onStructureRightClicked?: (structureId: string, structure: Structure) => void;
+  onStructureHovered?: (structureId: string | null) => void;
 }
 
 interface DragState {
@@ -55,7 +58,10 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
 
   const agentsMap = useAgentsShallow() as Record<string, GameAgent>;
   const agents = useMemo(() => Object.values(agentsMap), [agentsMap]);
+  const structuresMap = useStructuresShallow() as Record<string, Structure>;
+  const structures = useMemo(() => Object.values(structuresMap), [structuresMap]);
   const selectedAgentIds = useGameStore((state) => state.selectedAgentIds);
+  const setHoveredStructure = useGameStore((state) => state.setHoveredStructure);
   const selectAgent = useGameStore((state) => state.selectAgent);
   const toggleAgentSelection = useGameStore((state) => state.toggleAgentSelection);
   const clearSelection = useGameStore((state) => state.clearSelection);
@@ -118,6 +124,51 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
     [camera, agents, size]
   );
 
+  // Structure radius based on type for click detection
+  const STRUCTURE_RADIUS: Record<string, number> = {
+    castle: 4,
+    tower: 3,
+    workshop: 2.5,
+    campfire: 1.5,
+    base: 4,
+  };
+
+  // Raycast to find structure under cursor
+  const getStructureAtScreenPos = useCallback(
+    (screenX: number, screenY: number) => {
+      const vector = new Vector3();
+      vector.set(
+        (screenX / size.width) * 2 - 1,
+        -(screenY / size.height) * 2 + 1,
+        0.5
+      );
+
+      raycaster.current.setFromCamera(vector, camera);
+
+      // Check intersection with structure positions
+      const structureHits: Array<{ id: string; structure: Structure; distance: number }> = [];
+
+      for (const structure of structures) {
+        const structurePos = new Vector3(...structure.position);
+        const radius = STRUCTURE_RADIUS[structure.type] || 3;
+
+        // Create a sphere for the structure bounds
+        const sphere = new Sphere(structurePos, radius);
+        const intersection = raycaster.current.ray.intersectSphere(sphere, new Vector3());
+
+        if (intersection) {
+          const distance = intersection.distanceTo(raycaster.current.ray.origin);
+          structureHits.push({ id: structure.id, structure, distance });
+        }
+      }
+
+      // Sort by distance and return closest
+      structureHits.sort((a, b) => a.distance - b.distance);
+      return structureHits[0] || null;
+    },
+    [camera, structures, size]
+  );
+
   // Check if an agent is within a screen-space selection box
   const isAgentInScreenBox = useCallback(
     (agent: GameAgent, box: { startX: number; startY: number; endX: number; endY: number }): boolean => {
@@ -174,6 +225,9 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
       // Check if clicking on an agent
       const agentId = getAgentAtScreenPos(x, y);
 
+      // Check if clicking on a structure
+      const structureHit = getStructureAtScreenPos(x, y);
+
       if (e.button === 0) {
         // Left click
         if (agentId) {
@@ -187,6 +241,9 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
             selectAgent(agentId);
           }
           options.onAgentsSelected?.([agentId]);
+        } else if (structureHit) {
+          // Clicking on a structure
+          options.onStructureClicked?.(structureHit.id, structureHit.structure);
         } else {
           // Clicked on empty space - start drag selection
           dragStateRef.current = {
@@ -207,6 +264,11 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
           closeContextMenu();
           openContextMenu({ x: e.clientX, y: e.clientY }, agentId);
           options.onAgentRightClicked?.(agentId, { x: e.clientX, y: e.clientY });
+        } else if (structureHit) {
+          // Right click on structure - assign selected agents to goal
+          e.preventDefault();
+          closeContextMenu();
+          options.onStructureRightClicked?.(structureHit.id, structureHit.structure);
         } else {
           // Right click on ground - move selected agents
           const worldPos = screenToWorld(x, y);
@@ -223,6 +285,7 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
       selectAgent,
       toggleAgentSelection,
       getAgentAtScreenPos,
+      getStructureAtScreenPos,
       screenToWorld,
       openContextMenu,
       closeContextMenu,
@@ -232,15 +295,23 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
     ]
   );
 
-  // Handle mouse move (for drag selection)
+  // Handle mouse move (for drag selection and structure hover)
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
-      if (!dragStateRef.current.isDragging) return;
-
       const rect = (e.target as HTMLElement).getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
 
+      if (!dragStateRef.current.isDragging) {
+        // Check for structure hover when not dragging
+        const structureHit = getStructureAtScreenPos(x, y);
+        const hoveredId = structureHit?.id || null;
+        setHoveredStructure(hoveredId);
+        options.onStructureHovered?.(hoveredId);
+        return;
+      }
+
+      // Drag selection in progress
       // Check if we've moved enough to consider this a drag
       const movedDistance = Math.sqrt(
         Math.pow(x - dragStateRef.current.startX, 2) +
@@ -255,7 +326,7 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
         updateSelectionBox(x, y);
       }
     },
-    [updateSelectionBox]
+    [updateSelectionBox, getStructureAtScreenPos, setHoveredStructure, options]
   );
 
   // Handle mouse up (end drag selection)
@@ -319,6 +390,7 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
   return {
     screenToWorld,
     getAgentAtScreenPos,
+    getStructureAtScreenPos,
     isAgentInScreenBox,
     selectAgentsInScreenBox,
   };
@@ -386,6 +458,9 @@ interface SelectionSystemComponentProps {
   onAgentsSelected?: (agentIds: string[]) => void;
   onGroundClicked?: (position: [number, number, number]) => void;
   onAgentRightClicked?: (agentId: string, position: { x: number; y: number }) => void;
+  onStructureClicked?: (structureId: string, structure: Structure) => void;
+  onStructureRightClicked?: (structureId: string, structure: Structure) => void;
+  onStructureHovered?: (structureId: string | null) => void;
 }
 
 export function SelectionSystem(props: SelectionSystemComponentProps) {

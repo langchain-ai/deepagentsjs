@@ -114,6 +114,15 @@ The app opens with an immersive landing page featuring:
 - [x] Spawn Deep Agents as visual characters
 - [x] Map agent state to visual state
 - [x] Event type definitions
+- [x] **Agent State Visualization** ([DA-003](https://github.com/DavinciDreams/deepagentsjs/issues/32))
+  - [x] All 6 states with distinct visual indicators (IDLE, THINKING, MOVING, WORKING, ERROR, COMPLETING)
+  - [x] State color coding with smooth transitions
+  - [x] ERROR state: Shake/jitter animation with red sparks
+  - [x] COMPLETING state: Celebration particles with expanding ring
+  - [x] MOVING state: Green trail effect
+  - [x] WORKING state: Tool swing animation with glow
+  - [x] THINKING state: Purple pulsing glow
+  - [x] IDLE state: Gentle blue bob animation
 
 ### Phase 3: UI Overlay ✅
 - [x] Minimap (top-right corner)

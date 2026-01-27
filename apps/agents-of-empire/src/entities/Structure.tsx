@@ -1,8 +1,9 @@
-import React, { useRef, useMemo, useState } from "react";
+import React, { useRef, useMemo, useState, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Group, Color } from "three";
 import { Text } from "@react-three/drei";
 import { useGameStore, useStructuresShallow, type Structure as StructureType } from "../store/gameStore";
+import { shallow } from "zustand/shallow";
 
 // ============================================================================
 // Structure Visual Configurations
@@ -42,11 +43,24 @@ const STRUCTURE_CONFIG = {
 
 interface StructureVisualProps {
   structure: StructureType;
+  isHovered?: boolean;
+  hasSelectedAgents?: boolean;
+  onPointerOver?: () => void;
+  onPointerOut?: () => void;
+  onClick?: () => void;
 }
 
-export function StructureVisual({ structure }: StructureVisualProps) {
+export function StructureVisual({
+  structure,
+  isHovered = false,
+  hasSelectedAgents = false,
+  onPointerOver,
+  onPointerOut,
+  onClick,
+}: StructureVisualProps) {
   const groupRef = useRef<Group>(null);
   const config = STRUCTURE_CONFIG[structure.type];
+  const [pulseScale, setPulseScale] = useState(1);
 
   // Animate certain structures
   useFrame((state) => {
@@ -63,16 +77,65 @@ export function StructureVisual({ structure }: StructureVisualProps) {
       // Subtle floating for magical structures
       groupRef.current.position.y = Math.sin(time * 0.5) * 0.1;
     }
+
+    // Pulse effect when hovered with selected agents
+    if (hasSelectedAgents && isHovered) {
+      setPulseScale(1 + Math.sin(time * 4) * 0.1);
+    } else {
+      setPulseScale(1);
+    }
   });
 
+  // Structure radius based on type for click detection
+  const STRUCTURE_RADIUS: Record<string, number> = {
+    castle: 4,
+    tower: 3,
+    workshop: 2.5,
+    campfire: 1.5,
+    base: 4,
+  };
+
+  const radius = STRUCTURE_RADIUS[structure.type] || 3;
+
   return (
-    <group ref={groupRef} position={structure.position}>
-      {/* Structure base - render different geometry based on type */}
-      {structure.type === "castle" && <CastleMesh />}
-      {structure.type === "tower" && <TowerMesh />}
-      {structure.type === "workshop" && <WorkshopMesh />}
-      {structure.type === "campfire" && <CampfireMesh />}
-      {structure.type === "base" && <BaseMesh />}
+    <group
+      ref={groupRef}
+      position={structure.position}
+      onPointerOver={onPointerOver}
+      onPointerOut={onPointerOut}
+      onClick={onClick}
+    >
+      {/* Invisible hit sphere for easier clicking */}
+      <mesh visible={false}>
+        <sphereGeometry args={[radius, 16, 16]} />
+        <meshBasicMaterial />
+      </mesh>
+
+      {/* Highlight ring when hovered with selected agents */}
+      {hasSelectedAgents && isHovered && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+          <ringGeometry args={[radius, radius + 0.3, 32]} />
+          <meshBasicMaterial color="#2ecc71" transparent opacity={0.6} />
+        </mesh>
+      )}
+
+      {/* Highlight ring when hovered without selected agents */}
+      {isHovered && !hasSelectedAgents && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+          <ringGeometry args={[radius, radius + 0.2, 32]} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={0.4} />
+        </mesh>
+      )}
+
+      {/* Scale pulse for hover effect */}
+      <group scale={pulseScale}>
+        {/* Structure base - render different geometry based on type */}
+        {structure.type === "castle" && <CastleMesh />}
+        {structure.type === "tower" && <TowerMesh />}
+        {structure.type === "workshop" && <WorkshopMesh />}
+        {structure.type === "campfire" && <CampfireMesh />}
+        {structure.type === "base" && <BaseMesh />}
+      </group>
 
       {/* Name label */}
       <Text
@@ -86,6 +149,21 @@ export function StructureVisual({ structure }: StructureVisualProps) {
       >
         {structure.name}
       </Text>
+
+      {/* Assignment indicator when agents can be assigned */}
+      {hasSelectedAgents && !isHovered && (
+        <Text
+          position={[0, 3.7, 0]}
+          fontSize={0.2}
+          color="#2ecc71"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.02}
+          outlineColor="#000000"
+        >
+          Right-click to assign
+        </Text>
+      )}
 
       {/* Goal indicator if this is a quest target */}
       {structure.goalId && (
@@ -219,12 +297,24 @@ function BaseMesh() {
 // ============================================================================
 
 interface StructurePoolProps {
-  onStructureClick?: (structureId: string) => void;
+  onStructureClick?: (structureId: string, structure: StructureType) => void;
+  onStructureRightClick?: (structureId: string, structure: StructureType) => void;
 }
 
-export function StructurePool({ onStructureClick }: StructurePoolProps) {
+export function StructurePool({ onStructureClick, onStructureRightClick }: StructurePoolProps) {
   const structuresMap = useStructuresShallow() as Record<string, StructureType>;
   const structures = useMemo(() => Object.values(structuresMap), [structuresMap]);
+  const hoverStructureId = useGameStore((state) => state.hoverStructureId);
+  const selectedAgentIds = useGameStore((state) => state.selectedAgentIds);
+  const setHoveredStructure = useGameStore((state) => state.setHoveredStructure);
+
+  // Handle structure hover
+  const handleStructureHover = useCallback((structureId: string | null) => {
+    setHoveredStructure(structureId);
+  }, [setHoveredStructure]);
+
+  // Check if there are selected agents (for assignment UI)
+  const hasSelectedAgents = selectedAgentIds.size > 0;
 
   return (
     <>
@@ -232,6 +322,11 @@ export function StructurePool({ onStructureClick }: StructurePoolProps) {
         <StructureVisual
           key={structure.id}
           structure={structure}
+          isHovered={hoverStructureId === structure.id}
+          hasSelectedAgents={hasSelectedAgents}
+          onPointerOver={() => handleStructureHover(structure.id)}
+          onPointerOut={() => handleStructureHover(null)}
+          onClick={() => onStructureClick?.(structure.id, structure)}
         />
       ))}
     </>

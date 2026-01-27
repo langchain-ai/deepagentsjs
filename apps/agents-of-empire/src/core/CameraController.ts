@@ -34,6 +34,7 @@ const DEFAULT_ELEVATION = Math.asin(Math.tan(Math.PI / 6)); // ~35.26 degrees (t
 const MIN_ELEVATION = Math.PI / 8; // 22.5 degrees minimum
 const MAX_ELEVATION = Math.PI / 3; // 60 degrees maximum
 const DISTANCE_BASE = 40; // Base distance from target
+const MIN_CAMERA_HEIGHT = 5; // Minimum camera height to prevent terrain clipping
 
 /**
  * useCameraController - Manages the isometric RTS camera
@@ -42,15 +43,22 @@ const DISTANCE_BASE = 40; // Base distance from target
  * - Isometric projection with 45-degree default angle
  * - Fully rotational camera around the scene
  * - Smooth damping for all camera movements
- * - Zoom with scroll wheel
+ * - Zoom with scroll wheel (0.2x to 5.0x range for agent-to-map view)
  * - Pan with edge scrolling, middle-click drag, or WASD/arrow keys
  * - Rotate with Q/E keys or right-click drag
  * - Adjust elevation with Home/End keys
+ *
+ * Zoom Levels:
+ * - 5.0x: Full map overview (50x50 tiles visible)
+ * - 2.0x: Standard tactical view (default)
+ * - 1.0x: Medium-close view (multiple agents)
+ * - 0.5x: Close view (single agent detail)
+ * - 0.2x: Extreme close-up (agent inspection)
  */
 export function useCameraController({
-  minZoom = 0.5,
-  maxZoom = 3,
-  zoomSpeed = 0.001,
+  minZoom = 0.2,
+  maxZoom = 5.0,
+  zoomSpeed = 0.002,
   panSpeed = 0.01,
   rotationSpeed = 0.02,
   elevationSpeed = 0.01,
@@ -363,7 +371,10 @@ export function useCameraController({
     const camY = distance * Math.sin(currentElevation);
     const camZ = smoothRef.current.currentZ + distance * Math.cos(currentRotation) * Math.cos(currentElevation);
 
-    camera.position.set(camX, camY, camZ);
+    // Clamp camera height to prevent clipping through terrain
+    const clampedCamY = Math.max(MIN_CAMERA_HEIGHT, camY);
+
+    camera.position.set(camX, clampedCamY, camZ);
     camera.lookAt(
       smoothRef.current.currentX,
       0,
