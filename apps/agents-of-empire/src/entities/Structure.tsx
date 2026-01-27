@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useState, useCallback } from "react";
+import React, { useRef, useMemo, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Group, Color } from "three";
 import { Text } from "@react-three/drei";
@@ -98,6 +98,15 @@ export function StructureVisual({
   const radius = STRUCTURE_RADIUS[structure.type] || 3;
 
   return (
+<<<<<<< HEAD
+    <group ref={groupRef} position={structure.position}>
+      {/* Structure base - render different geometry based on type */}
+      {structure.type === "castle" && <CastleMesh />}
+      {structure.type === "tower" && <TowerMesh />}
+      {structure.type === "workshop" && <WorkshopMesh />}
+      {structure.type === "campfire" && <CampfireMesh />}
+      {structure.type === "base" && <BaseMesh />}
+=======
     <group
       ref={groupRef}
       position={structure.position}
@@ -110,6 +119,7 @@ export function StructureVisual({
         <sphereGeometry args={[radius, 16, 16]} />
         <meshBasicMaterial />
       </mesh>
+>>>>>>> origin/main
 
       {/* Highlight ring when hovered with selected agents */}
       {hasSelectedAgents && isHovered && (
