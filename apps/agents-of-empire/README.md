@@ -12,7 +12,7 @@ Not a node editor. A real game interface where:
 - **Goals are physical locations** (castles, buildings) on the map
 - **Tools are equipped** like RPG inventory items
 - **Errors spawn dragons** that agents must battle
-- **Agent coordination is visible** on the battlefield
+- **Agent coordination is visible** on the battlefield with connection lines
 
 ## Tech Stack
 
@@ -129,6 +129,13 @@ The app opens with an immersive landing page featuring:
 - [x] Error → Dragon spawn flow
 
 ### Phase 5: Polish (In Progress)
+- [x] **Connection lines between cooperating agents** (COORD-001)
+  - [x] Parent-Child (subagent) lines in cyan
+  - [x] Collaboration lines for working agents in green
+  - [x] Moving-together lines for coordinated movement in yellow
+  - [x] Glowing effect with pulse animation
+  - [x] Lines follow agents as they move
+  - [x] Lines fade when collaboration ends
 - [ ] Character models/skins
 - [ ] Persistent world state
 - [ ] Save/load functionality
@@ -150,6 +157,7 @@ apps/agents-of-empire/
 │   ├── entities/
 │   │   ├── GameAgent.tsx           # Agent visualization (w/ instanced rendering)
 │   │   ├── AgentPool.ts            # Agent spawning (grid/random/circle patterns)
+│   │   ├── ConnectionLines.tsx     # Connection lines between cooperating agents
 │   │   ├── Dragon.tsx              # Enemy dragons
 │   │   └── Structure.tsx           # Buildings
 │   ├── ui/
