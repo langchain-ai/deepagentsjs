@@ -8,6 +8,7 @@ import { useGameStore, type GameAgent } from "../store/gameStore";
 interface AgentPoolOptions {
   maxAgents?: number;
   spawnRadius?: number;
+  spawnPattern?: "random" | "grid" | "circle";
 }
 
 const DEFAULT_AGENTS = [
@@ -19,16 +20,22 @@ const DEFAULT_AGENTS = [
 ];
 
 export function useAgentPool(options: AgentPoolOptions = {}) {
-  const { maxAgents = 100, spawnRadius = 5 } = options;
+  const { maxAgents = 500, spawnRadius = 20, spawnPattern = "random" } = options;
 
   const spawnAgent = useCallback(
     (name?: string, position?: [number, number, number], agentRef?: any, parentId?: string) => {
       const agentName = name || DEFAULT_AGENTS[Math.floor(Math.random() * DEFAULT_AGENTS.length)].name;
-      const spawnPos: [number, number, number] = position || [
-        25 + (Math.random() - 0.5) * spawnRadius * 2,
-        0,
-        25 + (Math.random() - 0.5) * spawnRadius * 2,
-      ];
+      let spawnPos: [number, number, number];
+
+      if (position) {
+        spawnPos = position;
+      } else {
+        spawnPos = [
+          25 + (Math.random() - 0.5) * spawnRadius * 2,
+          0,
+          25 + (Math.random() - 0.5) * spawnRadius * 2,
+        ];
+      }
 
       return useGameStore.getState().spawnAgent(agentName, spawnPos, agentRef, parentId);
     },
@@ -36,17 +43,49 @@ export function useAgentPool(options: AgentPoolOptions = {}) {
   );
 
   const spawnAgentBatch = useCallback(
-    (count: number, basePosition?: [number, number, number]) => {
+    (count: number, basePosition?: [number, number, number], pattern?: "random" | "grid" | "circle") => {
       const agents: GameAgent[] = [];
       const base = basePosition || [25, 0, 25];
+      const spawnPattern = pattern || "random";
 
-      for (let i = 0; i < count; i++) {
-        const pos: [number, number, number] = [
-          base[0] + (Math.random() - 0.5) * spawnRadius * 2,
-          base[1],
-          base[2] + (Math.random() - 0.5) * spawnRadius * 2,
-        ];
-        agents.push(spawnAgent(undefined, pos));
+      if (spawnPattern === "grid") {
+        // Grid pattern for organized deployment
+        const gridSize = Math.ceil(Math.sqrt(count));
+        const spacing = 2;
+        const offset = (gridSize * spacing) / 2;
+
+        for (let i = 0; i < count; i++) {
+          const row = Math.floor(i / gridSize);
+          const col = i % gridSize;
+          const pos: [number, number, number] = [
+            base[0] + col * spacing - offset,
+            base[1],
+            base[2] + row * spacing - offset,
+          ];
+          agents.push(spawnAgent(undefined, pos));
+        }
+      } else if (spawnPattern === "circle") {
+        // Circle pattern for defensive formation
+        for (let i = 0; i < count; i++) {
+          const angle = (i / count) * Math.PI * 2;
+          const radius = spawnRadius;
+          const pos: [number, number, number] = [
+            base[0] + Math.cos(angle) * radius,
+            base[1],
+            base[2] + Math.sin(angle) * radius,
+          ];
+          agents.push(spawnAgent(undefined, pos));
+        }
+      } else {
+        // Random pattern (default)
+        for (let i = 0; i < count; i++) {
+          const pos: [number, number, number] = [
+            base[0] + (Math.random() - 0.5) * spawnRadius * 2,
+            base[1],
+            base[2] + (Math.random() - 0.5) * spawnRadius * 2,
+          ];
+          agents.push(spawnAgent(undefined, pos));
+        }
       }
 
       return agents;
@@ -81,7 +120,7 @@ interface InitialAgentsProps {
   count?: number;
 }
 
-export function InitialAgents({ count = 5 }: InitialAgentsProps) {
+export function InitialAgents({ count = 100 }: InitialAgentsProps) {
   const agentCount = useGameStore((state) => state.agentCount);
   const hasInitialized = useRef(false);
 
@@ -89,9 +128,9 @@ export function InitialAgents({ count = 5 }: InitialAgentsProps) {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
 
-    // Spawn initial agents
+    // Spawn initial agents in grid pattern for better distribution
     const { spawnAgentBatch } = useGameStore.getState();
-    const newAgents = spawnAgentBatch?.(count);
+    const newAgents = spawnAgentBatch?.(count, [25, 0, 25], "grid");
 
     // Add default tools to agents
     const defaultTools = [
