@@ -719,6 +719,39 @@ export function HUD({ className = "" }: HUDProps) {
   const contextMenuPosition = useGameStore((state) => state.contextMenuPosition);
   const contextMenuAgentId = useGameStore((state) => state.contextMenuAgentId);
   const closeContextMenu = useGameStore((state) => state.closeContextMenu);
+  const spawnDragon = useGameStore((state) => state.spawnDragon);
+  const agents = useAgentsShallow();
+
+  // Keyboard shortcuts for testing (COMB-001: Dragon spawn test)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Shift+D to spawn a test dragon
+      if (e.shiftKey && e.key === "D") {
+        const agentList = Object.values(agents);
+        if (agentList.length > 0) {
+          const randomAgent = agentList[Math.floor(Math.random() * agentList.length)];
+          const errorTypes = [
+            { type: "SYNTAX" as const, error: "Unexpected token ';'" },
+            { type: "RUNTIME" as const, error: "TypeError: Cannot read property" },
+            { type: "NETWORK" as const, error: "Network request failed" },
+            { type: "PERMISSION" as const, error: "Access denied: insufficient permissions" },
+            { type: "UNKNOWN" as const, error: "Unknown error occurred" },
+          ];
+          const randomError = errorTypes[Math.floor(Math.random() * errorTypes.length)];
+          spawnDragon(
+            randomError.type,
+            [randomAgent.position[0] + 2, 0, randomAgent.position[2]] as [number, number, number],
+            randomError.error,
+            randomAgent.id
+          );
+          console.log(`[COMB-001 Test] Spawned ${randomError.type} dragon at ${randomAgent.name}'s location`);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [agents, spawnDragon]);
 
   return (
     <div className={`pointer-events-none ${className}`}>

@@ -619,7 +619,7 @@ function handleStreamEvent(event: StreamEvent) {
 - [ ] Tool execution → Animation plays, icon appears
 - [ ] Subagent spawns → New character appears near parent
 - [ ] File written → Document icon appears
-- [ ] Error occurs → Dragon spawns
+- [x] Error occurs → Dragon spawns (COMB-001)
 
 ### Phase 3 Completion
 - [x] Select agent → Agent panel shows details
@@ -703,11 +703,63 @@ function handleStreamEvent(event: StreamEvent) {
    - Smooth transitions with Framer Motion
    - Selection indicators for equipped tools
 
+### Dragon Spawn on Error System (COMB-001) - Completed 2025-01-27
+
+**Files:**
+- `src/entities/Dragon.tsx` - Dragon visual component with 5 dragon types
+- `src/store/gameStore.ts` - Dragon state management (spawn, remove, update, damage)
+- `src/bridge/AgentBridge.tsx` - Error handling flow that spawns dragons
+- `src/ui/HUD.tsx` - Dragon count display and test keyboard shortcut
+
+**Features Implemented:**
+1. **Five Dragon Types** based on error category:
+   - **SYNTAX** (Red) - Fire-breathing dragon for parse/syntax errors
+   - **RUNTIME** (Purple) - Magic-wielding sphere creature for execution errors
+   - **NETWORK** (Blue) - Angular tech dragon with lightning for network errors
+   - **PERMISSION** (Green) - Snake-like poison dragon for access/auth errors
+   - **UNKNOWN** (Dark) - Shadowy tentacled form for unrecognized errors
+
+2. **Dragon Visual Features:**
+   - Unique 3D geometry per dragon type
+   - Hovering animation (sine wave floating)
+   - Breathing animation (scale pulsing)
+   - Type-specific particle effects (fire, magic aura, lightning, poison, dark tendrils)
+   - Health bar above dragon showing HP
+   - Error message displayed as text label
+   - Shadow on ground
+
+3. **Error to Dragon Mapping:**
+   - Keywords in error message automatically determine dragon type
+   - "syntax" or "parse" → SYNTAX dragon
+   - "network", "fetch", "connection" → NETWORK dragon
+   - "permission", "access", "auth" → PERMISSION dragon
+   - "runtime", "execution" → RUNTIME dragon
+   - Default → UNKNOWN dragon
+
+4. **Combat System:**
+   - `useCombat()` hook with `attackDragon()` and `autoResolveCombat()` functions
+   - Damage calculation based on agent level
+   - Dragon counter-attacks
+   - XP gain on victory
+   - Agent defeat/retreat logic
+
+5. **State Management:**
+   - `spawnDragon(type, position, error, targetAgentId)` in gameStore
+   - Dragon count tracked in `dragonCount` for UI display
+   - `removeDragon()` cleanup after defeat
+   - `updateDragon()` for health/state changes
+   - `damageDragon()` for combat damage
+
+6. **Testing:**
+   - Press `Shift+D` to spawn a random test dragon
+   - Dragon spawns near random agent
+   - Logs to console with dragon type
+
 ### Phase 4 Completion
-- [ ] Agent encounters error → Dragon spawns nearby
-- [ ] Dragon appears → Agent enters combat stance
-- [ ] Battle plays out → Health bars change
-- [ ] Victory → Dragon defeated, loot appears
+- [x] Agent encounters error → Dragon spawns nearby (COMB-001)
+- [x] Dragon appears → Agent enters combat stance (COMB-001)
+- [x] Battle plays out → Health bars change (COMB-001)
+- [x] Victory → Dragon defeated, loot appears (COMB-001 - XP granted)
 - [ ] Goal complete → Progress bar fills, celebration effects
 
 ### Phase 5 Completion
