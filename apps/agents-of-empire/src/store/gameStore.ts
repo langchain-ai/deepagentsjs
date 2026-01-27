@@ -303,7 +303,7 @@ export const useGameStore = create<GameStore>()(
       health: 100,
       maxHealth: 100,
       equippedTool: null,
-      inventory: getStarterTools(),
+      inventory: [],
       currentTask: "Awaiting orders...",
       agentRef,
       parentId: parentId || null,
