@@ -123,7 +123,15 @@ The app opens with an immersive landing page featuring:
 - [x] Context Menu (right-click on agents)
 
 ### Phase 4: Goals & Dragons ✅
-- [x] Goal Structures (Castle, Tower, Workshop, Campfire, Base)
+- [x] **Goal Structures (GOAL-001)** - All 5 types with distinct 3D appearances:
+  - [x] Castle (main goals) - Large structure with corner towers, gold color
+  - [x] Tower (sub-goals) - Cylinder with cone roof, orange color
+  - [x] Workshop (tasks) - Building with roof and chimney, gray color
+  - [x] Campfire (spawn/gathering) - Animated fire with light, red color
+  - [x] Base (HQ) - Building with flag pole, blue color
+  - [x] Goal indicators (golden sphere + light for structures with goalId)
+  - [x] Structure spawn effects with particles
+  - [x] Structures visible on minimap
 - [x] Dragon Types (SYNTAX, RUNTIME, NETWORK, PERMISSION, UNKNOWN)
 - [x] Combat mechanics
 - [x] Error → Dragon spawn flow

@@ -628,9 +628,40 @@ function handleStreamEvent(event: StreamEvent) {
 - [x] Rarity filter tabs for organizing inventory
 - [x] Visual equipped tool indicator with ToolIcon component
 - [ ] Drag tool to agent → Agent equips tool
-- [ ] Create goal → Goal structure appears on map
+- [x] Create goal → Goal structure appears on map (GOAL-001)
 - [ ] Assign agent to goal → Agent moves to goal and shows working
 - [x] Minimap → Shows all agents and structures
+
+### Goal Structures Implementation (GOAL-001) - Completed 2025-01-27
+
+**Files:**
+- `src/entities/Structure.tsx` - All 5 goal structure types with unique 3D appearances
+- `src/store/gameStore.ts` - Structure type definitions and state management
+- `src/App.tsx` - Initial structure placement
+
+**Features Implemented:**
+1. **Five Structure Types** with distinct visual appearances:
+   - **Castle** (main goals) - Large box geometry with 4 corner towers, gold color, subtle floating animation
+   - **Tower** (sub-goals) - Cylinder with cone roof, orange color, floating animation
+   - **Workshop** (tasks) - Box with pyramid roof and chimney, gray color
+   - **Campfire** (spawn/gathering) - Animated flickering fire with light, red color
+   - **Base** (HQ) - Box with flag pole and flag, blue color
+
+2. **Visual Features:**
+   - Each structure type has unique color and emissive properties
+   - Name labels displayed above structures
+   - Goal indicators (golden sphere + point light) for structures with goalId
+   - Structure spawn effects with rising animation and particles
+   - Structures visible on minimap (HUD.tsx)
+
+3. **State Management:**
+   - addStructure(), removeStructure(), updateStructure() in gameStore
+   - Structure type: "castle" | "tower" | "workshop" | "campfire" | "base"
+   - Structure interface includes id, type, position, name, description, goalId
+
+4. **Initialization:**
+   - 8 structures placed at game start (1 base, 1 castle, 2 towers, 2 workshops, 2 campfires)
+   - Structures properly positioned on terrain
 
 ### Inventory System Implementation (INV-001) - Completed 2025-01-27
 
