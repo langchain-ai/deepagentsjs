@@ -541,8 +541,8 @@ export function GameAgentVisual({
           <mesh castShadow position={[0, 0, 0]}>
             <boxGeometry args={[0.2, 0.6, 0.2]} />
             <meshStandardMaterial
-              color={currentColor}
-              emissive={currentEmissive}
+              color={currentColorRef.current}
+              emissive={currentEmissiveRef.current}
               emissiveIntensity={(stateConfig.glowIntensity || 0.3) * 0.5}
             />
           </mesh>
@@ -551,8 +551,8 @@ export function GameAgentVisual({
           <mesh castShadow position={[0, 0, 0]}>
             <boxGeometry args={[0.2, 0.6, 0.2]} />
             <meshStandardMaterial
-              color={currentColor}
-              emissive={currentEmissive}
+              color={currentColorRef.current}
+              emissive={currentEmissiveRef.current}
               emissiveIntensity={(stateConfig.glowIntensity || 0.3) * 0.5}
             />
           </mesh>
