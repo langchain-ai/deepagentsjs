@@ -28,22 +28,42 @@ interface SelectionSystemOptions {
   onAgentRightClicked?: (agentId: string, position: { x: number; y: number }) => void;
 }
 
+interface DragState {
+  isDragging: boolean;
+  startX: number;
+  startY: number;
+  hasMoved: boolean;
+  currentX: number;
+  currentY: number;
+}
+
 export function useSelectionSystem(options: SelectionSystemOptions = {}) {
   const { camera, size } = useThree();
   const raycaster = useRef(new Raycaster());
   const mouse = useRef(new Vector3());
   const groundPlane = useRef(new Plane(new Vector3(0, 1, 0), 0));
 
+  // Use ref for drag state to avoid closure issues
+  const dragStateRef = useRef<DragState>({
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+    hasMoved: false,
+    currentX: 0,
+    currentY: 0,
+  });
+
   const agentsMap = useAgentsShallow() as Record<string, GameAgent>;
   const agents = useMemo(() => Object.values(agentsMap), [agentsMap]);
   const selectedAgentIds = useGameStore((state) => state.selectedAgentIds);
   const selectAgent = useGameStore((state) => state.selectAgent);
   const toggleAgentSelection = useGameStore((state) => state.toggleAgentSelection);
-  const selectAgentsInBox = useGameStore((state) => state.selectAgentsInBox);
   const clearSelection = useGameStore((state) => state.clearSelection);
-  const deselectAgent = useGameStore((state) => state.deselectAgent);
   const openContextMenu = useGameStore((state) => state.openContextMenu);
   const closeContextMenu = useGameStore((state) => state.closeContextMenu);
+  const startSelectionBox = useGameStore((state) => state.startSelectionBox);
+  const updateSelectionBox = useGameStore((state) => state.updateSelectionBox);
+  const endSelectionBox = useGameStore((state) => state.endSelectionBox);
 
   // Screen to world coordinates
   const screenToWorld = useCallback(
@@ -98,6 +118,52 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
     [camera, agents, size]
   );
 
+  // Check if an agent is within a screen-space selection box
+  const isAgentInScreenBox = useCallback(
+    (agent: GameAgent, box: { startX: number; startY: number; endX: number; endY: number }): boolean => {
+      const pos = new Vector3(...agent.position);
+      pos.project(camera);
+
+      const screenX = (pos.x * 0.5 + 0.5) * size.width;
+      const screenY = ((-pos.y * 0.5) + 0.5) * size.height;
+
+      const minX = Math.min(box.startX, box.endX);
+      const maxX = Math.max(box.startX, box.endX);
+      const minY = Math.min(box.startY, box.endY);
+      const maxY = Math.max(box.startY, box.endY);
+
+      return screenX >= minX && screenX <= maxX && screenY >= minY && screenY <= maxY;
+    },
+    [camera, size]
+  );
+
+  // Select all agents within a screen-space selection box
+  const selectAgentsInScreenBox = useCallback(
+    (box: { startX: number; startY: number; endX: number; endY: number }) => {
+      const selectedIds: string[] = [];
+
+      for (const agent of agents) {
+        if (isAgentInScreenBox(agent, box)) {
+          selectedIds.push(agent.id);
+        }
+      }
+
+      // Update store with selected agents
+      if (selectedIds.length > 0) {
+        // Clear current selection and select new agents
+        clearSelection();
+        const store = useGameStore.getState();
+        for (const id of selectedIds) {
+          store.selectAgent(id);
+        }
+      }
+
+      options.onAgentsSelected?.(selectedIds);
+      return selectedIds;
+    },
+    [agents, isAgentInScreenBox, clearSelection, options]
+  );
+
   // Handle mouse down (start selection or detect click)
   const handleMouseDown = useCallback(
     (e: MouseEvent) => {
@@ -111,6 +177,7 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
       if (e.button === 0) {
         // Left click
         if (agentId) {
+          // Clicking on an agent - handle agent selection
           if (e.shiftKey) {
             // Shift + click = toggle selection
             toggleAgentSelection(agentId);
@@ -121,9 +188,16 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
           }
           options.onAgentsSelected?.([agentId]);
         } else {
-          // Clicked on empty space - deselect all
-          clearSelection();
-          options.onAgentsSelected?.([]);
+          // Clicked on empty space - start drag selection
+          dragStateRef.current = {
+            isDragging: true,
+            startX: x,
+            startY: y,
+            hasMoved: false,
+            currentX: x,
+            currentY: y,
+          };
+          startSelectionBox(x, y);
         }
       } else if (e.button === 2) {
         // Right click
@@ -152,6 +226,8 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
       screenToWorld,
       openContextMenu,
       closeContextMenu,
+      startSelectionBox,
+      selectedAgentIds,
       options,
     ]
   );
@@ -159,17 +235,61 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
   // Handle mouse move (for drag selection)
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
-      // Could be used for drag box selection
+      if (!dragStateRef.current.isDragging) return;
+
+      const rect = (e.target as HTMLElement).getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      // Check if we've moved enough to consider this a drag
+      const movedDistance = Math.sqrt(
+        Math.pow(x - dragStateRef.current.startX, 2) +
+        Math.pow(y - dragStateRef.current.startY, 2)
+      );
+
+      if (movedDistance > 5) {
+        // Minimum drag distance of 5 pixels
+        dragStateRef.current.hasMoved = true;
+        dragStateRef.current.currentX = x;
+        dragStateRef.current.currentY = y;
+        updateSelectionBox(x, y);
+      }
     },
-    []
+    [updateSelectionBox]
   );
 
   // Handle mouse up (end drag selection)
   const handleMouseUp = useCallback(
     (e: MouseEvent) => {
-      // Complete drag selection if active
+      if (!dragStateRef.current.isDragging) return;
+
+      if (dragStateRef.current.hasMoved) {
+        // Complete drag selection
+        const box = {
+          startX: dragStateRef.current.startX,
+          startY: dragStateRef.current.startY,
+          endX: dragStateRef.current.currentX,
+          endY: dragStateRef.current.currentY,
+        };
+        selectAgentsInScreenBox(box);
+      } else {
+        // Was just a click on empty space - deselect all
+        clearSelection();
+        options.onAgentsSelected?.([]);
+      }
+
+      // Reset drag state
+      dragStateRef.current = {
+        isDragging: false,
+        startX: 0,
+        startY: 0,
+        hasMoved: false,
+        currentX: 0,
+        currentY: 0,
+      };
+      endSelectionBox();
     },
-    []
+    [selectAgentsInScreenBox, clearSelection, endSelectionBox, options]
   );
 
   // Prevent context menu on right click
@@ -199,6 +319,8 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
   return {
     screenToWorld,
     getAgentAtScreenPos,
+    isAgentInScreenBox,
+    selectAgentsInScreenBox,
   };
 }
 
@@ -258,7 +380,7 @@ export function isAgentInSelectionBox(
 
 // ============================================================================
 // Selection System Component (wrapper for the hook)
-// ============================================================================()
+// ============================================================================
 
 interface SelectionSystemComponentProps {
   onAgentsSelected?: (agentIds: string[]) => void;
