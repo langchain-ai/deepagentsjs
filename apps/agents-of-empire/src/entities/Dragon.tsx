@@ -468,7 +468,7 @@ interface DragonSpawnEffectProps {
 export function DragonSpawnEffect({ position, type, onComplete }: DragonSpawnEffectProps) {
   const groupRef = useRef<Group>(null);
   const config = DRAGON_CONFIG[type];
-  const [progress, setProgress] = React.useState(0);
+  const [progress, setProgress] = useState(0);
 
   useFrame((state) => {
     if (!groupRef.current) return;

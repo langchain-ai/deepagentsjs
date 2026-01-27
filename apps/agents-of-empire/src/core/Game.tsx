@@ -22,7 +22,11 @@ export function GameState({ children, config }: GameStateProps) {
     // Initialize terrain
     initializeWorld(50, 50);
 
-    // Add base structure at center
+    // ============================================================================
+    // Initialize Goal Structures - All 5 Types
+    // ============================================================================
+
+    // 1. BASE - Home base (fortified)
     addStructure({
       type: "base",
       position: [25, 0, 25],
@@ -30,20 +34,60 @@ export function GameState({ children, config }: GameStateProps) {
       description: "Agent spawn point and base of operations",
     });
 
-    // Add quest goal structure
+    // 2. CASTLE - Main goals (large, impressive)
     addStructure({
       type: "castle",
       position: [40, 0, 10],
       name: "Knowledge Castle",
       description: "The ultimate goal - complete all research here",
+      goalId: "main-goal-knowledge",
     });
 
-    // Add workshop
+    // 3. TOWER - Sub-goals (tall, watchtower style)
+    addStructure({
+      type: "tower",
+      position: [8, 0, 8],
+      name: "Scout Tower",
+      description: "Sub-goal: Establish reconnaissance",
+      goalId: "sub-goal-scouting",
+    });
+
+    addStructure({
+      type: "tower",
+      position: [42, 0, 42],
+      name: "Watchtower",
+      description: "Sub-goal: Defend the perimeter",
+      goalId: "sub-goal-defense",
+    });
+
+    // 4. WORKSHOP - Tasks (building with work areas)
     addStructure({
       type: "workshop",
       position: [10, 0, 40],
       name: "Code Workshop",
-      description: "Where agents craft their solutions",
+      description: "Task: Craft agent solutions",
+    });
+
+    addStructure({
+      type: "workshop",
+      position: [40, 0, 40],
+      name: "Research Lab",
+      description: "Task: Analyze data patterns",
+    });
+
+    // 5. CAMPFIRE - Gathering points (warm, inviting)
+    addStructure({
+      type: "campfire",
+      position: [25, 0, 15],
+      name: "Strategy Circle",
+      description: "Gathering point for agent coordination",
+    });
+
+    addStructure({
+      type: "campfire",
+      position: [15, 0, 25],
+      name: "Rest Camp",
+      description: "Agent rest and recovery point",
     });
 
     setIsInitialized(true);

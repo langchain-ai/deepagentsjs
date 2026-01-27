@@ -619,21 +619,147 @@ function handleStreamEvent(event: StreamEvent) {
 - [ ] Tool execution → Animation plays, icon appears
 - [ ] Subagent spawns → New character appears near parent
 - [ ] File written → Document icon appears
-- [ ] Error occurs → Dragon spawns
+- [x] Error occurs → Dragon spawns (COMB-001)
 
 ### Phase 3 Completion
-- [ ] Select agent → Agent panel shows details
-- [ ] Open inventory → See tools available
+- [x] Select agent → Agent panel shows details
+- [x] Open inventory → See tools available with RPG-style representation
+- [x] Tools show icons, names, descriptions, and rarity levels (common, rare, epic, legendary)
+- [x] Rarity filter tabs for organizing inventory
+- [x] Visual equipped tool indicator with ToolIcon component
 - [ ] Drag tool to agent → Agent equips tool
-- [ ] Create goal → Goal structure appears on map
+- [x] Create goal → Goal structure appears on map (GOAL-001)
 - [ ] Assign agent to goal → Agent moves to goal and shows working
-- [ ] Minimap → Shows all agents and structures
+- [x] Minimap → Shows all agents and structures
+
+### Goal Structures Implementation (GOAL-001) - Completed 2025-01-27
+
+**Files:**
+- `src/entities/Structure.tsx` - All 5 goal structure types with unique 3D appearances
+- `src/store/gameStore.ts` - Structure type definitions and state management
+- `src/App.tsx` - Initial structure placement
+
+**Features Implemented:**
+1. **Five Structure Types** with distinct visual appearances:
+   - **Castle** (main goals) - Large box geometry with 4 corner towers, gold color, subtle floating animation
+   - **Tower** (sub-goals) - Cylinder with cone roof, orange color, floating animation
+   - **Workshop** (tasks) - Box with pyramid roof and chimney, gray color
+   - **Campfire** (spawn/gathering) - Animated flickering fire with light, red color
+   - **Base** (HQ) - Box with flag pole and flag, blue color
+
+2. **Visual Features:**
+   - Each structure type has unique color and emissive properties
+   - Name labels displayed above structures
+   - Goal indicators (golden sphere + point light) for structures with goalId
+   - Structure spawn effects with rising animation and particles
+   - Structures visible on minimap (HUD.tsx)
+
+3. **State Management:**
+   - addStructure(), removeStructure(), updateStructure() in gameStore
+   - Structure type: "castle" | "tower" | "workshop" | "campfire" | "base"
+   - Structure interface includes id, type, position, name, description, goalId
+
+4. **Initialization:**
+   - 8 structures placed at game start (1 base, 1 castle, 2 towers, 2 workshops, 2 campfires)
+   - Structures properly positioned on terrain
+
+### Inventory System Implementation (INV-001) - Completed 2025-01-27
+
+**Files Created:**
+- `src/ui/ToolCard.tsx` - Tool representation components:
+  - `ToolIcon` - Displays tool icon with rarity-based styling
+  - `RarityBadge` - Shows rarity level (common/rare/epic/legendary)
+  - `ToolCard` - Full RPG-style card with hover tooltips
+  - `ToolListItem` - Compact list item for inventory
+  - `TOOL_TYPE_CONFIG` - Tool type configuration (icons, colors, labels)
+  - `RARITY_CONFIG` - Rarity configuration (colors, gradients, glow effects)
+
+**Features Implemented:**
+1. Tool Icons - Each tool type has a unique icon and color:
+   - Search (🔍) - Blue
+   - Code Executor (⚒️) - Red
+   - File Reader (📜) - Green
+   - Web Fetcher (🌐) - Purple
+   - Subagent (🧙) - Orange
+
+2. Rarity Levels - Visual distinction for each rarity:
+   - Common (#95a5a6) - Gray/steel appearance
+   - Rare (#3498db) - Blue with glow
+   - Epic (#9b59b6) - Purple with shine effect
+   - Legendary (#f4d03f) - Gold with strong glow
+
+3. Enhanced InventoryPanel:
+   - Currently equipped tool display
+   - Rarity filter tabs (All, Common, Rare, Epic, Legendary)
+   - Count badges showing tools per rarity
+   - List view with ToolListItem components
+   - Tool types legend
+   - Equip/Unequip functionality
+
+4. Visual Effects:
+   - Glow effects based on rarity
+   - Hover tooltips
+   - Shine animation for epic/legendary tools
+   - Smooth transitions with Framer Motion
+   - Selection indicators for equipped tools
+
+### Dragon Spawn on Error System (COMB-001) - Completed 2025-01-27
+
+**Files:**
+- `src/entities/Dragon.tsx` - Dragon visual component with 5 dragon types
+- `src/store/gameStore.ts` - Dragon state management (spawn, remove, update, damage)
+- `src/bridge/AgentBridge.tsx` - Error handling flow that spawns dragons
+- `src/ui/HUD.tsx` - Dragon count display and test keyboard shortcut
+
+**Features Implemented:**
+1. **Five Dragon Types** based on error category:
+   - **SYNTAX** (Red) - Fire-breathing dragon for parse/syntax errors
+   - **RUNTIME** (Purple) - Magic-wielding sphere creature for execution errors
+   - **NETWORK** (Blue) - Angular tech dragon with lightning for network errors
+   - **PERMISSION** (Green) - Snake-like poison dragon for access/auth errors
+   - **UNKNOWN** (Dark) - Shadowy tentacled form for unrecognized errors
+
+2. **Dragon Visual Features:**
+   - Unique 3D geometry per dragon type
+   - Hovering animation (sine wave floating)
+   - Breathing animation (scale pulsing)
+   - Type-specific particle effects (fire, magic aura, lightning, poison, dark tendrils)
+   - Health bar above dragon showing HP
+   - Error message displayed as text label
+   - Shadow on ground
+
+3. **Error to Dragon Mapping:**
+   - Keywords in error message automatically determine dragon type
+   - "syntax" or "parse" → SYNTAX dragon
+   - "network", "fetch", "connection" → NETWORK dragon
+   - "permission", "access", "auth" → PERMISSION dragon
+   - "runtime", "execution" → RUNTIME dragon
+   - Default → UNKNOWN dragon
+
+4. **Combat System:**
+   - `useCombat()` hook with `attackDragon()` and `autoResolveCombat()` functions
+   - Damage calculation based on agent level
+   - Dragon counter-attacks
+   - XP gain on victory
+   - Agent defeat/retreat logic
+
+5. **State Management:**
+   - `spawnDragon(type, position, error, targetAgentId)` in gameStore
+   - Dragon count tracked in `dragonCount` for UI display
+   - `removeDragon()` cleanup after defeat
+   - `updateDragon()` for health/state changes
+   - `damageDragon()` for combat damage
+
+6. **Testing:**
+   - Press `Shift+D` to spawn a random test dragon
+   - Dragon spawns near random agent
+   - Logs to console with dragon type
 
 ### Phase 4 Completion
-- [ ] Agent encounters error → Dragon spawns nearby
-- [ ] Dragon appears → Agent enters combat stance
-- [ ] Battle plays out → Health bars change
-- [ ] Victory → Dragon defeated, loot appears
+- [x] Agent encounters error → Dragon spawns nearby (COMB-001)
+- [x] Dragon appears → Agent enters combat stance (COMB-001)
+- [x] Battle plays out → Health bars change (COMB-001)
+- [x] Victory → Dragon defeated, loot appears (COMB-001 - XP granted)
 - [ ] Goal complete → Progress bar fills, celebration effects
 
 ### Phase 5 Completion

@@ -1,4 +1,4 @@
-import { useRef, useMemo } from "react";
+import React, { useRef, useMemo, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Group, Color } from "three";
 import { Text } from "@react-three/drei";
@@ -67,19 +67,12 @@ export function StructureVisual({ structure }: StructureVisualProps) {
 
   return (
     <group ref={groupRef} position={structure.position}>
-      {/* Structure base */}
-      <mesh castShadow receiveShadow position={[0, 0.5, 0]}>
-        {structure.type === "castle" && <CastleGeometry />}
-        {structure.type === "tower" && <TowerGeometry />}
-        {structure.type === "workshop" && <WorkshopGeometry />}
-        {structure.type === "campfire" && <CampfireGeometry />}
-        {structure.type === "base" && <BaseGeometry />}
-        <meshStandardMaterial
-          color={config.color}
-          emissive={config.emissive}
-          emissiveIntensity={0.3}
-        />
-      </mesh>
+      {/* Structure base - render different geometry based on type */}
+      {structure.type === "castle" && <CastleMesh />}
+      {structure.type === "tower" && <TowerMesh />}
+      {structure.type === "workshop" && <WorkshopMesh />}
+      {structure.type === "campfire" && <CampfireMesh />}
+      {structure.type === "base" && <BaseMesh />}
 
       {/* Name label */}
       <Text
@@ -109,32 +102,42 @@ export function StructureVisual({ structure }: StructureVisualProps) {
 }
 
 // ============================================================================
-// Structure Geometries
-// ============================================================================()
+// Structure Mesh Components
+// ============================================================================
 
-function CastleGeometry() {
+function CastleMesh() {
+  const config = STRUCTURE_CONFIG.castle;
+
   return (
     <group>
       {/* Main keep */}
-      <boxGeometry args={[3, 4, 3]} />
+      <mesh castShadow receiveShadow position={[0, 2, 0]}>
+        <boxGeometry args={[3, 4, 3]} />
+        <meshStandardMaterial color={config.color} emissive={config.emissive} emissiveIntensity={0.3} />
+      </mesh>
       {/* Towers at corners */}
       {[[-1.5, 2, -1.5], [1.5, 2, -1.5], [-1.5, 2, 1.5], [1.5, 2, 1.5]].map((pos, i) => (
-        <mesh key={i} position={pos}>
+        <mesh key={i} position={pos} castShadow>
           <cylinderGeometry args={[0.5, 0.5, 3, 8]} />
-          <meshStandardMaterial color="#f39c12" />
+          <meshStandardMaterial color={config.color} emissive={config.emissive} emissiveIntensity={0.3} />
         </mesh>
       ))}
     </group>
   );
 }
 
-function TowerGeometry() {
+function TowerMesh() {
+  const config = STRUCTURE_CONFIG.tower;
+
   return (
     <group>
       {/* Main tower */}
-      <cylinderGeometry args={[1, 1.2, 4, 8]} />
+      <mesh castShadow receiveShadow position={[0, 2, 0]}>
+        <cylinderGeometry args={[1, 1.2, 4, 8]} />
+        <meshStandardMaterial color={config.color} emissive={config.emissive} emissiveIntensity={0.3} />
+      </mesh>
       {/* Cone roof */}
-      <mesh position={[0, 2.5, 0]}>
+      <mesh position={[0, 4.5, 0]} castShadow>
         <coneGeometry args={[1.5, 2, 8]} />
         <meshStandardMaterial color="#8b4513" />
       </mesh>
@@ -142,18 +145,23 @@ function TowerGeometry() {
   );
 }
 
-function WorkshopGeometry() {
+function WorkshopMesh() {
+  const config = STRUCTURE_CONFIG.workshop;
+
   return (
     <group>
       {/* Main building */}
-      <boxGeometry args={[2, 2, 2]} />
+      <mesh castShadow receiveShadow position={[0, 1, 0]}>
+        <boxGeometry args={[2, 2, 2]} />
+        <meshStandardMaterial color={config.color} emissive={config.emissive} emissiveIntensity={0.3} />
+      </mesh>
       {/* Roof */}
-      <mesh position={[0, 1.5, 0]}>
+      <mesh position={[0, 2.2, 0]} castShadow>
         <coneGeometry args={[1.8, 1, 4]} />
         <meshStandardMaterial color="#8b4513" />
       </mesh>
       {/* Chimney */}
-      <mesh position={[0.5, 2, 0.5]}>
+      <mesh position={[0.5, 2.5, 0.5]} castShadow>
         <cylinderGeometry args={[0.2, 0.2, 0.8, 8]} />
         <meshStandardMaterial color="#7f8c8d" />
       </mesh>
@@ -161,11 +169,16 @@ function WorkshopGeometry() {
   );
 }
 
-function CampfireGeometry() {
+function CampfireMesh() {
+  const config = STRUCTURE_CONFIG.campfire;
+
   return (
     <group>
       {/* Fire pit */}
-      <ringGeometry args={[0.3, 0.5, 16]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]} receiveShadow>
+        <ringGeometry args={[0.3, 0.5, 16]} />
+        <meshStandardMaterial color="#5d4037" />
+      </mesh>
       {/* Fire */}
       <mesh position={[0, 0.5, 0]}>
         <coneGeometry args={[0.3, 0.8, 8]} />
@@ -177,18 +190,23 @@ function CampfireGeometry() {
   );
 }
 
-function BaseGeometry() {
+function BaseMesh() {
+  const config = STRUCTURE_CONFIG.base;
+
   return (
     <group>
       {/* Main building */}
-      <boxGeometry args={[3, 2, 3]} />
+      <mesh castShadow receiveShadow position={[0, 1, 0]}>
+        <boxGeometry args={[3, 2, 3]} />
+        <meshStandardMaterial color={config.color} emissive={config.emissive} emissiveIntensity={0.3} />
+      </mesh>
       {/* Flag pole */}
-      <mesh position={[0, 2, 0]}>
+      <mesh position={[0, 2.5, 0]} castShadow>
         <cylinderGeometry args={[0.1, 0.1, 2, 8]} />
         <meshStandardMaterial color="#8b4513" />
       </mesh>
       {/* Flag */}
-      <mesh position={[0.3, 3.5, 0]}>
+      <mesh position={[0.3, 4, 0]} rotation={[0, Math.PI / 2, 0]}>
         <planeGeometry args={[0.8, 0.5]} />
         <meshBasicMaterial color="#f4d03f" side={2} />
       </mesh>
@@ -222,7 +240,7 @@ export function StructurePool({ onStructureClick }: StructurePoolProps) {
 
 // ============================================================================
 // Structure Spawn Effect
-// ============================================================================()
+// ============================================================================
 
 interface StructureSpawnEffectProps {
   position: [number, number, number];
@@ -232,7 +250,7 @@ interface StructureSpawnEffectProps {
 
 export function StructureSpawnEffect({ position, type, onComplete }: StructureSpawnEffectProps) {
   const groupRef = useRef<Group>(null);
-  const [progress, setProgress] = React.useState(0);
+  const [progress, setProgress] = useState(0);
   const config = STRUCTURE_CONFIG[type];
 
   useFrame((state) => {
@@ -282,4 +300,8 @@ export function StructureSpawnEffect({ position, type, onComplete }: StructureSp
   );
 }
 
-import React from "react";
+// ============================================================================
+// Export types
+// ============================================================================
+
+export type { StructureVisualProps };

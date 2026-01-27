@@ -1,9 +1,10 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { shallow } from "zustand/shallow";
-import { useGameStore, useSelectedAgentIds, useAgentsMap, useAgentsShallow, useQuestsShallow, useSelection, useAgentCount, useDragonCount, useQuestCount, useCompletedQuestCount, type GameAgent } from "../store/gameStore";
+import { useGameStore, useSelectedAgentIds, useAgentsMap, useAgentsShallow, useQuestsShallow, useSelection, useAgentCount, useDragonCount, useQuestCount, useCompletedQuestCount, type GameAgent, type Tool } from "../store/gameStore";
 import { useAgentBridgeContext } from "../bridge/AgentBridge";
 import { useCombat } from "../entities/Dragon";
+import { ToolCard, ToolListItem, ToolIcon, RarityBadge, TOOL_TYPE_CONFIG, RARITY_CONFIG } from "./ToolCard";
 
 // ============================================================================
 // Minimap Component
@@ -277,81 +278,162 @@ export function AgentPanel({ className = "" }: AgentPanelProps) {
 }
 
 // ============================================================================
-// Inventory Panel Component
+// Inventory Panel Component - Enhanced RPG-Style
 // ============================================================================
 
 interface InventoryPanelProps {
   agentId: string;
   onClose?: () => void;
+  viewMode?: "grid" | "list";
 }
 
-export function InventoryPanel({ agentId, onClose }: InventoryPanelProps) {
+export function InventoryPanel({ agentId, onClose, viewMode = "list" }: InventoryPanelProps) {
   const agent = useGameStore((state) => state.agents[agentId]);
   const equipTool = useGameStore((state) => state.equipTool);
   const unequipTool = useGameStore((state) => state.unequipTool);
+  const [selectedRarityFilter, setSelectedRarityFilter] = useState<string | null>(null);
 
   if (!agent) return null;
 
+  // Filter inventory by rarity if filter is active
+  const filteredInventory = useMemo(() => {
+    if (!selectedRarityFilter) return agent.inventory;
+    return agent.inventory.filter((tool) => tool.rarity === selectedRarityFilter);
+  }, [agent.inventory, selectedRarityFilter]);
+
+  // Count tools by rarity
+  const rarityCounts = useMemo(() => {
+    const counts: Record<string, number> = { common: 0, rare: 0, epic: 0, legendary: 0 };
+    agent.inventory.forEach((tool) => {
+      counts[tool.rarity] = (counts[tool.rarity] || 0) + 1;
+    });
+    return counts;
+  }, [agent.inventory]);
+
   return (
     <motion.div
-      initial={{ opacity: 0, x: -50 }}
+      initial={{ opacity: 0, x: 50 }}
       animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -50 }}
-      className="absolute top-1/2 right-4 transform -translate-y-1/2 bg-gray-900/95 border-2 border-empire-gold rounded-lg p-4 text-white w-64 shadow-lg shadow-empire-gold/20"
+      exit={{ opacity: 0, x: 50 }}
+      className="absolute top-1/2 right-4 transform -translate-y-1/2 bg-gray-900/98 border-2 border-empire-gold rounded-lg p-4 text-white w-80 shadow-2xl shadow-empire-gold/30 max-h-[80vh] overflow-hidden flex flex-col"
     >
-      <div className="flex justify-between items-center mb-4 pb-2 border-b border-empire-gold/30">
-        <h3 className="text-empire-gold text-lg font-bold">Inventory</h3>
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white hover:bg-gray-700 w-6 h-6 rounded transition-colors"
-          >
-            ✕
-          </button>
-        )}
-      </div>
-
-      <div className="mb-4">
-        <p className="text-sm text-gray-400 mb-2">{agent.name}'s Tools:</p>
-        <div className="space-y-2">
-          {agent.inventory.length === 0 ? (
-            <p className="text-gray-500 text-sm italic">No tools available</p>
-          ) : (
-            agent.inventory.map((tool) => (
-              <div
-                key={tool.id}
-                className={`p-2 rounded border cursor-pointer transition-all ${
-                  agent.equippedTool?.id === tool.id
-                    ? "bg-empire-gold text-gray-900 border-empire-gold shadow-lg shadow-empire-gold/30"
-                    : "bg-gray-800 border-gray-700 hover:border-empire-gold/50"
-                }`}
-                onClick={() =>
-                  agent.equippedTool?.id === tool.id
-                    ? unequipTool(agentId)
-                    : equipTool(agentId, tool)
-                }
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">{tool.icon}</span>
-                  <div>
-                    <div className="font-semibold text-sm">{tool.name}</div>
-                    <div className="text-xs opacity-75">{tool.description}</div>
-                  </div>
-                </div>
-              </div>
-            ))
+      {/* Header */}
+      <div className="flex justify-between items-center mb-4 pb-3 border-b border-empire-gold/30">
+        <div>
+          <h3 className="text-empire-gold text-lg font-bold">Inventory</h3>
+          <p className="text-xs text-gray-400">{agent.name}&apos;s Equipment</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-white hover:bg-gray-700 w-6 h-6 rounded transition-colors"
+            >
+              ✕
+            </button>
           )}
         </div>
       </div>
 
+      {/* Currently Equipped Tool */}
+      <div className="mb-4 p-3 rounded-lg bg-gray-800/80 border border-empire-gold/30">
+        <p className="text-xs text-gray-400 mb-2 uppercase tracking-wider">Equipped</p>
+        {agent.equippedTool ? (
+          <div className="flex items-center gap-3">
+            <ToolIcon toolType={agent.equippedTool.type} rarity={agent.equippedTool.rarity} size="md" />
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm text-empire-gold truncate">{agent.equippedTool.name}</p>
+              <RarityBadge rarity={agent.equippedTool.rarity} />
+            </div>
+            <button
+              onClick={() => unequipTool(agentId)}
+              className="text-xs px-2 py-1 rounded bg-red-900/50 text-red-400 hover:bg-red-900 transition-colors"
+            >
+              Unequip
+            </button>
+          </div>
+        ) : (
+          <p className="text-gray-500 text-sm italic text-center py-2">No tool equipped</p>
+        )}
+      </div>
+
+      {/* Rarity Filter Tabs */}
+      <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+        <button
+          onClick={() => setSelectedRarityFilter(null)}
+          className={`text-xs px-3 py-1 rounded-full whitespace-nowrap transition-colors ${
+            selectedRarityFilter === null
+              ? "bg-empire-gold text-gray-900 font-bold"
+              : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+          }`}
+        >
+          All ({agent.inventory.length})
+        </button>
+        {(["common", "rare", "epic", "legendary"] as const).map((rarity) => (
+          <button
+            key={rarity}
+            onClick={() => setSelectedRarityFilter(rarity)}
+            className={`text-xs px-3 py-1 rounded-full whitespace-nowrap transition-colors ${
+              selectedRarityFilter === rarity
+                ? "font-bold"
+                : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+            }`}
+            style={{
+              backgroundColor: selectedRarityFilter === rarity ? RARITY_CONFIG[rarity].color : undefined,
+              color: selectedRarityFilter === rarity ? "#1a1a2e" : undefined,
+            }}
+          >
+            {RARITY_CONFIG[rarity].label} ({rarityCounts[rarity]})
+          </button>
+        ))}
+      </div>
+
+      {/* Inventory Grid/List */}
+      <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+        {filteredInventory.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-gray-500 text-sm italic">
+              {selectedRarityFilter ? `No ${selectedRarityFilter} tools` : "No tools available"}
+            </p>
+          </div>
+        ) : viewMode === "grid" ? (
+          <div className="grid grid-cols-2 gap-2">
+            {filteredInventory.map((tool) => (
+              <ToolCard
+                key={tool.id}
+                tool={tool}
+                isEquipped={agent.equippedTool?.id === tool.id}
+                onEquip={() => equipTool(agentId, tool)}
+                onUnequip={() => unequipTool(agentId)}
+                showDetails={false}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filteredInventory.map((tool) => (
+              <ToolListItem
+                key={tool.id}
+                tool={tool}
+                isEquipped={agent.equippedTool?.id === tool.id}
+                onEquip={() => equipTool(agentId, tool)}
+                onUnequip={() => unequipTool(agentId)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Tool Types Legend */}
-      <div className="border-t border-gray-700 pt-3">
-        <p className="text-xs text-gray-500 mb-2">Available Tool Types:</p>
-        <div className="grid grid-cols-2 gap-1 text-xs">
-          <div className="text-gray-400">🔍 Search</div>
-          <div className="text-gray-400">🔨 Code Executor</div>
-          <div className="text-gray-400">📜 File Reader</div>
-          <div className="text-gray-400">🌐 Web Fetcher</div>
+      <div className="mt-3 pt-3 border-t border-gray-700">
+        <p className="text-xs text-gray-500 mb-2">Tool Types</p>
+        <div className="grid grid-cols-3 gap-1 text-xs">
+          {Object.entries(TOOL_TYPE_CONFIG).map(([type, config]) => (
+            <div key={type} className="flex items-center gap-1 text-gray-400">
+              <span>{config.icon}</span>
+              <span className="truncate">{config.label.split(" ")[0]}</span>
+            </div>
+          ))}
         </div>
       </div>
     </motion.div>
@@ -637,6 +719,39 @@ export function HUD({ className = "" }: HUDProps) {
   const contextMenuPosition = useGameStore((state) => state.contextMenuPosition);
   const contextMenuAgentId = useGameStore((state) => state.contextMenuAgentId);
   const closeContextMenu = useGameStore((state) => state.closeContextMenu);
+  const spawnDragon = useGameStore((state) => state.spawnDragon);
+  const agents = useAgentsShallow();
+
+  // Keyboard shortcuts for testing (COMB-001: Dragon spawn test)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Shift+D to spawn a test dragon
+      if (e.shiftKey && e.key === "D") {
+        const agentList = Object.values(agents);
+        if (agentList.length > 0) {
+          const randomAgent = agentList[Math.floor(Math.random() * agentList.length)];
+          const errorTypes = [
+            { type: "SYNTAX" as const, error: "Unexpected token ';'" },
+            { type: "RUNTIME" as const, error: "TypeError: Cannot read property" },
+            { type: "NETWORK" as const, error: "Network request failed" },
+            { type: "PERMISSION" as const, error: "Access denied: insufficient permissions" },
+            { type: "UNKNOWN" as const, error: "Unknown error occurred" },
+          ];
+          const randomError = errorTypes[Math.floor(Math.random() * errorTypes.length)];
+          spawnDragon(
+            randomError.type,
+            [randomAgent.position[0] + 2, 0, randomAgent.position[2]] as [number, number, number],
+            randomError.error,
+            randomAgent.id
+          );
+          console.log(`[COMB-001 Test] Spawned ${randomError.type} dragon at ${randomAgent.name}'s location`);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [agents, spawnDragon]);
 
   return (
     <div className={`pointer-events-none ${className}`}>

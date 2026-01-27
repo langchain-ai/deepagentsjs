@@ -1,6 +1,6 @@
 import { useRef, useEffect, useMemo, useState, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Group, Vector3, Color, Object3D, InstancedMesh } from "three";
+import { Group, Vector3, Color, Object3D, InstancedMesh, BufferGeometry, Float32BufferAttribute } from "three";
 import { Text, Limit } from "@react-three/drei";
 import { useGameStore, useAgentsShallow, type AgentState, type GameAgent as GameAgentType } from "../store/gameStore";
 
@@ -8,34 +8,105 @@ import { useGameStore, useAgentsShallow, type AgentState, type GameAgent as Game
 // Agent State Visual Configurations
 // ============================================================================
 
+// State animation configuration
+interface StateAnimationConfig {
+  color: string;
+  emissive: string;
+  icon: string;
+  pulseSpeed?: number;
+  pulseAmount?: number;
+  shakeIntensity?: number;
+  glowIntensity?: number;
+}
+
+const AGENT_STATE_CONFIG: Record<AgentState, StateAnimationConfig> = {
+  IDLE: {
+    color: "#3498db",      // Blue
+    emissive: "#1a5276",
+    icon: "💤",
+    pulseSpeed: 0.5,
+    pulseAmount: 0.02,
+  },
+  THINKING: {
+    color: "#9b59b6",      // Purple
+    emissive: "#6c3483",
+    icon: "🤔",
+    pulseSpeed: 3,
+    pulseAmount: 0.12,
+    glowIntensity: 0.6,
+  },
+  MOVING: {
+    color: "#2ecc71",      // Green
+    emissive: "#1e8449",
+    icon: "🏃",
+    pulseSpeed: 0,
+    pulseAmount: 0,
+  },
+  WORKING: {
+    color: "#f39c12",      // Orange
+    emissive: "#b7950b",
+    icon: "⚒️",
+    pulseSpeed: 4,
+    pulseAmount: 0.05,
+    glowIntensity: 0.4,
+  },
+  ERROR: {
+    color: "#e74c3c",      // Red
+    emissive: "#c0392b",
+    icon: "❌",
+    pulseSpeed: 8,
+    pulseAmount: 0.08,
+    shakeIntensity: 0.15,
+    glowIntensity: 0.8,
+  },
+  COMPLETING: {
+    color: "#f4d03f",      // Gold
+    emissive: "#b7950b",
+    icon: "✨",
+    pulseSpeed: 6,
+    pulseAmount: 0.15,
+    glowIntensity: 1.0,
+  },
+  COMBAT: {
+    color: "#e74c3c",      // Red
+    emissive: "#c0392b",
+    icon: "⚔️",
+    pulseSpeed: 5,
+    pulseAmount: 0.1,
+    shakeIntensity: 0.1,
+    glowIntensity: 0.5,
+  },
+};
+
+// Backwards compatibility exports
 const AGENT_STATE_COLORS: Record<AgentState, string> = {
-  IDLE: "#3498db",      // Blue
-  THINKING: "#9b59b6",  // Purple
-  MOVING: "#2ecc71",    // Green
-  WORKING: "#f39c12",   // Orange
-  ERROR: "#e74c3c",     // Red
-  COMPLETING: "#f4d03f", // Gold
-  COMBAT: "#e74c3c",    // Red
+  IDLE: AGENT_STATE_CONFIG.IDLE.color,
+  THINKING: AGENT_STATE_CONFIG.THINKING.color,
+  MOVING: AGENT_STATE_CONFIG.MOVING.color,
+  WORKING: AGENT_STATE_CONFIG.WORKING.color,
+  ERROR: AGENT_STATE_CONFIG.ERROR.color,
+  COMPLETING: AGENT_STATE_CONFIG.COMPLETING.color,
+  COMBAT: AGENT_STATE_CONFIG.COMBAT.color,
 };
 
 const AGENT_STATE_EMISSIVE: Record<AgentState, string> = {
-  IDLE: "#1a5276",
-  THINKING: "#6c3483",
-  MOVING: "#1e8449",
-  WORKING: "#b7950b",
-  ERROR: "#c0392b",
-  COMPLETING: "#b7950b",
-  COMBAT: "#c0392b",
+  IDLE: AGENT_STATE_CONFIG.IDLE.emissive,
+  THINKING: AGENT_STATE_CONFIG.THINKING.emissive,
+  MOVING: AGENT_STATE_CONFIG.MOVING.emissive,
+  WORKING: AGENT_STATE_CONFIG.WORKING.emissive,
+  ERROR: AGENT_STATE_CONFIG.ERROR.emissive,
+  COMPLETING: AGENT_STATE_CONFIG.COMPLETING.emissive,
+  COMBAT: AGENT_STATE_CONFIG.COMBAT.emissive,
 };
 
 const AGENT_STATE_ICONS: Record<AgentState, string> = {
-  IDLE: "💤",
-  THINKING: "🤔",
-  MOVING: "🏃",
-  WORKING: "⚒️",
-  ERROR: "❌",
-  COMPLETING: "✨",
-  COMBAT: "⚔️",
+  IDLE: AGENT_STATE_CONFIG.IDLE.icon,
+  THINKING: AGENT_STATE_CONFIG.THINKING.icon,
+  MOVING: AGENT_STATE_CONFIG.MOVING.icon,
+  WORKING: AGENT_STATE_CONFIG.WORKING.icon,
+  ERROR: AGENT_STATE_CONFIG.ERROR.icon,
+  COMPLETING: AGENT_STATE_CONFIG.COMPLETING.icon,
+  COMBAT: AGENT_STATE_CONFIG.COMBAT.icon,
 };
 
 // ============================================================================
@@ -47,7 +118,261 @@ const AGENT_BODY_HEIGHT = 1.5;
 const AGENT_SCALE = 0.8;
 
 // ============================================================================
-// Agent State Icons (emojis for now, could be textures)
+// State Transition Configuration
+// ============================================================================
+
+const COLOR_TRANSITION_DURATION = 0.3; // seconds for color interpolation
+
+// ============================================================================
+// Particle System for State Effects
+// ============================================================================
+
+interface Particle {
+  position: [number, number, number];
+  velocity: [number, number, number];
+  life: number;
+  maxLife: number;
+  size: number;
+  color: string;
+}
+
+interface StateParticlesProps {
+  agentState: AgentState;
+  position: [number, number, number];
+  onComplete?: () => void;
+}
+
+function StateParticles({ agentState, position, onComplete }: StateParticlesProps) {
+  const particlesRef = useRef<Group>(null);
+  const [particles, setParticles] = useState<Particle[]>([]);
+
+  // Spawn particles based on state
+  useEffect(() => {
+    if (agentState === "COMPLETING") {
+      // Celebration particles
+      const newParticles: Particle[] = [];
+      for (let i = 0; i < 20; i++) {
+        const angle = (i / 20) * Math.PI * 2;
+        const speed = 2 + Math.random() * 2;
+        newParticles.push({
+          position: [0, 1.5, 0],
+          velocity: [
+            Math.cos(angle) * speed,
+            1 + Math.random() * 2,
+            Math.sin(angle) * speed,
+          ],
+          life: 1,
+          maxLife: 1,
+          size: 0.1 + Math.random() * 0.1,
+          color: Math.random() > 0.5 ? "#f4d03f" : "#3498db",
+        });
+      }
+      setParticles(newParticles);
+
+      // Auto-complete after animation
+      const timer = setTimeout(() => {
+        setParticles([]);
+        onComplete?.();
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (agentState === "ERROR") {
+      // Error sparks
+      const newParticles: Particle[] = [];
+      for (let i = 0; i < 8; i++) {
+        newParticles.push({
+          position: [
+            (Math.random() - 0.5) * 0.5,
+            0.5 + Math.random(),
+            (Math.random() - 0.5) * 0.5,
+          ],
+          velocity: [
+            (Math.random() - 0.5) * 3,
+            Math.random() * 2,
+            (Math.random() - 0.5) * 3,
+          ],
+          life: 0.5,
+          maxLife: 0.5,
+          size: 0.05 + Math.random() * 0.05,
+          color: "#e74c3c",
+        });
+      }
+      setParticles(newParticles);
+
+      const timer = setTimeout(() => {
+        setParticles([]);
+      }, 500);
+      return () => clearTimeout(timer);
+    } else {
+      setParticles([]);
+    }
+  }, [agentState, onComplete]);
+
+  // Animate particles
+  useFrame((state, delta) => {
+    if (particles.length === 0) return;
+
+    setParticles((prev) =>
+      prev
+        .map((p) => ({
+          ...p,
+          position: [
+            p.position[0] + p.velocity[0] * delta,
+            p.position[1] + p.velocity[1] * delta,
+            p.position[2] + p.velocity[2] * delta,
+          ],
+          velocity: [
+            p.velocity[0],
+            p.velocity[1] - 3 * delta, // gravity
+            p.velocity[2],
+          ],
+          life: p.life - delta,
+        }))
+        .filter((p) => p.life > 0)
+    );
+  });
+
+  if (particles.length === 0) return null;
+
+  return (
+    <group ref={particlesRef} position={position}>
+      {particles.map((p, i) => (
+        <mesh key={i} position={p.position}>
+          <sphereGeometry args={[p.size * (p.life / p.maxLife), 8, 8]} />
+          <meshBasicMaterial color={p.color} transparent opacity={p.life / p.maxLife} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+// ============================================================================
+// Trail Effect for MOVING State
+// ============================================================================
+
+interface AgentTrailProps {
+  position: [number, number, number];
+  active: boolean;
+}
+
+function AgentTrail({ position, active }: AgentTrailProps) {
+  const trailRef = useRef<Group>(null);
+  const [trailPositions, setTrailPositions] = useState<[number, number, number][]>([]);
+
+  useFrame(() => {
+    if (!active) {
+      setTrailPositions([]);
+      return;
+    }
+
+    // Add current position to trail
+    setTrailPositions((prev) => {
+      const newTrail = [position, ...prev].slice(0, 10); // Keep last 10 positions
+      return newTrail;
+    });
+  });
+
+  if (trailPositions.length < 2) return null;
+
+  return (
+    <group ref={trailRef}>
+      {trailPositions.map((pos, i) => {
+        const alpha = 1 - i / trailPositions.length;
+        const size = 0.3 * alpha;
+        return (
+          <mesh key={i} position={pos}>
+            <sphereGeometry args={[size, 8, 8]} />
+            <meshBasicMaterial color="#2ecc71" transparent opacity={alpha * 0.3} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+// ============================================================================
+// Completion Ring Effect
+// ============================================================================
+
+interface CompletionRingProps {
+  position: [number, number, number];
+  active: boolean;
+}
+
+function CompletionRing({ position, active }: CompletionRingProps) {
+  const ringRef = useRef<Group>(null);
+  const [scale, setScale] = useState(0);
+  const [opacity, setOpacity] = useState(0);
+
+  useFrame((state, delta) => {
+    if (!active) {
+      setScale(0);
+      setOpacity(0);
+      return;
+    }
+
+    // Animate ring expansion
+    setScale((prev) => Math.min(prev + delta * 3, 3));
+    setOpacity((prev) => Math.max(prev - delta * 1.5, 0));
+  });
+
+  if (scale <= 0) return null;
+
+  return (
+    <group ref={ringRef} position={position}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+        <ringGeometry args={[0.8, scale, 32]} />
+        <meshBasicMaterial color="#f4d03f" transparent opacity={opacity * 0.8} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.15, 0]}>
+        <ringGeometry args={[0.8, scale * 1.2, 32]} />
+        <meshBasicMaterial color="#3498db" transparent opacity={opacity * 0.4} />
+      </mesh>
+    </group>
+  );
+}
+
+// ============================================================================
+// Glow Effect for THINKING, WORKING, ERROR, COMPLETING States
+// ============================================================================
+
+interface StateGlowProps {
+  state: AgentState;
+  position: [number, number, number];
+}
+
+function StateGlow({ state, position }: StateGlowProps) {
+  const glowRef = useRef<Group>(null);
+  const config = AGENT_STATE_CONFIG[state];
+  const hasGlow = config.glowIntensity && config.glowIntensity > 0;
+
+  useFrame((stateFrame) => {
+    if (!glowRef.current || !hasGlow) return;
+
+    const time = stateFrame.clock.elapsedTime;
+    const pulse = Math.sin(time * (config.pulseSpeed || 3)) * 0.1 + 0.9;
+    glowRef.current.scale.setScalar(pulse);
+  });
+
+  if (!hasGlow) return null;
+
+  const glowColor = config.color;
+
+  return (
+    <group ref={glowRef} position={position}>
+      <mesh position={[0, 0.75, 0]}>
+        <sphereGeometry args={[1, 16, 16]} />
+        <meshBasicMaterial
+          color={glowColor}
+          transparent
+          opacity={(config.glowIntensity || 0.5) * 0.3}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+// ============================================================================
+// Individual Agent Component (for selected/hovered agents only)
 // ============================================================================
 
 // ============================================================================
@@ -73,25 +398,41 @@ export function GameAgentVisual({
 }: GameAgentVisualProps) {
   const groupRef = useRef<Group>(null);
   const bodyRef = useRef<Group>(null);
+  const leftArmRef = useRef<Group>(null);
+  const rightArmRef = useRef<Group>(null);
   const pulseRef = useRef(0);
+  const workAnimRef = useRef(0);
 
-  // Color based on state
-  const color = useMemo(() => new Color(AGENT_STATE_COLORS[agent.state]), [agent.state]);
-  const emissive = useMemo(() => new Color(AGENT_STATE_EMISSIVE[agent.state]), [agent.state]);
+  // State config for this agent
+  const stateConfig = AGENT_STATE_CONFIG[agent.state];
 
-  // Movement animation
-  useFrame((state) => {
+  // Color based on state with smooth transition
+  const targetColor = useMemo(() => new Color(AGENT_STATE_COLORS[agent.state]), [agent.state]);
+  const targetEmissive = useMemo(() => new Color(AGENT_STATE_EMISSIVE[agent.state]), [agent.state]);
+  const [currentColor, setCurrentColor] = useState(targetColor.clone());
+  const [currentEmissive, setCurrentEmissive] = useState(targetEmissive.clone());
+
+  // Smooth color transition
+  useFrame((state, delta) => {
+    const lerpFactor = Math.min(delta / COLOR_TRANSITION_DURATION, 1);
+    currentColor.lerp(targetColor, lerpFactor);
+    currentEmissive.lerp(targetEmissive, lerpFactor);
+  });
+
+  // Enhanced state-based animations
+  useFrame((stateFrame) => {
     if (!bodyRef.current) return;
 
-    // Idle/walking animation
-    const time = state.clock.elapsedTime;
-    const bobAmount = agent.state === "MOVING" ? 0.1 : 0.03;
-    const bobSpeed = agent.state === "MOVING" ? 10 : 2;
+    const time = stateFrame.clock.elapsedTime;
+    const config = AGENT_STATE_CONFIG[agent.state];
 
+    // Base bob animation - varies by state
+    const bobAmount = config.pulseAmount || 0.03;
+    const bobSpeed = config.pulseSpeed || 2;
     bodyRef.current.position.y = Math.sin(time * bobSpeed) * bobAmount;
 
     // Rotate when moving
-    if (agent.targetPosition) {
+    if (agent.targetPosition && agent.state === "MOVING") {
       const currentPos = new Vector3(...agent.position);
       const targetPos = new Vector3(...agent.targetPosition);
       const direction = targetPos.sub(currentPos).normalize();
@@ -99,13 +440,38 @@ export function GameAgentVisual({
       bodyRef.current.rotation.y = angle;
     }
 
-    // Pulse effect for thinking state
-    if (agent.state === "THINKING") {
+    // Pulse/Scale effect based on state
+    if (config.pulseAmount && config.pulseAmount > 0.05) {
       pulseRef.current += 0.05;
-      const scale = 1 + Math.sin(pulseRef.current) * 0.1;
+      const scale = 1 + Math.sin(pulseRef.current) * (config.pulseAmount || 0.1);
       bodyRef.current.scale.setScalar(scale);
     } else {
       bodyRef.current.scale.setScalar(1);
+    }
+
+    // ERROR state: Shake/jitter animation
+    if (agent.state === "ERROR" || agent.state === "COMBAT") {
+      const shakeIntensity = config.shakeIntensity || 0.15;
+      bodyRef.current.rotation.x = (Math.random() - 0.5) * shakeIntensity;
+      bodyRef.current.rotation.z = (Math.random() - 0.5) * shakeIntensity;
+    } else {
+      bodyRef.current.rotation.x = 0;
+      bodyRef.current.rotation.z = 0;
+    }
+
+    // WORKING state: Tool swing animation
+    if (agent.state === "WORKING") {
+      workAnimRef.current += 0.1;
+      const swingAngle = Math.sin(workAnimRef.current) * 0.5;
+      if (leftArmRef.current) {
+        leftArmRef.current.rotation.x = swingAngle;
+      }
+      if (rightArmRef.current) {
+        rightArmRef.current.rotation.x = -swingAngle;
+      }
+    } else {
+      if (leftArmRef.current) leftArmRef.current.rotation.x = 0;
+      if (rightArmRef.current) rightArmRef.current.rotation.x = 0;
     }
 
     // Hover effect
@@ -128,6 +494,12 @@ export function GameAgentVisual({
       onPointerOut={onPointerOut}
       onClick={onClick}
     >
+      {/* State-based visual effects */}
+      <StateParticles agentState={agent.state} position={[0, 0, 0]} />
+      <CompletionRing position={[0, 0, 0]} active={agent.state === "COMPLETING"} />
+      <StateGlow state={agent.state} position={[0, 0, 0]} />
+      <AgentTrail position={agent.position} active={agent.state === "MOVING"} />
+
       {/* Selection ring */}
       {isSelected && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.4, 0]}>
@@ -149,33 +521,61 @@ export function GameAgentVisual({
         {/* Body */}
         <mesh castShadow position={[0, 0.5, 0]}>
           <boxGeometry args={[0.8, 1, 0.5]} />
-          <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.3} />
+          <meshStandardMaterial
+            color={currentColor}
+            emissive={currentEmissive}
+            emissiveIntensity={(stateConfig.glowIntensity || 0.3) * 0.5}
+          />
         </mesh>
 
         {/* Head */}
         <mesh castShadow position={[0, 1.2, 0]}>
           <boxGeometry args={[0.5, 0.5, 0.5]} />
-          <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.3} />
+          <meshStandardMaterial
+            color={currentColor}
+            emissive={currentEmissive}
+            emissiveIntensity={(stateConfig.glowIntensity || 0.3) * 0.5}
+          />
         </mesh>
 
-        {/* Arms */}
-        <mesh castShadow position={[-0.5, 0.6, 0]}>
-          <boxGeometry args={[0.2, 0.6, 0.2]} />
-          <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.3} />
-        </mesh>
-        <mesh castShadow position={[0.5, 0.6, 0]}>
-          <boxGeometry args={[0.2, 0.6, 0.2]} />
-          <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.3} />
-        </mesh>
+        {/* Arms with animated refs */}
+        <group ref={leftArmRef} position={[-0.5, 0.6, 0]}>
+          <mesh castShadow position={[0, 0, 0]}>
+            <boxGeometry args={[0.2, 0.6, 0.2]} />
+            <meshStandardMaterial
+              color={currentColor}
+              emissive={currentEmissive}
+              emissiveIntensity={(stateConfig.glowIntensity || 0.3) * 0.5}
+            />
+          </mesh>
+        </group>
+        <group ref={rightArmRef} position={[0.5, 0.6, 0]}>
+          <mesh castShadow position={[0, 0, 0]}>
+            <boxGeometry args={[0.2, 0.6, 0.2]} />
+            <meshStandardMaterial
+              color={currentColor}
+              emissive={currentEmissive}
+              emissiveIntensity={(stateConfig.glowIntensity || 0.3) * 0.5}
+            />
+          </mesh>
+        </group>
 
         {/* Legs */}
         <mesh castShadow position={[-0.2, -0.3, 0]}>
           <boxGeometry args={[0.2, 0.4, 0.2]} />
-          <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.3} />
+          <meshStandardMaterial
+            color={currentColor}
+            emissive={currentEmissive}
+            emissiveIntensity={(stateConfig.glowIntensity || 0.3) * 0.5}
+          />
         </mesh>
         <mesh castShadow position={[0.2, -0.3, 0]}>
           <boxGeometry args={[0.2, 0.4, 0.2]} />
-          <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={0.3} />
+          <meshStandardMaterial
+            color={currentColor}
+            emissive={currentEmissive}
+            emissiveIntensity={(stateConfig.glowIntensity || 0.3) * 0.5}
+          />
         </mesh>
       </group>
 
@@ -187,20 +587,18 @@ export function GameAgentVisual({
         </mesh>
       )}
 
-      {/* State icon (floating above) */}
-      {(agent.state !== "IDLE" || agent.thoughtBubble) && (
-        <Text
-          position={[0, 2.2, 0]}
-          fontSize={0.5}
-          color="#ffffff"
-          anchorX="center"
-          anchorY="middle"
-          outlineWidth={0.02}
-          outlineColor="#000000"
-        >
-          {agent.thoughtBubble || AGENT_STATE_ICONS[agent.state]}
-        </Text>
-      )}
+      {/* State icon (floating above) - show for all states now with enhanced visibility */}
+      <Text
+        position={[0, 2.2, 0]}
+        fontSize={0.5}
+        color="#ffffff"
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={0.02}
+        outlineColor="#000000"
+      >
+        {agent.thoughtBubble || AGENT_STATE_ICONS[agent.state]}
+      </Text>
 
       {/* Agent name */}
       <Text
