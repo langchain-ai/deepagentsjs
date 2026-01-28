@@ -15,7 +15,7 @@ describe("index", () => {
 
     it("returns string in correct format", () => {
       const key = getPlatformKey();
-      expect(key).toMatch(/^[a-z]+-[a-z0-9]+$/);
+      expect(key).toMatch(/^[a-z0-9]+-[a-z0-9]+$/);
     });
   });
 

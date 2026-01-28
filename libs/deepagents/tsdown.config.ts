@@ -1,5 +1,8 @@
 import { defineConfig } from "tsdown";
 
+// Mark all node_modules as external since this is a library
+const external = [/^[^./]/];
+
 export default defineConfig([
   {
     entry: ["./src/index.ts"],
@@ -9,6 +12,7 @@ export default defineConfig([
     sourcemap: true,
     outDir: "dist",
     outExtensions: () => ({ js: ".js" }),
+    external,
   },
   {
     entry: ["./src/index.ts"],
@@ -18,5 +22,6 @@ export default defineConfig([
     sourcemap: true,
     outDir: "dist",
     outExtensions: () => ({ js: ".cjs" }),
+    external,
   },
 ]);

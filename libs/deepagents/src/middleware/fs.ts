@@ -12,7 +12,13 @@ import {
   ToolMessage,
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
-import { Command, isCommand, getCurrentTaskInput } from "@langchain/langgraph";
+import {
+  Command,
+  isCommand,
+  getCurrentTaskInput,
+  StateSchema,
+  ReducedValue,
+} from "@langchain/langgraph";
 import { z } from "zod/v4";
 import type {
   BackendProtocol,
@@ -134,15 +140,40 @@ const FileDataSchema = z.object({
 export type { FileData };
 
 /**
- * Merge file updates with support for deletions.
+ * Type for the files state record.
  */
-function fileDataReducer(
-  left: Record<string, FileData> | undefined,
-  right: Record<string, FileData | null>,
-): Record<string, FileData> {
-  if (left === undefined) {
-    const result: Record<string, FileData> = {};
-    for (const [key, value] of Object.entries(right)) {
+export type FilesRecord = Record<string, FileData>;
+
+/**
+ * Type for file updates, where null indicates deletion.
+ */
+export type FilesRecordUpdate = Record<string, FileData | null>;
+
+/**
+ * Reducer for files state that merges file updates with support for deletions.
+ * When a file value is null, the file is deleted from state.
+ * When a file value is non-null, it is added or updated in state.
+ *
+ * This reducer enables concurrent updates from parallel subagents by properly
+ * merging their file changes instead of requiring LastValue semantics.
+ *
+ * @param current - The current files record (from state)
+ * @param update - The new files record (from a subagent update), with null values for deletions
+ * @returns Merged files record with deletions applied
+ */
+export function fileDataReducer(
+  current: FilesRecord | undefined,
+  update: FilesRecordUpdate | undefined,
+): FilesRecord {
+  // If no update, return current (or empty object)
+  if (update === undefined) {
+    return current || {};
+  }
+
+  // If no current, filter out null values from update
+  if (current === undefined) {
+    const result: FilesRecord = {};
+    for (const [key, value] of Object.entries(update)) {
       if (value !== null) {
         result[key] = value;
       }
@@ -150,8 +181,9 @@ function fileDataReducer(
     return result;
   }
 
-  const result = { ...left };
-  for (const [key, value] of Object.entries(right)) {
+  // Merge: apply updates and deletions
+  const result = { ...current };
+  for (const [key, value] of Object.entries(update)) {
     if (value === null) {
       delete result[key];
     } else {
@@ -166,17 +198,17 @@ function fileDataReducer(
  * Defined at module level to ensure the same object identity is used across all agents,
  * preventing "Channel already exists with different type" errors when multiple agents
  * use createFilesystemMiddleware.
+ *
+ * Uses ReducedValue for files to allow concurrent updates from parallel subagents.
  */
-const FilesystemStateSchema = z.object({
-  files: z
-    .record(z.string(), FileDataSchema)
-    .default({})
-    .meta({
-      reducer: {
-        fn: fileDataReducer,
-        schema: z.record(z.string(), FileDataSchema.nullable()),
-      },
-    }),
+const FilesystemStateSchema = new StateSchema({
+  files: new ReducedValue(
+    z.record(z.string(), FileDataSchema).default(() => ({})),
+    {
+      inputSchema: z.record(z.string(), FileDataSchema.nullable()).optional(),
+      reducer: fileDataReducer,
+    },
+  ),
 });
 
 /**

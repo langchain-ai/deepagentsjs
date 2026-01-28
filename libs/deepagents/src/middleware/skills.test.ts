@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { createSkillsMiddleware } from "./skills.js";
+import {
+  createSkillsMiddleware,
+  skillsMetadataReducer,
+  type SkillMetadataEntry,
+} from "./skills.js";
 import type {
   BackendProtocol,
   FileDownloadResponse,
@@ -479,6 +483,192 @@ This skill has no valid frontmatter.`;
       expect(modifiedRequest.systemPrompt).toContain(
         "You are a helpful assistant",
       );
+    });
+  });
+});
+
+describe("skillsMetadataReducer", () => {
+  // Helper to create a minimal valid skill metadata entry
+  function createSkill(
+    name: string,
+    description = "A test skill",
+  ): SkillMetadataEntry {
+    return {
+      name,
+      description,
+      path: `/skills/${name}/SKILL.md`,
+    };
+  }
+
+  describe("edge cases", () => {
+    it("should return empty array when both current and update are undefined", () => {
+      const result = skillsMetadataReducer(undefined, undefined);
+      expect(result).toEqual([]);
+    });
+
+    it("should return empty array when current is undefined and update is empty", () => {
+      const result = skillsMetadataReducer(undefined, []);
+      expect(result).toEqual([]);
+    });
+
+    it("should return current when update is undefined", () => {
+      const current = [createSkill("skill-a")];
+      const result = skillsMetadataReducer(current, undefined);
+      expect(result).toEqual(current);
+    });
+
+    it("should return current when update is empty array", () => {
+      const current = [createSkill("skill-a")];
+      const result = skillsMetadataReducer(current, []);
+      expect(result).toEqual(current);
+    });
+
+    it("should return update when current is undefined", () => {
+      const update = [createSkill("skill-a")];
+      const result = skillsMetadataReducer(undefined, update);
+      expect(result).toEqual(update);
+    });
+
+    it("should return update when current is empty array", () => {
+      const update = [createSkill("skill-a")];
+      const result = skillsMetadataReducer([], update);
+      expect(result).toEqual(update);
+    });
+  });
+
+  describe("merging behavior", () => {
+    it("should merge non-overlapping skills from current and update", () => {
+      const current = [createSkill("skill-a")];
+      const update = [createSkill("skill-b")];
+
+      const result = skillsMetadataReducer(current, update);
+
+      expect(result).toHaveLength(2);
+      expect(result.map((s) => s.name).sort()).toEqual(["skill-a", "skill-b"]);
+    });
+
+    it("should override current skill with update when names match", () => {
+      const current = [createSkill("skill-a", "Current description")];
+      const update = [createSkill("skill-a", "Updated description")];
+
+      const result = skillsMetadataReducer(current, update);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe("skill-a");
+      expect(result[0].description).toBe("Updated description");
+    });
+
+    it("should handle multiple overlapping skills (update wins)", () => {
+      const current = [
+        createSkill("skill-a", "Current A"),
+        createSkill("skill-b", "Current B"),
+        createSkill("skill-c", "Current C"),
+      ];
+      const update = [
+        createSkill("skill-a", "Updated A"),
+        createSkill("skill-c", "Updated C"),
+      ];
+
+      const result = skillsMetadataReducer(current, update);
+
+      expect(result).toHaveLength(3);
+
+      const skillA = result.find((s) => s.name === "skill-a");
+      const skillB = result.find((s) => s.name === "skill-b");
+      const skillC = result.find((s) => s.name === "skill-c");
+
+      expect(skillA?.description).toBe("Updated A");
+      expect(skillB?.description).toBe("Current B"); // Not updated
+      expect(skillC?.description).toBe("Updated C");
+    });
+
+    it("should preserve order: current skills first, then new skills from update", () => {
+      const current = [createSkill("skill-a"), createSkill("skill-b")];
+      const update = [createSkill("skill-c"), createSkill("skill-d")];
+
+      const result = skillsMetadataReducer(current, update);
+
+      expect(result.map((s) => s.name)).toEqual([
+        "skill-a",
+        "skill-b",
+        "skill-c",
+        "skill-d",
+      ]);
+    });
+  });
+
+  describe("parallel subagent simulation", () => {
+    it("should handle concurrent updates from multiple parallel subagents", () => {
+      // Simulate: main agent has loaded skills, two subagents run in parallel
+      const mainAgentSkills = [
+        createSkill("shared-skill", "Main agent version"),
+        createSkill("main-only", "Only in main"),
+      ];
+
+      // First subagent returns
+      const subagent1Update = [
+        createSkill("shared-skill", "Subagent 1 version"),
+        createSkill("subagent1-skill", "From subagent 1"),
+      ];
+
+      // Second subagent returns
+      const subagent2Update = [
+        createSkill("shared-skill", "Subagent 2 version"),
+        createSkill("subagent2-skill", "From subagent 2"),
+      ];
+
+      // Apply updates sequentially (as the reducer would be called)
+      const afterSubagent1 = skillsMetadataReducer(
+        mainAgentSkills,
+        subagent1Update,
+      );
+      const afterSubagent2 = skillsMetadataReducer(
+        afterSubagent1,
+        subagent2Update,
+      );
+
+      expect(afterSubagent2).toHaveLength(4);
+
+      const sharedSkill = afterSubagent2.find((s) => s.name === "shared-skill");
+      expect(sharedSkill?.description).toBe("Subagent 2 version"); // Last update wins
+
+      expect(afterSubagent2.map((s) => s.name).sort()).toEqual([
+        "main-only",
+        "shared-skill",
+        "subagent1-skill",
+        "subagent2-skill",
+      ]);
+    });
+
+    it("should preserve all metadata fields when merging", () => {
+      const current: SkillMetadataEntry[] = [
+        {
+          name: "full-skill",
+          description: "Current version",
+          path: "/skills/full-skill/SKILL.md",
+          license: "MIT",
+          compatibility: "node >= 18",
+          metadata: { author: "original" },
+          allowedTools: ["read_file"],
+        },
+      ];
+
+      const update: SkillMetadataEntry[] = [
+        {
+          name: "full-skill",
+          description: "Updated version",
+          path: "/skills/full-skill/SKILL.md",
+          license: "Apache-2.0",
+          compatibility: "node >= 20",
+          metadata: { author: "updated", version: "2.0" },
+          allowedTools: ["read_file", "write_file"],
+        },
+      ];
+
+      const result = skillsMetadataReducer(current, update);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual(update[0]); // Full replacement with update
     });
   });
 });

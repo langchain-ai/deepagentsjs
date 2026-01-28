@@ -28,13 +28,10 @@ const DEFAULT_SUBAGENT_PROMPT =
 // 1. The messages key is handled explicitly to ensure only the final message is included
 // 2. The todos and structuredResponse keys are excluded as they do not have a defined reducer
 //    and no clear meaning for returning them from a subagent to the main agent.
-// 3. The files key is excluded to prevent concurrent subagents from writing to the files
-//    channel simultaneously (which causes LastValue errors in LangGraph).
 const EXCLUDED_STATE_KEYS = [
   "messages",
   "todos",
   "structuredResponse",
-  "files",
 ] as const;
 
 const DEFAULT_GENERAL_PURPOSE_DESCRIPTION =

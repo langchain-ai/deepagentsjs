@@ -49,6 +49,7 @@ import {
    */
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
+import { StateSchema, ReducedValue } from "@langchain/langgraph";
 
 import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
@@ -109,22 +110,66 @@ export interface SkillsMiddlewareOptions {
 }
 
 /**
- * State schema for skills middleware.
+ * Zod schema for a single skill metadata entry.
  */
-const SkillsStateSchema = z.object({
-  skillsMetadata: z
-    .array(
-      z.object({
-        name: z.string(),
-        description: z.string(),
-        path: z.string(),
-        license: z.string().nullable().optional(),
-        compatibility: z.string().nullable().optional(),
-        metadata: z.record(z.string(), z.string()).optional(),
-        allowedTools: z.array(z.string()).optional(),
-      }),
-    )
-    .optional(),
+export const SkillMetadataEntrySchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  path: z.string(),
+  license: z.string().nullable().optional(),
+  compatibility: z.string().nullable().optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
+  allowedTools: z.array(z.string()).optional(),
+});
+
+/**
+ * Type for a single skill metadata entry.
+ */
+export type SkillMetadataEntry = z.infer<typeof SkillMetadataEntrySchema>;
+
+/**
+ * Reducer for skillsMetadata that merges arrays from parallel subagents.
+ * Skills are deduplicated by name, with later values overriding earlier ones.
+ *
+ * @param current - The current skillsMetadata array (from state)
+ * @param update - The new skillsMetadata array (from a subagent update)
+ * @returns Merged array with duplicates resolved by name (later values win)
+ */
+export function skillsMetadataReducer(
+  current: SkillMetadataEntry[] | undefined,
+  update: SkillMetadataEntry[] | undefined,
+): SkillMetadataEntry[] {
+  // If no update, return current (or empty array)
+  if (!update || update.length === 0) {
+    return current || [];
+  }
+  // If no current, return update
+  if (!current || current.length === 0) {
+    return update;
+  }
+  // Merge by skill name (later values override earlier ones)
+  const merged = new Map<string, SkillMetadataEntry>();
+  for (const skill of current) {
+    merged.set(skill.name, skill);
+  }
+  for (const skill of update) {
+    merged.set(skill.name, skill);
+  }
+  return Array.from(merged.values());
+}
+
+/**
+ * State schema for skills middleware.
+ * Uses ReducedValue for skillsMetadata to allow concurrent updates from parallel subagents.
+ */
+const SkillsStateSchema = new StateSchema({
+  skillsMetadata: new ReducedValue(
+    z.array(SkillMetadataEntrySchema).default(() => []),
+    {
+      inputSchema: z.array(SkillMetadataEntrySchema).optional(),
+      reducer: skillsMetadataReducer,
+    },
+  ),
 });
 
 /**
@@ -303,10 +348,11 @@ async function listSkillsFromBackend(
 ): Promise<SkillMetadata[]> {
   const skills: SkillMetadata[] = [];
 
-  // Normalize path to ensure it ends with /
-  const normalizedPath = sourcePath.endsWith("/")
-    ? sourcePath
-    : `${sourcePath}/`;
+  // Normalize path to ensure it ends with / (handle both Unix and Windows paths)
+  const normalizedPath =
+    sourcePath.endsWith("/") || sourcePath.endsWith("\\")
+      ? sourcePath
+      : `${sourcePath}/`;
 
   // List directories in the source path using lsInfo
   let fileInfos: { path: string; is_dir?: boolean }[];
@@ -318,8 +364,13 @@ async function listSkillsFromBackend(
   }
 
   // Convert FileInfo[] to entries format
+  // Handle both forward slashes (Unix) and backslashes (Windows) in paths
   const entries = fileInfos.map((info) => ({
-    name: info.path.replace(/\/$/, "").split("/").pop() || "",
+    name:
+      info.path
+        .replace(/[/\\]$/, "") // Remove trailing slash or backslash
+        .split(/[/\\]/) // Split on either separator
+        .pop() || "",
     type: (info.is_dir ? "directory" : "file") as "file" | "directory",
   }));
 
@@ -381,10 +432,11 @@ function formatSkillsLocations(sources: string[]): string {
   for (let i = 0; i < sources.length; i++) {
     const sourcePath = sources[i];
     // Extract a friendly name from the path (last non-empty component)
+    // Handle both Unix (/) and Windows (\) path separators
     const name =
       sourcePath
-        .replace(/\/$/, "")
-        .split("/")
+        .replace(/[/\\]$/, "")
+        .split(/[/\\]/)
         .filter(Boolean)
         .pop()
         ?.replace(/^./, (c) => c.toUpperCase()) || "Skills";
