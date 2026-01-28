@@ -348,10 +348,11 @@ async function listSkillsFromBackend(
 ): Promise<SkillMetadata[]> {
   const skills: SkillMetadata[] = [];
 
-  // Normalize path to ensure it ends with /
-  const normalizedPath = sourcePath.endsWith("/")
-    ? sourcePath
-    : `${sourcePath}/`;
+  // Normalize path to ensure it ends with / (handle both Unix and Windows paths)
+  const normalizedPath =
+    sourcePath.endsWith("/") || sourcePath.endsWith("\\")
+      ? sourcePath
+      : `${sourcePath}/`;
 
   // List directories in the source path using lsInfo
   let fileInfos: { path: string; is_dir?: boolean }[];
@@ -363,8 +364,13 @@ async function listSkillsFromBackend(
   }
 
   // Convert FileInfo[] to entries format
+  // Handle both forward slashes (Unix) and backslashes (Windows) in paths
   const entries = fileInfos.map((info) => ({
-    name: info.path.replace(/\/$/, "").split("/").pop() || "",
+    name:
+      info.path
+        .replace(/[/\\]$/, "") // Remove trailing slash or backslash
+        .split(/[/\\]/) // Split on either separator
+        .pop() || "",
     type: (info.is_dir ? "directory" : "file") as "file" | "directory",
   }));
 
@@ -426,10 +432,11 @@ function formatSkillsLocations(sources: string[]): string {
   for (let i = 0; i < sources.length; i++) {
     const sourcePath = sources[i];
     // Extract a friendly name from the path (last non-empty component)
+    // Handle both Unix (/) and Windows (\) path separators
     const name =
       sourcePath
-        .replace(/\/$/, "")
-        .split("/")
+        .replace(/[/\\]$/, "")
+        .split(/[/\\]/)
         .filter(Boolean)
         .pop()
         ?.replace(/^./, (c) => c.toUpperCase()) || "Skills";
