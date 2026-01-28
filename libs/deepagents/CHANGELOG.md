@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.6.1
+
+### Patch Changes
+
+- [`a0f6960`](https://github.com/langchain-ai/deepagentsjs/commit/a0f69609b85327f339fe162c227696e1a618371f) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): use new StateSchema to define middleware schemas
+
 ## 1.6.0
 
 ### Minor Changes
