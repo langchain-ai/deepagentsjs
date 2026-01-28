@@ -39,6 +39,10 @@ export interface GameAgent {
   childrenIds: string[]; // For tracking spawned subagents
   thoughtBubble: string | null;
   lastToolCall: string | null;
+  lastMove?: number;
+  thinkStart?: number | null;
+  workStart?: number | null;
+  completeStart?: number | null;
 }
 
 export type DragonType = "SYNTAX" | "RUNTIME" | "NETWORK" | "PERMISSION" | "UNKNOWN";
@@ -75,6 +79,21 @@ export interface Quest {
   requiredAgents: number;
   assignedAgentIds: string[];
   rewards: string[];
+  questlineId?: string; // Reference to parent questline
+  prerequisiteQuestIds?: string[]; // Quests that must be completed first
+  position?: number; // Position within questline sequence
+}
+
+export type QuestlineStatus = "not_started" | "in_progress" | "completed" | "failed";
+
+export interface Questline {
+  id: string;
+  name: string;
+  description: string;
+  status: QuestlineStatus;
+  questIds: string[]; // Ordered array of quest IDs
+  currentQuestIndex: number; // Which quest is currently active
+  requiredCompletedQuests: number; // How many quests needed to complete questline
 }
 
 export type TileType = "grass" | "dirt" | "stone" | "water" | "path";
@@ -112,6 +131,10 @@ interface GameState {
   quests: Record<string, Quest>;
   questCount: number; // Cached count for UI
   completedQuestCount: number; // Cached count for UI
+
+  // Questlines
+  questlines: Record<string, Questline>;
+  activeQuestlineId: string | null;
 
   // Camera
   cameraPosition: { x: number; y: number; z: number };
@@ -203,6 +226,13 @@ interface GameActions {
   assignQuestToAgents: (questId: string, agentIds: string[]) => void;
   completeQuest: (id: string) => void;
 
+  // Questlines
+  addQuestline: (questline: Omit<Questline, "id">) => Questline;
+  updateQuestline: (id: string, updates: Partial<Questline>) => void;
+  startQuestline: (id: string) => void;
+  advanceQuestline: (questlineId: string) => void;
+  setActiveQuestline: (questlineId: string | null) => void;
+
   // Camera
   setCameraPosition: (position: { x: number; y: number; z: number }) => void;
   setCameraTarget: (target: { x: number; y: number; z: number }) => void;
@@ -250,6 +280,8 @@ export const useGameStore = create<GameStore>()(
     quests: {},
     questCount: 0,
     completedQuestCount: 0,
+    questlines: {},
+    activeQuestlineId: null,
     cameraPosition: { x: 25, y: 30, z: 25 },
     cameraTarget: { x: 0, y: 0, z: 0 },
     zoom: 1,

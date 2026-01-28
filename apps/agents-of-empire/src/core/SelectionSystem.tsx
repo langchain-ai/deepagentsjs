@@ -1,10 +1,8 @@
 import { useRef, useCallback, useEffect, useMemo } from "react";
 import { useThree } from "@react-three/fiber";
-import { Vector3, Raycaster, Plane, Camera, Sphere } from "three";
+import { Vector2, Vector3, Raycaster, Camera, Sphere } from "three";
 import { useGameStore, useAgentsShallow, useStructuresShallow, type GameAgent, type Structure } from "../store/gameStore";
 
-// Get selectedAgentIds from store for checking selection state
-const getSelectedAgentIds = () => useGameStore.getState().selectedAgentIds;
 
 // ============================================================================
 // Selection Box Types
@@ -41,10 +39,8 @@ interface DragState {
 }
 
 export function useSelectionSystem(options: SelectionSystemOptions = {}) {
-  const { camera, size } = useThree();
+  const { camera, size, gl } = useThree();
   const raycaster = useRef(new Raycaster());
-  const mouse = useRef(new Vector3());
-  const groundPlane = useRef(new Plane(new Vector3(0, 1, 0), 0));
 
   // Use ref for drag state to avoid closure issues
   const dragStateRef = useRef<DragState>({
@@ -95,11 +91,10 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
   // Raycast to find agent under cursor
   const getAgentAtScreenPos = useCallback(
     (screenX: number, screenY: number) => {
-      const vector = new Vector3();
+      const vector = new Vector2();
       vector.set(
         (screenX / size.width) * 2 - 1,
-        -(screenY / size.height) * 2 + 1,
-        0.5
+        -(screenY / size.height) * 2 + 1
       );
 
       raycaster.current.setFromCamera(vector, camera);
@@ -136,11 +131,10 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
   // Raycast to find structure under cursor
   const getStructureAtScreenPos = useCallback(
     (screenX: number, screenY: number) => {
-      const vector = new Vector3();
+      const vector = new Vector2();
       vector.set(
         (screenX / size.width) * 2 - 1,
-        -(screenY / size.height) * 2 + 1,
-        0.5
+        -(screenY / size.height) * 2 + 1
       );
 
       raycaster.current.setFromCamera(vector, camera);
@@ -227,19 +221,6 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
 
       // Check if clicking on a structure
       const structureHit = getStructureAtScreenPos(x, y);
-
-      // Debug logging for right-click
-      if (e.button === 2) {
-        console.log("[SelectionSystem] Right-click detected", {
-          clientX: e.clientX,
-          clientY: e.clientY,
-          rectLeft: rect.left,
-          rectTop: rect.top,
-          x, y,
-          agentId,
-          structureHit: structureHit?.id || null,
-        });
-      }
 
       if (e.button === 0) {
         // Left click
@@ -381,32 +362,43 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
     e.preventDefault();
   }, []);
 
-  // Set up event listeners
+  // Store handlers in refs to avoid recreating event listeners
+  const handlersRef = useRef({
+    handleMouseDown,
+    handleMouseMove,
+    handleMouseUp,
+    handleContextMenu
+  });
+
+  // Update refs when handlers change
   useEffect(() => {
-    const canvas = camera.domElement || document.querySelector("canvas");
+    handlersRef.current = {
+      handleMouseDown,
+      handleMouseMove,
+      handleMouseUp,
+      handleContextMenu
+    };
+  }, [handleMouseDown, handleMouseMove, handleMouseUp, handleContextMenu]);
+
+  // Set up event listeners ONCE
+  useEffect(() => {
+    // Use the gl.domElement which is the canvas element from React Three Fiber
+    const canvas = gl.domElement;
 
     if (canvas) {
-      console.log("[SelectionSystem] Attaching event listeners to canvas", {
-        hasDomElement: !!camera.domElement,
-        canvasFound: !!canvas,
-        canvasId: (canvas as HTMLElement).id,
-      });
-
-      canvas.addEventListener("mousedown", handleMouseDown);
-      canvas.addEventListener("mousemove", handleMouseMove);
-      canvas.addEventListener("mouseup", handleMouseUp);
-      canvas.addEventListener("contextmenu", handleContextMenu);
+      canvas.addEventListener("mousedown", handlersRef.current.handleMouseDown);
+      canvas.addEventListener("mousemove", handlersRef.current.handleMouseMove);
+      canvas.addEventListener("mouseup", handlersRef.current.handleMouseUp);
+      canvas.addEventListener("contextmenu", handlersRef.current.handleContextMenu);
 
       return () => {
-        canvas.removeEventListener("mousedown", handleMouseDown);
-        canvas.removeEventListener("mousemove", handleMouseMove);
-        canvas.removeEventListener("mouseup", handleMouseUp);
-        canvas.removeEventListener("contextmenu", handleContextMenu);
+        canvas.removeEventListener("mousedown", handlersRef.current.handleMouseDown);
+        canvas.removeEventListener("mousemove", handlersRef.current.handleMouseMove);
+        canvas.removeEventListener("mouseup", handlersRef.current.handleMouseUp);
+        canvas.removeEventListener("contextmenu", handlersRef.current.handleContextMenu);
       };
-    } else {
-      console.error("[SelectionSystem] No canvas found for event listeners!");
     }
-  }, [camera, handleMouseDown, handleMouseMove, handleMouseUp, handleContextMenu]);
+  }, [gl]); // Only depend on gl, not the handlers
 
   return {
     screenToWorld,

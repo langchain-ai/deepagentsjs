@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useGameStore, useTilesShallow, type TileType } from "../store/gameStore";
+import { useGameStore, useTilesShallow, type Tile, type TileType } from "../store/gameStore";
 
 // ============================================================================
 // Terrain Generation Types
@@ -176,7 +176,7 @@ export function Terrain({ config }: TerrainProps) {
       const generatedTiles = generateTerrain(config ?? defaultConfig);
 
       // Convert to object and initialize store
-      const tilesRecord: Record<string, { x: number; z: number; type: string; walkable: boolean }> = {};
+      const tilesRecord: Record<string, Tile> = {};
       for (const key in generatedTiles) {
         tilesRecord[key] = generatedTiles[key];
       }

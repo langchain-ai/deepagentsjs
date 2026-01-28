@@ -1,6 +1,6 @@
 import { useRef, useEffect } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
-import { Vector3, MathUtils } from "three";
+import { Vector3, MathUtils, Camera as ThreeCamera } from "three";
 import {
   useCameraPosition,
   useZoom,
@@ -29,8 +29,6 @@ interface CameraControllerProps {
 }
 
 // Constants for isometric camera
-const DEFAULT_ROTATION = Math.PI / 4; // 45 degrees
-const DEFAULT_ELEVATION = Math.asin(Math.tan(Math.PI / 6)); // ~35.26 degrees (true isometric)
 const MIN_ELEVATION = Math.PI / 8; // 22.5 degrees minimum
 const MAX_ELEVATION = Math.PI / 3; // 60 degrees maximum
 const DISTANCE_BASE = 40; // Base distance from target
@@ -400,7 +398,7 @@ export function CameraController(props: CameraControllerProps) {
 
 export function worldToScreen(
   worldPos: Vector3,
-  camera: THREE.Camera,
+  camera: ThreeCamera,
   width: number,
   height: number
 ): { x: number; y: number } {
@@ -420,7 +418,7 @@ export function worldToScreen(
 export function screenToWorld(
   screenX: number,
   screenY: number,
-  camera: THREE.Camera,
+  camera: ThreeCamera,
   width: number,
   height: number
 ): Vector3 | null {

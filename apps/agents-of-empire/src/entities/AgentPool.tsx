@@ -20,7 +20,7 @@ const DEFAULT_AGENTS = [
 ];
 
 export function useAgentPool(options: AgentPoolOptions = {}) {
-  const { maxAgents = 500, spawnRadius = 20, spawnPattern = "random" } = options;
+  const { spawnRadius = 20 } = options;
 
   const spawnAgent = useCallback(
     (name?: string, position?: [number, number, number], agentRef?: any, parentId?: string) => {
@@ -99,7 +99,7 @@ export function useAgentPool(options: AgentPoolOptions = {}) {
 
   const despawnAllAgents = useCallback(() => {
     const { agents } = useGameStore.getState();
-    for (const [id] of agents) {
+    for (const [id] of Object.entries(agents)) {
       despawnAgent(id);
     }
   }, [despawnAgent]);
@@ -121,7 +121,6 @@ interface InitialAgentsProps {
 }
 
 export function InitialAgents({ count = 100 }: InitialAgentsProps) {
-  const agentCount = useGameStore((state) => state.agentCount);
   const hasInitialized = useRef(false);
 
   useEffect(() => {
@@ -129,18 +128,18 @@ export function InitialAgents({ count = 100 }: InitialAgentsProps) {
     hasInitialized.current = true;
 
     // Spawn initial agents in grid pattern for better distribution
-    const { spawnAgentBatch, spawnAgent } = useGameStore.getState();
-    const newAgents = spawnAgentBatch?.(count, [25, 0, 25], "grid");
+    const store = useGameStore.getState();
+    const newAgents = store.spawnAgentBatch(count, [25, 0, 25], "grid");
 
     // Add default tools to agents
     const defaultTools = [
-      { id: "search", name: "Search", type: "search" as const, icon: "🔍", description: "Search the web" },
-      { id: "read", name: "File Reader", type: "file_reader" as const, icon: "📜", description: "Read files" },
-      { id: "code", name: "Code Executor", type: "code_executor" as const, icon: "🔨", description: "Execute code" },
+      { id: "search", name: "Search", type: "search" as const, icon: "🔍", description: "Search web", rarity: "common" as const },
+      { id: "read", name: "File Reader", type: "file_reader" as const, icon: "📜", description: "Read files", rarity: "common" as const },
+      { id: "code", name: "Code Executor", type: "code_executor" as const, icon: "🔨", description: "Execute code", rarity: "common" as const },
     ];
 
     newAgents?.forEach((agent: GameAgent) => {
-      useGameStore.getState().updateAgent(agent.id, {
+      store.updateAgent(agent.id, {
         inventory: [...defaultTools],
         equippedTool: defaultTools[Math.floor(Math.random() * defaultTools.length)],
       });
@@ -153,7 +152,7 @@ export function InitialAgents({ count = 100 }: InitialAgentsProps) {
       parentAgents.forEach((parent: GameAgent) => {
         // Spawn 2 subagents per parent
         for (let i = 0; i < 2; i++) {
-          const subagent = spawnAgent?.(
+          const subagent = store.spawnAgent(
             `${parent.name}-Sub-${i + 1}`,
             [
               parent.position[0] + (Math.random() - 0.5) * 3,
@@ -161,10 +160,10 @@ export function InitialAgents({ count = 100 }: InitialAgentsProps) {
               parent.position[2] + (Math.random() - 0.5) * 3,
             ],
             null,
-            parent.id // This sets the parent-child relationship
+            parent.id // This sets up parent-child relationship
           );
           if (subagent) {
-            useGameStore.getState().updateAgent(subagent.id, {
+            store.updateAgent(subagent.id, {
               inventory: [...defaultTools],
               equippedTool: defaultTools[Math.floor(Math.random() * defaultTools.length)],
             });
@@ -177,7 +176,7 @@ export function InitialAgents({ count = 100 }: InitialAgentsProps) {
     if (newAgents && newAgents.length >= 20) {
       // Set agents 10-14 to WORKING state (they are near each other from grid pattern)
       for (let i = 10; i < 15; i++) {
-        useGameStore.getState().updateAgent(newAgents[i].id, {
+        store.updateAgent(newAgents[i].id, {
           state: "WORKING",
           currentTask: "Collaborating on task...",
         });
@@ -235,5 +234,3 @@ export function AgentSpawner({ onSpawn }: AgentSpawnerProps) {
     </div>
   );
 }
-
-import React from "react";

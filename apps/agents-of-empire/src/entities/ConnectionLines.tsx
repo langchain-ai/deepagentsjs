@@ -150,7 +150,7 @@ export function ConnectionLines({
   const agents = useAgentsShallow() as Record<string, any>;
   const connectionsRef = useRef<AgentConnection[]>([]);
   const lastUpdateRef = useRef(0);
-  const updateInterval = 100; // Update every 100ms
+  const updateInterval = 250; // Update every 250ms (reduced from 100ms for better performance)
 
   // Find all connections based on agent relationships
   const updateConnections = useMemo(() => {
@@ -173,6 +173,7 @@ export function ConnectionLines({
       }
 
       // Find parent-child connections (subagent relationships)
+      // Only check parentId to avoid duplicates - the childrenIds array is redundant
       for (const agent of agentList) {
         if (agent.parentId && agentIds.has(agent.parentId)) {
           const parent = agents[agent.parentId];
@@ -187,27 +188,6 @@ export function ConnectionLines({
               startTime: existing?.startTime || now,
               intensity: existing ? Math.min(1, existing.intensity + 0.1) : 0.3,
             });
-          }
-        }
-
-        // Also check children
-        if (agent.childrenIds && Array.isArray(agent.childrenIds)) {
-          for (const childId of agent.childrenIds) {
-            if (agentIds.has(childId)) {
-              const key = `${agent.id}-${childId}`;
-              // Avoid duplicates
-              if (!connections.find((c) => c.toAgentId === childId && c.fromAgentId === agent.id)) {
-                const existing = existingConnections.get(key);
-
-                connections.push({
-                  fromAgentId: agent.id,
-                  toAgentId: childId,
-                  type: "parent-child",
-                  startTime: existing?.startTime || now,
-                  intensity: existing ? Math.min(1, existing.intensity + 0.1) : 0.3,
-                });
-              }
-            }
           }
         }
       }

@@ -1,7 +1,7 @@
-import React, { Suspense, useCallback, useEffect, useState } from "react";
-import { Canvas } from "@react-three/fiber";
+import { Suspense, useCallback, useEffect, useState, useRef } from "react";
+import { Canvas, useThree } from "@react-three/fiber";
 import { Stars, Environment } from "@react-three/drei";
-import { useGame, useGameTime, useGameStats } from "./core/Game";
+import { useGame } from "./core/Game";
 import { CameraController } from "./core/CameraController";
 import { SelectionSystem } from "./core/SelectionSystem";
 import { WorldGrid, GroundPlane } from "./world/WorldManager";
@@ -117,18 +117,51 @@ function Lighting() {
         position={[30, 50, 30]}
         intensity={1}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-camera-far={100}
         shadow-camera-left={-30}
         shadow-camera-right={30}
         shadow-camera-top={30}
         shadow-camera-bottom={-30}
+        shadow-bias={-0.0001}
       />
       <directionalLight position={[-20, 30, -20]} intensity={0.3} />
-      <pointLight position={[0, 20, 0]} intensity={0.2} color="#f4d03f" />
+      <pointLight position={[0, 20, 0]} intensity={0.2} color="#f4d03f" distance={50} />
     </>
   );
+}
+
+// ============================================================================
+// WebGL Context Loss Handler
+// ============================================================================()
+
+function ContextLossHandler() {
+  const gl = useThree((state) => state.gl);
+  const [, forceUpdate] = useState(0);
+
+  useEffect(() => {
+    const handleContextLoss = (event: Event) => {
+      event.preventDefault();
+      console.warn("[WebGL] Context lost - attempting recovery...");
+    };
+
+    const handleContextRestored = () => {
+      console.log("[WebGL] Context restored - forcing re-render");
+      forceUpdate((prev) => prev + 1);
+    };
+
+    const canvas = gl.domElement;
+    canvas.addEventListener("webglcontextlost", handleContextLoss);
+    canvas.addEventListener("webglcontextrestored", handleContextRestored);
+
+    return () => {
+      canvas.removeEventListener("webglcontextlost", handleContextLoss);
+      canvas.removeEventListener("webglcontextrestored", handleContextRestored);
+    };
+  }, [gl]);
+
+  return null;
 }
 
 // ============================================================================
@@ -145,10 +178,7 @@ function GameLoop() {
 // ============================================================================()
 
 function GameScene() {
-  const { spawnAgent, spawnAgentBatch } = useAgentPool();
-  const isDragging = useGameStore((state) => state.isDragging);
-  const dragStart = useGameStore((state) => state.dragStart);
-  const dragEnd = useGameStore((state) => state.dragEnd);
+  useAgentPool();
 
   // Move agents to a target position in formation
   const moveAgentsToPosition = useCallback(
@@ -193,8 +223,8 @@ function GameScene() {
 
   // Handle structure click (select structure or show info)
   const handleStructureClick = useCallback(
-    (structureId: string, structure: Structure) => {
-      console.log("Structure clicked:", structure.name, structureId);
+    (_structureId: string, structure: Structure) => {
+      console.log("Structure clicked:", structure.name);
       // Could show structure info panel here
     },
     []
@@ -202,7 +232,7 @@ function GameScene() {
 
   // Handle structure right-click - assign selected agents to goal
   const handleStructureRightClick = useCallback(
-    (structureId: string, structure: Structure) => {
+    (_structureId: string, structure: Structure) => {
       const selectedAgents = Array.from(useGameStore.getState().selectedAgentIds);
 
       if (selectedAgents.length === 0) {
@@ -214,6 +244,12 @@ function GameScene() {
 
       // Move agents to the structure's position
       moveAgentsToPosition(structure.position, selectedAgents);
+
+      // If the structure has a goalId, assign the quest to the agents
+      if (structure.goalId) {
+        useGameStore.getState().assignQuestToAgents(structure.goalId, selectedAgents);
+        console.log(`Assigned quest ${structure.goalId} to ${selectedAgents.length} agents`);
+      }
 
       // Update agent tasks to reflect assignment to this goal
       for (const agentId of selectedAgents) {
@@ -227,7 +263,7 @@ function GameScene() {
 
   // Handle structure hover
   const handleStructureHovered = useCallback(
-    (structureId: string | null) => {
+    (_structureId: string | null) => {
       // Could show tooltip or status here
     },
     []
@@ -243,7 +279,7 @@ function GameScene() {
       <WorldGrid />
       <GroundPlane />
 
-      <InitialAgents count={100} />
+      <InitialAgents count={10} />
       <AgentPool onAgentClick={(agentId) => console.log("Agent clicked:", agentId)} />
 
       <ConnectionLines enabled={true} maxConnections={100} />
@@ -337,22 +373,34 @@ export default function App() {
   return (
     <div className="w-screen h-screen overflow-hidden bg-gray-900">
       <Suspense fallback={<LoadingScreen />}>
-        {/* Initialize game state before Canvas */}
-        {!isReady && <GameInitializer onReady={() => setIsReady(true)} />}
-
-        {/* Show loading until ready */}
+        {/* Initialize game state before Canvas - only show when not ready */}
         {!isReady ? (
-          <LoadingScreen />
+          <>
+            <GameInitializer onReady={() => setIsReady(true)} />
+            <LoadingScreen />
+          </>
         ) : (
           <>
             <Canvas
               shadows
               camera={{ position: [0, 30, 0], fov: 50 }}
-              gl={{ antialias: true, alpha: false }}
+              gl={{
+                antialias: true,
+                alpha: false,
+                powerPreference: "high-performance",
+                failIfMajorPerformanceCaveat: false,
+                preserveDrawingBuffer: false,
+                desynchronized: true,
+                stencil: false,
+                depth: true,
+              }}
+              dpr={[1, 2]} // Limit pixel ratio for performance
+              frameloop="demand" // Only render when needed
             >
               <GameScene />
               <CameraController />
               <GameLoop /> {/* Game loop runs inside Canvas */}
+              <ContextLossHandler />
             </Canvas>
 
             <HUD />

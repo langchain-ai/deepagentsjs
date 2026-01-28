@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, createContext, useContext } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { useGameStore, type GameAgent, type AgentState, type DragonType } from "../store/gameStore";
-import type { DeepAgent, DeepAgentTypeConfig } from "deepagents";
+import { useGameStore, type AgentState, type DragonType } from "../store/gameStore";
+import { createDeepAgent, type DeepAgent } from "deepagents";
+import { tool } from "langchain";
+import { z } from "zod";
+import { ChatOpenAI } from "@langchain/openai";
 
 // ============================================================================
 // Types
@@ -73,7 +76,34 @@ export function useAgentBridge() {
   const setAgentState = useGameStore((state) => state.setAgentState);
   const setThoughtBubble = useGameStore((state) => state.setThoughtBubble);
   const spawnDragon = useGameStore((state) => state.spawnDragon);
-  const removeDragon = useGameStore((state) => state.removeDragon);
+
+  // Define default tools for agents
+  const searchTool = tool(
+    async ({ query }: { query: string }) => {
+      return `Searching for "${query}"...`;
+    },
+    {
+      name: "search",
+      description: "Search for information",
+      schema: z.object({
+        query: z.string().describe("The search query"),
+      }),
+    }
+  );
+
+  const writeFileTool = tool(
+    async ({ path }: { path: string; content: string }) => {
+      return `Writing to ${path}...`;
+    },
+    {
+      name: "write_file",
+      description: "Write content to a file",
+      schema: z.object({
+        path: z.string().describe("The file path"),
+        content: z.string().describe("The file content"),
+      }),
+    }
+  );
 
   // Spawn a new Deep Agent and create visual representation
   const spawnDeepAgent = useCallback(
@@ -84,12 +114,29 @@ export function useAgentBridge() {
       // Spawn visual agent
       const gameAgent = spawnAgent(name, [25 + Math.random() * 5, 0, 25 + Math.random() * 5]);
 
-      // Store Deep Agent reference (will be set when agent is invoked)
+      // Create real Deep Agent instance
+      const deepAgent = createDeepAgent({
+        model: new ChatOpenAI({
+          modelName: "gpt-4o-mini",
+          temperature: 0,
+        }),
+        tools: [searchTool, writeFileTool],
+        systemPrompt: config.systemPrompt || `You are ${name}, a strategic agent in Agents of Empire game.
+Your role is to:
+1. Analyze objectives given by the player
+2. Execute tasks efficiently
+3. Report back with clear results
+
+When given a task:
+- Break it down into clear steps
+- Execute each step methodically
+- Provide status updates`,
+        subagents: [],
+      });
+
+      // Store Deep Agent reference
       updateAgent(gameAgent.id, {
-        agentRef: {
-          id: agentId,
-          config,
-        },
+        agentRef: deepAgent,
       });
 
       return gameAgent.id;
@@ -136,7 +183,8 @@ export function useAgentBridge() {
   // Handle error -> dragon spawn
   const handleError = useCallback(
     (agentId: string, error: string) => {
-      const agent = useGameStore.getState().agents.get(agentId);
+      const agents = useGameStore.getState().agents;
+      const agent = agents[agentId];
       if (!agent) return;
 
       const dragonType = ERROR_TO_DRAGON_TYPE(error);
@@ -158,7 +206,8 @@ export function useAgentBridge() {
   // Handle subagent spawn
   const handleSubagentSpawn = useCallback(
     (parentAgentId: string, subagentName: string) => {
-      const parent = useGameStore.getState().agents.get(parentAgentId);
+      const agents = useGameStore.getState().agents;
+      const parent = agents[parentAgentId];
       if (!parent) return;
 
       // Spawn subagent visual near parent
@@ -264,11 +313,15 @@ export function AgentBridgeProvider({ children }: AgentBridgeProviderProps) {
 
   // Register an agent for streaming
   const registerAgent = useCallback(
-    (agentId: string, deepAgent: DeepAgent) => {
-      const streamProcessor = deepAgent.stream?.({ messages: [] });
-      if (!streamProcessor) return;
+    (agentId: string, _deepAgent: DeepAgent) => {
+      // Note: Deep Agents don't have a stream() method by default
+      // The invoke() method returns an async result, not a stream
+      // For now, we'll use mock events for visualization
+      // In the future, this should be updated to use real LangGraph streaming
 
-      const { cancel } = processAgentStream(streamProcessor as AsyncIterable<any>, {
+      const mockStream = createMockAgentStream(agentId);
+
+      const { cancel } = processAgentStream(mockStream, {
         agentId,
         onEvent: (event) => {
           bridge.syncVisualState(agentId, event);
@@ -295,7 +348,6 @@ export function AgentBridgeProvider({ children }: AgentBridgeProviderProps) {
         },
         onComplete: () => {
           // Stream completed
-          console.log(`Agent ${agentId} stream completed`);
         },
         onError: (error) => {
           // Stream error - spawn dragon

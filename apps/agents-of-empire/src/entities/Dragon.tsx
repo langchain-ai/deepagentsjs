@@ -1,6 +1,6 @@
-import { useRef, useMemo, useCallback, useState, useEffect } from "react";
+import { useRef, useMemo, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Group, Vector3, Color } from "three";
+import { Group } from "three";
 import { Text } from "@react-three/drei";
 import { useGameStore, useAgentsShallow, useDragonsShallow, type GameAgent, type Dragon as DragonType } from "../store/gameStore";
 
@@ -50,7 +50,7 @@ interface DragonVisualProps {
   onDefeated?: (dragonId: string) => void;
 }
 
-export function DragonVisual({ dragon, onDefeated }: DragonVisualProps) {
+export function DragonVisual({ dragon }: DragonVisualProps) {
   const groupRef = useRef<Group>(null);
   const bodyRef = useRef<Group>(null);
   const particlesRef = useRef<Group>(null);
@@ -365,7 +365,6 @@ export function useCombat() {
   const dragonsMap = useDragonsShallow() as Record<string, DragonType>;
   // Actions are stable references, safe to select individually
   const updateAgent = useGameStore((state) => state.updateAgent);
-  const updateDragon = useGameStore((state) => state.updateDragon);
   const damageDragon = useGameStore((state) => state.damageDragon);
   const removeDragon = useGameStore((state) => state.removeDragon);
   const setAgentState = useGameStore((state) => state.setAgentState);
@@ -461,27 +460,28 @@ export function useCombat() {
 
 interface DragonSpawnEffectProps {
   position: [number, number, number];
-  type: DragonType;
+  type: DragonType["type"];
   onComplete?: () => void;
 }
 
 export function DragonSpawnEffect({ position, type, onComplete }: DragonSpawnEffectProps) {
   const groupRef = useRef<Group>(null);
-  const config = DRAGON_CONFIG[type];
-  const [progress, setProgress] = useState(0);
+  const config = DRAGON_CONFIG[type as keyof typeof DRAGON_CONFIG];
+  const progressRef = useRef(0);
 
-  useFrame((state) => {
+  useFrame((_state, delta) => {
     if (!groupRef.current) return;
 
-    const delta = 0.02;
-    setProgress((p) => Math.min(p + delta, 1));
+    progressRef.current = Math.min(progressRef.current + delta * 2, 1);
 
-    if (progress >= 1) {
+    if (progressRef.current >= 1) {
       onComplete?.();
     }
   });
 
-  if (progress >= 1) return null;
+  if (progressRef.current >= 1) return null;
+
+  const progress = progressRef.current;
 
   return (
     <group ref={groupRef} position={position}>

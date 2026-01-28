@@ -1,7 +1,7 @@
-import { useRef, useCallback, useState, useEffect } from "react";
+import { useRef, useCallback, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Vector3 } from "three";
-import { useGameStore, useAgentsShallow, useDragonsShallow, useQuestsShallow, type AgentState } from "../store/gameStore";
+import { useGameStore, useAgentsShallow, useDragonsShallow, useQuestsShallow, type GameAgent, type Dragon, type Quest } from "../store/gameStore";
 
 // ============================================================================
 // Game Configuration
@@ -71,7 +71,7 @@ export function useGame(config: GameConfig = DEFAULT_CONFIG) {
   }, []);
 
   // Move agent towards target
-  const moveAgentTowardsTarget = useCallback((agent: any, now: number) => {
+  const moveAgentTowardsTarget = useCallback((agent: GameAgent, now: number) => {
     const speed = 5; // units per second
     const current = new Vector3(...agent.position);
     const target = new Vector3(...agent.targetPosition);
@@ -98,7 +98,7 @@ export function useGame(config: GameConfig = DEFAULT_CONFIG) {
   }, []);
 
   // Update agent state based on current state
-  const updateAgentState = useCallback((agent: any, now: number) => {
+  const updateAgentState = useCallback((agent: GameAgent, now: number) => {
     switch (agent.state) {
       case "THINKING":
         // Simulate thinking duration
@@ -150,7 +150,7 @@ export function useGame(config: GameConfig = DEFAULT_CONFIG) {
   }, []);
 
   // Update dragon AI
-  const updateDragonAI = useCallback((dragon: any, now: number) => {
+  const updateDragonAI = useCallback((dragon: Dragon, _now: number) => {
     // Simple AI: move toward target agent if exists
     if (dragon.targetAgentId) {
       const agent = useGameStore.getState().agents[dragon.targetAgentId];
@@ -214,9 +214,9 @@ export function useGameTime() {
 // ============================================================================()
 
 export function useGameStats() {
-  const agents = useAgentsShallow() as Record<string, any>;
-  const dragons = useDragonsShallow() as Record<string, any>;
-  const quests = useQuestsShallow() as Record<string, any>;
+  const agents = useAgentsShallow() as Record<string, GameAgent>;
+  const dragons = useDragonsShallow() as Record<string, Dragon>;
+  const quests = useQuestsShallow() as Record<string, Quest>;
 
   const stats = {
     totalAgents: Object.keys(agents).length,
@@ -226,7 +226,7 @@ export function useGameStats() {
     activeQuests: Object.values(quests).filter((q) => q.status === "in_progress").length,
     completedQuests: Object.values(quests).filter((q) => q.status === "completed").length,
     averageLevel: Object.keys(agents).length > 0
-      ? Object.values(agents).reduce((sum: number, a: any) => sum + a.level, 0) / Object.keys(agents).length
+      ? Object.values(agents).reduce((sum: number, a: GameAgent) => sum + a.level, 0) / Object.keys(agents).length
       : 0,
   };
 

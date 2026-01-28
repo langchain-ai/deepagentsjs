@@ -1,8 +1,9 @@
 import { useRef, useEffect, useMemo, useState, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Group, Vector3, Color, Object3D, InstancedMesh, BufferGeometry, Float32BufferAttribute } from "three";
-import { Text, Limit } from "@react-three/drei";
+import { Group, Vector3, Color, Object3D, InstancedMesh } from "three";
+import { Text } from "@react-three/drei";
 import { useGameStore, useAgentsShallow, type AgentState, type GameAgent as GameAgentType } from "../store/gameStore";
+import { useWorldManager } from "../world/WorldManager";
 
 // ============================================================================
 // Agent State Visual Configurations
@@ -142,7 +143,7 @@ interface StateParticlesProps {
 
 function StateParticles({ agentState, position, onComplete }: StateParticlesProps) {
   const particlesRef = useRef<Group>(null);
-  const [particles, setParticles] = useState<Particle[]>([]);
+  const particlesStateRef = useRef<Particle[]>([]);
 
   // Spawn particles based on state
   useEffect(() => {
@@ -165,11 +166,11 @@ function StateParticles({ agentState, position, onComplete }: StateParticlesProp
           color: Math.random() > 0.5 ? "#f4d03f" : "#3498db",
         });
       }
-      setParticles(newParticles);
+      particlesStateRef.current = newParticles;
 
       // Auto-complete after animation
       const timer = setTimeout(() => {
-        setParticles([]);
+        particlesStateRef.current = [];
         onComplete?.();
       }, 1000);
       return () => clearTimeout(timer);
@@ -194,46 +195,42 @@ function StateParticles({ agentState, position, onComplete }: StateParticlesProp
           color: "#e74c3c",
         });
       }
-      setParticles(newParticles);
+      particlesStateRef.current = newParticles;
 
       const timer = setTimeout(() => {
-        setParticles([]);
+        particlesStateRef.current = [];
       }, 500);
       return () => clearTimeout(timer);
     } else {
-      setParticles([]);
+      particlesStateRef.current = [];
     }
   }, [agentState, onComplete]);
 
-  // Animate particles
-  useFrame((state, delta) => {
+  // Animate particles - NO forceUpdate to prevent re-renders
+  useFrame((_state, delta) => {
+    const particles = particlesStateRef.current;
     if (particles.length === 0) return;
 
-    setParticles((prev) =>
-      prev
-        .map((p) => ({
-          ...p,
-          position: [
-            p.position[0] + p.velocity[0] * delta,
-            p.position[1] + p.velocity[1] * delta,
-            p.position[2] + p.velocity[2] * delta,
-          ],
-          velocity: [
-            p.velocity[0],
-            p.velocity[1] - 3 * delta, // gravity
-            p.velocity[2],
-          ],
-          life: p.life - delta,
-        }))
-        .filter((p) => p.life > 0)
-    );
+    // Update particles in place
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.position[0] += p.velocity[0] * delta;
+      p.position[1] += p.velocity[1] * delta;
+      p.position[2] += p.velocity[2] * delta;
+      p.velocity[1] -= 3 * delta; // gravity
+      p.life -= delta;
+
+      if (p.life <= 0) {
+        particles.splice(i, 1);
+      }
+    }
   });
 
-  if (particles.length === 0) return null;
+  if (particlesStateRef.current.length === 0) return null;
 
   return (
     <group ref={particlesRef} position={position}>
-      {particles.map((p, i) => (
+      {particlesStateRef.current.map((p, i) => (
         <mesh key={i} position={p.position}>
           <sphereGeometry args={[p.size * (p.life / p.maxLife), 8, 8]} />
           <meshBasicMaterial color={p.color} transparent opacity={p.life / p.maxLife} />
@@ -870,9 +867,10 @@ export function AgentPool({ onAgentClick }: AgentPoolProps) {
   // Convert agents object to array for rendering
   const agentsArray = useMemo(() => Object.values(agents), [agents]);
 
-  // Handle agent click
+  // Handle agent click - just log, let SelectionSystem handle actual selection
   const handleAgentClick = useCallback(
     (agentId: string) => {
+      // Only call the optional callback - SelectionSystem handles selection
       onAgentClick?.(agentId);
     },
     [onAgentClick]
@@ -906,6 +904,10 @@ export function useAgentMovement(agentId: string) {
   const agent = useGameStore((state) => state.agents[agentId]);
   const updateAgent = useGameStore((state) => state.updateAgent);
   const setAgentPosition = useGameStore((state) => state.setAgentPosition);
+  const { findPath } = useWorldManager();
+
+  const [currentPathIndex, setCurrentPathIndex] = useState(0);
+  const [calculatedPath, setCalculatedPath] = useState<[number, number][] | null>(null);
 
   useEffect(() => {
     if (!agent || !agent.targetPosition) return;
@@ -913,13 +915,74 @@ export function useAgentMovement(agentId: string) {
     const speed = 3; // units per second
     const currentPos = new Vector3(...agent.position);
     const targetPos = new Vector3(...agent.targetPosition);
+
+    // Calculate path using A* pathfinding
+    const path = findPath(
+      Math.round(currentPos.x),
+      Math.round(currentPos.z),
+      Math.round(targetPos.x),
+      Math.round(targetPos.z)
+    );
+
+    if (!path || path.length === 0) {
+      // No path found - move directly
+      const direction = targetPos.clone().sub(currentPos);
+      const distance = direction.length();
+
+      if (distance < 0.1) {
+        // Arrived at target
+        setAgentPosition(agentId, [targetPos.x, targetPos.y, targetPos.z]);
+        updateAgent(agentId, { targetPosition: null, state: agent.currentTask ? "WORKING" : "IDLE" });
+        return;
+      }
+
+      const startTime = Date.now();
+      const duration = (distance / speed) * 1000;
+
+      const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        const newPos = currentPos.clone().add(direction.clone().multiplyScalar(progress));
+        setAgentPosition(agentId, [newPos.x, newPos.y, newPos.z]);
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          updateAgent(agentId, { targetPosition: null, state: agent.currentTask ? "WORKING" : "IDLE" });
+        }
+      };
+
+      animate();
+    } else {
+      // Path found - follow path
+      setCalculatedPath(path);
+      setCurrentPathIndex(0);
+    }
+  }, [agent, agentId, setAgentPosition, updateAgent, findPath]);
+
+  // Move agent along calculated path
+  useEffect(() => {
+    if (!agent || !calculatedPath || currentPathIndex >= calculatedPath.length) return;
+
+    const speed = 3; // units per second
+    const currentPos = new Vector3(...agent.position);
+    const targetNode = calculatedPath[currentPathIndex];
+    const targetPos = new Vector3(targetNode[0], 0, targetNode[1]);
     const direction = targetPos.clone().sub(currentPos);
     const distance = direction.length();
 
     if (distance < 0.1) {
-      // Arrived at target
-      setAgentPosition(agentId, [targetPos.x, targetPos.y, targetPos.z]);
-      updateAgent(agentId, { targetPosition: null, state: agent.currentTask ? "WORKING" : "IDLE" });
+      // Arrived at this node, move to next
+      if (currentPathIndex < calculatedPath.length - 1) {
+        setCurrentPathIndex(currentPathIndex + 1);
+      } else {
+        // Arrived at final destination
+        setAgentPosition(agentId, [targetPos.x, targetPos.y, targetPos.z]);
+        updateAgent(agentId, { targetPosition: null, state: agent.currentTask ? "WORKING" : "IDLE" });
+        setCalculatedPath(null);
+        setCurrentPathIndex(0);
+      }
       return;
     }
 
@@ -936,12 +999,21 @@ export function useAgentMovement(agentId: string) {
       if (progress < 1) {
         requestAnimationFrame(animate);
       } else {
-        updateAgent(agentId, { targetPosition: null, state: "IDLE" });
+        // Arrived at this node, move to next
+        if (currentPathIndex < calculatedPath.length - 1) {
+          setCurrentPathIndex(currentPathIndex + 1);
+        } else {
+          // Arrived at final destination
+          setAgentPosition(agentId, [targetPos.x, targetPos.y, targetPos.z]);
+          updateAgent(agentId, { targetPosition: null, state: agent.currentTask ? "WORKING" : "IDLE" });
+          setCalculatedPath(null);
+          setCurrentPathIndex(0);
+        }
       }
     };
 
     animate();
-  }, [agent, agentId, setAgentPosition, updateAgent]);
+  }, [agent, agentId, calculatedPath, currentPathIndex, setAgentPosition, updateAgent]);
 }
 
 // ============================================================================
