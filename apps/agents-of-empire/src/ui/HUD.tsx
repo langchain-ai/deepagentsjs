@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { shallow } from "zustand/shallow";
-import { useGameStore, useSelectedAgentIds, useAgentsMap, useAgentsShallow, useQuestsShallow, useSelection, useAgentCount, useDragonCount, useQuestCount, useCompletedQuestCount, type GameAgent, type Tool } from "../store/gameStore";
+import { useGameStore, useSelectedAgentIds, useAgentsMap, useAgentsShallow, useQuestsShallow, useSelection, useAgentCount, useDragonCount, useQuestCount, useCompletedQuestCount, type GameAgent, type Tool, type Quest } from "../store/gameStore";
 import { useAgentBridgeContext } from "../bridge/AgentBridge";
 import { useCombat } from "../entities/Dragon";
 import { ToolCard, ToolListItem, ToolIcon, RarityBadge, TOOL_TYPE_CONFIG, RARITY_CONFIG } from "./ToolCard";
@@ -453,78 +453,219 @@ interface QuestTrackerProps {
 export function QuestTracker({ className = "" }: QuestTrackerProps) {
   const questsMap = useQuestsShallow();
   const assignQuestToAgents = useGameStore((state) => state.assignQuestToAgents);
+  const updateQuest = useGameStore((state) => state.updateQuest);
   const selectedAgentIds = useSelection();
+  const [selectedQuestId, setSelectedQuestId] = useState<string | null>(null);
+  const [executingQuests, setExecutingQuests] = useState<Set<string>>(new Set());
 
   // Convert Record to array with useMemo to prevent infinite re-renders
   const quests = useMemo(() => Object.values(questsMap), [questsMap]);
+  const selectedQuest = selectedQuestId ? questsMap[selectedQuestId] : null;
+
+  // Execute a quest task via the quest server
+  const executeQuestTask = useCallback(async (questId: string) => {
+    const quest = questsMap[questId];
+    if (!quest || executingQuests.has(questId)) return;
+
+    console.log("[QuestTracker] Starting quest execution:", questId);
+    setExecutingQuests(prev => new Set(prev).add(questId));
+
+    try {
+      // Try to call the quest server for real execution
+      const response = await fetch("http://localhost:3002/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          taskType: quest.taskType || "list_directory",
+          taskPath: quest.taskPath || ".",
+          questId: quest.id,
+          questTitle: quest.title,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log("[QuestTracker] Server response:", result);
+        updateQuest(questId, { status: "completed", logs: result.logs });
+      } else {
+        throw new Error(`Server returned ${response.status}`);
+      }
+    setExecutingQuests(prev => {
+        const next = new Set(prev);
+        next.delete(questId);
+        return next;
+      });
+    } catch (error) {
+      console.log("[QuestTracker] Server not available, using simulated execution:", error);
+
+      // Fallback to simulated execution if server is not running
+      await new Promise<void>((resolve) => {
+        setTimeout(() => {
+          let logs = `[${new Date().toISOString()}] Task started (simulated - server not running)\n`;
+          logs += `[${new Date().toISOString()}] To enable real execution, run: npx tsx server/quest-server.ts\n\n`;
+
+          if (quest.taskType === "list_directory") {
+            logs += `$ ls -la ${quest.taskPath || "."}\n\n`;
+            logs += "[Simulated output - start the quest server for real results]\n";
+            logs += "src/\n";
+            logs += "package.json\n";
+            logs += "tsconfig.json\n";
+          } else {
+            logs += "[Simulated task execution]\n";
+          }
+
+          logs += `\n[${new Date().toISOString()}] Task completed (simulated)`;
+          updateQuest(questId, { status: "completed", logs });
+          setExecutingQuests(prev => {
+            const next = new Set(prev);
+            next.delete(questId);
+            return next;
+          });
+          resolve();
+        }, 1500);
+      });
+    }
+  }, [questsMap, executingQuests, updateQuest]);
+
+  // Auto-execute when quest becomes in_progress
+  useEffect(() => {
+    for (const quest of quests) {
+      if (quest.status === "in_progress" && !executingQuests.has(quest.id) && !quest.logs) {
+        console.log("[QuestTracker] Auto-executing quest:", quest.id);
+        executeQuestTask(quest.id);
+      }
+    }
+  }, [quests, executingQuests, executeQuestTask]);
+
+  // Manual complete handler (kept for manual override)
+  const handleCompleteQuest = useCallback((questId: string) => {
+    console.log("[QuestTracker] handleCompleteQuest called:", questId);
+    executeQuestTask(questId);
+  }, [executeQuestTask]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: -50, y: -20 }}
-      animate={{ opacity: 1, x: 0, y: 0 }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className={`absolute top-4 left-4 bg-gray-900/95 border-2 border-empire-gold rounded-lg p-4 text-white w-80 shadow-lg shadow-empire-gold/20 ${className}`}
-    >
-      {/* Classic RTS objectives header */}
-      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-empire-gold/30">
-        <span className="text-empire-gold text-xl">📜</span>
-        <h3 className="text-empire-gold text-lg font-bold">Objectives</h3>
-      </div>
-
-      {quests.length === 0 ? (
-        <p className="text-gray-400 text-sm italic">No active objectives</p>
-      ) : (
-        <div className="space-y-2 max-h-60 overflow-y-auto">
-          {quests.map((quest) => (
-            <div
-              key={quest.id}
-              className={`p-3 rounded border transition-all ${
-                quest.status === "completed"
-                  ? "bg-green-900/30 border-green-600"
-                  : quest.status === "in_progress"
-                  ? "bg-yellow-900/30 border-yellow-600"
-                  : "bg-gray-800/80 border-gray-700"
-              }`}
-            >
-              <div className="flex justify-between items-start mb-1">
-                <span className="font-semibold text-sm">{quest.title}</span>
-                <span
-                  className={`text-xs px-2 py-0.5 rounded font-medium ${
-                    quest.status === "completed"
-                      ? "bg-green-700 text-white"
-                      : quest.status === "in_progress"
-                      ? "bg-yellow-700 text-white"
-                      : "bg-gray-600 text-gray-300"
-                  }`}
-                >
-                  {quest.status === "completed"
-                    ? "Done"
-                    : quest.status === "in_progress"
-                    ? "Active"
-                    : "Pending"}
-                </span>
-              </div>
-              <p className="text-xs text-gray-300 mb-2">{quest.description}</p>
-
-              {quest.status === "pending" && selectedAgentIds.size > 0 && (
-                <button
-                  onClick={() => assignQuestToAgents(quest.id, Array.from(selectedAgentIds))}
-                  className="text-xs bg-empire-gold text-gray-900 px-3 py-1 rounded font-semibold hover:bg-yellow-500 transition-colors"
-                >
-                  Assign ({selectedAgentIds.size})
-                </button>
-              )}
-
-              {quest.status === "in_progress" && (
-                <div className="text-xs text-gray-400">
-                  {quest.assignedAgentIds.length} unit(s) assigned
-                </div>
-              )}
-            </div>
-          ))}
+    <>
+      <motion.div
+        initial={{ opacity: 0, x: -50, y: -20 }}
+        animate={{ opacity: 1, x: 0, y: 0 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className={`absolute top-4 left-4 bg-gray-900/95 border-2 border-empire-gold rounded-lg p-4 text-white w-80 shadow-lg shadow-empire-gold/20 pointer-events-auto ${className}`}
+      >
+        {/* Classic RTS objectives header */}
+        <div className="flex items-center gap-2 mb-3 pb-2 border-b border-empire-gold/30">
+          <span className="text-empire-gold text-xl">📜</span>
+          <h3 className="text-empire-gold text-lg font-bold">Objectives</h3>
         </div>
-      )}
-    </motion.div>
+
+        {quests.length === 0 ? (
+          <p className="text-gray-400 text-sm italic">No active objectives</p>
+        ) : (
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {quests.map((quest) => (
+              <div
+                key={quest.id}
+                onClick={() => setSelectedQuestId(quest.id)}
+                className={`p-3 rounded border transition-all cursor-pointer hover:brightness-110 ${
+                  quest.status === "completed"
+                    ? "bg-green-900/30 border-green-600"
+                    : quest.status === "in_progress"
+                    ? "bg-yellow-900/30 border-yellow-600"
+                    : "bg-gray-800/80 border-gray-700"
+                }`}
+              >
+                <div className="flex justify-between items-start mb-1">
+                  <span className="font-semibold text-sm">{quest.title}</span>
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded font-medium ${
+                      quest.status === "completed"
+                        ? "bg-green-700 text-white"
+                        : quest.status === "in_progress"
+                        ? "bg-yellow-700 text-white"
+                        : "bg-gray-600 text-gray-300"
+                    }`}
+                  >
+                    {quest.status === "completed"
+                      ? "Done"
+                      : quest.status === "in_progress"
+                      ? "Active"
+                      : "Pending"}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-300 mb-2">{quest.description}</p>
+
+                {quest.status === "pending" && selectedAgentIds.size > 0 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      assignQuestToAgents(quest.id, Array.from(selectedAgentIds));
+                    }}
+                    className="text-xs bg-empire-gold text-gray-900 px-3 py-1 rounded font-semibold hover:bg-yellow-500 transition-colors"
+                  >
+                    Assign ({selectedAgentIds.size})
+                  </button>
+                )}
+
+                {quest.status === "in_progress" && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-400">
+                      {quest.assignedAgentIds.length} unit(s) assigned
+                    </span>
+                    {executingQuests.has(quest.id) ? (
+                      <span className="text-xs text-yellow-400 animate-pulse">
+                        ⏳ Executing...
+                      </span>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCompleteQuest(quest.id);
+                        }}
+                        className="text-xs bg-empire-green text-white px-2 py-1 rounded font-semibold hover:bg-green-600 transition-colors"
+                      >
+                        Complete
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {quest.status === "completed" && quest.logs && (
+                  <span className="text-xs text-green-400">Click to view logs</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </motion.div>
+
+      {/* Quest Dialog */}
+      <AnimatePresence>
+        {selectedQuest && (
+          <div className="pointer-events-auto">
+            <QuestDialog
+              quest={selectedQuest}
+              onAccept={() => {
+                console.log("[QuestDialog] onAccept called, selectedAgentIds:", selectedAgentIds.size);
+                if (selectedAgentIds.size > 0) {
+                  console.log("[QuestDialog] Calling assignQuestToAgents:", selectedQuest.id);
+                  assignQuestToAgents(selectedQuest.id, Array.from(selectedAgentIds));
+                } else {
+                  console.log("[QuestDialog] No agents selected, not assigning");
+                }
+                setSelectedQuestId(null);
+              }}
+              onCancel={() => {
+                console.log("[QuestDialog] onCancel called");
+                setSelectedQuestId(null);
+              }}
+              onClose={() => {
+                console.log("[QuestDialog] onClose called");
+                setSelectedQuestId(null);
+              }}
+            />
+          </div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
@@ -699,6 +840,131 @@ export function TopBar({ className = "" }: TopBarProps) {
         <div className="text-white text-center bg-gray-900/60 px-4 py-1 rounded-lg border border-empire-red/30">
           <div className="text-2xl font-bold text-empire-red">{dragonCount}</div>
           <div className="text-xs text-gray-400">Threats</div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ============================================================================
+// Quest Dialog Component - For accepting/viewing quests
+// ============================================================================
+
+interface QuestDialogProps {
+  quest: Quest;
+  onAccept: () => void;
+  onCancel: () => void;
+  onClose: () => void;
+  onViewLogs?: () => void;
+}
+
+function QuestDialog({ quest, onAccept, onCancel, onClose, onViewLogs }: QuestDialogProps) {
+  const [showLogs, setShowLogs] = useState(false);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      className="fixed inset-0 flex items-center justify-center z-50"
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+
+      {/* Dialog */}
+      <div className="relative bg-gray-900 border-2 border-empire-gold rounded-lg p-6 max-w-md w-full mx-4 shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-4 pb-3 border-b border-empire-gold/30">
+          <span className="text-3xl">📜</span>
+          <div>
+            <h2 className="text-xl font-bold text-empire-gold">{quest.title}</h2>
+            <span className={`text-xs px-2 py-0.5 rounded ${
+              quest.status === "completed" ? "bg-green-700" :
+              quest.status === "in_progress" ? "bg-yellow-700" : "bg-gray-700"
+            }`}>
+              {quest.status.replace("_", " ").toUpperCase()}
+            </span>
+          </div>
+        </div>
+
+        {/* Description */}
+        <p className="text-gray-300 mb-4">{quest.description}</p>
+
+        {/* Task Info */}
+        {quest.taskType && (
+          <div className="bg-gray-800 rounded p-3 mb-4">
+            <p className="text-sm text-gray-400">Task Type: <span className="text-empire-gold">{quest.taskType}</span></p>
+            {quest.taskPath && (
+              <p className="text-sm text-gray-400">Path: <span className="text-white font-mono">{quest.taskPath}</span></p>
+            )}
+          </div>
+        )}
+
+        {/* Rewards */}
+        {quest.rewards.length > 0 && (
+          <div className="mb-4">
+            <p className="text-sm text-gray-400 mb-1">Rewards:</p>
+            <div className="flex gap-2">
+              {quest.rewards.map((reward, i) => (
+                <span key={i} className="text-xs bg-empire-gold/20 text-empire-gold px-2 py-1 rounded">
+                  {reward}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Logs (for completed quests) */}
+        {quest.status === "completed" && quest.logs && (
+          <div className="mb-4">
+            <button
+              onClick={() => setShowLogs(!showLogs)}
+              className="text-sm text-empire-gold hover:underline mb-2"
+            >
+              {showLogs ? "Hide Logs" : "View Logs"}
+            </button>
+            {showLogs && (
+              <pre className="bg-black/50 rounded p-3 text-xs text-green-400 font-mono max-h-48 overflow-auto whitespace-pre-wrap">
+                {quest.logs}
+              </pre>
+            )}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex gap-3 justify-end">
+          {quest.status === "pending" && (
+            <>
+              <button
+                onClick={onCancel}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={onAccept}
+                className="px-4 py-2 bg-empire-gold hover:bg-yellow-500 text-gray-900 font-bold rounded transition-colors"
+              >
+                Accept Quest
+              </button>
+            </>
+          )}
+          {quest.status === "in_progress" && (
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+            >
+              Close
+            </button>
+          )}
+          {quest.status === "completed" && (
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-empire-green hover:bg-green-600 text-white font-bold rounded transition-colors"
+            >
+              Done
+            </button>
+          )}
         </div>
       </div>
     </motion.div>

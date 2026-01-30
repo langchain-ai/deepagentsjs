@@ -99,6 +99,50 @@ function GameInitializer({ onReady }: GameInitializerProps) {
       description: "Agent rest and recovery point",
     });
 
+    // 6. QUEST MARKERS - Random quests
+    addStructure({
+      type: "quest_marker",
+      position: [35, 0, 25],
+      name: "Directory Scout",
+      description: "List the contents of a directory",
+      goalId: "quest-list-directory",
+    });
+
+    // Add the associated quest
+    const { addQuest } = useGameStore.getState();
+    addQuest({
+      title: "Scout the Filesystem",
+      description: "List the contents of the current directory to discover what files exist.",
+      status: "pending",
+      targetStructureId: null,
+      requiredAgents: 1,
+      assignedAgentIds: [],
+      rewards: ["50 XP", "File Knowledge"],
+      taskType: "list_directory",
+      taskPath: ".",
+    });
+
+    // 7. DUNGEON - Creative exploration quest
+    addStructure({
+      type: "quest_marker",
+      position: [12, 0, 38],
+      name: "The Dark Dungeon",
+      description: "A mysterious dungeon filled with secrets...",
+      goalId: "quest-dungeon-exploration",
+    });
+
+    addQuest({
+      title: "Explore the Dark Dungeon",
+      description: "Venture into the dungeon and write a tale of what you discover within its shadowy depths.",
+      status: "pending",
+      targetStructureId: null,
+      requiredAgents: 1,
+      assignedAgentIds: [],
+      rewards: ["100 XP", "Dungeon Lore", "Creative Writing"],
+      taskType: "dungeon_explore",
+      taskPath: "dungeon",
+    });
+
     onReady();
   }, [onReady]);
 

@@ -386,22 +386,28 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
     };
   }, [handleMouseDown, handleMouseMove, handleMouseUp, handleContextMenu]);
 
-  // Set up event listeners ONCE
+  // Set up event listeners ONCE with wrapper functions that call latest handlers
   useEffect(() => {
     // Use the gl.domElement which is the canvas element from React Three Fiber
     const canvas = gl.domElement;
 
     if (canvas) {
-      canvas.addEventListener("mousedown", handlersRef.current.handleMouseDown);
-      canvas.addEventListener("mousemove", handlersRef.current.handleMouseMove);
-      canvas.addEventListener("mouseup", handlersRef.current.handleMouseUp);
-      canvas.addEventListener("contextmenu", handlersRef.current.handleContextMenu);
+      // Wrapper functions that always call the latest handler from ref
+      const onMouseDown = (e: MouseEvent) => handlersRef.current.handleMouseDown(e);
+      const onMouseMove = (e: MouseEvent) => handlersRef.current.handleMouseMove(e);
+      const onMouseUp = (e: MouseEvent) => handlersRef.current.handleMouseUp(e);
+      const onContextMenu = (e: MouseEvent) => handlersRef.current.handleContextMenu(e);
+
+      canvas.addEventListener("mousedown", onMouseDown);
+      canvas.addEventListener("mousemove", onMouseMove);
+      canvas.addEventListener("mouseup", onMouseUp);
+      canvas.addEventListener("contextmenu", onContextMenu);
 
       return () => {
-        canvas.removeEventListener("mousedown", handlersRef.current.handleMouseDown);
-        canvas.removeEventListener("mousemove", handlersRef.current.handleMouseMove);
-        canvas.removeEventListener("mouseup", handlersRef.current.handleMouseUp);
-        canvas.removeEventListener("contextmenu", handlersRef.current.handleContextMenu);
+        canvas.removeEventListener("mousedown", onMouseDown);
+        canvas.removeEventListener("mousemove", onMouseMove);
+        canvas.removeEventListener("mouseup", onMouseUp);
+        canvas.removeEventListener("contextmenu", onContextMenu);
       };
     }
   }, [gl]); // Only depend on gl, not the handlers

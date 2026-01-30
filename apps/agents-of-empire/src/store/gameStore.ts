@@ -61,7 +61,7 @@ export interface Dragon {
   targetAgentId: string | null;
 }
 
-export type StructureType = "castle" | "tower" | "workshop" | "campfire" | "base";
+export type StructureType = "castle" | "tower" | "workshop" | "campfire" | "base" | "quest_marker";
 
 export interface Structure {
   id: string;
@@ -86,6 +86,9 @@ export interface Quest {
   questlineId?: string; // Reference to parent questline
   prerequisiteQuestIds?: string[]; // Quests that must be completed first
   position?: number; // Position within questline sequence
+  taskType?: "list_directory" | "read_file" | "custom"; // Type of task to execute
+  taskPath?: string; // Path for file operations
+  logs?: string; // Output logs from completed task
 }
 
 export type QuestlineStatus = "not_started" | "in_progress" | "completed" | "failed";
@@ -453,6 +456,10 @@ export const useGameStore = create<GameStore>()(
     get().updateAgent(id, { targetPosition: target });
   },
 
+  setAgentPath: (id, path) => {
+    get().updateAgent(id, { currentPath: path, pathIndex: 0 });
+  },
+
   equipTool: (agentId, tool) => {
     get().updateAgent(agentId, { equippedTool: tool });
   },
@@ -609,27 +616,36 @@ export const useGameStore = create<GameStore>()(
   },
 
   updateQuest: (id, updates) => {
+    console.log("[Quest] updateQuest called:", { id, updates });
     set((state) => {
       const quest = state.quests[id];
+      console.log("[Quest] Quest before update:", JSON.stringify(quest));
       if (quest) {
         const oldCompleted = quest.status === "completed";
         Object.assign(state.quests[id], updates);
         const newCompleted = (updates.status ?? quest.status) === "completed";
         const completedDelta = newCompleted ? 1 : 0 - (oldCompleted ? 1 : 0);
         state.completedQuestCount = Math.max(0, state.completedQuestCount + completedDelta);
+        console.log("[Quest] Quest after update:", JSON.stringify(state.quests[id]));
       }
     });
   },
 
   assignQuestToAgents: (questId, agentIds) => {
+    console.log("[Quest] assignQuestToAgents called:", { questId, agentIds });
+    const quest = get().quests[questId];
+    console.log("[Quest] Current quest state before update:", quest);
     get().updateQuest(questId, {
       assignedAgentIds: agentIds,
       status: "in_progress",
     });
+    console.log("[Quest] Quest state after update:", get().quests[questId]);
   },
 
   completeQuest: (id) => {
+    console.log("[Quest] completeQuest called:", id);
     get().updateQuest(id, { status: "completed" });
+    console.log("[Quest] Quest completed:", get().quests[id]);
   },
 
   // Camera Actions
