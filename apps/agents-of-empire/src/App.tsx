@@ -279,7 +279,7 @@ function GameScene() {
       <WorldGrid />
       <GroundPlane />
 
-      <InitialAgents count={10} />
+      <InitialAgents count={2} />
       <AgentPool onAgentClick={(agentId) => console.log("Agent clicked:", agentId)} />
 
       <ConnectionLines enabled={true} maxConnections={100} />
@@ -395,7 +395,7 @@ export default function App() {
                 depth: true,
               }}
               dpr={[1, 2]} // Limit pixel ratio for performance
-              frameloop="demand" // Only render when needed
+              frameloop="always" // Continuous rendering for game loop
             >
               <GameScene />
               <CameraController />

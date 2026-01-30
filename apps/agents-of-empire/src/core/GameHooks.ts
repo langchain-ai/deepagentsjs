@@ -46,6 +46,7 @@ export function useGame(config: GameConfig = DEFAULT_CONFIG) {
   // This prevents infinite re-renders inside Canvas
   const updateAgent = useGameStore((state) => state.updateAgent);
   const updateDragon = useGameStore((state) => state.updateDragon);
+  const setAgentPath = useGameStore((state) => state.setAgentPath);
 
   // Move agent towards target using pathfinding
   const moveAgentTowardsTarget = useCallback((agent: GameAgent, now: number, delta: number) => {

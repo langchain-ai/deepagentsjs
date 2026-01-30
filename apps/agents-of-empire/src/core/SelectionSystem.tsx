@@ -99,15 +99,21 @@ export function useSelectionSystem(options: SelectionSystemOptions = {}) {
 
       raycaster.current.setFromCamera(vector, camera);
 
-      // Check intersection with agent positions
+      // Check intersection with agent positions using sphere intersection
       const agentHits: Array<{ id: string; distance: number }> = [];
+      const AGENT_RADIUS = 1.5; // Clickable radius around agent
 
       for (const agent of agents) {
         const agentPos = new Vector3(...agent.position);
-        const distance = agentPos.distanceTo(raycaster.current.ray.origin);
+        // Adjust agent position to center of agent model (y=0.75)
+        agentPos.y += 0.75;
 
-        // Simple proximity check (agent radius ~1 unit)
-        if (distance < 3) {
+        // Create a sphere for the agent bounds and check ray intersection
+        const sphere = new Sphere(agentPos, AGENT_RADIUS);
+        const intersection = raycaster.current.ray.intersectSphere(sphere, new Vector3());
+
+        if (intersection) {
+          const distance = intersection.distanceTo(raycaster.current.ray.origin);
           agentHits.push({ id: agent.id, distance });
         }
       }

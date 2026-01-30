@@ -22,6 +22,5 @@
       "@deepagents/*": ["../../libs/deepagents/src/*"]
     }
   },
-  "include": ["src"],
-  "references": [{ "path": "../../libs/deepagents" }]
+  "include": ["src"]
 }

@@ -677,6 +677,8 @@ export function InstancedAgentRenderer({
 
   // Update instanced meshes
   useFrame(() => {
+    // Skip update if no agents to render
+    if (instancedAgents.length === 0) return;
     if (!bodyMeshRef.current || !headMeshRef.current) return;
 
     let index = 0;
@@ -733,6 +735,11 @@ export function InstancedAgentRenderer({
       onAgentHover(null);
     }
   };
+
+  // Don't render instanced meshes if there are no agents to instance
+  if (instancedAgents.length === 0) {
+    return null;
+  }
 
   return (
     <>
@@ -797,6 +804,12 @@ export function LODAgentRenderer({
 
   // Calculate which agents should be rendered in detail
   useEffect(() => {
+    // If there are few agents, render all in detail
+    if (agents.length <= 20) {
+      setNearbyAgents(agents);
+      return;
+    }
+
     const NEAR_THRESHOLD = 30; // Distance threshold for detailed rendering
     const detailed: GameAgentType[] = [];
 

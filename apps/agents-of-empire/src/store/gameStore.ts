@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
+import { enableMapSet } from "immer";
 import { v4 as uuidv4 } from "uuid";
+
+// Enable immer support for Set and Map
+enableMapSet();
 
 // ============================================================================
 // Types
