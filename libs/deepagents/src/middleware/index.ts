@@ -2,7 +2,6 @@ export {
   createFilesystemMiddleware,
   type FilesystemMiddlewareOptions,
   type FileData,
-  // Eviction constants
   TOOLS_EXCLUDED_FROM_EVICTION,
   NUM_CHARS_PER_TOKEN,
   createContentPreview,
@@ -12,6 +11,14 @@ export {
   type SubAgentMiddlewareOptions,
   type SubAgent,
   type CompiledSubAgent,
+  type PendingBatchTask,
+  type BatchTaskResult,
+  type BatchTaskSummary,
+  type SubagentTask,
+  type ParseSubagentMarkersResult,
+  parseSubagentMarkers,
+  hasSubagentMarkers,
+  SUBAGENT_MARKER_PREFIX,
 } from "./subagents.js";
 export { createPatchToolCallsMiddleware } from "./patch_tool_calls.js";
 export {

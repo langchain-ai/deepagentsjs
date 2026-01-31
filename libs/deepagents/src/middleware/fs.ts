@@ -32,6 +32,11 @@ import {
   sanitizeToolCallId,
   formatContentWithLineNumbers,
 } from "../backends/utils.js";
+import {
+  parseSubagentMarkers,
+  hasSubagentMarkers,
+  type PendingBatchTask,
+} from "./subagents.js";
 
 /**
  * Tools that should be excluded from the large result eviction logic.
@@ -201,6 +206,21 @@ export function fileDataReducer(
  *
  * Uses ReducedValue for files to allow concurrent updates from parallel subagents.
  */
+/**
+ * Zod schema for PendingBatchTask in state.
+ */
+const PendingBatchTaskSchema = z
+  .object({
+    tasks: z.array(
+      z.object({
+        description: z.string(),
+        type: z.string().optional(),
+      }),
+    ),
+  })
+  .nullable()
+  .optional();
+
 const FilesystemStateSchema = new StateSchema({
   files: new ReducedValue(
     z.record(z.string(), FileDataSchema).default(() => ({})),
@@ -209,6 +229,8 @@ const FilesystemStateSchema = new StateSchema({
       reducer: fileDataReducer,
     },
   ),
+  // Pending batch task from execute tool's spawn_subagent markers
+  pendingBatchTask: PendingBatchTaskSchema.default(null),
 });
 
 /**
@@ -295,7 +317,10 @@ Examples:
 - Search all files: \`grep(pattern="TODO")\`
 - Search Python files only: \`grep(pattern="import", glob="*.py")\`
 - Show matching lines: \`grep(pattern="error", output_mode="content")\``;
-export const EXECUTE_TOOL_DESCRIPTION = `Executes a shell command in an isolated sandbox environment.
+/**
+ * Base execute tool description without batch spawning documentation.
+ */
+export const EXECUTE_TOOL_DESCRIPTION_BASE = `Executes a shell command in an isolated sandbox environment.
 
 Usage:
 Executes a given command in the sandbox environment with proper handling and security measures.
@@ -340,6 +365,58 @@ Examples:
 Note: This tool is only available if the backend supports execution (SandboxBackendProtocol).
 If execution is not supported, the tool will return an error message.`;
 
+/**
+ * Batch spawning documentation to append when enableBatchSpawning is true.
+ */
+export const EXECUTE_BATCH_SPAWNING_DOCS = `
+
+## Batch Subagent Spawning
+
+For batch operations involving many similar tasks (10+), use the \`spawn_subagent\` command instead of calling the task tool repeatedly:
+
+\`\`\`bash
+spawn_subagent "task description" [subagent_type]
+\`\`\`
+
+**When to use spawn_subagent:**
+- Processing a list/CSV/JSON of similar tasks
+- Running the same operation on multiple files
+- Any scenario requiring 10+ similar subagent tasks
+
+**Example - Process tasks from a CSV:**
+\`\`\`bash
+cat tasks.csv | while IFS=, read -r task priority region; do
+  spawn_subagent "Analyze $region data: $task (priority: $priority)"
+done
+\`\`\`
+
+**Example - Process multiple files:**
+\`\`\`bash
+find . -name "*.log" -exec basename {} \\; | while read file; do
+  spawn_subagent "Summarize errors in $file"
+done
+\`\`\`
+
+**Example - JSON input with jq:**
+\`\`\`bash
+jq -r '.tasks[] | @json' tasks.json | while read task; do
+  spawn_subagent "Process task: $task"
+done
+\`\`\`
+
+Spawned tasks execute in parallel. Results are written to \`/batch_results/<timestamp>/\` with:
+- \`summary.json\` - Overall stats (total, succeeded, failed)
+- \`results.jsonl\` - Individual task results
+- \`failures.jsonl\` - Failed tasks for inspection
+
+Available subagent types: general-purpose (default), or any custom subagents configured for this agent.`;
+
+/**
+ * Full execute tool description with batch spawning support.
+ */
+export const EXECUTE_TOOL_DESCRIPTION =
+  EXECUTE_TOOL_DESCRIPTION_BASE + EXECUTE_BATCH_SPAWNING_DOCS;
+
 // System prompt for execution capability
 export const EXECUTION_SYSTEM_PROMPT = `## Execute Tool \`execute\`
 
@@ -347,6 +424,20 @@ You have access to an \`execute\` tool for running shell commands in a sandboxed
 Use this tool to run commands, scripts, tests, builds, and other shell operations.
 
 - execute: run a shell command in the sandbox (returns output and exit code)`;
+
+/**
+ * Bash function that outputs a subagent task marker.
+ * This function is automatically injected as a prefix to every command,
+ * making spawn_subagent available without modifying PATH or writing to the filesystem.
+ *
+ * Usage: spawn_subagent "task description" [subagent_type]
+ *
+ * The function outputs a line in the format:
+ * SUBAGENT_TASK: {"description": "...", "type": "..."}
+ *
+ * These markers are parsed by the execute tool and trigger batch subagent execution.
+ */
+export const SPAWN_SUBAGENT_FUNCTION = `spawn_subagent() { local desc="$1" type="\${2:-general-purpose}"; printf 'SUBAGENT_TASK: {"description": "%s", "type": "%s"}\\n' "$desc" "$type"; }; `;
 
 /**
  * Create ls tool using backend.
@@ -646,7 +737,34 @@ function createGrepTool(
 }
 
 /**
+ * Format execute output for LLM consumption.
+ */
+function formatExecuteOutput(
+  output: string,
+  exitCode: number | null,
+  truncated: boolean,
+): string {
+  const parts = [output];
+
+  if (exitCode !== null) {
+    const status = exitCode === 0 ? "succeeded" : "failed";
+    parts.push(`\n[Command ${status} with exit code ${exitCode}]`);
+  }
+
+  if (truncated) {
+    parts.push("\n[Output was truncated due to size limits]");
+  }
+
+  return parts.join("");
+}
+
+/**
  * Create execute tool using backend.
+ *
+ * This tool automatically injects the spawn_subagent bash function when the
+ * backend supports execution, allowing batch subagent spawning via shell scripts.
+ * When spawn_subagent markers are detected in the output, they are extracted and
+ * returned as a pendingBatchTask for the SubAgentMiddleware to execute.
  */
 function createExecuteTool(
   backend: BackendProtocol | BackendFactory,
@@ -670,21 +788,72 @@ function createExecuteTool(
         );
       }
 
-      const result = await resolvedBackend.execute(input.command);
+      // Always inject spawn_subagent function when execution is supported
+      const commandToExecute = SPAWN_SUBAGENT_FUNCTION + input.command;
+      const result = await resolvedBackend.execute(commandToExecute);
 
-      // Format output for LLM consumption
-      const parts = [result.output];
-
-      if (result.exitCode !== null) {
-        const status = result.exitCode === 0 ? "succeeded" : "failed";
-        parts.push(`\n[Command ${status} with exit code ${result.exitCode}]`);
+      // Quick check for markers before full parsing
+      if (!hasSubagentMarkers(result.output)) {
+        // No markers - return normal output
+        return formatExecuteOutput(
+          result.output,
+          result.exitCode,
+          result.truncated,
+        );
       }
 
-      if (result.truncated) {
-        parts.push("\n[Output was truncated due to size limits]");
+      // Parse subagent markers from output
+      const { cleanOutput, subagentTasks, warnings } = parseSubagentMarkers(
+        result.output,
+      );
+
+      // If no valid tasks were parsed, return normal output with any warnings
+      if (subagentTasks.length === 0) {
+        const outputWithWarnings =
+          warnings.length > 0
+            ? `${cleanOutput}\n\n${warnings.join("\n")}`
+            : cleanOutput;
+        return formatExecuteOutput(
+          outputWithWarnings,
+          result.exitCode,
+          result.truncated,
+        );
       }
 
-      return parts.join("");
+      // Format the clean output
+      const formattedOutput = formatExecuteOutput(
+        cleanOutput,
+        result.exitCode,
+        result.truncated,
+      );
+
+      // Get the tool call ID for this execution
+      const toolCallId = config.toolCall?.id;
+      if (!toolCallId) {
+        // Fallback - return normal output if no tool call ID
+        return formattedOutput;
+      }
+
+      // Create the pending batch task for SubAgentMiddleware to pick up
+      const pendingBatchTask: PendingBatchTask = {
+        tasks: subagentTasks,
+      };
+
+      // Return Command that:
+      // 1. Adds ToolMessage for this execute call
+      // 2. Sets pendingBatchTask in state for wrapModelCall to inject batch_task call
+      return new Command({
+        update: {
+          messages: [
+            new ToolMessage({
+              content: formattedOutput,
+              tool_call_id: toolCallId,
+              name: "execute",
+            }),
+          ],
+          pendingBatchTask,
+        },
+      });
     },
     {
       name: "execute",

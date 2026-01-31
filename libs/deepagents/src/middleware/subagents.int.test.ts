@@ -1,16 +1,20 @@
 import { describe, it, expect } from "vitest";
 import { createAgent, createMiddleware, ReactAgent } from "langchain";
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
+import path from "path";
+import fs from "fs";
 import {
   createSubAgentMiddleware,
   createFilesystemMiddleware,
 } from "../index.js";
+import { createDeepAgent } from "../agent.js";
 import {
   SAMPLE_MODEL,
   getWeather,
   getSoccerScores,
   extractToolsFromAgent,
 } from "../testing/utils.js";
+import { parseSubagentMarkers } from "./subagents.js";
 
 const WeatherToolMiddleware = createMiddleware({
   name: "weatherToolMiddleware",
@@ -528,6 +532,213 @@ Each subagent should write ONE file. Do NOT write files sequentially - spawn all
       // (The exact content depends on which subagents successfully wrote)
       const filesCount = Object.keys(responseWithFiles.files || {}).length;
       expect(filesCount).toBeGreaterThanOrEqual(0); // At minimum, no error occurred
+    },
+  );
+});
+
+describe("Batch Spawning Integration Tests", () => {
+  it.concurrent.skip(
+    "should parse spawn_subagent markers from execute output",
+    { timeout: 30 * 1000 },
+    async () => {
+      // Simulate output from a shell command that processes CSV and spawns subagents
+      const mockOutput = `Processing tasks...
+SUBAGENT_TASK: {"description": "Task 1: Analyze data", "type": "general-purpose"}
+SUBAGENT_TASK: {"description": "Task 2: Generate report", "type": "general-purpose"}
+SUBAGENT_TASK: {"description": "Task 3: Review code", "type": "general-purpose"}
+Done processing 3 tasks.`;
+
+      const result = parseSubagentMarkers(mockOutput);
+
+      expect(result.subagentTasks).toHaveLength(3);
+      expect(result.subagentTasks[0].description).toBe("Task 1: Analyze data");
+      expect(result.subagentTasks[1].description).toBe(
+        "Task 2: Generate report",
+      );
+      expect(result.subagentTasks[2].description).toBe("Task 3: Review code");
+      expect(result.cleanOutput).toBe(
+        "Processing tasks...\nDone processing 3 tasks.",
+      );
+      expect(result.warnings).toHaveLength(0);
+    },
+  );
+
+  it.concurrent.skip(
+    "should handle malformed markers gracefully",
+    { timeout: 30 * 1000 },
+    async () => {
+      const mockOutput = `Processing...
+SUBAGENT_TASK: {"description": "Valid task", "type": "general-purpose"}
+SUBAGENT_TASK: {invalid json}
+SUBAGENT_TASK: {"type": "missing-description"}
+SUBAGENT_TASK: {"description": "Another valid", "type": "research"}
+Done.`;
+
+      const result = parseSubagentMarkers(mockOutput);
+
+      // Should only have 2 valid tasks
+      expect(result.subagentTasks).toHaveLength(2);
+      expect(result.subagentTasks[0].description).toBe("Valid task");
+      expect(result.subagentTasks[1].description).toBe("Another valid");
+
+      // Should have 2 warnings (invalid JSON and missing description)
+      expect(result.warnings).toHaveLength(2);
+      expect(result.warnings[0]).toContain("malformed");
+      expect(result.warnings[1]).toContain("missing description");
+    },
+  );
+
+  it.concurrent(
+    "should invoke batch_task tool when spawn_subagent markers are detected with createDeepAgent",
+    { timeout: 120 * 1000 },
+    async () => {
+      /* eslint-disable no-console */
+      // Read first few lines of the CSV fixture
+      const csvPath = path.join(
+        import.meta.dirname,
+        "__fixtures__",
+        "subagent_tasks.csv",
+      );
+      const csvContent = fs.readFileSync(csvPath, "utf-8");
+      const lines = csvContent.split("\n").slice(1, 6); // Skip header, take 5 tasks
+
+      console.log("[TEST] CSV lines to process:", lines);
+
+      // Create a mock backend that supports execution
+      const mockFiles: Map<string, string> = new Map();
+      mockFiles.set("/tasks.csv", lines.join("\n"));
+
+      // Mock backend implementing SandboxBackendProtocol
+      const mockBackend = {
+        id: "mock-batch-test",
+        lsInfo: async (dirPath: string) => {
+          console.log("[BACKEND] lsInfo:", dirPath);
+          return [];
+        },
+        read: async (filePath: string) => {
+          console.log("[BACKEND] read:", filePath);
+          const content = mockFiles.get(filePath);
+          if (!content) return `Error: File not found: ${filePath}`;
+          return content;
+        },
+        write: async (filePath: string, content: string) => {
+          console.log("[BACKEND] write:", filePath, "length:", content.length);
+          mockFiles.set(filePath, content);
+          return { error: undefined };
+        },
+        edit: async () => ({ error: undefined, content: "", occurrences: 0 }),
+        globInfo: async () => [],
+        grepRaw: async () => [],
+        execute: async (command: string) => {
+          console.log(
+            "[BACKEND] execute:",
+            command.substring(0, 200) + (command.length > 200 ? "..." : ""),
+          );
+          // Simulate reading CSV and spawning subagents
+          if (command.includes("spawn_subagent")) {
+            // Extract the spawn_subagent function definition first
+            const output = lines
+              .map((line) => {
+                const parts = line.split(",");
+                if (parts.length >= 3) {
+                  const taskDesc = parts[2];
+                  return `SUBAGENT_TASK: {"description": "${taskDesc}", "type": "general-purpose"}`;
+                }
+                return "";
+              })
+              .filter(Boolean)
+              .join("\n");
+            console.log("[BACKEND] execute output with markers:", output);
+            return { output, exitCode: 0, truncated: false };
+          }
+          return { output: "", exitCode: 0, truncated: false };
+        },
+      };
+
+      // Use createDeepAgent which is the default harness
+      const agent = createDeepAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt: `You have access to execute shell commands and can spawn batch subagents.
+When asked to process a CSV file, use the execute tool to read it and spawn subagents for each task.`,
+        backend: () => mockBackend as any,
+      });
+
+      // Check that both task and batch_task tools are available
+      const tools = extractToolsFromAgent(agent);
+      console.log("[TEST] Available tools:", Object.keys(tools));
+      expect(tools.task).toBeDefined();
+      expect(tools.batch_task).toBeDefined();
+      expect(tools.execute).toBeDefined();
+
+      console.log("[TEST] Starting agent invocation with streaming...");
+
+      // Use streaming to see each step
+      let stepCount = 0;
+      const allToolCalls: Array<{ name: string; args: unknown }> = [];
+
+      const stream = await agent.stream(
+        {
+          messages: [
+            new HumanMessage(
+              'Process the CSV file at /tasks.csv. For each row, spawn a subagent using the execute tool with: cat /tasks.csv | while IFS=, read -r id cat desc prompt; do spawn_subagent "$desc"; done',
+            ),
+          ],
+        },
+        { recursionLimit: 50 },
+      );
+
+      for await (const event of stream as AsyncIterable<Record<string, any>>) {
+        stepCount++;
+        console.log(`\n[STEP ${stepCount}] Event keys:`, Object.keys(event));
+
+        // Log messages from event
+        for (const [key, value] of Object.entries(event)) {
+          const messages = (value as any)?.messages;
+          if (messages && Array.isArray(messages)) {
+            for (const msg of messages) {
+              const msgType = msg.constructor?.name || "Unknown";
+              console.log(`  [${key}] ${msgType}:`, {
+                content:
+                  typeof msg.content === "string"
+                    ? msg.content.substring(0, 100) +
+                      (msg.content.length > 100 ? "..." : "")
+                    : msg.content,
+                tool_calls: msg.tool_calls?.map((tc: any) => ({
+                  name: tc.name,
+                  args:
+                    JSON.stringify(tc.args).substring(0, 100) +
+                    (JSON.stringify(tc.args).length > 100 ? "..." : ""),
+                })),
+              });
+
+              // Collect tool calls
+              if (msg.tool_calls) {
+                for (const tc of msg.tool_calls) {
+                  allToolCalls.push({ name: tc.name, args: tc.args });
+                }
+              }
+            }
+          }
+        }
+      }
+
+      console.log("\n[TEST] Total steps:", stepCount);
+      console.log(
+        "[TEST] All tool calls:",
+        allToolCalls.map((tc) => tc.name),
+      );
+      console.log("[TEST] Files written:", Array.from(mockFiles.keys()));
+
+      // Should have called execute tool
+      const executeCall = allToolCalls.find((tc) => tc.name === "execute");
+      expect(executeCall).toBeDefined();
+
+      // Should have called batch_task tool (injected synthetically via wrapModelCall)
+      const batchTaskCall = allToolCalls.find((tc) => tc.name === "batch_task");
+      expect(batchTaskCall).toBeDefined();
+      expect((batchTaskCall?.args as any)?.tasks).toBeDefined();
+      expect(Array.isArray((batchTaskCall?.args as any)?.tasks)).toBe(true);
+      expect((batchTaskCall?.args as any)?.tasks.length).toBeGreaterThan(0);
     },
   );
 });

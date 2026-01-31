@@ -11,10 +11,15 @@ import {
   type ReactAgent,
   StructuredTool,
 } from "langchain";
-import { Command, getCurrentTaskInput } from "@langchain/langgraph";
+import { Command, getCurrentTaskInput, StateSchema } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
-import { HumanMessage } from "@langchain/core/messages";
+import { HumanMessage, AIMessage } from "@langchain/core/messages";
+import type {
+  BackendProtocol,
+  BackendFactory,
+  StateAndStore,
+} from "../backends/protocol.js";
 
 export type { AgentMiddleware };
 
@@ -338,35 +343,11 @@ function getSubagents(options: {
 /**
  * Create the task tool for invoking subagents
  */
-function createTaskTool(options: {
-  defaultModel: LanguageModelLike | string;
-  defaultTools: StructuredTool[];
-  defaultMiddleware: AgentMiddleware[] | null;
-  defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
-  subagents: (SubAgent | CompiledSubAgent)[];
-  generalPurposeAgent: boolean;
-  taskDescription: string | null;
-}) {
-  const {
-    defaultModel,
-    defaultTools,
-    defaultMiddleware,
-    defaultInterruptOn,
-    subagents,
-    generalPurposeAgent,
-    taskDescription,
-  } = options;
-
-  const { agents: subagentGraphs, descriptions: subagentDescriptions } =
-    getSubagents({
-      defaultModel,
-      defaultTools,
-      defaultMiddleware,
-      defaultInterruptOn,
-      subagents,
-      generalPurposeAgent,
-    });
-
+function createTaskTool(
+  subagentGraphs: Record<string, ReactAgent | Runnable>,
+  subagentDescriptions: string[],
+  taskDescription: string | null,
+) {
   const finalTaskDescription = taskDescription
     ? taskDescription
     : getTaskToolDescription(subagentDescriptions);
@@ -426,6 +407,367 @@ function createTaskTool(options: {
 }
 
 /**
+ * Prefix that identifies a subagent task marker in command output.
+ */
+export const SUBAGENT_MARKER_PREFIX = "SUBAGENT_TASK: ";
+
+/**
+ * Represents a single subagent task parsed from a marker.
+ */
+export interface SubagentTask {
+  description: string;
+  type: string;
+}
+
+/**
+ * Result of parsing subagent markers from command output.
+ */
+export interface ParseSubagentMarkersResult {
+  cleanOutput: string;
+  subagentTasks: SubagentTask[];
+  warnings: string[];
+}
+
+/**
+ * Parse subagent task markers from command output.
+ */
+export function parseSubagentMarkers(
+  output: string,
+): ParseSubagentMarkersResult {
+  const lines = output.split("\n");
+  const tasks: SubagentTask[] = [];
+  const cleanLines: string[] = [];
+  const warnings: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith(SUBAGENT_MARKER_PREFIX)) {
+      try {
+        const jsonStr = line.slice(SUBAGENT_MARKER_PREFIX.length).trim();
+        const parsed = JSON.parse(jsonStr);
+
+        if (
+          typeof parsed.description !== "string" ||
+          !parsed.description.trim()
+        ) {
+          warnings.push(`[WARN: subagent marker missing description] ${line}`);
+          cleanLines.push(line);
+          continue;
+        }
+
+        tasks.push({
+          description: parsed.description,
+          type:
+            typeof parsed.type === "string" ? parsed.type : "general-purpose",
+        });
+      } catch (_e) {
+        warnings.push(`[WARN: malformed subagent marker JSON] ${line}`);
+        cleanLines.push(line);
+      }
+    } else {
+      cleanLines.push(line);
+    }
+  }
+
+  return {
+    cleanOutput: cleanLines.join("\n"),
+    subagentTasks: tasks,
+    warnings,
+  };
+}
+
+/**
+ * Check if output contains any subagent markers.
+ */
+export function hasSubagentMarkers(output: string): boolean {
+  return output.includes(SUBAGENT_MARKER_PREFIX);
+}
+
+/**
+ * Represents a pending batch task that needs to be executed.
+ */
+export interface PendingBatchTask {
+  tasks: SubagentTask[];
+}
+
+/**
+ * Zod schema for PendingBatchTask in state.
+ * This must match the schema in fs.ts for state to be shared correctly.
+ */
+const PendingBatchTaskSchema = z
+  .object({
+    tasks: z.array(
+      z.object({
+        description: z.string(),
+        type: z.string().optional(),
+      }),
+    ),
+  })
+  .nullable()
+  .optional();
+
+/**
+ * State schema for SubAgentMiddleware.
+ * Includes pendingBatchTask to enable batch spawning from execute tool.
+ */
+const SubAgentStateSchema = new StateSchema({
+  pendingBatchTask: PendingBatchTaskSchema.default(null),
+});
+
+/**
+ * Result of a single batch task execution.
+ */
+export interface BatchTaskResult {
+  index: number;
+  task: SubagentTask;
+  result?: string;
+  error?: string;
+  status: "success" | "failed";
+}
+
+/**
+ * Summary of batch task execution.
+ */
+export interface BatchTaskSummary {
+  total: number;
+  succeeded: number;
+  failed: number;
+  durationMs: number;
+  resultsPath: string;
+}
+
+function getBackend(
+  backend: BackendProtocol | BackendFactory | undefined,
+  stateAndStore: StateAndStore,
+): BackendProtocol | undefined {
+  if (!backend) return undefined;
+  if (typeof backend === "function") {
+    return backend(stateAndStore);
+  }
+  return backend;
+}
+
+async function writeBatchResults(
+  results: BatchTaskResult[],
+  resultsPath: string,
+  backend: BackendProtocol,
+  durationMs: number,
+): Promise<BatchTaskSummary> {
+  const succeeded = results.filter((r) => r.status === "success").length;
+  const failed = results.length - succeeded;
+
+  const summary: BatchTaskSummary = {
+    total: results.length,
+    succeeded,
+    failed,
+    durationMs,
+    resultsPath,
+  };
+
+  await backend.write(
+    `${resultsPath}/summary.json`,
+    JSON.stringify(summary, null, 2),
+  );
+
+  const resultsJsonl = results.map((r) => JSON.stringify(r)).join("\n");
+  await backend.write(`${resultsPath}/results.jsonl`, resultsJsonl);
+
+  const failures = results.filter((r) => r.status === "failed");
+  if (failures.length > 0) {
+    const failuresJsonl = failures.map((r) => JSON.stringify(r)).join("\n");
+    await backend.write(`${resultsPath}/failures.jsonl`, failuresJsonl);
+  }
+
+  return summary;
+}
+
+/**
+ * Execute a single batch task and return the result.
+ */
+async function executeSingleTask(
+  task: SubagentTask,
+  index: number,
+  subagentGraphs: Record<string, ReactAgent | Runnable>,
+  config: any,
+): Promise<BatchTaskResult> {
+  const defaultType = "general-purpose";
+
+  try {
+    const subagent = subagentGraphs[task.type] || subagentGraphs[defaultType];
+    if (!subagent) {
+      return {
+        index,
+        task,
+        error: `Unknown subagent type: ${task.type}`,
+        status: "failed" as const,
+      };
+    }
+
+    const result = (await subagent.invoke(
+      {
+        messages: [new HumanMessage({ content: task.description })],
+      },
+      config,
+    )) as Record<string, unknown>;
+
+    const messages = result.messages as Array<{ content: string }>;
+    const lastMessage = messages?.[messages.length - 1];
+
+    return {
+      index,
+      task,
+      result: lastMessage?.content || "Task completed",
+      status: "success" as const,
+    };
+  } catch (error) {
+    return {
+      index,
+      task,
+      error: String(error),
+      status: "failed" as const,
+    };
+  }
+}
+
+/**
+ * Execute batch tasks with concurrency limit.
+ */
+async function executeBatchTasks(
+  tasks: SubagentTask[],
+  subagentGraphs: Record<string, ReactAgent | Runnable>,
+  config: any,
+  concurrency: number,
+): Promise<BatchTaskResult[]> {
+  const results: BatchTaskResult[] = new Array(tasks.length);
+  let currentIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (currentIndex < tasks.length) {
+      const index = currentIndex++;
+      const task = tasks[index];
+      results[index] = await executeSingleTask(
+        task,
+        index,
+        subagentGraphs,
+        config,
+      );
+    }
+  }
+
+  // Spawn workers up to concurrency limit
+  const workers = Array.from(
+    { length: Math.min(concurrency, tasks.length) },
+    () => worker(),
+  );
+  await Promise.all(workers);
+
+  return results;
+}
+
+const BATCH_TASK_DESCRIPTION = `Execute multiple subagent tasks in parallel with results written to files.
+
+This tool runs many tasks concurrently and writes results to the filesystem to avoid flooding
+the context window. Use this for batch operations involving 10+ similar tasks.
+
+The tool returns a summary with paths to detailed results:
+- /batch_results/<timestamp>/summary.json - Overall stats
+- /batch_results/<timestamp>/results.jsonl - All task results
+- /batch_results/<timestamp>/failures.jsonl - Failed tasks only
+
+Prefer using spawn_subagent in a shell script for batch operations, which automatically
+triggers this tool. Direct calls are supported but the shell approach is more flexible.`;
+
+/**
+ * Create the batch_task tool for running multiple subagents in parallel.
+ */
+function createBatchTaskTool(
+  subagentGraphs: Record<string, ReactAgent | Runnable>,
+  backend: BackendProtocol | BackendFactory | undefined,
+  concurrency: number,
+) {
+  return tool(
+    async (
+      input: { tasks: Array<{ description: string; type?: string }> },
+      config,
+    ): Promise<Command | string> => {
+      const stateAndStore: StateAndStore = {
+        state: getCurrentTaskInput(config),
+        store: (config as any).store,
+      };
+      const resolvedBackend = getBackend(backend, stateAndStore);
+
+      if (!resolvedBackend) {
+        return "Error: batch_task execution failed - no backend configured for writing results.";
+      }
+
+      const normalizedTasks: SubagentTask[] = input.tasks.map((t) => ({
+        description: t.description,
+        type: t.type || "general-purpose",
+      }));
+
+      const startTime = Date.now();
+      const batchResults = await executeBatchTasks(
+        normalizedTasks,
+        subagentGraphs,
+        config,
+        concurrency,
+      );
+      const durationMs = Date.now() - startTime;
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const resultsPath = `/batch_results/${timestamp}`;
+      const summary = await writeBatchResults(
+        batchResults,
+        resultsPath,
+        resolvedBackend,
+        durationMs,
+      );
+
+      const summaryMessage = `Executed ${summary.total} tasks. ${summary.succeeded} succeeded, ${summary.failed} failed. Results in ${summary.resultsPath}/`;
+
+      const toolCallId = config.toolCall?.id;
+      if (!toolCallId) {
+        return new Command({
+          update: { pendingBatchTask: null },
+          resume: summaryMessage,
+        });
+      }
+
+      return new Command({
+        update: {
+          pendingBatchTask: null,
+          messages: [
+            new ToolMessage({
+              content: summaryMessage,
+              tool_call_id: toolCallId,
+              name: "batch_task",
+            }),
+          ],
+        },
+      });
+    },
+    {
+      name: "batch_task",
+      description: BATCH_TASK_DESCRIPTION,
+      schema: z.object({
+        tasks: z
+          .array(
+            z.object({
+              description: z.string().describe("The task description"),
+              type: z
+                .string()
+                .optional()
+                .describe(
+                  `Subagent type (default: general-purpose). Available: ${Object.keys(subagentGraphs).join(", ")}`,
+                ),
+            }),
+          )
+          .describe("Array of tasks to execute in parallel"),
+      }),
+    },
+  );
+}
+
+/**
  * Options for creating subagent middleware
  */
 export interface SubAgentMiddlewareOptions {
@@ -445,10 +787,14 @@ export interface SubAgentMiddlewareOptions {
   generalPurposeAgent?: boolean;
   /** Custom description for the task tool */
   taskDescription?: string | null;
+  /** Backend for writing batch results (required for batch_task support) */
+  backend?: BackendProtocol | BackendFactory;
+  /** Maximum number of concurrent subagent executions for batch_task (default: 10) */
+  batchConcurrency?: number;
 }
 
 /**
- * Create subagent middleware with task tool
+ * Create subagent middleware with task tool and batch task support
  */
 export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
   const {
@@ -460,22 +806,60 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     systemPrompt = TASK_SYSTEM_PROMPT,
     generalPurposeAgent = true,
     taskDescription = null,
+    backend,
+    batchConcurrency = 10,
   } = options;
 
-  const taskTool = createTaskTool({
-    defaultModel,
-    defaultTools,
-    defaultMiddleware,
-    defaultInterruptOn,
-    subagents,
-    generalPurposeAgent,
+  // Create subagent graphs once - used by both task and batch_task tools
+  const { agents: subagentGraphs, descriptions: subagentDescriptions } =
+    getSubagents({
+      defaultModel,
+      defaultTools,
+      defaultMiddleware,
+      defaultInterruptOn,
+      subagents,
+      generalPurposeAgent,
+    });
+
+  // Build tools array
+  const taskTool = createTaskTool(
+    subagentGraphs,
+    subagentDescriptions,
     taskDescription,
-  });
+  );
+  const tools: StructuredTool[] = [taskTool];
+  if (backend) {
+    tools.push(createBatchTaskTool(subagentGraphs, backend, batchConcurrency));
+  }
 
   return createMiddleware({
     name: "subAgentMiddleware",
-    tools: [taskTool],
+    stateSchema: SubAgentStateSchema,
+    tools,
     wrapModelCall: async (request, handler) => {
+      // Check if there's a pending batch task from execute tool
+      const state = request.state as Record<string, unknown> | undefined;
+      const pendingBatchTask = state?.pendingBatchTask as
+        | PendingBatchTask
+        | undefined;
+
+      if (pendingBatchTask && pendingBatchTask.tasks.length > 0) {
+        // Skip model call and return AIMessage with batch_task tool call
+        const batchToolCallId = `batch-${Date.now()}`;
+
+        return new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: batchToolCallId,
+              name: "batch_task",
+              args: { tasks: pendingBatchTask.tasks },
+            },
+          ],
+        });
+      }
+
+      // Normal model call with optional system prompt
       if (systemPrompt !== null) {
         return handler({
           ...request,

@@ -155,6 +155,7 @@ export function createDeepAgent<
     // Enables filesystem operations and optional long-term memory storage
     createFilesystemMiddleware({ backend: filesystemBackend }),
     // Enables delegation to specialized subagents for complex tasks
+    // Also enables batch_task tool for spawn_subagent batch operations
     createSubAgentMiddleware({
       defaultModel: model,
       defaultTools: tools as StructuredTool[],
@@ -183,6 +184,8 @@ export function createDeepAgent<
       defaultInterruptOn: interruptOn,
       subagents: subagents as unknown as (SubAgent | CompiledSubAgent)[],
       generalPurposeAgent: true,
+      // Backend for writing batch_task results to filesystem
+      backend: filesystemBackend,
     }),
     // Automatically summarizes conversation history when token limits are approached
     summarizationMiddleware({
