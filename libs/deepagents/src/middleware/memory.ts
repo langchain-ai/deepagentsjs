@@ -254,6 +254,10 @@ async function loadMemoryFromBackend(
 export function createMemoryMiddleware(options: MemoryMiddlewareOptions) {
   const { backend, sources } = options;
 
+  // Closure cache so wrapModelCall can access memory immediately.
+  // beforeAgent state updates are not guaranteed to be visible in the same call.
+  let loadedContents: Record<string, string> | null = null;
+
   /**
    * Resolve backend from instance or factory.
    */
@@ -265,39 +269,72 @@ export function createMemoryMiddleware(options: MemoryMiddlewareOptions) {
     return backend;
   }
 
+  function hasFilesInState(state: unknown): boolean {
+    if (!state || typeof state !== "object") {
+      return false;
+    }
+    const files = (state as { files?: Record<string, unknown> }).files;
+    return files != null && Object.keys(files).length > 0;
+  }
+
+  async function loadAllMemory(
+    state: unknown,
+  ): Promise<Record<string, string>> {
+    const resolvedBackend = getBackend(state);
+    const contents: Record<string, string> = {};
+
+    for (const path of sources) {
+      try {
+        const content = await loadMemoryFromBackend(resolvedBackend, path);
+        if (content) {
+          contents[path] = content;
+        }
+      } catch (error) {
+        // Log but continue - memory is optional
+        // eslint-disable-next-line no-console
+        console.debug(`Failed to load memory from ${path}:`, error);
+      }
+    }
+
+    return contents;
+  }
+
   return createMiddleware({
     name: "MemoryMiddleware",
     stateSchema: MemoryStateSchema,
 
     async beforeAgent(state) {
       // Skip if already loaded
+      if (loadedContents != null) {
+        return undefined;
+      }
       if ("memoryContents" in state && state.memoryContents != null) {
+        loadedContents = state.memoryContents as Record<string, string>;
         return undefined;
       }
 
-      const resolvedBackend = getBackend(state);
-      const contents: Record<string, string> = {};
-
-      for (const path of sources) {
-        try {
-          const content = await loadMemoryFromBackend(resolvedBackend, path);
-          if (content) {
-            contents[path] = content;
-          }
-        } catch (error) {
-          // Log but continue - memory is optional
-          // eslint-disable-next-line no-console
-          console.debug(`Failed to load memory from ${path}:`, error);
-        }
-      }
-
+      const contents = await loadAllMemory(state);
+      loadedContents = contents;
       return { memoryContents: contents };
     },
 
-    wrapModelCall(request, handler) {
+    async wrapModelCall(request, handler) {
       // Get memory contents from state
-      const memoryContents: Record<string, string> =
-        request.state?.memoryContents || {};
+      let memoryContents: Record<string, string> =
+        loadedContents ??
+        (request.state?.memoryContents as Record<string, string>) ??
+        {};
+
+      // If beforeAgent ran before input files were merged into state,
+      // try a one-time lazy load using the request state.
+      if (
+        Object.keys(memoryContents).length === 0 &&
+        (loadedContents == null || hasFilesInState(request.state))
+      ) {
+        const contents = await loadAllMemory(request.state ?? {});
+        loadedContents = contents;
+        memoryContents = contents;
+      }
 
       // Format memory section
       const formattedContents = formatMemoryContents(memoryContents, sources);
