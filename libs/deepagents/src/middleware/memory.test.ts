@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { createMemoryMiddleware } from "./memory.js";
+import { StateBackend } from "../backends/state.js";
+import { createFileData } from "../backends/utils.js";
+import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import type {
   BackendProtocol,
   FileDownloadResponse,
@@ -135,7 +138,7 @@ describe("createMemoryMiddleware", () => {
   });
 
   describe("wrapModelCall", () => {
-    it("should inject memory content into system prompt", () => {
+    it("should inject memory content into system prompt", async () => {
       const middleware = createMemoryMiddleware({
         backend: createMockBackend({}),
         sources: ["~/.deepagents/AGENTS.md", "./.deepagents/AGENTS.md"],
@@ -152,7 +155,7 @@ describe("createMemoryMiddleware", () => {
         },
       };
 
-      middleware.wrapModelCall!(request as any, mockHandler);
+      await middleware.wrapModelCall!(request as any, mockHandler);
 
       expect(mockHandler).toHaveBeenCalled();
       const modifiedRequest = mockHandler.mock.calls[0][0];
@@ -165,7 +168,7 @@ describe("createMemoryMiddleware", () => {
       expect(modifiedRequest.systemPrompt).toContain("./.deepagents/AGENTS.md");
     });
 
-    it("should show (No memory loaded) when no content", () => {
+    it("should show (No memory loaded) when no content", async () => {
       const middleware = createMemoryMiddleware({
         backend: createMockBackend({}),
         sources: ["~/.deepagents/AGENTS.md"],
@@ -177,13 +180,13 @@ describe("createMemoryMiddleware", () => {
         state: { memoryContents: {} },
       };
 
-      middleware.wrapModelCall!(request as any, mockHandler);
+      await middleware.wrapModelCall!(request as any, mockHandler);
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
       expect(modifiedRequest.systemPrompt).toContain("(No memory loaded)");
     });
 
-    it("should prepend memory section to existing system prompt", () => {
+    it("should prepend memory section to existing system prompt", async () => {
       const middleware = createMemoryMiddleware({
         backend: createMockBackend({}),
         sources: [],
@@ -195,7 +198,7 @@ describe("createMemoryMiddleware", () => {
         state: { memoryContents: {} },
       };
 
-      middleware.wrapModelCall!(request as any, mockHandler);
+      await middleware.wrapModelCall!(request as any, mockHandler);
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
       // Memory section should come before the original prompt
@@ -206,7 +209,7 @@ describe("createMemoryMiddleware", () => {
       expect(memoryIndex).toBeLessThan(originalIndex);
     });
 
-    it("should work when state has no memoryContents", () => {
+    it("should work when state has no memoryContents", async () => {
       const middleware = createMemoryMiddleware({
         backend: createMockBackend({}),
         sources: ["~/.deepagents/AGENTS.md"],
@@ -218,10 +221,36 @@ describe("createMemoryMiddleware", () => {
         state: {},
       };
 
-      middleware.wrapModelCall!(request as any, mockHandler);
+      await middleware.wrapModelCall!(request as any, mockHandler);
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
       expect(modifiedRequest.systemPrompt).toContain("(No memory loaded)");
+    });
+
+    it("should lazily load memory when files are in request state", async () => {
+      const middleware = createMemoryMiddleware({
+        backend: (config: { state: unknown; store?: BaseStore }) =>
+          new StateBackend({
+            state: config.state,
+            store: undefined,
+          }),
+        sources: ["/AGENTS.md"],
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemPrompt: "Base prompt",
+        state: {
+          files: {
+            "/AGENTS.md": createFileData("Lazy load content"),
+          },
+        },
+      };
+
+      await middleware.wrapModelCall!(request as any, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      expect(modifiedRequest.systemPrompt).toContain("Lazy load content");
     });
   });
 
