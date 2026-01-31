@@ -301,7 +301,9 @@ describe("DeepAgents Integration Tests", () => {
       );
 
       expect((result1 as any).files).toHaveProperty("/app.js");
-      expect((result1 as any).files["/app.js"].content.join()).toContain("Hello");
+      expect((result1 as any).files["/app.js"].content.join()).toContain(
+        "Hello",
+      );
 
       expect(result1.todos.length).toBeGreaterThanOrEqual(3);
       const todoStatuses = result1.todos.map((t: any) => t.status);
