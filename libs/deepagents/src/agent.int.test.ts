@@ -270,6 +270,82 @@ describe("DeepAgents Integration Tests", () => {
   );
 
   it.concurrent(
+    "should handle complex multi-turn workflow with files, todos, and subagents",
+    { timeout: 120 * 1000 }, // 120s
+    async () => {
+      const subagents = [
+        {
+          name: "code_reviewer",
+          description: "Reviews code and provides feedback",
+          systemPrompt: "You are a code reviewer. Analyze code quality.",
+          tools: [sampleTool],
+          model: SAMPLE_MODEL,
+        },
+      ];
+      const agent = createDeepAgent({
+        middleware: [ResearchMiddleware],
+        subagents,
+      });
+      assertAllDeepAgentQualities(agent);
+
+      const result1 = await agent.invoke(
+        {
+          messages: [
+            new HumanMessage(
+              "Create a file called app.js with the content 'console.log(\"Hello\");' and " +
+                "create a todo list with tasks: 'Write code' (completed), 'Review code' (in_progress), 'Deploy' (pending)",
+            ),
+          ],
+        },
+        { recursionLimit: 100 },
+      );
+
+      expect((result1 as any).files).toHaveProperty("/app.js");
+      expect((result1 as any).files["/app.js"].content.join()).toContain("Hello");
+
+      expect(result1.todos.length).toBeGreaterThanOrEqual(3);
+      const todoStatuses = result1.todos.map((t: any) => t.status);
+      expect(todoStatuses).toContain("completed");
+      expect(todoStatuses).toContain("in_progress");
+      expect(todoStatuses).toContain("pending");
+
+      const result2 = await agent.invoke(
+        {
+          messages: [
+            ...result1.messages,
+            new HumanMessage(
+              "Use the code_reviewer subagent to review the app.js file. " +
+                "Also save this research note: 'Project uses Node.js'",
+            ),
+          ],
+        },
+        { recursionLimit: 100 },
+      );
+
+      const agentMessages = result2.messages.filter((msg: any) =>
+        AIMessage.isInstance(msg),
+      );
+      const toolCalls = agentMessages.flatMap(
+        (msg: any) => msg.tool_calls || [],
+      );
+      expect(
+        toolCalls.some(
+          (tc: any) =>
+            tc.name === "task" && tc.args?.subagent_type === "code_reviewer",
+        ),
+      ).toBe(true);
+
+      expect((result2 as any).files).toHaveProperty("/app.js");
+
+      expect((result2 as any).research).toContain("Node.js");
+
+      expect(result2.todos.length).toBeGreaterThanOrEqual(3);
+
+      expect(result2.messages.length).toBeGreaterThan(result1.messages.length);
+    },
+  );
+
+  it.concurrent(
     "should create deep agent with subagents no tools",
     { timeout: 90 * 1000 }, // 90s
     async () => {
