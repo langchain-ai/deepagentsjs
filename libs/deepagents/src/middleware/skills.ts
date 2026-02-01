@@ -54,6 +54,7 @@ import { StateSchema, ReducedValue } from "@langchain/langgraph";
 import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
+import { fileDataReducer, FileDataSchema } from "./fs.js";
 
 // Security: Maximum size for SKILL.md files to prevent DoS attacks (10MB)
 export const MAX_SKILL_FILE_SIZE = 10 * 1024 * 1024;
@@ -168,6 +169,13 @@ const SkillsStateSchema = new StateSchema({
     {
       inputSchema: z.array(SkillMetadataEntrySchema).optional(),
       reducer: skillsMetadataReducer,
+    },
+  ),
+  files: new ReducedValue(
+    z.record(z.string(), FileDataSchema).default(() => ({})),
+    {
+      inputSchema: z.record(z.string(), FileDataSchema.nullable()).optional(),
+      reducer: fileDataReducer,
     },
   ),
 });
