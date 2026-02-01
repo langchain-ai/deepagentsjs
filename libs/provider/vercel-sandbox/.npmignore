@@ -1,0 +1,23 @@
+# Ignore source TypeScript files (only ship compiled dist/)
+src/
+
+# Ignore test files
+*.test.ts
+*.int.test.ts
+**/*.test.ts
+**/*.int.test.ts
+
+# Ignore configuration files
+tsconfig.json
+tsdown.config.ts
+vitest.config.ts
+.tsdown/
+
+# Ignore development files
+.gitignore
+.env
+.env.local
+.env.*
+
+# Ignore build artifacts (if any leftover)
+*.tsbuildinfo
