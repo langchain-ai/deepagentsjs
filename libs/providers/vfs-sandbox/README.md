@@ -64,9 +64,10 @@ Create and initialize a new VFS sandbox in one step.
 
 ```typescript
 const sandbox = await VfsSandbox.create({
-  mountPath: "/vfs",           // Mount path for the VFS (default: "/vfs")
-  timeout: 30000,              // Command timeout in ms (default: 30000)
-  initialFiles: {              // Initial files to populate
+  mountPath: "/vfs", // Mount path for the VFS (default: "/vfs")
+  timeout: 30000, // Command timeout in ms (default: 30000)
+  initialFiles: {
+    // Initial files to populate
     "/README.md": "# Hello",
     "/src/index.js": "console.log('Hello')",
   },
@@ -81,8 +82,8 @@ Execute a shell command in the sandbox.
 
 ```typescript
 const result = await sandbox.execute("node src/index.js");
-console.log(result.output);    // Command output
-console.log(result.exitCode);  // Exit code (0 = success)
+console.log(result.output); // Command output
+console.log(result.exitCode); // Exit code (0 = success)
 ```
 
 ##### `sandbox.uploadFiles(files)`

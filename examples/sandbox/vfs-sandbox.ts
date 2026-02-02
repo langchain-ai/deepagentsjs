@@ -81,9 +81,10 @@ async function main() {
           type: "module",
         },
         null,
-        2
+        2,
       ),
-      "/README.md": "# VFS Demo Project\n\nThis project was created in a virtual file system!",
+      "/README.md":
+        "# VFS Demo Project\n\nThis project was created in a virtual file system!",
     },
   });
 
