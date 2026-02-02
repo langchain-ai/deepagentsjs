@@ -298,7 +298,7 @@ export class VercelSandboxError extends Error {
   constructor(
     message: string,
     public readonly code: VercelSandboxErrorCode,
-    public override readonly cause?: Error
+    public override readonly cause?: Error,
   ) {
     super(message);
     // Maintain proper prototype chain for instanceof checks
