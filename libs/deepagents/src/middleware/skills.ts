@@ -521,7 +521,12 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
       if (loadedSkills.length > 0) {
         return undefined;
       }
-      if ("skillsMetadata" in state && state.skillsMetadata != null) {
+      // Check if skills were restored from checkpoint (non-empty array in state)
+      if (
+        "skillsMetadata" in state &&
+        Array.isArray(state.skillsMetadata) &&
+        state.skillsMetadata.length > 0
+      ) {
         // Restore from state (e.g., after checkpoint restore)
         loadedSkills = state.skillsMetadata as SkillMetadata[];
         return undefined;
