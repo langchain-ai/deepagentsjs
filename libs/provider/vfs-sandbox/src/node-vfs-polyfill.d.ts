@@ -51,7 +51,7 @@ declare module "node-vfs-polyfill" {
       buffer: Buffer,
       offset: number,
       length: number,
-      position: number | null
+      position: number | null,
     ): number;
 
     /**
@@ -62,7 +62,7 @@ declare module "node-vfs-polyfill" {
       buffer: Buffer,
       offset: number,
       length: number,
-      position: number | null
+      position: number | null,
     ): number;
 
     /**
@@ -90,7 +90,7 @@ declare module "node-vfs-polyfill" {
      */
     readdirSync(
       path: string,
-      options?: { withFileTypes?: boolean }
+      options?: { withFileTypes?: boolean },
     ): string[] | Dirent[];
 
     /**
@@ -239,27 +239,27 @@ declare module "node-vfs-polyfill" {
     readFileSync(path: string, options: { encoding: BufferEncoding }): string;
     readFileSync(
       path: string,
-      options?: { encoding?: BufferEncoding | null }
+      options?: { encoding?: BufferEncoding | null },
     ): Buffer | string;
 
     /** Write a file */
     writeFileSync(
       path: string,
       data: string | Buffer | Uint8Array,
-      options?: { encoding?: BufferEncoding; mode?: number; flag?: string }
+      options?: { encoding?: BufferEncoding; mode?: number; flag?: string },
     ): void;
 
     /** Append to a file */
     appendFileSync(
       path: string,
       data: string | Buffer,
-      options?: { encoding?: BufferEncoding; mode?: number; flag?: string }
+      options?: { encoding?: BufferEncoding; mode?: number; flag?: string },
     ): void;
 
     /** Create a directory */
     mkdirSync(
       path: string,
-      options?: { recursive?: boolean; mode?: number }
+      options?: { recursive?: boolean; mode?: number },
     ): void;
 
     /** Read a directory */
@@ -267,14 +267,17 @@ declare module "node-vfs-polyfill" {
     readdirSync(path: string, options: { withFileTypes: true }): Dirent[];
     readdirSync(
       path: string,
-      options?: { withFileTypes?: boolean }
+      options?: { withFileTypes?: boolean },
     ): string[] | Dirent[];
 
     /** Remove a directory */
     rmdirSync(path: string): void;
 
     /** Remove a file or directory */
-    rmSync(path: string, options?: { recursive?: boolean; force?: boolean }): void;
+    rmSync(
+      path: string,
+      options?: { recursive?: boolean; force?: boolean },
+    ): void;
 
     /** Remove a file */
     unlinkSync(path: string): void;
@@ -304,7 +307,7 @@ declare module "node-vfs-polyfill" {
     utimesSync(
       path: string,
       atime: Date | number | string,
-      mtime: Date | number | string
+      mtime: Date | number | string,
     ): void;
 
     /** Change file mode */
@@ -321,7 +324,7 @@ declare module "node-vfs-polyfill" {
       buffer: Buffer,
       offset?: number,
       length?: number,
-      position?: number | null
+      position?: number | null,
     ): number;
 
     /** Write to an open file */
@@ -330,7 +333,7 @@ declare module "node-vfs-polyfill" {
       buffer: Buffer | string,
       offset?: number,
       length?: number,
-      position?: number | null
+      position?: number | null,
     ): number;
 
     /** Close an open file */
@@ -359,7 +362,7 @@ declare module "node-vfs-polyfill" {
         start?: number;
         end?: number;
         highWaterMark?: number;
-      }
+      },
     ): NodeJS.ReadableStream;
 
     /** Create a writable stream */
@@ -370,7 +373,7 @@ declare module "node-vfs-polyfill" {
         encoding?: BufferEncoding;
         mode?: number;
         start?: number;
-      }
+      },
     ): WriteStream;
 
     // ==================== Promises API ====================
@@ -379,28 +382,31 @@ declare module "node-vfs-polyfill" {
     readonly promises: {
       readFile(
         path: string,
-        options?: { encoding?: BufferEncoding | null }
+        options?: { encoding?: BufferEncoding | null },
       ): Promise<Buffer | string>;
       writeFile(
         path: string,
         data: string | Buffer | Uint8Array,
-        options?: { encoding?: BufferEncoding; mode?: number; flag?: string }
+        options?: { encoding?: BufferEncoding; mode?: number; flag?: string },
       ): Promise<void>;
       appendFile(
         path: string,
         data: string | Buffer,
-        options?: { encoding?: BufferEncoding; mode?: number; flag?: string }
+        options?: { encoding?: BufferEncoding; mode?: number; flag?: string },
       ): Promise<void>;
       mkdir(
         path: string,
-        options?: { recursive?: boolean; mode?: number }
+        options?: { recursive?: boolean; mode?: number },
       ): Promise<void>;
       readdir(path: string): Promise<string[]>;
-      readdir(path: string, options: { withFileTypes: true }): Promise<Dirent[]>;
+      readdir(
+        path: string,
+        options: { withFileTypes: true },
+      ): Promise<Dirent[]>;
       rmdir(path: string): Promise<void>;
       rm(
         path: string,
-        options?: { recursive?: boolean; force?: boolean }
+        options?: { recursive?: boolean; force?: boolean },
       ): Promise<void>;
       unlink(path: string): Promise<void>;
       rename(oldPath: string, newPath: string): Promise<void>;
@@ -415,7 +421,7 @@ declare module "node-vfs-polyfill" {
       utimes(
         path: string,
         atime: Date | number | string,
-        mtime: Date | number | string
+        mtime: Date | number | string,
       ): Promise<void>;
       chmod(path: string, mode: number): Promise<void>;
       open(path: string, flags: string, mode?: number): Promise<FileHandle>;
@@ -427,20 +433,20 @@ declare module "node-vfs-polyfill" {
     watch(
       path: string,
       options?: { persistent?: boolean; recursive?: boolean },
-      listener?: (eventType: string, filename: string) => void
+      listener?: (eventType: string, filename: string) => void,
     ): FSWatcher;
 
     /** Watch a file for changes */
     watchFile(
       path: string,
       options?: { persistent?: boolean; interval?: number },
-      listener?: (curr: Stats, prev: Stats) => void
+      listener?: (curr: Stats, prev: Stats) => void,
     ): void;
 
     /** Stop watching a file */
     unwatchFile(
       path: string,
-      listener?: (curr: Stats, prev: Stats) => void
+      listener?: (curr: Stats, prev: Stats) => void,
     ): void;
 
     // ==================== Glob ====================
@@ -448,13 +454,13 @@ declare module "node-vfs-polyfill" {
     /** Find files matching a pattern */
     globSync(
       pattern: string | string[],
-      options?: { cwd?: string; exclude?: (path: string) => boolean }
+      options?: { cwd?: string; exclude?: (path: string) => boolean },
     ): string[];
 
     /** Find files matching a pattern (async) */
     glob(
       pattern: string | string[],
-      options?: { cwd?: string; exclude?: (path: string) => boolean }
+      options?: { cwd?: string; exclude?: (path: string) => boolean },
     ): Promise<string[]>;
   }
 
@@ -467,13 +473,13 @@ declare module "node-vfs-polyfill" {
       buffer: Buffer,
       offset?: number,
       length?: number,
-      position?: number | null
+      position?: number | null,
     ): Promise<{ bytesRead: number; buffer: Buffer }>;
     write(
       buffer: Buffer | string,
       offset?: number,
       length?: number,
-      position?: number | null
+      position?: number | null,
     ): Promise<{ bytesWritten: number; buffer: Buffer }>;
     close(): Promise<void>;
     stat(): Promise<Stats>;
@@ -501,7 +507,7 @@ declare module "node-vfs-polyfill" {
    */
   export function create(
     provider?: VirtualProvider,
-    options?: VirtualFileSystemOptions
+    options?: VirtualFileSystemOptions,
   ): VirtualFileSystem;
   export function create(options?: VirtualFileSystemOptions): VirtualFileSystem;
 }

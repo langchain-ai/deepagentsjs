@@ -114,7 +114,7 @@ export class VfsSandboxError extends Error {
   constructor(
     message: string,
     public readonly code: VfsSandboxErrorCode,
-    public readonly cause?: Error
+    public readonly cause?: Error,
   ) {
     super(message);
     // Maintain proper prototype chain for instanceof checks
