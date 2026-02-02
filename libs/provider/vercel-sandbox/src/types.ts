@@ -230,6 +230,23 @@ export interface SnapshotInfo {
 }
 
 /**
+ * Metadata for a Vercel Sandbox instance.
+ *
+ * This is used by `VercelSandboxProvider.list()` to return information
+ * about available sandboxes.
+ */
+export interface VercelSandboxMetadata {
+  /** Current status of the sandbox */
+  status?: "running" | "stopped" | "error";
+  /** Runtime used by the sandbox */
+  runtime?: "node24" | "node22" | "python3.13";
+  /** Timestamp when the sandbox was created */
+  createdAt?: string;
+  /** Remaining timeout in milliseconds */
+  timeoutRemaining?: number;
+}
+
+/**
  * Error codes for Vercel Sandbox operations.
  *
  * Used to identify specific error conditions and handle them appropriately.

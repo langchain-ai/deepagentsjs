@@ -98,4 +98,11 @@ export {
   type FileUploadResponse,
   type SandboxBackendProtocol,
   type MaybePromise,
+  // Sandbox provider types
+  type SandboxInfo,
+  type SandboxListResponse,
+  type SandboxListOptions,
+  type SandboxGetOrCreateOptions,
+  type SandboxDeleteOptions,
+  type SandboxProvider,
 } from "./backends/index.js";

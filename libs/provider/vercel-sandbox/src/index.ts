@@ -37,8 +37,8 @@
  * @packageDocumentation
  */
 
-// Export main class
-export { VercelSandbox } from "./sandbox.js";
+// Export main class and provider
+export { VercelSandbox, VercelSandboxProvider } from "./sandbox.js";
 
 // Export factory functions and types
 export {
@@ -59,6 +59,7 @@ export type {
   SandboxSource,
   VercelSandboxOptions,
   SnapshotInfo,
+  VercelSandboxMetadata,
   VercelSandboxErrorCode,
 } from "./types.js";
 

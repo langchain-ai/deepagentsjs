@@ -42,8 +42,8 @@
  * @packageDocumentation
  */
 
-// Export main class
-export { VfsSandbox } from "./sandbox.js";
+// Export main class and provider
+export { VfsSandbox, VfsSandboxProvider } from "./sandbox.js";
 
 // Export factory functions
 export {
@@ -52,7 +52,11 @@ export {
 } from "./sandbox.js";
 
 // Export types
-export type { VfsSandboxOptions, VfsSandboxErrorCode } from "./types.js";
+export type {
+  VfsSandboxOptions,
+  VfsSandboxMetadata,
+  VfsSandboxErrorCode,
+} from "./types.js";
 
 // Export error class (value export)
 export { VfsSandboxError } from "./types.js";

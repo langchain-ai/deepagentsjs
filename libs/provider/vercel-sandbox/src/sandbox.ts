@@ -16,12 +16,18 @@ import {
   type FileDownloadResponse,
   type FileOperationError,
   type FileUploadResponse,
+  type SandboxDeleteOptions,
+  type SandboxGetOrCreateOptions,
+  type SandboxListOptions,
+  type SandboxListResponse,
+  type SandboxProvider,
 } from "deepagents";
 
 import { getAuthCredentials } from "./auth.js";
 import {
   VercelSandboxError,
   type SnapshotInfo,
+  type VercelSandboxMetadata,
   type VercelSandboxOptions,
 } from "./types.js";
 
@@ -708,4 +714,161 @@ export function createVercelSandboxFactoryFromSandbox(
   sandbox: VercelSandbox,
 ): BackendFactory {
   return () => sandbox;
+}
+
+// ============================================================================
+// Sandbox Provider Implementation
+// ============================================================================
+
+/**
+ * Vercel Sandbox provider for lifecycle management.
+ *
+ * Implements the `SandboxProvider` interface to provide standardized
+ * lifecycle management (list, create, delete) for Vercel Sandboxes.
+ *
+ * This separates lifecycle management from sandbox execution:
+ * - Use `VercelSandboxProvider` to manage sandbox lifecycle
+ * - Use `VercelSandbox` (returned by `getOrCreate`) for execution
+ *
+ * ## Basic Usage
+ *
+ * ```typescript
+ * import { VercelSandboxProvider } from "@langchain/vercel-sandbox";
+ *
+ * const provider = new VercelSandboxProvider({ runtime: "node24" });
+ *
+ * // Create a new sandbox
+ * const sandbox = await provider.getOrCreate();
+ * console.log(`Created sandbox: ${sandbox.id}`);
+ *
+ * // Execute commands
+ * const result = await sandbox.execute("node --version");
+ *
+ * // Delete when done
+ * await provider.delete({ sandboxId: sandbox.id });
+ * ```
+ *
+ * ## Reconnecting to Existing Sandbox
+ *
+ * ```typescript
+ * // Reconnect to an existing sandbox
+ * const existing = await provider.getOrCreate({ sandboxId: "sb_abc123" });
+ * ```
+ */
+export class VercelSandboxProvider implements SandboxProvider<VercelSandboxMetadata> {
+  /** Configuration options for sandboxes created by this provider */
+  #options: VercelSandboxOptions;
+
+  /**
+   * Create a new VercelSandboxProvider.
+   *
+   * @param options - Configuration options applied to new sandboxes
+   *
+   * @example
+   * ```typescript
+   * const provider = new VercelSandboxProvider({
+   *   runtime: "node24",
+   *   timeout: 600000,
+   * });
+   * ```
+   */
+  constructor(options: VercelSandboxOptions = {}) {
+    this.#options = options;
+  }
+
+  /**
+   * List available sandboxes.
+   *
+   * Note: The Vercel Sandbox SDK does not currently provide a list API.
+   * This method returns an empty list. For sandbox management, use the
+   * Vercel Dashboard or track sandbox IDs in your application.
+   *
+   * @param options - Optional pagination options
+   * @returns Paginated list of sandbox metadata (currently empty)
+   *
+   * @example
+   * ```typescript
+   * const response = await provider.list();
+   * console.log(`Found ${response.items.length} sandboxes`);
+   * ```
+   */
+  async list(
+    options?: SandboxListOptions,
+  ): Promise<SandboxListResponse<VercelSandboxMetadata>> {
+    // Vercel Sandbox SDK doesn't provide a list API
+    // Users should track sandbox IDs in their application or use Vercel Dashboard
+    void options; // Unused - cursor pagination not applicable
+    return {
+      items: [],
+      cursor: null,
+    };
+  }
+
+  /**
+   * Get an existing sandbox or create a new one.
+   *
+   * If `sandboxId` is provided, reconnects to the existing sandbox.
+   * If `sandboxId` is undefined, creates a new sandbox with the
+   * provider's configuration options.
+   *
+   * @param options - Optional options including sandboxId to retrieve
+   * @returns An initialized VercelSandbox instance
+   * @throws {VercelSandboxError} If sandboxId is provided but not found
+   *
+   * @example
+   * ```typescript
+   * // Create new sandbox
+   * const newSandbox = await provider.getOrCreate();
+   *
+   * // Reconnect to existing
+   * const existing = await provider.getOrCreate({ sandboxId: "sb_abc123" });
+   * ```
+   */
+  async getOrCreate(
+    options?: SandboxGetOrCreateOptions,
+  ): Promise<VercelSandbox> {
+    if (options?.sandboxId) {
+      // Get existing sandbox
+      return VercelSandbox.get(options.sandboxId, { auth: this.#options.auth });
+    }
+
+    // Create new sandbox
+    return VercelSandbox.create(this.#options);
+  }
+
+  /**
+   * Delete a sandbox.
+   *
+   * This stops the sandbox and releases all resources. The operation
+   * is idempotent - calling delete on a non-existent or already-stopped
+   * sandbox will succeed without error.
+   *
+   * @param options - Options including the sandboxId to delete
+   *
+   * @example
+   * ```typescript
+   * await provider.delete({ sandboxId: "sb_abc123" });
+   *
+   * // Safe to call multiple times
+   * await provider.delete({ sandboxId: "sb_abc123" }); // No error
+   * ```
+   */
+  async delete(options: SandboxDeleteOptions): Promise<void> {
+    try {
+      const sandbox = await VercelSandbox.get(options.sandboxId, {
+        auth: this.#options.auth,
+      });
+      await sandbox.stop();
+    } catch (error) {
+      // Idempotent - if sandbox doesn't exist or is already stopped, succeed silently
+      if (
+        error instanceof VercelSandboxError &&
+        error.code === "SANDBOX_NOT_FOUND"
+      ) {
+        return;
+      }
+      // Re-throw unexpected errors
+      throw error;
+    }
+  }
 }
