@@ -4,14 +4,8 @@ export default defineConfig(({ mode }) => ({
   test: {
     globals: true,
     environment: "node",
-    include:
-      mode === "int"
-        ? ["src/**/*.int.test.ts"]
-        : ["src/**/*.test.ts"],
-    exclude:
-      mode === "int"
-        ? []
-        : ["src/**/*.int.test.ts"],
+    include: mode === "int" ? ["src/**/*.int.test.ts"] : ["src/**/*.test.ts"],
+    exclude: mode === "int" ? [] : ["src/**/*.int.test.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

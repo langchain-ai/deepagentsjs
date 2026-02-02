@@ -95,7 +95,9 @@ console.log(add(2, 3));
     it("should execute shell commands with pipes", async () => {
       sandbox = await VfsSandbox.create();
 
-      const result = await sandbox.execute("echo 'hello world' | tr 'a-z' 'A-Z'");
+      const result = await sandbox.execute(
+        "echo 'hello world' | tr 'a-z' 'A-Z'",
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.output.trim()).toBe("HELLO WORLD");
@@ -154,13 +156,17 @@ echo "Script done"
       sandbox = await VfsSandbox.create();
 
       // Create a file via command
-      const createResult = await sandbox.execute('echo "Created by command" > output.txt');
+      const createResult = await sandbox.execute(
+        'echo "Created by command" > output.txt',
+      );
       expect(createResult.exitCode).toBe(0);
 
       // Verify file is now in VFS
       const downloaded = await sandbox.downloadFiles(["output.txt"]);
       expect(downloaded[0].error).toBeNull();
-      expect(new TextDecoder().decode(downloaded[0].content!).trim()).toBe("Created by command");
+      expect(new TextDecoder().decode(downloaded[0].content!).trim()).toBe(
+        "Created by command",
+      );
     });
 
     it("should modify existing files and sync changes back", async () => {
@@ -190,9 +196,13 @@ echo "Script done"
       `);
       expect(result.exitCode).toBe(0);
 
-      const downloaded = await sandbox.downloadFiles(["deep/nested/dir/file.txt"]);
+      const downloaded = await sandbox.downloadFiles([
+        "deep/nested/dir/file.txt",
+      ]);
       expect(downloaded[0].error).toBeNull();
-      expect(new TextDecoder().decode(downloaded[0].content!).trim()).toBe("nested file");
+      expect(new TextDecoder().decode(downloaded[0].content!).trim()).toBe(
+        "nested file",
+      );
     });
 
     it("should handle file deletion during execution", async () => {
@@ -289,7 +299,9 @@ console.log('Processed successfully');
       const downloaded = await sandbox.downloadFiles(["output.json"]);
       expect(downloaded[0].error).toBeNull();
 
-      const output = JSON.parse(new TextDecoder().decode(downloaded[0].content!));
+      const output = JSON.parse(
+        new TextDecoder().decode(downloaded[0].content!),
+      );
       expect(output.name).toBe("Test");
       expect(output.count).toBe(50);
       expect(output.processed).toBe(true);
@@ -353,7 +365,9 @@ console.log('Processed successfully');
       const result = await sandbox.execute("nonexistent_command_12345");
 
       expect(result.exitCode).not.toBe(0);
-      expect(result.output.toLowerCase()).toMatch(/not found|command not found/);
+      expect(result.output.toLowerCase()).toMatch(
+        /not found|command not found/,
+      );
     });
 
     it("should handle permission errors in scripts", async () => {
@@ -389,7 +403,9 @@ try {
       expect(sandbox.isRunning).toBe(true);
 
       const downloaded = await sandbox.downloadFiles(["/factory.txt"]);
-      expect(new TextDecoder().decode(downloaded[0].content!)).toBe("Created by factory");
+      expect(new TextDecoder().decode(downloaded[0].content!)).toBe(
+        "Created by factory",
+      );
     });
 
     it("should create independent sandboxes from factory", async () => {
@@ -406,7 +422,9 @@ try {
         expect(sandbox1).not.toBe(sandbox2);
 
         // Create file in sandbox1
-        await sandbox1.uploadFiles([["test.txt", new TextEncoder().encode("sandbox1")]]);
+        await sandbox1.uploadFiles([
+          ["test.txt", new TextEncoder().encode("sandbox1")],
+        ]);
 
         // Should not exist in sandbox2
         const downloaded = await sandbox2.downloadFiles(["test.txt"]);
@@ -442,7 +460,9 @@ try {
       // Should be downloadable from VFS
       const downloaded = await sandbox.downloadFiles(["new-file.txt"]);
       expect(downloaded[0].error).toBeNull();
-      expect(new TextDecoder().decode(downloaded[0].content!).trim()).toBe("created during exec");
+      expect(new TextDecoder().decode(downloaded[0].content!).trim()).toBe(
+        "created during exec",
+      );
     });
 
     it("should maintain file state across multiple executions", async () => {
