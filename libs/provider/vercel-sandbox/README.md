@@ -110,7 +110,9 @@ try {
   });
 
   const result = await agent.invoke({
-    messages: [{ role: "user", content: "Create a hello world Node.js app and run it" }],
+    messages: [
+      { role: "user", content: "Create a hello world Node.js app and run it" },
+    ],
   });
 } finally {
   await sandbox.stop();
@@ -350,50 +352,50 @@ try {
 
 ### Error Codes
 
-| Code                     | Description                                  |
-| ------------------------ | -------------------------------------------- |
-| `NOT_INITIALIZED`        | Sandbox not initialized - call initialize()  |
-| `ALREADY_INITIALIZED`    | Cannot initialize twice                      |
-| `AUTHENTICATION_FAILED`  | Invalid or missing Vercel token              |
-| `SANDBOX_CREATION_FAILED`| Failed to create sandbox                     |
-| `SANDBOX_NOT_FOUND`      | Sandbox ID not found or expired              |
-| `COMMAND_TIMEOUT`        | Command execution timed out                  |
-| `COMMAND_FAILED`         | Command execution failed                     |
-| `FILE_OPERATION_FAILED`  | File read/write failed                       |
-| `SNAPSHOT_FAILED`        | Snapshot creation failed                     |
-| `RESOURCE_LIMIT_EXCEEDED`| CPU, memory, or storage limits exceeded      |
+| Code                      | Description                                 |
+| ------------------------- | ------------------------------------------- |
+| `NOT_INITIALIZED`         | Sandbox not initialized - call initialize() |
+| `ALREADY_INITIALIZED`     | Cannot initialize twice                     |
+| `AUTHENTICATION_FAILED`   | Invalid or missing Vercel token             |
+| `SANDBOX_CREATION_FAILED` | Failed to create sandbox                    |
+| `SANDBOX_NOT_FOUND`       | Sandbox ID not found or expired             |
+| `COMMAND_TIMEOUT`         | Command execution timed out                 |
+| `COMMAND_FAILED`          | Command execution failed                    |
+| `FILE_OPERATION_FAILED`   | File read/write failed                      |
+| `SNAPSHOT_FAILED`         | Snapshot creation failed                    |
+| `RESOURCE_LIMIT_EXCEEDED` | CPU, memory, or storage limits exceeded     |
 
 ## Inherited BaseSandbox Methods
 
 `VercelSandbox` extends `BaseSandbox` and inherits these convenience methods:
 
-| Method     | Description                           |
-| ---------- | ------------------------------------- |
-| `read()`   | Read a file's contents                |
-| `write()`  | Write content to a file               |
-| `edit()`   | Replace text in a file                |
-| `lsInfo()` | List directory contents               |
-| `grepRaw()`| Search for patterns in files          |
-| `globInfo()`| Find files matching a pattern        |
+| Method       | Description                   |
+| ------------ | ----------------------------- |
+| `read()`     | Read a file's contents        |
+| `write()`    | Write content to a file       |
+| `edit()`     | Replace text in a file        |
+| `lsInfo()`   | List directory contents       |
+| `grepRaw()`  | Search for patterns in files  |
+| `globInfo()` | Find files matching a pattern |
 
 ## Limits and Constraints
 
-| Constraint              | Value                                      |
-| ----------------------- | ------------------------------------------ |
-| Max timeout (Hobby)     | 45 minutes                                 |
-| Max timeout (Pro/Ent)   | 5 hours                                    |
-| Snapshot expiration     | 7 days                                     |
-| Available runtimes      | `node24`, `node22`, `python3.13`           |
-| Working directory       | `/vercel/sandbox`                          |
-| Network access          | Full (by default)                          |
-| Interactive commands    | Not supported (no TTY)                     |
+| Constraint            | Value                            |
+| --------------------- | -------------------------------- |
+| Max timeout (Hobby)   | 45 minutes                       |
+| Max timeout (Pro/Ent) | 5 hours                          |
+| Snapshot expiration   | 7 days                           |
+| Available runtimes    | `node24`, `node22`, `python3.13` |
+| Working directory     | `/vercel/sandbox`                |
+| Network access        | Full (by default)                |
+| Interactive commands  | Not supported (no TTY)           |
 
 ## Environment Variables
 
-| Variable              | Description                                     |
-| --------------------- | ----------------------------------------------- |
-| `VERCEL_OIDC_TOKEN`   | Vercel OIDC token (set via `vercel env pull`)   |
-| `VERCEL_ACCESS_TOKEN` | Alternative: Vercel personal access token       |
+| Variable              | Description                                   |
+| --------------------- | --------------------------------------------- |
+| `VERCEL_OIDC_TOKEN`   | Vercel OIDC token (set via `vercel env pull`) |
+| `VERCEL_ACCESS_TOKEN` | Alternative: Vercel personal access token     |
 
 ## API Reference
 
@@ -413,11 +415,16 @@ class VercelSandbox extends BaseSandbox {
 
   // Static factories
   static create(options?: VercelSandboxOptions): Promise<VercelSandbox>;
-  static get(sandboxId: string, options?: Pick<VercelSandboxOptions, "auth">): Promise<VercelSandbox>;
+  static get(
+    sandboxId: string,
+    options?: Pick<VercelSandboxOptions, "auth">,
+  ): Promise<VercelSandbox>;
 
   // Operations
   execute(command: string): Promise<ExecuteResponse>;
-  uploadFiles(files: Array<[string, Uint8Array]>): Promise<FileUploadResponse[]>;
+  uploadFiles(
+    files: Array<[string, Uint8Array]>,
+  ): Promise<FileUploadResponse[]>;
   downloadFiles(paths: string[]): Promise<FileDownloadResponse[]>;
 
   // Sandbox features
