@@ -9,6 +9,8 @@ import type {
   FileDownloadResponse,
   FileInfo,
 } from "../backends/protocol.js";
+import { StateBackend } from "../backends/state.js";
+import { createFileData } from "../backends/utils.js";
 
 // Mock backend that returns specified files and directory listings
 function createMockBackend(config: {
@@ -670,5 +672,184 @@ describe("skillsMetadataReducer", () => {
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual(update[0]); // Full replacement with update
     });
+  });
+});
+
+describe("StateBackend integration", () => {
+  const VALID_SKILL_MD = `---
+name: test-skill
+description: A test skill for StateBackend integration
+---
+
+# Test Skill
+
+Instructions for the test skill.
+`;
+
+  const ANOTHER_SKILL_MD = `---
+name: another-skill
+description: Another test skill
+---
+
+# Another Skill
+`;
+
+  it("should load skills from state.files via StateBackend", async () => {
+    const middleware = createSkillsMiddleware({
+      backend: ({ state }: { state: unknown }) =>
+        new StateBackend({ state, store: undefined }),
+      sources: ["/skills/"],
+    });
+
+    const state = {
+      files: {
+        "/skills/test-skill/SKILL.md": createFileData(VALID_SKILL_MD),
+      },
+    };
+
+    // @ts-expect-error - typing issue in LangChain
+    const result = await middleware.beforeAgent?.(state);
+
+    expect(result).toBeDefined();
+    expect(result?.skillsMetadata).toHaveLength(1);
+    expect(result?.skillsMetadata[0].name).toBe("test-skill");
+    expect(result?.skillsMetadata[0].description).toBe(
+      "A test skill for StateBackend integration",
+    );
+  });
+
+  it("should load multiple skills from state.files", async () => {
+    const middleware = createSkillsMiddleware({
+      backend: ({ state }: { state: unknown }) =>
+        new StateBackend({ state, store: undefined }),
+      sources: ["/skills/"],
+    });
+
+    const state = {
+      files: {
+        "/skills/test-skill/SKILL.md": createFileData(VALID_SKILL_MD),
+        "/skills/another-skill/SKILL.md": createFileData(ANOTHER_SKILL_MD),
+      },
+    };
+
+    // @ts-expect-error - typing issue in LangChain
+    const result = await middleware.beforeAgent?.(state);
+
+    expect(result).toBeDefined();
+    expect(result?.skillsMetadata).toHaveLength(2);
+    expect(result?.skillsMetadata.map((s: any) => s.name).sort()).toEqual([
+      "another-skill",
+      "test-skill",
+    ]);
+  });
+
+  it("should return empty skills when state.files is empty", async () => {
+    const middleware = createSkillsMiddleware({
+      backend: ({ state }: { state: unknown }) =>
+        new StateBackend({ state, store: undefined }),
+      sources: ["/skills/"],
+    });
+
+    const state = {
+      files: {},
+    };
+
+    // @ts-expect-error - typing issue in LangChain
+    const result = await middleware.beforeAgent?.(state);
+
+    expect(result).toBeDefined();
+    expect(result?.skillsMetadata).toEqual([]);
+  });
+
+  it("should return empty skills when state.files is undefined", async () => {
+    const middleware = createSkillsMiddleware({
+      backend: ({ state }: { state: unknown }) =>
+        new StateBackend({ state, store: undefined }),
+      sources: ["/skills/"],
+    });
+
+    // This simulates the bug: state without files field
+    const state = {};
+
+    // @ts-expect-error - typing issue in LangChain
+    const result = await middleware.beforeAgent?.(state);
+
+    expect(result).toBeDefined();
+    expect(result?.skillsMetadata).toEqual([]);
+  });
+
+  it("should load skills from multiple sources via StateBackend", async () => {
+    const userSkillMd = `---
+name: user-skill
+description: User-level skill
+---
+# User Skill`;
+
+    const projectSkillMd = `---
+name: project-skill
+description: Project-level skill
+---
+# Project Skill`;
+
+    const middleware = createSkillsMiddleware({
+      backend: ({ state }: { state: unknown }) =>
+        new StateBackend({ state, store: undefined }),
+      sources: ["/skills/user/", "/skills/project/"],
+    });
+
+    const state = {
+      files: {
+        "/skills/user/user-skill/SKILL.md": createFileData(userSkillMd),
+        "/skills/project/project-skill/SKILL.md":
+          createFileData(projectSkillMd),
+      },
+    };
+
+    // @ts-expect-error - typing issue in LangChain
+    const result = await middleware.beforeAgent?.(state);
+
+    expect(result).toBeDefined();
+    expect(result?.skillsMetadata).toHaveLength(2);
+    expect(result?.skillsMetadata.map((s: any) => s.name).sort()).toEqual([
+      "project-skill",
+      "user-skill",
+    ]);
+  });
+
+  it("should override user skills with project skills (last source wins)", async () => {
+    const userVersion = `---
+name: shared-skill
+description: User version
+---
+# User`;
+
+    const projectVersion = `---
+name: shared-skill
+description: Project version (should win)
+---
+# Project`;
+
+    const middleware = createSkillsMiddleware({
+      backend: ({ state }: { state: unknown }) =>
+        new StateBackend({ state, store: undefined }),
+      sources: ["/skills/user/", "/skills/project/"],
+    });
+
+    const state = {
+      files: {
+        "/skills/user/shared-skill/SKILL.md": createFileData(userVersion),
+        "/skills/project/shared-skill/SKILL.md": createFileData(projectVersion),
+      },
+    };
+
+    // @ts-expect-error - typing issue in LangChain
+    const result = await middleware.beforeAgent?.(state);
+
+    expect(result).toBeDefined();
+    expect(result?.skillsMetadata).toHaveLength(1);
+    expect(result?.skillsMetadata[0].name).toBe("shared-skill");
+    expect(result?.skillsMetadata[0].description).toBe(
+      "Project version (should win)",
+    );
   });
 });
