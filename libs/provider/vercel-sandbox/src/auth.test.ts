@@ -105,12 +105,14 @@ describe("getAuthToken", () => {
 
     it("should throw when options provided but no token", () => {
       expect(() => getAuthToken({ type: "oidc" })).toThrow(
-        "Vercel authentication required"
+        "Vercel authentication required",
       );
     });
 
     it("should throw when type-only options provided without env vars", () => {
-      expect(() => getAuthToken({ type: "oidc" })).toThrow("Vercel authentication required");
+      expect(() => getAuthToken({ type: "oidc" })).toThrow(
+        "Vercel authentication required",
+      );
     });
   });
 
