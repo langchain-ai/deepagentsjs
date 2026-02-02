@@ -105,7 +105,7 @@ export function getAuthToken(options?: VercelSandboxOptions["auth"]): string {
       "   - VERCEL_TEAM_ID: From your team settings\n" +
       "   - VERCEL_PROJECT_ID: From your project settings\n\n" +
       "3. Pass credentials directly in options:\n" +
-      "   new VercelSandbox({ auth: { type: 'access_token', token: '...', teamId: '...', projectId: '...' } })"
+      "   new VercelSandbox({ auth: { type: 'access_token', token: '...', teamId: '...', projectId: '...' } })",
   );
 }
 
@@ -120,7 +120,7 @@ export function getAuthToken(options?: VercelSandboxOptions["auth"]): string {
  * @throws {Error} If no authentication token is available
  */
 export function getAuthCredentials(
-  options?: VercelSandboxOptions["auth"]
+  options?: VercelSandboxOptions["auth"],
 ): VercelCredentials {
   const token = getAuthToken(options);
 
