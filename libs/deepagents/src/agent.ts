@@ -194,8 +194,6 @@ export function createDeepAgent<
     anthropicPromptCachingMiddleware({
       unsupportedModelBehavior: "ignore",
     }),
-    // Patches tool calls to ensure compatibility across different model providers
-    createPatchToolCallsMiddleware(),
     // Add memory middleware if memory sources provided
     ...(memory != null && memory.length > 0
       ? [
@@ -214,6 +212,14 @@ export function createDeepAgent<
     // @ts-expect-error - builtInMiddleware is readonly
     builtInMiddleware.push(humanInTheLoopMiddleware({ interruptOn }));
   }
+
+  // Patches tool calls to ensure compatibility across different model providers
+  // IMPORTANT: This must run AFTER humanInTheLoopMiddleware so that when a tool call
+  // is rejected, the dangling tool_call_id can be properly patched with a synthetic
+  // ToolMessage. If patchToolCalls runs before HITL, the patch may be overwritten
+  // when HITL processes the resume decision.
+  // @ts-expect-error - builtInMiddleware is readonly
+  builtInMiddleware.push(createPatchToolCallsMiddleware());
 
   // Combine built-in middleware with custom middleware
   // The custom middleware is typed as TMiddleware to preserve type information

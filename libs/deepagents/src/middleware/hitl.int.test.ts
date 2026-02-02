@@ -132,6 +132,103 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
   );
 
   it.concurrent(
+    "should not leave dangling tool_call_id when rejecting an interrupted tool with parallel tool calls (issue #15)",
+    { timeout: 120000 },
+    async () => {
+      // Regression test for GitHub issue #15:
+      // When two tools are called in parallel (one interrupted, one not),
+      // rejecting the interrupted tool should not leave a dangling tool_call_id.
+      // The provider would throw: "An assistant message with 'tool_calls' must be
+      // followed by tool messages responding to each 'tool_call_id'."
+
+      const checkpointer = new MemorySaver();
+
+      // interrupted_tool requires approval, free_tool does not
+      const interruptConfig: Record<string, boolean | InterruptOnConfig> = {
+        sample_tool: true, // This one will be interrupted
+        get_weather: false, // This one will run freely
+      };
+
+      const agent = createDeepAgent({
+        tools: [sampleTool, getWeather],
+        interruptOn: interruptConfig,
+        checkpointer,
+      });
+
+      const config = { configurable: { thread_id: uuidv4() } };
+      assertAllDeepAgentQualities(agent);
+
+      // First invocation - ask agent to call both tools in parallel
+      // sample_tool will be interrupted, get_weather will run freely
+      const result = await agent.invoke(
+        {
+          messages: [
+            {
+              role: "user",
+              content:
+                "Call both sample_tool AND get_weather for New York in parallel.",
+            },
+          ],
+        },
+        config,
+      );
+
+      // Check that both tools were called
+      const agentMessages = result.messages.filter((msg: any) =>
+        AIMessage.isInstance(msg),
+      );
+      const toolCalls = agentMessages.flatMap(
+        (msg: any) => msg.tool_calls || [],
+      );
+
+      expect(toolCalls.some((tc: any) => tc.name === "sample_tool")).toBe(true);
+      expect(toolCalls.some((tc: any) => tc.name === "get_weather")).toBe(true);
+
+      // Check that we have an interrupt for sample_tool
+      expect(result.__interrupt__).toBeDefined();
+      expect(result.__interrupt__).toHaveLength(1);
+
+      const interrupts = result.__interrupt__?.[0].value as HITLRequest;
+      expect(interrupts.actionRequests).toHaveLength(1);
+      expect(interrupts.actionRequests[0].name).toBe("sample_tool");
+
+      // REJECT the interrupted tool call
+      // This is the key scenario from issue #15 - rejecting should not leave
+      // a dangling tool_call_id
+      const result2 = await agent.invoke(
+        new Command({
+          resume: {
+            decisions: [{ type: "reject" }],
+          },
+        }),
+        config,
+      );
+
+      // The agent should complete without errors (no dangling tool_call_id)
+      expect(result2.__interrupt__).toBeUndefined();
+
+      // Check that we have tool results for get_weather (the non-interrupted tool)
+      const toolResults = result2.messages.filter(
+        (msg: any) => msg._getType() === "tool",
+      );
+      expect(toolResults.some((tr: any) => tr.name === "get_weather")).toBe(
+        true,
+      );
+
+      // The sample_tool should have a synthetic ToolMessage (cancelled/rejected)
+      // or the tool call should be handled in some way that doesn't leave it dangling
+      const sampleToolResult = toolResults.find(
+        (tr: any) => tr.name === "sample_tool",
+      );
+      // Either there's a result for sample_tool (rejection message) or
+      // the agent handled it properly without leaving dangling tool_call_id
+      if (sampleToolResult) {
+        expect(typeof sampleToolResult.content).toBe("string");
+      }
+    },
+  );
+
+  it.concurrent(
     "should handle HITL with subagents",
     { timeout: 120000 },
     async () => {
