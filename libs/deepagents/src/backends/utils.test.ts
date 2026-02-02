@@ -258,6 +258,33 @@ describe("performStringReplacement", () => {
     const result = performStringReplacement("foo foo foo", "foo", "bar", true);
     expect(result).toEqual(["bar bar bar", 3]);
   });
+
+  it("should return error if oldString is empty with non-empty content", () => {
+    const result = performStringReplacement("hello world", "", "bar", false);
+    expect(typeof result).toBe("string");
+    expect(result).toContain("oldString cannot be empty");
+  });
+
+  it("should set initial content when both content and oldString are empty", () => {
+    const result = performStringReplacement("", "", "initial content", false);
+    expect(result).toEqual(["initial content", 0]);
+  });
+
+  it("should set initial content when both content and oldString are empty with replaceAll", () => {
+    const result = performStringReplacement("", "", "initial content", true);
+    expect(result).toEqual(["initial content", 0]);
+  });
+
+  it("should return error if oldString is empty with replaceAll true and non-empty content", () => {
+    const result = performStringReplacement("hello", "", "bar", true);
+    expect(typeof result).toBe("string");
+    expect(result).toContain("oldString cannot be empty");
+  });
+
+  it("should allow setting empty content on empty file", () => {
+    const result = performStringReplacement("", "", "", false);
+    expect(result).toEqual(["", 0]);
+  });
 });
 
 describe("truncateIfTooLong", () => {

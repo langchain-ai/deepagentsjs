@@ -184,6 +184,10 @@ export function formatReadResponse(
  * @param newString - Replacement string
  * @param replaceAll - Whether to replace all occurrences
  * @returns Tuple of [new_content, occurrences] on success, or error message string
+ *
+ * Special case: When both content and oldString are empty, this sets the initial
+ * content to newString. This allows editing empty files by treating empty oldString
+ * as "set initial content" rather than "replace nothing".
  */
 export function performStringReplacement(
   content: string,
@@ -191,6 +195,16 @@ export function performStringReplacement(
   newString: string,
   replaceAll: boolean,
 ): [string, number] | string {
+  // Special case: empty file with empty oldString sets initial content
+  if (content === "" && oldString === "") {
+    return [newString, 0];
+  }
+
+  // Validate that oldString is not empty (for non-empty files)
+  if (oldString === "") {
+    return "Error: oldString cannot be empty when file has content";
+  }
+
   // Use split to count occurrences (simpler than regex)
   const occurrences = content.split(oldString).length - 1;
 
