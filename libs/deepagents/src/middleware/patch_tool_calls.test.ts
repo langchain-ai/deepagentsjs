@@ -1,18 +1,26 @@
 import { describe, it, expect } from "vitest";
-import { HumanMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
 import { createPatchToolCallsMiddleware } from "./patch_tool_calls.js";
+import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
+import { RemoveMessage } from "@langchain/core/messages";
+import { REMOVE_ALL_MESSAGES } from "@langchain/langgraph";
 
 describe("createPatchToolCallsMiddleware", () => {
-  describe("basic functionality", () => {
-    it("should return undefined when no messages", async () => {
+  describe("no patching needed (should return undefined)", () => {
+    it("should return undefined when messages is empty", async () => {
       const middleware = createPatchToolCallsMiddleware();
-
-      // @ts-expect-error - typing issue
+      // @ts-expect-error - typing issue in LangChain
       const result = await middleware.beforeAgent?.({ messages: [] });
       expect(result).toBeUndefined();
     });
 
-    it("should not modify messages without tool calls", async () => {
+    it("should return undefined when messages is undefined", async () => {
+      const middleware = createPatchToolCallsMiddleware();
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({ messages: undefined });
+      expect(result).toBeUndefined();
+    });
+
+    it("should return undefined when there are no AI messages with tool calls", async () => {
       const middleware = createPatchToolCallsMiddleware();
       const messages = [
         new HumanMessage({ content: "Hello" }),
@@ -20,50 +28,12 @@ describe("createPatchToolCallsMiddleware", () => {
         new HumanMessage({ content: "How are you?" }),
       ];
 
-      // @ts-expect-error - typing issue
+      // @ts-expect-error - typing issue in LangChain
       const result = await middleware.beforeAgent?.({ messages });
-
-      expect(result).toBeDefined();
-      // Should have RemoveMessage + original messages
-      expect(result?.messages.length).toBe(messages.length + 1);
-    });
-  });
-
-  describe("dangling tool calls", () => {
-    it("should add synthetic ToolMessage for dangling tool call", async () => {
-      const middleware = createPatchToolCallsMiddleware();
-      const messages = [
-        new HumanMessage({ content: "Read a file" }),
-        new AIMessage({
-          content: "",
-          tool_calls: [
-            {
-              id: "call_123",
-              name: "read_file",
-              args: { path: "/test.txt" },
-            },
-          ],
-        }),
-        new HumanMessage({ content: "Never mind" }),
-      ];
-
-      // @ts-expect-error - typing issue
-      const result = await middleware.beforeAgent?.({ messages });
-
-      expect(result).toBeDefined();
-      // Should have RemoveMessage + 3 original + 1 synthetic ToolMessage
-      expect(result?.messages.length).toBe(5);
-
-      // Find the synthetic ToolMessage and verify its content
-      const toolMessage = result?.messages.find(
-        (m: any) => ToolMessage.isInstance(m) && m.tool_call_id === "call_123",
-      );
-      expect(toolMessage).toBeDefined();
-      expect(toolMessage?.content).toContain("cancelled");
-      expect(toolMessage?.name).toBe("read_file");
+      expect(result).toBeUndefined();
     });
 
-    it("should not add ToolMessage when corresponding ToolMessage already exists", async () => {
+    it("should return undefined when all tool calls have corresponding ToolMessages", async () => {
       const middleware = createPatchToolCallsMiddleware();
       const messages = [
         new HumanMessage({ content: "Read a file" }),
@@ -85,15 +55,144 @@ describe("createPatchToolCallsMiddleware", () => {
         new AIMessage({ content: "Here's the file content" }),
       ];
 
-      // @ts-expect-error - typing issue
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({ messages });
+      expect(result).toBeUndefined();
+    });
+
+    it("should return undefined when AI message has empty tool_calls array", async () => {
+      const middleware = createPatchToolCallsMiddleware();
+      const messages = [
+        new AIMessage({
+          content: "No tools",
+          tool_calls: [],
+        }),
+      ];
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({ messages });
+      expect(result).toBeUndefined();
+    });
+
+    it("should return undefined when AI message has null tool_calls", async () => {
+      const middleware = createPatchToolCallsMiddleware();
+      const messages = [
+        new AIMessage({
+          content: "Also no tools",
+          tool_calls: null as any,
+        }),
+      ];
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({ messages });
+      expect(result).toBeUndefined();
+    });
+  });
+
+  describe("dangling tool calls (should patch)", () => {
+    it("should add synthetic ToolMessage for dangling tool call", async () => {
+      const middleware = createPatchToolCallsMiddleware();
+      const messages = [
+        new HumanMessage({ content: "Read a file" }),
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "call_123",
+              name: "read_file",
+              args: { path: "/test.txt" },
+            },
+          ],
+        }),
+        new HumanMessage({ content: "Never mind" }),
+      ];
+
+      // @ts-expect-error - typing issue in LangChain
       const result = await middleware.beforeAgent?.({ messages });
 
       expect(result).toBeDefined();
-      // Should have RemoveMessage + 4 original messages, no synthetic ones
+      // Should have RemoveMessage + 3 original + 1 synthetic ToolMessage
       expect(result?.messages.length).toBe(5);
+
+      // First message should be RemoveMessage
+      const firstMsg = result?.messages[0];
+      expect(firstMsg).toBeInstanceOf(RemoveMessage);
+      expect((firstMsg as RemoveMessage).id).toBe(REMOVE_ALL_MESSAGES);
+
+      // Find the synthetic ToolMessage and verify its content
+      const toolMessage = result?.messages.find(
+        (m: any) => ToolMessage.isInstance(m) && m.tool_call_id === "call_123",
+      );
+      expect(toolMessage).toBeDefined();
+      expect(toolMessage?.content).toContain("cancelled");
+      expect(toolMessage?.name).toBe("read_file");
     });
 
-    it("should handle mixed scenario: some tool calls have responses, some don't", async () => {
+    it("should patch multiple dangling tool calls in a single AI message", async () => {
+      const middleware = createPatchToolCallsMiddleware();
+      const messages = [
+        new HumanMessage({ content: "Do multiple things" }),
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            { id: "call_1", name: "tool_a", args: {} },
+            { id: "call_2", name: "tool_b", args: {} },
+          ],
+        }),
+        // Both tool calls are dangling
+      ];
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({ messages });
+
+      expect(result).toBeDefined();
+      // RemoveMessage + 2 original + 2 synthetic ToolMessages
+      expect(result?.messages.length).toBe(5);
+
+      // Should have synthetic ToolMessages for both dangling calls
+      const syntheticMsgs = result?.messages.filter(
+        (m: any) =>
+          ToolMessage.isInstance(m) &&
+          (m.tool_call_id === "call_1" || m.tool_call_id === "call_2"),
+      );
+      expect(syntheticMsgs?.length).toBe(2);
+    });
+
+    it("should handle multiple AI messages with dangling tool calls", async () => {
+      const middleware = createPatchToolCallsMiddleware();
+      const messages = [
+        new AIMessage({
+          content: "",
+          tool_calls: [{ id: "call_1", name: "tool_a", args: {} }],
+        }),
+        new HumanMessage({ content: "msg1" }),
+        new AIMessage({
+          content: "",
+          tool_calls: [{ id: "call_2", name: "tool_b", args: {} }],
+        }),
+        new HumanMessage({ content: "msg2" }),
+      ];
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({ messages });
+
+      expect(result).toBeDefined();
+      // RemoveMessage + 4 original + 2 synthetic ToolMessages
+      expect(result?.messages.length).toBe(7);
+
+      // Both tool calls should have synthetic responses
+      const toolMessage1 = result?.messages.find(
+        (m: any) => ToolMessage.isInstance(m) && m.tool_call_id === "call_1",
+      );
+      const toolMessage2 = result?.messages.find(
+        (m: any) => ToolMessage.isInstance(m) && m.tool_call_id === "call_2",
+      );
+
+      expect(toolMessage1).toBeDefined();
+      expect(toolMessage2).toBeDefined();
+    });
+
+    it("should only patch dangling tool calls, not ones with responses", async () => {
       const middleware = createPatchToolCallsMiddleware();
       const messages = [
         new HumanMessage({ content: "Do two things" }),
@@ -120,11 +219,11 @@ describe("createPatchToolCallsMiddleware", () => {
         new HumanMessage({ content: "Thanks" }),
       ];
 
-      // @ts-expect-error - typing issue
+      // @ts-expect-error - typing issue in LangChain
       const result = await middleware.beforeAgent?.({ messages });
 
       expect(result).toBeDefined();
-      // Should have RemoveMessage + 4 original + 1 synthetic ToolMessage for call_1
+      // RemoveMessage + 4 original + 1 synthetic ToolMessage for call_1
       expect(result?.messages.length).toBe(6);
 
       // Check synthetic ToolMessage for call_1 exists (dangling)
@@ -145,63 +244,6 @@ describe("createPatchToolCallsMiddleware", () => {
           m.content === "File written successfully",
       );
       expect(originalToolMessage).toBeDefined();
-    });
-  });
-
-  describe("edge cases", () => {
-    it("should handle AI message with empty or null tool_calls", async () => {
-      const middleware = createPatchToolCallsMiddleware();
-      const messages = [
-        new AIMessage({
-          content: "No tools",
-          tool_calls: [],
-        }),
-        new AIMessage({
-          content: "Also no tools",
-          tool_calls: null as any,
-        }),
-      ];
-
-      // @ts-expect-error - typing issue
-      const result = await middleware.beforeAgent?.({ messages });
-
-      expect(result).toBeDefined();
-      // Should have RemoveMessage + 2 original messages
-      expect(result?.messages.length).toBe(3);
-    });
-
-    it("should handle multiple AI messages with dangling tool calls", async () => {
-      const middleware = createPatchToolCallsMiddleware();
-      const messages = [
-        new AIMessage({
-          content: "",
-          tool_calls: [{ id: "call_1", name: "tool_a", args: {} }],
-        }),
-        new HumanMessage({ content: "msg1" }),
-        new AIMessage({
-          content: "",
-          tool_calls: [{ id: "call_2", name: "tool_b", args: {} }],
-        }),
-        new HumanMessage({ content: "msg2" }),
-      ];
-
-      // @ts-expect-error - typing issue
-      const result = await middleware.beforeAgent?.({ messages });
-
-      expect(result).toBeDefined();
-      // RemoveMessage + 4 original + 2 synthetic ToolMessages
-      expect(result?.messages.length).toBe(7);
-
-      // Both tool calls should have synthetic responses
-      const toolMessage1 = result?.messages.find(
-        (m: any) => ToolMessage.isInstance(m) && m.tool_call_id === "call_1",
-      );
-      const toolMessage2 = result?.messages.find(
-        (m: any) => ToolMessage.isInstance(m) && m.tool_call_id === "call_2",
-      );
-
-      expect(toolMessage1).toBeDefined();
-      expect(toolMessage2).toBeDefined();
     });
   });
 });

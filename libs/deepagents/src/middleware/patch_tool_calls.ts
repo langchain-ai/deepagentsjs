@@ -41,6 +41,7 @@ export function createPatchToolCallsMiddleware() {
       }
 
       const patchedMessages: any[] = [];
+      let needsPatch = false;
 
       // Iterate over the messages and add any dangling tool calls
       for (let i = 0; i < messages.length; i++) {
@@ -60,6 +61,7 @@ export function createPatchToolCallsMiddleware() {
 
             if (!correspondingToolMsg) {
               // We have a dangling tool call which needs a ToolMessage
+              needsPatch = true;
               const toolMsg = `Tool call ${toolCall.name} with id ${toolCall.id} was cancelled - another message came in before it could be completed.`;
               patchedMessages.push(
                 new ToolMessage({
@@ -71,6 +73,13 @@ export function createPatchToolCallsMiddleware() {
             }
           }
         }
+      }
+
+      /**
+       * Only trigger REMOVE_ALL_MESSAGES if patching is actually needed
+       */
+      if (!needsPatch) {
+        return;
       }
 
       // Return state update with RemoveMessage followed by patched messages
