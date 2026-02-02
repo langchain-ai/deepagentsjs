@@ -12,9 +12,8 @@ import type {
 import { createFileData } from "../backends/utils.js";
 import { createDeepAgent } from "../agent.js";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
-import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import { HumanMessage, type BaseMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
-import { createMiddleware } from "langchain";
 
 // Mock backend that returns specified files and directory listings
 function createMockBackend(config: {
@@ -705,33 +704,37 @@ description: Another test skill
 `;
 
   /**
-   * Creates a middleware that captures the system prompt from wrapModelCall.
-   * Returns an AIMessage directly to end the agent loop (we only need to capture the prompt).
+   * Helper to extract system prompt content from model invoke spy.
+   * The system message can have content as string or array of content blocks.
    */
-  function createCaptureMiddleware(capture: { systemPrompt: string }) {
-    return createMiddleware({
-      name: "CaptureMiddleware",
-      wrapModelCall: async (request) => {
-        capture.systemPrompt = request.systemPrompt || "";
-        // Return AIMessage directly to end the loop - we only care about capturing the prompt
-        return new AIMessage("Done");
-      },
-    });
+  function getSystemPromptFromSpy(
+    invokeSpy: ReturnType<typeof vi.spyOn>,
+  ): string {
+    const lastCall = invokeSpy.mock.calls[invokeSpy.mock.calls.length - 1];
+    const messages = lastCall?.[0] as BaseMessage[] | undefined;
+    if (!messages) return "";
+    const systemMessage = messages.find((m) => m.getType() === "system");
+    if (!systemMessage) return "";
+
+    const content = systemMessage.content;
+    if (typeof content === "string") return content;
+    if (Array.isArray(content)) {
+      return content
+        .map((block) => (typeof block === "string" ? block : block.text || ""))
+        .join("");
+    }
+    return "";
   }
 
   it("should load skills from state.files and inject into system prompt", async () => {
-    const capture = { systemPrompt: "" };
-
-    const model = new FakeListChatModel({
-      responses: ["Done"],
-    });
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    const model = new FakeListChatModel({ responses: ["Done"] });
 
     const checkpointer = new MemorySaver();
     const agent = createDeepAgent({
       model: model as any,
       skills: ["/skills/"],
       checkpointer,
-      middleware: [createCaptureMiddleware(capture)],
     });
 
     await agent.invoke(
@@ -744,27 +747,25 @@ description: Another test skill
       { configurable: { thread_id: `test-${Date.now()}` }, recursionLimit: 50 },
     );
 
+    expect(invokeSpy).toHaveBeenCalled();
+    const systemPrompt = getSystemPromptFromSpy(invokeSpy);
+
     // Verify skill was injected into system prompt
-    expect(capture.systemPrompt).toContain("test-skill");
-    expect(capture.systemPrompt).toContain(
-      "A test skill for StateBackend integration",
-    );
-    expect(capture.systemPrompt).toContain("/skills/test-skill/SKILL.md");
+    expect(systemPrompt).toContain("test-skill");
+    expect(systemPrompt).toContain("A test skill for StateBackend integration");
+    expect(systemPrompt).toContain("/skills/test-skill/SKILL.md");
+    invokeSpy.mockRestore();
   });
 
   it("should load multiple skills from state.files", async () => {
-    const capture = { systemPrompt: "" };
-
-    const model = new FakeListChatModel({
-      responses: ["Done"],
-    });
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    const model = new FakeListChatModel({ responses: ["Done"] });
 
     const checkpointer = new MemorySaver();
     const agent = createDeepAgent({
       model: model as any,
       skills: ["/skills/"],
       checkpointer,
-      middleware: [createCaptureMiddleware(capture)],
     });
 
     await agent.invoke(
@@ -781,28 +782,26 @@ description: Another test skill
       },
     );
 
+    expect(invokeSpy).toHaveBeenCalled();
+    const systemPrompt = getSystemPromptFromSpy(invokeSpy);
+
     // Verify both skills were injected
-    expect(capture.systemPrompt).toContain("test-skill");
-    expect(capture.systemPrompt).toContain("another-skill");
-    expect(capture.systemPrompt).toContain(
-      "A test skill for StateBackend integration",
-    );
-    expect(capture.systemPrompt).toContain("Another test skill");
+    expect(systemPrompt).toContain("test-skill");
+    expect(systemPrompt).toContain("another-skill");
+    expect(systemPrompt).toContain("A test skill for StateBackend integration");
+    expect(systemPrompt).toContain("Another test skill");
+    invokeSpy.mockRestore();
   });
 
   it("should show no skills message when state.files is empty", async () => {
-    const capture = { systemPrompt: "" };
-
-    const model = new FakeListChatModel({
-      responses: ["Done"],
-    });
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    const model = new FakeListChatModel({ responses: ["Done"] });
 
     const checkpointer = new MemorySaver();
     const agent = createDeepAgent({
       model: model as any,
       skills: ["/skills/"],
       checkpointer,
-      middleware: [createCaptureMiddleware(capture)],
     });
 
     await agent.invoke(
@@ -816,9 +815,13 @@ description: Another test skill
       },
     );
 
+    expect(invokeSpy).toHaveBeenCalled();
+    const systemPrompt = getSystemPromptFromSpy(invokeSpy);
+
     // Verify "no skills" message appears
-    expect(capture.systemPrompt).toContain("No skills available yet");
-    expect(capture.systemPrompt).toContain("/skills/");
+    expect(systemPrompt).toContain("No skills available yet");
+    expect(systemPrompt).toContain("/skills/");
+    invokeSpy.mockRestore();
   });
 
   it("should load skills from multiple sources via StateBackend", async () => {
@@ -834,18 +837,14 @@ description: Project-level skill for team collaboration
 ---
 # Project Skill`;
 
-    const capture = { systemPrompt: "" };
-
-    const model = new FakeListChatModel({
-      responses: ["Done"],
-    });
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    const model = new FakeListChatModel({ responses: ["Done"] });
 
     const checkpointer = new MemorySaver();
     const agent = createDeepAgent({
       model: model as any,
       skills: ["/skills/user/", "/skills/project/"],
       checkpointer,
-      middleware: [createCaptureMiddleware(capture)],
     });
 
     await agent.invoke(
@@ -863,26 +862,26 @@ description: Project-level skill for team collaboration
       },
     );
 
+    expect(invokeSpy).toHaveBeenCalled();
+    const systemPrompt = getSystemPromptFromSpy(invokeSpy);
+
     // Verify both sources' skills are present
-    expect(capture.systemPrompt).toContain("user-skill");
-    expect(capture.systemPrompt).toContain("project-skill");
-    expect(capture.systemPrompt).toContain("User-level skill");
-    expect(capture.systemPrompt).toContain("Project-level skill");
+    expect(systemPrompt).toContain("user-skill");
+    expect(systemPrompt).toContain("project-skill");
+    expect(systemPrompt).toContain("User-level skill");
+    expect(systemPrompt).toContain("Project-level skill");
+    invokeSpy.mockRestore();
   });
 
   it("should include skill paths for progressive disclosure", async () => {
-    const capture = { systemPrompt: "" };
-
-    const model = new FakeListChatModel({
-      responses: ["Done"],
-    });
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    const model = new FakeListChatModel({ responses: ["Done"] });
 
     const checkpointer = new MemorySaver();
     const agent = createDeepAgent({
       model: model as any,
       skills: ["/skills/"],
       checkpointer,
-      middleware: [createCaptureMiddleware(capture)],
     });
 
     await agent.invoke(
@@ -898,21 +897,25 @@ description: Project-level skill for team collaboration
       },
     );
 
+    expect(invokeSpy).toHaveBeenCalled();
+    const systemPrompt = getSystemPromptFromSpy(invokeSpy);
+
     // Verify the full path is included for progressive disclosure
-    expect(capture.systemPrompt).toContain("/skills/test-skill/SKILL.md");
+    expect(systemPrompt).toContain("/skills/test-skill/SKILL.md");
     // Verify progressive disclosure instructions are present
-    expect(capture.systemPrompt).toContain("Progressive Disclosure");
+    expect(systemPrompt).toContain("Progressive Disclosure");
+    invokeSpy.mockRestore();
   });
 
   it("should handle empty skills directory gracefully", async () => {
-    const capture = { systemPrompt: "" };
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    const model = new FakeListChatModel({ responses: ["Done"] });
 
     const checkpointer = new MemorySaver();
     const agent = createDeepAgent({
-      model: new FakeListChatModel({ responses: ["Done"] }) as any,
+      model: model as any,
       skills: ["/skills/empty/"],
       checkpointer,
-      middleware: [createCaptureMiddleware(capture)],
     });
 
     // Should not throw even when no skills exist (empty files)
@@ -929,7 +932,11 @@ description: Project-level skill for team collaboration
       ),
     ).resolves.toBeDefined();
 
+    expect(invokeSpy).toHaveBeenCalled();
+    const systemPrompt = getSystemPromptFromSpy(invokeSpy);
+
     // Should still have a system prompt with the "no skills" message
-    expect(capture.systemPrompt).toContain("No skills available yet");
+    expect(systemPrompt).toContain("No skills available yet");
+    invokeSpy.mockRestore();
   });
 });
