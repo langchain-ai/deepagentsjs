@@ -1,10 +1,10 @@
 {
-  "name": "@langchain/vercel-sandbox",
+  "name": "@langchain/vfs-sandbox",
   "version": "0.0.1",
-  "description": "Vercel Sandbox backend for deepagents",
+  "description": "Virtual File System sandbox backend for deepagents",
   "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "type": "module",
   "scripts": {
     "build": "tsdown",
@@ -27,7 +27,8 @@
     "langchain",
     "typescript",
     "llm",
-    "vercel",
+    "vfs",
+    "virtual-file-system",
     "sandbox"
   ],
   "author": "LangChain",
@@ -37,7 +38,7 @@
   },
   "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "dependencies": {
-    "@vercel/sandbox": "latest"
+    "node-vfs-polyfill": "github:vercel-labs/node-vfs-polyfill"
   },
   "peerDependencies": {
     "deepagents": ">=1.6.0"
@@ -47,7 +48,6 @@
     "@tsconfig/recommended": "^1.0.13",
     "@types/node": "^25.1.0",
     "@vitest/coverage-v8": "^4.0.18",
-    "dotenv": "^17.2.3",
     "tsdown": "^0.20.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
@@ -56,8 +56,8 @@
   "exports": {
     ".": {
       "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
       },
       "require": {
         "types": "./dist/index.d.cts",
