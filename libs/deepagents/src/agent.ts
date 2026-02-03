@@ -166,6 +166,14 @@ export function createDeepAgent<
       : [];
 
   /**
+   * Build middleware stack ONLY for the general-purpose subagent (custom subagents do NOT inherit these)
+   * skills middleware is only added to the general-purpose agent.
+   */
+  const generalPurposeSubagentMiddleware: AgentMiddleware[] = [
+    ...skillsMiddlewareArray,
+  ];
+
+  /**
    * Built-in middleware array - core middleware with known types
    * This tuple is typed without conditional spreads to preserve TypeScript's tuple inference.
    * Optional middleware (skills, memory, HITL) are handled at runtime but typed explicitly.
@@ -191,10 +199,6 @@ export function createDeepAgent<
          */
         todoListMiddleware(),
         /**
-         * Subagent middleware: Skills (if provided) - added at runtime
-         */
-        ...skillsMiddlewareArray,
-        /**
          * Subagent middleware: Filesystem operations
          */
         createFilesystemMiddleware({
@@ -219,6 +223,10 @@ export function createDeepAgent<
          */
         createPatchToolCallsMiddleware(),
       ],
+      /**
+       * Skills middleware is ONLY added to the general-purpose subagent, not custom subagents
+       */
+      generalPurposeMiddleware: generalPurposeSubagentMiddleware,
       defaultInterruptOn: interruptOn,
       subagents: subagents as unknown as (SubAgent | CompiledSubAgent)[],
       generalPurposeAgent: true,

@@ -28,10 +28,15 @@ const DEFAULT_SUBAGENT_PROMPT =
 // 1. The messages key is handled explicitly to ensure only the final message is included
 // 2. The todos and structuredResponse keys are excluded as they do not have a defined reducer
 //    and no clear meaning for returning them from a subagent to the main agent.
+// 3. The skillsMetadata key is excluded because skills are loaded per-agent
+//    -> Subagents don't receive the parent's skillsMetadata.
+//    -> Subagents don't return their skillsMetadata to the parent.
+
 const EXCLUDED_STATE_KEYS = [
   "messages",
   "todos",
   "structuredResponse",
+  "skillsMetadata",
 ] as const;
 
 const DEFAULT_GENERAL_PURPOSE_DESCRIPTION =
@@ -264,6 +269,7 @@ function getSubagents(options: {
   defaultModel: LanguageModelLike | string;
   defaultTools: StructuredTool[];
   defaultMiddleware: AgentMiddleware[] | null;
+  generalPurposeMiddleware: AgentMiddleware[] | null;
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
   subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
@@ -275,18 +281,23 @@ function getSubagents(options: {
     defaultModel,
     defaultTools,
     defaultMiddleware,
+    generalPurposeMiddleware,
     defaultInterruptOn,
     subagents,
     generalPurposeAgent,
   } = options;
 
   const defaultSubagentMiddleware = defaultMiddleware || [];
+  const generalPurposeAgentMiddleware = generalPurposeMiddleware || [];
   const agents: Record<string, ReactAgent | Runnable> = {};
   const subagentDescriptions: string[] = [];
 
   // Create general-purpose agent if enabled
   if (generalPurposeAgent) {
-    const generalPurposeMiddleware = [...defaultSubagentMiddleware];
+    const generalPurposeMiddleware = [
+      ...defaultSubagentMiddleware,
+      ...generalPurposeAgentMiddleware,
+    ];
     if (defaultInterruptOn) {
       generalPurposeMiddleware.push(
         humanInTheLoopMiddleware({ interruptOn: defaultInterruptOn }),
@@ -306,7 +317,7 @@ function getSubagents(options: {
     );
   }
 
-  // Process custom subagents
+  // Process custom subagents (they do NOT get general-purpose middleware)
   for (const agentParams of subagents) {
     subagentDescriptions.push(
       `- ${agentParams.name}: ${agentParams.description}`,
@@ -342,6 +353,7 @@ function createTaskTool(options: {
   defaultModel: LanguageModelLike | string;
   defaultTools: StructuredTool[];
   defaultMiddleware: AgentMiddleware[] | null;
+  generalPurposeMiddleware: AgentMiddleware[] | null;
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
   subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
@@ -351,6 +363,7 @@ function createTaskTool(options: {
     defaultModel,
     defaultTools,
     defaultMiddleware,
+    generalPurposeMiddleware,
     defaultInterruptOn,
     subagents,
     generalPurposeAgent,
@@ -362,6 +375,7 @@ function createTaskTool(options: {
       defaultModel,
       defaultTools,
       defaultMiddleware,
+      generalPurposeMiddleware,
       defaultInterruptOn,
       subagents,
       generalPurposeAgent,
@@ -435,6 +449,8 @@ export interface SubAgentMiddlewareOptions {
   defaultTools?: StructuredTool[];
   /** Default middleware to apply to all subagents */
   defaultMiddleware?: AgentMiddleware[] | null;
+  /** Additional middleware to apply only to the general-purpose subagent (e.g., SkillsMiddleware). Custom subagents do not inherit this middleware. */
+  generalPurposeMiddleware?: AgentMiddleware[] | null;
   /** The tool configs for the default general-purpose subagent */
   defaultInterruptOn?: Record<string, boolean | InterruptOnConfig> | null;
   /** A list of additional subagents to provide to the agent */
@@ -455,6 +471,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     defaultModel,
     defaultTools = [],
     defaultMiddleware = null,
+    generalPurposeMiddleware = null,
     defaultInterruptOn = null,
     subagents = [],
     systemPrompt = TASK_SYSTEM_PROMPT,
@@ -466,6 +483,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     defaultModel,
     defaultTools,
     defaultMiddleware,
+    generalPurposeMiddleware,
     defaultInterruptOn,
     subagents,
     generalPurposeAgent,
