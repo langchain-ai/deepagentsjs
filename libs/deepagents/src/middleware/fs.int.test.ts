@@ -288,7 +288,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const messages = response.messages;
       const readMessage = messages.find(
-        (msg: any) => msg._getType() === "tool" && msg.name === "read_file",
+        (msg) => ToolMessage.isInstance(msg) && msg.name === "read_file",
       );
 
       expect(readMessage).toBeDefined();
@@ -335,7 +335,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const messages = response.messages;
       const readMessage = messages.find(
-        (msg: any) => msg._getType() === "tool" && msg.name === "read_file",
+        (msg) => ToolMessage.isInstance(msg) && msg.name === "read_file",
       );
 
       expect(readMessage).toBeDefined();
@@ -428,7 +428,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const messages = response.messages;
       const writeMessage = messages.find(
-        (msg: any) => msg._getType() === "tool" && msg.name === "write_file",
+        (msg) => ToolMessage.isInstance(msg) && msg.name === "write_file",
       );
 
       expect(writeMessage).toBeDefined();
@@ -656,7 +656,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const messages = response.messages;
       const writeMessage = messages.find(
-        (msg: any) => msg._getType() === "tool" && msg.name === "write_file",
+        (msg) => ToolMessage.isInstance(msg) && msg.name === "write_file",
       );
 
       expect(writeMessage).toBeDefined();
@@ -1062,7 +1062,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const messages = response2.messages;
       const readMessage = messages.find(
-        (msg: any) => msg._getType() === "tool" && msg.name === "read_file",
+        (msg) => ToolMessage.isInstance(msg) && msg.name === "read_file",
       );
       expect(readMessage).toBeDefined();
       expect(readMessage!.content.toString()).toContain("Hello World");
@@ -1103,7 +1103,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const readMessages = readResponse.messages;
       const readMessage = readMessages.find(
-        (msg: any) => msg._getType() === "tool" && msg.name === "read_file",
+        (msg) => ToolMessage.isInstance(msg) && msg.name === "read_file",
       );
       expect(readMessage).toBeDefined();
       expect(readMessage!.content.toString()).toContain("Charmander");
@@ -1119,7 +1119,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const listMessages = listResponse.messages;
       const lsMessage = listMessages.find(
-        (msg: any) => msg._getType() === "tool" && msg.name === "ls",
+        (msg) => ToolMessage.isInstance(msg) && msg.name === "ls",
       );
       expect(lsMessage).toBeDefined();
       expect(lsMessage!.content.toString()).toContain("/memories/pokemon.txt");
@@ -1139,7 +1139,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const editMessages = editResponse.messages;
       const editMessage = editMessages.find(
-        (msg: any) => msg._getType() === "tool" && msg.name === "edit_file",
+        (msg) => ToolMessage.isInstance(msg) && msg.name === "edit_file",
       );
       expect(editMessage).toBeDefined();
 
@@ -1196,9 +1196,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       const readMessages = readResponse.messages;
       const readMessage = [...readMessages]
         .reverse()
-        .find(
-          (msg: any) => msg._getType() === "tool" && msg.name === "read_file",
-        );
+        .find((msg) => ToolMessage.isInstance(msg) && msg.name === "read_file");
       expect(readMessage).toBeDefined();
       expect(
         readMessage!.content.toString().toLowerCase().includes("fiery"),
@@ -1216,7 +1214,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const listMessages = listResponse.messages;
       const lsMessage = listMessages.find(
-        (msg: any) => msg._getType() === "tool" && msg.name === "ls",
+        (msg) => ToolMessage.isInstance(msg) && msg.name === "ls",
       );
       expect(lsMessage).toBeDefined();
       expect(lsMessage!.content.toString()).toContain("/charmander.txt");
@@ -1253,9 +1251,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       const verifyMessages = verifyResponse.messages;
       const verifyReadMessage = [...verifyMessages]
         .reverse()
-        .find(
-          (msg: any) => msg._getType() === "tool" && msg.name === "read_file",
-        );
+        .find((msg) => ToolMessage.isInstance(msg) && msg.name === "read_file");
       expect(verifyReadMessage).toBeDefined();
       expect(
         verifyReadMessage!.content.toString().toLowerCase().includes("ember"),

@@ -73,16 +73,12 @@ describe("DeepAgents Integration Tests", () => {
         messages: [new HumanMessage("What is the weather in Tokyo?")],
       });
 
-      const agentMessages = result.messages.filter((msg: any) =>
-        AIMessage.isInstance(msg),
-      );
-      const toolCalls = agentMessages.flatMap(
-        (msg: any) => msg.tool_calls || [],
-      );
+      const agentMessages = result.messages.filter(AIMessage.isInstance);
+      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
 
       expect(
         toolCalls.some(
-          (tc: any) =>
+          (tc) =>
             tc.name === "task" && tc.args?.subagent_type === "weather_agent",
         ),
       ).toBe(true);
@@ -113,16 +109,12 @@ describe("DeepAgents Integration Tests", () => {
         ],
       });
 
-      const agentMessages = result.messages.filter((msg: any) =>
-        AIMessage.isInstance(msg),
-      );
-      const toolCalls = agentMessages.flatMap(
-        (msg: any) => msg.tool_calls || [],
-      );
+      const agentMessages = result.messages.filter(AIMessage.isInstance);
+      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
 
       expect(
         toolCalls.some(
-          (tc: any) =>
+          (tc) =>
             tc.name === "task" && tc.args?.subagent_type === "general-purpose",
         ),
       ).toBe(true);
@@ -150,16 +142,12 @@ describe("DeepAgents Integration Tests", () => {
         messages: [new HumanMessage("What is the weather in Tokyo?")],
       });
 
-      const agentMessages = result.messages.filter((msg: any) =>
-        AIMessage.isInstance(msg),
-      );
-      const toolCalls = agentMessages.flatMap(
-        (msg: any) => msg.tool_calls || [],
-      );
+      const agentMessages = result.messages.filter(AIMessage.isInstance);
+      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
 
       expect(
         toolCalls.some(
-          (tc: any) =>
+          (tc) =>
             tc.name === "task" && tc.args?.subagent_type === "weather_agent",
         ),
       ).toBe(true);
@@ -199,22 +187,18 @@ describe("DeepAgents Integration Tests", () => {
         ],
       });
 
-      const agentMessages = result.messages.filter((msg: any) =>
-        AIMessage.isInstance(msg),
-      );
-      const toolCalls = agentMessages.flatMap(
-        (msg: any) => msg.tool_calls || [],
-      );
+      const agentMessages = result.messages.filter(AIMessage.isInstance);
+      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
 
       expect(
         toolCalls.some(
-          (tc: any) =>
+          (tc) =>
             tc.name === "task" && tc.args?.subagent_type === "weather_agent",
         ),
       ).toBe(true);
       expect(
         toolCalls.some(
-          (tc: any) =>
+          (tc) =>
             tc.name === "task" && tc.args?.subagent_type === "soccer_agent",
         ),
       ).toBe(true);
@@ -251,16 +235,12 @@ describe("DeepAgents Integration Tests", () => {
         { recursionLimit: 100 },
       );
 
-      const agentMessages = result.messages.filter((msg: any) =>
-        AIMessage.isInstance(msg),
-      );
-      const toolCalls = agentMessages.flatMap(
-        (msg: any) => msg.tool_calls || [],
-      );
+      const agentMessages = result.messages.filter(AIMessage.isInstance);
+      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
 
       expect(
         toolCalls.some(
-          (tc: any) =>
+          (tc) =>
             tc.name === "task" &&
             tc.args?.subagent_type === "basketball_info_agent",
         ),
@@ -295,16 +275,12 @@ describe("DeepAgents Integration Tests", () => {
         { recursionLimit: 100 },
       );
 
-      const agentMessages = result.messages.filter((msg: any) =>
-        AIMessage.isInstance(msg),
-      );
-      const toolCalls = agentMessages.flatMap(
-        (msg: any) => msg.tool_calls || [],
-      );
+      const agentMessages = result.messages.filter(AIMessage.isInstance);
+      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
 
       expect(
         toolCalls.some(
-          (tc: any) =>
+          (tc) =>
             tc.name === "task" &&
             tc.args?.subagent_type === "basketball_info_agent",
         ),
