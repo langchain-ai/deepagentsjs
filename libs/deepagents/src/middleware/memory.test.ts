@@ -381,7 +381,7 @@ This project uses React.`;
       {
         messages: [new HumanMessage("Hello")],
         files: {},
-      } as any,
+      },
       {
         configurable: { thread_id: `test-memory-empty-${Date.now()}` },
         recursionLimit: 50,
