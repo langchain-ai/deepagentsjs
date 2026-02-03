@@ -52,7 +52,6 @@ export {
   type MemoryMiddlewareOptions,
   type SubAgent,
   type CompiledSubAgent,
-  type FileData,
 } from "./middleware/index.js";
 
 // Export agent memory middleware
@@ -85,6 +84,7 @@ export {
   type EditResult,
   // Sandbox execution types
   type ExecuteResponse,
+  type FileData,
   type FileOperationError,
   type FileDownloadResponse,
   type FileUploadResponse,
