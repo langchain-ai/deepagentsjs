@@ -769,7 +769,6 @@ export function createFilesystemMiddleware(
   const baseSystemPrompt = customSystemPrompt || FILESYSTEM_SYSTEM_PROMPT;
 
   // All tools including execute (execute will be filtered at runtime if backend doesn't support it)
-  // Using `as const` to preserve exact tool types for proper middleware type inference
   const allTools = [
     createLsTool(backend, {
       customDescription: customToolDescriptions?.ls,
@@ -793,7 +792,7 @@ export function createFilesystemMiddleware(
     createExecuteTool(backend, {
       customDescription: customToolDescriptions?.execute,
     }),
-  ] as const;
+  ];
 
   return createMiddleware({
     name: "FilesystemMiddleware",
