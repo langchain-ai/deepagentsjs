@@ -98,7 +98,7 @@ describe("Protocol Types", () => {
 
 describe("isSandboxBackend", () => {
   it("should return true for backends with execute function and id string", () => {
-    const sandboxBackend: SandboxBackendProtocol = {
+    const sandboxBackend = {
       id: "test-sandbox",
       execute: async () => ({ output: "", exitCode: 0, truncated: false }),
       lsInfo: async () => [],
@@ -109,13 +109,13 @@ describe("isSandboxBackend", () => {
       edit: async () => ({ path: "" }),
       uploadFiles: async () => [],
       downloadFiles: async () => [],
-    };
+    } as unknown as SandboxBackendProtocol;
 
     expect(isSandboxBackend(sandboxBackend)).toBe(true);
   });
 
   it("should return false for backends without execute", () => {
-    const nonSandboxBackend: BackendProtocol = {
+    const nonSandboxBackend = {
       lsInfo: async () => [],
       read: async () => "",
       grepRaw: async () => [],
@@ -124,7 +124,7 @@ describe("isSandboxBackend", () => {
       edit: async () => ({ path: "" }),
       uploadFiles: async () => [],
       downloadFiles: async () => [],
-    };
+    } as unknown as BackendProtocol;
 
     expect(isSandboxBackend(nonSandboxBackend)).toBe(false);
   });

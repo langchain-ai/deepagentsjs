@@ -15,6 +15,9 @@ export default defineConfig((env) => {
       teardownTimeout: 60_000,
       exclude: ["**/*.int.test.ts", ...configDefaults.exclude],
       setupFiles: ["dotenv/config"],
+      typecheck: {
+        enabled: true,
+      },
     },
   };
 

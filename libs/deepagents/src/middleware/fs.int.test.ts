@@ -586,7 +586,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       // Command returns files and research state
       expect(response.files).toBeDefined();
-      expect(response.files["/test.txt"]).toBeDefined();
+      expect(response.files!["/test.txt"]).toBeDefined();
     },
   );
 
@@ -611,8 +611,9 @@ describe("Filesystem Middleware Integration Tests", () => {
       });
 
       // Existing files should be preserved
-      expect(response.files["/existing.txt"]).toBeDefined();
-      expect(response.files["/existing.txt"].content).toContain(
+      expect(response.files).toBeDefined();
+      expect(response.files!["/existing.txt"]).toBeDefined();
+      expect(response.files!["/existing.txt"]?.content).toContain(
         "Existing file",
       );
     },
@@ -1233,8 +1234,8 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const editedFiles = editResponse.files || {};
       expect(editedFiles["/charmander.txt"]).toBeDefined();
-      const content = editedFiles["/charmander.txt"].content.join("\n");
-      expect(content.toLowerCase().includes("ember")).toBe(true);
+      const content = editedFiles["/charmander.txt"]?.content.join("\n");
+      expect(content?.toLowerCase().includes("ember")).toBe(true);
 
       // Read again to verify edit
       const verifyResponse = await agent.invoke(

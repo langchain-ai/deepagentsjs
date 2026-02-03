@@ -1,19 +1,24 @@
 import { describe, it, expect } from "vitest";
 import { createAgent } from "langchain";
 import {
-  createFilesystemMiddleware,
-  createSubAgentMiddleware,
-  createPatchToolCallsMiddleware,
-} from "../index.js";
-import {
   SystemMessage,
   HumanMessage,
   AIMessage,
   ToolMessage,
 } from "@langchain/core/messages";
+import type { StructuredTool } from "@langchain/core/tools";
 import { messagesStateReducer as addMessages } from "@langchain/langgraph";
+import {
+  createFilesystemMiddleware,
+  createSubAgentMiddleware,
+  createPatchToolCallsMiddleware,
+} from "../index.js";
 
 import { SAMPLE_MODEL } from "../testing/utils.js";
+import {
+  isSandboxBackend,
+  type SandboxBackendProtocol,
+} from "../backends/protocol.js";
 
 describe("Middleware Integration", () => {
   it("should add filesystem middleware to agent", () => {
@@ -118,7 +123,7 @@ describe("FilesystemMiddleware", () => {
     });
     expect(middleware).toBeDefined();
     const tools = middleware.tools || [];
-    const lsTool = tools.find((t) => t.name === "ls");
+    const lsTool = tools.find((t: StructuredTool) => t.name === "ls");
     expect(lsTool).toBeDefined();
     expect(lsTool?.description).toBe(customDesc);
   });
@@ -133,7 +138,7 @@ describe("FilesystemMiddleware", () => {
     });
     expect(middleware).toBeDefined();
     const tools = middleware.tools || [];
-    const lsTool = tools.find((t) => t.name === "ls");
+    const lsTool = tools.find((t: StructuredTool) => t.name === "ls");
     expect(lsTool).toBeDefined();
     expect(lsTool?.description).toBe(customDesc);
   });
@@ -168,7 +173,7 @@ describe("Execute Tool", () => {
   it("should include execute tool description", () => {
     const middleware = createFilesystemMiddleware();
     const tools = middleware.tools || [];
-    const executeTool = tools.find((t) => t.name === "execute");
+    const executeTool = tools.find((t: StructuredTool) => t.name === "execute");
     expect(executeTool).toBeDefined();
     expect(executeTool?.description).toContain("sandbox");
     expect(executeTool?.description).toContain("command");
@@ -189,8 +194,6 @@ describe("Execute Tool", () => {
 
 describe("isSandboxBackend type guard", () => {
   it("should return true for backends with execute and id", async () => {
-    const { isSandboxBackend } = await import("../backends/protocol.js");
-
     const mockSandbox = {
       execute: () => ({ output: "", exitCode: 0, truncated: false }),
       id: "test-sandbox",
@@ -202,7 +205,7 @@ describe("isSandboxBackend type guard", () => {
       edit: () => ({}),
       uploadFiles: () => [],
       downloadFiles: () => [],
-    };
+    } as unknown as SandboxBackendProtocol;
 
     expect(isSandboxBackend(mockSandbox)).toBe(true);
   });
@@ -218,8 +221,6 @@ describe("isSandboxBackend type guard", () => {
   });
 
   it("should return false for backends without id", async () => {
-    const { isSandboxBackend } = await import("../backends/protocol.js");
-
     const mockBackend = {
       execute: () => ({ output: "", exitCode: 0, truncated: false }),
       // Missing id
