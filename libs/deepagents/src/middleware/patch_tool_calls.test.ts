@@ -298,7 +298,10 @@ describe("createPatchToolCallsMiddleware", () => {
       const handler = vi.fn().mockResolvedValue({ content: "AI response" });
 
       // @ts-expect-error - typing issue in LangChain
-      await middleware.wrapModelCall?.({ messages, systemPrompt: "test" }, handler);
+      await middleware.wrapModelCall?.(
+        { messages, systemPrompt: "test" },
+        handler,
+      );
 
       // Handler should be called with patched messages
       expect(handler).toHaveBeenCalledTimes(1);
@@ -323,9 +326,15 @@ describe("createPatchToolCallsMiddleware", () => {
       const handler = vi.fn().mockResolvedValue({ content: "AI response" });
 
       // @ts-expect-error - typing issue in LangChain
-      await middleware.wrapModelCall?.({ messages: [], systemPrompt: "test" }, handler);
+      await middleware.wrapModelCall?.(
+        { messages: [], systemPrompt: "test" },
+        handler,
+      );
 
-      expect(handler).toHaveBeenCalledWith({ messages: [], systemPrompt: "test" });
+      expect(handler).toHaveBeenCalledWith({
+        messages: [],
+        systemPrompt: "test",
+      });
     });
   });
 
@@ -353,9 +362,7 @@ describe("createPatchToolCallsMiddleware", () => {
 
       // Verify synthetic ToolMessage was added
       const syntheticMsg = result.patchedMessages.find(
-        (m) =>
-          ToolMessage.isInstance(m) &&
-          m.tool_call_id === "call_1",
+        (m) => ToolMessage.isInstance(m) && m.tool_call_id === "call_1",
       );
       expect(syntheticMsg).toBeDefined();
     });
