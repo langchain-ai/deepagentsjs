@@ -12,7 +12,11 @@ import type {
 import { createFileData } from "../backends/utils.js";
 import { createDeepAgent } from "../agent.js";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
-import { HumanMessage, type BaseMessage } from "@langchain/core/messages";
+import {
+  HumanMessage,
+  SystemMessage,
+  type BaseMessage,
+} from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 
 // Mock backend that returns specified files and directory listings
@@ -713,17 +717,10 @@ description: Another test skill
     const lastCall = invokeSpy.mock.calls[invokeSpy.mock.calls.length - 1];
     const messages = lastCall?.[0] as BaseMessage[] | undefined;
     if (!messages) return "";
-    const systemMessage = messages.find((m) => m.getType() === "system");
+    const systemMessage = messages.find(SystemMessage.isInstance);
     if (!systemMessage) return "";
 
-    const content = systemMessage.content;
-    if (typeof content === "string") return content;
-    if (Array.isArray(content)) {
-      return content
-        .map((block) => (typeof block === "string" ? block : block.text || ""))
-        .join("");
-    }
-    return "";
+    return systemMessage.text;
   }
 
   it("should load skills from state.files and inject into system prompt", async () => {
