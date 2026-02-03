@@ -14,8 +14,11 @@ import { REMOVE_ALL_MESSAGES } from "@langchain/langgraph";
 /**
  * Patches dangling tool calls in a messages array.
  *
- * Adds synthetic ToolMessages for any tool_calls that don't have corresponding responses.
- * This is critical for handling rejected tool calls during HITL interrupts.
+ * Adds synthetic ToolMessages for any tool_calls that don't have corresponding responses,
+ * BUT only for AIMessages where at least one of their tool_calls already has a response.
+ * This distinguishes between:
+ * - Normal flow: AIMessage has tool_calls, none have responses yet (tools are executing)
+ * - HITL rejection: AIMessage has tool_calls, SOME have responses (partial rejection)
  *
  * @param messages - The messages array to patch
  * @returns The patched messages array, or the original if no changes needed
@@ -42,21 +45,31 @@ export function patchDanglingToolCalls(messages: BaseMessage[]): BaseMessage[] {
     patchedMessages.push(msg);
 
     // Check if this is an AI message with tool calls
-    if (AIMessage.isInstance(msg) && msg.tool_calls != null) {
-      for (const toolCall of msg.tool_calls) {
-        // If this tool call doesn't have a corresponding ToolMessage, add synthetic one
-        if (toolCall.id && !existingToolCallIds.has(toolCall.id)) {
-          const toolMsg = `Tool call ${toolCall.name} with id ${toolCall.id} was cancelled - another message came in before it could be completed.`;
-          patchedMessages.push(
-            new ToolMessage({
-              content: toolMsg,
-              name: toolCall.name,
-              tool_call_id: toolCall.id,
-            }),
-          );
-          // Mark as handled to avoid duplicates if we see the same tool_call_id again
-          existingToolCallIds.add(toolCall.id);
-          hasChanges = true;
+    if (AIMessage.isInstance(msg) && msg.tool_calls != null && msg.tool_calls.length > 0) {
+      // Check if at least one of THIS AIMessage's tool_calls has a response
+      // This indicates partial execution/rejection - the HITL rejection scenario
+      const hasPartialResponse = msg.tool_calls.some(
+        (tc) => tc.id && existingToolCallIds.has(tc.id),
+      );
+
+      // Only patch if there's a partial response (some responded, some didn't)
+      // This avoids patching during normal flow where tools are still executing
+      if (hasPartialResponse) {
+        for (const toolCall of msg.tool_calls) {
+          // If this tool call doesn't have a corresponding ToolMessage, add synthetic one
+          if (toolCall.id && !existingToolCallIds.has(toolCall.id)) {
+            const toolMsg = `Tool call ${toolCall.name} with id ${toolCall.id} was cancelled - another message came in before it could be completed.`;
+            patchedMessages.push(
+              new ToolMessage({
+                content: toolMsg,
+                name: toolCall.name,
+                tool_call_id: toolCall.id,
+              }),
+            );
+            // Mark as handled to avoid duplicates if we see the same tool_call_id again
+            existingToolCallIds.add(toolCall.id);
+            hasChanges = true;
+          }
         }
       }
     }
@@ -138,7 +151,6 @@ export function createPatchToolCallsMiddleware() {
     },
     // wrapModelCall wraps the actual model invocation - runs when HITL jumps to model
     wrapModelCall: (request, handler) => {
-      // Check if we need to patch
       if (request.messages && request.messages.length > 0) {
         const patchedMessages = patchDanglingToolCalls(request.messages);
         if (patchedMessages !== request.messages) {
@@ -150,15 +162,6 @@ export function createPatchToolCallsMiddleware() {
     // afterModel runs after the model call - persist synthetic messages to state
     afterModel: (state) => {
       if (!state.messages || state.messages.length === 0) {
-        return;
-      }
-
-      // Only patch if there's at least one ToolMessage already
-      // This indicates we're in a rejection/resume scenario, not the initial model call
-      const hasToolMessages = state.messages.some((m) =>
-        ToolMessage.isInstance(m),
-      );
-      if (!hasToolMessages) {
         return;
       }
 

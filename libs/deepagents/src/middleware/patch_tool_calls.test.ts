@@ -34,8 +34,10 @@ describe("createPatchToolCallsMiddleware", () => {
   });
 
   describe("dangling tool calls", () => {
-    it("should add synthetic ToolMessage for dangling tool call", async () => {
+    it("should return undefined when no ToolMessages present (normal pre-execution flow)", async () => {
       const middleware = createPatchToolCallsMiddleware();
+      // This represents normal flow where model called a tool but it hasn't executed yet
+      // The middleware should NOT patch because this is expected behavior
       const messages = [
         new HumanMessage({ content: "Read a file" }),
         new AIMessage({
@@ -54,33 +56,8 @@ describe("createPatchToolCallsMiddleware", () => {
       // @ts-expect-error - typing issue
       const result = await middleware.beforeModel?.({ messages });
 
-      expect(result).toBeDefined();
-      // Result includes RemoveMessage + patched messages
-      // RemoveMessage + HumanMessage + AIMessage + ToolMessage(synthetic) + HumanMessage = 5
-      expect(result?.messages.length).toBe(5);
-
-      // First message should be RemoveMessage
-      expect(RemoveMessage.isInstance(result?.messages[0])).toBe(true);
-
-      // Filter out RemoveMessage to check the actual messages
-      const actualMessages = result?.messages.filter(
-        (m: any) => !RemoveMessage.isInstance(m),
-      );
-
-      // Find the synthetic ToolMessage
-      const toolMessage = actualMessages.find(
-        (m: any) => ToolMessage.isInstance(m) && m.tool_call_id === "call_123",
-      );
-      expect(toolMessage).toBeDefined();
-      expect(toolMessage?.content).toContain("cancelled");
-      expect(toolMessage?.name).toBe("read_file");
-
-      // Verify the order: synthetic ToolMessage should be right after AIMessage
-      const aiMsgIndex = actualMessages.findIndex(AIMessage.isInstance);
-      const toolMsgIndex = actualMessages.findIndex(
-        (m: any) => ToolMessage.isInstance(m) && m.tool_call_id === "call_123",
-      );
-      expect(toolMsgIndex).toBe(aiMsgIndex + 1);
+      // No ToolMessages present, so this is normal flow - no patching needed
+      expect(result).toBeUndefined();
     });
 
     it("should return undefined when corresponding ToolMessage already exists", async () => {
@@ -112,8 +89,10 @@ describe("createPatchToolCallsMiddleware", () => {
       expect(result).toBeUndefined();
     });
 
-    it("should handle mixed scenario: some tool calls have responses, some don't", async () => {
+    it("should handle mixed scenario: some tool calls have responses, some don't (HITL rejection)", async () => {
       const middleware = createPatchToolCallsMiddleware();
+      // This represents HITL rejection scenario: one tool was rejected (has ToolMessage),
+      // but another tool call from the same AIMessage doesn't have a response
       const messages = [
         new HumanMessage({ content: "Do two things" }),
         new AIMessage({
@@ -196,8 +175,42 @@ describe("createPatchToolCallsMiddleware", () => {
       expect(result).toBeUndefined();
     });
 
-    it("should handle multiple AI messages with dangling tool calls", async () => {
+    it("should NOT patch second AIMessage when its tool calls have no response", async () => {
       const middleware = createPatchToolCallsMiddleware();
+      // Scenario: multiple AI messages with tool calls
+      // First AIMessage has a complete response, second AIMessage has no response
+      // The second AIMessage should NOT be patched because none of ITS tool_calls
+      // have a partial response (the ToolMessage belongs to first AIMessage)
+      const messages = [
+        new AIMessage({
+          content: "",
+          tool_calls: [{ id: "call_1", name: "tool_a", args: {} }],
+        }),
+        new ToolMessage({
+          content: "Result for tool_a",
+          name: "tool_a",
+          tool_call_id: "call_1",
+        }),
+        new HumanMessage({ content: "msg1" }),
+        new AIMessage({
+          content: "",
+          tool_calls: [{ id: "call_2", name: "tool_b", args: {} }],
+        }),
+        new HumanMessage({ content: "msg2" }),
+      ];
+
+      // @ts-expect-error - typing issue
+      const result = await middleware.beforeModel?.({ messages });
+
+      // Second AIMessage's tool_calls have no response yet - this is normal flow
+      // Only patch when an AIMessage has PARTIAL responses (some responded, some didn't)
+      expect(result).toBeUndefined();
+    });
+
+    it("should return undefined when no ToolMessages present (multiple dangling)", async () => {
+      const middleware = createPatchToolCallsMiddleware();
+      // Multiple AI messages with tool calls but no ToolMessages at all
+      // This is normal pre-execution flow, should not patch
       const messages = [
         new AIMessage({
           content: "",
@@ -214,23 +227,8 @@ describe("createPatchToolCallsMiddleware", () => {
       // @ts-expect-error - typing issue
       const result = await middleware.beforeModel?.({ messages });
 
-      expect(result).toBeDefined();
-      // RemoveMessage + 4 original + 2 synthetic = 7
-      expect(result?.messages.length).toBe(7);
-
-      // First message should be RemoveMessage
-      expect(RemoveMessage.isInstance(result?.messages[0])).toBe(true);
-
-      // Both tool calls should have synthetic responses
-      const toolMessage1 = result?.messages.find(
-        (m: any) => ToolMessage.isInstance(m) && m.tool_call_id === "call_1",
-      );
-      const toolMessage2 = result?.messages.find(
-        (m: any) => ToolMessage.isInstance(m) && m.tool_call_id === "call_2",
-      );
-
-      expect(toolMessage1).toBeDefined();
-      expect(toolMessage2).toBeDefined();
+      // No ToolMessages present, so no patching needed
+      expect(result).toBeUndefined();
     });
   });
 });

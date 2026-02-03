@@ -252,7 +252,9 @@ describe("PatchToolCallsMiddleware", () => {
     expect(stateUpdate).toBeUndefined();
   });
 
-  it("should patch a single missing tool call", async () => {
+  it("should return undefined when no ToolMessages present (normal pre-execution flow)", async () => {
+    // Without any ToolMessages, this is considered normal pre-execution flow
+    // The middleware should NOT patch in this case
     const inputMessages = [
       new SystemMessage({ content: "You are a helpful assistant.", id: "1" }),
       new HumanMessage({ content: "Hello, how are you?", id: "2" }),
@@ -275,26 +277,61 @@ describe("PatchToolCallsMiddleware", () => {
     const stateUpdate = await beforeAgentHook({
       messages: inputMessages,
     });
-    expect(stateUpdate).toBeDefined();
-    expect(stateUpdate.messages).toHaveLength(6);
-    expect(stateUpdate.messages[0]._getType()).toBe("remove");
-    expect(stateUpdate.messages[1]).toBe(inputMessages[0]);
-    expect(stateUpdate.messages[2]).toBe(inputMessages[1]);
-    expect(stateUpdate.messages[3]).toBe(inputMessages[2]);
-    expect(stateUpdate.messages[4]._getType()).toBe("tool");
-    expect((stateUpdate.messages[4] as any).tool_call_id).toBe("123");
-    expect((stateUpdate.messages[4] as any).name).toBe("get_events_for_days");
-    expect((stateUpdate.messages[4] as any).content).toContain("cancelled");
-    expect(stateUpdate.messages[5]).toBe(inputMessages[3]);
+    // No ToolMessages present, so no patching (normal flow)
+    expect(stateUpdate).toBeUndefined();
+  });
 
-    const updatedMessages = addMessages(inputMessages, stateUpdate.messages);
-    expect(updatedMessages).toHaveLength(5);
-    expect(updatedMessages[0]).toBe(inputMessages[0]);
-    expect(updatedMessages[1]).toBe(inputMessages[1]);
-    expect(updatedMessages[2]).toBe(inputMessages[2]);
-    expect(updatedMessages[3]._getType()).toBe("tool");
-    expect((updatedMessages[3] as any).tool_call_id).toBe("123");
-    expect(updatedMessages[4]).toBe(inputMessages[3]);
+  it("should patch dangling tool call in HITL rejection scenario", async () => {
+    // This represents HITL rejection: parallel tool calls where one got a response
+    // but another is dangling (needs synthetic message)
+    const inputMessages = [
+      new SystemMessage({ content: "You are a helpful assistant.", id: "1" }),
+      new HumanMessage({ content: "Hello, how are you?", id: "2" }),
+      new AIMessage({
+        content: "I'm doing well, thank you!",
+        tool_calls: [
+          {
+            id: "123",
+            name: "get_events_for_days",
+            args: { date_str: "2025-01-01" },
+          },
+          {
+            id: "456",
+            name: "get_weather",
+            args: { city: "Tokyo" },
+          },
+        ],
+        id: "3",
+      }),
+      // Only one tool got a response (the other was rejected/cancelled)
+      new ToolMessage({
+        content: "Rejected by user",
+        tool_call_id: "456",
+        id: "4",
+      }),
+      new HumanMessage({ content: "What is the weather in Tokyo?", id: "5" }),
+    ];
+
+    const middleware = createPatchToolCallsMiddleware();
+    const beforeAgentHook = (middleware as any).beforeAgent;
+    const stateUpdate = await beforeAgentHook({
+      messages: inputMessages,
+    });
+    expect(stateUpdate).toBeDefined();
+    // RemoveMessage + 5 original + 1 synthetic = 7
+    expect(stateUpdate.messages).toHaveLength(7);
+    expect(stateUpdate.messages[0]._getType()).toBe("remove");
+
+    // Find the synthetic ToolMessage for the dangling call
+    const syntheticToolMsg = stateUpdate.messages.find(
+      (m: any) =>
+        ToolMessage.isInstance(m) &&
+        m.tool_call_id === "123" &&
+        typeof m.content === "string" &&
+        m.content.includes("cancelled"),
+    );
+    expect(syntheticToolMsg).toBeDefined();
+    expect((syntheticToolMsg as any).name).toBe("get_events_for_days");
   });
 
   it("should not patch when tool message exists", async () => {
@@ -330,7 +367,8 @@ describe("PatchToolCallsMiddleware", () => {
     expect(stateUpdate).toBeUndefined();
   });
 
-  it("should patch multiple missing tool calls", async () => {
+  it("should return undefined when multiple dangling calls but no ToolMessages", async () => {
+    // Without any ToolMessages, this is normal pre-execution flow
     const inputMessages = [
       new SystemMessage({ content: "You are a helpful assistant.", id: "1" }),
       new HumanMessage({ content: "Hello, how are you?", id: "2" }),
@@ -365,31 +403,57 @@ describe("PatchToolCallsMiddleware", () => {
       messages: inputMessages,
     });
 
-    expect(stateUpdate).toBeDefined();
-    expect(stateUpdate.messages).toHaveLength(9);
-    expect(stateUpdate.messages[0]._getType()).toBe("remove");
-    expect(stateUpdate.messages[1]).toBe(inputMessages[0]);
-    expect(stateUpdate.messages[2]).toBe(inputMessages[1]);
-    expect(stateUpdate.messages[3]).toBe(inputMessages[2]);
-    expect(stateUpdate.messages[4]._getType()).toBe("tool");
-    expect((stateUpdate.messages[4] as any).tool_call_id).toBe("123");
-    expect(stateUpdate.messages[5]).toBe(inputMessages[3]);
-    expect(stateUpdate.messages[6]).toBe(inputMessages[4]);
-    expect(stateUpdate.messages[7]._getType()).toBe("tool");
-    expect((stateUpdate.messages[7] as any).tool_call_id).toBe("456");
-    expect(stateUpdate.messages[8]).toBe(inputMessages[5]);
+    // No ToolMessages present, so no patching (normal flow)
+    expect(stateUpdate).toBeUndefined();
+  });
 
-    const updatedMessages = addMessages(inputMessages, stateUpdate.messages);
-    expect(updatedMessages).toHaveLength(8);
-    expect(updatedMessages[0]).toBe(inputMessages[0]);
-    expect(updatedMessages[1]).toBe(inputMessages[1]);
-    expect(updatedMessages[2]).toBe(inputMessages[2]);
-    expect(updatedMessages[3].type).toBe("tool");
-    expect((updatedMessages[3] as any).tool_call_id).toBe("123");
-    expect(updatedMessages[4]).toBe(inputMessages[3]);
-    expect(updatedMessages[5]).toBe(inputMessages[4]);
-    expect(updatedMessages[6].type).toBe("tool");
-    expect((updatedMessages[6] as any).tool_call_id).toBe("456");
-    expect(updatedMessages[7]).toBe(inputMessages[5]);
+  it("should NOT patch second AIMessage when its tool calls have no response", async () => {
+    // This tests that we only patch when an AIMessage has PARTIAL responses
+    // The second AIMessage has no responses for any of its tool_calls,
+    // so it should not be patched (even though another AIMessage has responses)
+    const inputMessages = [
+      new SystemMessage({ content: "You are a helpful assistant.", id: "1" }),
+      new HumanMessage({ content: "Hello, how are you?", id: "2" }),
+      new AIMessage({
+        content: "I'm doing well, thank you!",
+        tool_calls: [
+          {
+            id: "123",
+            name: "get_events_for_days",
+            args: { date_str: "2025-01-01" },
+          },
+        ],
+        id: "3",
+      }),
+      // First AIMessage's call got a response (complete)
+      new ToolMessage({
+        content: "Events for that day",
+        tool_call_id: "123",
+        id: "3a",
+      }),
+      new HumanMessage({ content: "What is the weather in Tokyo?", id: "4" }),
+      new AIMessage({
+        content: "I'm doing well, thank you!",
+        tool_calls: [
+          {
+            id: "456",
+            name: "get_weather",
+            args: { city: "Tokyo" },
+          },
+        ],
+        id: "5",
+      }),
+      // Second AIMessage's call has no response yet (normal pre-execution)
+      new HumanMessage({ content: "What is the weather in Tokyo?", id: "6" }),
+    ];
+    const middleware = createPatchToolCallsMiddleware();
+    const beforeAgentHook = (middleware as any).beforeAgent;
+    const stateUpdate = await beforeAgentHook({
+      messages: inputMessages,
+    });
+
+    // Second AIMessage has no partial responses - this is normal flow
+    // Only patch when an AIMessage has PARTIAL responses (HITL rejection scenario)
+    expect(stateUpdate).toBeUndefined();
   });
 });
