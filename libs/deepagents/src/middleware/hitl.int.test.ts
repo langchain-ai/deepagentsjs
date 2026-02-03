@@ -178,8 +178,8 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
 
       // REJECT the interrupted tool call
       // This is the key scenario from issue #15 - rejecting should not leave
-      // a dangling tool_call_id
-      const result2 = await agent.invoke(
+      // a dangling tool_call_id that causes a 400 error
+      let result2 = await agent.invoke(
         new Command({
           resume: {
             decisions: [{ type: "reject" }],
@@ -188,10 +188,26 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
         config,
       );
 
-      // The agent should complete without errors (no dangling tool_call_id)
-      expect(result2.__interrupt__).toBeUndefined();
+      // The key assertion: we should NOT get a 400 error about dangling tool_call_ids
+      // The agent may still have an interrupt if it decides to retry the tool,
+      // so we'll keep rejecting until it completes or gives up
+      let retries = 0;
+      const maxRetries = 3;
+      while (result2.__interrupt__ && retries < maxRetries) {
+        // If there's still an interrupt (agent retrying the rejected tool),
+        // reject again - this is valid behavior, we just want to ensure no 400 error
+        result2 = await agent.invoke(
+          new Command({
+            resume: {
+              decisions: result2.__interrupt__.map(() => ({ type: "reject" })),
+            },
+          }),
+          config,
+        );
+        retries++;
+      }
 
-      // Check that we have tool results for get_weather (the non-interrupted tool)
+      // After rejecting, check that we have tool results for get_weather (the non-interrupted tool)
       const toolResults = result2.messages.filter(ToolMessage.isInstance);
       expect(toolResults.some((tr) => tr.name === "get_weather")).toBe(true);
 
@@ -200,11 +216,9 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
       const sampleToolResult = toolResults.find(
         (tr) => tr.name === "sample_tool",
       );
-      // Either there's a result for sample_tool (rejection message) or
-      // the agent handled it properly without leaving dangling tool_call_id
-      if (sampleToolResult) {
-        expect(typeof sampleToolResult.content).toBe("string");
-      }
+      // There should be at least one result for sample_tool (rejection message from patching)
+      expect(sampleToolResult).toBeDefined();
+      expect(typeof sampleToolResult?.content).toBe("string");
     },
   );
 
@@ -258,10 +272,11 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
           subgraphs: true,
         },
       )) {
-        const update = chunk[1] ?? {};
+        // @ts-expect-error - type issue in LangChain
+        const update = chunk[2] ?? {};
         if (!("tools" in update)) continue;
 
-        const tools = update.tools;
+        const tools = update.tools as any;
         toolResultNames.push(...tools.messages.map((msg) => msg.name ?? ""));
       }
 

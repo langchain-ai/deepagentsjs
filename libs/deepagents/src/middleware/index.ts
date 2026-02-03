@@ -13,7 +13,10 @@ export {
   type SubAgent,
   type CompiledSubAgent,
 } from "./subagents.js";
-export { createPatchToolCallsMiddleware } from "./patch_tool_calls.js";
+export {
+  createPatchToolCallsMiddleware,
+  patchDanglingToolCalls,
+} from "./patch_tool_calls.js";
 export {
   createMemoryMiddleware,
   type MemoryMiddlewareOptions,

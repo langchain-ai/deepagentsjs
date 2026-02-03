@@ -248,13 +248,8 @@ describe("PatchToolCallsMiddleware", () => {
     const stateUpdate = await beforeAgentHook({
       messages: inputMessages,
     });
-    expect(stateUpdate).toBeDefined();
-    expect(stateUpdate.messages).toHaveLength(3);
-    expect(stateUpdate.messages[0]._getType()).toBe("remove");
-    expect(stateUpdate.messages[1].content).toBe(
-      "You are a helpful assistant.",
-    );
-    expect(stateUpdate.messages[2].content).toBe("Hello, how are you?");
+    // No patching needed, so returns undefined (no state changes)
+    expect(stateUpdate).toBeUndefined();
   });
 
   it("should patch a single missing tool call", async () => {
@@ -331,14 +326,8 @@ describe("PatchToolCallsMiddleware", () => {
       messages: inputMessages,
     });
 
-    expect(stateUpdate).toBeDefined();
-    expect(stateUpdate.messages).toHaveLength(6);
-    expect(stateUpdate.messages[0]._getType()).toBe("remove");
-    expect(stateUpdate.messages.slice(1)).toEqual(inputMessages);
-
-    const updatedMessages = addMessages(inputMessages, stateUpdate.messages);
-    expect(updatedMessages).toHaveLength(5);
-    expect(updatedMessages).toEqual(inputMessages);
+    // No patching needed (tool message exists), so returns undefined (no state changes)
+    expect(stateUpdate).toBeUndefined();
   });
 
   it("should patch multiple missing tool calls", async () => {
