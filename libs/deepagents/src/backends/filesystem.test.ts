@@ -299,6 +299,42 @@ describe("FilesystemBackend", () => {
     expect(txt).toContain("empty contents");
   });
 
+  it("should return error when editing non-empty file with empty oldString", async () => {
+    const root = tmpDir;
+    const filePath = path.join(root, "test.txt");
+    await writeFile(filePath, "hello world");
+
+    const backend = new FilesystemBackend({
+      rootDir: root,
+      virtualMode: false,
+    });
+
+    const result = await backend.edit(filePath, "", "replacement", false);
+    expect(result.error).toBeDefined();
+    expect(result.error).toContain("oldString cannot be empty");
+    expect(result.occurrences).toBeUndefined();
+  });
+
+  it("should set initial content when editing empty file with empty oldString", async () => {
+    const root = tmpDir;
+    const filePath = path.join(root, "empty.txt");
+    await writeFile(filePath, "");
+
+    const backend = new FilesystemBackend({
+      rootDir: root,
+      virtualMode: false,
+    });
+
+    const result = await backend.edit(filePath, "", "initial content", false);
+    expect(result.error).toBeUndefined();
+    expect(result.occurrences).toBe(0);
+    expect(result.path).toBe(filePath);
+
+    // Verify the file now has content
+    const content = await backend.read(filePath);
+    expect(content).toContain("initial content");
+  });
+
   it("should handle files with trailing newlines", async () => {
     const root = tmpDir;
     const filePath = path.join(root, "trailing.txt");
