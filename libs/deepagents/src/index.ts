@@ -54,6 +54,9 @@ export {
   type CompiledSubAgent,
 } from "./middleware/index.js";
 
+// Export shared state values (similar to LangGraph's messagesValue pattern)
+export { filesValue } from "./values.js";
+
 // Export agent memory middleware
 export {
   createAgentMemoryMiddleware,
