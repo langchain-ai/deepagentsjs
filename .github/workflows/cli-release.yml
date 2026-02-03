@@ -198,7 +198,7 @@ jobs:
           version: 9
 
       - name: Download all platform packages
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v7.0.0
         with:
           path: libs/cli/dist/platforms/
           pattern: cli-*
