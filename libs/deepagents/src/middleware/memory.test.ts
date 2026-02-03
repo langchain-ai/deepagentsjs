@@ -318,7 +318,7 @@ This project uses React.`;
         files: {
           "/AGENTS.md": createFileData(USER_MEMORY),
         },
-      } as any,
+      },
       {
         configurable: { thread_id: `test-memory-${Date.now()}` },
         recursionLimit: 50,
