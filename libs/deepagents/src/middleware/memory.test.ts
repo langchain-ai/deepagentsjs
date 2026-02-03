@@ -476,7 +476,7 @@ This project uses React.`;
         {
           messages: [new HumanMessage("Hello")],
           files: {},
-        } as any,
+        },
         {
           configurable: {
             thread_id: `test-memory-empty-graceful-${Date.now()}`,
