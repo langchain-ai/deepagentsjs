@@ -351,7 +351,7 @@ This project uses React.`;
           "/user/AGENTS.md": createFileData(USER_MEMORY),
           "/project/AGENTS.md": createFileData(PROJECT_MEMORY),
         },
-      } as any,
+      },
       {
         configurable: { thread_id: `test-memory-multi-${Date.now()}` },
         recursionLimit: 50,
