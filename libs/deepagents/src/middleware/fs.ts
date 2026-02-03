@@ -73,6 +73,20 @@ export const TOOLS_EXCLUDED_FROM_EVICTION = [
 export const NUM_CHARS_PER_TOKEN = 4;
 
 /**
+ * Default values for read_file tool pagination (in lines).
+ */
+export const DEFAULT_READ_LINE_OFFSET = 0;
+export const DEFAULT_READ_LINE_LIMIT = 100;
+
+/**
+ * Template for truncation message in read_file.
+ * {file_path} will be filled in at runtime.
+ */
+const READ_FILE_TRUNCATION_MSG = `
+
+[Output was truncated due to size limits. The file content is very large. Consider reformatting the file to make it easier to navigate. For example, if this is JSON, use execute(command='jq . {file_path}') to pretty-print it with line breaks. For other formats, you can use appropriate formatting tools to split long lines.]`;
+
+/**
  * Message template for evicted tool results.
  */
 const TOO_LARGE_TOOL_MSG = `Tool result too large, the result of this tool call {tool_call_id} was saved in the filesystem at this path: {file_path}
@@ -136,8 +150,6 @@ export const FileDataSchema = z.object({
   created_at: z.string(),
   modified_at: z.string(),
 });
-
-export type { FileData };
 
 /**
  * Type for the files state record.
@@ -251,7 +263,7 @@ export const READ_FILE_TOOL_DESCRIPTION = `Reads a file from the filesystem.
 Assume this tool is able to read all files. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
 
 Usage:
-- By default, it reads up to 500 lines starting from the beginning of the file
+- By default, it reads up to 100 lines starting from the beginning of the file
 - **IMPORTANT for large files and codebase exploration**: Use pagination with offset and limit parameters to avoid context overflow
   - First scan: read_file(path, limit=100) to see file structure
   - Read more sections: read_file(path, offset=100, limit=200) for next 200 lines
@@ -401,9 +413,12 @@ function createLsTool(
  */
 function createReadFileTool(
   backend: BackendProtocol | BackendFactory,
-  options: { customDescription: string | undefined },
+  options: {
+    customDescription: string | undefined;
+    toolTokenLimitBeforeEvict: number | null;
+  },
 ) {
-  const { customDescription } = options;
+  const { customDescription, toolTokenLimitBeforeEvict } = options;
   return tool(
     async (input, config) => {
       const stateAndStore: StateAndStore = {
@@ -411,8 +426,36 @@ function createReadFileTool(
         store: (config as any).store,
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
-      const { file_path, offset = 0, limit = 500 } = input;
-      return await resolvedBackend.read(file_path, offset, limit);
+      const {
+        file_path,
+        offset = DEFAULT_READ_LINE_OFFSET,
+        limit = DEFAULT_READ_LINE_LIMIT,
+      } = input;
+      let result = await resolvedBackend.read(file_path, offset, limit);
+
+      // Enforce line limit on result (in case backend returns more)
+      const lines = result.split("\n");
+      if (lines.length > limit) {
+        result = lines.slice(0, limit).join("\n");
+      }
+
+      // Check if result exceeds token threshold and truncate if necessary
+      if (
+        toolTokenLimitBeforeEvict &&
+        result.length >= NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict
+      ) {
+        // Calculate truncation message length to ensure final result stays under threshold
+        const truncationMsg = READ_FILE_TRUNCATION_MSG.replace(
+          "{file_path}",
+          file_path,
+        );
+        const maxContentLength =
+          NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict -
+          truncationMsg.length;
+        result = result.substring(0, maxContentLength) + truncationMsg;
+      }
+
+      return result;
     },
     {
       name: "read_file",
@@ -422,12 +465,12 @@ function createReadFileTool(
         offset: z.coerce
           .number()
           .optional()
-          .default(0)
+          .default(DEFAULT_READ_LINE_OFFSET)
           .describe("Line offset to start reading from (0-indexed)"),
         limit: z.coerce
           .number()
           .optional()
-          .default(500)
+          .default(DEFAULT_READ_LINE_LIMIT)
           .describe("Maximum number of lines to read"),
       }),
     },
@@ -732,6 +775,7 @@ export function createFilesystemMiddleware(
     }),
     createReadFileTool(backend, {
       customDescription: customToolDescriptions?.read_file,
+      toolTokenLimitBeforeEvict,
     }),
     createWriteFileTool(backend, {
       customDescription: customToolDescriptions?.write_file,
