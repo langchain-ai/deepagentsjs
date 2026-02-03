@@ -51,6 +51,7 @@
 import { z } from "zod";
 import {
   createMiddleware,
+  SystemMessage,
   /**
    * required for type inference
    */
@@ -316,13 +317,14 @@ export function createMemoryMiddleware(options: MemoryMiddlewareOptions) {
         formattedContents,
       );
 
-      // Prepend memory section to system prompt
-      const currentSystemPrompt = request.systemPrompt || "";
-      const newSystemPrompt = currentSystemPrompt
-        ? `${memorySection}\n\n${currentSystemPrompt}`
-        : memorySection;
+      // Concat memory section to system prompt
+      const memoryMessage = new SystemMessage(memorySection);
+      const newSystemMessage = memoryMessage.concat(request.systemMessage);
 
-      return handler({ ...request, systemPrompt: newSystemPrompt });
+      return handler({
+        ...request,
+        systemMessage: newSystemMessage,
+      });
     },
   });
 }
