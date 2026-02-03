@@ -1,7 +1,6 @@
 export {
   createFilesystemMiddleware,
   type FilesystemMiddlewareOptions,
-  type FileData,
   // Eviction constants
   TOOLS_EXCLUDED_FROM_EVICTION,
   NUM_CHARS_PER_TOKEN,
