@@ -175,11 +175,9 @@ describe("Subagent HITL Integration Tests - interrupt() primitive", () => {
       );
 
       // Check that task tool was called
-      const aiMessages = result.messages.filter((msg: any) =>
-        AIMessage.isInstance(msg),
-      );
-      const toolCalls = aiMessages.flatMap((msg: any) => msg.tool_calls || []);
-      expect(toolCalls.some((tc: any) => tc.name === "task")).toBe(true);
+      const aiMessages = result.messages.filter(AIMessage.isInstance);
+      const toolCalls = aiMessages.flatMap((msg) => msg.tool_calls || []);
+      expect(toolCalls.some((tc) => tc.name === "task")).toBe(true);
 
       // Step 2: Check for interrupt
       expect(result.__interrupt__).toBeDefined();
@@ -205,14 +203,12 @@ describe("Subagent HITL Integration Tests - interrupt() primitive", () => {
       expect(result2.__interrupt__).toBeUndefined();
 
       // Find the tool response
-      const toolMsgs = result2.messages.filter((m: any) =>
-        ToolMessage.isInstance(m),
-      );
+      const toolMsgs = result2.messages.filter(ToolMessage.isInstance);
       expect(toolMsgs.length).toBeGreaterThan(0);
 
       // At least one tool message should contain the approval result
       const hasApprovalResult = toolMsgs.some(
-        (msg: any) =>
+        (msg) =>
           typeof msg.content === "string" &&
           msg.content.toLowerCase().includes("approved"),
       );
@@ -327,9 +323,7 @@ describe("Subagent HITL Integration Tests - interrupt() primitive", () => {
       // Step 4: Verify review completed
       expect(result2.__interrupt__).toBeUndefined();
 
-      const toolMsgs = result2.messages.filter((m: any) =>
-        ToolMessage.isInstance(m),
-      );
+      const toolMsgs = result2.messages.filter(ToolMessage.isInstance);
       expect(toolMsgs.length).toBeGreaterThan(0);
     },
   );
@@ -396,14 +390,12 @@ describe("Subagent HITL Integration Tests - interrupt() primitive", () => {
       // Step 4: Verify answer was processed
       expect(result2.__interrupt__).toBeUndefined();
 
-      const toolMsgs = result2.messages.filter((m: any) =>
-        ToolMessage.isInstance(m),
-      );
+      const toolMsgs = result2.messages.filter(ToolMessage.isInstance);
       expect(toolMsgs.length).toBeGreaterThan(0);
 
       // Check that the response mentions the user's answer
       const hasAnswerResult = toolMsgs.some(
-        (msg: any) =>
+        (msg) =>
           typeof msg.content === "string" &&
           msg.content.toLowerCase().includes("blue"),
       );
@@ -492,9 +484,7 @@ describe("Subagent HITL Integration Tests - interrupt() primitive", () => {
       // Final result should have no more interrupts
       expect(currentResult.__interrupt__).toBeUndefined();
 
-      const toolMsgs = currentResult.messages.filter((m: any) =>
-        ToolMessage.isInstance(m),
-      );
+      const toolMsgs = currentResult.messages.filter(ToolMessage.isInstance);
       expect(toolMsgs.length).toBeGreaterThan(0);
     },
   );
@@ -567,14 +557,12 @@ describe("Subagent HITL Integration Tests - interrupt() primitive", () => {
       // Step 4: Verify rejection was processed
       expect(result2.__interrupt__).toBeUndefined();
 
-      const toolMsgs = result2.messages.filter((m: any) =>
-        ToolMessage.isInstance(m),
-      );
+      const toolMsgs = result2.messages.filter(ToolMessage.isInstance);
       expect(toolMsgs.length).toBeGreaterThan(0);
 
       // Check that at least one tool message contains rejection info
       const hasRejectionResult = toolMsgs.some(
-        (msg: any) =>
+        (msg) =>
           typeof msg.content === "string" &&
           msg.content.toLowerCase().includes("rejected"),
       );

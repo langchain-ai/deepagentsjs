@@ -20,13 +20,13 @@ const WeatherToolMiddleware = createMiddleware({
 /**
  * Helper to extract all tool calls from agent response
  */
-function extractAllToolCalls(
-  response: any,
-): Array<{ name: string; args: Record<string, any>; model?: string }> {
+function extractAllToolCalls(response: {
+  messages: BaseMessage[];
+}): Array<{ name: string; args: Record<string, unknown>; model?: string }> {
   const messages = response.messages || [];
-  const aiMessages = messages.filter((msg: any) => AIMessage.isInstance(msg));
-  return aiMessages.flatMap((msg: any) =>
-    (msg.tool_calls || []).map((toolCall: any) => ({
+  const aiMessages = messages.filter(AIMessage.isInstance);
+  return aiMessages.flatMap((msg) =>
+    (msg.tool_calls || []).map((toolCall) => ({
       name: toolCall.name,
       args: toolCall.args,
       model: msg.response_metadata?.model_name || undefined,

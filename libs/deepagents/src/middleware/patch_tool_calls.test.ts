@@ -1,5 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { createPatchToolCallsMiddleware } from "./patch_tool_calls.js";
+import { describe, it, expect, vi } from "vitest";
+import {
+  createPatchToolCallsMiddleware,
+  patchDanglingToolCalls,
+} from "./patch_tool_calls.js";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { RemoveMessage } from "@langchain/core/messages";
 import { REMOVE_ALL_MESSAGES } from "@langchain/langgraph";
@@ -244,6 +247,144 @@ describe("createPatchToolCallsMiddleware", () => {
           m.content === "File written successfully",
       );
       expect(originalToolMessage).toBeDefined();
+    });
+  });
+
+  describe("wrapModelCall (safety net for HITL rejections)", () => {
+    it("should pass through when no patching needed", async () => {
+      const middleware = createPatchToolCallsMiddleware();
+      const messages = [
+        new HumanMessage({ content: "Hello" }),
+        new AIMessage({
+          content: "",
+          tool_calls: [{ id: "call_1", name: "tool_a", args: {} }],
+        }),
+        new ToolMessage({
+          content: "Result",
+          name: "tool_a",
+          tool_call_id: "call_1",
+        }),
+      ];
+
+      const handler = vi.fn().mockResolvedValue({ content: "AI response" });
+      const request = { messages, systemPrompt: "test" };
+
+      // @ts-expect-error - typing issue in LangChain
+      await middleware.wrapModelCall?.(request, handler);
+
+      // Handler should be called with original request (no patching needed)
+      expect(handler).toHaveBeenCalledWith(request);
+    });
+
+    it("should patch dangling tool calls in wrapModelCall", async () => {
+      const middleware = createPatchToolCallsMiddleware();
+      const messages = [
+        new HumanMessage({ content: "Hello" }),
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            { id: "call_1", name: "tool_a", args: {} },
+            { id: "call_2", name: "tool_b", args: {} },
+          ],
+        }),
+        // Only call_2 has a response - call_1 is dangling
+        new ToolMessage({
+          content: "Result",
+          name: "tool_b",
+          tool_call_id: "call_2",
+        }),
+      ];
+
+      const handler = vi.fn().mockResolvedValue({ content: "AI response" });
+
+      // @ts-expect-error - typing issue in LangChain
+      await middleware.wrapModelCall?.(
+        { messages, systemPrompt: "test" },
+        handler,
+      );
+
+      // Handler should be called with patched messages
+      expect(handler).toHaveBeenCalledTimes(1);
+      const calledRequest = handler.mock.calls[0][0];
+
+      // Should have patched messages with synthetic ToolMessage for call_1
+      expect(calledRequest.messages.length).toBe(4); // original 3 + 1 synthetic
+
+      // Find the synthetic ToolMessage
+      const syntheticToolMessage = calledRequest.messages.find(
+        (m: any) =>
+          ToolMessage.isInstance(m) &&
+          m.tool_call_id === "call_1" &&
+          typeof m.content === "string" &&
+          m.content.includes("cancelled"),
+      );
+      expect(syntheticToolMessage).toBeDefined();
+    });
+
+    it("should handle empty messages in wrapModelCall", async () => {
+      const middleware = createPatchToolCallsMiddleware();
+      const handler = vi.fn().mockResolvedValue({ content: "AI response" });
+
+      // @ts-expect-error - typing issue in LangChain
+      await middleware.wrapModelCall?.(
+        { messages: [], systemPrompt: "test" },
+        handler,
+      );
+
+      expect(handler).toHaveBeenCalledWith({
+        messages: [],
+        systemPrompt: "test",
+      });
+    });
+  });
+
+  describe("patchDanglingToolCalls utility function", () => {
+    it("should return empty result for empty messages", () => {
+      const result = patchDanglingToolCalls([]);
+      expect(result.patchedMessages).toEqual([]);
+      expect(result.needsPatch).toBe(false);
+    });
+
+    it("should detect and patch dangling tool calls", () => {
+      const messages = [
+        new HumanMessage({ content: "Test" }),
+        new AIMessage({
+          content: "",
+          tool_calls: [{ id: "call_1", name: "tool_a", args: {} }],
+        }),
+        // No ToolMessage for call_1 - it's dangling
+      ];
+
+      const result = patchDanglingToolCalls(messages);
+
+      expect(result.needsPatch).toBe(true);
+      expect(result.patchedMessages.length).toBe(3); // 2 original + 1 synthetic
+
+      // Verify synthetic ToolMessage was added
+      const syntheticMsg = result.patchedMessages.find(
+        (m) => ToolMessage.isInstance(m) && m.tool_call_id === "call_1",
+      );
+      expect(syntheticMsg).toBeDefined();
+    });
+
+    it("should not patch when all tool calls have responses", () => {
+      const messages = [
+        new HumanMessage({ content: "Test" }),
+        new AIMessage({
+          content: "",
+          tool_calls: [{ id: "call_1", name: "tool_a", args: {} }],
+        }),
+        new ToolMessage({
+          content: "Result",
+          name: "tool_a",
+          tool_call_id: "call_1",
+        }),
+      ];
+
+      const result = patchDanglingToolCalls(messages);
+
+      expect(result.needsPatch).toBe(false);
+      expect(result.patchedMessages).toEqual(messages);
     });
   });
 });

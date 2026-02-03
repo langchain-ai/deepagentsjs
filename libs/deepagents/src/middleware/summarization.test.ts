@@ -342,9 +342,7 @@ describe("createSummarizationMiddleware", () => {
       expect(result).toBeDefined();
       expect(result?.messages).toBeDefined();
       // The truncated AI message should have truncated content
-      const aiMessage = result?.messages.find((m: any) =>
-        AIMessage.isInstance(m),
-      );
+      const aiMessage = result?.messages.find(AIMessage.isInstance);
       if (aiMessage) {
         expect(aiMessage.tool_calls[0].args.content).toContain(
           "...(truncated)",
