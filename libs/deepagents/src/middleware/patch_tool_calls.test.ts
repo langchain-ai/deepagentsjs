@@ -1,11 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
+import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
+import { RemoveMessage } from "@langchain/core/messages";
+import { REMOVE_ALL_MESSAGES } from "@langchain/langgraph";
+
 import {
   createPatchToolCallsMiddleware,
   patchDanglingToolCalls,
 } from "./patch_tool_calls.js";
-import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
-import { RemoveMessage } from "@langchain/core/messages";
-import { REMOVE_ALL_MESSAGES } from "@langchain/langgraph";
+import type { MiddlewareHandler } from "./types.js";
 
 describe("createPatchToolCallsMiddleware", () => {
   describe("no patching needed (should return undefined)", () => {
@@ -297,8 +299,7 @@ describe("createPatchToolCallsMiddleware", () => {
 
       const handler = vi.fn().mockResolvedValue({ content: "AI response" });
 
-      // @ts-expect-error - typing issue in LangChain
-      await middleware.wrapModelCall?.(
+      await (middleware.wrapModelCall as MiddlewareHandler)(
         { messages, systemPrompt: "test" },
         handler,
       );
@@ -325,8 +326,7 @@ describe("createPatchToolCallsMiddleware", () => {
       const middleware = createPatchToolCallsMiddleware();
       const handler = vi.fn().mockResolvedValue({ content: "AI response" });
 
-      // @ts-expect-error - typing issue in LangChain
-      await middleware.wrapModelCall?.(
+      await (middleware.wrapModelCall as MiddlewareHandler)(
         { messages: [], systemPrompt: "test" },
         handler,
       );

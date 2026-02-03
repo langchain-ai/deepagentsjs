@@ -135,8 +135,8 @@ export function createDeepAgent<
     : (config: { state: unknown; store?: BaseStore }) =>
         new StateBackend(config);
 
-  // Add skills middleware if skill sources provided
-  const skillsMiddleware =
+  // Skills middleware (created conditionally for runtime use)
+  const skillsMiddlewareArray =
     skills != null && skills.length > 0
       ? [
           createSkillsMiddleware({
@@ -146,12 +146,23 @@ export function createDeepAgent<
         ]
       : [];
 
-  // Built-in middleware array
+  // Memory middleware (created conditionally for runtime use)
+  const memoryMiddlewareArray =
+    memory != null && memory.length > 0
+      ? [
+          createMemoryMiddleware({
+            backend: filesystemBackend,
+            sources: memory,
+          }),
+        ]
+      : [];
+
+  // Built-in middleware array - core middleware with known types
+  // This tuple is typed without conditional spreads to preserve TypeScript's tuple inference.
+  // Optional middleware (skills, memory, HITL) are handled at runtime but typed explicitly.
   const builtInMiddleware = [
     // Provides todo list management capabilities for tracking tasks
     todoListMiddleware(),
-    // Add skills middleware if skill sources provided
-    ...skillsMiddleware,
     // Enables filesystem operations and optional long-term memory storage
     createFilesystemMiddleware({ backend: filesystemBackend }),
     // Enables delegation to specialized subagents for complex tasks
@@ -161,8 +172,8 @@ export function createDeepAgent<
       defaultMiddleware: [
         // Subagent middleware: Todo list management
         todoListMiddleware(),
-        // Subagent middleware: Skills (if provided)
-        ...skillsMiddleware,
+        // Subagent middleware: Skills (if provided) - added at runtime
+        ...skillsMiddlewareArray,
         // Subagent middleware: Filesystem operations
         createFilesystemMiddleware({
           backend: filesystemBackend,
@@ -196,31 +207,18 @@ export function createDeepAgent<
     }),
     // Patches tool calls to ensure compatibility across different model providers
     createPatchToolCallsMiddleware(),
-    // Add memory middleware if memory sources provided
-    ...(memory != null && memory.length > 0
-      ? [
-          createMemoryMiddleware({
-            backend: filesystemBackend,
-            sources: memory,
-          }),
-        ]
-      : []),
   ] as const;
 
-  // Add human-in-the-loop middleware if interrupt config provided
-  if (interruptOn) {
-    // builtInMiddleware is typed as readonly to enable type inference
-    // however, we need to push to it to add the middleware, so let's ignore the type error
-    // @ts-expect-error - builtInMiddleware is readonly
-    builtInMiddleware.push(humanInTheLoopMiddleware({ interruptOn }));
-  }
-
-  // Combine built-in middleware with custom middleware
-  // The custom middleware is typed as TMiddleware to preserve type information
-  const allMiddleware = [
-    ...builtInMiddleware,
-    ...(customMiddleware as unknown as TMiddleware),
-  ] as const;
+  // Runtime middleware array: combine built-in + optional middleware
+  // Note: The type is handled separately via AllMiddleware type alias
+  const runtimeMiddleware: AgentMiddleware[] = [
+    builtInMiddleware[0], // todoListMiddleware
+    ...skillsMiddlewareArray, // optional skills middleware
+    ...builtInMiddleware.slice(1), // rest of built-in middleware
+    ...memoryMiddlewareArray, // optional memory middleware
+    ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []), // optional HITL middleware
+    ...(customMiddleware as unknown as AgentMiddleware[]), // custom middleware
+  ];
 
   // Note: Recursion limit of 1000 (matching Python behavior) should be passed
   // at invocation time: agent.invoke(input, { recursionLimit: 1000 })
@@ -228,7 +226,7 @@ export function createDeepAgent<
     model,
     systemPrompt: finalSystemPrompt,
     tools: tools as StructuredTool[],
-    middleware: allMiddleware as unknown as AgentMiddleware[],
+    middleware: runtimeMiddleware,
     responseFormat: responseFormat as ResponseFormat,
     contextSchema,
     checkpointer,
