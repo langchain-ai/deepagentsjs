@@ -4,6 +4,15 @@ import type {
   BackendProtocol,
   FileDownloadResponse,
 } from "../backends/protocol.js";
+import { createDeepAgent } from "../agent.js";
+import { FakeListChatModel } from "@langchain/core/utils/testing";
+import {
+  HumanMessage,
+  SystemMessage,
+  type BaseMessage,
+} from "@langchain/core/messages";
+import { MemorySaver } from "@langchain/langgraph";
+import { createFileData } from "../backends/utils.js";
 
 // Mock backend that returns specified files
 function createMockBackend(
@@ -259,5 +268,228 @@ describe("createMemoryMiddleware", () => {
         "You are a helpful assistant",
       );
     });
+  });
+});
+
+/**
+ * StateBackend integration tests.
+ *
+ * These tests verify that memory is properly loaded from state.files and
+ * injected into the system prompt when using createDeepAgent with StateBackend.
+ */
+describe("StateBackend integration with createDeepAgent", () => {
+  const USER_MEMORY = `# User Memory
+
+Remember: The secret code is ALPHA123.`;
+
+  const PROJECT_MEMORY = `# Project Memory
+
+This project uses React.`;
+
+  /**
+   * Helper to extract system prompt content from model invoke spy.
+   * The system message can have content as string or array of content blocks.
+   */
+  function getSystemPromptFromSpy(
+    invokeSpy: ReturnType<typeof vi.spyOn>,
+  ): string {
+    const lastCall = invokeSpy.mock.calls[invokeSpy.mock.calls.length - 1];
+    const messages = lastCall?.[0] as BaseMessage[] | undefined;
+    if (!messages) return "";
+    const systemMessage = messages.find(SystemMessage.isInstance);
+    if (!systemMessage) return "";
+    return systemMessage.text;
+  }
+
+  it("should load memory from state.files and inject into system prompt", async () => {
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    const model = new FakeListChatModel({ responses: ["Done"] });
+    const checkpointer = new MemorySaver();
+
+    const agent = createDeepAgent({
+      model: model as any,
+      memory: ["/AGENTS.md"],
+      checkpointer,
+    });
+
+    await agent.invoke(
+      {
+        messages: [new HumanMessage("What do you remember?")],
+        files: {
+          "/AGENTS.md": createFileData(USER_MEMORY),
+        },
+      },
+      {
+        configurable: { thread_id: `test-memory-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    expect(invokeSpy).toHaveBeenCalled();
+    const systemPrompt = getSystemPromptFromSpy(invokeSpy);
+
+    expect(systemPrompt).toContain("ALPHA123");
+    expect(systemPrompt).toContain("/AGENTS.md");
+    invokeSpy.mockRestore();
+  });
+
+  it("should load multiple memory files from state.files", async () => {
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    const model = new FakeListChatModel({ responses: ["Done"] });
+    const checkpointer = new MemorySaver();
+
+    const agent = createDeepAgent({
+      model: model as any,
+      memory: ["/user/AGENTS.md", "/project/AGENTS.md"],
+      checkpointer,
+    });
+
+    await agent.invoke(
+      {
+        messages: [new HumanMessage("List all memory")],
+        files: {
+          "/user/AGENTS.md": createFileData(USER_MEMORY),
+          "/project/AGENTS.md": createFileData(PROJECT_MEMORY),
+        },
+      },
+      {
+        configurable: { thread_id: `test-memory-multi-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    expect(invokeSpy).toHaveBeenCalled();
+    const systemPrompt = getSystemPromptFromSpy(invokeSpy);
+
+    expect(systemPrompt).toContain("ALPHA123");
+    expect(systemPrompt).toContain("This project uses React.");
+    invokeSpy.mockRestore();
+  });
+
+  it("should show no memory message when state.files is empty", async () => {
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    const model = new FakeListChatModel({ responses: ["Done"] });
+    const checkpointer = new MemorySaver();
+
+    const agent = createDeepAgent({
+      model: model as any,
+      memory: ["/AGENTS.md"],
+      checkpointer,
+    });
+
+    await agent.invoke(
+      {
+        messages: [new HumanMessage("Hello")],
+        files: {},
+      },
+      {
+        configurable: { thread_id: `test-memory-empty-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    expect(invokeSpy).toHaveBeenCalled();
+    const systemPrompt = getSystemPromptFromSpy(invokeSpy);
+
+    expect(systemPrompt).toContain("(No memory loaded)");
+    invokeSpy.mockRestore();
+  });
+
+  it("should load memory from multiple sources via StateBackend", async () => {
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    const model = new FakeListChatModel({ responses: ["Done"] });
+    const checkpointer = new MemorySaver();
+
+    const agent = createDeepAgent({
+      model: model as any,
+      memory: ["/memory/user/AGENTS.md", "/memory/project/AGENTS.md"],
+      checkpointer,
+    });
+
+    await agent.invoke(
+      {
+        messages: [new HumanMessage("List memory")],
+        files: {
+          "/memory/user/AGENTS.md": createFileData(USER_MEMORY),
+          "/memory/project/AGENTS.md": createFileData(PROJECT_MEMORY),
+        },
+      },
+      {
+        configurable: { thread_id: `test-memory-sources-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    expect(invokeSpy).toHaveBeenCalled();
+    const systemPrompt = getSystemPromptFromSpy(invokeSpy);
+
+    expect(systemPrompt).toContain("/memory/user/AGENTS.md");
+    expect(systemPrompt).toContain("/memory/project/AGENTS.md");
+    invokeSpy.mockRestore();
+  });
+
+  it("should include memory paths in the system prompt", async () => {
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    const model = new FakeListChatModel({ responses: ["Done"] });
+    const checkpointer = new MemorySaver();
+
+    const agent = createDeepAgent({
+      model: model as any,
+      memory: ["/AGENTS.md"],
+      checkpointer,
+    });
+
+    await agent.invoke(
+      {
+        messages: [new HumanMessage("What memory do you have?")],
+        files: {
+          "/AGENTS.md": createFileData(USER_MEMORY),
+        },
+      },
+      {
+        configurable: { thread_id: `test-memory-paths-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    expect(invokeSpy).toHaveBeenCalled();
+    const systemPrompt = getSystemPromptFromSpy(invokeSpy);
+
+    expect(systemPrompt).toContain("/AGENTS.md");
+    expect(systemPrompt).toContain("<memory_guidelines>");
+    invokeSpy.mockRestore();
+  });
+
+  it("should handle empty memory directory gracefully", async () => {
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    const model = new FakeListChatModel({ responses: ["Done"] });
+    const checkpointer = new MemorySaver();
+
+    const agent = createDeepAgent({
+      model: model as any,
+      memory: ["/memory/empty/AGENTS.md"],
+      checkpointer,
+    });
+
+    await expect(
+      agent.invoke(
+        {
+          messages: [new HumanMessage("Hello")],
+          files: {},
+        },
+        {
+          configurable: {
+            thread_id: `test-memory-empty-graceful-${Date.now()}`,
+          },
+          recursionLimit: 50,
+        },
+      ),
+    ).resolves.toBeDefined();
+
+    expect(invokeSpy).toHaveBeenCalled();
+    const systemPrompt = getSystemPromptFromSpy(invokeSpy);
+
+    expect(systemPrompt).toContain("(No memory loaded)");
+    invokeSpy.mockRestore();
   });
 });

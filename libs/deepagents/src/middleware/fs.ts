@@ -131,7 +131,7 @@ import type * as _messages from "@langchain/core/messages";
 /**
  * Zod v3 schema for FileData (re-export from backends)
  */
-const FileDataSchema = z.object({
+export const FileDataSchema = z.object({
   content: z.array(z.string()),
   created_at: z.string(),
   modified_at: z.string(),
