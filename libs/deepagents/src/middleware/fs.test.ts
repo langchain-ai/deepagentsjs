@@ -1,10 +1,16 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   fileDataReducer,
   type FilesRecord,
   type FilesRecordUpdate,
+  createFilesystemMiddleware,
+  NUM_CHARS_PER_TOKEN,
+  TOOLS_EXCLUDED_FROM_EVICTION,
 } from "./fs.js";
-import type { FileData } from "../backends/protocol.js";
+import type { FileData, BackendProtocol } from "../backends/protocol.js";
+import { SystemMessage } from "@langchain/core/messages";
+import { ToolMessage } from "langchain";
+import { Command, isCommand } from "@langchain/langgraph";
 
 describe("fileDataReducer", () => {
   // Helper to create a FileData object
@@ -309,6 +315,416 @@ describe("fileDataReducer", () => {
       const result = fileDataReducer(current, update);
 
       expect(result).not.toBe(current);
+    });
+  });
+});
+
+describe("createFilesystemMiddleware", () => {
+  // Helper to create a mock backend that doesn't support execution
+  function createMockBackend(): BackendProtocol {
+    return {
+      lsInfo: vi.fn().mockResolvedValue([]),
+      read: vi.fn().mockResolvedValue(""),
+      write: vi.fn().mockResolvedValue({ error: null, filesUpdate: null }),
+      edit: vi.fn().mockResolvedValue({
+        error: null,
+        occurrences: 1,
+        filesUpdate: null,
+      }),
+      globInfo: vi.fn().mockResolvedValue([]),
+      grepRaw: vi.fn().mockResolvedValue([]),
+    } as unknown as BackendProtocol;
+  }
+
+  // Helper to create a mock backend that supports execution (SandboxBackendProtocol)
+  function createMockSandboxBackend(): BackendProtocol {
+    return {
+      ...createMockBackend(),
+      id: "mock-sandbox",
+      execute: vi.fn().mockResolvedValue({
+        output: "command output",
+        exitCode: 0,
+        truncated: false,
+      }),
+    } as unknown as BackendProtocol;
+  }
+
+  describe("wrapModelCall", () => {
+    it("should add filesystem system prompt to model call", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: middleware.tools || [],
+      };
+
+      middleware.wrapModelCall!(request as any, mockHandler);
+
+      expect(mockHandler).toHaveBeenCalled();
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      expect(modifiedRequest.systemMessage.text).toContain("Filesystem Tools");
+      expect(modifiedRequest.systemMessage.text).toContain("Base prompt");
+    });
+
+    it("should include execute tool and execution prompt when backend supports execution", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockSandboxBackend(),
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: middleware.tools || [],
+      };
+
+      middleware.wrapModelCall!(request as any, mockHandler);
+
+      expect(mockHandler).toHaveBeenCalled();
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+
+      // Should include execution system prompt
+      expect(modifiedRequest.systemMessage.text).toContain("Execute Tool");
+      expect(modifiedRequest.systemMessage.text).toContain("Base prompt");
+
+      // Should include execute tool in tools array
+      const toolNames = modifiedRequest.tools.map((t: any) => t.name);
+      expect(toolNames).toContain("execute");
+    });
+
+    it("should exclude execute tool when backend doesn't support execution", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: middleware.tools || [],
+      };
+
+      middleware.wrapModelCall!(request as any, mockHandler);
+
+      expect(mockHandler).toHaveBeenCalled();
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+
+      // Should NOT include execution system prompt
+      expect(modifiedRequest.systemMessage.text).not.toContain("Execute Tool");
+
+      // Should NOT include execute tool in tools array
+      const toolNames = modifiedRequest.tools.map((t: any) => t.name);
+      expect(toolNames).not.toContain("execute");
+    });
+
+    it("should use custom system prompt when provided", () => {
+      const customPrompt = "Custom filesystem instructions";
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        systemPrompt: customPrompt,
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: middleware.tools || [],
+      };
+
+      middleware.wrapModelCall!(request as any, mockHandler);
+
+      expect(mockHandler).toHaveBeenCalled();
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+
+      // Should include custom prompt
+      expect(modifiedRequest.systemMessage.text).toContain(customPrompt);
+      // Should NOT include default filesystem prompt
+      expect(modifiedRequest.systemMessage.text).not.toContain(
+        "Filesystem Tools",
+      );
+    });
+  });
+
+  describe("wrapToolCall", () => {
+    it("should pass through handler when eviction is disabled", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        toolTokenLimitBeforeEvict: null,
+      });
+
+      const mockMessage = new ToolMessage({
+        content: "test result",
+        tool_call_id: "test-id",
+        name: "test_tool",
+      });
+      const mockHandler = vi.fn().mockResolvedValue(mockMessage);
+      const request = {
+        toolCall: { id: "test-id", name: "test_tool" },
+        state: {},
+        config: {},
+      };
+
+      const result = await middleware.wrapToolCall!(
+        request as any,
+        mockHandler,
+      );
+
+      expect(mockHandler).toHaveBeenCalledWith(request);
+      expect(result).toBe(mockMessage);
+    });
+
+    it("should not evict tools in TOOLS_EXCLUDED_FROM_EVICTION even with large results", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        toolTokenLimitBeforeEvict: 100,
+      });
+
+      // Create large content that would normally trigger eviction
+      const largeContent = "x".repeat(100 * NUM_CHARS_PER_TOKEN + 1000);
+
+      // Test a representative excluded tool
+      const toolName = TOOLS_EXCLUDED_FROM_EVICTION[0];
+      const mockMessage = new ToolMessage({
+        content: largeContent,
+        tool_call_id: "test-id",
+        name: toolName,
+      });
+      const mockHandler = vi.fn().mockResolvedValue(mockMessage);
+      const request = {
+        toolCall: { id: "test-id", name: toolName },
+        state: {},
+        config: {},
+      };
+
+      const result = await middleware.wrapToolCall!(
+        request as any,
+        mockHandler,
+      );
+
+      // Should not be evicted - should return original message
+      expect(result).toBe(mockMessage);
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.content).toBe(largeContent);
+        expect(result.content).not.toContain("Tool result too large");
+      }
+    });
+
+    it("should not evict small ToolMessage results", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        toolTokenLimitBeforeEvict: 1000,
+      });
+
+      const smallContent = "This is a small result";
+      const mockMessage = new ToolMessage({
+        content: smallContent,
+        tool_call_id: "test-id",
+        name: "some_tool",
+      });
+      const mockHandler = vi.fn().mockResolvedValue(mockMessage);
+      const request = {
+        toolCall: { id: "test-id", name: "some_tool" },
+        state: {},
+        config: {},
+      };
+
+      const result = await middleware.wrapToolCall!(
+        request as any,
+        mockHandler,
+      );
+
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.content).toBe(smallContent);
+        expect(result.tool_call_id).toBe("test-id");
+      }
+    });
+
+    it("should evict large ToolMessage results to filesystem", async () => {
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: null,
+        filesUpdate: {
+          "/large_tool_results/test-id": {
+            content: ["large content"],
+            created_at: "2024-01-01T00:00:00Z",
+            modified_at: "2024-01-01T00:00:00Z",
+          },
+        },
+      });
+      mockBackend.write = mockWrite;
+
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        toolTokenLimitBeforeEvict: 100,
+      });
+
+      const largeContent = "x".repeat(100 * NUM_CHARS_PER_TOKEN + 1000);
+      const mockMessage = new ToolMessage({
+        content: largeContent,
+        tool_call_id: "test-id",
+        name: "some_tool",
+      });
+      const mockHandler = vi.fn().mockResolvedValue(mockMessage);
+      const request = {
+        toolCall: { id: "test-id", name: "some_tool" },
+        state: {},
+        config: {},
+      };
+
+      const result = await middleware.wrapToolCall!(
+        request as any,
+        mockHandler,
+      );
+
+      // Should have written to backend
+      expect(mockWrite).toHaveBeenCalledWith(
+        "/large_tool_results/test-id",
+        largeContent,
+      );
+
+      // Should return a Command with truncated message
+      expect(isCommand(result)).toBe(true);
+      if (isCommand(result)) {
+        const update = result.update as any;
+        expect(update.messages).toHaveLength(1);
+        expect(ToolMessage.isInstance(update.messages[0])).toBe(true);
+
+        const truncatedMsg = update.messages[0];
+        expect(truncatedMsg.content).toContain("Tool result too large");
+        expect(truncatedMsg.content).toContain("/large_tool_results/test-id");
+        expect(truncatedMsg.tool_call_id).toBe("test-id");
+
+        // Should have filesUpdate
+        expect(update.files).toBeDefined();
+        expect(update.files["/large_tool_results/test-id"]).toBeDefined();
+      }
+    });
+
+    it("should handle Command with multiple ToolMessages", async () => {
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: null,
+        filesUpdate: {
+          "/large_tool_results/test-id-1": {
+            content: ["large content 1"],
+            created_at: "2024-01-01T00:00:00Z",
+            modified_at: "2024-01-01T00:00:00Z",
+          },
+        },
+      });
+      mockBackend.write = mockWrite;
+
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        toolTokenLimitBeforeEvict: 100,
+      });
+
+      const largeContent = "y".repeat(100 * NUM_CHARS_PER_TOKEN + 1000);
+      const smallContent = "small result";
+
+      const largeMessage = new ToolMessage({
+        content: largeContent,
+        tool_call_id: "test-id-1",
+        name: "tool1",
+      });
+
+      const smallMessage = new ToolMessage({
+        content: smallContent,
+        tool_call_id: "test-id-2",
+        name: "tool2",
+      });
+
+      const commandResult = new Command({
+        update: {
+          messages: [largeMessage, smallMessage],
+          files: {},
+        },
+      });
+
+      const mockHandler = vi.fn().mockResolvedValue(commandResult);
+      const request = {
+        toolCall: { id: "test-id-1", name: "tool1" },
+        state: {},
+        config: {},
+      };
+
+      const result = await middleware.wrapToolCall!(
+        request as any,
+        mockHandler,
+      );
+
+      // Should have written large content
+      expect(mockWrite).toHaveBeenCalledWith(
+        "/large_tool_results/test-id-1",
+        largeContent,
+      );
+
+      // Result should be a Command
+      expect(isCommand(result)).toBe(true);
+      if (isCommand(result)) {
+        const update = result.update as any;
+        expect(update.messages).toHaveLength(2);
+
+        // First message should be truncated
+        expect(update.messages[0].content).toContain("Tool result too large");
+
+        // Second message should be unchanged
+        expect(update.messages[1].content).toBe(smallContent);
+
+        // Should accumulate files
+        expect(update.files["/large_tool_results/test-id-1"]).toBeDefined();
+      }
+    });
+
+    it("should handle write errors gracefully during eviction", async () => {
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: "Failed to write file",
+        filesUpdate: null,
+      });
+      mockBackend.write = mockWrite;
+
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        toolTokenLimitBeforeEvict: 100,
+      });
+
+      const largeContent = "z".repeat(100 * NUM_CHARS_PER_TOKEN + 1000);
+      const mockMessage = new ToolMessage({
+        content: largeContent,
+        tool_call_id: "test-id",
+        name: "some_tool",
+      });
+      const mockHandler = vi.fn().mockResolvedValue(mockMessage);
+      const request = {
+        toolCall: { id: "test-id", name: "some_tool" },
+        state: {},
+        config: {},
+      };
+
+      const result = await middleware.wrapToolCall!(
+        request as any,
+        mockHandler,
+      );
+
+      // Should attempt to write
+      expect(mockWrite).toHaveBeenCalled();
+
+      // Should return original message when write fails
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.content).toBe(largeContent);
+      }
     });
   });
 });
