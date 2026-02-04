@@ -13,6 +13,7 @@ import type {
   ServerTool,
   StructuredTool,
 } from "@langchain/core/tools";
+import { Runnable } from "@langchain/core/runnables";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 
 import {
@@ -176,14 +177,14 @@ export function createDeepAgent<
     /**
      * CompiledSubAgent - use as-is (already has its own middleware baked in)
      */
-    if ("runnable" in subagent) {
+    if (Runnable.isRunnable(subagent)) {
       return subagent;
     }
 
     /**
      * SubAgent without skills - use as-is
      */
-    if (!subagent.skills || subagent.skills.length === 0) {
+    if (!("skills" in subagent) || subagent.skills?.length === 0) {
       return subagent;
     }
 
@@ -194,7 +195,7 @@ export function createDeepAgent<
      */
     const subagentSkillsMiddleware = createSkillsMiddleware({
       backend: filesystemBackend,
-      sources: subagent.skills,
+      sources: subagent.skills ?? [],
     });
 
     return {
