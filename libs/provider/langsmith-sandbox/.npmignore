@@ -1,0 +1,7 @@
+src/
+*.test.ts
+*.int.test.ts
+tsconfig.json
+tsdown.config.ts
+vitest.config.ts
+.tsdown/
