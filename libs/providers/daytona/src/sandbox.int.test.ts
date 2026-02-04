@@ -12,12 +12,6 @@ describe("DaytonaSandbox Integration Tests", () => {
   let sandbox: DaytonaSandbox;
 
   beforeAll(async () => {
-    // Skip if no API key is configured
-    if (!process.env.DAYTONA_API_KEY) {
-      console.log("Skipping integration tests: DAYTONA_API_KEY not set");
-      return;
-    }
-
     // Create sandbox with reasonable defaults for testing
     sandbox = await DaytonaSandbox.create({
       language: "typescript",
@@ -27,19 +21,10 @@ describe("DaytonaSandbox Integration Tests", () => {
         package: "@langchain/daytona",
       },
     });
-
-    console.log(`Created sandbox: ${sandbox.id}`);
   });
 
   afterAll(async () => {
-    if (sandbox) {
-      try {
-        await sandbox.close();
-        console.log(`Deleted sandbox: ${sandbox.id}`);
-      } catch (error) {
-        console.error("Failed to cleanup sandbox:", error);
-      }
-    }
+    await sandbox?.close();
   });
 
   it("should create and initialize sandbox", async () => {
