@@ -71,7 +71,10 @@ try {
 
   const result = await agent.invoke({
     messages: [
-      { role: "user", content: "Create a hello world TypeScript app and run it" },
+      {
+        role: "user",
+        content: "Create a hello world TypeScript app and run it",
+      },
     ],
   });
 } finally {
@@ -110,9 +113,9 @@ interface DaytonaSandboxOptions {
    * Resource allocation (only available when using `image`).
    */
   resources?: {
-    cpu?: number;    // Number of CPUs
+    cpu?: number; // Number of CPUs
     memory?: number; // Memory in GiB
-    disk?: number;   // Disk space in GiB
+    disk?: number; // Disk space in GiB
   };
 
   /**
