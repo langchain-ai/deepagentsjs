@@ -189,14 +189,16 @@ describe("Subagent skills isolation", () => {
 
     // Main agent should have skills
     const mainAgentPrompts = systemPrompts.filter(
-      (p) => p.includes("test-skill") && p.includes("`task` (subagent spawner)"),
+      (p) =>
+        p.includes("test-skill") && p.includes("`task` (subagent spawner)"),
     );
     expect(mainAgentPrompts.length).toBeGreaterThan(0);
     expect(mainAgentPrompts[0]).toContain("Skills System");
 
     // GP subagent should also have skills (no `task` tool in prompt)
     const gpSubagentPrompts = systemPrompts.filter(
-      (p) => p.includes("test-skill") && !p.includes("`task` (subagent spawner)"),
+      (p) =>
+        p.includes("test-skill") && !p.includes("`task` (subagent spawner)"),
     );
     expect(gpSubagentPrompts.length).toBeGreaterThan(0);
     expect(gpSubagentPrompts[0]).toContain("Skills System");

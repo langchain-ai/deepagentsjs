@@ -414,7 +414,8 @@ function getSubagents(options: {
 
   const defaultSubagentMiddleware = defaultMiddleware || [];
   // General-purpose middleware includes skills from main agent, falls back to default
-  const generalPurposeMiddlewareBase = gpMiddleware || defaultSubagentMiddleware;
+  const generalPurposeMiddlewareBase =
+    gpMiddleware || defaultSubagentMiddleware;
   const agents: Record<string, ReactAgent | Runnable> = {};
   const subagentDescriptions: string[] = [];
 
