@@ -60,8 +60,8 @@ import {
 import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
-import { fileDataReducer, FileDataSchema } from "./fs.js";
-import { ReducedValue, StateSchema } from "@langchain/langgraph";
+import { filesValue } from "../values.js";
+import { StateSchema } from "@langchain/langgraph";
 
 /**
  * Options for the memory middleware.
@@ -93,13 +93,7 @@ const MemoryStateSchema = new StateSchema({
    * Marked as private so it's not included in the final agent state.
    */
   memoryContents: z.record(z.string(), z.string()).optional(),
-  files: new ReducedValue(
-    z.record(z.string(), FileDataSchema).default(() => ({})),
-    {
-      inputSchema: z.record(z.string(), FileDataSchema.nullable()).optional(),
-      reducer: fileDataReducer,
-    },
-  ),
+  files: filesValue,
 });
 
 /**
