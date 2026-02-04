@@ -255,10 +255,6 @@ export function createDeepAgent<
     ...(customMiddleware as unknown as AgentMiddleware[]),
   ];
 
-  /**
-   * Note: Recursion limit of 1000 (matching Python behavior) should be passed
-   * at invocation time: agent.invoke(input, { recursionLimit: 1000 })
-   */
   const agent = createAgent({
     model,
     systemPrompt: finalSystemPrompt,
@@ -269,7 +265,7 @@ export function createDeepAgent<
     checkpointer,
     store,
     name,
-  });
+  }).withConfig({ recursionLimit: 10_000 });
 
   /**
    * Combine custom middleware with flattened subagent middleware for complete type inference

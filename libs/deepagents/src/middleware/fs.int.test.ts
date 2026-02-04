@@ -63,7 +63,9 @@ describe("Filesystem Middleware Integration Tests", () => {
       );
 
       const lastMessage = response.messages[response.messages.length - 1];
-      expect(lastMessage.content.toString().toLowerCase()).toContain("pokemon");
+      expect(lastMessage.content.toString().toLowerCase()).toMatch(
+        /pok[ée]mon/,
+      );
     },
   );
 
