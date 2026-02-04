@@ -126,8 +126,9 @@ describe("FilesystemBackend", () => {
     const globResults = await backend.globInfo("**/*.md", "/");
     expect(globResults.some((i) => i.path === "/dir/b.md")).toBe(true);
 
-    const err = await backend.grepRaw("[", "/");
-    expect(typeof err).toBe("string");
+    // Special characters like "[" are treated literally (not regex), returns empty list or matches
+    const literalResult = await backend.grepRaw("[", "/");
+    expect(Array.isArray(literalResult)).toBe(true);
 
     const traversalError = await backend.read("/../a.txt");
     expect(traversalError).toContain("Error");

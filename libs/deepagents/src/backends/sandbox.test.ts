@@ -395,17 +395,25 @@ describe("BaseSandbox", () => {
       }
     });
 
-    it("should return error string for invalid regex", async () => {
+    it("should treat special characters as literal text (not regex)", async () => {
       const sandbox = new MockSandbox();
       sandbox.execute = vi.fn().mockResolvedValue({
-        output: "Invalid regex: [",
-        exitCode: 1,
+        output: JSON.stringify({
+          path: "/test.py",
+          line: 1,
+          text: "def __init__(self):",
+        }),
+        exitCode: 0,
         truncated: false,
       });
 
-      const result = await sandbox.grepRaw("[", "/");
-      expect(typeof result).toBe("string");
-      expect(result).toContain("Invalid regex");
+      // Special characters like "[" and "(" should be treated literally, not as regex
+      const result = await sandbox.grepRaw("def __init__(", "/");
+      expect(Array.isArray(result)).toBe(true);
+      if (Array.isArray(result)) {
+        expect(result.length).toBe(1);
+        expect(result[0].text).toBe("def __init__(self):");
+      }
     });
   });
 

@@ -1,19 +1,22 @@
+import * as fs from "node:fs/promises";
+import * as fsSync from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
+
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { InMemoryStore } from "@langchain/langgraph-checkpoint";
+import { getCurrentTaskInput } from "@langchain/langgraph";
+
 import { CompositeBackend } from "./composite.js";
 import { StateBackend } from "./state.js";
 import { StoreBackend } from "./store.js";
 import { FilesystemBackend } from "./filesystem.js";
-import { InMemoryStore } from "@langchain/langgraph-checkpoint";
-import { getCurrentTaskInput } from "@langchain/langgraph";
-import * as fs from "fs/promises";
-import * as fsSync from "fs";
-import * as path from "path";
-import * as os from "os";
 import type {
   ExecuteResponse,
   FileDownloadResponse,
   FileUploadResponse,
   SandboxBackendProtocol,
+  GrepMatch,
 } from "./protocol.js";
 
 /**
@@ -210,15 +213,15 @@ describe("CompositeBackend", () => {
     expect(memPaths).not.toContain("/temp.txt");
     expect(memPaths).not.toContain("/archive/old.log");
 
-    const allMatches = await composite.grepRaw(".", "/");
+    // grep across all backends with literal text search
+    // Note: All written content contains 'e' character
+    const allMatches = (await composite.grepRaw("e", "/")) as GrepMatch[];
     expect(Array.isArray(allMatches)).toBe(true);
-    if (Array.isArray(allMatches)) {
-      const pathsWithContent = allMatches.map((m) => m.path);
-      expect(pathsWithContent).toContain("/temp.txt");
-      expect(pathsWithContent).toContain("/memories/important.md");
-      expect(pathsWithContent).toContain("/archive/old.log");
-      expect(pathsWithContent).toContain("/cache/session.json");
-    }
+    const pathsWithContent = allMatches.map((m) => m.path);
+    expect(pathsWithContent).toContain("/temp.txt");
+    expect(pathsWithContent).toContain("/memories/important.md");
+    expect(pathsWithContent).toContain("/archive/old.log");
+    expect(pathsWithContent).toContain("/cache/session.json");
 
     const globResults = await composite.globInfo("**/*.md", "/");
     expect(globResults.some((i) => i.path === "/memories/important.md")).toBe(

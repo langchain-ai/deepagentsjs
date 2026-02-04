@@ -4,7 +4,7 @@
  * Security and search upgrades:
  * - Secure path resolution with root containment when in virtual_mode (sandboxed to cwd)
  * - Prevent symlink-following on file I/O using O_NOFOLLOW when available
- * - Ripgrep-powered grep with JSON parsing, plus regex fallback
+ * - Ripgrep-powered grep with literal (fixed-string) search, plus substring fallback
  *   and optional glob include filtering, while preserving virtual path behavior
  */
 
@@ -410,20 +410,20 @@ export class FilesystemBackend implements BackendProtocol {
   }
 
   /**
-   * Structured search results or error string for invalid input.
+   * Search for a literal text pattern in files.
+   *
+   * Uses ripgrep if available, falling back to substring search.
+   *
+   * @param pattern - Literal string to search for (NOT regex).
+   * @param dirPath - Directory or file path to search in. Defaults to current directory.
+   * @param glob - Optional glob pattern to filter which files to search.
+   * @returns List of GrepMatch dicts containing path, line number, and matched text.
    */
   async grepRaw(
     pattern: string,
     dirPath: string = "/",
     glob: string | null = null,
   ): Promise<GrepMatch[] | string> {
-    // Validate regex
-    try {
-      new RegExp(pattern);
-    } catch (e: any) {
-      return `Invalid regex pattern: ${e.message}`;
-    }
-
     // Resolve base path
     let baseFull: string;
     try {
@@ -438,10 +438,10 @@ export class FilesystemBackend implements BackendProtocol {
       return [];
     }
 
-    // Try ripgrep first, fallback to regex search
+    // Try ripgrep first (with -F flag for literal search), fallback to substring search
     let results = await this.ripgrepSearch(pattern, baseFull, glob);
     if (results === null) {
-      results = await this.pythonSearch(pattern, baseFull, glob);
+      results = await this.literalSearch(pattern, baseFull, glob);
     }
 
     const matches: GrepMatch[] = [];
@@ -454,8 +454,13 @@ export class FilesystemBackend implements BackendProtocol {
   }
 
   /**
-   * Try to use ripgrep for fast searching.
-   * Returns null if ripgrep is not available or fails.
+   * Search using ripgrep with fixed-string (literal) mode.
+   *
+   * @param pattern - Literal string to search for (unescaped).
+   * @param baseFull - Resolved base path to search in.
+   * @param includeGlob - Optional glob pattern to filter files.
+   * @returns Dict mapping file paths to list of (line_number, line_text) tuples.
+   *          Returns null if ripgrep is unavailable or times out.
    */
   private async ripgrepSearch(
     pattern: string,
@@ -463,7 +468,8 @@ export class FilesystemBackend implements BackendProtocol {
     includeGlob: string | null,
   ): Promise<Record<string, Array<[number, string]>> | null> {
     return new Promise((resolve) => {
-      const args = ["--json"];
+      // -F enables fixed-string (literal) mode
+      const args = ["--json", "-F"];
       if (includeGlob) {
         args.push("--glob", includeGlob);
       }
@@ -533,20 +539,20 @@ export class FilesystemBackend implements BackendProtocol {
   }
 
   /**
-   * Fallback regex search implementation.
+   * Fallback search using literal substring matching when ripgrep is unavailable.
+   *
+   * Recursively searches files, respecting maxFileSizeBytes limit.
+   *
+   * @param pattern - Literal string to search for.
+   * @param baseFull - Resolved base path to search in.
+   * @param includeGlob - Optional glob pattern to filter files by name.
+   * @returns Dict mapping file paths to list of (line_number, line_text) tuples.
    */
-  private async pythonSearch(
+  private async literalSearch(
     pattern: string,
     baseFull: string,
     includeGlob: string | null,
   ): Promise<Record<string, Array<[number, string]>>> {
-    let regex: RegExp;
-    try {
-      regex = new RegExp(pattern);
-    } catch {
-      return {};
-    }
-
     const results: Record<string, Array<[number, string]>> = {};
     const stat = await fs.stat(baseFull);
     const root = stat.isDirectory() ? baseFull : path.dirname(baseFull);
@@ -575,13 +581,14 @@ export class FilesystemBackend implements BackendProtocol {
           continue;
         }
 
-        // Read and search
+        // Read and search using literal substring matching
         const content = await fs.readFile(fp, "utf-8");
         const lines = content.split("\n");
 
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i];
-          if (regex.test(line)) {
+          // Simple substring search for literal matching
+          if (line.includes(pattern)) {
             let virtPath: string;
             if (this.virtualMode) {
               try {
