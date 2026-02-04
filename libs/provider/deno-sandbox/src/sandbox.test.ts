@@ -383,7 +383,7 @@ describe("DenoSandbox", () => {
       await sandbox.execute("echo hello");
 
       expect(spawnSpy).toHaveBeenCalledWith("/bin/bash", {
-        args: ["-c", "cd /home/sandbox && echo hello"],
+        args: ["-c", "echo hello"],
         stdout: "piped",
         stderr: "piped",
       });

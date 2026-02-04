@@ -100,18 +100,15 @@ async function main() {
 
     console.log("🤖 Running agent...\n");
 
-    const result = await agent.invoke(
-      {
-        messages: [
-          new HumanMessage(
-            `Create a simple TypeScript file called hello.ts that prints "Hello from DeepAgents!".
+    const result = await agent.invoke({
+      messages: [
+        new HumanMessage(
+          `Create a simple TypeScript file called hello.ts that prints "Hello from DeepAgents!".
             Then run it with deno to verify it works.
             Finally, show me the output.`,
-          ),
-        ],
-      },
-      { recursionLimit: 50 },
-    );
+        ),
+      ],
+    });
 
     // Show the final AI response
     const messages = result.messages;

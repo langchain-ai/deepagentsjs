@@ -68,13 +68,6 @@ export interface DenoSandboxOptions {
   region?: DenoSandboxRegion;
 
   /**
-   * Working directory for command execution.
-   *
-   * @default "/home/sandbox"
-   */
-  cwd?: string;
-
-  /**
    * Authentication configuration for Deno Deploy API.
    *
    * ### Environment Variable Setup
