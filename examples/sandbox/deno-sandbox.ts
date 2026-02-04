@@ -4,7 +4,11 @@
  *
  * This example demonstrates the Sandbox Execution Support feature of DeepAgents
  * using Deno Deploy's cloud-based sandbox infrastructure. It shows how to:
+<<<<<<< HEAD
  * 1. Create a Deno Sandbox backend using the @langchain/deno package
+=======
+ * 1. Create a Deno Sandbox backend using the @langchain/deno-sandbox package
+>>>>>>> 12b39a3 (switch to deno)
  * 2. Use the `execute` tool to run shell commands in an isolated microVM
  * 3. Leverage file upload/download capabilities
  *
