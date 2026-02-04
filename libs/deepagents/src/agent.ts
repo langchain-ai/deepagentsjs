@@ -208,6 +208,26 @@ export function createDeepAgent<
   });
 
   /**
+   * Middleware for custom subagents (does NOT include skills from main agent).
+   * Custom subagents must define their own `skills` property to get skills.
+   */
+  const subagentMiddleware = [
+    todoListMiddleware(),
+    createFilesystemMiddleware({
+      backend: filesystemBackend,
+    }),
+    summarizationMiddleware({
+      model,
+      trigger: { tokens: 170_000 },
+      keep: { messages: 6 },
+    }),
+    anthropicPromptCachingMiddleware({
+      unsupportedModelBehavior: "ignore",
+    }),
+    createPatchToolCallsMiddleware(),
+  ];
+
+  /**
    * Built-in middleware array - core middleware with known types
    * This tuple is typed without conditional spreads to preserve TypeScript's tuple inference.
    * Optional middleware (skills, memory, HITL) are handled at runtime but typed explicitly.
@@ -227,39 +247,16 @@ export function createDeepAgent<
     createSubAgentMiddleware({
       defaultModel: model,
       defaultTools: tools as StructuredTool[],
-      defaultMiddleware: [
-        /**
-         * Subagent middleware: Todo list management
-         */
-        todoListMiddleware(),
-        /**
-         * Subagent middleware: Skills (if provided) - added at runtime
-         */
+      /**
+       * Custom subagents must define their own `skills` property to get skills.
+       */
+      defaultMiddleware: subagentMiddleware,
+      /**
+       * Middleware for the general-purpose subagent (inherits skills from main agent).
+       */
+      generalPurposeMiddleware: [
+        ...subagentMiddleware,
         ...skillsMiddlewareArray,
-        /**
-         * Subagent middleware: Filesystem operations
-         */
-        createFilesystemMiddleware({
-          backend: filesystemBackend,
-        }),
-        /**
-         * Subagent middleware: Automatic conversation summarization when token limits are approached
-         */
-        summarizationMiddleware({
-          model,
-          trigger: { tokens: 170_000 },
-          keep: { messages: 6 },
-        }),
-        /**
-         * Subagent middleware: Anthropic prompt caching for improved performance
-         */
-        anthropicPromptCachingMiddleware({
-          unsupportedModelBehavior: "ignore",
-        }),
-        /**
-         * Subagent middleware: Patches tool calls for compatibility
-         */
-        createPatchToolCallsMiddleware(),
       ],
       defaultInterruptOn: interruptOn,
       subagents: processedSubagents,
