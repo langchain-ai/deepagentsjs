@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import {
-  getAuthApiKey,
-  getAuthApiUrl,
-  getAuthCredentials,
-} from "./auth.js";
+import { getAuthApiKey, getAuthApiUrl, getAuthCredentials } from "./auth.js";
 
 describe("auth", () => {
   const originalEnv = { ...process.env };
@@ -39,9 +35,7 @@ describe("auth", () => {
     });
 
     it("should throw error when no API key is available", () => {
-      expect(() => getAuthApiKey()).toThrow(
-        "Daytona authentication required",
-      );
+      expect(() => getAuthApiKey()).toThrow("Daytona authentication required");
     });
 
     it("should provide helpful error message with setup instructions", () => {
