@@ -61,7 +61,9 @@ describe("getAuthToken", () => {
 
   describe("error handling", () => {
     it("should throw when no token is available", () => {
-      expect(() => getAuthToken()).toThrow("Deno Deploy authentication required");
+      expect(() => getAuthToken()).toThrow(
+        "Deno Deploy authentication required",
+      );
     });
 
     it("should throw with descriptive error message", () => {
