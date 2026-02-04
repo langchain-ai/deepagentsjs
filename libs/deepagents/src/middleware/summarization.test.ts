@@ -8,16 +8,21 @@ import type {
   EditResult,
 } from "../backends/protocol.js";
 
-// Mock the OpenAI module with a class constructor
-vi.mock("@langchain/openai", () => {
+// Mock the initChatModel function from langchain/chat_models/universal
+vi.mock("langchain/chat_models/universal", () => {
   return {
-    ChatOpenAI: class MockChatOpenAI {
-      constructor(_config: any) {}
-      async invoke(_messages: any) {
-        return {
-          content: "This is a summary of the conversation.",
-        };
-      }
+    initChatModel: async (_modelName: string) => {
+      return {
+        async invoke(_messages: any) {
+          return {
+            content: "This is a summary of the conversation.",
+          };
+        },
+        // Mock profile with maxInputTokens for testing
+        profile: {
+          maxInputTokens: 128000,
+        },
+      };
     },
   };
 });
@@ -172,6 +177,120 @@ describe("createSummarizationMiddleware", () => {
 
       expect(result).toBeDefined();
       expect(result?.messages).toBeDefined();
+    });
+  });
+
+  describe("fraction trigger", () => {
+    it("should trigger summarization when token count exceeds fraction of maxInputTokens", async () => {
+      const mockBackend = createMockBackend();
+
+      // Create a mock model with profile containing low maxInputTokens
+      const mockModelWithProfile = {
+        profile: {
+          maxInputTokens: 200, // Low threshold for testing (100 tokens = 50%)
+        },
+        async invoke(_messages: any) {
+          return {
+            content: "This is a summary of the conversation.",
+          };
+        },
+      };
+
+      const middleware = createSummarizationMiddleware({
+        model: mockModelWithProfile as any,
+        backend: mockBackend,
+        trigger: { type: "fraction", value: 0.5 }, // 50% of maxInputTokens
+        keep: { type: "messages", value: 2 },
+      });
+
+      // Create messages with enough content to exceed 100 tokens (50% of 200)
+      const messages = Array.from(
+        { length: 10 },
+        (_, i) =>
+          new HumanMessage({
+            content: `Message ${i} with some extra content to increase token count`,
+          }),
+      );
+
+      // @ts-expect-error - typing issue
+      const result = await middleware.beforeModel?.({ messages });
+
+      expect(result).toBeDefined();
+      expect(result?.messages).toBeDefined();
+      // Should have summary message + 2 preserved messages
+      expect(result?.messages.length).toBe(3);
+    });
+
+    it("should not trigger fraction-based summarization when model has no profile", async () => {
+      const mockBackend = createMockBackend();
+
+      // Create a mock model WITHOUT a profile (no maxInputTokens)
+      const mockModelWithoutProfile = {
+        async invoke(_messages: any) {
+          return {
+            content: "This is a summary of the conversation.",
+          };
+        },
+        // No profile property
+      };
+
+      const middleware = createSummarizationMiddleware({
+        model: mockModelWithoutProfile as any,
+        backend: mockBackend,
+        trigger: { type: "fraction", value: 0.5 },
+        keep: { type: "messages", value: 2 },
+        // maxInputTokens is NOT provided and model has no profile
+      });
+
+      // Create messages with content
+      const messages = Array.from(
+        { length: 10 },
+        (_, i) =>
+          new HumanMessage({
+            content: `Message ${i} with some extra content`,
+          }),
+      );
+
+      // @ts-expect-error - typing issue
+      const result = await middleware.beforeModel?.({ messages });
+
+      // Without maxInputTokens (no explicit option and no model profile), fraction trigger should not fire
+      expect(result).toBeUndefined();
+    });
+
+    it("should not trigger when token count is below fraction threshold", async () => {
+      const mockBackend = createMockBackend();
+
+      // Create a mock model with high maxInputTokens in profile
+      const mockModelWithHighLimit = {
+        profile: {
+          maxInputTokens: 100000, // Very high threshold
+        },
+        async invoke(_messages: any) {
+          return {
+            content: "This is a summary of the conversation.",
+          };
+        },
+      };
+
+      const middleware = createSummarizationMiddleware({
+        model: mockModelWithHighLimit as any,
+        backend: mockBackend,
+        trigger: { type: "fraction", value: 0.9 }, // 90% of maxInputTokens
+        keep: { type: "messages", value: 2 },
+      });
+
+      // Create just a few short messages
+      const messages = [
+        new HumanMessage({ content: "Hello" }),
+        new AIMessage({ content: "Hi" }),
+      ];
+
+      // @ts-expect-error - typing issue
+      const result = await middleware.beforeModel?.({ messages });
+
+      // Token count is far below 90% of 100000, so should not trigger
+      expect(result).toBeUndefined();
     });
   });
 

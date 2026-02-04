@@ -53,7 +53,7 @@ import {
 } from "langchain";
 import { getBufferString } from "@langchain/core/messages";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { ChatOpenAI } from "@langchain/openai";
+import { initChatModel } from "langchain/chat_models/universal";
 
 import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
@@ -260,13 +260,45 @@ export function createSummarizationMiddleware(
   }
 
   /**
-   * Resolve the chat model.
+   * Cached resolved model to avoid repeated initChatModel calls
    */
-  function getChatModel(): BaseChatModel {
-    if (typeof model === "string") {
-      return new ChatOpenAI({ modelName: model });
+  let cachedModel: BaseChatModel | undefined = undefined;
+
+  /**
+   * Resolve the chat model.
+   * Uses initChatModel to support any model provider from a string name.
+   * The resolved model is cached for subsequent calls.
+   */
+  async function getChatModel(): Promise<BaseChatModel> {
+    if (cachedModel) {
+      return cachedModel;
     }
-    return model;
+
+    if (typeof model === "string") {
+      cachedModel = await initChatModel(model);
+    } else {
+      cachedModel = model;
+    }
+    return cachedModel;
+  }
+
+  /**
+   * Get the max input tokens from the resolved model's profile.
+   * Similar to Python's _get_profile_limits.
+   */
+  function getMaxInputTokens(resolvedModel: BaseChatModel): number | undefined {
+    const profile = (
+      resolvedModel as BaseChatModel & { profile?: { maxInputTokens?: number } }
+    ).profile;
+    if (
+      profile &&
+      typeof profile === "object" &&
+      "maxInputTokens" in profile &&
+      typeof profile.maxInputTokens === "number"
+    ) {
+      return profile.maxInputTokens;
+    }
+    return undefined;
   }
 
   /**
@@ -533,9 +565,10 @@ export function createSummarizationMiddleware(
   /**
    * Create summary of messages.
    */
-  async function createSummary(messages: BaseMessage[]): Promise<string> {
-    const chatModel = getChatModel();
-
+  async function createSummary(
+    messages: BaseMessage[],
+    chatModel: BaseChatModel,
+  ): Promise<string> {
     // Trim messages if too long
     let messagesToSummarize = messages;
     const tokens = countTokensApproximately(messages);
@@ -605,29 +638,49 @@ ${summary}
         return undefined;
       }
 
-      // Step 1: Truncate args if configured
-      const { messages: truncatedMessages, modified: argsWereTruncated } =
-        truncateArgs(messages);
+      /**
+       * Resolve the chat model and get max input tokens from profile
+       */
+      const resolvedModel = await getChatModel();
+      const maxInputTokens = getMaxInputTokens(resolvedModel);
 
-      // Step 2: Check if summarization should happen
+      /**
+       * Step 1: Truncate args if configured
+       */
+      const { messages: truncatedMessages, modified: argsWereTruncated } =
+        truncateArgs(messages, maxInputTokens);
+
+      /**
+       * Step 2: Check if summarization should happen
+       */
       const totalTokens = countTokensApproximately(truncatedMessages);
       const shouldDoSummarization = shouldSummarize(
         truncatedMessages,
         totalTokens,
+        maxInputTokens,
       );
 
-      // If only truncation happened (no summarization)
+      /**
+       * If only truncation happened (no summarization)
+       */
       if (argsWereTruncated && !shouldDoSummarization) {
         return { messages: truncatedMessages };
       }
 
-      // If no truncation and no summarization
+      /**
+       * If no truncation and no summarization
+       */
       if (!shouldDoSummarization) {
         return undefined;
       }
 
-      // Step 3: Perform summarization
-      const cutoffIndex = determineCutoffIndex(truncatedMessages);
+      /**
+       * Step 3: Perform summarization
+       */
+      const cutoffIndex = determineCutoffIndex(
+        truncatedMessages,
+        maxInputTokens,
+      );
       if (cutoffIndex <= 0) {
         if (argsWereTruncated) {
           return { messages: truncatedMessages };
@@ -638,7 +691,9 @@ ${summary}
       const messagesToSummarize = truncatedMessages.slice(0, cutoffIndex);
       const preservedMessages = truncatedMessages.slice(cutoffIndex);
 
-      // Offload to backend first
+      /**
+       * Offload to backend first
+       */
       const resolvedBackend = getBackend(state);
       const filePath = await offloadToBackend(
         resolvedBackend,
@@ -647,14 +702,20 @@ ${summary}
       );
 
       if (filePath === null) {
-        // Offloading failed - don't proceed with summarization
+        /**
+         * Offloading failed - don't proceed with summarization
+         */
         return undefined;
       }
 
-      // Generate summary
-      const summary = await createSummary(messagesToSummarize);
+      /**
+       * Generate summary
+       */
+      const summary = await createSummary(messagesToSummarize, resolvedModel);
 
-      // Build summary message
+      /**
+       * Build summary message
+       */
       const summaryMessage = buildSummaryMessage(summary, filePath);
 
       return {
