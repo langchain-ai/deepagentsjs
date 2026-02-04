@@ -152,7 +152,7 @@ describe("createMemoryMiddleware", () => {
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       const request = {
-        systemPrompt: "Base prompt",
+        systemMessage: new SystemMessage("Base prompt"),
         state: {
           memoryContents: {
             "~/.deepagents/AGENTS.md": "User memory content",
@@ -165,13 +165,23 @@ describe("createMemoryMiddleware", () => {
 
       expect(mockHandler).toHaveBeenCalled();
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      expect(modifiedRequest.systemPrompt).toContain("<agent_memory>");
-      expect(modifiedRequest.systemPrompt).toContain("</agent_memory>");
-      expect(modifiedRequest.systemPrompt).toContain("<memory_guidelines>");
-      expect(modifiedRequest.systemPrompt).toContain("User memory content");
-      expect(modifiedRequest.systemPrompt).toContain("Project memory content");
-      expect(modifiedRequest.systemPrompt).toContain("~/.deepagents/AGENTS.md");
-      expect(modifiedRequest.systemPrompt).toContain("./.deepagents/AGENTS.md");
+      expect(modifiedRequest.systemMessage.text).toContain("<agent_memory>");
+      expect(modifiedRequest.systemMessage.text).toContain("</agent_memory>");
+      expect(modifiedRequest.systemMessage.text).toContain(
+        "<memory_guidelines>",
+      );
+      expect(modifiedRequest.systemMessage.text).toContain(
+        "User memory content",
+      );
+      expect(modifiedRequest.systemMessage.text).toContain(
+        "Project memory content",
+      );
+      expect(modifiedRequest.systemMessage.text).toContain(
+        "~/.deepagents/AGENTS.md",
+      );
+      expect(modifiedRequest.systemMessage.text).toContain(
+        "./.deepagents/AGENTS.md",
+      );
     });
 
     it("should show (No memory loaded) when no content", () => {
@@ -182,14 +192,16 @@ describe("createMemoryMiddleware", () => {
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       const request = {
-        systemPrompt: "Base prompt",
+        systemMessage: new SystemMessage("Base prompt"),
         state: { memoryContents: {} },
       };
 
       middleware.wrapModelCall!(request as any, mockHandler);
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      expect(modifiedRequest.systemPrompt).toContain("(No memory loaded)");
+      expect(modifiedRequest.systemMessage.text).toContain(
+        "(No memory loaded)",
+      );
     });
 
     it("should prepend memory section to existing system prompt", () => {
@@ -200,7 +212,7 @@ describe("createMemoryMiddleware", () => {
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       const request = {
-        systemPrompt: "Original system prompt content",
+        systemMessage: new SystemMessage("Original system prompt content"),
         state: { memoryContents: {} },
       };
 
@@ -208,8 +220,9 @@ describe("createMemoryMiddleware", () => {
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
       // Memory section should come before the original prompt
-      const memoryIndex = modifiedRequest.systemPrompt.indexOf("Agent Memory");
-      const originalIndex = modifiedRequest.systemPrompt.indexOf(
+      const memoryIndex =
+        modifiedRequest.systemMessage.text.indexOf("Agent Memory");
+      const originalIndex = modifiedRequest.systemMessage.text.indexOf(
         "Original system prompt content",
       );
       expect(memoryIndex).toBeLessThan(originalIndex);
@@ -223,14 +236,16 @@ describe("createMemoryMiddleware", () => {
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       const request = {
-        systemPrompt: "Base prompt",
+        systemMessage: new SystemMessage("Base prompt"),
         state: {},
       };
 
       middleware.wrapModelCall!(request as any, mockHandler);
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      expect(modifiedRequest.systemPrompt).toContain("(No memory loaded)");
+      expect(modifiedRequest.systemMessage.text).toContain(
+        "(No memory loaded)",
+      );
     });
   });
 
@@ -255,16 +270,20 @@ describe("createMemoryMiddleware", () => {
       // Step 2: Use loaded memory in wrapModelCall
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       const request: any = {
-        systemPrompt: "You are a helpful assistant.",
+        systemMessage: new SystemMessage("You are a helpful assistant."),
         state: stateUpdate,
       };
 
       middleware.wrapModelCall!(request, mockHandler);
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      expect(modifiedRequest.systemPrompt).toContain("I prefer TypeScript");
-      expect(modifiedRequest.systemPrompt).toContain("This is a React project");
-      expect(modifiedRequest.systemPrompt).toContain(
+      expect(modifiedRequest.systemMessage.text).toContain(
+        "I prefer TypeScript",
+      );
+      expect(modifiedRequest.systemMessage.text).toContain(
+        "This is a React project",
+      );
+      expect(modifiedRequest.systemMessage.text).toContain(
         "You are a helpful assistant",
       );
     });
