@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, afterAll } from "vitest";
-import { DenoSandbox } from "./sandbox.js";
+import { DenoSandbox } from "/home/app/sandbox.js";
 
 // Check if integration tests should run
 const DENO_TOKEN = process.env.DENO_DEPLOY_TOKEN;
@@ -245,16 +245,16 @@ describe.skipIf(!DENO_TOKEN)("DenoSandbox Integration Tests", () => {
 
         const content = new TextEncoder().encode("Hello from test file!");
         const results = await sandbox.uploadFiles([
-          ["/home/sandbox/test-upload.txt", content],
+          ["/home/app/test-upload.txt", content],
         ]);
 
         expect(results.length).toBe(1);
-        expect(results[0].path).toBe("/home/sandbox/test-upload.txt");
+        expect(results[0].path).toBe("/home/app/test-upload.txt");
         expect(results[0].error).toBeNull();
 
         // Verify file exists using execute
         const checkResult = await sandbox.execute(
-          "cat /home/sandbox/test-upload.txt",
+          "cat /home/app/test-upload.txt",
         );
         expect(checkResult.output.trim()).toBe("Hello from test file!");
       },
@@ -272,16 +272,16 @@ describe.skipIf(!DENO_TOKEN)("DenoSandbox Integration Tests", () => {
 
         // First create a file using execute
         await sandbox.execute(
-          'echo "Download test content" > /home/sandbox/test-download.txt',
+          'echo "Download test content" > /home/app/test-download.txt',
         );
 
         // Now download it
         const results = await sandbox.downloadFiles([
-          "/home/sandbox/test-download.txt",
+          "/home/app/test-download.txt",
         ]);
 
         expect(results.length).toBe(1);
-        expect(results[0].path).toBe("/home/sandbox/test-download.txt");
+        expect(results[0].path).toBe("/home/app/test-download.txt");
         expect(results[0].error).toBeNull();
         expect(results[0].content).not.toBeNull();
 
@@ -301,7 +301,7 @@ describe.skipIf(!DENO_TOKEN)("DenoSandbox Integration Tests", () => {
         sandboxesToCleanup.push(sandbox);
 
         const results = await sandbox.downloadFiles([
-          "/home/sandbox/nonexistent-file-12345.txt",
+          "/home/app/nonexistent-file-12345.txt",
         ]);
 
         expect(results.length).toBe(1);
@@ -322,11 +322,11 @@ describe.skipIf(!DENO_TOKEN)("DenoSandbox Integration Tests", () => {
 
         // Create a file first
         await sandbox.execute(
-          'echo "Read test content" > /home/sandbox/read-test.txt',
+          'echo "Read test content" > /home/app/read-test.txt',
         );
 
         // Use inherited read method
-        const content = await sandbox.read("/home/sandbox/read-test.txt");
+        const content = await sandbox.read("/home/app/read-test.txt");
 
         expect(content).toContain("Read test content");
       },
@@ -344,13 +344,13 @@ describe.skipIf(!DENO_TOKEN)("DenoSandbox Integration Tests", () => {
 
         // Use inherited write method
         await sandbox.write(
-          "/home/sandbox/write-test.txt",
+          "/home/app/write-test.txt",
           "Written via BaseSandbox",
         );
 
         // Verify using execute
         const result = await sandbox.execute(
-          "cat /home/sandbox/write-test.txt",
+          "cat /home/app/write-test.txt",
         );
         expect(result.output.trim()).toBe("Written via BaseSandbox");
       },
@@ -367,18 +367,18 @@ describe.skipIf(!DENO_TOKEN)("DenoSandbox Integration Tests", () => {
         sandboxesToCleanup.push(sandbox);
 
         // Create initial file
-        await sandbox.write("/home/sandbox/edit-test.txt", "Hello World");
+        await sandbox.write("/home/app/edit-test.txt", "Hello World");
 
         // Use inherited edit method
         await sandbox.edit(
-          "/home/sandbox/edit-test.txt",
+          "/home/app/edit-test.txt",
           "Hello World",
           "Hello Edited World",
         );
 
         // Verify the edit
         const result = await sandbox.execute(
-          "cat /home/sandbox/edit-test.txt",
+          "cat /home/app/edit-test.txt",
         );
         expect(result.output.trim()).toBe("Hello Edited World");
       },
@@ -396,9 +396,9 @@ describe.skipIf(!DENO_TOKEN)("DenoSandbox Integration Tests", () => {
 
         const encoder = new TextEncoder();
         const results = await sandbox.uploadFiles([
-          ["/home/sandbox/multi1.txt", encoder.encode("Content 1")],
-          ["/home/sandbox/multi2.txt", encoder.encode("Content 2")],
-          ["/home/sandbox/multi3.txt", encoder.encode("Content 3")],
+          ["/home/app/multi1.txt", encoder.encode("Content 1")],
+          ["/home/app/multi2.txt", encoder.encode("Content 2")],
+          ["/home/app/multi3.txt", encoder.encode("Content 3")],
         ]);
 
         expect(results.length).toBe(3);
@@ -406,7 +406,7 @@ describe.skipIf(!DENO_TOKEN)("DenoSandbox Integration Tests", () => {
 
         // Verify all files exist
         const checkResult = await sandbox.execute(
-          "cat /home/sandbox/multi1.txt /home/sandbox/multi2.txt /home/sandbox/multi3.txt",
+          "cat /home/app/multi1.txt /home/app/multi2.txt /home/app/multi3.txt",
         );
         expect(checkResult.output).toContain("Content 1");
         expect(checkResult.output).toContain("Content 2");
@@ -434,7 +434,7 @@ describe.skipIf(!DENO_TOKEN)("DenoSandbox Integration Tests", () => {
 
         // Create a file to verify later
         await originalSandbox.execute(
-          'echo "Reconnect test" > /home/sandbox/reconnect.txt',
+          'echo "Reconnect test" > /home/app/reconnect.txt',
         );
 
         // Close the connection (but sandbox keeps running due to duration lifetime)
@@ -450,7 +450,7 @@ describe.skipIf(!DENO_TOKEN)("DenoSandbox Integration Tests", () => {
 
         // Verify we can still access the file
         const result = await reconnectedSandbox.execute(
-          "cat /home/sandbox/reconnect.txt",
+          "cat /home/app/reconnect.txt",
         );
         expect(result.output.trim()).toBe("Reconnect test");
 
