@@ -220,7 +220,9 @@ describe.skipIf(!DENO_TOKEN)("DenoSandbox Integration Tests", () => {
 
         sandboxesToCleanup.push(sandbox);
 
-        const result = await sandbox.execute('export MY_VAR="test_value" && echo $MY_VAR');
+        const result = await sandbox.execute(
+          'export MY_VAR="test_value" && echo $MY_VAR',
+        );
 
         expect(result.exitCode).toBe(0);
         expect(result.output.trim()).toBe("test_value");
@@ -349,9 +351,7 @@ describe.skipIf(!DENO_TOKEN)("DenoSandbox Integration Tests", () => {
         );
 
         // Verify using execute
-        const result = await sandbox.execute(
-          "cat /home/app/write-test.txt",
-        );
+        const result = await sandbox.execute("cat /home/app/write-test.txt");
         expect(result.output.trim()).toBe("Written via BaseSandbox");
       },
       TEST_TIMEOUT,
@@ -377,9 +377,7 @@ describe.skipIf(!DENO_TOKEN)("DenoSandbox Integration Tests", () => {
         );
 
         // Verify the edit
-        const result = await sandbox.execute(
-          "cat /home/app/edit-test.txt",
-        );
+        const result = await sandbox.execute("cat /home/app/edit-test.txt");
         expect(result.output.trim()).toBe("Hello Edited World");
       },
       TEST_TIMEOUT,

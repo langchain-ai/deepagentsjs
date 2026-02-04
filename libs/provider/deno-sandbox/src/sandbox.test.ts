@@ -27,7 +27,11 @@ interface MockSandboxType {
   id: string;
   status: string;
   files: Map<string, string>;
-  nextCommandResult: { stdoutText: string; stderrText: string; status: { success: boolean; code: number } };
+  nextCommandResult: {
+    stdoutText: string;
+    stderrText: string;
+    status: { success: boolean; code: number };
+  };
   shouldFailWriteFile: boolean;
   shouldFailReadFile: boolean;
   setNextCommandResult: (
@@ -36,7 +40,10 @@ interface MockSandboxType {
     code: number,
   ) => void;
   addFile: (path: string, content: string) => void;
-  spawn: (cmd: string, options: { args: string[]; stdout: string; stderr: string }) => Promise<{
+  spawn: (
+    cmd: string,
+    options: { args: string[]; stdout: string; stderr: string },
+  ) => Promise<{
     output: () => Promise<{
       status: { success: boolean; code: number };
       stdoutText: string;
@@ -448,7 +455,10 @@ describe("DenoSandbox", () => {
   describe("uploadFiles", () => {
     it("should write text content to sandbox", async () => {
       const sandbox = await DenoSandbox.create();
-      const writeFileSpy = vi.spyOn(mockState.sandboxInstance!, "writeTextFile");
+      const writeFileSpy = vi.spyOn(
+        mockState.sandboxInstance!,
+        "writeTextFile",
+      );
 
       const content = new TextEncoder().encode("file content");
       await sandbox.uploadFiles([["test.txt", content]]);
