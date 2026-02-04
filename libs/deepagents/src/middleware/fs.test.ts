@@ -1,10 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   fileDataReducer,
   type FilesRecord,
   type FilesRecordUpdate,
+  createFilesystemMiddleware,
 } from "./fs.js";
-import type { FileData } from "../backends/protocol.js";
+import type { FileData, BackendProtocol } from "../backends/protocol.js";
+import { SystemMessage } from "@langchain/core/messages";
 
 describe("fileDataReducer", () => {
   // Helper to create a FileData object
@@ -309,6 +311,141 @@ describe("fileDataReducer", () => {
       const result = fileDataReducer(current, update);
 
       expect(result).not.toBe(current);
+    });
+  });
+});
+
+describe("createFilesystemMiddleware", () => {
+  // Helper to create a mock backend that doesn't support execution
+  function createMockBackend(): BackendProtocol {
+    return {
+      lsInfo: vi.fn().mockResolvedValue([]),
+      read: vi.fn().mockResolvedValue(""),
+      write: vi.fn().mockResolvedValue({ error: null, filesUpdate: null }),
+      edit: vi.fn().mockResolvedValue({
+        error: null,
+        occurrences: 1,
+        filesUpdate: null,
+      }),
+      globInfo: vi.fn().mockResolvedValue([]),
+      grepRaw: vi.fn().mockResolvedValue([]),
+    } as unknown as BackendProtocol;
+  }
+
+  // Helper to create a mock backend that supports execution (SandboxBackendProtocol)
+  function createMockSandboxBackend(): BackendProtocol {
+    return {
+      ...createMockBackend(),
+      id: "mock-sandbox",
+      execute: vi.fn().mockResolvedValue({
+        output: "command output",
+        exitCode: 0,
+        truncated: false,
+      }),
+    } as unknown as BackendProtocol;
+  }
+
+  describe("wrapModelCall", () => {
+    it("should add filesystem system prompt to model call", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: middleware.tools || [],
+      };
+
+      middleware.wrapModelCall!(request as any, mockHandler);
+
+      expect(mockHandler).toHaveBeenCalled();
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      expect(modifiedRequest.systemMessage.text).toContain("Filesystem Tools");
+      expect(modifiedRequest.systemMessage.text).toContain("Base prompt");
+    });
+
+    it("should include execute tool and execution prompt when backend supports execution", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockSandboxBackend(),
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: middleware.tools || [],
+      };
+
+      middleware.wrapModelCall!(request as any, mockHandler);
+
+      expect(mockHandler).toHaveBeenCalled();
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+
+      // Should include execution system prompt
+      expect(modifiedRequest.systemMessage.text).toContain("Execute Tool");
+      expect(modifiedRequest.systemMessage.text).toContain("Base prompt");
+
+      // Should include execute tool in tools array
+      const toolNames = modifiedRequest.tools.map((t: any) => t.name);
+      expect(toolNames).toContain("execute");
+    });
+
+    it("should exclude execute tool when backend doesn't support execution", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: middleware.tools || [],
+      };
+
+      middleware.wrapModelCall!(request as any, mockHandler);
+
+      expect(mockHandler).toHaveBeenCalled();
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+
+      // Should NOT include execution system prompt
+      expect(modifiedRequest.systemMessage.text).not.toContain("Execute Tool");
+
+      // Should NOT include execute tool in tools array
+      const toolNames = modifiedRequest.tools.map((t: any) => t.name);
+      expect(toolNames).not.toContain("execute");
+    });
+
+    it("should use custom system prompt when provided", () => {
+      const customPrompt = "Custom filesystem instructions";
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        systemPrompt: customPrompt,
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: middleware.tools || [],
+      };
+
+      middleware.wrapModelCall!(request as any, mockHandler);
+
+      expect(mockHandler).toHaveBeenCalled();
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+
+      // Should include custom prompt
+      expect(modifiedRequest.systemMessage.text).toContain(customPrompt);
+      // Should NOT include default filesystem prompt
+      expect(modifiedRequest.systemMessage.text).not.toContain(
+        "Filesystem Tools",
+      );
     });
   });
 });

@@ -815,18 +815,15 @@ export function createFilesystemMiddleware(
       }
 
       // Build system prompt - add execution instructions if available
-      let systemPrompt = baseSystemPrompt;
+      let filesystemPrompt = baseSystemPrompt;
       if (supportsExecution) {
-        systemPrompt = `${systemPrompt}\n\n${EXECUTION_SYSTEM_PROMPT}`;
+        filesystemPrompt = `${filesystemPrompt}\n\n${EXECUTION_SYSTEM_PROMPT}`;
       }
 
-      // Combine with existing system prompt
-      const currentSystemPrompt = request.systemPrompt || "";
-      const newSystemPrompt = currentSystemPrompt
-        ? `${currentSystemPrompt}\n\n${systemPrompt}`
-        : systemPrompt;
+      // Combine with existing system message
+      const newSystemMessage = request.systemMessage.concat(filesystemPrompt);
 
-      return handler({ ...request, tools, systemPrompt: newSystemPrompt });
+      return handler({ ...request, tools, systemMessage: newSystemMessage });
     },
     wrapToolCall: async (request, handler) => {
       // Return early if eviction is disabled
