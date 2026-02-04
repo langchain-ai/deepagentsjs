@@ -11,6 +11,11 @@ export {
   type SubAgentMiddlewareOptions,
   type SubAgent,
   type CompiledSubAgent,
+  // Constants for building custom subagent configurations
+  GENERAL_PURPOSE_SUBAGENT,
+  DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
+  DEFAULT_SUBAGENT_PROMPT,
+  TASK_SYSTEM_PROMPT,
 } from "./subagents.js";
 export {
   createPatchToolCallsMiddleware,

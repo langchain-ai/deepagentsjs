@@ -166,6 +166,47 @@ export function createDeepAgent<
       : [];
 
   /**
+   * Process subagents to add SkillsMiddleware for those with their own skills.
+   *
+   * Custom subagents do NOT inherit skills from the main agent by default.
+   * Only the general-purpose subagent inherits the main agent's skills (via defaultMiddleware).
+   * If a custom subagent needs skills, it must specify its own `skills` array.
+   */
+  const processedSubagents = subagents.map((subagent) => {
+    /**
+     * CompiledSubAgent - use as-is (already has its own middleware baked in)
+     */
+    if ("runnable" in subagent) {
+      return subagent;
+    }
+
+    /**
+     * SubAgent without skills - use as-is
+     */
+    if (!subagent.skills || subagent.skills.length === 0) {
+      return subagent;
+    }
+
+    /**
+     * SubAgent with skills - add SkillsMiddleware BEFORE user's middleware
+     * Order: base middleware (via defaultMiddleware) → skills → user's middleware
+     * This matches Python's ordering in create_deep_agent
+     */
+    const subagentSkillsMiddleware = createSkillsMiddleware({
+      backend: filesystemBackend,
+      sources: subagent.skills,
+    });
+
+    return {
+      ...subagent,
+      middleware: [
+        subagentSkillsMiddleware,
+        ...(subagent.middleware || []),
+      ] as readonly AgentMiddleware[],
+    };
+  });
+
+  /**
    * Built-in middleware array - core middleware with known types
    * This tuple is typed without conditional spreads to preserve TypeScript's tuple inference.
    * Optional middleware (skills, memory, HITL) are handled at runtime but typed explicitly.
@@ -220,7 +261,7 @@ export function createDeepAgent<
         createPatchToolCallsMiddleware(),
       ],
       defaultInterruptOn: interruptOn,
-      subagents: subagents as unknown as (SubAgent | CompiledSubAgent)[],
+      subagents: processedSubagents,
       generalPurposeAgent: true,
     }),
     /**

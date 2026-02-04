@@ -18,23 +18,38 @@ import { HumanMessage } from "@langchain/core/messages";
 
 export type { AgentMiddleware };
 
-// Constants
-const DEFAULT_SUBAGENT_PROMPT =
+/**
+ * Default system prompt for subagents.
+ * Provides a minimal base prompt that can be extended by specific subagent configurations.
+ */
+export const DEFAULT_SUBAGENT_PROMPT =
   "In order to complete the objective that the user asks of you, you have access to a number of standard tools.";
 
-// State keys that are excluded when passing state to subagents and when returning
-// updates from subagents.
-// When returning updates:
-// 1. The messages key is handled explicitly to ensure only the final message is included
-// 2. The todos and structuredResponse keys are excluded as they do not have a defined reducer
-//    and no clear meaning for returning them from a subagent to the main agent.
+/**
+ * State keys that are excluded when passing state to subagents and when returning
+ * updates from subagents.
+ *
+ * When returning updates:
+ * 1. The messages key is handled explicitly to ensure only the final message is included
+ * 2. The todos and structuredResponse keys are excluded as they do not have a defined reducer
+ *    and no clear meaning for returning them from a subagent to the main agent.
+ * 3. The skillsMetadata and memoryContents keys are automatically excluded from subagent output
+ *    to prevent parent state from leaking to child agents. Each agent loads its own skills/memory
+ *    independently based on its middleware configuration.
+ */
 const EXCLUDED_STATE_KEYS = [
   "messages",
   "todos",
   "structuredResponse",
+  "skillsMetadata",
+  "memoryContents",
 ] as const;
 
-const DEFAULT_GENERAL_PURPOSE_DESCRIPTION =
+/**
+ * Default description for the general-purpose subagent.
+ * This description is shown to the model when selecting which subagent to use.
+ */
+export const DEFAULT_GENERAL_PURPOSE_DESCRIPTION =
   "General-purpose agent for researching complex questions, searching for files and content, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you. This agent has access to all tools as the main agent.";
 
 // Comprehensive task tool description from Python
@@ -152,7 +167,20 @@ assistant: "I'm going to use the Task tool to launch with the greeting-responder
   `.trim();
 }
 
-const TASK_SYSTEM_PROMPT = `## \`task\` (subagent spawner)
+/**
+ * System prompt section that explains how to use the task tool for spawning subagents.
+ *
+ * This prompt is automatically appended to the main agent's system prompt when
+ * using `createSubAgentMiddleware`. It provides guidance on:
+ * - When to use the task tool
+ * - Subagent lifecycle (spawn → run → return → reconcile)
+ * - When NOT to use the task tool
+ * - Best practices for parallel task execution
+ *
+ * You can provide a custom `systemPrompt` to `createSubAgentMiddleware` to override
+ * or extend this default.
+ */
+export const TASK_SYSTEM_PROMPT = `## \`task\` (subagent spawner)
 
 You have access to a \`task\` tool to launch short-lived subagents that handle isolated tasks. These agents are ephemeral — they live only for the duration of the task and return a single result.
 
@@ -198,24 +226,125 @@ export interface CompiledSubAgent<
 }
 
 /**
- * Type definitions for subagents
+ * Specification for a subagent that can be dynamically created.
+ *
+ * When using `createDeepAgent`, subagents automatically receive a default middleware
+ * stack (todoListMiddleware, filesystemMiddleware, summarizationMiddleware, etc.) before
+ * any custom `middleware` specified in this spec.
+ *
+ * Required fields:
+ * - `name`: Identifier used to select this subagent in the task tool
+ * - `description`: Shown to the model for subagent selection
+ * - `systemPrompt`: The system prompt for the subagent
+ *
+ * Optional fields:
+ * - `model`: Override the default model for this subagent
+ * - `tools`: Override the default tools for this subagent
+ * - `middleware`: Additional middleware appended after defaults
+ * - `interruptOn`: Human-in-the-loop configuration for specific tools
+ * - `skills`: Skill source paths for SkillsMiddleware (e.g., `["/skills/user/", "/skills/project/"]`)
+ *
+ * @example
+ * ```typescript
+ * const researcher: SubAgent = {
+ *   name: "researcher",
+ *   description: "Research assistant for complex topics",
+ *   systemPrompt: "You are a research assistant.",
+ *   tools: [webSearchTool],
+ *   skills: ["/skills/research/"],
+ * };
+ * ```
  */
 export interface SubAgent {
-  /** The name of the agent */
+  /** Identifier used to select this subagent in the task tool */
   name: string;
-  /** The description of the agent */
+
+  /** Description shown to the model for subagent selection */
   description: string;
+
   /** The system prompt to use for the agent */
   systemPrompt: string;
+
   /** The tools to use for the agent (tool instances, not names). Defaults to defaultTools */
   tools?: StructuredTool[];
-  /** The model for the agent. Defaults to default_model */
+
+  /** The model for the agent. Defaults to defaultModel */
   model?: LanguageModelLike | string;
+
   /** Additional middleware to append after default_middleware */
   middleware?: readonly AgentMiddleware[];
-  /** The tool configs to use for the agent */
+
+  /** Human-in-the-loop configuration for specific tools. Requires a checkpointer. */
   interruptOn?: Record<string, boolean | InterruptOnConfig>;
+
+  /**
+   * Skill source paths for SkillsMiddleware.
+   *
+   * List of paths to skill directories (e.g., `["/skills/user/", "/skills/project/"]`).
+   * When specified, the subagent will have its own SkillsMiddleware that loads skills
+   * from these paths. This allows subagents to have different skill sets than the main agent.
+   *
+   * Note: Custom subagents do NOT inherit skills from the main agent by default.
+   * Only the general-purpose subagent inherits the main agent's skills.
+   *
+   * @example
+   * ```typescript
+   * const researcher: SubAgent = {
+   *   name: "researcher",
+   *   description: "Research assistant",
+   *   systemPrompt: "You are a researcher.",
+   *   skills: ["/skills/research/", "/skills/web-search/"],
+   * };
+   * ```
+   */
+  skills?: string[];
 }
+
+/**
+ * Base specification for the general-purpose subagent.
+ *
+ * This constant provides the default configuration for the general-purpose subagent
+ * that is automatically included when `generalPurposeAgent: true` (the default).
+ *
+ * The general-purpose subagent:
+ * - Has access to all tools from the main agent
+ * - Inherits skills from the main agent (when skills are configured)
+ * - Uses the same model as the main agent (by default)
+ * - Is ideal for delegating complex, multi-step tasks
+ *
+ * You can spread this constant and override specific properties when creating
+ * custom subagents that should behave similarly to the general-purpose agent:
+ *
+ * @example
+ * ```typescript
+ * import { GENERAL_PURPOSE_SUBAGENT, createDeepAgent } from "@anthropic/deepagents";
+ *
+ * // Use as-is (automatically included with generalPurposeAgent: true)
+ * const agent = createDeepAgent({ model: "claude-sonnet-4-5-20250929" });
+ *
+ * // Or create a custom variant with different tools
+ * const customGP: SubAgent = {
+ *   ...GENERAL_PURPOSE_SUBAGENT,
+ *   name: "research-gp",
+ *   tools: [webSearchTool, readFileTool],
+ * };
+ *
+ * const agent = createDeepAgent({
+ *   model: "claude-sonnet-4-5-20250929",
+ *   subagents: [customGP],
+ *   // Disable the default general-purpose agent since we're providing our own
+ *   // (handled automatically when using createSubAgentMiddleware directly)
+ * });
+ * ```
+ */
+export const GENERAL_PURPOSE_SUBAGENT: Pick<
+  SubAgent,
+  "name" | "description" | "systemPrompt"
+> = {
+  name: "general-purpose",
+  description: DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
+  systemPrompt: DEFAULT_SUBAGENT_PROMPT,
+} as const;
 
 /**
  * Filter state to exclude certain keys when passing to subagents

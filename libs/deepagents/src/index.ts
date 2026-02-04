@@ -46,6 +46,11 @@ export {
   MAX_SKILL_FILE_SIZE,
   MAX_SKILL_NAME_LENGTH,
   MAX_SKILL_DESCRIPTION_LENGTH,
+  // Subagent constants for building custom configurations
+  GENERAL_PURPOSE_SUBAGENT,
+  DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
+  DEFAULT_SUBAGENT_PROMPT,
+  TASK_SYSTEM_PROMPT,
   // Other middleware types
   type FilesystemMiddlewareOptions,
   type SubAgentMiddlewareOptions,
