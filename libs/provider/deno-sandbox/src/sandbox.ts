@@ -74,9 +74,6 @@ export class DenoSandbox extends BaseSandbox {
   /** Unique identifier for this sandbox instance */
   #id: string;
 
-  /** Working directory for command execution */
-  #cwd: string;
-
   /**
    * Get the unique identifier for this sandbox.
    *
@@ -140,11 +137,8 @@ export class DenoSandbox extends BaseSandbox {
     this.#options = {
       memoryMb: 768,
       lifetime: "session",
-      cwd: "/home/sandbox",
       ...options,
     };
-
-    this.#cwd = this.#options.cwd ?? "/home/sandbox";
 
     // Generate temporary ID until initialized
     this.#id = `deno-sandbox-${Date.now()}`;
@@ -247,7 +241,7 @@ export class DenoSandbox extends BaseSandbox {
     try {
       // Use spawn with bash to execute the command
       const child = await sandbox.spawn("/bin/bash", {
-        args: ["-c", `cd ${this.#cwd} && ${command}`],
+        args: ["-c", command],
         stdout: "piped",
         stderr: "piped",
       });

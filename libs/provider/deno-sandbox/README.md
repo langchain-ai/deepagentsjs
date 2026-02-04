@@ -103,12 +103,6 @@ interface DenoSandboxOptions {
   region?: DenoSandboxRegion;
 
   /**
-   * Working directory for command execution.
-   * @default "/home/sandbox"
-   */
-  cwd?: string;
-
-  /**
    * Authentication configuration.
    */
   auth?: {
@@ -280,7 +274,7 @@ try {
 | Maximum memory       | 4096 MB (4 GB)    |
 | Disk space           | 10 GB             |
 | vCPUs                | 2                 |
-| Working directory    | `/home/sandbox`   |
+| Working directory    | `/home/app`       |
 | Network access       | Full (by default) |
 | Interactive commands | Not supported     |
 
