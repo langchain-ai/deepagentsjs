@@ -1,5 +1,13 @@
 # deepagents
 
+## 1.6.3
+
+### Patch Changes
+
+- [#178](https://github.com/langchain-ai/deepagentsjs/pull/178) [`9f77da4`](https://github.com/langchain-ai/deepagentsjs/commit/9f77da472360dcf0554f468fd15a9e25ab649cd5) Thanks [@JadenKim-dev](https://github.com/JadenKim-dev)! - refactor: migrate memory middleware to use SystemMessage
+
+- [#183](https://github.com/langchain-ai/deepagentsjs/pull/183) [`063436e`](https://github.com/langchain-ai/deepagentsjs/commit/063436e0a023d288698da4ba7d5d2776e20b4f8d) Thanks [@hntrl](https://github.com/hntrl)! - feat: set default recursionLimit to 10k
+
 ## 1.6.2
 
 ### Patch Changes
