@@ -1,7 +1,7 @@
 {
-  "name": "@langchain/vercel-sandbox",
+  "name": "@langchain/deno-sandbox",
   "version": "0.0.1",
-  "description": "Vercel Sandbox backend for deepagents",
+  "description": "Deno Sandbox backend for deepagents",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -27,7 +27,7 @@
     "langchain",
     "typescript",
     "llm",
-    "vercel",
+    "deno",
     "sandbox"
   ],
   "author": "LangChain",
@@ -37,7 +37,7 @@
   },
   "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "dependencies": {
-    "@vercel/sandbox": "latest"
+    "@deno/sandbox": "^0.2.2"
   },
   "peerDependencies": {
     "deepagents": ">=1.6.0"
