@@ -275,37 +275,6 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@25.2.0)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
-  libs/providers/vfs-sandbox:
-    dependencies:
-      node-vfs-polyfill:
-        specifier: github:vercel-labs/node-vfs-polyfill
-        version: https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/1227fb028a26eb0d65e565c11b0a28e7b49b990f
-    devDependencies:
-      '@tsconfig/recommended':
-        specifier: ^1.0.13
-        version: 1.0.13
-      '@types/node':
-        specifier: ^25.1.0
-        version: 25.2.0
-      '@vitest/coverage-v8':
-        specifier: ^4.0.18
-        version: 4.0.18(vitest@4.0.18)
-      deepagents:
-        specifier: workspace:*
-        version: link:../../deepagents
-      tsdown:
-        specifier: ^0.20.1
-        version: 0.20.2(synckit@0.11.12)(typescript@5.9.3)
-      tsx:
-        specifier: ^4.21.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: ^4.0.18
-        version: 4.0.18(@types/node@25.2.0)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
-
 packages:
 
   '@anthropic-ai/sdk@0.71.2':
