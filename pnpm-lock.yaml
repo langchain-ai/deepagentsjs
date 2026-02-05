@@ -255,9 +255,6 @@ importers:
       '@deno/sandbox':
         specifier: ^0.2.2
         version: 0.2.2
-      deepagents:
-        specifier: workspace:*
-        version: link:../../deepagents
     devDependencies:
       '@tsconfig/recommended':
         specifier: ^1.0.13
@@ -268,6 +265,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.0.18
         version: 4.0.18(vitest@4.0.18)
+      deepagents:
+        specifier: workspace:*
+        version: link:../../deepagents
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -286,9 +286,6 @@ importers:
 
   libs/providers/modal:
     dependencies:
-      deepagents:
-        specifier: workspace:*
-        version: link:../../deepagents
       modal:
         specifier: ^0.6.1
         version: 0.6.1
@@ -302,6 +299,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.0.18
         version: 4.0.18(vitest@4.0.18)
+      deepagents:
+        specifier: workspace:*
+        version: link:../../deepagents
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
