@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * DeepAgents ACP Server CLI
  *
@@ -13,15 +14,16 @@
  *   --workspace <path>    Workspace root directory (default: cwd)
  *   --skills <paths>      Comma-separated skill paths
  *   --memory <paths>      Comma-separated memory/AGENTS.md paths
- *   --debug               Enable debug logging
+ *   --debug               Enable debug logging to stderr
+ *   --log-file <path>     Write logs to file (for production debugging)
  *   --help                Show this help message
  *   --version             Show version
  */
 
 import { DeepAgentsServer } from "./server.js";
 import { FilesystemBackend } from "deepagents";
-import * as path from "node:path";
-import * as fs from "node:fs";
+import path from "node:path";
+import fs from "node:fs";
 
 interface CLIOptions {
   name: string;
@@ -31,8 +33,40 @@ interface CLIOptions {
   skills: string[];
   memory: string[];
   debug: boolean;
+  logFile: string | null;
   help: boolean;
   version: boolean;
+}
+
+/**
+ * Normalize arguments to handle various formats:
+ * - "--name value" (space-separated in single string)
+ * - "--name=value" (equals-separated)
+ * - "--name", "value" (separate array elements - standard)
+ */
+function normalizeArgs(args: string[]): string[] {
+  const normalized: string[] = [];
+
+  for (const arg of args) {
+    // Handle space-separated args in a single string (e.g., "--name deepagents")
+    if (arg.includes(" ") && arg.startsWith("-")) {
+      const parts = arg.split(/\s+/);
+      normalized.push(...parts);
+    }
+    // Handle equals-separated args (e.g., "--name=deepagents")
+    else if (arg.includes("=") && arg.startsWith("-")) {
+      const eqIndex = arg.indexOf("=");
+      const key = arg.slice(0, eqIndex);
+      const value = arg.slice(eqIndex + 1);
+      normalized.push(key, value);
+    }
+    // Standard format
+    else {
+      normalized.push(arg);
+    }
+  }
+
+  return normalized;
 }
 
 function parseArgs(args: string[]): CLIOptions {
@@ -44,13 +78,17 @@ function parseArgs(args: string[]): CLIOptions {
     skills: [],
     memory: [],
     debug: process.env.DEBUG === "true",
+    logFile: process.env.DEEPAGENTS_LOG_FILE ?? null,
     help: false,
     version: false,
   };
 
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    const nextArg = args[i + 1];
+  // Normalize args to handle various input formats
+  const normalizedArgs = normalizeArgs(args);
+
+  for (let i = 0; i < normalizedArgs.length; i++) {
+    const arg = normalizedArgs[i];
+    const nextArg = normalizedArgs[i + 1];
 
     switch (arg) {
       case "--name":
@@ -104,6 +142,14 @@ function parseArgs(args: string[]): CLIOptions {
         options.debug = true;
         break;
 
+      case "--log-file":
+      case "-l":
+        if (nextArg) {
+          options.logFile = path.resolve(nextArg);
+          i++;
+        }
+        break;
+
       case "--help":
       case "-h":
         options.help = true;
@@ -137,6 +183,7 @@ OPTIONS:
   -s, --skills <paths>      Comma-separated skill paths (SKILL.md locations)
       --memory <paths>      Comma-separated memory paths (AGENTS.md locations)
       --debug               Enable debug logging to stderr
+  -l, --log-file <path>     Write logs to file (for production debugging)
   -h, --help                Show this help message
   -v, --version             Show version
 
@@ -144,6 +191,7 @@ ENVIRONMENT VARIABLES:
   ANTHROPIC_API_KEY         API key for Anthropic models (required for Claude)
   OPENAI_API_KEY            API key for OpenAI models
   DEBUG                     Set to "true" to enable debug logging
+  DEEPAGENTS_LOG_FILE       Path to log file (alternative to --log-file)
   WORKSPACE_ROOT            Alternative to --workspace flag
 
 EXAMPLES:
@@ -156,6 +204,12 @@ EXAMPLES:
   # Debug mode with custom workspace
   npx deepagents-server --debug --workspace /path/to/project
 
+  # Production debugging with log file
+  npx deepagents-server --log-file /var/log/deepagents.log
+
+  # Combined debug and file logging
+  npx deepagents-server --debug --log-file ./debug.log
+
 ZED INTEGRATION:
   Add to your Zed settings.json:
 
@@ -165,7 +219,7 @@ ZED INTEGRATION:
         "deepagents": {
           "name": "DeepAgents",
           "command": "npx",
-          "args": ["deepagents-server"],
+          "args": ["deepagents-server", "--log-file", "/tmp/deepagents.log"],
           "env": {}
         }
       }
@@ -233,7 +287,7 @@ async function main(): Promise<void> {
 
   // Log startup info to stderr (stdout is reserved for ACP protocol)
   const log = (...msgArgs: unknown[]) => {
-    if (options.debug) {
+    if (options.debug || options.logFile) {
       console.error("[deepagents-server]", ...msgArgs);
     }
   };
@@ -244,6 +298,9 @@ async function main(): Promise<void> {
   log("Workspace:", workspaceRoot);
   log("Skills:", skills.join(", "));
   log("Memory:", memory.join(", "));
+  if (options.logFile) {
+    log("Log file:", options.logFile);
+  }
 
   try {
     const server = new DeepAgentsServer({
@@ -258,6 +315,7 @@ async function main(): Promise<void> {
       serverName: "deepagents-server",
       workspaceRoot,
       debug: options.debug,
+      logFile: options.logFile ?? undefined,
     });
 
     await server.start();
