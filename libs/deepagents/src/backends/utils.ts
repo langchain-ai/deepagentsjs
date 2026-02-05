@@ -462,10 +462,12 @@ export function formatGrepResults(
 }
 
 /**
- * Search file contents for regex pattern.
+ * Search file contents for literal text pattern.
+ *
+ * Performs literal text search.
  *
  * @param files - Dictionary of file paths to FileData
- * @param pattern - Regex pattern to search for
+ * @param pattern - Literal text to search for
  * @param path - Base path to search from
  * @param glob - Optional glob pattern to filter files (e.g., "*.py")
  * @param outputMode - Output format - "files_with_matches", "content", or "count"
@@ -485,13 +487,6 @@ export function grepSearchFiles(
   glob: string | null = null,
   outputMode: "files_with_matches" | "content" | "count" = "files_with_matches",
 ): string {
-  let regex: RegExp;
-  try {
-    regex = new RegExp(pattern);
-  } catch (e: any) {
-    return `Invalid regex pattern: ${e.message}`;
-  }
-
   let normalizedPath: string;
   try {
     normalizedPath = validatePath(path);
@@ -516,7 +511,8 @@ export function grepSearchFiles(
     for (let i = 0; i < fileData.content.length; i++) {
       const line = fileData.content[i];
       const lineNum = i + 1;
-      if (regex.test(line)) {
+      // Simple substring search for literal matching
+      if (line.includes(pattern)) {
         if (!results[filePath]) {
           results[filePath] = [];
         }
@@ -531,14 +527,14 @@ export function grepSearchFiles(
   return formatGrepResults(results, outputMode);
 }
 
-// -------- Structured helpers for composition --------
-
 /**
  * Return structured grep matches from an in-memory files mapping.
  *
- * Returns a list of GrepMatch on success, or a string for invalid inputs
- * (e.g., invalid regex). We deliberately do not raise here to keep backends
- * non-throwing in tool contexts and preserve user-facing error messages.
+ * Performs literal text search (not regex).
+ *
+ * Returns a list of GrepMatch on success, or a string for invalid inputs.
+ * We deliberately do not raise here to keep backends non-throwing in tool
+ * contexts and preserve user-facing error messages.
  */
 export function grepMatchesFromFiles(
   files: Record<string, FileData>,
@@ -546,13 +542,6 @@ export function grepMatchesFromFiles(
   path: string | null = null,
   glob: string | null = null,
 ): GrepMatch[] | string {
-  let regex: RegExp;
-  try {
-    regex = new RegExp(pattern);
-  } catch (e: any) {
-    return `Invalid regex pattern: ${e.message}`;
-  }
-
   let normalizedPath: string;
   try {
     normalizedPath = validatePath(path);
@@ -577,7 +566,8 @@ export function grepMatchesFromFiles(
     for (let i = 0; i < fileData.content.length; i++) {
       const line = fileData.content[i];
       const lineNum = i + 1;
-      if (regex.test(line)) {
+      // Simple substring search for literal matching
+      if (line.includes(pattern)) {
         matches.push({ path: filePath, line: lineNum, text: line });
       }
     }

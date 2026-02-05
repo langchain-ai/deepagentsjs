@@ -65,8 +65,9 @@ describe("StateBackend", () => {
       expect(matches.some((m) => m.path === "/notes.txt")).toBe(true);
     }
 
-    const err = backend.grepRaw("[", "/");
-    expect(typeof err).toBe("string");
+    // Special characters like "[" are treated literally (not regex), returns empty list or matches
+    const literalResult = backend.grepRaw("[", "/");
+    expect(Array.isArray(literalResult)).toBe(true);
 
     const infos = backend.globInfo("*.txt", "/");
     expect(infos.some((i) => i.path === "/notes.txt")).toBe(true);

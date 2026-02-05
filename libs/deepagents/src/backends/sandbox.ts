@@ -225,7 +225,11 @@ console.log(count);
 }
 
 /**
- * Node.js command template for grep operations.
+ * Node.js command template for grep operations with literal (fixed-string) search.
+ *
+ * @param pattern - Literal string to search for (NOT regex).
+ * @param searchPath - Base path to search in.
+ * @param globPattern - Optional glob pattern to filter files.
  */
 function buildGrepCommand(
   pattern: string,
@@ -243,14 +247,6 @@ const path = require('path');
 const pattern = atob('${patternB64}');
 const searchPath = atob('${pathB64}');
 const globPattern = ${globPattern ? `atob('${globB64}')` : "null"};
-
-let regex;
-try {
-  regex = new RegExp(pattern);
-} catch (e) {
-  console.error('Invalid regex: ' + e.message);
-  process.exit(1);
-}
 
 function globMatch(filePath, pattern) {
   if (!pattern) return true;
@@ -276,7 +272,8 @@ function walkDir(dir, results) {
             const content = fs.readFileSync(fullPath, 'utf-8');
             const lines = content.split('\\n');
             for (let i = 0; i < lines.length; i++) {
-              if (regex.test(lines[i])) {
+              // Simple substring search for literal matching
+              if (lines[i].includes(pattern)) {
                 console.log(JSON.stringify({
                   path: fullPath,
                   line: i + 1,
@@ -428,7 +425,12 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
   }
 
   /**
-   * Structured search results or error string for invalid input.
+   * Search for a literal text pattern in files.
+   *
+   * @param pattern - Literal string to search for (NOT regex).
+   * @param path - Directory or file path to search in.
+   * @param glob - Optional glob pattern to filter which files to search.
+   * @returns List of GrepMatch dicts containing path, line number, and matched text.
    */
   async grepRaw(
     pattern: string,
@@ -437,13 +439,6 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
   ): Promise<GrepMatch[] | string> {
     const command = buildGrepCommand(pattern, path, glob);
     const result = await this.execute(command);
-
-    if (result.exitCode === 1) {
-      // Check if it's a regex error
-      if (result.output.includes("Invalid regex:")) {
-        return result.output.trim();
-      }
-    }
 
     const matches: GrepMatch[] = [];
     const lines = result.output.trim().split("\n").filter(Boolean);
