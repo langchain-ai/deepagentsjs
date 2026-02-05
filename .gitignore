@@ -56,3 +56,4 @@ agent-os
 
 # Sandbox workspace directory - created at runtime
 sandbox-workspace/
+coverage
