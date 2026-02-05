@@ -1,9 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
 import { createMemoryMiddleware } from "./memory.js";
-import type {
-  BackendProtocol,
-  FileDownloadResponse,
-} from "../backends/protocol.js";
 import { createDeepAgent } from "../agent.js";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
 import {
@@ -13,41 +9,21 @@ import {
 } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 import { createFileData } from "../backends/utils.js";
-
-// Mock backend that returns specified files
-function createMockBackend(
-  files: Record<string, string | null>,
-): BackendProtocol {
-  return {
-    async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
-      return paths.map((path) => {
-        const content = files[path];
-        if (content === null || content === undefined) {
-          return { path, error: "file_not_found", content: null };
-        }
-        return {
-          path,
-          content: new TextEncoder().encode(content),
-          error: null,
-        };
-      });
-    },
-    // Implement other required methods as stubs
-    listDir: vi.fn(),
-    readFiles: vi.fn(),
-    writeFile: vi.fn(),
-    editFile: vi.fn(),
-    grep: vi.fn(),
-  } as unknown as BackendProtocol;
-}
+import { createMockBackend } from "./test.js";
 
 describe("createMemoryMiddleware", () => {
   describe("beforeAgent", () => {
     it("should load memory content from configured sources", async () => {
       const mockBackend = createMockBackend({
-        "~/.deepagents/AGENTS.md": "# User Memory\n\nThis is user memory.",
-        "./.deepagents/AGENTS.md":
-          "# Project Memory\n\nThis is project memory.",
+        files: {
+          "~/.deepagents/AGENTS.md": "# User Memory\n\nThis is user memory.",
+          "./.deepagents/AGENTS.md":
+            "# Project Memory\n\nThis is project memory.",
+        },
+        directories: {
+          "~/.deepagents/": [{ name: "AGENTS.md", type: "file" }],
+          "./.deepagents/": [{ name: "AGENTS.md", type: "file" }],
+        },
       });
 
       const middleware = createMemoryMiddleware({
@@ -68,7 +44,12 @@ describe("createMemoryMiddleware", () => {
 
     it("should skip missing files gracefully", async () => {
       const mockBackend = createMockBackend({
-        "~/.deepagents/AGENTS.md": "# User Memory",
+        files: {
+          "~/.deepagents/AGENTS.md": "# User Memory",
+        },
+        directories: {
+          "~/.deepagents/": [{ name: "AGENTS.md", type: "file" }],
+        },
         // Project file doesn't exist
       });
 
@@ -103,7 +84,12 @@ describe("createMemoryMiddleware", () => {
 
     it("should skip loading if memoryContents already in state", async () => {
       const mockBackend = createMockBackend({
-        "~/.deepagents/AGENTS.md": "Should not load this",
+        files: {
+          "~/.deepagents/AGENTS.md": "Should not load this",
+        },
+        directories: {
+          "~/.deepagents/": [{ name: "AGENTS.md", type: "file" }],
+        },
       });
 
       const middleware = createMemoryMiddleware({
@@ -123,7 +109,12 @@ describe("createMemoryMiddleware", () => {
 
     it("should work with backend factory function", async () => {
       const mockBackend = createMockBackend({
-        "/memory/AGENTS.md": "# Factory Memory",
+        files: {
+          "/memory/AGENTS.md": "# Factory Memory",
+        },
+        directories: {
+          "/memory/": [{ name: "AGENTS.md", type: "file" }],
+        },
       });
 
       const backendFactory = vi.fn().mockReturnValue(mockBackend);
@@ -252,9 +243,11 @@ describe("createMemoryMiddleware", () => {
   describe("integration", () => {
     it("should work end-to-end: load memory and inject into prompt", async () => {
       const mockBackend = createMockBackend({
-        "~/.deepagents/AGENTS.md":
-          "# User Agent Memory\n\nI prefer TypeScript.",
-        "./project/AGENTS.md": "# Project Memory\n\nThis is a React project.",
+        files: {
+          "~/.deepagents/AGENTS.md":
+            "# User Agent Memory\n\nI prefer TypeScript.",
+          "./project/AGENTS.md": "# Project Memory\n\nThis is a React project.",
+        },
       });
 
       const middleware = createMemoryMiddleware({

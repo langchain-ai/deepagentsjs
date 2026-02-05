@@ -1,16 +1,4 @@
 import { describe, it, expect, vi } from "vitest";
-import {
-  createSkillsMiddleware,
-  skillsMetadataReducer,
-  type SkillMetadataEntry,
-} from "./skills.js";
-import type {
-  BackendProtocol,
-  FileDownloadResponse,
-  FileInfo,
-} from "../backends/protocol.js";
-import { createFileData } from "../backends/utils.js";
-import { createDeepAgent } from "../agent.js";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
 import {
   HumanMessage,
@@ -19,46 +7,14 @@ import {
 } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 
-// Mock backend that returns specified files and directory listings
-function createMockBackend(config: {
-  files: Record<string, string | null>;
-  directories: Record<
-    string,
-    Array<{ name: string; type: "file" | "directory" }>
-  >;
-}): BackendProtocol {
-  return {
-    async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
-      return paths.map((path) => {
-        const content = config.files[path];
-        if (content === null || content === undefined) {
-          return { path, error: "file_not_found", content: null };
-        }
-        return {
-          path,
-          content: new TextEncoder().encode(content),
-          error: null,
-        };
-      });
-    },
-    async lsInfo(dirPath: string): Promise<FileInfo[]> {
-      const entries = config.directories[dirPath];
-      if (!entries) {
-        throw new Error(`Directory not found: ${dirPath}`);
-      }
-      // Convert test format to FileInfo format
-      return entries.map((entry) => ({
-        path: entry.name + (entry.type === "directory" ? "/" : ""),
-        is_dir: entry.type === "directory",
-      }));
-    },
-    // Implement other required methods as stubs
-    readFiles: vi.fn(),
-    writeFile: vi.fn(),
-    editFile: vi.fn(),
-    grep: vi.fn(),
-  } as unknown as BackendProtocol;
-}
+import {
+  createSkillsMiddleware,
+  skillsMetadataReducer,
+  type SkillMetadataEntry,
+} from "./skills.js";
+import { createFileData } from "../backends/utils.js";
+import { createDeepAgent } from "../agent.js";
+import { createMockBackend } from "./test.js";
 
 const VALID_SKILL_CONTENT = `---
 name: web-research

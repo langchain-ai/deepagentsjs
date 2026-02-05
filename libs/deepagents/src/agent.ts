@@ -13,6 +13,7 @@ import type {
   ServerTool,
   StructuredTool,
 } from "@langchain/core/tools";
+import { Runnable } from "@langchain/core/runnables";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 
 import {
@@ -166,6 +167,67 @@ export function createDeepAgent<
       : [];
 
   /**
+   * Process subagents to add SkillsMiddleware for those with their own skills.
+   *
+   * Custom subagents do NOT inherit skills from the main agent by default.
+   * Only the general-purpose subagent inherits the main agent's skills (via defaultMiddleware).
+   * If a custom subagent needs skills, it must specify its own `skills` array.
+   */
+  const processedSubagents = subagents.map((subagent) => {
+    /**
+     * CompiledSubAgent - use as-is (already has its own middleware baked in)
+     */
+    if (Runnable.isRunnable(subagent)) {
+      return subagent;
+    }
+
+    /**
+     * SubAgent without skills - use as-is
+     */
+    if (!("skills" in subagent) || subagent.skills?.length === 0) {
+      return subagent;
+    }
+
+    /**
+     * SubAgent with skills - add SkillsMiddleware BEFORE user's middleware
+     * Order: base middleware (via defaultMiddleware) → skills → user's middleware
+     * This matches Python's ordering in create_deep_agent
+     */
+    const subagentSkillsMiddleware = createSkillsMiddleware({
+      backend: filesystemBackend,
+      sources: subagent.skills ?? [],
+    });
+
+    return {
+      ...subagent,
+      middleware: [
+        subagentSkillsMiddleware,
+        ...(subagent.middleware || []),
+      ] as readonly AgentMiddleware[],
+    };
+  });
+
+  /**
+   * Middleware for custom subagents (does NOT include skills from main agent).
+   * Custom subagents must define their own `skills` property to get skills.
+   */
+  const subagentMiddleware = [
+    todoListMiddleware(),
+    createFilesystemMiddleware({
+      backend: filesystemBackend,
+    }),
+    summarizationMiddleware({
+      model,
+      trigger: { tokens: 170_000 },
+      keep: { messages: 6 },
+    }),
+    anthropicPromptCachingMiddleware({
+      unsupportedModelBehavior: "ignore",
+    }),
+    createPatchToolCallsMiddleware(),
+  ];
+
+  /**
    * Built-in middleware array - core middleware with known types
    * This tuple is typed without conditional spreads to preserve TypeScript's tuple inference.
    * Optional middleware (skills, memory, HITL) are handled at runtime but typed explicitly.
@@ -185,42 +247,19 @@ export function createDeepAgent<
     createSubAgentMiddleware({
       defaultModel: model,
       defaultTools: tools as StructuredTool[],
-      defaultMiddleware: [
-        /**
-         * Subagent middleware: Todo list management
-         */
-        todoListMiddleware(),
-        /**
-         * Subagent middleware: Skills (if provided) - added at runtime
-         */
+      /**
+       * Custom subagents must define their own `skills` property to get skills.
+       */
+      defaultMiddleware: subagentMiddleware,
+      /**
+       * Middleware for the general-purpose subagent (inherits skills from main agent).
+       */
+      generalPurposeMiddleware: [
+        ...subagentMiddleware,
         ...skillsMiddlewareArray,
-        /**
-         * Subagent middleware: Filesystem operations
-         */
-        createFilesystemMiddleware({
-          backend: filesystemBackend,
-        }),
-        /**
-         * Subagent middleware: Automatic conversation summarization when token limits are approached
-         */
-        summarizationMiddleware({
-          model,
-          trigger: { tokens: 170_000 },
-          keep: { messages: 6 },
-        }),
-        /**
-         * Subagent middleware: Anthropic prompt caching for improved performance
-         */
-        anthropicPromptCachingMiddleware({
-          unsupportedModelBehavior: "ignore",
-        }),
-        /**
-         * Subagent middleware: Patches tool calls for compatibility
-         */
-        createPatchToolCallsMiddleware(),
       ],
       defaultInterruptOn: interruptOn,
-      subagents: subagents as unknown as (SubAgent | CompiledSubAgent)[],
+      subagents: processedSubagents,
       generalPurposeAgent: true,
     }),
     /**

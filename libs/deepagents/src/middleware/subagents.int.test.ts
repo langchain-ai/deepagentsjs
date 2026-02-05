@@ -1,10 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { createAgent, createMiddleware, ReactAgent } from "langchain";
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
+import { MemorySaver } from "@langchain/langgraph";
 import {
   createSubAgentMiddleware,
   createFilesystemMiddleware,
 } from "../index.js";
+import { createDeepAgent } from "../agent.js";
+import { createFileData } from "../backends/utils.js";
 import {
   SAMPLE_MODEL,
   getWeather,
@@ -528,6 +531,139 @@ Each subagent should write ONE file. Do NOT write files sequentially - spawn all
       // (The exact content depends on which subagents successfully wrote)
       const filesCount = Object.keys(responseWithFiles.files || {}).length;
       expect(filesCount).toBeGreaterThanOrEqual(0); // At minimum, no error occurred
+    },
+  );
+});
+
+/**
+ * Integration tests for subagent skills via createDeepAgent.
+ *
+ * These tests verify that subagents with their own `skills` property
+ * can load and use skills from their configured sources.
+ */
+describe("Subagent Skills Integration Tests", () => {
+  /**
+   * Skill that instructs the agent to use a VERY SPECIFIC and unusual pattern.
+   * This allows us to verify the skill is actually being used.
+   */
+  const CODING_STYLE_SKILL = `---
+name: coding-style
+description: MANDATORY coding style requirements - MUST follow exactly
+---
+
+# MANDATORY Coding Style Skill
+
+## CRITICAL REQUIREMENT - READ CAREFULLY
+
+When writing ANY JavaScript code, you MUST follow this EXACT pattern:
+
+1. NEVER use console.log() - it is FORBIDDEN
+2. ALWAYS use process.stdout.write() for ALL output
+3. This is a STRICT requirement with NO exceptions
+
+Example of CORRECT code:
+\`\`\`javascript
+process.stdout.write("Hello World\\n");
+\`\`\`
+
+Example of FORBIDDEN code (NEVER do this):
+\`\`\`javascript
+console.log("Hello World"); // WRONG - NEVER USE THIS
+\`\`\`
+
+IMPORTANT: If you use console.log, the code will be REJECTED.
+`;
+
+  it.concurrent(
+    "should invoke subagent with skills and verify skill influences code generation",
+    { timeout: 120 * 1000 }, // 120s
+    async () => {
+      /**
+       * This test verifies that a subagent configured with skills:
+       * 1. Can be invoked successfully
+       * 2. Has access to the skill files passed in state
+       * 3. Writes files as instructed
+       *
+       * Note: The actual skill following depends on LLM behavior, so we verify
+       * the infrastructure works and optionally check if the skill was followed.
+       */
+      const checkpointer = new MemorySaver();
+      const agent = createDeepAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt:
+          "You are an orchestrator. When asked to write code, delegate to the coder subagent via the task tool.",
+        subagents: [
+          {
+            name: "coder",
+            description:
+              "A coding subagent that writes production-quality code following strict coding style requirements.",
+            systemPrompt: `You are a coding assistant. You MUST read and follow your coding-style skill before writing ANY code.
+Your coding-style skill contains MANDATORY requirements. Violating them will cause the code to be rejected.
+Use the write_file tool to save your code.`,
+            skills: ["/skills/coding/"], // Subagent-specific skills path
+          },
+        ],
+        checkpointer,
+      });
+
+      // Verify the agent was created with the coder subagent
+      const tools = extractToolsFromAgent(agent);
+      expect(tools.task).toBeDefined();
+      expect(tools.task.description).toContain("coder");
+
+      // Invoke with skill files in state - the subagent should load these
+      const response = await agent.invoke(
+        {
+          messages: [
+            new HumanMessage(
+              'Use the coder subagent to write a simple JavaScript script that prints "Hello World". Save it to /hello.js. Make sure the coder follows their coding-style skill requirements.',
+            ),
+          ],
+          files: {
+            "/skills/coding/coding-style/SKILL.md":
+              createFileData(CODING_STYLE_SKILL),
+          },
+        } as any,
+        {
+          configurable: { thread_id: `test-subagent-skills-${Date.now()}` },
+          recursionLimit: 50,
+        },
+      );
+
+      // Verify the task tool was called with the coder subagent
+      const toolCalls = extractAllToolCalls(response);
+      const taskCall = toolCalls.find((tc) => tc.name === "task");
+      expect(taskCall).toBeDefined();
+      expect(taskCall!.args.subagent_type).toBe("coder");
+
+      // Verify a file was written
+      const responseWithFiles = response as unknown as {
+        files?: Record<string, { content?: string[] }>;
+      };
+      expect(responseWithFiles.files).toBeDefined();
+
+      // Find any .js file (the exact path might vary)
+      const jsFiles = Object.entries(responseWithFiles.files || {}).filter(
+        ([path]) => path.endsWith(".js"),
+      );
+      expect(jsFiles.length).toBeGreaterThan(0);
+
+      // Get the file content
+      const [, fileData] = jsFiles[0];
+      const fileContent = fileData?.content?.join("\n") || "";
+
+      // Verify the file contains valid JavaScript that outputs something
+      expect(fileContent).toMatch(/Hello.*World|hello.*world/i);
+
+      // Check if the skill was followed (process.stdout.write instead of console.log)
+      // This is the main assertion - if the skill was loaded, the agent should follow it
+      const usedProcessStdout = fileContent.includes("process.stdout.write");
+      const usedConsoleLog = fileContent.includes("console.log");
+
+      // The skill explicitly forbids console.log and requires process.stdout.write
+      // If the skill is properly loaded and followed, the subagent MUST use process.stdout.write
+      expect(usedProcessStdout).toBe(true);
+      expect(usedConsoleLog).toBe(false);
     },
   );
 });

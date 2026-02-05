@@ -330,6 +330,7 @@ interface SubAgent {
   model?: LanguageModelLike | string;
   middleware?: AgentMiddleware[];
   interruptOn?: Record<string, boolean | InterruptOnConfig>;
+  skills?: string[];
 }
 ```
 
@@ -342,6 +343,37 @@ interface SubAgent {
 - **model**: Optional model name or model instance.
 - **middleware**: Additional middleware to attach to the subagent. See [here](https://docs.langchain.com/oss/typescript/langchain/middleware) for an introduction into middleware and how it works with createAgent.
 - **interruptOn**: A custom interrupt config that specifies human-in-the-loop interactions for your tools.
+- **skills**: Skill source paths for the subagent (e.g., `["/skills/research/"]`). See skills inheritance below.
+
+#### Skills Inheritance
+
+When you configure `skills` on the main agent via `createDeepAgent`, the behavior differs between subagent types:
+
+- **General-purpose subagent**: Automatically inherits skills from the main agent. This subagent has access to all the same skills as the main agent.
+- **Custom subagents**: Do NOT inherit skills from the main agent by default. If you want a custom subagent to have access to skills, you must explicitly define the `skills` property on that subagent.
+
+```typescript
+const agent = createDeepAgent({
+  model: "claude-sonnet-4-20250514",
+  skills: ["/skills/"], // Main agent and general-purpose subagent get these skills
+  subagents: [
+    {
+      name: "researcher",
+      description: "Research assistant",
+      systemPrompt: "You are a researcher.",
+      // This subagent will NOT have access to /skills/ from the main agent
+    },
+    {
+      name: "coder",
+      description: "Coding assistant",
+      systemPrompt: "You are a coder.",
+      skills: ["/skills/coding/"], // This subagent has its own skills
+    },
+  ],
+});
+```
+
+This design ensures context isolation - custom subagents only have access to the skills they explicitly need, preventing unintended skill leakage between specialized agents.
 
 #### Using SubAgent
 

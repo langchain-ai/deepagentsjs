@@ -5,8 +5,8 @@ import type {
   BackendProtocol,
   FileDownloadResponse,
   WriteResult,
-  EditResult,
 } from "../backends/protocol.js";
+import { createMockBackend } from "./test.js";
 
 // Mock the OpenAI module with a class constructor
 vi.mock("@langchain/openai", () => {
@@ -21,51 +21,6 @@ vi.mock("@langchain/openai", () => {
     },
   };
 });
-
-// Create a mock backend
-function createMockBackend(
-  options: {
-    files?: Record<string, string>;
-    writeError?: string;
-  } = {},
-): BackendProtocol {
-  const { files = {}, writeError } = options;
-  const writtenFiles: Record<string, string> = { ...files };
-
-  return {
-    async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
-      return paths.map((path) => {
-        const content = writtenFiles[path];
-        if (content === undefined) {
-          return { path, error: "file_not_found", content: null };
-        }
-        return {
-          path,
-          content: new TextEncoder().encode(content),
-          error: null,
-        };
-      });
-    },
-    async write(path: string, content: string): Promise<WriteResult> {
-      if (writeError) {
-        return { error: writeError };
-      }
-      writtenFiles[path] = content;
-      return { path };
-    },
-    async edit(
-      path: string,
-      _oldString: string,
-      newString: string,
-    ): Promise<EditResult> {
-      if (writeError) {
-        return { error: writeError };
-      }
-      writtenFiles[path] = newString;
-      return { path, occurrences: 1 };
-    },
-  } as unknown as BackendProtocol;
-}
 
 describe("createSummarizationMiddleware", () => {
   beforeEach(() => {
