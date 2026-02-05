@@ -1,5 +1,5 @@
 ---
-"@langchain/modal": patch
+"@langchain/modal": minor
 ---
 
 feat(modal): add Modal sandbox provider for DeepAgents

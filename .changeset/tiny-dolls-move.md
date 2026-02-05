@@ -1,5 +1,5 @@
 ---
-"@langchain/daytona": patch
+"@langchain/daytona": minor
 ---
 
 feat(daytona): adding sandbox integration
