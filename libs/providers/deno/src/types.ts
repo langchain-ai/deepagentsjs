@@ -114,6 +114,8 @@ export type DenoSandboxErrorCode =
   /** Resource limits exceeded (CPU, memory, storage) */
   | "RESOURCE_LIMIT_EXCEEDED";
 
+const DENO_SANDBOX_ERROR_SYMBOL = Symbol.for("deno.sandbox.error");
+
 /**
  * Custom error class for Deno Sandbox operations.
  *
@@ -143,6 +145,8 @@ export type DenoSandboxErrorCode =
  * ```
  */
 export class DenoSandboxError extends Error {
+  [DENO_SANDBOX_ERROR_SYMBOL]: true;
+
   /** Error name for instanceof checks and logging */
   override readonly name = "DenoSandboxError";
 
@@ -161,5 +165,19 @@ export class DenoSandboxError extends Error {
     super(message);
     // Maintain proper prototype chain for instanceof checks
     Object.setPrototypeOf(this, DenoSandboxError.prototype);
+  }
+
+  /**
+   * Checks if the error is an instance of DenoSandboxError.
+   *
+   * @param error - The error to check
+   * @returns True if the error is an instance of DenoSandboxError, false otherwise
+   */
+  static isInstance(error: unknown): error is DenoSandboxError {
+    return (
+      typeof error === "object" &&
+      error !== null &&
+      (error as Record<symbol, unknown>)[DENO_SANDBOX_ERROR_SYMBOL] === true
+    );
   }
 }
