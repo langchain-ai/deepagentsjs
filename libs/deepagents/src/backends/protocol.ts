@@ -287,6 +287,224 @@ export function isSandboxBackend(
 }
 
 /**
+ * Metadata for a single sandbox instance.
+ *
+ * This lightweight structure is returned from list operations and provides
+ * basic information about a sandbox without requiring a full connection.
+ *
+ * @typeParam MetadataT - Type of the metadata field. Providers can define
+ *   their own interface for type-safe metadata access.
+ *
+ * @example
+ * ```typescript
+ * // Using default metadata type
+ * const info: SandboxInfo = {
+ *   sandboxId: "sb_abc123",
+ *   metadata: { status: "running", createdAt: "2024-01-15T10:30:00Z" },
+ * };
+ *
+ * // Using typed metadata
+ * interface MyMetadata {
+ *   status: "running" | "stopped";
+ *   createdAt: string;
+ * }
+ * const typedInfo: SandboxInfo<MyMetadata> = {
+ *   sandboxId: "sb_abc123",
+ *   metadata: { status: "running", createdAt: "2024-01-15T10:30:00Z" },
+ * };
+ * ```
+ */
+export interface SandboxInfo<MetadataT = Record<string, unknown>> {
+  /** Unique identifier for the sandbox instance */
+  sandboxId: string;
+  /** Optional provider-specific metadata (e.g., creation time, status, template) */
+  metadata?: MetadataT;
+}
+
+/**
+ * Paginated response from a sandbox list operation.
+ *
+ * This structure supports cursor-based pagination for efficiently browsing
+ * large collections of sandboxes.
+ *
+ * @typeParam MetadataT - Type of the metadata field in SandboxInfo items.
+ *
+ * @example
+ * ```typescript
+ * const response: SandboxListResponse = {
+ *   items: [
+ *     { sandboxId: "sb_001", metadata: { status: "running" } },
+ *     { sandboxId: "sb_002", metadata: { status: "stopped" } },
+ *   ],
+ *   cursor: "eyJvZmZzZXQiOjEwMH0=",
+ * };
+ *
+ * // Fetch next page
+ * const nextResponse = await provider.list({ cursor: response.cursor });
+ * ```
+ */
+export interface SandboxListResponse<MetadataT = Record<string, unknown>> {
+  /** List of sandbox metadata objects for the current page */
+  items: SandboxInfo<MetadataT>[];
+  /**
+   * Opaque continuation token for retrieving the next page.
+   * null indicates no more pages available.
+   */
+  cursor: string | null;
+}
+
+/**
+ * Options for listing sandboxes.
+ */
+export interface SandboxListOptions {
+  /**
+   * Continuation token from a previous list() call.
+   * Pass undefined to start from the beginning.
+   */
+  cursor?: string;
+}
+
+/**
+ * Options for getting or creating a sandbox.
+ */
+export interface SandboxGetOrCreateOptions {
+  /**
+   * Unique identifier of an existing sandbox to retrieve.
+   * If undefined, creates a new sandbox instance.
+   * If provided but the sandbox doesn't exist, an error will be thrown.
+   */
+  sandboxId?: string;
+}
+
+/**
+ * Options for deleting a sandbox.
+ */
+export interface SandboxDeleteOptions {
+  /** Unique identifier of the sandbox to delete */
+  sandboxId: string;
+}
+
+/**
+ * Abstract interface for sandbox provider implementations.
+ *
+ * Defines the lifecycle management interface for sandbox providers. Implementations
+ * should integrate with their respective SDKs to provide standardized sandbox
+ * lifecycle operations (list, getOrCreate, delete).
+ *
+ * This interface separates lifecycle management from sandbox execution:
+ * - `SandboxProvider` handles lifecycle (list, create, delete)
+ * - `SandboxBackendProtocol` handles execution (execute, file operations)
+ *
+ * @typeParam MetadataT - Type of the metadata field in sandbox listings.
+ *   Providers can define their own interface for type-safe metadata access.
+ *
+ * @example
+ * ```typescript
+ * interface MyMetadata {
+ *   status: "running" | "stopped";
+ *   template: string;
+ * }
+ *
+ * class MySandboxProvider implements SandboxProvider<MyMetadata> {
+ *   async list(options?: SandboxListOptions): Promise<SandboxListResponse<MyMetadata>> {
+ *     // Query provider API
+ *     return { items: [...], cursor: null };
+ *   }
+ *
+ *   async getOrCreate(options?: SandboxGetOrCreateOptions): Promise<SandboxBackendProtocol> {
+ *     if (options?.sandboxId) {
+ *       return this.get(options.sandboxId);
+ *     }
+ *     return this.create();
+ *   }
+ *
+ *   async delete(options: SandboxDeleteOptions): Promise<void> {
+ *     // Idempotent - no error if already deleted
+ *     await this.client.delete(options.sandboxId);
+ *   }
+ * }
+ *
+ * // Usage
+ * const provider = new MySandboxProvider();
+ * const sandbox = await provider.getOrCreate();
+ * const result = await sandbox.execute("echo hello");
+ * await provider.delete({ sandboxId: sandbox.id });
+ * ```
+ */
+export interface SandboxProvider<MetadataT = Record<string, unknown>> {
+  /**
+   * List available sandboxes with optional pagination.
+   *
+   * @param options - Optional list options including cursor for pagination
+   * @returns Paginated list of sandbox metadata
+   *
+   * @example
+   * ```typescript
+   * // First page
+   * const response = await provider.list();
+   * for (const sandbox of response.items) {
+   *   console.log(sandbox.sandboxId);
+   * }
+   *
+   * // Next page if available
+   * if (response.cursor) {
+   *   const nextPage = await provider.list({ cursor: response.cursor });
+   * }
+   * ```
+   */
+  list(options?: SandboxListOptions): Promise<SandboxListResponse<MetadataT>>;
+
+  /**
+   * Get an existing sandbox or create a new one.
+   *
+   * If sandboxId is provided, retrieves the existing sandbox. If the sandbox
+   * doesn't exist, throws an error (does NOT create a new one).
+   *
+   * If sandboxId is undefined, creates a new sandbox instance.
+   *
+   * @param options - Optional options including sandboxId to retrieve
+   * @returns A sandbox instance implementing SandboxBackendProtocol
+   * @throws Error if sandboxId is provided but the sandbox doesn't exist
+   *
+   * @example
+   * ```typescript
+   * // Create a new sandbox
+   * const sandbox = await provider.getOrCreate();
+   * console.log(sandbox.id); // "sb_new123"
+   *
+   * // Reconnect to existing sandbox
+   * const existing = await provider.getOrCreate({ sandboxId: "sb_new123" });
+   *
+   * // Use the sandbox
+   * const result = await sandbox.execute("node --version");
+   * ```
+   */
+  getOrCreate(
+    options?: SandboxGetOrCreateOptions,
+  ): Promise<SandboxBackendProtocol>;
+
+  /**
+   * Delete a sandbox instance.
+   *
+   * This permanently destroys the sandbox and all its associated data.
+   * The operation is idempotent - calling delete on a non-existent sandbox
+   * should succeed without raising an error.
+   *
+   * @param options - Options including the sandboxId to delete
+   *
+   * @example
+   * ```typescript
+   * // Simple deletion
+   * await provider.delete({ sandboxId: "sb_123" });
+   *
+   * // Safe to call multiple times (idempotent)
+   * await provider.delete({ sandboxId: "sb_123" }); // No error
+   * ```
+   */
+  delete(options: SandboxDeleteOptions): Promise<void>;
+}
+
+/**
  * State and store container for backend initialization.
  *
  * This provides a clean interface for what backends need to access:

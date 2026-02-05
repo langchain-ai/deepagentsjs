@@ -23,11 +23,20 @@ import {
   type FileDownloadResponse,
   type FileOperationError,
   type FileUploadResponse,
+  type SandboxDeleteOptions,
+  type SandboxGetOrCreateOptions,
+  type SandboxListOptions,
+  type SandboxListResponse,
+  type SandboxProvider,
 } from "deepagents";
 
 import { VirtualFileSystem } from "node-vfs-polyfill";
 
-import { VfsSandboxError, type VfsSandboxOptions } from "./types.js";
+import {
+  VfsSandboxError,
+  type VfsSandboxMetadata,
+  type VfsSandboxOptions,
+} from "./types.js";
 
 /**
  * Node.js VFS Sandbox backend for deepagents.
@@ -562,4 +571,179 @@ export function createVfsSandboxFactoryFromSandbox(
   sandbox: VfsSandbox,
 ): BackendFactory {
   return () => sandbox;
+}
+
+// ============================================================================
+// Sandbox Provider Implementation
+// ============================================================================
+
+/**
+ * VFS Sandbox provider for lifecycle management.
+ *
+ * Implements the `SandboxProvider` interface to provide standardized
+ * lifecycle management (list, create, delete) for in-memory VFS Sandboxes.
+ *
+ * Since VFS sandboxes are in-memory, this provider tracks created sandboxes
+ * internally and can list/delete them.
+ *
+ * ## Basic Usage
+ *
+ * ```typescript
+ * import { VfsSandboxProvider } from "@langchain/vfs-sandbox";
+ *
+ * const provider = new VfsSandboxProvider({
+ *   initialFiles: { "/README.md": "# Hello" },
+ * });
+ *
+ * // Create a new sandbox
+ * const sandbox = await provider.getOrCreate();
+ * console.log(`Created sandbox: ${sandbox.id}`);
+ *
+ * // List sandboxes
+ * const { items } = await provider.list();
+ * console.log(`Active sandboxes: ${items.length}`);
+ *
+ * // Delete when done
+ * await provider.delete({ sandboxId: sandbox.id });
+ * ```
+ */
+export class VfsSandboxProvider implements SandboxProvider<VfsSandboxMetadata> {
+  /** Configuration options for sandboxes created by this provider */
+  #options: VfsSandboxOptions;
+
+  /** Map of active sandboxes managed by this provider */
+  #sandboxes: Map<string, { sandbox: VfsSandbox; createdAt: string }> =
+    new Map();
+
+  /**
+   * Create a new VfsSandboxProvider.
+   *
+   * @param options - Configuration options applied to new sandboxes
+   *
+   * @example
+   * ```typescript
+   * const provider = new VfsSandboxProvider({
+   *   initialFiles: { "/README.md": "# Hello" },
+   *   timeout: 60000,
+   * });
+   * ```
+   */
+  constructor(options: VfsSandboxOptions = {}) {
+    this.#options = options;
+  }
+
+  /**
+   * List available sandboxes.
+   *
+   * Returns all sandboxes that were created by this provider and
+   * are still active (not deleted).
+   *
+   * @param options - Optional pagination options (cursor not used for in-memory)
+   * @returns Paginated list of sandbox metadata
+   *
+   * @example
+   * ```typescript
+   * const response = await provider.list();
+   * for (const info of response.items) {
+   *   console.log(`Sandbox: ${info.sandboxId}, Status: ${info.metadata?.status}`);
+   * }
+   * ```
+   */
+  async list(
+    options?: SandboxListOptions,
+  ): Promise<SandboxListResponse<VfsSandboxMetadata>> {
+    void options; // Cursor pagination not needed for in-memory store
+
+    const items = Array.from(this.#sandboxes.entries()).map(
+      ([sandboxId, { sandbox, createdAt }]) => ({
+        sandboxId,
+        metadata: {
+          status: sandbox.isRunning
+            ? ("running" as const)
+            : ("stopped" as const),
+          createdAt,
+          workingDirectory: sandbox.workingDirectory,
+        },
+      }),
+    );
+
+    return {
+      items,
+      cursor: null,
+    };
+  }
+
+  /**
+   * Get an existing sandbox or create a new one.
+   *
+   * If `sandboxId` is provided, retrieves the existing sandbox from the
+   * internal map. If the sandbox doesn't exist, throws an error.
+   *
+   * If `sandboxId` is undefined, creates a new VFS sandbox with the
+   * provider's configuration options.
+   *
+   * @param options - Optional options including sandboxId to retrieve
+   * @returns An initialized VfsSandbox instance
+   * @throws {VfsSandboxError} If sandboxId is provided but not found
+   *
+   * @example
+   * ```typescript
+   * // Create new sandbox
+   * const newSandbox = await provider.getOrCreate();
+   *
+   * // Get existing sandbox
+   * const existing = await provider.getOrCreate({ sandboxId: newSandbox.id });
+   * ```
+   */
+  async getOrCreate(options?: SandboxGetOrCreateOptions): Promise<VfsSandbox> {
+    if (options?.sandboxId) {
+      // Get existing sandbox
+      const entry = this.#sandboxes.get(options.sandboxId);
+      if (!entry) {
+        throw new VfsSandboxError(
+          `Sandbox not found: ${options.sandboxId}`,
+          "NOT_INITIALIZED",
+        );
+      }
+      return entry.sandbox;
+    }
+
+    // Create new sandbox
+    const sandbox = await VfsSandbox.create(this.#options);
+    const createdAt = new Date().toISOString();
+
+    // Track the sandbox
+    this.#sandboxes.set(sandbox.id, { sandbox, createdAt });
+
+    return sandbox;
+  }
+
+  /**
+   * Delete a sandbox.
+   *
+   * Stops the sandbox and removes it from the provider's internal tracking.
+   * The operation is idempotent - calling delete on a non-existent sandbox
+   * will succeed without error.
+   *
+   * @param options - Options including the sandboxId to delete
+   *
+   * @example
+   * ```typescript
+   * await provider.delete({ sandboxId: "vfs-sandbox-123" });
+   *
+   * // Safe to call multiple times
+   * await provider.delete({ sandboxId: "vfs-sandbox-123" }); // No error
+   * ```
+   */
+  async delete(options: SandboxDeleteOptions): Promise<void> {
+    const entry = this.#sandboxes.get(options.sandboxId);
+
+    if (entry) {
+      // Stop the sandbox and remove from tracking
+      await entry.sandbox.stop();
+      this.#sandboxes.delete(options.sandboxId);
+    }
+
+    // Idempotent - succeed silently if not found
+  }
 }

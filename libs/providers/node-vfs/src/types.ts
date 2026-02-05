@@ -54,6 +54,21 @@ export interface VfsSandboxOptions {
 }
 
 /**
+ * Metadata for a VFS Sandbox instance.
+ *
+ * This is used by `VfsSandboxProvider.list()` to return information
+ * about available sandboxes.
+ */
+export interface VfsSandboxMetadata {
+  /** Current status of the sandbox */
+  status?: "running" | "stopped";
+  /** Timestamp when the sandbox was created */
+  createdAt?: string;
+  /** Working directory path */
+  workingDirectory?: string;
+}
+
+/**
  * Error codes for VFS Sandbox operations.
  */
 export type VfsSandboxErrorCode =

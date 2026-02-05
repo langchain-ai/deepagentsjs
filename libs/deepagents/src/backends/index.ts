@@ -21,6 +21,13 @@ export type {
   FileUploadResponse,
   SandboxBackendProtocol,
   MaybePromise,
+  // Sandbox provider types
+  SandboxInfo,
+  SandboxListResponse,
+  SandboxListOptions,
+  SandboxGetOrCreateOptions,
+  SandboxDeleteOptions,
+  SandboxProvider,
 } from "./protocol.js";
 
 // Export type guard
