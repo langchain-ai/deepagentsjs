@@ -182,3 +182,144 @@ console.log(\`2 + 3 = \${add(2, 3)}\`);
     expect(readBack.output).toContain("Created with write()");
   });
 });
+
+describe("DaytonaSandbox initialFiles Integration Tests", () => {
+  it("should create sandbox with initial files", async () => {
+    const sandbox = await DaytonaSandbox.create({
+      language: "typescript",
+      autoStopInterval: 5,
+      labels: {
+        purpose: "integration-test-initial-files",
+        package: "@langchain/daytona",
+      },
+      initialFiles: {
+        "app/index.js": "console.log('Hello from initial file');",
+        "app/package.json": '{"name": "test-app", "version": "1.0.0"}',
+      },
+    });
+
+    try {
+      expect(sandbox.isRunning).toBe(true);
+
+      // Verify index.js exists and has correct content
+      const indexResult = await sandbox.execute("cat app/index.js");
+      expect(indexResult.exitCode).toBe(0);
+      expect(indexResult.output).toContain("Hello from initial file");
+
+      // Verify package.json exists and has correct content
+      const packageResult = await sandbox.execute("cat app/package.json");
+      expect(packageResult.exitCode).toBe(0);
+      expect(packageResult.output).toContain("test-app");
+      expect(packageResult.output).toContain("1.0.0");
+
+      // Verify we can execute the JavaScript file
+      const execResult = await sandbox.execute("node app/index.js");
+      expect(execResult.exitCode).toBe(0);
+      expect(execResult.output).toContain("Hello from initial file");
+    } finally {
+      await sandbox.close();
+    }
+  });
+
+  it("should create sandbox with deeply nested initial files", async () => {
+    const sandbox = await DaytonaSandbox.create({
+      language: "typescript",
+      autoStopInterval: 5,
+      labels: {
+        purpose: "integration-test-nested-files",
+        package: "@langchain/daytona",
+      },
+      initialFiles: {
+        "src/components/Button/index.tsx":
+          "export const Button = () => <button>Click</button>;",
+        "src/utils/helpers/string.ts":
+          "export const capitalize = (s: string) => s.toUpperCase();",
+      },
+    });
+
+    try {
+      expect(sandbox.isRunning).toBe(true);
+
+      // Verify nested directory structure was created
+      const lsResult = await sandbox.execute("find src -type f");
+      expect(lsResult.exitCode).toBe(0);
+      expect(lsResult.output).toContain("src/components/Button/index.tsx");
+      expect(lsResult.output).toContain("src/utils/helpers/string.ts");
+
+      // Verify file contents
+      const buttonContent = await sandbox.execute(
+        "cat src/components/Button/index.tsx",
+      );
+      expect(buttonContent.output).toContain("Button");
+
+      const helperContent = await sandbox.execute(
+        "cat src/utils/helpers/string.ts",
+      );
+      expect(helperContent.output).toContain("capitalize");
+    } finally {
+      await sandbox.close();
+    }
+  });
+
+  it("should create sandbox with empty initialFiles object", async () => {
+    const sandbox = await DaytonaSandbox.create({
+      language: "typescript",
+      autoStopInterval: 5,
+      labels: {
+        purpose: "integration-test-empty-files",
+        package: "@langchain/daytona",
+      },
+      initialFiles: {},
+    });
+
+    try {
+      expect(sandbox.isRunning).toBe(true);
+
+      // Sandbox should work normally
+      const result = await sandbox.execute('echo "Works!"');
+      expect(result.exitCode).toBe(0);
+      expect(result.output).toContain("Works!");
+    } finally {
+      await sandbox.close();
+    }
+  });
+
+  it("should create sandbox with TypeScript files and execute them", async () => {
+    const tsCode = `
+const greeting: string = "Hello from initialFiles!";
+console.log(greeting);
+
+interface User {
+  name: string;
+  age: number;
+}
+
+const user: User = { name: "Alice", age: 30 };
+console.log(\`User: \${user.name}, Age: \${user.age}\`);
+`;
+
+    const sandbox = await DaytonaSandbox.create({
+      language: "typescript",
+      autoStopInterval: 5,
+      labels: {
+        purpose: "integration-test-typescript",
+        package: "@langchain/daytona",
+      },
+      initialFiles: {
+        "main.ts": tsCode,
+      },
+    });
+
+    try {
+      expect(sandbox.isRunning).toBe(true);
+
+      // Execute the TypeScript file
+      const result = await sandbox.execute("npx tsx main.ts");
+      expect(result.exitCode).toBe(0);
+      expect(result.output).toContain("Hello from initialFiles!");
+      expect(result.output).toContain("User: Alice, Age: 30");
+    } finally {
+      await sandbox.close();
+    }
+  });
+});

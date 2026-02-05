@@ -121,6 +121,26 @@ export interface DaytonaSandboxOptions {
   labels?: Record<string, string>;
 
   /**
+   * Initial files to create in the sandbox after initialization.
+   *
+   * A map of file paths to their contents. Files will be created
+   * in the sandbox filesystem before any commands are executed.
+   * Parent directories are created automatically.
+   *
+   * @example
+   * ```typescript
+   * const options: DaytonaSandboxOptions = {
+   *   language: "typescript",
+   *   initialFiles: {
+   *     "/app/index.js": "console.log('Hello')",
+   *     "/app/package.json": '{"name": "test"}',
+   *   },
+   * };
+   * ```
+   */
+  initialFiles?: Record<string, string>;
+
+  /**
    * Authentication configuration for Daytona API.
    *
    * ### Environment Variable Setup
