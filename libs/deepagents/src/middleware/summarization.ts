@@ -287,9 +287,7 @@ export function createSummarizationMiddleware(
    * Similar to Python's _get_profile_limits.
    */
   function getMaxInputTokens(resolvedModel: BaseChatModel): number | undefined {
-    const profile = (
-      resolvedModel as BaseChatModel & { profile?: { maxInputTokens?: number } }
-    ).profile;
+    const profile = resolvedModel.profile;
     if (
       profile &&
       typeof profile === "object" &&
