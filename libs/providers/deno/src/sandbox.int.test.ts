@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, afterAll } from "vitest";
-import { DenoSandbox } from "/home/app/sandbox.js";
+import { DenoSandbox } from "./sandbox.js";
 
 // Check if integration tests should run
 const DENO_TOKEN = process.env.DENO_DEPLOY_TOKEN;
@@ -41,10 +41,6 @@ afterAll(async () => {
 describe.skipIf(!DENO_TOKEN)("DenoSandbox Integration Tests", () => {
   // Increase timeout for integration tests (sandbox creation can take 10-30 seconds)
   const TEST_TIMEOUT = 120_000; // 2 minutes
-
-  // ============================================================================
-  // Test sandbox lifecycle
-  // ============================================================================
 
   describe("sandbox lifecycle", () => {
     it(
@@ -114,10 +110,6 @@ describe.skipIf(!DENO_TOKEN)("DenoSandbox Integration Tests", () => {
       TEST_TIMEOUT,
     );
   });
-
-  // ============================================================================
-  // Test command execution
-  // ============================================================================
 
   describe("command execution", () => {
     it(
@@ -230,10 +222,6 @@ describe.skipIf(!DENO_TOKEN)("DenoSandbox Integration Tests", () => {
       TEST_TIMEOUT,
     );
   });
-
-  // ============================================================================
-  // Test file operations
-  // ============================================================================
 
   describe("file operations", () => {
     it(
@@ -414,12 +402,8 @@ describe.skipIf(!DENO_TOKEN)("DenoSandbox Integration Tests", () => {
     );
   });
 
-  // ============================================================================
-  // Test reconnect to existing sandbox
-  // ============================================================================
-
   describe("reconnect to existing sandbox", () => {
-    it.skip(
+    it(
       "should reconnect to existing sandbox via DenoSandbox.connect()",
       async () => {
         // Create a sandbox with duration lifetime so it persists
