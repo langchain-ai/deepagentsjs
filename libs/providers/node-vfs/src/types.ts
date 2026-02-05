@@ -1,7 +1,7 @@
 /**
  * Type definitions for the Node.js VFS backend.
  *
- * This module contains all type definitions for the @langchain/vfs-sandbox package,
+ * This module contains all type definitions for the @langchain/node-vfs package,
  * including options and error types.
  */
 

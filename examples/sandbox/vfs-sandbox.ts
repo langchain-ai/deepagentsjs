@@ -4,7 +4,7 @@
  *
  * This example demonstrates the Sandbox Execution Support feature of DeepAgents
  * using an in-memory Virtual File System. It shows how to:
- * 1. Create a VFS Sandbox backend using the @langchain/vfs-sandbox package
+ * 1. Create a VFS Sandbox backend using the @langchain/node-vfs package
  * 2. Use the `execute` tool to run shell commands in an isolated environment
  * 3. Pre-populate the sandbox with initial files
  *
@@ -33,7 +33,7 @@ import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { ChatAnthropic } from "@langchain/anthropic";
 
 import { createDeepAgent } from "deepagents";
-import { VfsSandbox } from "@langchain/vfs-sandbox";
+import { VfsSandbox } from "@langchain/node-vfs";
 
 // System prompt that leverages the execute capability
 const systemPrompt = `You are a powerful coding assistant with access to an in-memory virtual file system.

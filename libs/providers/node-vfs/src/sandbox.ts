@@ -42,7 +42,7 @@ import { VfsSandboxError, type VfsSandboxOptions } from "./types.js";
  * ## Basic Usage
  *
  * ```typescript
- * import { VfsSandbox } from "@langchain/vfs-sandbox";
+ * import { VfsSandbox } from "@langchain/node-vfs";
  *
  * // Create and initialize a VFS sandbox
  * const sandbox = await VfsSandbox.create({
@@ -64,7 +64,7 @@ import { VfsSandboxError, type VfsSandboxOptions } from "./types.js";
  *
  * ```typescript
  * import { createDeepAgent } from "deepagents";
- * import { VfsSandbox } from "@langchain/vfs-sandbox";
+ * import { VfsSandbox } from "@langchain/node-vfs";
  *
  * const sandbox = await VfsSandbox.create();
  *
@@ -520,7 +520,7 @@ import type { BackendFactory } from "deepagents";
  *
  * @example
  * ```typescript
- * import { VfsSandbox, createVfsSandboxFactory } from "@langchain/vfs-sandbox";
+ * import { VfsSandbox, createVfsSandboxFactory } from "@langchain/node-vfs";
  *
  * const factory = createVfsSandboxFactory({
  *   initialFiles: { "/README.md": "# Hello" },

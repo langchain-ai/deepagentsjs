@@ -71,15 +71,15 @@ importers:
       '@langchain/langgraph-checkpoint':
         specifier: ^1.0.0
         version: 1.0.0(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))
+      '@langchain/node-vfs':
+        specifier: workspace:*
+        version: link:../libs/providers/node-vfs
       '@langchain/openai':
         specifier: ^1.2.4
         version: 1.2.4(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))(ws@8.19.0)
       '@langchain/tavily':
         specifier: ^1.2.0
         version: 1.2.0(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))
-      '@langchain/vfs-sandbox':
-        specifier: workspace:*
-        version: link:../libs/providers/vfs-sandbox
       deepagents:
         specifier: workspace:*
         version: link:../libs/deepagents
@@ -244,7 +244,7 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@25.2.0)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
-  libs/providers/vfs-sandbox:
+  libs/providers/node-vfs:
     dependencies:
       node-vfs-polyfill:
         specifier: github:vercel-labs/node-vfs-polyfill

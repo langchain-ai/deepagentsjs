@@ -1,5 +1,5 @@
 /**
- * @langchain/vfs-sandbox
+ * @langchain/node-vfs
  *
  * Node.js Virtual File System backend for deepagents.
  *
@@ -13,7 +13,7 @@
  *
  * @example
  * ```typescript
- * import { VfsSandbox } from "@langchain/vfs-sandbox";
+ * import { VfsSandbox } from "@langchain/node-vfs";
  * import { createDeepAgent } from "deepagents";
  * import { ChatAnthropic } from "@langchain/anthropic";
  *

@@ -1,4 +1,4 @@
-# @langchain/vfs-sandbox
+# @langchain/node-vfs
 
 Node.js Virtual File System backend for [DeepAgents](https://github.com/langchain-ai/deepagentsjs).
 
@@ -7,15 +7,15 @@ This package provides an in-memory VFS implementation that enables agents to wor
 ## Installation
 
 ```bash
-npm install @langchain/vfs-sandbox deepagents
+npm install @langchain/node-vfs deepagents
 # or
-pnpm add @langchain/vfs-sandbox deepagents
+pnpm add @langchain/node-vfs deepagents
 ```
 
 ## Quick Start
 
 ```typescript
-import { VfsSandbox } from "@langchain/vfs-sandbox";
+import { VfsSandbox } from "@langchain/node-vfs";
 import { createDeepAgent } from "deepagents";
 import { ChatAnthropic } from "@langchain/anthropic";
 
@@ -155,7 +155,7 @@ const factory = createVfsSandboxFactoryFromSandbox(sandbox);
 The package exports a `VfsSandboxError` class for typed error handling:
 
 ```typescript
-import { VfsSandboxError } from "@langchain/vfs-sandbox";
+import { VfsSandboxError } from "@langchain/node-vfs";
 
 try {
   await sandbox.execute("some-command");
