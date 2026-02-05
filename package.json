@@ -14,7 +14,7 @@
     "format:check": "prettier --check \"libs/**/*.{ts,js,json,md}\" \"examples/**/*.{ts,js,json,md}\"",
     "test": "pnpm format:check && pnpm lint && pnpm --filter \"./libs/*\" test",
     "test:unit": "pnpm --filter \"./libs/*\" test:unit",
-    "test:int": "pnpm --filter \"./libs/*\" test:int",
+    "test:int": "pnpm --filter \"./libs/*\" --filter \"./libs/providers/*\" test:int",
     "test:watch": "pnpm --filter \"./libs/*\" test:watch",
     "test:coverage": "pnpm --filter \"./libs/*\" test:coverage",
     "changeset:version": "changeset version",
