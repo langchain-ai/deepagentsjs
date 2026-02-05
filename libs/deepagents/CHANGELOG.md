@@ -1,5 +1,21 @@
 # deepagents
 
+## 1.7.0
+
+### Minor Changes
+
+- [#165](https://github.com/langchain-ai/deepagentsjs/pull/165) [`988b44c`](https://github.com/langchain-ai/deepagentsjs/commit/988b44c129277dea526ba48c56bb34ebf098614d) Thanks [@christian-bromann](https://github.com/christian-bromann)! - feat: add SandboxProvider abstraction
+
+- [`b5e719c`](https://github.com/langchain-ai/deepagentsjs/commit/b5e719c8aacb1eac74560ac46bc1604d6733b36b) Thanks [@christian-bromann](https://github.com/christian-bromann)! - feat(deepagents): support skills in subagents
+
+### Patch Changes
+
+- [`b5e719c`](https://github.com/langchain-ai/deepagentsjs/commit/b5e719c8aacb1eac74560ac46bc1604d6733b36b) Thanks [@christian-bromann](https://github.com/christian-bromann)! - chore: migrate to use SystemMessage and add tests for filesystem middleware
+
+- [`b5e719c`](https://github.com/langchain-ai/deepagentsjs/commit/b5e719c8aacb1eac74560ac46bc1604d6733b36b) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): grep should perform literal search instead of regex (
+
+- [`b5e719c`](https://github.com/langchain-ai/deepagentsjs/commit/b5e719c8aacb1eac74560ac46bc1604d6733b36b) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(summarization): resolve fraction trigger bug by using model profile for maxInputTokens
+
 ## 1.6.3
 
 ### Patch Changes
