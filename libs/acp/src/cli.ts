@@ -5,7 +5,7 @@
  * Run a DeepAgents ACP server for integration with IDEs like Zed.
  *
  * Usage:
- *   npx deepagents-server [options]
+ *   npx deepagents-acp [options]
  *
  * Options:
  *   --name <name>         Agent name (default: "deepagents")
@@ -173,7 +173,7 @@ Run a DeepAgents-powered AI coding assistant that integrates with IDEs
 like Zed, JetBrains, and other ACP-compatible clients.
 
 USAGE:
-  npx deepagents-server [options]
+  npx deepagents-acp [options]
 
 OPTIONS:
   -n, --name <name>         Agent name (default: "deepagents")
@@ -196,19 +196,19 @@ ENVIRONMENT VARIABLES:
 
 EXAMPLES:
   # Start with defaults
-  npx deepagents-server
+  npx deepagents-acp
 
   # Custom agent with skills
-  npx deepagents-server --name my-agent --skills ./skills,~/.deepagents/skills
+  npx deepagents-acp --name my-agent --skills ./skills,~/.deepagents/skills
 
   # Debug mode with custom workspace
-  npx deepagents-server --debug --workspace /path/to/project
+  npx deepagents-acp --debug --workspace /path/to/project
 
   # Production debugging with log file
-  npx deepagents-server --log-file /var/log/deepagents.log
+  npx deepagents-acp --log-file /var/log/deepagents.log
 
   # Combined debug and file logging
-  npx deepagents-server --debug --log-file ./debug.log
+  npx deepagents-acp --debug --log-file ./debug.log
 
 ZED INTEGRATION:
   Add to your Zed settings.json:
@@ -219,7 +219,7 @@ ZED INTEGRATION:
         "deepagents": {
           "name": "DeepAgents",
           "command": "npx",
-          "args": ["deepagents-server", "--log-file", "/tmp/deepagents.log"],
+          "args": ["deepagents-acp", "--log-file", "/tmp/deepagents.log"],
           "env": {}
         }
       }
@@ -240,9 +240,9 @@ function showVersion(): void {
       "package.json",
     );
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
-    console.log(`deepagents-server v${packageJson.version}`);
+    console.log(`deepagents-acp v${packageJson.version}`);
   } catch {
-    console.log("deepagents-server v0.0.1");
+    console.log("deepagents-acp v0.0.1");
   }
 }
 
@@ -288,7 +288,7 @@ async function main(): Promise<void> {
   // Log startup info to stderr (stdout is reserved for ACP protocol)
   const log = (...msgArgs: unknown[]) => {
     if (options.debug || options.logFile) {
-      console.error("[deepagents-server]", ...msgArgs);
+      console.error("[deepagents-acp]", ...msgArgs);
     }
   };
 
@@ -312,7 +312,7 @@ async function main(): Promise<void> {
         skills,
         memory,
       },
-      serverName: "deepagents-server",
+      serverName: "deepagents-acp",
       workspaceRoot,
       debug: options.debug,
       logFile: options.logFile ?? undefined,
@@ -320,13 +320,13 @@ async function main(): Promise<void> {
 
     await server.start();
   } catch (error) {
-    console.error("[deepagents-server] Fatal error:", error);
+    console.error("[deepagents-acp] Fatal error:", error);
     process.exit(1);
   }
 }
 
 // Handle top-level errors
 main().catch((err) => {
-  console.error("[deepagents-server] Unhandled error:", err);
+  console.error("[deepagents-acp] Unhandled error:", err);
   process.exit(1);
 });

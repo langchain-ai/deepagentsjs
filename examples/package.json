@@ -7,6 +7,7 @@
   },
   "dependencies": {
     "deepagents": "workspace:*",
+    "deepagents-acp": "workspace:*",
     "@langchain/modal": "workspace:*",
     "@langchain/anthropic": "^1.3.18",
     "@langchain/core": "^1.1.25",

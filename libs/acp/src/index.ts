@@ -6,11 +6,11 @@
  * and other ACP-compatible clients.
  *
  * @packageDocumentation
- * @module deepagents-server
+ * @module deepagents-acp
  *
  * @example
  * ```typescript
- * import { DeepAgentsServer, startServer } from "deepagents-server";
+ * import { DeepAgentsServer, startServer } from "deepagents-acp";
  *
  * // Quick start
  * await startServer({

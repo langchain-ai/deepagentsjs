@@ -75,7 +75,7 @@ type SessionNotification = Record<string, unknown>;
  *
  * @example
  * ```typescript
- * import { DeepAgentsServer } from "deepagents-server";
+ * import { DeepAgentsServer } from "deepagents-acp";
  *
  * const server = new DeepAgentsServer({
  *   agents: {
@@ -105,7 +105,7 @@ export class DeepAgentsServer {
   private readonly logger: Logger;
 
   constructor(options: DeepAgentsServerOptions) {
-    this.serverName = options.serverName ?? "deepagents-server";
+    this.serverName = options.serverName ?? "deepagents-acp";
     this.serverVersion = options.serverVersion ?? "0.0.1";
     this.debug = options.debug ?? false;
     this.workspaceRoot = options.workspaceRoot ?? process.cwd();
@@ -114,7 +114,7 @@ export class DeepAgentsServer {
     this.logger = createLogger({
       debug: this.debug,
       logFile: options.logFile,
-      prefix: "[deepagents-server]",
+      prefix: "[deepagents-acp]",
     });
 
     // Shared checkpointer for session persistence
@@ -1082,7 +1082,7 @@ export class DeepAgentsServer {
  *
  * @example
  * ```typescript
- * import { startServer } from "deepagents-server";
+ * import { startServer } from "deepagents-acp";
  *
  * await startServer({
  *   agents: {

@@ -1,4 +1,4 @@
-# deepagents-server
+# deepagents-acp
 
 ACP (Agent Client Protocol) server for DeepAgents - enables integration with IDEs like Zed, JetBrains, and other ACP-compatible clients.
 
@@ -18,9 +18,9 @@ The Agent Client Protocol is a standardized communication protocol between code 
 ## Installation
 
 ```bash
-npm install deepagents-server
+npm install deepagents-acp
 # or
-pnpm add deepagents-server
+pnpm add deepagents-acp
 ```
 
 ## Quick Start
@@ -31,13 +31,13 @@ The easiest way to start is with the CLI:
 
 ```bash
 # Run with defaults
-npx deepagents-server
+npx deepagents-acp
 
 # With custom options
-npx deepagents-server --name my-agent --debug
+npx deepagents-acp --name my-agent --debug
 
 # Full options
-npx deepagents-server \
+npx deepagents-acp \
   --name coding-assistant \
   --model claude-sonnet-4-5-20250929 \
   --workspace /path/to/project \
@@ -71,7 +71,7 @@ npx deepagents-server \
 ### Programmatic Usage
 
 ```typescript
-import { startServer } from "deepagents-server";
+import { startServer } from "deepagents-acp";
 
 await startServer({
   agents: {
@@ -85,7 +85,7 @@ await startServer({
 ### Advanced Configuration
 
 ```typescript
-import { DeepAgentsServer } from "deepagents-server";
+import { DeepAgentsServer } from "deepagents-acp";
 import { FilesystemBackend } from "deepagents";
 
 const server = new DeepAgentsServer({
@@ -107,7 +107,7 @@ const server = new DeepAgentsServer({
   ],
 
   // Server options
-  serverName: "my-deepagents-server",
+  serverName: "my-deepagents-acp",
   serverVersion: "1.0.0",
   workspaceRoot: process.cwd(),
   debug: true,
@@ -129,7 +129,7 @@ To use with [Zed](https://zed.dev), add the agent to your settings (`~/.config/z
       "deepagents": {
         "name": "DeepAgents",
         "command": "npx",
-        "args": ["deepagents-server"]
+        "args": ["deepagents-acp"]
       }
     }
   }
@@ -146,7 +146,7 @@ To use with [Zed](https://zed.dev), add the agent to your settings (`~/.config/z
         "name": "DeepAgents",
         "command": "npx",
         "args": [
-          "deepagents-server",
+          "deepagents-acp",
           "--name", "my-assistant",
           "--skills", "./skills",
           "--debug"
@@ -166,7 +166,7 @@ For more control, create a custom script:
 
 ```typescript
 // server.ts
-import { startServer } from "deepagents-server";
+import { startServer } from "deepagents-acp";
 
 await startServer({
   agents: {
@@ -200,20 +200,20 @@ Then configure Zed:
 The main server class that handles ACP communication.
 
 ```typescript
-import { DeepAgentsServer } from "deepagents-server";
+import { DeepAgentsServer } from "deepagents-acp";
 
 const server = new DeepAgentsServer(options);
 ```
 
 #### Options
 
-| Option          | Type                                   | Description                                        |
-| --------------- | -------------------------------------- | -------------------------------------------------- |
-| `agents`        | `DeepAgentConfig \| DeepAgentConfig[]` | Agent configuration(s)                             |
-| `serverName`    | `string`                               | Server name for ACP (default: "deepagents-server") |
-| `serverVersion` | `string`                               | Server version (default: "0.0.1")                  |
-| `workspaceRoot` | `string`                               | Workspace root directory (default: cwd)            |
-| `debug`         | `boolean`                              | Enable debug logging (default: false)              |
+| Option          | Type                                   | Description                                     |
+| --------------- | -------------------------------------- | ----------------------------------------------- |
+| `agents`        | `DeepAgentConfig \| DeepAgentConfig[]` | Agent configuration(s)                          |
+| `serverName`    | `string`                               | Server name for ACP (default: "deepagents-acp") |
+| `serverVersion` | `string`                               | Server version (default: "0.0.1")               |
+| `workspaceRoot` | `string`                               | Workspace root directory (default: cwd)         |
+| `debug`         | `boolean`                              | Enable debug logging (default: false)           |
 
 #### DeepAgentConfig
 
@@ -252,7 +252,7 @@ server.stop();
 Convenience function to create and start a server.
 
 ```typescript
-import { startServer } from "deepagents-server";
+import { startServer } from "deepagents-acp";
 
 const server = await startServer(options);
 ```
@@ -311,7 +311,7 @@ The server supports three operating modes:
                       │ stdio (JSON-RPC 2.0)
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                  deepagents-server                          │
+│                  deepagents-acp                          │
 │   ┌─────────────────────────────────────────────────────┐   │
 │   │              AgentSideConnection                    │   │
 │   │   (from @agentclientprotocol/sdk)                   │   │
@@ -334,7 +334,7 @@ The server supports three operating modes:
 ### Custom Backend
 
 ```typescript
-import { DeepAgentsServer } from "deepagents-server";
+import { DeepAgentsServer } from "deepagents-acp";
 import { CompositeBackend, FilesystemBackend, StateBackend } from "deepagents";
 
 const server = new DeepAgentsServer({
@@ -353,7 +353,7 @@ const server = new DeepAgentsServer({
 ### With Custom Tools
 
 ```typescript
-import { DeepAgentsServer } from "deepagents-server";
+import { DeepAgentsServer } from "deepagents-acp";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
