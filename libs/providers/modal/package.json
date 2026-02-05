@@ -1,0 +1,71 @@
+{
+  "name": "@langchain/modal",
+  "version": "0.0.1",
+  "description": "Modal Sandbox backend for deepagents",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsdown",
+    "clean": "rm -rf dist/ .tsdown/",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:int": "vitest run --mode int"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/langchain-ai/deepagentsjs.git"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "langgraph",
+    "langchain",
+    "typescript",
+    "llm",
+    "modal",
+    "sandbox"
+  ],
+  "author": "LangChain",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/langchain-ai/deepagentsjs/issues"
+  },
+  "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
+  "dependencies": {
+    "modal": "^0.6.1"
+  },
+  "peerDependencies": {
+    "deepagents": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/recommended": "^1.0.13",
+    "@types/node": "^25.1.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "dotenv": "^17.2.3",
+    "tsdown": "^0.20.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/**/*"
+  ]
+}

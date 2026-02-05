@@ -7,8 +7,10 @@
   },
   "dependencies": {
     "deepagents": "workspace:*",
+    "@langchain/modal": "workspace:*",
     "@langchain/anthropic": "^1.3.14",
     "@langchain/core": "^1.1.19",
+    "@langchain/daytona": "workspace:*",
     "@langchain/deno": "workspace:*",
     "@langchain/node-vfs": "workspace:*",
     "@langchain/langgraph-checkpoint": "^1.0.0",
