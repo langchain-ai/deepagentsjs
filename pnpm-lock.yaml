@@ -71,6 +71,9 @@ importers:
       '@langchain/langgraph-checkpoint':
         specifier: ^1.0.0
         version: 1.0.0(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))
+      '@langchain/node-vfs':
+        specifier: workspace:*
+        version: link:../libs/providers/node-vfs
       '@langchain/openai':
         specifier: ^1.2.4
         version: 1.2.4(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))(ws@8.19.0)
@@ -228,6 +231,37 @@ importers:
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
+      tsdown:
+        specifier: ^0.20.1
+        version: 0.20.2(synckit@0.11.12)(typescript@5.9.3)
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@types/node@25.2.0)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+
+  libs/providers/node-vfs:
+    dependencies:
+      node-vfs-polyfill:
+        specifier: github:vercel-labs/node-vfs-polyfill
+        version: https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/1227fb028a26eb0d65e565c11b0a28e7b49b990f
+    devDependencies:
+      '@tsconfig/recommended':
+        specifier: ^1.0.13
+        version: 1.0.13
+      '@types/node':
+        specifier: ^25.1.0
+        version: 25.2.0
+      '@vitest/coverage-v8':
+        specifier: ^4.0.18
+        version: 4.0.18(vitest@4.0.18)
+      deepagents:
+        specifier: workspace:*
+        version: link:../../deepagents
       tsdown:
         specifier: ^0.20.1
         version: 0.20.2(synckit@0.11.12)(typescript@5.9.3)
@@ -1973,6 +2007,11 @@ packages:
     peerDependenciesMeta:
       encoding:
         optional: true
+
+  node-vfs-polyfill@https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/1227fb028a26eb0d65e565c11b0a28e7b49b990f:
+    resolution: {tarball: https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/1227fb028a26eb0d65e565c11b0a28e7b49b990f}
+    version: 1.0.0
+    engines: {node: '>=22.0.0'}
 
   object-inspect@1.13.4:
     resolution: {integrity: sha512-W67iLl4J2EXEGTbfeHCffrjDfitvLANg0UlX3wFUUSTx92KXRFegMHUVgSqE+wvhAbi4WqjGg9czysTV2Epbew==}
@@ -4469,6 +4508,8 @@ snapshots:
   node-fetch@2.7.0:
     dependencies:
       whatwg-url: 5.0.0
+
+  node-vfs-polyfill@https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/1227fb028a26eb0d65e565c11b0a28e7b49b990f: {}
 
   object-inspect@1.13.4: {}
 
