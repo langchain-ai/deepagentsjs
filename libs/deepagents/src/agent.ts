@@ -110,6 +110,7 @@ export function createDeepAgent<
     name,
     memory,
     skills,
+    filesystemOptions,
   } = params;
 
   /**
@@ -215,6 +216,7 @@ export function createDeepAgent<
     todoListMiddleware(),
     createFilesystemMiddleware({
       backend: filesystemBackend,
+      ...filesystemOptions,
     }),
     summarizationMiddleware({
       model,
@@ -240,7 +242,7 @@ export function createDeepAgent<
     /**
      * Enables filesystem operations and optional long-term memory storage
      */
-    createFilesystemMiddleware({ backend: filesystemBackend }),
+    createFilesystemMiddleware({ backend: filesystemBackend, ...filesystemOptions }),
     /**
      * Enables delegation to specialized subagents for complex tasks
      */

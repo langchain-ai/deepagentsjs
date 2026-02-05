@@ -20,7 +20,7 @@ import type {
   BaseStore,
 } from "@langchain/langgraph-checkpoint";
 
-import type { SubAgent } from "./middleware/index.js";
+import type { SubAgent, FilesystemMiddlewareOptions } from "./middleware/index.js";
 import type { BackendProtocol } from "./backends/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type { AnnotationRoot } from "@langchain/langgraph";
@@ -355,6 +355,22 @@ export interface CreateDeepAgentParams<
    * Memory is loaded at agent startup and added into the system prompt.
    */
   memory?: string[];
+  /**
+   * Optional filesystem middleware options (excluding `backend`, which is configured separately).
+   * These options are forwarded to `createFilesystemMiddleware` for both the main agent and subagents.
+   *
+   * @example
+   * ```typescript
+   * const agent = createDeepAgent({
+   *   filesystemOptions: {
+   *     systemPrompt: "Custom filesystem prompt",
+   *     customToolDescriptions: { ls: "List directory contents" },
+   *     toolTokenLimitBeforeEvict: 10000,
+   *   },
+   * });
+   * ```
+   */
+  filesystemOptions?: Omit<FilesystemMiddlewareOptions, 'backend'>;
   /**
    * Optional list of skill source paths (e.g., `["/skills/user/", "/skills/project/"]`).
    *
