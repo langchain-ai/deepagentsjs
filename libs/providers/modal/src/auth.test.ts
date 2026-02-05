@@ -120,7 +120,9 @@ describe("getAuthCredentials", () => {
 
   describe("error handling", () => {
     it("should throw error when both credentials are missing", () => {
-      expect(() => getAuthCredentials()).toThrow("Modal authentication required");
+      expect(() => getAuthCredentials()).toThrow(
+        "Modal authentication required",
+      );
       expect(() => getAuthCredentials()).toThrow(
         "Missing: MODAL_TOKEN_ID, MODAL_TOKEN_SECRET",
       );
@@ -129,7 +131,9 @@ describe("getAuthCredentials", () => {
     it("should throw error when only tokenId is missing", () => {
       process.env.MODAL_TOKEN_SECRET = "env-token-secret";
 
-      expect(() => getAuthCredentials()).toThrow("Modal authentication required");
+      expect(() => getAuthCredentials()).toThrow(
+        "Modal authentication required",
+      );
       // Should only list MODAL_TOKEN_ID in the Missing: section
       expect(() => getAuthCredentials()).toThrow("Missing: MODAL_TOKEN_ID.");
     });
@@ -137,9 +141,13 @@ describe("getAuthCredentials", () => {
     it("should throw error when only tokenSecret is missing", () => {
       process.env.MODAL_TOKEN_ID = "env-token-id";
 
-      expect(() => getAuthCredentials()).toThrow("Modal authentication required");
+      expect(() => getAuthCredentials()).toThrow(
+        "Modal authentication required",
+      );
       // Should only list MODAL_TOKEN_SECRET in the Missing: section
-      expect(() => getAuthCredentials()).toThrow("Missing: MODAL_TOKEN_SECRET.");
+      expect(() => getAuthCredentials()).toThrow(
+        "Missing: MODAL_TOKEN_SECRET.",
+      );
     });
 
     it("should throw error with empty string tokenId", () => {

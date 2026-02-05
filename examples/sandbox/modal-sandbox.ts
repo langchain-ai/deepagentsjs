@@ -106,7 +106,7 @@ async function main() {
         new HumanMessage(
           `Create a simple Python file called hello.py that prints "Hello from DeepAgents!".
             Then run it with python to verify it works.
-            Finally, show me the output.`
+            Finally, show me the output.`,
         ),
       ],
     });

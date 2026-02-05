@@ -821,12 +821,16 @@ describe("ModalSandbox", () => {
   // ==========================================================================
 
   describe("inherited BaseSandbox methods", () => {
-    it.each(["read", "write", "edit", "lsInfo", "grepRaw", "globInfo"] as const)(
-      "should have %s method from BaseSandbox",
-      async (method) => {
-        const sandbox = await ModalSandbox.create();
-        expect(typeof sandbox[method]).toBe("function");
-      },
-    );
+    it.each([
+      "read",
+      "write",
+      "edit",
+      "lsInfo",
+      "grepRaw",
+      "globInfo",
+    ] as const)("should have %s method from BaseSandbox", async (method) => {
+      const sandbox = await ModalSandbox.create();
+      expect(typeof sandbox[method]).toBe("function");
+    });
   });
 });
