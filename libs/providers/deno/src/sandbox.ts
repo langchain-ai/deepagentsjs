@@ -31,7 +31,7 @@ import { DenoSandboxError, type DenoSandboxOptions } from "./types.js";
  * ## Basic Usage
  *
  * ```typescript
- * import { DenoSandbox } from "@langchain/deno-sandbox";
+ * import { DenoSandbox } from "@langchain/deno";
  *
  * // Create and initialize a sandbox
  * const sandbox = await DenoSandbox.create({
@@ -53,7 +53,7 @@ import { DenoSandboxError, type DenoSandboxOptions } from "./types.js";
  *
  * ```typescript
  * import { createDeepAgent } from "deepagents";
- * import { DenoSandbox } from "@langchain/deno-sandbox";
+ * import { DenoSandbox } from "@langchain/deno";
  *
  * const sandbox = await DenoSandbox.create();
  *
@@ -568,7 +568,7 @@ export type AsyncDenoSandboxFactory = () => Promise<DenoSandbox>;
  *
  * @example
  * ```typescript
- * import { DenoSandbox, createDenoSandboxFactory } from "@langchain/deno-sandbox";
+ * import { DenoSandbox, createDenoSandboxFactory } from "@langchain/deno";
  *
  * // Create a factory for new sandboxes
  * const factory = createDenoSandboxFactory({ memoryMb: 1024 });
@@ -608,7 +608,7 @@ export function createDenoSandboxFactory(
  * @example
  * ```typescript
  * import { createDeepAgent, createFilesystemMiddleware } from "deepagents";
- * import { DenoSandbox, createDenoSandboxFactoryFromSandbox } from "@langchain/deno-sandbox";
+ * import { DenoSandbox, createDenoSandboxFactoryFromSandbox } from "@langchain/deno";
  *
  * // Create and initialize a sandbox
  * const sandbox = await DenoSandbox.create({ memoryMb: 1024 });

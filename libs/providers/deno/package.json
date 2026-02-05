@@ -1,5 +1,5 @@
 {
-  "name": "@langchain/deno-sandbox",
+  "name": "@langchain/deno",
   "version": "0.0.1",
   "description": "Deno Sandbox backend for deepagents",
   "main": "./dist/index.cjs",

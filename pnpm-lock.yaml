@@ -62,9 +62,9 @@ importers:
       '@langchain/core':
         specifier: ^1.1.19
         version: 1.1.19(openai@6.16.0(ws@8.19.0)(zod@4.3.6))
-      '@langchain/deno-sandbox':
+      '@langchain/deno':
         specifier: workspace:*
-        version: link:../libs/provider/deno-sandbox
+        version: link:../libs/providers/deno
       '@langchain/langgraph-checkpoint':
         specifier: ^1.0.0
         version: 1.0.0(@langchain/core@1.1.19(openai@6.16.0(ws@8.19.0)(zod@4.3.6)))
@@ -204,7 +204,7 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@25.1.0)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
-  libs/provider/deno-sandbox:
+  libs/providers/deno:
     dependencies:
       '@deno/sandbox':
         specifier: ^0.2.2

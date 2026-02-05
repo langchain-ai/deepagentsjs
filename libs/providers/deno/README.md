@@ -1,8 +1,8 @@
-# @langchain/deno-sandbox
+# @langchain/deno
 
 Deno Sandbox backend for [deepagents](https://www.npmjs.com/package/deepagents). This package provides a `DenoSandbox` implementation of the `SandboxBackendProtocol`, enabling agents to execute commands, read/write files, and manage isolated Linux microVM environments using Deno Deploy's Sandbox infrastructure.
 
-[![npm version](https://img.shields.io/npm/v/@langchain/deno-sandbox.svg)](https://www.npmjs.com/package/@langchain/deno-sandbox)
+[![npm version](https://img.shields.io/npm/v/@langchain/deno.svg)](https://www.npmjs.com/package/@langchain/deno)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
@@ -17,13 +17,13 @@ Deno Sandbox backend for [deepagents](https://www.npmjs.com/package/deepagents).
 
 ```bash
 # npm
-npm install @langchain/deno-sandbox
+npm install @langchain/deno
 
 # yarn
-yarn add @langchain/deno-sandbox
+yarn add @langchain/deno
 
 # pnpm
-pnpm add @langchain/deno-sandbox
+pnpm add @langchain/deno
 ```
 
 ## Authentication Setup
@@ -53,7 +53,7 @@ const sandbox = await DenoSandbox.create({
 ```typescript
 import { createDeepAgent } from "deepagents";
 import { ChatAnthropic } from "@langchain/anthropic";
-import { DenoSandbox } from "@langchain/deno-sandbox";
+import { DenoSandbox } from "@langchain/deno";
 
 // Create and initialize the sandbox
 const sandbox = await DenoSandbox.create({
@@ -150,7 +150,7 @@ See the [@deno/sandbox documentation](https://www.npmjs.com/package/@deno/sandbo
 ### Creating New Sandboxes Per Invocation
 
 ```typescript
-import { createDenoSandboxFactory } from "@langchain/deno-sandbox";
+import { createDenoSandboxFactory } from "@langchain/deno";
 
 // Each call creates a new sandbox
 const factory = createDenoSandboxFactory({ memoryMb: 1024 });
@@ -173,7 +173,7 @@ import { createDeepAgent, createFilesystemMiddleware } from "deepagents";
 import {
   DenoSandbox,
   createDenoSandboxFactoryFromSandbox,
-} from "@langchain/deno-sandbox";
+} from "@langchain/deno";
 
 // Create and initialize a sandbox
 const sandbox = await DenoSandbox.create({ memoryMb: 1024 });
@@ -216,7 +216,7 @@ const result = await reconnected.execute("ls -la");
 ## Error Handling
 
 ```typescript
-import { DenoSandboxError } from "@langchain/deno-sandbox";
+import { DenoSandboxError } from "@langchain/deno";
 
 try {
   await sandbox.execute("some command");

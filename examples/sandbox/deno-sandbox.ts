@@ -4,7 +4,7 @@
  *
  * This example demonstrates the Sandbox Execution Support feature of DeepAgents
  * using Deno Deploy's cloud-based sandbox infrastructure. It shows how to:
- * 1. Create a Deno Sandbox backend using the @langchain/deno-sandbox package
+ * 1. Create a Deno Sandbox backend using the @langchain/deno package
  * 2. Use the `execute` tool to run shell commands in an isolated microVM
  * 3. Leverage file upload/download capabilities
  *
@@ -41,7 +41,7 @@ import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { ChatAnthropic } from "@langchain/anthropic";
 
 import { createDeepAgent } from "deepagents";
-import { DenoSandbox } from "@langchain/deno-sandbox";
+import { DenoSandbox } from "@langchain/deno";
 
 // System prompt that leverages the execute capability
 const systemPrompt = `You are a powerful coding assistant with access to a cloud-based sandboxed shell environment.

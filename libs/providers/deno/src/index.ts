@@ -1,5 +1,5 @@
 /**
- * @langchain/deno-sandbox
+ * @langchain/deno
  *
  * Deno Sandbox backend for deepagents.
  *
@@ -9,7 +9,7 @@
  *
  * @example
  * ```typescript
- * import { DenoSandbox } from "@langchain/deno-sandbox";
+ * import { DenoSandbox } from "@langchain/deno";
  * import { createDeepAgent } from "deepagents";
  * import { ChatAnthropic } from "@langchain/anthropic";
  *

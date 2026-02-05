@@ -1,4 +1,4 @@
 packages:
   - "libs/*"
-  - "libs/provider/*"
+  - "libs/providers/*"
   - "examples"

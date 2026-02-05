@@ -1,7 +1,7 @@
 /**
  * Type definitions for the Deno Sandbox backend.
  *
- * This module contains all type definitions for the @langchain/deno-sandbox package,
+ * This module contains all type definitions for the @langchain/deno package,
  * including options and error types.
  */
 
