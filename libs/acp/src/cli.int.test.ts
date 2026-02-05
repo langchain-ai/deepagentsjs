@@ -38,10 +38,13 @@ interface ACPNotification {
  */
 class CLITestHelper {
   private process: ChildProcess | null = null;
-  private responseQueue: Map<number, {
-    resolve: (value: ACPResponse) => void;
-    reject: (error: Error) => void;
-  }> = new Map();
+  private responseQueue: Map<
+    number,
+    {
+      resolve: (value: ACPResponse) => void;
+      reject: (error: Error) => void;
+    }
+  > = new Map();
   private notifications: ACPNotification[] = [];
   private nextId = 1;
   private rl: readline.Interface | null = null;
@@ -74,9 +77,15 @@ class CLITestHelper {
       this.process.stderr?.on("data", (data: Buffer) => {
         const lines = data.toString().split("\n").filter(Boolean);
         this.stderrOutput.push(...lines);
-        
+
         // Check for startup message
-        if (lines.some((l) => l.includes("Server started") || l.includes("waiting for connections"))) {
+        if (
+          lines.some(
+            (l) =>
+              l.includes("Server started") ||
+              l.includes("waiting for connections"),
+          )
+        ) {
           clearTimeout(timeout);
           resolve();
         }
@@ -91,10 +100,10 @@ class CLITestHelper {
 
         this.rl.on("line", (line) => {
           if (!line.trim()) return;
-          
+
           try {
             const message = JSON.parse(line);
-            
+
             if ("id" in message && this.responseQueue.has(message.id)) {
               // This is a response to a request
               const handler = this.responseQueue.get(message.id)!;
@@ -133,7 +142,10 @@ class CLITestHelper {
   /**
    * Send an ACP request and wait for response
    */
-  async sendRequest(method: string, params?: Record<string, unknown>): Promise<ACPResponse> {
+  async sendRequest(
+    method: string,
+    params?: Record<string, unknown>,
+  ): Promise<ACPResponse> {
     if (!this.process?.stdin) {
       throw new Error("CLI not started");
     }
@@ -219,7 +231,7 @@ class CLITestHelper {
     if (this.process) {
       // Close stdin to signal EOF
       this.process.stdin?.end();
-      
+
       // Wait for process to exit
       await new Promise<void>((resolve) => {
         const timeout = setTimeout(() => {
@@ -282,22 +294,17 @@ describe("CLI Integration Tests", () => {
     });
 
     it("should start with custom agent name", async () => {
-      helper = new CLITestHelper(cliPath, [
-        "--name", "test-agent",
-        "--debug",
-      ]);
+      helper = new CLITestHelper(cliPath, ["--name", "test-agent", "--debug"]);
       await helper.start();
 
       expect(helper.isRunning()).toBe(true);
-      
+
       const stderr = helper.getStderr();
       expect(stderr.some((line) => line.includes("test-agent"))).toBe(true);
     });
 
     it("should write logs to file when --log-file is specified", async () => {
-      helper = new CLITestHelper(cliPath, [
-        "--log-file", logFile,
-      ]);
+      helper = new CLITestHelper(cliPath, ["--log-file", logFile]);
       await helper.start();
 
       // Give time for log to be written
@@ -327,8 +334,10 @@ describe("CLI Integration Tests", () => {
 
       expect(response.result).toBeDefined();
       // Check for ACP spec format (agentInfo)
-      const agentInfo = response.result?.agentInfo as { name?: string; version?: string } | undefined;
-      expect(agentInfo?.name).toBe("deepagents-server");
+      const agentInfo = response.result?.agentInfo as
+        | { name?: string; version?: string }
+        | undefined;
+      expect(agentInfo?.name).toBe("deepagents-acp");
       expect(response.result?.protocolVersion).toBe(1);
     });
 
@@ -339,11 +348,17 @@ describe("CLI Integration Tests", () => {
       });
 
       expect(response.result?.agentCapabilities).toBeDefined();
-      const capabilities = response.result?.agentCapabilities as Record<string, unknown>;
+      const capabilities = response.result?.agentCapabilities as Record<
+        string,
+        unknown
+      >;
       // ACP spec: loadSession is a boolean
       expect(capabilities.loadSession).toBe(true);
       // ACP spec: sessionCapabilities contains modes and commands
-      const sessionCaps = capabilities.sessionCapabilities as Record<string, boolean>;
+      const sessionCaps = capabilities.sessionCapabilities as Record<
+        string,
+        boolean
+      >;
       expect(sessionCaps.modes).toBe(true);
       expect(sessionCaps.commands).toBe(true);
     });
@@ -355,9 +370,15 @@ describe("CLI Integration Tests", () => {
       });
 
       expect(response.result?.agentCapabilities).toBeDefined();
-      const agentCaps = response.result?.agentCapabilities as Record<string, unknown>;
+      const agentCaps = response.result?.agentCapabilities as Record<
+        string,
+        unknown
+      >;
       // ACP spec: promptCapabilities has image, audio, embeddedContext
-      const promptCaps = agentCaps.promptCapabilities as Record<string, boolean>;
+      const promptCaps = agentCaps.promptCapabilities as Record<
+        string,
+        boolean
+      >;
       expect(promptCaps.image).toBe(true);
       expect(promptCaps.embeddedContext).toBe(true);
     });
@@ -385,7 +406,9 @@ describe("CLI Integration Tests", () => {
       expect(response.result).toBeDefined();
       expect(response.result?.sessionId).toBeDefined();
       expect(typeof response.result?.sessionId).toBe("string");
-      expect((response.result?.sessionId as string).startsWith("sess_")).toBe(true);
+      expect((response.result?.sessionId as string).startsWith("sess_")).toBe(
+        true,
+      );
     });
 
     it("should return available modes in new session", async () => {
@@ -396,10 +419,13 @@ describe("CLI Integration Tests", () => {
 
       // ACP spec uses 'modes' object with 'availableModes' array and 'currentModeId'
       expect(response.result?.modes).toBeDefined();
-      const modesState = response.result?.modes as { availableModes?: Array<{ id: string; name: string }>; currentModeId?: string };
+      const modesState = response.result?.modes as {
+        availableModes?: Array<{ id: string; name: string }>;
+        currentModeId?: string;
+      };
       expect(modesState.availableModes).toBeDefined();
       expect(modesState.availableModes!.length).toBeGreaterThan(0);
-      
+
       const modeIds = modesState.availableModes!.map((m) => m.id);
       expect(modeIds).toContain("agent");
       expect(modeIds).toContain("plan");
@@ -504,7 +530,9 @@ describe("CLI Integration Tests", () => {
       });
 
       const stderr = helper.getStderr();
-      expect(stderr.some((line) => line.includes("[deepagents-server]"))).toBe(true);
+      expect(stderr.some((line) => line.includes("[deepagents-acp]"))).toBe(
+        true,
+      );
     });
 
     it("should log client connection info in debug mode", async () => {
@@ -517,9 +545,13 @@ describe("CLI Integration Tests", () => {
       });
 
       const stderr = helper.getStderr();
-      expect(stderr.some((line) => 
-        line.includes("Client connected") || line.includes("my-test-client")
-      )).toBe(true);
+      expect(
+        stderr.some(
+          (line) =>
+            line.includes("Client connected") ||
+            line.includes("my-test-client"),
+        ),
+      ).toBe(true);
     });
   });
 
@@ -556,14 +588,22 @@ describe("CLI Integration Tests", () => {
 describe("CLI Help and Version", () => {
   it("should show help with --help flag", async () => {
     const cliPath = path.resolve(__dirname, "..", "dist", "cli.js");
-    
-    const result = await new Promise<{ stdout: string; stderr: string; code: number }>((resolve) => {
+
+    const result = await new Promise<{
+      stdout: string;
+      stderr: string;
+      code: number;
+    }>((resolve) => {
       const proc = spawn("node", [cliPath, "--help"]);
       let stdout = "";
       let stderr = "";
 
-      proc.stdout?.on("data", (data) => { stdout += data.toString(); });
-      proc.stderr?.on("data", (data) => { stderr += data.toString(); });
+      proc.stdout?.on("data", (data) => {
+        stdout += data.toString();
+      });
+      proc.stderr?.on("data", (data) => {
+        stderr += data.toString();
+      });
       proc.on("exit", (code) => {
         resolve({ stdout, stderr, code: code ?? 0 });
       });
@@ -578,18 +618,22 @@ describe("CLI Help and Version", () => {
 
   it("should show version with --version flag", async () => {
     const cliPath = path.resolve(__dirname, "..", "dist", "cli.js");
-    
-    const result = await new Promise<{ stdout: string; code: number }>((resolve) => {
-      const proc = spawn("node", [cliPath, "--version"]);
-      let stdout = "";
 
-      proc.stdout?.on("data", (data) => { stdout += data.toString(); });
-      proc.on("exit", (code) => {
-        resolve({ stdout, code: code ?? 0 });
-      });
-    });
+    const result = await new Promise<{ stdout: string; code: number }>(
+      (resolve) => {
+        const proc = spawn("node", [cliPath, "--version"]);
+        let stdout = "";
+
+        proc.stdout?.on("data", (data) => {
+          stdout += data.toString();
+        });
+        proc.on("exit", (code) => {
+          resolve({ stdout, code: code ?? 0 });
+        });
+      },
+    );
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("deepagents-server");
+    expect(result.stdout).toContain("deepagents-acp");
   });
 });

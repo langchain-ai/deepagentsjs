@@ -1,5 +1,5 @@
 {
-  "name": "deepagents-server",
+  "name": "deepagents-acp",
   "version": "0.0.1",
   "description": "ACP (Agent Client Protocol) server for DeepAgents - enables IDE integration with Zed, JetBrains, and other ACP clients",
   "main": "./dist/index.cjs",
@@ -7,7 +7,7 @@
   "types": "./dist/index.d.ts",
   "type": "module",
   "bin": {
-    "deepagents-server": "./dist/cli.js"
+    "deepagents-acp": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsdown",

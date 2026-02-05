@@ -61,7 +61,7 @@ export class Logger {
   constructor(options: LoggerOptions = {}) {
     this.debug = options.debug ?? false;
     this.logFile = options.logFile ?? null;
-    this.prefix = options.prefix ?? "[deepagents-server]";
+    this.prefix = options.prefix ?? "[deepagents-acp]";
     this.timestampsForStderr = options.timestamps ?? false;
     this.timestampsForFile = true; // Always include timestamps in file logs
 

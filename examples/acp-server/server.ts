@@ -23,7 +23,7 @@
  * }
  */
 
-import { DeepAgentsServer } from "deepagents-server";
+import { DeepAgentsServer } from "deepagents-acp";
 import { FilesystemBackend } from "deepagents";
 import path from "node:path";
 
