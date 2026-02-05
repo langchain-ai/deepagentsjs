@@ -22,7 +22,12 @@ import {
   type BackendFactory,
 } from "deepagents";
 
-import { HumanMessage, AIMessage, isAIMessage } from "@langchain/core/messages";
+import {
+  type BaseMessage,
+  HumanMessage,
+  AIMessage,
+  ToolMessage,
+} from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph-checkpoint";
 
 import type {
@@ -33,6 +38,8 @@ import type {
   StopReason,
   ACPCapabilities,
 } from "./types.js";
+
+import { Logger, createLogger } from "./logger.js";
 
 import {
   acpPromptToHumanMessage,
@@ -95,12 +102,20 @@ export class DeepAgentsServer {
   private readonly serverVersion: string;
   private readonly debug: boolean;
   private readonly workspaceRoot: string;
+  private readonly logger: Logger;
 
   constructor(options: DeepAgentsServerOptions) {
     this.serverName = options.serverName ?? "deepagents-server";
     this.serverVersion = options.serverVersion ?? "0.0.1";
     this.debug = options.debug ?? false;
     this.workspaceRoot = options.workspaceRoot ?? process.cwd();
+
+    // Initialize logger with debug and/or file logging
+    this.logger = createLogger({
+      debug: this.debug,
+      logFile: options.logFile,
+      prefix: "[deepagents-server]",
+    });
 
     // Shared checkpointer for session persistence
     this.checkpointer = new MemorySaver();
@@ -115,6 +130,10 @@ export class DeepAgentsServer {
     }
 
     this.log("Initialized with agents:", [...this.agentConfigs.keys()]);
+
+    if (options.logFile) {
+      this.log("Logging to file:", options.logFile);
+    }
   }
 
   /**
@@ -246,7 +265,7 @@ export class DeepAgentsServer {
   /**
    * Stop the ACP server
    */
-  stop(): void {
+  async stop(): Promise<void> {
     if (!this.isRunning) {
       return;
     }
@@ -255,6 +274,9 @@ export class DeepAgentsServer {
     this.connection = null;
     this.sessions.clear();
     this.log("Server stopped");
+
+    // Close the logger to flush any pending writes
+    await this.logger.close();
   }
 
   /**
@@ -283,44 +305,69 @@ export class DeepAgentsServer {
   private async handleInitialize(
     params: InitializeRequest,
   ): Promise<InitializeResponse> {
-    this.log(
-      "Client connected:",
-      params.clientName ?? "unknown",
-      params.clientVersion ?? "unknown",
-    );
+    // Extract client info from either new format (clientInfo) or legacy format
+    const clientInfo = params.clientInfo as
+      | { name?: string; version?: string }
+      | undefined;
+    const clientName =
+      clientInfo?.name ?? (params.clientName as string) ?? "unknown";
+    const clientVersion =
+      clientInfo?.version ?? (params.clientVersion as string) ?? "unknown";
+
+    this.log("Client connected:", clientName, clientVersion);
 
     // Store client capabilities
-    const capabilities = params.capabilities as
+    const clientCaps = params.clientCapabilities as
       | Record<string, unknown>
       | undefined;
-    if (capabilities) {
-      const fs = capabilities.fs as Record<string, boolean> | undefined;
+    if (clientCaps) {
+      const fs = clientCaps.fs as Record<string, boolean> | undefined;
       this.clientCapabilities = {
         fsReadTextFile: fs?.readTextFile ?? false,
         fsWriteTextFile: fs?.writeTextFile ?? false,
-        terminal: capabilities.terminal !== undefined,
+        terminal: clientCaps.terminal !== undefined,
       };
     }
 
-    return {
-      serverName: this.serverName,
-      serverVersion: this.serverVersion,
-      protocolVersion: params.protocolVersion ?? "1.0",
-      capabilities: {
-        // We support session loading
-        loadSession: true,
-        // We support modes
-        modes: true,
-        // We support commands
-        commands: true,
+    // Protocol version - ensure it's a number (ACP spec requires number)
+    const requestedVersion =
+      typeof params.protocolVersion === "number"
+        ? params.protocolVersion
+        : parseInt(String(params.protocolVersion), 10) || 1;
+
+    const response = {
+      // Required: protocol version as number per ACP spec
+      protocolVersion: requestedVersion,
+      // ACP spec: agentInfo contains name and version
+      agentInfo: {
+        name: this.serverName,
+        version: this.serverVersion,
       },
-      // Prompt capabilities - what content types we accept
-      promptCapabilities: {
-        text: true,
-        images: true,
-        resources: true,
+      // ACP spec: agentCapabilities with correct structure
+      agentCapabilities: {
+        // Whether we support session/load - must be boolean
+        loadSession: true,
+        // Prompt capabilities - what content types we accept
+        promptCapabilities: {
+          image: true,
+          audio: false,
+          embeddedContext: true,
+        },
+        // MCP capabilities
+        mcpCapabilities: {
+          http: false,
+          sse: false,
+        },
+        // Session capabilities (modes, commands, etc.)
+        sessionCapabilities: {
+          modes: true,
+          commands: true,
+        },
       },
     };
+
+    this.log("Initialize response:", JSON.stringify(response));
+    return response;
   }
 
   /**
@@ -374,34 +421,34 @@ export class DeepAgentsServer {
 
     this.log("Created session:", sessionId, "for agent:", agentName);
 
-    return {
+    // ACP spec NewSessionResponse only allows: sessionId, modes, models, configOptions
+    const response = {
       sessionId,
-      // Available modes for this agent
-      availableModes: [
-        {
-          id: "agent",
-          name: "Agent Mode",
-          description: "Full autonomous agent",
-        },
-        {
-          id: "plan",
-          name: "Plan Mode",
-          description: "Planning and discussion",
-        },
-        {
-          id: "ask",
-          name: "Ask Mode",
-          description: "Q&A without file changes",
-        },
-      ],
-      currentMode: (params.mode as string) ?? "agent",
-      // Available slash commands
-      availableCommands: [
-        { name: "help", description: "Show available commands" },
-        { name: "clear", description: "Clear conversation history" },
-        { name: "status", description: "Show current task status" },
-      ],
+      // ACP spec: modes object with availableModes and currentModeId
+      modes: {
+        availableModes: [
+          {
+            id: "agent",
+            name: "Agent Mode",
+            description: "Full autonomous agent",
+          },
+          {
+            id: "plan",
+            name: "Plan Mode",
+            description: "Planning and discussion",
+          },
+          {
+            id: "ask",
+            name: "Ask Mode",
+            description: "Q&A without file changes",
+          },
+        ],
+        currentModeId: (params.mode as string) ?? "agent",
+      },
     };
+
+    this.log("New session response:", JSON.stringify(response));
+    return response;
   }
 
   /**
@@ -415,37 +462,44 @@ export class DeepAgentsServer {
     const session = this.sessions.get(sessionId);
 
     if (!session) {
+      this.log("Load session failed: session not found:", sessionId);
       throw new Error(`Session not found: ${sessionId}`);
     }
 
+    this.log("Loading session:", {
+      sessionId,
+      agent: session.agentName,
+      mode: session.mode,
+    });
     session.lastActivityAt = new Date();
 
-    return {
-      sessionId: session.id,
-      availableModes: [
-        {
-          id: "agent",
-          name: "Agent Mode",
-          description: "Full autonomous agent",
-        },
-        {
-          id: "plan",
-          name: "Plan Mode",
-          description: "Planning and discussion",
-        },
-        {
-          id: "ask",
-          name: "Ask Mode",
-          description: "Q&A without file changes",
-        },
-      ],
-      currentMode: session.mode ?? "agent",
-      availableCommands: [
-        { name: "help", description: "Show available commands" },
-        { name: "clear", description: "Clear conversation history" },
-        { name: "status", description: "Show current task status" },
-      ],
+    // ACP spec LoadSessionResponse only allows: modes, models, configOptions
+    const response = {
+      // ACP spec: modes object with availableModes and currentModeId
+      modes: {
+        availableModes: [
+          {
+            id: "agent",
+            name: "Agent Mode",
+            description: "Full autonomous agent",
+          },
+          {
+            id: "plan",
+            name: "Plan Mode",
+            description: "Planning and discussion",
+          },
+          {
+            id: "ask",
+            name: "Ask Mode",
+            description: "Q&A without file changes",
+          },
+        ],
+        currentModeId: session.mode ?? "agent",
+      },
     };
+
+    this.log("Load session response:", JSON.stringify(response));
+    return response;
   }
 
   /**
@@ -461,12 +515,14 @@ export class DeepAgentsServer {
     const session = this.sessions.get(sessionId);
 
     if (!session) {
+      this.log("Prompt failed: session not found:", sessionId);
       throw new Error(`Session not found: ${sessionId}`);
     }
 
     const agent = this.agents.get(session.agentName);
 
     if (!agent) {
+      this.log("Prompt failed: agent not found:", session.agentName);
       throw new Error(`Agent not found: ${session.agentName}`);
     }
 
@@ -475,9 +531,17 @@ export class DeepAgentsServer {
     // Create abort controller for cancellation
     this.currentPromptAbortController = new AbortController();
 
+    // Extract prompt text for logging
+    const prompt = params.prompt as ContentBlock[];
+    const promptPreview = this.getPromptPreview(prompt);
+    this.log("Prompt received:", {
+      sessionId,
+      agent: session.agentName,
+      preview: promptPreview,
+    });
+
     try {
       // Convert ACP prompt to LangChain message
-      const prompt = params.prompt as ContentBlock[];
       const humanMessage = acpPromptToHumanMessage(prompt);
 
       // Stream the agent response
@@ -488,15 +552,30 @@ export class DeepAgentsServer {
         conn,
       );
 
+      this.log("Prompt completed:", { sessionId, stopReason });
       return { stopReason };
     } catch (error) {
       if ((error as Error).name === "AbortError") {
+        this.log("Prompt cancelled:", sessionId);
         return { stopReason: "cancelled" };
       }
+      this.log("Prompt error:", { sessionId, error: (error as Error).message });
       throw error;
     } finally {
       this.currentPromptAbortController = null;
     }
+  }
+
+  /**
+   * Get a preview of the prompt for logging (truncated)
+   */
+  private getPromptPreview(prompt: ContentBlock[]): string {
+    const textBlocks = prompt.filter((b) => b.type === "text");
+    if (textBlocks.length === 0) {
+      return `[${prompt.length} non-text blocks]`;
+    }
+    const text = (textBlocks[0] as { text: string }).text;
+    return text.length > 100 ? text.slice(0, 100) + "..." : text;
   }
 
   /**
@@ -523,8 +602,10 @@ export class DeepAgentsServer {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    session.mode = params.mode as string;
-    this.log("Set mode for session:", sessionId, "to:", params.mode);
+    // Accept both ACP spec 'modeId' and legacy 'mode' parameter
+    const mode = (params.modeId as string) ?? (params.mode as string);
+    session.mode = mode;
+    this.log("Set mode for session:", sessionId, "to:", mode);
 
     return;
   }
@@ -545,13 +626,28 @@ export class DeepAgentsServer {
 
     // Track active tool calls
     const activeToolCalls = new Map<string, ToolCallInfo>();
+    let eventCount = 0;
+
+    this.log("Starting agent stream:", {
+      sessionId: session.id,
+      threadId: session.threadId,
+    });
 
     // Stream the agent
     const stream = await agent.stream({ messages: [humanMessage] }, config);
 
     for await (const event of stream) {
+      eventCount++;
+
+      // Log event structure for debugging
+      const eventKeys = Object.keys(event);
+
       // Check for cancellation
       if (this.currentPromptAbortController?.signal.aborted) {
+        this.log(
+          "Stream cancelled, cleaning up tool calls:",
+          activeToolCalls.size,
+        );
         // Cancel all active tool calls
         for (const toolCall of activeToolCalls.values()) {
           await this.sendToolCallUpdate(session.id, conn, {
@@ -562,27 +658,86 @@ export class DeepAgentsServer {
         return "cancelled";
       }
 
-      // Handle different event types
+      // Extract messages from the event structure
+      // LangGraph stream events have node names as keys (e.g., "model_request", "tools")
+      // Messages are nested inside these node updates
+      let messages: BaseMessage[] = [];
+
+      // Check for direct messages property
       if (event.messages && Array.isArray(event.messages)) {
-        for (const message of event.messages) {
-          if (isAIMessage(message)) {
-            await this.handleAIMessage(
-              session,
-              message as AIMessage,
-              activeToolCalls,
-              conn,
-            );
-          }
+        messages = event.messages;
+      }
+      // Check for model_request node which contains messages
+      else if (event.model_request && typeof event.model_request === "object") {
+        const modelReq = event.model_request as { messages?: BaseMessage[] };
+        if (modelReq.messages && Array.isArray(modelReq.messages)) {
+          messages = modelReq.messages;
+        }
+      }
+      // Check for tools node which may contain tool messages
+      else if (event.tools && typeof event.tools === "object") {
+        const toolsUpdate = event.tools as { messages?: BaseMessage[] };
+        if (toolsUpdate.messages && Array.isArray(toolsUpdate.messages)) {
+          messages = toolsUpdate.messages;
+        }
+      }
+
+      this.log("Stream event:", {
+        sessionId: session.id,
+        eventNum: eventCount,
+        keys: eventKeys,
+        messagesFound: messages.length,
+      });
+
+      // Process any messages found
+      for (const message of messages) {
+        const messageType = message.constructor?.name ?? typeof message;
+        this.log("Processing message:", {
+          sessionId: session.id,
+          type: messageType,
+          isAI: AIMessage.isInstance(message),
+          isTool: ToolMessage.isInstance(message),
+          contentType: typeof message.content,
+          contentPreview:
+            typeof message.content === "string"
+              ? message.content.slice(0, 100)
+              : "[complex]",
+        });
+
+        if (AIMessage.isInstance(message)) {
+          await this.handleAIMessage(
+            session,
+            message as AIMessage,
+            activeToolCalls,
+            conn,
+          );
+        } else if (ToolMessage.isInstance(message)) {
+          // Handle tool completion
+          await this.handleToolMessage(
+            session,
+            message as ToolMessage,
+            activeToolCalls,
+            conn,
+          );
         }
       }
 
       // Handle todo list updates (plan entries)
       if (event.todos && Array.isArray(event.todos)) {
+        this.log("Plan updated:", {
+          sessionId: session.id,
+          entries: event.todos.length,
+        });
         const planEntries = todosToPlanEntries(event.todos);
         await this.sendPlanUpdate(session.id, conn, planEntries);
       }
     }
 
+    this.log("Agent stream completed:", {
+      sessionId: session.id,
+      eventCount,
+      toolCalls: activeToolCalls.size,
+    });
     return "end_turn";
   }
 
@@ -598,6 +753,10 @@ export class DeepAgentsServer {
     // Handle text content
     if (message.content && typeof message.content === "string") {
       const contentBlocks = langChainMessageToACP(message);
+      const preview =
+        message.content.slice(0, 50) +
+        (message.content.length > 50 ? "..." : "");
+      this.log("Agent message:", { sessionId: session.id, preview });
       await this.sendMessageChunk(session.id, conn, "agent", contentBlocks);
     }
 
@@ -605,6 +764,13 @@ export class DeepAgentsServer {
     const toolCalls = extractToolCalls(message);
 
     for (const toolCall of toolCalls) {
+      this.log("Tool call started:", {
+        sessionId: session.id,
+        toolId: toolCall.id,
+        tool: toolCall.name,
+        args: Object.keys(toolCall.args),
+      });
+
       // Send tool call notification
       await this.sendToolCall(session.id, conn, toolCall);
       activeToolCalls.set(toolCall.id, toolCall);
@@ -613,6 +779,60 @@ export class DeepAgentsServer {
       toolCall.status = "in_progress";
       await this.sendToolCallUpdate(session.id, conn, toolCall);
     }
+  }
+
+  /**
+   * Handle a tool message (tool result) from the agent
+   */
+  private async handleToolMessage(
+    session: SessionState,
+    message: ToolMessage,
+    activeToolCalls: Map<string, ToolCallInfo>,
+    conn: AgentSideConnection,
+  ): Promise<void> {
+    // Get the tool call ID from the message
+    const toolCallId = message.tool_call_id;
+    const toolCall = activeToolCalls.get(toolCallId);
+
+    if (!toolCall) {
+      this.log("Tool message for unknown tool call:", {
+        sessionId: session.id,
+        toolCallId,
+      });
+      return;
+    }
+
+    // Extract the result content
+    const resultContent =
+      typeof message.content === "string"
+        ? message.content
+        : JSON.stringify(message.content);
+
+    // Determine status based on result
+    const isError =
+      message.status === "error" ||
+      (typeof message.content === "string" &&
+        message.content.toLowerCase().includes("error"));
+
+    const resultPreview =
+      resultContent.slice(0, 100) + (resultContent.length > 100 ? "..." : "");
+    this.log("Tool completed:", {
+      sessionId: session.id,
+      toolId: toolCallId,
+      tool: toolCall.name,
+      status: isError ? "error" : "completed",
+      resultPreview,
+    });
+
+    // Update the tool call with the result
+    toolCall.status = isError ? "error" : "completed";
+    toolCall.result = resultContent;
+
+    // Send the update
+    await this.sendToolCallUpdate(session.id, conn, toolCall);
+
+    // Remove from active tracking
+    activeToolCalls.delete(toolCallId);
   }
 
   /**
@@ -626,18 +846,30 @@ export class DeepAgentsServer {
   ): Promise<void> {
     const sessionUpdate =
       messageType === "thought"
-        ? "thought_message_chunk"
+        ? "agent_thought_chunk"
         : messageType === "user"
           ? "user_message_chunk"
           : "agent_message_chunk";
 
-    await conn.sessionUpdate({
+    const notification = {
       sessionId,
       update: {
         sessionUpdate,
         content: content[0], // ACP expects single content block per chunk
       },
-    } as SessionNotification);
+    } as SessionNotification;
+
+    this.log("Sending message chunk:", {
+      sessionId,
+      type: sessionUpdate,
+      contentType: content[0]?.type,
+      preview:
+        content[0]?.type === "text"
+          ? (content[0] as { text: string }).text?.slice(0, 50)
+          : "[non-text]",
+    });
+
+    await conn.sessionUpdate(notification);
   }
 
   /**
@@ -724,8 +956,17 @@ export class DeepAgentsServer {
     const config = this.agentConfigs.get(agentName);
 
     if (!config) {
+      this.log("Agent configuration not found:", agentName);
       throw new Error(`Agent configuration not found: ${agentName}`);
     }
+
+    this.log("Creating agent:", {
+      name: agentName,
+      model: config.model ?? "default",
+      skills: config.skills?.length ?? 0,
+      memory: config.memory?.length ?? 0,
+      tools: config.tools?.length ?? 0,
+    });
 
     // Create backend - prefer ACP filesystem if client supports it
     const backend = this.createBackend(config);
@@ -734,8 +975,7 @@ export class DeepAgentsServer {
       model: config.model,
       tools: config.tools,
       systemPrompt: config.systemPrompt,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      middleware: config.middleware as any,
+      middleware: config.middleware,
       backend,
       skills: config.skills,
       memory: config.memory,
@@ -744,7 +984,7 @@ export class DeepAgentsServer {
     });
 
     this.agents.set(agentName, agent);
-    this.log("Created agent:", agentName);
+    this.log("Agent created successfully:", agentName);
   }
 
   /**
@@ -755,6 +995,7 @@ export class DeepAgentsServer {
   ): BackendProtocol | BackendFactory {
     // If a custom backend is provided, use it
     if (config.backend) {
+      this.log("Using custom backend for agent:", config.name);
       return config.backend;
     }
 
@@ -765,9 +1006,12 @@ export class DeepAgentsServer {
       this.clientCapabilities.fsWriteTextFile
     ) {
       // TODO: Implement ACPFilesystemBackend that proxies to client
-      this.log("Client supports filesystem, using local backend");
+      this.log(
+        "Client supports filesystem operations, but using local backend",
+      );
     }
 
+    this.log("Creating FilesystemBackend:", { rootDir: this.workspaceRoot });
     return new FilesystemBackend({
       rootDir: this.workspaceRoot,
     });
@@ -778,13 +1022,20 @@ export class DeepAgentsServer {
    */
   async readFileViaClient(path: string): Promise<string | null> {
     if (!this.connection || !this.clientCapabilities.fsReadTextFile) {
+      this.log("readFileViaClient: client does not support file read");
       return null;
     }
 
+    this.log("Reading file via client:", path);
     try {
       const result = await this.connection.readTextFile({ path });
+      this.log("File read successful:", {
+        path,
+        length: result.text?.length ?? 0,
+      });
       return result.text;
-    } catch {
+    } catch (err) {
+      this.log("File read failed:", { path, error: (err as Error).message });
       return null;
     }
   }
@@ -794,13 +1045,17 @@ export class DeepAgentsServer {
    */
   async writeFileViaClient(path: string, content: string): Promise<boolean> {
     if (!this.connection || !this.clientCapabilities.fsWriteTextFile) {
+      this.log("writeFileViaClient: client does not support file write");
       return false;
     }
 
+    this.log("Writing file via client:", { path, length: content.length });
     try {
       await this.connection.writeTextFile({ path, text: content });
+      this.log("File write successful:", path);
       return true;
-    } catch {
+    } catch (err) {
+      this.log("File write failed:", { path, error: (err as Error).message });
       return false;
     }
   }
@@ -809,9 +1064,14 @@ export class DeepAgentsServer {
    * Log a debug message
    */
   private log(...args: unknown[]): void {
-    if (this.debug) {
-      console.error("[deepagents-server]", ...args);
-    }
+    this.logger.log(...args);
+  }
+
+  /**
+   * Get the logger instance (for external access if needed)
+   */
+  getLogger(): Logger {
+    return this.logger;
   }
 }
 

@@ -5,78 +5,25 @@
  * DeepAgents with the Agent Client Protocol (ACP).
  */
 
-import type { BackendProtocol, BackendFactory } from "deepagents";
-import type { StructuredTool } from "@langchain/core/tools";
-import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
-
-// Re-export middleware type for convenience
-type AgentMiddleware = unknown;
-
-// ResponseFormat placeholder (actual type comes from langchain)
-type ResponseFormat = unknown;
-
-// Checkpointer type alias
-type Checkpointer = BaseCheckpointSaver;
+import type { CreateDeepAgentParams } from "deepagents";
 
 /**
  * Configuration for a DeepAgent exposed via ACP
+ *
+ * Extends CreateDeepAgentParams from deepagents with ACP-specific fields.
+ * The `name` field is required for ACP session routing.
  */
-export interface DeepAgentConfig {
+export interface DeepAgentConfig extends CreateDeepAgentParams {
   /**
-   * Unique name for this agent (used in session routing)
+   * Unique name for this agent (required for ACP session routing)
    */
   name: string;
 
   /**
    * Human-readable description of the agent's capabilities
+   * Shown to ACP clients when listing available agents
    */
   description?: string;
-
-  /**
-   * LLM model to use (default: "claude-sonnet-4-5-20250929")
-   */
-  model?: string;
-
-  /**
-   * Custom tools available to the agent
-   */
-  tools?: StructuredTool[];
-
-  /**
-   * Custom system prompt (combined with base prompt)
-   */
-  systemPrompt?: string;
-
-  /**
-   * Custom middleware array
-   */
-  middleware?: AgentMiddleware[];
-
-  /**
-   * Backend for filesystem operations
-   * Can be an instance or a factory function
-   */
-  backend?: BackendProtocol | BackendFactory;
-
-  /**
-   * Array of skill source paths (SKILL.md files)
-   */
-  skills?: string[];
-
-  /**
-   * Array of memory source paths (AGENTS.md files)
-   */
-  memory?: string[];
-
-  /**
-   * Structured output format
-   */
-  responseFormat?: ResponseFormat;
-
-  /**
-   * State persistence checkpointer
-   */
-  checkpointer?: Checkpointer;
 }
 
 /**
@@ -99,9 +46,15 @@ export interface DeepAgentsServerOptions {
   serverVersion?: string;
 
   /**
-   * Enable debug logging
+   * Enable debug logging to stderr
    */
   debug?: boolean;
+
+  /**
+   * Path to log file for persistent logging
+   * Logs are written to this file regardless of debug flag, useful for production debugging
+   */
+  logFile?: string;
 
   /**
    * Workspace root directory (defaults to cwd)
@@ -171,10 +124,16 @@ export interface ToolCallInfo {
   /**
    * Current status
    */
-  status: "pending" | "in_progress" | "completed" | "failed" | "cancelled";
+  status:
+    | "pending"
+    | "in_progress"
+    | "completed"
+    | "failed"
+    | "cancelled"
+    | "error";
 
   /**
-   * Result content (if completed)
+   * Result content (if completed or error)
    */
   result?: unknown;
 

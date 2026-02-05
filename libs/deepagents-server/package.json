@@ -17,6 +17,8 @@
     "prepublishOnly": "pnpm build",
     "test": "vitest run",
     "test:unit": "vitest run",
+    "test:int": "vitest run --mode int",
+    "test:all": "vitest run --mode all",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage"

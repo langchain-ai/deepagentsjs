@@ -65,3 +65,7 @@ export {
   fileUriToPath,
   pathToFileUri,
 } from "./adapter.js";
+
+// Logger utilities
+export { Logger, createLogger, nullLogger } from "./logger.js";
+export type { LogLevel, LoggerOptions } from "./logger.js";
