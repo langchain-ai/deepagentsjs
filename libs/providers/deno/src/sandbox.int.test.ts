@@ -20,7 +20,7 @@ import { describe, it, expect, afterAll, afterEach } from "vitest";
 import { DenoSandbox } from "./sandbox.js";
 
 // Check if integration tests should run
-const DENO_TOKEN = process.env.DENO_API_KEY;
+const DENO_TOKEN = process.env.DENO_DEPLOY_TOKEN;
 
 /**
  * Current sandbox for the test - cleaned up after each test
