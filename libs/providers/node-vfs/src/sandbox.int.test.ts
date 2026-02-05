@@ -12,7 +12,9 @@ import { describe, it, expect, afterEach } from "vitest";
 
 import { VfsSandbox, createVfsSandboxFactory } from "./sandbox.js";
 
-describe("VfsSandbox Integration", () => {
+const isWindows = process.platform === "win32";
+
+describe.skipIf(isWindows)("VfsSandbox Integration", () => {
   let sandbox: VfsSandbox;
 
   afterEach(async () => {
