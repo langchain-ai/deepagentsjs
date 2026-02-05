@@ -268,11 +268,40 @@ export class DaytonaSandbox extends BaseSandbox {
 
       // Update ID to the actual sandbox ID
       this.#id = this.#sandbox.id;
+
+      // Upload initial files if provided
+      if (this.#options.initialFiles) {
+        await this.#uploadInitialFiles(this.#options.initialFiles);
+      }
     } catch (error) {
       throw new DaytonaSandboxError(
         `Failed to create Daytona Sandbox: ${error instanceof Error ? error.message : String(error)}`,
         "SANDBOX_CREATION_FAILED",
         error instanceof Error ? error : undefined,
+      );
+    }
+  }
+
+  /**
+   * Upload initial files to the sandbox.
+   *
+   * @param files - A map of file paths to their string contents
+   */
+  async #uploadInitialFiles(files: Record<string, string>): Promise<void> {
+    const encoder = new TextEncoder();
+    const fileEntries: Array<[string, Uint8Array]> = Object.entries(files).map(
+      ([path, content]) => [path, encoder.encode(content)],
+    );
+
+    const results = await this.uploadFiles(fileEntries);
+
+    // Check for any errors during upload
+    const errors = results.filter((r) => r.error !== null);
+    if (errors.length > 0) {
+      const errorPaths = errors.map((e) => `${e.path}: ${e.error}`).join(", ");
+      throw new DaytonaSandboxError(
+        `Failed to upload initial files: ${errorPaths}`,
+        "FILE_OPERATION_FAILED",
       );
     }
   }
