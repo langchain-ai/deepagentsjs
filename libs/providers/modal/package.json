@@ -40,9 +40,10 @@
     "modal": "^0.6.1"
   },
   "peerDependencies": {
-    "deepagents": "workspace:*"
+    "deepagents": ">=1.6.0"
   },
   "devDependencies": {
+    "deepagents": "workspace:*",
     "@tsconfig/recommended": "^1.0.13",
     "@types/node": "^25.1.0",
     "@vitest/coverage-v8": "^4.0.18",
