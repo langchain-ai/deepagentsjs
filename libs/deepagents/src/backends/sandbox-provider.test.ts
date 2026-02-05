@@ -16,10 +16,6 @@ import type {
 } from "./protocol.js";
 import { BaseSandbox } from "./sandbox.js";
 
-// ============================================================================
-// Mock Implementations for Testing
-// ============================================================================
-
 /**
  * Example typed metadata for sandboxes.
  */
@@ -140,10 +136,6 @@ class MockSandboxProvider implements SandboxProvider<MockMetadata> {
     }
   }
 }
-
-// ============================================================================
-// Tests
-// ============================================================================
 
 describe("SandboxProvider Types", () => {
   describe("SandboxInfo", () => {
