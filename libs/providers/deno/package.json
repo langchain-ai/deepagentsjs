@@ -40,10 +40,9 @@
     "@deno/sandbox": "^0.2.2"
   },
   "peerDependencies": {
-    "deepagents": ">=1.6.0"
+    "deepagents": "workspace:*"
   },
   "devDependencies": {
-    "deepagents": "workspace:*",
     "@tsconfig/recommended": "^1.0.13",
     "@types/node": "^25.1.0",
     "@vitest/coverage-v8": "^4.0.18",
