@@ -159,7 +159,7 @@ vi.mock("@deno/sandbox", () => {
     // SDK methods
     async spawn(
       _cmd: string,
-      _options: { args: string[]; stdout: string; stderr: string },
+      options: { args: string[]; stdout: string; stderr: string },
     ): Promise<{
       output: () => Promise<{
         status: { success: boolean; code: number };
@@ -168,6 +168,50 @@ vi.mock("@deno/sandbox", () => {
       }>;
       status: Promise<{ success: boolean; code: number }>;
     }> {
+      // Extract the command from args (bash -c "command")
+      const command = options.args?.[1] || "";
+
+      // Handle cat commands for file reading
+      if (command.startsWith("cat ")) {
+        // Extract file path from 'cat "path"' or 'cat path'
+        const match = command.match(/^cat\s+"?([^"]+)"?$/);
+        const filePath = match ? match[1] : command.substring(4).trim();
+        const content = this.files.get(filePath);
+
+        if (content !== undefined) {
+          return {
+            output: async () => ({
+              status: { success: true, code: 0 },
+              stdoutText: content,
+              stderrText: "",
+            }),
+            status: Promise.resolve({ success: true, code: 0 }),
+          };
+        } else {
+          return {
+            output: async () => ({
+              status: { success: false, code: 1 },
+              stdoutText: "",
+              stderrText: "cat: file not found",
+            }),
+            status: Promise.resolve({ success: false, code: 1 }),
+          };
+        }
+      }
+
+      // Handle mkdir commands (always succeed)
+      if (command.startsWith("mkdir ")) {
+        return {
+          output: async () => ({
+            status: { success: true, code: 0 },
+            stdoutText: "",
+            stderrText: "",
+          }),
+          status: Promise.resolve({ success: true, code: 0 }),
+        };
+      }
+
+      // Default behavior for other commands
       const result = { ...this.nextCommandResult };
 
       return {

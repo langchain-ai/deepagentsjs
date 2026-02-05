@@ -68,6 +68,26 @@ export interface DenoSandboxOptions {
   region?: DenoSandboxRegion;
 
   /**
+   * Initial files to create in the sandbox after initialization.
+   *
+   * A map of file paths to their contents. Files will be created
+   * in the sandbox filesystem before any commands are executed.
+   * Parent directories are created automatically.
+   *
+   * @example
+   * ```typescript
+   * const options: DenoSandboxOptions = {
+   *   memoryMb: 1024,
+   *   initialFiles: {
+   *     "/home/app/index.js": "console.log('Hello')",
+   *     "/home/app/package.json": '{"name": "test"}',
+   *   },
+   * };
+   * ```
+   */
+  initialFiles?: Record<string, string>;
+
+  /**
    * Authentication configuration for Deno Deploy API.
    *
    * ### Environment Variable Setup

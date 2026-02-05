@@ -12,11 +12,13 @@
 import { Sandbox } from "@deno/sandbox";
 import {
   BaseSandbox,
+  type EditResult,
   type ExecuteResponse,
   type FileDownloadResponse,
   type FileOperationError,
   type FileUploadResponse,
   type BackendFactory,
+  type WriteResult,
 } from "deepagents";
 
 import { getAuthCredentials } from "./auth.js";
@@ -210,11 +212,40 @@ export class DenoSandbox extends BaseSandbox {
 
       // Update ID to the actual sandbox ID
       this.#id = this.#sandbox.id;
+
+      // Upload initial files if provided
+      if (this.#options.initialFiles) {
+        await this.#uploadInitialFiles(this.#options.initialFiles);
+      }
     } catch (error) {
       throw new DenoSandboxError(
         `Failed to create Deno Sandbox: ${error instanceof Error ? error.message : String(error)}`,
         "SANDBOX_CREATION_FAILED",
         error instanceof Error ? error : undefined,
+      );
+    }
+  }
+
+  /**
+   * Upload initial files to the sandbox.
+   *
+   * @param files - A map of file paths to their string contents
+   */
+  async #uploadInitialFiles(files: Record<string, string>): Promise<void> {
+    const encoder = new TextEncoder();
+    const fileEntries: Array<[string, Uint8Array]> = Object.entries(files).map(
+      ([path, content]) => [path, encoder.encode(content)],
+    );
+
+    const results = await this.uploadFiles(fileEntries);
+
+    // Check for any errors during upload
+    const errors = results.filter((r) => r.error !== null);
+    if (errors.length > 0) {
+      const errorPaths = errors.map((e) => `${e.path}: ${e.error}`).join(", ");
+      throw new DenoSandboxError(
+        `Failed to upload initial files: ${errorPaths}`,
+        "FILE_OPERATION_FAILED",
       );
     }
   }
@@ -298,10 +329,15 @@ export class DenoSandbox extends BaseSandbox {
 
     for (const [path, content] of files) {
       try {
-        // Ensure parent directory exists
+        // Ensure parent directory exists using spawn (more reliable than sh template)
         const parentDir = path.substring(0, path.lastIndexOf("/"));
         if (parentDir) {
-          await sandbox.sh`mkdir -p ${parentDir}`.noThrow();
+          const mkdirChild = await sandbox.spawn("/bin/bash", {
+            args: ["-c", `mkdir -p "${parentDir}"`],
+            stdout: "piped",
+            stderr: "piped",
+          });
+          await mkdirChild.output();
         }
 
         // Write the file content
@@ -343,17 +379,23 @@ export class DenoSandbox extends BaseSandbox {
 
     for (const path of paths) {
       try {
-        // Use shell command to read file content
-        const result = await sandbox.sh`cat ${path}`.noThrow();
+        // Use spawn with bash to read file content (same approach as execute())
+        const child = await sandbox.spawn("/bin/bash", {
+          args: ["-c", `cat "${path}"`],
+          stdout: "piped",
+          stderr: "piped",
+        });
 
-        if (!result.status.success) {
+        const { status, stdoutText } = await child.output();
+
+        if (!status.success) {
           results.push({
             path,
             content: null,
             error: "file_not_found",
           });
         } else {
-          const content = new TextEncoder().encode(result.stdoutText ?? "");
+          const content = new TextEncoder().encode(stdoutText ?? "");
           results.push({
             path,
             content,
@@ -370,6 +412,183 @@ export class DenoSandbox extends BaseSandbox {
     }
 
     return results;
+  }
+
+  // ============================================================================
+  // Override BaseSandbox methods that use Python with pure shell implementations
+  // Deno sandboxes don't have Python installed, only basic Unix tools
+  // ============================================================================
+
+  /**
+   * Read a file's content with line numbers.
+   *
+   * Override of BaseSandbox.read() to use awk instead of Python,
+   * since Deno sandboxes don't have Python installed.
+   *
+   * @param filePath - Absolute path to the file
+   * @param offset - Line offset (0-indexed, default 0)
+   * @param limit - Maximum lines to return (default 500)
+   * @returns Formatted file content with line numbers, or error message
+   */
+  override async read(
+    filePath: string,
+    offset: number = 0,
+    limit: number = 500,
+  ): Promise<string> {
+    // Coerce offset and limit to safe non-negative integers
+    const safeOffset =
+      Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0;
+    const safeLimit =
+      Number.isFinite(limit) && limit > 0 && limit < Number.MAX_SAFE_INTEGER
+        ? Math.floor(limit)
+        : 500;
+
+    // Escape path for shell
+    const escapedPath = filePath.replace(/'/g, "'\\''");
+
+    // Build shell command using awk for portable line number formatting
+    // First check if file exists, then format with line numbers
+    const command = `
+if [ ! -f '${escapedPath}' ]; then
+  echo "Error: File not found"
+  exit 1
+fi
+if [ ! -s '${escapedPath}' ]; then
+  echo "System reminder: File exists but has empty contents"
+  exit 0
+fi
+awk -v offset=${safeOffset} -v limit=${safeLimit} '
+  NR > offset && NR <= offset + limit {
+    printf "%6d\\t%s\\n", NR, $0
+  }
+' '${escapedPath}'
+`;
+
+    const result = await this.execute(command);
+
+    if (result.exitCode !== 0) {
+      return `Error: File '${filePath}' not found`;
+    }
+
+    return result.output;
+  }
+
+  /**
+   * Create a new file with content.
+   *
+   * Override of BaseSandbox.write() to use shell commands instead of Python,
+   * since Deno sandboxes don't have Python installed.
+   *
+   * @param filePath - Absolute path for the new file
+   * @param content - File content to write
+   * @returns WriteResult with error populated on failure
+   */
+  override async write(
+    filePath: string,
+    content: string,
+  ): Promise<WriteResult> {
+    // Escape path for shell
+    const escapedPath = filePath.replace(/'/g, "'\\''");
+
+    // Check if file already exists
+    const checkResult = await this.execute(`test -f '${escapedPath}'`);
+    if (checkResult.exitCode === 0) {
+      return {
+        error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
+      };
+    }
+
+    // Use uploadFiles for reliable content writing (handles binary, special chars, etc.)
+    const encoder = new TextEncoder();
+    const uploadResult = await this.uploadFiles([
+      [filePath, encoder.encode(content)],
+    ]);
+
+    if (uploadResult[0]?.error) {
+      return { error: `Failed to write file: ${uploadResult[0].error}` };
+    }
+
+    return { path: filePath, filesUpdate: null };
+  }
+
+  /**
+   * Edit a file by replacing string occurrences.
+   *
+   * Override of BaseSandbox.edit() to use shell commands instead of Python,
+   * since Deno sandboxes don't have Python installed.
+   *
+   * Uses sed for in-place replacement with proper escaping.
+   *
+   * @param filePath - Absolute path to the file
+   * @param oldString - String to find and replace
+   * @param newString - Replacement string
+   * @param replaceAll - If true, replace all occurrences (default: false)
+   * @returns EditResult with error, path, and occurrences
+   */
+  override async edit(
+    filePath: string,
+    oldString: string,
+    newString: string,
+    replaceAll: boolean = false,
+  ): Promise<EditResult> {
+    // Escape path for shell
+    const escapedPath = filePath.replace(/'/g, "'\\''");
+
+    // Check if file exists
+    const checkResult = await this.execute(`test -f '${escapedPath}'`);
+    if (checkResult.exitCode !== 0) {
+      return { error: `Error: File '${filePath}' not found` };
+    }
+
+    // Count occurrences first using grep -F (fixed string)
+    // Escape old string for grep
+    const escapedOldForGrep = oldString.replace(/'/g, "'\\''");
+    const countResult = await this.execute(
+      `grep -oF '${escapedOldForGrep}' '${escapedPath}' | wc -l`,
+    );
+    const count = parseInt(countResult.output.trim(), 10) || 0;
+
+    if (count === 0) {
+      return { error: `String not found in file '${filePath}'` };
+    }
+
+    if (count > 1 && !replaceAll) {
+      return {
+        error: `Multiple occurrences found in '${filePath}'. Use replaceAll=true to replace all.`,
+      };
+    }
+
+    // Perform the replacement using sed
+    // Use a delimiter that's unlikely to be in the strings (we'll use \x00 if available, otherwise |)
+    // For safety, we'll use awk which handles arbitrary strings better than sed
+
+    // Base64 encode both strings to safely pass them to awk
+    const oldB64 = Buffer.from(oldString, "utf-8").toString("base64");
+    const newB64 = Buffer.from(newString, "utf-8").toString("base64");
+
+    // Use awk with base64 decoding for safe string replacement
+    const awkCommand = `
+OLD=$(echo '${oldB64}' | base64 -d)
+NEW=$(echo '${newB64}' | base64 -d)
+awk -v old="$OLD" -v new="$NEW" -v replace_all=${replaceAll ? 1 : 0} '
+{
+  if (replace_all) {
+    gsub(old, new)
+  } else {
+    sub(old, new)
+  }
+  print
+}
+' '${escapedPath}' > '${escapedPath}.tmp' && mv '${escapedPath}.tmp' '${escapedPath}'
+`;
+
+    const editResult = await this.execute(awkCommand);
+
+    if (editResult.exitCode !== 0) {
+      return { error: `Unknown error editing file '${filePath}'` };
+    }
+
+    return { path: filePath, filesUpdate: null, occurrences: count };
   }
 
   /**
