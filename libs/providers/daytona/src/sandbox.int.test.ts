@@ -5,7 +5,7 @@
  * Run with: pnpm test:int
  */
 
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { sandboxStandardTests } from "@langchain/standard-tests";
 
 import { DaytonaSandbox } from "./index.js";
@@ -29,32 +29,31 @@ sandboxStandardTests({
   resolvePath: (name) => name,
 });
 
-const sandboxesToCleanup: DaytonaSandbox[] = [];
+describe("DaytonaSandbox Provider-Specific Tests", () => {
+  let sandbox: DaytonaSandbox;
 
-afterAll(async () => {
-  for (const sandbox of sandboxesToCleanup) {
+  beforeAll(async () => {
+    sandbox = await DaytonaSandbox.create({
+      language: "typescript",
+      autoStopInterval: 5,
+      labels: {
+        purpose: "integration-test",
+        package: "@langchain/daytona",
+      },
+    });
+  }, TEST_TIMEOUT);
+
+  afterAll(async () => {
     try {
-      await sandbox.close();
+      await sandbox?.close();
     } catch {
       // Ignore cleanup errors
     }
-  }
-});
+  }, TEST_TIMEOUT);
 
-describe("DaytonaSandbox Provider-Specific Tests", () => {
   it(
     "should execute node command",
     async () => {
-      const sandbox = await DaytonaSandbox.create({
-        language: "typescript",
-        autoStopInterval: 5,
-        labels: {
-          purpose: "integration-test",
-          package: "@langchain/daytona",
-        },
-      });
-      sandboxesToCleanup.push(sandbox);
-
       const result = await sandbox.execute("node --version");
 
       expect(result.exitCode).toBe(0);
@@ -66,16 +65,6 @@ describe("DaytonaSandbox Provider-Specific Tests", () => {
   it(
     "should get working directory",
     async () => {
-      const sandbox = await DaytonaSandbox.create({
-        language: "typescript",
-        autoStopInterval: 5,
-        labels: {
-          purpose: "integration-test",
-          package: "@langchain/daytona",
-        },
-      });
-      sandboxesToCleanup.push(sandbox);
-
       const workDir = await sandbox.getWorkDir();
 
       expect(workDir).toBeTruthy();
@@ -87,16 +76,6 @@ describe("DaytonaSandbox Provider-Specific Tests", () => {
   it(
     "should get user home directory",
     async () => {
-      const sandbox = await DaytonaSandbox.create({
-        language: "typescript",
-        autoStopInterval: 5,
-        labels: {
-          purpose: "integration-test",
-          package: "@langchain/daytona",
-        },
-      });
-      sandboxesToCleanup.push(sandbox);
-
       const homeDir = await sandbox.getUserHomeDir();
 
       expect(homeDir).toBeTruthy();
@@ -108,16 +87,6 @@ describe("DaytonaSandbox Provider-Specific Tests", () => {
   it(
     "should run TypeScript code",
     async () => {
-      const sandbox = await DaytonaSandbox.create({
-        language: "typescript",
-        autoStopInterval: 5,
-        labels: {
-          purpose: "integration-test",
-          package: "@langchain/daytona",
-        },
-      });
-      sandboxesToCleanup.push(sandbox);
-
       const encoder = new TextEncoder();
       const tsCode = `
 const greeting: string = "Hello, TypeScript!";
@@ -139,11 +108,17 @@ console.log(\`2 + 3 = \${add(2, 3)}\`);
     },
     TEST_TIMEOUT,
   );
+});
 
-  it(
-    "should create sandbox with TypeScript files and execute them",
-    async () => {
-      const tsCode = `
+// ---------------------------------------------------------------------------
+// initialFiles with TypeScript (needs its own sandbox, cleaned up immediately)
+// ---------------------------------------------------------------------------
+
+describe("DaytonaSandbox TypeScript initialFiles", () => {
+  let sandbox: DaytonaSandbox;
+
+  beforeAll(async () => {
+    const tsCode = `
 const greeting: string = "Hello from initialFiles!";
 console.log(greeting);
 
@@ -156,19 +131,30 @@ const user: User = { name: "Alice", age: 30 };
 console.log(\`User: \${user.name}, Age: \${user.age}\`);
 `;
 
-      const sandbox = await DaytonaSandbox.create({
-        language: "typescript",
-        autoStopInterval: 5,
-        labels: {
-          purpose: "integration-test-typescript",
-          package: "@langchain/daytona",
-        },
-        initialFiles: {
-          "main.ts": tsCode,
-        },
-      });
-      sandboxesToCleanup.push(sandbox);
+    sandbox = await DaytonaSandbox.create({
+      language: "typescript",
+      autoStopInterval: 5,
+      labels: {
+        purpose: "integration-test-typescript",
+        package: "@langchain/daytona",
+      },
+      initialFiles: {
+        "main.ts": tsCode,
+      },
+    });
+  }, TEST_TIMEOUT);
 
+  afterAll(async () => {
+    try {
+      await sandbox?.close();
+    } catch {
+      // Ignore cleanup errors
+    }
+  }, TEST_TIMEOUT);
+
+  it(
+    "should create sandbox with TypeScript files and execute them",
+    async () => {
       expect(sandbox.isRunning).toBe(true);
 
       // Execute the TypeScript file
