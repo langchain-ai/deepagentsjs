@@ -27,10 +27,7 @@ class MockSandbox extends BaseSandbox {
       const files = Array.from(this.files.keys());
       const now = Math.floor(Date.now() / 1000);
       const output = files
-        .map(
-          (f) =>
-            `${this.files.get(f)!.length}\t${now}\tregular file\t${f}`,
-        )
+        .map((f) => `${this.files.get(f)!.length}\t${now}\tregular file\t${f}`)
         .join("\n");
       return { output, exitCode: 0, truncated: false };
     }
@@ -40,10 +37,7 @@ class MockSandbox extends BaseSandbox {
       const files = Array.from(this.files.keys());
       const now = Math.floor(Date.now() / 1000);
       const output = files
-        .map(
-          (f) =>
-            `${this.files.get(f)!.length}\t${now}\tregular file\t${f}`,
-        )
+        .map((f) => `${this.files.get(f)!.length}\t${now}\tregular file\t${f}`)
         .join("\n");
       return { output, exitCode: 0, truncated: false };
     }
@@ -64,8 +58,7 @@ class MockSandbox extends BaseSandbox {
         }
         if (content.length === 0) {
           return {
-            output:
-              "System reminder: File exists but has empty contents",
+            output: "System reminder: File exists but has empty contents",
             exitCode: 0,
             truncated: false,
           };
@@ -268,7 +261,12 @@ describe("BaseSandbox", () => {
       const sandbox = new MockSandbox();
       sandbox.addFile("/test.txt", "Hello World");
 
-      const result = await sandbox.edit("/test.txt", "World", "Universe", false);
+      const result = await sandbox.edit(
+        "/test.txt",
+        "World",
+        "Universe",
+        false,
+      );
       expect(result.error).toBeUndefined();
       expect(result.occurrences).toBe(1);
       expect(result.filesUpdate).toBeNull();
@@ -385,9 +383,7 @@ describe("BaseSandbox", () => {
       const result = await sandbox.globInfo("**/*.ts", "/workspace");
       expect(result.length).toBe(2);
       expect(result.some((f) => f.path === "src/main.ts")).toBe(true);
-      expect(
-        result.some((f) => f.path === "src/utils/helper.ts"),
-      ).toBe(true);
+      expect(result.some((f) => f.path === "src/utils/helper.ts")).toBe(true);
     });
 
     it("should return empty array for no matches", async () => {

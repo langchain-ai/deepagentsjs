@@ -200,9 +200,7 @@ function buildGrepCommand(
 ): string {
   const patternEscaped = shellQuote(pattern);
   const searchPathQuoted = shellQuote(searchPath);
-  const globOpt = globPattern
-    ? `--include=${shellQuote(globPattern)}`
-    : "";
+  const globOpt = globPattern ? `--include=${shellQuote(globPattern)}` : "";
 
   return `grep -rHnF ${globOpt} -e ${patternEscaped} ${searchPathQuoted} 2>/dev/null || true`;
 }
