@@ -23,10 +23,6 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 /**
  * Minimal interface matching what BaseSandbox provides.
  * Uses duck typing so any sandbox implementation that matches will work.
@@ -117,10 +113,6 @@ export interface StandardTestsConfig<
   resolvePath: (relativePath: string) => string;
 }
 
-// ---------------------------------------------------------------------------
-// Retry helper
-// ---------------------------------------------------------------------------
-
 /**
  * Default number of retry attempts for sandbox creation.
  */
@@ -170,10 +162,6 @@ export async function withRetry<T>(
 
   throw lastError;
 }
-
-// ---------------------------------------------------------------------------
-// Test suite
-// ---------------------------------------------------------------------------
 
 /**
  * Run the standard sandbox integration tests against a provider.
@@ -229,10 +217,6 @@ export function sandboxStandardTests<T extends SandboxInstance>(
         // Ignore cleanup errors
       }
     }, timeout);
-
-    // -----------------------------------------------------------------------
-    // Lifecycle
-    // -----------------------------------------------------------------------
 
     describe("sandbox lifecycle", () => {
       it(
@@ -309,10 +293,6 @@ export function sandboxStandardTests<T extends SandboxInstance>(
         );
       });
     });
-
-    // -----------------------------------------------------------------------
-    // Command execution  (all use the shared sandbox)
-    // -----------------------------------------------------------------------
 
     describe("command execution", () => {
       it(

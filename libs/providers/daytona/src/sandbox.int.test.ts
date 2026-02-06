@@ -124,10 +124,6 @@ console.log(\`2 + 3 = \${add(2, 3)}\`);
   );
 });
 
-// ---------------------------------------------------------------------------
-// initialFiles with TypeScript (needs its own sandbox, cleaned up immediately)
-// ---------------------------------------------------------------------------
-
 describe("DaytonaSandbox TypeScript initialFiles", () => {
   let sandbox: DaytonaSandbox;
 
