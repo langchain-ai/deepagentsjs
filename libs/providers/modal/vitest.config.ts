@@ -27,6 +27,7 @@ export default defineConfig((env) => {
         exclude: configDefaults.exclude,
         include: ["**/*.int.test.ts"],
         name: "int",
+        sequence: { concurrent: false },
       },
     } satisfies ViteUserConfigExport;
   }
