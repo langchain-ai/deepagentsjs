@@ -714,7 +714,7 @@ awk -v old="$OLD" -v new="$NEW" -v replace_all=${replaceAll ? 1 : 0} '
    * @example
    * ```typescript
    * // Resume a sandbox from a stored ID
-   * const sandbox = await DenoSandbox.connect("sandbox-abc123");
+   * const sandbox = await DenoSandbox.fromId("sandbox-abc123");
    * const result = await sandbox.execute("ls -la");
    * ```
    */

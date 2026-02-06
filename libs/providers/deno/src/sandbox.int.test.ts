@@ -101,8 +101,8 @@ describe
           // Close the connection (but sandbox keeps running due to duration lifetime)
           await originalSandbox.close();
 
-          // Reconnect using DenoSandbox.connect()
-          const reconnectedSandbox = await DenoSandbox.connect(sandboxId);
+          // Reconnect using DenoSandbox.fromId()
+          const reconnectedSandbox = await DenoSandbox.fromId(sandboxId);
 
           expect(reconnectedSandbox.id).toBe(sandboxId);
           expect(reconnectedSandbox.isRunning).toBe(true);
