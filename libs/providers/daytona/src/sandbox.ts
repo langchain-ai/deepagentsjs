@@ -640,6 +640,61 @@ export class DaytonaSandbox extends BaseSandbox {
   }
 
   /**
+   * Delete all sandboxes matching the given labels.
+   *
+   * This is useful for cleaning up stale sandboxes from previous test runs
+   * or CI pipelines that may not have shut down cleanly.
+   *
+   * @param labels - Label key-value pairs to filter sandboxes
+   * @param options - Optional auth configuration
+   * @returns The number of sandboxes that were deleted
+   *
+   * @example
+   * ```typescript
+   * // Clean up all integration-test sandboxes
+   * const deleted = await DaytonaSandbox.deleteAll({
+   *   purpose: "integration-test",
+   *   package: "@langchain/daytona",
+   * });
+   * console.log(`Deleted ${deleted} stale sandboxes`);
+   * ```
+   */
+  static async deleteAll(
+    labels: Record<string, string>,
+    options?: Pick<DaytonaSandboxOptions, "auth" | "target">,
+  ): Promise<number> {
+    let credentials: { apiKey: string; apiUrl: string; target?: string };
+    try {
+      credentials = getAuthCredentials(options?.auth, options?.target);
+    } catch (error) {
+      throw new DaytonaSandboxError(
+        "Failed to authenticate with Daytona. Check your API key configuration.",
+        "AUTHENTICATION_FAILED",
+        error instanceof Error ? error : undefined,
+      );
+    }
+
+    const daytona = new Daytona({
+      apiKey: credentials.apiKey,
+      apiUrl: credentials.apiUrl,
+      target: credentials.target,
+    });
+
+    const { items } = await daytona.list(labels);
+
+    const results = await Promise.all(
+      items.map((sandbox) =>
+        daytona
+          .delete(sandbox)
+          .then(() => true)
+          .catch(() => false),
+      ),
+    );
+
+    return results.filter(Boolean).length;
+  }
+
+  /**
    * Connect to an existing sandbox by ID.
    *
    * This allows you to resume working with a sandbox that was created

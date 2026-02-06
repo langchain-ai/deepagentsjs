@@ -2,6 +2,7 @@
  * Integration tests for VfsSandbox.
  *
  * These tests verify end-to-end functionality including:
+ * - Standard sandbox tests (shared across all providers)
  * - Actual code execution (Node.js, shell scripts)
  * - File operations that persist across commands
  * - VFS to temp directory sync and back
@@ -9,12 +10,21 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-
+import { sandboxStandardTests } from "@langchain/standard-tests";
 import { VfsSandbox, createVfsSandboxFactory } from "./sandbox.js";
 
 const isWindows = process.platform === "win32";
 
-describe.skipIf(isWindows)("VfsSandbox Integration", () => {
+sandboxStandardTests({
+  name: "VfsSandbox",
+  skip: isWindows,
+  timeout: 30_000,
+  createSandbox: async (options) => VfsSandbox.create(options),
+  closeSandbox: (sandbox) => sandbox.stop(),
+  resolvePath: (name) => name,
+});
+
+describe.skipIf(isWindows)("VfsSandbox Provider-Specific Tests", () => {
   let sandbox: VfsSandbox;
 
   afterEach(async () => {
@@ -359,17 +369,6 @@ console.log('Processed successfully');
 
       expect(result.output).toContain("timed out");
       expect(result.exitCode).toBeNull();
-    });
-
-    it("should handle non-existent command", async () => {
-      sandbox = await VfsSandbox.create();
-
-      const result = await sandbox.execute("nonexistent_command_12345");
-
-      expect(result.exitCode).not.toBe(0);
-      expect(result.output.toLowerCase()).toMatch(
-        /not found|command not found/,
-      );
     });
 
     it("should handle permission errors in scripts", async () => {
