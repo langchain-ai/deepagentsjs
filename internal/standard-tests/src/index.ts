@@ -10,6 +10,7 @@
 
 export {
   sandboxStandardTests,
+  withRetry,
   type SandboxInstance,
   type StandardTestsConfig,
 } from "./sandbox.js";

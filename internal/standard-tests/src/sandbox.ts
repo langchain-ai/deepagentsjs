@@ -118,6 +118,60 @@ export interface StandardTestsConfig<
 }
 
 // ---------------------------------------------------------------------------
+// Retry helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Default number of retry attempts for sandbox creation.
+ */
+const DEFAULT_MAX_RETRIES = 3;
+
+/**
+ * Default delay in milliseconds between retries.
+ */
+const DEFAULT_RETRY_DELAY_MS = 10_000;
+
+/**
+ * Retry an async operation with a fixed delay between attempts.
+ *
+ * Useful for working around transient sandbox concurrency limits:
+ * when a provider rejects creation because the organisation has too
+ * many running sandboxes, waiting a short while and retrying usually
+ * succeeds once a previous sandbox finishes shutting down.
+ *
+ * @param fn - The async operation to attempt
+ * @param maxRetries - Maximum number of attempts (default: 3)
+ * @param delayMs - Milliseconds to wait between attempts (default: 10 000)
+ * @returns The result of the first successful attempt
+ *
+ * @example
+ * ```ts
+ * const sandbox = await withRetry(() => DenoSandbox.create({ memoryMb: 768 }));
+ * ```
+ */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = DEFAULT_MAX_RETRIES,
+  delayMs: number = DEFAULT_RETRY_DELAY_MS,
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+// ---------------------------------------------------------------------------
 // Test suite
 // ---------------------------------------------------------------------------
 
@@ -165,7 +219,7 @@ export function sandboxStandardTests<T extends SandboxInstance>(
     let shared: T;
 
     beforeAll(async () => {
-      shared = await config.createSandbox();
+      shared = await withRetry(() => config.createSandbox());
     }, timeout);
 
     afterAll(async () => {
@@ -204,7 +258,7 @@ export function sandboxStandardTests<T extends SandboxInstance>(
         let tmp: T;
 
         beforeAll(async () => {
-          tmp = await config.createSandbox();
+          tmp = await withRetry(() => config.createSandbox());
         }, timeout);
 
         afterAll(async () => {
@@ -479,12 +533,14 @@ export function sandboxStandardTests<T extends SandboxInstance>(
           const initPath = config.resolvePath("init-test.txt");
           const nestedPath = config.resolvePath("nested/dir/file.txt");
 
-          const tmp = await config.createSandbox({
-            initialFiles: {
-              [initPath]: "Hello from initial file!",
-              [nestedPath]: "Nested content",
-            },
-          });
+          const tmp = await withRetry(() =>
+            config.createSandbox({
+              initialFiles: {
+                [initPath]: "Hello from initial file!",
+                [nestedPath]: "Nested content",
+              },
+            }),
+          );
 
           try {
             expect(tmp.isRunning).toBe(true);
@@ -512,14 +568,16 @@ export function sandboxStandardTests<T extends SandboxInstance>(
           );
           const helperPath = config.resolvePath("src/utils/helpers/string.ts");
 
-          const tmp = await config.createSandbox({
-            initialFiles: {
-              [buttonPath]:
-                "export const Button = () => <button>Click</button>;",
-              [helperPath]:
-                "export const capitalize = (s: string) => s.toUpperCase();",
-            },
-          });
+          const tmp = await withRetry(() =>
+            config.createSandbox({
+              initialFiles: {
+                [buttonPath]:
+                  "export const Button = () => <button>Click</button>;",
+                [helperPath]:
+                  "export const capitalize = (s: string) => s.toUpperCase();",
+              },
+            }),
+          );
 
           try {
             expect(tmp.isRunning).toBe(true);
@@ -540,7 +598,9 @@ export function sandboxStandardTests<T extends SandboxInstance>(
       it(
         "should create sandbox with empty initialFiles object",
         async () => {
-          const tmp = await config.createSandbox({ initialFiles: {} });
+          const tmp = await withRetry(() =>
+            config.createSandbox({ initialFiles: {} }),
+          );
 
           try {
             expect(tmp.isRunning).toBe(true);

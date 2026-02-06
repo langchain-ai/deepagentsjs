@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { sandboxStandardTests } from "@langchain/standard-tests";
+import { sandboxStandardTests, withRetry } from "@langchain/standard-tests";
 import { DenoSandbox } from "./sandbox.js";
 
 // Check if integration tests should run
@@ -46,7 +46,7 @@ describe
     let shared: DenoSandbox;
 
     beforeAll(async () => {
-      shared = await DenoSandbox.create({ memoryMb: 768 });
+      shared = await withRetry(() => DenoSandbox.create({ memoryMb: 768 }));
     }, TEST_TIMEOUT);
 
     afterAll(async () => {
@@ -73,10 +73,12 @@ describe
     describe("reconnect to existing sandbox", () => {
       let originalSandbox: DenoSandbox;
       beforeAll(async () => {
-        originalSandbox = await DenoSandbox.create({
-          memoryMb: 768,
-          lifetime: "5m",
-        });
+        originalSandbox = await withRetry(() =>
+          DenoSandbox.create({
+            memoryMb: 768,
+            lifetime: "5m",
+          }),
+        );
       }, TEST_TIMEOUT);
 
       afterAll(async () => {
@@ -131,12 +133,14 @@ const user: User = { name: "Alice", age: 30 };
 console.log(\`User: \${user.name}, Age: \${user.age}\`);
 `;
 
-        tsSandbox = await DenoSandbox.create({
-          memoryMb: 768,
-          initialFiles: {
-            "/home/app/main.ts": tsCode,
-          },
-        });
+        tsSandbox = await withRetry(() =>
+          DenoSandbox.create({
+            memoryMb: 768,
+            initialFiles: {
+              "/home/app/main.ts": tsCode,
+            },
+          }),
+        );
       }, TEST_TIMEOUT);
 
       afterAll(async () => {

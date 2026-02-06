@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { sandboxStandardTests } from "@langchain/standard-tests";
+import { sandboxStandardTests, withRetry } from "@langchain/standard-tests";
 import { ModalSandbox } from "./sandbox.js";
 
 // Check if integration tests should run
@@ -49,12 +49,14 @@ describe.skipIf(!hasCredentials)("ModalSandbox Provider-Specific Tests", () => {
 
       beforeAll(async () => {
         const encoder = new TextEncoder();
-        sandbox = await ModalSandbox.create({
-          imageName: "alpine:3.21",
-          initialFiles: {
-            "/tmp/binary-init.txt": encoder.encode("Binary content test"),
-          },
-        });
+        sandbox = await withRetry(() =>
+          ModalSandbox.create({
+            imageName: "alpine:3.21",
+            initialFiles: {
+              "/tmp/binary-init.txt": encoder.encode("Binary content test"),
+            },
+          }),
+        );
       }, TEST_TIMEOUT);
 
       afterAll(async () => {
@@ -80,12 +82,14 @@ describe.skipIf(!hasCredentials)("ModalSandbox Provider-Specific Tests", () => {
       let sandbox: ModalSandbox;
 
       beforeAll(async () => {
-        sandbox = await ModalSandbox.create({
-          imageName: "alpine:3.21",
-          initialFiles: {
-            "/tmp/download-init.txt": "Content to download",
-          },
-        });
+        sandbox = await withRetry(() =>
+          ModalSandbox.create({
+            imageName: "alpine:3.21",
+            initialFiles: {
+              "/tmp/download-init.txt": "Content to download",
+            },
+          }),
+        );
       }, TEST_TIMEOUT);
 
       afterAll(async () => {
@@ -123,12 +127,14 @@ describe.skipIf(!hasCredentials)("ModalSandbox Provider-Specific Tests", () => {
           null,
           2,
         );
-        sandbox = await ModalSandbox.create({
-          imageName: "alpine:3.21",
-          initialFiles: {
-            "/app/config.json": configContent,
-          },
-        });
+        sandbox = await withRetry(() =>
+          ModalSandbox.create({
+            imageName: "alpine:3.21",
+            initialFiles: {
+              "/app/config.json": configContent,
+            },
+          }),
+        );
       }, TEST_TIMEOUT);
 
       afterAll(async () => {
@@ -158,10 +164,12 @@ describe.skipIf(!hasCredentials)("ModalSandbox Provider-Specific Tests", () => {
     it(
       "should reconnect to existing sandbox via ModalSandbox.fromId()",
       async () => {
-        const originalSandbox = await ModalSandbox.create({
-          imageName: "alpine:3.21",
-          timeoutMs: 600_000,
-        });
+        const originalSandbox = await withRetry(() =>
+          ModalSandbox.create({
+            imageName: "alpine:3.21",
+            timeoutMs: 600_000,
+          }),
+        );
 
         try {
           const sandboxId = originalSandbox.id;
@@ -195,13 +203,15 @@ describe.skipIf(!hasCredentials)("ModalSandbox Provider-Specific Tests", () => {
     let sandbox: ModalSandbox;
 
     beforeAll(async () => {
-      sandbox = await ModalSandbox.create({
-        imageName: "python:3.12-slim",
-        timeoutMs: 300_000,
-        initialFiles: {
-          "/app/hello.py": 'print("Hello from Python!")',
-        },
-      });
+      sandbox = await withRetry(() =>
+        ModalSandbox.create({
+          imageName: "python:3.12-slim",
+          timeoutMs: 300_000,
+          initialFiles: {
+            "/app/hello.py": 'print("Hello from Python!")',
+          },
+        }),
+      );
     }, TEST_TIMEOUT);
 
     afterAll(async () => {
@@ -251,13 +261,15 @@ describe.skipIf(!hasCredentials)("ModalSandbox Provider-Specific Tests", () => {
     let sandbox: ModalSandbox;
 
     beforeAll(async () => {
-      sandbox = await ModalSandbox.create({
-        imageName: "node:20-slim",
-        timeoutMs: 300_000,
-        initialFiles: {
-          "/app/hello.js": 'console.log("Hello from Node.js!");',
-        },
-      });
+      sandbox = await withRetry(() =>
+        ModalSandbox.create({
+          imageName: "node:20-slim",
+          timeoutMs: 300_000,
+          initialFiles: {
+            "/app/hello.js": 'console.log("Hello from Node.js!");',
+          },
+        }),
+      );
     }, TEST_TIMEOUT);
 
     afterAll(async () => {

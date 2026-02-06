@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { sandboxStandardTests } from "@langchain/standard-tests";
+import { sandboxStandardTests, withRetry } from "@langchain/standard-tests";
 import os from "node:os";
 
 import { DaytonaSandbox } from "./index.js";
@@ -48,11 +48,13 @@ describe("DaytonaSandbox Provider-Specific Tests", () => {
   let sandbox: DaytonaSandbox;
 
   beforeAll(async () => {
-    sandbox = await DaytonaSandbox.create({
-      language: "typescript",
-      autoStopInterval: 5,
-      labels: CI_LABELS,
-    });
+    sandbox = await withRetry(() =>
+      DaytonaSandbox.create({
+        language: "typescript",
+        autoStopInterval: 5,
+        labels: CI_LABELS,
+      }),
+    );
   }, TEST_TIMEOUT);
 
   afterAll(async () => {
@@ -143,14 +145,16 @@ const user: User = { name: "Alice", age: 30 };
 console.log(\`User: \${user.name}, Age: \${user.age}\`);
 `;
 
-    sandbox = await DaytonaSandbox.create({
-      language: "typescript",
-      autoStopInterval: 5,
-      labels: { ...CI_LABELS, purpose: "integration-test-typescript" },
-      initialFiles: {
-        "main.ts": tsCode,
-      },
-    });
+    sandbox = await withRetry(() =>
+      DaytonaSandbox.create({
+        language: "typescript",
+        autoStopInterval: 5,
+        labels: { ...CI_LABELS, purpose: "integration-test-typescript" },
+        initialFiles: {
+          "main.ts": tsCode,
+        },
+      }),
+    );
   }, TEST_TIMEOUT);
 
   afterAll(async () => {
