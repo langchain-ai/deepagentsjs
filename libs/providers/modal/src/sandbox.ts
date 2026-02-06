@@ -331,7 +331,8 @@ export class ModalSandbox extends BaseSandbox {
   /**
    * Execute a command in the sandbox.
    *
-   * Commands are run using bash -c to execute the command string.
+   * Commands are run using sh -c to execute the command string.
+   * Uses sh instead of bash for compatibility with minimal images like Alpine.
    *
    * @param command - The shell command to execute
    * @returns Execution result with output, exit code, and truncation flag
@@ -348,8 +349,8 @@ export class ModalSandbox extends BaseSandbox {
     const sandbox = this.instance; // Throws if not initialized
 
     try {
-      // Execute using bash -c to handle shell features
-      const process = await sandbox.exec(["bash", "-c", command], {
+      // Execute using sh -c for compatibility with minimal images (e.g. Alpine)
+      const process = await sandbox.exec(["sh", "-c", command], {
         stdout: "pipe",
         stderr: "pipe",
       });
@@ -580,13 +581,18 @@ export class ModalSandbox extends BaseSandbox {
     if (error instanceof Error) {
       const msg = error.message.toLowerCase();
 
-      if (msg.includes("not found") || msg.includes("enoent")) {
+      // Check for "no such file or directory" first (contains both "file" and "directory")
+      if (
+        msg.includes("not found") ||
+        msg.includes("enoent") ||
+        msg.includes("no such file")
+      ) {
         return "file_not_found";
       }
       if (msg.includes("permission") || msg.includes("eacces")) {
         return "permission_denied";
       }
-      if (msg.includes("directory") || msg.includes("eisdir")) {
+      if (msg.includes("is a directory") || msg.includes("eisdir")) {
         return "is_directory";
       }
     }
