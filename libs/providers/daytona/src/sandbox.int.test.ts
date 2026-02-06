@@ -7,19 +7,27 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { sandboxStandardTests } from "@langchain/standard-tests";
+import os from "node:os";
 
 import { DaytonaSandbox } from "./index.js";
 
 const TEST_TIMEOUT = 120_000; // 2 minutes
 
+/** Labels that uniquely identify sandboxes created by this CI job. */
+const CI_LABELS: Record<string, string> = {
+  purpose: "integration-test",
+  package: "@langchain/daytona",
+  node: process.version,
+  os: os.platform(),
+};
+
 /**
  * Clean up stale integration-test sandboxes before running tests.
+ * Only deletes sandboxes matching this specific Node version + OS combination
+ * so parallel CI pipelines don't interfere with each other.
  */
 beforeAll(async () => {
-  await DaytonaSandbox.deleteAll({
-    purpose: "integration-test",
-    package: "@langchain/daytona",
-  });
+  await DaytonaSandbox.deleteAll(CI_LABELS);
 }, TEST_TIMEOUT);
 
 sandboxStandardTests({
@@ -29,10 +37,7 @@ sandboxStandardTests({
     DaytonaSandbox.create({
       language: "typescript",
       autoStopInterval: 5,
-      labels: {
-        purpose: "integration-test",
-        package: "@langchain/daytona",
-      },
+      labels: CI_LABELS,
       ...options,
     }),
   closeSandbox: (sandbox) => sandbox.close(),
@@ -46,10 +51,7 @@ describe("DaytonaSandbox Provider-Specific Tests", () => {
     sandbox = await DaytonaSandbox.create({
       language: "typescript",
       autoStopInterval: 5,
-      labels: {
-        purpose: "integration-test",
-        package: "@langchain/daytona",
-      },
+      labels: CI_LABELS,
     });
   }, TEST_TIMEOUT);
 
@@ -144,10 +146,7 @@ console.log(\`User: \${user.name}, Age: \${user.age}\`);
     sandbox = await DaytonaSandbox.create({
       language: "typescript",
       autoStopInterval: 5,
-      labels: {
-        purpose: "integration-test-typescript",
-        package: "@langchain/daytona",
-      },
+      labels: { ...CI_LABELS, purpose: "integration-test-typescript" },
       initialFiles: {
         "main.ts": tsCode,
       },
