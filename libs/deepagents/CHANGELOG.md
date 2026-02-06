@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.7.2
+
+### Patch Changes
+
+- [#197](https://github.com/langchain-ai/deepagentsjs/pull/197) [`e4b5892`](https://github.com/langchain-ai/deepagentsjs/commit/e4b5892b0e171cf33b75c8e2c93665ce97f87638) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): runtime agnostic sandbox operations
+
 ## 1.7.1
 
 ### Patch Changes
