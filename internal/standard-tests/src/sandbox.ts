@@ -124,12 +124,12 @@ export interface StandardTestsConfig<
 /**
  * Default number of retry attempts for sandbox creation.
  */
-const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_MAX_RETRIES = 5;
 
 /**
  * Default delay in milliseconds between retries.
  */
-const DEFAULT_RETRY_DELAY_MS = 10_000;
+const DEFAULT_RETRY_DELAY_MS = 15_000;
 
 /**
  * Retry an async operation with a fixed delay between attempts.
