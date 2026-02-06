@@ -12,6 +12,16 @@ import { DaytonaSandbox } from "./index.js";
 
 const TEST_TIMEOUT = 120_000; // 2 minutes
 
+/**
+ * Clean up stale integration-test sandboxes before running tests.
+ */
+beforeAll(async () => {
+  await DaytonaSandbox.deleteAll({
+    purpose: "integration-test",
+    package: "@langchain/daytona",
+  });
+}, TEST_TIMEOUT);
+
 sandboxStandardTests({
   name: "DaytonaSandbox",
   timeout: TEST_TIMEOUT,
