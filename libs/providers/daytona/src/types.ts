@@ -5,6 +5,8 @@
  * including options and error types.
  */
 
+import { type SandboxErrorCode, SandboxError } from "deepagents";
+
 /**
  * Supported target regions for Daytona sandboxes.
  *
@@ -176,10 +178,7 @@ export interface DaytonaSandboxOptions {
  * Used to identify specific error conditions and handle them appropriately.
  */
 export type DaytonaSandboxErrorCode =
-  /** Sandbox has not been initialized - call initialize() first */
-  | "NOT_INITIALIZED"
-  /** Sandbox is already initialized - cannot initialize twice */
-  | "ALREADY_INITIALIZED"
+  | SandboxErrorCode
   /** Authentication failed - check API key configuration */
   | "AUTHENTICATION_FAILED"
   /** Failed to create sandbox - check options and quotas */
@@ -188,14 +187,10 @@ export type DaytonaSandboxErrorCode =
   | "SANDBOX_NOT_FOUND"
   /** Sandbox is not in started state */
   | "SANDBOX_NOT_STARTED"
-  /** Command execution timed out */
-  | "COMMAND_TIMEOUT"
-  /** Command execution failed */
-  | "COMMAND_FAILED"
-  /** File operation (read/write) failed */
-  | "FILE_OPERATION_FAILED"
   /** Resource limits exceeded (CPU, memory, storage) */
   | "RESOURCE_LIMIT_EXCEEDED";
+
+const DAYTONA_SANDBOX_ERROR_SYMBOL = Symbol.for("daytona.sandbox.error");
 
 /**
  * Custom error class for Daytona Sandbox operations.
@@ -225,7 +220,10 @@ export type DaytonaSandboxErrorCode =
  * }
  * ```
  */
-export class DaytonaSandboxError extends Error {
+export class DaytonaSandboxError extends SandboxError {
+  /** Symbol for identifying sandbox error instances */
+  [DAYTONA_SANDBOX_ERROR_SYMBOL] = true as const;
+
   /** Error name for instanceof checks and logging */
   override readonly name = "DaytonaSandboxError";
 
@@ -241,8 +239,22 @@ export class DaytonaSandboxError extends Error {
     public readonly code: DaytonaSandboxErrorCode,
     public override readonly cause?: Error,
   ) {
-    super(message);
+    super(message, code as SandboxErrorCode, cause);
     // Maintain proper prototype chain for instanceof checks
     Object.setPrototypeOf(this, DaytonaSandboxError.prototype);
+  }
+
+  /**
+   * Checks if the error is an instance of DaytonaSandboxError.
+   *
+   * @param error - The error to check
+   * @returns True if the error is an instance of DaytonaSandboxError, false otherwise
+   */
+  static isInstance(error: unknown): error is DaytonaSandboxError {
+    return (
+      typeof error === "object" &&
+      error !== null &&
+      (error as Record<symbol, unknown>)[DAYTONA_SANDBOX_ERROR_SYMBOL] === true
+    );
   }
 }

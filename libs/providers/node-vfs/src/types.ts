@@ -5,6 +5,8 @@
  * including options and error types.
  */
 
+import { SandboxError, type SandboxErrorCode } from "deepagents";
+
 /**
  * Configuration options for creating a VFS Sandbox.
  *
@@ -54,38 +56,16 @@ export interface VfsSandboxOptions {
 }
 
 /**
- * Metadata for a VFS Sandbox instance.
- *
- * This is used by `VfsSandboxProvider.list()` to return information
- * about available sandboxes.
- */
-export interface VfsSandboxMetadata {
-  /** Current status of the sandbox */
-  status?: "running" | "stopped";
-  /** Timestamp when the sandbox was created */
-  createdAt?: string;
-  /** Working directory path */
-  workingDirectory?: string;
-}
-
-/**
  * Error codes for VFS Sandbox operations.
  */
 export type VfsSandboxErrorCode =
-  /** VFS has not been initialized - call initialize() first */
-  | "NOT_INITIALIZED"
-  /** VFS is already initialized - cannot initialize twice */
-  | "ALREADY_INITIALIZED"
+  | SandboxErrorCode
   /** VFS initialization failed */
   | "INITIALIZATION_FAILED"
-  /** Command execution timed out */
-  | "COMMAND_TIMEOUT"
-  /** Command execution failed */
-  | "COMMAND_FAILED"
-  /** File operation (read/write) failed */
-  | "FILE_OPERATION_FAILED"
   /** VFS is not supported in this environment */
   | "NOT_SUPPORTED";
+
+const VFS_SANDBOX_ERROR_SYMBOL = Symbol.for("vfs.sandbox.error");
 
 /**
  * Custom error class for VFS Sandbox operations.
@@ -115,7 +95,9 @@ export type VfsSandboxErrorCode =
  * }
  * ```
  */
-export class VfsSandboxError extends Error {
+export class VfsSandboxError extends SandboxError {
+  [VFS_SANDBOX_ERROR_SYMBOL] = true as const;
+
   /** Error name for instanceof checks and logging */
   override readonly name = "VfsSandboxError";
 
@@ -131,8 +113,22 @@ export class VfsSandboxError extends Error {
     public readonly code: VfsSandboxErrorCode,
     public readonly cause?: Error,
   ) {
-    super(message);
+    super(message, code as SandboxErrorCode, cause);
     // Maintain proper prototype chain for instanceof checks
     Object.setPrototypeOf(this, VfsSandboxError.prototype);
+  }
+
+  /**
+   * Checks if the error is an instance of VfsSandboxError.
+   *
+   * @param error - The error to check
+   * @returns True if the error is an instance of VfsSandboxError, false otherwise
+   */
+  static isInstance(error: unknown): error is VfsSandboxError {
+    return (
+      typeof error === "object" &&
+      error !== null &&
+      (error as Record<symbol, unknown>)[VFS_SANDBOX_ERROR_SYMBOL] === true
+    );
   }
 }

@@ -13,6 +13,7 @@ import { ModalClient } from "modal";
 import type { App, Sandbox, Image, SandboxCreateParams } from "modal";
 import {
   BaseSandbox,
+  type BackendFactory,
   type ExecuteResponse,
   type FileDownloadResponse,
   type FileOperationError,
@@ -593,10 +594,6 @@ export class ModalSandbox extends BaseSandbox {
     return "invalid_path";
   }
 
-  // ============================================================================
-  // Static Factory Methods
-  // ============================================================================
-
   /**
    * Create and initialize a new ModalSandbox in one step.
    *
@@ -723,4 +720,96 @@ export class ModalSandbox extends BaseSandbox {
       );
     }
   }
+}
+
+/**
+ * Async factory function type for creating Modal Sandbox instances.
+ *
+ * This is similar to BackendFactory but supports async creation,
+ * which is required for Modal Sandbox since initialization is async.
+ */
+export type AsyncModalSandboxFactory = () => Promise<ModalSandbox>;
+
+/**
+ * Create an async factory function that creates a new Modal Sandbox per invocation.
+ *
+ * Each call to the factory will create and initialize a new sandbox.
+ * This is useful when you want fresh, isolated environments for each
+ * agent invocation.
+ *
+ * **Important**: This returns an async factory. For use with middleware that
+ * requires synchronous BackendFactory, use `createModalSandboxFactoryFromSandbox()`
+ * with a pre-created sandbox instead.
+ *
+ * @param options - Optional configuration for sandbox creation
+ * @returns An async factory function that creates new sandboxes
+ *
+ * @example
+ * ```typescript
+ * import { ModalSandbox, createModalSandboxFactory } from "@langchain/modal";
+ *
+ * // Create a factory for new sandboxes
+ * const factory = createModalSandboxFactory({ imageName: "python:3.12-slim" });
+ *
+ * // Each call creates a new sandbox
+ * const sandbox1 = await factory();
+ * const sandbox2 = await factory();
+ *
+ * try {
+ *   // Use sandboxes...
+ * } finally {
+ *   await sandbox1.close();
+ *   await sandbox2.close();
+ * }
+ * ```
+ */
+export function createModalSandboxFactory(
+  options?: ModalSandboxOptions,
+): AsyncModalSandboxFactory {
+  return async () => {
+    return await ModalSandbox.create(options);
+  };
+}
+
+/**
+ * Create a backend factory that reuses an existing Modal Sandbox.
+ *
+ * This allows multiple agent invocations to share the same sandbox,
+ * avoiding the startup overhead of creating new sandboxes.
+ *
+ * Important: You are responsible for managing the sandbox lifecycle
+ * (calling `close()` when done).
+ *
+ * @param sandbox - An existing ModalSandbox instance (must be initialized)
+ * @returns A BackendFactory that returns the provided sandbox
+ *
+ * @example
+ * ```typescript
+ * import { createDeepAgent, createFilesystemMiddleware } from "deepagents";
+ * import { ModalSandbox, createModalSandboxFactoryFromSandbox } from "@langchain/modal";
+ *
+ * // Create and initialize a sandbox
+ * const sandbox = await ModalSandbox.create({ imageName: "python:3.12-slim" });
+ *
+ * try {
+ *   const agent = createDeepAgent({
+ *     model: new ChatAnthropic({ model: "claude-sonnet-4-20250514" }),
+ *     systemPrompt: "You are a coding assistant.",
+ *     middlewares: [
+ *       createFilesystemMiddleware({
+ *         backend: createModalSandboxFactoryFromSandbox(sandbox),
+ *       }),
+ *     ],
+ *   });
+ *
+ *   await agent.invoke({ messages: [...] });
+ * } finally {
+ *   await sandbox.close();
+ * }
+ * ```
+ */
+export function createModalSandboxFactoryFromSandbox(
+  sandbox: ModalSandbox,
+): BackendFactory {
+  return () => sandbox;
 }

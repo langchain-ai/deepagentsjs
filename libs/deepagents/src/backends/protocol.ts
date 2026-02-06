@@ -385,123 +385,87 @@ export interface SandboxDeleteOptions {
 }
 
 /**
- * Abstract interface for sandbox provider implementations.
+ * Common error codes shared across all sandbox provider implementations.
  *
- * Defines the lifecycle management interface for sandbox providers. Implementations
- * should integrate with their respective SDKs to provide standardized sandbox
- * lifecycle operations (list, getOrCreate, delete).
- *
- * This interface separates lifecycle management from sandbox execution:
- * - `SandboxProvider` handles lifecycle (list, create, delete)
- * - `SandboxBackendProtocol` handles execution (execute, file operations)
- *
- * @typeParam MetadataT - Type of the metadata field in sandbox listings.
- *   Providers can define their own interface for type-safe metadata access.
+ * These represent the core error conditions that any sandbox provider may encounter.
+ * Provider-specific error codes should extend this type with additional codes.
  *
  * @example
  * ```typescript
- * interface MyMetadata {
- *   status: "running" | "stopped";
- *   template: string;
- * }
- *
- * class MySandboxProvider implements SandboxProvider<MyMetadata> {
- *   async list(options?: SandboxListOptions): Promise<SandboxListResponse<MyMetadata>> {
- *     // Query provider API
- *     return { items: [...], cursor: null };
- *   }
- *
- *   async getOrCreate(options?: SandboxGetOrCreateOptions): Promise<SandboxBackendProtocol> {
- *     if (options?.sandboxId) {
- *       return this.get(options.sandboxId);
- *     }
- *     return this.create();
- *   }
- *
- *   async delete(options: SandboxDeleteOptions): Promise<void> {
- *     // Idempotent - no error if already deleted
- *     await this.client.delete(options.sandboxId);
- *   }
- * }
- *
- * // Usage
- * const provider = new MySandboxProvider();
- * const sandbox = await provider.getOrCreate();
- * const result = await sandbox.execute("echo hello");
- * await provider.delete({ sandboxId: sandbox.id });
+ * // Provider-specific error code type extending the common codes:
+ * type MySandboxErrorCode = SandboxErrorCode | "CUSTOM_ERROR";
  * ```
  */
-export interface SandboxProvider<MetadataT = Record<string, unknown>> {
-  /**
-   * List available sandboxes with optional pagination.
-   *
-   * @param options - Optional list options including cursor for pagination
-   * @returns Paginated list of sandbox metadata
-   *
-   * @example
-   * ```typescript
-   * // First page
-   * const response = await provider.list();
-   * for (const sandbox of response.items) {
-   *   console.log(sandbox.sandboxId);
-   * }
-   *
-   * // Next page if available
-   * if (response.cursor) {
-   *   const nextPage = await provider.list({ cursor: response.cursor });
-   * }
-   * ```
-   */
-  list(options?: SandboxListOptions): Promise<SandboxListResponse<MetadataT>>;
+export type SandboxErrorCode =
+  /** Sandbox has not been initialized - call initialize() first */
+  | "NOT_INITIALIZED"
+  /** Sandbox is already initialized - cannot initialize twice */
+  | "ALREADY_INITIALIZED"
+  /** Command execution timed out */
+  | "COMMAND_TIMEOUT"
+  /** Command execution failed */
+  | "COMMAND_FAILED"
+  /** File operation (read/write) failed */
+  | "FILE_OPERATION_FAILED";
+
+const SANDBOX_ERROR_SYMBOL = Symbol.for("sandbox.error");
+
+/**
+ * Custom error class for sandbox operations.
+ *
+ * @param message - Human-readable error description
+ * @param code - Structured error code for programmatic handling
+ * @returns SandboxError with message and code
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   await sandbox.execute("some command");
+ * } catch (error) {
+ *   if (error instanceof SandboxError) {
+ *     switch (error.code) {
+ *       case "NOT_INITIALIZED":
+ *         await sandbox.initialize();
+ *         break;
+ *       case "COMMAND_TIMEOUT":
+ *         console.error("Command took too long");
+ *         break;
+ *       default:
+ *         throw error;
+ *     }
+ *   }
+ * }
+ * ```
+ */
+export class SandboxError extends Error {
+  /** Symbol for identifying sandbox error instances */
+  [SANDBOX_ERROR_SYMBOL] = true as const;
+
+  /** Error name for instanceof checks and logging */
+  override readonly name: string = "SandboxError";
 
   /**
-   * Get an existing sandbox or create a new one.
+   * Creates a new SandboxError.
    *
-   * If sandboxId is provided, retrieves the existing sandbox. If the sandbox
-   * doesn't exist, throws an error (does NOT create a new one).
-   *
-   * If sandboxId is undefined, creates a new sandbox instance.
-   *
-   * @param options - Optional options including sandboxId to retrieve
-   * @returns A sandbox instance implementing SandboxBackendProtocol
-   * @throws Error if sandboxId is provided but the sandbox doesn't exist
-   *
-   * @example
-   * ```typescript
-   * // Create a new sandbox
-   * const sandbox = await provider.getOrCreate();
-   * console.log(sandbox.id); // "sb_new123"
-   *
-   * // Reconnect to existing sandbox
-   * const existing = await provider.getOrCreate({ sandboxId: "sb_new123" });
-   *
-   * // Use the sandbox
-   * const result = await sandbox.execute("node --version");
-   * ```
+   * @param message - Human-readable error description
+   * @param code - Structured error code for programmatic handling
    */
-  getOrCreate(
-    options?: SandboxGetOrCreateOptions,
-  ): Promise<SandboxBackendProtocol>;
+  constructor(
+    message: string,
+    public readonly code: string,
+    public readonly cause?: Error,
+  ) {
+    super(message);
+    Object.setPrototypeOf(this, SandboxError.prototype);
+  }
 
-  /**
-   * Delete a sandbox instance.
-   *
-   * This permanently destroys the sandbox and all its associated data.
-   * The operation is idempotent - calling delete on a non-existent sandbox
-   * should succeed without raising an error.
-   *
-   * @param options - Options including the sandboxId to delete
-   *
-   * @example
-   * ```typescript
-   * // Simple deletion
-   * await provider.delete({ sandboxId: "sb_123" });
-   *
-   * // Safe to call multiple times (idempotent)
-   * await provider.delete({ sandboxId: "sb_123" }); // No error
-   * ```
-   */
-  delete(options: SandboxDeleteOptions): Promise<void>;
+  static isInstance(error: unknown): error is SandboxError {
+    return (
+      typeof error === "object" &&
+      error !== null &&
+      (error as Record<symbol, unknown>)[SANDBOX_ERROR_SYMBOL] === true
+    );
+  }
 }
 
 /**

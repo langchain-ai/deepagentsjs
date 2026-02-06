@@ -6,6 +6,7 @@
  */
 
 import type { SandboxCreateParams } from "modal";
+import { type SandboxErrorCode, SandboxError } from "deepagents";
 
 /**
  * Fields from SandboxCreateParams that we wrap with a different API:
@@ -162,22 +163,13 @@ export interface ModalSandboxOptions extends BaseSdkOptions {
  * Used to identify specific error conditions and handle them appropriately.
  */
 export type ModalSandboxErrorCode =
-  /** Sandbox has not been initialized - call initialize() first */
-  | "NOT_INITIALIZED"
-  /** Sandbox is already initialized - cannot initialize twice */
-  | "ALREADY_INITIALIZED"
+  | SandboxErrorCode
   /** Authentication failed - check token configuration */
   | "AUTHENTICATION_FAILED"
   /** Failed to create sandbox - check options and quotas */
   | "SANDBOX_CREATION_FAILED"
   /** Sandbox not found - may have been stopped or expired */
   | "SANDBOX_NOT_FOUND"
-  /** Command execution timed out */
-  | "COMMAND_TIMEOUT"
-  /** Command execution failed */
-  | "COMMAND_FAILED"
-  /** File operation (read/write) failed */
-  | "FILE_OPERATION_FAILED"
   /** Resource limits exceeded (CPU, memory, storage) */
   | "RESOURCE_LIMIT_EXCEEDED"
   /** Volume operation failed */
@@ -213,7 +205,7 @@ const MODAL_SANDBOX_ERROR_SYMBOL = Symbol.for("modal.sandbox.error");
  * }
  * ```
  */
-export class ModalSandboxError extends Error {
+export class ModalSandboxError extends SandboxError {
   [MODAL_SANDBOX_ERROR_SYMBOL]: true;
 
   /** Error name for instanceof checks and logging */
@@ -231,7 +223,7 @@ export class ModalSandboxError extends Error {
     public readonly code: ModalSandboxErrorCode,
     public override readonly cause?: Error,
   ) {
-    super(message);
+    super(message, code as SandboxErrorCode, cause);
     // Maintain proper prototype chain for instanceof checks
     Object.setPrototypeOf(this, ModalSandboxError.prototype);
   }

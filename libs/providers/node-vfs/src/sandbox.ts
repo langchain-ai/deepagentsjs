@@ -23,20 +23,12 @@ import {
   type FileDownloadResponse,
   type FileOperationError,
   type FileUploadResponse,
-  type SandboxDeleteOptions,
-  type SandboxGetOrCreateOptions,
-  type SandboxListOptions,
-  type SandboxListResponse,
-  type SandboxProvider,
+  type BackendFactory,
 } from "deepagents";
 
 import { VirtualFileSystem } from "node-vfs-polyfill";
 
-import {
-  VfsSandboxError,
-  type VfsSandboxMetadata,
-  type VfsSandboxOptions,
-} from "./types.js";
+import { VfsSandboxError, type VfsSandboxOptions } from "./types.js";
 
 /**
  * Node.js VFS Sandbox backend for deepagents.
@@ -86,7 +78,7 @@ import {
  */
 export class VfsSandbox extends BaseSandbox {
   /** Private reference to the VirtualFileSystem instance */
-  #vfs: VirtualFileSystem | null = null;
+  #vfs?: VirtualFileSystem;
 
   /** Configuration options for this sandbox */
   #options: VfsSandboxOptions;
@@ -98,7 +90,7 @@ export class VfsSandbox extends BaseSandbox {
   #workingDirectory: string;
 
   /** Temp directory for command execution */
-  #tempDir: string | null = null;
+  #tempDir?: string;
 
   /** Whether the sandbox is initialized */
   #initialized = false;
@@ -108,6 +100,19 @@ export class VfsSandbox extends BaseSandbox {
    */
   get id(): string {
     return this.#id;
+  }
+
+  /**
+   * Get the VirtualFileSystem instance.
+   */
+  get instance(): VirtualFileSystem {
+    if (!this.#vfs) {
+      throw new VfsSandboxError(
+        "VFS not initialized. Call initialize() or use VfsSandbox.create()",
+        "NOT_INITIALIZED",
+      );
+    }
+    return this.#vfs;
   }
 
   /**
@@ -219,7 +224,7 @@ export class VfsSandbox extends BaseSandbox {
     fs.mkdirSync(tempPath, { recursive: true });
 
     // Read VFS directory
-    const entries = this.#vfs!.readdirSync(vfsPath, { withFileTypes: true });
+    const entries = this.instance.readdirSync(vfsPath, { withFileTypes: true });
 
     for (const entry of entries) {
       const vfsEntryPath = path.posix.join(vfsPath, entry.name);
@@ -228,7 +233,7 @@ export class VfsSandbox extends BaseSandbox {
       if (entry.isDirectory()) {
         await this.#syncDirToTemp(vfsEntryPath, tempEntryPath);
       } else {
-        const content = this.#vfs!.readFileSync(vfsEntryPath);
+        const content = this.instance.readFileSync(vfsEntryPath);
         fs.writeFileSync(tempEntryPath, content);
       }
     }
@@ -250,7 +255,7 @@ export class VfsSandbox extends BaseSandbox {
    */
   async #syncDirFromTemp(tempPath: string, vfsPath: string): Promise<void> {
     // Ensure VFS directory exists
-    this.#vfs!.mkdirSync(vfsPath, { recursive: true });
+    this.instance.mkdirSync(vfsPath, { recursive: true });
 
     // Read temp directory
     const entries = fs.readdirSync(tempPath, { withFileTypes: true });
@@ -263,7 +268,7 @@ export class VfsSandbox extends BaseSandbox {
         await this.#syncDirFromTemp(tempEntryPath, vfsEntryPath);
       } else {
         const content = fs.readFileSync(tempEntryPath);
-        this.#vfs!.writeFileSync(vfsEntryPath, content);
+        this.instance.writeFileSync(vfsEntryPath, content);
       }
     }
   }
@@ -367,8 +372,8 @@ export class VfsSandbox extends BaseSandbox {
         const parentDir = path.posix.dirname(fullPath);
 
         // Ensure parent directory exists
-        this.#vfs!.mkdirSync(parentDir, { recursive: true });
-        this.#vfs!.writeFileSync(fullPath, Buffer.from(content));
+        this.instance.mkdirSync(parentDir, { recursive: true });
+        this.instance.writeFileSync(fullPath, Buffer.from(content));
 
         results.push({ path: filePath, error: null });
       } catch (error) {
@@ -393,7 +398,7 @@ export class VfsSandbox extends BaseSandbox {
       try {
         const fullPath = path.posix.join(this.#workingDirectory, filePath);
 
-        if (!this.#vfs!.existsSync(fullPath)) {
+        if (!this.instance.existsSync(fullPath)) {
           results.push({
             path: filePath,
             content: null,
@@ -402,7 +407,7 @@ export class VfsSandbox extends BaseSandbox {
           continue;
         }
 
-        const stat = this.#vfs!.statSync(fullPath);
+        const stat = this.instance.statSync(fullPath);
         if (stat.isDirectory()) {
           results.push({
             path: filePath,
@@ -412,7 +417,7 @@ export class VfsSandbox extends BaseSandbox {
           continue;
         }
 
-        const content = this.#vfs!.readFileSync(fullPath) as Buffer;
+        const content = this.instance.readFileSync(fullPath) as Buffer;
         results.push({
           path: filePath,
           content: new Uint8Array(content),
@@ -443,11 +448,11 @@ export class VfsSandbox extends BaseSandbox {
       } catch {
         // Ignore cleanup errors
       }
-      this.#tempDir = null;
+      this.#tempDir = undefined;
     }
 
     // Clear VFS reference
-    this.#vfs = null;
+    this.#vfs = undefined;
     this.#initialized = false;
     this.#workingDirectory = "/workspace";
   }
@@ -486,10 +491,6 @@ export class VfsSandbox extends BaseSandbox {
     return "invalid_path";
   }
 
-  // ============================================================================
-  // Static Factory Methods
-  // ============================================================================
-
   /**
    * Create and initialize a new VfsSandbox in one step.
    *
@@ -514,12 +515,6 @@ export class VfsSandbox extends BaseSandbox {
     return sandbox;
   }
 }
-
-// ============================================================================
-// Factory Functions
-// ============================================================================
-
-import type { BackendFactory } from "deepagents";
 
 /**
  * Create a backend factory that creates a new VFS Sandbox per invocation.
@@ -571,179 +566,4 @@ export function createVfsSandboxFactoryFromSandbox(
   sandbox: VfsSandbox,
 ): BackendFactory {
   return () => sandbox;
-}
-
-// ============================================================================
-// Sandbox Provider Implementation
-// ============================================================================
-
-/**
- * VFS Sandbox provider for lifecycle management.
- *
- * Implements the `SandboxProvider` interface to provide standardized
- * lifecycle management (list, create, delete) for in-memory VFS Sandboxes.
- *
- * Since VFS sandboxes are in-memory, this provider tracks created sandboxes
- * internally and can list/delete them.
- *
- * ## Basic Usage
- *
- * ```typescript
- * import { VfsSandboxProvider } from "@langchain/vfs-sandbox";
- *
- * const provider = new VfsSandboxProvider({
- *   initialFiles: { "/README.md": "# Hello" },
- * });
- *
- * // Create a new sandbox
- * const sandbox = await provider.getOrCreate();
- * console.log(`Created sandbox: ${sandbox.id}`);
- *
- * // List sandboxes
- * const { items } = await provider.list();
- * console.log(`Active sandboxes: ${items.length}`);
- *
- * // Delete when done
- * await provider.delete({ sandboxId: sandbox.id });
- * ```
- */
-export class VfsSandboxProvider implements SandboxProvider<VfsSandboxMetadata> {
-  /** Configuration options for sandboxes created by this provider */
-  #options: VfsSandboxOptions;
-
-  /** Map of active sandboxes managed by this provider */
-  #sandboxes: Map<string, { sandbox: VfsSandbox; createdAt: string }> =
-    new Map();
-
-  /**
-   * Create a new VfsSandboxProvider.
-   *
-   * @param options - Configuration options applied to new sandboxes
-   *
-   * @example
-   * ```typescript
-   * const provider = new VfsSandboxProvider({
-   *   initialFiles: { "/README.md": "# Hello" },
-   *   timeout: 60000,
-   * });
-   * ```
-   */
-  constructor(options: VfsSandboxOptions = {}) {
-    this.#options = options;
-  }
-
-  /**
-   * List available sandboxes.
-   *
-   * Returns all sandboxes that were created by this provider and
-   * are still active (not deleted).
-   *
-   * @param options - Optional pagination options (cursor not used for in-memory)
-   * @returns Paginated list of sandbox metadata
-   *
-   * @example
-   * ```typescript
-   * const response = await provider.list();
-   * for (const info of response.items) {
-   *   console.log(`Sandbox: ${info.sandboxId}, Status: ${info.metadata?.status}`);
-   * }
-   * ```
-   */
-  async list(
-    options?: SandboxListOptions,
-  ): Promise<SandboxListResponse<VfsSandboxMetadata>> {
-    void options; // Cursor pagination not needed for in-memory store
-
-    const items = Array.from(this.#sandboxes.entries()).map(
-      ([sandboxId, { sandbox, createdAt }]) => ({
-        sandboxId,
-        metadata: {
-          status: sandbox.isRunning
-            ? ("running" as const)
-            : ("stopped" as const),
-          createdAt,
-          workingDirectory: sandbox.workingDirectory,
-        },
-      }),
-    );
-
-    return {
-      items,
-      cursor: null,
-    };
-  }
-
-  /**
-   * Get an existing sandbox or create a new one.
-   *
-   * If `sandboxId` is provided, retrieves the existing sandbox from the
-   * internal map. If the sandbox doesn't exist, throws an error.
-   *
-   * If `sandboxId` is undefined, creates a new VFS sandbox with the
-   * provider's configuration options.
-   *
-   * @param options - Optional options including sandboxId to retrieve
-   * @returns An initialized VfsSandbox instance
-   * @throws {VfsSandboxError} If sandboxId is provided but not found
-   *
-   * @example
-   * ```typescript
-   * // Create new sandbox
-   * const newSandbox = await provider.getOrCreate();
-   *
-   * // Get existing sandbox
-   * const existing = await provider.getOrCreate({ sandboxId: newSandbox.id });
-   * ```
-   */
-  async getOrCreate(options?: SandboxGetOrCreateOptions): Promise<VfsSandbox> {
-    if (options?.sandboxId) {
-      // Get existing sandbox
-      const entry = this.#sandboxes.get(options.sandboxId);
-      if (!entry) {
-        throw new VfsSandboxError(
-          `Sandbox not found: ${options.sandboxId}`,
-          "NOT_INITIALIZED",
-        );
-      }
-      return entry.sandbox;
-    }
-
-    // Create new sandbox
-    const sandbox = await VfsSandbox.create(this.#options);
-    const createdAt = new Date().toISOString();
-
-    // Track the sandbox
-    this.#sandboxes.set(sandbox.id, { sandbox, createdAt });
-
-    return sandbox;
-  }
-
-  /**
-   * Delete a sandbox.
-   *
-   * Stops the sandbox and removes it from the provider's internal tracking.
-   * The operation is idempotent - calling delete on a non-existent sandbox
-   * will succeed without error.
-   *
-   * @param options - Options including the sandboxId to delete
-   *
-   * @example
-   * ```typescript
-   * await provider.delete({ sandboxId: "vfs-sandbox-123" });
-   *
-   * // Safe to call multiple times
-   * await provider.delete({ sandboxId: "vfs-sandbox-123" }); // No error
-   * ```
-   */
-  async delete(options: SandboxDeleteOptions): Promise<void> {
-    const entry = this.#sandboxes.get(options.sandboxId);
-
-    if (entry) {
-      // Stop the sandbox and remove from tracking
-      await entry.sandbox.stop();
-      this.#sandboxes.delete(options.sandboxId);
-    }
-
-    // Idempotent - succeed silently if not found
-  }
 }

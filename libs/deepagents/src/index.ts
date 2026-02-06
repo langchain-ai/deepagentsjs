@@ -84,6 +84,7 @@ export {
   CompositeBackend,
   BaseSandbox,
   isSandboxBackend,
+  SandboxError,
   type BackendProtocol,
   type BackendFactory,
   type FileInfo,
@@ -104,5 +105,6 @@ export {
   type SandboxListOptions,
   type SandboxGetOrCreateOptions,
   type SandboxDeleteOptions,
-  type SandboxProvider,
+  // Sandbox error types
+  type SandboxErrorCode,
 } from "./backends/index.js";
