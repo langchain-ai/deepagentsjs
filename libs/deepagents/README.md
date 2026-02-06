@@ -1,5 +1,5 @@
 <div align="center">
-  <a href="https://docs.langchain.com/oss/python/deepagents/overview#deep-agents-overview">
+  <a href="https://docs.langchain.com/oss/javascript/deepagents/overview">
     <picture>
       <source media="(prefers-color-scheme: light)" srcset=".github/images/logo-dark.svg">
       <source media="(prefers-color-scheme: dark)" srcset=".github/images/logo-light.svg">
@@ -19,22 +19,7 @@
   <a href="https://x.com/LangChain_JS" target="_blank"><img src="https://img.shields.io/twitter/url/https/twitter.com/LangChain_JS.svg?style=social&label=Follow%20%40LangChain_JS" alt="Twitter / X"></a>
 </div>
 
-Using an LLM to call tools in a loop is the simplest form of an agent. This architecture, however, can yield agents that are "shallow" and fail to plan and act over longer, more complex tasks.
-
-Applications like "Deep Research", "Manus", and "Claude Code" have gotten around this limitation by implementing a combination of four things:
-a **planning tool**, **sub agents**, access to a **file system**, and a **detailed prompt**.
-
-`deepagents` is a TypeScript package that implements these in a general purpose way so that you can easily create a Deep Agent for your application.
-
-> 💡 **Tip:** Looking for the Python version of this package? See [langchain-ai/deepagents](https://github.com/langchain-ai/deepagents)
-
-<div align="center">
-
-[Documentation](https://docs.langchain.com/oss/javascript/deepagents/overview) | [Examples](./examples) | [Report Bug](https://github.com/langchain-ai/deepagentsjs/issues) | [Request Feature](https://github.com/langchain-ai/deepagentsjs/issues)
-
-</div>
-
-## 📖 Overview
+<br />
 
 Using an LLM to call tools in a loop is the simplest form of an agent. However, this architecture can yield agents that are "shallow" and fail to plan and act over longer, more complex tasks.
 
@@ -46,6 +31,37 @@ Applications like **Deep Research**, **Manus**, and **Claude Code** have overcom
 4. **Detailed Prompts** - Context-rich instructions
 
 **Deep Agents** is a TypeScript package that implements these patterns in a general-purpose way, enabling you to easily create sophisticated agents for your applications.
+
+> 💡 **Tip:** Looking for the Python version of this package? See [langchain-ai/deepagents](https://github.com/langchain-ai/deepagents)
+
+<div align="center">
+
+[Documentation](https://docs.langchain.com/oss/javascript/deepagents/overview) | [Examples](./examples) | [Report Bug](https://github.com/langchain-ai/deepagentsjs/issues) | [Request Feature](https://github.com/langchain-ai/deepagentsjs/issues)
+
+</div>
+
+## Table of Contents
+
+- [Table of Contents](#table-of-contents)
+- [✨ Features](#-features)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Core Capabilities](#core-capabilities)
+- [Customizing Deep Agents](#customizing-deep-agents)
+  - [`model`](#model)
+  - [`systemPrompt`](#systemprompt)
+  - [`tools`](#tools)
+  - [`middleware`](#middleware)
+  - [`subagents`](#subagents)
+    - [Skills Inheritance](#skills-inheritance)
+    - [Using SubAgent](#using-subagent)
+  - [`interruptOn`](#interrupton)
+  - [`backend`](#backend)
+  - [Sandbox Execution](#sandbox-execution)
+- [Deep Agents Middleware](#deep-agents-middleware)
+  - [TodoListMiddleware](#todolistmiddleware)
+  - [FilesystemMiddleware](#filesystemmiddleware)
+  - [SubAgentMiddleware](#subagentmiddleware)
 
 ## ✨ Features
 
@@ -77,7 +93,7 @@ pnpm add deepagents
 Make sure to set `TAVILY_API_KEY` in your environment. You can generate one [here](https://www.tavily.com/).
 
 ```typescript
-import { tool } from "langchain";
+import { tool } from "@langchain/core/tools";
 import { TavilySearch } from "@langchain/tavily";
 import { createDeepAgent } from "deepagents";
 import { z } from "zod";
@@ -196,7 +212,7 @@ const agent = createDeepAgent({
 // Using OpenAI
 const agent2 = createDeepAgent({
   model: new ChatOpenAI({
-    model: "gpt-5",
+    model: "gpt-4o",
     temperature: 0,
   }),
 });
@@ -224,7 +240,7 @@ const agent = createDeepAgent({
 Just like with tool-calling agents, you can provide a deep agent with a set of tools that it has access to.
 
 ```typescript
-import { tool } from "langchain";
+import { tool } from "@langchain/core/tools";
 import { TavilySearch } from "@langchain/tavily";
 import { createDeepAgent } from "deepagents";
 import { z } from "zod";
@@ -274,9 +290,8 @@ const agent = createDeepAgent({
 `createDeepAgent` is implemented with middleware that can be customized. You can provide additional middleware to extend functionality, add tools, or implement custom hooks.
 
 ```typescript
-import { tool } from "langchain";
-import { createDeepAgent } from "deepagents";
-import type { AgentMiddleware } from "langchain";
+import { tool } from "@langchain/core/tools";
+import { createDeepAgent, type AgentMiddleware } from "deepagents";
 import { z } from "zod";
 
 const getWeather = tool(
@@ -378,7 +393,7 @@ This design ensures context isolation - custom subagents only have access to the
 #### Using SubAgent
 
 ```typescript
-import { tool } from "langchain";
+import { tool } from "@langchain/core/tools";
 import { TavilySearch } from "@langchain/tavily";
 import { createDeepAgent, type SubAgent } from "deepagents";
 import { z } from "zod";
@@ -441,7 +456,7 @@ A common reality for agents is that some tool operations may be sensitive and re
 These tool configs are passed to our prebuilt [HITL middleware](https://docs.langchain.com/oss/typescript/langchain/middleware#human-in-the-loop) so that the agent pauses execution and waits for feedback from the user before executing configured tools.
 
 ```typescript
-import { tool } from "langchain";
+import { tool } from "@langchain/core/tools";
 import { createDeepAgent } from "deepagents";
 import { z } from "zod";
 
@@ -609,7 +624,8 @@ Planning is integral to solving complex problems. If you've used claude code rec
 **todoListMiddleware** provides your agent with a tool specifically for updating this To-Do list. Before, and while it executes a multi-part task, the agent is prompted to use the write_todos tool to keep track of what its doing, and what still needs to be done.
 
 ```typescript
-import { createAgent, todoListMiddleware } from "langchain";
+import { createAgent } from "@langchain/langgraph/prebuilt";
+import { todoListMiddleware } from "deepagents";
 
 // todoListMiddleware is included by default in createDeepAgent
 // You can customize it if building a custom agent
@@ -639,7 +655,7 @@ Context engineering is one of the main challenges in building effective agents. 
 - **execute**: Run shell commands (only available when using a `SandboxBackendProtocol`)
 
 ```typescript
-import { createAgent } from "langchain";
+import { createAgent } from "@langchain/langgraph/prebuilt";
 import { createFilesystemMiddleware } from "deepagents";
 
 // FilesystemMiddleware is included by default in createDeepAgent
@@ -666,8 +682,8 @@ Handing off tasks to subagents is a great way to isolate context, keeping the co
 A subagent is defined with a name, description, system prompt, and tools. You can also provide a subagent with a custom model, or with additional middleware. This can be particularly useful when you want to give the subagent an additional state key to share with the main agent.
 
 ```typescript
-import { tool } from "langchain";
-import { createAgent } from "langchain";
+import { tool } from "@langchain/core/tools";
+import { createAgent } from "@langchain/langgraph/prebuilt";
 import { createSubAgentMiddleware, type SubAgent } from "deepagents";
 import { z } from "zod";
 

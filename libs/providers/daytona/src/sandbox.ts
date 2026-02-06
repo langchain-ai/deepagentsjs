@@ -101,7 +101,7 @@ export class DaytonaSandbox extends BaseSandbox {
    * const daytonaSdk = sandbox.sandbox; // Access the raw SDK
    * ```
    */
-  get sandbox(): Sandbox {
+  get instance(): Sandbox {
     if (!this.#sandbox) {
       throw new DaytonaSandboxError(
         "Sandbox not initialized. Call initialize() or use DaytonaSandbox.create()",
@@ -109,6 +109,27 @@ export class DaytonaSandbox extends BaseSandbox {
       );
     }
     return this.#sandbox;
+  }
+
+  /**
+   * Get the underlying Daytona client instance.
+   *
+   * @throws {DaytonaSandboxError} If the client is not initialized
+   *
+   * @example
+   * ```typescript
+   * const sandbox = await DaytonaSandbox.create();
+   * const daytonaClient = sandbox.client; // Access the raw Daytona client
+   * ```
+   */
+  get client(): Daytona {
+    if (!this.#daytona) {
+      throw new DaytonaSandboxError(
+        "Daytona client not initialized. Call initialize() or use DaytonaSandbox.create()",
+        "NOT_INITIALIZED",
+      );
+    }
+    return this.#daytona;
   }
 
   /**
@@ -323,7 +344,7 @@ export class DaytonaSandbox extends BaseSandbox {
    * ```
    */
   async execute(command: string): Promise<ExecuteResponse> {
-    const sandbox = this.sandbox; // Throws if not initialized
+    const sandbox = this.instance; // Throws if not initialized
 
     try {
       const response = await sandbox.process.executeCommand(
@@ -377,7 +398,7 @@ export class DaytonaSandbox extends BaseSandbox {
   async uploadFiles(
     files: Array<[string, Uint8Array]>,
   ): Promise<FileUploadResponse[]> {
-    const sandbox = this.sandbox; // Throws if not initialized
+    const sandbox = this.instance; // Throws if not initialized
     const results: FileUploadResponse[] = [];
 
     for (const [path, content] of files) {
@@ -422,7 +443,7 @@ export class DaytonaSandbox extends BaseSandbox {
    * ```
    */
   async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
-    const sandbox = this.sandbox; // Throws if not initialized
+    const sandbox = this.instance; // Throws if not initialized
     const results: FileDownloadResponse[] = [];
 
     for (const path of paths) {
@@ -532,7 +553,7 @@ export class DaytonaSandbox extends BaseSandbox {
    * ```
    */
   async getWorkDir(): Promise<string> {
-    const sandbox = this.sandbox;
+    const sandbox = this.instance;
     const workDir = await sandbox.getWorkDir();
     return workDir ?? "/home/daytona";
   }
@@ -549,7 +570,7 @@ export class DaytonaSandbox extends BaseSandbox {
    * ```
    */
   async getUserHomeDir(): Promise<string> {
-    const sandbox = this.sandbox;
+    const sandbox = this.instance;
     const homeDir = await sandbox.getUserHomeDir();
     return homeDir ?? "/home/daytona";
   }
@@ -591,10 +612,6 @@ export class DaytonaSandbox extends BaseSandbox {
 
     return "invalid_path";
   }
-
-  // ============================================================================
-  // Static Factory Methods
-  // ============================================================================
 
   /**
    * Create and initialize a new DaytonaSandbox in one step.
@@ -639,8 +656,8 @@ export class DaytonaSandbox extends BaseSandbox {
    * const result = await sandbox.execute("ls -la");
    * ```
    */
-  static async connect(
-    sandboxId: string,
+  static async fromId(
+    id: string,
     options?: Pick<DaytonaSandboxOptions, "auth" | "target" | "timeout">,
   ): Promise<DaytonaSandbox> {
     // Get authentication credentials
@@ -662,26 +679,36 @@ export class DaytonaSandbox extends BaseSandbox {
         target: credentials.target,
       });
 
-      const existingSandbox = await daytona.get(sandboxId);
+      const existingSandbox = await daytona.get(id);
 
       const daytonaSandbox = new DaytonaSandbox(options);
       // Set the existing sandbox directly (bypass initialize)
-      daytonaSandbox.#setFromExisting(daytona, existingSandbox, sandboxId);
+      daytonaSandbox.#setFromExisting(daytona, existingSandbox, id);
 
       return daytonaSandbox;
     } catch (error) {
       throw new DaytonaSandboxError(
-        `Sandbox not found: ${sandboxId}`,
+        `Sandbox not found: ${id}`,
         "SANDBOX_NOT_FOUND",
         error instanceof Error ? error : undefined,
       );
     }
   }
-}
 
-// ============================================================================
-// Factory Functions
-// ============================================================================
+  /**
+   * Get a running sandbox by name from a deployed app.
+   *
+   * @param name - The name of the sandbox
+   * @param options - Optional auth configuration
+   * @returns A connected sandbox instance
+   */
+  static async fromName(
+    name: string,
+    options?: Pick<DaytonaSandboxOptions, "auth">,
+  ): Promise<DaytonaSandbox> {
+    return DaytonaSandbox.fromId(name, options);
+  }
+}
 
 /**
  * Async factory function type for creating Daytona Sandbox instances.

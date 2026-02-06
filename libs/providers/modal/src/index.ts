@@ -37,8 +37,13 @@
  * @packageDocumentation
  */
 
-// Export main class
-export { ModalSandbox } from "./sandbox.js";
+// Export main class and factory functions
+export {
+  ModalSandbox,
+  createModalSandboxFactory,
+  createModalSandboxFactoryFromSandbox,
+} from "./sandbox.js";
+export type { AsyncModalSandboxFactory } from "./sandbox.js";
 
 // Export authentication utilities
 export { getAuthCredentials } from "./auth.js";
