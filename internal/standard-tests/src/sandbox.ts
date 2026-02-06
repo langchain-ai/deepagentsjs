@@ -284,7 +284,7 @@ export function sandboxStandardTests<T extends SandboxInstance>(
 
             expect(tmp.isRunning).toBe(false);
 
-            await tmp.initialize!();
+            await withRetry(() => tmp.initialize!());
 
             expect(tmp.isRunning).toBe(true);
             expect(tmp.id).toBeDefined();
