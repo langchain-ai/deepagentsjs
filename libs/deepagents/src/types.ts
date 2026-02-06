@@ -20,7 +20,10 @@ import type {
   BaseStore,
 } from "@langchain/langgraph-checkpoint";
 
-import type { SubAgent, FilesystemMiddlewareOptions } from "./middleware/index.js";
+import type {
+  SubAgent,
+  FilesystemMiddlewareOptions,
+} from "./middleware/index.js";
 import type { BackendProtocol } from "./backends/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type { AnnotationRoot } from "@langchain/langgraph";
@@ -370,7 +373,7 @@ export interface CreateDeepAgentParams<
    * });
    * ```
    */
-  filesystemOptions?: Omit<FilesystemMiddlewareOptions, 'backend'>;
+  filesystemOptions?: Omit<FilesystemMiddlewareOptions, "backend">;
   /**
    * Optional list of skill source paths (e.g., `["/skills/user/", "/skills/project/"]`).
    *
