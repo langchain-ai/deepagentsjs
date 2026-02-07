@@ -137,7 +137,8 @@ function parseStatLine(
     size,
     mtime,
     // GNU find %y outputs "d"; BSD stat %Sp outputs "drwxr-xr-x"
-    isDir: fileType === "d" || fileType === "directory" || fileType.startsWith("d"),
+    isDir:
+      fileType === "d" || fileType === "directory" || fileType.startsWith("d"),
     fullPath,
   };
 }
