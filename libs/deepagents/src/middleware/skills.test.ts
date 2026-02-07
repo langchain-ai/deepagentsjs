@@ -15,6 +15,7 @@ import {
 import { createFileData } from "../backends/utils.js";
 import { createDeepAgent } from "../agent.js";
 import { createMockBackend } from "./test.js";
+import type { BackendProtocol } from "../backends/protocol.js";
 
 const VALID_SKILL_CONTENT = `---
 name: web-research
@@ -251,6 +252,480 @@ This skill has no valid frontmatter.`;
       expect(backendFactory).toHaveBeenCalled();
       expect(result?.skillsMetadata).toHaveLength(1);
     });
+
+    it("should skip skills exceeding MAX_SKILL_FILE_SIZE (10MB)", async () => {
+      // Create a skill content larger than 10MB
+      const largeFrontmatter = `---
+name: large-skill
+description: A skill with very large content
+---
+`;
+      const largeContent = largeFrontmatter + "x".repeat(10 * 1024 * 1024 + 1); // 10MB + 1 byte
+
+      const mockBackend = createMockBackend({
+        files: {
+          "/skills/user/large-skill/SKILL.md": largeContent,
+        },
+        directories: {
+          "/skills/user/": [{ name: "large-skill", type: "directory" }],
+        },
+      });
+
+      const middleware = createSkillsMiddleware({
+        backend: mockBackend,
+        sources: ["/skills/user/"],
+      });
+
+      const consoleWarnSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({});
+
+      // Should skip the large skill
+      expect(result?.skillsMetadata).toEqual([]);
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("content too large"),
+      );
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it("should continue loading from other sources when one source fails", async () => {
+      const mockBackend = createMockBackend({
+        files: {
+          "/skills/good/web-research/SKILL.md": VALID_SKILL_CONTENT,
+        },
+        directories: {
+          "/skills/good/": [{ name: "web-research", type: "directory" }],
+          // /skills/bad/ not in directories, so lsInfo will fail
+        },
+      });
+
+      const middleware = createSkillsMiddleware({
+        backend: mockBackend,
+        sources: ["/skills/bad/", "/skills/good/"],
+      });
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({});
+
+      // Should load from /skills/good/ even though /skills/bad/ failed
+      expect(result?.skillsMetadata).toHaveLength(1);
+      expect(result?.skillsMetadata[0].name).toBe("web-research");
+    });
+
+    it("should use backend.read() fallback when downloadFiles is not available", async () => {
+      const mockBackend = {
+        async lsInfo(dirPath: string) {
+          if (dirPath === "/skills/user/") {
+            return [
+              {
+                path: "web-research/",
+                is_dir: true,
+              },
+            ];
+          }
+          return [];
+        },
+        async read(path: string) {
+          if (path === "/skills/user/web-research/SKILL.md") {
+            return VALID_SKILL_CONTENT;
+          }
+          return "Error: file not found";
+        },
+        // downloadFiles is NOT defined
+        readFiles: vi.fn(),
+        write: vi.fn(),
+        edit: vi.fn(),
+        grep: vi.fn(),
+      } as unknown as BackendProtocol;
+
+      const middleware = createSkillsMiddleware({
+        backend: mockBackend,
+        sources: ["/skills/user/"],
+      });
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({});
+
+      expect(result?.skillsMetadata).toHaveLength(1);
+      expect(result?.skillsMetadata[0].name).toBe("web-research");
+    });
+
+    it("should skip skill when backend.read() returns error", async () => {
+      const mockBackend = {
+        async lsInfo(dirPath: string) {
+          if (dirPath === "/skills/user/") {
+            return [
+              {
+                path: "broken-skill/",
+                is_dir: true,
+              },
+            ];
+          }
+          return [];
+        },
+        async read(_path: string) {
+          return "Error: permission denied";
+        },
+        readFiles: vi.fn(),
+        write: vi.fn(),
+        edit: vi.fn(),
+        grep: vi.fn(),
+      } as unknown as BackendProtocol;
+
+      const middleware = createSkillsMiddleware({
+        backend: mockBackend,
+        sources: ["/skills/user/"],
+      });
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({});
+
+      // Should skip the skill that returned error
+      expect(result?.skillsMetadata).toEqual([]);
+    });
+
+    it("should not reload when skills are already loaded", async () => {
+      const mockBackend = createMockBackend({
+        files: {
+          "/skills/user/web-research/SKILL.md": VALID_SKILL_CONTENT,
+        },
+        directories: {
+          "/skills/user/": [{ name: "web-research", type: "directory" }],
+        },
+      });
+
+      const middleware = createSkillsMiddleware({
+        backend: mockBackend,
+        sources: ["/skills/user/"],
+      });
+
+      // First call - should load skills
+      // @ts-expect-error - typing issue in LangChain
+      const result1 = await middleware.beforeAgent?.({});
+      expect(result1?.skillsMetadata).toHaveLength(1);
+
+      // Second call - should return undefined (already loaded in closure)
+      // @ts-expect-error - typing issue in LangChain
+      const result2 = await middleware.beforeAgent?.({});
+      expect(result2).toBeUndefined();
+    });
+
+    it("should skip reload when skillsMetadata exists in checkpoint state", async () => {
+      const mockBackend = createMockBackend({
+        files: {},
+        directories: {},
+      });
+
+      const middleware = createSkillsMiddleware({
+        backend: mockBackend,
+        sources: ["/skills/user/"],
+      });
+
+      // Simulate checkpoint restore scenario
+      const checkpointState = {
+        skillsMetadata: [
+          {
+            name: "restored-skill",
+            description: "Restored from checkpoint",
+            path: "/skills/user/restored-skill/SKILL.md",
+          },
+        ],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(checkpointState);
+
+      // Should return undefined (not reload)
+      expect(result).toBeUndefined();
+    });
+
+    it("should truncate description exceeding 1024 characters", async () => {
+      const longDescription = "A".repeat(1100); // 1100 chars (exceeds 1024 limit)
+      const skillContent = `---
+name: long-desc-skill
+description: ${longDescription}
+---
+
+# Long Description Skill`;
+
+      const mockBackend = createMockBackend({
+        files: {
+          "/skills/user/long-desc-skill/SKILL.md": skillContent,
+        },
+        directories: {
+          "/skills/user/": [{ name: "long-desc-skill", type: "directory" }],
+        },
+      });
+
+      const middleware = createSkillsMiddleware({
+        backend: mockBackend,
+        sources: ["/skills/user/"],
+      });
+
+      const consoleWarnSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({});
+
+      // Should truncate to 1024 characters
+      expect(result?.skillsMetadata).toHaveLength(1);
+      expect(result?.skillsMetadata[0].description).toHaveLength(1024);
+      expect(result?.skillsMetadata[0].description).toBe("A".repeat(1024));
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Description exceeds 1024 characters"),
+      );
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it("should warn when skill name does not match directory name", async () => {
+      const skillContent = `---
+name: different-name
+description: Skill with mismatched name
+---
+
+# Mismatched Name Skill`;
+
+      const mockBackend = createMockBackend({
+        files: {
+          "/skills/user/actual-dir-name/SKILL.md": skillContent,
+        },
+        directories: {
+          "/skills/user/": [{ name: "actual-dir-name", type: "directory" }],
+        },
+      });
+
+      const middleware = createSkillsMiddleware({
+        backend: mockBackend,
+        sources: ["/skills/user/"],
+      });
+
+      const consoleWarnSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({});
+
+      // Should still load the skill (warning only, backwards compatible)
+      expect(result?.skillsMetadata).toHaveLength(1);
+      expect(result?.skillsMetadata[0].name).toBe("different-name");
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("does not follow Agent Skills specification"),
+      );
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("must match directory name"),
+      );
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it("should warn when skill name has invalid format", async () => {
+      const skillContent = `---
+name: Invalid_Name_With_Underscores
+description: Skill with invalid name format
+---
+
+# Invalid Name Skill`;
+
+      const mockBackend = createMockBackend({
+        files: {
+          "/skills/user/Invalid_Name_With_Underscores/SKILL.md": skillContent,
+        },
+        directories: {
+          "/skills/user/": [
+            { name: "Invalid_Name_With_Underscores", type: "directory" },
+          ],
+        },
+      });
+
+      const middleware = createSkillsMiddleware({
+        backend: mockBackend,
+        sources: ["/skills/user/"],
+      });
+
+      const consoleWarnSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({});
+
+      // Should still load the skill (warning only)
+      expect(result?.skillsMetadata).toHaveLength(1);
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("does not follow Agent Skills specification"),
+      );
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("lowercase alphanumeric with single hyphens"),
+      );
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it("should parse license and compatibility from frontmatter", async () => {
+      const skillContent = `---
+name: licensed-skill
+description: A skill with license and compatibility info
+license: MIT
+compatibility: node >= 18
+---
+
+# Licensed Skill`;
+
+      const mockBackend = createMockBackend({
+        files: {
+          "/skills/user/licensed-skill/SKILL.md": skillContent,
+        },
+        directories: {
+          "/skills/user/": [{ name: "licensed-skill", type: "directory" }],
+        },
+      });
+
+      const middleware = createSkillsMiddleware({
+        backend: mockBackend,
+        sources: ["/skills/user/"],
+      });
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({});
+
+      expect(result?.skillsMetadata).toHaveLength(1);
+      expect(result?.skillsMetadata[0].license).toBe("MIT");
+      expect(result?.skillsMetadata[0].compatibility).toBe("node >= 18");
+    });
+
+    it("should parse allowed-tools from frontmatter", async () => {
+      const skillContent = `---
+name: tools-skill
+description: A skill with allowed tools
+allowed-tools: read_file write_file grep
+---
+
+# Tools Skill`;
+
+      const mockBackend = createMockBackend({
+        files: {
+          "/skills/user/tools-skill/SKILL.md": skillContent,
+        },
+        directories: {
+          "/skills/user/": [{ name: "tools-skill", type: "directory" }],
+        },
+      });
+
+      const middleware = createSkillsMiddleware({
+        backend: mockBackend,
+        sources: ["/skills/user/"],
+      });
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({});
+
+      expect(result?.skillsMetadata).toHaveLength(1);
+      expect(result?.skillsMetadata[0].allowedTools).toEqual([
+        "read_file",
+        "write_file",
+        "grep",
+      ]);
+    });
+
+    it("should skip skill with YAML parse error", async () => {
+      const skillContent = `---
+name: broken-yaml
+description: [invalid yaml syntax: unclosed bracket
+---
+
+# Broken YAML Skill`;
+
+      const mockBackend = createMockBackend({
+        files: {
+          "/skills/user/broken-yaml/SKILL.md": skillContent,
+        },
+        directories: {
+          "/skills/user/": [{ name: "broken-yaml", type: "directory" }],
+        },
+      });
+
+      const middleware = createSkillsMiddleware({
+        backend: mockBackend,
+        sources: ["/skills/user/"],
+      });
+
+      const consoleWarnSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({});
+
+      // Should skip the skill with YAML error
+      expect(result?.skillsMetadata).toEqual([]);
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Invalid YAML"),
+        expect.anything(),
+      );
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it("should normalize Unix paths without trailing slash", async () => {
+      // Unix paths use forward slashes
+      const mockBackend = createMockBackend({
+        files: {
+          "/skills/user/web-research/SKILL.md": VALID_SKILL_CONTENT,
+        },
+        directories: {
+          "/skills/user/": [{ name: "web-research", type: "directory" }],
+        },
+      });
+
+      const middleware = createSkillsMiddleware({
+        backend: mockBackend,
+        sources: ["/skills/user"], // No trailing slash
+      });
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({});
+
+      // Should normalize path (adding trailing /) and load skill successfully
+      expect(result?.skillsMetadata).toHaveLength(1);
+      expect(result?.skillsMetadata[0].name).toBe("web-research");
+      expect(result?.skillsMetadata[0].path).toBe(
+        "/skills/user/web-research/SKILL.md",
+      );
+    });
+
+    it("should handle Windows-style backslash paths", async () => {
+      const mockBackend = createMockBackend({
+        files: {
+          "C:\\skills\\user\\web-research\\SKILL.md": VALID_SKILL_CONTENT,
+        },
+        directories: {
+          "C:\\skills\\user\\": [{ name: "web-research", type: "directory" }],
+        },
+      });
+
+      const middleware = createSkillsMiddleware({
+        backend: mockBackend,
+        sources: ["C:\\skills\\user"], // No trailing backslash
+      });
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({});
+
+      // Should normalize path (adding trailing \) and load skill successfully
+      expect(result?.skillsMetadata).toHaveLength(1);
+      expect(result?.skillsMetadata[0].name).toBe("web-research");
+      expect(result?.skillsMetadata[0].path).toBe(
+        "C:\\skills\\user\\web-research\\SKILL.md",
+      );
+    });
   });
 
   describe("wrapModelCall", () => {
@@ -447,6 +922,49 @@ This skill has no valid frontmatter.`;
       expect(modifiedRequest.systemPrompt).toContain("code-review");
       expect(modifiedRequest.systemPrompt).toContain(
         "You are a helpful assistant",
+      );
+    });
+
+    it("should restore skills from checkpoint and inject into prompt", async () => {
+      const mockBackend = createMockBackend({
+        files: {},
+        directories: {},
+      });
+
+      const middleware = createSkillsMiddleware({
+        backend: mockBackend,
+        sources: ["/skills/user/"],
+      });
+
+      // Simulate checkpoint restore scenario
+      const checkpointState = {
+        skillsMetadata: [
+          {
+            name: "restored-skill",
+            description: "Restored from checkpoint",
+            path: "/skills/user/restored-skill/SKILL.md",
+          },
+        ],
+      };
+
+      // Step 1: beforeAgent should skip reload when skillsMetadata exists
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(checkpointState);
+      expect(result).toBeUndefined();
+
+      // Step 2: wrapModelCall should use the restored skills from state
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request: any = {
+        systemPrompt: "Base prompt",
+        state: checkpointState,
+      };
+
+      middleware.wrapModelCall!(request, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      expect(modifiedRequest.systemPrompt).toContain("restored-skill");
+      expect(modifiedRequest.systemPrompt).toContain(
+        "Restored from checkpoint",
       );
     });
   });
