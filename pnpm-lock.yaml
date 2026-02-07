@@ -123,6 +123,10 @@ importers:
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@25.2.0)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+    devDependencies:
+      deepagents:
+        specifier: workspace:*
+        version: link:../../libs/deepagents
 
   libs/cli:
     devDependencies:

@@ -101,11 +101,18 @@ function globToPathRegex(pattern: string): RegExp {
 }
 
 /**
- * Parse a single line of stat output in the format: size\tmtime\ttype\tpath
+ * Parse a single line of stat/find output in the format: size\tmtime\ttype\tpath
  *
  * The first three tab-delimited fields are always fixed (number, number, string),
  * so we safely take everything after the third tab as the file path — even if the
  * path itself contains tabs.
+ *
+ * The type field varies by platform / tool:
+ * - GNU find -printf %y: single letter "d", "f", "l"
+ * - BSD stat -f %Sp: permission strings like "drwxr-xr-x", "-rw-r--r--"
+ *
+ * The mtime field may be a float (GNU find %T@ → "1234567890.0000000000")
+ * or an integer (BSD stat %m → "1234567890"); parseInt handles both.
  */
 function parseStatLine(
   line: string,
@@ -129,31 +136,51 @@ function parseStatLine(
   return {
     size,
     mtime,
-    isDir: fileType === "directory",
+    // GNU find %y outputs "d"; BSD stat %Sp outputs "drwxr-xr-x"
+    isDir:
+      fileType === "d" || fileType === "directory" || fileType.startsWith("d"),
     fullPath,
   };
 }
 
 /**
- * Pure POSIX shell command for listing directory contents with metadata.
- * Uses find -maxdepth 1 + stat — works on any Linux including Alpine (busybox).
+ * Shell command for listing directory contents with metadata.
+ *
+ * Detects GNU find (Linux) vs BSD find (macOS) at runtime:
+ * - GNU find: uses built-in `-printf` (no external stat needed)
+ * - BSD find: uses `find -exec stat -f ...` (macOS)
  *
  * Output format per line: size\tmtime\ttype\tpath
  */
 function buildLsCommand(dirPath: string): string {
   const quotedPath = shellQuote(dirPath);
-  return `find ${quotedPath} -maxdepth 1 -not -path ${quotedPath} -exec stat -c '%s\\t%Y\\t%F\\t%n' {} + 2>/dev/null || true`;
+  const findBase = `find ${quotedPath} -maxdepth 1 -not -path ${quotedPath}`;
+  // Probe: GNU find supports -printf; BSD find does not.
+  return (
+    `if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then ` +
+    `${findBase} -printf '%s\\t%T@\\t%y\\t%p\\n' 2>/dev/null; ` +
+    `else ` +
+    `${findBase} -exec stat -f '%z\t%m\t%Sp\t%N' {} + 2>/dev/null; ` +
+    `fi || true`
+  );
 }
 
 /**
- * Pure POSIX shell command for listing files recursively with metadata.
- * Uses find + stat — works on any Linux including Alpine (busybox).
+ * Shell command for listing files recursively with metadata.
+ * Same detection logic as buildLsCommand (GNU -printf vs BSD stat -f).
  *
  * Output format per line: size\tmtime\ttype\tpath
  */
 function buildFindCommand(searchPath: string): string {
   const quotedPath = shellQuote(searchPath);
-  return `find ${quotedPath} -not -path ${quotedPath} -exec stat -c '%s\\t%Y\\t%F\\t%n' {} + 2>/dev/null || true`;
+  const findBase = `find ${quotedPath} -not -path ${quotedPath}`;
+  return (
+    `if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then ` +
+    `${findBase} -printf '%s\\t%T@\\t%y\\t%p\\n' 2>/dev/null; ` +
+    `else ` +
+    `${findBase} -exec stat -f '%z\t%m\t%Sp\t%N' {} + 2>/dev/null; ` +
+    `fi || true`
+  );
 }
 
 /**
@@ -288,6 +315,9 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     offset: number = 0,
     limit: number = 500,
   ): Promise<string> {
+    // limit=0 means return nothing
+    if (limit === 0) return "";
+
     const command = buildReadCommand(filePath, offset, limit);
     const result = await this.execute(command);
 
