@@ -1,6 +1,6 @@
 {
   "name": "@langchain/deno",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Deno Sandbox backend for deepagents",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -44,6 +44,7 @@
   },
   "devDependencies": {
     "deepagents": "workspace:*",
+    "@langchain/standard-tests": "workspace:*",
     "@tsconfig/recommended": "^1.0.13",
     "@types/node": "^25.1.0",
     "@vitest/coverage-v8": "^4.0.18",

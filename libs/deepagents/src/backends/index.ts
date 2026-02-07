@@ -27,11 +27,12 @@ export type {
   SandboxListOptions,
   SandboxGetOrCreateOptions,
   SandboxDeleteOptions,
-  SandboxProvider,
+  // Sandbox error types
+  SandboxErrorCode,
 } from "./protocol.js";
 
-// Export type guard
-export { isSandboxBackend } from "./protocol.js";
+// Export type guard and error class
+export { isSandboxBackend, SandboxError } from "./protocol.js";
 
 export { StateBackend } from "./state.js";
 export { StoreBackend } from "./store.js";

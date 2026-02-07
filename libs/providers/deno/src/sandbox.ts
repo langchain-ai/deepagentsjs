@@ -97,7 +97,7 @@ export class DenoSandbox extends BaseSandbox {
    * const denoSdk = sandbox.sandbox; // Access the raw SDK
    * ```
    */
-  get sandbox(): Sandbox {
+  get instance(): Sandbox {
     if (!this.#sandbox) {
       throw new DenoSandboxError(
         "Sandbox not initialized. Call initialize() or use DenoSandbox.create()",
@@ -267,7 +267,7 @@ export class DenoSandbox extends BaseSandbox {
    * ```
    */
   async execute(command: string): Promise<ExecuteResponse> {
-    const sandbox = this.sandbox; // Throws if not initialized
+    const sandbox = this.instance; // Throws if not initialized
 
     try {
       // Use spawn with bash to execute the command
@@ -324,7 +324,7 @@ export class DenoSandbox extends BaseSandbox {
   async uploadFiles(
     files: Array<[string, Uint8Array]>,
   ): Promise<FileUploadResponse[]> {
-    const sandbox = this.sandbox; // Throws if not initialized
+    const sandbox = this.instance; // Throws if not initialized
     const results: FileUploadResponse[] = [];
 
     for (const [path, content] of files) {
@@ -374,7 +374,7 @@ export class DenoSandbox extends BaseSandbox {
    * ```
    */
   async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
-    const sandbox = this.sandbox; // Throws if not initialized
+    const sandbox = this.instance; // Throws if not initialized
     const results: FileDownloadResponse[] = [];
 
     for (const path of paths) {
@@ -677,10 +677,6 @@ awk -v old="$OLD" -v new="$NEW" -v replace_all=${replaceAll ? 1 : 0} '
     return "invalid_path";
   }
 
-  // ============================================================================
-  // Static Factory Methods
-  // ============================================================================
-
   /**
    * Create and initialize a new DenoSandbox in one step.
    *
@@ -711,19 +707,19 @@ awk -v old="$OLD" -v new="$NEW" -v replace_all=${replaceAll ? 1 : 0} '
    * This allows you to resume working with a sandbox that was created
    * earlier with a duration-based lifetime.
    *
-   * @param sandboxId - The ID of the sandbox to reconnect to
+   * @param id - The ID of the sandbox to reconnect to
    * @param options - Optional auth configuration (for token)
    * @returns A connected sandbox instance
    *
    * @example
    * ```typescript
    * // Resume a sandbox from a stored ID
-   * const sandbox = await DenoSandbox.connect("sandbox-abc123");
+   * const sandbox = await DenoSandbox.fromId("sandbox-abc123");
    * const result = await sandbox.execute("ls -la");
    * ```
    */
-  static async connect(
-    sandboxId: string,
+  static async fromId(
+    id: string,
     options?: Pick<DenoSandboxOptions, "auth">,
   ): Promise<DenoSandbox> {
     // Get authentication credentials
@@ -742,26 +738,22 @@ awk -v old="$OLD" -v new="$NEW" -v replace_all=${replaceAll ? 1 : 0} '
       // Set the token in environment for the SDK
       process.env.DENO_DEPLOY_TOKEN = credentials.token;
 
-      const existingSandbox = await Sandbox.connect({ id: sandboxId });
+      const existingSandbox = await Sandbox.connect({ id });
 
       const denoSandbox = new DenoSandbox();
       // Set the existing sandbox directly (bypass initialize)
-      denoSandbox.#setFromExisting(existingSandbox, sandboxId);
+      denoSandbox.#setFromExisting(existingSandbox, id);
 
       return denoSandbox;
     } catch (error) {
       throw new DenoSandboxError(
-        `Sandbox not found: ${sandboxId}`,
+        `Sandbox not found: ${id}`,
         "SANDBOX_NOT_FOUND",
         error instanceof Error ? error : undefined,
       );
     }
   }
 }
-
-// ============================================================================
-// Factory Functions
-// ============================================================================
 
 /**
  * Async factory function type for creating Deno Sandbox instances.

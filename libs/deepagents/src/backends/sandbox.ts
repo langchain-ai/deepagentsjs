@@ -2,10 +2,15 @@
  * BaseSandbox: Abstract base class for sandbox backends with command execution.
  *
  * This class provides default implementations for all SandboxBackendProtocol
- * methods using shell commands executed via execute(). Concrete implementations
- * only need to implement the execute() method.
+ * methods. Concrete implementations only need to implement execute(),
+ * uploadFiles(), and downloadFiles().
  *
- * Requires Node.js 20+ on the sandbox host.
+ * Runtime requirements on the sandbox host:
+ * - read, grep: Pure POSIX shell (awk, grep) — works on any Linux including Alpine
+ * - write, edit, readRaw: No runtime needed — uses uploadFiles/downloadFiles directly
+ * - ls, glob: Pure POSIX shell (find, stat) — works on any Linux including Alpine
+ *
+ * No Python, Node.js, or other runtime required.
  */
 
 import type {
@@ -22,210 +27,167 @@ import type {
 } from "./protocol.js";
 
 /**
- * Node.js command template for glob operations.
- * Uses web-standard atob() for base64 decoding.
+ * Shell-quote a string using single quotes (POSIX).
+ * Escapes embedded single quotes with the '\'' technique.
  */
-function buildGlobCommand(searchPath: string, pattern: string): string {
-  const pathB64 = btoa(searchPath);
-  const patternB64 = btoa(pattern);
-
-  return `node -e "
-const fs = require('fs');
-const path = require('path');
-
-const searchPath = atob('${pathB64}');
-const pattern = atob('${patternB64}');
-
-function globMatch(relativePath, pattern) {
-  const regexPattern = pattern
-    .replace(/\\*\\*/g, '<<<GLOBSTAR>>>')
-    .replace(/\\*/g, '[^/]*')
-    .replace(/\\?/g, '.')
-    .replace(/<<<GLOBSTAR>>>/g, '.*');
-  return new RegExp('^' + regexPattern + '$').test(relativePath);
-}
-
-function walkDir(dir, baseDir, results) {
-  try {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      const relativePath = path.relative(baseDir, fullPath);
-      if (entry.isDirectory()) {
-        walkDir(fullPath, baseDir, results);
-      } else if (globMatch(relativePath, pattern)) {
-        const stat = fs.statSync(fullPath);
-        console.log(JSON.stringify({
-          path: relativePath,
-          size: stat.size,
-          mtime: stat.mtimeMs,
-          isDir: false
-        }));
-      }
-    }
-  } catch (e) {
-    // Silent failure for non-existent paths
-  }
-}
-
-try {
-  process.chdir(searchPath);
-  walkDir('.', '.', []);
-} catch (e) {
-  // Silent failure for non-existent paths
-}
-"`;
+function shellQuote(s: string): string {
+  return "'" + s.replace(/'/g, "'\\''") + "'";
 }
 
 /**
- * Node.js command template for listing directory contents.
+ * Convert a glob pattern to a path-aware RegExp.
+ *
+ * Inspired by the just-bash project's glob utilities:
+ * - `*`  matches any characters except `/`
+ * - `**` matches any characters including `/` (recursive)
+ * - `?`  matches a single character except `/`
+ * - `[...]` character classes
+ */
+function globToPathRegex(pattern: string): RegExp {
+  let regex = "^";
+  let i = 0;
+
+  while (i < pattern.length) {
+    const c = pattern[i];
+
+    if (c === "*") {
+      if (i + 1 < pattern.length && pattern[i + 1] === "*") {
+        // ** (globstar) matches everything including /
+        i += 2;
+        if (i < pattern.length && pattern[i] === "/") {
+          // **/ matches zero or more directory segments
+          regex += "(.*/)?";
+          i++;
+        } else {
+          // ** at end matches anything
+          regex += ".*";
+        }
+      } else {
+        // * matches anything except /
+        regex += "[^/]*";
+        i++;
+      }
+    } else if (c === "?") {
+      regex += "[^/]";
+      i++;
+    } else if (c === "[") {
+      // Character class — find closing bracket
+      let j = i + 1;
+      while (j < pattern.length && pattern[j] !== "]") j++;
+      regex += pattern.slice(i, j + 1);
+      i = j + 1;
+    } else if (
+      c === "." ||
+      c === "+" ||
+      c === "^" ||
+      c === "$" ||
+      c === "{" ||
+      c === "}" ||
+      c === "(" ||
+      c === ")" ||
+      c === "|" ||
+      c === "\\"
+    ) {
+      regex += `\\${c}`;
+      i++;
+    } else {
+      regex += c;
+      i++;
+    }
+  }
+
+  regex += "$";
+  return new RegExp(regex);
+}
+
+/**
+ * Parse a single line of stat output in the format: size\tmtime\ttype\tpath
+ *
+ * The first three tab-delimited fields are always fixed (number, number, string),
+ * so we safely take everything after the third tab as the file path — even if the
+ * path itself contains tabs.
+ */
+function parseStatLine(
+  line: string,
+): { size: number; mtime: number; isDir: boolean; fullPath: string } | null {
+  const firstTab = line.indexOf("\t");
+  if (firstTab === -1) return null;
+
+  const secondTab = line.indexOf("\t", firstTab + 1);
+  if (secondTab === -1) return null;
+
+  const thirdTab = line.indexOf("\t", secondTab + 1);
+  if (thirdTab === -1) return null;
+
+  const size = parseInt(line.slice(0, firstTab), 10);
+  const mtime = parseInt(line.slice(firstTab + 1, secondTab), 10);
+  const fileType = line.slice(secondTab + 1, thirdTab);
+  const fullPath = line.slice(thirdTab + 1);
+
+  if (isNaN(size) || isNaN(mtime)) return null;
+
+  return {
+    size,
+    mtime,
+    isDir: fileType === "directory",
+    fullPath,
+  };
+}
+
+/**
+ * Pure POSIX shell command for listing directory contents with metadata.
+ * Uses find -maxdepth 1 + stat — works on any Linux including Alpine (busybox).
+ *
+ * Output format per line: size\tmtime\ttype\tpath
  */
 function buildLsCommand(dirPath: string): string {
-  const pathB64 = btoa(dirPath);
-
-  return `node -e "
-const fs = require('fs');
-const path = require('path');
-
-const dirPath = atob('${pathB64}');
-
-try {
-  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dirPath, entry.name);
-    const stat = fs.statSync(fullPath);
-    console.log(JSON.stringify({
-      path: entry.isDirectory() ? fullPath + '/' : fullPath,
-      size: stat.size,
-      mtime: stat.mtimeMs,
-      isDir: entry.isDirectory()
-    }));
-  }
-} catch (e) {
-  console.error('Error: ' + e.message);
-  process.exit(1);
-}
-"`;
+  const quotedPath = shellQuote(dirPath);
+  return `find ${quotedPath} -maxdepth 1 -not -path ${quotedPath} -exec stat -c '%s\\t%Y\\t%F\\t%n' {} + 2>/dev/null || true`;
 }
 
 /**
- * Node.js command template for reading files.
+ * Pure POSIX shell command for listing files recursively with metadata.
+ * Uses find + stat — works on any Linux including Alpine (busybox).
+ *
+ * Output format per line: size\tmtime\ttype\tpath
+ */
+function buildFindCommand(searchPath: string): string {
+  const quotedPath = shellQuote(searchPath);
+  return `find ${quotedPath} -not -path ${quotedPath} -exec stat -c '%s\\t%Y\\t%F\\t%n' {} + 2>/dev/null || true`;
+}
+
+/**
+ * Pure POSIX shell command for reading files with line numbers.
+ * Uses awk for line numbering with offset/limit — works on any Linux including Alpine.
  */
 function buildReadCommand(
   filePath: string,
   offset: number,
   limit: number,
 ): string {
-  const pathB64 = btoa(filePath);
-  // Coerce offset and limit to safe non-negative integers before embedding in the shell command.
+  const quotedPath = shellQuote(filePath);
+  // Coerce offset and limit to safe non-negative integers.
   const safeOffset =
     Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0;
   const safeLimit =
-    Number.isFinite(limit) && limit > 0 && limit < Number.MAX_SAFE_INTEGER
-      ? Math.floor(limit)
-      : 0;
+    Number.isFinite(limit) && limit > 0
+      ? Math.min(Math.floor(limit), 999_999_999)
+      : 999_999_999;
+  // awk NR is 1-based, our offset is 0-based
+  const start = safeOffset + 1;
+  const end = safeOffset + safeLimit;
 
-  return `node -e "
-const fs = require('fs');
-
-const filePath = atob('${pathB64}');
-const offset = ${safeOffset};
-const limit = ${safeLimit};
-
-if (!fs.existsSync(filePath)) {
-  console.log('Error: File not found');
-  process.exit(1);
-}
-
-const stat = fs.statSync(filePath);
-if (stat.size === 0) {
-  console.log('System reminder: File exists but has empty contents');
-  process.exit(0);
-}
-
-const content = fs.readFileSync(filePath, 'utf-8');
-const lines = content.split('\\n');
-const selected = lines.slice(offset, offset + limit);
-
-for (let i = 0; i < selected.length; i++) {
-  const lineNum = offset + i + 1;
-  console.log(String(lineNum).padStart(6) + '\\t' + selected[i]);
-}
-"`;
+  return [
+    `if [ ! -f ${quotedPath} ]; then echo "Error: File not found"; exit 1; fi`,
+    `if [ ! -s ${quotedPath} ]; then echo "System reminder: File exists but has empty contents"; exit 0; fi`,
+    `awk 'NR >= ${start} && NR <= ${end} { printf "%6d\\t%s\\n", NR, $0 }' ${quotedPath}`,
+  ].join("; ");
 }
 
 /**
- * Node.js command template for writing files.
- */
-function buildWriteCommand(filePath: string, content: string): string {
-  const pathB64 = btoa(filePath);
-  const contentB64 = btoa(content);
-
-  return `node -e "
-const fs = require('fs');
-const path = require('path');
-
-const filePath = atob('${pathB64}');
-const content = atob('${contentB64}');
-
-if (fs.existsSync(filePath)) {
-  console.error('Error: File already exists');
-  process.exit(1);
-}
-
-const parentDir = path.dirname(filePath) || '.';
-fs.mkdirSync(parentDir, { recursive: true });
-
-fs.writeFileSync(filePath, content, 'utf-8');
-console.log('OK');
-"`;
-}
-
-/**
- * Node.js command template for editing files.
- */
-function buildEditCommand(
-  filePath: string,
-  oldStr: string,
-  newStr: string,
-  replaceAll: boolean,
-): string {
-  const pathB64 = btoa(filePath);
-  const oldB64 = btoa(oldStr);
-  const newB64 = btoa(newStr);
-
-  return `node -e "
-const fs = require('fs');
-
-const filePath = atob('${pathB64}');
-const oldStr = atob('${oldB64}');
-const newStr = atob('${newB64}');
-const replaceAll = ${Boolean(replaceAll)};
-
-let text;
-try {
-  text = fs.readFileSync(filePath, 'utf-8');
-} catch (e) {
-  process.exit(3);
-}
-
-const count = text.split(oldStr).length - 1;
-
-if (count === 0) {
-  process.exit(1);
-}
-if (count > 1 && !replaceAll) {
-  process.exit(2);
-}
-
-const result = text.split(oldStr).join(newStr);
-fs.writeFileSync(filePath, result, 'utf-8');
-console.log(count);
-"`;
-}
-
-/**
- * Node.js command template for grep operations with literal (fixed-string) search.
+ * Build a grep command for literal (fixed-string) search.
+ * Uses grep -rHnF for recursive, with-filename, with-line-number, fixed-string search.
+ * Pure POSIX — works on any Linux including Alpine.
  *
  * @param pattern - Literal string to search for (NOT regex).
  * @param searchPath - Base path to search in.
@@ -236,68 +198,11 @@ function buildGrepCommand(
   searchPath: string,
   globPattern: string | null,
 ): string {
-  const patternB64 = btoa(pattern);
-  const pathB64 = btoa(searchPath);
-  const globB64 = globPattern ? btoa(globPattern) : "";
+  const patternEscaped = shellQuote(pattern);
+  const searchPathQuoted = shellQuote(searchPath);
+  const globOpt = globPattern ? `--include=${shellQuote(globPattern)}` : "";
 
-  return `node -e "
-const fs = require('fs');
-const path = require('path');
-
-const pattern = atob('${patternB64}');
-const searchPath = atob('${pathB64}');
-const globPattern = ${globPattern ? `atob('${globB64}')` : "null"};
-
-function globMatch(filePath, pattern) {
-  if (!pattern) return true;
-  const regexPattern = pattern
-    .replace(/\\*\\*/g, '<<<GLOBSTAR>>>')
-    .replace(/\\*/g, '[^/]*')
-    .replace(/\\?/g, '.')
-    .replace(/<<<GLOBSTAR>>>/g, '.*');
-  return new RegExp('^' + regexPattern + '$').test(filePath);
-}
-
-function walkDir(dir, results) {
-  try {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walkDir(fullPath, results);
-      } else {
-        const relativePath = path.relative(searchPath, fullPath);
-        if (globMatch(relativePath, globPattern)) {
-          try {
-            const content = fs.readFileSync(fullPath, 'utf-8');
-            const lines = content.split('\\n');
-            for (let i = 0; i < lines.length; i++) {
-              // Simple substring search for literal matching
-              if (lines[i].includes(pattern)) {
-                console.log(JSON.stringify({
-                  path: fullPath,
-                  line: i + 1,
-                  text: lines[i]
-                }));
-              }
-            }
-          } catch (e) {
-            // Skip unreadable files
-          }
-        }
-      }
-    }
-  } catch (e) {
-    // Skip unreadable directories
-  }
-}
-
-try {
-  walkDir(searchPath, []);
-} catch (e) {
-  // Silent failure
-}
-"`;
+  return `grep -rHnF ${globOpt} -e ${patternEscaped} ${searchPathQuoted} 2>/dev/null || true`;
 }
 
 /**
@@ -305,9 +210,11 @@ try {
  *
  * This class provides default implementations for all SandboxBackendProtocol
  * methods using shell commands executed via execute(). Concrete implementations
- * only need to implement the execute() method.
+ * only need to implement execute(), uploadFiles(), and downloadFiles().
  *
- * Requires Node.js 20+ on the sandbox host.
+ * All shell commands use pure POSIX utilities (awk, grep, find, stat) that are
+ * available on any Linux including Alpine/busybox. No Python, Node.js, or
+ * other runtime is required on the sandbox host.
  */
 export abstract class BaseSandbox implements SandboxBackendProtocol {
   /** Unique identifier for the sandbox backend */
@@ -336,6 +243,9 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
   /**
    * List files and directories in the specified directory (non-recursive).
    *
+   * Uses pure POSIX shell (find + stat) via execute() — works on any Linux
+   * including Alpine. No Python or Node.js needed.
+   *
    * @param path - Absolute path to directory
    * @returns List of FileInfo objects for files and directories directly in the directory.
    */
@@ -343,27 +253,19 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     const command = buildLsCommand(path);
     const result = await this.execute(command);
 
-    if (result.exitCode !== 0) {
-      return [];
-    }
-
     const infos: FileInfo[] = [];
     const lines = result.output.trim().split("\n").filter(Boolean);
 
     for (const line of lines) {
-      try {
-        const parsed = JSON.parse(line);
-        infos.push({
-          path: parsed.path,
-          is_dir: parsed.isDir,
-          size: parsed.size,
-          modified_at: parsed.mtime
-            ? new Date(parsed.mtime).toISOString()
-            : undefined,
-        });
-      } catch {
-        // Skip invalid JSON lines
-      }
+      const parsed = parseStatLine(line);
+      if (!parsed) continue;
+
+      infos.push({
+        path: parsed.isDir ? parsed.fullPath + "/" : parsed.fullPath,
+        is_dir: parsed.isDir,
+        size: parsed.size,
+        modified_at: new Date(parsed.mtime * 1000).toISOString(),
+      });
     }
 
     return infos;
@@ -371,6 +273,10 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
 
   /**
    * Read file content with line numbers.
+   *
+   * Uses pure POSIX shell (awk) via execute() — only the requested slice
+   * is returned over the wire, making this efficient for large files.
+   * Works on any Linux including Alpine (no Python or Node.js needed).
    *
    * @param filePath - Absolute file path
    * @param offset - Line offset to start reading from (0-indexed)
@@ -395,26 +301,19 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
   /**
    * Read file content as raw FileData.
    *
+   * Uses downloadFiles() directly — no runtime needed on the sandbox host.
+   *
    * @param filePath - Absolute file path
    * @returns Raw file content as FileData
    */
   async readRaw(filePath: string): Promise<FileData> {
-    const command = buildReadCommand(filePath, 0, Number.MAX_SAFE_INTEGER);
-    const result = await this.execute(command);
-
-    if (result.exitCode !== 0) {
+    const results = await this.downloadFiles([filePath]);
+    if (results[0].error || !results[0].content) {
       throw new Error(`File '${filePath}' not found`);
     }
 
-    // Parse the line-numbered output back to content
-    const lines: string[] = [];
-    for (const line of result.output.split("\n")) {
-      // Format is "    123\tContent"
-      const tabIndex = line.indexOf("\t");
-      if (tabIndex !== -1) {
-        lines.push(line.substring(tabIndex + 1));
-      }
-    }
+    const content = new TextDecoder().decode(results[0].content);
+    const lines = content.split("\n");
 
     const now = new Date().toISOString();
     return {
@@ -425,7 +324,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
   }
 
   /**
-   * Search for a literal text pattern in files.
+   * Search for a literal text pattern in files using grep.
    *
    * @param pattern - Literal string to search for (NOT regex).
    * @param path - Directory or file path to search in.
@@ -440,19 +339,24 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     const command = buildGrepCommand(pattern, path, glob);
     const result = await this.execute(command);
 
-    const matches: GrepMatch[] = [];
-    const lines = result.output.trim().split("\n").filter(Boolean);
+    const output = result.output.trim();
+    if (!output) {
+      return [];
+    }
 
-    for (const line of lines) {
-      try {
-        const parsed = JSON.parse(line);
-        matches.push({
-          path: parsed.path,
-          line: parsed.line,
-          text: parsed.text,
-        });
-      } catch {
-        // Skip invalid JSON lines
+    // Parse grep output format: path:line_number:text
+    const matches: GrepMatch[] = [];
+    for (const line of output.split("\n")) {
+      const parts = line.split(":");
+      if (parts.length >= 3) {
+        const lineNum = parseInt(parts[1], 10);
+        if (!isNaN(lineNum)) {
+          matches.push({
+            path: parts[0],
+            line: lineNum,
+            text: parts.slice(2).join(":"),
+          });
+        }
       }
     }
 
@@ -461,27 +365,44 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
 
   /**
    * Structured glob matching returning FileInfo objects.
+   *
+   * Uses pure POSIX shell (find + stat) via execute() to list all files,
+   * then applies glob-to-regex matching in TypeScript. No Python or Node.js
+   * needed on the sandbox host.
+   *
+   * Glob patterns are matched against paths relative to the search base:
+   * - `*`  matches any characters except `/`
+   * - `**` matches any characters including `/` (recursive)
+   * - `?`  matches a single character except `/`
+   * - `[...]` character classes
    */
   async globInfo(pattern: string, path: string = "/"): Promise<FileInfo[]> {
-    const command = buildGlobCommand(path, pattern);
+    const command = buildFindCommand(path);
     const result = await this.execute(command);
 
+    const regex = globToPathRegex(pattern);
     const infos: FileInfo[] = [];
     const lines = result.output.trim().split("\n").filter(Boolean);
 
+    // Normalise base path (strip trailing /)
+    const basePath = path.endsWith("/") ? path.slice(0, -1) : path;
+
     for (const line of lines) {
-      try {
-        const parsed = JSON.parse(line);
+      const parsed = parseStatLine(line);
+      if (!parsed) continue;
+
+      // Compute path relative to the search base
+      const relPath = parsed.fullPath.startsWith(basePath + "/")
+        ? parsed.fullPath.slice(basePath.length + 1)
+        : parsed.fullPath;
+
+      if (regex.test(relPath)) {
         infos.push({
-          path: parsed.path,
+          path: relPath,
           is_dir: parsed.isDir,
           size: parsed.size,
-          modified_at: parsed.mtime
-            ? new Date(parsed.mtime).toISOString()
-            : undefined,
+          modified_at: new Date(parsed.mtime * 1000).toISOString(),
         });
-      } catch {
-        // Skip invalid JSON lines
       }
     }
 
@@ -490,14 +411,31 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
 
   /**
    * Create a new file with content.
+   *
+   * Uses downloadFiles() to check existence and uploadFiles() to write.
+   * No runtime needed on the sandbox host.
    */
   async write(filePath: string, content: string): Promise<WriteResult> {
-    const command = buildWriteCommand(filePath, content);
-    const result = await this.execute(command);
+    // Check if file already exists
+    try {
+      const existCheck = await this.downloadFiles([filePath]);
+      if (existCheck[0].content !== null && existCheck[0].error === null) {
+        return {
+          error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
+        };
+      }
+    } catch {
+      // File doesn't exist, which is what we want for write
+    }
 
-    if (result.exitCode !== 0) {
+    const encoder = new TextEncoder();
+    const results = await this.uploadFiles([
+      [filePath, encoder.encode(content)],
+    ]);
+
+    if (results[0].error) {
       return {
-        error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
+        error: `Failed to write to ${filePath}: ${results[0].error}`,
       };
     }
 
@@ -506,6 +444,9 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
 
   /**
    * Edit a file by replacing string occurrences.
+   *
+   * Uses downloadFiles() to read, performs string replacement in TypeScript,
+   * then uploadFiles() to write back. No runtime needed on the sandbox host.
    */
   async edit(
     filePath: string,
@@ -513,29 +454,41 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     newString: string,
     replaceAll: boolean = false,
   ): Promise<EditResult> {
-    const command = buildEditCommand(
-      filePath,
-      oldString,
-      newString,
-      replaceAll,
-    );
-    const result = await this.execute(command);
-
-    switch (result.exitCode) {
-      case 0: {
-        const occurrences = parseInt(result.output.trim(), 10) || 1;
-        return { path: filePath, filesUpdate: null, occurrences };
-      }
-      case 1:
-        return { error: `String not found in file '${filePath}'` };
-      case 2:
-        return {
-          error: `Multiple occurrences found in '${filePath}'. Use replaceAll=true to replace all.`,
-        };
-      case 3:
-        return { error: `Error: File '${filePath}' not found` };
-      default:
-        return { error: `Unknown error editing file '${filePath}'` };
+    // Read the file
+    const results = await this.downloadFiles([filePath]);
+    if (results[0].error || !results[0].content) {
+      return { error: `Error: File '${filePath}' not found` };
     }
+
+    const text = new TextDecoder().decode(results[0].content);
+    const count = text.split(oldString).length - 1;
+
+    if (count === 0) {
+      return { error: `String not found in file '${filePath}'` };
+    }
+    if (count > 1 && !replaceAll) {
+      return {
+        error: `Multiple occurrences found in '${filePath}'. Use replaceAll=true to replace all.`,
+      };
+    }
+
+    // Perform replacement
+    const newText = replaceAll
+      ? text.split(oldString).join(newString)
+      : text.replace(oldString, newString);
+
+    // Write back
+    const encoder = new TextEncoder();
+    const uploadResults = await this.uploadFiles([
+      [filePath, encoder.encode(newText)],
+    ]);
+
+    if (uploadResults[0].error) {
+      return {
+        error: `Failed to write edited file '${filePath}': ${uploadResults[0].error}`,
+      };
+    }
+
+    return { path: filePath, filesUpdate: null, occurrences: count };
   }
 }
