@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.7.3
+
+### Patch Changes
+
+- [#200](https://github.com/langchain-ai/deepagentsjs/pull/200) [`a837eac`](https://github.com/langchain-ai/deepagentsjs/commit/a837eacb8145b3c5467c56d18946cf7ae1ddb69f) Thanks [@JadenKim-dev](https://github.com/JadenKim-dev)! - fix: normalize path handling for cross-platform compatibility
+
 ## 1.7.2
 
 ### Patch Changes
