@@ -12,7 +12,6 @@
 import { Sandbox } from "@deno/sandbox";
 import {
   BaseSandbox,
-  type EditResult,
   type ExecuteResponse,
   type FileDownloadResponse,
   type FileOperationError,
@@ -435,6 +434,9 @@ export class DenoSandbox extends BaseSandbox {
     offset: number = 0,
     limit: number = 500,
   ): Promise<string> {
+    // limit=0 means return nothing
+    if (limit === 0) return "";
+
     // Coerce offset and limit to safe non-negative integers
     const safeOffset =
       Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0;
@@ -511,85 +513,8 @@ awk -v offset=${safeOffset} -v limit=${safeLimit} '
     return { path: filePath, filesUpdate: null };
   }
 
-  /**
-   * Edit a file by replacing string occurrences.
-   *
-   * Override of BaseSandbox.edit() to use shell commands instead of Python,
-   * since Deno sandboxes don't have Python installed.
-   *
-   * Uses sed for in-place replacement with proper escaping.
-   *
-   * @param filePath - Absolute path to the file
-   * @param oldString - String to find and replace
-   * @param newString - Replacement string
-   * @param replaceAll - If true, replace all occurrences (default: false)
-   * @returns EditResult with error, path, and occurrences
-   */
-  override async edit(
-    filePath: string,
-    oldString: string,
-    newString: string,
-    replaceAll: boolean = false,
-  ): Promise<EditResult> {
-    // Escape path for shell
-    const escapedPath = filePath.replace(/'/g, "'\\''");
-
-    // Check if file exists
-    const checkResult = await this.execute(`test -f '${escapedPath}'`);
-    if (checkResult.exitCode !== 0) {
-      return { error: `Error: File '${filePath}' not found` };
-    }
-
-    // Count occurrences first using grep -F (fixed string)
-    // Escape old string for grep
-    const escapedOldForGrep = oldString.replace(/'/g, "'\\''");
-    const countResult = await this.execute(
-      `grep -oF '${escapedOldForGrep}' '${escapedPath}' | wc -l`,
-    );
-    const count = parseInt(countResult.output.trim(), 10) || 0;
-
-    if (count === 0) {
-      return { error: `String not found in file '${filePath}'` };
-    }
-
-    if (count > 1 && !replaceAll) {
-      return {
-        error: `Multiple occurrences found in '${filePath}'. Use replaceAll=true to replace all.`,
-      };
-    }
-
-    // Perform the replacement using sed
-    // Use a delimiter that's unlikely to be in the strings (we'll use \x00 if available, otherwise |)
-    // For safety, we'll use awk which handles arbitrary strings better than sed
-
-    // Base64 encode both strings to safely pass them to awk
-    const oldB64 = Buffer.from(oldString, "utf-8").toString("base64");
-    const newB64 = Buffer.from(newString, "utf-8").toString("base64");
-
-    // Use awk with base64 decoding for safe string replacement
-    const awkCommand = `
-OLD=$(echo '${oldB64}' | base64 -d)
-NEW=$(echo '${newB64}' | base64 -d)
-awk -v old="$OLD" -v new="$NEW" -v replace_all=${replaceAll ? 1 : 0} '
-{
-  if (replace_all) {
-    gsub(old, new)
-  } else {
-    sub(old, new)
-  }
-  print
-}
-' '${escapedPath}' > '${escapedPath}.tmp' && mv '${escapedPath}.tmp' '${escapedPath}'
-`;
-
-    const editResult = await this.execute(awkCommand);
-
-    if (editResult.exitCode !== 0) {
-      return { error: `Unknown error editing file '${filePath}'` };
-    }
-
-    return { path: filePath, filesUpdate: null, occurrences: count };
-  }
+  // edit() is inherited from BaseSandbox, which uses downloadFiles()/uploadFiles()
+  // for reliable literal string replacement in TypeScript — no shell escaping issues.
 
   /**
    * Close the sandbox and release all resources.
