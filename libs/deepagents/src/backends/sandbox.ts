@@ -106,6 +106,10 @@ function globToPathRegex(pattern: string): RegExp {
  * The first three tab-delimited fields are always fixed (number, number, string),
  * so we safely take everything after the third tab as the file path — even if the
  * path itself contains tabs.
+ *
+ * The type field varies by platform:
+ * - GNU stat (Linux): outputs descriptive names like "directory", "regular file"
+ * - BSD stat (macOS): outputs permission strings like "drwxr-xr-x", "-rw-r--r--"
  */
 function parseStatLine(
   line: string,
@@ -129,31 +133,54 @@ function parseStatLine(
   return {
     size,
     mtime,
-    isDir: fileType === "directory",
+    // GNU stat %F outputs "directory"; BSD stat %Sp outputs "drwxr-xr-x"
+    isDir: fileType === "directory" || fileType.startsWith("d"),
     fullPath,
   };
 }
 
 /**
  * Pure POSIX shell command for listing directory contents with metadata.
- * Uses find -maxdepth 1 + stat — works on any Linux including Alpine (busybox).
+ * Uses find -maxdepth 1 + stat — works on any Linux including Alpine (busybox)
+ * and macOS (BSD stat).
+ *
+ * Detects GNU vs BSD stat at runtime:
+ * - GNU stat (Linux): `-c '%s\t%Y\t%F\t%n'`
+ * - BSD stat (macOS): `-f '%z\t%m\t%Sp\t%N'`
  *
  * Output format per line: size\tmtime\ttype\tpath
  */
 function buildLsCommand(dirPath: string): string {
   const quotedPath = shellQuote(dirPath);
-  return `find ${quotedPath} -maxdepth 1 -not -path ${quotedPath} -exec stat -c '%s\\t%Y\\t%F\\t%n' {} + 2>/dev/null || true`;
+  const findBase = `find ${quotedPath} -maxdepth 1 -not -path ${quotedPath}`;
+  return (
+    `if stat -c '%s' /dev/null >/dev/null 2>&1; then ` +
+    `${findBase} -exec stat -c '%s\\t%Y\\t%F\\t%n' {} + 2>/dev/null; ` +
+    `else ` +
+    `${findBase} -exec stat -f '%z\t%m\t%Sp\t%N' {} + 2>/dev/null; ` +
+    `fi || true`
+  );
 }
 
 /**
  * Pure POSIX shell command for listing files recursively with metadata.
- * Uses find + stat — works on any Linux including Alpine (busybox).
+ * Uses find + stat — works on any Linux including Alpine (busybox)
+ * and macOS (BSD stat).
+ *
+ * Detects GNU vs BSD stat at runtime (same as buildLsCommand).
  *
  * Output format per line: size\tmtime\ttype\tpath
  */
 function buildFindCommand(searchPath: string): string {
   const quotedPath = shellQuote(searchPath);
-  return `find ${quotedPath} -not -path ${quotedPath} -exec stat -c '%s\\t%Y\\t%F\\t%n' {} + 2>/dev/null || true`;
+  const findBase = `find ${quotedPath} -not -path ${quotedPath}`;
+  return (
+    `if stat -c '%s' /dev/null >/dev/null 2>&1; then ` +
+    `${findBase} -exec stat -c '%s\\t%Y\\t%F\\t%n' {} + 2>/dev/null; ` +
+    `else ` +
+    `${findBase} -exec stat -f '%z\t%m\t%Sp\t%N' {} + 2>/dev/null; ` +
+    `fi || true`
+  );
 }
 
 /**
@@ -288,6 +315,9 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     offset: number = 0,
     limit: number = 500,
   ): Promise<string> {
+    // limit=0 means return nothing
+    if (limit === 0) return "";
+
     const command = buildReadCommand(filePath, offset, limit);
     const result = await this.execute(command);
 
