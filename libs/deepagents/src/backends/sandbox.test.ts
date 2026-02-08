@@ -32,8 +32,8 @@ class MockSandbox extends BaseSandbox {
       return { output, exitCode: 0, truncated: false };
     }
 
-    // Simulate find command for glob (find + stat, recursive — no -maxdepth)
-    if (command.includes("stat -c") && !command.includes("-maxdepth")) {
+    // Simulate find command for glob (find + stat, recursive — no -maxdepth 1)
+    if (command.includes("stat -c") && !command.includes("-maxdepth 1")) {
       const files = Array.from(this.files.keys());
       const now = Math.floor(Date.now() / 1000);
       const output = files
@@ -71,8 +71,8 @@ class MockSandbox extends BaseSandbox {
       }
     }
 
-    // Simulate grep command (grep -rHnF)
-    if (command.startsWith("grep")) {
+    // Simulate grep command (grep -rHnF or find + grep -HnF)
+    if (command.includes("grep") && command.includes("-e ")) {
       // Extract pattern from -e 'pattern'
       const patternMatch = command.match(/-e '([^']+)'/);
       if (patternMatch) {
