@@ -151,12 +151,12 @@ function parseStatLine(
  * printf handles tab-delimited output formatting.
  */
 const STAT_C_SCRIPT =
-  'for f; do ' +
+  "for f; do " +
   'if [ -d "$f" ]; then t=d; elif [ -L "$f" ]; then t=l; else t=f; fi; ' +
   'sz=$(stat -c %s "$f" 2>/dev/null) || continue; ' +
   'mt=$(stat -c %Y "$f" 2>/dev/null) || continue; ' +
   'printf "%s\\t%s\\t%s\\t%s\\n" "$sz" "$mt" "$t" "$f"; ' +
-  'done';
+  "done";
 
 /**
  * Shell command for listing directory contents with metadata.
