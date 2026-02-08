@@ -142,7 +142,7 @@ function parseStatLine(
  */
 function buildLsCommand(dirPath: string): string {
   const quotedPath = shellQuote(dirPath);
-  return `find ${quotedPath} -maxdepth 1 -not -path ${quotedPath} -exec stat -c '%s\\t%Y\\t%F\\t%n' {} + 2>/dev/null || true`;
+  return `find ${quotedPath} -maxdepth 1 -not -path ${quotedPath} -exec stat -c "%s\t%Y\t%F\t%n" {} + 2>/dev/null || true`;
 }
 
 /**
@@ -153,7 +153,7 @@ function buildLsCommand(dirPath: string): string {
  */
 function buildFindCommand(searchPath: string): string {
   const quotedPath = shellQuote(searchPath);
-  return `find ${quotedPath} -not -path ${quotedPath} -exec stat -c '%s\\t%Y\\t%F\\t%n' {} + 2>/dev/null || true`;
+  return `find ${quotedPath} -not -path ${quotedPath} -exec stat -c "%s\t%Y\t%F\t%n" {} + 2>/dev/null || true`;
 }
 
 /**
