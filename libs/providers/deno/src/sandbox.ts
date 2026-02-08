@@ -513,9 +513,6 @@ awk -v offset=${safeOffset} -v limit=${safeLimit} '
     return { path: filePath, filesUpdate: null };
   }
 
-  // edit() is inherited from BaseSandbox, which uses downloadFiles()/uploadFiles()
-  // for reliable literal string replacement in TypeScript — no shell escaping issues.
-
   /**
    * Close the sandbox and release all resources.
    *
