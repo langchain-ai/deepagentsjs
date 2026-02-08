@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { SystemMessage } from "@langchain/core/messages";
-import { appendToSystemMessage, prependToSystemMessage } from "./utils.js";
+import {
+  appendToSystemMessage,
+  prependToSystemMessage,
+  mergeMiddleware,
+} from "./utils.js";
+import { AgentMiddleware, MIDDLEWARE_BRAND } from "langchain";
 
 describe("appendToSystemMessage", () => {
   it("should create a new SystemMessage when original is null", () => {
@@ -92,5 +97,113 @@ describe("prependToSystemMessage", () => {
       type: "text",
       text: "Prepended content\n\n",
     });
+  });
+});
+
+describe("mergeMiddleware", () => {
+  const createMockMiddleware = (name: string): AgentMiddleware => ({
+    [MIDDLEWARE_BRAND]: true,
+    name,
+  });
+
+  it("should return defaults when custom is empty", () => {
+    const defaults = [createMockMiddleware("mw1"), createMockMiddleware("mw2")];
+    const result = mergeMiddleware(defaults, []);
+    expect(result).toEqual(defaults);
+    expect(result).toHaveLength(2);
+  });
+
+  it("should return custom when defaults is empty", () => {
+    const custom = [createMockMiddleware("mw1"), createMockMiddleware("mw2")];
+    const result = mergeMiddleware([], custom);
+    expect(result).toEqual(custom);
+    expect(result).toHaveLength(2);
+  });
+
+  it("should return empty when both are empty", () => {
+    expect(mergeMiddleware([], [])).toEqual([]);
+  });
+
+  it("should replace default with same-named custom in-place", () => {
+    const mw1 = createMockMiddleware("mw1");
+    const mw2 = createMockMiddleware("mw2");
+    const mw3 = createMockMiddleware("mw3");
+    const mw2Override = createMockMiddleware("mw2");
+
+    const result = mergeMiddleware([mw1, mw2, mw3], [mw2Override]);
+
+    expect(result).toHaveLength(3);
+    expect(result[0]).toBe(mw1);
+    expect(result[1]).toBe(mw2Override); // replaced in-place
+    expect(result[2]).toBe(mw3);
+  });
+
+  it("should append custom middleware that has no default counterpart", () => {
+    const mw1 = createMockMiddleware("mw1");
+    const mw2 = createMockMiddleware("mw2");
+    const mw4 = createMockMiddleware("mw4");
+
+    const result = mergeMiddleware([mw1, mw2], [mw4]);
+
+    expect(result).toHaveLength(3);
+    expect(result[0]).toBe(mw1);
+    expect(result[1]).toBe(mw2);
+    expect(result[2]).toBe(mw4);
+  });
+
+  it("should handle mixed overrides and additions", () => {
+    const mw1 = createMockMiddleware("mw1");
+    const mw2 = createMockMiddleware("mw2");
+    const mw3 = createMockMiddleware("mw3");
+    const mw2Override = createMockMiddleware("mw2");
+    const mw4 = createMockMiddleware("mw4");
+
+    const result = mergeMiddleware([mw1, mw2, mw3], [mw2Override, mw4]);
+
+    expect(result).toHaveLength(4);
+    expect(result[0]).toBe(mw1);
+    expect(result[1]).toBe(mw2Override);
+    expect(result[2]).toBe(mw3);
+    expect(result[3]).toBe(mw4);
+  });
+
+  it("should replace all defaults when all are overridden", () => {
+    const mw1 = createMockMiddleware("mw1");
+    const mw2 = createMockMiddleware("mw2");
+    const mw1Override = createMockMiddleware("mw1");
+    const mw2Override = createMockMiddleware("mw2");
+
+    const result = mergeMiddleware([mw1, mw2], [mw1Override, mw2Override]);
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toBe(mw1Override);
+    expect(result[1]).toBe(mw2Override);
+  });
+
+  it("should preserve default order for non-overridden middleware", () => {
+    const mw1 = createMockMiddleware("mw1");
+    const mw2 = createMockMiddleware("mw2");
+    const mw3 = createMockMiddleware("mw3");
+    const mw1Override = createMockMiddleware("mw1");
+    const mw3Override = createMockMiddleware("mw3");
+
+    const result = mergeMiddleware([mw1, mw2, mw3], [mw3Override, mw1Override]);
+
+    expect(result).toHaveLength(3);
+    expect(result[0]).toBe(mw1Override);
+    expect(result[1]).toBe(mw2);
+    expect(result[2]).toBe(mw3Override);
+  });
+
+  it("should not mutate input arrays", () => {
+    const defaults = [createMockMiddleware("mw1"), createMockMiddleware("mw2")];
+    const custom = [createMockMiddleware("mw2"), createMockMiddleware("mw3")];
+    const defaultsCopy = [...defaults];
+    const customCopy = [...custom];
+
+    mergeMiddleware(defaults, custom);
+
+    expect(defaults).toEqual(defaultsCopy);
+    expect(custom).toEqual(customCopy);
   });
 });
