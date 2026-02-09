@@ -518,7 +518,10 @@ export class VfsSandbox extends BaseSandbox {
    * Overrides BaseSandbox.globInfo() to normalize paths with a leading `/`
    * so they resolve correctly in the temp execution directory.
    */
-  async globInfo(pattern: string, searchPath: string = "/"): Promise<FileInfo[]> {
+  async globInfo(
+    pattern: string,
+    searchPath: string = "/",
+  ): Promise<FileInfo[]> {
     return super.globInfo(pattern, this.#normalizeExecPath(searchPath));
   }
 
