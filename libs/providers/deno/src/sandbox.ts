@@ -17,7 +17,6 @@ import {
   type FileOperationError,
   type FileUploadResponse,
   type BackendFactory,
-  type WriteResult,
 } from "deepagents";
 
 import { getAuthCredentials } from "./auth.js";
@@ -411,106 +410,6 @@ export class DenoSandbox extends BaseSandbox {
     }
 
     return results;
-  }
-
-  // ============================================================================
-  // Override BaseSandbox methods that use Python with pure shell implementations
-  // Deno sandboxes don't have Python installed, only basic Unix tools
-  // ============================================================================
-
-  /**
-   * Read a file's content with line numbers.
-   *
-   * Override of BaseSandbox.read() to use awk instead of Python,
-   * since Deno sandboxes don't have Python installed.
-   *
-   * @param filePath - Absolute path to the file
-   * @param offset - Line offset (0-indexed, default 0)
-   * @param limit - Maximum lines to return (default 500)
-   * @returns Formatted file content with line numbers, or error message
-   */
-  override async read(
-    filePath: string,
-    offset: number = 0,
-    limit: number = 500,
-  ): Promise<string> {
-    // limit=0 means return nothing
-    if (limit === 0) return "";
-
-    // Coerce offset and limit to safe non-negative integers
-    const safeOffset =
-      Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0;
-    const safeLimit =
-      Number.isFinite(limit) && limit > 0 && limit < Number.MAX_SAFE_INTEGER
-        ? Math.floor(limit)
-        : 500;
-
-    // Escape path for shell
-    const escapedPath = filePath.replace(/'/g, "'\\''");
-
-    // Build shell command using awk for portable line number formatting
-    // First check if file exists, then format with line numbers
-    const command = `
-if [ ! -f '${escapedPath}' ]; then
-  echo "Error: File not found"
-  exit 1
-fi
-if [ ! -s '${escapedPath}' ]; then
-  echo "System reminder: File exists but has empty contents"
-  exit 0
-fi
-awk -v offset=${safeOffset} -v limit=${safeLimit} '
-  NR > offset && NR <= offset + limit {
-    printf "%6d\\t%s\\n", NR, $0
-  }
-' '${escapedPath}'
-`;
-
-    const result = await this.execute(command);
-
-    if (result.exitCode !== 0) {
-      return `Error: File '${filePath}' not found`;
-    }
-
-    return result.output;
-  }
-
-  /**
-   * Create a new file with content.
-   *
-   * Override of BaseSandbox.write() to use shell commands instead of Python,
-   * since Deno sandboxes don't have Python installed.
-   *
-   * @param filePath - Absolute path for the new file
-   * @param content - File content to write
-   * @returns WriteResult with error populated on failure
-   */
-  override async write(
-    filePath: string,
-    content: string,
-  ): Promise<WriteResult> {
-    // Escape path for shell
-    const escapedPath = filePath.replace(/'/g, "'\\''");
-
-    // Check if file already exists
-    const checkResult = await this.execute(`test -f '${escapedPath}'`);
-    if (checkResult.exitCode === 0) {
-      return {
-        error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
-      };
-    }
-
-    // Use uploadFiles for reliable content writing (handles binary, special chars, etc.)
-    const encoder = new TextEncoder();
-    const uploadResult = await this.uploadFiles([
-      [filePath, encoder.encode(content)],
-    ]);
-
-    if (uploadResult[0]?.error) {
-      return { error: `Failed to write file: ${uploadResult[0].error}` };
-    }
-
-    return { path: filePath, filesUpdate: null };
   }
 
   /**
