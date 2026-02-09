@@ -350,11 +350,14 @@ async function listSkillsFromBackend(
 ): Promise<SkillMetadata[]> {
   const skills: SkillMetadata[] = [];
 
-  // Normalize path to ensure it ends with / (handle both Unix and Windows paths)
+  // Detect path separator (Windows uses \, Unix uses /)
+  const pathSep = sourcePath.includes("\\") ? "\\" : "/";
+
+  // Normalize path to ensure it ends with the appropriate separator
   const normalizedPath =
     sourcePath.endsWith("/") || sourcePath.endsWith("\\")
       ? sourcePath
-      : `${sourcePath}/`;
+      : `${sourcePath}${pathSep}`;
 
   // List directories in the source path using lsInfo
   let fileInfos: { path: string; is_dir?: boolean }[];
@@ -382,7 +385,7 @@ async function listSkillsFromBackend(
       continue;
     }
 
-    const skillMdPath = `${normalizedPath}${entry.name}/SKILL.md`;
+    const skillMdPath = `${normalizedPath}${entry.name}${pathSep}SKILL.md`;
 
     // Try to download the SKILL.md file
     let content: string;
