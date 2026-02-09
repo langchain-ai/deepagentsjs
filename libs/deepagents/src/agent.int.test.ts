@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { createDeepAgent } from "./index.js";
+import type { CompiledSubAgent } from "./index.js";
 import {
   SAMPLE_MODEL,
   TOY_BASKETBALL_RESEARCH,
@@ -283,6 +284,122 @@ describe("DeepAgents Integration Tests", () => {
           (tc) =>
             tc.name === "task" &&
             tc.args?.subagent_type === "basketball_info_agent",
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it.concurrent(
+    "should use a deep agent as a compiled subagent (agent-as-subagent hierarchy)",
+    { timeout: 120 * 1000 }, // 120s
+    async () => {
+      // Create a deep agent that will serve as a subagent
+      const weatherDeepAgent = createDeepAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt:
+          "You are a weather specialist. Use the get_weather tool to get weather information for any location requested.",
+        tools: [getWeather],
+      });
+
+      // Use the deep agent as a CompiledSubAgent in the parent
+      const parentAgent = createDeepAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt:
+          "You are an orchestrator. Delegate weather queries to the weather-specialist subagent via the task tool.",
+        subagents: [
+          {
+            name: "weather-specialist",
+            description:
+              "A specialized weather agent that can provide detailed weather information for any city.",
+            runnable: weatherDeepAgent,
+          } satisfies CompiledSubAgent,
+        ],
+      });
+      assertAllDeepAgentQualities(parentAgent);
+
+      // Verify the task tool lists the weather-specialist subagent
+      const tools = extractToolsFromAgent(parentAgent);
+      expect(tools.task).toBeDefined();
+      expect(tools.task.description).toContain("weather-specialist");
+
+      // Invoke and verify the parent delegates to the weather-specialist
+      const result = await parentAgent.invoke(
+        {
+          messages: [new HumanMessage("What is the weather in Tokyo?")],
+        },
+        { recursionLimit: 100 },
+      );
+
+      const agentMessages = result.messages.filter(AIMessage.isInstance);
+      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
+
+      expect(
+        toolCalls.some(
+          (tc) =>
+            tc.name === "task" &&
+            tc.args?.subagent_type === "weather-specialist",
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it.concurrent(
+    "should support multi-level deep agent hierarchy (nested deep agents)",
+    { timeout: 120 * 1000 }, // 120s
+    async () => {
+      // Level 2: A deep agent with its own subagents
+      const innerDeepAgent = createDeepAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt:
+          "You are a sports information agent. Use the get_soccer_scores tool to get soccer scores.",
+        tools: [getSoccerScores],
+        subagents: [
+          {
+            name: "weather-helper",
+            description: "Gets weather information for match day conditions.",
+            systemPrompt:
+              "Use the get_weather tool to get weather information.",
+            tools: [getWeather],
+            model: SAMPLE_MODEL,
+          },
+        ],
+      });
+
+      // Level 1: Parent deep agent using the inner deep agent as a subagent
+      const parentAgent = createDeepAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt:
+          "You are an orchestrator. Use the sports-info subagent for any sports related questions.",
+        tools: [sampleTool],
+        subagents: [
+          {
+            name: "sports-info",
+            description:
+              "A specialized sports agent that can get soccer scores and check match day weather.",
+            runnable: innerDeepAgent,
+          } satisfies CompiledSubAgent,
+        ],
+      });
+      assertAllDeepAgentQualities(parentAgent);
+
+      const result = await parentAgent.invoke(
+        {
+          messages: [
+            new HumanMessage(
+              "What are the latest scores for Manchester United?",
+            ),
+          ],
+        },
+        { recursionLimit: 100 },
+      );
+
+      const agentMessages = result.messages.filter(AIMessage.isInstance);
+      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
+
+      expect(
+        toolCalls.some(
+          (tc) =>
+            tc.name === "task" && tc.args?.subagent_type === "sports-info",
         ),
       ).toBe(true);
     },
