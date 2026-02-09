@@ -574,13 +574,10 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
         skillsLocations,
       ).replace("{skills_list}", skillsList);
 
-      // Append to existing system prompt
-      const currentSystemPrompt = request.systemPrompt || "";
-      const newSystemPrompt = currentSystemPrompt
-        ? `${currentSystemPrompt}\n\n${skillsSection}`
-        : skillsSection;
+      // Combine with existing system message
+      const newSystemMessage = request.systemMessage.concat(skillsSection);
 
-      return handler({ ...request, systemPrompt: newSystemPrompt });
+      return handler({ ...request, systemMessage: newSystemMessage });
     },
   });
 }

@@ -737,7 +737,7 @@ description: [invalid yaml syntax: unclosed bracket
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       const request: any = {
-        systemPrompt: "Base prompt",
+        systemMessage: new SystemMessage("Base prompt"),
         state: {
           skillsMetadata: [
             {
@@ -753,10 +753,10 @@ description: [invalid yaml syntax: unclosed bracket
 
       expect(mockHandler).toHaveBeenCalled();
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      expect(modifiedRequest.systemPrompt).toContain("Skills System");
-      expect(modifiedRequest.systemPrompt).toContain("web-research");
-      expect(modifiedRequest.systemPrompt).toContain("Research the web");
-      expect(modifiedRequest.systemPrompt).toContain(
+      expect(modifiedRequest.systemMessage.text).toContain("Skills System");
+      expect(modifiedRequest.systemMessage.text).toContain("web-research");
+      expect(modifiedRequest.systemMessage.text).toContain("Research the web");
+      expect(modifiedRequest.systemMessage.text).toContain(
         "/skills/user/web-research/SKILL.md",
       );
     });
@@ -769,14 +769,14 @@ description: [invalid yaml syntax: unclosed bracket
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       const request: any = {
-        systemPrompt: "Base prompt",
+        systemMessage: new SystemMessage("Base prompt"),
         state: { skillsMetadata: [] },
       };
 
       middleware.wrapModelCall!(request, mockHandler);
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      expect(modifiedRequest.systemPrompt).toContain("No skills available yet");
+      expect(modifiedRequest.systemMessage.text).toContain("No skills available yet");
     });
 
     it("should show priority indicator for last source", () => {
@@ -787,7 +787,7 @@ description: [invalid yaml syntax: unclosed bracket
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       const request: any = {
-        systemPrompt: "Base prompt",
+        systemMessage: new SystemMessage("Base prompt"),
         state: { skillsMetadata: [] },
       };
 
@@ -795,10 +795,10 @@ description: [invalid yaml syntax: unclosed bracket
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
       // Last source should have "higher priority" indicator
-      expect(modifiedRequest.systemPrompt).toContain("(higher priority)");
+      expect(modifiedRequest.systemMessage.text).toContain("(higher priority)");
       // Should show project source with priority
-      expect(modifiedRequest.systemPrompt).toContain("Project Skills");
-      expect(modifiedRequest.systemPrompt).toContain("/skills/project/");
+      expect(modifiedRequest.systemMessage.text).toContain("Project Skills");
+      expect(modifiedRequest.systemMessage.text).toContain("/skills/project/");
     });
 
     it("should show allowed tools for skills that have them", () => {
@@ -809,7 +809,7 @@ description: [invalid yaml syntax: unclosed bracket
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       const request: any = {
-        systemPrompt: "Base prompt",
+        systemMessage: new SystemMessage("Base prompt"),
         state: {
           skillsMetadata: [
             {
@@ -825,9 +825,9 @@ description: [invalid yaml syntax: unclosed bracket
       middleware.wrapModelCall!(request, mockHandler);
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      expect(modifiedRequest.systemPrompt).toContain("Allowed tools:");
-      expect(modifiedRequest.systemPrompt).toContain("search_web");
-      expect(modifiedRequest.systemPrompt).toContain("fetch_url");
+      expect(modifiedRequest.systemMessage.text).toContain("Allowed tools:");
+      expect(modifiedRequest.systemMessage.text).toContain("search_web");
+      expect(modifiedRequest.systemMessage.text).toContain("fetch_url");
     });
 
     it("should not show allowed tools line if skill has no allowed tools", () => {
@@ -838,7 +838,7 @@ description: [invalid yaml syntax: unclosed bracket
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       const request: any = {
-        systemPrompt: "Base prompt",
+        systemMessage: new SystemMessage("Base prompt"),
         state: {
           skillsMetadata: [
             {
@@ -856,7 +856,7 @@ description: [invalid yaml syntax: unclosed bracket
       const modifiedRequest = mockHandler.mock.calls[0][0];
       // Should not have "Allowed tools:" line for skills without allowed tools
       const allowedToolsCount = (
-        modifiedRequest.systemPrompt.match(/Allowed tools:/g) || []
+        modifiedRequest.systemMessage.text.match(/Allowed tools:/g) || []
       ).length;
       expect(allowedToolsCount).toBe(0);
     });
@@ -869,7 +869,7 @@ description: [invalid yaml syntax: unclosed bracket
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       const request: any = {
-        systemPrompt: "Original system prompt content",
+        systemMessage: new SystemMessage("Original system prompt content"),
         state: { skillsMetadata: [] },
       };
 
@@ -877,10 +877,10 @@ description: [invalid yaml syntax: unclosed bracket
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
       // Original prompt should come before skills section
-      const originalIndex = modifiedRequest.systemPrompt.indexOf(
+      const originalIndex = modifiedRequest.systemMessage.text.indexOf(
         "Original system prompt content",
       );
-      const skillsIndex = modifiedRequest.systemPrompt.indexOf("Skills System");
+      const skillsIndex = modifiedRequest.systemMessage.text.indexOf("Skills System");
       expect(originalIndex).toBeLessThan(skillsIndex);
     });
   });
@@ -911,16 +911,16 @@ description: [invalid yaml syntax: unclosed bracket
       // Step 2: Inject skills into prompt
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       const request: any = {
-        systemPrompt: "You are a helpful assistant.",
+        systemMessage: new SystemMessage("You are a helpful assistant."),
         state: stateUpdate,
       };
 
       middleware.wrapModelCall!(request, mockHandler);
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      expect(modifiedRequest.systemPrompt).toContain("web-research");
-      expect(modifiedRequest.systemPrompt).toContain("code-review");
-      expect(modifiedRequest.systemPrompt).toContain(
+      expect(modifiedRequest.systemMessage.text).toContain("web-research");
+      expect(modifiedRequest.systemMessage.text).toContain("code-review");
+      expect(modifiedRequest.systemMessage.text).toContain(
         "You are a helpful assistant",
       );
     });
@@ -955,15 +955,15 @@ description: [invalid yaml syntax: unclosed bracket
       // Step 2: wrapModelCall should use the restored skills from state
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       const request: any = {
-        systemPrompt: "Base prompt",
+        systemMessage: new SystemMessage("Base prompt"),
         state: checkpointState,
       };
 
       middleware.wrapModelCall!(request, mockHandler);
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      expect(modifiedRequest.systemPrompt).toContain("restored-skill");
-      expect(modifiedRequest.systemPrompt).toContain(
+      expect(modifiedRequest.systemMessage.text).toContain("restored-skill");
+      expect(modifiedRequest.systemMessage.text).toContain(
         "Restored from checkpoint",
       );
     });
