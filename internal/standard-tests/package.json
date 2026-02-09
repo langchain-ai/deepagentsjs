@@ -1,6 +1,6 @@
 {
   "name": "@langchain/standard-tests",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "Standard integration tests for deepagents sandbox providers",
   "type": "module",
