@@ -14,5 +14,8 @@
   },
   "dependencies": {
     "vitest": "^4.0.18"
+  },
+  "devDependencies": {
+    "deepagents": "workspace:*"
   }
 }
