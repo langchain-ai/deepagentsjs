@@ -392,6 +392,74 @@ try {
     });
   });
 
+  describe("Absolute path initialFiles (README example)", () => {
+    it("should access initialFiles with leading slash via execute()", async () => {
+      sandbox = await VfsSandbox.create({
+        initialFiles: {
+          "/src/index.js": "console.log('Hello from VFS!')",
+        },
+      });
+
+      // The path used in initialFiles should work in execute()
+      const result = await sandbox.execute("node src/index.js");
+      expect(result.exitCode).toBe(0);
+      expect(result.output.trim()).toBe("Hello from VFS!");
+    });
+
+    it("should access initialFiles with leading slash via read()", async () => {
+      sandbox = await VfsSandbox.create({
+        initialFiles: {
+          "/src/index.js": "console.log('Hello from VFS!')",
+        },
+      });
+
+      const content = await sandbox.read("/src/index.js");
+      expect(content).toContain("console.log('Hello from VFS!')");
+    });
+
+    it("should access initialFiles with leading slash via downloadFiles()", async () => {
+      sandbox = await VfsSandbox.create({
+        initialFiles: {
+          "/src/index.js": "console.log('Hello from VFS!')",
+        },
+      });
+
+      const results = await sandbox.downloadFiles(["/src/index.js"]);
+      expect(results[0].error).toBeNull();
+      expect(results[0].content).not.toBeNull();
+      const content = new TextDecoder().decode(results[0].content!);
+      expect(content).toBe("console.log('Hello from VFS!')");
+    });
+
+    it("should list initialFiles with leading slash via lsInfo()", async () => {
+      sandbox = await VfsSandbox.create({
+        initialFiles: {
+          "/src/index.js": "console.log('Hello')",
+          "/src/utils.js": "module.exports = {}",
+        },
+      });
+
+      // Leading `/` is normalized to relative paths for temp-dir execution
+      const entries = await sandbox.lsInfo("/src");
+      const paths = entries.map((e) => e.path.replace(/\/$/, ""));
+      expect(paths).toContain("src/index.js");
+      expect(paths).toContain("src/utils.js");
+    });
+
+    it("should run a multi-file Node.js project with absolute paths from README", async () => {
+      sandbox = await VfsSandbox.create({
+        initialFiles: {
+          "/src/utils.js": `module.exports = { greet: (name) => 'Hello, ' + name + '!' };`,
+          "/src/index.js": `const { greet } = require('./utils');\nconsole.log(greet('VFS'));`,
+        },
+      });
+
+      const result = await sandbox.execute("node src/index.js");
+      expect(result.exitCode).toBe(0);
+      expect(result.output.trim()).toBe("Hello, VFS!");
+    });
+  });
+
   describe("Factory functions", () => {
     it("should create sandbox via factory", async () => {
       const factory = createVfsSandboxFactory({

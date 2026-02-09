@@ -101,5 +101,102 @@ export function registerInitialFilesTests<T extends SandboxInstance>(
       },
       timeout,
     );
+
+    it(
+      "should make initialFiles accessible via read()",
+      async () => {
+        const filePath = config.resolvePath("init-read-test.txt");
+        const tmp = await withRetry(() =>
+          config.createSandbox({
+            initialFiles: {
+              [filePath]: "Content for read test",
+            },
+          }),
+        );
+
+        try {
+          const content = await tmp.read(filePath);
+          expect(content).toContain("Content for read test");
+        } finally {
+          await config.closeSandbox(tmp);
+        }
+      },
+      timeout,
+    );
+
+    it(
+      "should make initialFiles accessible via downloadFiles()",
+      async () => {
+        const filePath = config.resolvePath("init-download-test.txt");
+        const tmp = await withRetry(() =>
+          config.createSandbox({
+            initialFiles: {
+              [filePath]: "Content for download test",
+            },
+          }),
+        );
+
+        try {
+          const results = await tmp.downloadFiles([filePath]);
+          expect(results[0].error).toBeNull();
+          expect(results[0].content).not.toBeNull();
+          const content = new TextDecoder().decode(results[0].content!);
+          expect(content).toContain("Content for download test");
+        } finally {
+          await config.closeSandbox(tmp);
+        }
+      },
+      timeout,
+    );
+
+    it(
+      "should execute a script created via initialFiles",
+      async () => {
+        const scriptPath = config.resolvePath("init-script.sh");
+        const tmp = await withRetry(() =>
+          config.createSandbox({
+            initialFiles: {
+              [scriptPath]:
+                '#!/bin/bash\necho "Hello from initialFiles script"',
+            },
+          }),
+        );
+
+        try {
+          const result = await tmp.execute(`bash ${scriptPath}`);
+          expect(result.exitCode).toBe(0);
+          expect(result.output.trim()).toBe(
+            "Hello from initialFiles script",
+          );
+        } finally {
+          await config.closeSandbox(tmp);
+        }
+      },
+      timeout,
+    );
+
+    it(
+      "should make initialFiles in subdirectories visible via lsInfo()",
+      async () => {
+        const dirPath = config.resolvePath("init-ls-dir");
+        const filePath = `${dirPath}/file.txt`;
+        const tmp = await withRetry(() =>
+          config.createSandbox({
+            initialFiles: {
+              [filePath]: "ls test content",
+            },
+          }),
+        );
+
+        try {
+          const entries = await tmp.lsInfo(dirPath);
+          const paths = entries.map((e) => e.path.replace(/\/$/, ""));
+          expect(paths).toContain(filePath);
+        } finally {
+          await config.closeSandbox(tmp);
+        }
+      },
+      timeout,
+    );
   });
 }
