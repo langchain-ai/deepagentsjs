@@ -157,13 +157,13 @@ export function registerInitialFilesTests<T extends SandboxInstance>(
           config.createSandbox({
             initialFiles: {
               [scriptPath]:
-                '#!/bin/bash\necho "Hello from initialFiles script"',
+                '#!/bin/sh\necho "Hello from initialFiles script"',
             },
           }),
         );
 
         try {
-          const result = await tmp.execute(`bash ${scriptPath}`);
+          const result = await tmp.execute(`sh ${scriptPath}`);
           expect(result.exitCode).toBe(0);
           expect(result.output.trim()).toBe(
             "Hello from initialFiles script",
