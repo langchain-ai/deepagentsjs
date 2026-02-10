@@ -40,6 +40,12 @@ import type {
 import type * as _messages from "@langchain/core/messages";
 import type * as _Command from "@langchain/langgraph";
 
+/**
+ * SDK version injected at build time by tsdown's `define` option.
+ * Falls back to "unknown" during tests or when not built via tsdown.
+ */
+declare const __SDK_VERSION__: string;
+
 const BASE_PROMPT = `In order to complete the objective that the user asks of you, you have access to a number of standard tools.`;
 
 /**
@@ -304,7 +310,13 @@ export function createDeepAgent<
     checkpointer,
     store,
     name,
-  }).withConfig({ recursionLimit: 10_000 });
+  }).withConfig({
+    recursionLimit: 10_000,
+    metadata: {
+      sdk: "deepagents-js",
+      sdk_version: __SDK_VERSION__,
+    },
+  });
 
   /**
    * Combine custom middleware with flattened subagent middleware for complete type inference

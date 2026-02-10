@@ -1,4 +1,5 @@
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import {
   configDefaults,
   defineConfig,
@@ -9,8 +10,15 @@ import dotenv from "dotenv";
 // Load .env from workspace root (two levels up from libs/deepagents)
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
+const { version } = JSON.parse(
+  readFileSync(path.resolve(__dirname, "package.json"), "utf-8"),
+);
+
 export default defineConfig((env) => {
   const common: ViteUserConfigExport = {
+    define: {
+      __SDK_VERSION__: JSON.stringify(version),
+    },
     test: {
       environment: "node",
       hideSkippedTests: true,
@@ -27,6 +35,7 @@ export default defineConfig((env) => {
 
   if (env.mode === "int") {
     return {
+      define: common.define,
       test: {
         ...common.test,
         globals: false,
@@ -39,6 +48,7 @@ export default defineConfig((env) => {
   }
 
   return {
+    define: common.define,
     test: {
       ...common.test,
       include: ["src/**/*.test.ts"],
