@@ -205,7 +205,8 @@ export class DenoSandbox extends BaseSandbox {
       const createOptions: SandboxOptions = {
         ...passthroughOptions,
         // `memory` takes precedence over deprecated `memoryMb`
-        memory: memory ?? (memoryMb !== undefined ? `${memoryMb}MiB` : undefined),
+        memory:
+          memory ?? (memoryMb !== undefined ? `${memoryMb}MiB` : undefined),
         // `timeout` takes precedence over deprecated `lifetime`
         timeout: timeout ?? lifetime,
         // Resolved token (top-level `token` > `auth.token` > env)
@@ -548,11 +549,13 @@ export class DenoSandbox extends BaseSandbox {
    */
   static async fromId(
     id: string,
-    options?: Pick<DenoSandboxOptions, "auth" | "token" | "org" | "apiEndpoint">,
+    options?: Pick<
+      DenoSandboxOptions,
+      "auth" | "token" | "org" | "apiEndpoint"
+    >,
   ): Promise<DenoSandbox> {
     // Resolve authentication: top-level `token` takes precedence over deprecated `auth.token`
-    const resolvedToken =
-      options?.token ?? options?.auth?.token ?? undefined;
+    const resolvedToken = options?.token ?? options?.auth?.token ?? undefined;
 
     if (resolvedToken) {
       process.env.DENO_DEPLOY_TOKEN = resolvedToken;
