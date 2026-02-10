@@ -62,6 +62,12 @@ export {
 // Export shared state values (similar to LangGraph's messagesValue pattern)
 export { filesValue } from "./values.js";
 
+// Export enhanced todoListMiddleware with ID generation and merge-by-id reducer
+export {
+  todoListMiddleware,
+  type TodoListMiddlewareOptions,
+} from "./middleware/todos.js";
+
 // Export agent memory middleware
 export {
   createAgentMemoryMiddleware,

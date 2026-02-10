@@ -2,12 +2,12 @@ import {
   createAgent,
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
-  todoListMiddleware,
   summarizationMiddleware,
   SystemMessage,
   type AgentMiddleware,
   type ResponseFormat,
 } from "langchain";
+import { todoListMiddleware } from "./middleware/todos.js";
 import type {
   ClientTool,
   ServerTool,
