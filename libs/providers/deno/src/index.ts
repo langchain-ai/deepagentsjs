@@ -15,8 +15,8 @@
  *
  * // Create and initialize a sandbox
  * const sandbox = await DenoSandbox.create({
- *   memoryMb: 1024, // 1GB memory
- *   lifetime: "10m", // 10 minutes
+ *   memory: "1GiB", // 1GB memory
+ *   timeout: "10m", // 10 minutes
  * });
  *
  * try {
@@ -56,6 +56,7 @@ export type {
   DenoSandboxOptions,
   DenoSandboxRegion,
   SandboxLifetime,
+  SandboxTimeout,
   DenoSandboxErrorCode,
 } from "./types.js";
 

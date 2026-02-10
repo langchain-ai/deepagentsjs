@@ -374,15 +374,15 @@ describe("DenoSandbox", () => {
     it("should throw if not initialized", () => {
       const sandbox = new DenoSandbox();
 
-      expect(() => sandbox.sandbox).toThrow(DenoSandboxError);
-      expect(() => sandbox.sandbox).toThrow("not initialized");
+      expect(() => sandbox.instance).toThrow(DenoSandboxError);
+      expect(() => sandbox.instance).toThrow("not initialized");
     });
 
     it("should return sandbox instance after initialization", async () => {
       const sandbox = new DenoSandbox();
       await sandbox.initialize();
 
-      const sdkSandbox = sandbox.sandbox;
+      const sdkSandbox = sandbox.instance;
       expect(sdkSandbox).toBeDefined();
       expect(sdkSandbox.id).toBe("sandbox-mock-123");
     });
@@ -411,7 +411,7 @@ describe("DenoSandbox", () => {
 
   describe("static connect", () => {
     it("should reconnect to existing sandbox by ID", async () => {
-      const sandbox = await DenoSandbox.connect("existing-sandbox-id");
+      const sandbox = await DenoSandbox.fromId("existing-sandbox-id");
 
       expect(sandbox.id).toBe("existing-sandbox-id");
       expect(sandbox.isRunning).toBe(true);

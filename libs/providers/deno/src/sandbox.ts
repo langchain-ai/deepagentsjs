@@ -9,7 +9,7 @@
  * @packageDocumentation
  */
 
-import { Sandbox } from "@deno/sandbox";
+import { Sandbox, type SandboxOptions } from "@deno/sandbox";
 import {
   BaseSandbox,
   type ExecuteResponse,
@@ -35,8 +35,8 @@ import { DenoSandboxError, type DenoSandboxOptions } from "./types.js";
  *
  * // Create and initialize a sandbox
  * const sandbox = await DenoSandbox.create({
- *   memoryMb: 1024,
- *   lifetime: "5m",
+ *   memory: "1GiB",
+ *   timeout: "5m",
  * });
  *
  * try {
@@ -123,22 +123,17 @@ export class DenoSandbox extends BaseSandbox {
    * @example
    * ```typescript
    * // Two-step initialization
-   * const sandbox = new DenoSandbox({ memoryMb: 1024 });
+   * const sandbox = new DenoSandbox({ memory: "1GiB" });
    * await sandbox.initialize();
    *
    * // Or use the factory method
-   * const sandbox = await DenoSandbox.create({ memoryMb: 1024 });
+   * const sandbox = await DenoSandbox.create({ memory: "1GiB" });
    * ```
    */
   constructor(options: DenoSandboxOptions = {}) {
     super();
 
-    // Set defaults
-    this.#options = {
-      memoryMb: 768,
-      lifetime: "session",
-      ...options,
-    };
+    this.#options = { ...options };
 
     // Generate temporary ID until initialized
     this.#id = `deno-sandbox-${Date.now()}`;
@@ -171,39 +166,36 @@ export class DenoSandbox extends BaseSandbox {
       );
     }
 
-    // Get authentication credentials
-    let credentials: { token: string };
-    try {
-      credentials = getAuthCredentials(this.#options.auth);
-    } catch (error) {
-      throw new DenoSandboxError(
-        "Failed to authenticate with Deno Deploy. Check your token configuration.",
-        "AUTHENTICATION_FAILED",
-        error instanceof Error ? error : undefined,
-      );
-    }
+    // Resolve token: top-level `token` > deprecated `auth.token` > env variable
+    const resolvedToken =
+      this.#options.token ??
+      this.#options.auth?.token ??
+      getAuthCredentials(this.#options.auth).token;
 
     try {
-      // Set the token in environment for the SDK
-      process.env.DENO_DEPLOY_TOKEN = credentials.token;
+      // Separate deprecated / custom keys from options that pass through 1:1
+      const {
+        memoryMb,
+        memory,
+        lifetime,
+        timeout,
+        auth: _auth,
+        initialFiles: _initialFiles,
+        ...passthroughOptions
+      } = this.#options;
 
-      // Build SDK create options
-      const createOptions: Parameters<typeof Sandbox.create>[0] = {};
-
-      // Add optional memory configuration
-      if (this.#options.memoryMb !== undefined) {
-        createOptions.memoryMb = this.#options.memoryMb;
-      }
-
-      // Add optional lifetime configuration
-      if (this.#options.lifetime !== undefined) {
-        createOptions.lifetime = this.#options.lifetime;
-      }
-
-      // Add optional region configuration
-      if (this.#options.region !== undefined) {
-        createOptions.region = this.#options.region;
-      }
+      // Build SDK create options: start with all 1:1 passthrough keys,
+      // then layer on the deprecated-to-new mappings.
+      const createOptions: SandboxOptions = {
+        ...passthroughOptions,
+        // `memory` takes precedence over deprecated `memoryMb`
+        memory:
+          memory ?? (memoryMb !== undefined ? `${memoryMb}MiB` : undefined),
+        // `timeout` takes precedence over deprecated `lifetime`
+        timeout: timeout ?? lifetime,
+        // Resolved token
+        token: resolvedToken,
+      };
 
       // Create the sandbox
       this.#sandbox = await Sandbox.create(createOptions);
@@ -340,7 +332,7 @@ export class DenoSandbox extends BaseSandbox {
 
         // Write the file content
         const textContent = new TextDecoder().decode(content);
-        await sandbox.writeTextFile(path, textContent);
+        await sandbox.fs.writeTextFile(path, textContent);
         results.push({ path, error: null });
       } catch (error) {
         results.push({ path, error: this.#mapError(error) });
@@ -510,9 +502,9 @@ export class DenoSandbox extends BaseSandbox {
    * @example
    * ```typescript
    * const sandbox = await DenoSandbox.create({
-   *   memoryMb: 1024,
-   *   lifetime: "10m",
-   *   region: "iad",
+   *   memory: "1GiB",
+   *   timeout: "10m",
+   *   region: "ord",
    * });
    * ```
    */
@@ -541,25 +533,26 @@ export class DenoSandbox extends BaseSandbox {
    */
   static async fromId(
     id: string,
-    options?: Pick<DenoSandboxOptions, "auth">,
+    options?: Pick<
+      DenoSandboxOptions,
+      "auth" | "token" | "org" | "apiEndpoint"
+    >,
   ): Promise<DenoSandbox> {
-    // Get authentication credentials
-    let credentials: { token: string };
-    try {
-      credentials = getAuthCredentials(options?.auth);
-    } catch (error) {
-      throw new DenoSandboxError(
-        "Failed to authenticate with Deno Deploy. Check your token configuration.",
-        "AUTHENTICATION_FAILED",
-        error instanceof Error ? error : undefined,
-      );
-    }
+    // Resolve token: top-level `token` > deprecated `auth.token` > env variable
+    const resolvedToken =
+      options?.token ??
+      options?.auth?.token ??
+      getAuthCredentials(options?.auth).token;
 
     try {
-      // Set the token in environment for the SDK
-      process.env.DENO_DEPLOY_TOKEN = credentials.token;
-
-      const existingSandbox = await Sandbox.connect({ id });
+      const existingSandbox = await Sandbox.connect({
+        id,
+        token: resolvedToken,
+        ...(options?.org !== undefined ? { org: options.org } : {}),
+        ...(options?.apiEndpoint !== undefined
+          ? { apiEndpoint: options.apiEndpoint }
+          : {}),
+      });
 
       const denoSandbox = new DenoSandbox();
       // Set the existing sandbox directly (bypass initialize)
@@ -603,7 +596,7 @@ export type AsyncDenoSandboxFactory = () => Promise<DenoSandbox>;
  * import { DenoSandbox, createDenoSandboxFactory } from "@langchain/deno";
  *
  * // Create a factory for new sandboxes
- * const factory = createDenoSandboxFactory({ memoryMb: 1024 });
+ * const factory = createDenoSandboxFactory({ memory: "1GiB" });
  *
  * // Each call creates a new sandbox
  * const sandbox1 = await factory();
@@ -643,7 +636,7 @@ export function createDenoSandboxFactory(
  * import { DenoSandbox, createDenoSandboxFactoryFromSandbox } from "@langchain/deno";
  *
  * // Create and initialize a sandbox
- * const sandbox = await DenoSandbox.create({ memoryMb: 1024 });
+ * const sandbox = await DenoSandbox.create({ memory: "1GiB" });
  *
  * try {
  *   const agent = createDeepAgent({
