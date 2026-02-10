@@ -54,6 +54,7 @@ import {
 import { getBufferString } from "@langchain/core/messages";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { initChatModel } from "langchain/chat_models/universal";
+import { Command } from "@langchain/langgraph";
 
 import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
@@ -171,11 +172,37 @@ Conversation to summarize:
 Summary:`;
 
 /**
+ * Zod schema for a summarization event that tracks what was summarized and
+ * where the cutoff is.
+ *
+ * Instead of rewriting LangGraph state with `RemoveMessage(REMOVE_ALL_MESSAGES)`,
+ * the middleware stores this event and uses it to reconstruct the effective message
+ * list on subsequent calls.
+ */
+const SummarizationEventSchema = z.object({
+  /**
+   * The index in the state messages list where summarization occurred.
+   * Messages before this index have been summarized. */
+  cutoffIndex: z.number(),
+  /** The HumanMessage containing the summary. */
+  summaryMessage: z.instanceof(HumanMessage),
+  /** Path where the conversation history was offloaded, or null if offload failed. */
+  filePath: z.string().nullable(),
+});
+
+/**
+ * Represents a summarization event that tracks what was summarized and where the cutoff is.
+ */
+export type SummarizationEvent = z.infer<typeof SummarizationEventSchema>;
+
+/**
  * State schema for summarization middleware.
  */
 const SummarizationStateSchema = z.object({
   /** Session ID for history file naming */
   _summarizationSessionId: z.string().optional(),
+  /** Most recent summarization event (private state, not visible to agent) */
+  _summarizationEvent: SummarizationEventSchema.optional(),
 });
 
 /**
@@ -625,15 +652,43 @@ ${summary}
     });
   }
 
+  /**
+   * Reconstruct the effective message list based on any previous summarization event.
+   *
+   * After summarization, instead of using all messages from state, we use the summary
+   * message plus messages after the cutoff index. This avoids full state rewrites.
+   */
+  function getEffectiveMessages(
+    messages: BaseMessage[],
+    state: Record<string, unknown>,
+  ): BaseMessage[] {
+    const event = state._summarizationEvent as SummarizationEvent | undefined;
+
+    // If no summarization event, return all messages as-is
+    if (!event) {
+      return messages;
+    }
+
+    // Build effective messages: summary message, then messages from cutoff onward
+    const result: BaseMessage[] = [event.summaryMessage];
+    result.push(...messages.slice(event.cutoffIndex));
+
+    return result;
+  }
+
   return createMiddleware({
     name: "SummarizationMiddleware",
     stateSchema: SummarizationStateSchema,
 
-    async beforeModel(state) {
-      const messages = state.messages ?? [];
+    async wrapModelCall(request, handler) {
+      // Get effective messages based on previous summarization events
+      const effectiveMessages = getEffectiveMessages(
+        request.messages ?? [],
+        request.state,
+      );
 
-      if (messages.length === 0) {
-        return undefined;
+      if (effectiveMessages.length === 0) {
+        return handler(request);
       }
 
       /**
@@ -646,7 +701,7 @@ ${summary}
        * Step 1: Truncate args if configured
        */
       const { messages: truncatedMessages, modified: argsWereTruncated } =
-        truncateArgs(messages, maxInputTokens);
+        truncateArgs(effectiveMessages, maxInputTokens);
 
       /**
        * Step 2: Check if summarization should happen
@@ -659,17 +714,14 @@ ${summary}
       );
 
       /**
-       * If only truncation happened (no summarization)
+       * If only truncation happened (no summarization), or no action needed
        */
       if (argsWereTruncated && !shouldDoSummarization) {
-        return { messages: truncatedMessages };
+        return handler({ ...request, messages: truncatedMessages });
       }
 
-      /**
-       * If no truncation and no summarization
-       */
       if (!shouldDoSummarization) {
-        return undefined;
+        return handler({ ...request, messages: truncatedMessages });
       }
 
       /**
@@ -680,10 +732,7 @@ ${summary}
         maxInputTokens,
       );
       if (cutoffIndex <= 0) {
-        if (argsWereTruncated) {
-          return { messages: truncatedMessages };
-        }
-        return undefined;
+        return handler({ ...request, messages: truncatedMessages });
       }
 
       const messagesToSummarize = truncatedMessages.slice(0, cutoffIndex);
@@ -692,18 +741,18 @@ ${summary}
       /**
        * Offload to backend first
        */
-      const resolvedBackend = getBackend(state);
+      const resolvedBackend = getBackend(request.state);
       const filePath = await offloadToBackend(
         resolvedBackend,
         messagesToSummarize,
-        state,
+        request.state,
       );
 
       if (filePath === null) {
         /**
          * Offloading failed - don't proceed with summarization
          */
-        return undefined;
+        return handler({ ...request, messages: truncatedMessages });
       }
 
       /**
@@ -716,10 +765,42 @@ ${summary}
        */
       const summaryMessage = buildSummaryMessage(summary, filePath);
 
-      return {
-        messages: [summaryMessage, ...preservedMessages],
-        _summarizationSessionId: getSessionId(state),
+      /**
+       * Calculate state cutoff index for chained summarizations.
+       * If this is a subsequent summarization, convert effective message index to state index.
+       * The -1 accounts for the summary message at effective[0] which does not
+       * correspond to any state message.
+       */
+      const previousEvent = request.state._summarizationEvent;
+      const stateCutoffIndex =
+        previousEvent != null
+          ? previousEvent.cutoffIndex + cutoffIndex - 1
+          : cutoffIndex;
+
+      /**
+       * Create new summarization event
+       */
+      const newEvent: SummarizationEvent = {
+        cutoffIndex: stateCutoffIndex,
+        summaryMessage,
+        filePath,
       };
+
+      /**
+       * Call handler with summarized messages
+       */
+      const modifiedMessages = [summaryMessage, ...preservedMessages];
+      await handler({ ...request, messages: modifiedMessages });
+
+      /**
+       * Return Command with state update for the summarization event
+       */
+      return new Command({
+        update: {
+          _summarizationEvent: newEvent,
+          _summarizationSessionId: getSessionId(request.state),
+        },
+      });
     },
   });
 }
