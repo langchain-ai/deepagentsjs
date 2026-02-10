@@ -31,15 +31,17 @@ export const DEFAULT_SUBAGENT_PROMPT =
  *
  * When returning updates:
  * 1. The messages key is handled explicitly to ensure only the final message is included
- * 2. The todos and structuredResponse keys are excluded as they do not have a defined reducer
- *    and no clear meaning for returning them from a subagent to the main agent.
+ * 2. The structuredResponse key is excluded as it has no defined reducer and no clear meaning
+ *    for returning from a subagent to the main agent.
  * 3. The skillsMetadata and memoryContents keys are automatically excluded from subagent output
  *    to prevent parent state from leaking to child agents. Each agent loads its own skills/memory
  *    independently based on its middleware configuration.
+ *
+ * Note: todos flows through so subagents can mark their assigned parent todos as completed.
+ * The parent's todosReducer merges by id, so parallel subagent updates are safe.
  */
 const EXCLUDED_STATE_KEYS = [
   "messages",
-  "todos",
   "structuredResponse",
   "skillsMetadata",
   "memoryContents",
@@ -372,6 +374,24 @@ function returnCommandWithStateUpdate(
   const messages = result.messages as Array<{ content: string }>;
   const lastMessage = messages?.[messages.length - 1];
 
+  // Debug: log whether todos are flowing back from subagent
+  if ("todos" in stateUpdate) {
+    const todos = stateUpdate.todos as Array<{
+      id?: string;
+      content: string;
+      status: string;
+    }>;
+    console.debug("[subagents] todos flowing back from subagent", {
+      count: todos?.length ?? 0,
+      statuses:
+        todos?.map(
+          (t) => `${(t.id ?? "no-id").slice(0, 8)}:${t.status}`,
+        ) ?? [],
+    });
+  } else {
+    console.debug("[subagents] no todos in subagent return state");
+  }
+
   return new Command({
     update: {
       ...stateUpdate,
@@ -512,10 +532,10 @@ function createTaskTool(options: {
 
   return tool(
     async (
-      input: { description: string; subagent_type: string },
+      input: { description: string; subagent_type: string; todo_id?: string },
       config,
     ): Promise<Command | string> => {
-      const { description, subagent_type } = input;
+      const { description, subagent_type, todo_id } = input;
 
       // Validate subagent type
       if (!(subagent_type in subagentGraphs)) {
@@ -540,6 +560,21 @@ function createTaskTool(options: {
         unknown
       >;
 
+      // Auto-mark the assigned parent todo as completed when the subagent finishes
+      if (todo_id) {
+        const todos = (result.todos ?? currentState.todos) as
+          | Array<{ id: string; status: string; content: string }>
+          | undefined;
+        if (todos) {
+          result.todos = todos.map((t) =>
+            t.id === todo_id ? { ...t, status: "completed" } : t,
+          );
+          console.debug(
+            `[subagents] auto-marked todo ${todo_id.slice(0, 8)} as completed`,
+          );
+        }
+      }
+
       // Return command with filtered state update
       if (!config.toolCall?.id) {
         throw new Error("Tool call ID is required for subagent invocation");
@@ -558,6 +593,12 @@ function createTaskTool(options: {
           .string()
           .describe(
             `Name of the agent to use. Available: ${Object.keys(subagentGraphs).join(", ")}`,
+          ),
+        todo_id: z
+          .string()
+          .optional()
+          .describe(
+            "ID of the parent todo item to automatically mark as completed when this task finishes. Pass this to get real-time progress tracking.",
           ),
       }),
     },
