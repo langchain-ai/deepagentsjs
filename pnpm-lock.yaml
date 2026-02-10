@@ -13,7 +13,7 @@ importers:
         version: 0.5.2
       '@changesets/cli':
         specifier: ^2.29.8
-        version: 2.29.8(@types/node@25.2.0)
+        version: 2.29.8(@types/node@25.2.2)
       '@eslint/eslintrc':
         specifier: ^3.3.3
         version: 3.3.3
@@ -61,10 +61,10 @@ importers:
     dependencies:
       '@langchain/anthropic':
         specifier: ^1.3.14
-        version: 1.3.14(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))
+        version: 1.3.16(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))
       '@langchain/core':
         specifier: ^1.1.19
-        version: 1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6))
+        version: 1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6))
       '@langchain/daytona':
         specifier: workspace:*
         version: link:../libs/providers/daytona
@@ -73,7 +73,7 @@ importers:
         version: link:../libs/providers/deno
       '@langchain/langgraph-checkpoint':
         specifier: ^1.0.0
-        version: 1.0.0(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))
+        version: 1.0.0(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))
       '@langchain/modal':
         specifier: workspace:*
         version: link:../libs/providers/modal
@@ -82,16 +82,16 @@ importers:
         version: link:../libs/providers/node-vfs
       '@langchain/openai':
         specifier: ^1.2.4
-        version: 1.2.4(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))(ws@8.19.0)
+        version: 1.2.6(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))(ws@8.19.0)
       '@langchain/tavily':
         specifier: ^1.2.0
-        version: 1.2.0(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))
+        version: 1.2.0(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))
       deepagents:
         specifier: workspace:*
         version: link:../libs/deepagents
       langchain:
         specifier: ^1.2.17
-        version: 1.2.17(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))(openai@6.17.0(ws@8.19.0)(zod@4.3.6))
+        version: 1.2.19(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))(openai@6.19.0(ws@8.19.0)(zod@4.3.6))
       uuid:
         specifier: ^13.0.0
         version: 13.0.0
@@ -107,13 +107,13 @@ importers:
         version: 1.0.13
       '@types/node':
         specifier: ^25.2.0
-        version: 25.2.0
+        version: 25.2.2
       '@types/uuid':
         specifier: ^11.0.0
         version: 11.0.0
       dotenv:
         specifier: ^17.2.3
-        version: 17.2.3
+        version: 17.2.4
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -122,7 +122,7 @@ importers:
     dependencies:
       vitest:
         specifier: ^4.0.18
-        version: 4.0.18(@types/node@25.2.0)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+        version: 4.0.18(@types/node@25.2.2)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
     devDependencies:
       deepagents:
         specifier: workspace:*
@@ -135,13 +135,13 @@ importers:
         version: 11.0.4
       '@types/node':
         specifier: ^25.0.8
-        version: 25.2.0
+        version: 25.2.2
       fs-extra:
         specifier: ^11.3.0
         version: 11.3.3
       tsdown:
         specifier: ^0.20.1
-        version: 0.20.2(synckit@0.11.12)(typescript@5.9.3)
+        version: 0.20.3(synckit@0.11.12)(typescript@5.9.3)
       tsx:
         specifier: ^4.20.5
         version: 4.21.0
@@ -150,7 +150,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.0.16
-        version: 4.0.18(@types/node@25.2.0)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+        version: 4.0.18(@types/node@25.2.2)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
     optionalDependencies:
       '@deepagents-cli/darwin-arm64':
         specifier: 0.0.14
@@ -160,16 +160,16 @@ importers:
     dependencies:
       '@langchain/core':
         specifier: ^1.1.19
-        version: 1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6))
+        version: 1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6))
       '@langchain/langgraph':
         specifier: ^1.1.3
-        version: 1.1.3(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))(zod@4.3.6)
+        version: 1.1.4(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))(zod@4.3.6)
       fast-glob:
         specifier: ^3.3.3
         version: 3.3.3
       langchain:
         specifier: ^1.2.17
-        version: 1.2.17(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))(openai@6.17.0(ws@8.19.0)(zod@4.3.6))
+        version: 1.2.19(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))(openai@6.19.0(ws@8.19.0)(zod@4.3.6))
       micromatch:
         specifier: ^4.0.8
         version: 4.0.8
@@ -182,13 +182,13 @@ importers:
     devDependencies:
       '@langchain/langgraph-checkpoint':
         specifier: ^1.0.0
-        version: 1.0.0(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))
+        version: 1.0.0(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))
       '@langchain/openai':
         specifier: ^1.2.3
-        version: 1.2.4(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))(ws@8.19.0)
+        version: 1.2.6(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))(ws@8.19.0)
       '@langchain/tavily':
         specifier: ^1.2.0
-        version: 1.2.0(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))
+        version: 1.2.0(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))
       '@tsconfig/recommended':
         specifier: ^1.0.13
         version: 1.0.13
@@ -197,7 +197,7 @@ importers:
         version: 4.0.10
       '@types/node':
         specifier: ^25.1.0
-        version: 25.2.0
+        version: 25.2.2
       '@types/uuid':
         specifier: ^11.0.0
         version: 11.0.0
@@ -209,10 +209,10 @@ importers:
         version: 4.0.18(vitest@4.0.18)
       dotenv:
         specifier: ^17.2.3
-        version: 17.2.3
+        version: 17.2.4
       tsdown:
         specifier: ^0.20.1
-        version: 0.20.2(synckit@0.11.12)(typescript@5.9.3)
+        version: 0.20.3(synckit@0.11.12)(typescript@5.9.3)
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
@@ -224,7 +224,7 @@ importers:
         version: 13.0.0
       vitest:
         specifier: ^4.0.18
-        version: 4.0.18(@types/node@25.2.0)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+        version: 4.0.18(@types/node@25.2.2)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
   libs/providers/daytona:
     dependencies:
@@ -240,7 +240,7 @@ importers:
         version: 1.0.13
       '@types/node':
         specifier: ^25.1.0
-        version: 25.2.0
+        version: 25.2.2
       '@vitest/coverage-v8':
         specifier: ^4.0.18
         version: 4.0.18(vitest@4.0.18)
@@ -249,10 +249,10 @@ importers:
         version: link:../../deepagents
       dotenv:
         specifier: ^17.2.3
-        version: 17.2.3
+        version: 17.2.4
       tsdown:
         specifier: ^0.20.1
-        version: 0.20.2(synckit@0.11.12)(typescript@5.9.3)
+        version: 0.20.3(synckit@0.11.12)(typescript@5.9.3)
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
@@ -261,7 +261,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.0.18
-        version: 4.0.18(@types/node@25.2.0)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+        version: 4.0.18(@types/node@25.2.2)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
   libs/providers/deno:
     dependencies:
@@ -277,7 +277,7 @@ importers:
         version: 1.0.13
       '@types/node':
         specifier: ^25.1.0
-        version: 25.2.0
+        version: 25.2.2
       '@vitest/coverage-v8':
         specifier: ^4.0.18
         version: 4.0.18(vitest@4.0.18)
@@ -286,10 +286,10 @@ importers:
         version: link:../../deepagents
       dotenv:
         specifier: ^17.2.3
-        version: 17.2.3
+        version: 17.2.4
       tsdown:
         specifier: ^0.20.1
-        version: 0.20.2(synckit@0.11.12)(typescript@5.9.3)
+        version: 0.20.3(synckit@0.11.12)(typescript@5.9.3)
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
@@ -298,13 +298,13 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.0.18
-        version: 4.0.18(@types/node@25.2.0)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+        version: 4.0.18(@types/node@25.2.2)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
   libs/providers/modal:
     dependencies:
       modal:
         specifier: ^0.6.1
-        version: 0.6.1
+        version: 0.6.2
     devDependencies:
       '@langchain/standard-tests':
         specifier: workspace:*
@@ -314,7 +314,7 @@ importers:
         version: 1.0.13
       '@types/node':
         specifier: ^25.1.0
-        version: 25.2.0
+        version: 25.2.2
       '@vitest/coverage-v8':
         specifier: ^4.0.18
         version: 4.0.18(vitest@4.0.18)
@@ -323,10 +323,10 @@ importers:
         version: link:../../deepagents
       dotenv:
         specifier: ^17.2.3
-        version: 17.2.3
+        version: 17.2.4
       tsdown:
         specifier: ^0.20.1
-        version: 0.20.2(synckit@0.11.12)(typescript@5.9.3)
+        version: 0.20.3(synckit@0.11.12)(typescript@5.9.3)
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
@@ -335,7 +335,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.0.18
-        version: 4.0.18(@types/node@25.2.0)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+        version: 4.0.18(@types/node@25.2.2)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
   libs/providers/node-vfs:
     dependencies:
@@ -351,7 +351,7 @@ importers:
         version: 1.0.13
       '@types/node':
         specifier: ^25.1.0
-        version: 25.2.0
+        version: 25.2.2
       '@vitest/coverage-v8':
         specifier: ^4.0.18
         version: 4.0.18(vitest@4.0.18)
@@ -360,7 +360,7 @@ importers:
         version: link:../../deepagents
       tsdown:
         specifier: ^0.20.1
-        version: 0.20.2(synckit@0.11.12)(typescript@5.9.3)
+        version: 0.20.3(synckit@0.11.12)(typescript@5.9.3)
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
@@ -369,12 +369,12 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.0.18
-        version: 4.0.18(@types/node@25.2.0)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+        version: 4.0.18(@types/node@25.2.2)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
 packages:
 
-  '@anthropic-ai/sdk@0.71.2':
-    resolution: {integrity: sha512-TGNDEUuEstk/DKu0/TflXAEt+p+p/WhTlFzEnoosvbaDU2LTjm42igSdlL0VijrKpWejtOKxX0b8A7uc+XiSAQ==}
+  '@anthropic-ai/sdk@0.73.0':
+    resolution: {integrity: sha512-URURVzhxXGJDGUGFunIOtBlSl7KWvZiAAKY/ttTkZAkXT9bTPqdk2eK0b8qqSxXpikh3QKPnPYpiyX98zf5ebw==}
     hasBin: true
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -975,14 +975,14 @@ packages:
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
 
-  '@langchain/anthropic@1.3.14':
-    resolution: {integrity: sha512-mexm4UyThn11cwDGsR7+D56bjmwaoJi+WWjWzCGi59zove6PTe9hxHXaOwiv9Z3PjFKyjldQOqoJT7JhzWKGVA==}
+  '@langchain/anthropic@1.3.16':
+    resolution: {integrity: sha512-4624jR0uh+g4/Wtm4p6fmQkTkdVVy72zZxGVi3/s/aHcMBtzrKrjBWDft/+o4Va8C2a/2P8VPqf8i29+oQjyAA==}
     engines: {node: '>=20'}
     peerDependencies:
-      '@langchain/core': 1.1.19
+      '@langchain/core': 1.1.20
 
-  '@langchain/core@1.1.19':
-    resolution: {integrity: sha512-hmNAcgeLLqNLnu8UK+HVTfB8170eCmAfsy4gFLBYeE+kdsnyO0Hd/Kd42pZi8Cgfux4OMX3yxl+g+/a1ktGe0A==}
+  '@langchain/core@1.1.20':
+    resolution: {integrity: sha512-rwi7ZMhR336xIewGxVtOVZd63QBzVsV+zg/o1Og82yG4xTWODI8RIczMUATE5YYbEQQcbqsLPmM7vPpXtD5eHQ==}
     engines: {node: '>=20'}
 
   '@langchain/langgraph-checkpoint@1.0.0':
@@ -991,10 +991,10 @@ packages:
     peerDependencies:
       '@langchain/core': ^1.0.1
 
-  '@langchain/langgraph-sdk@1.5.5':
-    resolution: {integrity: sha512-SyiAs6TVXPWlt/8cI9pj/43nbIvclY3ytKqUFbL5MplCUnItetEyqvH87EncxyVF5D7iJKRZRfSVYBMmOZbjbQ==}
+  '@langchain/langgraph-sdk@1.6.0':
+    resolution: {integrity: sha512-J/B1SkCG0U+eXEXH/X89dDHxP8I0eULjLtXYvZ39uk2TxEKjLsrW4LY5J7Qwrf0GCDA+IM/agjKSLXALnctWTw==}
     peerDependencies:
-      '@langchain/core': ^1.1.15
+      '@langchain/core': ^1.1.16
       react: ^18 || ^19
       react-dom: ^18 || ^19
     peerDependenciesMeta:
@@ -1005,19 +1005,19 @@ packages:
       react-dom:
         optional: true
 
-  '@langchain/langgraph@1.1.3':
-    resolution: {integrity: sha512-o/cEWeocDDSpyBI2MfX07LkNG4LzdRKxwcgUcbR4PyRzhxxCkeIZRCCYkXVQoDbdKqAczJa0D7+yjU9rmA5iHQ==}
+  '@langchain/langgraph@1.1.4':
+    resolution: {integrity: sha512-9OhRF+7Zvcpure8TLtBrxfJDo0PAoHZhfzcPL6M3CsGXiYqLWm5tQe+FYqn9zRIV7IwphqVEl1QDNbOkVgo+kw==}
     engines: {node: '>=18'}
     peerDependencies:
-      '@langchain/core': ^1.0.1
+      '@langchain/core': ^1.1.16
       zod: ^3.25.32 || ^4.2.0
       zod-to-json-schema: ^3.x
     peerDependenciesMeta:
       zod-to-json-schema:
         optional: true
 
-  '@langchain/openai@1.2.4':
-    resolution: {integrity: sha512-3ThBOIXAJ6eXuqGGO41XDgr4rp/qpl/RpZmGcjv1S3+CRLS4UQBgXkZEab7mun85HfdsUWLs/v1+pDwbMFixcA==}
+  '@langchain/openai@1.2.6':
+    resolution: {integrity: sha512-fD+fRjqeWIM2r7mcFWCL9lp6iecUMJ8ePeqDjSQZtENP/u+RQ/18nfZE5wG9zBk7PT9BPlJWh8cZf07p748jzQ==}
     engines: {node: '>=20'}
     peerDependencies:
       '@langchain/core': ^1.0.0
@@ -1558,8 +1558,8 @@ packages:
   '@types/node@12.20.55':
     resolution: {integrity: sha512-J8xLz7q2OFulZ2cyGTLE1TbbZcjpno7FaN6zdJNrgAdrJ+DZzh/uFR6YrTb4C+nXakvud8Q4+rbhoIWlYQbUFQ==}
 
-  '@types/node@25.2.0':
-    resolution: {integrity: sha512-DZ8VwRFUNzuqJ5khrvwMXHmvPe+zGayJhr2CDNiKB1WBE1ST8Djl00D0IC4vvNmHMdj6DlbYRIaFE7WHjlDl5w==}
+  '@types/node@25.2.2':
+    resolution: {integrity: sha512-BkmoP5/FhRYek5izySdkOneRyXYN35I860MFAGupTdebyE66uZaR+bXLHq8k4DirE5DwQi3NuhvRU1jqTVwUrQ==}
 
   '@types/uuid@10.0.0':
     resolution: {integrity: sha512-7gqG38EyHgyP1S+7+xomFtL+ZNHcKv6DwNaCZmJmo1vgMugyF3TCnXVg4t1uk89mLNwnLtnY3TpOpCOyp1/xHQ==}
@@ -1946,8 +1946,8 @@ packages:
     resolution: {integrity: sha512-35mSku4ZXK0vfCuHEDAwt55dg2jNajHZ1odvF+8SSr82EsZY4QmXfuWso8oEd8zRhVObSN18aM0CjSdoBX7zIw==}
     engines: {node: '>=0.10.0'}
 
-  dotenv@17.2.3:
-    resolution: {integrity: sha512-JVUnt+DUIzu87TABbhPmNfVdBDt18BLOWjMUFJMSi/Qqg7NTYtabbvSNJGOJ7afbRuv9D/lngizHtP7QyLQ+9w==}
+  dotenv@17.2.4:
+    resolution: {integrity: sha512-mudtfb4zRB4bVvdj0xRo+e6duH1csJRM8IukBqfTRvHotn9+LBXB8ynAidP9zHqoRC/fsllXgk4kCKlR21fIhw==}
     engines: {node: '>=12'}
 
   dotenv@8.6.0:
@@ -2279,6 +2279,9 @@ packages:
   get-tsconfig@4.13.1:
     resolution: {integrity: sha512-EoY1N2xCn44xU6750Sx7OjOIT59FkmstNc3X6y5xpz7D5cBtZRe/3pSlTkDJgqsOk3WwZPkWfonhhUJfttQo3w==}
 
+  get-tsconfig@4.13.6:
+    resolution: {integrity: sha512-shZT/QMiSHc/YBLxxOkMtgSid5HFoauqCE3/exfsEcwg1WkeqjG+V40yBbBrsD+jW2HDXcs28xOfcbm2jI8Ddw==}
+
   glob-parent@5.1.2:
     resolution: {integrity: sha512-AOIgSQCepiJYwP3ARnGx+5VnTu2HBYdzbGP45eLw1vr3zB3vZLeyed1sC9hnbcOc9/SrMyM5RPQrkGz4aS9Zow==}
     engines: {node: '>= 6'}
@@ -2577,14 +2580,14 @@ packages:
   keyv@4.5.4:
     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
 
-  langchain@1.2.17:
-    resolution: {integrity: sha512-qiBvupKnPa/eKyv4Kzd1KeanSV7vfPuLZcaW/2upXQ9nesxrNp3sZNEpf9auQPg+XZgItwxaFi5euWqjXXnakA==}
+  langchain@1.2.19:
+    resolution: {integrity: sha512-Ymg7w27Xl+9GjwOhA7WkFLBfVM4tn+rR6EO8+I9imLLwFLCGwywo0LfI+66CaBysDlZ+8sUK+mQpIekQeKfCbg==}
     engines: {node: '>=20'}
     peerDependencies:
-      '@langchain/core': 1.1.19
+      '@langchain/core': 1.1.20
 
-  langsmith@0.4.12:
-    resolution: {integrity: sha512-YWt0jcGvKqjUgIvd78rd4QcdMss0lUkeUaqp0UpVRq7H2yNDx8H5jOUO/laWUmaPtWGgcip0qturykXe1g9Gqw==}
+  langsmith@0.5.2:
+    resolution: {integrity: sha512-CfkcQsiajtTWknAcyItvJsKEQdY2VgDpm6U8pRI9wnM07mevnOv5EF+RcqWGwx37SEUxtyi2RXMwnKW8b06JtA==}
     peerDependencies:
       '@opentelemetry/api': '*'
       '@opentelemetry/exporter-trace-otlp-proto': '*'
@@ -2681,8 +2684,8 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
-  modal@0.6.1:
-    resolution: {integrity: sha512-A2pLSxbXquAtJ5lqBb8SFiuKgJnkNk3bWB7msi/kjVef6m5kiSu3abmbVPPYBQ63K2em0YRk50eR+ElwQzxXXA==}
+  modal@0.6.2:
+    resolution: {integrity: sha512-SBKz+Wq9Z7DIokZw6QAhqubG2DmUUo8cRebLX5/BQe/v+7hBaZtZDZen1kj40zhMqY6EKb92QbsS8+17XmChyA==}
 
   mri@1.2.0:
     resolution: {integrity: sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==}
@@ -2758,8 +2761,8 @@ packages:
   obug@2.1.1:
     resolution: {integrity: sha512-uTqF9MuPraAQ+IsnPf366RG4cP9RtUi7MLO1N3KEc+wb0a6yKpeL0lmk2IB1jY5KHPAlTc6T/JRdC/YqxHNwkQ==}
 
-  openai@6.17.0:
-    resolution: {integrity: sha512-NHRpPEUPzAvFOAFs9+9pC6+HCw/iWsYsKCMPXH5Kw7BpMxqd8g/A07/1o7Gx2TWtCnzevVRyKMRFqyiHyAlqcA==}
+  openai@6.19.0:
+    resolution: {integrity: sha512-5uGrF82Ql7TKgIWUnuxh+OyzYbPRPwYDSgGc05JowbXRFsOkuj0dJuCdPCTBZT4mcmp2NEvj/URwDzW+lYgmVw==}
     hasBin: true
     peerDependencies:
       ws: ^8.18.0
@@ -3022,6 +3025,11 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
+  semver@7.7.4:
+    resolution: {integrity: sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA==}
+    engines: {node: '>=10'}
+    hasBin: true
+
   set-function-length@1.2.2:
     resolution: {integrity: sha512-pgRc4hJ4/sNjWCSS9AmnS40x3bNMDTknHgL5UaMBTMyJnU90EgWh1Rz+MC9eFu4BuN/UwZjKQuY/1v3rM7HMfg==}
     engines: {node: '>= 0.4'}
@@ -3211,8 +3219,8 @@ packages:
   tsconfig-paths@3.15.0:
     resolution: {integrity: sha512-2Ac2RgzDe/cn48GvOe3M+o82pEFewD3UPbyoUHHdKasHwJKjds4fLXWf/Ux5kATBKN20oaFGu+jbElp1pos0mg==}
 
-  tsdown@0.20.2:
-    resolution: {integrity: sha512-CBoA7rDtyuNkRcFsf8OgFQqBZjCC/ffbNHuS8aUE3HvTJDysWiW7REsQ/nqCYPqsCzy/MqA0tleJj8r+gfy97Q==}
+  tsdown@0.20.3:
+    resolution: {integrity: sha512-qWOUXSbe4jN8JZEgrkc/uhJpC8VN2QpNu3eZkBWwNuTEjc/Ik1kcc54ycfcQ5QPRHeu9OQXaLfCI3o7pEJgB2w==}
     engines: {node: '>=20.19.0'}
     hasBin: true
     peerDependencies:
@@ -3485,7 +3493,7 @@ packages:
 
 snapshots:
 
-  '@anthropic-ai/sdk@0.71.2(zod@4.3.6)':
+  '@anthropic-ai/sdk@0.73.0(zod@4.3.6)':
     dependencies:
       json-schema-to-ts: 3.1.1
     optionalDependencies:
@@ -4091,7 +4099,7 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  '@changesets/cli@2.29.8(@types/node@25.2.0)':
+  '@changesets/cli@2.29.8(@types/node@25.2.2)':
     dependencies:
       '@changesets/apply-release-plan': 7.0.14
       '@changesets/assemble-release-plan': 6.0.9
@@ -4107,7 +4115,7 @@ snapshots:
       '@changesets/should-skip-package': 0.1.2
       '@changesets/types': 6.1.0
       '@changesets/write': 0.4.0
-      '@inquirer/external-editor': 1.0.3(@types/node@25.2.0)
+      '@inquirer/external-editor': 1.0.3(@types/node@25.2.2)
       '@manypkg/get-packages': 1.1.3
       ansi-colors: 4.1.3
       ci-info: 3.9.0
@@ -4228,7 +4236,7 @@ snapshots:
       '@iarna/toml': 2.2.5
       axios: 1.13.4
       busboy: 1.6.0
-      dotenv: 17.2.3
+      dotenv: 17.2.4
       expand-tilde: 2.0.2
       fast-glob: 3.3.3
       form-data: 4.0.5
@@ -4432,12 +4440,12 @@ snapshots:
 
   '@iarna/toml@2.2.5': {}
 
-  '@inquirer/external-editor@1.0.3(@types/node@25.2.0)':
+  '@inquirer/external-editor@1.0.3(@types/node@25.2.2)':
     dependencies:
       chardet: 2.1.1
       iconv-lite: 0.7.2
     optionalDependencies:
-      '@types/node': 25.2.0
+      '@types/node': 25.2.2
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
@@ -4455,20 +4463,20 @@ snapshots:
 
   '@js-sdsl/ordered-map@4.4.2': {}
 
-  '@langchain/anthropic@1.3.14(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))':
+  '@langchain/anthropic@1.3.16(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))':
     dependencies:
-      '@anthropic-ai/sdk': 0.71.2(zod@4.3.6)
-      '@langchain/core': 1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6))
+      '@anthropic-ai/sdk': 0.73.0(zod@4.3.6)
+      '@langchain/core': 1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6))
       zod: 4.3.6
 
-  '@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6))':
+  '@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6))':
     dependencies:
       '@cfworker/json-schema': 4.1.1
       ansi-styles: 5.2.0
       camelcase: 6.3.0
       decamelize: 1.2.0
       js-tiktoken: 1.0.21
-      langsmith: 0.4.12(openai@6.17.0(ws@8.19.0)(zod@4.3.6))
+      langsmith: 0.5.2(openai@6.19.0(ws@8.19.0)(zod@4.3.6))
       mustache: 4.2.0
       p-queue: 6.6.2
       uuid: 10.0.0
@@ -4479,24 +4487,25 @@ snapshots:
       - '@opentelemetry/sdk-trace-base'
       - openai
 
-  '@langchain/langgraph-checkpoint@1.0.0(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))':
+  '@langchain/langgraph-checkpoint@1.0.0(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))':
     dependencies:
-      '@langchain/core': 1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6))
+      '@langchain/core': 1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6))
       uuid: 10.0.0
 
-  '@langchain/langgraph-sdk@1.5.5(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))':
+  '@langchain/langgraph-sdk@1.6.0(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))':
     dependencies:
+      '@types/json-schema': 7.0.15
       p-queue: 9.1.0
       p-retry: 7.1.1
       uuid: 13.0.0
     optionalDependencies:
-      '@langchain/core': 1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6))
+      '@langchain/core': 1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6))
 
-  '@langchain/langgraph@1.1.3(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))(zod@4.3.6)':
+  '@langchain/langgraph@1.1.4(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))(zod@4.3.6)':
     dependencies:
-      '@langchain/core': 1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6))
-      '@langchain/langgraph-checkpoint': 1.0.0(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))
-      '@langchain/langgraph-sdk': 1.5.5(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))
+      '@langchain/core': 1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6))
+      '@langchain/langgraph-checkpoint': 1.0.0(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))
+      '@langchain/langgraph-sdk': 1.6.0(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))
       '@standard-schema/spec': 1.1.0
       uuid: 10.0.0
       zod: 4.3.6
@@ -4504,18 +4513,18 @@ snapshots:
       - react
       - react-dom
 
-  '@langchain/openai@1.2.4(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))(ws@8.19.0)':
+  '@langchain/openai@1.2.6(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))(ws@8.19.0)':
     dependencies:
-      '@langchain/core': 1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6))
+      '@langchain/core': 1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6))
       js-tiktoken: 1.0.21
-      openai: 6.17.0(ws@8.19.0)(zod@4.3.6)
+      openai: 6.19.0(ws@8.19.0)(zod@4.3.6)
       zod: 4.3.6
     transitivePeerDependencies:
       - ws
 
-  '@langchain/tavily@1.2.0(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))':
+  '@langchain/tavily@1.2.0(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))':
     dependencies:
-      '@langchain/core': 1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6))
+      '@langchain/core': 1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6))
       zod: 4.3.6
 
   '@manypkg/find-root@1.1.0':
@@ -5067,7 +5076,7 @@ snapshots:
   '@types/fs-extra@11.0.4':
     dependencies:
       '@types/jsonfile': 6.1.4
-      '@types/node': 25.2.0
+      '@types/node': 25.2.2
 
   '@types/jsesc@2.5.1': {}
 
@@ -5077,7 +5086,7 @@ snapshots:
 
   '@types/jsonfile@6.1.4':
     dependencies:
-      '@types/node': 25.2.0
+      '@types/node': 25.2.2
 
   '@types/micromatch@4.0.10':
     dependencies:
@@ -5085,7 +5094,7 @@ snapshots:
 
   '@types/node@12.20.55': {}
 
-  '@types/node@25.2.0':
+  '@types/node@25.2.2':
     dependencies:
       undici-types: 7.16.0
 
@@ -5163,7 +5172,7 @@ snapshots:
       '@typescript-eslint/visitor-keys': 8.54.0
       debug: 4.4.3
       minimatch: 9.0.5
-      semver: 7.7.3
+      semver: 7.7.4
       tinyglobby: 0.2.15
       ts-api-utils: 2.4.0(typescript@5.9.3)
       typescript: 5.9.3
@@ -5198,7 +5207,7 @@ snapshots:
       obug: 2.1.1
       std-env: 3.10.0
       tinyrainbow: 3.0.3
-      vitest: 4.0.18(@types/node@25.2.0)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+      vitest: 4.0.18(@types/node@25.2.2)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
   '@vitest/expect@4.0.18':
     dependencies:
@@ -5209,13 +5218,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.0.3
 
-  '@vitest/mocker@4.0.18(vite@7.3.1(@types/node@25.2.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))':
+  '@vitest/mocker@4.0.18(vite@7.3.1(@types/node@25.2.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))':
     dependencies:
       '@vitest/spy': 4.0.18
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 7.3.1(@types/node@25.2.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+      vite: 7.3.1(@types/node@25.2.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
   '@vitest/pretty-format@4.0.18':
     dependencies:
@@ -5243,7 +5252,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 3.0.3
-      vitest: 4.0.18(@types/node@25.2.0)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+      vitest: 4.0.18(@types/node@25.2.2)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
   '@vitest/utils@4.0.18':
     dependencies:
@@ -5542,7 +5551,7 @@ snapshots:
     dependencies:
       esutils: 2.0.3
 
-  dotenv@17.2.3: {}
+  dotenv@17.2.4: {}
 
   dotenv@8.6.0: {}
 
@@ -5969,6 +5978,10 @@ snapshots:
     dependencies:
       resolve-pkg-maps: 1.0.0
 
+  get-tsconfig@4.13.6:
+    dependencies:
+      resolve-pkg-maps: 1.0.0
+
   glob-parent@5.1.2:
     dependencies:
       is-glob: 4.0.3
@@ -6247,12 +6260,12 @@ snapshots:
     dependencies:
       json-buffer: 3.0.1
 
-  langchain@1.2.17(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))(openai@6.17.0(ws@8.19.0)(zod@4.3.6)):
+  langchain@1.2.19(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))(openai@6.19.0(ws@8.19.0)(zod@4.3.6)):
     dependencies:
-      '@langchain/core': 1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6))
-      '@langchain/langgraph': 1.1.3(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))(zod@4.3.6)
-      '@langchain/langgraph-checkpoint': 1.0.0(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))
-      langsmith: 0.4.12(openai@6.17.0(ws@8.19.0)(zod@4.3.6))
+      '@langchain/core': 1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6))
+      '@langchain/langgraph': 1.1.4(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))(zod@4.3.6)
+      '@langchain/langgraph-checkpoint': 1.0.0(@langchain/core@1.1.20(openai@6.19.0(ws@8.19.0)(zod@4.3.6)))
+      langsmith: 0.5.2(openai@6.19.0(ws@8.19.0)(zod@4.3.6))
       uuid: 10.0.0
       zod: 4.3.6
     transitivePeerDependencies:
@@ -6264,16 +6277,16 @@ snapshots:
       - react-dom
       - zod-to-json-schema
 
-  langsmith@0.4.12(openai@6.17.0(ws@8.19.0)(zod@4.3.6)):
+  langsmith@0.5.2(openai@6.19.0(ws@8.19.0)(zod@4.3.6)):
     dependencies:
       '@types/uuid': 10.0.0
       chalk: 4.1.2
       console-table-printer: 2.15.0
       p-queue: 6.6.2
-      semver: 7.7.3
+      semver: 7.7.4
       uuid: 10.0.0
     optionalDependencies:
-      openai: 6.17.0(ws@8.19.0)(zod@4.3.6)
+      openai: 6.19.0(ws@8.19.0)(zod@4.3.6)
 
   levn@0.4.1:
     dependencies:
@@ -6308,7 +6321,7 @@ snapshots:
 
   make-dir@4.0.0:
     dependencies:
-      semver: 7.7.3
+      semver: 7.7.4
 
   math-intrinsics@1.1.0: {}
 
@@ -6348,7 +6361,7 @@ snapshots:
 
   mkdirp@1.0.4: {}
 
-  modal@0.6.1:
+  modal@0.6.2:
     dependencies:
       cbor-x: 1.6.0
       long: 5.3.2
@@ -6425,7 +6438,7 @@ snapshots:
 
   obug@2.1.1: {}
 
-  openai@6.17.0(ws@8.19.0)(zod@4.3.6):
+  openai@6.19.0(ws@8.19.0)(zod@4.3.6):
     optionalDependencies:
       ws: 8.19.0
       zod: 4.3.6
@@ -6551,7 +6564,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.0
-      '@types/node': 25.2.0
+      '@types/node': 25.2.2
       long: 5.3.2
 
   proxy-from-env@1.1.0: {}
@@ -6622,7 +6635,7 @@ snapshots:
       ast-kit: 3.0.0-beta.1
       birpc: 4.0.0
       dts-resolver: 2.1.3
-      get-tsconfig: 4.13.1
+      get-tsconfig: 4.13.6
       obug: 2.1.1
       rolldown: 1.0.0-rc.3
     optionalDependencies:
@@ -6710,6 +6723,8 @@ snapshots:
   semver@6.3.1: {}
 
   semver@7.7.3: {}
+
+  semver@7.7.4: {}
 
   set-function-length@1.2.2:
     dependencies:
@@ -6910,7 +6925,7 @@ snapshots:
       minimist: 1.2.8
       strip-bom: 3.0.0
 
-  tsdown@0.20.2(synckit@0.11.12)(typescript@5.9.3):
+  tsdown@0.20.3(synckit@0.11.12)(typescript@5.9.3):
     dependencies:
       ansis: 4.2.0
       cac: 6.7.14
@@ -6922,7 +6937,7 @@ snapshots:
       picomatch: 4.0.3
       rolldown: 1.0.0-rc.3
       rolldown-plugin-dts: 0.22.1(rolldown@1.0.0-rc.3)(typescript@5.9.3)
-      semver: 7.7.3
+      semver: 7.7.4
       tinyexec: 1.0.2
       tinyglobby: 0.2.15
       tree-kill: 1.2.2
@@ -7032,7 +7047,7 @@ snapshots:
 
   uuid@13.0.0: {}
 
-  vite@7.3.1(@types/node@25.2.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2):
+  vite@7.3.1(@types/node@25.2.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2):
     dependencies:
       esbuild: 0.27.2
       fdir: 6.5.0(picomatch@4.0.3)
@@ -7041,16 +7056,16 @@ snapshots:
       rollup: 4.57.1
       tinyglobby: 0.2.15
     optionalDependencies:
-      '@types/node': 25.2.0
+      '@types/node': 25.2.2
       fsevents: 2.3.3
       jiti: 2.6.1
       tsx: 4.21.0
       yaml: 2.8.2
 
-  vitest@4.0.18(@types/node@25.2.0)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2):
+  vitest@4.0.18(@types/node@25.2.2)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2):
     dependencies:
       '@vitest/expect': 4.0.18
-      '@vitest/mocker': 4.0.18(vite@7.3.1(@types/node@25.2.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
+      '@vitest/mocker': 4.0.18(vite@7.3.1(@types/node@25.2.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
       '@vitest/pretty-format': 4.0.18
       '@vitest/runner': 4.0.18
       '@vitest/snapshot': 4.0.18
@@ -7067,10 +7082,10 @@ snapshots:
       tinyexec: 1.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 3.0.3
-      vite: 7.3.1(@types/node@25.2.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+      vite: 7.3.1(@types/node@25.2.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
       why-is-node-running: 2.3.0
     optionalDependencies:
-      '@types/node': 25.2.0
+      '@types/node': 25.2.2
       '@vitest/ui': 4.0.18(vitest@4.0.18)
     transitivePeerDependencies:
       - jiti
