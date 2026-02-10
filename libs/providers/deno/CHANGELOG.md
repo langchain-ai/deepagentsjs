@@ -1,5 +1,11 @@
 # @langchain/deno
 
+## 0.2.0
+
+### Minor Changes
+
+- [#216](https://github.com/langchain-ai/deepagentsjs/pull/216) [`786053f`](https://github.com/langchain-ai/deepagentsjs/commit/786053fe42e7df66a5d728cd4635a18bde049387) Thanks [@christian-bromann](https://github.com/christian-bromann)! - feat(deno): better support for sandboxes with volume
+
 ## 0.1.2
 
 ### Patch Changes
