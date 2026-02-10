@@ -1452,10 +1452,7 @@ describe("validateMetadata", () => {
   });
 
   it("should pass through valid dict[str, str]", () => {
-    const result = validateMetadata(
-      { author: "acme" },
-      "/skills/s/SKILL.md",
-    );
+    const result = validateMetadata({ author: "acme" }, "/skills/s/SKILL.md");
     expect(result).toEqual({ author: "acme" });
   });
 });

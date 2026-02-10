@@ -447,9 +447,7 @@ export function parseSkillMetadataFromContent(
   let allowedTools: string[];
   if (rawTools) {
     if (Array.isArray(rawTools)) {
-      allowedTools = rawTools
-        .map((t) => String(t).trim())
-        .filter(Boolean);
+      allowedTools = rawTools.map((t) => String(t).trim()).filter(Boolean);
     } else {
       // Split on whitespace (handles multiple consecutive spaces)
       allowedTools = String(rawTools).split(/\s+/).filter(Boolean);
@@ -599,7 +597,10 @@ function formatSkillsLocations(sources: string[]): string {
  * Format skills metadata for display in system prompt.
  * Shows allowed tools for each skill if specified.
  */
-export function formatSkillsList(skills: SkillMetadata[], sources: string[]): string {
+export function formatSkillsList(
+  skills: SkillMetadata[],
+  sources: string[],
+): string {
   if (skills.length === 0) {
     const paths = sources.map((s) => `\`${s}\``).join(" or ");
     return `(No skills available yet. You can create skills in ${paths})`;
@@ -730,4 +731,3 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
     },
   });
 }
-
