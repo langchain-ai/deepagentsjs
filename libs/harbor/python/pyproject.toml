@@ -1,0 +1,44 @@
+[project]
+name = "deepagents-js-harbor"
+version = "0.0.1"
+description = "Harbor benchmark wrapper for deepagents-js (TypeScript agent via JSON-RPC bridge)"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+keywords = ["agents", "ai", "harbor", "benchmark", "terminal-bench"]
+dependencies = [
+    "harbor>=0.1.12",
+    "langsmith>=0.4.0",
+    "python-dotenv>=1.0.0",
+]
+
+[dependency-groups]
+test = [
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "ruff>=0.8.0",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["deepagents_js_harbor*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "TID252"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+force-single-line = false
+combine-as-imports = true
+known-first-party = ["deepagents_js_harbor"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

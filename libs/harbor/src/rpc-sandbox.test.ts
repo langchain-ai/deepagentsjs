@@ -262,9 +262,7 @@ describe("RpcSandbox", () => {
       expect(results.length).toBe(1);
       expect(results[0].path).toBe("/app/test.txt");
       expect(results[0].error).toBeNull();
-      expect(new TextDecoder().decode(results[0].content!)).toBe(
-        "hello world",
-      );
+      expect(new TextDecoder().decode(results[0].content!)).toBe("hello world");
 
       restore();
     });

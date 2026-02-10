@@ -46,9 +46,7 @@ function serializeMessage(msg: BaseMessage): SerializedMessage {
 
   // Extract text content
   const content =
-    typeof msg.content === "string"
-      ? msg.content
-      : JSON.stringify(msg.content);
+    typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
 
   const serialized: SerializedMessage = { role, content };
 
@@ -83,14 +81,25 @@ function serializeMessage(msg: BaseMessage): SerializedMessage {
 
 /**
  * Wait for the init message from Python.
- * Returns a promise that resolves with the init message.
+ * Returns a promise that resolves with the init message, or rejects
+ * if no init message arrives within the timeout period.
  */
 async function waitForInit(
   sandbox: RpcSandbox,
+  timeoutMs = 30_000,
 ): Promise<InitMessage> {
-  return new Promise<InitMessage>((resolve) => {
+  return new Promise<InitMessage>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(
+        new Error(
+          `Timed out waiting for init message from Python after ${timeoutMs}ms`,
+        ),
+      );
+    }, timeoutMs);
+
     sandbox.setMessageHandler((msg) => {
       if (msg.type === "init") {
+        clearTimeout(timer);
         resolve(msg as InitMessage);
       }
     });
@@ -162,10 +171,10 @@ async function main(): Promise<void> {
       messages,
     });
   } catch (error) {
-    const errorMsg =
-      error instanceof Error ? error.message : String(error);
-    const errorStack =
-      error instanceof Error ? error.stack : undefined;
+    const isError =
+      typeof error === "object" && error !== null && "message" in error;
+    const errorMsg = isError ? (error as Error).message : String(error);
+    const errorStack = isError ? (error as Error).stack : undefined;
 
     log(`Agent error: ${errorMsg}`);
 

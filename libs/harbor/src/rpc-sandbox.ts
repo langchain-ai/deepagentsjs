@@ -176,7 +176,10 @@ __DEEPAGENTS_EOF__`;
         const result = await this.execute(cmd);
 
         if (result.exitCode !== 0) {
-          results.push({ path: filePath, error: this.#mapError(result.output) });
+          results.push({
+            path: filePath,
+            error: this.#mapError(result.output),
+          });
         } else {
           results.push({ path: filePath, error: null });
         }
@@ -204,11 +207,12 @@ __DEEPAGENTS_EOF__`;
 
         const result = await this.execute(cmd);
 
-        if (
-          result.exitCode !== 0 ||
-          result.output.trim() === "__NOT_FOUND__"
-        ) {
-          results.push({ path: filePath, content: null, error: "file_not_found" });
+        if (result.exitCode !== 0 || result.output.trim() === "__NOT_FOUND__") {
+          results.push({
+            path: filePath,
+            content: null,
+            error: "file_not_found",
+          });
         } else {
           // Decode the base64 output
           const content = Buffer.from(result.output.trim(), "base64");

@@ -1,8 +1,7 @@
-.PHONY: all build bench-docker bench-daytona help
+.PHONY: all build bench-docker bench-docker-all bench-daytona help
 
-# Path to the Python harbor package (sibling repo)
-PYTHON_HARBOR_DIR ?= ../../../deepagents/libs/harbor
-AGENT_IMPORT = deepagents_harbor:DeepAgentsJSWrapper
+AGENT_IMPORT = deepagents_js_harbor:DeepAgentsJSWrapper
+PYTHON_DIR = python
 
 # Default target
 all: help
@@ -23,27 +22,27 @@ build:
 TASK ?= gpt2-codegolf
 bench-docker: build
 	@mkdir -p jobs/terminal-bench
-	cd $(PYTHON_HARBOR_DIR) && uv run harbor run \
+	cd $(PYTHON_DIR) && uv run harbor run \
 		--agent-import-path $(AGENT_IMPORT) \
 		--dataset terminal-bench@2.0 -n 1 \
 		-t $(TASK) \
-		--jobs-dir jobs/terminal-bench-js --env docker
+		--jobs-dir ../jobs/terminal-bench --env docker
 
 # Run all tasks on Docker (local)
 bench-docker-all: build
 	@mkdir -p jobs/terminal-bench
-	cd $(PYTHON_HARBOR_DIR) && uv run harbor run \
+	cd $(PYTHON_DIR) && uv run harbor run \
 		--agent-import-path $(AGENT_IMPORT) \
 		--dataset terminal-bench@2.0 -n 1 \
-		--jobs-dir jobs/terminal-bench-js --env docker
+		--jobs-dir ../jobs/terminal-bench --env docker
 
 # Run 10 concurrent tasks on Daytona (cloud, requires DAYTONA_API_KEY)
 bench-daytona: build
 	@mkdir -p jobs/terminal-bench
-	cd $(PYTHON_HARBOR_DIR) && uv run harbor run \
+	cd $(PYTHON_DIR) && uv run harbor run \
 		--agent-import-path $(AGENT_IMPORT) \
 		--dataset terminal-bench@2.0 -n 10 \
-		--jobs-dir jobs/terminal-bench-js --env daytona
+		--jobs-dir ../jobs/terminal-bench --env daytona
 
 ######################
 # HELP
@@ -55,17 +54,17 @@ help:
 	@echo '===================='
 	@echo ''
 	@echo 'Prerequisites:'
-	@echo '  - Python harbor package set up at $(PYTHON_HARBOR_DIR)'
-	@echo '  - Run: cd $(PYTHON_HARBOR_DIR) && uv sync'
+	@echo '  - Run: cd $(PYTHON_DIR) && uv sync'
 	@echo '  - Set ANTHROPIC_API_KEY in environment'
 	@echo ''
 	@echo 'Commands:'
-	@echo '  make build            - Build the TypeScript package'
-	@echo '  make bench-docker     - Run 1 task on Docker (local)'
-	@echo '  make bench-daytona    - Run 10 tasks on Daytona (cloud)'
+	@echo '  make build              - Build the TypeScript package'
+	@echo '  make bench-docker       - Run 1 task on Docker (TASK=gpt2-codegolf)'
+	@echo '  make bench-docker-all   - Run all tasks on Docker'
+	@echo '  make bench-daytona      - Run 10 tasks on Daytona (cloud)'
 	@echo ''
 	@echo 'Environment variables:'
-	@echo '  PYTHON_HARBOR_DIR     - Path to Python harbor package (default: $(PYTHON_HARBOR_DIR))'
+	@echo '  TASK                  - Task name for bench-docker (default: gpt2-codegolf)'
 	@echo '  ANTHROPIC_API_KEY     - Required for Claude models'
 	@echo '  DAYTONA_API_KEY       - Required for Daytona environment'
 	@echo '  LANGSMITH_API_KEY     - Optional for LangSmith tracing'

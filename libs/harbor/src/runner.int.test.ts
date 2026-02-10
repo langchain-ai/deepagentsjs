@@ -33,9 +33,10 @@ function send(child: ChildProcess, msg: Record<string, unknown>): void {
  * Each line is parsed as JSON and pushed to the provided array.
  * Returns the readline interface so it can be closed in cleanup.
  */
-function collectJsonLines(
-  child: ChildProcess,
-): { messages: Record<string, unknown>[]; rl: ReadlineInterface } {
+function collectJsonLines(child: ChildProcess): {
+  messages: Record<string, unknown>[];
+  rl: ReadlineInterface;
+} {
   const messages: Record<string, unknown>[] = [];
   const rl = createInterface({ input: child.stdout!, crlfDelay: Infinity });
   rl.on("line", (line: string) => {

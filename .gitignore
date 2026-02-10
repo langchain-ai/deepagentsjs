@@ -57,3 +57,10 @@ agent-os
 # Sandbox workspace directory - created at runtime
 sandbox-workspace/
 coverage
+
+# Python (harbor wrapper)
+**/__pycache__/
+**/*.egg-info/
+**/.venv/
+**/uv.lock
+**/jobs/
