@@ -166,27 +166,11 @@ export class DenoSandbox extends BaseSandbox {
       );
     }
 
-    // Resolve authentication: top-level `token` takes precedence over deprecated `auth.token`
+    // Resolve token: top-level `token` > deprecated `auth.token` > env variable
     const resolvedToken =
-      this.#options.token ?? this.#options.auth?.token ?? undefined;
-
-    if (resolvedToken) {
-      // Set the token in environment for the SDK
-      process.env.DENO_DEPLOY_TOKEN = resolvedToken;
-    } else {
-      // Fall back to getAuthCredentials which reads from environment
-      let credentials: { token: string };
-      try {
-        credentials = getAuthCredentials(this.#options.auth);
-      } catch (error) {
-        throw new DenoSandboxError(
-          "Failed to authenticate with Deno Deploy. Check your token configuration.",
-          "AUTHENTICATION_FAILED",
-          error instanceof Error ? error : undefined,
-        );
-      }
-      process.env.DENO_DEPLOY_TOKEN = credentials.token;
-    }
+      this.#options.token ??
+      this.#options.auth?.token ??
+      getAuthCredentials(this.#options.auth).token;
 
     try {
       // Separate deprecated / custom keys from options that pass through 1:1
@@ -209,8 +193,8 @@ export class DenoSandbox extends BaseSandbox {
           memory ?? (memoryMb !== undefined ? `${memoryMb}MiB` : undefined),
         // `timeout` takes precedence over deprecated `lifetime`
         timeout: timeout ?? lifetime,
-        // Resolved token (top-level `token` > `auth.token` > env)
-        ...(resolvedToken ? { token: resolvedToken } : {}),
+        // Resolved token
+        token: resolvedToken,
       };
 
       // Create the sandbox
@@ -554,44 +538,21 @@ export class DenoSandbox extends BaseSandbox {
       "auth" | "token" | "org" | "apiEndpoint"
     >,
   ): Promise<DenoSandbox> {
-    // Resolve authentication: top-level `token` takes precedence over deprecated `auth.token`
-    const resolvedToken = options?.token ?? options?.auth?.token ?? undefined;
-
-    if (resolvedToken) {
-      process.env.DENO_DEPLOY_TOKEN = resolvedToken;
-    } else {
-      let credentials: { token: string };
-      try {
-        credentials = getAuthCredentials(options?.auth);
-      } catch (error) {
-        throw new DenoSandboxError(
-          "Failed to authenticate with Deno Deploy. Check your token configuration.",
-          "AUTHENTICATION_FAILED",
-          error instanceof Error ? error : undefined,
-        );
-      }
-      process.env.DENO_DEPLOY_TOKEN = credentials.token;
-    }
+    // Resolve token: top-level `token` > deprecated `auth.token` > env variable
+    const resolvedToken =
+      options?.token ??
+      options?.auth?.token ??
+      getAuthCredentials(options?.auth).token;
 
     try {
-      const connectOptions: {
-        id: string;
-        token?: string;
-        org?: string;
-        apiEndpoint?: string;
-      } = { id };
-
-      if (resolvedToken) {
-        connectOptions.token = resolvedToken;
-      }
-      if (options?.org !== undefined) {
-        connectOptions.org = options.org;
-      }
-      if (options?.apiEndpoint !== undefined) {
-        connectOptions.apiEndpoint = options.apiEndpoint;
-      }
-
-      const existingSandbox = await Sandbox.connect(connectOptions);
+      const existingSandbox = await Sandbox.connect({
+        id,
+        token: resolvedToken,
+        ...(options?.org !== undefined ? { org: options.org } : {}),
+        ...(options?.apiEndpoint !== undefined
+          ? { apiEndpoint: options.apiEndpoint }
+          : {}),
+      });
 
       const denoSandbox = new DenoSandbox();
       // Set the existing sandbox directly (bypass initialize)
