@@ -776,7 +776,9 @@ description: [invalid yaml syntax: unclosed bracket
       middleware.wrapModelCall!(request, mockHandler);
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      expect(modifiedRequest.systemMessage.text).toContain("No skills available yet");
+      expect(modifiedRequest.systemMessage.text).toContain(
+        "No skills available yet",
+      );
     });
 
     it("should show priority indicator for last source", () => {
@@ -880,7 +882,8 @@ description: [invalid yaml syntax: unclosed bracket
       const originalIndex = modifiedRequest.systemMessage.text.indexOf(
         "Original system prompt content",
       );
-      const skillsIndex = modifiedRequest.systemMessage.text.indexOf("Skills System");
+      const skillsIndex =
+        modifiedRequest.systemMessage.text.indexOf("Skills System");
       expect(originalIndex).toBeLessThan(skillsIndex);
     });
   });
