@@ -10,6 +10,13 @@ import { MemorySaver } from "@langchain/langgraph";
 import {
   createSkillsMiddleware,
   skillsMetadataReducer,
+  MAX_SKILL_COMPATIBILITY_LENGTH,
+  validateSkillName,
+  parseSkillMetadataFromContent,
+  validateMetadata,
+  formatSkillAnnotations,
+  formatSkillsList,
+  type SkillMetadata,
   type SkillMetadataEntry,
 } from "./skills.js";
 import { createFileData } from "../backends/utils.js";
@@ -1156,6 +1163,434 @@ describe("skillsMetadataReducer", () => {
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual(update[0]); // Full replacement with update
     });
+  });
+});
+
+describe("validateSkillName", () => {
+  it("should accept valid ASCII lowercase names", () => {
+    const result = validateSkillName("web-research", "web-research");
+    expect(result.valid).toBe(true);
+    expect(result.error).toBe("");
+  });
+
+  it("should accept unicode lowercase alphanumeric characters", () => {
+    const result1 = validateSkillName("café", "café");
+    expect(result1.valid).toBe(true);
+
+    const result2 = validateSkillName("über-tool", "über-tool");
+    expect(result2.valid).toBe(true);
+  });
+
+  it("should reject unicode uppercase characters", () => {
+    const result = validateSkillName("Café", "Café");
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("lowercase");
+  });
+
+  it("should reject CJK characters", () => {
+    const result = validateSkillName("中文", "中文");
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("lowercase");
+  });
+
+  it("should reject emoji characters", () => {
+    const result = validateSkillName("tool-😀", "tool-😀");
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("lowercase");
+  });
+
+  it("should reject empty name", () => {
+    const result = validateSkillName("", "dir");
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe("name is required");
+  });
+
+  it("should reject name exceeding 64 characters", () => {
+    const longName = "a".repeat(65);
+    const result = validateSkillName(longName, longName);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("64 characters");
+  });
+
+  it("should reject name starting with hyphen", () => {
+    const result = validateSkillName("-tool", "-tool");
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("lowercase");
+  });
+
+  it("should reject name ending with hyphen", () => {
+    const result = validateSkillName("tool-", "tool-");
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("lowercase");
+  });
+
+  it("should reject consecutive hyphens", () => {
+    const result = validateSkillName("my--tool", "my--tool");
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("lowercase");
+  });
+
+  it("should reject name not matching directory", () => {
+    const result = validateSkillName("my-tool", "other-dir");
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("must match directory name");
+  });
+});
+
+describe("parseSkillMetadataFromContent", () => {
+  it("should parse valid frontmatter", () => {
+    const content = `---
+name: test-skill
+description: A test skill
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+    expect(result).not.toBeNull();
+    expect(result?.name).toBe("test-skill");
+    expect(result?.description).toBe("A test skill");
+  });
+
+  it("should reject whitespace-only description", () => {
+    const content = `---
+name: test-skill
+description: "   "
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+    expect(result).toBeNull();
+  });
+
+  it("should reject whitespace-only name", () => {
+    const content = `---
+name: "   "
+description: A test skill
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+    expect(result).toBeNull();
+  });
+
+  it("should handle allowed-tools as YAML list", () => {
+    const content = `---
+name: test-skill
+description: A test skill
+allowed-tools:
+  - Bash
+  - Read
+  - Write
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+    expect(result).not.toBeNull();
+    expect(result?.allowedTools).toEqual(["Bash", "Read", "Write"]);
+  });
+
+  it("should handle multiple consecutive spaces in allowed-tools string", () => {
+    const content = `---
+name: test-skill
+description: A test skill
+allowed-tools: Bash  Read   Write
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+    expect(result).not.toBeNull();
+    expect(result?.allowedTools).toEqual(["Bash", "Read", "Write"]);
+  });
+
+  it("should coerce boolean license to string", () => {
+    const content = `---
+name: test-skill
+description: A test skill
+license: true
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+    expect(result).not.toBeNull();
+    expect(result?.license).toBe("true");
+  });
+
+  it("should handle non-dict metadata gracefully", () => {
+    const content = `---
+name: test-skill
+description: A test skill
+metadata: some-text
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+    expect(result).not.toBeNull();
+    expect(result?.metadata).toEqual({});
+  });
+
+  it("should truncate compatibility exceeding 500 chars", () => {
+    const longCompat = "x".repeat(600);
+    const content = `---
+name: test-skill
+description: A test skill
+compatibility: ${longCompat}
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+    expect(result).not.toBeNull();
+    expect(result?.compatibility).not.toBeNull();
+    expect(result?.compatibility?.length).toBe(MAX_SKILL_COMPATIBILITY_LENGTH);
+  });
+
+  it("should return null for empty compatibility", () => {
+    const content = `---
+name: test-skill
+description: A test skill
+compatibility: ""
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+    expect(result).not.toBeNull();
+    expect(result?.compatibility).toBeNull();
+  });
+
+  it("should coerce metadata values to strings", () => {
+    const content = `---
+name: test-skill
+description: A test skill
+metadata:
+  count: 42
+  active: true
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+    expect(result).not.toBeNull();
+    expect(result?.metadata).toEqual({ count: "42", active: "true" });
+  });
+});
+
+describe("validateMetadata", () => {
+  it("should return empty dict for non-dict input", () => {
+    const result = validateMetadata("not a dict", "/skills/s/SKILL.md");
+    expect(result).toEqual({});
+  });
+
+  it("should return empty dict for list input", () => {
+    const result = validateMetadata(["a", "b"], "/skills/s/SKILL.md");
+    expect(result).toEqual({});
+  });
+
+  it("should return empty dict for null input", () => {
+    const result = validateMetadata(null, "/skills/s/SKILL.md");
+    expect(result).toEqual({});
+  });
+
+  it("should return empty dict for falsy input without warning", () => {
+    const result = validateMetadata(undefined, "/skills/s/SKILL.md");
+    expect(result).toEqual({});
+  });
+
+  it("should coerce non-string values to strings", () => {
+    const result = validateMetadata(
+      { count: 42, active: true },
+      "/skills/s/SKILL.md",
+    );
+    expect(result).toEqual({ count: "42", active: "true" });
+  });
+
+  it("should pass through valid dict[str, str]", () => {
+    const result = validateMetadata(
+      { author: "acme" },
+      "/skills/s/SKILL.md",
+    );
+    expect(result).toEqual({ author: "acme" });
+  });
+});
+
+describe("formatSkillAnnotations", () => {
+  it("should format both license and compatibility", () => {
+    const skill: SkillMetadata = {
+      name: "s",
+      description: "d",
+      path: "/p",
+      license: "MIT",
+      compatibility: "Python 3.10+",
+      metadata: {},
+      allowedTools: [],
+    };
+    expect(formatSkillAnnotations(skill)).toBe(
+      "License: MIT, Compatibility: Python 3.10+",
+    );
+  });
+
+  it("should format license only", () => {
+    const skill: SkillMetadata = {
+      name: "s",
+      description: "d",
+      path: "/p",
+      license: "Apache-2.0",
+      compatibility: null,
+      metadata: {},
+      allowedTools: [],
+    };
+    expect(formatSkillAnnotations(skill)).toBe("License: Apache-2.0");
+  });
+
+  it("should format compatibility only", () => {
+    const skill: SkillMetadata = {
+      name: "s",
+      description: "d",
+      path: "/p",
+      license: null,
+      compatibility: "Requires poppler",
+      metadata: {},
+      allowedTools: [],
+    };
+    expect(formatSkillAnnotations(skill)).toBe(
+      "Compatibility: Requires poppler",
+    );
+  });
+
+  it("should return empty string when no fields set", () => {
+    const skill: SkillMetadata = {
+      name: "s",
+      description: "d",
+      path: "/p",
+      license: null,
+      compatibility: null,
+      metadata: {},
+      allowedTools: [],
+    };
+    expect(formatSkillAnnotations(skill)).toBe("");
+  });
+});
+
+describe("formatSkillsList with annotations", () => {
+  it("should include both license and compatibility in annotations", () => {
+    const skills: SkillMetadata[] = [
+      {
+        name: "my-skill",
+        description: "Does things",
+        path: "/skills/my-skill/SKILL.md",
+        license: "Apache-2.0",
+        compatibility: "Requires poppler",
+        metadata: {},
+        allowedTools: [],
+      },
+    ];
+
+    const result = formatSkillsList(skills, ["/skills/"]);
+    expect(result).toContain(
+      "(License: Apache-2.0, Compatibility: Requires poppler)",
+    );
+  });
+
+  it("should include license-only annotation", () => {
+    const skills: SkillMetadata[] = [
+      {
+        name: "licensed-skill",
+        description: "A licensed skill",
+        path: "/skills/licensed-skill/SKILL.md",
+        license: "MIT",
+        compatibility: null,
+        metadata: {},
+        allowedTools: [],
+      },
+    ];
+
+    const result = formatSkillsList(skills, ["/skills/"]);
+    expect(result).toContain("(License: MIT)");
+    expect(result).not.toContain("Compatibility");
+  });
+
+  it("should include compatibility-only annotation", () => {
+    const skills: SkillMetadata[] = [
+      {
+        name: "compat-skill",
+        description: "A compatible skill",
+        path: "/skills/compat-skill/SKILL.md",
+        license: null,
+        compatibility: "Python 3.10+",
+        metadata: {},
+        allowedTools: [],
+      },
+    ];
+
+    const result = formatSkillsList(skills, ["/skills/"]);
+    expect(result).toContain("(Compatibility: Python 3.10+)");
+    expect(result).not.toContain("License");
+  });
+
+  it("should not include annotations when no optional fields set", () => {
+    const skills: SkillMetadata[] = [
+      {
+        name: "plain-skill",
+        description: "A plain skill",
+        path: "/skills/plain-skill/SKILL.md",
+        license: null,
+        compatibility: null,
+        metadata: {},
+        allowedTools: [],
+      },
+    ];
+
+    const result = formatSkillsList(skills, ["/skills/"]);
+    expect(result).toContain("- **plain-skill**: A plain skill\n");
+    expect(result).not.toContain("License");
+    expect(result).not.toContain("Compatibility");
   });
 });
 
