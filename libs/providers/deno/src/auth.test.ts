@@ -73,9 +73,7 @@ describe("getAuthToken", () => {
         getAuthToken();
       } catch (error) {
         expect(error).toBeInstanceOf(DenoSandboxError);
-        expect((error as DenoSandboxError).code).toBe(
-          "AUTHENTICATION_FAILED",
-        );
+        expect((error as DenoSandboxError).code).toBe("AUTHENTICATION_FAILED");
       }
     });
 
