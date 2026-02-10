@@ -1,5 +1,16 @@
 # deepagents
 
+## 1.7.4
+
+### Patch Changes
+
+- [#208](https://github.com/langchain-ai/deepagentsjs/pull/208) [`4ea1858`](https://github.com/langchain-ai/deepagentsjs/commit/4ea18587a3799a1cffcfa706ae00c5b9a89040b3) Thanks [@antonnak](https://github.com/antonnak)! - fix(skills): use systemMessage.concat() instead of systemPrompt string in SkillsMiddleware
+
+  Aligns SkillsMiddleware.wrapModelCall with FilesystemMiddleware and SubAgentMiddleware
+  by using request.systemMessage.concat() instead of request.systemPrompt string concatenation.
+  This preserves SystemMessage content blocks including cache_control annotations for
+  Anthropic prompt caching.
+
 ## 1.7.3
 
 ### Patch Changes
