@@ -273,9 +273,9 @@ Remember: Skills are tools to make you more capable and consistent. When in doub
  * - Must not contain consecutive `--`
  * - Must match the parent directory name containing the `SKILL.md` file
  *
- * Unicode lowercase alphanumeric means any character matching `\p{Ll}` (Lowercase
- * Letter) or `\p{Nd}` (Decimal Digit Number), which covers accented Latin
- * characters (e.g., `'café'`, `'über-tool'`) and other scripts.
+ * Unicode lowercase alphanumeric means any lowercase or decimal digit, which
+ * covers accented Latin characters (e.g., `'café'`, `'über-tool'`) and other
+ * scripts.
  *
  * @param name - The skill name from YAML frontmatter
  * @param directoryName - The parent directory name
