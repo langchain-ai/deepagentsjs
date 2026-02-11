@@ -1,5 +1,21 @@
 # deepagents
 
+## 1.7.5
+
+### Patch Changes
+
+- [#211](https://github.com/langchain-ai/deepagentsjs/pull/211) [`adce96c`](https://github.com/langchain-ai/deepagentsjs/commit/adce96c7c7a99fd37a2ebbd850984b0793e1f8b4) Thanks [@hntrl](https://github.com/hntrl)! - fix(skills): improve skills middleware input validation and add annotations
+
+  Port of Python PR #1189. Hardens `parseSkillMetadataFromContent` with stricter
+  coercion/trimming for all YAML fields, adds Unicode lowercase support in
+  `validateSkillName`, validates and truncates compatibility length, handles
+  `allowed-tools` as YAML list or space-delimited string, and shows
+  license/compatibility annotations in the system prompt skill listing.
+
+- [#210](https://github.com/langchain-ai/deepagentsjs/pull/210) [`2eea576`](https://github.com/langchain-ai/deepagentsjs/commit/2eea576809f5f89ec29ba9f9425f9a113e6db365) Thanks [@hntrl](https://github.com/hntrl)! - refactor(summarization): state rework, move to wrap pattern
+
+  Refactors `createSummarizationMiddleware` to use the `wrapModelCall` hook instead of `beforeModel`. Instead of rewriting LangGraph state with `RemoveMessage(REMOVE_ALL_MESSAGES)` on each summarization, the middleware now tracks a `SummarizationEvent` in private state and reconstructs the effective message list on each call, avoiding full state rewrites. Supports chained summarizations with correct cutoff index progression.
+
 ## 1.7.4
 
 ### Patch Changes
