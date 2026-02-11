@@ -1,5 +1,5 @@
 import { defineConfig } from "tsdown";
-import { readFileSync } from "node:fs";
+import { version } from "./package.json"  with { type: "json" };
 
 // Mark all node_modules as external since this is a library
 const external = [/^[^./]/];

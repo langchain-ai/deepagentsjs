@@ -1,5 +1,5 @@
 import path from "node:path";
-import { readFileSync } from "node:fs";
+import { version } from "./package.json"  with { type: "json" };
 import {
   configDefaults,
   defineConfig,
