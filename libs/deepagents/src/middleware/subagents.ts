@@ -11,7 +11,7 @@ import {
   type ReactAgent,
   StructuredTool,
 } from "langchain";
-import { Command, getCurrentTaskInput } from "@langchain/langgraph";
+import { Command, getCurrentTaskInput, getWriter } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
@@ -364,7 +364,10 @@ function filterStateForSubagent(
 }
 
 /**
- * Create Command with filtered state update from subagent result
+ * Create Command with filtered state update from subagent result.
+ *
+ * Only includes non-excluded state keys. The todos key flows through
+ * so that subagent auto-mark completions propagate to the parent.
  */
 function returnCommandWithStateUpdate(
   result: Record<string, unknown>,
@@ -374,22 +377,27 @@ function returnCommandWithStateUpdate(
   const messages = result.messages as Array<{ content: string }>;
   const lastMessage = messages?.[messages.length - 1];
 
-  // Debug: log whether todos are flowing back from subagent
+  // Debug: log state keys being returned and todo details
+  const stateKeys = Object.keys(stateUpdate);
+  console.debug("[subagents] returnCommandWithStateUpdate", {
+    stateKeys,
+    hasTodos: "todos" in stateUpdate,
+    toolCallId: toolCallId.slice(0, 12),
+  });
+
   if ("todos" in stateUpdate) {
     const todos = stateUpdate.todos as Array<{
       id?: string;
       content: string;
       status: string;
     }>;
-    console.debug("[subagents] todos flowing back from subagent", {
+    console.debug("[subagents] todos in Command update", {
       count: todos?.length ?? 0,
       statuses:
         todos?.map(
           (t) => `${(t.id ?? "no-id").slice(0, 8)}:${t.status}`,
         ) ?? [],
     });
-  } else {
-    console.debug("[subagents] no todos in subagent return state");
   }
 
   return new Command({
@@ -549,6 +557,29 @@ function createTaskTool(options: {
 
       const subagent = subagentGraphs[subagent_type];
 
+      // Capture the stream writer BEFORE subagent.invoke() — the subagent's
+      // graph invocation replaces the AsyncLocalStorage context, so getWriter()
+      // returns undefined after invoke() completes.
+      let streamWriter: ((data: unknown) => void) | undefined;
+      try {
+        // Try explicit config first, then ALS fallback
+        const w = getWriter(config) ?? getWriter();
+        if (typeof w === "function") {
+          streamWriter = w;
+        } else if (w && typeof (w as any).write === "function") {
+          streamWriter = (data: unknown) => (w as any).write(data);
+        } else if (w && typeof (w as any).push === "function") {
+          streamWriter = (data: unknown) => (w as any).push(data);
+        }
+        console.debug(
+          `[subagents] writer captured pre-invoke: ${streamWriter ? "yes" : "no"}, raw type=${typeof w}, keys=${w ? Object.keys(w as object).join(",") : "null"}`,
+        );
+      } catch (e) {
+        console.debug(
+          `[subagents] writer capture failed: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+
       // Get current state and filter it for subagent
       const currentState = getCurrentTaskInput<Record<string, unknown>>();
       const subagentState = filterStateForSubagent(currentState);
@@ -562,9 +593,17 @@ function createTaskTool(options: {
 
       // Auto-mark the assigned parent todo as completed when the subagent finishes
       if (todo_id) {
+        const todosSource = result.todos ? "subagent-result" : "parent-state";
         const todos = (result.todos ?? currentState.todos) as
           | Array<{ id: string; status: string; content: string }>
           | undefined;
+        console.debug("[subagents] auto-mark attempt", {
+          todo_id: todo_id.slice(0, 12),
+          todosSource,
+          todosCount: todos?.length ?? 0,
+          todoIds: todos?.map((t) => t.id?.slice(0, 12)) ?? [],
+          matchFound: todos?.some((t) => t.id === todo_id) ?? false,
+        });
         if (todos) {
           result.todos = todos.map((t) =>
             t.id === todo_id ? { ...t, status: "completed" } : t,
@@ -572,6 +611,29 @@ function createTaskTool(options: {
           console.debug(
             `[subagents] auto-marked todo ${todo_id.slice(0, 8)} as completed`,
           );
+
+          // Emit immediately via writer() — bypasses Promise.all batching
+          // so the frontend sees this todo flip to completed right away
+          if (streamWriter) {
+            try {
+              streamWriter({
+                id: crypto.randomUUID(),
+                event: "__state_patch__",
+                todos: result.todos,
+              });
+              console.debug(
+                `[subagents] __state_patch__ emitted for todo ${todo_id.slice(0, 8)}`,
+              );
+            } catch (e) {
+              console.debug(
+                `[subagents] __state_patch__ emit failed for todo ${todo_id.slice(0, 8)}: ${e instanceof Error ? e.message : String(e)}`,
+              );
+            }
+          } else {
+            console.debug(
+              `[subagents] no writer available for todo ${todo_id.slice(0, 8)}, skipping __state_patch__`,
+            );
+          }
         }
       }
 
