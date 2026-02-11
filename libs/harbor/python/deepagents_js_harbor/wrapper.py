@@ -256,7 +256,7 @@ class DeepAgentsJSWrapper(BaseAgent):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=os.environ.copy(),
-            limit=10 * 1024 * 1024,
+            limit=100 * 1024 * 1024,
         )
 
         try:

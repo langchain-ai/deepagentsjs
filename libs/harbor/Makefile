@@ -1,6 +1,7 @@
-.PHONY: all build bench-docker bench-docker-all bench-daytona help
+.PHONY: all build bench-docker bench-docker-all bench-daytona bench-langsmith help
 
 AGENT_IMPORT = deepagents_js_harbor:DeepAgentsJSWrapper
+ENV_IMPORT = deepagents_js_harbor.langsmith_environment:LangSmithEnvironment
 PYTHON_DIR = python
 
 # Default target
@@ -44,6 +45,16 @@ bench-daytona: build
 		--dataset terminal-bench@2.0 -n 10 \
 		--jobs-dir ../jobs/terminal-bench --env daytona
 
+# Run 1 task on LangSmith sandbox (cloud, requires LANGSMITH_API_KEY)
+bench-langsmith: build
+	@mkdir -p jobs/terminal-bench
+	cd $(PYTHON_DIR) && uv run harbor run \
+		--agent-import-path $(AGENT_IMPORT) \
+		-c langsmith-env-config.yaml \
+		--dataset terminal-bench@2.0 -n 1 \
+		-t $(TASK) \
+		--jobs-dir ../jobs/terminal-bench
+
 ######################
 # HELP
 ######################
@@ -62,11 +73,12 @@ help:
 	@echo '  make bench-docker       - Run 1 task on Docker (TASK=gpt2-codegolf)'
 	@echo '  make bench-docker-all   - Run all tasks on Docker'
 	@echo '  make bench-daytona      - Run 10 tasks on Daytona (cloud)'
+	@echo '  make bench-langsmith    - Run 1 task on LangSmith sandbox (cloud)'
 	@echo ''
 	@echo 'Environment variables:'
-	@echo '  TASK                  - Task name for bench-docker (default: gpt2-codegolf)'
+	@echo '  TASK                  - Task name for bench-docker/bench-langsmith (default: gpt2-codegolf)'
 	@echo '  ANTHROPIC_API_KEY     - Required for Claude models'
 	@echo '  DAYTONA_API_KEY       - Required for Daytona environment'
-	@echo '  LANGSMITH_API_KEY     - Optional for LangSmith tracing'
+	@echo '  LANGSMITH_API_KEY     - Required for LangSmith sandbox & tracing'
 	@echo '  LANGSMITH_EXPERIMENT  - Optional experiment name for LangSmith'
 	@echo '  DEEPAGENTS_JS_RUNNER  - Override path to runner.js'

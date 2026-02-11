@@ -13,6 +13,7 @@
  * @packageDocumentation
  */
 
+import { awaitAllCallbacks } from "@langchain/core/callbacks/promises";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
 
@@ -186,6 +187,11 @@ async function main(): Promise<void> {
 
     process.exitCode = 1;
   } finally {
+    // Flush all pending LangSmith traces and LangChain callbacks before the
+    // process exits.  Without this, Python may terminate the child process
+    // before background trace batches have been sent.
+    await awaitAllCallbacks();
+
     rpcSandbox.dispose();
     reader.close();
     // Destroy stdin so the event loop can drain and the process exits cleanly.

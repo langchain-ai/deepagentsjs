@@ -1,0 +1,7 @@
+# Harbor job config for running benchmarks with a LangSmith sandbox.
+# Usage: harbor run -c langsmith-env-config.yaml --dataset terminal-bench@2.0 ...
+#
+# The container image is automatically resolved from the task's docker_image
+# field in task.toml.  Override with template_image if needed.
+environment:
+  import_path: "deepagents_js_harbor.langsmith_environment:LangSmithEnvironment"
