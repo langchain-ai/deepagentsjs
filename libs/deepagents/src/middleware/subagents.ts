@@ -435,6 +435,7 @@ function getSubagents(options: {
       systemPrompt: DEFAULT_SUBAGENT_PROMPT,
       tools: defaultTools as any,
       middleware: generalPurposeMiddleware,
+      name: "general-purpose",
     });
 
     agents["general-purpose"] = generalPurposeSubagent;
@@ -465,6 +466,7 @@ function getSubagents(options: {
         systemPrompt: agentParams.systemPrompt,
         tools: agentParams.tools ?? defaultTools,
         middleware,
+        name: agentParams.name,
       });
     }
   }

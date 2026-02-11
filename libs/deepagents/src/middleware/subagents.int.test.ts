@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { createAgent, createMiddleware, ReactAgent } from "langchain";
+import { createAgent, createMiddleware, ReactAgent, tool } from "langchain";
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
+import { z } from "zod/v4";
 import {
   createSubAgentMiddleware,
   createFilesystemMiddleware,
@@ -840,6 +841,66 @@ Use the write_file tool to save your code.`,
       // If the skill is properly loaded and followed, the subagent MUST use process.stdout.write
       expect(usedProcessStdout).toBe(true);
       expect(usedConsoleLog).toBe(false);
+    },
+  );
+
+  it.concurrent(
+    "should propagate lc_agent_name metadata to tools inside subagents",
+    { timeout: 90 * 1000 }, // 90s
+    async () => {
+      /**
+       * This test verifies that when a subagent is created with a name,
+       * its tools can access the agent name via config.metadata.lc_agent_name.
+       * This is critical for identifying which agent invoked a shared tool.
+       */
+      let capturedAgentName: string | undefined;
+
+      const identifyingTool = tool(
+        (input, config) => {
+          capturedAgentName = config.metadata?.lc_agent_name;
+          return `Weather in ${input.location} is sunny. Agent: ${capturedAgentName}`;
+        },
+        {
+          name: "get_weather_with_identity",
+          description: "Get the weather and identify the calling agent",
+          schema: z.object({ location: z.string() }),
+        },
+      );
+
+      const agent = createAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt:
+          "Use the weather-agent subagent to get the weather. Always delegate to the subagent.",
+        middleware: [
+          createSubAgentMiddleware({
+            defaultModel: SAMPLE_MODEL,
+            defaultTools: [],
+            subagents: [
+              {
+                name: "weather-agent",
+                description:
+                  "A weather specialist agent. Use this for any weather queries.",
+                systemPrompt:
+                  "You are a weather specialist. Use the get_weather_with_identity tool to answer weather questions.",
+                tools: [identifyingTool],
+              },
+            ],
+          }),
+        ],
+      });
+
+      const response = await agent.invoke({
+        messages: [new HumanMessage("What is the weather in Tokyo?")],
+      });
+
+      // Verify the task tool was called with the weather-agent subagent
+      const toolCalls = extractAllToolCalls(response);
+      const taskCall = toolCalls.find((tc) => tc.name === "task");
+      expect(taskCall).toBeDefined();
+      expect(taskCall!.args.subagent_type).toBe("weather-agent");
+
+      // Verify the tool captured the correct agent name
+      expect(capturedAgentName).toBe("weather-agent");
     },
   );
 });
