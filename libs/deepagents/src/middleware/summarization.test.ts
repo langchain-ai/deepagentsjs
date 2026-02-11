@@ -44,10 +44,10 @@ async function callWrapModelCall(
   state: Record<string, unknown>,
 ): Promise<{
   result: any;
-  capturedRequest: { messages: BaseMessage[];[key: string]: any } | null;
+  capturedRequest: { messages: BaseMessage[]; [key: string]: any } | null;
 }> {
   const messages = (state.messages ?? []) as BaseMessage[];
-  let capturedRequest: { messages: BaseMessage[];[key: string]: any } | null =
+  let capturedRequest: { messages: BaseMessage[]; [key: string]: any } | null =
     null;
 
   const mockResponse = new AIMessage({ content: "Mock response" });
