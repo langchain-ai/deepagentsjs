@@ -17,6 +17,15 @@ import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
 import type * as _tools from "@langchain/core/tools";
 
+const expectedTools = [
+  "write_todos",
+  "ls",
+  "read_file",
+  "write_file",
+  "edit_file",
+  "task",
+];
+
 /**
  * Assert that an agent has all the expected deep agent qualities
  * Accepts any object with a graph property (compatible with ReactAgent and DeepAgent types)
@@ -39,16 +48,7 @@ export function assertAllDeepAgentQualities(agent: {
 
   // Check tools
   const tools = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
-  const toolNames = tools.map((t: any) => t.name);
-
-  const expectedTools = [
-    "write_todos",
-    "ls",
-    "read_file",
-    "write_file",
-    "edit_file",
-    "task",
-  ];
+  const toolNames = tools.map((t: StructuredTool) => t.name);
   for (const toolName of expectedTools) {
     if (!toolNames.includes(toolName)) {
       throw new Error(

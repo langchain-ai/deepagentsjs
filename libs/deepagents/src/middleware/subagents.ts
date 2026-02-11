@@ -212,10 +212,12 @@ When NOT to use the task tool:
  * Type definitions for pre-compiled agents.
  *
  * @typeParam TRunnable - The type of the runnable (ReactAgent or Runnable).
- *   When using `createAgent`, this preserves the middleware types for type inference.
+ *   When using `createAgent` or `createDeepAgent`, this preserves the middleware
+ *   types for type inference. Uses `ReactAgent<any>` to accept agents with any
+ *   type configuration (including DeepAgent instances).
  */
 export interface CompiledSubAgent<
-  TRunnable extends ReactAgent | Runnable = ReactAgent | Runnable,
+  TRunnable extends ReactAgent<any> | Runnable = ReactAgent<any> | Runnable,
 > {
   /** The name of the agent */
   name: string;
