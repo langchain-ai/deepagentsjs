@@ -45,6 +45,7 @@ export {
   // Backend-aware summarization middleware with history offloading
   createSummarizationMiddleware,
   type SummarizationMiddlewareOptions,
+  type SummarizationEvent,
   type ContextSize,
   type TruncateArgsSettings,
   // Re-export base summarization middleware from langchain for users who don't need backend offloading
