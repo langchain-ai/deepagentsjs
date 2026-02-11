@@ -562,22 +562,14 @@ function createTaskTool(options: {
       // returns undefined after invoke() completes.
       let streamWriter: ((data: unknown) => void) | undefined;
       try {
-        // Try explicit config first, then ALS fallback
         const w = getWriter(config) ?? getWriter();
         if (typeof w === "function") {
           streamWriter = w;
         } else if (w && typeof (w as any).write === "function") {
           streamWriter = (data: unknown) => (w as any).write(data);
-        } else if (w && typeof (w as any).push === "function") {
-          streamWriter = (data: unknown) => (w as any).push(data);
         }
-        console.debug(
-          `[subagents] writer captured pre-invoke: ${streamWriter ? "yes" : "no"}, raw type=${typeof w}, keys=${w ? Object.keys(w as object).join(",") : "null"}`,
-        );
-      } catch (e) {
-        console.debug(
-          `[subagents] writer capture failed: ${e instanceof Error ? e.message : String(e)}`,
-        );
+      } catch {
+        // writer not available outside graph streaming context
       }
 
       // Get current state and filter it for subagent
@@ -621,18 +613,9 @@ function createTaskTool(options: {
                 event: "__state_patch__",
                 todos: result.todos,
               });
-              console.debug(
-                `[subagents] __state_patch__ emitted for todo ${todo_id.slice(0, 8)}`,
-              );
-            } catch (e) {
-              console.debug(
-                `[subagents] __state_patch__ emit failed for todo ${todo_id.slice(0, 8)}: ${e instanceof Error ? e.message : String(e)}`,
-              );
+            } catch {
+              // emit failed — falls back to normal state update after Promise.all
             }
-          } else {
-            console.debug(
-              `[subagents] no writer available for todo ${todo_id.slice(0, 8)}, skipping __state_patch__`,
-            );
           }
         }
       }
