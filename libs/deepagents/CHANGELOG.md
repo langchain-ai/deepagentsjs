@@ -1,5 +1,29 @@
 # deepagents
 
+## 1.7.4
+
+### Patch Changes
+
+- [#208](https://github.com/langchain-ai/deepagentsjs/pull/208) [`4ea1858`](https://github.com/langchain-ai/deepagentsjs/commit/4ea18587a3799a1cffcfa706ae00c5b9a89040b3) Thanks [@antonnak](https://github.com/antonnak)! - fix(skills): use systemMessage.concat() instead of systemPrompt string in SkillsMiddleware
+
+  Aligns SkillsMiddleware.wrapModelCall with FilesystemMiddleware and SubAgentMiddleware
+  by using request.systemMessage.concat() instead of request.systemPrompt string concatenation.
+  This preserves SystemMessage content blocks including cache_control annotations for
+  Anthropic prompt caching.
+
+## 1.7.3
+
+### Patch Changes
+
+- [#200](https://github.com/langchain-ai/deepagentsjs/pull/200) [`a837eac`](https://github.com/langchain-ai/deepagentsjs/commit/a837eacb8145b3c5467c56d18946cf7ae1ddb69f) Thanks [@JadenKim-dev](https://github.com/JadenKim-dev)! - fix: normalize path handling for cross-platform compatibility
+
+- [#201](https://github.com/langchain-ai/deepagentsjs/pull/201) [`3f30ba7`](https://github.com/langchain-ai/deepagentsjs/commit/3f30ba7e1dc20ec8c892838392b2df6a2c4155ac) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): cross-platform shell commands for Alpine/BusyBox and macOS
+
+  The BaseSandbox shell commands for lsInfo, globInfo, and grepRaw now work across three environments via runtime detection:
+  - GNU Linux (Ubuntu, Debian): uses find -printf for efficient metadata listing
+  - BusyBox / Alpine: uses find -exec sh -c with stat -c for size/mtime and POSIX test builtins for file type detection
+  - BSD / macOS: uses find -exec stat -f as a fallback
+
 ## 1.7.2
 
 ### Patch Changes

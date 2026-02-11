@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { getAuthToken } from "./auth.js";
+import { DenoSandboxError } from "./types.js";
 
 describe("getAuthToken", () => {
   // Store original env vars
@@ -60,10 +61,20 @@ describe("getAuthToken", () => {
   });
 
   describe("error handling", () => {
-    it("should throw when no token is available", () => {
+    it("should throw DenoSandboxError when no token is available", () => {
+      expect(() => getAuthToken()).toThrow(DenoSandboxError);
       expect(() => getAuthToken()).toThrow(
         "Deno Deploy authentication required",
       );
+    });
+
+    it("should throw with AUTHENTICATION_FAILED code", () => {
+      try {
+        getAuthToken();
+      } catch (error) {
+        expect(error).toBeInstanceOf(DenoSandboxError);
+        expect((error as DenoSandboxError).code).toBe("AUTHENTICATION_FAILED");
+      }
     });
 
     it("should throw with descriptive error message", () => {

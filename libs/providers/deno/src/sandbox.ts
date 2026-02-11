@@ -9,16 +9,14 @@
  * @packageDocumentation
  */
 
-import { Sandbox } from "@deno/sandbox";
+import { Sandbox, type SandboxOptions } from "@deno/sandbox";
 import {
   BaseSandbox,
-  type EditResult,
   type ExecuteResponse,
   type FileDownloadResponse,
   type FileOperationError,
   type FileUploadResponse,
   type BackendFactory,
-  type WriteResult,
 } from "deepagents";
 
 import { getAuthCredentials } from "./auth.js";
@@ -37,8 +35,8 @@ import { DenoSandboxError, type DenoSandboxOptions } from "./types.js";
  *
  * // Create and initialize a sandbox
  * const sandbox = await DenoSandbox.create({
- *   memoryMb: 1024,
- *   lifetime: "5m",
+ *   memory: "1GiB",
+ *   timeout: "5m",
  * });
  *
  * try {
@@ -125,22 +123,17 @@ export class DenoSandbox extends BaseSandbox {
    * @example
    * ```typescript
    * // Two-step initialization
-   * const sandbox = new DenoSandbox({ memoryMb: 1024 });
+   * const sandbox = new DenoSandbox({ memory: "1GiB" });
    * await sandbox.initialize();
    *
    * // Or use the factory method
-   * const sandbox = await DenoSandbox.create({ memoryMb: 1024 });
+   * const sandbox = await DenoSandbox.create({ memory: "1GiB" });
    * ```
    */
   constructor(options: DenoSandboxOptions = {}) {
     super();
 
-    // Set defaults
-    this.#options = {
-      memoryMb: 768,
-      lifetime: "session",
-      ...options,
-    };
+    this.#options = { ...options };
 
     // Generate temporary ID until initialized
     this.#id = `deno-sandbox-${Date.now()}`;
@@ -173,39 +166,36 @@ export class DenoSandbox extends BaseSandbox {
       );
     }
 
-    // Get authentication credentials
-    let credentials: { token: string };
-    try {
-      credentials = getAuthCredentials(this.#options.auth);
-    } catch (error) {
-      throw new DenoSandboxError(
-        "Failed to authenticate with Deno Deploy. Check your token configuration.",
-        "AUTHENTICATION_FAILED",
-        error instanceof Error ? error : undefined,
-      );
-    }
+    // Resolve token: top-level `token` > deprecated `auth.token` > env variable
+    const resolvedToken =
+      this.#options.token ??
+      this.#options.auth?.token ??
+      getAuthCredentials(this.#options.auth).token;
 
     try {
-      // Set the token in environment for the SDK
-      process.env.DENO_DEPLOY_TOKEN = credentials.token;
+      // Separate deprecated / custom keys from options that pass through 1:1
+      const {
+        memoryMb,
+        memory,
+        lifetime,
+        timeout,
+        auth: _auth,
+        initialFiles: _initialFiles,
+        ...passthroughOptions
+      } = this.#options;
 
-      // Build SDK create options
-      const createOptions: Parameters<typeof Sandbox.create>[0] = {};
-
-      // Add optional memory configuration
-      if (this.#options.memoryMb !== undefined) {
-        createOptions.memoryMb = this.#options.memoryMb;
-      }
-
-      // Add optional lifetime configuration
-      if (this.#options.lifetime !== undefined) {
-        createOptions.lifetime = this.#options.lifetime;
-      }
-
-      // Add optional region configuration
-      if (this.#options.region !== undefined) {
-        createOptions.region = this.#options.region;
-      }
+      // Build SDK create options: start with all 1:1 passthrough keys,
+      // then layer on the deprecated-to-new mappings.
+      const createOptions: SandboxOptions = {
+        ...passthroughOptions,
+        // `memory` takes precedence over deprecated `memoryMb`
+        memory:
+          memory ?? (memoryMb !== undefined ? `${memoryMb}MiB` : undefined),
+        // `timeout` takes precedence over deprecated `lifetime`
+        timeout: timeout ?? lifetime,
+        // Resolved token
+        token: resolvedToken,
+      };
 
       // Create the sandbox
       this.#sandbox = await Sandbox.create(createOptions);
@@ -342,7 +332,7 @@ export class DenoSandbox extends BaseSandbox {
 
         // Write the file content
         const textContent = new TextDecoder().decode(content);
-        await sandbox.writeTextFile(path, textContent);
+        await sandbox.fs.writeTextFile(path, textContent);
         results.push({ path, error: null });
       } catch (error) {
         results.push({ path, error: this.#mapError(error) });
@@ -412,183 +402,6 @@ export class DenoSandbox extends BaseSandbox {
     }
 
     return results;
-  }
-
-  // ============================================================================
-  // Override BaseSandbox methods that use Python with pure shell implementations
-  // Deno sandboxes don't have Python installed, only basic Unix tools
-  // ============================================================================
-
-  /**
-   * Read a file's content with line numbers.
-   *
-   * Override of BaseSandbox.read() to use awk instead of Python,
-   * since Deno sandboxes don't have Python installed.
-   *
-   * @param filePath - Absolute path to the file
-   * @param offset - Line offset (0-indexed, default 0)
-   * @param limit - Maximum lines to return (default 500)
-   * @returns Formatted file content with line numbers, or error message
-   */
-  override async read(
-    filePath: string,
-    offset: number = 0,
-    limit: number = 500,
-  ): Promise<string> {
-    // Coerce offset and limit to safe non-negative integers
-    const safeOffset =
-      Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0;
-    const safeLimit =
-      Number.isFinite(limit) && limit > 0 && limit < Number.MAX_SAFE_INTEGER
-        ? Math.floor(limit)
-        : 500;
-
-    // Escape path for shell
-    const escapedPath = filePath.replace(/'/g, "'\\''");
-
-    // Build shell command using awk for portable line number formatting
-    // First check if file exists, then format with line numbers
-    const command = `
-if [ ! -f '${escapedPath}' ]; then
-  echo "Error: File not found"
-  exit 1
-fi
-if [ ! -s '${escapedPath}' ]; then
-  echo "System reminder: File exists but has empty contents"
-  exit 0
-fi
-awk -v offset=${safeOffset} -v limit=${safeLimit} '
-  NR > offset && NR <= offset + limit {
-    printf "%6d\\t%s\\n", NR, $0
-  }
-' '${escapedPath}'
-`;
-
-    const result = await this.execute(command);
-
-    if (result.exitCode !== 0) {
-      return `Error: File '${filePath}' not found`;
-    }
-
-    return result.output;
-  }
-
-  /**
-   * Create a new file with content.
-   *
-   * Override of BaseSandbox.write() to use shell commands instead of Python,
-   * since Deno sandboxes don't have Python installed.
-   *
-   * @param filePath - Absolute path for the new file
-   * @param content - File content to write
-   * @returns WriteResult with error populated on failure
-   */
-  override async write(
-    filePath: string,
-    content: string,
-  ): Promise<WriteResult> {
-    // Escape path for shell
-    const escapedPath = filePath.replace(/'/g, "'\\''");
-
-    // Check if file already exists
-    const checkResult = await this.execute(`test -f '${escapedPath}'`);
-    if (checkResult.exitCode === 0) {
-      return {
-        error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
-      };
-    }
-
-    // Use uploadFiles for reliable content writing (handles binary, special chars, etc.)
-    const encoder = new TextEncoder();
-    const uploadResult = await this.uploadFiles([
-      [filePath, encoder.encode(content)],
-    ]);
-
-    if (uploadResult[0]?.error) {
-      return { error: `Failed to write file: ${uploadResult[0].error}` };
-    }
-
-    return { path: filePath, filesUpdate: null };
-  }
-
-  /**
-   * Edit a file by replacing string occurrences.
-   *
-   * Override of BaseSandbox.edit() to use shell commands instead of Python,
-   * since Deno sandboxes don't have Python installed.
-   *
-   * Uses sed for in-place replacement with proper escaping.
-   *
-   * @param filePath - Absolute path to the file
-   * @param oldString - String to find and replace
-   * @param newString - Replacement string
-   * @param replaceAll - If true, replace all occurrences (default: false)
-   * @returns EditResult with error, path, and occurrences
-   */
-  override async edit(
-    filePath: string,
-    oldString: string,
-    newString: string,
-    replaceAll: boolean = false,
-  ): Promise<EditResult> {
-    // Escape path for shell
-    const escapedPath = filePath.replace(/'/g, "'\\''");
-
-    // Check if file exists
-    const checkResult = await this.execute(`test -f '${escapedPath}'`);
-    if (checkResult.exitCode !== 0) {
-      return { error: `Error: File '${filePath}' not found` };
-    }
-
-    // Count occurrences first using grep -F (fixed string)
-    // Escape old string for grep
-    const escapedOldForGrep = oldString.replace(/'/g, "'\\''");
-    const countResult = await this.execute(
-      `grep -oF '${escapedOldForGrep}' '${escapedPath}' | wc -l`,
-    );
-    const count = parseInt(countResult.output.trim(), 10) || 0;
-
-    if (count === 0) {
-      return { error: `String not found in file '${filePath}'` };
-    }
-
-    if (count > 1 && !replaceAll) {
-      return {
-        error: `Multiple occurrences found in '${filePath}'. Use replaceAll=true to replace all.`,
-      };
-    }
-
-    // Perform the replacement using sed
-    // Use a delimiter that's unlikely to be in the strings (we'll use \x00 if available, otherwise |)
-    // For safety, we'll use awk which handles arbitrary strings better than sed
-
-    // Base64 encode both strings to safely pass them to awk
-    const oldB64 = Buffer.from(oldString, "utf-8").toString("base64");
-    const newB64 = Buffer.from(newString, "utf-8").toString("base64");
-
-    // Use awk with base64 decoding for safe string replacement
-    const awkCommand = `
-OLD=$(echo '${oldB64}' | base64 -d)
-NEW=$(echo '${newB64}' | base64 -d)
-awk -v old="$OLD" -v new="$NEW" -v replace_all=${replaceAll ? 1 : 0} '
-{
-  if (replace_all) {
-    gsub(old, new)
-  } else {
-    sub(old, new)
-  }
-  print
-}
-' '${escapedPath}' > '${escapedPath}.tmp' && mv '${escapedPath}.tmp' '${escapedPath}'
-`;
-
-    const editResult = await this.execute(awkCommand);
-
-    if (editResult.exitCode !== 0) {
-      return { error: `Unknown error editing file '${filePath}'` };
-    }
-
-    return { path: filePath, filesUpdate: null, occurrences: count };
   }
 
   /**
@@ -689,9 +502,9 @@ awk -v old="$OLD" -v new="$NEW" -v replace_all=${replaceAll ? 1 : 0} '
    * @example
    * ```typescript
    * const sandbox = await DenoSandbox.create({
-   *   memoryMb: 1024,
-   *   lifetime: "10m",
-   *   region: "iad",
+   *   memory: "1GiB",
+   *   timeout: "10m",
+   *   region: "ord",
    * });
    * ```
    */
@@ -720,25 +533,26 @@ awk -v old="$OLD" -v new="$NEW" -v replace_all=${replaceAll ? 1 : 0} '
    */
   static async fromId(
     id: string,
-    options?: Pick<DenoSandboxOptions, "auth">,
+    options?: Pick<
+      DenoSandboxOptions,
+      "auth" | "token" | "org" | "apiEndpoint"
+    >,
   ): Promise<DenoSandbox> {
-    // Get authentication credentials
-    let credentials: { token: string };
-    try {
-      credentials = getAuthCredentials(options?.auth);
-    } catch (error) {
-      throw new DenoSandboxError(
-        "Failed to authenticate with Deno Deploy. Check your token configuration.",
-        "AUTHENTICATION_FAILED",
-        error instanceof Error ? error : undefined,
-      );
-    }
+    // Resolve token: top-level `token` > deprecated `auth.token` > env variable
+    const resolvedToken =
+      options?.token ??
+      options?.auth?.token ??
+      getAuthCredentials(options?.auth).token;
 
     try {
-      // Set the token in environment for the SDK
-      process.env.DENO_DEPLOY_TOKEN = credentials.token;
-
-      const existingSandbox = await Sandbox.connect({ id });
+      const existingSandbox = await Sandbox.connect({
+        id,
+        token: resolvedToken,
+        ...(options?.org !== undefined ? { org: options.org } : {}),
+        ...(options?.apiEndpoint !== undefined
+          ? { apiEndpoint: options.apiEndpoint }
+          : {}),
+      });
 
       const denoSandbox = new DenoSandbox();
       // Set the existing sandbox directly (bypass initialize)
@@ -782,7 +596,7 @@ export type AsyncDenoSandboxFactory = () => Promise<DenoSandbox>;
  * import { DenoSandbox, createDenoSandboxFactory } from "@langchain/deno";
  *
  * // Create a factory for new sandboxes
- * const factory = createDenoSandboxFactory({ memoryMb: 1024 });
+ * const factory = createDenoSandboxFactory({ memory: "1GiB" });
  *
  * // Each call creates a new sandbox
  * const sandbox1 = await factory();
@@ -822,7 +636,7 @@ export function createDenoSandboxFactory(
  * import { DenoSandbox, createDenoSandboxFactoryFromSandbox } from "@langchain/deno";
  *
  * // Create and initialize a sandbox
- * const sandbox = await DenoSandbox.create({ memoryMb: 1024 });
+ * const sandbox = await DenoSandbox.create({ memory: "1GiB" });
  *
  * try {
  *   const agent = createDeepAgent({

@@ -1,6 +1,6 @@
 {
   "name": "@langchain/deno",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Deno Sandbox backend for deepagents",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -37,7 +37,7 @@
   },
   "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "dependencies": {
-    "@deno/sandbox": "^0.2.2"
+    "@deno/sandbox": "^0.11.0"
   },
   "peerDependencies": {
     "deepagents": ">=1.6.0"
