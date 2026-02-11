@@ -62,30 +62,71 @@ export const MAX_SKILL_FILE_SIZE = 10 * 1024 * 1024;
 // Agent Skills specification constraints (https://agentskills.io/specification)
 export const MAX_SKILL_NAME_LENGTH = 64;
 export const MAX_SKILL_DESCRIPTION_LENGTH = 1024;
+export const MAX_SKILL_COMPATIBILITY_LENGTH = 500;
 
 /**
  * Metadata for a skill per Agent Skills specification.
  */
 export interface SkillMetadata {
-  /** Skill identifier (max 64 chars, lowercase alphanumeric and hyphens) */
+  /**
+   * Skill identifier.
+   *
+   * Constraints per Agent Skills specification:
+   *
+   * - 1-64 characters
+   * - Unicode lowercase alphanumeric and hyphens only (`a-z` and `-`).
+   * - Must not start or end with `-`
+   * - Must not contain consecutive `--`
+   * - Must match the parent directory name containing the `SKILL.md` file
+   */
   name: string;
 
-  /** What the skill does (max 1024 chars) */
+  /**
+   * What the skill does.
+   *
+   * Constraints per Agent Skills specification:
+   *
+   * - 1-1024 characters
+   * - Should describe both what the skill does and when to use it
+   * - Should include specific keywords that help agents identify relevant tasks
+   */
   description: string;
 
   /** Path to the SKILL.md file in the backend */
   path: string;
 
-  /** License name or reference to bundled license file */
+  /** License name or reference to bundled license file. */
   license?: string | null;
 
-  /** Environment requirements (max 500 chars) */
+  /**
+   * Environment requirements.
+   *
+   * Constraints per Agent Skills specification:
+   *
+   * - 1-500 characters if provided
+   * - Should only be included if there are specific compatibility requirements
+   * - Can indicate intended product, required packages, etc.
+   */
   compatibility?: string | null;
 
-  /** Arbitrary key-value mapping for additional metadata */
+  /**
+   * Arbitrary key-value mapping for additional metadata.
+   *
+   * Clients can use this to store additional properties not defined by the spec.
+   *
+   * It is recommended to keep key names unique to avoid conflicts.
+   */
   metadata?: Record<string, string>;
 
-  /** List of pre-approved tools (experimental) */
+  /**
+   * Tool names the skill recommends using.
+   *
+   * Warning: this is experimental.
+   *
+   * Constraints per Agent Skills specification:
+   *
+   * - Space-delimited list of tool names
+   */
   allowedTools?: string[];
 }
 
@@ -223,8 +264,24 @@ Remember: Skills are tools to make you more capable and consistent. When in doub
 
 /**
  * Validate skill name per Agent Skills specification.
+ *
+ * Constraints per Agent Skills specification:
+ *
+ * - 1-64 characters
+ * - Unicode lowercase alphanumeric and hyphens only (`a-z` and `-`).
+ * - Must not start or end with `-`
+ * - Must not contain consecutive `--`
+ * - Must match the parent directory name containing the `SKILL.md` file
+ *
+ * Unicode lowercase alphanumeric means any lowercase or decimal digit, which
+ * covers accented Latin characters (e.g., `'café'`, `'über-tool'`) and other
+ * scripts.
+ *
+ * @param name - The skill name from YAML frontmatter
+ * @param directoryName - The parent directory name
+ * @returns `{ valid, error }` tuple. Error is empty string if valid.
  */
-function validateSkillName(
+export function validateSkillName(
   name: string,
   directoryName: string,
 ): { valid: boolean; error: string } {
@@ -234,8 +291,15 @@ function validateSkillName(
   if (name.length > MAX_SKILL_NAME_LENGTH) {
     return { valid: false, error: "name exceeds 64 characters" };
   }
-  // Pattern: lowercase alphanumeric, single hyphens between segments, no start/end hyphen
-  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) {
+  if (name.startsWith("-") || name.endsWith("-") || name.includes("--")) {
+    return {
+      valid: false,
+      error: "name must be lowercase alphanumeric with single hyphens only",
+    };
+  }
+  for (const c of name) {
+    if (c === "-") continue;
+    if (/\p{Ll}/u.test(c) || /\p{Nd}/u.test(c)) continue;
     return {
       valid: false,
       error: "name must be lowercase alphanumeric with single hyphens only",
@@ -251,9 +315,69 @@ function validateSkillName(
 }
 
 /**
- * Parse YAML frontmatter from SKILL.md content.
+ * Validate and normalize the metadata field from YAML frontmatter.
+ *
+ * YAML parsing can return any type for the `metadata` key. This ensures the
+ * value in {@link SkillMetadata} is always a `Record<string, string>` by
+ * coercing via `String()` and rejecting non-object inputs.
+ *
+ * @param raw - Raw value from `frontmatterData.metadata`.
+ * @param skillPath - Path to the `SKILL.md` file (for warning messages).
+ * @returns A validated `Record<string, string>`.
  */
-function parseSkillMetadataFromContent(
+export function validateMetadata(
+  raw: unknown,
+  skillPath: string,
+): Record<string, string> {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    if (raw) {
+      console.warn(
+        `Ignoring non-object metadata in ${skillPath} (got ${typeof raw})`,
+      );
+    }
+    return {};
+  }
+  const result: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    result[String(k)] = String(v);
+  }
+  return result;
+}
+
+/**
+ * Build a parenthetical annotation string from optional skill fields.
+ *
+ * Combines license and compatibility into a comma-separated string for
+ * display in the system prompt skill listing.
+ *
+ * @param skill - Skill metadata to extract annotations from.
+ * @returns Annotation string like `'License: MIT, Compatibility: Python 3.10+'`,
+ *   or empty string if neither field is set.
+ */
+export function formatSkillAnnotations(skill: SkillMetadata): string {
+  const parts: string[] = [];
+  if (skill.license) {
+    parts.push(`License: ${skill.license}`);
+  }
+  if (skill.compatibility) {
+    parts.push(`Compatibility: ${skill.compatibility}`);
+  }
+  return parts.join(", ");
+}
+
+/**
+ * Parse YAML frontmatter from `SKILL.md` content.
+ *
+ * Extracts metadata per Agent Skills specification from YAML frontmatter
+ * delimited by `---` markers at the start of the content.
+ *
+ * @param content - Content of the `SKILL.md` file
+ * @param skillPath - Path to the `SKILL.md` file (for error messages and metadata)
+ * @param directoryName - Name of the parent directory containing the skill
+ * @returns `SkillMetadata` if parsing succeeds, `null` if parsing fails or
+ *   validation errors occur
+ */
+export function parseSkillMetadataFromContent(
   content: string,
   skillPath: string,
   directoryName: string,
@@ -290,9 +414,9 @@ function parseSkillMetadataFromContent(
     return null;
   }
 
-  // Validate required fields
-  const name = frontmatterData.name as string | undefined;
-  const description = frontmatterData.description as string | undefined;
+  // Validate required fields - coerce and strip whitespace
+  const name = String(frontmatterData.name ?? "").trim();
+  const description = String(frontmatterData.description ?? "").trim();
 
   if (!name || !description) {
     console.warn(
@@ -302,7 +426,7 @@ function parseSkillMetadataFromContent(
   }
 
   // Validate name format per spec (warn but continue for backwards compatibility)
-  const validation = validateSkillName(String(name), directoryName);
+  const validation = validateSkillName(name, directoryName);
   if (!validation.valid) {
     console.warn(
       `Skill '${name}' in ${skillPath} does not follow Agent Skills specification: ${validation.error}. Consider renaming for spec compliance.`,
@@ -310,7 +434,7 @@ function parseSkillMetadataFromContent(
   }
 
   // Validate description length per spec (max 1024 chars)
-  let descriptionStr = String(description).trim();
+  let descriptionStr = description;
   if (descriptionStr.length > MAX_SKILL_DESCRIPTION_LENGTH) {
     console.warn(
       `Description exceeds ${MAX_SKILL_DESCRIPTION_LENGTH} characters in ${skillPath}, truncating`,
@@ -318,25 +442,43 @@ function parseSkillMetadataFromContent(
     descriptionStr = descriptionStr.slice(0, MAX_SKILL_DESCRIPTION_LENGTH);
   }
 
-  // Parse allowed-tools
-  const allowedToolsStr = frontmatterData["allowed-tools"] as
-    | string
-    | undefined;
-  const allowedTools = allowedToolsStr ? allowedToolsStr.split(" ") : [];
+  // Parse allowed-tools: support both YAML list and space-delimited string
+  const rawTools = frontmatterData["allowed-tools"];
+  let allowedTools: string[];
+  if (rawTools) {
+    if (Array.isArray(rawTools)) {
+      allowedTools = rawTools.map((t) => String(t).trim()).filter(Boolean);
+    } else {
+      // Split on whitespace (handles multiple consecutive spaces)
+      allowedTools = String(rawTools).split(/\s+/).filter(Boolean);
+    }
+  } else {
+    allowedTools = [];
+  }
+
+  // Validate and truncate compatibility length
+  let compatibilityStr =
+    String(frontmatterData.compatibility ?? "").trim() || null;
+  if (
+    compatibilityStr &&
+    compatibilityStr.length > MAX_SKILL_COMPATIBILITY_LENGTH
+  ) {
+    console.warn(
+      `Compatibility exceeds ${MAX_SKILL_COMPATIBILITY_LENGTH} characters in ${skillPath}, truncating`,
+    );
+    compatibilityStr = compatibilityStr.slice(
+      0,
+      MAX_SKILL_COMPATIBILITY_LENGTH,
+    );
+  }
 
   return {
-    name: String(name),
+    name,
     description: descriptionStr,
     path: skillPath,
-    metadata: (frontmatterData.metadata as Record<string, string>) || {},
-    license:
-      typeof frontmatterData.license === "string"
-        ? frontmatterData.license.trim() || null
-        : null,
-    compatibility:
-      typeof frontmatterData.compatibility === "string"
-        ? frontmatterData.compatibility.trim() || null
-        : null,
+    metadata: validateMetadata(frontmatterData.metadata ?? {}, skillPath),
+    license: String(frontmatterData.license ?? "").trim() || null,
+    compatibility: compatibilityStr,
     allowedTools,
   };
 }
@@ -455,7 +597,10 @@ function formatSkillsLocations(sources: string[]): string {
  * Format skills metadata for display in system prompt.
  * Shows allowed tools for each skill if specified.
  */
-function formatSkillsList(skills: SkillMetadata[], sources: string[]): string {
+export function formatSkillsList(
+  skills: SkillMetadata[],
+  sources: string[],
+): string {
   if (skills.length === 0) {
     const paths = sources.map((s) => `\`${s}\``).join(" or ");
     return `(No skills available yet. You can create skills in ${paths})`;
@@ -463,7 +608,12 @@ function formatSkillsList(skills: SkillMetadata[], sources: string[]): string {
 
   const lines: string[] = [];
   for (const skill of skills) {
-    lines.push(`- **${skill.name}**: ${skill.description}`);
+    const annotations = formatSkillAnnotations(skill);
+    let descLine = `- **${skill.name}**: ${skill.description}`;
+    if (annotations) {
+      descLine += ` (${annotations})`;
+    }
+    lines.push(descLine);
     if (skill.allowedTools && skill.allowedTools.length > 0) {
       lines.push(`  → Allowed tools: ${skill.allowedTools.join(", ")}`);
     }
