@@ -1,5 +1,13 @@
 # deepagents
 
+## 1.7.6
+
+### Patch Changes
+
+- [#218](https://github.com/langchain-ai/deepagentsjs/pull/218) [`ae70fa4`](https://github.com/langchain-ai/deepagentsjs/commit/ae70fa400eb3b9710f7917467574d6e08b6583aa) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): pass on subagent name
+
+- [#222](https://github.com/langchain-ai/deepagentsjs/pull/222) [`163c135`](https://github.com/langchain-ai/deepagentsjs/commit/163c1357e8d865dafed181907544ed03b476b650) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): unwrap responseFormat strategy types so structuredResponse is correctly typed
+
 ## 1.7.5
 
 ### Patch Changes
