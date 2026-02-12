@@ -727,4 +727,22 @@ describe("createFilesystemMiddleware", () => {
       }
     });
   });
+
+  describe("tools", () => {
+    it("write_file schema should accept missing content and default to empty string", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+      });
+
+      const writeFileTool = middleware.tools!.find(
+        (t: any) => t.name === "write_file",
+      ) as any;
+      expect(writeFileTool).toBeDefined();
+
+      // Parse with only file_path, no content — simulates the model omitting it
+      const parsed = writeFileTool.schema.parse({ file_path: "/app/test.c" });
+      expect(parsed.file_path).toBe("/app/test.c");
+      expect(parsed.content).toBe("");
+    });
+  });
 });
