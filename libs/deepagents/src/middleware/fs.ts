@@ -522,7 +522,10 @@ function createWriteFileTool(
       description: customDescription || WRITE_FILE_TOOL_DESCRIPTION,
       schema: z.object({
         file_path: z.string().describe("Absolute path to the file to write"),
-        content: z.string().describe("Content to write to the file"),
+        content: z
+          .string()
+          .default("")
+          .describe("Content to write to the file"),
       }),
     },
   );
