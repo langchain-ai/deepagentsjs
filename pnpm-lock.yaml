@@ -234,6 +234,9 @@ importers:
       '@langchain/openai':
         specifier: ^1.2.3
         version: 1.2.4(@langchain/core@1.1.19(openai@6.17.0(ws@8.19.0)(zod@4.3.6)))(ws@8.19.0)
+      langsmith:
+        specifier: '>=0.2.0'
+        version: 0.4.12(openai@6.17.0(ws@8.19.0)(zod@4.3.6))
     devDependencies:
       '@langchain/core':
         specifier: ^1.1.19

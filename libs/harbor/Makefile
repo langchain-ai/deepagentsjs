@@ -1,4 +1,4 @@
-.PHONY: all build bench-docker bench-docker-all bench-daytona bench-langsmith help
+.PHONY: all build bench-docker bench-docker-all bench-daytona bench-langsmith bench-langsmith-all help
 
 AGENT_IMPORT = deepagents_js_harbor:DeepAgentsJSWrapper
 ENV_IMPORT = deepagents_js_harbor.langsmith_environment:LangSmithEnvironment
@@ -55,6 +55,15 @@ bench-langsmith: build
 		-t $(TASK) \
 		--jobs-dir ../jobs/terminal-bench
 
+# Run all tasks on LangSmith sandbox (cloud, 10 concurrent)
+bench-langsmith-all: build
+	@mkdir -p jobs/terminal-bench
+	cd $(PYTHON_DIR) && uv run harbor run \
+		--agent-import-path $(AGENT_IMPORT) \
+		-c langsmith-env-config.yaml \
+		--dataset terminal-bench@2.0 -n 10 \
+		--jobs-dir ../jobs/terminal-bench
+
 ######################
 # HELP
 ######################
@@ -73,7 +82,8 @@ help:
 	@echo '  make bench-docker       - Run 1 task on Docker (TASK=gpt2-codegolf)'
 	@echo '  make bench-docker-all   - Run all tasks on Docker'
 	@echo '  make bench-daytona      - Run 10 tasks on Daytona (cloud)'
-	@echo '  make bench-langsmith    - Run 1 task on LangSmith sandbox (cloud)'
+	@echo '  make bench-langsmith      - Run 1 task on LangSmith sandbox (cloud)'
+	@echo '  make bench-langsmith-all  - Run all tasks on LangSmith sandbox (10 concurrent)'
 	@echo ''
 	@echo 'Environment variables:'
 	@echo '  TASK                  - Task name for bench-docker/bench-langsmith (default: gpt2-codegolf)'

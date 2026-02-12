@@ -164,7 +164,7 @@ class DeepAgentsJSWrapper(BaseAgent):
         **kwargs,
     ) -> None:
         super().__init__(logs_dir, model_name, *args, **kwargs)
-        self._model_name = model_name or "anthropic:claude-sonnet-4-5-20250929"
+        self._model_name = model_name or "anthropic:claude-opus-4-6"
 
         # Build instruction -> LangSmith example_id mapping (if experiment is set)
         self._instruction_to_example_id: dict[str, str] = {}
