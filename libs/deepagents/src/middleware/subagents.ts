@@ -577,11 +577,33 @@ function createTaskTool(options: {
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
 
+      // Snapshot files before invoke so we can diff after — only return
+      // files this subagent actually changed. Without this, parallel
+      // subagents each return the full parent file set, and the last one
+      // to finish overwrites other subagents' edits via fileDataReducer.
+      const preFiles = subagentState.files as
+        | Record<string, unknown>
+        | undefined;
+
       // Invoke the subagent
       const result = (await subagent.invoke(subagentState, config)) as Record<
         string,
         unknown
       >;
+
+      // Only return files that actually changed (diff by reference).
+      // fileDataReducer creates new objects only for modified entries;
+      // unchanged entries keep the same reference from the parent state.
+      if (preFiles && result.files) {
+        const postFiles = result.files as Record<string, unknown>;
+        const changedFiles: Record<string, unknown> = {};
+        for (const [path, fileData] of Object.entries(postFiles)) {
+          if (fileData !== preFiles[path]) {
+            changedFiles[path] = fileData;
+          }
+        }
+        result.files = changedFiles;
+      }
 
       // Auto-mark the assigned parent todo as completed when the subagent finishes
       if (todo_id) {

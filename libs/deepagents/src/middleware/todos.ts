@@ -4,14 +4,16 @@
  * 2. A ReducedValue with merge-by-id + status-priority reducer
  *    (so parallel subagent todo updates don't clobber each other)
  *
- * This wraps langchain's todoListMiddleware and replaces its stateSchema
- * with one that uses ReducedValue for proper concurrent merging.
+ * IMPORTANT: This middleware intentionally does NOT use afterModel.
+ * afterModel creates a separate LangGraph node that can run with stale state
+ * snapshots, causing it to overwrite completed todos back to pending when
+ * subagent Command returns are interleaved with afterModel execution.
  */
 import { z } from "zod/v4";
 import { randomUUID } from "crypto";
 import { Command, StateSchema, ReducedValue } from "@langchain/langgraph";
 import { tool } from "@langchain/core/tools";
-import { AIMessage, ToolMessage } from "@langchain/core/messages";
+import { ToolMessage } from "@langchain/core/messages";
 import {
   createMiddleware,
   TODO_LIST_MIDDLEWARE_SYSTEM_PROMPT,
@@ -29,6 +31,12 @@ const TodoSchema = z.object({
 
 type Todo = z.infer<typeof TodoSchema>;
 
+const STATUS_PRIORITY: Record<string, number> = {
+  pending: 0,
+  in_progress: 1,
+  completed: 2,
+};
+
 /**
  * Merge-by-id reducer with status priority.
  * - Existing IDs are updated in-place (never downgrading status)
@@ -38,18 +46,13 @@ type Todo = z.infer<typeof TodoSchema>;
 function todosReducer(current: Todo[], update: Todo[]): Todo[] {
   if (!update) return current || [];
   if (!current || current.length === 0) {
-    console.debug("[todosReducer] initial set", {
+    console.debug("[deepagents:todosReducer] initial set", {
       count: update.length,
       ids: update.map((t) => t.id?.slice(0, 8)),
     });
     return update;
   }
-
-  const STATUS_PRIORITY: Record<string, number> = {
-    pending: 0,
-    in_progress: 1,
-    completed: 2,
-  };
+  if (update.length === 0) return []; // explicit clear signal
 
   const merged = [...current];
   const mergedById = new Map(merged.map((t, i) => [t.id, i]));
@@ -81,7 +84,13 @@ function todosReducer(current: Todo[], update: Todo[]): Todo[] {
     }
   }
 
-  console.debug("[todosReducer] merge", {
+  console.debug("[deepagents:todosReducer] merge", {
+    currentStatuses: current.map(
+      (t) => `${(t.id || "?").slice(0, 8)}:${t.status}`,
+    ),
+    updateStatuses: update.map(
+      (t) => `${(t.id || "?").slice(0, 8)}:${t.status}`,
+    ),
     changes,
     blocked,
     resultStatuses: merged.map(
@@ -105,14 +114,22 @@ export interface TodoListMiddlewareOptions {
 
 /**
  * Enhanced todoListMiddleware with UUID auto-generation and merge-by-id reducer.
+ *
+ * No afterModel hook — afterModel creates a separate LangGraph node that
+ * runs with stale state snapshots, overwriting subagent todo completions.
  */
 export function todoListMiddleware(options?: TodoListMiddlewareOptions) {
   const writeTodos = tool(
     ({ todos }, config) => {
-      // Auto-generate UUIDs for any todos that don't have them
+      // Auto-generate UUIDs for any todos that don't have them.
+      // Auto-upgrade pending → in_progress: if the agent is creating/updating
+      // todos, it's actively working on them. The LLM often ignores prompts to
+      // set in_progress, so we enforce it here. The LLM can still explicitly
+      // set "completed" when done.
       const todosWithIds = todos.map((t) => ({
         ...t,
         id: t.id || randomUUID(),
+        status: t.status === "pending" ? "in_progress" : t.status,
       }));
       console.debug("[todoListMiddleware] write_todos called", {
         count: todosWithIds.length,
@@ -157,40 +174,5 @@ export function todoListMiddleware(options?: TodoListMiddlewareOptions) {
           `\n\n${options?.systemPrompt ?? TODO_LIST_MIDDLEWARE_SYSTEM_PROMPT}`,
         ),
       }),
-    afterModel: (state) => {
-      // Reject parallel write_todos calls
-      const messages = state.messages;
-      if (!messages || messages.length === 0) return undefined;
-
-      const lastAiMsg = [...messages]
-        .reverse()
-        .find((msg) => AIMessage.isInstance(msg));
-      if (
-        !lastAiMsg ||
-        !lastAiMsg.tool_calls ||
-        lastAiMsg.tool_calls.length === 0
-      )
-        return undefined;
-
-      const writeTodosCalls = lastAiMsg.tool_calls.filter(
-        (tc) => tc.name === writeTodos.name,
-      );
-
-      if (writeTodosCalls.length > 1) {
-        const errorMessages = writeTodosCalls.map(
-          (tc) =>
-            new ToolMessage({
-              content:
-                "Error: The `write_todos` tool should never be called multiple times " +
-                "in parallel. Please call it only once per model invocation.",
-              tool_call_id: tc.id as string,
-              status: "error",
-            }),
-        );
-        return { messages: errorMessages };
-      }
-
-      return undefined;
-    },
   });
 }
