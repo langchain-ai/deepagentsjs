@@ -6,6 +6,7 @@ import { createDeepAgent } from "./index.js";
 import type { CompiledSubAgent } from "./index.js";
 import {
   SAMPLE_MODEL,
+  SAMPLE_MODEL_WITH_STRUCTURED_RESPONSE,
   TOY_BASKETBALL_RESEARCH,
   ResearchMiddleware,
   ResearchMiddlewareWithTools,
@@ -407,9 +408,18 @@ describe("DeepAgents Integration Tests", () => {
     },
   );
 
-  describe("responseFormat", () => {
+  describe.each([
+    {
+      strategyName: "toolStrategy",
+      wrap: (s: z.ZodObject<any>) => toolStrategy(s),
+    },
+    {
+      strategyName: "providerStrategy",
+      wrap: (s: z.ZodObject<any>) => providerStrategy(s),
+    },
+  ])("responseFormat ($strategyName)", ({ strategyName, wrap }) => {
     it.concurrent(
-      "should return structuredResponse with toolStrategy (Zod schema)",
+      "should return structuredResponse with Zod schema",
       { timeout: 120 * 1000 },
       async () => {
         const WeatherSchema = z.object({
@@ -418,12 +428,16 @@ describe("DeepAgents Integration Tests", () => {
           conditions: z.string().describe("Weather conditions summary"),
         });
 
+        const model =
+          strategyName === "providerStrategy"
+            ? SAMPLE_MODEL_WITH_STRUCTURED_RESPONSE
+            : SAMPLE_MODEL;
         const agent = createDeepAgent({
-          model: SAMPLE_MODEL,
+          model,
           tools: [getWeather],
           systemPrompt:
             "You are a weather assistant. When asked about the weather, use the get_weather tool to get the information, then return a structured response with the location, temperature, and conditions.",
-          responseFormat: toolStrategy(WeatherSchema),
+          responseFormat: wrap(WeatherSchema),
         });
 
         const result = await agent.invoke({
@@ -441,39 +455,7 @@ describe("DeepAgents Integration Tests", () => {
     );
 
     it.concurrent(
-      "should return structuredResponse with providerStrategy (Zod schema)",
-      { timeout: 120 * 1000 },
-      async () => {
-        const AnswerSchema = z.object({
-          answer: z.string().describe("The direct answer to the question"),
-          confidence: z
-            .enum(["high", "medium", "low"])
-            .describe("Confidence level of the answer"),
-        });
-
-        const agent = createDeepAgent({
-          model: SAMPLE_MODEL,
-          systemPrompt:
-            "You are a helpful assistant. Answer questions concisely and provide a confidence level.",
-          responseFormat: providerStrategy(AnswerSchema),
-        });
-
-        const result = await agent.invoke({
-          messages: [new HumanMessage("What is the capital of France?")],
-        });
-
-        expect(result.structuredResponse).toBeDefined();
-        expect(result.structuredResponse).toHaveProperty("answer");
-        expect(result.structuredResponse).toHaveProperty("confidence");
-        expect(typeof result.structuredResponse.answer).toBe("string");
-        expect(["high", "medium", "low"]).toContain(
-          result.structuredResponse.confidence,
-        );
-      },
-    );
-
-    it.concurrent(
-      "should return structuredResponse with toolStrategy and tools",
+      "should return structuredResponse with tools",
       { timeout: 120 * 1000 },
       async () => {
         const WeatherReportSchema = z.object({
@@ -484,12 +466,16 @@ describe("DeepAgents Integration Tests", () => {
           is_sunny: z.boolean().describe("Whether the weather is sunny"),
         });
 
+        const model =
+          strategyName === "providerStrategy"
+            ? SAMPLE_MODEL_WITH_STRUCTURED_RESPONSE
+            : SAMPLE_MODEL;
         const agent = createDeepAgent({
-          model: SAMPLE_MODEL,
+          model,
           tools: [getWeather],
           systemPrompt:
             "You are a weather assistant. Use the get_weather tool to look up the weather, then provide a structured weather report.",
-          responseFormat: toolStrategy(WeatherReportSchema),
+          responseFormat: wrap(WeatherReportSchema),
         });
 
         const result = await agent.invoke({
@@ -526,11 +512,15 @@ describe("DeepAgents Integration Tests", () => {
             .describe("Overall sentiment"),
         });
 
+        const model =
+          strategyName === "providerStrategy"
+            ? SAMPLE_MODEL_WITH_STRUCTURED_RESPONSE
+            : SAMPLE_MODEL;
         const agent = createDeepAgent({
-          model: SAMPLE_MODEL,
+          model,
           systemPrompt:
             "You are an analyst. Provide structured analysis of any topic the user asks about.",
-          responseFormat: toolStrategy(AnalysisSchema),
+          responseFormat: wrap(AnalysisSchema),
         });
 
         const result = await agent.invoke({
@@ -547,7 +537,9 @@ describe("DeepAgents Integration Tests", () => {
         expect(result.structuredResponse).toHaveProperty("sentiment");
         expect(typeof result.structuredResponse.topic).toBe("string");
         expect(Array.isArray(result.structuredResponse.key_points)).toBe(true);
-        expect(result.structuredResponse.key_points.length).toBeGreaterThan(0);
+        expect(
+          (result.structuredResponse.key_points as string[]).length,
+        ).toBeGreaterThan(0);
         expect(["positive", "negative", "neutral"]).toContain(
           result.structuredResponse.sentiment,
         );
@@ -555,7 +547,7 @@ describe("DeepAgents Integration Tests", () => {
     );
 
     it.concurrent(
-      "should return structuredResponse with subagents and toolStrategy",
+      "should return structuredResponse with subagents",
       { timeout: 120 * 1000 },
       async () => {
         const WeatherResponseSchema = z.object({
@@ -563,11 +555,15 @@ describe("DeepAgents Integration Tests", () => {
           summary: z.string().describe("Summary of the weather"),
         });
 
+        const model =
+          strategyName === "providerStrategy"
+            ? SAMPLE_MODEL_WITH_STRUCTURED_RESPONSE
+            : SAMPLE_MODEL;
         const agent = createDeepAgent({
-          model: SAMPLE_MODEL,
+          model,
           systemPrompt:
             "You are an orchestrator. Delegate weather queries to the weather_agent subagent, then return a structured response summarizing the result.",
-          responseFormat: toolStrategy(WeatherResponseSchema),
+          responseFormat: wrap(WeatherResponseSchema),
           subagents: [
             {
               name: "weather_agent",
