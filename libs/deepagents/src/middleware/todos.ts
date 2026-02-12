@@ -46,19 +46,12 @@ const STATUS_PRIORITY: Record<string, number> = {
 function todosReducer(current: Todo[], update: Todo[]): Todo[] {
   if (!update) return current || [];
   if (!current || current.length === 0) {
-    console.debug("[deepagents:todosReducer] initial set", {
-      count: update.length,
-      ids: update.map((t) => t.id?.slice(0, 8)),
-    });
     return update;
   }
   if (update.length === 0) return []; // explicit clear signal
 
   const merged = [...current];
   const mergedById = new Map(merged.map((t, i) => [t.id, i]));
-  const changes: string[] = [];
-  const blocked: string[] = [];
-
   for (const todo of update) {
     const existingIdx = mergedById.get(todo.id);
     if (existingIdx !== undefined) {
@@ -67,36 +60,13 @@ function todosReducer(current: Todo[], update: Todo[]): Todo[] {
       const nextPriority = STATUS_PRIORITY[todo.status] ?? 0;
       // Never downgrade status — parallel subagents have stale snapshots
       if (nextPriority >= prevPriority) {
-        if (prev.status !== todo.status) {
-          changes.push(
-            `${(todo.id || "?").slice(0, 8)}: ${prev.status} → ${todo.status}`,
-          );
-        }
         merged[existingIdx] = todo;
-      } else {
-        blocked.push(
-          `${(todo.id || "?").slice(0, 8)}: BLOCKED ${prev.status} ← ${todo.status}`,
-        );
       }
     } else {
       mergedById.set(todo.id, merged.length);
       merged.push(todo);
     }
   }
-
-  console.debug("[deepagents:todosReducer] merge", {
-    currentStatuses: current.map(
-      (t) => `${(t.id || "?").slice(0, 8)}:${t.status}`,
-    ),
-    updateStatuses: update.map(
-      (t) => `${(t.id || "?").slice(0, 8)}:${t.status}`,
-    ),
-    changes,
-    blocked,
-    resultStatuses: merged.map(
-      (t) => `${(t.id || "?").slice(0, 8)}:${t.status}`,
-    ),
-  });
 
   return merged;
 }
@@ -131,13 +101,6 @@ export function todoListMiddleware(options?: TodoListMiddlewareOptions) {
         id: t.id || randomUUID(),
         status: t.status === "pending" ? "in_progress" : t.status,
       }));
-      console.debug("[todoListMiddleware] write_todos called", {
-        count: todosWithIds.length,
-        ids: todosWithIds.map((t) => t.id),
-        statuses: todosWithIds.map(
-          (t) => `${t.id.slice(0, 8)}:${t.status}`,
-        ),
-      });
       return new Command({
         update: {
           todos: todosWithIds,
