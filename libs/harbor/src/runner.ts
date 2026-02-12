@@ -16,6 +16,8 @@
 import { awaitAllCallbacks } from "@langchain/core/callbacks/promises";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
+import { RunTree } from "langsmith";
+import { withRunTree } from "langsmith/traceable";
 
 import { createDeepAgent } from "deepagents";
 
@@ -143,18 +145,30 @@ async function main(): Promise<void> {
 
     log("Agent created, invoking with instruction...");
 
-    // Invoke the agent
-    const result = await agent.invoke(
-      {
-        messages: [{ role: "user", content: init.instruction }],
+    const invokeConfig = {
+      configurable: {
+        thread_id: init.sessionId,
       },
-      {
-        configurable: {
-          thread_id: init.sessionId,
-        },
-        recursionLimit: 10_000,
-      },
-    );
+      recursionLimit: 10_000,
+    };
+
+    const invokeAgent = () =>
+      agent.invoke(
+        { messages: [{ role: "user", content: init.instruction }] },
+        invokeConfig,
+      );
+
+    // If LangSmith distributed tracing headers were provided by the Python
+    // wrapper, reconstruct the parent RunTree and run the agent inside it.
+    // This nests all LLM calls and tool invocations under the parent trace.
+    // See: https://docs.langchain.com/langsmith/distributed-tracing
+    const parentRunTree = init.langsmithHeaders
+      ? RunTree.fromHeaders(init.langsmithHeaders)
+      : undefined;
+
+    const result = parentRunTree
+      ? await withRunTree(parentRunTree, invokeAgent)
+      : await invokeAgent();
 
     // Serialize all messages
     const messages: SerializedMessage[] = [];

@@ -45,7 +45,7 @@ class LangSmithEnvironment(BaseEnvironment):
     """
 
     _DEFAULT_TEMPLATE_IMAGE = "python:3.12-slim"
-    _DEFAULT_EXEC_TIMEOUT = 300  # seconds
+    _DEFAULT_EXEC_TIMEOUT = 1000  # seconds
 
     def __init__(
         self,

@@ -26,6 +26,7 @@ from harbor.models.trajectories import (
 )
 from langsmith import trace
 from langsmith.client import Client
+from langsmith.run_helpers import get_current_run_tree
 
 load_dotenv()
 
@@ -260,19 +261,57 @@ class DeepAgentsJSWrapper(BaseAgent):
         )
 
         try:
-            await self._send(process, {
-                "type": "init",
-                "instruction": instruction,
-                "sessionId": environment.session_id,
-                "model": self._model_name,
-                "systemPrompt": system_prompt,
-            })
+            experiment_name = os.environ.get("LANGSMITH_EXPERIMENT", "").strip() or None
 
-            result_messages = await self._bridge_loop(process, environment)
+            if experiment_name:
+                metadata = {
+                    "task_instruction": instruction,
+                    "model": self._model_name,
+                    "harbor_session_id": environment.session_id,
+                    "agent_mode": "js",
+                    **configuration,
+                }
+                example_id = self._instruction_to_example_id.get(instruction)
 
-            self._langsmith_trace(
-                instruction, environment, configuration, result_messages
-            )
+                with trace(
+                    name=environment.session_id,
+                    reference_example_id=example_id,
+                    inputs={"instruction": instruction},
+                    project_name=experiment_name,
+                    metadata=metadata,
+                ) as run_tree:
+                    # Propagate LangSmith trace context to the Node.js subprocess
+                    # so its LLM calls and tool invocations nest under this trace.
+                    # See: https://docs.langchain.com/langsmith/distributed-tracing
+                    rt = get_current_run_tree()
+                    langsmith_headers = rt.to_headers() if rt else {}
+
+                    await self._send(process, {
+                        "type": "init",
+                        "instruction": instruction,
+                        "sessionId": environment.session_id,
+                        "model": self._model_name,
+                        "systemPrompt": system_prompt,
+                        "langsmithHeaders": langsmith_headers,
+                    })
+
+                    result_messages = await self._bridge_loop(process, environment)
+                    last_ai = next(
+                        (m for m in reversed(result_messages) if m.get("role") == "ai"),
+                        None,
+                    )
+                    if last_ai:
+                        run_tree.end(outputs={"last_message": last_ai.get("content", "")})
+            else:
+                await self._send(process, {
+                    "type": "init",
+                    "instruction": instruction,
+                    "sessionId": environment.session_id,
+                    "model": self._model_name,
+                    "systemPrompt": system_prompt,
+                })
+                result_messages = await self._bridge_loop(process, environment)
+
             self._save_trajectory(environment, instruction, result_messages)
 
         finally:
@@ -348,43 +387,6 @@ class DeepAgentsJSWrapper(BaseAgent):
                 )
             else:
                 print(f"[DeepAgentsJS] Warning: unknown message type: {msg_type}")
-
-    # ------------------------------------------------------------------
-    # LangSmith
-    # ------------------------------------------------------------------
-
-    def _langsmith_trace(
-        self,
-        instruction: str,
-        environment: BaseEnvironment,
-        configuration: dict,
-        messages: list[dict],
-    ) -> None:
-        experiment_name = os.environ.get("LANGSMITH_EXPERIMENT", "").strip() or None
-        if not experiment_name:
-            return
-
-        metadata = {
-            "task_instruction": instruction,
-            "model": self._model_name,
-            "harbor_session_id": environment.session_id,
-            "agent_mode": "js",
-            **configuration,
-        }
-        example_id = self._instruction_to_example_id.get(instruction)
-
-        with trace(
-            name=environment.session_id,
-            reference_example_id=example_id,
-            inputs={"instruction": instruction},
-            project_name=experiment_name,
-            metadata=metadata,
-        ) as run_tree:
-            last_ai = next(
-                (m for m in reversed(messages) if m.get("role") == "ai"), None
-            )
-            if last_ai:
-                run_tree.end(outputs={"last_message": last_ai.get("content", "")})
 
     # ------------------------------------------------------------------
     # Trajectory

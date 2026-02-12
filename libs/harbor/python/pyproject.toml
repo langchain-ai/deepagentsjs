@@ -9,6 +9,8 @@ dependencies = [
     "harbor>=0.1.12",
     "langsmith>=0.7.0",
     "python-dotenv>=1.0.0",
+    "aiohttp>=3.9.0",
+    "toml>=0.10.0",
 ]
 
 [dependency-groups]

@@ -40,7 +40,8 @@
   "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "dependencies": {
     "@langchain/anthropic": "^1.0.0",
-    "@langchain/openai": "^1.2.3"
+    "@langchain/openai": "^1.2.3",
+    "langsmith": ">=0.2.0"
   },
   "peerDependencies": {
     "deepagents": ">=1.6.0"

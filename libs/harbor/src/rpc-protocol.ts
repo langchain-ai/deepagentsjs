@@ -27,6 +27,13 @@ export interface InitMessage {
   model: string;
   /** Pre-formatted system prompt with directory context */
   systemPrompt: string;
+  /**
+   * LangSmith distributed tracing headers (optional).
+   * When present, the runner uses these to nest all agent traces
+   * (LLM calls, tool invocations) under the parent Python trace.
+   * @see https://docs.langchain.com/langsmith/distributed-tracing
+   */
+  langsmithHeaders?: Record<string, string>;
 }
 
 /**
