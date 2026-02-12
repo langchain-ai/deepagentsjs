@@ -729,20 +729,25 @@ describe("createFilesystemMiddleware", () => {
   });
 
   describe("tools", () => {
-    it("write_file schema should accept missing content and default to empty string", () => {
+    it("write_file should default content to empty string when omitted", async () => {
+      const mockBackend = createMockBackend();
       const middleware = createFilesystemMiddleware({
-        backend: createMockBackend(),
+        backend: mockBackend,
       });
 
       const writeFileTool = middleware.tools!.find(
         (t: any) => t.name === "write_file",
-      ) as any;
+      );
       expect(writeFileTool).toBeDefined();
 
-      // Parse with only file_path, no content — simulates the model omitting it
-      const parsed = writeFileTool.schema.parse({ file_path: "/app/test.c" });
-      expect(parsed.file_path).toBe("/app/test.c");
-      expect(parsed.content).toBe("");
+      // Invoke with only file_path, no content — simulates the model omitting it
+      const result = await (writeFileTool as any).invoke(
+        { file_path: "/app/test.c" },
+        { configurable: { thread_id: "test" } },
+      );
+
+      // Should have called backend.write with empty string
+      expect(mockBackend.write).toHaveBeenCalledWith("/app/test.c", "");
     });
   });
 });
