@@ -6,7 +6,6 @@ import {
   summarizationMiddleware,
   SystemMessage,
   type AgentMiddleware,
-  type ResponseFormat,
 } from "langchain";
 import type {
   ClientTool,
@@ -33,6 +32,7 @@ import type {
   DeepAgentTypeConfig,
   FlattenSubAgentMiddleware,
   InferStructuredResponse,
+  SupportedResponseFormat,
 } from "./types.js";
 
 /**
@@ -75,7 +75,7 @@ const BASE_PROMPT = `In order to complete the objective that the user asks of yo
  * ```
  */
 export function createDeepAgent<
-  TResponse extends ResponseFormat = ResponseFormat,
+  TResponse extends SupportedResponseFormat = SupportedResponseFormat,
   ContextSchema extends InteropZodObject = InteropZodObject,
   const TMiddleware extends readonly AgentMiddleware[] = readonly [],
   const TSubagents extends readonly (SubAgent | CompiledSubAgent)[] =
@@ -300,7 +300,7 @@ export function createDeepAgent<
     systemPrompt: finalSystemPrompt,
     tools: tools as StructuredTool[],
     middleware: runtimeMiddleware,
-    responseFormat: responseFormat as ResponseFormat,
+    ...(responseFormat != null && { responseFormat }),
     contextSchema,
     checkpointer,
     store,

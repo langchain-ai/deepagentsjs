@@ -32,6 +32,12 @@ import type { CompiledSubAgent } from "./middleware/subagents.js";
 // We use AnnotationRoot<any> as a compatible equivalent
 type AnyAnnotationRoot = AnnotationRoot<any>;
 
+// TODO: import TypedToolStrategy from "langchain" once exported from the top-level entry point
+// (currently only available via "langchain/dist/agents/responses.js")
+interface TypedToolStrategy<T = unknown> extends Array<ToolStrategy<any>> {
+  _schemaType?: T;
+}
+
 /**
  * Helper type to extract middleware from a SubAgent definition
  * Handles both mutable and readonly middleware arrays
@@ -77,31 +83,45 @@ export type MergedDeepAgentState<
   InferSubAgentMiddlewareStates<TSubagents>;
 
 /**
+ * Union of all response format types accepted by `createDeepAgent`.
+ *
+ * Matches the formats supported by LangChain's `createAgent`:
+ * - `ToolStrategy<T>` — from `ToolStrategy.fromSchema(schema)`
+ * - `ProviderStrategy<T>` — from `providerStrategy(schema)`
+ * - `TypedToolStrategy<T>` — from `toolStrategy(schema)`
+ * - `ResponseFormat` — the base union of the above single-strategy types
+ */
+export type SupportedResponseFormat = ResponseFormat | TypedToolStrategy<any>;
+
+/**
  * Utility type to extract the parsed response type from a ResponseFormat strategy.
  *
- * Maps `ToolStrategy<T>` and `ProviderStrategy<T>` to `T` (the parsed output type),
- * so that `structuredResponse` is correctly typed as the schema's inferred type
- * rather than the strategy wrapper.
+ * Maps `ToolStrategy<T>`, `ProviderStrategy<T>`, and `TypedToolStrategy<T>` to `T`
+ * (the parsed output type), so that `structuredResponse` is correctly typed as the
+ * schema's inferred type rather than the strategy wrapper.
  *
- * When no `responseFormat` is provided (i.e. `T` defaults to the full `ResponseFormat`
- * union), this resolves to `ResponseFormatUndefined` so that `structuredResponse` is
- * excluded from the agent's output state.
+ * When no `responseFormat` is provided (i.e. `T` defaults to the full
+ * `SupportedResponseFormat` union), this resolves to `ResponseFormatUndefined` so
+ * that `structuredResponse` is excluded from the agent's output state.
  *
  * @example
  * ```typescript
  * type T1 = InferStructuredResponse<ToolStrategy<{ city: string }>>; // { city: string }
  * type T2 = InferStructuredResponse<ProviderStrategy<{ answer: string }>>; // { answer: string }
- * type T3 = InferStructuredResponse<ResponseFormat>; // ResponseFormatUndefined (default/unset)
+ * type T3 = InferStructuredResponse<TypedToolStrategy<{ city: string }>>; // { city: string }
+ * type T4 = InferStructuredResponse<SupportedResponseFormat>; // ResponseFormatUndefined (default/unset)
  * ```
  */
-export type InferStructuredResponse<T extends ResponseFormat> =
-  ResponseFormat extends T
+export type InferStructuredResponse<T extends SupportedResponseFormat> =
+  SupportedResponseFormat extends T
     ? ResponseFormatUndefined
-    : T extends ToolStrategy<infer U>
+    : T extends TypedToolStrategy<infer U>
       ? U
-      : T extends ProviderStrategy<infer U>
+      : T extends ToolStrategy<infer U>
         ? U
-        : ResponseFormatUndefined;
+        : T extends ProviderStrategy<infer U>
+          ? U
+          : ResponseFormatUndefined;
 
 /**
  * Type bag that extends AgentTypeConfig with subagent type information.
@@ -334,7 +354,7 @@ export type InferSubagentReactAgentType<
  * @typeParam TTools - The tools array type
  */
 export interface CreateDeepAgentParams<
-  TResponse extends ResponseFormat = ResponseFormat,
+  TResponse extends SupportedResponseFormat = SupportedResponseFormat,
   ContextSchema extends AnnotationRoot<any> | InteropZodObject =
     AnnotationRoot<any>,
   TMiddleware extends readonly AgentMiddleware[] = readonly AgentMiddleware[],

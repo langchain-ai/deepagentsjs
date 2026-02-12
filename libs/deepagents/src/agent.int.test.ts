@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
-import { ToolStrategy, providerStrategy } from "langchain";
+import { toolStrategy, providerStrategy } from "langchain";
 import { z } from "zod/v4";
 import { createDeepAgent } from "./index.js";
 import type { CompiledSubAgent } from "./index.js";
@@ -423,7 +423,7 @@ describe("DeepAgents Integration Tests", () => {
           tools: [getWeather],
           systemPrompt:
             "You are a weather assistant. When asked about the weather, use the get_weather tool to get the information, then return a structured response with the location, temperature, and conditions.",
-          responseFormat: ToolStrategy.fromSchema(WeatherSchema),
+          responseFormat: toolStrategy(WeatherSchema),
         });
 
         const result = await agent.invoke({
@@ -489,7 +489,7 @@ describe("DeepAgents Integration Tests", () => {
           tools: [getWeather],
           systemPrompt:
             "You are a weather assistant. Use the get_weather tool to look up the weather, then provide a structured weather report.",
-          responseFormat: ToolStrategy.fromSchema(WeatherReportSchema),
+          responseFormat: toolStrategy(WeatherReportSchema),
         });
 
         const result = await agent.invoke({
@@ -507,9 +507,7 @@ describe("DeepAgents Integration Tests", () => {
         expect(result.structuredResponse).toHaveProperty("weather_summary");
         expect(result.structuredResponse).toHaveProperty("is_sunny");
         expect(typeof result.structuredResponse.city).toBe("string");
-        expect(typeof result.structuredResponse.weather_summary).toBe(
-          "string",
-        );
+        expect(typeof result.structuredResponse.weather_summary).toBe("string");
         expect(typeof result.structuredResponse.is_sunny).toBe("boolean");
       },
     );
@@ -532,7 +530,7 @@ describe("DeepAgents Integration Tests", () => {
           model: SAMPLE_MODEL,
           systemPrompt:
             "You are an analyst. Provide structured analysis of any topic the user asks about.",
-          responseFormat: ToolStrategy.fromSchema(AnalysisSchema),
+          responseFormat: toolStrategy(AnalysisSchema),
         });
 
         const result = await agent.invoke({
@@ -548,12 +546,8 @@ describe("DeepAgents Integration Tests", () => {
         expect(result.structuredResponse).toHaveProperty("key_points");
         expect(result.structuredResponse).toHaveProperty("sentiment");
         expect(typeof result.structuredResponse.topic).toBe("string");
-        expect(Array.isArray(result.structuredResponse.key_points)).toBe(
-          true,
-        );
-        expect(
-          result.structuredResponse.key_points.length,
-        ).toBeGreaterThan(0);
+        expect(Array.isArray(result.structuredResponse.key_points)).toBe(true);
+        expect(result.structuredResponse.key_points.length).toBeGreaterThan(0);
         expect(["positive", "negative", "neutral"]).toContain(
           result.structuredResponse.sentiment,
         );
@@ -573,7 +567,7 @@ describe("DeepAgents Integration Tests", () => {
           model: SAMPLE_MODEL,
           systemPrompt:
             "You are an orchestrator. Delegate weather queries to the weather_agent subagent, then return a structured response summarizing the result.",
-          responseFormat: ToolStrategy.fromSchema(WeatherResponseSchema),
+          responseFormat: toolStrategy(WeatherResponseSchema),
           subagents: [
             {
               name: "weather_agent",
