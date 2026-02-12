@@ -43,7 +43,8 @@ const STATUS_PRIORITY: Record<string, number> = {
  * - New IDs are appended
  * - Status priority: completed(2) > in_progress(1) > pending(0)
  */
-function todosReducer(current: Todo[], update: Todo[]): Todo[] {
+/** @internal Exported for testing */
+export function todosReducer(current: Todo[], update: Todo[]): Todo[] {
   if (!update) return current || [];
   if (!current || current.length === 0) {
     return update;

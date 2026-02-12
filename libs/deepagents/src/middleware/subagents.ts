@@ -349,9 +349,53 @@ export const GENERAL_PURPOSE_SUBAGENT: Pick<
 } as const;
 
 /**
- * Filter state to exclude certain keys when passing to subagents
+ * Auto-mark a specific todo as completed by ID.
+ *
+ * Used by the task tool to mark the assigned parent todo as completed
+ * when a subagent finishes its work. Falls back to parentTodos if
+ * subagentTodos is undefined.
+ *
+ * @internal Exported for testing
  */
-function filterStateForSubagent(
+export function autoMarkTodoCompleted(
+  todoId: string,
+  subagentTodos: Array<{ id: string; status: string; content: string }> | undefined,
+  parentTodos: Array<{ id: string; status: string; content: string }> | undefined,
+): Array<{ id: string; status: string; content: string }> | undefined {
+  const todos = subagentTodos ?? parentTodos;
+  if (!todos) return undefined;
+  return todos.map((t) =>
+    t.id === todoId ? { ...t, status: "completed" } : t,
+  );
+}
+
+/**
+ * Diff files by reference to only return files that actually changed.
+ *
+ * When parallel subagents each return the full parent file set, only the files
+ * this specific subagent modified should propagate. Unchanged files keep the same
+ * object reference from the parent state, so a reference comparison (===) is sufficient.
+ *
+ * @internal Exported for testing
+ */
+export function diffFilesByReference(
+  preFiles: Record<string, unknown>,
+  postFiles: Record<string, unknown>,
+): Record<string, unknown> {
+  const changedFiles: Record<string, unknown> = {};
+  for (const [path, fileData] of Object.entries(postFiles)) {
+    if (fileData !== preFiles[path]) {
+      changedFiles[path] = fileData;
+    }
+  }
+  return changedFiles;
+}
+
+/** @internal Exported for testing */
+export const EXCLUDED_STATE_KEYS_LIST = EXCLUDED_STATE_KEYS;
+
+/** @internal Exported for testing */
+export function filterStateForSubagent(
   state: Record<string, unknown>,
 ): Record<string, unknown> {
   const filtered: Record<string, unknown> = {};
@@ -569,28 +613,22 @@ function createTaskTool(options: {
       >;
 
       // Only return files that actually changed (diff by reference).
-      // fileDataReducer creates new objects only for modified entries;
-      // unchanged entries keep the same reference from the parent state.
       if (preFiles && result.files) {
-        const postFiles = result.files as Record<string, unknown>;
-        const changedFiles: Record<string, unknown> = {};
-        for (const [path, fileData] of Object.entries(postFiles)) {
-          if (fileData !== preFiles[path]) {
-            changedFiles[path] = fileData;
-          }
-        }
-        result.files = changedFiles;
+        result.files = diffFilesByReference(
+          preFiles,
+          result.files as Record<string, unknown>,
+        );
       }
 
       // Auto-mark the assigned parent todo as completed when the subagent finishes
       if (todo_id) {
-        const todos = (result.todos ?? currentState.todos) as
-          | Array<{ id: string; status: string; content: string }>
-          | undefined;
-        if (todos) {
-          result.todos = todos.map((t) =>
-            t.id === todo_id ? { ...t, status: "completed" } : t,
-          );
+        const markedTodos = autoMarkTodoCompleted(
+          todo_id,
+          result.todos as Array<{ id: string; status: string; content: string }> | undefined,
+          (currentState.todos ?? undefined) as Array<{ id: string; status: string; content: string }> | undefined,
+        );
+        if (markedTodos) {
+          result.todos = markedTodos;
           // Emit immediately via writer() — bypasses Promise.all batching
           // so the frontend sees this todo flip to completed right away
           if (streamWriter) {
