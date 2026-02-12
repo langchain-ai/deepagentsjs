@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import { toolStrategy, providerStrategy } from "langchain";
+import { z } from "zod/v4";
 import { createDeepAgent } from "./index.js";
 import type { CompiledSubAgent } from "./index.js";
 import {
   SAMPLE_MODEL,
+  SAMPLE_MODEL_WITH_STRUCTURED_RESPONSE,
   TOY_BASKETBALL_RESEARCH,
   ResearchMiddleware,
   ResearchMiddlewareWithTools,
@@ -405,6 +408,198 @@ describe("DeepAgents Integration Tests", () => {
     },
   );
 
-  // Note: response_format with ToolStrategy is not yet available in LangChain TS v1
-  // Skipping test_response_format_tool_strategy for now
+  describe.each([
+    {
+      strategyName: "toolStrategy",
+      wrap: (s: z.ZodObject<any>) => toolStrategy(s),
+    },
+    {
+      strategyName: "providerStrategy",
+      wrap: (s: z.ZodObject<any>) => providerStrategy(s),
+    },
+  ])("responseFormat ($strategyName)", ({ strategyName, wrap }) => {
+    it.concurrent(
+      "should return structuredResponse with Zod schema",
+      { timeout: 120 * 1000 },
+      async () => {
+        const WeatherSchema = z.object({
+          location: z.string().describe("The location queried"),
+          temperature: z.string().describe("The temperature"),
+          conditions: z.string().describe("Weather conditions summary"),
+        });
+
+        const model =
+          strategyName === "providerStrategy"
+            ? SAMPLE_MODEL_WITH_STRUCTURED_RESPONSE
+            : SAMPLE_MODEL;
+        const agent = createDeepAgent({
+          model,
+          tools: [getWeather],
+          systemPrompt:
+            "You are a weather assistant. When asked about the weather, use the get_weather tool to get the information, then return a structured response with the location, temperature, and conditions.",
+          responseFormat: wrap(WeatherSchema),
+        });
+
+        const result = await agent.invoke({
+          messages: [new HumanMessage("What is the weather in San Francisco?")],
+        });
+
+        expect(result.structuredResponse).toBeDefined();
+        expect(result.structuredResponse).toHaveProperty("location");
+        expect(result.structuredResponse).toHaveProperty("temperature");
+        expect(result.structuredResponse).toHaveProperty("conditions");
+        expect(typeof result.structuredResponse.location).toBe("string");
+        expect(typeof result.structuredResponse.temperature).toBe("string");
+        expect(typeof result.structuredResponse.conditions).toBe("string");
+      },
+    );
+
+    it.concurrent(
+      "should return structuredResponse with tools",
+      { timeout: 120 * 1000 },
+      async () => {
+        const WeatherReportSchema = z.object({
+          city: z.string().describe("The city name"),
+          weather_summary: z
+            .string()
+            .describe("A summary of the weather conditions"),
+          is_sunny: z.boolean().describe("Whether the weather is sunny"),
+        });
+
+        const model =
+          strategyName === "providerStrategy"
+            ? SAMPLE_MODEL_WITH_STRUCTURED_RESPONSE
+            : SAMPLE_MODEL;
+        const agent = createDeepAgent({
+          model,
+          tools: [getWeather],
+          systemPrompt:
+            "You are a weather assistant. Use the get_weather tool to look up the weather, then provide a structured weather report.",
+          responseFormat: wrap(WeatherReportSchema),
+        });
+
+        const result = await agent.invoke({
+          messages: [new HumanMessage("What's the weather like in Tokyo?")],
+        });
+
+        // Verify the weather tool was actually called
+        const agentMessages = result.messages.filter(AIMessage.isInstance);
+        const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
+        expect(toolCalls.some((tc) => tc.name === "get_weather")).toBe(true);
+
+        // Verify structured response
+        expect(result.structuredResponse).toBeDefined();
+        expect(result.structuredResponse).toHaveProperty("city");
+        expect(result.structuredResponse).toHaveProperty("weather_summary");
+        expect(result.structuredResponse).toHaveProperty("is_sunny");
+        expect(typeof result.structuredResponse.city).toBe("string");
+        expect(typeof result.structuredResponse.weather_summary).toBe("string");
+        expect(typeof result.structuredResponse.is_sunny).toBe("boolean");
+      },
+    );
+
+    it.concurrent(
+      "should return structuredResponse with complex nested schema",
+      { timeout: 120 * 1000 },
+      async () => {
+        const AnalysisSchema = z.object({
+          topic: z.string().describe("The main topic"),
+          key_points: z
+            .array(z.string())
+            .describe("Key points about the topic"),
+          sentiment: z
+            .enum(["positive", "negative", "neutral"])
+            .describe("Overall sentiment"),
+        });
+
+        const model =
+          strategyName === "providerStrategy"
+            ? SAMPLE_MODEL_WITH_STRUCTURED_RESPONSE
+            : SAMPLE_MODEL;
+        const agent = createDeepAgent({
+          model,
+          systemPrompt:
+            "You are an analyst. Provide structured analysis of any topic the user asks about.",
+          responseFormat: wrap(AnalysisSchema),
+        });
+
+        const result = await agent.invoke({
+          messages: [
+            new HumanMessage(
+              "Provide an analysis on the benefits of open source software.",
+            ),
+          ],
+        });
+
+        expect(result.structuredResponse).toBeDefined();
+        expect(result.structuredResponse).toHaveProperty("topic");
+        expect(result.structuredResponse).toHaveProperty("key_points");
+        expect(result.structuredResponse).toHaveProperty("sentiment");
+        expect(typeof result.structuredResponse.topic).toBe("string");
+        expect(Array.isArray(result.structuredResponse.key_points)).toBe(true);
+        expect(
+          (result.structuredResponse.key_points as string[]).length,
+        ).toBeGreaterThan(0);
+        expect(["positive", "negative", "neutral"]).toContain(
+          result.structuredResponse.sentiment,
+        );
+      },
+    );
+
+    it.concurrent(
+      "should return structuredResponse with subagents",
+      { timeout: 120 * 1000 },
+      async () => {
+        const WeatherResponseSchema = z.object({
+          location: z.string().describe("The location queried"),
+          summary: z.string().describe("Summary of the weather"),
+        });
+
+        const model =
+          strategyName === "providerStrategy"
+            ? SAMPLE_MODEL_WITH_STRUCTURED_RESPONSE
+            : SAMPLE_MODEL;
+        const agent = createDeepAgent({
+          model,
+          systemPrompt:
+            "You are an orchestrator. Delegate weather queries to the weather_agent subagent, then return a structured response summarizing the result.",
+          responseFormat: wrap(WeatherResponseSchema),
+          subagents: [
+            {
+              name: "weather_agent",
+              description: "Use this agent to get the weather for any location",
+              systemPrompt:
+                "You are a weather agent. Use the get_weather tool to get weather information.",
+              tools: [getWeather],
+              model: SAMPLE_MODEL,
+            },
+          ],
+        });
+
+        const result = await agent.invoke(
+          {
+            messages: [new HumanMessage("What is the weather in London?")],
+          },
+          { recursionLimit: 100 },
+        );
+
+        // Verify the subagent was invoked
+        const agentMessages = result.messages.filter(AIMessage.isInstance);
+        const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
+        expect(
+          toolCalls.some(
+            (tc) =>
+              tc.name === "task" && tc.args?.subagent_type === "weather_agent",
+          ),
+        ).toBe(true);
+
+        // Verify structured response
+        expect(result.structuredResponse).toBeDefined();
+        expect(result.structuredResponse).toHaveProperty("location");
+        expect(result.structuredResponse).toHaveProperty("summary");
+        expect(typeof result.structuredResponse.location).toBe("string");
+        expect(typeof result.structuredResponse.summary).toBe("string");
+      },
+    );
+  });
 });

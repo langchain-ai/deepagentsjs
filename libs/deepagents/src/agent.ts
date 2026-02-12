@@ -6,7 +6,6 @@ import {
   summarizationMiddleware,
   SystemMessage,
   type AgentMiddleware,
-  type ResponseFormat,
 } from "langchain";
 import type {
   ClientTool,
@@ -32,6 +31,8 @@ import type {
   DeepAgent,
   DeepAgentTypeConfig,
   FlattenSubAgentMiddleware,
+  InferStructuredResponse,
+  SupportedResponseFormat,
 } from "./types.js";
 
 /**
@@ -74,7 +75,7 @@ const BASE_PROMPT = `In order to complete the objective that the user asks of yo
  * ```
  */
 export function createDeepAgent<
-  TResponse extends ResponseFormat = ResponseFormat,
+  TResponse extends SupportedResponseFormat = SupportedResponseFormat,
   ContextSchema extends InteropZodObject = InteropZodObject,
   const TMiddleware extends readonly AgentMiddleware[] = readonly [],
   const TSubagents extends readonly (SubAgent | CompiledSubAgent)[] =
@@ -299,7 +300,7 @@ export function createDeepAgent<
     systemPrompt: finalSystemPrompt,
     tools: tools as StructuredTool[],
     middleware: runtimeMiddleware,
-    responseFormat: responseFormat as ResponseFormat,
+    ...(responseFormat != null && { responseFormat }),
     contextSchema,
     checkpointer,
     store,
@@ -318,7 +319,7 @@ export function createDeepAgent<
 
   /**
    * Return as DeepAgent with proper DeepAgentTypeConfig
-   * - Response: TResponse (from responseFormat parameter)
+   * - Response: InferStructuredResponse<TResponse> (unwraps ToolStrategy<T>/ProviderStrategy<T> → T)
    * - State: undefined (state comes from middleware)
    * - Context: ContextSchema
    * - Middleware: AllMiddleware (built-in + custom + subagent middleware for state inference)
@@ -327,7 +328,7 @@ export function createDeepAgent<
    */
   return agent as unknown as DeepAgent<
     DeepAgentTypeConfig<
-      TResponse,
+      InferStructuredResponse<TResponse>,
       undefined,
       ContextSchema,
       AllMiddleware,

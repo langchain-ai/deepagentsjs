@@ -8,24 +8,24 @@
   "dependencies": {
     "deepagents": "workspace:*",
     "@langchain/modal": "workspace:*",
-    "@langchain/anthropic": "^1.3.14",
-    "@langchain/core": "^1.1.19",
+    "@langchain/anthropic": "^1.3.17",
+    "@langchain/core": "^1.1.24",
     "@langchain/daytona": "workspace:*",
     "@langchain/deno": "workspace:*",
     "@langchain/node-vfs": "workspace:*",
     "@langchain/langgraph-checkpoint": "^1.0.0",
-    "@langchain/openai": "^1.2.4",
+    "@langchain/openai": "^1.2.7",
     "@langchain/tavily": "^1.2.0",
-    "langchain": "^1.2.17",
+    "langchain": "^1.2.23",
     "uuid": "^13.0.0",
     "yaml": "^2.8.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.13",
-    "@types/node": "^25.2.0",
+    "@types/node": "^25.2.3",
     "@types/uuid": "^11.0.0",
-    "dotenv": "^17.2.3",
+    "dotenv": "^17.2.4",
     "typescript": "^5.9.3"
   }
 }

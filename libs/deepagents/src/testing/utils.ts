@@ -31,7 +31,7 @@ const expectedTools = [
  * Accepts any object with a graph property (compatible with ReactAgent and DeepAgent types)
  */
 export function assertAllDeepAgentQualities(agent: {
-  graph: ReactAgent["graph"];
+  graph: ReactAgent<any>["graph"];
 }) {
   // Check state channels
   const channels = Object.keys(agent.graph?.channels || {});
@@ -62,6 +62,7 @@ export function assertAllDeepAgentQualities(agent: {
  * Constants
  */
 export const SAMPLE_MODEL = "claude-sonnet-4-5-20250929";
+export const SAMPLE_MODEL_WITH_STRUCTURED_RESPONSE = "claude-opus-4-6";
 
 /**
  * Mock tools for testing
