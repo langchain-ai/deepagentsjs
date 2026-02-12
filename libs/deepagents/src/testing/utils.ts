@@ -31,7 +31,7 @@ const expectedTools = [
  * Accepts any object with a graph property (compatible with ReactAgent and DeepAgent types)
  */
 export function assertAllDeepAgentQualities(agent: {
-  graph: ReactAgent["graph"];
+  graph: ReactAgent<any>["graph"];
 }) {
   // Check state channels
   const channels = Object.keys(agent.graph?.channels || {});

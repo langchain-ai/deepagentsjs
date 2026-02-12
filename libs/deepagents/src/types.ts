@@ -8,6 +8,8 @@ import type {
   ResponseFormat,
   SystemMessage,
   ResponseFormatUndefined,
+  ToolStrategy,
+  ProviderStrategy,
 } from "langchain";
 import type {
   ClientTool,
@@ -73,6 +75,33 @@ export type MergedDeepAgentState<
   TSubagents extends readonly (SubAgent | CompiledSubAgent)[],
 > = InferMiddlewareStates<TMiddleware> &
   InferSubAgentMiddlewareStates<TSubagents>;
+
+/**
+ * Utility type to extract the parsed response type from a ResponseFormat strategy.
+ *
+ * Maps `ToolStrategy<T>` and `ProviderStrategy<T>` to `T` (the parsed output type),
+ * so that `structuredResponse` is correctly typed as the schema's inferred type
+ * rather than the strategy wrapper.
+ *
+ * When no `responseFormat` is provided (i.e. `T` defaults to the full `ResponseFormat`
+ * union), this resolves to `ResponseFormatUndefined` so that `structuredResponse` is
+ * excluded from the agent's output state.
+ *
+ * @example
+ * ```typescript
+ * type T1 = InferStructuredResponse<ToolStrategy<{ city: string }>>; // { city: string }
+ * type T2 = InferStructuredResponse<ProviderStrategy<{ answer: string }>>; // { answer: string }
+ * type T3 = InferStructuredResponse<ResponseFormat>; // ResponseFormatUndefined (default/unset)
+ * ```
+ */
+export type InferStructuredResponse<T extends ResponseFormat> =
+  ResponseFormat extends T
+    ? ResponseFormatUndefined
+    : T extends ToolStrategy<infer U>
+      ? U
+      : T extends ProviderStrategy<infer U>
+        ? U
+        : ResponseFormatUndefined;
 
 /**
  * Type bag that extends AgentTypeConfig with subagent type information.

@@ -32,6 +32,7 @@ import type {
   DeepAgent,
   DeepAgentTypeConfig,
   FlattenSubAgentMiddleware,
+  InferStructuredResponse,
 } from "./types.js";
 
 /**
@@ -318,7 +319,7 @@ export function createDeepAgent<
 
   /**
    * Return as DeepAgent with proper DeepAgentTypeConfig
-   * - Response: TResponse (from responseFormat parameter)
+   * - Response: InferStructuredResponse<TResponse> (unwraps ToolStrategy<T>/ProviderStrategy<T> → T)
    * - State: undefined (state comes from middleware)
    * - Context: ContextSchema
    * - Middleware: AllMiddleware (built-in + custom + subagent middleware for state inference)
@@ -327,7 +328,7 @@ export function createDeepAgent<
    */
   return agent as unknown as DeepAgent<
     DeepAgentTypeConfig<
-      TResponse,
+      InferStructuredResponse<TResponse>,
       undefined,
       ContextSchema,
       AllMiddleware,

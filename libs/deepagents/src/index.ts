@@ -22,6 +22,8 @@ export type {
   ExtractSubAgentMiddleware,
   FlattenSubAgentMiddleware,
   InferSubAgentMiddlewareStates,
+  // Response format type utilities
+  InferStructuredResponse,
 } from "./types.js";
 
 // Export config
