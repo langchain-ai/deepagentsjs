@@ -48,6 +48,7 @@ import {
   countTokensApproximately,
   HumanMessage,
   AIMessage,
+  ToolMessage,
   BaseMessage,
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
@@ -214,6 +215,154 @@ function isSummaryMessage(msg: BaseMessage): boolean {
     return false;
   }
   return msg.additional_kwargs?.lc_source === "summarization";
+}
+
+/**
+ * Estimate the token overhead from tool definition schemas.
+ *
+ * `countTokensApproximately` handles messages (including the system message when
+ * prepended), but it does not accept tool definitions. This helper uses the same
+ * chars/4 heuristic to approximate the tokens consumed by tool schemas.
+ *
+ * Matches the Python approach where `tools=request.tools` is passed to the
+ * token counter — here we estimate separately because the JS token counter
+ * does not accept a `tools` parameter.
+ */
+function estimateToolsOverhead(
+  tools?: Array<{ name?: string; description?: string; schema?: unknown }>,
+): number {
+  if (!tools?.length) {
+    return 0;
+  }
+
+  let chars = 0;
+  for (const tool of tools) {
+    chars += JSON.stringify({
+      name: tool.name,
+      description: tool.description,
+      schema: tool.schema,
+    }).length;
+  }
+
+  return Math.ceil(chars / 4);
+}
+
+const CONTENT_TRUNCATION_NOTICE =
+  "\n\n...(content truncated to fit context window)";
+
+/**
+ * Safety margin multiplier for `countTokensApproximately`.
+ *
+ * The chars/4 heuristic consistently underestimates actual API token counts by
+ * ~20-30% because it ignores message framing overhead (role labels, separators)
+ * and because code/JSON tokenises at ~3-3.5 chars/token rather than 4.
+ *
+ * This multiplier is used ONLY for hard-limit safety checks
+ * (`emergencyTruncateMessages`, post-summarization overflow detection) where
+ * under-estimation could cause an API rejection.  The proactive
+ * summarization trigger uses the raw estimate directly so that the logged
+ * token count is not inflated by an arbitrary factor — instead the trigger
+ * value itself is set conservatively enough to fire before the hard limit.
+ */
+const TOKEN_ESTIMATION_SAFETY_FACTOR = 1.25;
+
+/**
+ * Emergency truncation of oversized individual messages when summarization
+ * cannot reduce the message count (e.g., too few messages to cut).
+ *
+ * Iteratively truncates the largest string-content messages until the total
+ * estimated token count (with safety margin) fits within `maxTokens`.
+ * Only ToolMessage and HumanMessage content is truncated; AIMessage content
+ * is left intact to preserve tool_calls structure.
+ *
+ * @param messages - The agent messages (without system message)
+ * @param systemMessage - The system message (included in token counting)
+ * @param maxTokens - Hard token limit (e.g. model's maxInputTokens)
+ * @param toolsOverhead - Estimated tokens from tool definitions
+ */
+function emergencyTruncateMessages(
+  messages: BaseMessage[],
+  systemMessage: BaseMessage | undefined,
+  maxTokens: number,
+  toolsOverhead: number,
+): BaseMessage[] | null {
+  const result = [...messages];
+
+  function estimateTotal(): number {
+    const counted = systemMessage != null ? [systemMessage, ...result] : result;
+    return (
+      (countTokensApproximately(counted) + toolsOverhead) *
+      TOKEN_ESTIMATION_SAFETY_FACTOR
+    );
+  }
+
+  let totalTokens = estimateTotal();
+
+  if (totalTokens <= maxTokens) {
+    return null; // No truncation needed
+  }
+
+  // Iterate: find the largest truncatable message, halve it, repeat
+  const MAX_ITERATIONS = 10;
+  for (let iter = 0; iter < MAX_ITERATIONS && totalTokens > maxTokens; iter++) {
+    let largestIdx = -1;
+    let largestLen = 0;
+
+    for (let i = 0; i < result.length; i++) {
+      const msg = result[i];
+      if (
+        typeof msg.content === "string" &&
+        msg.content.length > largestLen &&
+        (ToolMessage.isInstance(msg) || HumanMessage.isInstance(msg))
+      ) {
+        largestIdx = i;
+        largestLen = msg.content.length;
+      }
+    }
+
+    // Nothing left to truncate
+    if (
+      largestIdx === -1 ||
+      largestLen <= CONTENT_TRUNCATION_NOTICE.length * 2
+    ) {
+      break;
+    }
+
+    const msg = result[largestIdx];
+    const content = msg.content as string;
+
+    // Calculate how many chars to keep: target is to remove just enough
+    const excess = totalTokens - maxTokens;
+    const charsToRemove = Math.max(
+      excess * 4, // convert tokens to chars
+      content.length / 2, // at least halve
+    );
+    const newLength = Math.max(
+      200, // keep at least some context
+      content.length - charsToRemove,
+    );
+    const newContent =
+      content.substring(0, newLength) + CONTENT_TRUNCATION_NOTICE;
+
+    // Reconstruct message preserving its type and metadata
+    if (ToolMessage.isInstance(msg)) {
+      result[largestIdx] = new ToolMessage({
+        content: newContent,
+        tool_call_id: msg.tool_call_id,
+        name: msg.name,
+        additional_kwargs: msg.additional_kwargs,
+      });
+    } else {
+      result[largestIdx] = new HumanMessage({
+        content: newContent,
+        additional_kwargs: msg.additional_kwargs,
+      });
+    }
+
+    totalTokens = estimateTotal();
+  }
+
+  return totalTokens <= maxTokens ? result : null;
 }
 
 /**
@@ -395,6 +544,31 @@ export function createSummarizationMiddleware(
   }
 
   /**
+   * Adjust a cutoff index to avoid orphaning ToolMessages.
+   *
+   * When the cutoff falls between an AIMessage (with tool_calls) and its
+   * corresponding ToolMessages, the preserved messages would start with
+   * orphaned ToolMessages. This breaks the API contract that every
+   * tool_result must have a corresponding tool_use in the preceding message.
+   *
+   * Advances the cutoff past any leading ToolMessages to the next
+   * non-ToolMessage (typically an AIMessage starting a new turn).
+   */
+  function adjustCutoffForToolMessages(
+    messages: BaseMessage[],
+    cutoffIndex: number,
+  ): number {
+    let adjusted = cutoffIndex;
+    while (
+      adjusted < messages.length &&
+      ToolMessage.isInstance(messages[adjusted])
+    ) {
+      adjusted++;
+    }
+    return adjusted;
+  }
+
+  /**
    * Check if argument truncation should be triggered.
    */
   function shouldTruncateArgs(
@@ -456,12 +630,20 @@ export function createSummarizationMiddleware(
 
   /**
    * Truncate large tool arguments in old messages.
+   * Matches Python's _truncate_args(messages, system_message, tools).
    */
   function truncateArgs(
     messages: BaseMessage[],
+    systemMessage: BaseMessage | undefined,
+    tools:
+      | Array<{ name?: string; description?: string; schema?: unknown }>
+      | undefined,
     maxInputTokens?: number,
   ): { messages: BaseMessage[]; modified: boolean } {
-    const totalTokens = countTokensApproximately(messages);
+    const countedMessages =
+      systemMessage != null ? [systemMessage, ...messages] : messages;
+    const totalTokens =
+      countTokensApproximately(countedMessages) + estimateToolsOverhead(tools);
     if (!shouldTruncateArgs(messages, totalTokens, maxInputTokens)) {
       return { messages, modified: false };
     }
@@ -669,9 +851,14 @@ ${summary}
       return messages;
     }
 
-    // Build effective messages: summary message, then messages from cutoff onward
+    // Build effective messages: summary message, then messages from cutoff onward.
+    // Defensively skip orphaned ToolMessages at the cutoff boundary to
+    // maintain API message structure integrity (tool_results need a
+    // preceding tool_use in the assistant message).
+    const startIdx = adjustCutoffForToolMessages(messages, event.cutoffIndex);
+
     const result: BaseMessage[] = [event.summaryMessage];
-    result.push(...messages.slice(event.cutoffIndex));
+    result.push(...messages.slice(startIdx));
 
     return result;
   }
@@ -698,15 +885,29 @@ ${summary}
       const maxInputTokens = getMaxInputTokens(resolvedModel);
 
       /**
-       * Step 1: Truncate args if configured
+       * Step 1: Truncate args if configured.
+       * Pass systemMessage and tools so the token count includes full request overhead.
        */
-      const { messages: truncatedMessages, modified: argsWereTruncated } =
-        truncateArgs(effectiveMessages, maxInputTokens);
+      const { messages: truncatedMessages } = truncateArgs(
+          effectiveMessages,
+          request.systemMessage,
+          request.tools,
+          maxInputTokens,
+        );
 
       /**
-       * Step 2: Check if summarization should happen
+       * Step 2: Check if summarization should happen.
+       * Prepend systemMessage to the counted list (matches Python's approach)
+       * and add tool schema overhead so the trigger fires before the full
+       * request exceeds the model limit.
        */
-      const totalTokens = countTokensApproximately(truncatedMessages);
+      const countedMessages =
+        request.systemMessage != null
+          ? [request.systemMessage, ...truncatedMessages]
+          : truncatedMessages;
+      const toolsOverhead = estimateToolsOverhead(request.tools);
+      const totalTokens =
+        countTokensApproximately(countedMessages) + toolsOverhead;
       const shouldDoSummarization = shouldSummarize(
         truncatedMessages,
         totalTokens,
@@ -714,24 +915,61 @@ ${summary}
       );
 
       /**
-       * If only truncation happened (no summarization), or no action needed
+       * If summarization is not needed, pass messages through.
+       * Safety net: if estimated tokens still exceed maxInputTokens (e.g. a
+       * single massive tool result jumped past the trigger in one step),
+       * apply emergency truncation to prevent API errors.
        */
-      if (argsWereTruncated && !shouldDoSummarization) {
-        return handler({ ...request, messages: truncatedMessages });
-      }
-
       if (!shouldDoSummarization) {
+        if (maxInputTokens && totalTokens > maxInputTokens) {
+          const fitted = emergencyTruncateMessages(
+            truncatedMessages,
+            request.systemMessage,
+            maxInputTokens,
+            toolsOverhead,
+          );
+          if (fitted) {
+            console.warn(
+              `[Summarization] no summarization triggered but tokens exceed limit — ` +
+                `emergency-truncating (${truncatedMessages.length} msgs, ` +
+                `~${totalTokens} estimated tok, limit: ${maxInputTokens})`,
+            );
+            return handler({ ...request, messages: fitted });
+          }
+        }
         return handler({ ...request, messages: truncatedMessages });
       }
 
       /**
        * Step 3: Perform summarization
        */
-      const cutoffIndex = determineCutoffIndex(
+      const cutoffIndex = adjustCutoffForToolMessages(
         truncatedMessages,
-        maxInputTokens,
+        determineCutoffIndex(truncatedMessages, maxInputTokens),
       );
       if (cutoffIndex <= 0) {
+        // Not enough messages to cut. Fall back to truncating oversized
+        // individual messages (e.g., a single grep/read_file result that
+        // consumed most of the context window).
+        if (maxInputTokens) {
+          const fitted = emergencyTruncateMessages(
+            truncatedMessages,
+            request.systemMessage,
+            maxInputTokens,
+            toolsOverhead,
+          );
+          if (fitted) {
+            console.warn(
+              `[Summarization] cutoffIndex=0, emergency-truncated oversized messages ` +
+                `(${truncatedMessages.length} msgs, ~${totalTokens} estimated tok)`,
+            );
+            return handler({ ...request, messages: fitted });
+          }
+        }
+        console.warn(
+          `[Summarization] cutoffIndex=0, cannot reduce — ` +
+            `${truncatedMessages.length} msgs, ~${totalTokens} estimated tok`,
+        );
         return handler({ ...request, messages: truncatedMessages });
       }
 
@@ -752,6 +990,9 @@ ${summary}
         /**
          * Offloading failed - don't proceed with summarization
          */
+        console.warn(
+          `[Summarization] backend offload failed — skipping summarization`,
+        );
         return handler({ ...request, messages: truncatedMessages });
       }
 
@@ -770,12 +1011,23 @@ ${summary}
        * If this is a subsequent summarization, convert effective message index to state index.
        * The -1 accounts for the summary message at effective[0] which does not
        * correspond to any state message.
+       *
+       * When getEffectiveMessages skips orphaned ToolMessages at the boundary,
+       * the effective-to-state mapping shifts. We compute the actual adjusted
+       * start index to correctly map back to state positions.
        */
       const previousEvent = request.state._summarizationEvent;
-      const stateCutoffIndex =
-        previousEvent != null
-          ? previousEvent.cutoffIndex + cutoffIndex - 1
-          : cutoffIndex;
+      let stateCutoffIndex: number;
+      if (previousEvent != null) {
+        // Account for any ToolMessages skipped by getEffectiveMessages
+        const adjustedStart = adjustCutoffForToolMessages(
+          request.messages ?? [],
+          previousEvent.cutoffIndex,
+        );
+        stateCutoffIndex = adjustedStart + cutoffIndex - 1;
+      } else {
+        stateCutoffIndex = cutoffIndex;
+      }
 
       /**
        * Create new summarization event
@@ -787,10 +1039,49 @@ ${summary}
       };
 
       /**
-       * Call handler with summarized messages
+       * Call handler with summarized messages.
+       *
+       * Post-summarization safety: even after cutting messages, a single
+       * oversized tool result in the preserved window can keep the total
+       * above the model limit. Apply emergency truncation if needed.
        */
-      const modifiedMessages = [summaryMessage, ...preservedMessages];
-      await handler({ ...request, messages: modifiedMessages });
+      let finalMessages: BaseMessage[] = [summaryMessage, ...preservedMessages];
+
+      if (maxInputTokens) {
+        const postSumCounted =
+          request.systemMessage != null
+            ? [request.systemMessage, ...finalMessages]
+            : finalMessages;
+        const postSumAdjusted = Math.ceil(
+          (countTokensApproximately(postSumCounted) + toolsOverhead) *
+            TOKEN_ESTIMATION_SAFETY_FACTOR,
+        );
+
+        if (postSumAdjusted > maxInputTokens) {
+          const fitted = emergencyTruncateMessages(
+            finalMessages,
+            request.systemMessage,
+            maxInputTokens,
+            toolsOverhead,
+          );
+          if (fitted) {
+            console.warn(
+              `[Summarization] post-summarization still exceeds limit — ` +
+                `emergency-truncating (${finalMessages.length} msgs, ` +
+                `~${postSumAdjusted} adjusted tok, limit: ${maxInputTokens})`,
+            );
+            finalMessages = fitted;
+          } else {
+            console.warn(
+              `[Summarization] post-summarization emergency truncation failed — ` +
+                `${finalMessages.length} msgs, ~${postSumAdjusted} adjusted tok, ` +
+                `limit: ${maxInputTokens}`,
+            );
+          }
+        }
+      }
+
+      await handler({ ...request, messages: finalMessages });
 
       /**
        * Return Command with state update for the summarization event

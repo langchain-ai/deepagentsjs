@@ -3,7 +3,6 @@ import {
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
   todoListMiddleware,
-  summarizationMiddleware,
   SystemMessage,
   type AgentMiddleware,
 } from "langchain";
@@ -23,6 +22,7 @@ import {
   createSkillsMiddleware,
   type SubAgent,
 } from "./middleware/index.js";
+import { createSummarizationMiddleware } from "./middleware/summarization.js";
 import { StateBackend } from "./backends/index.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { CompiledSubAgent } from "./middleware/subagents.js";
@@ -217,10 +217,11 @@ export function createDeepAgent<
     createFilesystemMiddleware({
       backend: filesystemBackend,
     }),
-    summarizationMiddleware({
-      model,
-      trigger: { tokens: 170_000 },
-      keep: { messages: 6 },
+    createSummarizationMiddleware({
+      model: model as string,
+      backend: filesystemBackend,
+      trigger: { type: "tokens", value: 130_000 },
+      keep: { type: "messages", value: 6 },
     }),
     anthropicPromptCachingMiddleware({
       unsupportedModelBehavior: "ignore",
@@ -266,10 +267,11 @@ export function createDeepAgent<
     /**
      * Automatically summarizes conversation history when token limits are approached
      */
-    summarizationMiddleware({
-      model,
-      trigger: { tokens: 170_000 },
-      keep: { messages: 6 },
+    createSummarizationMiddleware({
+      model: model as string,
+      backend: filesystemBackend,
+      trigger: { type: "tokens", value: 130_000 },
+      keep: { type: "messages", value: 6 },
     }),
     /**
      * Enables Anthropic prompt caching for improved performance and reduced costs
