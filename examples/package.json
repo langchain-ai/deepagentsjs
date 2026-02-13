@@ -16,7 +16,7 @@
     "@langchain/langgraph-checkpoint": "^1.0.0",
     "@langchain/openai": "^1.2.7",
     "@langchain/tavily": "^1.2.0",
-    "langchain": "^1.2.23",
+    "langchain": "^1.2.24",
     "uuid": "^13.0.0",
     "yaml": "^2.8.2",
     "zod": "^4.3.6"
