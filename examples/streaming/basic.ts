@@ -23,11 +23,15 @@ const agent = createDeepAgent({
 });
 
 for await (const [namespace, chunk] of await agent.stream(
-  { messages: [{ role: "user", content: "Research quantum computing advances" }] },
+  {
+    messages: [
+      { role: "user", content: "Research quantum computing advances" },
+    ],
+  },
   {
     streamMode: "updates",
     subgraphs: true,
-  }
+  },
 )) {
   if (namespace.length > 0) {
     // Subagent event — namespace identifies the source
