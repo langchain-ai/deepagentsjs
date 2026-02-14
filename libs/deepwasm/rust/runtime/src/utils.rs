@@ -45,21 +45,12 @@ impl GlobalScope {
     }
 
     pub fn sleep(&self, milliseconds: i32) -> Promise {
-        Promise::new(&mut |resolve, reject| match self {
-            GlobalScope::Window(window) => {
-                window
-                    .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, milliseconds)
-                    .unwrap();
-            }
-            GlobalScope::Worker(worker_global_scope) => {
-                worker_global_scope
-                    .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, milliseconds)
-                    .unwrap();
-            }
-            GlobalScope::Other(_) => {
-                let error = js_sys::Error::new("Unable to call setTimeout()");
-                reject.call1(&reject, &error).unwrap();
-            }
+        // Use raw JS setTimeout for Node.js worker compatibility.
+        // The web_sys::WorkerGlobalScope::set_timeout_* methods fail in
+        // Node.js workers (web-worker polyfill) because the polyfill's
+        // setTimeout signature differs from the browser's.
+        Promise::new(&mut |resolve, _reject| {
+            set_timeout_raw(&resolve, milliseconds);
         })
     }
 
@@ -262,6 +253,11 @@ pub(crate) fn js_record_of_strings(obj: &js_sys::Object) -> Result<Vec<(String, 
 extern "C" {
     #[wasm_bindgen(typescript_type = "string | Uint8Array")]
     pub type StringOrBytes;
+
+    /// Raw setTimeout binding that works in both browser and Node.js workers.
+    /// Uses `globalThis.setTimeout` which is available everywhere.
+    #[wasm_bindgen(js_name = "setTimeout")]
+    fn set_timeout_raw(handler: &js_sys::Function, timeout: i32);
 }
 
 impl StringOrBytes {

@@ -31,6 +31,17 @@ impl wasmer_wasix::runtime::package_loader::PackageLoader for PackageLoader {
     async fn load(&self, summary: &PackageSummary) -> Result<Container, Error> {
         let url = &summary.dist.webc;
 
+        // Check the global container store first (for locally registered packages)
+        if let Some(container) = crate::runtime::GLOBAL_CONTAINERS
+            .lock()
+            .unwrap()
+            .get(url)
+            .cloned()
+        {
+            tracing::debug!(%url, pkg=%summary.pkg.id, "Loading dependency from local store");
+            return Ok(container);
+        }
+
         tracing::debug!(%url, pkg=%summary.pkg.id, "Downloading dependency webc");
 
         let request = HttpRequest {

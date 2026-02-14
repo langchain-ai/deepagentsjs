@@ -3302,8 +3302,6 @@ dependencies = [
 [[package]]
 name = "virtual-mio"
 version = "0.601.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a14806a3f25b70315764760c376d9f68937f5467013891bc7497a33d24105097"
 dependencies = [
  "async-trait",
  "bytes",

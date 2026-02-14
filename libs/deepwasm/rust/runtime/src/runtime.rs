@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::{atomic::AtomicBool, Arc, Mutex, Weak};
 
 use lazy_static::lazy_static;
@@ -9,11 +10,12 @@ use wasmer_wasix::{
     runtime::{
         module_cache::ThreadLocalCache,
         package_loader::PackageLoader,
-        resolver::BackendSource,
+        resolver::InMemorySource,
     },
     VirtualTaskManager,
     WasiTtyState,
 };
+use webc::Container;
 
 lazy_static! {
     /// We initialize the ThreadPool lazily
@@ -21,6 +23,15 @@ lazy_static! {
 }
 
 use crate::{tasks::ThreadPool, utils::Error};
+
+/// Global InMemorySource for offline package resolution.
+pub(crate) static GLOBAL_SOURCE: Lazy<Mutex<InMemorySource>> =
+    Lazy::new(|| Mutex::new(InMemorySource::new()));
+
+/// Global store for .webc containers keyed by their fake file:// URL.
+/// The PackageLoader checks this before attempting an HTTP download.
+pub(crate) static GLOBAL_CONTAINERS: Lazy<Mutex<HashMap<url::Url, Container>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// A weak reference to the global [`Runtime`].
 static GLOBAL_RUNTIME: Lazy<Mutex<Weak<Runtime>>> = Lazy::new(Mutex::default);
@@ -31,7 +42,6 @@ static GLOBAL_RUNTIME: Lazy<Mutex<Weak<Runtime>>> = Lazy::new(Mutex::default);
 pub struct Runtime {
     task_manager: Option<Arc<dyn VirtualTaskManager>>,
     networking: Arc<dyn VirtualNetworking>,
-    source: Arc<BackendSource>,
     http_client: Arc<dyn HttpClient + Send + Sync>,
     package_loader: Arc<crate::package_loader::PackageLoader>,
     module_cache: Arc<ThreadLocalCache>,
@@ -102,18 +112,12 @@ impl Runtime {
     pub(crate) fn new() -> Self {
         let http_client = Arc::new(DefaultHttpClient::default());
 
-        let registry_url = BackendSource::WASMER_PROD_ENDPOINT
-            .parse()
-            .expect("hardcoded registry URL is valid");
-        let source = Arc::new(BackendSource::new(registry_url, http_client.clone()));
-
         let module_cache = ThreadLocalCache::default();
         let package_loader = crate::package_loader::PackageLoader::new(http_client.clone());
 
         Runtime {
             task_manager: None,
             networking: Arc::new(virtual_net::UnsupportedVirtualNetworking::default()),
-            source,
             http_client: Arc::new(http_client),
             package_loader: Arc::new(package_loader),
             module_cache: Arc::new(module_cache),
@@ -150,11 +154,12 @@ impl wasmer_wasix::runtime::Runtime for Runtime {
     }
 
     fn source(&self) -> Arc<dyn wasmer_wasix::runtime::resolver::Source + Send + Sync> {
-        Arc::clone(&self.source) as _
+        let source = GLOBAL_SOURCE.lock().unwrap().clone();
+        Arc::new(source)
     }
 
     fn http_client(&self) -> Option<&wasmer_wasix::http::DynHttpClient> {
-        Some(&self.http_client)
+        None
     }
 
     fn package_loader(&self) -> Arc<dyn PackageLoader + Send + Sync> {

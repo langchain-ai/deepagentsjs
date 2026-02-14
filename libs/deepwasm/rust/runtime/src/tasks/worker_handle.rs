@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use anyhow::{Context, Error};
-use js_sys::{Array, JsString, Uint8Array};
+use js_sys::JsString;
 use once_cell::sync::Lazy;
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
 
@@ -160,7 +160,7 @@ fn init_message(id: u32) -> Result<JsValue, JsValue> {
 
 /// The URL used by the bootstrapping script to import the Wasmer SDK.
 fn sdk_url() -> String {
-    "index.mjs".to_string()
+    crate::SDK_URL.lock().unwrap().clone()
 }
 
 /// The URL for the worker.
@@ -169,14 +169,10 @@ fn worker_url() -> String {
 }
 
 /// A data URL containing our worker's bootstrap script.
+/// Uses a data URL instead of a blob URL for Node.js compatibility
+/// (the `web-worker` polyfill does not support blob URLs).
 static DEFAULT_WORKER_URL: Lazy<String> = Lazy::new(|| {
     let script = include_str!("../../../../src/worker.js");
-
-    let blob = web_sys::Blob::new_with_u8_array_sequence_and_options(
-        Array::from_iter([Uint8Array::from(script.as_bytes())]).as_ref(),
-        web_sys::BlobPropertyBag::new().type_("application/javascript"),
-    )
-    .unwrap();
-
-    web_sys::Url::create_object_url_with_blob(&blob).unwrap_or("worker.mjs".to_string())
+    let encoded = js_sys::encode_uri_component(script);
+    format!("data:application/javascript,{}", encoded.as_string().unwrap_or_default())
 });

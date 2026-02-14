@@ -99,6 +99,7 @@ pub(crate) fn to_scheduler_message(
         env,
         module_bytes,
         update_layout,
+        call_initialize,
         result: None,
         recycle,
         store_snapshot,
@@ -204,6 +205,9 @@ pub(crate) struct SpawnWasm {
     /// responses.
     trigger: Option<WasmRunTrigger>,
     update_layout: bool,
+    /// Whether to call _initialize during instantiation.
+    /// Set to false when using run_exec which handles _initialize itself.
+    call_initialize: bool,
     /// The result of running the trigger.
     result: Option<Result<Bytes, ExitCode>>,
     #[derivative(Debug(format_with = "crate::utils::hidden"))]
@@ -251,6 +255,7 @@ impl ReadySpawnWasm {
             env,
             module_bytes,
             update_layout,
+            call_initialize,
             result,
             trigger: _,
             recycle,
@@ -266,6 +271,7 @@ impl ReadySpawnWasm {
             store_snapshot,
             run_type,
             update_layout,
+            call_initialize,
         )
         .context("Unable to initialize the context and store")?;
 
@@ -293,6 +299,7 @@ fn build_ctx_and_store(
     store_snapshot: Option<StoreSnapshot>,
     run_type: WasmMemoryType,
     update_layout: bool,
+    call_initialize: bool,
 ) -> Option<(WasiFunctionEnv, Store)> {
     // Compile the web assembly module
     let module: Module = (module, module_bytes).into();
@@ -314,7 +321,6 @@ fn build_ctx_and_store(
         }
     };
 
-    let call_initialize = true;
     let parent_linker_and_ctx = None;
 
     let (ctx, store) = match WasiFunctionEnv::new_with_store(

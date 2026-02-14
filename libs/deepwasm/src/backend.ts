@@ -12,7 +12,7 @@ import {
   type FileUploadResponse,
 } from "deepagents";
 
-import load, { Wasmer, Directory, registerLocalPackage } from "../rust/runtime/pkg/deepwasm_runtime";
+import load, { Wasmer, Directory, registerLocalPackage, setSdkUrl } from "../rust/runtime/pkg/deepwasm_runtime";
 
 import {
   DeepwasmError,
@@ -112,6 +112,18 @@ export class DeepwasmBackend extends BaseSandbox {
     );
     const wasmModule = readFileSync(wasmPath);
     await load({ module_or_path: wasmModule });
+
+    // Set the SDK URL so worker threads can import the runtime via absolute path.
+    // Workers run from data URLs and can't resolve relative imports.
+    const sdkPath = path.join(
+      thisDir,
+      "..",
+      "rust",
+      "runtime",
+      "pkg",
+      "deepwasm_runtime.js",
+    );
+    setSdkUrl(new URL(`file://${sdkPath}`).href);
 
     // Register bundled coreutils package for offline dependency resolution
     const coreutilsWebc = readFileSync(
