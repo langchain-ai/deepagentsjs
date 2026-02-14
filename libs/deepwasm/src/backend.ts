@@ -94,10 +94,14 @@ export class DeepwasmBackend extends BaseSandbox {
       );
     }
 
-    await init({});
+    const thisDir = path.dirname(fileURLToPath(import.meta.url));
+
+    // Load the WASM runtime module from pkg/ (source) or alongside dist/ (built)
+    const wasmPath = path.join(thisDir, "..", "rust", "runtime", "pkg", "deepwasm_bg.wasm");
+    const wasmModule = readFileSync(wasmPath);
+    await init({ module: wasmModule });
 
     // Load bash from the bundled .webc file
-    const thisDir = path.dirname(fileURLToPath(import.meta.url));
     const bashWebc = readFileSync(
       path.join(thisDir, "..", "assets", "bash.webc"),
     );
