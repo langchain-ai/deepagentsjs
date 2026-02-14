@@ -18,9 +18,8 @@ use wasmer_config::package::SuggestedCompilerOptimizations;
 use wasmer_wasix::{
     bin_factory::{BinaryPackage, BinaryPackageCommand},
     os::{Tty, TtyOptions},
-    runners::wasi::{WasiRunner, RuntimeOrEngine, PackageOrHash},
-    Runtime as _,
-    WasiRuntimeError,
+    runners::wasi::{WasiRunner, RuntimeOrEngine},
+    VirtualTaskManager as _,
 };
 use web_sys::{ReadableStream, WritableStream};
 use webc::{indexmap::IndexMap, metadata::Command as MetadataCommand};
@@ -28,6 +27,7 @@ use webc::{indexmap::IndexMap, metadata::Command as MetadataCommand};
 use crate::{
     instance::ExitCondition,
     runtime::Runtime,
+    tasks::ThreadPool,
     utils::{Error, GlobalScope},
     Instance, JsRuntime, SpawnOptions,
 };
@@ -212,7 +212,12 @@ pub struct Command {
 #[wasm_bindgen]
 impl Command {
     pub async fn run(&self, options: Option<SpawnOptions>) -> Result<Instance, Error> {
-        let runtime = Arc::new(self.runtime.with_default_pool());
+        // Create a dedicated thread pool for this command, matching the
+        // upstream wasmer-js pattern. A per-command pool ensures that
+        // run_command's internal spawn_and_block_on (which uses blocking_recv)
+        // works correctly on a dedicated web worker.
+        let thread_pool = Arc::new(ThreadPool::new());
+        let runtime = Arc::new(self.runtime.with_task_manager(thread_pool.clone()));
         let pkg = Arc::clone(&self.pkg);
 
         let options = options.unwrap_or_default();
@@ -223,57 +228,17 @@ impl Command {
 
         tracing::debug!(%command_name, "Starting the WASI runner");
 
-        // Extract the WASI annotation from the command metadata (replicating
-        // what run_command does internally).
-        let cmd = pkg
-            .get_command(&command_name)
-            .ok_or_else(|| anyhow::anyhow!("Command '{}' not found", command_name))?;
-
-        let wasi: webc::metadata::annotations::Wasi = cmd
-            .metadata()
-            .annotation("wasi")?
-            .unwrap_or_else(|| webc::metadata::annotations::Wasi::new(&command_name));
-
-        let exec_name = wasi.exec_name.as_deref().unwrap_or(&command_name);
-
-        // Build the WASI environment via prepare_webc_env, then spawn_exec.
-        // This avoids run_command's spawn_and_block_on which uses
-        // blocking_recv — impossible in a WASM single-threaded context.
-        let runtime_dyn: Arc<dyn wasmer_wasix::Runtime + Send + Sync> = runtime;
-        let builder = runner
-            .prepare_webc_env(
-                exec_name,
-                &wasi,
-                PackageOrHash::Package(&pkg),
-                RuntimeOrEngine::Runtime(Arc::clone(&runtime_dyn)),
-                None,
-            )?;
-
-        let env = builder.build()?;
-
-        // Spawn the command asynchronously — no blocking!
-        let mut task_handle = wasmer_wasix::bin_factory::spawn_exec(
-            (*pkg).clone(),
-            &command_name,
-            env,
-            &runtime_dyn,
-        )
-        .await?;
-
         let (sender, receiver) = oneshot::channel();
 
-        // Wait for the process in a spawned future on the JS event loop.
-        wasm_bindgen_futures::spawn_local(async move {
-            let result = task_handle.wait_finished().await;
-            let exit = match result {
-                Ok(exit_code) if exit_code.raw() == 0 => ExitCondition::from_result(Ok(())),
-                Ok(exit_code) => ExitCondition::from_result(Err(
-                    WasiRuntimeError::Wasi(wasmer_wasix::WasiError::Exit(exit_code)).into(),
-                )),
-                Err(e) => ExitCondition::from_result(Err(anyhow::anyhow!("{}", e))),
-            };
-            let _ = sender.send(exit);
-        });
+        // Run the command on a dedicated worker thread. WasiRunner::run_command
+        // blocks until the process exits, properly connecting stdout/stderr
+        // pipes through prepare_webc_env → builder.build() → spawn_exec.
+        let pool_handle = thread_pool.clone();
+        thread_pool.task_dedicated(Box::new(move || {
+            let result = runner.run_command(&command_name, &pkg, RuntimeOrEngine::Runtime(runtime));
+            let _ = sender.send(ExitCondition::from_result(result));
+            pool_handle.close();
+        }))?;
 
         Ok(Instance {
             stdin,
