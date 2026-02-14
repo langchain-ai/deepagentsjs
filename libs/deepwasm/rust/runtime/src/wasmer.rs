@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 use anyhow::Context;
 use bytes::{Bytes, BytesMut};
@@ -18,19 +18,16 @@ use wasmer_config::package::SuggestedCompilerOptimizations;
 use wasmer_wasix::{
     bin_factory::{BinaryPackage, BinaryPackageCommand},
     os::{Tty, TtyOptions},
-    runtime::module_cache::HashedModuleData,
-    runtime::task_manager::TaskWasm,
-    runners::wasi::{PackageOrHash, WasiRunner, RuntimeOrEngine},
+    runners::wasi::{WasiRunner, RuntimeOrEngine},
     Runtime as _,
-    VirtualTaskManager as _,
-    WasiError,
 };
 use web_sys::{ReadableStream, WritableStream};
-use webc::{indexmap::IndexMap, metadata::Command as MetadataCommand, metadata::annotations::Wasi};
+use webc::{indexmap::IndexMap, metadata::Command as MetadataCommand};
 
 use crate::{
     instance::ExitCondition,
     runtime::Runtime,
+    tasks::ThreadPool,
     utils::{Error, GlobalScope},
     Instance, JsRuntime, SpawnOptions,
 };
@@ -215,8 +212,11 @@ pub struct Command {
 #[wasm_bindgen]
 impl Command {
     pub async fn run(&self, options: Option<SpawnOptions>) -> Result<Instance, Error> {
-        let runtime = Arc::new(self.runtime.with_default_pool());
+        // We set the default pool as it may be not set
+        let thread_pool = Arc::new(ThreadPool::new());
+        let runtime = Arc::new(self.runtime.with_task_manager(thread_pool.clone()));
         let pkg = Arc::clone(&self.pkg);
+        let tasks = Arc::clone(runtime.task_manager());
 
         let options = options.unwrap_or_default();
 
@@ -226,47 +226,15 @@ impl Command {
 
         tracing::debug!(%command_name, "Starting the WASI runner");
 
-        // Build the WASI environment on the main thread.
-        let wasi = Wasi::new(&command_name);
-        let builder = runner.prepare_webc_env(
-            &command_name,
-            &wasi,
-            PackageOrHash::Package(&pkg),
-            RuntimeOrEngine::Runtime(Arc::clone(&runtime) as Arc<dyn wasmer_wasix::Runtime + Send + Sync>),
-            None,
-        ).map_err(|e| anyhow::anyhow!("{e}"))?;
-        let env = builder.build().map_err(|e| anyhow::anyhow!("{e}"))?;
-
-        // Get the command's WASM atom and compile it to a module
-        let cmd = pkg.get_command(&command_name)
-            .ok_or_else(|| anyhow::anyhow!("Command '{}' not found", &command_name))?;
-        let atom = cmd.atom();
-        let hashed = HashedModuleData::new(atom.as_ref());
-        let module: wasmer::Module = runtime.load_hashed_module(hashed, None).await?;
-
         let (sender, receiver) = oneshot::channel();
 
-        // Dispatch the WASI module to a web worker via task_wasm().
-        //
-        // task_wasm handles shared memory setup (serializing/deserializing
-        // the module + WasiEnv across the worker boundary). We call _start
-        // directly instead of run_exec() because run_exec's error handling
-        // uses RuntimeError::downcast::<WasiError>() which always fails in
-        // the JS WASM backend (the JS exception round-trip loses typed error
-        // info), causing every non-zero exit to be reported as NOEXEC (45).
-        let tasks = runtime.task_manager().clone();
-        tasks.task_wasm(
-            TaskWasm::new(
-                Box::new(move |props| {
-                    let exit = run_wasi_from_props(props);
-                    let _ = sender.send(exit);
-                }),
-                env,
-                module,
-                true,  // update_layout
-                true,  // call_initialize
-            ),
-        )?;
+        // Note: The WasiRunner::run_command() method blocks, so we need to run
+        // it on the thread pool.
+        tasks.task_dedicated(Box::new(move || {
+            let result = runner.run_command(&command_name, &pkg, RuntimeOrEngine::Runtime(runtime));
+            let _ = sender.send(ExitCondition::from_result(result));
+            thread_pool.close();
+        }))?;
 
         Ok(Instance {
             stdin,
@@ -314,125 +282,6 @@ impl Default for OptionalRuntime {
             obj: JsValue::UNDEFINED,
         }
     }
-}
-
-/// Execute a WASI module from TaskWasmRunProperties, calling `_start` directly.
-///
-/// This replaces wasmer_wasix::bin_factory::run_exec which cannot be used in the
-/// JS WASM backend because:
-/// 1. Host function errors (like proc_exit returning Err(WasiError::Exit(code)))
-///    are thrown as JS exceptions via wasm_bindgen::throw_val
-/// 2. The JS WebAssembly runtime re-wraps the exception as a generic
-///    WebAssembly.RuntimeError, losing the typed Rust error info
-/// 3. RuntimeError::downcast::<WasiError>() always fails, so run_exec's error
-///    handling falls through to Errno::Noexec (45) for every exit
-///
-/// Custom WASI execution that replaces run_exec() for the JS backend.
-///
-/// run_exec() uses RuntimeError::downcast::<WasiError>() to extract exit codes,
-/// which always fails in the JS WASM backend because the JS exception round-trip
-/// loses Rust type info. This causes every exit to be reported as NOEXEC (45).
-///
-/// We replicate run_exec's logic but with JS-friendly error handling:
-/// 1. bootstrap() for journal replay (no-op without journals)
-/// 2. Call _start directly via try_clone_instance()
-/// 3. Parse exit code from error message string when downcast fails
-/// 4. blocking_on_exit for cleanup (safe with our wait_timeout(50ms) patch)
-fn run_wasi_from_props(props: wasmer_wasix::runtime::task_manager::TaskWasmRunProperties) -> ExitCondition {
-    use wasmer_wasix::WasiFunctionEnv;
-
-    let ctx = props.ctx;
-    let mut store = props.store;
-
-    // Get _start from the instantiated module via try_clone_instance (public API).
-    // In the JS backend, Instance::clone() is a JsValue reference copy — same
-    // underlying JS WebAssembly.Instance as what run_exec would use.
-    let start = match ctx.data(&store)
-        .try_clone_instance()
-        .and_then(|inst| inst.exports.get_function("_start").ok().cloned())
-    {
-        Some(f) => f,
-        None => {
-            web_sys::console::error_1(&"[deepwasm] run_wasi: _start not found".into());
-            return ExitCondition::from_raw(1);
-        }
-    };
-
-    // Track the thread for status updates.
-    let thread = ctx.data(&store).thread.clone();
-    thread.set_status_running();
-
-    // Convert to WasiFunctionEnv for bootstrap() access (same as run_exec does).
-    let ctx = WasiFunctionEnv { env: ctx.env };
-
-    // Bootstrap the process (journal replay, etc). Must run on the same thread
-    // as the WASM code. Without journals this is a no-op.
-    match unsafe { ctx.bootstrap(&mut store) } {
-        Ok(_rewind_state) => {
-            // rewind_state is only used with journals; we ignore it.
-        }
-        Err(err) => {
-            web_sys::console::error_1(
-                &format!("[deepwasm] run_wasi: bootstrap failed: {err}").into(),
-            );
-            let exit_code = wasmer_wasix::wasmer_wasix_types::wasi::ExitCode::from(1u16);
-            ctx.data(&store).blocking_on_exit(Some(exit_code));
-            thread.set_status_finished(Err(err));
-            return ExitCondition::from_raw(1);
-        }
-    }
-
-    // Call _start. In WASI, proc_exit(N) propagates as Err(WasiError::Exit(N))
-    // through the call stack, surfacing as a RuntimeError.
-    let call_result = start.call(&mut store, &[]);
-
-    // Extract the exit code from the result.
-    let code: i32 = match &call_result {
-        Ok(_) => 0,
-        Err(err) => {
-            // Try typed downcast first (works on native, fails on JS backend
-            // because the JS exception round-trip loses Rust type info).
-            match err.downcast_ref::<WasiError>() {
-                Some(WasiError::Exit(code)) => code.raw() as i32,
-                Some(WasiError::ThreadExit) => 0,
-                _ => {
-                    // JS backend fallback: parse exit code from error message.
-                    // WasiError::Exit formats as "WASI exited with code: ExitCode::N"
-                    // Currently the JS engine re-wraps this as a generic
-                    // WebAssembly.RuntimeError, so parsing won't find a match.
-                    parse_exit_code_from_message(&err.message()).unwrap_or(0)
-                }
-            }
-        }
-    };
-
-    let exit_code = wasmer_wasix::wasmer_wasix_types::wasi::ExitCode::from(code as u16);
-
-    // Run cleanup synchronously. With our patched virtual-mio (wait_timeout
-    // instead of unbounded Condvar::wait), blocking_on_exit won't deadlock.
-    // This ensures stdout/stderr are flushed before we return.
-    ctx.data(&store).blocking_on_exit(Some(exit_code));
-
-    // Mark thread as finished with the correct exit code.
-    thread.set_status_finished(Ok(exit_code));
-
-    ExitCondition::from_raw(code)
-}
-
-/// Parse an exit code from a RuntimeError message string.
-///
-/// In the JS WASM backend, WasiError::Exit(code) becomes a JS exception.
-/// If the wasmer JS backend preserves the error message, it will contain
-/// "WASI exited with code: ExitCode::N" wrapped as "js: WASI exited with...".
-/// Currently the JS engine re-wraps it as "null function or function signature
-/// mismatch", so this parser won't find a match, but it's kept as a fallback
-/// for when the wasmer JS backend is fixed.
-fn parse_exit_code_from_message(msg: &str) -> Option<i32> {
-    let marker = "ExitCode::";
-    let idx = msg.find(marker)?;
-    let after = &msg[idx + marker.len()..];
-    let num_str: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
-    num_str.parse().ok()
 }
 
 pub(crate) async fn configure_runner(

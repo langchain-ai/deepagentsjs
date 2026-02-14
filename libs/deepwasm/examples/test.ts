@@ -30,12 +30,13 @@ async function main() {
       "/bar": new BarBackend(),
     },
   });
-  // Try writing to a file in the FooBackend (which is readonly and should fail)
-  const writeResult = await backend.execute(`echo 'should fail' > /foo/a.txt`);
-  console.log(writeResult);
+  const readResult = await backend.execute(
+    `(cat /foo/a.txt >> /bar/d.txt) && cat /bar/d.txt`,
+  );
+  console.log(readResult);
 }
 
-main().catch((err) => {
+await main().catch((err) => {
   console.error(err);
   process.exit(1);
 });

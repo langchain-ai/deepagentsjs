@@ -172,7 +172,7 @@ fn worker_url() -> String {
 /// Uses a data URL instead of a blob URL for Node.js compatibility
 /// (the `web-worker` polyfill does not support blob URLs).
 static DEFAULT_WORKER_URL: Lazy<String> = Lazy::new(|| {
-    let script = include_str!("../../../../src/worker.js");
+    let script = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../src/worker.js"));
     let encoded = js_sys::encode_uri_component(script);
     format!("data:application/javascript,{}", encoded.as_string().unwrap_or_default())
 });

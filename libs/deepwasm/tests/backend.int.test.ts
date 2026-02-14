@@ -4,15 +4,11 @@ import { DeepwasmBackend } from "../src/backend.js";
 /**
  * Integration tests for the full DeepwasmBackend → @wasmer/sdk → bash pipeline.
  *
- * These tests require network access (first run downloads bash from the Wasmer
- * registry) and a working @wasmer/sdk runtime. The suite is skipped automatically
- * if the SDK fails to initialize.
+ * These tests require a working @wasmer/sdk runtime with pre-downloaded
+ * wasmer/bash and wasmer/coreutils webc assets. The suite is skipped
+ * automatically if the SDK fails to initialize.
  *
  * Run with: pnpm test:int
- *
- * NOTE: The WASIX bash runtime (sharrattj/bash) returns exit code 45 for shell
- * builtins like `echo`, `pwd`, and `exit`. External commands like `cat` and `ls`
- * return standard exit codes. Tests are written to accommodate this behavior.
  */
 
 // Probe whether the SDK can initialize before running any tests.

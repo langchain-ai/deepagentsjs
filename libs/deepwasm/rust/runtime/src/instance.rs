@@ -101,20 +101,6 @@ async fn copy_to_buffer(
 pub(crate) struct ExitCondition(i32);
 
 impl ExitCondition {
-    pub(crate) fn from_raw(code: i32) -> Self {
-        ExitCondition(code)
-    }
-
-    pub(crate) fn from_exit_code(result: Result<wasmer_wasix::types::wasi::ExitCode, std::sync::Arc<WasiRuntimeError>>) -> Self {
-        match result {
-            Ok(exit_code) => ExitCondition(exit_code.raw()),
-            Err(err) => {
-                let code = err.as_exit_code().map(|c| c.raw()).unwrap_or(1);
-                ExitCondition(code)
-            }
-        }
-    }
-
     pub(crate) fn from_result(result: Result<(), anyhow::Error>) -> Self {
         let err = match result {
             Ok(_) => return ExitCondition(0),
