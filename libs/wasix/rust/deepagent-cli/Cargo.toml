@@ -7,3 +7,7 @@ description = "CLI tool for the deepagent WASIX execution engine"
 [[bin]]
 name = "deepagent"
 path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

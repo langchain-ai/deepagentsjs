@@ -103,12 +103,191 @@ describe("WasixBackend", () => {
         // SDK initialized — verify we got real output
         expect(result.output).toContain("hello");
         expect(result.truncated).toBe(false);
+        expect(result.spawnRequests).toEqual([]);
       } catch (err) {
         // SDK did not initialize — verify the error
         expect(err).toBeInstanceOf(WasixSandboxError);
         expect((err as WasixSandboxError).code).toBe(
           "WASM_ENGINE_NOT_INITIALIZED",
         );
+      }
+    }, 30000);
+  });
+
+  describe("RPC spawn request scanning", () => {
+    it("parses spawn requests from /.rpc/requests/ after execute", async () => {
+      backend = await WasixBackend.create();
+      const enc = new TextEncoder();
+
+      const rpcRequest = JSON.stringify({
+        id: "test-1234-5678",
+        method: "spawn",
+        args: { task: "analyze this file" },
+        timestamp: "1700000000.123",
+      });
+
+      // Upload an RPC request file to the in-memory FS
+      await backend.uploadFiles([
+        ["/.rpc/requests/test-1234-5678.json", enc.encode(rpcRequest)],
+      ]);
+
+      try {
+        const result = await backend.execute("echo noop");
+        // SDK available — verify spawn requests were parsed
+        expect(result.spawnRequests).toHaveLength(1);
+        expect(result.spawnRequests[0]).toEqual({
+          id: "test-1234-5678",
+          method: "spawn",
+          args: { task: "analyze this file" },
+          timestamp: "1700000000.123",
+        });
+      } catch (err) {
+        // SDK not available — skip RPC assertions
+        expect(err).toBeInstanceOf(WasixSandboxError);
+      }
+    }, 30000);
+
+    it("cleans up processed RPC files after scanning", async () => {
+      backend = await WasixBackend.create();
+      const enc = new TextEncoder();
+
+      const rpcRequest = JSON.stringify({
+        id: "cleanup-001",
+        method: "spawn",
+        args: { task: "test cleanup" },
+        timestamp: "1700000001.000",
+      });
+
+      await backend.uploadFiles([
+        ["/.rpc/requests/cleanup-001.json", enc.encode(rpcRequest)],
+      ]);
+
+      try {
+        // First execute: should find and return the request
+        const result1 = await backend.execute("echo first");
+        expect(result1.spawnRequests).toHaveLength(1);
+        expect(result1.spawnRequests[0].id).toBe("cleanup-001");
+
+        // Second execute: request files should be cleaned up
+        const result2 = await backend.execute("echo second");
+        expect(result2.spawnRequests).toHaveLength(0);
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
+      }
+    }, 60000);
+
+    it("handles multiple spawn requests in one execution", async () => {
+      backend = await WasixBackend.create();
+      const enc = new TextEncoder();
+
+      const requests = [
+        {
+          id: "multi-001",
+          method: "spawn" as const,
+          args: { task: "task one" },
+          timestamp: "1700000001.000",
+        },
+        {
+          id: "multi-002",
+          method: "spawn" as const,
+          args: { task: "task two" },
+          timestamp: "1700000002.000",
+        },
+      ];
+
+      await backend.uploadFiles(
+        requests.map(
+          (r) =>
+            [`/.rpc/requests/${r.id}.json`, enc.encode(JSON.stringify(r))] as [
+              string,
+              Uint8Array,
+            ],
+        ),
+      );
+
+      try {
+        const result = await backend.execute("echo noop");
+        expect(result.spawnRequests).toHaveLength(2);
+        const ids = result.spawnRequests.map((r) => r.id).sort();
+        expect(ids).toEqual(["multi-001", "multi-002"]);
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
+      }
+    }, 30000);
+
+    it("ignores malformed JSON in RPC directory", async () => {
+      backend = await WasixBackend.create();
+      const enc = new TextEncoder();
+
+      // Upload a valid request and an invalid one
+      const validRequest = JSON.stringify({
+        id: "valid-001",
+        method: "spawn",
+        args: { task: "valid task" },
+        timestamp: "1700000003.000",
+      });
+
+      await backend.uploadFiles([
+        ["/.rpc/requests/valid-001.json", enc.encode(validRequest)],
+        ["/.rpc/requests/bad.json", enc.encode("not valid json{{{")],
+      ]);
+
+      try {
+        const result = await backend.execute("echo noop");
+        // Only the valid request should be returned
+        expect(result.spawnRequests).toHaveLength(1);
+        expect(result.spawnRequests[0].id).toBe("valid-001");
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
+      }
+    }, 30000);
+
+    it("ignores JSON files with missing required fields", async () => {
+      backend = await WasixBackend.create();
+      const enc = new TextEncoder();
+
+      // Missing 'method' field
+      const incomplete = JSON.stringify({
+        id: "incomplete-001",
+        args: { task: "some task" },
+        timestamp: "1700000004.000",
+      });
+
+      await backend.uploadFiles([
+        ["/.rpc/requests/incomplete-001.json", enc.encode(incomplete)],
+      ]);
+
+      try {
+        const result = await backend.execute("echo noop");
+        expect(result.spawnRequests).toHaveLength(0);
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
+      }
+    }, 30000);
+
+    it("ignores non-JSON files in RPC directory", async () => {
+      backend = await WasixBackend.create();
+      const enc = new TextEncoder();
+
+      const validRequest = JSON.stringify({
+        id: "json-only-001",
+        method: "spawn",
+        args: { task: "task" },
+        timestamp: "1700000005.000",
+      });
+
+      await backend.uploadFiles([
+        ["/.rpc/requests/json-only-001.json", enc.encode(validRequest)],
+        ["/.rpc/requests/readme.txt", enc.encode("not a request")],
+        ["/.rpc/requests/.lockfile", enc.encode("")],
+      ]);
+
+      try {
+        const result = await backend.execute("echo noop");
+        expect(result.spawnRequests).toHaveLength(1);
+        expect(result.spawnRequests[0].id).toBe("json-only-001");
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
       }
     }, 30000);
   });

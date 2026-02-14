@@ -1,4 +1,27 @@
-import { SandboxError, type SandboxErrorCode } from "deepagents";
+import {
+  SandboxError,
+  type SandboxErrorCode,
+  type ExecuteResponse,
+} from "deepagents";
+
+/**
+ * An RPC request written by the deepagent CLI inside the WASIX sandbox.
+ * Files are written to `/.rpc/requests/<id>.json`.
+ */
+export interface SpawnRequest {
+  id: string;
+  method: "spawn";
+  args: { task: string };
+  timestamp: string;
+}
+
+/**
+ * Extended execute result that includes any spawn requests found
+ * in the `/.rpc/requests/` directory after command execution.
+ */
+export interface WasixExecuteResult extends ExecuteResponse {
+  spawnRequests: SpawnRequest[];
+}
 
 /**
  * Configuration options for creating a WASIX Sandbox backend.

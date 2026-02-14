@@ -3,13 +3,17 @@ import crypto from "node:crypto";
 
 import {
   BaseSandbox,
-  type ExecuteResponse,
   type FileDownloadResponse,
   type FileOperationError,
   type FileUploadResponse,
 } from "deepagents";
 
-import { WasixSandboxError, type WasixBackendOptions } from "./types.js";
+import {
+  WasixSandboxError,
+  type WasixBackendOptions,
+  type WasixExecuteResult,
+  type SpawnRequest,
+} from "./types.js";
 
 // Lazily-loaded @wasmer/sdk bindings (Node.js entry point)
 type WasmerSdk = typeof import("@wasmer/sdk/node");
@@ -105,7 +109,7 @@ export class WasixBackend extends BaseSandbox {
    * Files from the in-memory FS are mounted into the WASIX instance,
    * and any file changes are synced back after execution.
    */
-  async execute(command: string): Promise<ExecuteResponse> {
+  async execute(command: string): Promise<WasixExecuteResult> {
     this.#ensureInitialized();
 
     if (this.#sdk === null || this.#wasmerPkg === null) {
@@ -153,10 +157,14 @@ export class WasixBackend extends BaseSandbox {
     // Sync files back from the Directory to the in-memory Map
     await this.#syncDirectoryToFs(dir, "/");
 
+    // Scan for RPC spawn requests and clean them up
+    const spawnRequests = this.#collectSpawnRequests();
+
     return {
       output: output.stdout + output.stderr,
       exitCode: output.code,
       truncated: false,
+      spawnRequests,
     };
   }
 
@@ -260,6 +268,42 @@ export class WasixBackend extends BaseSandbox {
         this.#fs.set(fullPath, data);
       }
     }
+  }
+
+  /**
+   * Scan the in-memory FS for RPC spawn requests in `/.rpc/requests/`,
+   * parse them, and delete the files so they aren't re-processed.
+   */
+  #collectSpawnRequests(): SpawnRequest[] {
+    const RPC_PREFIX = "/.rpc/requests/";
+    const requests: SpawnRequest[] = [];
+
+    for (const [path, data] of this.#fs) {
+      if (path.startsWith(RPC_PREFIX) && path.endsWith(".json")) {
+        try {
+          const text = new TextDecoder().decode(data);
+          const parsed = JSON.parse(text) as SpawnRequest;
+          // Basic validation: ensure required fields exist
+          if (
+            typeof parsed.id === "string" &&
+            parsed.method === "spawn" &&
+            typeof parsed.args?.task === "string" &&
+            typeof parsed.timestamp === "string"
+          ) {
+            requests.push(parsed);
+          }
+        } catch {
+          // Ignore malformed JSON files
+        }
+      }
+    }
+
+    // Clean up processed request files
+    for (const req of requests) {
+      this.#fs.delete(`${RPC_PREFIX}${req.id}.json`);
+    }
+
+    return requests;
   }
 
   #ensureInitialized(): void {
