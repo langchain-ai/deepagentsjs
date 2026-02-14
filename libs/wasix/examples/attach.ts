@@ -18,9 +18,6 @@ function die(msg: string): never {
 }
 
 function cleanup(): void {
-  if (process.stdin.isTTY) {
-    process.stdin.setRawMode(false);
-  }
   process.stdin.pause();
 }
 
@@ -36,16 +33,23 @@ socket.on("connect", () => {
   connected = true;
   console.log("[attached]");
 
-  // Enter raw mode so keystrokes pass through directly
-  if (process.stdin.isTTY) {
-    process.stdin.setRawMode(true);
-  }
+  // Use line-buffered mode (no raw mode) so the terminal handles
+  // echo and line editing natively. Bash in WASIX has no PTY layer,
+  // so it won't echo input — letting the terminal do it avoids the problem.
   process.stdin.resume();
+  process.stdin.setEncoding("utf8");
 
-  // Pipe stdin → socket (keystrokes to the daemon)
-  process.stdin.pipe(socket);
+  // Forward input to the daemon
+  process.stdin.on("data", (chunk) => {
+    socket.write(chunk);
+  });
 
-  // Listen for data to detect errors before piping normally
+  // Handle stdin end (Ctrl+D)
+  process.stdin.on("end", () => {
+    socket.end();
+  });
+
+  // Receive output from the daemon
   let firstChunk = true;
   socket.on("data", (chunk: Buffer) => {
     if (firstChunk) {
