@@ -1,5 +1,5 @@
 {
-  "name": "deepwasm",
+  "name": "deepbash",
   "version": "0.10.0",
   "type": "module",
   "main": "dist/index.mjs",
@@ -11,7 +11,7 @@
     "wasi",
     "wasix"
   ],
-  "description": "Deepwasm — WASIX execution runtime for deepagents",
+  "description": "Deepbash — WASIX execution runtime for deepagents",
   "author": "Deepagents",
   "license": "MIT",
   "repository": {
@@ -31,15 +31,15 @@
       "default": "./dist/node.mjs"
     },
     "./wasm": {
-      "unwasm": "./dist/deepwasm_bg.wasm",
+      "unwasm": "./dist/deepbash_bg.wasm",
       "types": "./dist/wasm.d.ts",
-      "default": "./dist/deepwasm_bg.wasm"
+      "default": "./dist/deepbash_bg.wasm"
     },
     "./package.json": "./package.json",
     "./*": "./dist/*"
   },
   "scripts": {
-    "build": "wasm-pack build rust/runtime --release --target=web --weak-refs --no-pack && wasm-opt rust/runtime/pkg/deepwasm_bg.wasm -O2 -o rust/runtime/pkg/deepwasm_bg.wasm && npm run build:rollup",
+    "build": "wasm-pack build rust/runtime --release --target=web --weak-refs --no-pack && wasm-opt rust/runtime/pkg/deepbash_bg.wasm -O2 -o rust/runtime/pkg/deepbash_bg.wasm && npm run build:rollup",
     "build:rollup": "rollup -c --environment BUILD:production",
     "build:dev": "wasm-pack build rust/runtime --dev --target=web --weak-refs --no-pack && rollup -c --environment BUILD:development",
     "dev": "rollup -c -w",

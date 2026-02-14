@@ -12,30 +12,30 @@ import {
   type FileUploadResponse,
 } from "deepagents";
 
-import load, { Wasmer, Directory, registerLocalPackage, setSdkUrl } from "../rust/runtime/pkg/deepwasm_runtime";
+import load, { Wasmer, Directory, registerLocalPackage, setSdkUrl } from "../rust/runtime/pkg/deepbash_runtime";
 
 import {
-  DeepwasmError,
-  type DeepwasmBackendOptions,
-  type DeepwasmExecuteResult,
-  type DeepwasmShellSession,
+  DeepbashError,
+  type DeepbashBackendOptions,
+  type DeepbashExecuteResult,
+  type DeepbashShellSession,
   type SpawnRequest,
 } from "./types.js";
 
-type DeepwasmPkg = Awaited<ReturnType<typeof Wasmer.fromFile>>;
+type DeepbashPkg = Awaited<ReturnType<typeof Wasmer.fromFile>>;
 
 /**
- * Deepwasm execution backend.
+ * Deepbash execution backend.
  *
  * Provides an in-process sandbox using a WASM-based execution engine.
  * File operations use an in-memory virtual filesystem; command execution
- * delegates to the deepwasm WASIX runtime.
+ * delegates to the deepbash WASIX runtime.
  *
- * Use the static `DeepwasmBackend.create()` factory method to create instances.
+ * Use the static `DeepbashBackend.create()` factory method to create instances.
  */
-export class DeepwasmBackend extends BaseSandbox {
+export class DeepbashBackend extends BaseSandbox {
   readonly #id: string;
-  readonly #options: DeepwasmBackendOptions;
+  readonly #options: DeepbashBackendOptions;
 
   /** In-memory virtual filesystem */
   readonly #fs = new Map<string, Uint8Array>();
@@ -47,7 +47,7 @@ export class DeepwasmBackend extends BaseSandbox {
   readonly #mounts: ReadonlyMap<string, BackendProtocol>;
 
   /** Loaded bash package */
-  #wasmerPkg: DeepwasmPkg | null = null;
+  #wasmerPkg: DeepbashPkg | null = null;
 
   /** Pre-loaded subagent WASM binary (mounted onto PATH at runtime) */
   #subagentBinary: Uint8Array | null = null;
@@ -59,11 +59,11 @@ export class DeepwasmBackend extends BaseSandbox {
   }
 
   /**
-   * Private constructor — use `DeepwasmBackend.create()` instead.
+   * Private constructor — use `DeepbashBackend.create()` instead.
    */
-  private constructor(options: DeepwasmBackendOptions) {
+  private constructor(options: DeepbashBackendOptions) {
     super();
-    this.#id = `deepwasm-${crypto.randomUUID()}`;
+    this.#id = `deepbash-${crypto.randomUUID()}`;
     this.#options = { timeout: 30000, ...options };
     this.#mounts = new Map(
       options.mounts ? Object.entries(options.mounts) : [],
@@ -71,24 +71,24 @@ export class DeepwasmBackend extends BaseSandbox {
   }
 
   /**
-   * Create and initialize a new DeepwasmBackend.
+   * Create and initialize a new DeepbashBackend.
    */
   static async create(
-    options: DeepwasmBackendOptions = {},
-  ): Promise<DeepwasmBackend> {
-    const backend = new DeepwasmBackend(options);
+    options: DeepbashBackendOptions = {},
+  ): Promise<DeepbashBackend> {
+    const backend = new DeepbashBackend(options);
     await backend.initialize();
     return backend;
   }
 
   /**
-   * Initialize the deepwasm backend.
+   * Initialize the deepbash backend.
    * Loads the WASM runtime and loads bash from the bundled .webc file.
    */
   async initialize(): Promise<void> {
     if (this.#initialized) {
-      throw new DeepwasmError(
-        "Deepwasm backend is already initialized.",
+      throw new DeepbashError(
+        "Deepbash backend is already initialized.",
         "ALREADY_INITIALIZED",
       );
     }
@@ -108,7 +108,7 @@ export class DeepwasmBackend extends BaseSandbox {
       "rust",
       "runtime",
       "pkg",
-      "deepwasm_runtime_bg.wasm",
+      "deepbash_runtime_bg.wasm",
     );
     const wasmModule = readFileSync(wasmPath);
     await load({ module_or_path: wasmModule });
@@ -121,7 +121,7 @@ export class DeepwasmBackend extends BaseSandbox {
       "rust",
       "runtime",
       "pkg",
-      "deepwasm_runtime.js",
+      "deepbash_runtime.js",
     );
     setSdkUrl(new URL(`file://${sdkPath}`).href);
 
@@ -153,23 +153,23 @@ export class DeepwasmBackend extends BaseSandbox {
   /**
    * Execute a command in the WASIX sandbox.
    *
-   * Uses the deepwasm runtime to run bash with the given command.
+   * Uses the deepbash runtime to run bash with the given command.
    * Files from the in-memory FS are mounted into the WASIX instance,
    * and any file changes are synced back after execution.
    */
-  async execute(command: string): Promise<DeepwasmExecuteResult> {
+  async execute(command: string): Promise<DeepbashExecuteResult> {
     this.#ensureInitialized();
 
     if (this.#wasmerPkg === null) {
-      throw new DeepwasmError(
-        "Deepwasm runtime not available. Failed to initialize.",
+      throw new DeepbashError(
+        "Deepbash runtime not available. Failed to initialize.",
         "WASM_ENGINE_NOT_INITIALIZED",
       );
     }
 
     const entrypoint = this.#wasmerPkg.entrypoint;
     if (!entrypoint) {
-      throw new DeepwasmError(
+      throw new DeepbashError(
         "Bash package has no entrypoint.",
         "WASM_ENGINE_FAILED",
       );
@@ -242,19 +242,19 @@ export class DeepwasmBackend extends BaseSandbox {
    * Files from the in-memory FS are mounted, and changes are synced back
    * when the session ends (via `wait()`).
    */
-  async shell(): Promise<DeepwasmShellSession> {
+  async shell(): Promise<DeepbashShellSession> {
     this.#ensureInitialized();
 
     if (this.#wasmerPkg === null) {
-      throw new DeepwasmError(
-        "Deepwasm runtime not available. Failed to initialize.",
+      throw new DeepbashError(
+        "Deepbash runtime not available. Failed to initialize.",
         "WASM_ENGINE_NOT_INITIALIZED",
       );
     }
 
     const entrypoint = this.#wasmerPkg.entrypoint;
     if (!entrypoint) {
-      throw new DeepwasmError(
+      throw new DeepbashError(
         "Bash package has no entrypoint.",
         "WASM_ENGINE_FAILED",
       );
@@ -289,7 +289,7 @@ export class DeepwasmBackend extends BaseSandbox {
     });
 
     if (!instance.stdin) {
-      throw new DeepwasmError(
+      throw new DeepbashError(
         "Failed to get stdin stream for interactive shell.",
         "WASM_ENGINE_FAILED",
       );
@@ -678,8 +678,8 @@ export class DeepwasmBackend extends BaseSandbox {
 
   #ensureInitialized(): void {
     if (!this.#initialized) {
-      throw new DeepwasmError(
-        "Deepwasm backend not initialized. Use DeepwasmBackend.create().",
+      throw new DeepbashError(
+        "Deepbash backend not initialized. Use DeepbashBackend.create().",
         "NOT_INITIALIZED",
       );
     }

@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { DeepwasmBackend } from "../src/backend.js";
+import { DeepbashBackend } from "../src/backend.js";
 
 /**
  * Integration tests for the subagent spawning pipeline.
  *
  * Tests exercise the full flow: bash writes JSON to /.rpc/requests/ inside the
- * WASIX sandbox → files sync back to the in-memory FS → DeepwasmBackend parses
+ * WASIX sandbox → files sync back to the in-memory FS → DeepbashBackend parses
  * them as SpawnRequest objects.
  *
  * The deepagent CLI binary may not be mounted, so we simulate the RPC write
@@ -17,7 +17,7 @@ import { DeepwasmBackend } from "../src/backend.js";
 // Probe whether the SDK can initialize before running any tests.
 let sdkAvailable = true;
 try {
-  const probe = await DeepwasmBackend.create();
+  const probe = await DeepbashBackend.create();
   await probe.execute("echo probe");
   probe.close();
 } catch {
@@ -27,10 +27,10 @@ try {
 const describeIfSdk = sdkAvailable ? describe : describe.skip;
 
 describeIfSdk("Subagent spawning integration", { timeout: 120_000 }, () => {
-  let backend: DeepwasmBackend;
+  let backend: DeepbashBackend;
 
   beforeAll(async () => {
-    backend = await DeepwasmBackend.create();
+    backend = await DeepbashBackend.create();
   }, 60_000);
 
   afterAll(() => {

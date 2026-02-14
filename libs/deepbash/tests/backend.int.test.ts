@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { DeepwasmBackend } from "../src/backend.js";
+import { DeepbashBackend } from "../src/backend.js";
 
 /**
- * Integration tests for the full DeepwasmBackend → @wasmer/sdk → bash pipeline.
+ * Integration tests for the full DeepbashBackend → @wasmer/sdk → bash pipeline.
  *
  * These tests require a working @wasmer/sdk runtime with pre-downloaded
  * wasmer/bash and wasmer/coreutils webc assets. The suite is skipped
@@ -14,7 +14,7 @@ import { DeepwasmBackend } from "../src/backend.js";
 // Probe whether the SDK can initialize before running any tests.
 let sdkAvailable = true;
 try {
-  const probe = await DeepwasmBackend.create();
+  const probe = await DeepbashBackend.create();
   await probe.execute("echo probe");
   probe.close();
 } catch {
@@ -23,11 +23,11 @@ try {
 
 const describeIfSdk = sdkAvailable ? describe : describe.skip;
 
-describeIfSdk("DeepwasmBackend integration", { timeout: 120_000 }, () => {
-  let backend: DeepwasmBackend;
+describeIfSdk("DeepbashBackend integration", { timeout: 120_000 }, () => {
+  let backend: DeepbashBackend;
 
   beforeAll(async () => {
-    backend = await DeepwasmBackend.create();
+    backend = await DeepbashBackend.create();
   }, 60_000);
 
   afterAll(() => {

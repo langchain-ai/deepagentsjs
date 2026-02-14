@@ -5,7 +5,7 @@ import type {
   FileDownloadResponse,
   FileUploadResponse,
 } from "deepagents";
-import { DeepwasmBackend } from "../src/backend.js";
+import { DeepbashBackend } from "../src/backend.js";
 
 /**
  * Integration tests for composable filesystem mounts.
@@ -91,7 +91,7 @@ class MockBackend implements BackendProtocol {
 // Probe whether the SDK can initialize before running any tests.
 let sdkAvailable = true;
 try {
-  const probe = await DeepwasmBackend.create();
+  const probe = await DeepbashBackend.create();
   await probe.execute("echo probe");
   probe.close();
 } catch {
@@ -101,7 +101,7 @@ try {
 const describeIfSdk = sdkAvailable ? describe : describe.skip;
 
 describeIfSdk("Composable mounts integration", { timeout: 120_000 }, () => {
-  let backend: DeepwasmBackend | undefined;
+  let backend: DeepbashBackend | undefined;
 
   afterEach(() => {
     backend?.close();
@@ -112,7 +112,7 @@ describeIfSdk("Composable mounts integration", { timeout: 120_000 }, () => {
     const mock = new MockBackend();
     mock.seed("/file.txt", "hello from mount");
 
-    backend = await DeepwasmBackend.create({
+    backend = await DeepbashBackend.create({
       mounts: { "/data": mock },
     });
 
@@ -123,7 +123,7 @@ describeIfSdk("Composable mounts integration", { timeout: 120_000 }, () => {
   it("writes files back to the mounted backend", async () => {
     const mock = new MockBackend();
 
-    backend = await DeepwasmBackend.create({
+    backend = await DeepbashBackend.create({
       mounts: { "/data": mock },
     });
 
@@ -140,7 +140,7 @@ describeIfSdk("Composable mounts integration", { timeout: 120_000 }, () => {
     dataBackend.seed("/input.txt", "data content");
     configBackend.seed("/settings.json", '{"key":"value"}');
 
-    backend = await DeepwasmBackend.create({
+    backend = await DeepbashBackend.create({
       mounts: { "/data": dataBackend, "/config": configBackend },
     });
 
@@ -156,7 +156,7 @@ describeIfSdk("Composable mounts integration", { timeout: 120_000 }, () => {
     const configBackend = new MockBackend();
     dataBackend.seed("/input.txt", "cross mount content");
 
-    backend = await DeepwasmBackend.create({
+    backend = await DeepbashBackend.create({
       mounts: { "/data": dataBackend, "/config": configBackend },
     });
 
@@ -171,7 +171,7 @@ describeIfSdk("Composable mounts integration", { timeout: 120_000 }, () => {
     const mock = new MockBackend();
     mock.seed("/existing.txt", "original content");
 
-    backend = await DeepwasmBackend.create({
+    backend = await DeepbashBackend.create({
       mounts: { "/data": mock },
     });
 
@@ -189,7 +189,7 @@ describeIfSdk("Composable mounts integration", { timeout: 120_000 }, () => {
   }, 30_000);
 
   it("works without mounts (backward compatibility)", async () => {
-    backend = await DeepwasmBackend.create();
+    backend = await DeepbashBackend.create();
 
     const content = new TextEncoder().encode("compat test");
     await backend.uploadFiles([["/test.txt", content]]);
@@ -202,7 +202,7 @@ describeIfSdk("Composable mounts integration", { timeout: 120_000 }, () => {
     const mock = new MockBackend();
     mock.seed("/before.txt", "pre-existing");
 
-    backend = await DeepwasmBackend.create({
+    backend = await DeepbashBackend.create({
       mounts: { "/data": mock },
     });
 

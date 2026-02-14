@@ -7,9 +7,9 @@ import {
 
 /**
  * An interactive shell session with streaming I/O.
- * Created via `DeepwasmBackend.shell()`.
+ * Created via `DeepbashBackend.shell()`.
  */
-export interface DeepwasmShellSession {
+export interface DeepbashShellSession {
   /** Writable stream for sending input to the shell */
   readonly stdin: WritableStream;
   /** Readable stream of shell stdout */
@@ -39,14 +39,14 @@ export interface SpawnRequest {
  * Extended execute result that includes any spawn requests found
  * in the `/.rpc/requests/` directory after command execution.
  */
-export interface DeepwasmExecuteResult extends ExecuteResponse {
+export interface DeepbashExecuteResult extends ExecuteResponse {
   spawnRequests: SpawnRequest[];
 }
 
 /**
- * Configuration options for creating a Deepwasm backend.
+ * Configuration options for creating a Deepbash backend.
  */
-export interface DeepwasmBackendOptions {
+export interface DeepbashBackendOptions {
   /**
    * List of standard WASIX packages to install (e.g., ["bash", "coreutils"]).
    * These are fetched from the Wasmer registry.
@@ -91,33 +91,33 @@ export interface DeepwasmBackendOptions {
 }
 
 /**
- * Error codes for Deepwasm operations.
+ * Error codes for Deepbash operations.
  */
-export type DeepwasmErrorCode =
+export type DeepbashErrorCode =
   | SandboxErrorCode
   | "WASM_ENGINE_NOT_INITIALIZED"
   | "WASM_ENGINE_FAILED";
 
-const DEEPWASM_ERROR_SYMBOL = Symbol.for("deepwasm.error");
+const DEEPWASM_ERROR_SYMBOL = Symbol.for("deepbash.error");
 
 /**
- * Custom error class for Deepwasm operations.
+ * Custom error class for Deepbash operations.
  */
-export class DeepwasmError extends SandboxError {
+export class DeepbashError extends SandboxError {
   [DEEPWASM_ERROR_SYMBOL] = true as const;
 
-  override readonly name = "DeepwasmError";
+  override readonly name = "DeepbashError";
 
   constructor(
     message: string,
-    public readonly code: DeepwasmErrorCode,
+    public readonly code: DeepbashErrorCode,
     public readonly cause?: Error,
   ) {
     super(message, code as SandboxErrorCode, cause);
-    Object.setPrototypeOf(this, DeepwasmError.prototype);
+    Object.setPrototypeOf(this, DeepbashError.prototype);
   }
 
-  static isInstance(error: unknown): error is DeepwasmError {
+  static isInstance(error: unknown): error is DeepbashError {
     return (
       typeof error === "object" &&
       error !== null &&

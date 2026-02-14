@@ -53,14 +53,14 @@ const makeConfig = (env = "development", plugins = []) => {
       copy({
         targets: [
           {
-            src: ["rust/runtime/pkg/deepwasm_bg.wasm", "rust/runtime/pkg/deepwasm_bg.wasm.d.ts"],
+            src: ["rust/runtime/pkg/deepbash_bg.wasm", "rust/runtime/pkg/deepbash_bg.wasm.d.ts"],
             dest: "dist",
           },
         ],
       }),
       replace({
         values: {
-          "globalThis.wasmUrl": `"https://unpkg.com/${pkg.name}@${pkg.version}/dist/deepwasm_bg.wasm"`,
+          "globalThis.wasmUrl": `"https://unpkg.com/${pkg.name}@${pkg.version}/dist/deepbash_bg.wasm"`,
           "globalThis.workerUrl": `"https://unpkg.com/${pkg.name}@${pkg.version}/dist/index.mjs"`,
         },
         preventAssignment: true,

@@ -8,7 +8,7 @@ let handleMessage = async data => {
     try {
       await worker.handle(data);
     } catch (e) {
-      console.error('[deepwasm worker] Error handling message:', e);
+      console.error('[deepbash worker] Error handling message:', e);
     }
   } else {
     // We start off by buffering up all messages until we finish initializing.
@@ -32,11 +32,11 @@ globalThis.onmessage = async ev => {
         try {
           await worker.handle(msg);
         } catch (e) {
-          console.error('[deepwasm worker] Error handling buffered message:', e);
+          console.error('[deepbash worker] Error handling buffered message:', e);
         }
       }
     } catch (e) {
-      console.error('[deepwasm worker] Error during initialization:', e);
+      console.error('[deepbash worker] Error during initialization:', e);
     }
   } else {
     // Handle the message like normal.

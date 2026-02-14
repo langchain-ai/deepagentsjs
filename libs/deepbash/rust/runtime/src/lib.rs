@@ -54,7 +54,7 @@ fn on_start() {
 }
 
 /// Set the URL that worker threads use to import the SDK.
-/// In Node.js, call this with an absolute `file://` path to `deepwasm_runtime.js`
+/// In Node.js, call this with an absolute `file://` path to `deepbash_runtime.js`
 /// before loading any packages or spawning workers.
 #[wasm_bindgen(js_name = "setSdkUrl")]
 pub fn set_sdk_url(url: &str) {

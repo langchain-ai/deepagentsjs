@@ -21,7 +21,7 @@ if ! rustup target list --installed | grep -q wasm32-unknown-unknown; then
   rustup target add wasm32-unknown-unknown
 fi
 
-echo "Building deepwasm runtime with wasm-pack..."
+echo "Building deepbash runtime with wasm-pack..."
 wasm-pack build \
   "$RUST_DIR/runtime" \
   --release \

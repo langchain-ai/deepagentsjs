@@ -1,4 +1,4 @@
-import { DeepwasmBackend } from "../src/backend.js";
+import { DeepbashBackend } from "../src/backend.js";
 import { BaseDemoBackend } from "./demo-backend";
 
 class FooBackend extends BaseDemoBackend {
@@ -24,7 +24,7 @@ class BarBackend extends BaseDemoBackend {
 }
 
 async function main() {
-  const backend = await DeepwasmBackend.create({
+  const backend = await DeepbashBackend.create({
     mounts: {
       "/foo": new FooBackend(),
       "/bar": new BarBackend(),

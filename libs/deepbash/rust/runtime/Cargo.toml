@@ -1,5 +1,5 @@
 [package]
-name = "deepwasm-runtime"
+name = "deepbash-runtime"
 version = "0.0.0"
 authors = ["Syrus Akbary <syrus@wasmer.io>"]
 edition = "2021"

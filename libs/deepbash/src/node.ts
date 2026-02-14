@@ -1,3 +1,3 @@
 export * from "./";
-export { DeepwasmBackend } from "./backend.js";
+export { DeepbashBackend } from "./backend.js";
 export * from "./types.js";

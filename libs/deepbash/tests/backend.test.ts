@@ -5,8 +5,8 @@ import type {
   FileDownloadResponse,
   FileUploadResponse,
 } from "deepagents";
-import { DeepwasmBackend } from "../src/backend.js";
-import { DeepwasmError } from "../src/types.js";
+import { DeepbashBackend } from "../src/backend.js";
+import { DeepbashError } from "../src/types.js";
 /**
  * Minimal mock BackendProtocol for testing mount sync logic.
  * Uses in-memory storage. Only globInfo, downloadFiles, and uploadFiles
@@ -83,8 +83,8 @@ class MockBackend implements BackendProtocol {
   }
 }
 
-describe("DeepwasmBackend", () => {
-  let backend: DeepwasmBackend | undefined;
+describe("DeepbashBackend", () => {
+  let backend: DeepbashBackend | undefined;
 
   afterEach(() => {
     backend?.close();
@@ -92,29 +92,29 @@ describe("DeepwasmBackend", () => {
   });
 
   describe("factory method", () => {
-    it("creates an instance via DeepwasmBackend.create()", async () => {
-      backend = await DeepwasmBackend.create();
-      expect(backend).toBeInstanceOf(DeepwasmBackend);
+    it("creates an instance via DeepbashBackend.create()", async () => {
+      backend = await DeepbashBackend.create();
+      expect(backend).toBeInstanceOf(DeepbashBackend);
     });
 
     it("accepts options", async () => {
-      backend = await DeepwasmBackend.create({
+      backend = await DeepbashBackend.create({
         packages: ["bash", "coreutils"],
         timeout: 5000,
       });
-      expect(backend).toBeInstanceOf(DeepwasmBackend);
+      expect(backend).toBeInstanceOf(DeepbashBackend);
     });
   });
 
   describe("id", () => {
     it("has a unique id per instance", async () => {
-      backend = await DeepwasmBackend.create();
-      const other = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
+      const other = await DeepbashBackend.create();
       try {
         expect(backend.id).toBeTruthy();
         expect(other.id).toBeTruthy();
         expect(backend.id).not.toBe(other.id);
-        expect(backend.id).toMatch(/^deepwasm-/);
+        expect(backend.id).toMatch(/^deepbash-/);
       } finally {
         other.close();
       }
@@ -123,7 +123,7 @@ describe("DeepwasmBackend", () => {
 
   describe("uploadFiles + downloadFiles roundtrip", () => {
     it("stores and retrieves files from in-memory FS", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       const content = new TextEncoder().encode("hello world");
 
       const uploadResults = await backend.uploadFiles([
@@ -141,14 +141,14 @@ describe("DeepwasmBackend", () => {
     });
 
     it("returns file_not_found for missing files", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       const results = await backend.downloadFiles(["/nonexistent.txt"]);
       expect(results[0].error).toBe("file_not_found");
       expect(results[0].content).toBeNull();
     });
 
     it("returns is_directory for directory paths", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       // Upload a file to create the /mydir directory
       await backend.uploadFiles([
         ["/mydir/file.txt", new Uint8Array([1, 2, 3])],
@@ -158,7 +158,7 @@ describe("DeepwasmBackend", () => {
     });
 
     it("handles multiple files in one call", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       const enc = new TextEncoder();
 
       const uploadResults = await backend.uploadFiles([
@@ -177,7 +177,7 @@ describe("DeepwasmBackend", () => {
 
   describe("execute", () => {
     it("runs a command when SDK is available, or throws when not", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       try {
         const result = await backend.execute("echo hello");
         // SDK initialized — verify we got real output
@@ -186,8 +186,8 @@ describe("DeepwasmBackend", () => {
         expect(result.spawnRequests).toEqual([]);
       } catch (err) {
         // SDK did not initialize — verify the error
-        expect(err).toBeInstanceOf(DeepwasmError);
-        expect((err as DeepwasmError).code).toBe(
+        expect(err).toBeInstanceOf(DeepbashError);
+        expect((err as DeepbashError).code).toBe(
           "WASM_ENGINE_NOT_INITIALIZED",
         );
       }
@@ -196,7 +196,7 @@ describe("DeepwasmBackend", () => {
 
   describe("RPC spawn request scanning", () => {
     it("parses spawn requests from /.rpc/requests/ after execute", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       const enc = new TextEncoder();
 
       const rpcRequest = JSON.stringify({
@@ -223,12 +223,12 @@ describe("DeepwasmBackend", () => {
         });
       } catch (err) {
         // SDK not available — skip RPC assertions
-        expect(err).toBeInstanceOf(DeepwasmError);
+        expect(err).toBeInstanceOf(DeepbashError);
       }
     }, 30000);
 
     it("cleans up processed RPC files after scanning", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       const enc = new TextEncoder();
 
       const rpcRequest = JSON.stringify({
@@ -252,12 +252,12 @@ describe("DeepwasmBackend", () => {
         const result2 = await backend.execute("echo second");
         expect(result2.spawnRequests).toHaveLength(0);
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
+        expect(err).toBeInstanceOf(DeepbashError);
       }
     }, 60000);
 
     it("handles multiple spawn requests in one execution", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       const enc = new TextEncoder();
 
       const requests = [
@@ -291,12 +291,12 @@ describe("DeepwasmBackend", () => {
         const ids = result.spawnRequests.map((r) => r.id).sort();
         expect(ids).toEqual(["multi-001", "multi-002"]);
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
+        expect(err).toBeInstanceOf(DeepbashError);
       }
     }, 30000);
 
     it("ignores malformed JSON in RPC directory", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       const enc = new TextEncoder();
 
       // Upload a valid request and an invalid one
@@ -318,12 +318,12 @@ describe("DeepwasmBackend", () => {
         expect(result.spawnRequests).toHaveLength(1);
         expect(result.spawnRequests[0].id).toBe("valid-001");
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
+        expect(err).toBeInstanceOf(DeepbashError);
       }
     }, 30000);
 
     it("ignores JSON files with missing required fields", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       const enc = new TextEncoder();
 
       // Missing 'method' field
@@ -341,12 +341,12 @@ describe("DeepwasmBackend", () => {
         const result = await backend.execute("echo noop");
         expect(result.spawnRequests).toHaveLength(0);
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
+        expect(err).toBeInstanceOf(DeepbashError);
       }
     }, 30000);
 
     it("ignores non-JSON files in RPC directory", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       const enc = new TextEncoder();
 
       const validRequest = JSON.stringify({
@@ -367,7 +367,7 @@ describe("DeepwasmBackend", () => {
         expect(result.spawnRequests).toHaveLength(1);
         expect(result.spawnRequests[0].id).toBe("json-only-001");
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
+        expect(err).toBeInstanceOf(DeepbashError);
       }
     }, 30000);
   });
@@ -375,15 +375,15 @@ describe("DeepwasmBackend", () => {
   describe("shell", () => {
     it("throws if not initialized", async () => {
       // Access the constructor indirectly by creating then closing
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       backend.close();
-      await expect(backend.shell()).rejects.toThrow(DeepwasmError);
+      await expect(backend.shell()).rejects.toThrow(DeepbashError);
       await expect(backend.shell()).rejects.toThrow("not initialized");
       backend = undefined;
     });
 
     it("starts a shell or throws when SDK not available", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       try {
         const session = await backend.shell();
         // SDK initialized — verify we got a session with all expected properties
@@ -398,56 +398,56 @@ describe("DeepwasmBackend", () => {
         session.kill();
       } catch (err) {
         // SDK did not initialize — verify the error
-        expect(err).toBeInstanceOf(DeepwasmError);
-        expect((err as DeepwasmError).code).toBe(
+        expect(err).toBeInstanceOf(DeepbashError);
+        expect((err as DeepbashError).code).toBe(
           "WASM_ENGINE_NOT_INITIALIZED",
         );
       }
     }, 30000);
 
     it("session has stdin as WritableStream", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       try {
         const session = await backend.shell();
         expect(session.stdin).toBeInstanceOf(WritableStream);
         session.kill();
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
+        expect(err).toBeInstanceOf(DeepbashError);
       }
     }, 30000);
 
     it("session has stdout and stderr as ReadableStream", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       try {
         const session = await backend.shell();
         expect(session.stdout).toBeInstanceOf(ReadableStream);
         expect(session.stderr).toBeInstanceOf(ReadableStream);
         session.kill();
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
+        expect(err).toBeInstanceOf(DeepbashError);
       }
     }, 30000);
 
     it("kill() does not throw when called multiple times", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       try {
         const session = await backend.shell();
         expect(() => session.kill()).not.toThrow();
         expect(() => session.kill()).not.toThrow();
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
+        expect(err).toBeInstanceOf(DeepbashError);
       }
     }, 30000);
   });
 
   describe("close", () => {
     it("does not throw", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       expect(() => backend!.close()).not.toThrow();
     });
 
     it("can be called multiple times", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       backend.close();
       expect(() => backend!.close()).not.toThrow();
       backend = undefined; // already closed
@@ -455,8 +455,8 @@ describe("DeepwasmBackend", () => {
   });
 });
 
-describe("DeepwasmBackend mounts", () => {
-  let backend: DeepwasmBackend | undefined;
+describe("DeepbashBackend mounts", () => {
+  let backend: DeepbashBackend | undefined;
 
   afterEach(() => {
     backend?.close();
@@ -466,19 +466,19 @@ describe("DeepwasmBackend mounts", () => {
   describe("creation with mounts option", () => {
     it("accepts mounts option without error", async () => {
       const mockBackend = new MockBackend();
-      backend = await DeepwasmBackend.create({
+      backend = await DeepbashBackend.create({
         mounts: { "/work": mockBackend },
       });
-      expect(backend).toBeInstanceOf(DeepwasmBackend);
+      expect(backend).toBeInstanceOf(DeepbashBackend);
     });
 
     it("accepts multiple mounts", async () => {
       const backend1 = new MockBackend();
       const backend2 = new MockBackend();
-      backend = await DeepwasmBackend.create({
+      backend = await DeepbashBackend.create({
         mounts: { "/work": backend1, "/data": backend2 },
       });
-      expect(backend).toBeInstanceOf(DeepwasmBackend);
+      expect(backend).toBeInstanceOf(DeepbashBackend);
     });
   });
 
@@ -487,7 +487,7 @@ describe("DeepwasmBackend mounts", () => {
       const mockBackend = new MockBackend();
       mockBackend.seed("/hello.txt", "Hello from mount!");
 
-      backend = await DeepwasmBackend.create({
+      backend = await DeepbashBackend.create({
         mounts: { "/work": mockBackend },
       });
 
@@ -496,8 +496,8 @@ describe("DeepwasmBackend mounts", () => {
         expect(result.output).toContain("Hello from mount!");
       } catch (err) {
         // SDK not available — verify it's the expected error
-        expect(err).toBeInstanceOf(DeepwasmError);
-        expect((err as DeepwasmError).code).toBe(
+        expect(err).toBeInstanceOf(DeepbashError);
+        expect((err as DeepbashError).code).toBe(
           "WASM_ENGINE_NOT_INITIALIZED",
         );
       }
@@ -506,7 +506,7 @@ describe("DeepwasmBackend mounts", () => {
     it("uploads new files back to mock backend after execution", async () => {
       const mockBackend = new MockBackend();
 
-      backend = await DeepwasmBackend.create({
+      backend = await DeepbashBackend.create({
         mounts: { "/work": mockBackend },
       });
 
@@ -517,8 +517,8 @@ describe("DeepwasmBackend mounts", () => {
         expect(content).toBeDefined();
         expect(content).toContain("new content");
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
-        expect((err as DeepwasmError).code).toBe(
+        expect(err).toBeInstanceOf(DeepbashError);
+        expect((err as DeepbashError).code).toBe(
           "WASM_ENGINE_NOT_INITIALIZED",
         );
       }
@@ -528,7 +528,7 @@ describe("DeepwasmBackend mounts", () => {
       const mockBackend = new MockBackend();
       mockBackend.seed("/data.txt", "original");
 
-      backend = await DeepwasmBackend.create({
+      backend = await DeepbashBackend.create({
         mounts: { "/work": mockBackend },
       });
 
@@ -538,8 +538,8 @@ describe("DeepwasmBackend mounts", () => {
         expect(content).toBeDefined();
         expect(content).toContain("modified");
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
-        expect((err as DeepwasmError).code).toBe(
+        expect(err).toBeInstanceOf(DeepbashError);
+        expect((err as DeepbashError).code).toBe(
           "WASM_ENGINE_NOT_INITIALIZED",
         );
       }
@@ -557,7 +557,7 @@ describe("DeepwasmBackend mounts", () => {
         return origUpload(files);
       };
 
-      backend = await DeepwasmBackend.create({
+      backend = await DeepbashBackend.create({
         mounts: { "/work": mockBackend },
       });
 
@@ -567,8 +567,8 @@ describe("DeepwasmBackend mounts", () => {
         // The unchanged file should NOT have been uploaded
         expect(uploadedPaths).not.toContain("/unchanged.txt");
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
-        expect((err as DeepwasmError).code).toBe(
+        expect(err).toBeInstanceOf(DeepbashError);
+        expect((err as DeepbashError).code).toBe(
           "WASM_ENGINE_NOT_INITIALIZED",
         );
       }
@@ -580,7 +580,7 @@ describe("DeepwasmBackend mounts", () => {
       work.seed("/task.txt", "task info");
       data.seed("/config.json", '{"key":"value"}');
 
-      backend = await DeepwasmBackend.create({
+      backend = await DeepbashBackend.create({
         mounts: { "/work": work, "/data": data },
       });
 
@@ -591,8 +591,8 @@ describe("DeepwasmBackend mounts", () => {
         expect(result.output).toContain("task info");
         expect(result.output).toContain('{"key":"value"}');
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
-        expect((err as DeepwasmError).code).toBe(
+        expect(err).toBeInstanceOf(DeepbashError);
+        expect((err as DeepbashError).code).toBe(
           "WASM_ENGINE_NOT_INITIALIZED",
         );
       }
@@ -601,7 +601,7 @@ describe("DeepwasmBackend mounts", () => {
 
   describe("backward compatibility", () => {
     it("no mounts option uses in-memory FS as before", async () => {
-      backend = await DeepwasmBackend.create();
+      backend = await DeepbashBackend.create();
       const enc = new TextEncoder();
 
       // Upload a file to in-memory FS
@@ -613,15 +613,15 @@ describe("DeepwasmBackend mounts", () => {
         const result = await backend.execute("cat /work/test.txt");
         expect(result.output).toContain("in-memory content");
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
-        expect((err as DeepwasmError).code).toBe(
+        expect(err).toBeInstanceOf(DeepbashError);
+        expect((err as DeepbashError).code).toBe(
           "WASM_ENGINE_NOT_INITIALIZED",
         );
       }
     }, 30000);
 
     it("empty mounts object uses in-memory FS as before", async () => {
-      backend = await DeepwasmBackend.create({ mounts: {} });
+      backend = await DeepbashBackend.create({ mounts: {} });
       const enc = new TextEncoder();
 
       await backend.uploadFiles([["/file.txt", enc.encode("still works")]]);
@@ -630,7 +630,7 @@ describe("DeepwasmBackend mounts", () => {
         const result = await backend.execute("cat /work/file.txt");
         expect(result.output).toContain("still works");
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
+        expect(err).toBeInstanceOf(DeepbashError);
       }
     }, 30000);
   });
@@ -642,7 +642,7 @@ describe("DeepwasmBackend mounts", () => {
       // Remove downloadFiles to simulate optional method
       (noDownload as Partial<MockBackend>).downloadFiles = undefined;
 
-      backend = await DeepwasmBackend.create({
+      backend = await DeepbashBackend.create({
         mounts: { "/work": noDownload as BackendProtocol },
       });
 
@@ -651,8 +651,8 @@ describe("DeepwasmBackend mounts", () => {
         const result = await backend.execute("ls /work");
         expect(result.exitCode).toBeDefined();
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
-        expect((err as DeepwasmError).code).toBe(
+        expect(err).toBeInstanceOf(DeepbashError);
+        expect((err as DeepbashError).code).toBe(
           "WASM_ENGINE_NOT_INITIALIZED",
         );
       }
@@ -664,7 +664,7 @@ describe("DeepwasmBackend mounts", () => {
       // Remove uploadFiles to simulate optional method
       (noUpload as Partial<MockBackend>).uploadFiles = undefined;
 
-      backend = await DeepwasmBackend.create({
+      backend = await DeepbashBackend.create({
         mounts: { "/work": noUpload as BackendProtocol },
       });
 
@@ -673,8 +673,8 @@ describe("DeepwasmBackend mounts", () => {
         const result = await backend.execute("echo 'new' > /work/file.txt");
         expect(result.exitCode).toBeDefined();
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
-        expect((err as DeepwasmError).code).toBe(
+        expect(err).toBeInstanceOf(DeepbashError);
+        expect((err as DeepbashError).code).toBe(
           "WASM_ENGINE_NOT_INITIALIZED",
         );
       }
@@ -683,7 +683,7 @@ describe("DeepwasmBackend mounts", () => {
     it("handles empty backend (no files to download)", async () => {
       const emptyBackend = new MockBackend();
 
-      backend = await DeepwasmBackend.create({
+      backend = await DeepbashBackend.create({
         mounts: { "/work": emptyBackend },
       });
 
@@ -696,8 +696,8 @@ describe("DeepwasmBackend mounts", () => {
         // Either way, execution should complete without throwing
         expect(result.exitCode).toBeDefined();
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
-        expect((err as DeepwasmError).code).toBe(
+        expect(err).toBeInstanceOf(DeepbashError);
+        expect((err as DeepbashError).code).toBe(
           "WASM_ENGINE_NOT_INITIALIZED",
         );
       }
@@ -711,7 +711,7 @@ describe("DeepwasmBackend mounts", () => {
         { path: "/broken.txt", content: null, error: "file_not_found" },
       ];
 
-      backend = await DeepwasmBackend.create({
+      backend = await DeepbashBackend.create({
         mounts: { "/work": errorBackend },
       });
 
@@ -720,8 +720,8 @@ describe("DeepwasmBackend mounts", () => {
         const result = await backend.execute("echo ok");
         expect(result.output).toContain("ok");
       } catch (err) {
-        expect(err).toBeInstanceOf(DeepwasmError);
-        expect((err as DeepwasmError).code).toBe(
+        expect(err).toBeInstanceOf(DeepbashError);
+        expect((err as DeepbashError).code).toBe(
           "WASM_ENGINE_NOT_INITIALIZED",
         );
       }

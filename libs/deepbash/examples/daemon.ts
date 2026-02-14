@@ -9,7 +9,7 @@
 
 import net from "node:net";
 import fs from "node:fs";
-import { DeepwasmBackend } from "../src/backend.js";
+import { DeepbashBackend } from "../src/backend.js";
 
 const SOCKET_PATH = `/tmp/wasix-${process.pid}.sock`;
 const WELL_KNOWN_SOCKET = `/tmp/wasix-session.sock`;
@@ -105,7 +105,7 @@ function cleanupFiles(): void {
 async function main(): Promise<void> {
   log("Booting WASIX sandbox...");
 
-  const backend = await DeepwasmBackend.create();
+  const backend = await DeepbashBackend.create();
   const session = await backend.shell();
 
   log(`WASIX sandbox ready. Socket: ${SOCKET_PATH}`);

@@ -62,4 +62,4 @@ sandbox-workspace/
 coverage
 
 # Deepwasm build artifacts
-libs/deepwasm/rust/runtime/Cargo.lock
+libs/deepbash/rust/runtime/Cargo.lock
