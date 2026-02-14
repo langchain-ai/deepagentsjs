@@ -1,7 +1,89 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import type {
+  BackendProtocol,
+  FileInfo,
+  FileDownloadResponse,
+  FileUploadResponse,
+} from "deepagents";
 import { WasixBackend } from "./backend.js";
 import { WasixSandboxError } from "./types.js";
 import { createFsCallbacks, type FsCallbacks } from "./fs-callbacks.js";
+
+/**
+ * Minimal mock BackendProtocol for testing mount sync logic.
+ * Uses in-memory storage. Only globInfo, downloadFiles, and uploadFiles
+ * are needed for mount sync.
+ */
+class MockBackend implements BackendProtocol {
+  readonly files = new Map<string, Uint8Array>();
+
+  /** Seed the mock with files */
+  seed(path: string, content: string | Uint8Array): void {
+    const data =
+      typeof content === "string" ? new TextEncoder().encode(content) : content;
+    this.files.set(path.startsWith("/") ? path : `/${path}`, data);
+  }
+
+  /** Read a file's content as string (test helper) */
+  readString(path: string): string | undefined {
+    const data = this.files.get(path.startsWith("/") ? path : `/${path}`);
+    return data ? new TextDecoder().decode(data) : undefined;
+  }
+
+  globInfo(pattern: string, _path?: string): FileInfo[] {
+    const results: FileInfo[] = [];
+    for (const [filePath] of this.files) {
+      // Simple: return all files when pattern is "**/*"
+      if (pattern === "**/*") {
+        results.push({ path: filePath, is_dir: false });
+      }
+    }
+    return results;
+  }
+
+  downloadFiles(paths: string[]): FileDownloadResponse[] {
+    return paths.map((p) => {
+      const normalized = p.startsWith("/") ? p : `/${p}`;
+      const content = this.files.get(normalized);
+      if (content) {
+        return { path: p, content: new Uint8Array(content), error: null };
+      }
+      return { path: p, content: null, error: "file_not_found" as const };
+    });
+  }
+
+  uploadFiles(files: Array<[string, Uint8Array]>): FileUploadResponse[] {
+    return files.map(([path, content]) => {
+      const normalized = path.startsWith("/") ? path : `/${path}`;
+      this.files.set(normalized, new Uint8Array(content));
+      return { path, error: null };
+    });
+  }
+
+  // Stubs for required BackendProtocol methods (not used by mount sync)
+  lsInfo(): FileInfo[] {
+    return [];
+  }
+  read(): string {
+    return "";
+  }
+  readRaw() {
+    return {
+      content: [],
+      created_at: new Date().toISOString(),
+      modified_at: new Date().toISOString(),
+    };
+  }
+  grepRaw(): [] {
+    return [];
+  }
+  write() {
+    return {};
+  }
+  edit() {
+    return {};
+  }
+}
 
 describe("WasixBackend", () => {
   let backend: WasixBackend | undefined;
@@ -372,6 +454,280 @@ describe("WasixBackend", () => {
       expect(() => backend!.close()).not.toThrow();
       backend = undefined; // already closed
     });
+  });
+});
+
+describe("WasixBackend mounts", () => {
+  let backend: WasixBackend | undefined;
+
+  afterEach(() => {
+    backend?.close();
+    backend = undefined;
+  });
+
+  describe("creation with mounts option", () => {
+    it("accepts mounts option without error", async () => {
+      const mockBackend = new MockBackend();
+      backend = await WasixBackend.create({
+        mounts: { "/work": mockBackend },
+      });
+      expect(backend).toBeInstanceOf(WasixBackend);
+    });
+
+    it("accepts multiple mounts", async () => {
+      const backend1 = new MockBackend();
+      const backend2 = new MockBackend();
+      backend = await WasixBackend.create({
+        mounts: { "/work": backend1, "/data": backend2 },
+      });
+      expect(backend).toBeInstanceOf(WasixBackend);
+    });
+  });
+
+  describe("execute with mounts", () => {
+    it("downloads files from mock backend before execution", async () => {
+      const mockBackend = new MockBackend();
+      mockBackend.seed("/hello.txt", "Hello from mount!");
+
+      backend = await WasixBackend.create({
+        mounts: { "/work": mockBackend },
+      });
+
+      try {
+        const result = await backend.execute("cat /work/hello.txt");
+        expect(result.output).toContain("Hello from mount!");
+      } catch (err) {
+        // SDK not available — verify it's the expected error
+        expect(err).toBeInstanceOf(WasixSandboxError);
+        expect((err as WasixSandboxError).code).toBe(
+          "WASM_ENGINE_NOT_INITIALIZED",
+        );
+      }
+    }, 30000);
+
+    it("uploads new files back to mock backend after execution", async () => {
+      const mockBackend = new MockBackend();
+
+      backend = await WasixBackend.create({
+        mounts: { "/work": mockBackend },
+      });
+
+      try {
+        await backend.execute("echo 'new content' > /work/output.txt");
+        // File should have been uploaded back to the mock backend
+        const content = mockBackend.readString("/output.txt");
+        expect(content).toBeDefined();
+        expect(content).toContain("new content");
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
+        expect((err as WasixSandboxError).code).toBe(
+          "WASM_ENGINE_NOT_INITIALIZED",
+        );
+      }
+    }, 30000);
+
+    it("uploads modified files back to mock backend after execution", async () => {
+      const mockBackend = new MockBackend();
+      mockBackend.seed("/data.txt", "original");
+
+      backend = await WasixBackend.create({
+        mounts: { "/work": mockBackend },
+      });
+
+      try {
+        await backend.execute("echo 'modified' > /work/data.txt");
+        const content = mockBackend.readString("/data.txt");
+        expect(content).toBeDefined();
+        expect(content).toContain("modified");
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
+        expect((err as WasixSandboxError).code).toBe(
+          "WASM_ENGINE_NOT_INITIALIZED",
+        );
+      }
+    }, 30000);
+
+    it("does not re-upload unchanged files", async () => {
+      const mockBackend = new MockBackend();
+      mockBackend.seed("/unchanged.txt", "same content");
+
+      // Track uploads
+      const uploadedPaths: string[] = [];
+      const origUpload = mockBackend.uploadFiles.bind(mockBackend);
+      mockBackend.uploadFiles = (files: Array<[string, Uint8Array]>) => {
+        for (const [p] of files) uploadedPaths.push(p);
+        return origUpload(files);
+      };
+
+      backend = await WasixBackend.create({
+        mounts: { "/work": mockBackend },
+      });
+
+      try {
+        // Run a command that doesn't modify any files
+        await backend.execute("echo noop");
+        // The unchanged file should NOT have been uploaded
+        expect(uploadedPaths).not.toContain("/unchanged.txt");
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
+        expect((err as WasixSandboxError).code).toBe(
+          "WASM_ENGINE_NOT_INITIALIZED",
+        );
+      }
+    }, 30000);
+
+    it("handles multiple mounts simultaneously", async () => {
+      const work = new MockBackend();
+      const data = new MockBackend();
+      work.seed("/task.txt", "task info");
+      data.seed("/config.json", '{"key":"value"}');
+
+      backend = await WasixBackend.create({
+        mounts: { "/work": work, "/data": data },
+      });
+
+      try {
+        const result = await backend.execute(
+          "cat /work/task.txt && cat /data/config.json",
+        );
+        expect(result.output).toContain("task info");
+        expect(result.output).toContain('{"key":"value"}');
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
+        expect((err as WasixSandboxError).code).toBe(
+          "WASM_ENGINE_NOT_INITIALIZED",
+        );
+      }
+    }, 30000);
+  });
+
+  describe("backward compatibility", () => {
+    it("no mounts option uses in-memory FS as before", async () => {
+      backend = await WasixBackend.create();
+      const enc = new TextEncoder();
+
+      // Upload a file to in-memory FS
+      await backend.uploadFiles([
+        ["/test.txt", enc.encode("in-memory content")],
+      ]);
+
+      try {
+        const result = await backend.execute("cat /work/test.txt");
+        expect(result.output).toContain("in-memory content");
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
+        expect((err as WasixSandboxError).code).toBe(
+          "WASM_ENGINE_NOT_INITIALIZED",
+        );
+      }
+    }, 30000);
+
+    it("empty mounts object uses in-memory FS as before", async () => {
+      backend = await WasixBackend.create({ mounts: {} });
+      const enc = new TextEncoder();
+
+      await backend.uploadFiles([["/file.txt", enc.encode("still works")]]);
+
+      try {
+        const result = await backend.execute("cat /work/file.txt");
+        expect(result.output).toContain("still works");
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
+      }
+    }, 30000);
+  });
+
+  describe("mount edge cases", () => {
+    it("skips mounts without downloadFiles", async () => {
+      // Create a backend that doesn't implement downloadFiles
+      const noDownload = new MockBackend();
+      // Remove downloadFiles to simulate optional method
+      (noDownload as Partial<MockBackend>).downloadFiles = undefined;
+
+      backend = await WasixBackend.create({
+        mounts: { "/work": noDownload as BackendProtocol },
+      });
+
+      try {
+        // Should not throw — just creates an empty directory
+        const result = await backend.execute("ls /work");
+        expect(result.exitCode).toBeDefined();
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
+        expect((err as WasixSandboxError).code).toBe(
+          "WASM_ENGINE_NOT_INITIALIZED",
+        );
+      }
+    }, 30000);
+
+    it("skips upload for mounts without uploadFiles", async () => {
+      const noUpload = new MockBackend();
+      noUpload.seed("/file.txt", "data");
+      // Remove uploadFiles to simulate optional method
+      (noUpload as Partial<MockBackend>).uploadFiles = undefined;
+
+      backend = await WasixBackend.create({
+        mounts: { "/work": noUpload as BackendProtocol },
+      });
+
+      try {
+        // Should not throw even when files are modified
+        const result = await backend.execute("echo 'new' > /work/file.txt");
+        expect(result.exitCode).toBeDefined();
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
+        expect((err as WasixSandboxError).code).toBe(
+          "WASM_ENGINE_NOT_INITIALIZED",
+        );
+      }
+    }, 30000);
+
+    it("handles empty backend (no files to download)", async () => {
+      const emptyBackend = new MockBackend();
+
+      backend = await WasixBackend.create({
+        mounts: { "/work": emptyBackend },
+      });
+
+      try {
+        const result = await backend.execute("echo hello > /work/new.txt");
+        // If the command succeeded, verify the file was uploaded
+        if (result.exitCode === 0) {
+          expect(emptyBackend.readString("/new.txt")).toContain("hello");
+        }
+        // Either way, execution should complete without throwing
+        expect(result.exitCode).toBeDefined();
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
+        expect((err as WasixSandboxError).code).toBe(
+          "WASM_ENGINE_NOT_INITIALIZED",
+        );
+      }
+    }, 30000);
+
+    it("handles download errors gracefully", async () => {
+      const errorBackend = new MockBackend();
+      // Override globInfo to return a file but downloadFiles to return error
+      errorBackend.globInfo = () => [{ path: "/broken.txt", is_dir: false }];
+      errorBackend.downloadFiles = () => [
+        { path: "/broken.txt", content: null, error: "file_not_found" },
+      ];
+
+      backend = await WasixBackend.create({
+        mounts: { "/work": errorBackend },
+      });
+
+      try {
+        // Should not throw — skips files with download errors
+        const result = await backend.execute("echo ok");
+        expect(result.output).toContain("ok");
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
+        expect((err as WasixSandboxError).code).toBe(
+          "WASM_ENGINE_NOT_INITIALIZED",
+        );
+      }
+    }, 30000);
   });
 });
 

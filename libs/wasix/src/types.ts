@@ -2,6 +2,7 @@ import {
   SandboxError,
   type SandboxErrorCode,
   type ExecuteResponse,
+  type BackendProtocol,
 } from "deepagents";
 
 /**
@@ -69,6 +70,18 @@ export interface WasixBackendOptions {
    * @default 30000 (30 seconds)
    */
   timeout?: number;
+
+  /**
+   * Mount external backends into the WASIX sandbox.
+   *
+   * Each key is a mount path (e.g. "/work", "/memories") and each value
+   * is a BackendProtocol that provides files for that mount point.
+   *
+   * When provided, the in-memory Map is NOT used — all filesystem state
+   * comes from the mounted backends. When omitted, falls back to the
+   * default in-memory filesystem mounted at "/work".
+   */
+  mounts?: Record<string, BackendProtocol>;
 }
 
 /**

@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 
 import {
   BaseSandbox,
+  type BackendProtocol,
   type FileDownloadResponse,
   type FileOperationError,
   type FileUploadResponse,
@@ -42,6 +43,9 @@ export class WasixBackend extends BaseSandbox {
   /** Track directories for path validation */
   readonly #dirs = new Set<string>(["/", "/workspace"]);
 
+  /** External backend mounts (path → BackendProtocol) */
+  readonly #mounts: ReadonlyMap<string, BackendProtocol>;
+
   /** Lazily-loaded @wasmer/sdk module */
   #sdk: WasmerSdk | null = null;
 
@@ -61,6 +65,9 @@ export class WasixBackend extends BaseSandbox {
     super();
     this.#id = `wasix-${crypto.randomUUID()}`;
     this.#options = { timeout: 30000, ...options };
+    this.#mounts = new Map(
+      options.mounts ? Object.entries(options.mounts) : [],
+    );
   }
 
   /**
@@ -128,35 +135,41 @@ export class WasixBackend extends BaseSandbox {
       );
     }
 
-    // Build a Directory from the in-memory FS
-    const dir = new this.#sdk.Directory();
-    for (const [path, data] of this.#fs) {
-      // Ensure parent directories exist in the Directory
-      const parts = path.split("/").filter(Boolean);
-      for (let i = 1; i < parts.length; i++) {
-        const parentDir = "/" + parts.slice(0, i).join("/");
-        try {
-          await dir.createDir(parentDir);
-        } catch {
-          // Directory may already exist — ignore
-        }
-      }
-      await dir.writeFile(path, data);
+    let mountRecord: Record<string, WasmerDirectory>;
+    let mountSnapshots: Map<string, Map<string, Uint8Array>>;
+    const cwd = this.#mounts.size > 0 ? [...this.#mounts.keys()][0] : "/work";
+
+    if (this.#mounts.size > 0) {
+      // Mount mode: populate directories from external backends
+      const result = await this.#populateMountDirectories();
+      mountRecord = result.directories;
+      mountSnapshots = result.snapshots;
+    } else {
+      // Legacy mode: single in-memory FS mounted at /work
+      const dir = new this.#sdk.Directory();
+      await this.#populateDirectoryFromFs(dir);
+      mountRecord = { "/work": dir };
+      mountSnapshots = new Map();
     }
 
-    // Run bash -c <command> with the directory mounted at /work
+    // Run bash -c <command> with the directory/directories mounted
     // Provide empty stdin to prevent bash from waiting for input.
     const instance = await entrypoint.run({
       args: ["-c", command],
-      mount: { "/work": dir },
-      cwd: "/work",
+      mount: mountRecord,
+      cwd,
       stdin: "",
     });
 
     const output = await instance.wait();
 
-    // Sync files back from the Directory to the in-memory Map
-    await this.#syncDirectoryToFs(dir, "/");
+    if (this.#mounts.size > 0) {
+      // Sync changes back to mounted backends
+      await this.#syncMountsBack(mountRecord, mountSnapshots);
+    } else {
+      // Legacy: sync back to in-memory FS
+      await this.#syncDirectoryToFs(mountRecord["/work"], "/");
+    }
 
     // Scan for RPC spawn requests and clean them up
     const spawnRequests = this.#collectSpawnRequests();
@@ -195,26 +208,26 @@ export class WasixBackend extends BaseSandbox {
       );
     }
 
-    // Build a Directory from the in-memory FS (same as execute())
-    const dir = new this.#sdk.Directory();
-    for (const [path, data] of this.#fs) {
-      const parts = path.split("/").filter(Boolean);
-      for (let i = 1; i < parts.length; i++) {
-        const parentDir = "/" + parts.slice(0, i).join("/");
-        try {
-          await dir.createDir(parentDir);
-        } catch {
-          // Directory may already exist — ignore
-        }
-      }
-      await dir.writeFile(path, data);
+    let mountRecord: Record<string, WasmerDirectory>;
+    let mountSnapshots: Map<string, Map<string, Uint8Array>>;
+    const cwd = this.#mounts.size > 0 ? [...this.#mounts.keys()][0] : "/work";
+
+    if (this.#mounts.size > 0) {
+      const result = await this.#populateMountDirectories();
+      mountRecord = result.directories;
+      mountSnapshots = result.snapshots;
+    } else {
+      const dir = new this.#sdk.Directory();
+      await this.#populateDirectoryFromFs(dir);
+      mountRecord = { "/work": dir };
+      mountSnapshots = new Map();
     }
 
     // Start bash WITHOUT stdin — this gives us the WritableStream
     const instance = await entrypoint.run({
       args: [],
-      mount: { "/work": dir },
-      cwd: "/work",
+      mount: mountRecord,
+      cwd,
       // No stdin property — leaves instance.stdin as a WritableStream
     });
 
@@ -239,8 +252,11 @@ export class WasixBackend extends BaseSandbox {
 
       async wait() {
         const output = await instance.wait();
-        // Sync files back from the Directory to the in-memory FS
-        await backend.#syncDirectoryToFs(dir, "/");
+        if (backend.#mounts.size > 0) {
+          await backend.#syncMountsBack(mountRecord, mountSnapshots);
+        } else {
+          await backend.#syncDirectoryToFs(mountRecord["/work"], "/");
+        }
         return { exitCode: output.code };
       },
 
@@ -340,6 +356,159 @@ export class WasixBackend extends BaseSandbox {
   }
 
   // --- Private helpers ---
+
+  /**
+   * Populate a @wasmer/sdk Directory from the in-memory FS map.
+   */
+  async #populateDirectoryFromFs(dir: WasmerDirectory): Promise<void> {
+    for (const [path, data] of this.#fs) {
+      const parts = path.split("/").filter(Boolean);
+      for (let i = 1; i < parts.length; i++) {
+        const parentDir = "/" + parts.slice(0, i).join("/");
+        try {
+          await dir.createDir(parentDir);
+        } catch {
+          // Directory may already exist — ignore
+        }
+      }
+      await dir.writeFile(path, data);
+    }
+  }
+
+  /**
+   * For each mount, discover files via globInfo, download via
+   * downloadFiles, and populate a Directory. Returns the directories
+   * and pre-execution snapshots for diff detection.
+   */
+  async #populateMountDirectories(): Promise<{
+    directories: Record<string, WasmerDirectory>;
+    snapshots: Map<string, Map<string, Uint8Array>>;
+  }> {
+    if (!this.#sdk) {
+      throw new WasixSandboxError(
+        "WASIX runtime not available.",
+        "WASM_ENGINE_NOT_INITIALIZED",
+      );
+    }
+
+    const directories: Record<string, WasmerDirectory> = {};
+    const snapshots = new Map<string, Map<string, Uint8Array>>();
+
+    for (const [mountPath, backend] of this.#mounts) {
+      const dir = new this.#sdk.Directory();
+      const snapshot = new Map<string, Uint8Array>();
+
+      // Skip mounts that don't support download
+      if (!backend.downloadFiles) {
+        directories[mountPath] = dir;
+        snapshots.set(mountPath, snapshot);
+        continue;
+      }
+
+      // Discover all files in the backend
+      const fileInfos = await backend.globInfo("**/*", "/");
+      const filePaths = fileInfos.filter((f) => !f.is_dir).map((f) => f.path);
+
+      if (filePaths.length > 0) {
+        // Download all files
+        const downloads = await backend.downloadFiles(filePaths);
+
+        for (const dl of downloads) {
+          if (dl.error || !dl.content) continue;
+
+          const filePath = dl.path.startsWith("/") ? dl.path : `/${dl.path}`;
+
+          // Store snapshot for later diff
+          snapshot.set(filePath, new Uint8Array(dl.content));
+
+          // Populate the directory
+          const parts = filePath.split("/").filter(Boolean);
+          for (let i = 1; i < parts.length; i++) {
+            const parentDir = "/" + parts.slice(0, i).join("/");
+            try {
+              await dir.createDir(parentDir);
+            } catch {
+              // Directory may already exist — ignore
+            }
+          }
+          await dir.writeFile(filePath, dl.content);
+        }
+      }
+
+      directories[mountPath] = dir;
+      snapshots.set(mountPath, snapshot);
+    }
+
+    return { directories, snapshots };
+  }
+
+  /**
+   * After execution, walk each mount's Directory, diff against the
+   * pre-execution snapshot, and upload changed/new files back to the
+   * backend via `uploadFiles()`.
+   */
+  async #syncMountsBack(
+    directories: Record<string, WasmerDirectory>,
+    snapshots: Map<string, Map<string, Uint8Array>>,
+  ): Promise<void> {
+    for (const [mountPath, backend] of this.#mounts) {
+      const dir = directories[mountPath];
+      if (!dir || !backend.uploadFiles) continue;
+
+      const snapshot =
+        snapshots.get(mountPath) ?? new Map<string, Uint8Array>();
+
+      // Walk the directory to get all current files
+      const currentFiles = new Map<string, Uint8Array>();
+      await this.#walkDirectory(dir, "/", currentFiles);
+
+      // Diff: find new and modified files
+      const toUpload: Array<[string, Uint8Array]> = [];
+      for (const [filePath, content] of currentFiles) {
+        const original = snapshot.get(filePath);
+        if (!original || !this.#bytesEqual(original, content)) {
+          toUpload.push([filePath, content]);
+        }
+      }
+
+      if (toUpload.length > 0) {
+        await backend.uploadFiles(toUpload);
+      }
+    }
+  }
+
+  /**
+   * Recursively walk a @wasmer/sdk Directory and collect all file paths
+   * and their contents.
+   */
+  async #walkDirectory(
+    dir: WasmerDirectory,
+    prefix: string,
+    result: Map<string, Uint8Array>,
+  ): Promise<void> {
+    const entries = await dir.readDir(prefix);
+    for (const entry of entries) {
+      const fullPath =
+        prefix === "/" ? `/${entry.name}` : `${prefix}/${entry.name}`;
+      if (entry.type === "dir") {
+        await this.#walkDirectory(dir, fullPath, result);
+      } else if (entry.type === "file") {
+        const data = await dir.readFile(fullPath);
+        result.set(fullPath, data);
+      }
+    }
+  }
+
+  /**
+   * Compare two Uint8Arrays for byte equality.
+   */
+  #bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+    if (a.byteLength !== b.byteLength) return false;
+    for (let i = 0; i < a.byteLength; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  }
 
   /**
    * Recursively walk a @wasmer/sdk Directory and sync all files back into
