@@ -1,0 +1,6 @@
+[toolchain]
+# The nightly toolchain is needed so the generated wasm generates
+# a shared memory (via +atomics) instead of a non-shared one (default behavior)
+channel = "nightly-2025-07-05"
+targets = ["wasm32-unknown-unknown", "wasm32-wasi"]
+components = ["rust-src", "rustfmt", "clippy"]
