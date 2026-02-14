@@ -15,7 +15,9 @@
     "prepublishOnly": "pnpm build",
     "test": "vitest run",
     "test:unit": "vitest run",
-    "test:int": "vitest run --mode int"
+    "test:int": "vitest run --mode int",
+    "demo:start": "tsx examples/daemon.ts",
+    "demo:attach": "tsx examples/attach.ts"
   },
   "repository": {
     "type": "git",
