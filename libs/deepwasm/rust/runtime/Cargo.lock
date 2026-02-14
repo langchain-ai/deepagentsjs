@@ -595,7 +595,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "deepwasm"
+name = "deepwasm-runtime"
 version = "0.0.0"
 dependencies = [
  "anyhow",
@@ -604,6 +604,7 @@ dependencies = [
  "console_error_panic_hook",
  "derivative",
  "futures",
+ "http",
  "instant",
  "js-sys",
  "lazy_static",

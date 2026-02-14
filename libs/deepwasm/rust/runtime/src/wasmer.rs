@@ -74,15 +74,6 @@ pub struct UserPackageDefinition {
 
 #[wasm_bindgen]
 impl Wasmer {
-    /// Load a package from the Wasmer registry.
-    #[wasm_bindgen(js_name = "fromRegistry")]
-    pub async fn js_from_registry(
-        specifier: &str,
-        runtime: Option<OptionalRuntime>,
-    ) -> Result<Wasmer, Error> {
-        Wasmer::from_registry(specifier, runtime).await
-    }
-
     /// Load a package from a package file.
     #[wasm_bindgen(js_name = "fromFile")]
     pub async fn js_from_file(
@@ -111,18 +102,6 @@ impl Wasmer {
 
 /// The actual impl - with `#[tracing::instrument]` macros.
 impl Wasmer {
-    #[tracing::instrument(skip(runtime))]
-    async fn from_registry(
-        specifier: &str,
-        runtime: Option<OptionalRuntime>,
-    ) -> Result<Self, Error> {
-        let specifier = PackageSource::from_str(specifier)?;
-        let runtime = runtime.unwrap_or_default().resolve()?.into_inner();
-        let pkg = BinaryPackage::from_registry(&specifier, &*runtime).await?;
-
-        Wasmer::from_package(pkg, runtime)
-    }
-
     #[tracing::instrument(skip(runtime))]
     async fn from_file(binary: Vec<u8>, runtime: Option<OptionalRuntime>) -> Result<Self, Error> {
         let runtime = runtime.unwrap_or_default().resolve()?.into_inner();

@@ -17,6 +17,7 @@ bytes = "1"
 console_error_panic_hook = { version = "0.1" }
 derivative = { version = "2" }
 futures = "0.3"
+http = "1"
 instant = { version = "0.1", features = ["wasm-bindgen"] }
 js-sys = "0.3"
 once_cell = "1"

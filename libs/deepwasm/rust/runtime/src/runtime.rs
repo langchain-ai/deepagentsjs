@@ -3,14 +3,13 @@ use std::sync::{atomic::AtomicBool, Arc, Mutex, Weak};
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
 use virtual_net::VirtualNetworking;
-use wasmer_config::package::PackageSource;
 use wasmer_wasix::{
     http::{HttpClient, WebHttpClient as DefaultHttpClient}, // reqwest::ReqwestHttpClient
     os::{TtyBridge, TtyOptions},
     runtime::{
         module_cache::ThreadLocalCache,
         package_loader::PackageLoader,
-        resolver::{BackendSource, PackageSummary, QueryError, Source},
+        resolver::BackendSource,
     },
     VirtualTaskManager,
     WasiTtyState,
@@ -32,7 +31,7 @@ static GLOBAL_RUNTIME: Lazy<Mutex<Weak<Runtime>>> = Lazy::new(Mutex::default);
 pub struct Runtime {
     task_manager: Option<Arc<dyn VirtualTaskManager>>,
     networking: Arc<dyn VirtualNetworking>,
-    source: Option<Arc<BackendSource>>,
+    source: Arc<BackendSource>,
     http_client: Arc<dyn HttpClient + Send + Sync>,
     package_loader: Arc<crate::package_loader::PackageLoader>,
     module_cache: Arc<ThreadLocalCache>,
@@ -76,11 +75,7 @@ impl Runtime {
     }
 
     pub(crate) fn with_defaults() -> Result<Self, Error> {
-        let mut rt = Runtime::new();
-
-        rt.set_registry(crate::DEFAULT_REGISTRY, None)?;
-
-        Ok(rt)
+        Ok(Runtime::new())
     }
 
     pub(crate) fn with_task_manager(&self, task_manager: Arc<ThreadPool>) -> Self {
@@ -105,12 +100,12 @@ impl Runtime {
     }
 
     pub(crate) fn new() -> Self {
-        let http_client = DefaultHttpClient::default();
-        // http_client.with_default_header(
-        //     reqwest::header::USER_AGENT,
-        //     HeaderValue::from_static(crate::USER_AGENT),
-        // );
-        let http_client = Arc::new(http_client);
+        let http_client = Arc::new(DefaultHttpClient::default());
+
+        let registry_url = BackendSource::WASMER_PROD_ENDPOINT
+            .parse()
+            .expect("hardcoded registry URL is valid");
+        let source = Arc::new(BackendSource::new(registry_url, http_client.clone()));
 
         let module_cache = ThreadLocalCache::default();
         let package_loader = crate::package_loader::PackageLoader::new(http_client.clone());
@@ -118,31 +113,13 @@ impl Runtime {
         Runtime {
             task_manager: None,
             networking: Arc::new(virtual_net::UnsupportedVirtualNetworking::default()),
-            source: None,
+            source,
             http_client: Arc::new(http_client),
             package_loader: Arc::new(package_loader),
             module_cache: Arc::new(module_cache),
             tty: TtyOptions::default(),
             connected_to_tty: Arc::new(AtomicBool::new(false)),
         }
-    }
-
-    /// Stub: networking gateway is not supported in this fork.
-    pub fn set_network_gateway(&mut self, _url: String) {
-        tracing::warn!("Network gateway not supported in this build, ignoring");
-    }
-
-    /// Set the registry that packages will be fetched from.
-    pub fn set_registry(&mut self, url: &str, token: Option<&str>) -> Result<(), Error> {
-        let url = url.parse().map_err(Error::from)?;
-
-        let mut source = BackendSource::new(url, self.http_client.clone());
-        if let Some(token) = token {
-            source = source.with_auth_token(token);
-        }
-        self.source = Some(Arc::new(source));
-
-        Ok(())
     }
 
 }
@@ -173,10 +150,7 @@ impl wasmer_wasix::runtime::Runtime for Runtime {
     }
 
     fn source(&self) -> Arc<dyn wasmer_wasix::runtime::resolver::Source + Send + Sync> {
-        match &self.source {
-            Some(wapm) => Arc::clone(wapm) as _,
-            None => Arc::new(UnsupportedSource),
-        }
+        Arc::clone(&self.source) as _
     }
 
     fn http_client(&self) -> Option<&wasmer_wasix::http::DynHttpClient> {
@@ -245,19 +219,6 @@ impl TtyBridge for Runtime {
         self.set_connected_to_tty(
             tty_state.stdin_tty || tty_state.stdout_tty || tty_state.stderr_tty,
         );
-    }
-}
-
-/// A [`Source`] that will always error out with [`QueryError::Unsupported`].
-#[derive(Debug, Clone)]
-struct UnsupportedSource;
-
-#[async_trait::async_trait]
-impl Source for UnsupportedSource {
-    async fn query(&self, package: &PackageSource) -> Result<Vec<PackageSummary>, QueryError> {
-        Err(QueryError::Unsupported {
-            query: package.clone(),
-        })
     }
 }
 

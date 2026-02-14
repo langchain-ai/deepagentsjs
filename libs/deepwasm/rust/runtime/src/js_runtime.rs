@@ -31,23 +31,8 @@ impl JsRuntime {
 #[wasm_bindgen(js_class = "Runtime")]
 impl JsRuntime {
     #[wasm_bindgen(constructor)]
-    pub fn js_new(options: Option<RuntimeOptions>) -> Result<JsRuntime, Error> {
-        let registry = match options.as_ref().and_then(|opts| opts.registry()) {
-            Some(registry_url) => registry_url.resolve(),
-            None => Some(crate::DEFAULT_REGISTRY.to_string()),
-        };
-
-        let mut rt = Runtime::new();
-
-        if let Some(registry) = registry.as_deref() {
-            let api_key = options.as_ref().and_then(|opts| opts.api_key());
-            rt.set_registry(registry, api_key.as_deref())?;
-        }
-
-        if let Some(gateway) = options.as_ref().and_then(|opts| opts.network_gateway()) {
-            rt.set_network_gateway(gateway);
-        }
-
+    pub fn js_new(_options: Option<RuntimeOptions>) -> Result<JsRuntime, Error> {
+        let rt = Runtime::new();
         Ok(JsRuntime::new(Arc::new(rt)))
     }
 
@@ -137,9 +122,7 @@ extern "C" {
 
 impl MaybeRegistryUrl {
     fn resolve(&self) -> Option<String> {
-        if self.is_undefined() {
-            Some(crate::DEFAULT_REGISTRY.to_string())
-        } else if self.is_null() {
+        if self.is_undefined() || self.is_null() {
             None
         } else if let Some(s) = self.dyn_ref::<js_sys::JsString>() {
             Some(s.into())

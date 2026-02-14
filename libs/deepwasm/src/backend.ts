@@ -12,7 +12,7 @@ import {
   type FileUploadResponse,
 } from "deepagents";
 
-import load, { Wasmer, Directory } from "../rust/runtime/pkg/deepwasm";
+import load, { Wasmer, Directory } from "../rust/runtime/pkg/deepwasm_runtime";
 
 import {
   DeepwasmError,
@@ -96,14 +96,20 @@ export class DeepwasmBackend extends BaseSandbox {
     // Polyfill Worker for Node.js (required by the WASM thread pool)
     if (!globalThis.Worker) {
       const { default: Worker } = await import("web-worker");
-      // @ts-ignore
       globalThis.Worker = Worker;
     }
 
     const thisDir = path.dirname(fileURLToPath(import.meta.url));
 
     // Load and initialize the WASM runtime
-    const wasmPath = path.join(thisDir, "..", "rust", "runtime", "pkg", "deepwasm_bg.wasm");
+    const wasmPath = path.join(
+      thisDir,
+      "..",
+      "rust",
+      "runtime",
+      "pkg",
+      "deepwasm_runtime_bg.wasm",
+    );
     const wasmModule = readFileSync(wasmPath);
     await load(wasmModule);
 

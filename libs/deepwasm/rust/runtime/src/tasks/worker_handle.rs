@@ -160,19 +160,12 @@ fn init_message(id: u32) -> Result<JsValue, JsValue> {
 
 /// The URL used by the bootstrapping script to import the Wasmer SDK.
 fn sdk_url() -> String {
-    let sdk_url = crate::CUSTOM_SDK_URL.lock().unwrap();
-    // let import_meta_url = import_meta_url();
-    let sdk_url = sdk_url.as_deref().unwrap_or("index.mjs");
-
-    sdk_url.to_string()
+    "index.mjs".to_string()
 }
 
-/// The URL user for the worker.
+/// The URL for the worker.
 fn worker_url() -> String {
-    let worker_url = crate::CUSTOM_WORKER_URL.lock().unwrap();
-    let worker_url = worker_url.as_deref().unwrap_or(DEFAULT_WORKER_URL.as_str());
-
-    worker_url.to_string()
+    DEFAULT_WORKER_URL.to_string()
 }
 
 /// A data URL containing our worker's bootstrap script.
