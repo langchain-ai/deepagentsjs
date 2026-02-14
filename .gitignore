@@ -50,6 +50,9 @@ credentials.json
 
 **/.claude/settings.local.json
 
+# Rust
+**/target
+
 # Agent OS
 agent-os
 .claude
@@ -57,3 +60,7 @@ agent-os
 # Sandbox workspace directory - created at runtime
 sandbox-workspace/
 coverage
+
+# WASIX build artifacts
+libs/wasix/src/wasm/
+libs/wasix/rust/Cargo.lock

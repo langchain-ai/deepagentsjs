@@ -1,0 +1,9 @@
+[package]
+name = "deepagent-cli"
+version = "0.1.0"
+edition = "2021"
+description = "CLI tool for the deepagent WASIX execution engine"
+
+[[bin]]
+name = "deepagent"
+path = "src/main.rs"

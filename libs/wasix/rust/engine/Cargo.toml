@@ -1,0 +1,26 @@
+[package]
+name = "deepagent-wasix-engine"
+version = "0.1.0"
+edition = "2021"
+description = "WASIX execution engine for deepagents — compiles to WASM via wasm-bindgen"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2.108"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde-wasm-bindgen = "0.6"
+
+# wasmer crates are native-only (they can't compile to wasm32).
+# They are used when running the engine natively (e.g. tests, CLI).
+# The wasm-pack build targets wasm32-unknown-unknown and skips these.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+wasmer = "7.0.1"
+wasmer-wasix = "0.700.1"
+virtual-fs = "0.700.1"
+futures = "0.3"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
