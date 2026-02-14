@@ -61,6 +61,5 @@ agent-os
 sandbox-workspace/
 coverage
 
-# WASIX build artifacts
-libs/wasix/src/wasm/
-libs/wasix/rust/Cargo.lock
+# Deepwasm build artifacts
+libs/deepwasm/rust/runtime/Cargo.lock

@@ -1,0 +1,42 @@
+import { DeepwasmBackend } from "../src/backend.js";
+import { BaseDemoBackend } from "./demo-backend";
+
+class FooBackend extends BaseDemoBackend {
+  constructor() {
+    super({
+      "/a.txt": "i'm a text file, aaaaaaaa.",
+      "/b.txt": "if you can read this, venmo me $10.",
+      "/c.txt": "(now with 20% more bytes)",
+    });
+    this.isReadonly = true;
+  }
+}
+
+class BarBackend extends BaseDemoBackend {
+  constructor() {
+    super({
+      "/d.txt": "i'm a text file, bbbbbbbb.",
+      "/e.txt": "the quick brown fox jumps over the lazy dog.",
+      "/f.txt": "(now with 20% more bytes)",
+    });
+    this.isReadonly = false;
+  }
+}
+
+async function main() {
+  const backend = await DeepwasmBackend.create({
+    mounts: {
+      "/foo": new FooBackend(),
+      "/bar": new BarBackend(),
+    },
+  });
+  await backend.initialize();
+  // Try writing to a file in the FooBackend (which is readonly and should fail)
+  const writeResult = await backend.execute(`echo 'should fail' > /foo/a.txt`);
+  console.log(writeResult);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
