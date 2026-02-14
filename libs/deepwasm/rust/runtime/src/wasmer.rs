@@ -18,7 +18,9 @@ use wasmer_config::package::SuggestedCompilerOptimizations;
 use wasmer_wasix::{
     bin_factory::{BinaryPackage, BinaryPackageCommand},
     os::{Tty, TtyOptions},
+    runtime::module_cache::HashedModuleData,
     runners::wasi::{WasiRunner, RuntimeOrEngine},
+    Runtime as _,
     VirtualTaskManager as _,
 };
 use web_sys::{ReadableStream, WritableStream};
@@ -212,12 +214,7 @@ pub struct Command {
 #[wasm_bindgen]
 impl Command {
     pub async fn run(&self, options: Option<SpawnOptions>) -> Result<Instance, Error> {
-        // Create a dedicated thread pool for this command, matching the
-        // upstream wasmer-js pattern. A per-command pool ensures that
-        // run_command's internal spawn_and_block_on (which uses blocking_recv)
-        // works correctly on a dedicated web worker.
-        let thread_pool = Arc::new(ThreadPool::new());
-        let runtime = Arc::new(self.runtime.with_task_manager(thread_pool.clone()));
+        let runtime = Arc::new(self.runtime.with_default_pool());
         let pkg = Arc::clone(&self.pkg);
 
         let options = options.unwrap_or_default();
@@ -228,17 +225,30 @@ impl Command {
 
         tracing::debug!(%command_name, "Starting the WASI runner");
 
+        // Get the command's WASM atom and compile it to a module
+        let cmd = pkg.get_command(&command_name)
+            .ok_or_else(|| anyhow::anyhow!("Command '{}' not found", &command_name))?;
+        let atom = cmd.atom();
+        let hashed = HashedModuleData::new(atom.as_ref());
+        let module: wasmer::Module = runtime.load_hashed_module(hashed, None).await?;
+
         let (sender, receiver) = oneshot::channel();
 
-        // Run the command on a dedicated worker thread. WasiRunner::run_command
-        // blocks until the process exits, properly connecting stdout/stderr
-        // pipes through prepare_webc_env → builder.build() → spawn_exec.
-        let pool_handle = thread_pool.clone();
-        thread_pool.task_dedicated(Box::new(move || {
-            let result = runner.run_command(&command_name, &pkg, RuntimeOrEngine::Runtime(runtime));
-            let _ = sender.send(ExitCondition::from_result(result));
-            pool_handle.close();
-        }))?;
+        // Use spawn_with_module to run on a web worker (same pattern as run.rs)
+        let tasks = runtime.task_manager().clone();
+        tasks.spawn_with_module(
+            module,
+            Box::new(move |module| {
+                let hash = ModuleHash::random();
+                let result = runner.run_wasm(
+                    RuntimeOrEngine::Runtime(runtime),
+                    &command_name,
+                    module,
+                    hash,
+                );
+                let _ = sender.send(ExitCondition::from_result(result));
+            }),
+        )?;
 
         Ok(Instance {
             stdin,
