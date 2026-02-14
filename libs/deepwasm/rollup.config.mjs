@@ -20,8 +20,6 @@ const GLOBALS = {}; // https://rollupjs.org/guide/en/#outputglobals
 const entries = [
   'src/index.ts',
   'src/node.ts',
-  'src/unpkg.ts',
-  'src/wasm-inlined.ts',
   'src/worker.js',
 ]
 

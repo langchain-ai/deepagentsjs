@@ -1,7 +1,6 @@
 {
   "name": "deepwasm",
   "version": "0.10.0",
-  "unpkg": "dist/unpkg.mjs",
   "main": "dist/index.mjs",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -30,19 +29,10 @@
       "types": "./dist/node.d.ts",
       "default": "./dist/node.mjs"
     },
-    "./unpkg": {
-      "types": "./dist/unpkg.d.ts",
-      "default": "./dist/unpkg.mjs"
-    },
     "./wasm": {
       "unwasm": "./dist/deepwasm_bg.wasm",
       "types": "./dist/wasm.d.ts",
       "default": "./dist/deepwasm_bg.wasm"
-    },
-    "./wasm-inline": {
-      "unwasm": "./dist/wasm-inlined.mjs",
-      "types": "./dist/wasm-inlined.d.ts",
-      "default": "./dist/wasm-inlined.mjs"
     },
     "./package.json": "./package.json",
     "./*": "./dist/*"
