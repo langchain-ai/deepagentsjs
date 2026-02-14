@@ -12,7 +12,7 @@ import {
   type FileUploadResponse,
 } from "deepagents";
 
-import load, { Wasmer, Directory } from "../rust/runtime/pkg/deepwasm_runtime";
+import load, { Wasmer, Directory, registerLocalPackage } from "../rust/runtime/pkg/deepwasm_runtime";
 
 import {
   DeepwasmError,
@@ -111,7 +111,13 @@ export class DeepwasmBackend extends BaseSandbox {
       "deepwasm_runtime_bg.wasm",
     );
     const wasmModule = readFileSync(wasmPath);
-    await load(wasmModule);
+    await load({ module_or_path: wasmModule });
+
+    // Register bundled coreutils package for offline dependency resolution
+    const coreutilsWebc = readFileSync(
+      path.join(thisDir, "..", "assets", "coreutils.webc"),
+    );
+    registerLocalPackage("wasmer/coreutils@1.0.19", coreutilsWebc);
 
     // Load bash from the bundled .webc file
     const bashWebc = readFileSync(

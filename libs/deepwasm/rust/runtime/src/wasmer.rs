@@ -27,7 +27,6 @@ use webc::{indexmap::IndexMap, metadata::Command as MetadataCommand};
 use crate::{
     instance::ExitCondition,
     runtime::Runtime,
-    tasks::ThreadPool,
     utils::{Error, GlobalScope},
     Instance, JsRuntime, SpawnOptions,
 };
@@ -212,10 +211,7 @@ pub struct Command {
 #[wasm_bindgen]
 impl Command {
     pub async fn run(&self, options: Option<SpawnOptions>) -> Result<Instance, Error> {
-        // We set the default pool as it may be not set
-        let thread_pool = Arc::new(ThreadPool::new());
-        let runtime = Arc::new(self.runtime.with_task_manager(thread_pool.clone()));
-        // let runtime = Arc::new(self.runtime.with_default_pool());
+        let runtime = Arc::new(self.runtime.with_default_pool());
         let pkg = Arc::clone(&self.pkg);
         let tasks = Arc::clone(runtime.task_manager());
 
@@ -234,7 +230,6 @@ impl Command {
         tasks.task_dedicated(Box::new(move || {
             let result = runner.run_command(&command_name, &pkg, RuntimeOrEngine::Runtime(runtime));
             let _ = sender.send(ExitCondition::from_result(result));
-            thread_pool.close();
         }))?;
 
         Ok(Instance {
