@@ -1,5 +1,5 @@
 [package]
-name = "deepagent-wasix-engine"
+name = "subagent-wasix-engine"
 version = "0.1.0"
 edition = "2021"
 description = "WASIX execution engine for deepagents — compiles to WASM via wasm-bindgen"

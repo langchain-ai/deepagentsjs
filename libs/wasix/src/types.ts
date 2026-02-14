@@ -5,7 +5,7 @@ import {
 } from "deepagents";
 
 /**
- * An RPC request written by the deepagent CLI inside the WASIX sandbox.
+ * An RPC request written by the subagent CLI inside the WASIX sandbox.
  * Files are written to `/.rpc/requests/<id>.json`.
  */
 export interface SpawnRequest {

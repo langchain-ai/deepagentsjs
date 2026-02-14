@@ -35,7 +35,7 @@ fn get_timestamp() -> String {
 }
 
 fn print_usage() {
-    eprintln!("Usage: deepagent <command> [args...]");
+    eprintln!("Usage: subagent <command> [args...]");
     eprintln!();
     eprintln!("Commands:");
     eprintln!("  spawn <task_description>    Spawn a subagent with the given task");

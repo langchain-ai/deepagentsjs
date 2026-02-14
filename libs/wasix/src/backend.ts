@@ -23,7 +23,7 @@ type WasmerPkg = Awaited<
 type WasmerDirectory = import("@wasmer/sdk/node").Directory;
 
 /**
- * WASIX execution backend for deepagents.
+ * WASIX execution backend.
  *
  * Provides an in-process sandbox using a WASM-based execution engine.
  * File operations use an in-memory virtual filesystem; command execution

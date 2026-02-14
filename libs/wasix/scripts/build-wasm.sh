@@ -29,7 +29,7 @@ wasm-pack build \
 # Remove it since we want the wasm output to be version-controlled.
 rm -f "$OUT_DIR/.gitignore"
 
-# Build deepagent CLI as a standalone WASI binary.
+# Build subagent CLI as a standalone WASI binary.
 # This targets wasm32-wasip1 (the standard WASI target) which is compatible with WASIX runtimes.
 WASI_TARGET="wasm32-wasip1"
 
@@ -38,19 +38,19 @@ if ! rustup target list --installed | grep -q "$WASI_TARGET"; then
   rustup target add "$WASI_TARGET"
 fi
 
-echo "Building deepagent-cli for $WASI_TARGET..."
+echo "Building subagent-cli for $WASI_TARGET..."
 cargo build \
   --release \
   --target "$WASI_TARGET" \
-  --manifest-path "$RUST_DIR/deepagent-cli/Cargo.toml"
+  --manifest-path "$RUST_DIR/subagent-cli/Cargo.toml"
 
 # Copy the WASM binary to the output directory
-CLI_WASM="$RUST_DIR/target/$WASI_TARGET/release/deepagent.wasm"
+CLI_WASM="$RUST_DIR/target/$WASI_TARGET/release/subagent.wasm"
 if [ -f "$CLI_WASM" ]; then
-  cp "$CLI_WASM" "$OUT_DIR/deepagent.wasm"
-  echo "Copied deepagent.wasm to $OUT_DIR"
+  cp "$CLI_WASM" "$OUT_DIR/subagent.wasm"
+  echo "Copied subagent.wasm to $OUT_DIR"
 else
-  echo "Warning: deepagent.wasm not found at $CLI_WASM" >&2
+  echo "Warning: subagent.wasm not found at $CLI_WASM" >&2
 fi
 
 echo "Build complete. Output in $OUT_DIR"

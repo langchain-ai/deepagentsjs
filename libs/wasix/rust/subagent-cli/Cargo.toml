@@ -1,11 +1,11 @@
 [package]
-name = "deepagent-cli"
+name = "subagent-cli"
 version = "0.1.0"
 edition = "2021"
-description = "CLI tool for the deepagent WASIX execution engine"
+description = "CLI tool for the subagent WASIX execution engine"
 
 [[bin]]
-name = "deepagent"
+name = "subagent"
 path = "src/main.rs"
 
 [dependencies]
