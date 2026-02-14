@@ -94,33 +94,22 @@ export class DeepwasmBackend extends BaseSandbox {
       );
     }
 
-    void this.#options;
+    await init({});
 
+    // Load bash from the bundled .webc file
+    const thisDir = path.dirname(fileURLToPath(import.meta.url));
+    const bashWebc = readFileSync(
+      path.join(thisDir, "..", "assets", "bash.webc"),
+    );
+    this.#wasmerPkg = await Wasmer.fromFile(bashWebc);
+
+    // Load the subagent WASM binary (optional — if missing, subagent commands won't work)
+    const subagentPath =
+      this.#options.subagentWasmPath ??
+      path.join(thisDir, "..", "assets", "subagent.wasm");
     try {
-      await init({});
-
-      // Load bash from the bundled .webc file
-      const thisDir = path.dirname(fileURLToPath(import.meta.url));
-      const bashWebc = readFileSync(
-        path.join(thisDir, "..", "assets", "bash.webc"),
-      );
-      this.#wasmerPkg = await Wasmer.fromFile(bashWebc);
-
-      // Load the subagent WASM binary
-      const subagentPath =
-        this.#options.subagentWasmPath ??
-        path.join(thisDir, "..", "assets", "subagent.wasm");
-      try {
-        this.#subagentBinary = readFileSync(subagentPath);
-      } catch {
-        // subagent binary is optional — if missing, subagent commands won't work
-        this.#subagentBinary = null;
-      }
+      this.#subagentBinary = readFileSync(subagentPath);
     } catch {
-      // If the runtime cannot load, mark as initialized but without
-      // execution capability. execute() will throw; uploadFiles/downloadFiles
-      // still work against the in-memory FS.
-      this.#wasmerPkg = null;
       this.#subagentBinary = null;
     }
 
