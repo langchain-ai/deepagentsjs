@@ -225,7 +225,7 @@ export class WasixBackend extends BaseSandbox {
 
     // Start bash WITHOUT stdin — this gives us the WritableStream
     const instance = await entrypoint.run({
-      args: [],
+      args: ["-i"],
       mount: mountRecord,
       cwd,
       // No stdin property — leaves instance.stdin as a WritableStream
