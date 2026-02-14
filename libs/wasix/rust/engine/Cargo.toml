@@ -12,6 +12,7 @@ wasm-bindgen = "0.2.108"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde-wasm-bindgen = "0.6"
+js-sys = "0.3"
 
 # wasmer crates are native-only (they can't compile to wasm32).
 # They are used when running the engine natively (e.g. tests, CLI).
@@ -19,8 +20,14 @@ serde-wasm-bindgen = "0.6"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 wasmer = "7.0.1"
 wasmer-wasix = "0.700.1"
+wasmer-types = "7.0.1"
 virtual-fs = "0.700.1"
+virtual-mio = "0.700.1"
 futures = "0.3"
+tokio = { version = "1", features = ["rt", "io-util"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "io-util", "macros"] }

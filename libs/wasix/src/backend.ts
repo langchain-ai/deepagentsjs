@@ -1,3 +1,4 @@
+/* eslint-disable no-instanceof/no-instanceof */
 import crypto from "node:crypto";
 
 import {
@@ -9,13 +10,21 @@ import {
 } from "deepagents";
 
 import { WasixSandboxError, type WasixBackendOptions } from "./types.js";
+import {
+  initEngine,
+  createRuntime,
+  executeCommand,
+  isEngineInitialized,
+  type WasmRuntimeHandle,
+} from "./engine.js";
+import { createFsCallbacks } from "./fs-callbacks.js";
 
 /**
  * WASIX execution backend for deepagents.
  *
  * Provides an in-process sandbox using a WASM-based execution engine.
  * File operations use an in-memory virtual filesystem; command execution
- * delegates to the Rust WASM engine (stubbed until the engine is built).
+ * delegates to the Rust WASM engine.
  *
  * Use the static `WasixBackend.create()` factory method to create instances.
  */
@@ -28,6 +37,9 @@ export class WasixBackend extends BaseSandbox {
 
   /** Track directories for path validation */
   readonly #dirs = new Set<string>(["/", "/workspace"]);
+
+  /** WASM runtime handle (null when engine is not available) */
+  #runtimeHandle: WasmRuntimeHandle | null = null;
 
   #initialized = false;
 
@@ -57,7 +69,7 @@ export class WasixBackend extends BaseSandbox {
 
   /**
    * Initialize the WASIX backend.
-   * Loads requested packages (stubbed — will integrate with Rust WASM engine).
+   * Loads the WASM engine and creates a runtime with filesystem callbacks.
    */
   async initialize(): Promise<void> {
     if (this.#initialized) {
@@ -66,26 +78,53 @@ export class WasixBackend extends BaseSandbox {
         "ALREADY_INITIALIZED",
       );
     }
-    // TODO: Initialize WASM engine and load packages
-    // Packages requested: this.#options.packages, this.#options.customPackages, this.#options.localPackages
+
+    // Packages will be used when the full wasmer-wasix runtime is integrated
     void this.#options;
+
+    try {
+      await initEngine();
+      const callbacks = createFsCallbacks(this.#fs, this.#dirs);
+      this.#runtimeHandle = createRuntime(callbacks);
+    } catch (err) {
+      // If WASM isn't available, proceed without it — execute() will
+      // return a stub response. This allows uploadFiles/downloadFiles
+      // to work even without the WASM engine.
+      if (
+        err instanceof WasixSandboxError &&
+        err.code === "WASM_ENGINE_NOT_INITIALIZED"
+      ) {
+        this.#runtimeHandle = null;
+      } else {
+        throw err;
+      }
+    }
+
     this.#initialized = true;
   }
 
   /**
    * Execute a command in the WASIX sandbox.
    *
-   * Currently returns a stub response. Will delegate to the Rust WASM engine
-   * once the wasm-bindgen bindings are available.
+   * Delegates to the Rust WASM engine when available, otherwise returns a
+   * stub response indicating the engine is not loaded.
    */
   async execute(command: string): Promise<ExecuteResponse> {
     this.#ensureInitialized();
 
-    // Stub: WASM engine is not yet wired up
+    if (!isEngineInitialized() || this.#runtimeHandle === null) {
+      return {
+        output: `[WASIX stub] Command received: ${command}\nWASM engine not yet initialized.`,
+        exitCode: 1,
+        truncated: false,
+      };
+    }
+
+    const result = executeCommand(command);
     return {
-      output: `[WASIX stub] Command received: ${command}\nWASM engine not yet initialized.`,
-      exitCode: 1,
-      truncated: false,
+      output: result.output,
+      exitCode: result.exit_code,
+      truncated: result.truncated,
     };
   }
 
@@ -152,6 +191,14 @@ export class WasixBackend extends BaseSandbox {
    * Release resources. Safe to call multiple times.
    */
   close(): void {
+    if (this.#runtimeHandle !== null) {
+      try {
+        this.#runtimeHandle.free();
+      } catch {
+        // Ignore errors during cleanup (handle may already be freed)
+      }
+      this.#runtimeHandle = null;
+    }
     this.#fs.clear();
     this.#dirs.clear();
     this.#initialized = false;

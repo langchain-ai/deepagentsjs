@@ -3,6 +3,18 @@ use wasm_bindgen::prelude::*;
 
 mod fs;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod runtime;
+
+// Re-export filesystem types at the crate root
+pub use fs::{DirEntry, FsMetadata};
+
+#[cfg(target_arch = "wasm32")]
+pub use fs::ProxyFileSystem;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub use fs::{FsCallbacks, OpenFlags, ProxyFileSystem};
+
 /// Result of executing a command in the WASIX runtime.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecuteResult {
@@ -15,19 +27,44 @@ pub struct ExecuteResult {
 #[wasm_bindgen]
 pub struct RuntimeHandle {
     id: u64,
+    // On wasm32, we hold onto the ProxyFileSystem so it lives as long as the runtime.
+    // On native, the ProxyFileSystem is stored differently (not wasm_bindgen).
+    #[cfg(target_arch = "wasm32")]
+    _fs: Option<fs::ProxyFileSystem>,
 }
 
 static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
-/// Create a new WASIX runtime instance and return a handle to it.
+/// Create a new WASIX runtime instance with a filesystem proxy.
 ///
-/// In the current skeleton this allocates a handle ID but does not
-/// initialise a real runtime. The actual wasmer-wasix integration
-/// will be added in Wave 2.
+/// The `fs_callbacks` parameter is a JS object with callback functions
+/// for filesystem operations. See `ProxyFileSystem::new` for the expected
+/// callback interface.
+///
+/// In the current skeleton this allocates a handle ID and stores the
+/// ProxyFileSystem but does not initialise a real wasmer-wasix runtime.
 #[wasm_bindgen]
-pub fn create_runtime() -> RuntimeHandle {
+pub fn create_runtime(fs_callbacks: JsValue) -> Result<RuntimeHandle, JsError> {
     let id = NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    RuntimeHandle { id }
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        let proxy_fs = if fs_callbacks.is_undefined() || fs_callbacks.is_null() {
+            None
+        } else {
+            Some(fs::ProxyFileSystem::new(fs_callbacks)?)
+        };
+        Ok(RuntimeHandle {
+            id,
+            _fs: proxy_fs,
+        })
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = fs_callbacks; // Not used on native — tests construct ProxyFileSystem directly
+        Ok(RuntimeHandle { id })
+    }
 }
 
 #[wasm_bindgen]
@@ -59,12 +96,6 @@ pub fn execute(command: &str) -> JsValue {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_create_runtime() {
-        let handle = create_runtime();
-        assert!(handle.id > 0);
-    }
 
     #[test]
     fn test_execute_result_serialization() {

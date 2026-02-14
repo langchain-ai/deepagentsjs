@@ -8,5 +8,5 @@ export default defineConfig({
   clean: true,
   treeshake: true,
   splitting: false,
-  external: ["deepagents", "@wasmer/sdk"],
+  external: ["deepagents", "@wasmer/sdk", /\.wasm$/, /\/wasm\//],
 });
