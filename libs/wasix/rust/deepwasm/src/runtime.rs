@@ -127,6 +127,11 @@ impl Runtime {
         }
     }
 
+    /// Stub: networking gateway is not supported in this fork.
+    pub fn set_network_gateway(&mut self, _url: String) {
+        tracing::warn!("Network gateway not supported in this build, ignoring");
+    }
+
     /// Set the registry that packages will be fetched from.
     pub fn set_registry(&mut self, url: &str, token: Option<&str>) -> Result<(), Error> {
         let url = url.parse().map_err(Error::from)?;

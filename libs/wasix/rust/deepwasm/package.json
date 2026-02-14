@@ -1,5 +1,5 @@
 {
-  "name": "@wasmer/sdk",
+  "name": "deepwasm",
   "version": "0.10.0",
   "unpkg": "dist/unpkg.mjs",
   "main": "dist/index.mjs",

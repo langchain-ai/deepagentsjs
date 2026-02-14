@@ -1,5 +1,5 @@
 [package]
-name = "wasmer-js"
+name = "deepwasm"
 version = "0.0.0"
 authors = ["Syrus Akbary <syrus@wasmer.io>"]
 edition = "2021"

@@ -1,4 +1,4 @@
 [workspace]
 resolver = "2"
 members = ["engine", "subagent-cli"]
-exclude = ["deepwasm", "wasmer-js"]
+exclude = ["deepwasm"]
