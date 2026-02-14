@@ -10,21 +10,20 @@ import {
 } from "deepagents";
 
 import { WasixSandboxError, type WasixBackendOptions } from "./types.js";
-import {
-  initEngine,
-  createRuntime,
-  executeCommand,
-  isEngineInitialized,
-  type WasmRuntimeHandle,
-} from "./engine.js";
-import { createFsCallbacks } from "./fs-callbacks.js";
+
+// Lazily-loaded @wasmer/sdk bindings (Node.js entry point)
+type WasmerSdk = typeof import("@wasmer/sdk/node");
+type WasmerPkg = Awaited<
+  ReturnType<(typeof import("@wasmer/sdk/node"))["Wasmer"]["fromRegistry"]>
+>;
+type WasmerDirectory = import("@wasmer/sdk/node").Directory;
 
 /**
  * WASIX execution backend for deepagents.
  *
  * Provides an in-process sandbox using a WASM-based execution engine.
  * File operations use an in-memory virtual filesystem; command execution
- * delegates to the Rust WASM engine.
+ * delegates to the `@wasmer/sdk` WASIX runtime (sharrattj/bash).
  *
  * Use the static `WasixBackend.create()` factory method to create instances.
  */
@@ -32,14 +31,17 @@ export class WasixBackend extends BaseSandbox {
   readonly #id: string;
   readonly #options: WasixBackendOptions;
 
-  /** In-memory virtual filesystem (stub for direct memory FS) */
+  /** In-memory virtual filesystem */
   readonly #fs = new Map<string, Uint8Array>();
 
   /** Track directories for path validation */
   readonly #dirs = new Set<string>(["/", "/workspace"]);
 
-  /** WASM runtime handle (null when engine is not available) */
-  #runtimeHandle: WasmRuntimeHandle | null = null;
+  /** Lazily-loaded @wasmer/sdk module */
+  #sdk: WasmerSdk | null = null;
+
+  /** Loaded bash package from the Wasmer registry */
+  #wasmerPkg: WasmerPkg | null = null;
 
   #initialized = false;
 
@@ -69,7 +71,7 @@ export class WasixBackend extends BaseSandbox {
 
   /**
    * Initialize the WASIX backend.
-   * Loads the WASM engine and creates a runtime with filesystem callbacks.
+   * Loads the @wasmer/sdk runtime and fetches the bash package from the registry.
    */
   async initialize(): Promise<void> {
     if (this.#initialized) {
@@ -79,25 +81,18 @@ export class WasixBackend extends BaseSandbox {
       );
     }
 
-    // Packages will be used when the full wasmer-wasix runtime is integrated
     void this.#options;
 
     try {
-      await initEngine();
-      const callbacks = createFsCallbacks(this.#fs, this.#dirs);
-      this.#runtimeHandle = createRuntime(callbacks);
-    } catch (err) {
-      // If WASM isn't available, proceed without it — execute() will
-      // return a stub response. This allows uploadFiles/downloadFiles
-      // to work even without the WASM engine.
-      if (
-        err instanceof WasixSandboxError &&
-        err.code === "WASM_ENGINE_NOT_INITIALIZED"
-      ) {
-        this.#runtimeHandle = null;
-      } else {
-        throw err;
-      }
+      this.#sdk = await import("@wasmer/sdk/node");
+      await this.#sdk.init();
+      this.#wasmerPkg = await this.#sdk.Wasmer.fromRegistry("sharrattj/bash");
+    } catch {
+      // If the SDK cannot load (e.g. missing native dependencies, no network),
+      // mark as initialized but without execution capability. execute() will
+      // throw; uploadFiles/downloadFiles still work against the in-memory FS.
+      this.#sdk = null;
+      this.#wasmerPkg = null;
     }
 
     this.#initialized = true;
@@ -106,25 +101,62 @@ export class WasixBackend extends BaseSandbox {
   /**
    * Execute a command in the WASIX sandbox.
    *
-   * Delegates to the Rust WASM engine when available, otherwise returns a
-   * stub response indicating the engine is not loaded.
+   * Uses the @wasmer/sdk to run bash with the given command.
+   * Files from the in-memory FS are mounted into the WASIX instance,
+   * and any file changes are synced back after execution.
    */
   async execute(command: string): Promise<ExecuteResponse> {
     this.#ensureInitialized();
 
-    if (!isEngineInitialized() || this.#runtimeHandle === null) {
-      return {
-        output: `[WASIX stub] Command received: ${command}\nWASM engine not yet initialized.`,
-        exitCode: 1,
-        truncated: false,
-      };
+    if (this.#sdk === null || this.#wasmerPkg === null) {
+      throw new WasixSandboxError(
+        "WASIX runtime not available. @wasmer/sdk failed to initialize.",
+        "WASM_ENGINE_NOT_INITIALIZED",
+      );
     }
 
-    const result = executeCommand(command);
+    const entrypoint = this.#wasmerPkg.entrypoint;
+    if (!entrypoint) {
+      throw new WasixSandboxError(
+        "Bash package has no entrypoint.",
+        "WASM_ENGINE_FAILED",
+      );
+    }
+
+    // Build a Directory from the in-memory FS
+    const dir = new this.#sdk.Directory();
+    for (const [path, data] of this.#fs) {
+      // Ensure parent directories exist in the Directory
+      const parts = path.split("/").filter(Boolean);
+      for (let i = 1; i < parts.length; i++) {
+        const parentDir = "/" + parts.slice(0, i).join("/");
+        try {
+          await dir.createDir(parentDir);
+        } catch {
+          // Directory may already exist — ignore
+        }
+      }
+      await dir.writeFile(path, data);
+    }
+
+    // Run bash -c <command> with the directory mounted at /work
+    // Provide empty stdin to prevent bash from waiting for input.
+    const instance = await entrypoint.run({
+      args: ["-c", command],
+      mount: { "/work": dir },
+      cwd: "/work",
+      stdin: "",
+    });
+
+    const output = await instance.wait();
+
+    // Sync files back from the Directory to the in-memory Map
+    await this.#syncDirectoryToFs(dir, "/");
+
     return {
-      output: result.output,
-      exitCode: result.exit_code,
-      truncated: result.truncated,
+      output: output.stdout + output.stderr,
+      exitCode: output.code,
+      truncated: false,
     };
   }
 
@@ -191,20 +223,44 @@ export class WasixBackend extends BaseSandbox {
    * Release resources. Safe to call multiple times.
    */
   close(): void {
-    if (this.#runtimeHandle !== null) {
+    if (this.#wasmerPkg !== null) {
       try {
-        this.#runtimeHandle.free();
+        this.#wasmerPkg.free();
       } catch {
         // Ignore errors during cleanup (handle may already be freed)
       }
-      this.#runtimeHandle = null;
+      this.#wasmerPkg = null;
     }
+    this.#sdk = null;
     this.#fs.clear();
     this.#dirs.clear();
     this.#initialized = false;
   }
 
   // --- Private helpers ---
+
+  /**
+   * Recursively walk a @wasmer/sdk Directory and sync all files back into
+   * the in-memory Map (and directories into the Set).
+   */
+  async #syncDirectoryToFs(
+    dir: WasmerDirectory,
+    prefix: string,
+  ): Promise<void> {
+    const entries = await dir.readDir(prefix);
+    for (const entry of entries) {
+      const fullPath =
+        prefix === "/" ? `/${entry.name}` : `${prefix}/${entry.name}`;
+      if (entry.type === "dir") {
+        this.#dirs.add(fullPath);
+        await this.#syncDirectoryToFs(dir, fullPath);
+      } else if (entry.type === "file") {
+        const data = await dir.readFile(fullPath);
+        this.#ensureParentDirs(fullPath);
+        this.#fs.set(fullPath, data);
+      }
+    }
+  }
 
   #ensureInitialized(): void {
     if (!this.#initialized) {

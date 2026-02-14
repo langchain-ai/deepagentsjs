@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { WasixBackend } from "./backend.js";
+import { WasixSandboxError } from "./types.js";
 import { createFsCallbacks, type FsCallbacks } from "./fs-callbacks.js";
 
 describe("WasixBackend", () => {
@@ -94,15 +95,22 @@ describe("WasixBackend", () => {
     });
   });
 
-  describe("execute (stub path)", () => {
-    it("returns a stub response when WASM is not available", async () => {
+  describe("execute", () => {
+    it("runs a command when SDK is available, or throws when not", async () => {
       backend = await WasixBackend.create();
-      const result = await backend.execute("echo hello");
-      expect(result.output).toContain("echo hello");
-      expect(result.output).toContain("WASIX stub");
-      expect(result.exitCode).toBe(1);
-      expect(result.truncated).toBe(false);
-    });
+      try {
+        const result = await backend.execute("echo hello");
+        // SDK initialized — verify we got real output
+        expect(result.output).toContain("hello");
+        expect(result.truncated).toBe(false);
+      } catch (err) {
+        // SDK did not initialize — verify the error
+        expect(err).toBeInstanceOf(WasixSandboxError);
+        expect((err as WasixSandboxError).code).toBe(
+          "WASM_ENGINE_NOT_INITIALIZED",
+        );
+      }
+    }, 30000);
   });
 
   describe("close", () => {
