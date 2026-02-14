@@ -12,6 +12,7 @@ import {
   WasixSandboxError,
   type WasixBackendOptions,
   type WasixExecuteResult,
+  type WasixShellSession,
   type SpawnRequest,
 } from "./types.js";
 
@@ -165,6 +166,99 @@ export class WasixBackend extends BaseSandbox {
       exitCode: output.code,
       truncated: false,
       spawnRequests,
+    };
+  }
+
+  /**
+   * Start an interactive shell session with streaming I/O.
+   *
+   * Unlike `execute()` which runs a batch command, `shell()` starts a
+   * long-lived bash process and returns stream handles for stdin/stdout/stderr.
+   * Files from the in-memory FS are mounted, and changes are synced back
+   * when the session ends (via `wait()`).
+   */
+  async shell(): Promise<WasixShellSession> {
+    this.#ensureInitialized();
+
+    if (this.#sdk === null || this.#wasmerPkg === null) {
+      throw new WasixSandboxError(
+        "WASIX runtime not available. @wasmer/sdk failed to initialize.",
+        "WASM_ENGINE_NOT_INITIALIZED",
+      );
+    }
+
+    const entrypoint = this.#wasmerPkg.entrypoint;
+    if (!entrypoint) {
+      throw new WasixSandboxError(
+        "Bash package has no entrypoint.",
+        "WASM_ENGINE_FAILED",
+      );
+    }
+
+    // Build a Directory from the in-memory FS (same as execute())
+    const dir = new this.#sdk.Directory();
+    for (const [path, data] of this.#fs) {
+      const parts = path.split("/").filter(Boolean);
+      for (let i = 1; i < parts.length; i++) {
+        const parentDir = "/" + parts.slice(0, i).join("/");
+        try {
+          await dir.createDir(parentDir);
+        } catch {
+          // Directory may already exist — ignore
+        }
+      }
+      await dir.writeFile(path, data);
+    }
+
+    // Start bash WITHOUT stdin — this gives us the WritableStream
+    const instance = await entrypoint.run({
+      args: [],
+      mount: { "/work": dir },
+      cwd: "/work",
+      // No stdin property — leaves instance.stdin as a WritableStream
+    });
+
+    if (!instance.stdin) {
+      throw new WasixSandboxError(
+        "Failed to get stdin stream for interactive shell.",
+        "WASM_ENGINE_FAILED",
+      );
+    }
+
+    const stdinStream = instance.stdin;
+    const encoder = new TextEncoder();
+
+    // Capture `this` for use in the session closure
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const backend = this;
+
+    return {
+      stdin: stdinStream,
+      stdout: instance.stdout,
+      stderr: instance.stderr,
+
+      async wait() {
+        const output = await instance.wait();
+        // Sync files back from the Directory to the in-memory FS
+        await backend.#syncDirectoryToFs(dir, "/");
+        return { exitCode: output.code };
+      },
+
+      async writeLine(line: string) {
+        const writer = stdinStream.getWriter();
+        await writer.write(encoder.encode(line + "\n"));
+        writer.releaseLock();
+      },
+
+      kill() {
+        try {
+          // close() returns a Promise — catch async rejection too
+          const p = stdinStream.close();
+          p.catch(() => {});
+        } catch {
+          // May already be closed
+        }
+      },
     };
   }
 

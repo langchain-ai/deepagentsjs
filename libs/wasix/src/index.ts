@@ -3,6 +3,7 @@ export {
   WasixSandboxError,
   type WasixBackendOptions,
   type WasixSandboxErrorCode,
+  type WasixShellSession,
   type SpawnRequest,
   type WasixExecuteResult,
 } from "./types.js";

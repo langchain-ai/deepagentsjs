@@ -5,6 +5,25 @@ import {
 } from "deepagents";
 
 /**
+ * An interactive shell session with streaming I/O.
+ * Created via `WasixBackend.shell()`.
+ */
+export interface WasixShellSession {
+  /** Writable stream for sending input to the shell */
+  readonly stdin: WritableStream;
+  /** Readable stream of shell stdout */
+  readonly stdout: ReadableStream;
+  /** Readable stream of shell stderr */
+  readonly stderr: ReadableStream;
+  /** Wait for the shell to exit. Returns the exit code. */
+  wait(): Promise<{ exitCode: number }>;
+  /** Convenience: write a line to stdin (appends newline) */
+  writeLine(line: string): Promise<void>;
+  /** Kill the shell process */
+  kill(): void;
+}
+
+/**
  * An RPC request written by the subagent CLI inside the WASIX sandbox.
  * Files are written to `/.rpc/requests/<id>.json`.
  */

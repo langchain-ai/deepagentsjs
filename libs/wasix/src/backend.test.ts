@@ -292,6 +292,74 @@ describe("WasixBackend", () => {
     }, 30000);
   });
 
+  describe("shell", () => {
+    it("throws if not initialized", async () => {
+      // Access the constructor indirectly by creating then closing
+      backend = await WasixBackend.create();
+      backend.close();
+      await expect(backend.shell()).rejects.toThrow(WasixSandboxError);
+      await expect(backend.shell()).rejects.toThrow("not initialized");
+      backend = undefined;
+    });
+
+    it("starts a shell or throws when SDK not available", async () => {
+      backend = await WasixBackend.create();
+      try {
+        const session = await backend.shell();
+        // SDK initialized — verify we got a session with all expected properties
+        expect(session.stdin).toBeDefined();
+        expect(session.stdout).toBeDefined();
+        expect(session.stderr).toBeDefined();
+        expect(typeof session.wait).toBe("function");
+        expect(typeof session.writeLine).toBe("function");
+        expect(typeof session.kill).toBe("function");
+
+        // Clean up the session
+        session.kill();
+      } catch (err) {
+        // SDK did not initialize — verify the error
+        expect(err).toBeInstanceOf(WasixSandboxError);
+        expect((err as WasixSandboxError).code).toBe(
+          "WASM_ENGINE_NOT_INITIALIZED",
+        );
+      }
+    }, 30000);
+
+    it("session has stdin as WritableStream", async () => {
+      backend = await WasixBackend.create();
+      try {
+        const session = await backend.shell();
+        expect(session.stdin).toBeInstanceOf(WritableStream);
+        session.kill();
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
+      }
+    }, 30000);
+
+    it("session has stdout and stderr as ReadableStream", async () => {
+      backend = await WasixBackend.create();
+      try {
+        const session = await backend.shell();
+        expect(session.stdout).toBeInstanceOf(ReadableStream);
+        expect(session.stderr).toBeInstanceOf(ReadableStream);
+        session.kill();
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
+      }
+    }, 30000);
+
+    it("kill() does not throw when called multiple times", async () => {
+      backend = await WasixBackend.create();
+      try {
+        const session = await backend.shell();
+        expect(() => session.kill()).not.toThrow();
+        expect(() => session.kill()).not.toThrow();
+      } catch (err) {
+        expect(err).toBeInstanceOf(WasixSandboxError);
+      }
+    }, 30000);
+  });
+
   describe("close", () => {
     it("does not throw", async () => {
       backend = await WasixBackend.create();
