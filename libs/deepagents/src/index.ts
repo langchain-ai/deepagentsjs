@@ -40,6 +40,7 @@ export {
   createFilesystemMiddleware,
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
+  createSummarizationMiddleware,
   createMemoryMiddleware,
   // Skills middleware - matches Python's SkillsMiddleware interface
   createSkillsMiddleware,
