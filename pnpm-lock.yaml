@@ -90,8 +90,8 @@ importers:
         specifier: workspace:*
         version: link:../libs/deepagents
       langchain:
-        specifier: ^1.2.23
-        version: 1.2.23(@langchain/core@1.1.24(openai@6.21.0(ws@8.19.0)(zod@4.3.6)))(openai@6.21.0(ws@8.19.0)(zod@4.3.6))
+        specifier: ^1.2.24
+        version: 1.2.24(@langchain/core@1.1.24(openai@6.21.0(ws@8.19.0)(zod@4.3.6)))(openai@6.21.0(ws@8.19.0)(zod@4.3.6))
       uuid:
         specifier: ^13.0.0
         version: 13.0.0
@@ -168,8 +168,8 @@ importers:
         specifier: ^3.3.3
         version: 3.3.3
       langchain:
-        specifier: ^1.2.23
-        version: 1.2.23(@langchain/core@1.1.24(openai@6.21.0(ws@8.19.0)(zod@4.3.6)))(openai@6.21.0(ws@8.19.0)(zod@4.3.6))
+        specifier: ^1.2.24
+        version: 1.2.24(@langchain/core@1.1.24(openai@6.21.0(ws@8.19.0)(zod@4.3.6)))(openai@6.21.0(ws@8.19.0)(zod@4.3.6))
       micromatch:
         specifier: ^4.0.8
         version: 4.0.8
@@ -2611,8 +2611,8 @@ packages:
   keyv@4.5.4:
     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
 
-  langchain@1.2.23:
-    resolution: {integrity: sha512-nCQZj3goJIF5nggQ+wN2yDMizl2iwVrOZkeHvuCw4iS4SaINt2EPtMbzUvgH18PhrOrr2B2YNjBm0Lv5j4puMQ==}
+  langchain@1.2.24:
+    resolution: {integrity: sha512-NpaOmDZ4dP16sLkY+Y49Q9mrV2fdTy81t+yTw7f3K7/zZtvuQk6IH/bIzfy3bdOD8TERethvR2mOmgueRDbZBw==}
     engines: {node: '>=20'}
     peerDependencies:
       '@langchain/core': ^1.1.24
@@ -6276,7 +6276,7 @@ snapshots:
     dependencies:
       json-buffer: 3.0.1
 
-  langchain@1.2.23(@langchain/core@1.1.24(openai@6.21.0(ws@8.19.0)(zod@4.3.6)))(openai@6.21.0(ws@8.19.0)(zod@4.3.6)):
+  langchain@1.2.24(@langchain/core@1.1.24(openai@6.21.0(ws@8.19.0)(zod@4.3.6)))(openai@6.21.0(ws@8.19.0)(zod@4.3.6)):
     dependencies:
       '@langchain/core': 1.1.24(openai@6.21.0(ws@8.19.0)(zod@4.3.6))
       '@langchain/langgraph': 1.1.4(@langchain/core@1.1.24(openai@6.21.0(ws@8.19.0)(zod@4.3.6)))(zod@4.3.6)
