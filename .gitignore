@@ -50,6 +50,9 @@ credentials.json
 
 **/.claude/settings.local.json
 
+# Rust
+**/target
+
 # Agent OS
 agent-os
 .claude
@@ -57,3 +60,6 @@ agent-os
 # Sandbox workspace directory - created at runtime
 sandbox-workspace/
 coverage
+
+# Deepwasm build artifacts
+libs/deepbash/rust/runtime/Cargo.lock

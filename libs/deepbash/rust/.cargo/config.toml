@@ -1,0 +1,5 @@
+# Cargo configuration for the WASIX engine workspace
+
+# Optimize wasm builds for size
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "opt-level=s"]
