@@ -374,7 +374,7 @@ describe("createSummarizationMiddleware", () => {
       expect(writtenContent[0]).toContain("Message 0");
     });
 
-    it("should pass through if backend write fails", async () => {
+    it("should still summarize if backend write fails (matching Python behavior)", async () => {
       const mockBackend = createMockBackend({ writeError: "Write failed" });
 
       const middleware = createSummarizationMiddleware({
@@ -389,11 +389,18 @@ describe("createSummarizationMiddleware", () => {
         (_, i) => new HumanMessage({ content: `Message ${i}` }),
       );
 
-      const { result } = await callWrapModelCall(middleware, { messages });
+      const { result, capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
 
-      // Should pass through (no Command returned) if offloading fails
-      expect(AIMessage.isInstance(result)).toBe(true);
-      expect(isCommand(result)).toBe(false);
+      // Should still summarize even if offloading fails (to prevent context overflow).
+      // This matches the Python implementation which warns but continues.
+      expect(isCommand(result)).toBe(true);
+      // The handler should still be called with summarized messages
+      expect(capturedRequest).not.toBeNull();
+      // First message should be the summary
+      expect(HumanMessage.isInstance(capturedRequest!.messages[0])).toBe(true);
+      expect(capturedRequest!.messages[0].content).toContain("summary");
     });
   });
 

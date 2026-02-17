@@ -48,17 +48,21 @@ import {
   countTokensApproximately,
   HumanMessage,
   AIMessage,
+  SystemMessage,
   BaseMessage,
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
 import { getBufferString } from "@langchain/core/messages";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import type { ClientTool, ServerTool } from "@langchain/core/tools";
 import { initChatModel } from "langchain/chat_models/universal";
 import { Command } from "@langchain/langgraph";
 
 import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
+
+const LOG_PREFIX = "[SummarizationMiddleware]";
 
 // Re-export the base summarization middleware from langchain for users who don't need backend offloading
 export { summarizationMiddleware } from "langchain";
@@ -455,13 +459,37 @@ export function createSummarizationMiddleware(
   }
 
   /**
+   * Count tokens including system message and tools, matching Python's approach.
+   * This gives a more accurate picture of what actually gets sent to the model.
+   */
+  function countTotalTokens(
+    messages: BaseMessage[],
+    systemMessage?: SystemMessage | unknown,
+    tools?: (ServerTool | ClientTool)[] | unknown[],
+  ): number {
+    const countedMessages: BaseMessage[] =
+      systemMessage && SystemMessage.isInstance(systemMessage)
+        ? [systemMessage as SystemMessage, ...messages]
+        : [...messages];
+
+    const toolsArray =
+      tools && Array.isArray(tools) && tools.length > 0
+        ? (tools as Array<Record<string, unknown>>)
+        : null;
+
+    return countTokensApproximately(countedMessages, toolsArray);
+  }
+
+  /**
    * Truncate large tool arguments in old messages.
    */
   function truncateArgs(
     messages: BaseMessage[],
     maxInputTokens?: number,
+    systemMessage?: SystemMessage | unknown,
+    tools?: (ServerTool | ClientTool)[] | unknown[],
   ): { messages: BaseMessage[]; modified: boolean } {
-    const totalTokens = countTokensApproximately(messages);
+    const totalTokens = countTotalTokens(messages, systemMessage, tools);
     if (!shouldTruncateArgs(messages, totalTokens, maxInputTokens)) {
       return { messages, modified: false };
     }
@@ -676,6 +704,87 @@ ${summary}
     return result;
   }
 
+  /**
+   * Perform the summarization flow: offload, generate summary, return Command.
+   * Extracted so it can be called both from the normal path and the overflow fallback.
+   */
+  async function performSummarization(
+    request: {
+      messages: BaseMessage[];
+      state: Record<string, unknown>;
+      systemMessage?: SystemMessage | unknown;
+      tools?: (ServerTool | ClientTool)[] | unknown[];
+      [key: string]: unknown;
+    },
+    handler: (req: any) => any,
+    truncatedMessages: BaseMessage[],
+    resolvedModel: BaseChatModel,
+    maxInputTokens: number | undefined,
+  ): Promise<any> {
+    const cutoffIndex = determineCutoffIndex(truncatedMessages, maxInputTokens);
+    console.log("cutoffIndex", cutoffIndex);
+    if (cutoffIndex <= 0) {
+      console.log(
+        `${LOG_PREFIX} cutoffIndex=0, nothing to summarize (all messages within keep policy). Passing through.`,
+      );
+      return handler({ ...request, messages: truncatedMessages });
+    }
+
+    const messagesToSummarize = truncatedMessages.slice(0, cutoffIndex);
+    const preservedMessages = truncatedMessages.slice(cutoffIndex);
+
+    console.log(
+      `${LOG_PREFIX} Summarizing: cutoffIndex=${cutoffIndex}, summarizing ${messagesToSummarize.length} messages, preserving ${preservedMessages.length} messages`,
+    );
+
+    const resolvedBackend = getBackend(request.state);
+    const filePath = await offloadToBackend(
+      resolvedBackend,
+      messagesToSummarize,
+      request.state,
+    );
+
+    if (filePath === null) {
+      console.warn(
+        `${LOG_PREFIX} Offloading conversation history to backend failed during summarization. Proceeding with summary generation anyway.`,
+      );
+    }
+
+    const summary = await createSummary(messagesToSummarize, resolvedModel);
+    const summaryMessage = buildSummaryMessage(summary, filePath);
+
+    const previousEvent = request.state._summarizationEvent;
+    const stateCutoffIndex =
+      previousEvent != null
+        ? (previousEvent as SummarizationEvent).cutoffIndex + cutoffIndex - 1
+        : cutoffIndex;
+
+    const newEvent: SummarizationEvent = {
+      cutoffIndex: stateCutoffIndex,
+      summaryMessage,
+      filePath,
+    };
+
+    const modifiedMessages = [summaryMessage, ...preservedMessages];
+    const modifiedTokens = countTotalTokens(
+      modifiedMessages,
+      request.systemMessage,
+      request.tools,
+    );
+    console.log(
+      `${LOG_PREFIX} After summarization: ${modifiedMessages.length} messages, ~${modifiedTokens} tokens (including system message + tools)`,
+    );
+
+    await handler({ ...request, messages: modifiedMessages });
+
+    return new Command({
+      update: {
+        _summarizationEvent: newEvent,
+        _summarizationSessionId: getSessionId(request.state),
+      },
+    });
+  }
+
   return createMiddleware({
     name: "SummarizationMiddleware",
     stateSchema: SummarizationStateSchema,
@@ -687,7 +796,12 @@ ${summary}
         request.state,
       );
 
+      console.log(
+        `${LOG_PREFIX} wrapModelCall: ${request.messages?.length ?? 0} raw messages, ${effectiveMessages.length} effective messages`,
+      );
+
       if (effectiveMessages.length === 0) {
+        console.log(`${LOG_PREFIX} No messages, passing through.`);
         return handler(request);
       }
 
@@ -696,111 +810,93 @@ ${summary}
        */
       const resolvedModel = await getChatModel();
       const maxInputTokens = getMaxInputTokens(resolvedModel);
+      console.log(
+        `${LOG_PREFIX} Model profile: maxInputTokens=${maxInputTokens ?? "unknown"}`,
+      );
 
       /**
        * Step 1: Truncate args if configured
        */
       const { messages: truncatedMessages, modified: argsWereTruncated } =
-        truncateArgs(effectiveMessages, maxInputTokens);
+        truncateArgs(
+          effectiveMessages,
+          maxInputTokens,
+          request.systemMessage,
+          request.tools,
+        );
+
+      if (argsWereTruncated) {
+        console.log(`${LOG_PREFIX} Tool arguments truncated in old messages.`);
+      }
 
       /**
-       * Step 2: Check if summarization should happen
+       * Step 2: Check if summarization should happen.
+       * Count tokens including system message and tools to match what's
+       * actually sent to the model (matching Python implementation).
        */
-      const totalTokens = countTokensApproximately(truncatedMessages);
+      const totalTokens = countTotalTokens(
+        truncatedMessages,
+        request.systemMessage,
+        request.tools,
+      );
+
       const shouldDoSummarization = shouldSummarize(
         truncatedMessages,
         totalTokens,
         maxInputTokens,
       );
 
-      /**
-       * If only truncation happened (no summarization), or no action needed
-       */
-      if (argsWereTruncated && !shouldDoSummarization) {
-        return handler({ ...request, messages: truncatedMessages });
-      }
+      console.log(
+        `${LOG_PREFIX} Token count: ~${totalTokens} tokens ` +
+          `(${truncatedMessages.length} messages + system message + ${Array.isArray(request.tools) ? request.tools.length : 0} tools), ` +
+          `trigger=${JSON.stringify(trigger)}, shouldSummarize=${shouldDoSummarization}`,
+      );
 
+      /**
+       * If no summarization needed, try passing through.
+       * If the handler throws a context overflow error, fall back to summarization.
+       */
       if (!shouldDoSummarization) {
-        return handler({ ...request, messages: truncatedMessages });
+        try {
+          return await handler({
+            ...request,
+            messages: truncatedMessages,
+          });
+        } catch (err: unknown) {
+          // Check if this is a context overflow / prompt too long error
+          const errMsg =
+            err && typeof err === "object" && "message" in err
+              ? String((err as { message: unknown }).message)
+              : typeof err === "string"
+                ? err
+                : JSON.stringify(err);
+          const isContextOverflow =
+            /prompt.*(too long|too large)|token.*limit|context.*overflow|context.*length|maximum.*token|exceeds.*maximum/i.test(
+              errMsg,
+            );
+
+          if (isContextOverflow) {
+            console.warn(
+              `${LOG_PREFIX} Context overflow detected after handler call (${totalTokens} tokens). ` +
+                `Falling back to emergency summarization. Error: ${errMsg}`,
+            );
+            // Fall through to summarization below
+          } else {
+            throw err;
+          }
+        }
       }
 
       /**
        * Step 3: Perform summarization
        */
-      const cutoffIndex = determineCutoffIndex(
+      return performSummarization(
+        request as any,
+        handler,
         truncatedMessages,
+        resolvedModel,
         maxInputTokens,
       );
-      if (cutoffIndex <= 0) {
-        return handler({ ...request, messages: truncatedMessages });
-      }
-
-      const messagesToSummarize = truncatedMessages.slice(0, cutoffIndex);
-      const preservedMessages = truncatedMessages.slice(cutoffIndex);
-
-      /**
-       * Offload to backend first
-       */
-      const resolvedBackend = getBackend(request.state);
-      const filePath = await offloadToBackend(
-        resolvedBackend,
-        messagesToSummarize,
-        request.state,
-      );
-
-      if (filePath === null) {
-        /**
-         * Offloading failed - don't proceed with summarization
-         */
-        return handler({ ...request, messages: truncatedMessages });
-      }
-
-      /**
-       * Generate summary
-       */
-      const summary = await createSummary(messagesToSummarize, resolvedModel);
-
-      /**
-       * Build summary message
-       */
-      const summaryMessage = buildSummaryMessage(summary, filePath);
-
-      /**
-       * Calculate state cutoff index for chained summarizations.
-       * If this is a subsequent summarization, convert effective message index to state index.
-       * The -1 accounts for the summary message at effective[0] which does not
-       * correspond to any state message.
-       */
-      const previousEvent = request.state._summarizationEvent;
-      const stateCutoffIndex =
-        previousEvent != null
-          ? previousEvent.cutoffIndex + cutoffIndex - 1
-          : cutoffIndex;
-
-      /**
-       * Create new summarization event
-       */
-      const newEvent: SummarizationEvent = {
-        cutoffIndex: stateCutoffIndex,
-        summaryMessage,
-        filePath,
-      };
-
-      /**
-       * Call handler with summarized messages
-       */
-      const modifiedMessages = [summaryMessage, ...preservedMessages];
-      await handler({ ...request, messages: modifiedMessages });
-
-      /**
-       * Return Command with state update for the summarization event
-       */
-      return new Command({
-        update: {
-          _summarizationEvent: newEvent,
-          _summarizationSessionId: getSessionId(request.state),
-        },
-      });
     },
   });
 }
