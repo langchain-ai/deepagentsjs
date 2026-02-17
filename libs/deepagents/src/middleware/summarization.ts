@@ -870,11 +870,11 @@ ${summary}
        * Pass systemMessage and tools so the token count includes full request overhead.
        */
       const { messages: truncatedMessages } = truncateArgs(
-          effectiveMessages,
-          request.systemMessage,
-          request.tools,
-          maxInputTokens,
-        );
+        effectiveMessages,
+        request.systemMessage,
+        request.tools,
+        maxInputTokens,
+      );
 
       /**
        * Step 2: Check if summarization should happen.
