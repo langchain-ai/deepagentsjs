@@ -41,6 +41,7 @@ export {
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
   createSummarizationMiddleware,
+  computeSummarizationDefaults,
   createMemoryMiddleware,
   // Skills middleware - matches Python's SkillsMiddleware interface
   createSkillsMiddleware,

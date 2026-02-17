@@ -48,12 +48,14 @@ import {
   countTokensApproximately,
   HumanMessage,
   AIMessage,
+  ToolMessage,
   SystemMessage,
   BaseMessage,
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
 import { getBufferString } from "@langchain/core/messages";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import type { BaseLanguageModel } from "@langchain/core/language_models/base";
 import type { ClientTool, ServerTool } from "@langchain/core/tools";
 import { initChatModel } from "langchain/chat_models/universal";
 import { Command } from "@langchain/langgraph";
@@ -112,9 +114,9 @@ export interface TruncateArgsSettings {
 export interface SummarizationMiddlewareOptions {
   /**
    * The language model to use for generating summaries.
-   * Can be a model string (e.g., "gpt-4o-mini") or a BaseChatModel instance.
+   * Can be a model string (e.g., "gpt-4o-mini") or a language model instance.
    */
-  model: string | BaseChatModel;
+  model: string | BaseChatModel | BaseLanguageModel;
 
   /**
    * Backend instance or factory for persisting conversation history.
@@ -163,6 +165,56 @@ export interface SummarizationMiddlewareOptions {
 // Default values
 const DEFAULT_MESSAGES_TO_KEEP = 20;
 const DEFAULT_TRIM_TOKEN_LIMIT = 4000;
+
+// Fallback defaults when model has no profile
+const FALLBACK_TRIGGER: ContextSize = { type: "tokens", value: 170_000 };
+const FALLBACK_KEEP: ContextSize = { type: "messages", value: 6 };
+const FALLBACK_TRUNCATE_ARGS: TruncateArgsSettings = {
+  trigger: { type: "messages", value: 20 },
+  keep: { type: "messages", value: 20 },
+};
+
+// Profile-based defaults (when model has max_input_tokens in profile)
+const PROFILE_TRIGGER: ContextSize = { type: "fraction", value: 0.85 };
+const PROFILE_KEEP: ContextSize = { type: "fraction", value: 0.1 };
+const PROFILE_TRUNCATE_ARGS: TruncateArgsSettings = {
+  trigger: { type: "fraction", value: 0.85 },
+  keep: { type: "fraction", value: 0.1 },
+};
+
+/**
+ * Compute summarization defaults based on model profile.
+ * Mirrors Python's `_compute_summarization_defaults`.
+ *
+ * If the model has a profile with `maxInputTokens`, uses fraction-based
+ * settings. Otherwise, uses fixed token/message counts.
+ */
+export function computeSummarizationDefaults(resolvedModel: BaseChatModel): {
+  trigger: ContextSize;
+  keep: ContextSize;
+  truncateArgsSettings: TruncateArgsSettings;
+} {
+  const profile = resolvedModel.profile;
+  const hasProfile =
+    profile &&
+    typeof profile === "object" &&
+    "maxInputTokens" in profile &&
+    typeof profile.maxInputTokens === "number";
+
+  if (hasProfile) {
+    return {
+      trigger: PROFILE_TRIGGER,
+      keep: PROFILE_KEEP,
+      truncateArgsSettings: PROFILE_TRUNCATE_ARGS,
+    };
+  }
+
+  return {
+    trigger: FALLBACK_TRIGGER,
+    keep: FALLBACK_KEEP,
+    truncateArgsSettings: FALLBACK_TRUNCATE_ARGS,
+  };
+}
 const DEFAULT_SUMMARY_PROMPT = `You are a conversation summarizer. Your task is to create a concise summary of the conversation that captures:
 1. The main topics discussed
 2. Key decisions or conclusions reached
@@ -238,23 +290,67 @@ export function createSummarizationMiddleware(
   const {
     model,
     backend,
-    trigger,
-    keep = { type: "messages", value: DEFAULT_MESSAGES_TO_KEEP },
     summaryPrompt = DEFAULT_SUMMARY_PROMPT,
     trimTokensToSummarize = DEFAULT_TRIM_TOKEN_LIMIT,
     historyPathPrefix = "/conversation_history",
-    truncateArgsSettings,
   } = options;
 
-  // Parse truncate settings
-  const truncateTrigger = truncateArgsSettings?.trigger;
-  const truncateKeep = truncateArgsSettings?.keep || {
+  // Mutable config that may be lazily computed from model profile.
+  // When trigger/keep/truncateArgsSettings are not provided, they will be
+  // computed from the model profile on first wrapModelCall, matching
+  // Python's `_compute_summarization_defaults` behavior.
+  let trigger = options.trigger;
+  let keep: ContextSize = options.keep ?? {
+    type: "messages",
+    value: DEFAULT_MESSAGES_TO_KEEP,
+  };
+  let truncateArgsSettings = options.truncateArgsSettings;
+  let defaultsComputed = trigger != null;
+
+  // Parse truncate settings (will be re-parsed after defaults are computed)
+  let truncateTrigger = truncateArgsSettings?.trigger;
+  let truncateKeep: ContextSize = truncateArgsSettings?.keep ?? {
     type: "messages" as const,
     value: 20,
   };
-  const maxArgLength = truncateArgsSettings?.maxLength || 2000;
-  const truncationText =
-    truncateArgsSettings?.truncationText || "...(argument truncated)";
+  let maxArgLength = truncateArgsSettings?.maxLength ?? 2000;
+  let truncationText =
+    truncateArgsSettings?.truncationText ?? "...(argument truncated)";
+
+  /**
+   * Lazily compute defaults from model profile when trigger was not provided.
+   * Called once when the model is first resolved.
+   */
+  function applyModelDefaults(resolvedModel: BaseChatModel): void {
+    if (defaultsComputed) {
+      return;
+    }
+    defaultsComputed = true;
+
+    const defaults = computeSummarizationDefaults(resolvedModel);
+    console.log(
+      `${LOG_PREFIX} Auto-computed defaults from model profile: ` +
+        `trigger=${JSON.stringify(defaults.trigger)}, ` +
+        `keep=${JSON.stringify(defaults.keep)}, ` +
+        `truncateArgs=${JSON.stringify(defaults.truncateArgsSettings)}`,
+    );
+
+    trigger = defaults.trigger;
+    keep = options.keep ?? defaults.keep;
+
+    if (!options.truncateArgsSettings) {
+      truncateArgsSettings = defaults.truncateArgsSettings;
+      truncateTrigger = defaults.truncateArgsSettings.trigger;
+      truncateKeep = defaults.truncateArgsSettings.keep ?? {
+        type: "messages" as const,
+        value: 20,
+      };
+      maxArgLength = defaults.truncateArgsSettings.maxLength ?? 2000;
+      truncationText =
+        defaults.truncateArgsSettings.truncationText ??
+        "...(argument truncated)";
+    }
+  }
 
   // Session ID for this middleware instance (fallback if no thread_id)
   let sessionId: string | null = null;
@@ -308,7 +404,7 @@ export function createSummarizationMiddleware(
     if (typeof model === "string") {
       cachedModel = await initChatModel(model);
     } else {
-      cachedModel = model;
+      cachedModel = model as BaseChatModel;
     }
     return cachedModel;
   }
@@ -363,39 +459,100 @@ export function createSummarizationMiddleware(
   }
 
   /**
+   * Find a safe cutoff point that doesn't split AI/Tool message pairs.
+   *
+   * If the message at `cutoffIndex` is a ToolMessage, search backward for the
+   * AIMessage containing the corresponding tool_calls and adjust the cutoff to
+   * include it. This ensures tool call requests and responses stay together.
+   *
+   * Falls back to advancing forward past ToolMessage objects only if no matching
+   * AIMessage is found (edge case).
+   */
+  function findSafeCutoffPoint(
+    messages: BaseMessage[],
+    cutoffIndex: number,
+  ): number {
+    if (
+      cutoffIndex >= messages.length ||
+      !ToolMessage.isInstance(messages[cutoffIndex])
+    ) {
+      return cutoffIndex;
+    }
+
+    // Collect tool_call_ids from consecutive ToolMessages at/after cutoff
+    const toolCallIds = new Set<string>();
+    let idx = cutoffIndex;
+    while (idx < messages.length && ToolMessage.isInstance(messages[idx])) {
+      const toolMsg = messages[idx] as InstanceType<typeof ToolMessage>;
+      if (toolMsg.tool_call_id) {
+        toolCallIds.add(toolMsg.tool_call_id);
+      }
+      idx++;
+    }
+
+    // Search backward for AIMessage with matching tool_calls
+    for (let i = cutoffIndex - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (AIMessage.isInstance(msg) && msg.tool_calls) {
+        const aiToolCallIds = new Set(
+          msg.tool_calls
+            .map((tc) => tc.id)
+            .filter((id): id is string => id != null),
+        );
+        // Check if there's any overlap
+        for (const id of toolCallIds) {
+          if (aiToolCallIds.has(id)) {
+            // Found the AIMessage - move cutoff to include it
+            return i;
+          }
+        }
+      }
+    }
+
+    // Fallback: no matching AIMessage found, advance past ToolMessages
+    // to avoid orphaned tool responses
+    return idx;
+  }
+
+  /**
    * Determine cutoff index for messages to summarize.
    * Messages at index < cutoff will be summarized.
    * Messages at index >= cutoff will be preserved.
+   *
+   * Uses findSafeCutoffPoint to ensure tool call/result pairs stay together.
    */
   function determineCutoffIndex(
     messages: BaseMessage[],
     maxInputTokens?: number,
   ): number {
+    let rawCutoff: number;
+
     if (keep.type === "messages") {
       if (messages.length <= keep.value) {
         return 0;
       }
-      return messages.length - keep.value;
-    }
-
-    if (keep.type === "tokens" || keep.type === "fraction") {
+      rawCutoff = messages.length - keep.value;
+    } else if (keep.type === "tokens" || keep.type === "fraction") {
       const targetTokenCount =
         keep.type === "fraction" && maxInputTokens
           ? Math.floor(maxInputTokens * keep.value)
           : keep.value;
 
       let tokensKept = 0;
+      rawCutoff = 0;
       for (let i = messages.length - 1; i >= 0; i--) {
         const msgTokens = countTokensApproximately([messages[i]]);
         if (tokensKept + msgTokens > targetTokenCount) {
-          return i + 1;
+          rawCutoff = i + 1;
+          break;
         }
         tokensKept += msgTokens;
       }
+    } else {
       return 0;
     }
 
-    return 0;
+    return findSafeCutoffPoint(messages, rawCutoff);
   }
 
   /**
@@ -426,36 +583,43 @@ export function createSummarizationMiddleware(
 
   /**
    * Determine cutoff index for argument truncation.
+   * Uses findSafeCutoffPoint to ensure tool call/result pairs stay together.
    */
   function determineTruncateCutoffIndex(
     messages: BaseMessage[],
     maxInputTokens?: number,
   ): number {
+    let rawCutoff: number;
+
     if (truncateKeep.type === "messages") {
       if (messages.length <= truncateKeep.value) {
         return messages.length;
       }
-      return messages.length - truncateKeep.value;
-    }
-
-    if (truncateKeep.type === "tokens" || truncateKeep.type === "fraction") {
+      rawCutoff = messages.length - truncateKeep.value;
+    } else if (
+      truncateKeep.type === "tokens" ||
+      truncateKeep.type === "fraction"
+    ) {
       const targetTokenCount =
         truncateKeep.type === "fraction" && maxInputTokens
           ? Math.floor(maxInputTokens * truncateKeep.value)
           : truncateKeep.value;
 
       let tokensKept = 0;
+      rawCutoff = 0;
       for (let i = messages.length - 1; i >= 0; i--) {
         const msgTokens = countTokensApproximately([messages[i]]);
         if (tokensKept + msgTokens > targetTokenCount) {
-          return i + 1;
+          rawCutoff = i + 1;
+          break;
         }
         tokensKept += msgTokens;
       }
-      return 0;
+    } else {
+      return messages.length;
     }
 
-    return messages.length;
+    return findSafeCutoffPoint(messages, rawCutoff);
   }
 
   /**
@@ -722,7 +886,6 @@ ${summary}
     maxInputTokens: number | undefined,
   ): Promise<any> {
     const cutoffIndex = determineCutoffIndex(truncatedMessages, maxInputTokens);
-    console.log("cutoffIndex", cutoffIndex);
     if (cutoffIndex <= 0) {
       console.log(
         `${LOG_PREFIX} cutoffIndex=0, nothing to summarize (all messages within keep policy). Passing through.`,
@@ -806,9 +969,12 @@ ${summary}
       }
 
       /**
-       * Resolve the chat model and get max input tokens from profile
+       * Resolve the chat model and get max input tokens from profile.
+       * Also compute defaults if trigger was not provided (lazy initialization
+       * matching Python's _compute_summarization_defaults).
        */
       const resolvedModel = await getChatModel();
+      applyModelDefaults(resolvedModel);
       const maxInputTokens = getMaxInputTokens(resolvedModel);
       console.log(
         `${LOG_PREFIX} Model profile: maxInputTokens=${maxInputTokens ?? "unknown"}`,

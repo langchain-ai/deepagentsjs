@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { HumanMessage, AIMessage } from "@langchain/core/messages";
+import { HumanMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
 import { isCommand } from "@langchain/langgraph";
 import {
@@ -711,6 +711,134 @@ describe("createSummarizationMiddleware", () => {
       expect(
         req3!.messages.slice(1).map((m: BaseMessage) => m.content),
       ).toEqual(["S18", "S19"]);
+    });
+  });
+
+  describe("safe cutoff for tool call/result pairs", () => {
+    it("should not split AI tool_call from its ToolMessage responses", async () => {
+      const mockBackend = createMockBackend();
+      const middleware = createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: mockBackend,
+        trigger: { type: "messages", value: 5 },
+        // keep: 3 messages would normally place the cutoff at index 7 (10 - 3)
+        // but if message[7] is a ToolMessage, it should adjust
+        keep: { type: "messages", value: 3 },
+      });
+
+      // Create a conversation where the naive cutoff (index 7) lands on a ToolMessage
+      const messages: BaseMessage[] = [
+        new HumanMessage({ content: "Message 0" }),
+        new AIMessage({ content: "Message 1" }),
+        new HumanMessage({ content: "Message 2" }),
+        new AIMessage({ content: "Message 3" }),
+        new HumanMessage({ content: "Message 4" }),
+        new AIMessage({ content: "Message 5" }),
+        // Index 6: AIMessage with tool calls
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "tool_call_1",
+              name: "read_file",
+              args: { path: "/test.txt" },
+            },
+          ],
+        }),
+        // Index 7: ToolMessage (naive cutoff would land here, splitting the pair)
+        new ToolMessage({
+          content: "file contents",
+          tool_call_id: "tool_call_1",
+        }),
+        new HumanMessage({ content: "Message 8" }),
+        new AIMessage({ content: "Message 9" }),
+      ];
+
+      const { capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
+
+      expect(capturedRequest).not.toBeNull();
+      // The cutoff should be adjusted so the AIMessage (index 6) and its
+      // ToolMessage (index 7) stay together in the preserved set.
+      // Safe cutoff moves back to index 6, so preserved = [AI+tool_calls, ToolMessage, msg8, msg9]
+      // The summary message is prepended, so total = 5
+      const preservedMessages = capturedRequest!.messages.slice(1); // skip summary
+      expect(preservedMessages.length).toBe(4);
+      // Verify no orphaned ToolMessages
+      for (const msg of preservedMessages) {
+        if (ToolMessage.isInstance(msg)) {
+          // Find the corresponding AIMessage with matching tool_call
+          const toolCallId = msg.tool_call_id;
+          const hasMatchingAI = preservedMessages.some(
+            (m) =>
+              AIMessage.isInstance(m) &&
+              m.tool_calls?.some((tc) => tc.id === toolCallId),
+          );
+          expect(hasMatchingAI).toBe(true);
+        }
+      }
+    });
+
+    it("should handle multiple consecutive ToolMessages", async () => {
+      const mockBackend = createMockBackend();
+      const middleware = createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: mockBackend,
+        trigger: { type: "messages", value: 5 },
+        keep: { type: "messages", value: 2 },
+      });
+
+      // Naive cutoff at index 8 (10 - 2) lands on a ToolMessage
+      const messages: BaseMessage[] = [
+        new HumanMessage({ content: "Message 0" }),
+        new AIMessage({ content: "Message 1" }),
+        new HumanMessage({ content: "Message 2" }),
+        new AIMessage({ content: "Message 3" }),
+        new HumanMessage({ content: "Message 4" }),
+        new AIMessage({ content: "Message 5" }),
+        // Index 6: AIMessage with multiple tool calls
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            { id: "tc_1", name: "read_file", args: { path: "/a.txt" } },
+            { id: "tc_2", name: "read_file", args: { path: "/b.txt" } },
+          ],
+        }),
+        // Index 7: First ToolMessage
+        new ToolMessage({
+          content: "file a contents",
+          tool_call_id: "tc_1",
+        }),
+        // Index 8: Second ToolMessage (naive cutoff lands here)
+        new ToolMessage({
+          content: "file b contents",
+          tool_call_id: "tc_2",
+        }),
+        new HumanMessage({ content: "Message 9" }),
+      ];
+
+      const { capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
+
+      expect(capturedRequest).not.toBeNull();
+      const preservedMessages = capturedRequest!.messages.slice(1);
+      // Safe cutoff should move back to include the AIMessage at index 6
+      // Preserved: [AI+tool_calls, ToolMsg1, ToolMsg2, msg9] = 4 messages
+      expect(preservedMessages.length).toBe(4);
+      // Verify all ToolMessages have matching AI tool_calls
+      for (const msg of preservedMessages) {
+        if (ToolMessage.isInstance(msg)) {
+          const toolCallId = msg.tool_call_id;
+          const hasMatchingAI = preservedMessages.some(
+            (m) =>
+              AIMessage.isInstance(m) &&
+              m.tool_calls?.some((tc) => tc.id === toolCallId),
+          );
+          expect(hasMatchingAI).toBe(true);
+        }
+      }
     });
   });
 });
