@@ -251,27 +251,11 @@ const CONTENT_TRUNCATION_NOTICE =
   "\n\n...(content truncated to fit context window)";
 
 /**
- * Safety margin multiplier for `countTokensApproximately`.
- *
- * The chars/4 heuristic consistently underestimates actual API token counts by
- * ~20-30% because it ignores message framing overhead (role labels, separators)
- * and because code/JSON tokenises at ~3-3.5 chars/token rather than 4.
- *
- * This multiplier is used ONLY for hard-limit safety checks
- * (`emergencyTruncateMessages`, post-summarization overflow detection) where
- * under-estimation could cause an API rejection.  The proactive
- * summarization trigger uses the raw estimate directly so that the logged
- * token count is not inflated by an arbitrary factor — instead the trigger
- * value itself is set conservatively enough to fire before the hard limit.
- */
-const TOKEN_ESTIMATION_SAFETY_FACTOR = 1.25;
-
-/**
  * Emergency truncation of oversized individual messages when summarization
  * cannot reduce the message count (e.g., too few messages to cut).
  *
  * Iteratively truncates the largest string-content messages until the total
- * estimated token count (with safety margin) fits within `maxTokens`.
+ * estimated token count fits within `maxTokens`.
  * Only ToolMessage and HumanMessage content is truncated; AIMessage content
  * is left intact to preserve tool_calls structure.
  *
@@ -290,10 +274,7 @@ function emergencyTruncateMessages(
 
   function estimateTotal(): number {
     const counted = systemMessage != null ? [systemMessage, ...result] : result;
-    return (
-      (countTokensApproximately(counted) + toolsOverhead) *
-      TOKEN_ESTIMATION_SAFETY_FACTOR
-    );
+    return countTokensApproximately(counted) + toolsOverhead;
   }
 
   let totalTokens = estimateTotal();
@@ -1052,12 +1033,10 @@ ${summary}
           request.systemMessage != null
             ? [request.systemMessage, ...finalMessages]
             : finalMessages;
-        const postSumAdjusted = Math.ceil(
-          (countTokensApproximately(postSumCounted) + toolsOverhead) *
-            TOKEN_ESTIMATION_SAFETY_FACTOR,
-        );
+        const postSumTokens =
+          countTokensApproximately(postSumCounted) + toolsOverhead;
 
-        if (postSumAdjusted > maxInputTokens) {
+        if (postSumTokens > maxInputTokens) {
           const fitted = emergencyTruncateMessages(
             finalMessages,
             request.systemMessage,
@@ -1068,13 +1047,13 @@ ${summary}
             console.warn(
               `[Summarization] post-summarization still exceeds limit — ` +
                 `emergency-truncating (${finalMessages.length} msgs, ` +
-                `~${postSumAdjusted} adjusted tok, limit: ${maxInputTokens})`,
+                `~${postSumTokens} tok, limit: ${maxInputTokens})`,
             );
             finalMessages = fitted;
           } else {
             console.warn(
               `[Summarization] post-summarization emergency truncation failed — ` +
-                `${finalMessages.length} msgs, ~${postSumAdjusted} adjusted tok, ` +
+                `${finalMessages.length} msgs, ~${postSumTokens} tok, ` +
                 `limit: ${maxInputTokens}`,
             );
           }

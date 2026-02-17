@@ -72,6 +72,7 @@ async function main() {
   console.log("🚀 Creating VFS Sandbox...\n");
 
   const sandbox = await VfsSandbox.create({
+    mountPath: "/sandbox",
     initialFiles: {
       // Pre-populate with a simple project structure
       "/package.json": JSON.stringify(

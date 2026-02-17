@@ -636,11 +636,21 @@ function createGlobTool(
 /**
  * Create grep tool using backend.
  */
+/**
+ * Truncation message appended to grep results that exceed the token limit.
+ */
+const GREP_TRUNCATION_MSG = `
+
+[Output was truncated due to size limits. The grep results are very large. Consider narrowing your search with a more specific pattern or glob filter.]`;
+
 function createGrepTool(
   backend: BackendProtocol | BackendFactory,
-  options: { customDescription: string | undefined },
+  options: {
+    customDescription: string | undefined;
+    toolTokenLimitBeforeEvict: number | null;
+  },
 ) {
-  const { customDescription } = options;
+  const { customDescription, toolTokenLimitBeforeEvict } = options;
   return tool(
     async (input, config) => {
       const stateAndStore: StateAndStore = {
@@ -671,7 +681,20 @@ function createGrepTool(
         lines.push(`  ${match.line}: ${match.text}`);
       }
 
-      return lines.join("\n");
+      let output = lines.join("\n");
+
+      // Truncate if result exceeds token threshold (same pattern as read_file)
+      if (
+        toolTokenLimitBeforeEvict &&
+        output.length >= NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict
+      ) {
+        const maxContentLength =
+          NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict -
+          GREP_TRUNCATION_MSG.length;
+        output = output.substring(0, maxContentLength) + GREP_TRUNCATION_MSG;
+      }
+
+      return output;
     },
     {
       name: "grep",
@@ -793,6 +816,7 @@ export function createFilesystemMiddleware(
     }),
     createGrepTool(backend, {
       customDescription: customToolDescriptions?.grep,
+      toolTokenLimitBeforeEvict,
     }),
     createExecuteTool(backend, {
       customDescription: customToolDescriptions?.execute,
@@ -844,7 +868,21 @@ export function createFilesystemMiddleware(
           toolName as (typeof TOOLS_EXCLUDED_FROM_EVICTION)[number],
         )
       ) {
-        return handler(request);
+        const result = await handler(request);
+        // Log large results from excluded tools for debugging
+        if (
+          ToolMessage.isInstance(result) &&
+          typeof result.content === "string"
+        ) {
+          const chars = result.content.length;
+          if (chars > 10000) {
+            console.debug(
+              `[Filesystem] tool=${toolName} (eviction-excluded): ` +
+                `result=${chars} chars (~${Math.ceil(chars / NUM_CHARS_PER_TOKEN)} tok)`,
+            );
+          }
+        }
+        return result;
       }
 
       const result = await handler(request);
