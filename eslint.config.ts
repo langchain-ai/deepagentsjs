@@ -5,7 +5,7 @@ import { configs } from "typescript-eslint";
 import noInstanceof from "eslint-plugin-no-instanceof";
 
 export default defineConfig([
-  { ignores: ["**/dist", "**/dist-examples", "**/node_modules"] },
+  { ignores: ["**/dist", "**/dist-examples", "**/node_modules", "**/.venv"] },
   js.configs.recommended,
   ...configs.recommended,
   {
