@@ -869,19 +869,6 @@ export function createFilesystemMiddleware(
         )
       ) {
         const result = await handler(request);
-        // Log large results from excluded tools for debugging
-        if (
-          ToolMessage.isInstance(result) &&
-          typeof result.content === "string"
-        ) {
-          const chars = result.content.length;
-          if (chars > 10000) {
-            console.debug(
-              `[Filesystem] tool=${toolName} (eviction-excluded): ` +
-                `result=${chars} chars (~${Math.ceil(chars / NUM_CHARS_PER_TOKEN)} tok)`,
-            );
-          }
-        }
         return result;
       }
 
