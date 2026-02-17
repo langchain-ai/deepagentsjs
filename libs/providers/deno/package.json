@@ -37,7 +37,7 @@
   },
   "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "dependencies": {
-    "@deno/sandbox": "^0.11.0"
+    "@deno/sandbox": "^0.12.0"
   },
   "peerDependencies": {
     "deepagents": ">=1.6.0"
