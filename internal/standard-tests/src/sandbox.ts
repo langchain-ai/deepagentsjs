@@ -142,7 +142,7 @@ export function sandboxStandardTests<T extends SandboxInstance>(
 
     afterAll(async () => {
       try {
-        await config.closeSandbox(shared);
+        await config.closeSandbox?.(shared);
       } catch {
         // Ignore cleanup errors
       }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { SandboxInstance, StandardTestsConfig } from "../sandbox.js";
+import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register detailed write() tests (new file, parent dirs, existing file,

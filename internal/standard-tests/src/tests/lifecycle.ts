@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import type { SandboxInstance, StandardTestsConfig } from "../sandbox.js";
+import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 import { withRetry } from "../sandbox.js";
 
 /**
@@ -34,7 +34,8 @@ export function registerLifecycleTests<T extends SandboxInstance>(
       timeout,
     );
 
-    describe("close", () => {
+    const canBeClosed = typeof config.closeSandbox === "function";
+    describe.skipIf(!canBeClosed)("close", () => {
       let tmp: T;
 
       beforeAll(async () => {
@@ -43,7 +44,7 @@ export function registerLifecycleTests<T extends SandboxInstance>(
 
       afterAll(async () => {
         try {
-          await config.closeSandbox(tmp);
+          await config.closeSandbox?.(tmp);
         } catch {
           // Ignore cleanup errors
         }
@@ -54,7 +55,7 @@ export function registerLifecycleTests<T extends SandboxInstance>(
         async () => {
           expect(tmp.isRunning).toBe(true);
 
-          await config.closeSandbox(tmp);
+          await config.closeSandbox?.(tmp);
 
           expect(tmp.isRunning).toBe(false);
         },
@@ -67,7 +68,7 @@ export function registerLifecycleTests<T extends SandboxInstance>(
 
       afterAll(async () => {
         try {
-          if (tmp) await config.closeSandbox(tmp);
+          if (tmp) await config.closeSandbox?.(tmp);
         } catch {
           // Ignore cleanup errors
         }

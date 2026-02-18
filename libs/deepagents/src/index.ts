@@ -111,4 +111,7 @@ export {
   type SandboxDeleteOptions,
   // Sandbox error types
   type SandboxErrorCode,
+  // Local shell backend
+  LocalShellBackend,
+  type LocalShellBackendOptions,
 } from "./backends/index.js";

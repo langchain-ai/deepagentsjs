@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { SandboxInstance, StandardTestsConfig } from "../sandbox.js";
+import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register lsInfo() tests (absolute paths, files + subdirs, empty dir,
@@ -73,9 +73,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
     it(
       "should return empty list for nonexistent directory",
       async () => {
-        const nonexistentDir = config.resolvePath(
-          "li-does-not-exist-12345",
-        );
+        const nonexistentDir = config.resolvePath("li-does-not-exist-12345");
 
         const result = await getShared().lsInfo(nonexistentDir);
 
@@ -106,10 +104,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
       async () => {
         const shared = getShared();
         const baseDir = config.resolvePath("li-spaces");
-        await shared.write(
-          `${baseDir}/file with spaces.txt`,
-          "content",
-        );
+        await shared.write(`${baseDir}/file with spaces.txt`, "content");
         await shared.execute(`mkdir -p '${baseDir}/dir with spaces'`);
 
         const result = await shared.lsInfo(baseDir);
