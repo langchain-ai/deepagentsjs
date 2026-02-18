@@ -1,5 +1,3 @@
-import { describe, it, expect } from "vitest";
-
 import { withRetry } from "../sandbox.js";
 import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
@@ -12,6 +10,8 @@ export function registerInitialFilesTests<T extends SandboxInstance>(
   config: StandardTestsConfig<T>,
   timeout: number,
 ): void {
+  const { describe, it, expect } = config.runner;
+
   describe("initialFiles", () => {
     it(
       "should create sandbox with initial files",

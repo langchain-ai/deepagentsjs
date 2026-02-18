@@ -1,4 +1,3 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 import { withRetry } from "../sandbox.js";
 
@@ -13,6 +12,16 @@ export function registerLifecycleTests<T extends SandboxInstance>(
   config: StandardTestsConfig<T>,
   timeout: number,
 ): void {
+  const { describe, it, expect, beforeAll, afterAll } = config.runner;
+
+  const describeSkipIf =
+    describe.skipIf ??
+    ((condition: boolean) =>
+      condition ? (describe.skip ?? (() => {})) : describe);
+
+  const itSkipIf =
+    it.skipIf ?? ((condition: boolean) => (condition ? () => {} : it));
+
   describe("sandbox lifecycle", () => {
     it(
       "should create sandbox and have a valid id",
@@ -35,7 +44,7 @@ export function registerLifecycleTests<T extends SandboxInstance>(
     );
 
     const canBeClosed = typeof config.closeSandbox === "function";
-    describe.skipIf(!canBeClosed)("close", () => {
+    describeSkipIf(!canBeClosed)("close", () => {
       let tmp: T;
 
       beforeAll(async () => {
@@ -74,7 +83,7 @@ export function registerLifecycleTests<T extends SandboxInstance>(
         }
       }, timeout);
 
-      it.skipIf(!config.createUninitializedSandbox)(
+      itSkipIf(!config.createUninitializedSandbox)(
         "should work with two-step initialization",
         async () => {
           tmp = config.createUninitializedSandbox!();

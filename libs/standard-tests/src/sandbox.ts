@@ -28,8 +28,6 @@
  * - Error handling (file not found, non-existent command)
  */
 
-import { describe, beforeAll, afterAll } from "vitest";
-
 import { registerLifecycleTests } from "./tests/lifecycle.js";
 import { registerCommandExecutionTests } from "./tests/command-execution.js";
 import { registerFileOperationTests } from "./tests/file-operations.js";
@@ -41,7 +39,7 @@ import { registerGrepRawTests } from "./tests/grep-raw.js";
 import { registerGlobInfoTests } from "./tests/glob-info.js";
 import { registerInitialFilesTests } from "./tests/initial-files.js";
 import { registerIntegrationTests } from "./tests/integration.js";
-import type { SandboxInstance, StandardTestsConfig } from "./types.js";
+import type { SandboxInstance, StandardTestsConfig, SuiteFn } from "./types.js";
 /**
  * Default number of retry attempts for sandbox creation.
  */
@@ -103,7 +101,7 @@ export async function withRetry<T>(
  *
  * @example
  * ```ts
- * import { sandboxStandardTests } from "@langchain/standard-tests";
+ * import { sandboxStandardTests } from "@langchain/sandbox-standard-tests/vitest";
  * import { ModalSandbox } from "./sandbox.js";
  *
  * sandboxStandardTests({
@@ -122,17 +120,22 @@ export async function withRetry<T>(
 export function sandboxStandardTests<T extends SandboxInstance>(
   config: StandardTestsConfig<T>,
 ): void {
+  const { describe, beforeAll, afterAll } = config.runner;
   const timeout = config.timeout ?? 120_000;
 
-  // Choose the right describe variant based on config
-  const outerDescribe = config.skip
-    ? describe.skip
-    : config.sequential
-      ? describe.sequential
-      : describe;
+  // Resolve the right describe variant based on skip / sequential flags.
+  // When the runner doesn't provide .skip or .sequential we fall back to
+  // a no-op or to the plain describe, respectively.
+  let outerDescribe: SuiteFn;
+  if (config.skip) {
+    outerDescribe = describe.skip ?? (() => {});
+  } else if (config.sequential) {
+    outerDescribe = describe.sequential ?? describe;
+  } else {
+    outerDescribe = describe;
+  }
 
   outerDescribe(`${config.name} Standard Tests`, () => {
-    // The single shared sandbox reused across most tests
     let shared: T;
     const getShared = () => shared;
 
@@ -148,7 +151,6 @@ export function sandboxStandardTests<T extends SandboxInstance>(
       }
     }, timeout);
 
-    // Register all test suites
     registerLifecycleTests(getShared, config, timeout);
     registerCommandExecutionTests(getShared, config, timeout);
     registerFileOperationTests(getShared, config, timeout);

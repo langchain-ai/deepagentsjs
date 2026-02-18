@@ -1,0 +1,30 @@
+{
+  "name": "@langchain/sandbox-standard-tests",
+  "version": "0.0.3",
+  "description": "Standard integration tests for deepagents sandbox providers",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./vitest": {
+      "types": "./src/vitest.ts",
+      "default": "./src/vitest.ts"
+    }
+  },
+  "peerDependencies": {
+    "vitest": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "deepagents": "workspace:*",
+    "vitest": "^4.0.18"
+  }
+}

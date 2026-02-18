@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
@@ -9,6 +8,8 @@ export function registerCommandExecutionTests<T extends SandboxInstance>(
   _config: StandardTestsConfig<T>,
   timeout: number,
 ): void {
+  const { describe, it, expect } = _config.runner;
+
   describe("command execution", () => {
     it(
       "should run a simple echo command",

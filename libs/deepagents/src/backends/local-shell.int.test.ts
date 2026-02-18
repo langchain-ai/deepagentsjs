@@ -11,7 +11,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { sandboxStandardTests } from "@langchain/standard-tests";
+import { sandboxStandardTests } from "@langchain/sandbox-standard-tests/vitest";
 import { LocalShellBackend } from "./local-shell.js";
 
 const TEST_TIMEOUT = 120_000; // 2 minutes

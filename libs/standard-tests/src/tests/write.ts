@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
@@ -10,6 +9,8 @@ export function registerWriteTests<T extends SandboxInstance>(
   config: StandardTestsConfig<T>,
   timeout: number,
 ): void {
+  const { describe, it, expect } = config.runner;
+
   describe("write", () => {
     it(
       "should write a new file with basic content",

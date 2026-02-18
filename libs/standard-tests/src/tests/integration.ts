@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
@@ -9,6 +8,8 @@ export function registerIntegrationTests<T extends SandboxInstance>(
   config: StandardTestsConfig<T>,
   timeout: number,
 ): void {
+  const { describe, it, expect } = config.runner;
+
   describe("integration workflows", () => {
     it(
       "should complete a write-read-edit-read workflow",
