@@ -587,17 +587,11 @@ export class SubagentExecution<
 
 const TaskMap = z.record(z.string(), z.custom<SubagentExecution>());
 
-const TaskUpdate = z.union([
-  z.object({
-    type: z.literal("add"),
-    execution: z.custom<SubagentExecution>(),
-  }),
-  z.object({
-    type: z.literal("remove"),
-  }),
-]);
+type TaskAdd = { type: "add"; execution: SubagentExecution };
+type TaskRemove = { type: "remove" };
+type TaskUpdate = TaskAdd | TaskRemove;
 
-const TaskMapInput = z.record(z.string(), TaskUpdate);
+const TaskMapInput = z.record(z.string(), z.custom<TaskUpdate>());
 
 const MiddlewareState = new StateSchema({
   tasks: new ReducedValue(TaskMap.default({}), {
