@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
@@ -11,6 +10,8 @@ export function registerGrepRawTests<T extends SandboxInstance>(
   config: StandardTestsConfig<T>,
   timeout: number,
 ): void {
+  const { describe, it, expect } = config.runner;
+
   describe("grepRaw", () => {
     it(
       "should find basic literal pattern matches",

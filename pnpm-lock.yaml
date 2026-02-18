@@ -118,16 +118,6 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
-  internal/standard-tests:
-    dependencies:
-      vitest:
-        specifier: ^4.0.18
-        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.2.3)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
-    devDependencies:
-      deepagents:
-        specifier: workspace:*
-        version: link:../../libs/deepagents
-
   libs/cli:
     devDependencies:
       '@types/fs-extra':
@@ -186,9 +176,9 @@ importers:
       '@langchain/openai':
         specifier: ^1.2.7
         version: 1.2.7(@langchain/core@1.1.24(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@4.3.6)))(ws@8.19.0)
-      '@langchain/standard-tests':
+      '@langchain/sandbox-standard-tests':
         specifier: workspace:*
-        version: link:../../internal/standard-tests
+        version: link:../standard-tests
       '@langchain/tavily':
         specifier: ^1.2.0
         version: 1.2.0(@langchain/core@1.1.24(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@4.3.6)))
@@ -235,9 +225,9 @@ importers:
         specifier: ^0.143.0
         version: 0.143.0(ws@8.19.0)
     devDependencies:
-      '@langchain/standard-tests':
+      '@langchain/sandbox-standard-tests':
         specifier: workspace:*
-        version: link:../../../internal/standard-tests
+        version: link:../../standard-tests
       '@tsconfig/recommended':
         specifier: ^1.0.13
         version: 1.0.13
@@ -272,9 +262,9 @@ importers:
         specifier: ^0.12.0
         version: 0.12.0
     devDependencies:
-      '@langchain/standard-tests':
+      '@langchain/sandbox-standard-tests':
         specifier: workspace:*
-        version: link:../../../internal/standard-tests
+        version: link:../../standard-tests
       '@tsconfig/recommended':
         specifier: ^1.0.13
         version: 1.0.13
@@ -309,9 +299,9 @@ importers:
         specifier: ^0.6.1
         version: 0.6.2
     devDependencies:
-      '@langchain/standard-tests':
+      '@langchain/sandbox-standard-tests':
         specifier: workspace:*
-        version: link:../../../internal/standard-tests
+        version: link:../../standard-tests
       '@tsconfig/recommended':
         specifier: ^1.0.13
         version: 1.0.13
@@ -346,9 +336,9 @@ importers:
         specifier: github:vercel-labs/node-vfs-polyfill
         version: https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/1227fb028a26eb0d65e565c11b0a28e7b49b990f
     devDependencies:
-      '@langchain/standard-tests':
+      '@langchain/sandbox-standard-tests':
         specifier: workspace:*
-        version: link:../../../internal/standard-tests
+        version: link:../../standard-tests
       '@tsconfig/recommended':
         specifier: ^1.0.13
         version: 1.0.13
@@ -367,6 +357,27 @@ importers:
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.2.3)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+
+  libs/standard-tests:
+    devDependencies:
+      '@tsconfig/recommended':
+        specifier: ^1.0.13
+        version: 1.0.13
+      '@types/node':
+        specifier: ^25.2.3
+        version: 25.2.3
+      deepagents:
+        specifier: workspace:*
+        version: link:../deepagents
+      tsdown:
+        specifier: ^0.20.3
+        version: 0.20.3(synckit@0.11.12)(typescript@5.9.3)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
@@ -11,6 +10,8 @@ export function registerGlobInfoTests<T extends SandboxInstance>(
   config: StandardTestsConfig<T>,
   timeout: number,
 ): void {
+  const { describe, it, expect } = config.runner;
+
   describe("globInfo", () => {
     it(
       "should match basic wildcard pattern",

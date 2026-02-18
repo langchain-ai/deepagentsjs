@@ -1,7 +1,7 @@
 {
-  "name": "@langchain/daytona",
-  "version": "0.1.1",
-  "description": "Daytona Sandbox backend for deepagents",
+  "name": "@langchain/sandbox-standard-tests",
+  "version": "0.0.3",
+  "description": "Standard integration tests for deepagents sandbox providers",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,10 +11,7 @@
     "clean": "rm -rf dist/ .tsdown/",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "pnpm build",
-    "test": "vitest run",
-    "test:unit": "vitest run",
-    "test:int": "vitest run --mode int"
+    "prepublishOnly": "pnpm build"
   },
   "repository": {
     "type": "git",
@@ -23,12 +20,10 @@
   "keywords": [
     "ai",
     "agents",
-    "langgraph",
     "langchain",
     "typescript",
-    "llm",
-    "daytona",
-    "sandbox"
+    "sandbox",
+    "testing"
   ],
   "author": "LangChain",
   "license": "MIT",
@@ -36,24 +31,6 @@
     "url": "https://github.com/langchain-ai/deepagentsjs/issues"
   },
   "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
-  "dependencies": {
-    "@daytonaio/sdk": "^0.143.0"
-  },
-  "peerDependencies": {
-    "deepagents": ">=1.6.0"
-  },
-  "devDependencies": {
-    "deepagents": "workspace:*",
-    "@langchain/sandbox-standard-tests": "workspace:*",
-    "@tsconfig/recommended": "^1.0.13",
-    "@types/node": "^25.1.0",
-    "@vitest/coverage-v8": "^4.0.18",
-    "dotenv": "^17.2.3",
-    "tsdown": "^0.20.1",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.18"
-  },
   "exports": {
     ".": {
       "import": {
@@ -65,9 +42,36 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./vitest": {
+      "import": {
+        "types": "./dist/vitest.d.ts",
+        "default": "./dist/vitest.js"
+      },
+      "require": {
+        "types": "./dist/vitest.d.cts",
+        "default": "./dist/vitest.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "dist/**/*"
-  ]
+  ],
+  "peerDependencies": {
+    "deepagents": ">=1.6.0",
+    "vitest": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "deepagents": "workspace:*",
+    "@tsconfig/recommended": "^1.0.13",
+    "@types/node": "^25.2.3",
+    "tsdown": "^0.20.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
 }

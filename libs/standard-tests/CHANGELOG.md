@@ -1,4 +1,4 @@
-# @langchain/standard-tests
+# @langchain/sandbox-standard-tests
 
 ## 0.0.2
 

@@ -5,6 +5,55 @@ import type {
   FileDownloadResponse,
 } from "deepagents";
 
+/* ------------------------------------------------------------------ */
+/*  Test-runner primitives                                             */
+/* ------------------------------------------------------------------ */
+
+/** A `describe` / suite function accepted by the standard tests. */
+export interface SuiteFn {
+  (name: string, fn: () => void): void;
+  skip?: SuiteFn;
+  sequential?: SuiteFn;
+  skipIf?: (condition: boolean) => SuiteFn;
+}
+
+/** An `it` / test function accepted by the standard tests. */
+export interface TestFn {
+  (name: string, fn: () => void | Promise<void>, timeout?: number): void;
+  skipIf?: (condition: boolean) => TestFn;
+}
+
+/** A `beforeAll` / `afterAll` hook function. */
+export type HookFn = (fn: () => void | Promise<void>, timeout?: number) => void;
+
+/**
+ * An `expect` function.
+ *
+ * The return type is intentionally `any` — every test framework exposes
+ * its own matcher API and fully typing it would couple the package to a
+ * specific runner.
+ */
+export type ExpectFn = (value: unknown) => any;
+
+/**
+ * Test-runner primitives required by the standard test suite.
+ *
+ * Pass the primitives from your test framework (Vitest, Jest, …) when
+ * importing from the root entry point.  The `@langchain/sandbox-standard-tests/vitest`
+ * sub-export fills these in automatically.
+ */
+export interface TestRunner {
+  describe: SuiteFn;
+  it: TestFn;
+  expect: ExpectFn;
+  beforeAll: HookFn;
+  afterAll: HookFn;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Sandbox types                                                      */
+/* ------------------------------------------------------------------ */
+
 /**
  * Interface for sandbox instances used in standard tests.
  *
@@ -38,6 +87,14 @@ export interface StandardTestsConfig<
    * Display name for the test suite (e.g., "ModalSandbox", "DenoSandbox").
    */
   name: string;
+
+  /**
+   * Test-runner primitives (`describe`, `it`, `expect`, `beforeAll`, `afterAll`).
+   *
+   * Required when importing from the root entry point.  Pre-filled when
+   * importing from `@langchain/sandbox-standard-tests/vitest`.
+   */
+  runner: TestRunner;
 
   /**
    * Skip all tests when true (e.g., when credentials are missing).

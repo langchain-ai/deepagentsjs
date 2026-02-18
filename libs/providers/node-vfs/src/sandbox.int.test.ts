@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import { sandboxStandardTests } from "@langchain/standard-tests";
+import { sandboxStandardTests } from "@langchain/sandbox-standard-tests/vitest";
 import { VfsSandbox, createVfsSandboxFactory } from "./sandbox.js";
 
 const isWindows = process.platform === "win32";
