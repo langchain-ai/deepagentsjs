@@ -20,7 +20,7 @@ import {
 } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
-import { HumanMessage } from "@langchain/core/messages";
+import { BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { IterableReadableStream } from "@langchain/core/utils/stream";
 
 export type { AgentMiddleware };
@@ -587,7 +587,17 @@ export class SubagentExecution<
 
 const TaskMap = z.record(z.string(), z.custom<SubagentExecution>());
 
-const TaskMapInput = z.record(z.string(), z.custom<TaskUpdate>());
+const TaskUpdate = z.union([
+  z.object({
+    type: z.literal("add"),
+    execution: z.custom<SubagentExecution>(),
+  }),
+  z.object({
+    type: z.literal("remove"),
+  }),
+]);
+
+const TaskMapInput = z.record(z.string(), TaskUpdate);
 
 const MiddlewareState = new StateSchema({
   tasks: new ReducedValue(TaskMap.default({}), {
@@ -637,13 +647,11 @@ function collectCompletedTasks(
       const filtered = filterStateForSubagent(finalState);
       Object.assign(stateUpdate, filtered);
 
-      const msgs = finalState.messages as
-        | Array<{ content: string }>
-        | undefined;
+      const msgs = finalState.messages as Array<BaseMessage>;
       const lastMsg = msgs?.at(-1);
       messages.push(
         new HumanMessage({
-          content: `[Task Result] The "${execution.subagentType}" task has completed.\n\n${lastMsg?.content || "Task completed successfully."}`,
+          content: `[Task Result] The "${execution.subagentType}" task has completed.\n\n${lastMsg?.text || "Task completed successfully."}`,
         }),
       );
     }

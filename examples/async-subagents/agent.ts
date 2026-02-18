@@ -17,7 +17,7 @@ const analyst: SubAgent = {
 
 export const agent = createDeepAgent({
   model: new ChatAnthropic({
-    model: "claude-opus-4-6",
+    model: "claude-sonnet-4-6",
     temperature: 0,
   }),
   systemPrompt: `You are a supervisor agent that orchestrates research and analysis tasks.
