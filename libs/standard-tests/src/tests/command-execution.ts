@@ -5,10 +5,10 @@ import type { SandboxInstance, StandardTestsConfig } from "../types.js";
  */
 export function registerCommandExecutionTests<T extends SandboxInstance>(
   getShared: () => T,
-  _config: StandardTestsConfig<T>,
+  config: StandardTestsConfig<T>,
   timeout: number,
 ): void {
-  const { describe, it, expect } = _config.runner;
+  const { describe, it, expect } = config.runner;
 
   describe("command execution", () => {
     it(
