@@ -185,7 +185,10 @@ export class LocalShellBackend
       });
 
       // Handle timeout (spawnSync kills the process and sets signal)
-      if (result.signal === "SIGTERM" || result.error?.message?.includes("ETIMEDOUT")) {
+      if (
+        result.signal === "SIGTERM" ||
+        result.error?.message?.includes("ETIMEDOUT")
+      ) {
         return {
           output: `Error: Command timed out after ${this.#timeout.toFixed(1)} seconds.`,
           exitCode: 124,
