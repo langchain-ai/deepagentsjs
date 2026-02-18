@@ -14,14 +14,6 @@ export function registerLifecycleTests<T extends SandboxInstance>(
 ): void {
   const { describe, it, expect, beforeAll, afterAll } = config.runner;
 
-  const describeSkipIf =
-    describe.skipIf ??
-    ((condition: boolean) =>
-      condition ? (describe.skip ?? (() => {})) : describe);
-
-  const itSkipIf =
-    it.skipIf ?? ((condition: boolean) => (condition ? () => {} : it));
-
   describe("sandbox lifecycle", () => {
     it(
       "should create sandbox and have a valid id",
@@ -43,60 +35,63 @@ export function registerLifecycleTests<T extends SandboxInstance>(
       timeout,
     );
 
-    const canBeClosed = typeof config.closeSandbox === "function";
-    describeSkipIf(!canBeClosed)("close", () => {
-      let tmp: T;
+    if (typeof config.closeSandbox === "function") {
+      describe("close", () => {
+        let tmp: T;
 
-      beforeAll(async () => {
-        tmp = await withRetry(() => config.createSandbox());
-      }, timeout);
+        beforeAll(async () => {
+          tmp = await withRetry(() => config.createSandbox());
+        }, timeout);
 
-      afterAll(async () => {
-        try {
-          await config.closeSandbox?.(tmp);
-        } catch {
-          // Ignore cleanup errors
-        }
-      }, timeout);
+        afterAll(async () => {
+          try {
+            await config.closeSandbox?.(tmp);
+          } catch {
+            // Ignore cleanup errors
+          }
+        }, timeout);
 
-      it(
-        "should close sandbox successfully",
-        async () => {
-          expect(tmp.isRunning).toBe(true);
+        it(
+          "should close sandbox successfully",
+          async () => {
+            expect(tmp.isRunning).toBe(true);
 
-          await config.closeSandbox?.(tmp);
+            await config.closeSandbox?.(tmp);
 
-          expect(tmp.isRunning).toBe(false);
-        },
-        timeout,
-      );
-    });
+            expect(tmp.isRunning).toBe(false);
+          },
+          timeout,
+        );
+      });
+    }
 
-    describe("two-step initialization", () => {
-      let tmp: T;
+    if (config.createUninitializedSandbox) {
+      describe("two-step initialization", () => {
+        let tmp: T;
 
-      afterAll(async () => {
-        try {
-          if (tmp) await config.closeSandbox?.(tmp);
-        } catch {
-          // Ignore cleanup errors
-        }
-      }, timeout);
+        afterAll(async () => {
+          try {
+            if (tmp) await config.closeSandbox?.(tmp);
+          } catch {
+            // Ignore cleanup errors
+          }
+        }, timeout);
 
-      itSkipIf(!config.createUninitializedSandbox)(
-        "should work with two-step initialization",
-        async () => {
-          tmp = config.createUninitializedSandbox!();
+        it(
+          "should work with two-step initialization",
+          async () => {
+            tmp = config.createUninitializedSandbox!();
 
-          expect(tmp.isRunning).toBe(false);
+            expect(tmp.isRunning).toBe(false);
 
-          await withRetry(() => tmp.initialize!());
+            await withRetry(() => tmp.initialize!());
 
-          expect(tmp.isRunning).toBe(true);
-          expect(tmp.id).toBeDefined();
-        },
-        timeout,
-      );
-    });
+            expect(tmp.isRunning).toBe(true);
+            expect(tmp.id).toBeDefined();
+          },
+          timeout,
+        );
+      });
+    }
   });
 }
