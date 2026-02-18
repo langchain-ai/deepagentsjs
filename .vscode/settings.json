@@ -6,5 +6,21 @@
   },
   "[typescript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "workbench.colorCustomizations": {
+    "activityBar.foreground": "#000000",
+    "iLoveWorkSpaceColors": true,
+    "iLoveWorkSpaceRandom": false,
+    "titleBar.activeBackground": "#f9dba2",
+    "titleBar.activeForeground": "#000000",
+    "titleBar.inactiveBackground": "#f9dba2",
+    "titleBar.inactiveForeground": "#000000",
+    "titleBar.border": "#f9dba2",
+    "activityBar.background": "#f9dba2",
+    "statusBar.background": "#f9dba2",
+    "statusBar.foreground": "#000000",
+    "statusBar.debuggingBackground": "#f9dba2",
+    "statusBar.debuggingForeground": "#000000",
+    "tab.activeBorder": "#f9dba2"
   }
 }
