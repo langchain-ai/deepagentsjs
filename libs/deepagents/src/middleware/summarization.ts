@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Summarization middleware with backend support for conversation history offloading.
  *
@@ -57,14 +56,13 @@ import { getBufferString } from "@langchain/core/messages";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { BaseLanguageModel } from "@langchain/core/language_models/base";
 import type { ClientTool, ServerTool } from "@langchain/core/tools";
+import { ContextOverflowError } from "@langchain/core/errors";
 import { initChatModel } from "langchain/chat_models/universal";
 import { Command } from "@langchain/langgraph";
 
 import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
-
-const LOG_PREFIX = "[SummarizationMiddleware]";
 
 // Re-export the base summarization middleware from langchain for users who don't need backend offloading
 export { summarizationMiddleware } from "langchain";
@@ -166,7 +164,7 @@ export interface SummarizationMiddlewareOptions {
 const DEFAULT_MESSAGES_TO_KEEP = 20;
 const DEFAULT_TRIM_TOKEN_LIMIT = 4000;
 
-// Fallback defaults when model has no profile
+// Fallback defaults when model has no profile (matches Python's fallback)
 const FALLBACK_TRIGGER: ContextSize = { type: "tokens", value: 170_000 };
 const FALLBACK_KEEP: ContextSize = { type: "messages", value: 6 };
 const FALLBACK_TRUNCATE_ARGS: TruncateArgsSettings = {
@@ -188,18 +186,19 @@ const PROFILE_TRUNCATE_ARGS: TruncateArgsSettings = {
  *
  * If the model has a profile with `maxInputTokens`, uses fraction-based
  * settings. Otherwise, uses fixed token/message counts.
+ *
+ * @param resolvedModel - The resolved chat model instance.
  */
 export function computeSummarizationDefaults(resolvedModel: BaseChatModel): {
   trigger: ContextSize;
   keep: ContextSize;
   truncateArgsSettings: TruncateArgsSettings;
 } {
-  const profile = resolvedModel.profile;
   const hasProfile =
-    profile &&
-    typeof profile === "object" &&
-    "maxInputTokens" in profile &&
-    typeof profile.maxInputTokens === "number";
+    resolvedModel.profile &&
+    typeof resolvedModel.profile === "object" &&
+    "maxInputTokens" in resolvedModel.profile &&
+    typeof resolvedModel.profile.maxInputTokens === "number";
 
   if (hasProfile) {
     return {
@@ -328,12 +327,6 @@ export function createSummarizationMiddleware(
     defaultsComputed = true;
 
     const defaults = computeSummarizationDefaults(resolvedModel);
-    console.log(
-      `${LOG_PREFIX} Auto-computed defaults from model profile: ` +
-        `trigger=${JSON.stringify(defaults.trigger)}, ` +
-        `keep=${JSON.stringify(defaults.keep)}, ` +
-        `truncateArgs=${JSON.stringify(defaults.truncateArgsSettings)}`,
-    );
 
     trigger = defaults.trigger;
     keep = options.keep ?? defaults.keep;
@@ -354,6 +347,13 @@ export function createSummarizationMiddleware(
 
   // Session ID for this middleware instance (fallback if no thread_id)
   let sessionId: string | null = null;
+
+  // Calibration multiplier for token estimation. countTokensApproximately
+  // can significantly undercount (e.g. it ignores tool_use content blocks,
+  // JSON structural overhead). After a ContextOverflowError we learn the
+  // gap between estimated and actual tokens and adjust future comparisons
+  // so proactive summarization fires before the hard limit is hit.
+  let tokenEstimationMultiplier = 1.0;
 
   /**
    * Resolve backend from instance or factory.
@@ -410,8 +410,13 @@ export function createSummarizationMiddleware(
   }
 
   /**
-   * Get the max input tokens from the resolved model's profile.
+   * Get the max input tokens from the model's profile.
    * Similar to Python's _get_profile_limits.
+   *
+   * When the profile is unavailable, returns undefined. In that case the
+   * middleware uses fixed token/message-count fallback defaults for
+   * trigger/keep, and relies on the ContextOverflowError catch as a
+   * safety net if the prompt still exceeds the model's actual limit.
    */
   function getMaxInputTokens(resolvedModel: BaseChatModel): number | undefined {
     const profile = resolvedModel.profile;
@@ -438,18 +443,19 @@ export function createSummarizationMiddleware(
       return false;
     }
 
+    const adjustedTokens = totalTokens * tokenEstimationMultiplier;
     const triggers = Array.isArray(trigger) ? trigger : [trigger];
 
     for (const t of triggers) {
       if (t.type === "messages" && messages.length >= t.value) {
         return true;
       }
-      if (t.type === "tokens" && totalTokens >= t.value) {
+      if (t.type === "tokens" && adjustedTokens >= t.value) {
         return true;
       }
       if (t.type === "fraction" && maxInputTokens) {
         const threshold = Math.floor(maxInputTokens * t.value);
-        if (totalTokens >= threshold) {
+        if (adjustedTokens >= threshold) {
           return true;
         }
       }
@@ -461,12 +467,16 @@ export function createSummarizationMiddleware(
   /**
    * Find a safe cutoff point that doesn't split AI/Tool message pairs.
    *
-   * If the message at `cutoffIndex` is a ToolMessage, search backward for the
-   * AIMessage containing the corresponding tool_calls and adjust the cutoff to
-   * include it. This ensures tool call requests and responses stay together.
+   * If the message at `cutoffIndex` is a ToolMessage, this adjusts the boundary
+   * so that related AI and Tool messages stay together. Two strategies are used:
    *
-   * Falls back to advancing forward past ToolMessage objects only if no matching
-   * AIMessage is found (edge case).
+   * 1. **Move backward** to include the AIMessage that produced the tool calls,
+   *    keeping the pair in the preserved set. Preferred when it doesn't move
+   *    the cutoff too far back.
+   *
+   * 2. **Advance forward** past all consecutive ToolMessages, putting the entire
+   *    pair into the summarized set. Used when moving backward would preserve
+   *    too many messages (e.g., a single AIMessage made 20+ tool calls).
    */
   function findSafeCutoffPoint(
     messages: BaseMessage[],
@@ -479,18 +489,26 @@ export function createSummarizationMiddleware(
       return cutoffIndex;
     }
 
-    // Collect tool_call_ids from consecutive ToolMessages at/after cutoff
+    // Advance past all consecutive ToolMessages at the cutoff point
+    let forwardIdx = cutoffIndex;
+    while (
+      forwardIdx < messages.length &&
+      ToolMessage.isInstance(messages[forwardIdx])
+    ) {
+      forwardIdx++;
+    }
+
+    // Collect tool_call_ids from the ToolMessages at the cutoff boundary
     const toolCallIds = new Set<string>();
-    let idx = cutoffIndex;
-    while (idx < messages.length && ToolMessage.isInstance(messages[idx])) {
-      const toolMsg = messages[idx] as InstanceType<typeof ToolMessage>;
+    for (let i = cutoffIndex; i < forwardIdx; i++) {
+      const toolMsg = messages[i] as InstanceType<typeof ToolMessage>;
       if (toolMsg.tool_call_id) {
         toolCallIds.add(toolMsg.tool_call_id);
       }
-      idx++;
     }
 
     // Search backward for AIMessage with matching tool_calls
+    let backwardIdx: number | null = null;
     for (let i = cutoffIndex - 1; i >= 0; i--) {
       const msg = messages[i];
       if (AIMessage.isInstance(msg) && msg.tool_calls) {
@@ -499,19 +517,31 @@ export function createSummarizationMiddleware(
             .map((tc) => tc.id)
             .filter((id): id is string => id != null),
         );
-        // Check if there's any overlap
         for (const id of toolCallIds) {
           if (aiToolCallIds.has(id)) {
-            // Found the AIMessage - move cutoff to include it
-            return i;
+            backwardIdx = i;
+            break;
           }
         }
+        if (backwardIdx !== null) break;
       }
     }
 
-    // Fallback: no matching AIMessage found, advance past ToolMessages
-    // to avoid orphaned tool responses
-    return idx;
+    if (backwardIdx === null) {
+      // No matching AIMessage found - advance forward past ToolMessages
+      return forwardIdx;
+    }
+
+    // Choose strategy: prefer backward (preserves more context) unless it
+    // would move the cutoff back by more than half the original position,
+    // which indicates a single AIMessage with many tool calls that would
+    // defeat the purpose of summarization.
+    const backwardDistance = cutoffIndex - backwardIdx;
+    if (backwardDistance > cutoffIndex / 2 && cutoffIndex > 2) {
+      return forwardIdx;
+    }
+
+    return backwardIdx;
   }
 
   /**
@@ -567,15 +597,16 @@ export function createSummarizationMiddleware(
       return false;
     }
 
+    const adjustedTokens = totalTokens * tokenEstimationMultiplier;
     if (truncateTrigger.type === "messages") {
       return messages.length >= truncateTrigger.value;
     }
     if (truncateTrigger.type === "tokens") {
-      return totalTokens >= truncateTrigger.value;
+      return adjustedTokens >= truncateTrigger.value;
     }
     if (truncateTrigger.type === "fraction" && maxInputTokens) {
       const threshold = Math.floor(maxInputTokens * truncateTrigger.value);
-      return totalTokens >= threshold;
+      return adjustedTokens >= threshold;
     }
 
     return false;
@@ -642,6 +673,74 @@ export function createSummarizationMiddleware(
         : null;
 
     return countTokensApproximately(countedMessages, toolsArray);
+  }
+
+  /**
+   * Truncate ToolMessage content so that the total payload fits within the
+   * model's context window. Each ToolMessage gets an equal share of the
+   * remaining token budget after accounting for non-tool messages, system
+   * message, and tool schemas.
+   *
+   * This is critical for conversations where a single AIMessage triggers
+   * many tool calls whose results collectively exceed the context window.
+   * Without this, findSafeCutoffPoint cannot split the AI/Tool group and
+   * summarization would discard everything, causing the model to re-call
+   * the same tools in an infinite loop.
+   */
+  function compactToolResults(
+    messages: BaseMessage[],
+    maxInputTokens: number,
+    systemMessage?: SystemMessage | unknown,
+    tools?: (ServerTool | ClientTool)[] | unknown[],
+  ): { messages: BaseMessage[]; modified: boolean } {
+    const toolMessageIndices: number[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      if (ToolMessage.isInstance(messages[i])) {
+        toolMessageIndices.push(i);
+      }
+    }
+    if (toolMessageIndices.length === 0) {
+      return { messages, modified: false };
+    }
+
+    const nonToolMessages = messages.filter((m) => !ToolMessage.isInstance(m));
+    const overheadTokens = countTotalTokens(
+      nonToolMessages,
+      systemMessage,
+      tools,
+    );
+
+    // Target: fit within maxInputTokens / multiplier, leaving 30% headroom
+    const adjustedMax = maxInputTokens / tokenEstimationMultiplier;
+    const budgetForTools = Math.max(adjustedMax * 0.7 - overheadTokens, 1000);
+    const perToolBudgetTokens = Math.floor(
+      budgetForTools / toolMessageIndices.length,
+    );
+    const perToolBudgetChars = perToolBudgetTokens * 4;
+
+    let modified = false;
+    const result = [...messages];
+
+    for (const idx of toolMessageIndices) {
+      const msg = messages[idx] as InstanceType<typeof ToolMessage>;
+      const content =
+        typeof msg.content === "string"
+          ? msg.content
+          : JSON.stringify(msg.content);
+
+      if (content.length > perToolBudgetChars) {
+        result[idx] = new ToolMessage({
+          content:
+            content.substring(0, perToolBudgetChars) +
+            "\n...(result truncated)",
+          tool_call_id: msg.tool_call_id,
+          name: msg.name,
+        });
+        modified = true;
+      }
+    }
+
+    return { messages: result, modified };
   }
 
   /**
@@ -766,6 +865,7 @@ export function createSummarizationMiddleware(
       }
 
       if (result.error) {
+        // eslint-disable-next-line no-console
         console.warn(
           `Failed to offload conversation history to ${path}: ${result.error}`,
         );
@@ -774,6 +874,7 @@ export function createSummarizationMiddleware(
 
       return path;
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.warn(`Exception offloading conversation history to ${path}:`, e);
       return null;
     }
@@ -869,9 +970,64 @@ ${summary}
   }
 
   /**
-   * Perform the summarization flow: offload, generate summary, return Command.
-   * Extracted so it can be called both from the normal path and the overflow fallback.
+   * Summarize a set of messages using the given model and build the
+   * summary message + backend offload. Returns the summary message,
+   * the file path, and the state cutoff index.
    */
+  async function summarizeMessages(
+    messagesToSummarize: BaseMessage[],
+    resolvedModel: BaseChatModel,
+    state: Record<string, unknown>,
+    previousCutoffIndex: number | undefined,
+    cutoffIndex: number,
+  ): Promise<{
+    summaryMessage: HumanMessage;
+    filePath: string | null;
+    stateCutoffIndex: number;
+  }> {
+    const resolvedBackend = getBackend(state);
+    const filePath = await offloadToBackend(
+      resolvedBackend,
+      messagesToSummarize,
+      state,
+    );
+
+    if (filePath === null) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[SummarizationMiddleware] Backend offload failed during summarization. Proceeding with summary generation.`,
+      );
+    }
+
+    const summary = await createSummary(messagesToSummarize, resolvedModel);
+    const summaryMessage = buildSummaryMessage(summary, filePath);
+
+    const stateCutoffIndex =
+      previousCutoffIndex != null
+        ? previousCutoffIndex + cutoffIndex - 1
+        : cutoffIndex;
+
+    return { summaryMessage, filePath, stateCutoffIndex };
+  }
+
+  /**
+   * Check if an error (possibly wrapped in MiddlewareError layers) is a
+   * ContextOverflowError by walking the `cause` chain.
+   */
+  function isContextOverflow(err: unknown): boolean {
+    let cause: unknown = err;
+    while (cause != null) {
+      if (ContextOverflowError.isInstance(cause)) {
+        return true;
+      }
+      cause =
+        typeof cause === "object" && cause !== null && "cause" in cause
+          ? (cause as { cause?: unknown }).cause
+          : undefined;
+    }
+    return false;
+  }
+
   async function performSummarization(
     request: {
       messages: BaseMessage[];
@@ -887,62 +1043,103 @@ ${summary}
   ): Promise<any> {
     const cutoffIndex = determineCutoffIndex(truncatedMessages, maxInputTokens);
     if (cutoffIndex <= 0) {
-      console.log(
-        `${LOG_PREFIX} cutoffIndex=0, nothing to summarize (all messages within keep policy). Passing through.`,
-      );
       return handler({ ...request, messages: truncatedMessages });
     }
 
     const messagesToSummarize = truncatedMessages.slice(0, cutoffIndex);
     const preservedMessages = truncatedMessages.slice(cutoffIndex);
 
-    console.log(
-      `${LOG_PREFIX} Summarizing: cutoffIndex=${cutoffIndex}, summarizing ${messagesToSummarize.length} messages, preserving ${preservedMessages.length} messages`,
-    );
-
-    const resolvedBackend = getBackend(request.state);
-    const filePath = await offloadToBackend(
-      resolvedBackend,
-      messagesToSummarize,
-      request.state,
-    );
-
-    if (filePath === null) {
-      console.warn(
-        `${LOG_PREFIX} Offloading conversation history to backend failed during summarization. Proceeding with summary generation anyway.`,
+    // When ALL messages would be summarized (preserving 0), the model loses
+    // all tool call context and re-invokes the same tools, creating an
+    // infinite loop. Instead, try truncating ToolMessage content so the
+    // entire AI/Tool group fits in context without summarization.
+    if (preservedMessages.length === 0 && maxInputTokens) {
+      const compact = compactToolResults(
+        truncatedMessages,
+        maxInputTokens,
+        request.systemMessage,
+        request.tools,
       );
+
+      if (compact.modified) {
+        try {
+          return await handler({
+            ...request,
+            messages: compact.messages,
+          });
+        } catch (err: unknown) {
+          if (!isContextOverflow(err)) {
+            throw err;
+          }
+        }
+      }
     }
 
-    const summary = await createSummary(messagesToSummarize, resolvedModel);
-    const summaryMessage = buildSummaryMessage(summary, filePath);
-
     const previousEvent = request.state._summarizationEvent;
-    const stateCutoffIndex =
+    const previousCutoffIndex =
       previousEvent != null
-        ? (previousEvent as SummarizationEvent).cutoffIndex + cutoffIndex - 1
-        : cutoffIndex;
+        ? (previousEvent as SummarizationEvent).cutoffIndex
+        : undefined;
 
-    const newEvent: SummarizationEvent = {
-      cutoffIndex: stateCutoffIndex,
-      summaryMessage,
-      filePath,
-    };
+    const { summaryMessage, filePath, stateCutoffIndex } =
+      await summarizeMessages(
+        messagesToSummarize,
+        resolvedModel,
+        request.state,
+        previousCutoffIndex,
+        cutoffIndex,
+      );
 
-    const modifiedMessages = [summaryMessage, ...preservedMessages];
+    let modifiedMessages = [summaryMessage, ...preservedMessages];
     const modifiedTokens = countTotalTokens(
       modifiedMessages,
       request.systemMessage,
       request.tools,
     );
-    console.log(
-      `${LOG_PREFIX} After summarization: ${modifiedMessages.length} messages, ~${modifiedTokens} tokens (including system message + tools)`,
-    );
 
-    await handler({ ...request, messages: modifiedMessages });
+    let finalStateCutoffIndex = stateCutoffIndex;
+    let finalSummaryMessage = summaryMessage;
+    let finalFilePath = filePath;
+
+    try {
+      await handler({ ...request, messages: modifiedMessages });
+    } catch (err: unknown) {
+      if (!isContextOverflow(err)) {
+        throw err;
+      }
+
+      if (maxInputTokens && modifiedTokens > 0) {
+        const observedRatio = maxInputTokens / modifiedTokens;
+        if (observedRatio > tokenEstimationMultiplier) {
+          tokenEstimationMultiplier = observedRatio * 1.1;
+        }
+      }
+
+      const allMessages = [...messagesToSummarize, ...preservedMessages];
+      const reSumResult = await summarizeMessages(
+        allMessages,
+        resolvedModel,
+        request.state,
+        previousCutoffIndex,
+        truncatedMessages.length,
+      );
+
+      finalSummaryMessage = reSumResult.summaryMessage;
+      finalFilePath = reSumResult.filePath;
+      finalStateCutoffIndex = reSumResult.stateCutoffIndex;
+
+      modifiedMessages = [reSumResult.summaryMessage];
+
+      await handler({ ...request, messages: modifiedMessages });
+    }
 
     return new Command({
       update: {
-        _summarizationEvent: newEvent,
+        _summarizationEvent: {
+          cutoffIndex: finalStateCutoffIndex,
+          summaryMessage: finalSummaryMessage,
+          filePath: finalFilePath,
+        } satisfies SummarizationEvent,
         _summarizationSessionId: getSessionId(request.state),
       },
     });
@@ -959,41 +1156,26 @@ ${summary}
         request.state,
       );
 
-      console.log(
-        `${LOG_PREFIX} wrapModelCall: ${request.messages?.length ?? 0} raw messages, ${effectiveMessages.length} effective messages`,
-      );
-
       if (effectiveMessages.length === 0) {
-        console.log(`${LOG_PREFIX} No messages, passing through.`);
         return handler(request);
       }
 
       /**
-       * Resolve the chat model and get max input tokens from profile.
-       * Also compute defaults if trigger was not provided (lazy initialization
-       * matching Python's _compute_summarization_defaults).
+       * Resolve the chat model and get max input tokens from its profile.
        */
       const resolvedModel = await getChatModel();
-      applyModelDefaults(resolvedModel);
       const maxInputTokens = getMaxInputTokens(resolvedModel);
-      console.log(
-        `${LOG_PREFIX} Model profile: maxInputTokens=${maxInputTokens ?? "unknown"}`,
-      );
+      applyModelDefaults(resolvedModel);
 
       /**
        * Step 1: Truncate args if configured
        */
-      const { messages: truncatedMessages, modified: argsWereTruncated } =
-        truncateArgs(
+      const { messages: truncatedMessages } = truncateArgs(
           effectiveMessages,
           maxInputTokens,
           request.systemMessage,
           request.tools,
         );
-
-      if (argsWereTruncated) {
-        console.log(`${LOG_PREFIX} Tool arguments truncated in old messages.`);
-      }
 
       /**
        * Step 2: Check if summarization should happen.
@@ -1012,15 +1194,10 @@ ${summary}
         maxInputTokens,
       );
 
-      console.log(
-        `${LOG_PREFIX} Token count: ~${totalTokens} tokens ` +
-          `(${truncatedMessages.length} messages + system message + ${Array.isArray(request.tools) ? request.tools.length : 0} tools), ` +
-          `trigger=${JSON.stringify(trigger)}, shouldSummarize=${shouldDoSummarization}`,
-      );
-
       /**
        * If no summarization needed, try passing through.
-       * If the handler throws a context overflow error, fall back to summarization.
+       * If the handler throws a ContextOverflowError, fall back to
+       * emergency summarization (matching Python's behavior).
        */
       if (!shouldDoSummarization) {
         try {
@@ -1029,27 +1206,17 @@ ${summary}
             messages: truncatedMessages,
           });
         } catch (err: unknown) {
-          // Check if this is a context overflow / prompt too long error
-          const errMsg =
-            err && typeof err === "object" && "message" in err
-              ? String((err as { message: unknown }).message)
-              : typeof err === "string"
-                ? err
-                : JSON.stringify(err);
-          const isContextOverflow =
-            /prompt.*(too long|too large)|token.*limit|context.*overflow|context.*length|maximum.*token|exceeds.*maximum/i.test(
-              errMsg,
-            );
-
-          if (isContextOverflow) {
-            console.warn(
-              `${LOG_PREFIX} Context overflow detected after handler call (${totalTokens} tokens). ` +
-                `Falling back to emergency summarization. Error: ${errMsg}`,
-            );
-            // Fall through to summarization below
-          } else {
+          if (!isContextOverflow(err)) {
             throw err;
           }
+
+          if (maxInputTokens && totalTokens > 0) {
+            const observedRatio = maxInputTokens / totalTokens;
+            if (observedRatio > tokenEstimationMultiplier) {
+              tokenEstimationMultiplier = observedRatio * 1.1;
+            }
+          }
+          // Fall through to summarization below
         }
       }
 
