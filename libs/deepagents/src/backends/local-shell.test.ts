@@ -67,9 +67,7 @@ describe("LocalShellBackend", () => {
       const backend = new LocalShellBackend({ rootDir: tmpDir });
       await backend.initialize();
 
-      await expect(backend.initialize()).rejects.toThrow(
-        "already initialized",
-      );
+      await expect(backend.initialize()).rejects.toThrow("already initialized");
     });
 
     it("should create and initialize via static create()", async () => {
@@ -224,7 +222,7 @@ describe("LocalShellBackend", () => {
       });
 
       const result = await backend.execute(
-        'node -e "process.stdout.write(\'CUSTOM_VAR is: \' + (process.env.CUSTOM_VAR || \'\'))"',
+        "node -e \"process.stdout.write('CUSTOM_VAR is: ' + (process.env.CUSTOM_VAR || ''))\"",
       );
 
       expect(result.exitCode).toBe(0);

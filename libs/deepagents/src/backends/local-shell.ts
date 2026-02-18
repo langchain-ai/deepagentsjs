@@ -290,8 +290,7 @@ export class LocalShellBackend
       return [];
     }
 
-    const formatPath = (rel: string) =>
-      this.virtualMode ? `/${rel}` : rel;
+    const formatPath = (rel: string) => (this.virtualMode ? `/${rel}` : rel);
 
     const globOpts = { cwd: resolvedSearchPath, absolute: false, dot: true };
     const [fileMatches, dirMatches] = await Promise.all([
@@ -310,7 +309,9 @@ export class LocalShellBackend
             modified_at: entryStat.mtime.toISOString(),
           };
         }
-      } catch { /* skip unstatable entries */ }
+      } catch {
+        /* skip unstatable entries */
+      }
       return null;
     };
 
@@ -325,7 +326,9 @@ export class LocalShellBackend
             modified_at: entryStat.mtime.toISOString(),
           };
         }
-      } catch { /* skip unstatable entries */ }
+      } catch {
+        /* skip unstatable entries */
+      }
       return null;
     };
 
