@@ -8,9 +8,6 @@
  * ```
  */
 
-export {
-  sandboxStandardTests,
-  withRetry,
-  type SandboxInstance,
-  type StandardTestsConfig,
-} from "./sandbox.js";
+export { sandboxStandardTests, withRetry } from "./sandbox.js";
+
+export type { SandboxInstance, StandardTestsConfig } from "./types.js";
