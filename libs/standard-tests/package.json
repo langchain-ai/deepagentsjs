@@ -2,20 +2,63 @@
   "name": "@langchain/sandbox-standard-tests",
   "version": "0.0.3",
   "description": "Standard integration tests for deepagents sandbox providers",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsdown",
+    "clean": "rm -rf dist/ .tsdown/",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/langchain-ai/deepagentsjs.git"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "langchain",
+    "typescript",
+    "sandbox",
+    "testing"
+  ],
+  "author": "LangChain",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/langchain-ai/deepagentsjs/issues"
+  },
+  "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./vitest": {
-      "types": "./src/vitest.ts",
-      "default": "./src/vitest.ts"
-    }
+      "import": {
+        "types": "./dist/vitest.d.ts",
+        "default": "./dist/vitest.js"
+      },
+      "require": {
+        "types": "./dist/vitest.d.cts",
+        "default": "./dist/vitest.cjs"
+      }
+    },
+    "./package.json": "./package.json"
   },
+  "files": [
+    "dist/**/*"
+  ],
   "peerDependencies": {
+    "deepagents": ">=1.6.0",
     "vitest": ">=1.0.0"
   },
   "peerDependenciesMeta": {
@@ -25,6 +68,10 @@
   },
   "devDependencies": {
     "deepagents": "workspace:*",
+    "@tsconfig/recommended": "^1.0.13",
+    "@types/node": "^25.2.3",
+    "tsdown": "^0.20.3",
+    "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   }
 }

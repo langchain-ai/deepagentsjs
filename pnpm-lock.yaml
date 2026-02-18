@@ -366,9 +366,21 @@ importers:
 
   libs/standard-tests:
     devDependencies:
+      '@tsconfig/recommended':
+        specifier: ^1.0.13
+        version: 1.0.13
+      '@types/node':
+        specifier: ^25.2.3
+        version: 25.2.3
       deepagents:
         specifier: workspace:*
         version: link:../deepagents
+      tsdown:
+        specifier: ^0.20.3
+        version: 0.20.3(synckit@0.11.12)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.2.3)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
