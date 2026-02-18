@@ -3,3 +3,4 @@ packages:
   - "libs/providers/*"
   - "internal/*"
   - "examples"
+  - "examples/async-subagents"
