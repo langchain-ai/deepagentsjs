@@ -8,8 +8,8 @@
   "dependencies": {
     "deepagents": "workspace:*",
     "@langchain/modal": "workspace:*",
-    "@langchain/anthropic": "^1.3.17",
-    "@langchain/core": "^1.1.24",
+    "@langchain/anthropic": "^1.3.18",
+    "@langchain/core": "^1.1.25",
     "@langchain/daytona": "workspace:*",
     "@langchain/deno": "workspace:*",
     "@langchain/node-vfs": "workspace:*",

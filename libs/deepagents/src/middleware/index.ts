@@ -44,6 +44,7 @@ export { appendToSystemMessage, prependToSystemMessage } from "./utils.js";
 export {
   // Backend-aware summarization middleware with history offloading
   createSummarizationMiddleware,
+  computeSummarizationDefaults,
   type SummarizationMiddlewareOptions,
   type SummarizationEvent,
   type ContextSize,

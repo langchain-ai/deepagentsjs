@@ -3,7 +3,6 @@ import {
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
   todoListMiddleware,
-  summarizationMiddleware,
   SystemMessage,
   type AgentMiddleware,
 } from "langchain";
@@ -19,6 +18,7 @@ import {
   createFilesystemMiddleware,
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
+  createSummarizationMiddleware,
   createMemoryMiddleware,
   createSkillsMiddleware,
   type SubAgent,
@@ -50,7 +50,7 @@ const BASE_PROMPT = `In order to complete the objective that the user asks of yo
  * - Todo management (todoListMiddleware)
  * - Filesystem tools (createFilesystemMiddleware)
  * - Subagent delegation (createSubAgentMiddleware)
- * - Conversation summarization (summarizationMiddleware)
+ * - Conversation summarization (createSummarizationMiddleware) with backend offloading
  * - Prompt caching (anthropicPromptCachingMiddleware)
  * - Tool call patching (createPatchToolCallsMiddleware)
  * - Human-in-the-loop (humanInTheLoopMiddleware) - optional
@@ -211,16 +211,21 @@ export function createDeepAgent<
   /**
    * Middleware for custom subagents (does NOT include skills from main agent).
    * Custom subagents must define their own `skills` property to get skills.
+   *
+   * Uses createSummarizationMiddleware (deepagents version) with backend support
+   * and auto-computed defaults from model profile, matching Python's create_deep_agent.
+   * When trigger is not provided, defaults are lazily computed:
+   *   - With model profile: fraction-based (trigger=0.85, keep=0.10)
+   *   - Without profile: fixed (trigger=170k tokens, keep=6 messages)
    */
   const subagentMiddleware = [
     todoListMiddleware(),
     createFilesystemMiddleware({
       backend: filesystemBackend,
     }),
-    summarizationMiddleware({
+    createSummarizationMiddleware({
       model,
-      trigger: { tokens: 170_000 },
-      keep: { messages: 6 },
+      backend: filesystemBackend,
     }),
     anthropicPromptCachingMiddleware({
       unsupportedModelBehavior: "ignore",
@@ -264,12 +269,13 @@ export function createDeepAgent<
       generalPurposeAgent: true,
     }),
     /**
-     * Automatically summarizes conversation history when token limits are approached
+     * Automatically summarizes conversation history when token limits are approached.
+     * Uses createSummarizationMiddleware (deepagents version) with backend support
+     * for conversation history offloading and auto-computed defaults from model profile.
      */
-    summarizationMiddleware({
+    createSummarizationMiddleware({
       model,
-      trigger: { tokens: 170_000 },
-      keep: { messages: 6 },
+      backend: filesystemBackend,
     }),
     /**
      * Enables Anthropic prompt caching for improved performance and reduced costs
