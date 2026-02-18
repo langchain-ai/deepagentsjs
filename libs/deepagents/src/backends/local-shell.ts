@@ -8,7 +8,7 @@
  * @module
  */
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 
 import { FilesystemBackend } from "./filesystem.js";
@@ -96,7 +96,7 @@ export interface LocalShellBackendOptions {
  * });
  *
  * // Execute shell commands (runs directly on host)
- * const result = backend.execute("ls -la");
+ * const result = await backend.execute("ls -la");
  * console.log(result.output);
  * console.log(result.exitCode);
  *
@@ -154,7 +154,7 @@ export class LocalShellBackend
   /**
    * Execute a shell command directly on the host system.
    *
-   * Commands are executed directly on your host system using `spawnSync()`
+   * Commands are executed directly on your host system using `spawn()`
    * with `shell: true`. There is NO sandboxing, isolation, or security
    * restrictions. The command runs with your user's full permissions.
    *
@@ -165,7 +165,7 @@ export class LocalShellBackend
    * @param command - Shell command string to execute
    * @returns ExecuteResponse containing output, exit code, and truncation flag
    */
-  execute(command: string): ExecuteResponse {
+  async execute(command: string): Promise<ExecuteResponse> {
     if (!command || typeof command !== "string") {
       return {
         output: "Error: Command must be a non-empty string.",
@@ -174,69 +174,84 @@ export class LocalShellBackend
       };
     }
 
-    try {
-      const result = spawnSync(command, {
+    return new Promise<ExecuteResponse>((resolve) => {
+      let stdout = "";
+      let stderr = "";
+      let timedOut = false;
+
+      const child = spawn(command, {
         shell: true,
-        timeout: this.#timeout * 1000,
         env: this.#env,
         cwd: this.cwd,
-        encoding: "utf-8",
-        maxBuffer: this.#maxOutputBytes * 2,
       });
 
-      // Handle timeout (spawnSync kills the process and sets signal)
-      if (
-        result.signal === "SIGTERM" ||
-        result.error?.message?.includes("ETIMEDOUT")
-      ) {
-        return {
-          output: `Error: Command timed out after ${this.#timeout.toFixed(1)} seconds.`,
-          exitCode: 124,
+      const timer = setTimeout(() => {
+        timedOut = true;
+        child.kill("SIGTERM");
+      }, this.#timeout * 1000);
+
+      child.stdout.on("data", (data: Buffer) => {
+        stdout += data.toString();
+      });
+
+      child.stderr.on("data", (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      child.on("error", (err) => {
+        clearTimeout(timer);
+        resolve({
+          output: `Error executing command: ${err.message}`,
+          exitCode: 1,
           truncated: false,
-        };
-      }
+        });
+      });
 
-      // Combine stdout and stderr, prefix stderr lines with [stderr]
-      const outputParts: string[] = [];
-      if (result.stdout) {
-        outputParts.push(result.stdout);
-      }
-      if (result.stderr) {
-        const stderrLines = result.stderr.trim().split("\n");
-        outputParts.push(
-          ...stderrLines.map((line: string) => `[stderr] ${line}`),
-        );
-      }
+      child.on("close", (code, signal) => {
+        clearTimeout(timer);
 
-      let output =
-        outputParts.length > 0 ? outputParts.join("\n") : "<no output>";
+        if (timedOut || signal === "SIGTERM") {
+          resolve({
+            output: `Error: Command timed out after ${this.#timeout.toFixed(1)} seconds.`,
+            exitCode: 124,
+            truncated: false,
+          });
+          return;
+        }
 
-      let truncated = false;
-      if (output.length > this.#maxOutputBytes) {
-        output = output.slice(0, this.#maxOutputBytes);
-        output += `\n\n... Output truncated at ${this.#maxOutputBytes} bytes.`;
-        truncated = true;
-      }
+        const outputParts: string[] = [];
+        if (stdout) {
+          outputParts.push(stdout);
+        }
+        if (stderr) {
+          const stderrLines = stderr.trim().split("\n");
+          outputParts.push(
+            ...stderrLines.map((line: string) => `[stderr] ${line}`),
+          );
+        }
 
-      const exitCode = result.status ?? 1;
+        let output =
+          outputParts.length > 0 ? outputParts.join("\n") : "<no output>";
 
-      if (exitCode !== 0) {
-        output = `${output.trimEnd()}\n\nExit code: ${exitCode}`;
-      }
+        let truncated = false;
+        if (output.length > this.#maxOutputBytes) {
+          output = output.slice(0, this.#maxOutputBytes);
+          output += `\n\n... Output truncated at ${this.#maxOutputBytes} bytes.`;
+          truncated = true;
+        }
 
-      return {
-        output,
-        exitCode,
-        truncated,
-      };
-    } catch (e: unknown) {
-      const err = e as { message?: string };
-      const message = err.message ?? String(e);
-      return {
-        output: `Error executing command: ${message}`,
-        exitCode: 1,
-        truncated: false,
-      };
-    }
+        const exitCode = code ?? 1;
+
+        if (exitCode !== 0) {
+          output = `${output.trimEnd()}\n\nExit code: ${exitCode}`;
+        }
+
+        resolve({
+          output,
+          exitCode,
+          truncated,
+        });
+      });
+    });
   }
 }

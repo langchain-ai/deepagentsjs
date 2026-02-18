@@ -44,33 +44,33 @@ describe("LocalShellBackend", () => {
   });
 
   describe("execute", () => {
-    it("should execute a simple command", () => {
+    it("should execute a simple command", async () => {
       const backend = new LocalShellBackend({
         rootDir: tmpDir,
         inheritEnv: true,
       });
 
-      const result = backend.execute("echo 'Hello World'");
+      const result = await backend.execute("echo 'Hello World'");
 
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain("Hello World");
       expect(result.truncated).toBe(false);
     });
 
-    it("should handle failing commands", () => {
+    it("should handle failing commands", async () => {
       const backend = new LocalShellBackend({
         rootDir: tmpDir,
         inheritEnv: true,
       });
 
-      const result = backend.execute("cat nonexistent_file.txt");
+      const result = await backend.execute("cat nonexistent_file.txt");
 
       expect(result.exitCode).not.toBe(0);
       expect(result.output).toContain("[stderr]");
       expect(result.output).toContain("Exit code:");
     });
 
-    it("should execute in the specified working directory", () => {
+    it("should execute in the specified working directory", async () => {
       fsSync.writeFileSync(path.join(tmpDir, "test.txt"), "test content");
 
       const backend = new LocalShellBackend({
@@ -78,54 +78,54 @@ describe("LocalShellBackend", () => {
         inheritEnv: true,
       });
 
-      const result = backend.execute("cat test.txt");
+      const result = await backend.execute("cat test.txt");
 
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain("test content");
     });
 
-    it("should return an error for empty command", () => {
+    it("should return an error for empty command", async () => {
       const backend = new LocalShellBackend({ rootDir: tmpDir });
 
-      const result = backend.execute("");
+      const result = await backend.execute("");
 
       expect(result.exitCode).toBe(1);
       expect(result.output).toContain("must be a non-empty string");
     });
 
-    it("should timeout long-running commands", () => {
+    it("should timeout long-running commands", async () => {
       const backend = new LocalShellBackend({
         rootDir: tmpDir,
         timeout: 1,
         inheritEnv: true,
       });
 
-      const result = backend.execute("sleep 5");
+      const result = await backend.execute("sleep 5");
 
       expect(result.exitCode).toBe(124);
       expect(result.output).toContain("timed out");
     });
 
-    it("should truncate large output", () => {
+    it("should truncate large output", async () => {
       const backend = new LocalShellBackend({
         rootDir: tmpDir,
         maxOutputBytes: 100,
         inheritEnv: true,
       });
 
-      const result = backend.execute("seq 1 1000");
+      const result = await backend.execute("seq 1 1000");
 
       expect(result.truncated).toBe(true);
       expect(result.output).toContain("Output truncated");
     });
 
-    it("should prefix stderr lines with [stderr]", () => {
+    it("should prefix stderr lines with [stderr]", async () => {
       const backend = new LocalShellBackend({
         rootDir: tmpDir,
         inheritEnv: true,
       });
 
-      const result = backend.execute("echo 'error message' >&2");
+      const result = await backend.execute("echo 'error message' >&2");
 
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain("[stderr]");
@@ -134,34 +134,34 @@ describe("LocalShellBackend", () => {
   });
 
   describe("environment variables", () => {
-    it("should pass custom environment variables to commands", () => {
+    it("should pass custom environment variables to commands", async () => {
       const backend = new LocalShellBackend({
         rootDir: tmpDir,
         env: { CUSTOM_VAR: "custom_value", PATH: "/usr/bin:/bin" },
       });
 
-      const result = backend.execute("sh -c 'echo $CUSTOM_VAR'");
+      const result = await backend.execute("sh -c 'echo $CUSTOM_VAR'");
 
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain("custom_value");
     });
 
-    it("should inherit parent environment when inheritEnv is true", () => {
+    it("should inherit parent environment when inheritEnv is true", async () => {
       const backend = new LocalShellBackend({
         rootDir: tmpDir,
         inheritEnv: true,
       });
 
-      const result = backend.execute("echo $PATH");
+      const result = await backend.execute("echo $PATH");
 
       expect(result.exitCode).toBe(0);
       expect(result.output.trim().length).toBeGreaterThan(0);
     });
 
-    it("should start with empty environment by default", () => {
+    it("should start with empty environment by default", async () => {
       const backend = new LocalShellBackend({ rootDir: tmpDir });
 
-      const result = backend.execute("sh -c 'echo PATH is: $PATH'");
+      const result = await backend.execute("sh -c 'echo PATH is: $PATH'");
 
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain("PATH is:");
@@ -201,13 +201,13 @@ describe("LocalShellBackend", () => {
 
       await backend.write("/script.sh", "#!/bin/bash\necho 'Script output'");
 
-      backend.execute("chmod +x script.sh");
-      const result = backend.execute("bash script.sh");
+      await backend.execute("chmod +x script.sh");
+      const result = await backend.execute("bash script.sh");
 
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain("Script output");
 
-      backend.execute("echo 'Shell created' > shell_file.txt");
+      await backend.execute("echo 'Shell created' > shell_file.txt");
 
       const content = await backend.read("/shell_file.txt");
       expect(content).toContain("Shell created");
@@ -278,7 +278,7 @@ describe("LocalShellBackend", () => {
       const content = await backend.read("/../etc/passwd");
       expect(content).toContain("Error");
 
-      const result = backend.execute("cat /etc/passwd");
+      const result = await backend.execute("cat /etc/passwd");
       expect(result).toBeDefined();
       expect(typeof result.exitCode).toBe("number");
     });
