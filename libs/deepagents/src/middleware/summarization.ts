@@ -1171,11 +1171,11 @@ ${summary}
        * Step 1: Truncate args if configured
        */
       const { messages: truncatedMessages } = truncateArgs(
-          effectiveMessages,
-          maxInputTokens,
-          request.systemMessage,
-          request.tools,
-        );
+        effectiveMessages,
+        maxInputTokens,
+        request.systemMessage,
+        request.tools,
+      );
 
       /**
        * Step 2: Check if summarization should happen.
