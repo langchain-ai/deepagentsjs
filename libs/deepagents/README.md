@@ -479,6 +479,7 @@ import {
   StateBackend,
   StoreBackend,
   FilesystemBackend,
+  LocalShellBackend,
   CompositeBackend,
 } from "deepagents";
 import { MemorySaver } from "@langchain/langgraph";
@@ -501,8 +502,16 @@ const agent3 = createDeepAgent({
   backend: (config) => new FilesystemBackend({ rootDir: "./agent-workspace" }),
 });
 
-// CompositeBackend: Combine multiple backends
+// LocalShellBackend: Filesystem access + local shell command execution
 const agent4 = createDeepAgent({
+  backend: new LocalShellBackend({
+    rootDir: "./agent-workspace",
+    inheritEnv: true,
+  }),
+});
+
+// CompositeBackend: Combine multiple backends
+const agent5 = createDeepAgent({
   backend: (config) =>
     new CompositeBackend({
       state: new StateBackend(config),
