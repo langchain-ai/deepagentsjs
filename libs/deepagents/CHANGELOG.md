@@ -1,5 +1,20 @@
 # deepagents
 
+## 1.8.0
+
+### Minor Changes
+
+- [#236](https://github.com/langchain-ai/deepagentsjs/pull/236) [`357a092`](https://github.com/langchain-ai/deepagentsjs/commit/357a092b31a991c57a87bf156c94042a7de70423) Thanks [@christian-bromann](https://github.com/christian-bromann)! - feat(deepagents): add local shell backend
+
+### Patch Changes
+
+- [#230](https://github.com/langchain-ai/deepagentsjs/pull/230) [`a762b91`](https://github.com/langchain-ai/deepagentsjs/commit/a762b91e7a304edc0ad3114a12d78e534f701c1d) Thanks [@alvedder](https://github.com/alvedder)! - chore(deepagents): re-export createSummarizationMiddleware
+
+- [#234](https://github.com/langchain-ai/deepagentsjs/pull/234) [`199c86c`](https://github.com/langchain-ai/deepagentsjs/commit/199c86c013c97fb193fd8f58220c9969fc26da08) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): update summarization behavior
+
+- [#223](https://github.com/langchain-ai/deepagentsjs/pull/223) [`bfa843d`](https://github.com/langchain-ai/deepagentsjs/commit/bfa843d4fe8df5f735307f18ab256098e518c929) Thanks [@maahir30](https://github.com/maahir30)! - fix(deepagents): prevent write_file crash when model omits content
+  - Default the content parameter to an empty string so a missing argument doesn't crash the entire agent run via Zod validation failure.
+
 ## 1.7.6
 
 ### Patch Changes
