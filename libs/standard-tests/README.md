@@ -95,7 +95,9 @@ Your sandbox class must implement the `SandboxInstance` interface, which extends
 ```ts
 interface SandboxInstance extends SandboxBackendProtocol {
   readonly isRunning: boolean;
-  uploadFiles(files: Array<[string, Uint8Array]>): MaybePromise<FileUploadResponse[]>;
+  uploadFiles(
+    files: Array<[string, Uint8Array]>,
+  ): MaybePromise<FileUploadResponse[]>;
   downloadFiles(paths: string[]): MaybePromise<FileDownloadResponse[]>;
   initialize?(): Promise<void>;
 }
@@ -137,8 +139,8 @@ import { withRetry } from "@langchain/sandbox-standard-tests/vitest";
 
 const sandbox = await withRetry(
   () => MySandbox.create({ memoryMb: 512 }),
-  5,       // max attempts (default: 5)
-  15_000,  // delay between attempts in ms (default: 15 000)
+  5, // max attempts (default: 5)
+  15_000, // delay between attempts in ms (default: 15 000)
 );
 ```
 
@@ -147,10 +149,15 @@ const sandbox = await withRetry(
 ### Remote provider (Modal)
 
 ```ts
-import { sandboxStandardTests, withRetry } from "@langchain/sandbox-standard-tests/vitest";
+import {
+  sandboxStandardTests,
+  withRetry,
+} from "@langchain/sandbox-standard-tests/vitest";
 import { ModalSandbox } from "./sandbox.js";
 
-const hasCredentials = !!(process.env.MODAL_TOKEN_ID && process.env.MODAL_TOKEN_SECRET);
+const hasCredentials = !!(
+  process.env.MODAL_TOKEN_ID && process.env.MODAL_TOKEN_SECRET
+);
 
 sandboxStandardTests({
   name: "ModalSandbox",
@@ -176,8 +183,7 @@ sandboxStandardTests({
   skip: !process.env.DENO_DEPLOY_TOKEN,
   sequential: true,
   timeout: 120_000,
-  createSandbox: (opts) =>
-    DenoSandbox.create({ memoryMb: 768, ...opts }),
+  createSandbox: (opts) => DenoSandbox.create({ memoryMb: 768, ...opts }),
   createUninitializedSandbox: () => new DenoSandbox({ memoryMb: 768 }),
   closeSandbox: (sb) => sb.close(),
   resolvePath: (name) => `/home/app/${name}`,
@@ -221,7 +227,9 @@ sandboxStandardTests({
 After calling `sandboxStandardTests`, you can add provider-specific tests in the same file using standard Vitest `describe` / `it` blocks:
 
 ```ts
-sandboxStandardTests({ /* ... */ });
+sandboxStandardTests({
+  /* ... */
+});
 
 describe("MySandbox Provider-Specific Tests", () => {
   it("should support custom image types", async () => {
