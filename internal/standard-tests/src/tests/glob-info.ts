@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { SandboxInstance, StandardTestsConfig } from "../sandbox.js";
+import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register globInfo() tests (wildcard, recursive, no matches, directories,
@@ -70,9 +70,7 @@ export function registerGlobInfoTests<T extends SandboxInstance>(
       async () => {
         const shared = getShared();
         const baseDir = config.resolvePath("gl-dirs");
-        await shared.execute(
-          `mkdir -p '${baseDir}/dir1' '${baseDir}/dir2'`,
-        );
+        await shared.execute(`mkdir -p '${baseDir}/dir1' '${baseDir}/dir2'`);
         await shared.write(`${baseDir}/file.txt`, "content");
 
         const result = await shared.globInfo("*", baseDir);

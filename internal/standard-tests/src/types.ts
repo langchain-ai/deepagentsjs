@@ -78,7 +78,7 @@ export interface StandardTestsConfig<
   /**
    * Close / cleanup a sandbox instance.
    */
-  closeSandbox: (sandbox: T) => Promise<void>;
+  closeSandbox?: (sandbox: T) => Promise<void>;
 
   /**
    * Convert a relative file path (e.g., `"test-file.txt"`) to the

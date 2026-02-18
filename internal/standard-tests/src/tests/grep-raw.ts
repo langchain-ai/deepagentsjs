@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { SandboxInstance, StandardTestsConfig } from "../sandbox.js";
+import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register grepRaw() tests (basic search, glob filter, no matches,
@@ -57,11 +57,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
         await shared.write(`${baseDir}/test.py`, "pattern_match");
         await shared.write(`${baseDir}/test.md`, "pattern_match");
 
-        const result = await shared.grepRaw(
-          "pattern_match",
-          baseDir,
-          "*.py",
-        );
+        const result = await shared.grepRaw("pattern_match", baseDir, "*.py");
 
         expect(Array.isArray(result)).toBe(true);
         const matches = result as Array<{
@@ -177,10 +173,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
       async () => {
         const shared = getShared();
         const baseDir = config.resolvePath("gr-case");
-        await shared.write(
-          `${baseDir}/case.txt`,
-          "Hello\nhello\nHELLO",
-        );
+        await shared.write(`${baseDir}/case.txt`, "Hello\nhello\nHELLO");
 
         const result = await shared.grepRaw("Hello", baseDir);
 
@@ -261,10 +254,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
         const shared = getShared();
         const baseDir = config.resolvePath("gr-nested");
         await shared.write(`${baseDir}/root.txt`, "target_nested here");
-        await shared.write(
-          `${baseDir}/sub1/level1.txt`,
-          "target_nested here",
-        );
+        await shared.write(`${baseDir}/sub1/level1.txt`, "target_nested here");
         await shared.write(
           `${baseDir}/sub1/sub2/level2.txt`,
           "target_nested here",

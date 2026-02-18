@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { SandboxInstance, StandardTestsConfig } from "../sandbox.js";
+import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register detailed edit() tests (single/multi occurrence, replaceAll,
@@ -17,10 +17,7 @@ export function registerEditTests<T extends SandboxInstance>(
       async () => {
         const shared = getShared();
         const filePath = config.resolvePath("ed-single.txt");
-        await shared.write(
-          filePath,
-          "Hello world\nGoodbye world\nHello again",
-        );
+        await shared.write(filePath, "Hello world\nGoodbye world\nHello again");
 
         const result = await shared.edit(filePath, "Goodbye", "Farewell");
 
@@ -39,10 +36,7 @@ export function registerEditTests<T extends SandboxInstance>(
       async () => {
         const shared = getShared();
         const filePath = config.resolvePath("ed-multi-fail.txt");
-        await shared.write(
-          filePath,
-          "apple\nbanana\napple\norange\napple",
-        );
+        await shared.write(filePath, "apple\nbanana\napple\norange\napple");
 
         const result = await shared.edit(filePath, "apple", "pear", false);
 
@@ -62,10 +56,7 @@ export function registerEditTests<T extends SandboxInstance>(
       async () => {
         const shared = getShared();
         const filePath = config.resolvePath("ed-replace-all.txt");
-        await shared.write(
-          filePath,
-          "apple\nbanana\napple\norange\napple",
-        );
+        await shared.write(filePath, "apple\nbanana\napple\norange\napple");
 
         const result = await shared.edit(filePath, "apple", "pear", true);
 
@@ -173,11 +164,7 @@ export function registerEditTests<T extends SandboxInstance>(
           "Keep this\nDelete this part\nKeep this too",
         );
 
-        const result = await shared.edit(
-          filePath,
-          "Delete this part\n",
-          "",
-        );
+        const result = await shared.edit(filePath, "Delete this part\n", "");
 
         expect(result.error).toBeUndefined();
         expect(result.occurrences).toBe(1);
@@ -219,11 +206,7 @@ export function registerEditTests<T extends SandboxInstance>(
           "Hello \u{1F44B} world\n\u4E16\u754C is beautiful",
         );
 
-        const result = await shared.edit(
-          filePath,
-          "\u{1F44B}",
-          "\u{1F30D}",
-        );
+        const result = await shared.edit(filePath, "\u{1F44B}", "\u{1F30D}");
 
         expect(result.error).toBeUndefined();
         expect(result.occurrences).toBe(1);
@@ -281,11 +264,7 @@ export function registerEditTests<T extends SandboxInstance>(
         const filePath = config.resolvePath("ed-line-endings.txt");
         await shared.write(filePath, "Line 1\nLine 2\nLine 3\n");
 
-        const result = await shared.edit(
-          filePath,
-          "Line 2",
-          "Modified Line 2",
-        );
+        const result = await shared.edit(filePath, "Line 2", "Modified Line 2");
 
         expect(result.error).toBeUndefined();
 

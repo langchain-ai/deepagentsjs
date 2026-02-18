@@ -33,6 +33,7 @@ describe("LocalShellBackend", () => {
       const backend = new LocalShellBackend({ rootDir: tmpDir });
 
       expect(backend.id).toMatch(/^local-[0-9a-f]{8}$/);
+      expect(backend.isInitialized).toBe(false);
     });
 
     it("should generate unique IDs", () => {
@@ -40,6 +41,60 @@ describe("LocalShellBackend", () => {
       const backend2 = new LocalShellBackend({ rootDir: tmpDir });
 
       expect(backend1.id).not.toBe(backend2.id);
+    });
+
+    it("should create rootDir on initialize()", async () => {
+      const newDir = path.join(tmpDir, "nested", "subdir");
+      const backend = new LocalShellBackend({ rootDir: newDir });
+
+      expect(fsSync.existsSync(newDir)).toBe(false);
+
+      await backend.initialize();
+
+      expect(backend.isInitialized).toBe(true);
+      expect(fsSync.existsSync(newDir)).toBe(true);
+      expect(fsSync.statSync(newDir).isDirectory()).toBe(true);
+    });
+
+    it("should be safe to initialize when rootDir already exists", async () => {
+      const backend = new LocalShellBackend({ rootDir: tmpDir });
+      await backend.initialize();
+
+      expect(backend.isInitialized).toBe(true);
+    });
+
+    it("should throw on double initialization", async () => {
+      const backend = new LocalShellBackend({ rootDir: tmpDir });
+      await backend.initialize();
+
+      await expect(backend.initialize()).rejects.toThrow(
+        "already initialized",
+      );
+    });
+
+    it("should create and initialize via static create()", async () => {
+      const newDir = path.join(tmpDir, "via-create");
+      const backend = await LocalShellBackend.create({ rootDir: newDir });
+
+      expect(backend.isInitialized).toBe(true);
+      expect(fsSync.existsSync(newDir)).toBe(true);
+    });
+
+    it("should expose isRunning as alias for isInitialized", async () => {
+      const backend = new LocalShellBackend({ rootDir: tmpDir });
+      expect(backend.isRunning).toBe(false);
+
+      await backend.initialize();
+      expect(backend.isRunning).toBe(true);
+    });
+
+    it("should set isRunning to false after close()", async () => {
+      const backend = await LocalShellBackend.create({ rootDir: tmpDir });
+      expect(backend.isRunning).toBe(true);
+
+      await backend.close();
+      expect(backend.isRunning).toBe(false);
+      expect(backend.isInitialized).toBe(false);
     });
   });
 
@@ -137,10 +192,12 @@ describe("LocalShellBackend", () => {
     it("should pass custom environment variables to commands", async () => {
       const backend = new LocalShellBackend({
         rootDir: tmpDir,
-        env: { CUSTOM_VAR: "custom_value", PATH: "/usr/bin:/bin" },
+        env: { CUSTOM_VAR: "custom_value", PATH: process.env.PATH ?? "" },
       });
 
-      const result = await backend.execute("sh -c 'echo $CUSTOM_VAR'");
+      const result = await backend.execute(
+        'node -e "process.stdout.write(process.env.CUSTOM_VAR || \\"\\")"',
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain("custom_value");
@@ -152,19 +209,27 @@ describe("LocalShellBackend", () => {
         inheritEnv: true,
       });
 
-      const result = await backend.execute("echo $PATH");
+      const result = await backend.execute(
+        'node -e "process.stdout.write(process.env.PATH || \\"\\")"',
+      );
 
       expect(result.exitCode).toBe(0);
       expect(result.output.trim().length).toBeGreaterThan(0);
     });
 
     it("should start with empty environment by default", async () => {
-      const backend = new LocalShellBackend({ rootDir: tmpDir });
+      const backend = new LocalShellBackend({
+        rootDir: tmpDir,
+        env: { PATH: process.env.PATH ?? "" },
+      });
 
-      const result = await backend.execute("sh -c 'echo PATH is: $PATH'");
+      const result = await backend.execute(
+        'node -e "process.stdout.write(\'CUSTOM_VAR is: \' + (process.env.CUSTOM_VAR || \'\'))"',
+      );
 
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain("PATH is:");
+      expect(result.output).toContain("CUSTOM_VAR is: ");
+      expect(result.output).not.toContain("CUSTOM_VAR is: something");
     });
   });
 

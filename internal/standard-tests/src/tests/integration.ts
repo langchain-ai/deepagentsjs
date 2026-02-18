@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { SandboxInstance, StandardTestsConfig } from "../sandbox.js";
+import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register integration workflow tests that combine multiple operations.
@@ -25,11 +25,7 @@ export function registerIntegrationTests<T extends SandboxInstance>(
         expect(content).toContain("Original content");
 
         // Edit it
-        const editResult = await shared.edit(
-          filePath,
-          "Original",
-          "Modified",
-        );
+        const editResult = await shared.edit(filePath, "Original", "Modified");
         expect(editResult.error).toBeUndefined();
 
         // Read again to verify
@@ -54,9 +50,7 @@ export function registerIntegrationTests<T extends SandboxInstance>(
 
         // List root directory
         const lsResult = await shared.lsInfo(baseDir);
-        const lsPaths = lsResult.map((info) =>
-          info.path.replace(/\/$/, ""),
-        );
+        const lsPaths = lsResult.map((info) => info.path.replace(/\/$/, ""));
         expect(lsPaths).toContain(`${baseDir}/root.txt`);
         expect(lsPaths).toContain(`${baseDir}/subdir1`);
         expect(lsPaths).toContain(`${baseDir}/subdir2`);

@@ -40,7 +40,7 @@ export function registerInitialFilesTests<T extends SandboxInstance>(
           expect(result2.exitCode).toBe(0);
           expect(result2.output.trim()).toBe("Nested content");
         } finally {
-          await config.closeSandbox(tmp);
+          await config.closeSandbox?.(tmp);
         }
       },
       timeout,
@@ -75,7 +75,7 @@ export function registerInitialFilesTests<T extends SandboxInstance>(
           const helperContent = await tmp.execute(`cat ${helperPath}`);
           expect(helperContent.output).toContain("capitalize");
         } finally {
-          await config.closeSandbox(tmp);
+          await config.closeSandbox?.(tmp);
         }
       },
       timeout,
@@ -96,7 +96,7 @@ export function registerInitialFilesTests<T extends SandboxInstance>(
           expect(result.exitCode).toBe(0);
           expect(result.output).toContain("Works!");
         } finally {
-          await config.closeSandbox(tmp);
+          await config.closeSandbox?.(tmp);
         }
       },
       timeout,
@@ -118,7 +118,7 @@ export function registerInitialFilesTests<T extends SandboxInstance>(
           const content = await tmp.read(filePath);
           expect(content).toContain("Content for read test");
         } finally {
-          await config.closeSandbox(tmp);
+          await config.closeSandbox?.(tmp);
         }
       },
       timeout,
@@ -143,7 +143,7 @@ export function registerInitialFilesTests<T extends SandboxInstance>(
           const content = new TextDecoder().decode(results[0].content!);
           expect(content).toContain("Content for download test");
         } finally {
-          await config.closeSandbox(tmp);
+          await config.closeSandbox?.(tmp);
         }
       },
       timeout,
@@ -156,8 +156,7 @@ export function registerInitialFilesTests<T extends SandboxInstance>(
         const tmp = await withRetry(() =>
           config.createSandbox({
             initialFiles: {
-              [scriptPath]:
-                '#!/bin/sh\necho "Hello from initialFiles script"',
+              [scriptPath]: '#!/bin/sh\necho "Hello from initialFiles script"',
             },
           }),
         );
@@ -165,11 +164,9 @@ export function registerInitialFilesTests<T extends SandboxInstance>(
         try {
           const result = await tmp.execute(`sh ${scriptPath}`);
           expect(result.exitCode).toBe(0);
-          expect(result.output.trim()).toBe(
-            "Hello from initialFiles script",
-          );
+          expect(result.output.trim()).toBe("Hello from initialFiles script");
         } finally {
-          await config.closeSandbox(tmp);
+          await config.closeSandbox?.(tmp);
         }
       },
       timeout,
@@ -193,7 +190,7 @@ export function registerInitialFilesTests<T extends SandboxInstance>(
           const paths = entries.map((e) => e.path.replace(/\/$/, ""));
           expect(paths).toContain(filePath);
         } finally {
-          await config.closeSandbox(tmp);
+          await config.closeSandbox?.(tmp);
         }
       },
       timeout,
