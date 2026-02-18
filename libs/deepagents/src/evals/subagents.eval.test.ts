@@ -2,7 +2,7 @@ import * as ls from "langsmith/vitest";
 import { expect } from "vitest";
 import { tool } from "langchain";
 import { z } from "zod/v4";
-import { createDeepAgent, runAgent } from "./index.js";
+import { DATASET_NAME, createDeepAgent, runAgent } from "./index.js";
 
 const getWeatherFake = tool(
   async (_input) => {
@@ -53,7 +53,8 @@ ls.describe("subagents", () => {
     "task calls general-purpose subagent",
     {
       inputs: {
-        query: "Use the general purpose subagent to get the weather in Tokyo.",
+        query:
+          "Use the general purpose subagent to get the weather in Tokyo.",
       },
       referenceOutputs: { expectedText: "89" },
     },
@@ -70,4 +71,4 @@ ls.describe("subagents", () => {
       expect(result).toHaveFinalTextContaining("89");
     },
   );
-});
+}, { testSuiteName: DATASET_NAME });

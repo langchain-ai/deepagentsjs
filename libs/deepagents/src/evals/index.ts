@@ -62,6 +62,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { expect } from "vitest";
 import { AIMessage, ToolMessage } from "@langchain/core/messages";
+import { ChatAnthropic } from "@langchain/anthropic";
 import * as ls from "langsmith/vitest";
 import type { ReactAgent } from "langchain";
 import { createDeepAgent } from "../index.js";
@@ -71,12 +72,20 @@ import type { FileData } from "../backends/protocol.js";
 export { createDeepAgent } from "../index.js";
 
 /**
+ * LangSmith dataset name shared across all eval test files. Every
+ * `ls.describe()` should pass `{ testSuiteName: DATASET_NAME }` so
+ * that all evals land in one dataset and each `pnpm test:eval` run
+ * creates a single experiment.
+ */
+export const DATASET_NAME = "deepagents-js-evals";
+
+/**
  * Shared deepagent instance used by all eval tests that don't need a
  * custom configuration. Change the model here to re-run every eval
  * against a different provider or model version.
  */
 export const agent = createDeepAgent({
-  model: "anthropic:claude-sonnet-4-5-20250929",
+  model: new ChatAnthropic({ model: "claude-sonnet-4-6" }),
 });
 
 /**

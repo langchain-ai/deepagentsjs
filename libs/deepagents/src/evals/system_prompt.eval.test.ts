@@ -1,6 +1,6 @@
 import * as ls from "langsmith/vitest";
 import { expect } from "vitest";
-import { createDeepAgent, runAgent } from "./index.js";
+import { DATASET_NAME, createDeepAgent, runAgent } from "./index.js";
 
 ls.describe("system prompt", () => {
   ls.test(
@@ -20,4 +20,4 @@ ls.describe("system prompt", () => {
       expect(result).toHaveFinalTextContaining("Foo Bar");
     },
   );
-});
+}, { testSuiteName: DATASET_NAME });

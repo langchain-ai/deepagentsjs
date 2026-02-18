@@ -1,6 +1,12 @@
 import * as ls from "langsmith/vitest";
 import { expect } from "vitest";
-import { agent, createDeepAgent, runAgent, getFinalText } from "./index.js";
+import {
+  DATASET_NAME,
+  agent,
+  createDeepAgent,
+  runAgent,
+  getFinalText,
+} from "./index.js";
 
 ls.describe("file operations", () => {
   ls.test(
@@ -258,4 +264,4 @@ ls.describe("file operations", () => {
       expect(answer).not.toContain("/foo/b.txt");
     },
   );
-});
+}, { testSuiteName: DATASET_NAME });
