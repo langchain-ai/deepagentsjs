@@ -60,7 +60,7 @@
     "@vitest/coverage-v8": "^4.0.18",
     "@vitest/ui": "^4.0.18",
     "dotenv": "^17.2.4",
-    "langsmith": "^0.4.0",
+    "langsmith": "^0.5.4",
     "tsdown": "^0.20.3",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",

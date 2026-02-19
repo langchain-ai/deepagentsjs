@@ -1,16 +1,96 @@
 import * as ls from "langsmith/vitest";
 import { expect } from "vitest";
-import {
-  DATASET_NAME,
-  agent,
-  createDeepAgent,
-  runAgent,
-  getFinalText,
-} from "./index.js";
+import { tool } from "langchain";
+import { z } from "zod/v4";
+import { agent, createDeepAgent, runAgent, getFinalText } from "./index.js";
 
-ls.describe("file operations", () => {
+const getWeatherFake = tool(
+  async (_input) => {
+    return "It's sunny at 89 degrees F";
+  },
+  {
+    name: "get_weather_fake",
+    description: "Return a fixed weather response for eval scenarios.",
+    schema: z.object({
+      location: z.string(),
+    }),
+  },
+);
+
+ls.describe("deepagents-js-basic", () => {
   ls.test(
-    "read file seeded state backend file",
+    "system prompt: custom system prompt",
+    {
+      inputs: { query: "what is your name" },
+      referenceOutputs: { expectedText: "Foo Bar" },
+    },
+    async ({ inputs }) => {
+      const customAgent = createDeepAgent({
+        systemPrompt: "Your name is Foo Bar.",
+      });
+      const result = await runAgent(customAgent, { query: inputs.query });
+
+      expect(result).toHaveAgentSteps(1);
+      expect(result).toHaveToolCallRequests(0);
+      expect(result).toHaveFinalTextContaining("Foo Bar");
+    },
+  );
+
+  ls.test(
+    "subagents: task calls weather subagent",
+    {
+      inputs: {
+        query: "Use the weather_agent subagent to get the weather in Tokyo.",
+      },
+      referenceOutputs: { expectedText: "89" },
+    },
+    async ({ inputs }) => {
+      const customAgent = createDeepAgent({
+        subagents: [
+          {
+            name: "weather_agent",
+            description: "Use this agent to get the weather",
+            systemPrompt: "You are a weather agent.",
+            tools: [getWeatherFake],
+          },
+        ],
+      });
+      const result = await runAgent(customAgent, { query: inputs.query });
+
+      expect(result).toHaveAgentSteps(2);
+      expect(result).toHaveToolCallRequests(1);
+      expect(result).toHaveToolCallInStep(1, {
+        name: "task",
+        argsContains: { subagent_type: "weather_agent" },
+      });
+      expect(result).toHaveFinalTextContaining("89");
+    },
+  );
+
+  ls.test(
+    "subagents: task calls general-purpose subagent",
+    {
+      inputs: {
+        query: "Use the general purpose subagent to get the weather in Tokyo.",
+      },
+      referenceOutputs: { expectedText: "89" },
+    },
+    async ({ inputs }) => {
+      const customAgent = createDeepAgent({ tools: [getWeatherFake] });
+      const result = await runAgent(customAgent, { query: inputs.query });
+
+      expect(result).toHaveAgentSteps(2);
+      expect(result).toHaveToolCallRequests(1);
+      expect(result).toHaveToolCallInStep(1, {
+        name: "task",
+        argsContains: { subagent_type: "general-purpose" },
+      });
+      expect(result).toHaveFinalTextContaining("89");
+    },
+  );
+
+  ls.test(
+    "files: read file seeded state backend file",
     {
       inputs: {
         query: "Read /foo.md and tell me the 3rd word on the 2nd line.",
@@ -19,7 +99,9 @@ ls.describe("file operations", () => {
     async ({ inputs }) => {
       const result = await runAgent(agent, {
         query: inputs.query,
-        initialFiles: { "/foo.md": "alpha beta gamma\none two three four\n" },
+        initialFiles: {
+          "/foo.md": "alpha beta gamma\none two three four\n",
+        },
       });
 
       expect(result).toHaveAgentSteps(2);
@@ -29,7 +111,7 @@ ls.describe("file operations", () => {
   );
 
   ls.test(
-    "write file simple",
+    "files: write file simple",
     {
       inputs: {
         query:
@@ -50,7 +132,7 @@ ls.describe("file operations", () => {
   );
 
   ls.test(
-    "write files in parallel",
+    "files: write files in parallel",
     {
       inputs: {
         query:
@@ -76,7 +158,7 @@ ls.describe("file operations", () => {
   );
 
   ls.test(
-    "ls directory contains file yes/no",
+    "files: ls directory contains file yes/no",
     {
       inputs: {
         query:
@@ -100,7 +182,7 @@ ls.describe("file operations", () => {
   );
 
   ls.test(
-    "ls directory missing file yes/no",
+    "files: ls directory missing file yes/no",
     {
       inputs: {
         query:
@@ -123,7 +205,7 @@ ls.describe("file operations", () => {
   );
 
   ls.test(
-    "edit file replace text",
+    "files: edit file replace text",
     {
       inputs: {
         query:
@@ -143,7 +225,7 @@ ls.describe("file operations", () => {
   );
 
   ls.test(
-    "read then write derived output",
+    "files: read then write derived output",
     {
       inputs: {
         query:
@@ -167,7 +249,7 @@ ls.describe("file operations", () => {
   );
 
   ls.test(
-    "avoid unnecessary tool calls",
+    "files: avoid unnecessary tool calls",
     {
       inputs: { query: "What is 2+2? Answer with just the number." },
     },
@@ -181,7 +263,7 @@ ls.describe("file operations", () => {
   );
 
   ls.test(
-    "read files in parallel",
+    "files: read files in parallel",
     {
       inputs: {
         query:
@@ -212,7 +294,7 @@ ls.describe("file operations", () => {
   );
 
   ls.test(
-    "grep finds matching paths",
+    "files: grep finds matching paths",
     {
       inputs: {
         query:
@@ -239,7 +321,7 @@ ls.describe("file operations", () => {
   );
 
   ls.test(
-    "glob lists markdown files",
+    "files: glob lists markdown files",
     {
       inputs: {
         query:
@@ -264,4 +346,4 @@ ls.describe("file operations", () => {
       expect(answer).not.toContain("/foo/b.txt");
     },
   );
-}, { testSuiteName: DATASET_NAME });
+});
