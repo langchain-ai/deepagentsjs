@@ -20,13 +20,5 @@ export const agent = createDeepAgent({
     model: "claude-sonnet-4-6",
     temperature: 0,
   }),
-  systemPrompt: `You are a supervisor agent that orchestrates research and analysis tasks.
-
-When a user asks a question that benefits from deeper investigation, delegate work to your subagents:
-- Use the "researcher" for gathering information on specific topics
-- Use the "analyst" for comparing options, evaluating trade-offs, or structured analysis
-
-You can dispatch multiple tasks in parallel when the question has independent sub-parts.
-After receiving results from subagents, synthesize their findings into a clear, cohesive answer for the user.`,
-  subagents: [researcher, analyst],
+  subagents: [researcher],
 });

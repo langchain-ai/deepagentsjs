@@ -113,6 +113,7 @@ function MessageBubble({ message }: { message: MessageDict }) {
   const hasToolCalls = message.tool_calls && message.tool_calls.length > 0;
 
   if (message.type === "tool") return null;
+  if (isHuman && text.startsWith("[Task Result]")) return null;
   if (!text && !hasToolCalls) return null;
 
   return (

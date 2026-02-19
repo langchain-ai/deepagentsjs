@@ -9,7 +9,7 @@ api.post("/api/stream", async (c) => {
   const stream = await agent.stream(input ?? { messages: [], tasks: {} }, {
     ...config,
     encoding: "text/event-stream" as const,
-    streamMode: ["updates", "messages", "values"] as const,
+    streamMode: ["updates", "messages", "values", "events"] as const,
     subgraphs: true,
     recursionLimit: 150,
   });

@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:standalone": "tsx --env-file=.env server.ts"
+    "dev:standalone": "tsx --env-file=.env server.ts",
+    "demo": "tsx --env-file=.env demo.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.14.3",

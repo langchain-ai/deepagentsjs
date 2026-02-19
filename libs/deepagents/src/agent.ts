@@ -237,11 +237,11 @@ export function createDeepAgent<
     /**
      * Provides todo list management capabilities for tracking tasks
      */
-    todoListMiddleware(),
+    // todoListMiddleware(),
     /**
      * Enables filesystem operations and optional long-term memory storage
      */
-    createFilesystemMiddleware({ backend: filesystemBackend }),
+    // createFilesystemMiddleware({ backend: filesystemBackend }),
     /**
      * Enables delegation to specialized subagents for complex tasks
      */
@@ -274,13 +274,13 @@ export function createDeepAgent<
     /**
      * Enables Anthropic prompt caching for improved performance and reduced costs
      */
-    anthropicPromptCachingMiddleware({
-      unsupportedModelBehavior: "ignore",
-    }),
+    // anthropicPromptCachingMiddleware({
+    //   unsupportedModelBehavior: "ignore",
+    // }),
     /**
      * Patches tool calls to ensure compatibility across different model providers
      */
-    createPatchToolCallsMiddleware(),
+    // createPatchToolCallsMiddleware(),
   ] as const;
 
   /**
@@ -289,10 +289,10 @@ export function createDeepAgent<
    */
   const runtimeMiddleware: AgentMiddleware[] = [
     ...builtInMiddleware,
-    ...skillsMiddlewareArray,
-    ...memoryMiddlewareArray,
-    ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
-    ...(customMiddleware as unknown as AgentMiddleware[]),
+    // ...skillsMiddlewareArray,
+    // ...memoryMiddlewareArray,
+    // ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
+    // ...(customMiddleware as unknown as AgentMiddleware[]),
   ];
 
   const agent = createAgent({

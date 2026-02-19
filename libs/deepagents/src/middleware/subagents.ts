@@ -16,7 +16,6 @@ import {
   getCurrentTaskInput,
   ReducedValue,
   StateSchema,
-  type StreamMode,
 } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
@@ -71,7 +70,7 @@ When using the Task tool, you must specify a subagent_type parameter to select w
 
 ## Usage notes:
 1. Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses. Since tasks run in the background, they naturally execute in parallel.
-2. The tool returns immediately — you do **not** need to wait for it. Continue working on other tasks or tool calls. When the subagent finishes, its result will be delivered to you as a \`[Task Result]\` message. The result is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary.
+2. The tool returns immediately — you do **not** need to wait for it. If you have other independent tool calls to make, continue with those. Otherwise, respond with a brief status message (e.g., "I've dispatched the tasks, working on it...") and **stop**. Do NOT attempt to answer the user's question yourself. When the subagent finishes, its result will be delivered to you as a \`[Task Result]\` message. The result is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary.
 3. Each agent invocation is stateless. You will not be able to send additional messages to the agent, nor will the agent be able to communicate with you outside of its final report. Therefore, your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.
 4. The agent's outputs should generally be trusted
 5. Clearly tell the agent whether you expect it to create content, perform analysis, or just do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent
@@ -86,7 +85,7 @@ When using the Task tool, you must specify a subagent_type parameter to select w
 
 <example>
 User: "I want to conduct research on the accomplishments of Lebron James, Michael Jordan, and Kobe Bryant, and then compare them."
-Assistant: *Launches three task tool calls in parallel — one per player — then continues working*
+Assistant: *Launches three task tool calls in parallel — one per player — then emits a brief acknowledgment and stops*
 Assistant: *As each [Task Result] arrives, reads the synthesized research*
 Assistant: *Once all three results are in, compares the players and responds to the User*
 <commentary>
@@ -94,15 +93,14 @@ Research is a complex, multi-step task in it of itself.
 The research of each individual player is not dependent on the research of the other players.
 The assistant launches all three tasks at once — they run in the background simultaneously.
 Each research task dives deep on one player and returns synthesized information as its result.
-The assistant does not block; it can continue doing other work while the tasks run.
+The assistant emits a brief acknowledgment and stops — it does NOT try to answer the question itself.
 </commentary>
 </example>
 
 <example>
 User: "Analyze a single large code repository for security vulnerabilities and generate a report."
-Assistant: *Launches a single \`task\` subagent for the repository analysis*
-Assistant: *Continues with other work or waits for the [Task Result]*
-Assistant: *Receives the result and integrates it into a final summary for the user*
+Assistant: *Launches a single \`task\` subagent for the repository analysis, emits a brief acknowledgment, and stops*
+Assistant: *Receives the [Task Result] and integrates it into a final summary for the user*
 <commentary>
 Subagent is used to isolate a large, context-heavy task, even though there is only one. This prevents the main thread from being overloaded with details.
 If the user then asks followup questions, we have a concise report to reference instead of the entire history of analysis and tool calls, which is good and saves us time and money.
@@ -111,12 +109,12 @@ If the user then asks followup questions, we have a concise report to reference 
 
 <example>
 User: "Schedule two meetings for me and prepare agendas for each."
-Assistant: *Launches two \`task\` subagents in parallel (one per meeting) to prepare agendas*
-Assistant: *As results arrive, assembles final schedules and agendas*
+Assistant: *Launches two \`task\` subagents in parallel (one per meeting) to prepare agendas, then stops*
+Assistant: *As [Task Result] messages arrive, assembles final schedules and agendas*
 <commentary>
 Tasks are simple individually, but subagents help silo agenda preparation.
 Each subagent only needs to worry about the agenda for one meeting.
-Both run simultaneously in the background.
+Both run simultaneously in the background. The assistant stops and waits for results.
 </commentary>
 </example>
 
@@ -217,7 +215,7 @@ When NOT to use the task tool:
 - Whenever possible, parallelize the work that you do. This is true for both tool_calls, and for tasks. Since tasks run in the background, launching multiple tasks in a single message means they all execute simultaneously — take advantage of this.
 - Remember to use the \`task\` tool to silo independent tasks within a multi-part objective.
 - You should use the \`task\` tool whenever you have a complex task that will take multiple steps, and is independent from other tasks that the agent needs to complete. These agents are highly competent and efficient.
-- After launching tasks, you can continue with other tool calls or reasoning. You do not need to wait — results will arrive when they are ready.`;
+- After launching tasks, if you have other independent tool calls to make, continue with those. Otherwise, emit a brief acknowledgment and **stop** — do NOT answer the user's question yourself. Results will arrive as \`[Task Result]\` messages when the subagents finish.`;
 
 /**
  * Type definitions for pre-compiled agents.
@@ -461,20 +459,6 @@ function getSubagents(options: {
 }
 
 /**
- * The streaming mode configuration for a {@link SubagentExecution}.
- *
- * Accepts the same shapes that `graph.stream()` does:
- * - A single mode string like `"values"` or `"updates"`
- * - An array of modes like `["updates"]` — in this case chunks arrive as
- *   `[mode, data]` tuples and the class unwraps them automatically
- */
-export type SubagentStreamMode = StreamMode | StreamMode[];
-
-export interface SubagentExecutionConfig {
-  streamMode?: SubagentStreamMode;
-}
-
-/**
  * Represents a single subagent execution that can be placed in graph state.
  * Implements `PromiseLike` so it can be directly awaited to get the final state.
  *
@@ -482,13 +466,15 @@ export interface SubagentExecutionConfig {
  * and provides:
  * - `isPending` — whether the stream is still being consumed
  * - `state` — the latest graph state snapshot, updated with each chunk
- * - Awaitable via `await execution` or `execution.then(...)` to get the
- *   final accumulated state
+ * - `error` — the error that caused the execution to fail, if any
  *
  * Iteration starts **eagerly** in the constructor — the stream is consumed
  * in the background as soon as the execution is created. This means you can
  * put the execution into graph state immediately and the stream keeps
  * draining without any external driver.
+ *
+ * **Note:** This object is **not serializable**. Graph state containing
+ * `SubagentExecution` instances cannot be checkpointed or persisted.
  *
  * @typeParam TState - The shape of the subagent's graph state.
  *
@@ -498,10 +484,7 @@ export interface SubagentExecutionConfig {
  * const execution = new SubagentExecution("researcher", stream);
  *
  * // Place in state, stream is already being consumed
- * return { tasks: { [id]: execution } };
- *
- * // Later, await directly:
- * const finalState = await execution;
+ * return { _subagent_tasks: { [id]: execution } };
  * ```
  */
 export class SubagentExecution<
@@ -510,6 +493,7 @@ export class SubagentExecution<
   readonly subagentType: string;
   private _isPending = true;
   private _state: TState | null = null;
+  private _error: unknown = null;
 
   /** Resolves with the final subagent state once the stream is fully consumed. */
   readonly result: Promise<TState>;
@@ -524,13 +508,15 @@ export class SubagentExecution<
     return this._state;
   }
 
-  constructor(
-    subagentType: string,
-    stream: IterableReadableStream<unknown>,
-    config?: SubagentExecutionConfig,
-  ) {
+  /** The error that caused the execution to fail, or `null` if it succeeded or is still pending. */
+  get error(): unknown {
+    return this._error;
+  }
+
+  constructor(subagentType: string, stream: IterableReadableStream<unknown>) {
     this.subagentType = subagentType;
-    this.result = this._consume(stream, config?.streamMode ?? "values");
+    this.result = this._consume(stream);
+    this.result.catch(() => {});
   }
 
   then<TResult1 = TState, TResult2 = never>(
@@ -542,37 +528,13 @@ export class SubagentExecution<
 
   private async _consume(
     stream: IterableReadableStream<unknown>,
-    streamMode: SubagentStreamMode,
   ): Promise<TState> {
-    const isArrayMode = Array.isArray(streamMode);
-    const effectiveMode: StreamMode = isArrayMode ? streamMode[0] : streamMode;
-
     try {
       let state = {} as TState;
 
       for await (const value of stream) {
         if (value == null || typeof value !== "object") continue;
-
-        // Array-form streamMode wraps each chunk as a [mode, data] tuple
-        const data =
-          isArrayMode && Array.isArray(value)
-            ? (value as [string, unknown])[1]
-            : value;
-
-        if (data == null || typeof data !== "object") continue;
-
-        const chunk = data as Record<string, unknown>;
-
-        if (effectiveMode === "values") {
-          state = chunk as TState;
-        } else if (effectiveMode === "updates") {
-          for (const nodeUpdate of Object.values(chunk)) {
-            if (nodeUpdate && typeof nodeUpdate === "object") {
-              state = { ...state, ...(nodeUpdate as Partial<TState>) };
-            }
-          }
-        }
-
+        state = value as TState;
         this._state = state;
       }
 
@@ -580,10 +542,13 @@ export class SubagentExecution<
       return state;
     } catch (error) {
       this._isPending = false;
+      this._error = error;
       throw error;
     }
   }
 }
+
+const TASKS_KEY = "subagentTasks" as const;
 
 const TaskMap = z.record(z.string(), z.custom<SubagentExecution>());
 
@@ -591,10 +556,10 @@ type TaskAdd = { type: "add"; execution: SubagentExecution };
 type TaskRemove = { type: "remove" };
 type TaskUpdate = TaskAdd | TaskRemove;
 
-const TaskMapInput = z.record(z.string(), z.custom<TaskUpdate>());
+const TaskMapInput = z.record(z.string(), z.custom<TaskUpdate>()).optional();
 
 const MiddlewareState = new StateSchema({
-  tasks: new ReducedValue(TaskMap.default({}), {
+  [TASKS_KEY]: new ReducedValue(TaskMap.default({}), {
     inputSchema: TaskMapInput,
     reducer: (left, right) => {
       if (!right || Object.keys(right).length === 0) return left ?? {};
@@ -622,19 +587,33 @@ function collectCompletedTasks(
 ): {
   stateUpdate: Record<string, unknown>;
   messages: HumanMessage[];
-  taskUpdates: z.infer<typeof TaskMapInput>;
+  taskUpdates: Record<string, TaskUpdate>;
 } | null {
   if (!tasks || Object.keys(tasks).length === 0) return null;
 
   const stateUpdate: Record<string, unknown> = {};
   const messages: HumanMessage[] = [];
-  const taskUpdates: z.infer<typeof TaskMapInput> = {};
+  const taskUpdates: Record<string, TaskUpdate> = {};
   let hasCompleted = false;
 
   for (const [id, execution] of Object.entries(tasks)) {
     if (execution.isPending) continue;
     hasCompleted = true;
     taskUpdates[id] = { type: "remove" };
+
+    if (execution.error) {
+      const err = execution.error;
+      const errorMsg =
+        typeof err === "object" && err !== null && "message" in err
+          ? (err as { message: string }).message
+          : String(err);
+      messages.push(
+        new HumanMessage({
+          content: `[Task Result] The "${execution.subagentType}" task failed with an error:\n\n${errorMsg}`,
+        }),
+      );
+      continue;
+    }
 
     const finalState = execution.state;
     if (finalState) {
@@ -661,7 +640,6 @@ function createTaskTool(options: {
   defaultModel: LanguageModelLike | string;
   defaultTools: StructuredTool[];
   defaultMiddleware: AgentMiddleware[] | null;
-  /** Middleware specifically for the general-purpose subagent (includes skills from main agent) */
   generalPurposeMiddleware: AgentMiddleware[] | null;
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
   subagents: (SubAgent | CompiledSubAgent)[];
@@ -701,7 +679,6 @@ function createTaskTool(options: {
     ): Promise<Command | string> => {
       const { description, subagent_type } = input;
 
-      // Validate subagent type
       if (!(subagent_type in subagentGraphs)) {
         const allowedTypes = Object.keys(subagentGraphs)
           .map((k) => `\`${k}\``)
@@ -716,29 +693,31 @@ function createTaskTool(options: {
 
       const subagent = subagentGraphs[subagent_type];
 
-      // Get current state and filter it for subagent
       const currentState = getCurrentTaskInput<Record<string, unknown>>();
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
 
       const stream = await subagent.stream(subagentState, config);
       const toolCallId = config.toolCall.id;
-
-      // Iteration starts eagerly — the stream is consumed in the background
-      // immediately on construction. The execution goes into state so
-      // downstream nodes can observe progress via isPending / state / result.
       const execution = new SubagentExecution(subagent_type, stream);
 
       return new Command({
         update: {
           messages: [
             new ToolMessage({
-              content: "Task initiated",
+              content: `✅ Task scheduled successfully and running in background.
+
+You will receive a [Task Result] message when it completes.
+
+STOP HERE — Acknowledge the tasks are running, then end your turn. Example:
+"I've scheduled research on [topic]. I'll synthesize the findings once the research completes."
+
+Do NOT call more tools. Do NOT answer the question yourself.`,
               tool_call_id: toolCallId,
               name: "task",
             }),
           ],
-          tasks: {
+          [TASKS_KEY]: {
             [toolCallId]: { type: "add" as const, execution },
           },
         },
@@ -821,7 +800,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     tools: [taskTool],
 
     beforeModel: async (state) => {
-      const tasks = state.tasks as
+      const tasks = state[TASKS_KEY] as
         | Record<string, SubagentExecution>
         | undefined;
       const result = collectCompletedTasks(tasks);
@@ -830,7 +809,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
       return {
         ...result.stateUpdate,
         messages: result.messages,
-        tasks: result.taskUpdates,
+        [TASKS_KEY]: result.taskUpdates,
       };
     },
 
@@ -848,16 +827,14 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
 
     afterAgent: {
       hook: async (state) => {
-        const tasks = state.tasks as
+        const tasks = state[TASKS_KEY] as
           | Record<string, SubagentExecution>
           | undefined;
         if (!tasks || Object.keys(tasks).length === 0) return;
 
-        // Race all executions — resolves instantly if any are already
-        // done, otherwise blocks until the first one finishes. Remaining
-        // tasks keep draining in the background and get picked up by
-        // beforeModel / afterAgent on subsequent iterations.
-        await Promise.race(Object.values(tasks).map((exec) => exec.result));
+        await Promise.race(
+          Object.values(tasks).map((exec) => exec.result.catch(() => {})),
+        );
 
         const result = collectCompletedTasks(tasks);
         if (!result) return;
@@ -865,7 +842,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
         return {
           ...result.stateUpdate,
           messages: result.messages,
-          tasks: result.taskUpdates,
+          [TASKS_KEY]: result.taskUpdates,
           jumpTo: "model" as const,
         };
       },
