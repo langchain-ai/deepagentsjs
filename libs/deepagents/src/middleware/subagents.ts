@@ -7,6 +7,8 @@ import {
   ToolMessage,
   humanInTheLoopMiddleware,
   SystemMessage,
+  type ContentBlock,
+  type BaseMessage,
   type InterruptOnConfig,
   type ReactAgent,
   StructuredTool,
@@ -364,6 +366,15 @@ function filterStateForSubagent(
 }
 
 /**
+ * Invalid tool message block types
+ */
+const INVALID_TOOL_MESSAGE_BLOCK_TYPES = [
+  "tool_use",
+  "thinking",
+  "redacted_thinking",
+];
+
+/**
  * Create Command with filtered state update from subagent result
  */
 function returnCommandWithStateUpdate(
@@ -371,15 +382,26 @@ function returnCommandWithStateUpdate(
   toolCallId: string,
 ): Command {
   const stateUpdate = filterStateForSubagent(result);
-  const messages = result.messages as Array<{ content: string }>;
+  const messages = result.messages as BaseMessage[];
   const lastMessage = messages?.[messages.length - 1];
+
+  let content: string | ContentBlock[] =
+    lastMessage?.content || "Task completed";
+  if (Array.isArray(content)) {
+    content = content.filter(
+      (block) => !INVALID_TOOL_MESSAGE_BLOCK_TYPES.includes(block.type),
+    );
+    if (content.length === 0) {
+      content = "Task completed";
+    }
+  }
 
   return new Command({
     update: {
       ...stateUpdate,
       messages: [
         new ToolMessage({
-          content: lastMessage?.content || "Task completed",
+          content,
           tool_call_id: toolCallId,
           name: "task",
         }),
