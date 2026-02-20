@@ -18,30 +18,12 @@ export default defineConfig((env) => {
       testTimeout: 60_000,
       hookTimeout: 60_000,
       teardownTimeout: 60_000,
-      exclude: [
-        "**/*.int.test.ts",
-        "**/*.eval.test.ts",
-        ...configDefaults.exclude,
-      ],
+      exclude: ["**/*.int.test.ts", ...configDefaults.exclude],
       typecheck: {
         enabled: true,
       },
     },
   };
-
-  if (env.mode === "eval") {
-    return {
-      test: {
-        ...common.test,
-        globals: false,
-        testTimeout: 120_000,
-        exclude: configDefaults.exclude,
-        include: ["**/*.eval.test.ts"],
-        reporters: ["langsmith/vitest/reporter"],
-        name: "eval",
-      },
-    } satisfies ViteUserConfigExport;
-  }
 
   if (env.mode === "int") {
     return {

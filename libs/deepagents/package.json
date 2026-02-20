@@ -17,7 +17,6 @@
     "test:int": "vitest run --mode int",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "test:eval": "vitest run --mode eval",
     "test:coverage": "vitest run --coverage"
   },
   "repository": {

@@ -1,0 +1,42 @@
+{
+  "name": "@langchain/deepagents-evals",
+  "version": "0.1.0",
+  "description": "Eval harness for deepagents",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/langchain-ai/deepagentsjs.git"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "langchain",
+    "typescript",
+    "evals"
+  ],
+  "author": "LangChain",
+  "license": "MIT",
+  "dependencies": {
+    "@langchain/anthropic": "^1.2.8",
+    "@langchain/core": "^1.1.25",
+    "deepagents": "workspace:*",
+    "langchain": "1.2.25",
+    "langsmith": "^0.5.4",
+    "uuid": "^13.0.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tsconfig/recommended": "^1.0.13",
+    "@types/node": "^25.2.3",
+    "@types/uuid": "^11.0.0",
+    "dotenv": "^17.2.4",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

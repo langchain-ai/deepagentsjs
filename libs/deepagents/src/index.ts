@@ -115,4 +115,7 @@ export {
   // Local shell backend
   LocalShellBackend,
   type LocalShellBackendOptions,
+  // Utils
+  createFileData,
+  fileDataToString,
 } from "./backends/index.js";

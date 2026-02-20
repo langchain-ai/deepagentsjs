@@ -65,11 +65,14 @@ import { AIMessage, ToolMessage } from "@langchain/core/messages";
 import { ChatAnthropic } from "@langchain/anthropic";
 import * as ls from "langsmith/vitest";
 import type { ReactAgent } from "langchain";
-import { createDeepAgent } from "../index.js";
-import { createFileData, fileDataToString } from "../backends/utils.js";
-import type { FileData } from "../backends/protocol.js";
+import {
+  createDeepAgent,
+  createFileData,
+  fileDataToString,
+  type FileData,
+} from "deepagents";
 
-export { createDeepAgent } from "../index.js";
+export { createDeepAgent } from "deepagents";
 
 /**
  * Shared deepagent instance used by all eval tests that don't need a
