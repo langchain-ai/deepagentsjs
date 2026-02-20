@@ -6,7 +6,9 @@ import {
   BaseMessage,
   SystemMessage,
   HumanMessage,
+  ToolMessage,
 } from "@langchain/core/messages";
+import { RunnableLambda } from "@langchain/core/runnables";
 
 import { createDeepAgent } from "../agent.js";
 import { createSkillsMiddleware } from "./skills.js";
@@ -271,5 +273,225 @@ description: A skill for the subagent
     // Verify skillsMetadata is NOT in the parent agent's final state
     // This confirms EXCLUDED_STATE_KEYS is working correctly
     expect(result).not.toHaveProperty("skillsMetadata");
+  });
+});
+
+describe("Subagent tool_use content filtering", () => {
+  it("should filter tool_use blocks from subagent response content", async () => {
+    const mockSubagent = RunnableLambda.from(async () => ({
+      messages: [
+        new AIMessage({
+          content: [
+            { type: "text", text: "Here is the result" },
+            {
+              type: "tool_use",
+              id: "call_inner",
+              name: "some_tool",
+              input: {},
+            },
+          ],
+        }),
+      ],
+    }));
+
+    const taskToolCallId = `call_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: { thread_id: `test-tool-use-filter-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    const toolMessages = result.messages.filter((msg: BaseMessage) =>
+      ToolMessage.isInstance(msg),
+    );
+    expect(toolMessages.length).toBeGreaterThan(0);
+
+    for (const msg of toolMessages) {
+      if (Array.isArray(msg.content)) {
+        const toolUseBlocks = (msg.content as Array<{ type: string }>).filter(
+          (block) => block.type === "tool_use",
+        );
+        expect(toolUseBlocks).toHaveLength(0);
+      }
+    }
+
+    const taskToolMessage = toolMessages.find(
+      (msg: BaseMessage) => (msg as ToolMessage).name === "task",
+    ) as ToolMessage;
+    expect(taskToolMessage).toBeDefined();
+    expect(taskToolMessage.content).toContainEqual({
+      type: "text",
+      text: "Here is the result",
+    });
+  });
+
+  it("should fall back to 'Task completed' when all content blocks are tool_use", async () => {
+    const mockSubagent = RunnableLambda.from(async () => ({
+      messages: [
+        new AIMessage({
+          content: [
+            {
+              type: "tool_use",
+              id: "call_1",
+              name: "tool_a",
+              input: {},
+            },
+            {
+              type: "tool_use",
+              id: "call_2",
+              name: "tool_b",
+              input: {},
+            },
+          ],
+        }),
+      ],
+    }));
+
+    const taskToolCallId = `call_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: {
+          thread_id: `test-tool-use-fallback-${Date.now()}`,
+        },
+        recursionLimit: 50,
+      },
+    );
+
+    const taskToolMessage = result.messages.find(
+      (msg: BaseMessage) =>
+        ToolMessage.isInstance(msg) && (msg as ToolMessage).name === "task",
+    ) as ToolMessage;
+    expect(taskToolMessage).toBeDefined();
+    expect(taskToolMessage.content).toBe("Task completed");
+  });
+
+  it("should pass through string content unchanged", async () => {
+    const mockSubagent = RunnableLambda.from(async () => ({
+      messages: [
+        new AIMessage({
+          content: "Simple string result",
+        }),
+      ],
+    }));
+
+    const taskToolCallId = `call_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: {
+          thread_id: `test-string-content-${Date.now()}`,
+        },
+        recursionLimit: 50,
+      },
+    );
+
+    const taskToolMessage = result.messages.find(
+      (msg: BaseMessage) =>
+        ToolMessage.isInstance(msg) && (msg as ToolMessage).name === "task",
+    ) as ToolMessage;
+    expect(taskToolMessage).toBeDefined();
+    expect(taskToolMessage.content).toBe("Simple string result");
   });
 });
