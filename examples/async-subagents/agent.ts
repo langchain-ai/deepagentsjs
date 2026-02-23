@@ -1,4 +1,4 @@
-import { ChatAnthropic } from "@langchain/anthropic";
+import { ChatOpenAI } from "@langchain/openai";
 import { createDeepAgent, type SubAgent } from "deepagents";
 
 const researcher: SubAgent = {
@@ -16,9 +16,8 @@ const analyst: SubAgent = {
 };
 
 export const agent = createDeepAgent({
-  model: new ChatAnthropic({
-    model: "claude-sonnet-4-6",
-    temperature: 0,
+  model: new ChatOpenAI({
+    model: "gpt-5-mini",
   }),
   subagents: [researcher],
 });

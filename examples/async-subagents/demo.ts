@@ -3,7 +3,7 @@ import { AIMessageChunk, HumanMessage } from "@langchain/core/messages";
 
 const query =
   process.argv.slice(2).join(" ") ||
-  "Compare React vs Vue vs Svelte for building enterprise dashboards";
+  "Compare React vs Vue vs Svelte for building enterprise dashboards. Only call async subagents, don't do any work yourself.";
 
 const COLORS = {
   reset: "\x1b[0m",
