@@ -6,7 +6,9 @@ import {
   BaseMessage,
   SystemMessage,
   HumanMessage,
+  ToolMessage,
 } from "@langchain/core/messages";
+import { RunnableLambda } from "@langchain/core/runnables";
 
 import { createDeepAgent } from "../agent.js";
 import { createSkillsMiddleware } from "./skills.js";
@@ -271,5 +273,308 @@ description: A skill for the subagent
     // Verify skillsMetadata is NOT in the parent agent's final state
     // This confirms EXCLUDED_STATE_KEYS is working correctly
     expect(result).not.toHaveProperty("skillsMetadata");
+  });
+});
+
+/**
+ * Tests for filtering invalid content blocks from subagent response content.
+ *
+ * When using Anthropic models, AIMessage.content can be an array containing
+ * block types that are invalid as ToolMessage content:
+ * - tool_use: tool invocation blocks (#239)
+ * - thinking / redacted_thinking: extended thinking blocks (#245)
+ *
+ * These must be filtered out before constructing the ToolMessage.
+ */
+describe("Subagent content block filtering", () => {
+  it("should filter tool_use blocks from subagent response content", async () => {
+    const mockSubagent = RunnableLambda.from(async () => ({
+      messages: [
+        new AIMessage({
+          content: [
+            { type: "text", text: "Here is the result" },
+            {
+              type: "tool_use",
+              id: "call_inner",
+              name: "some_tool",
+              input: {},
+            },
+          ],
+        }),
+      ],
+    }));
+
+    const taskToolCallId = `call_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: { thread_id: `test-tool-use-filter-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    const toolMessages = result.messages.filter((msg: BaseMessage) =>
+      ToolMessage.isInstance(msg),
+    );
+    expect(toolMessages.length).toBeGreaterThan(0);
+
+    for (const msg of toolMessages) {
+      if (Array.isArray(msg.content)) {
+        const invalidBlocks = (msg.content as Array<{ type: string }>).filter(
+          (block) => block.type === "tool_use",
+        );
+        expect(invalidBlocks).toHaveLength(0);
+      }
+    }
+
+    const taskToolMessage = toolMessages.find(
+      (msg: BaseMessage) => (msg as ToolMessage).name === "task",
+    ) as ToolMessage;
+    expect(taskToolMessage).toBeDefined();
+    expect(taskToolMessage.content).toContainEqual({
+      type: "text",
+      text: "Here is the result",
+    });
+  });
+
+  it("should filter thinking and redacted_thinking blocks from subagent response content", async () => {
+    const mockSubagent = RunnableLambda.from(async () => ({
+      messages: [
+        new AIMessage({
+          content: [
+            { type: "thinking", thinking: "Let me reason about this..." },
+            { type: "redacted_thinking", data: "..." },
+            { type: "text", text: "Final answer" },
+          ],
+        }),
+      ],
+    }));
+
+    const taskToolCallId = `call_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: {
+          thread_id: `test-thinking-filter-${Date.now()}`,
+        },
+        recursionLimit: 50,
+      },
+    );
+
+    const taskToolMessage = result.messages.find(
+      (msg: BaseMessage) =>
+        ToolMessage.isInstance(msg) && (msg as ToolMessage).name === "task",
+    ) as ToolMessage;
+    expect(taskToolMessage).toBeDefined();
+    expect(taskToolMessage.content).toContainEqual({
+      type: "text",
+      text: "Final answer",
+    });
+    if (Array.isArray(taskToolMessage.content)) {
+      const invalidBlocks = (
+        taskToolMessage.content as Array<{ type: string }>
+      ).filter(
+        (block) =>
+          block.type === "thinking" || block.type === "redacted_thinking",
+      );
+      expect(invalidBlocks).toHaveLength(0);
+    }
+  });
+
+  it("should fall back to 'Task completed' when all content blocks are invalid", async () => {
+    const mockSubagent = RunnableLambda.from(async () => ({
+      messages: [
+        new AIMessage({
+          content: [
+            {
+              type: "tool_use",
+              id: "call_1",
+              name: "tool_a",
+              input: {},
+            },
+            { type: "thinking", thinking: "internal reasoning" },
+            { type: "redacted_thinking", data: "..." },
+          ],
+        }),
+      ],
+    }));
+
+    const taskToolCallId = `call_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: {
+          thread_id: `test-invalid-blocks-fallback-${Date.now()}`,
+        },
+        recursionLimit: 50,
+      },
+    );
+
+    const taskToolMessage = result.messages.find(
+      (msg: BaseMessage) =>
+        ToolMessage.isInstance(msg) && (msg as ToolMessage).name === "task",
+    ) as ToolMessage;
+    expect(taskToolMessage).toBeDefined();
+    expect(taskToolMessage.content).toBe("Task completed");
+  });
+
+  it("should pass through string content unchanged", async () => {
+    const mockSubagent = RunnableLambda.from(async () => ({
+      messages: [
+        new AIMessage({
+          content: "Simple string result",
+        }),
+      ],
+    }));
+
+    const taskToolCallId = `call_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: {
+          thread_id: `test-string-content-${Date.now()}`,
+        },
+        recursionLimit: 50,
+      },
+    );
+
+    const taskToolMessage = result.messages.find(
+      (msg: BaseMessage) =>
+        ToolMessage.isInstance(msg) && (msg as ToolMessage).name === "task",
+    ) as ToolMessage;
+    expect(taskToolMessage).toBeDefined();
+    expect(taskToolMessage.content).toBe("Simple string result");
   });
 });
