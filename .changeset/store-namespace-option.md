@@ -1,5 +1,5 @@
 ---
-"deepagents": minor
+"deepagents": patch
 ---
 
 Add `namespace` option to `StoreBackend` for custom store namespace isolation.
