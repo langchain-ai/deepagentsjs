@@ -376,16 +376,18 @@ describe("StoreBackend", () => {
       store,
     };
 
-    expect(() =>
-      new StoreBackend(stateAndStore, {
-        namespace: ["filesystem", "*"],
-      }),
+    expect(
+      () =>
+        new StoreBackend(stateAndStore, {
+          namespace: ["filesystem", "*"],
+        }),
     ).toThrow("disallowed characters");
 
-    expect(() =>
-      new StoreBackend(stateAndStore, {
-        namespace: [],
-      }),
+    expect(
+      () =>
+        new StoreBackend(stateAndStore, {
+          namespace: [],
+        }),
     ).toThrow("must not be empty");
   });
 

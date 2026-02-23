@@ -1345,8 +1345,7 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const messages = response.messages;
       const readMessage = messages.find(
-        (msg: any) =>
-          ToolMessage.isInstance(msg) && msg.name === "read_file",
+        (msg: any) => ToolMessage.isInstance(msg) && msg.name === "read_file",
       );
 
       expect(readMessage).toBeDefined();
