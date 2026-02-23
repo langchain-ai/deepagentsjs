@@ -346,6 +346,55 @@ describe("Filesystem Middleware Integration Tests", () => {
   );
 
   it.concurrent(
+    "should propagate store via invoke config (cloud deployment simulation)",
+    { timeout: 90 * 1000 },
+    async () => {
+      const checkpointer = new MemorySaver();
+      const store = new InMemoryStore();
+
+      await store.put(["filesystem"], "/test.txt", {
+        content: ["Hello from runtime store"],
+        created_at: "2021-01-01",
+        modified_at: "2021-01-01",
+      });
+
+      const agent = createAgent({
+        model: SAMPLE_MODEL,
+        middleware: [
+          createFilesystemMiddleware({
+            backend: (stateAndStore: any) =>
+              new CompositeBackend(new StateBackend(stateAndStore), {
+                "/memories/": new StoreBackend(stateAndStore),
+              }),
+          }),
+        ],
+        checkpointer,
+      });
+
+      const config = {
+        configurable: { thread_id: uuidv4() },
+        store,
+      };
+      const response = await agent.invoke(
+        {
+          messages: [new HumanMessage("Read the file /memories/test.txt")],
+        },
+        config,
+      );
+
+      const messages = response.messages;
+      const readMessage = messages.find(
+        (msg) => ToolMessage.isInstance(msg) && msg.name === "read_file",
+      );
+
+      expect(readMessage).toBeDefined();
+      expect(readMessage!.content.toString()).toContain(
+        "Hello from runtime store",
+      );
+    },
+  );
+
+  it.concurrent(
     "should write to longterm memory",
     { timeout: 90 * 1000 }, // 90s
     async () => {
@@ -1259,6 +1308,50 @@ describe("Filesystem Middleware Integration Tests", () => {
       expect(
         verifyReadMessage!.content.toString().toLowerCase().includes("ember"),
       ).toBe(true);
+    },
+  );
+
+  it.concurrent(
+    "should propagate store via invoke config with createDeepAgent (cloud deployment simulation)",
+    { timeout: 90 * 1000 },
+    async () => {
+      const checkpointer = new MemorySaver();
+      const store = new InMemoryStore();
+
+      await store.put(["filesystem"], "/test.txt", {
+        content: ["Hello from cloud runtime store"],
+        created_at: "2021-01-01",
+        modified_at: "2021-01-01",
+      });
+
+      const agent = createDeepAgent({
+        backend: (stateAndStore: any) =>
+          new CompositeBackend(new StateBackend(stateAndStore), {
+            "/memories/": new StoreBackend(stateAndStore),
+          }),
+        checkpointer,
+      });
+
+      const config = {
+        configurable: { thread_id: uuidv4() },
+        store,
+      };
+      const response = await agent.invoke(
+        {
+          messages: [new HumanMessage("Read the file /memories/test.txt")],
+        },
+        config,
+      );
+
+      const messages = response.messages;
+      const readMessage = messages.find(
+        (msg: any) => ToolMessage.isInstance(msg) && msg.name === "read_file",
+      );
+
+      expect(readMessage).toBeDefined();
+      expect(readMessage!.content.toString()).toContain(
+        "Hello from cloud runtime store",
+      );
     },
   );
 });
