@@ -85,6 +85,7 @@ export {
 export {
   StateBackend,
   StoreBackend,
+  type StoreBackendOptions,
   FilesystemBackend,
   CompositeBackend,
   BaseSandbox,
