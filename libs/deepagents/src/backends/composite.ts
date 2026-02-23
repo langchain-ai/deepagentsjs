@@ -26,7 +26,6 @@ import { isSandboxBackend } from "./protocol.js";
  */
 export class CompositeBackend implements BackendProtocol {
   private default: BackendProtocol;
-  private routes: Record<string, BackendProtocol>;
   private sortedRoutes: Array<[string, BackendProtocol]>;
 
   constructor(
@@ -34,7 +33,6 @@ export class CompositeBackend implements BackendProtocol {
     routes: Record<string, BackendProtocol>,
   ) {
     this.default = defaultBackend;
-    this.routes = routes;
 
     // Sort routes by length (longest first) for correct prefix matching
     this.sortedRoutes = Object.entries(routes).sort(
@@ -170,42 +168,14 @@ export class CompositeBackend implements BackendProtocol {
       }
     }
 
-    // Otherwise, search default and all routed backends and merge
-    const allMatches: GrepMatch[] = [];
-    const rawDefault = await this.default.grepRaw(pattern, path, glob);
-
-    if (typeof rawDefault === "string") {
-      return rawDefault;
-    }
-
-    allMatches.push(...rawDefault);
-
-    // Search all routes
-    for (const [routePrefix, backend] of Object.entries(this.routes)) {
-      const raw = await backend.grepRaw(pattern, "/", glob);
-
-      if (typeof raw === "string") {
-        return raw;
-      }
-
-      // Add route prefix back
-      allMatches.push(
-        ...raw.map((m) => ({
-          ...m,
-          path: routePrefix.slice(0, -1) + m.path,
-        })),
-      );
-    }
-
-    return allMatches;
+    // Path doesn't match any route - search only the default backend
+    return await this.default.grepRaw(pattern, path, glob);
   }
 
   /**
    * Structured glob matching returning FileInfo objects.
    */
   async globInfo(pattern: string, path: string = "/"): Promise<FileInfo[]> {
-    const results: FileInfo[] = [];
-
     // Route based on path, not pattern
     for (const [routePrefix, backend] of this.sortedRoutes) {
       if (path.startsWith(routePrefix.replace(/\/$/, ""))) {
@@ -220,23 +190,8 @@ export class CompositeBackend implements BackendProtocol {
       }
     }
 
-    // Path doesn't match any specific route - search default backend AND all routed backends
-    const defaultInfos = await this.default.globInfo(pattern, path);
-    results.push(...defaultInfos);
-
-    for (const [routePrefix, backend] of Object.entries(this.routes)) {
-      const infos = await backend.globInfo(pattern, "/");
-      results.push(
-        ...infos.map((fi) => ({
-          ...fi,
-          path: routePrefix.slice(0, -1) + fi.path,
-        })),
-      );
-    }
-
-    // Deterministic ordering
-    results.sort((a, b) => a.path.localeCompare(b.path));
-    return results;
+    // Path doesn't match any route - search only the default backend
+    return await this.default.globInfo(pattern, path);
   }
 
   /**
