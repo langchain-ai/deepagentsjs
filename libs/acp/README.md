@@ -147,8 +147,10 @@ To use with [Zed](https://zed.dev), add the agent to your settings (`~/.config/z
         "command": "npx",
         "args": [
           "deepagents-acp",
-          "--name", "my-assistant",
-          "--skills", "./skills",
+          "--name",
+          "my-assistant",
+          "--skills",
+          "./skills",
           "--debug"
         ],
         "env": {
@@ -342,7 +344,10 @@ const server = new DeepAgentsServer({
     name: "custom-agent",
     backend: new CompositeBackend({
       routes: [
-        { prefix: "/workspace", backend: new FilesystemBackend({ rootDir: "./workspace" }) },
+        {
+          prefix: "/workspace",
+          backend: new FilesystemBackend({ rootDir: "./workspace" }),
+        },
         { prefix: "/", backend: (config) => new StateBackend(config) },
       ],
     }),
@@ -366,7 +371,7 @@ const searchTool = tool(
     name: "search",
     description: "Search the codebase",
     schema: z.object({ query: z.string() }),
-  }
+  },
 );
 
 const server = new DeepAgentsServer({

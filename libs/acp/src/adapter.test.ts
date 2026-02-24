@@ -308,7 +308,9 @@ describe("todosToPlanEntries", () => {
   });
 
   it("should convert cancelled to skipped", () => {
-    const todos = [{ id: "1", content: "Cancelled task", status: "cancelled" as const }];
+    const todos = [
+      { id: "1", content: "Cancelled task", status: "cancelled" as const },
+    ];
 
     const result = todosToPlanEntries(todos);
 
@@ -317,8 +319,18 @@ describe("todosToPlanEntries", () => {
 
   it("should preserve priority when provided", () => {
     const todos = [
-      { id: "1", content: "High priority", status: "pending" as const, priority: "high" },
-      { id: "2", content: "Low priority", status: "pending" as const, priority: "low" },
+      {
+        id: "1",
+        content: "High priority",
+        status: "pending" as const,
+        priority: "high",
+      },
+      {
+        id: "2",
+        content: "Low priority",
+        status: "pending" as const,
+        priority: "low",
+      },
     ];
 
     const result = todosToPlanEntries(todos);

@@ -57,7 +57,9 @@ describe("Logger", () => {
 
   describe("logging methods", () => {
     it("should log to stderr when debug=true", () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const consoleSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
       const logger = new Logger({ debug: true });
 
       logger.log("test message");
@@ -68,7 +70,9 @@ describe("Logger", () => {
     });
 
     it("should not log to stderr when debug=false", () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const consoleSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
       const logger = new Logger({ debug: false });
 
       logger.log("test message");
@@ -78,7 +82,9 @@ describe("Logger", () => {
     });
 
     it("should log errors to stderr even when debug=false", () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const consoleSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
       const logger = new Logger({ debug: false });
 
       logger.error("error message");
@@ -110,7 +116,9 @@ describe("Logger", () => {
     });
 
     it("should use custom prefix", () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const consoleSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
       const logger = new Logger({
         debug: true,
         prefix: "[custom-prefix]",
@@ -125,7 +133,9 @@ describe("Logger", () => {
 
   describe("log levels", () => {
     it("should support info level", () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const consoleSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
       const logger = new Logger({ debug: true });
 
       logger.info("info message");
@@ -135,7 +145,9 @@ describe("Logger", () => {
     });
 
     it("should support warn level", () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const consoleSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
       const logger = new Logger({ debug: true });
 
       logger.warn("warning message");
@@ -145,7 +157,9 @@ describe("Logger", () => {
     });
 
     it("should support error level", () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const consoleSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
       const logger = new Logger({ debug: true });
 
       logger.error("error message");

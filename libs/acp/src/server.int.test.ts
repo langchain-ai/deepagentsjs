@@ -47,7 +47,7 @@ describe("DeepAgentsServer Integration", () => {
       const serverAny = server as unknown as {
         handleNewSession: (
           params: Record<string, unknown>,
-          conn: unknown
+          conn: unknown,
         ) => Promise<{ sessionId: string }>;
         sessions: Map<string, SessionState>;
       };
@@ -77,11 +77,11 @@ describe("DeepAgentsServer Integration", () => {
       const serverAny = server as unknown as {
         handleNewSession: (
           params: Record<string, unknown>,
-          conn: unknown
+          conn: unknown,
         ) => Promise<{ sessionId: string }>;
         handleLoadSession: (
           params: Record<string, unknown>,
-          conn: unknown
+          conn: unknown,
         ) => Promise<{ modes: { availableModes: unknown[] } }>;
         sessions: Map<string, SessionState>;
       };
@@ -94,7 +94,7 @@ describe("DeepAgentsServer Integration", () => {
       // Try to load it
       const loadResult = await serverAny.handleLoadSession(
         { sessionId },
-        mockConn
+        mockConn,
       );
 
       // ACP spec: LoadSessionResponse returns modes, not sessionId
@@ -112,7 +112,7 @@ describe("DeepAgentsServer Integration", () => {
       const serverAny = server as unknown as {
         handleLoadSession: (
           params: Record<string, unknown>,
-          conn: unknown
+          conn: unknown,
         ) => Promise<{ sessionId: string }>;
       };
 
@@ -120,7 +120,7 @@ describe("DeepAgentsServer Integration", () => {
 
       // Try to load a non-existent session - should throw
       await expect(
-        serverAny.handleLoadSession({ sessionId: "non-existent" }, mockConn)
+        serverAny.handleLoadSession({ sessionId: "non-existent" }, mockConn),
       ).rejects.toThrow("Session not found");
     });
   });
@@ -136,14 +136,18 @@ describe("DeepAgentsServer Integration", () => {
       const serverAny = server as unknown as {
         handleNewSession: (
           params: Record<string, unknown>,
-          conn: unknown
-        ) => Promise<{ modes: { availableModes: Array<{ id: string; name: string }> } }>;
+          conn: unknown,
+        ) => Promise<{
+          modes: { availableModes: Array<{ id: string; name: string }> };
+        }>;
       };
 
       const mockConn = { sessionUpdate: vi.fn() };
       const result = await serverAny.handleNewSession({}, mockConn);
 
-      const agentMode = result.modes.availableModes.find((m) => m.id === "agent");
+      const agentMode = result.modes.availableModes.find(
+        (m) => m.id === "agent",
+      );
       expect(agentMode).toBeDefined();
       expect(agentMode?.name).toBe("Agent Mode");
     });
@@ -158,7 +162,7 @@ describe("DeepAgentsServer Integration", () => {
       const serverAny = server as unknown as {
         handleNewSession: (
           params: Record<string, unknown>,
-          conn: unknown
+          conn: unknown,
         ) => Promise<{ modes: { availableModes: Array<{ id: string }> } }>;
       };
 
@@ -179,9 +183,11 @@ describe("DeepAgentsServer Integration", () => {
       const serverAny = server as unknown as {
         handleNewSession: (
           params: Record<string, unknown>,
-          conn: unknown
+          conn: unknown,
         ) => Promise<{ sessionId: string }>;
-        handleSetSessionMode: (params: Record<string, unknown>) => Promise<void>;
+        handleSetSessionMode: (
+          params: Record<string, unknown>,
+        ) => Promise<void>;
         sessions: Map<string, SessionState>;
       };
 
@@ -220,7 +226,7 @@ describe("DeepAgentsServer Integration", () => {
       const serverAny = server as unknown as {
         handleNewSession: (
           params: Record<string, unknown>,
-          conn: unknown
+          conn: unknown,
         ) => Promise<{ sessionId: string }>;
         sessions: Map<string, SessionState>;
       };
@@ -230,7 +236,7 @@ describe("DeepAgentsServer Integration", () => {
       // Create session with specific agent
       const { sessionId } = await serverAny.handleNewSession(
         { configOptions: { agent: "writing-agent" } },
-        mockConn
+        mockConn,
       );
 
       const session = serverAny.sessions.get(sessionId);
@@ -239,16 +245,13 @@ describe("DeepAgentsServer Integration", () => {
 
     it("should use first agent as default", async () => {
       server = new DeepAgentsServer({
-        agents: [
-          { name: "first-agent" },
-          { name: "second-agent" },
-        ],
+        agents: [{ name: "first-agent" }, { name: "second-agent" }],
       });
 
       const serverAny = server as unknown as {
         handleNewSession: (
           params: Record<string, unknown>,
-          conn: unknown
+          conn: unknown,
         ) => Promise<{ sessionId: string }>;
         sessions: Map<string, SessionState>;
       };
@@ -271,7 +274,7 @@ describe("DeepAgentsServer Integration", () => {
       const serverAny = server as unknown as {
         handleNewSession: (
           params: Record<string, unknown>,
-          conn: unknown
+          conn: unknown,
         ) => Promise<{ sessionId: string }>;
         handleCancel: (params: Record<string, unknown>) => Promise<void>;
         currentPromptAbortController: AbortController | null;
@@ -300,7 +303,7 @@ describe("DeepAgentsServer Integration", () => {
       const serverAny = server as unknown as {
         handleNewSession: (
           params: Record<string, unknown>,
-          conn: unknown
+          conn: unknown,
         ) => Promise<{ sessionId: string }>;
         handleCancel: (params: Record<string, unknown>) => Promise<void>;
         currentPromptAbortController: AbortController | null;
@@ -317,7 +320,9 @@ describe("DeepAgentsServer Integration", () => {
       expect(controller.signal.aborted).toBe(true);
 
       // Second cancel should not throw
-      await expect(serverAny.handleCancel({ sessionId })).resolves.not.toThrow();
+      await expect(
+        serverAny.handleCancel({ sessionId }),
+      ).resolves.not.toThrow();
     });
   });
 

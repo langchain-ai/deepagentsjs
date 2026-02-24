@@ -5,6 +5,7 @@ This example demonstrates how to run DeepAgents as an ACP (Agent Client Protocol
 ## Prerequisites
 
 1. Install dependencies:
+
    ```bash
    pnpm install
    ```
