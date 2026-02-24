@@ -513,10 +513,6 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     newString: string,
     replaceAll: boolean = false,
   ): Promise<EditResult> {
-    if (oldString.length === 0) {
-      return { error: "oldString must not be empty" };
-    }
-
     const results = await this.downloadFiles([filePath]);
     if (results[0].error || !results[0].content) {
       return { error: `Error: File '${filePath}' not found` };
@@ -524,6 +520,41 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
 
     const text = new TextDecoder().decode(results[0].content);
     results[0].content = null as unknown as Uint8Array;
+
+    /**
+     * are we editing an empty file?
+     */
+    if (oldString.length === 0) {
+      /**
+       * if the file is not empty, we cannot edit it with an empty oldString
+       */
+      if (text.length !== 0) {
+        return {
+          error: "oldString must not be empty unless the file is empty",
+        };
+      }
+      /**
+       * if the newString is empty, we can just return the file as is
+       */
+      if (newString.length === 0) {
+        return { path: filePath, filesUpdate: null, occurrences: 0 };
+      }
+
+      /**
+       * if the newString is not empty, we can edit the file
+       */
+      const encoded = new TextEncoder().encode(newString);
+      const uploadResults = await this.uploadFiles([[filePath, encoded]]);
+      /**
+       * if the upload fails, we return an error
+       */
+      if (uploadResults[0].error) {
+        return {
+          error: `Failed to write edited file '${filePath}': ${uploadResults[0].error}`,
+        };
+      }
+      return { path: filePath, filesUpdate: null, occurrences: 1 };
+    }
 
     const firstIdx = text.indexOf(oldString);
     if (firstIdx === -1) {
@@ -539,12 +570,16 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
 
     if (replaceAll) {
       newText = text.replaceAll(oldString, newString);
-      // Derive count from the length delta to avoid a separate O(n) counting pass
+      /**
+       * Derive count from the length delta to avoid a separate O(n) counting pass
+       */
       const lenDiff = oldString.length - newString.length;
       if (lenDiff !== 0) {
         count = (text.length - newText.length) / lenDiff;
       } else {
-        // Lengths are equal — count via indexOf (we already found the first)
+        /**
+         * Lengths are equal — count via indexOf (we already found the first)
+         */
         count = 1;
         let pos = firstIdx + oldString.length;
         while (pos <= text.length) {
@@ -562,7 +597,9 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
         };
       }
       count = 1;
-      // Build result from the known index — avoids a redundant search by .replace()
+      /**
+       * Build result from the known index — avoids a redundant search by .replace()
+       */
       newText =
         text.slice(0, firstIdx) +
         newString +
