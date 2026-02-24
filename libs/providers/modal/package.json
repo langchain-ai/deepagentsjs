@@ -37,7 +37,7 @@
   },
   "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "dependencies": {
-    "modal": "^0.6.1"
+    "modal": "^0.7.1"
   },
   "peerDependencies": {
     "deepagents": ">=1.6.0"
