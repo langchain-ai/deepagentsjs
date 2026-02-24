@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { DeepAgentsServer } from "./server.js";
 import { generateSessionId } from "./adapter.js";
-import type { DeepAgentConfig, SessionState } from "./types.js";
+import type { SessionState } from "./types.js";
 
 // These tests use the actual deepagents library but mock the LLM
 vi.mock("@langchain/anthropic", () => ({
