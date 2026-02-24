@@ -1,5 +1,24 @@
 # deepagents
 
+## 1.8.1
+
+### Patch Changes
+
+- [#227](https://github.com/langchain-ai/deepagentsjs/pull/227) [`a553936`](https://github.com/langchain-ai/deepagentsjs/commit/a553936c5350ed148282533539491452d8815db2) Thanks [@christian-bromann](https://github.com/christian-bromann)! - docs(deepagents): add streaming examples
+
+- [`d8cb607`](https://github.com/langchain-ai/deepagentsjs/commit/d8cb607e01ffd1b7d1970b29908c401c5154695a) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): filter invalid content blocks from subagent ToolMessage
+
+- [#250](https://github.com/langchain-ai/deepagentsjs/pull/250) [`4bcc9d4`](https://github.com/langchain-ai/deepagentsjs/commit/4bcc9d46cff0d59b113034a42eede0040d4d8ba4) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): fix OOM in conversation history offloading
+
+- [#248](https://github.com/langchain-ai/deepagentsjs/pull/248) [`20c7df0`](https://github.com/langchain-ai/deepagentsjs/commit/20c7df08685754f88b5605fa426e9a07694f9a2c) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): preserve ToolMessage metadata when evicting large outputs
+
+- [#244](https://github.com/langchain-ai/deepagentsjs/pull/244) [`9e04404`](https://github.com/langchain-ai/deepagentsjs/commit/9e04404df2c64528e38d7c77e71bd7226e062fd5) Thanks [@hntrl](https://github.com/hntrl)! - Add `namespace` option to `StoreBackend` for custom store namespace isolation.
+  - `StoreBackend` now accepts an optional `{ namespace: string[] }` to control where files are stored in the LangGraph store
+  - Enables user-scoped, org-scoped, or any custom isolation pattern when combined with the `backend` factory on `createDeepAgent`
+  - Namespace components are validated to prevent wildcard/glob injection
+  - Defaults to `["filesystem"]` (or `[assistantId, "filesystem"]` when `assistantId` is set) for backwards compatibility
+  - Added integration tests verifying store propagation via invoke config (cloud deployment simulation)
+
 ## 1.8.0
 
 ### Minor Changes
