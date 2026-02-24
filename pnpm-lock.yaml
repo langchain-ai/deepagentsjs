@@ -302,8 +302,8 @@ importers:
   libs/providers/modal:
     dependencies:
       modal:
-        specifier: ^0.6.1
-        version: 0.6.2
+        specifier: ^0.7.1
+        version: 0.7.1
     devDependencies:
       '@langchain/sandbox-standard-tests':
         specifier: workspace:*
@@ -2928,8 +2928,8 @@ packages:
     resolution: {integrity: sha512-KZxYo1BUkWD2TVFLr0MQoM8vUUigWD3LlD83a/75BqC+4qE0Hb1Vo5v1FgcfaNXvfXzr+5EhQ6ing/CaBijTlw==}
     engines: {node: '>= 18'}
 
-  modal@0.6.2:
-    resolution: {integrity: sha512-SBKz+Wq9Z7DIokZw6QAhqubG2DmUUo8cRebLX5/BQe/v+7hBaZtZDZen1kj40zhMqY6EKb92QbsS8+17XmChyA==}
+  modal@0.7.1:
+    resolution: {integrity: sha512-WFn5mfVD7BbdNytqDODjKXG+RkF4bubTKiu7gZvq/JITcLIU1JWYnZQSJ41cE1TlrBlxFADSx8d7Q2AXF1GT+A==}
 
   module-details-from-path@1.0.4:
     resolution: {integrity: sha512-EGWKgxALGMgzvxYF1UyGTy0HXX/2vHLkw6+NvDKW2jypWbHpjQuj4UMcqQWXHERJhVGKikolT06G3bcKe4fi7w==}
@@ -6883,7 +6883,7 @@ snapshots:
     dependencies:
       minipass: 7.1.2
 
-  modal@0.6.2:
+  modal@0.7.1:
     dependencies:
       cbor-x: 1.6.0
       long: 5.3.2
