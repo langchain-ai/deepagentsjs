@@ -891,6 +891,12 @@ export function createFilesystemMiddleware(
             content: replacementText,
             tool_call_id: msg.tool_call_id,
             name: msg.name,
+            id: msg.id,
+            artifact: msg.artifact,
+            status: msg.status,
+            metadata: msg.metadata,
+            additional_kwargs: msg.additional_kwargs,
+            response_metadata: msg.response_metadata,
           });
 
           return {

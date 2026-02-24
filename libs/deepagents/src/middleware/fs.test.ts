@@ -610,6 +610,67 @@ describe("createFilesystemMiddleware", () => {
       }
     });
 
+    it("should preserve ToolMessage metadata on eviction", async () => {
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: null,
+        filesUpdate: {
+          "/large_tool_results/test-id": {
+            content: ["large content"],
+            created_at: "2024-01-01T00:00:00Z",
+            modified_at: "2024-01-01T00:00:00Z",
+          },
+        },
+      });
+      mockBackend.write = mockWrite;
+
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        toolTokenLimitBeforeEvict: 100,
+      });
+
+      const largeContent = "x".repeat(100 * NUM_CHARS_PER_TOKEN + 1000);
+      const artifactPayload = { kind: "structured", value: { key: "v" } };
+      const mockMessage = new ToolMessage({
+        content: largeContent,
+        tool_call_id: "test-id",
+        name: "some_tool",
+        id: "tool-msg-1",
+        artifact: artifactPayload,
+        status: "error",
+        metadata: { channel: "test" },
+        additional_kwargs: { trace: "abc" },
+        response_metadata: { provider: "mock" },
+      });
+      const mockHandler = vi.fn().mockResolvedValue(mockMessage);
+      const request = {
+        toolCall: { id: "test-id", name: "some_tool" },
+        state: {},
+        config: {},
+      };
+
+      const result = await middleware.wrapToolCall!(
+        request as any,
+        mockHandler,
+      );
+
+      expect(isCommand(result)).toBe(true);
+      if (isCommand(result)) {
+        const update = result.update as any;
+        expect(update.messages).toHaveLength(1);
+        const truncatedMsg = update.messages[0];
+        expect(truncatedMsg.content).toContain("Tool result too large");
+        expect(truncatedMsg.tool_call_id).toBe("test-id");
+        expect(truncatedMsg.name).toBe("some_tool");
+        expect(truncatedMsg.id).toBe("tool-msg-1");
+        expect(truncatedMsg.artifact).toEqual(artifactPayload);
+        expect(truncatedMsg.status).toBe("error");
+        expect(truncatedMsg.metadata).toEqual({ channel: "test" });
+        expect(truncatedMsg.additional_kwargs).toEqual({ trace: "abc" });
+        expect(truncatedMsg.response_metadata).toEqual({ provider: "mock" });
+      }
+    });
+
     it("should handle Command with multiple ToolMessages", async () => {
       const mockBackend = createMockBackend();
       const mockWrite = vi.fn().mockResolvedValue({
