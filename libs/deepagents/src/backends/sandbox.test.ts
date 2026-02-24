@@ -257,58 +257,276 @@ describe("BaseSandbox", () => {
   });
 
   describe("edit", () => {
-    it("should edit file via downloadFiles + uploadFiles", async () => {
-      const sandbox = new MockSandbox();
-      sandbox.addFile("/test.txt", "Hello World");
-
-      const result = await sandbox.edit(
-        "/test.txt",
-        "World",
-        "Universe",
-        false,
-      );
-      expect(result.error).toBeUndefined();
-      expect(result.occurrences).toBe(1);
-      expect(result.filesUpdate).toBeNull();
-
-      // Verify the edit
-      expect(sandbox.getFile("/test.txt")).toBe("Hello Universe");
-      // Should NOT go through execute
-      expect(sandbox.executedCommands.length).toBe(0);
-    });
-
-    it("should return error when string not found", async () => {
-      const sandbox = new MockSandbox();
-      sandbox.addFile("/test.txt", "Hello World");
-
-      const result = await sandbox.edit("/test.txt", "notfound", "new", false);
-      expect(result.error).toContain("not found");
-    });
-
-    it("should return error for multiple occurrences without replaceAll", async () => {
-      const sandbox = new MockSandbox();
-      sandbox.addFile("/test.txt", "foo bar foo baz foo");
-
-      const result = await sandbox.edit("/test.txt", "foo", "qux", false);
-      expect(result.error).toContain("Multiple occurrences");
-      expect(result.error).toContain("replaceAll");
-    });
-
-    it("should replace all occurrences with replaceAll=true", async () => {
-      const sandbox = new MockSandbox();
-      sandbox.addFile("/test.txt", "foo bar foo baz foo");
-
-      const result = await sandbox.edit("/test.txt", "foo", "qux", true);
-      expect(result.error).toBeUndefined();
-      expect(result.occurrences).toBe(3);
-      expect(sandbox.getFile("/test.txt")).toBe("qux bar qux baz qux");
-    });
-
     it("should return error when file not found", async () => {
       const sandbox = new MockSandbox();
-
       const result = await sandbox.edit("/nonexistent.txt", "a", "b", false);
       expect(result.error).toContain("not found");
+      expect(result.path).toBeUndefined();
+    });
+
+    describe("empty oldString (editing empty files)", () => {
+      it("should write content to an empty file", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/empty.txt", "");
+
+        const result = await sandbox.edit("/empty.txt", "", "hello", false);
+        expect(result.error).toBeUndefined();
+        expect(result.path).toBe("/empty.txt");
+        expect(result.occurrences).toBe(1);
+        expect(sandbox.getFile("/empty.txt")).toBe("hello");
+      });
+
+      it("should write multi-line content to an empty file", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/empty.txt", "");
+
+        const result = await sandbox.edit(
+          "/empty.txt",
+          "",
+          "line1\nline2\nline3",
+          false,
+        );
+        expect(result.error).toBeUndefined();
+        expect(sandbox.getFile("/empty.txt")).toBe("line1\nline2\nline3");
+      });
+
+      it("should no-op when both oldString and newString are empty", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/empty.txt", "");
+
+        const result = await sandbox.edit("/empty.txt", "", "", false);
+        expect(result.error).toBeUndefined();
+        expect(result.occurrences).toBe(0);
+        expect(sandbox.getFile("/empty.txt")).toBe("");
+      });
+
+      it("should reject empty oldString when file has content", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "existing content");
+
+        const result = await sandbox.edit("/test.txt", "", "new", false);
+        expect(result.error).toBe(
+          "oldString must not be empty unless the file is empty",
+        );
+      });
+    });
+
+    describe("single replacement (replaceAll=false)", () => {
+      it("should replace a unique occurrence", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "Hello World");
+
+        const result = await sandbox.edit(
+          "/test.txt",
+          "World",
+          "Universe",
+          false,
+        );
+        expect(result.error).toBeUndefined();
+        expect(result.path).toBe("/test.txt");
+        expect(result.occurrences).toBe(1);
+        expect(result.filesUpdate).toBeNull();
+        expect(sandbox.getFile("/test.txt")).toBe("Hello Universe");
+      });
+
+      it("should not use execute (goes through download/upload)", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "Hello World");
+
+        await sandbox.edit("/test.txt", "World", "Universe", false);
+        expect(sandbox.executedCommands.length).toBe(0);
+      });
+
+      it("should replace at the start of the file", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "Hello World");
+
+        const result = await sandbox.edit(
+          "/test.txt",
+          "Hello",
+          "Goodbye",
+          false,
+        );
+        expect(result.error).toBeUndefined();
+        expect(sandbox.getFile("/test.txt")).toBe("Goodbye World");
+      });
+
+      it("should replace at the end of the file", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "Hello World");
+
+        const result = await sandbox.edit("/test.txt", "World", "Earth", false);
+        expect(result.error).toBeUndefined();
+        expect(sandbox.getFile("/test.txt")).toBe("Hello Earth");
+      });
+
+      it("should replace the entire file content", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "old content");
+
+        const result = await sandbox.edit(
+          "/test.txt",
+          "old content",
+          "new content",
+          false,
+        );
+        expect(result.error).toBeUndefined();
+        expect(sandbox.getFile("/test.txt")).toBe("new content");
+      });
+
+      it("should handle multi-line replacements", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "line1\nline2\nline3");
+
+        const result = await sandbox.edit(
+          "/test.txt",
+          "line1\nline2",
+          "replaced",
+          false,
+        );
+        expect(result.error).toBeUndefined();
+        expect(sandbox.getFile("/test.txt")).toBe("replaced\nline3");
+      });
+
+      it("should replace with a longer string", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "ab");
+
+        const result = await sandbox.edit("/test.txt", "ab", "abcdef", false);
+        expect(result.error).toBeUndefined();
+        expect(sandbox.getFile("/test.txt")).toBe("abcdef");
+      });
+
+      it("should replace with a shorter string", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "abcdef");
+
+        const result = await sandbox.edit("/test.txt", "abcdef", "ab", false);
+        expect(result.error).toBeUndefined();
+        expect(sandbox.getFile("/test.txt")).toBe("ab");
+      });
+
+      it("should delete content when newString is empty", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "keep delete keep");
+
+        const result = await sandbox.edit("/test.txt", " delete", "", false);
+        expect(result.error).toBeUndefined();
+        expect(sandbox.getFile("/test.txt")).toBe("keep keep");
+      });
+
+      it("should return error when oldString not found", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "Hello World");
+
+        const result = await sandbox.edit(
+          "/test.txt",
+          "notfound",
+          "new",
+          false,
+        );
+        expect(result.error).toContain("String not found");
+        expect(result.error).toContain("/test.txt");
+      });
+
+      it("should return error for multiple occurrences", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "foo bar foo baz foo");
+
+        const result = await sandbox.edit("/test.txt", "foo", "qux", false);
+        expect(result.error).toContain("Multiple occurrences");
+        expect(result.error).toContain("replaceAll");
+      });
+
+      it("should no-op when oldString equals newString", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "Hello World");
+
+        const result = await sandbox.edit("/test.txt", "World", "World", false);
+        expect(result.error).toBeUndefined();
+        expect(result.occurrences).toBe(1);
+        expect(sandbox.getFile("/test.txt")).toBe("Hello World");
+      });
+    });
+
+    describe("replaceAll=true", () => {
+      it("should replace all occurrences", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "foo bar foo baz foo");
+
+        const result = await sandbox.edit("/test.txt", "foo", "qux", true);
+        expect(result.error).toBeUndefined();
+        expect(result.occurrences).toBe(3);
+        expect(sandbox.getFile("/test.txt")).toBe("qux bar qux baz qux");
+      });
+
+      it("should work with a single occurrence", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "foo bar baz");
+
+        const result = await sandbox.edit("/test.txt", "bar", "qux", true);
+        expect(result.error).toBeUndefined();
+        expect(result.occurrences).toBe(1);
+        expect(sandbox.getFile("/test.txt")).toBe("foo qux baz");
+      });
+
+      it("should count correctly with different-length replacements", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "aa bb aa cc aa");
+
+        const result = await sandbox.edit("/test.txt", "aa", "xyz", true);
+        expect(result.error).toBeUndefined();
+        expect(result.occurrences).toBe(3);
+        expect(sandbox.getFile("/test.txt")).toBe("xyz bb xyz cc xyz");
+      });
+
+      it("should count correctly with same-length replacements", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "ab cd ab ef ab");
+
+        const result = await sandbox.edit("/test.txt", "ab", "zz", true);
+        expect(result.error).toBeUndefined();
+        expect(result.occurrences).toBe(3);
+        expect(sandbox.getFile("/test.txt")).toBe("zz cd zz ef zz");
+      });
+
+      it("should delete all occurrences when newString is empty", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "keep remove keep remove keep");
+
+        const result = await sandbox.edit("/test.txt", " remove", "", true);
+        expect(result.error).toBeUndefined();
+        expect(result.occurrences).toBe(2);
+        expect(sandbox.getFile("/test.txt")).toBe("keep keep keep");
+      });
+
+      it("should handle adjacent occurrences", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "aaaa");
+
+        const result = await sandbox.edit("/test.txt", "aa", "b", true);
+        expect(result.error).toBeUndefined();
+        expect(result.occurrences).toBe(2);
+        expect(sandbox.getFile("/test.txt")).toBe("bb");
+      });
+
+      it("should no-op when oldString equals newString", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "foo bar foo");
+
+        const result = await sandbox.edit("/test.txt", "foo", "foo", true);
+        expect(result.error).toBeUndefined();
+        expect(result.occurrences).toBe(1);
+        expect(sandbox.getFile("/test.txt")).toBe("foo bar foo");
+      });
+
+      it("should return error when oldString not found", async () => {
+        const sandbox = new MockSandbox();
+        sandbox.addFile("/test.txt", "Hello World");
+
+        const result = await sandbox.edit("/test.txt", "notfound", "new", true);
+        expect(result.error).toContain("String not found");
+      });
     });
   });
 
