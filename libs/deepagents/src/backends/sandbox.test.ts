@@ -355,12 +355,7 @@ describe("BaseSandbox", () => {
         const sandbox = new MockSandbox();
         sandbox.addFile("/test.txt", "Hello World");
 
-        const result = await sandbox.edit(
-          "/test.txt",
-          "World",
-          "Earth",
-          false,
-        );
+        const result = await sandbox.edit("/test.txt", "World", "Earth", false);
         expect(result.error).toBeUndefined();
         expect(sandbox.getFile("/test.txt")).toBe("Hello Earth");
       });
@@ -397,12 +392,7 @@ describe("BaseSandbox", () => {
         const sandbox = new MockSandbox();
         sandbox.addFile("/test.txt", "ab");
 
-        const result = await sandbox.edit(
-          "/test.txt",
-          "ab",
-          "abcdef",
-          false,
-        );
+        const result = await sandbox.edit("/test.txt", "ab", "abcdef", false);
         expect(result.error).toBeUndefined();
         expect(sandbox.getFile("/test.txt")).toBe("abcdef");
       });
@@ -411,12 +401,7 @@ describe("BaseSandbox", () => {
         const sandbox = new MockSandbox();
         sandbox.addFile("/test.txt", "abcdef");
 
-        const result = await sandbox.edit(
-          "/test.txt",
-          "abcdef",
-          "ab",
-          false,
-        );
+        const result = await sandbox.edit("/test.txt", "abcdef", "ab", false);
         expect(result.error).toBeUndefined();
         expect(sandbox.getFile("/test.txt")).toBe("ab");
       });
@@ -425,12 +410,7 @@ describe("BaseSandbox", () => {
         const sandbox = new MockSandbox();
         sandbox.addFile("/test.txt", "keep delete keep");
 
-        const result = await sandbox.edit(
-          "/test.txt",
-          " delete",
-          "",
-          false,
-        );
+        const result = await sandbox.edit("/test.txt", " delete", "", false);
         expect(result.error).toBeUndefined();
         expect(sandbox.getFile("/test.txt")).toBe("keep keep");
       });
@@ -462,12 +442,7 @@ describe("BaseSandbox", () => {
         const sandbox = new MockSandbox();
         sandbox.addFile("/test.txt", "Hello World");
 
-        const result = await sandbox.edit(
-          "/test.txt",
-          "World",
-          "World",
-          false,
-        );
+        const result = await sandbox.edit("/test.txt", "World", "World", false);
         expect(result.error).toBeUndefined();
         expect(result.occurrences).toBe(1);
         expect(sandbox.getFile("/test.txt")).toBe("Hello World");
@@ -519,12 +494,7 @@ describe("BaseSandbox", () => {
         const sandbox = new MockSandbox();
         sandbox.addFile("/test.txt", "keep remove keep remove keep");
 
-        const result = await sandbox.edit(
-          "/test.txt",
-          " remove",
-          "",
-          true,
-        );
+        const result = await sandbox.edit("/test.txt", " remove", "", true);
         expect(result.error).toBeUndefined();
         expect(result.occurrences).toBe(2);
         expect(sandbox.getFile("/test.txt")).toBe("keep keep keep");
@@ -554,12 +524,7 @@ describe("BaseSandbox", () => {
         const sandbox = new MockSandbox();
         sandbox.addFile("/test.txt", "Hello World");
 
-        const result = await sandbox.edit(
-          "/test.txt",
-          "notfound",
-          "new",
-          true,
-        );
+        const result = await sandbox.edit("/test.txt", "notfound", "new", true);
         expect(result.error).toContain("String not found");
       });
     });
