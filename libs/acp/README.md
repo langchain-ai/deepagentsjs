@@ -116,6 +116,19 @@ const server = new DeepAgentsServer({
 await server.start();
 ```
 
+### Multiple Agents
+
+When you define multiple agents, the client selects which agent to use at session creation time by passing `configOptions.agent` in the `session/new` ACP request. If not specified, the first agent in the configuration is used by default.
+
+```typescript
+// Client sends session/new with configOptions to select an agent:
+// { "configOptions": { "agent": "reviewer" } }  → uses the "reviewer" agent
+// { "configOptions": { "agent": "code-agent" } } → uses the "code-agent" agent
+// { }                                            → uses the first agent ("code-agent")
+```
+
+> **Note:** Some ACP clients (like Zed) don't currently expose a UI for passing `configOptions` at session creation. In that case, consider running separate server instances with a single agent each, or using separate Zed profiles pointing to different server scripts.
+
 ## Usage with Zed
 
 To use with [Zed](https://zed.dev), add the agent to your settings (`~/.config/zed/settings.json` on Linux, `~/Library/Application Support/Zed/settings.json` on macOS):
