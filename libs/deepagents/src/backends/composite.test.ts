@@ -155,27 +155,14 @@ describe("CompositeBackend", () => {
       expect(matches1.some((m) => m.path === "/file.txt")).toBe(true);
     }
 
-    // Searching at "/" should NOT search routed backends
     const matches2 = await composite.grepRaw("beta", "/");
     expect(Array.isArray(matches2)).toBe(true);
     if (Array.isArray(matches2)) {
-      expect(matches2.some((m) => m.path === "/memories/readme.md")).toBe(
-        false,
-      );
-    }
-
-    // But searching with the route prefix should find it
-    const matches3 = await composite.grepRaw("beta", "/memories/");
-    expect(Array.isArray(matches3)).toBe(true);
-    if (Array.isArray(matches3)) {
-      expect(matches3.some((m) => m.path === "/memories/readme.md")).toBe(true);
+      expect(matches2.some((m) => m.path === "/memories/readme.md")).toBe(true);
     }
 
     const glob = await composite.globInfo("**/*.md", "/");
-    expect(glob.some((i) => i.path === "/memories/readme.md")).toBe(false);
-
-    const globRouted = await composite.globInfo("**/*.md", "/memories/");
-    expect(globRouted.some((i) => i.path === "/memories/readme.md")).toBe(true);
+    expect(glob.some((i) => i.path === "/memories/readme.md")).toBe(true);
   });
 
   it("should handle multiple routes", async () => {
@@ -226,44 +213,17 @@ describe("CompositeBackend", () => {
     expect(memPaths).not.toContain("/temp.txt");
     expect(memPaths).not.toContain("/archive/old.log");
 
-    // grep at "/" should only search the default backend, not routed backends
-    const defaultMatches = (await composite.grepRaw(
-      "ephemeral",
-      "/",
-    )) as GrepMatch[];
-    expect(Array.isArray(defaultMatches)).toBe(true);
-    expect(defaultMatches.map((m) => m.path)).toContain("/temp.txt");
+    // grep at "/" includes all routes since they are under "/"
+    const allMatches = (await composite.grepRaw("e", "/")) as GrepMatch[];
+    expect(Array.isArray(allMatches)).toBe(true);
+    const pathsWithContent = allMatches.map((m) => m.path);
+    expect(pathsWithContent).toContain("/temp.txt");
+    expect(pathsWithContent).toContain("/memories/important.md");
+    expect(pathsWithContent).toContain("/archive/old.log");
+    expect(pathsWithContent).toContain("/cache/session.json");
 
-    const rootMatches = (await composite.grepRaw("e", "/")) as GrepMatch[];
-    expect(Array.isArray(rootMatches)).toBe(true);
-    const rootPaths2 = rootMatches.map((m) => m.path);
-    expect(rootPaths2).toContain("/temp.txt");
-    expect(rootPaths2).not.toContain("/memories/important.md");
-    expect(rootPaths2).not.toContain("/archive/old.log");
-    expect(rootPaths2).not.toContain("/cache/session.json");
-
-    // Searching with a route prefix should find content in that route
-    const memMatches = (await composite.grepRaw(
-      "long-term",
-      "/memories/",
-    )) as GrepMatch[];
-    expect(memMatches.map((m) => m.path)).toContain("/memories/important.md");
-
-    const archiveMatches = (await composite.grepRaw(
-      "archived",
-      "/archive/",
-    )) as GrepMatch[];
-    expect(archiveMatches.map((m) => m.path)).toContain("/archive/old.log");
-
-    // glob at "/" should only search default backend
     const globResults = await composite.globInfo("**/*.md", "/");
     expect(globResults.some((i) => i.path === "/memories/important.md")).toBe(
-      false,
-    );
-
-    // glob with route prefix should find content in that route
-    const globRouted = await composite.globInfo("**/*.md", "/memories/");
-    expect(globRouted.some((i) => i.path === "/memories/important.md")).toBe(
       true,
     );
 
@@ -374,6 +334,49 @@ describe("CompositeBackend", () => {
     expect(listing1.map((fi) => fi.path)).toEqual(
       listing2.map((fi) => fi.path),
     );
+  });
+
+  it("should not search routed backends when path does not match any route", async () => {
+    const { stateAndStore } = makeConfig();
+
+    const memoryBackend = new StoreBackend(stateAndStore);
+    const skillsBackend = new StoreBackend(stateAndStore);
+    const grepMemSpy = vi.spyOn(memoryBackend, "grepRaw");
+    const grepSkillsSpy = vi.spyOn(skillsBackend, "grepRaw");
+    const globMemSpy = vi.spyOn(memoryBackend, "globInfo");
+    const globSkillsSpy = vi.spyOn(skillsBackend, "globInfo");
+
+    const composite = new CompositeBackend(new StateBackend(stateAndStore), {
+      "/memory/": memoryBackend,
+      "/skills/": skillsBackend,
+    });
+
+    // grep at a non-matching path should NOT query routed backends
+    await composite.grepRaw("hello", "/workspace");
+    expect(grepMemSpy).not.toHaveBeenCalled();
+    expect(grepSkillsSpy).not.toHaveBeenCalled();
+
+    // glob at a non-matching path should NOT query routed backends
+    await composite.globInfo("**/*.md", "/workspace");
+    expect(globMemSpy).not.toHaveBeenCalled();
+    expect(globSkillsSpy).not.toHaveBeenCalled();
+
+    // grep at "/" should query routed backends (routes are under "/")
+    await composite.grepRaw("hello", "/");
+    expect(grepMemSpy).toHaveBeenCalledTimes(1);
+    expect(grepSkillsSpy).toHaveBeenCalledTimes(1);
+
+    // glob at "/" should query routed backends
+    await composite.globInfo("**/*.md", "/");
+    expect(globMemSpy).toHaveBeenCalledTimes(1);
+    expect(globSkillsSpy).toHaveBeenCalledTimes(1);
+
+    // grep targeting a specific route should only search that route
+    grepMemSpy.mockClear();
+    grepSkillsSpy.mockClear();
+    await composite.grepRaw("hello", "/memory/");
+    expect(grepMemSpy).toHaveBeenCalledTimes(1);
+    expect(grepSkillsSpy).not.toHaveBeenCalled();
   });
 
   it("should handle large tool result interception with default route", async () => {
@@ -503,27 +506,14 @@ describe("CompositeBackend", () => {
         expect(gm1.some((m) => m.path === "/hello.txt")).toBe(true);
       }
 
-      // Searching at "/" should NOT find content in routed backends
       const gm2 = await composite.grepRaw("note", "/");
       expect(Array.isArray(gm2)).toBe(true);
       if (Array.isArray(gm2)) {
-        expect(gm2.some((m) => m.path === "/memories/notes.md")).toBe(false);
+        expect(gm2.some((m) => m.path === "/memories/notes.md")).toBe(true);
       }
 
-      // But searching with the route prefix should find it
-      const gm3 = await composite.grepRaw("note", "/memories/");
-      expect(Array.isArray(gm3)).toBe(true);
-      if (Array.isArray(gm3)) {
-        expect(gm3.some((m) => m.path === "/memories/notes.md")).toBe(true);
-      }
-
-      // glob at "/" should NOT search routed backends
       const gl = await composite.globInfo("*.md", "/");
-      expect(gl.some((i) => i.path === "/memories/notes.md")).toBe(false);
-
-      // glob with route prefix should find content in that route
-      const glRouted = await composite.globInfo("*.md", "/memories/");
-      expect(glRouted.some((i) => i.path === "/memories/notes.md")).toBe(true);
+      expect(gl.some((i) => i.path === "/memories/notes.md")).toBe(true);
     } finally {
       await removeDir(tmpDir);
     }
@@ -567,20 +557,10 @@ describe("CompositeBackend", () => {
       expect(matches1.some((m) => m.path === "/notes.txt")).toBe(true);
     }
 
-    // Searching at "/" should NOT find content in routed backends
     const matches2 = await composite.grepRaw("routed", "/");
     expect(Array.isArray(matches2)).toBe(true);
     if (Array.isArray(matches2)) {
       expect(matches2.some((m) => m.path === "/memories/important.txt")).toBe(
-        false,
-      );
-    }
-
-    // But searching with the route prefix should find it
-    const matches3 = await composite.grepRaw("routed", "/memories/");
-    expect(Array.isArray(matches3)).toBe(true);
-    if (Array.isArray(matches3)) {
-      expect(matches3.some((m) => m.path === "/memories/important.txt")).toBe(
         true,
       );
     }
