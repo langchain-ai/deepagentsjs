@@ -503,6 +503,9 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
    *
    * Uses downloadFiles() to read, performs string replacement in TypeScript,
    * then uploadFiles() to write back. No runtime needed on the sandbox host.
+   *
+   * Memory-conscious: releases intermediate references early so the GC can
+   * reclaim buffers before the next large allocation is made.
    */
   async edit(
     filePath: string,
@@ -510,34 +513,64 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     newString: string,
     replaceAll: boolean = false,
   ): Promise<EditResult> {
-    // Read the file
+    if (oldString.length === 0) {
+      return { error: "oldString must not be empty" };
+    }
+
     const results = await this.downloadFiles([filePath]);
     if (results[0].error || !results[0].content) {
       return { error: `Error: File '${filePath}' not found` };
     }
 
     const text = new TextDecoder().decode(results[0].content);
-    const count = text.split(oldString).length - 1;
+    results[0].content = null as unknown as Uint8Array;
 
-    if (count === 0) {
+    const firstIdx = text.indexOf(oldString);
+    if (firstIdx === -1) {
       return { error: `String not found in file '${filePath}'` };
     }
-    if (count > 1 && !replaceAll) {
-      return {
-        error: `Multiple occurrences found in '${filePath}'. Use replaceAll=true to replace all.`,
-      };
+
+    if (oldString === newString) {
+      return { path: filePath, filesUpdate: null, occurrences: 1 };
     }
 
-    // Perform replacement
-    const newText = replaceAll
-      ? text.split(oldString).join(newString)
-      : text.replace(oldString, newString);
+    let newText: string;
+    let count: number;
 
-    // Write back
-    const encoder = new TextEncoder();
-    const uploadResults = await this.uploadFiles([
-      [filePath, encoder.encode(newText)],
-    ]);
+    if (replaceAll) {
+      newText = text.replaceAll(oldString, newString);
+      // Derive count from the length delta to avoid a separate O(n) counting pass
+      const lenDiff = oldString.length - newString.length;
+      if (lenDiff !== 0) {
+        count = (text.length - newText.length) / lenDiff;
+      } else {
+        // Lengths are equal — count via indexOf (we already found the first)
+        count = 1;
+        let pos = firstIdx + oldString.length;
+        while (pos <= text.length) {
+          const idx = text.indexOf(oldString, pos);
+          if (idx === -1) break;
+          count++;
+          pos = idx + oldString.length;
+        }
+      }
+    } else {
+      const secondIdx = text.indexOf(oldString, firstIdx + oldString.length);
+      if (secondIdx !== -1) {
+        return {
+          error: `Multiple occurrences found in '${filePath}'. Use replaceAll=true to replace all.`,
+        };
+      }
+      count = 1;
+      // Build result from the known index — avoids a redundant search by .replace()
+      newText =
+        text.slice(0, firstIdx) +
+        newString +
+        text.slice(firstIdx + oldString.length);
+    }
+
+    const encoded = new TextEncoder().encode(newText);
+    const uploadResults = await this.uploadFiles([[filePath, encoded]]);
 
     if (uploadResults[0].error) {
       return {

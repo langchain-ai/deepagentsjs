@@ -820,62 +820,86 @@ export function createSummarizationMiddleware(
   }
 
   /**
-   * Offload messages to backend.
+   * Offload messages to backend by appending to the history file.
+   *
+   * Uses uploadFiles() directly with raw byte concatenation instead of
+   * edit() to avoid downloading the file twice and performing a full
+   * string search-and-replace. This keeps peak memory at ~2x file size
+   * (existing bytes + combined bytes) instead of ~6x with the old
+   * download → edit(oldContent, newContent) approach.
    */
   async function offloadToBackend(
     resolvedBackend: BackendProtocol,
     messages: BaseMessage[],
     state: Record<string, unknown>,
   ): Promise<string | null> {
-    const path = getHistoryPath(state);
+    const filePath = getHistoryPath(state);
     const filteredMessages = filterSummaryMessages(messages);
 
     const timestamp = new Date().toISOString();
     const newSection = `## Summarized at ${timestamp}\n\n${getBufferString(filteredMessages)}\n\n`;
+    const sectionBytes = new TextEncoder().encode(newSection);
 
-    // Read existing content
-    let existingContent = "";
     try {
+      // Read existing content as raw bytes (no string decode needed)
+      let existingBytes: Uint8Array | null = null;
       if (resolvedBackend.downloadFiles) {
-        const responses = await resolvedBackend.downloadFiles([path]);
-        if (
-          responses.length > 0 &&
-          responses[0].content &&
-          !responses[0].error
-        ) {
-          existingContent = new TextDecoder().decode(responses[0].content);
+        try {
+          const responses = await resolvedBackend.downloadFiles([filePath]);
+          if (
+            responses.length > 0 &&
+            responses[0].content &&
+            !responses[0].error
+          ) {
+            existingBytes = responses[0].content;
+          }
+        } catch {
+          // File doesn't exist yet, that's fine
         }
       }
-    } catch {
-      // File doesn't exist yet, that's fine
-    }
 
-    const combinedContent = existingContent + newSection;
-
-    try {
-      let result;
-      if (existingContent) {
-        result = await resolvedBackend.edit(
-          path,
-          existingContent,
-          combinedContent,
+      let result: { error?: string; path?: string };
+      if (existingBytes && resolvedBackend.uploadFiles) {
+        // Append: concatenate raw bytes and upload directly
+        const combined = new Uint8Array(
+          existingBytes.byteLength + sectionBytes.byteLength,
         );
+        combined.set(existingBytes, 0);
+        combined.set(sectionBytes, existingBytes.byteLength);
+
+        const uploadResults = await resolvedBackend.uploadFiles([
+          [filePath, combined],
+        ]);
+        result = uploadResults[0].error
+          ? { error: uploadResults[0].error }
+          : { path: filePath };
+      } else if (!existingBytes) {
+        result = await resolvedBackend.write(filePath, newSection);
       } else {
-        result = await resolvedBackend.write(path, combinedContent);
+        // Fallback: uploadFiles unavailable, use edit()
+        const existingContent = new TextDecoder().decode(existingBytes);
+        result = await resolvedBackend.edit(
+          filePath,
+          existingContent,
+          existingContent + newSection,
+        );
       }
 
       if (result.error) {
         // eslint-disable-next-line no-console
         console.warn(
-          `Failed to offload conversation history to ${path}: ${result.error}`,
+          `Failed to offload conversation history to ${filePath}: ${result.error}`,
         );
         return null;
       }
 
-      return path;
+      return filePath;
     } catch (e) {
       // eslint-disable-next-line no-console
-      console.warn(`Exception offloading conversation history to ${path}:`, e);
+      console.warn(
+        `Exception offloading conversation history to ${filePath}:`,
+        e,
+      );
       return null;
     }
   }
