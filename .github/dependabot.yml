@@ -4,32 +4,46 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+      day: "monday"
       time: "11:00"
     open-pull-requests-limit: 10
     versioning-strategy: increase-if-necessary
     groups:
       patch-deps-updates-main:
+        patterns:
+          - "*"
         update-types:
           - "patch"
       minor-deps-updates-main:
+        patterns:
+          - "*"
         update-types:
           - "minor"
       major-deps-updates-main:
+        patterns:
+          - "*"
         update-types:
           - "major"
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
+      day: "monday"
       time: "11:00"
     open-pull-requests-limit: 10
     groups:
       patch-deps-updates:
+        patterns:
+          - "*"
         update-types:
           - "patch"
       minor-deps-updates:
+        patterns:
+          - "*"
         update-types:
           - "minor"
       major-deps-updates:
+        patterns:
+          - "*"
         update-types:
           - "major"
