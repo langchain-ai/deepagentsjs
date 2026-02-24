@@ -28,6 +28,7 @@ import {
   AIMessage,
   ToolMessage,
 } from "@langchain/core/messages";
+import type { InteropZodObject } from "@langchain/core/utils/types";
 import { MemorySaver } from "@langchain/langgraph-checkpoint";
 
 import type {
@@ -966,6 +967,7 @@ export class DeepAgentsServer {
       skills: config.skills?.length ?? 0,
       memory: config.memory?.length ?? 0,
       tools: config.tools?.length ?? 0,
+      subagents: config.subagents?.length ?? 0,
     });
 
     // Create backend - prefer ACP filesystem if client supports it
@@ -976,6 +978,11 @@ export class DeepAgentsServer {
       tools: config.tools,
       systemPrompt: config.systemPrompt,
       middleware: config.middleware,
+      subagents: config.subagents,
+      responseFormat: config.responseFormat,
+      contextSchema: config.contextSchema as InteropZodObject | undefined,
+      interruptOn: config.interruptOn,
+      store: config.store,
       backend,
       skills: config.skills,
       memory: config.memory,
