@@ -234,19 +234,19 @@ const server = new DeepAgentsServer(options);
 
 #### DeepAgentConfig
 
-| Option         | Type                                | Description                                       |
-| -------------- | ----------------------------------- | ------------------------------------------------- |
-| `name`         | `string`                            | Unique agent name (required)                      |
-| `description`  | `string`                            | Agent description                                 |
-| `model`        | `string`                            | LLM model (default: "claude-sonnet-4-5-20250929") |
-| `tools`        | `StructuredTool[]`                  | Custom tools                                      |
-| `systemPrompt` | `string`                            | Custom system prompt                              |
-| `middleware`   | `AgentMiddleware[]`                 | Custom middleware                                 |
-| `backend`      | `BackendProtocol \| BackendFactory` | Filesystem backend                                |
-| `skills`       | `string[]`                          | Skill source paths                                |
-| `memory`       | `string[]`                          | Memory source paths (AGENTS.md)                   |
-| `interruptOn`  | `Record<string, boolean \| InterruptOnConfig>` | Tools requiring user approval (HITL) |
-| `commands`     | `Array<{ name, description, input? }>` | Custom slash commands                          |
+| Option         | Type                                           | Description                                       |
+| -------------- | ---------------------------------------------- | ------------------------------------------------- |
+| `name`         | `string`                                       | Unique agent name (required)                      |
+| `description`  | `string`                                       | Agent description                                 |
+| `model`        | `string`                                       | LLM model (default: "claude-sonnet-4-5-20250929") |
+| `tools`        | `StructuredTool[]`                             | Custom tools                                      |
+| `systemPrompt` | `string`                                       | Custom system prompt                              |
+| `middleware`   | `AgentMiddleware[]`                            | Custom middleware                                 |
+| `backend`      | `BackendProtocol \| BackendFactory`            | Filesystem backend                                |
+| `skills`       | `string[]`                                     | Skill source paths                                |
+| `memory`       | `string[]`                                     | Memory source paths (AGENTS.md)                   |
+| `interruptOn`  | `Record<string, boolean \| InterruptOnConfig>` | Tools requiring user approval (HITL)              |
+| `commands`     | `Array<{ name, description, input? }>`         | Custom slash commands                             |
 
 ### Methods
 
@@ -342,6 +342,7 @@ const server = new DeepAgentsServer({
 ```
 
 When the agent calls a protected tool, the IDE shows a permission dialog with options:
+
 - **Allow once** — approve this specific invocation
 - **Reject** — deny this specific invocation
 - **Always allow** — approve and remember for this session
@@ -383,39 +384,39 @@ This package implements the following ACP methods:
 
 ### Agent Methods (what we implement)
 
-| Method             | Description                         |
-| ------------------ | ----------------------------------- |
-| `initialize`       | Negotiate versions and capabilities |
-| `authenticate`     | Handle authentication (passthrough) |
-| `session/new`      | Create a new conversation session   |
+| Method             | Description                                         |
+| ------------------ | --------------------------------------------------- |
+| `initialize`       | Negotiate versions and capabilities                 |
+| `authenticate`     | Handle authentication (passthrough)                 |
+| `session/new`      | Create a new conversation session                   |
 | `session/load`     | Resume an existing session with full history replay |
-| `session/prompt`   | Process user prompts and slash commands |
-| `session/cancel`   | Cancel ongoing operations           |
-| `session/set_mode` | Switch agent modes                  |
+| `session/prompt`   | Process user prompts and slash commands             |
+| `session/cancel`   | Cancel ongoing operations                           |
+| `session/set_mode` | Switch agent modes                                  |
 
 ### Client Methods (what we call on the client)
 
-| Method                       | Description                                  |
-| ---------------------------- | -------------------------------------------- |
-| `session/request_permission` | Prompt user to approve/reject tool calls     |
+| Method                       | Description                                    |
+| ---------------------------- | ---------------------------------------------- |
+| `session/request_permission` | Prompt user to approve/reject tool calls       |
 | `fs/read_text_file`          | Read file contents (including unsaved buffers) |
-| `fs/write_text_file`         | Write file contents through the IDE          |
-| `terminal/create`            | Start a command in the client's terminal     |
-| `terminal/output`            | Get terminal output                          |
-| `terminal/wait_for_exit`     | Wait for command completion                  |
-| `terminal/kill`              | Kill a running command                       |
-| `terminal/release`           | Release terminal resources                   |
+| `fs/write_text_file`         | Write file contents through the IDE            |
+| `terminal/create`            | Start a command in the client's terminal       |
+| `terminal/output`            | Get terminal output                            |
+| `terminal/wait_for_exit`     | Wait for command completion                    |
+| `terminal/kill`              | Kill a running command                         |
+| `terminal/release`           | Release terminal resources                     |
 
 ### Session Updates (what we send)
 
-| Update                       | Description                              |
-| ---------------------------- | ---------------------------------------- |
-| `agent_message_chunk`        | Stream agent text responses              |
-| `thought_message_chunk`      | Stream agent thinking/reasoning          |
-| `tool_call`                  | Notify about tool invocations with kind, locations, and input |
-| `tool_call_update`           | Update tool call status with content (text, diffs, terminals) |
-| `plan`                       | Send task plan entries                   |
-| `available_commands_update`  | Advertise slash commands to the client   |
+| Update                      | Description                                                   |
+| --------------------------- | ------------------------------------------------------------- |
+| `agent_message_chunk`       | Stream agent text responses                                   |
+| `thought_message_chunk`     | Stream agent thinking/reasoning                               |
+| `tool_call`                 | Notify about tool invocations with kind, locations, and input |
+| `tool_call_update`          | Update tool call status with content (text, diffs, terminals) |
+| `plan`                      | Send task plan entries                                        |
+| `available_commands_update` | Advertise slash commands to the client                        |
 
 ### Capabilities
 
@@ -431,18 +432,18 @@ The server advertises these capabilities:
 
 Tool calls are categorized with [ACP-standard kinds](https://agentclientprotocol.com/protocol/tool-calls) for proper icon display:
 
-| Kind       | Tools                        |
-| ---------- | ---------------------------- |
-| `read`     | `read_file`, `ls`            |
-| `search`   | `grep`, `glob`               |
-| `edit`     | `write_file`, `edit_file`    |
-| `execute`  | `execute`, `shell`           |
-| `think`    | `write_todos`                |
-| `other`    | `task`, custom tools         |
+| Kind      | Tools                     |
+| --------- | ------------------------- |
+| `read`    | `read_file`, `ls`         |
+| `search`  | `grep`, `glob`            |
+| `edit`    | `write_file`, `edit_file` |
+| `execute` | `execute`, `shell`        |
+| `think`   | `write_todos`             |
+| `other`   | `task`, custom tools      |
 
 ## Architecture
 
-```
+```txt
 ┌─────────────────────────────────────────────────────────────┐
 │                    IDE (Zed, JetBrains)                     │
 │                      ACP Client                             │
