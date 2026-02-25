@@ -22,6 +22,8 @@ import {
   type BackendFactory,
 } from "deepagents";
 
+import { ACPFilesystemBackend } from "./acp-filesystem-backend.js";
+
 import {
   type BaseMessage,
   HumanMessage,
@@ -50,6 +52,7 @@ import {
   generateSessionId,
   getToolCallKind,
   formatToolCallTitle,
+  extractToolCallLocations,
 } from "./adapter.js";
 
 // Type definitions for ACP requests/responses (SDK uses generic types)
@@ -67,6 +70,20 @@ type SetSessionModeResponse = Record<string, unknown>;
 type AuthenticateRequest = Record<string, unknown>;
 type AuthenticateResponse = Record<string, unknown>;
 type SessionNotification = Record<string, unknown>;
+
+const AVAILABLE_MODES = [
+  { id: "agent", name: "Agent Mode", description: "Full autonomous agent" },
+  { id: "plan", name: "Plan Mode", description: "Planning and discussion" },
+  { id: "ask", name: "Ask Mode", description: "Q&A without file changes" },
+];
+
+const DEFAULT_COMMANDS = [
+  { name: "plan", description: "Switch to plan mode (read-only planning)" },
+  { name: "agent", description: "Switch to agent mode (full autonomous)" },
+  { name: "ask", description: "Switch to ask mode (Q&A, no file changes)" },
+  { name: "clear", description: "Clear conversation context and start fresh" },
+  { name: "status", description: "Show current session status and loaded skills" },
+];
 
 /**
  * DeepAgents ACP Server
@@ -98,6 +115,7 @@ export class DeepAgentsServer {
   private clientCapabilities: ACPCapabilities = {};
   private isRunning = false;
   private currentPromptAbortController: AbortController | null = null;
+  private acpBackends: Map<string, ACPFilesystemBackend> = new Map();
 
   private readonly serverName: string;
   private readonly serverVersion: string;
@@ -386,12 +404,11 @@ export class DeepAgentsServer {
    */
   private async handleNewSession(
     params: NewSessionRequest,
-    _conn: AgentSideConnection,
+    conn: AgentSideConnection,
   ): Promise<NewSessionResponse> {
     const sessionId = generateSessionId();
     const threadId = crypto.randomUUID();
 
-    // Default to first agent if not specified
     const configOptions = params.configOptions as
       | Record<string, unknown>
       | undefined;
@@ -402,7 +419,6 @@ export class DeepAgentsServer {
       throw new Error(`Unknown agent: ${agentName}`);
     }
 
-    // Create session state
     const session: SessionState = {
       id: sessionId,
       agentName,
@@ -415,40 +431,40 @@ export class DeepAgentsServer {
 
     this.sessions.set(sessionId, session);
 
-    // Lazily create the agent if not already created
     if (!this.agents.has(agentName)) {
       this.createAgent(agentName);
     }
 
+    const acpBackend = this.acpBackends.get(agentName);
+    if (acpBackend) {
+      acpBackend.setSessionId(sessionId);
+    }
+
     this.log("Created session:", sessionId, "for agent:", agentName);
 
-    // ACP spec NewSessionResponse only allows: sessionId, modes, models, configOptions
     const response = {
       sessionId,
-      // ACP spec: modes object with availableModes and currentModeId
       modes: {
-        availableModes: [
-          {
-            id: "agent",
-            name: "Agent Mode",
-            description: "Full autonomous agent",
-          },
-          {
-            id: "plan",
-            name: "Plan Mode",
-            description: "Planning and discussion",
-          },
-          {
-            id: "ask",
-            name: "Ask Mode",
-            description: "Q&A without file changes",
-          },
-        ],
+        availableModes: AVAILABLE_MODES,
         currentModeId: (params.mode as string) ?? "agent",
       },
     };
 
     this.log("New session response:", JSON.stringify(response));
+
+    const agentConfig = this.agentConfigs.get(agentName);
+    const customCommands = agentConfig?.commands ?? [];
+    const allCommands = [...DEFAULT_COMMANDS, ...customCommands];
+    conn.sessionUpdate({
+      sessionId,
+      update: {
+        sessionUpdate: "available_commands_update",
+        availableCommands: allCommands,
+      },
+    } as SessionNotification).catch((err) => {
+      this.log("Failed to send commands update:", err);
+    });
+
     return response;
   }
 
@@ -457,7 +473,7 @@ export class DeepAgentsServer {
    */
   private async handleLoadSession(
     params: LoadSessionRequest,
-    _conn: AgentSideConnection,
+    conn: AgentSideConnection,
   ): Promise<LoadSessionResponse> {
     const sessionId = params.sessionId as string;
     const session = this.sessions.get(sessionId);
@@ -474,27 +490,29 @@ export class DeepAgentsServer {
     });
     session.lastActivityAt = new Date();
 
-    // ACP spec LoadSessionResponse only allows: modes, models, configOptions
+    const acpBackend = this.acpBackends.get(session.agentName);
+    if (acpBackend) {
+      acpBackend.setSessionId(sessionId);
+    }
+
+    await this.replaySessionHistory(session, conn);
+
+    const agentConfig = this.agentConfigs.get(session.agentName);
+    const customCommands = agentConfig?.commands ?? [];
+    const allCommands = [...DEFAULT_COMMANDS, ...customCommands];
+    conn.sessionUpdate({
+      sessionId,
+      update: {
+        sessionUpdate: "available_commands_update",
+        availableCommands: allCommands,
+      },
+    } as SessionNotification).catch((err) => {
+      this.log("Failed to send commands update:", err);
+    });
+
     const response = {
-      // ACP spec: modes object with availableModes and currentModeId
       modes: {
-        availableModes: [
-          {
-            id: "agent",
-            name: "Agent Mode",
-            description: "Full autonomous agent",
-          },
-          {
-            id: "plan",
-            name: "Plan Mode",
-            description: "Planning and discussion",
-          },
-          {
-            id: "ask",
-            name: "Ask Mode",
-            description: "Q&A without file changes",
-          },
-        ],
+        availableModes: AVAILABLE_MODES,
         currentModeId: session.mode ?? "agent",
       },
     };
@@ -542,7 +560,11 @@ export class DeepAgentsServer {
     });
 
     try {
-      // Convert ACP prompt to LangChain message
+      const commandResult = await this.handleSlashCommand(session, prompt, conn);
+      if (commandResult) {
+        return commandResult;
+      }
+
       const humanMessage = acpPromptToHumanMessage(prompt);
 
       // Stream the agent response
@@ -634,7 +656,8 @@ export class DeepAgentsServer {
       threadId: session.threadId,
     });
 
-    // Stream the agent
+    session.messages.push(humanMessage);
+
     const stream = await agent.stream({ messages: [humanMessage] }, config);
 
     for await (const event of stream) {
@@ -751,7 +774,6 @@ export class DeepAgentsServer {
     activeToolCalls: Map<string, ToolCallInfo>,
     conn: AgentSideConnection,
   ): Promise<void> {
-    // Handle text content
     if (message.content && typeof message.content === "string") {
       const contentBlocks = langChainMessageToACP(message);
       const preview =
@@ -759,6 +781,20 @@ export class DeepAgentsServer {
         (message.content.length > 50 ? "..." : "");
       this.log("Agent message:", { sessionId: session.id, preview });
       await this.sendMessageChunk(session.id, conn, "agent", contentBlocks);
+    } else if (Array.isArray(message.content)) {
+      for (const block of message.content) {
+        const b = block as Record<string, unknown>;
+        if (b.type === "thinking" && b.thinking) {
+          this.log("Thought message:", { sessionId: session.id });
+          await this.sendMessageChunk(session.id, conn, "thought", [
+            { type: "text", text: b.thinking as string } as ContentBlock,
+          ]);
+        } else if (b.type === "text" && b.text) {
+          await this.sendMessageChunk(session.id, conn, "agent", [
+            { type: "text", text: b.text as string } as ContentBlock,
+          ]);
+        }
+      }
     }
 
     // Handle tool calls
@@ -803,13 +839,11 @@ export class DeepAgentsServer {
       return;
     }
 
-    // Extract the result content
     const resultContent =
       typeof message.content === "string"
         ? message.content
         : JSON.stringify(message.content);
 
-    // Determine status based on result
     const isError =
       message.status === "error" ||
       (typeof message.content === "string" &&
@@ -825,20 +859,220 @@ export class DeepAgentsServer {
       resultPreview,
     });
 
-    // Update the tool call with the result
     toolCall.status = isError ? "error" : "completed";
     toolCall.result = resultContent;
 
-    // Send the update
     await this.sendToolCallUpdate(session.id, conn, toolCall);
-
-    // Remove from active tracking
     activeToolCalls.delete(toolCallId);
   }
 
+  async executeWithTerminal(
+    session: SessionState,
+    conn: AgentSideConnection,
+    toolCall: ToolCallInfo,
+  ): Promise<{ output: string; exitCode: number | null }> {
+    const command = toolCall.args.command as string;
+    if (!command) {
+      return { output: "Error: No command specified", exitCode: 1 };
+    }
+
+    try {
+      const terminal = await conn.createTerminal({
+        sessionId: session.id,
+        command: "/bin/bash",
+        args: ["-c", command],
+        cwd: this.workspaceRoot,
+      } as any);
+
+      await this.sendToolCallUpdate(session.id, conn, {
+        ...toolCall,
+        status: "in_progress",
+      });
+
+      const exitResult = await terminal.waitForExit();
+      const outputResult = await terminal.currentOutput();
+      await terminal.release();
+
+      return {
+        output: outputResult.output ?? "",
+        exitCode: exitResult.exitCode ?? null,
+      };
+    } catch (err) {
+      this.log("Terminal execution failed, falling back:", err);
+      return { output: `Terminal error: ${(err as Error).message}`, exitCode: 1 };
+    }
+  }
+
+  async requestToolPermission(
+    session: SessionState,
+    conn: AgentSideConnection,
+    toolCall: ToolCallInfo,
+  ): Promise<"allow" | "reject" | "cancelled"> {
+    if (!session.permissionDecisions) {
+      session.permissionDecisions = new Map();
+    }
+
+    const cached = session.permissionDecisions.get(toolCall.name);
+    if (cached === "allow_always") return "allow";
+    if (cached === "reject_always") return "reject";
+
+    try {
+      const result = await conn.requestPermission({
+        sessionId: session.id,
+        toolCall: {
+          toolCallId: toolCall.id,
+          title: formatToolCallTitle(toolCall.name, toolCall.args),
+          kind: getToolCallKind(toolCall.name),
+          status: "pending",
+          input: toolCall.args,
+        },
+        options: [
+          { optionId: "allow-once", name: "Allow once", kind: "allow_once" as const },
+          { optionId: "allow-always", name: "Always allow", kind: "allow_always" as const },
+          { optionId: "reject-once", name: "Reject", kind: "reject_once" as const },
+          { optionId: "reject-always", name: "Always reject", kind: "reject_always" as const },
+        ],
+      } as any);
+
+      const outcome = result?.outcome as { outcome: string; optionId?: string } | undefined;
+      if (!outcome || outcome.outcome === "cancelled") {
+        return "cancelled";
+      }
+
+      const optionId = outcome.optionId;
+      if (optionId === "allow-always") {
+        session.permissionDecisions.set(toolCall.name, "allow_always");
+        return "allow";
+      }
+      if (optionId === "reject-always") {
+        session.permissionDecisions.set(toolCall.name, "reject_always");
+        return "reject";
+      }
+      if (optionId === "reject-once") {
+        return "reject";
+      }
+      return "allow";
+    } catch (err) {
+      this.log("Permission request failed:", err);
+      return "allow";
+    }
+  }
+
+  private async handleSlashCommand(
+    session: SessionState,
+    prompt: ContentBlock[],
+    conn: AgentSideConnection,
+  ): Promise<PromptResponse | null> {
+    const textBlocks = prompt.filter((b) => b.type === "text");
+    if (textBlocks.length === 0) return null;
+
+    const text = (textBlocks[0] as { text: string }).text.trim();
+    if (!text.startsWith("/")) return null;
+
+    const [command] = text.split(/\s+/, 1);
+    const commandName = command.slice(1).toLowerCase();
+
+    switch (commandName) {
+      case "plan":
+      case "agent":
+      case "ask": {
+        session.mode = commandName;
+        this.log("Slash command mode switch:", commandName);
+        await this.sendMessageChunk(session.id, conn, "agent", [
+          { type: "text", text: `Switched to ${commandName} mode.` } as ContentBlock,
+        ]);
+        return { stopReason: "end_turn" };
+      }
+      case "clear": {
+        session.messages = [];
+        session.threadId = crypto.randomUUID();
+        this.log("Slash command clear:", session.id);
+        await this.sendMessageChunk(session.id, conn, "agent", [
+          { type: "text", text: "Conversation cleared. Starting fresh." } as ContentBlock,
+        ]);
+        return { stopReason: "end_turn" };
+      }
+      case "status": {
+        const config = this.agentConfigs.get(session.agentName);
+        const status = [
+          `**Agent:** ${session.agentName}`,
+          `**Mode:** ${session.mode ?? "agent"}`,
+          `**Model:** ${config?.model ?? "default"}`,
+          `**Skills:** ${config?.skills?.length ?? 0} loaded`,
+          `**Memory:** ${config?.memory?.length ?? 0} sources`,
+          `**Session:** ${session.id}`,
+        ].join("\n");
+        await this.sendMessageChunk(session.id, conn, "agent", [
+          { type: "text", text: status } as ContentBlock,
+        ]);
+        return { stopReason: "end_turn" };
+      }
+      default:
+        return null;
+    }
+  }
+
   /**
-   * Send a message chunk update to the client
+   * Replay conversation history to the client via session update notifications
    */
+  private async replaySessionHistory(
+    session: SessionState,
+    conn: AgentSideConnection,
+  ): Promise<void> {
+    let messages: BaseMessage[] = [];
+
+    try {
+      const checkpoint = await this.checkpointer.getTuple({
+        configurable: { thread_id: session.threadId },
+      });
+      if (checkpoint?.checkpoint?.channel_values) {
+        const channelValues = checkpoint.checkpoint.channel_values as Record<string, unknown>;
+        if (Array.isArray(channelValues.messages)) {
+          messages = channelValues.messages as BaseMessage[];
+        }
+      }
+    } catch {
+      // Checkpointer may not have data yet
+    }
+
+    if (messages.length === 0) {
+      messages = session.messages as BaseMessage[];
+    }
+
+    if (messages.length === 0) {
+      this.log("No history to replay for session:", session.id);
+      return;
+    }
+
+    this.log("Replaying history:", {
+      sessionId: session.id,
+      messageCount: messages.length,
+    });
+
+    for (const message of messages) {
+      if (HumanMessage.isInstance(message)) {
+        const contentBlocks = langChainMessageToACP(message);
+        await this.sendMessageChunk(session.id, conn, "user", contentBlocks);
+      } else if (AIMessage.isInstance(message)) {
+        if (message.content && typeof message.content === "string") {
+          const contentBlocks = langChainMessageToACP(message);
+          await this.sendMessageChunk(session.id, conn, "agent", contentBlocks);
+        }
+
+        const toolCalls = extractToolCalls(message as AIMessage);
+        for (const toolCall of toolCalls) {
+          await this.sendToolCall(session.id, conn, toolCall);
+          await this.sendToolCallUpdate(session.id, conn, {
+            ...toolCall,
+            status: "completed",
+          });
+        }
+      } else if (ToolMessage.isInstance(message)) {
+        // Tool results are already covered by the tool call updates above
+      }
+    }
+  }
+
   private async sendMessageChunk(
     sessionId: string,
     conn: AgentSideConnection,
@@ -881,6 +1115,12 @@ export class DeepAgentsServer {
     conn: AgentSideConnection,
     toolCall: ToolCallInfo,
   ): Promise<void> {
+    const locations = extractToolCallLocations(
+      toolCall.name,
+      toolCall.args,
+      this.workspaceRoot,
+    );
+
     await conn.sessionUpdate({
       sessionId,
       update: {
@@ -889,6 +1129,8 @@ export class DeepAgentsServer {
         title: formatToolCallTitle(toolCall.name, toolCall.args),
         kind: getToolCallKind(toolCall.name),
         status: toolCall.status,
+        ...(locations ? { locations } : {}),
+        input: toolCall.args,
       },
     } as SessionNotification);
   }
@@ -907,20 +1149,23 @@ export class DeepAgentsServer {
       status: toolCall.status,
     };
 
-    // Add content if completed
     if (toolCall.status === "completed" && toolCall.result) {
+      const resultText =
+        typeof toolCall.result === "string"
+          ? toolCall.result
+          : JSON.stringify(toolCall.result, null, 2);
+
       update.content = [
         {
           type: "content",
           content: {
             type: "text",
-            text:
-              typeof toolCall.result === "string"
-                ? toolCall.result
-                : JSON.stringify(toolCall.result, null, 2),
+            text: resultText,
           },
         },
       ];
+
+      update.output = resultText;
     }
 
     await conn.sessionUpdate({
@@ -994,28 +1239,26 @@ export class DeepAgentsServer {
     this.log("Agent created successfully:", agentName);
   }
 
-  /**
-   * Create the appropriate backend for the agent
-   */
   private createBackend(
     config: DeepAgentConfig,
   ): BackendProtocol | BackendFactory {
-    // If a custom backend is provided, use it
     if (config.backend) {
       this.log("Using custom backend for agent:", config.name);
       return config.backend;
     }
 
-    // If client supports file operations, we could create an ACP-backed filesystem
-    // For now, default to FilesystemBackend with workspace root
     if (
       this.clientCapabilities.fsReadTextFile &&
-      this.clientCapabilities.fsWriteTextFile
+      this.clientCapabilities.fsWriteTextFile &&
+      this.connection
     ) {
-      // TODO: Implement ACPFilesystemBackend that proxies to client
-      this.log(
-        "Client supports filesystem operations, but using local backend",
-      );
+      this.log("Creating ACPFilesystemBackend for agent:", config.name);
+      const backend = new ACPFilesystemBackend({
+        conn: this.connection,
+        rootDir: this.workspaceRoot,
+      });
+      this.acpBackends.set(config.name, backend);
+      return backend;
     }
 
     this.log("Creating FilesystemBackend:", { rootDir: this.workspaceRoot });

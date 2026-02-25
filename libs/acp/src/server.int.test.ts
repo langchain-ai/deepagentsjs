@@ -52,7 +52,7 @@ describe("DeepAgentsServer Integration", () => {
         sessions: Map<string, SessionState>;
       };
 
-      const mockConn = { sessionUpdate: vi.fn() };
+      const mockConn = { sessionUpdate: vi.fn().mockResolvedValue(undefined) };
 
       // Create first session
       const result1 = await serverAny.handleNewSession({}, mockConn);
@@ -86,7 +86,7 @@ describe("DeepAgentsServer Integration", () => {
         sessions: Map<string, SessionState>;
       };
 
-      const mockConn = { sessionUpdate: vi.fn() };
+      const mockConn = { sessionUpdate: vi.fn().mockResolvedValue(undefined) };
 
       // Create a session
       const { sessionId } = await serverAny.handleNewSession({}, mockConn);
@@ -116,7 +116,7 @@ describe("DeepAgentsServer Integration", () => {
         ) => Promise<{ sessionId: string }>;
       };
 
-      const mockConn = { sessionUpdate: vi.fn() };
+      const mockConn = { sessionUpdate: vi.fn().mockResolvedValue(undefined) };
 
       // Try to load a non-existent session - should throw
       await expect(
@@ -142,7 +142,7 @@ describe("DeepAgentsServer Integration", () => {
         }>;
       };
 
-      const mockConn = { sessionUpdate: vi.fn() };
+      const mockConn = { sessionUpdate: vi.fn().mockResolvedValue(undefined) };
       const result = await serverAny.handleNewSession({}, mockConn);
 
       const agentMode = result.modes.availableModes.find(
@@ -166,7 +166,7 @@ describe("DeepAgentsServer Integration", () => {
         ) => Promise<{ modes: { availableModes: Array<{ id: string }> } }>;
       };
 
-      const mockConn = { sessionUpdate: vi.fn() };
+      const mockConn = { sessionUpdate: vi.fn().mockResolvedValue(undefined) };
       const result = await serverAny.handleNewSession({}, mockConn);
 
       const planMode = result.modes.availableModes.find((m) => m.id === "plan");
@@ -191,7 +191,7 @@ describe("DeepAgentsServer Integration", () => {
         sessions: Map<string, SessionState>;
       };
 
-      const mockConn = { sessionUpdate: vi.fn() };
+      const mockConn = { sessionUpdate: vi.fn().mockResolvedValue(undefined) };
       const { sessionId } = await serverAny.handleNewSession({}, mockConn);
 
       // Set to plan mode
@@ -231,7 +231,7 @@ describe("DeepAgentsServer Integration", () => {
         sessions: Map<string, SessionState>;
       };
 
-      const mockConn = { sessionUpdate: vi.fn() };
+      const mockConn = { sessionUpdate: vi.fn().mockResolvedValue(undefined) };
 
       // Create session with specific agent
       const { sessionId } = await serverAny.handleNewSession(
@@ -256,7 +256,7 @@ describe("DeepAgentsServer Integration", () => {
         sessions: Map<string, SessionState>;
       };
 
-      const mockConn = { sessionUpdate: vi.fn() };
+      const mockConn = { sessionUpdate: vi.fn().mockResolvedValue(undefined) };
 
       const { sessionId } = await serverAny.handleNewSession({}, mockConn);
 
@@ -280,7 +280,7 @@ describe("DeepAgentsServer Integration", () => {
         currentPromptAbortController: AbortController | null;
       };
 
-      const mockConn = { sessionUpdate: vi.fn() };
+      const mockConn = { sessionUpdate: vi.fn().mockResolvedValue(undefined) };
       const { sessionId } = await serverAny.handleNewSession({}, mockConn);
 
       // Simulate an active prompt
@@ -309,7 +309,7 @@ describe("DeepAgentsServer Integration", () => {
         currentPromptAbortController: AbortController | null;
       };
 
-      const mockConn = { sessionUpdate: vi.fn() };
+      const mockConn = { sessionUpdate: vi.fn().mockResolvedValue(undefined) };
       const { sessionId } = await serverAny.handleNewSession({}, mockConn);
 
       const controller = new AbortController();

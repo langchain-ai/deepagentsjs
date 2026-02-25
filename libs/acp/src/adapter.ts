@@ -173,20 +173,18 @@ export function pathToFileUri(path: string): string {
  */
 export function getToolCallKind(
   toolName: string,
-): "file_read" | "file_write" | "shell" | "other" {
-  const readTools = ["read_file", "ls", "grep", "glob"];
-  const writeTools = ["write_file", "edit_file"];
-  const shellTools = ["execute", "shell", "terminal"];
+): "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "other" {
+  const readTools = ["read_file", "ls"];
+  const searchTools = ["grep", "glob"];
+  const editTools = ["write_file", "edit_file"];
+  const executeTools = ["execute", "shell", "terminal"];
+  const thinkTools = ["write_todos"];
 
-  if (readTools.includes(toolName)) {
-    return "file_read";
-  }
-  if (writeTools.includes(toolName)) {
-    return "file_write";
-  }
-  if (shellTools.includes(toolName)) {
-    return "shell";
-  }
+  if (readTools.includes(toolName)) return "read";
+  if (searchTools.includes(toolName)) return "search";
+  if (editTools.includes(toolName)) return "edit";
+  if (executeTools.includes(toolName)) return "execute";
+  if (thinkTools.includes(toolName)) return "think";
   return "other";
 }
 
@@ -212,7 +210,31 @@ export function formatToolCallTitle(
       return `Finding files matching ${args.pattern ?? "pattern"}`;
     case "task":
       return `Delegating: ${args.description ?? "subtask"}`;
+    case "write_todos":
+      return `Planning tasks`;
     default:
       return `Executing ${toolName}`;
   }
+}
+
+/**
+ * Extract file locations from tool call arguments for ACP follow-along
+ */
+export function extractToolCallLocations(
+  toolName: string,
+  args: Record<string, unknown>,
+  workspaceRoot?: string,
+): Array<{ path: string; line?: number }> | undefined {
+  const filePath = args.path as string | undefined;
+  if (!filePath) return undefined;
+
+  const toolsWithPaths = ["read_file", "write_file", "edit_file", "ls", "grep", "glob"];
+  if (!toolsWithPaths.includes(toolName)) return undefined;
+
+  const absPath = filePath.startsWith("/")
+    ? filePath
+    : `${workspaceRoot ?? ""}/${filePath}`;
+
+  const line = (args.line ?? args.startLine) as number | undefined;
+  return [{ path: absPath, ...(line != null ? { line } : {}) }];
 }

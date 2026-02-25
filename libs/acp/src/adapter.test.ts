@@ -19,6 +19,7 @@ import {
   pathToFileUri,
   getToolCallKind,
   formatToolCallTitle,
+  extractToolCallLocations,
 } from "./adapter.js";
 
 describe("acpContentToLangChain", () => {
@@ -415,22 +416,29 @@ describe("pathToFileUri", () => {
 });
 
 describe("getToolCallKind", () => {
-  it("should identify file read tools", () => {
-    expect(getToolCallKind("read_file")).toBe("file_read");
-    expect(getToolCallKind("ls")).toBe("file_read");
-    expect(getToolCallKind("grep")).toBe("file_read");
-    expect(getToolCallKind("glob")).toBe("file_read");
+  it("should identify read tools", () => {
+    expect(getToolCallKind("read_file")).toBe("read");
+    expect(getToolCallKind("ls")).toBe("read");
   });
 
-  it("should identify file write tools", () => {
-    expect(getToolCallKind("write_file")).toBe("file_write");
-    expect(getToolCallKind("edit_file")).toBe("file_write");
+  it("should identify search tools", () => {
+    expect(getToolCallKind("grep")).toBe("search");
+    expect(getToolCallKind("glob")).toBe("search");
   });
 
-  it("should identify shell tools", () => {
-    expect(getToolCallKind("execute")).toBe("shell");
-    expect(getToolCallKind("shell")).toBe("shell");
-    expect(getToolCallKind("terminal")).toBe("shell");
+  it("should identify edit tools", () => {
+    expect(getToolCallKind("write_file")).toBe("edit");
+    expect(getToolCallKind("edit_file")).toBe("edit");
+  });
+
+  it("should identify execute tools", () => {
+    expect(getToolCallKind("execute")).toBe("execute");
+    expect(getToolCallKind("shell")).toBe("execute");
+    expect(getToolCallKind("terminal")).toBe("execute");
+  });
+
+  it("should identify think tools", () => {
+    expect(getToolCallKind("write_todos")).toBe("think");
   });
 
   it("should return other for unknown tools", () => {
@@ -485,5 +493,76 @@ describe("formatToolCallTitle", () => {
     expect(formatToolCallTitle("ls", {})).toBe("Listing directory");
     expect(formatToolCallTitle("grep", {})).toBe('Searching for "pattern"');
     expect(formatToolCallTitle("task", {})).toBe("Delegating: subtask");
+  });
+
+  it("should format write_todos title", () => {
+    const result = formatToolCallTitle("write_todos", {});
+    expect(result).toBe("Planning tasks");
+  });
+});
+
+describe("extractToolCallLocations", () => {
+  it("should extract location for read_file with absolute path", () => {
+    const result = extractToolCallLocations(
+      "read_file",
+      { path: "/src/index.ts" },
+      "/workspace",
+    );
+    expect(result).toEqual([{ path: "/src/index.ts" }]);
+  });
+
+  it("should resolve relative path using workspace root", () => {
+    const result = extractToolCallLocations(
+      "read_file",
+      { path: "src/index.ts" },
+      "/workspace",
+    );
+    expect(result).toEqual([{ path: "/workspace/src/index.ts" }]);
+  });
+
+  it("should include line number when present", () => {
+    const result = extractToolCallLocations(
+      "read_file",
+      { path: "/src/file.ts", line: 42 },
+      "/workspace",
+    );
+    expect(result).toEqual([{ path: "/src/file.ts", line: 42 }]);
+  });
+
+  it("should include startLine as line when present", () => {
+    const result = extractToolCallLocations(
+      "edit_file",
+      { path: "/src/file.ts", startLine: 10 },
+      "/workspace",
+    );
+    expect(result).toEqual([{ path: "/src/file.ts", line: 10 }]);
+  });
+
+  it("should return undefined for tools without path arg", () => {
+    const result = extractToolCallLocations("grep", { pattern: "TODO" }, "/workspace");
+    expect(result).toBeUndefined();
+  });
+
+  it("should return undefined for non-file tools", () => {
+    const result = extractToolCallLocations(
+      "task",
+      { path: "/something", description: "do stuff" },
+      "/workspace",
+    );
+    expect(result).toBeUndefined();
+  });
+
+  it("should handle all supported file tools", () => {
+    const tools = ["read_file", "write_file", "edit_file", "ls", "grep", "glob"];
+    for (const tool of tools) {
+      const result = extractToolCallLocations(tool, { path: "/test.txt" }, "/ws");
+      expect(result).toBeDefined();
+      expect(result![0].path).toBe("/test.txt");
+    }
+  });
+
+  it("should handle missing workspace root for relative paths", () => {
+    const result = extractToolCallLocations("read_file", { path: "file.ts" });
+    expect(result).toEqual([{ path: "/file.ts" }]);
   });
 });

@@ -24,6 +24,16 @@ export interface DeepAgentConfig extends CreateDeepAgentParams {
    * Shown to ACP clients when listing available agents
    */
   description?: string;
+
+  /**
+   * Custom slash commands to advertise to the ACP client.
+   * Merged with built-in commands (plan, agent, ask, clear, status).
+   */
+  commands?: Array<{
+    name: string;
+    description: string;
+    input?: { hint: string };
+  }>;
 }
 
 /**
@@ -100,6 +110,11 @@ export interface SessionState {
    * Current mode (if applicable)
    */
   mode?: string;
+
+  /**
+   * Cached permission decisions for tools (always-allow / always-reject)
+   */
+  permissionDecisions?: Map<string, "allow_always" | "reject_always">;
 }
 
 /**

@@ -38,6 +38,7 @@
 
 // Main server export
 export { DeepAgentsServer, startServer } from "./server.js";
+export { ACPFilesystemBackend } from "./acp-filesystem-backend.js";
 
 // Type exports
 export type {
@@ -62,6 +63,7 @@ export {
   generateToolCallId,
   getToolCallKind,
   formatToolCallTitle,
+  extractToolCallLocations,
   fileUriToPath,
   pathToFileUri,
 } from "./adapter.js";
