@@ -100,11 +100,7 @@ describe("ACPFilesystemBackend", () => {
       });
       backend.setSessionId("sess_123");
 
-      const result = await backend.read(
-        path.join(tmpDir, "local.txt"),
-        1,
-        2,
-      );
+      const result = await backend.read(path.join(tmpDir, "local.txt"), 1, 2);
 
       expect(result).toBe("line1\nline2");
     });
@@ -118,9 +114,7 @@ describe("ACPFilesystemBackend", () => {
 
       await backend.read(path.join(tmpDir, "local.txt"));
 
-      expect(mockConn.readTextFile.mock.calls[0][0].sessionId).toBe(
-        "sess_abc",
-      );
+      expect(mockConn.readTextFile.mock.calls[0][0].sessionId).toBe("sess_abc");
     });
   });
 
@@ -216,9 +210,7 @@ describe("ACPFilesystemBackend", () => {
 
       expect(mockConn.readTextFile).not.toHaveBeenCalled();
       expect(mockConn.writeTextFile).not.toHaveBeenCalled();
-      expect(entries.some((e: any) => e.path.includes("local.txt"))).toBe(
-        true,
-      );
+      expect(entries.some((e: any) => e.path.includes("local.txt"))).toBe(true);
     });
 
     it("should use local FS for grepRaw (no ACP equivalent)", async () => {
