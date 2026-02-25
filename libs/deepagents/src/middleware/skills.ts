@@ -23,8 +23,9 @@
  * const middleware = createSkillsMiddleware({
  *   backend: new FilesystemBackend({ rootDir: "/" }),
  *   sources: [
- *     "/skills/user/",
- *     "/skills/project/",
+ *     "/skills/user/",      // parent dir: every subdir with SKILL.md is loaded
+ *     "/skills/project/",   // parent dir: every subdir with SKILL.md is loaded
+ *     "/skills/my-skill/",  // direct path: SKILL.md lives at the root of this dir
  *   ],
  * });
  *
@@ -35,7 +36,7 @@
  *
  * ```typescript
  * const agent = createDeepAgent({
- *   skills: ["/skills/user/", "/skills/project/"],
+ *   skills: ["/skills/user/", "/skills/project/", "/skills/my-skill/"],
  * });
  * ```
  */
@@ -144,9 +145,27 @@ export interface SkillsMiddlewareOptions {
     | ((config: { state: unknown; store?: BaseStore }) => StateBackend);
 
   /**
-   * List of skill source paths to load (e.g., ["/skills/user/", "/skills/project/"]).
+   * List of skill source paths to load.
    * Paths must use POSIX conventions (forward slashes).
    * Later sources override earlier ones for skills with the same name (last one wins).
+   *
+   * Two formats are accepted for each entry:
+   *
+   * - **Parent directory** (e.g. `"/skills/"`, `"/skills/user/"`): the directory
+   *   is scanned and every subdirectory that contains a `SKILL.md` is loaded as
+   *   a separate skill.
+   *
+   * - **Direct skill path** (e.g. `"/skills/my-skill/"`): the path points to a
+   *   single skill directory whose `SKILL.md` lives at its root. Detected
+   *   automatically when the directory listing contains a `SKILL.md` file.
+   *
+   * Both formats can be mixed in the same array:
+   * ```typescript
+   * sources: [
+   *   "/skills/",                         // loads all skills in the directory
+   *   "/skills/my-skill/",                // loads a single skill by path
+   * ]
+   * ```
    */
   sources: string[];
 }
@@ -484,7 +503,43 @@ export function parseSkillMetadataFromContent(
 }
 
 /**
+ * Read a single file from the backend, returning its content as a string or
+ * null if the file does not exist or cannot be read.
+ */
+async function readFileFromBackend(
+  backend: BackendProtocol,
+  filePath: string,
+): Promise<string | null> {
+  if (backend.downloadFiles) {
+    const results = await backend.downloadFiles([filePath]);
+    if (results.length !== 1) {
+      return null;
+    }
+    const response = results[0];
+    if (response.error != null || response.content == null) {
+      return null;
+    }
+    return new TextDecoder().decode(response.content);
+  }
+  const readResult = await backend.read(filePath);
+  if (readResult.startsWith("Error:")) {
+    return null;
+  }
+  return readResult;
+}
+
+/**
  * List all skills from a backend source.
+ *
+ * Supports two source formats:
+ *
+ * - **Parent directory** (e.g. `"/skills/"`): the directory is scanned for
+ *   subdirectories, each of which must contain a `SKILL.md` file. This is the
+ *   standard pattern for hosting a collection of skills in one place.
+ *
+ * - **Direct skill path** (e.g. `"/skills/my-skill/"`): the path points to a
+ *   single skill directory that contains `SKILL.md` directly. Detected
+ *   automatically when the directory listing includes a `SKILL.md` file entry.
  */
 async function listSkillsFromBackend(
   backend: BackendProtocol,
@@ -501,7 +556,7 @@ async function listSkillsFromBackend(
       ? sourcePath
       : `${sourcePath}${pathSep}`;
 
-  // List directories in the source path using lsInfo
+  // List the source directory
   let fileInfos: { path: string; is_dir?: boolean }[];
   try {
     fileInfos = await backend.lsInfo(normalizedPath);
@@ -521,37 +576,41 @@ async function listSkillsFromBackend(
     type: (info.is_dir ? "directory" : "file") as "file" | "directory",
   }));
 
-  // Look for subdirectories containing SKILL.md
+  // Direct skill path: SKILL.md lives immediately inside the source directory.
+  // The source path itself is the skill — no subdirectory scan needed.
+  if (entries.some((e) => e.type === "file" && e.name === "SKILL.md")) {
+    const directoryName =
+      normalizedPath
+        .replace(/[/\\]$/, "")
+        .split(/[/\\]/)
+        .pop() || "";
+    const skillMdPath = `${normalizedPath}SKILL.md`;
+    const content = await readFileFromBackend(backend, skillMdPath);
+    if (content !== null) {
+      const metadata = parseSkillMetadataFromContent(
+        content,
+        skillMdPath,
+        directoryName,
+      );
+      if (metadata) {
+        skills.push(metadata);
+      }
+    }
+    return skills;
+  }
+
+  // Parent directory: scan subdirectories, each expected to contain SKILL.md.
   for (const entry of entries) {
     if (entry.type !== "directory") {
       continue;
     }
 
     const skillMdPath = `${normalizedPath}${entry.name}${pathSep}SKILL.md`;
-
-    // Try to download the SKILL.md file
-    let content: string;
-    if (backend.downloadFiles) {
-      const results = await backend.downloadFiles([skillMdPath]);
-      if (results.length !== 1) {
-        continue;
-      }
-
-      const response = results[0];
-      if (response.error != null || response.content == null) {
-        continue;
-      }
-
-      // Decode content
-      content = new TextDecoder().decode(response.content);
-    } else {
-      // Fall back to read if downloadFiles is not available
-      const readResult = await backend.read(skillMdPath);
-      if (readResult.startsWith("Error:")) {
-        continue;
-      }
-      content = readResult;
+    const content = await readFileFromBackend(backend, skillMdPath);
+    if (content === null) {
+      continue;
     }
+
     const metadata = parseSkillMetadataFromContent(
       content,
       skillMdPath,
