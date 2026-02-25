@@ -18,10 +18,7 @@ export class ACPFilesystemBackend extends FilesystemBackend {
   private conn: AgentSideConnection;
   private currentSessionId: string | null = null;
 
-  constructor(options: {
-    conn: AgentSideConnection;
-    rootDir: string;
-  }) {
+  constructor(options: { conn: AgentSideConnection; rootDir: string }) {
     super({ rootDir: options.rootDir });
     this.conn = options.conn;
   }

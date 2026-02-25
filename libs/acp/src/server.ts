@@ -82,7 +82,10 @@ const DEFAULT_COMMANDS = [
   { name: "agent", description: "Switch to agent mode (full autonomous)" },
   { name: "ask", description: "Switch to ask mode (Q&A, no file changes)" },
   { name: "clear", description: "Clear conversation context and start fresh" },
-  { name: "status", description: "Show current session status and loaded skills" },
+  {
+    name: "status",
+    description: "Show current session status and loaded skills",
+  },
 ];
 
 /**
@@ -455,15 +458,17 @@ export class DeepAgentsServer {
     const agentConfig = this.agentConfigs.get(agentName);
     const customCommands = agentConfig?.commands ?? [];
     const allCommands = [...DEFAULT_COMMANDS, ...customCommands];
-    conn.sessionUpdate({
-      sessionId,
-      update: {
-        sessionUpdate: "available_commands_update",
-        availableCommands: allCommands,
-      },
-    } as SessionNotification).catch((err) => {
-      this.log("Failed to send commands update:", err);
-    });
+    conn
+      .sessionUpdate({
+        sessionId,
+        update: {
+          sessionUpdate: "available_commands_update",
+          availableCommands: allCommands,
+        },
+      } as SessionNotification)
+      .catch((err) => {
+        this.log("Failed to send commands update:", err);
+      });
 
     return response;
   }
@@ -500,15 +505,17 @@ export class DeepAgentsServer {
     const agentConfig = this.agentConfigs.get(session.agentName);
     const customCommands = agentConfig?.commands ?? [];
     const allCommands = [...DEFAULT_COMMANDS, ...customCommands];
-    conn.sessionUpdate({
-      sessionId,
-      update: {
-        sessionUpdate: "available_commands_update",
-        availableCommands: allCommands,
-      },
-    } as SessionNotification).catch((err) => {
-      this.log("Failed to send commands update:", err);
-    });
+    conn
+      .sessionUpdate({
+        sessionId,
+        update: {
+          sessionUpdate: "available_commands_update",
+          availableCommands: allCommands,
+        },
+      } as SessionNotification)
+      .catch((err) => {
+        this.log("Failed to send commands update:", err);
+      });
 
     const response = {
       modes: {
@@ -560,7 +567,11 @@ export class DeepAgentsServer {
     });
 
     try {
-      const commandResult = await this.handleSlashCommand(session, prompt, conn);
+      const commandResult = await this.handleSlashCommand(
+        session,
+        prompt,
+        conn,
+      );
       if (commandResult) {
         return commandResult;
       }
@@ -899,7 +910,10 @@ export class DeepAgentsServer {
       };
     } catch (err) {
       this.log("Terminal execution failed, falling back:", err);
-      return { output: `Terminal error: ${(err as Error).message}`, exitCode: 1 };
+      return {
+        output: `Terminal error: ${(err as Error).message}`,
+        exitCode: 1,
+      };
     }
   }
 
@@ -927,14 +941,32 @@ export class DeepAgentsServer {
           input: toolCall.args,
         },
         options: [
-          { optionId: "allow-once", name: "Allow once", kind: "allow_once" as const },
-          { optionId: "allow-always", name: "Always allow", kind: "allow_always" as const },
-          { optionId: "reject-once", name: "Reject", kind: "reject_once" as const },
-          { optionId: "reject-always", name: "Always reject", kind: "reject_always" as const },
+          {
+            optionId: "allow-once",
+            name: "Allow once",
+            kind: "allow_once" as const,
+          },
+          {
+            optionId: "allow-always",
+            name: "Always allow",
+            kind: "allow_always" as const,
+          },
+          {
+            optionId: "reject-once",
+            name: "Reject",
+            kind: "reject_once" as const,
+          },
+          {
+            optionId: "reject-always",
+            name: "Always reject",
+            kind: "reject_always" as const,
+          },
         ],
       } as any);
 
-      const outcome = result?.outcome as { outcome: string; optionId?: string } | undefined;
+      const outcome = result?.outcome as
+        | { outcome: string; optionId?: string }
+        | undefined;
       if (!outcome || outcome.outcome === "cancelled") {
         return "cancelled";
       }
@@ -979,7 +1011,10 @@ export class DeepAgentsServer {
         session.mode = commandName;
         this.log("Slash command mode switch:", commandName);
         await this.sendMessageChunk(session.id, conn, "agent", [
-          { type: "text", text: `Switched to ${commandName} mode.` } as ContentBlock,
+          {
+            type: "text",
+            text: `Switched to ${commandName} mode.`,
+          } as ContentBlock,
         ]);
         return { stopReason: "end_turn" };
       }
@@ -988,7 +1023,10 @@ export class DeepAgentsServer {
         session.threadId = crypto.randomUUID();
         this.log("Slash command clear:", session.id);
         await this.sendMessageChunk(session.id, conn, "agent", [
-          { type: "text", text: "Conversation cleared. Starting fresh." } as ContentBlock,
+          {
+            type: "text",
+            text: "Conversation cleared. Starting fresh.",
+          } as ContentBlock,
         ]);
         return { stopReason: "end_turn" };
       }
@@ -1026,7 +1064,10 @@ export class DeepAgentsServer {
         configurable: { thread_id: session.threadId },
       });
       if (checkpoint?.checkpoint?.channel_values) {
-        const channelValues = checkpoint.checkpoint.channel_values as Record<string, unknown>;
+        const channelValues = checkpoint.checkpoint.channel_values as Record<
+          string,
+          unknown
+        >;
         if (Array.isArray(channelValues.messages)) {
           messages = channelValues.messages as BaseMessage[];
         }

@@ -173,7 +173,16 @@ export function pathToFileUri(path: string): string {
  */
 export function getToolCallKind(
   toolName: string,
-): "read" | "edit" | "delete" | "move" | "search" | "execute" | "think" | "fetch" | "other" {
+):
+  | "read"
+  | "edit"
+  | "delete"
+  | "move"
+  | "search"
+  | "execute"
+  | "think"
+  | "fetch"
+  | "other" {
   const readTools = ["read_file", "ls"];
   const searchTools = ["grep", "glob"];
   const editTools = ["write_file", "edit_file"];
@@ -228,7 +237,14 @@ export function extractToolCallLocations(
   const filePath = args.path as string | undefined;
   if (!filePath) return undefined;
 
-  const toolsWithPaths = ["read_file", "write_file", "edit_file", "ls", "grep", "glob"];
+  const toolsWithPaths = [
+    "read_file",
+    "write_file",
+    "edit_file",
+    "ls",
+    "grep",
+    "glob",
+  ];
   if (!toolsWithPaths.includes(toolName)) return undefined;
 
   const absPath = filePath.startsWith("/")

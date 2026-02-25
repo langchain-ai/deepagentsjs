@@ -539,7 +539,11 @@ describe("extractToolCallLocations", () => {
   });
 
   it("should return undefined for tools without path arg", () => {
-    const result = extractToolCallLocations("grep", { pattern: "TODO" }, "/workspace");
+    const result = extractToolCallLocations(
+      "grep",
+      { pattern: "TODO" },
+      "/workspace",
+    );
     expect(result).toBeUndefined();
   });
 
@@ -553,9 +557,20 @@ describe("extractToolCallLocations", () => {
   });
 
   it("should handle all supported file tools", () => {
-    const tools = ["read_file", "write_file", "edit_file", "ls", "grep", "glob"];
+    const tools = [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "ls",
+      "grep",
+      "glob",
+    ];
     for (const tool of tools) {
-      const result = extractToolCallLocations(tool, { path: "/test.txt" }, "/ws");
+      const result = extractToolCallLocations(
+        tool,
+        { path: "/test.txt" },
+        "/ws",
+      );
       expect(result).toBeDefined();
       expect(result![0].path).toBe("/test.txt");
     }
