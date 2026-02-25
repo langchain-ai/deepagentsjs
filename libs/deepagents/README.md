@@ -713,3 +713,52 @@ const agent = createAgent({
   ],
 });
 ```
+
+## ACP (Agent Client Protocol) Support
+
+Deep Agents can be exposed as an [Agent Client Protocol](https://agentclientprotocol.com) server, enabling integration with IDEs like [Zed](https://zed.dev), JetBrains, and other ACP-compatible clients through a standardized JSON-RPC 2.0 protocol over stdio.
+
+The `deepagents-acp` package wraps your Deep Agent with ACP support:
+
+```bash
+npm install deepagents-acp
+```
+
+The quickest way to get started is via the CLI:
+
+```bash
+npx deepagents-acp --name my-agent --workspace /path/to/project
+```
+
+Or programmatically:
+
+```typescript
+import { startServer } from "deepagents-acp";
+
+await startServer({
+  agents: {
+    name: "coding-assistant",
+    description: "AI coding assistant with filesystem access",
+    skills: ["./skills/"],
+  },
+  workspaceRoot: process.cwd(),
+});
+```
+
+To use with Zed, add the following to your Zed settings:
+
+```json
+{
+  "agent": {
+    "profiles": {
+      "deepagents": {
+        "name": "DeepAgents",
+        "command": "npx",
+        "args": ["deepagents-acp"]
+      }
+    }
+  }
+}
+```
+
+See the [deepagents-acp README](libs/acp/README.md) and the [ACP server example](examples/acp-server/) for full documentation and advanced configuration.
