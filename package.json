@@ -56,5 +56,11 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.55.0"
   },
-  "packageManager": "pnpm@10.29.2"
+  "packageManager": "pnpm@10.29.2",
+  "pnpm": {
+    "overrides": {
+      "minimatch@^9": ">=9.0.6",
+      "minimatch@^10": ">=10.2.1"
+    }
+  }
 }
