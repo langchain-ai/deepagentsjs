@@ -194,6 +194,7 @@ export class FilesystemBackend implements BackendProtocol {
     filePath: string,
     offset: number = 0,
     limit: number = 500,
+    encoding: string = "utf-8",
   ): Promise<string> {
     try {
       const resolvedPath = this.resolvePath(filePath);
@@ -210,7 +211,7 @@ export class FilesystemBackend implements BackendProtocol {
           fsSync.constants.O_RDONLY | fsSync.constants.O_NOFOLLOW,
         );
         try {
-          content = await fd.readFile({ encoding: "utf-8" });
+          content = await fd.readFile({ encoding: encoding as BufferEncoding });
         } finally {
           await fd.close();
         }
@@ -222,7 +223,7 @@ export class FilesystemBackend implements BackendProtocol {
         if (!stat.isFile()) {
           return `Error: File '${filePath}' not found`;
         }
-        content = await fs.readFile(resolvedPath, "utf-8");
+        content = await fs.readFile(resolvedPath, encoding as BufferEncoding);
       }
 
       const emptyMsg = checkEmptyContent(content);
@@ -251,7 +252,7 @@ export class FilesystemBackend implements BackendProtocol {
    * @param filePath - Absolute file path
    * @returns Raw file content as FileData
    */
-  async readRaw(filePath: string): Promise<FileData> {
+  async readRaw(filePath: string, encoding: string = "utf-8"): Promise<FileData> {
     const resolvedPath = this.resolvePath(filePath);
 
     let content: string;
@@ -265,7 +266,7 @@ export class FilesystemBackend implements BackendProtocol {
         fsSync.constants.O_RDONLY | fsSync.constants.O_NOFOLLOW,
       );
       try {
-        content = await fd.readFile({ encoding: "utf-8" });
+        content = await fd.readFile({ encoding: encoding as BufferEncoding });
       } finally {
         await fd.close();
       }
@@ -275,7 +276,7 @@ export class FilesystemBackend implements BackendProtocol {
         throw new Error(`Symlinks are not allowed: ${filePath}`);
       }
       if (!stat.isFile()) throw new Error(`File '${filePath}' not found`);
-      content = await fs.readFile(resolvedPath, "utf-8");
+      content = await fs.readFile(resolvedPath, encoding as BufferEncoding);
     }
 
     return {
@@ -289,7 +290,7 @@ export class FilesystemBackend implements BackendProtocol {
    * Create a new file with content.
    * Returns WriteResult. External storage sets filesUpdate=null.
    */
-  async write(filePath: string, content: string): Promise<WriteResult> {
+  async write(filePath: string, content: string, encoding: string = "utf-8"): Promise<WriteResult> {
     try {
       const resolvedPath = this.resolvePath(filePath);
 
@@ -318,12 +319,12 @@ export class FilesystemBackend implements BackendProtocol {
 
         const fd = await fs.open(resolvedPath, flags, 0o644);
         try {
-          await fd.writeFile(content, "utf-8");
+          await fd.writeFile(content, encoding as BufferEncoding);
         } finally {
           await fd.close();
         }
       } else {
-        await fs.writeFile(resolvedPath, content, "utf-8");
+        await fs.writeFile(resolvedPath, content, encoding as BufferEncoding);
       }
 
       return { path: filePath, filesUpdate: null };
@@ -341,6 +342,7 @@ export class FilesystemBackend implements BackendProtocol {
     oldString: string,
     newString: string,
     replaceAll: boolean = false,
+    encoding: string = "utf-8",
   ): Promise<EditResult> {
     try {
       const resolvedPath = this.resolvePath(filePath);
@@ -358,7 +360,7 @@ export class FilesystemBackend implements BackendProtocol {
           fsSync.constants.O_RDONLY | fsSync.constants.O_NOFOLLOW,
         );
         try {
-          content = await fd.readFile({ encoding: "utf-8" });
+          content = await fd.readFile({ encoding: encoding as BufferEncoding });
         } finally {
           await fd.close();
         }
@@ -370,7 +372,7 @@ export class FilesystemBackend implements BackendProtocol {
         if (!stat.isFile()) {
           return { error: `Error: File '${filePath}' not found` };
         }
-        content = await fs.readFile(resolvedPath, "utf-8");
+        content = await fs.readFile(resolvedPath, encoding as BufferEncoding);
       }
 
       const result = performStringReplacement(
@@ -395,12 +397,12 @@ export class FilesystemBackend implements BackendProtocol {
 
         const fd = await fs.open(resolvedPath, flags);
         try {
-          await fd.writeFile(newContent, "utf-8");
+          await fd.writeFile(newContent, encoding as BufferEncoding);
         } finally {
           await fd.close();
         }
       } else {
-        await fs.writeFile(resolvedPath, newContent, "utf-8");
+        await fs.writeFile(resolvedPath, newContent, encoding as BufferEncoding);
       }
 
       return { path: filePath, filesUpdate: null, occurrences: occurrences };
@@ -423,6 +425,7 @@ export class FilesystemBackend implements BackendProtocol {
     pattern: string,
     dirPath: string = "/",
     glob: string | null = null,
+    encoding: string = "utf-8",
   ): Promise<GrepMatch[] | string> {
     // Resolve base path
     let baseFull: string;
@@ -439,9 +442,9 @@ export class FilesystemBackend implements BackendProtocol {
     }
 
     // Try ripgrep first (with -F flag for literal search), fallback to substring search
-    let results = await this.ripgrepSearch(pattern, baseFull, glob);
+    let results = await this.ripgrepSearch(pattern, baseFull, glob, encoding);
     if (results === null) {
-      results = await this.literalSearch(pattern, baseFull, glob);
+      results = await this.literalSearch(pattern, baseFull, glob, encoding);
     }
 
     const matches: GrepMatch[] = [];
@@ -466,10 +469,14 @@ export class FilesystemBackend implements BackendProtocol {
     pattern: string,
     baseFull: string,
     includeGlob: string | null,
+    encoding: string,
   ): Promise<Record<string, Array<[number, string]>> | null> {
     return new Promise((resolve) => {
       // -F enables fixed-string (literal) mode
       const args = ["--json", "-F"];
+      if (encoding && encoding !== "utf-8") {
+        args.push("--encoding", encoding);
+      }
       if (includeGlob) {
         args.push("--glob", includeGlob);
       }
@@ -552,6 +559,7 @@ export class FilesystemBackend implements BackendProtocol {
     pattern: string,
     baseFull: string,
     includeGlob: string | null,
+    encoding: string,
   ): Promise<Record<string, Array<[number, string]>>> {
     const results: Record<string, Array<[number, string]>> = {};
     const stat = await fs.stat(baseFull);
@@ -582,7 +590,7 @@ export class FilesystemBackend implements BackendProtocol {
         }
 
         // Read and search using literal substring matching
-        const content = await fs.readFile(fp, "utf-8");
+        const content = await fs.readFile(fp, encoding as BufferEncoding);
         const lines = content.split("\n");
 
         for (let i = 0; i < lines.length; i++) {
