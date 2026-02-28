@@ -218,8 +218,9 @@ export class LocalShellBackend
     filePath: string,
     offset: number = 0,
     limit: number = 500,
+    encoding?: string,
   ): Promise<string> {
-    const result = await super.read(filePath, offset, limit);
+    const result = await super.read(filePath, offset, limit, encoding);
     if (
       typeof result === "string" &&
       result.startsWith("Error reading file") &&
@@ -238,8 +239,9 @@ export class LocalShellBackend
     oldString: string,
     newString: string,
     replaceAll: boolean = false,
+    encoding?: string,
   ): Promise<EditResult> {
-    const result = await super.edit(filePath, oldString, newString, replaceAll);
+    const result = await super.edit(filePath, oldString, newString, replaceAll, encoding);
     if (result.error?.includes("ENOENT")) {
       return { ...result, error: `Error: File '${filePath}' not found` };
     }

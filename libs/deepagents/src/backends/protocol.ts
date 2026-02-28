@@ -172,7 +172,7 @@ export interface BackendProtocol {
    * @param limit - Maximum number of lines to read, default 500
    * @returns Formatted file content with line numbers, or error message
    */
-  read(filePath: string, offset?: number, limit?: number): MaybePromise<string>;
+  read(filePath: string, offset?: number, limit?: number, encoding?: string): MaybePromise<string>;
 
   /**
    * Read file content as raw FileData.
@@ -180,7 +180,7 @@ export interface BackendProtocol {
    * @param filePath - Absolute file path
    * @returns Raw file content as FileData
    */
-  readRaw(filePath: string): MaybePromise<FileData>;
+  readRaw(filePath: string, encoding?: string): MaybePromise<FileData>;
 
   /**
    * Structured search results or error string for invalid input.
@@ -196,6 +196,7 @@ export interface BackendProtocol {
     pattern: string,
     path?: string | null,
     glob?: string | null,
+    encoding?: string,
   ): MaybePromise<GrepMatch[] | string>;
 
   /**
@@ -214,7 +215,7 @@ export interface BackendProtocol {
    * @param content - File content as string
    * @returns WriteResult with error populated on failure
    */
-  write(filePath: string, content: string): MaybePromise<WriteResult>;
+  write(filePath: string, content: string, encoding?: string): MaybePromise<WriteResult>;
 
   /**
    * Edit a file by replacing string occurrences.
@@ -230,6 +231,7 @@ export interface BackendProtocol {
     oldString: string,
     newString: string,
     replaceAll?: boolean,
+    encoding?: string,
   ): MaybePromise<EditResult>;
 
   /**
