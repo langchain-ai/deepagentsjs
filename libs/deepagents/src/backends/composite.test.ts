@@ -213,8 +213,7 @@ describe("CompositeBackend", () => {
     expect(memPaths).not.toContain("/temp.txt");
     expect(memPaths).not.toContain("/archive/old.log");
 
-    // grep across all backends with literal text search
-    // Note: All written content contains 'e' character
+    // grep at "/" includes all routes since they are under "/"
     const allMatches = (await composite.grepRaw("e", "/")) as GrepMatch[];
     expect(Array.isArray(allMatches)).toBe(true);
     const pathsWithContent = allMatches.map((m) => m.path);
@@ -335,6 +334,49 @@ describe("CompositeBackend", () => {
     expect(listing1.map((fi) => fi.path)).toEqual(
       listing2.map((fi) => fi.path),
     );
+  });
+
+  it("should not search routed backends when path does not match any route", async () => {
+    const { stateAndStore } = makeConfig();
+
+    const memoryBackend = new StoreBackend(stateAndStore);
+    const skillsBackend = new StoreBackend(stateAndStore);
+    const grepMemSpy = vi.spyOn(memoryBackend, "grepRaw");
+    const grepSkillsSpy = vi.spyOn(skillsBackend, "grepRaw");
+    const globMemSpy = vi.spyOn(memoryBackend, "globInfo");
+    const globSkillsSpy = vi.spyOn(skillsBackend, "globInfo");
+
+    const composite = new CompositeBackend(new StateBackend(stateAndStore), {
+      "/memory/": memoryBackend,
+      "/skills/": skillsBackend,
+    });
+
+    // grep at a non-matching path should NOT query routed backends
+    await composite.grepRaw("hello", "/workspace");
+    expect(grepMemSpy).not.toHaveBeenCalled();
+    expect(grepSkillsSpy).not.toHaveBeenCalled();
+
+    // glob at a non-matching path should NOT query routed backends
+    await composite.globInfo("**/*.md", "/workspace");
+    expect(globMemSpy).not.toHaveBeenCalled();
+    expect(globSkillsSpy).not.toHaveBeenCalled();
+
+    // grep at "/" should query routed backends (routes are under "/")
+    await composite.grepRaw("hello", "/");
+    expect(grepMemSpy).toHaveBeenCalledTimes(1);
+    expect(grepSkillsSpy).toHaveBeenCalledTimes(1);
+
+    // glob at "/" should query routed backends
+    await composite.globInfo("**/*.md", "/");
+    expect(globMemSpy).toHaveBeenCalledTimes(1);
+    expect(globSkillsSpy).toHaveBeenCalledTimes(1);
+
+    // grep targeting a specific route should only search that route
+    grepMemSpy.mockClear();
+    grepSkillsSpy.mockClear();
+    await composite.grepRaw("hello", "/memory/");
+    expect(grepMemSpy).toHaveBeenCalledTimes(1);
+    expect(grepSkillsSpy).not.toHaveBeenCalled();
   });
 
   it("should handle large tool result interception with default route", async () => {
