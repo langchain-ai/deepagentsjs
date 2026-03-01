@@ -104,6 +104,7 @@ export {
   type FileDownloadResponse,
   type FileUploadResponse,
   type SandboxBackendProtocol,
+  type StateAndStore,
   type MaybePromise,
   // Sandbox provider types
   type SandboxInfo,

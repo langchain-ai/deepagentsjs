@@ -88,10 +88,16 @@ importers:
         version: link:../libs/providers/node-vfs
       '@langchain/openai':
         specifier: ^1.2.7
-        version: 1.2.7(@langchain/core@1.1.26(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@4.3.6)))(ws@8.19.0)
+        version: 1.2.8(@langchain/core@1.1.26(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@4.3.6)))(ws@8.19.0)
+      '@langchain/quickjs':
+        specifier: workspace:*
+        version: link:../libs/providers/quickjs
       '@langchain/tavily':
         specifier: ^1.2.0
         version: 1.2.0(@langchain/core@1.1.26(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@4.3.6)))
+      dedent:
+        specifier: ^1.7.1
+        version: 1.7.1
       deepagents:
         specifier: workspace:*
         version: link:../libs/deepagents
@@ -422,6 +428,82 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
+  libs/providers/quickjs:
+    dependencies:
+      '@jitl/quickjs-ng-wasmfile-release-asyncify':
+        specifier: ^0.32.0
+        version: 0.32.0
+      '@sveltejs/acorn-typescript':
+        specifier: ^1.0.9
+        version: 1.0.9(acorn@8.16.0)
+      acorn:
+        specifier: ^8.16.0
+        version: 8.16.0
+      dedent:
+        specifier: ^1.7.1
+        version: 1.7.1
+      estree-walker:
+        specifier: ^3.0.3
+        version: 3.0.3
+      json-schema-to-typescript:
+        specifier: ^15.0.4
+        version: 15.0.4
+      magic-string:
+        specifier: ^0.30.21
+        version: 0.30.21
+      quickjs-emscripten:
+        specifier: ^0.32.0
+        version: 0.32.0
+      quickjs-emscripten-core:
+        specifier: ^0.32.0
+        version: 0.32.0
+    devDependencies:
+      '@langchain/core':
+        specifier: ^1.1.25
+        version: 1.1.26(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@4.3.6))
+      '@langchain/langgraph':
+        specifier: ^1.1.4
+        version: 1.1.4(@langchain/core@1.1.26(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@4.3.6)))(zod@4.3.6)
+      '@tsconfig/recommended':
+        specifier: ^1.0.13
+        version: 1.0.13
+      '@types/dedent':
+        specifier: ^0.7.2
+        version: 0.7.2
+      '@types/estree':
+        specifier: ^1.0.8
+        version: 1.0.8
+      '@types/node':
+        specifier: ^25.2.3
+        version: 25.3.3
+      '@vitest/coverage-v8':
+        specifier: ^4.0.18
+        version: 4.0.18(vitest@4.0.18)
+      deepagents:
+        specifier: workspace:*
+        version: link:../../deepagents
+      dotenv:
+        specifier: ^17.2.3
+        version: 17.3.1
+      langchain:
+        specifier: 1.2.26
+        version: 1.2.26(@langchain/core@1.1.26(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@4.3.6)))(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@4.3.6))
+      tsdown:
+        specifier: ^0.20.3
+        version: 0.20.3(synckit@0.11.12)(typescript@5.9.3)
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(@vitest/ui@4.0.18)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+
   libs/standard-tests:
     devDependencies:
       '@tsconfig/recommended':
@@ -458,6 +540,10 @@ packages:
     peerDependenciesMeta:
       zod:
         optional: true
+
+  '@apidevtools/json-schema-ref-parser@11.9.3':
+    resolution: {integrity: sha512-60vepv88RwcJtSHrD6MjIL6Ta3SOYbgfnkHb+ppAVK+o9mXprRtulx7VlRl3lN3bbvysAfCS7WMVfhUYemB0IQ==}
+    engines: {node: '>= 16'}
 
   '@aws-crypto/crc32@5.2.0':
     resolution: {integrity: sha512-nLbCWqQNgUiwwtFsen1AdzAtvuLRsQS8rYgMuxCrdKf9kOssamGLuPwyTY9wyYblNr9+1XM8v6zoDTPPSIeANg==}
@@ -1037,6 +1123,24 @@ packages:
     resolution: {integrity: sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==}
     engines: {node: '>=18.0.0'}
 
+  '@jitl/quickjs-ffi-types@0.32.0':
+    resolution: {integrity: sha512-v9T+GQpmk43VDJ7d72sf0Nexhk+ArvtUihW27dy7lqAl0zBObFKtSBBIm5RBjwIhE8VwsPPm9PNuvPvNqLWUEg==}
+
+  '@jitl/quickjs-ng-wasmfile-release-asyncify@0.32.0':
+    resolution: {integrity: sha512-N4GfnnxR0g4dEaymjclJkGjNaa1dpmPjp8fTu022WWFFyiQ2mOMi5b8V3CEWJOlW/4bflQGbSotuPI/I8/5PQg==}
+
+  '@jitl/quickjs-wasmfile-debug-asyncify@0.32.0':
+    resolution: {integrity: sha512-EX8zbXwGqCgAE764M+qvkHtyXDi/FUoMBea0JnES7vCM3P7a2+EOZOjGv85wtZ2sJhI1oJ+nekmqpOODFDY+hw==}
+
+  '@jitl/quickjs-wasmfile-debug-sync@0.32.0':
+    resolution: {integrity: sha512-LeYWrPGC1uNCTBWvibo3ZLJj0CSVNYUXvJpXMCmuQ5Sap2cCACc3uvGvYV4homHHBAzfw5akoTqMMS4YFRtw+Q==}
+
+  '@jitl/quickjs-wasmfile-release-asyncify@0.32.0':
+    resolution: {integrity: sha512-3oSwPfja12ICz4aIblB58cuY8JlEq5Txt8Cut4VLo+LH47QN+mzCnSgnbB03hWzg1LBcc+VyyI9UOag7a1NF+Q==}
+
+  '@jitl/quickjs-wasmfile-release-sync@0.32.0':
+    resolution: {integrity: sha512-BKNDI/TPBfGlLNGYpLrhcDGXmIk4xHm4MRAisOBnOzpXVn9HZWsfmMAc9WMBrAHjvvds6HOikKeaOBKdPdpVrg==}
+
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
 
@@ -1052,6 +1156,9 @@ packages:
 
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
+
+  '@jsdevtools/ono@7.1.3':
+    resolution: {integrity: sha512-4JQNk+3mVzK3xh2rqd6RB4J46qUR19azEHBneZyTZM+c456qOrbbM/5xcR8huNCCcbVt7+UmizG6GuUvPvKUYg==}
 
   '@langchain/anthropic@1.3.18':
     resolution: {integrity: sha512-3qkaTsFUf5OBad2AQQlF72h8vWx0IerPf7BrUQI+eB+S3iJdLyoK6BgCC96yAC7FJIZVEPuKUSwkxhgCGPHibQ==}
@@ -1093,12 +1200,6 @@ packages:
     peerDependenciesMeta:
       zod-to-json-schema:
         optional: true
-
-  '@langchain/openai@1.2.7':
-    resolution: {integrity: sha512-vR9zoF0/EZ03X0Tc6woIEWRDSDSr2l64n+MQCW8NduScJtBJs5r/Ng3Lrp2bjtJQywEMQoOhcrV2DMmAIPWgnw==}
-    engines: {node: '>=20'}
-    peerDependencies:
-      '@langchain/core': ^1.0.0
 
   '@langchain/openai@1.2.8':
     resolution: {integrity: sha512-qliwC7sb7/Kw0tsl/EiMchMThKt62rZbyofKXtxPwYBte3BMzMXo2HKaEFvAN2QHVOuDi4voqQ7ZlRXc/o2e8w==}
@@ -1806,6 +1907,11 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
+  '@sveltejs/acorn-typescript@1.0.9':
+    resolution: {integrity: sha512-lVJX6qEgs/4DOcRTpo56tmKzVPtoWAaVbL4hfO7t7NVwl9AAXzQR6cihesW1BmNMPl+bK6dreu2sOKBP2Q9CIA==}
+    peerDependencies:
+      acorn: ^8.9.0
+
   '@tsconfig/recommended@1.0.13':
     resolution: {integrity: sha512-sySRuBfMKyKO/j2ZAhR8kSembhjuPEV4Ra3AHtmWLq51+iGaudr45crPSzNC5b7/Ctrh9dfUpBuTlYrH6rM58Q==}
 
@@ -1817,6 +1923,9 @@ packages:
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
+
+  '@types/dedent@0.7.2':
+    resolution: {integrity: sha512-kRiitIeUg1mPV9yH4VUJ/1uk2XjyANfeL8/7rH1tsjvHeO9PJLBHJIYsFWmAvmGj5u8rj+1TZx7PZzW2qLw3Lw==}
 
   '@types/deep-eql@4.0.2':
     resolution: {integrity: sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw==}
@@ -1841,6 +1950,9 @@ packages:
 
   '@types/jsonfile@6.1.4':
     resolution: {integrity: sha512-D5qGUYwjvnNNextdU59/+fI+spnwtTFmyQP0h+PfIOSkNfpU6AOICUOkm4i0OnSk+NyjdPJrxCDro0sJsWlRpQ==}
+
+  '@types/lodash@4.17.24':
+    resolution: {integrity: sha512-gIW7lQLZbue7lRSWEFql49QJJWThrTFFeIMJdp3eH4tKoxm1OvEPg02rm4wCCSHS0cL3/Fizimb35b7k8atwsQ==}
 
   '@types/micromatch@4.0.10':
     resolution: {integrity: sha512-5jOhFDElqr4DKTrTEbnW8DZ4Hz5LRUEmyrGpCMrD/NphYv3nUnaF08xmSLx1rGGnyEs/kFnhiw6dCgcDqMr5PQ==}
@@ -2216,6 +2328,14 @@ packages:
   decamelize@1.2.0:
     resolution: {integrity: sha512-z2S+W9X73hAUUki+N+9Za2lBlun89zigOyGrsax+KUQ6wKW4ZoWpEYBkGhQjwAjjDCkWxhY0VKEhk8wzY7F5cA==}
     engines: {node: '>=0.10.0'}
+
+  dedent@1.7.1:
+    resolution: {integrity: sha512-9JmrhGZpOlEgOLdQgSm0zxFaYoQon408V1v49aqTWuXENVlnCuY9JBZcXZiCsZQWDjTm5Qf/nIvAy77mXDAjEg==}
+    peerDependencies:
+      babel-plugin-macros: ^3.1.0
+    peerDependenciesMeta:
+      babel-plugin-macros:
+        optional: true
 
   deep-is@0.1.4:
     resolution: {integrity: sha512-oIPzksmTg4/MriiaYGO+okXDT7ztn/w3Eptv/+gSIdMdKsJo0u4CfYNFJPy+4SKMuCqGw2wxnA+URMg3t8a/bQ==}
@@ -2873,6 +2993,11 @@ packages:
     resolution: {integrity: sha512-+DWg8jCJG2TEnpy7kOm/7/AxaYoaRbjVB4LFZLySZlWn8exGs3A4OLJR966cVvU26N7X9TWxl+Jsw7dzAqKT6g==}
     engines: {node: '>=16'}
 
+  json-schema-to-typescript@15.0.4:
+    resolution: {integrity: sha512-Su9oK8DR4xCmDsLlyvadkXzX6+GGXJpbhwoLtOGArAG61dvbW4YQmSEno2y66ahpIdmLMg6YUf/QHLgiwvkrHQ==}
+    engines: {node: '>=16.0.0'}
+    hasBin: true
+
   json-schema-traverse@0.4.1:
     resolution: {integrity: sha512-xbbCH5dCYU5T8LcEhhuh7HJ88HXuW3qsI3Y0zOZFKfZEHcpWiHU/Jxzk629Brsab/mMiHQti9wMP+845RPe3Vg==}
 
@@ -2938,6 +3063,9 @@ packages:
 
   lodash.startcase@4.4.0:
     resolution: {integrity: sha512-+WKqsK294HMSc2jEbNgpHpd0JfIBhp7rEV4aqXWqFr6AlXov+SlcgB1Fv01y2kGe3Gc8nMW7VA0SrGuSkRfIEg==}
+
+  lodash@4.17.23:
+    resolution: {integrity: sha512-LgVTMpQtIopCi79SJeDiP0TfWi5CNEc/L/aRdTh3yIvmZXTnheWpKjSZhnvMl8iXbC1tFg9gdHHDMLoV7CnG+w==}
 
   long@5.3.2:
     resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
@@ -3234,6 +3362,13 @@ packages:
 
   queue-microtask@1.2.3:
     resolution: {integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==}
+
+  quickjs-emscripten-core@0.32.0:
+    resolution: {integrity: sha512-QFnPfjFey8EqknSrSxe1hZrf1/8z7/6s1QzGOmKo6++02r7QRRX7ZoyNaZh7JuVjWsVW87KnQrbZqnHkOAzUyg==}
+
+  quickjs-emscripten@0.32.0:
+    resolution: {integrity: sha512-So0Sqw869y/S2oE3Nuc0uT3Dhqgvsj8FSrwBdsuTosVsG8ME5/OcudU1GxsrIFdFABgy17GHnTVO9TYV/bLQcA==}
+    engines: {node: '>=16.0.0'}
 
   read-yaml-file@1.1.0:
     resolution: {integrity: sha512-VIMnQi/Z4HT2Fxuwg5KrY174U1VdUIASQVWXXyqtNRtxSr9IYkn1rsI6Tb6HsrHCmB7gVpNwX6JxPTHcH6IoTA==}
@@ -3807,6 +3942,12 @@ snapshots:
       json-schema-to-ts: 3.1.1
     optionalDependencies:
       zod: 4.3.6
+
+  '@apidevtools/json-schema-ref-parser@11.9.3':
+    dependencies:
+      '@jsdevtools/ono': 7.1.3
+      '@types/json-schema': 7.0.15
+      js-yaml: 4.1.1
 
   '@aws-crypto/crc32@5.2.0':
     dependencies:
@@ -4719,6 +4860,28 @@ snapshots:
     dependencies:
       minipass: 7.1.3
 
+  '@jitl/quickjs-ffi-types@0.32.0': {}
+
+  '@jitl/quickjs-ng-wasmfile-release-asyncify@0.32.0':
+    dependencies:
+      '@jitl/quickjs-ffi-types': 0.32.0
+
+  '@jitl/quickjs-wasmfile-debug-asyncify@0.32.0':
+    dependencies:
+      '@jitl/quickjs-ffi-types': 0.32.0
+
+  '@jitl/quickjs-wasmfile-debug-sync@0.32.0':
+    dependencies:
+      '@jitl/quickjs-ffi-types': 0.32.0
+
+  '@jitl/quickjs-wasmfile-release-asyncify@0.32.0':
+    dependencies:
+      '@jitl/quickjs-ffi-types': 0.32.0
+
+  '@jitl/quickjs-wasmfile-release-sync@0.32.0':
+    dependencies:
+      '@jitl/quickjs-ffi-types': 0.32.0
+
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
@@ -4734,6 +4897,8 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   '@js-sdsl/ordered-map@4.4.2': {}
+
+  '@jsdevtools/ono@7.1.3': {}
 
   '@langchain/anthropic@1.3.18(@langchain/core@1.1.26(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@4.3.6)))':
     dependencies:
@@ -4784,15 +4949,6 @@ snapshots:
     transitivePeerDependencies:
       - react
       - react-dom
-
-  '@langchain/openai@1.2.7(@langchain/core@1.1.26(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@4.3.6)))(ws@8.19.0)':
-    dependencies:
-      '@langchain/core': 1.1.26(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@4.3.6))
-      js-tiktoken: 1.0.21
-      openai: 6.21.0(ws@8.19.0)(zod@4.3.6)
-      zod: 4.3.6
-    transitivePeerDependencies:
-      - ws
 
   '@langchain/openai@1.2.8(@langchain/core@1.1.26(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@4.3.6)))(ws@8.19.0)':
     dependencies:
@@ -5591,6 +5747,10 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
+  '@sveltejs/acorn-typescript@1.0.9(acorn@8.16.0)':
+    dependencies:
+      acorn: 8.16.0
+
   '@tsconfig/recommended@1.0.13': {}
 
   '@tybys/wasm-util@0.10.1':
@@ -5604,6 +5764,8 @@ snapshots:
     dependencies:
       '@types/deep-eql': 4.0.2
       assertion-error: 2.0.1
+
+  '@types/dedent@0.7.2': {}
 
   '@types/deep-eql@4.0.2': {}
 
@@ -5625,6 +5787,8 @@ snapshots:
   '@types/jsonfile@6.1.4':
     dependencies:
       '@types/node': 25.3.3
+
+  '@types/lodash@4.17.24': {}
 
   '@types/micromatch@4.0.10':
     dependencies:
@@ -6065,6 +6229,8 @@ snapshots:
       ms: 2.1.3
 
   decamelize@1.2.0: {}
+
+  dedent@1.7.1: {}
 
   deep-is@0.1.4: {}
 
@@ -6791,6 +6957,18 @@ snapshots:
       '@babel/runtime': 7.28.6
       ts-algebra: 2.0.0
 
+  json-schema-to-typescript@15.0.4:
+    dependencies:
+      '@apidevtools/json-schema-ref-parser': 11.9.3
+      '@types/json-schema': 7.0.15
+      '@types/lodash': 4.17.24
+      is-glob: 4.0.3
+      js-yaml: 4.1.1
+      lodash: 4.17.23
+      minimist: 1.2.8
+      prettier: 3.8.1
+      tinyglobby: 0.2.15
+
   json-schema-traverse@0.4.1: {}
 
   json-stable-stringify-without-jsonify@1.0.1: {}
@@ -6877,6 +7055,8 @@ snapshots:
   lodash.camelcase@4.3.0: {}
 
   lodash.startcase@4.4.0: {}
+
+  lodash@4.17.23: {}
 
   long@5.3.2: {}
 
@@ -7142,6 +7322,18 @@ snapshots:
   quansync@1.0.0: {}
 
   queue-microtask@1.2.3: {}
+
+  quickjs-emscripten-core@0.32.0:
+    dependencies:
+      '@jitl/quickjs-ffi-types': 0.32.0
+
+  quickjs-emscripten@0.32.0:
+    dependencies:
+      '@jitl/quickjs-wasmfile-debug-asyncify': 0.32.0
+      '@jitl/quickjs-wasmfile-debug-sync': 0.32.0
+      '@jitl/quickjs-wasmfile-release-asyncify': 0.32.0
+      '@jitl/quickjs-wasmfile-release-sync': 0.32.0
+      quickjs-emscripten-core: 0.32.0
 
   read-yaml-file@1.1.0:
     dependencies:
