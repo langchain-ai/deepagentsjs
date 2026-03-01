@@ -1,6 +1,5 @@
 ---
 "@langchain/quickjs": minor
-"deepagents": minor
 ---
 
 feat(quickjs): add `@langchain/quickjs` — sandboxed JavaScript/TypeScript REPL tool
@@ -9,4 +8,3 @@ feat(quickjs): add `@langchain/quickjs` — sandboxed JavaScript/TypeScript REPL
 - Programmatic tool calling (PTC): expose any agent tool as a typed async function inside the REPL for code-driven orchestration, batching, and parallel execution
 - Environment variable isolation with secret management: opaque placeholders for secrets, per-tool allowlists, and file-write leak prevention
 - AST-based transform pipeline (acorn + estree-walker + magic-string) for TypeScript stripping, declaration hoisting, and auto-return
-- `deepagents` task tool now supports PTC invocation (returns plain string when no tool call ID is present)
