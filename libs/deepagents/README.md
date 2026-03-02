@@ -132,6 +132,9 @@ const researchInstructions = `You are an expert researcher. Your job is to condu
 
 You have access to an internet search tool as your primary means of gathering information.
 
+> [!TIP]
+> For developing, debugging, and deploying AI agents and LLM applications, see [LangSmith](https://docs.langchain.com/langsmith/home).
+
 ## \`internet_search\`
 
 Use this to run an internet search for a given query. You can specify the max number of results to return, the topic, and whether raw content should be included.
