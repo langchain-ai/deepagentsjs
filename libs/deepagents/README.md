@@ -423,7 +423,7 @@ const internetSearch = tool(
 
 const researchSubagent: SubAgent = {
   name: "research-agent",
-  description: "Used to research more in depth questions",
+  description: "Used to research more in-depth questions",
   systemPrompt: "You are a great researcher",
   tools: [internetSearch],
   model: "gpt-4o", // Optional override, defaults to main agent model
@@ -618,7 +618,7 @@ Middleware is a composable concept, and you can choose to add as many or as few 
 
 Planning is integral to solving complex problems. If you've used claude code recently, you'll notice how it writes out a To-Do list before tackling complex, multi-part tasks. You'll also notice how it can adapt and update this To-Do list on the fly as more information comes in.
 
-**todoListMiddleware** provides your agent with a tool specifically for updating this To-Do list. Before, and while it executes a multi-part task, the agent is prompted to use the write_todos tool to keep track of what its doing, and what still needs to be done.
+**todoListMiddleware** provides your agent with a tool specifically for updating this To-Do list. Before, and while it executes a multi-part task, the agent is prompted to use the write_todos tool to keep track of what it's doing, and what still needs to be done.
 
 ```typescript
 import { createAgent, todoListMiddleware } from "langchain";
@@ -673,7 +673,7 @@ const agent = createAgent({
 
 ### SubAgentMiddleware
 
-Handing off tasks to subagents is a great way to isolate context, keeping the context window of the main (supervisor) agent clean while still going deep on a task. The subagents middleware allows you supply subagents through a task tool.
+Handing off tasks to subagents is a great way to isolate context, keeping the context window of the main (supervisor) agent clean while still going deep on a task. The subagents middleware allows you to supply subagents through a task tool.
 
 A subagent is defined with a name, description, system prompt, and tools. You can also provide a subagent with a custom model, or with additional middleware. This can be particularly useful when you want to give the subagent an additional state key to share with the main agent.
 
