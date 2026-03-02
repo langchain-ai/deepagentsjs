@@ -166,7 +166,7 @@ jobs:
         shell: bash
 
       - name: Upload platform package
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: cli-${{ matrix.platform }}
           path: libs/cli/dist/platforms/${{ matrix.platform }}/
