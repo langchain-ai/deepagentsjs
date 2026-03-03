@@ -246,7 +246,9 @@ export function createQuickJSMiddleware(
   const jsEvalTool = tool(
     async (input, config) => {
       const threadId = config.configurable?.thread_id || "__default__";
-      const session = ReplSession.get(threadId);
+      // Try the exact threadId first, then fall back to "__default__"
+      // (wrapModelCall may not receive configurable and creates under "__default__")
+      const session = ReplSession.get(threadId) || ReplSession.get("__default__");
       if (!session) {
         return "[error] REPL session not initialized";
       }
@@ -278,14 +280,14 @@ export function createQuickJSMiddleware(
     wrapModelCall: async (request, handler) => {
       const threadId = request.runtime.configurable?.thread_id || "__default__";
 
+      const agentTools = (request.tools || []) as StructuredToolInterface[];
+      const ptcTools = usePtc ? filterToolsForPtc(agentTools) : [];
+
       const stateAndStore: StateAndStore = {
         state: request.state || {},
         store: request.runtime.store,
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
-
-      const agentTools = (request.tools || []) as StructuredToolInterface[];
-      const ptcTools = usePtc ? filterToolsForPtc(agentTools) : [];
 
       await ReplSession.getOrCreate(threadId, {
         memoryLimitBytes,
