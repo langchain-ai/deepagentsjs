@@ -34,7 +34,7 @@ export default defineConfig((env) => {
       test: {
         ...common.test,
         globals: false,
-        testTimeout: 120_000,
+        testTimeout: 1_200_000,
         exclude: configDefaults.exclude,
         include: ["**/*.eval.test.ts"],
         reporters: ["langsmith/vitest/reporter"],

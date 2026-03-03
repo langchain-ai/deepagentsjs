@@ -35,6 +35,7 @@ export type {
 export { isSandboxBackend, SandboxError } from "./protocol.js";
 
 export { StateBackend } from "./state.js";
+export { KVBackend } from "./kv.js";
 export { StoreBackend, type StoreBackendOptions } from "./store.js";
 export { FilesystemBackend } from "./filesystem.js";
 export { CompositeBackend } from "./composite.js";

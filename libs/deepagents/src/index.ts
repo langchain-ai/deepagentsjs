@@ -84,6 +84,7 @@ export {
 // Export backends
 export {
   StateBackend,
+  KVBackend,
   StoreBackend,
   type StoreBackendOptions,
   FilesystemBackend,
@@ -117,4 +118,6 @@ export {
   // Local shell backend
   LocalShellBackend,
   type LocalShellBackendOptions,
+  // Utils
+  createFileData,
 } from "./backends/index.js";
