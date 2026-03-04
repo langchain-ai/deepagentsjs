@@ -401,4 +401,61 @@ describe("FilesystemBackend", () => {
     const readResult = await backend.read(symlinkFile);
     expect(readResult).toContain("Error");
   });
+
+  it("should support encoding parameter for file operations", async () => {
+    const root = tmpDir;
+    const backend = new FilesystemBackend({
+      rootDir: root,
+      virtualMode: false,
+    });
+
+    const file = path.join(root, "encoding-test.txt");
+    const text = "Hello encoding with utf-16le";
+    const encoding = "utf-16le";
+
+    // 1. Write with utf-16le encoding
+    const writeRes = await backend.write(file, text, encoding);
+    expect(writeRes.error).toBeUndefined();
+
+    // Verify raw file content on disk is actually utf-16le encoded
+    const diskContentRaw = await fs.readFile(file);
+    const decodedDiskContent = Buffer.from(diskContentRaw).toString(encoding);
+    expect(decodedDiskContent).toBe(text);
+
+    // 2. Read with utf-16le encoding
+    const readTxt = await backend.read(file, 0, 500, encoding);
+    expect(readTxt).toContain(text);
+
+    // 3. ReadRaw with utf-16le encoding
+    const readRawResult = await backend.readRaw(file, encoding);
+    expect(readRawResult.content.join("\n")).toContain(text);
+
+    // 4. Edit with utf-16le encoding
+    const newTextSegment = "World";
+    const replacedText = text.replace("Hello", newTextSegment);
+
+    const editRes = await backend.edit(
+      file,
+      "Hello",
+      newTextSegment,
+      false,
+      encoding,
+    );
+    expect(editRes.error).toBeUndefined();
+    expect(editRes.occurrences).toBe(1);
+
+    const newDiskContentRaw = await fs.readFile(file);
+    const newDecodedDiskContent =
+      Buffer.from(newDiskContentRaw).toString(encoding);
+    expect(newDecodedDiskContent).toBe(replacedText);
+
+    // 5. Grep with utf-16le encoding
+    const grepRes = await backend.grepRaw(newTextSegment, root, null, encoding);
+    expect(Array.isArray(grepRes)).toBe(true);
+    if (Array.isArray(grepRes)) {
+      expect(grepRes.length).toBeGreaterThan(0);
+      expect(grepRes[0].path).toBe(file);
+      expect(grepRes[0].text).toContain(newTextSegment);
+    }
+  });
 });
