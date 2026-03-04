@@ -1040,12 +1040,15 @@ ${summary}
    */
   function isContextOverflow(err: unknown): boolean {
     let cause: unknown = err;
-    while (cause != null) {
+    for (;;) {
+      if (!cause) {
+        break;
+      }
       if (ContextOverflowError.isInstance(cause)) {
         return true;
       }
       cause =
-        typeof cause === "object" && cause !== null && "cause" in cause
+        typeof cause === "object" && "cause" in cause
           ? (cause as { cause?: unknown }).cause
           : undefined;
     }

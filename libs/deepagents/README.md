@@ -1,9 +1,9 @@
 <div align="center">
   <a href="https://docs.langchain.com/oss/python/deepagents/overview#deep-agents-overview">
     <picture>
-      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/langchain-ai/deepagentsjs/refs/heads/main/.github/images/logo-dark.svg">
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/langchain-ai/deepagentsjs/refs/heads/main/.github/images/logo-light.svg">
-      <img alt="Deep Agents Logo" src="https://raw.githubusercontent.com/langchain-ai/deepagentsjs/refs/heads/main/.github/images/logo-dark.svg" width="80%">
+      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/langchain-ai/deepagentsjs/refs/heads/main/.github/images/logo-light.svg">
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/langchain-ai/deepagentsjs/refs/heads/main/.github/images/logo-dark.svg">
+      <img alt="Deep Agents Logo" src="https://raw.githubusercontent.com/langchain-ai/deepagentsjs/refs/heads/main/.github/images/logo-dark.svg" width="50%">
     </picture>
   </a>
 </div>
@@ -131,6 +131,9 @@ const internetSearch = tool(
 const researchInstructions = `You are an expert researcher. Your job is to conduct thorough research, and then write a polished report.
 
 You have access to an internet search tool as your primary means of gathering information.
+
+> [!TIP]
+> For developing, debugging, and deploying AI agents and LLM applications, see [LangSmith](https://docs.langchain.com/langsmith/home).
 
 ## \`internet_search\`
 
