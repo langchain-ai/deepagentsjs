@@ -578,3 +578,146 @@ describe("Subagent content block filtering", () => {
     expect(taskToolMessage.content).toBe("Simple string result");
   });
 });
+
+/**
+ * Tests for structured response support in subagents.
+ *
+ * When a subagent produces a `structuredResponse`, the middleware should
+ * JSON-serialize it as the ToolMessage content instead of extracting the
+ * last message text. This gives the supervisor predictable, parseable data.
+ */
+describe("Subagent structured response", () => {
+  it("should serialize structuredResponse as ToolMessage content", async () => {
+    const structuredData = {
+      findings: "Renewable energy adoption is accelerating",
+      confidence: 0.92,
+      sources: 3,
+    };
+
+    const mockSubagent = RunnableLambda.from(async () => ({
+      messages: [
+        new AIMessage({
+          content: "Here are my findings about renewable energy.",
+        }),
+      ],
+      structuredResponse: structuredData,
+    }));
+
+    const taskToolCallId = `call_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "Analyze renewable energy trends",
+                subagent_type: "analyzer",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "analyzer",
+          description: "An analysis agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Analyze renewable energy")] },
+      {
+        configurable: {
+          thread_id: `test-structured-response-${Date.now()}`,
+        },
+        recursionLimit: 50,
+      },
+    );
+
+    const taskToolMessage = result.messages.find(
+      (msg: BaseMessage) =>
+        ToolMessage.isInstance(msg) && (msg as ToolMessage).name === "task",
+    ) as ToolMessage;
+    expect(taskToolMessage).toBeDefined();
+    expect(taskToolMessage.content).toBe(JSON.stringify(structuredData));
+
+    const parsed = JSON.parse(taskToolMessage.content as string);
+    expect(parsed).toEqual(structuredData);
+  });
+
+  it("should fall back to last message when no structuredResponse is present", async () => {
+    const mockSubagent = RunnableLambda.from(async () => ({
+      messages: [
+        new AIMessage({
+          content: "Plain text result without structured response",
+        }),
+      ],
+    }));
+
+    const taskToolCallId = `call_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: {
+          thread_id: `test-no-structured-response-${Date.now()}`,
+        },
+        recursionLimit: 50,
+      },
+    );
+
+    const taskToolMessage = result.messages.find(
+      (msg: BaseMessage) =>
+        ToolMessage.isInstance(msg) && (msg as ToolMessage).name === "task",
+    ) as ToolMessage;
+    expect(taskToolMessage).toBeDefined();
+    expect(taskToolMessage.content).toBe(
+      "Plain text result without structured response",
+    );
+  });
+});
