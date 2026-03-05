@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { createAgent, createMiddleware, ReactAgent, tool, toolStrategy } from "langchain";
+import {
+  createAgent,
+  createMiddleware,
+  ReactAgent,
+  tool,
+  toolStrategy,
+} from "langchain";
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 import { z } from "zod/v4";
@@ -939,9 +945,7 @@ IMPORTANT: You MUST include the response_schema parameter in your task tool call
       expect(tools.task).toBeDefined();
 
       const response = await agent.invoke({
-        messages: [
-          new HumanMessage("What is the weather in Tokyo?"),
-        ],
+        messages: [new HumanMessage("What is the weather in Tokyo?")],
       });
 
       const toolCalls = extractAllToolCalls(response);

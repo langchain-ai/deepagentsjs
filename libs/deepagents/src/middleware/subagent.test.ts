@@ -737,9 +737,7 @@ describe("Dynamic response_schema", () => {
     const mockSubagent = RunnableLambda.from(async () => {
       mockInvoked = true;
       return {
-        messages: [
-          new AIMessage({ content: "Mock compiled subagent result" }),
-        ],
+        messages: [new AIMessage({ content: "Mock compiled subagent result" })],
       };
     });
 
@@ -807,9 +805,7 @@ describe("Dynamic response_schema", () => {
     const mockSubagent = RunnableLambda.from(async () => {
       mockInvoked = true;
       return {
-        messages: [
-          new AIMessage({ content: "Static format subagent result" }),
-        ],
+        messages: [new AIMessage({ content: "Static format subagent result" })],
         structuredResponse: { fixed: true },
       };
     });
@@ -870,8 +866,6 @@ describe("Dynamic response_schema", () => {
         ToolMessage.isInstance(msg) && (msg as ToolMessage).name === "task",
     ) as ToolMessage;
     expect(taskToolMessage).toBeDefined();
-    expect(taskToolMessage.content).toBe(
-      JSON.stringify({ fixed: true }),
-    );
+    expect(taskToolMessage.content).toBe(JSON.stringify({ fixed: true }));
   });
 });
