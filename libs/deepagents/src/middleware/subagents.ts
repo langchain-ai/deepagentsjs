@@ -74,6 +74,7 @@ When using the Task tool, you must specify a subagent_type parameter to select w
 5. Clearly tell the agent whether you expect it to create content, perform analysis, or just do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent
 6. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
 7. When only the general-purpose agent is provided, you should use it for all tasks. It is great for isolating context and token usage, and completing specific, complex tasks, as it has all the same capabilities as the main agent.
+8. Use the \`response_schema\` parameter when you need structured JSON from subagents, especially for parallel comparison or data aggregation. When you receive JSON from any subagent, incorporate the data naturally into your response.
 
 ### Example usage of the general-purpose agent:
 
@@ -206,6 +207,31 @@ When NOT to use the task tool:
 - If the task is trivial (a few tool calls or simple lookup)
 - If delegating does not reduce token usage, complexity, or context switching
 - If splitting would add latency without benefit
+
+## Structured output from subagents
+You can include a \`response_schema\` parameter in your task tool call to make the subagent return structured JSON instead of free text. This is valuable when you need specific, comparable data — especially from parallel subagents.
+
+<example>
+User: "Compare the weather in Tokyo, Paris, and New York."
+Assistant: *Calls the task tool three times in parallel, each with:*
+  description: "Get the current weather conditions in [city]"
+  subagent_type: "general-purpose"
+  response_schema: {"type": "object", "properties": {"city": {"type": "string"}, "temperature": {"type": "string"}, "conditions": {"type": "string"}}, "required": ["city", "temperature", "conditions"]}
+Assistant: *Receives structured JSON from each subagent, compares and presents results to user*
+<commentary>
+response_schema ensures all three subagents return identical fields, making comparison straightforward. Without it, three different narrative styles would need to be parsed and reconciled.
+</commentary>
+</example>
+
+<example>
+User: "Give me an in-depth analysis of our Q3 financial performance."
+Assistant: *Launches a single task subagent WITHOUT response_schema*
+<commentary>
+This is an open-ended analysis task where narrative context, caveats, and nuanced reasoning matter. A natural language response carries more information than flat JSON fields. Do not use response_schema here.
+</commentary>
+</example>
+
+Keep response_schema schemas flat with basic types (string, number, boolean). Some subagents have built-in structured output (noted in their descriptions) and will return JSON automatically without needing response_schema.
 
 ## Important Task Tool Usage Notes to Remember
 - Whenever possible, parallelize the work that you do. This is true for both tool_calls, and for tasks. Whenever you have independent steps to complete - make tool_calls, or kick off tasks (subagents) in parallel to accomplish them faster. This saves time for the user, which is incredibly important.
@@ -503,9 +529,11 @@ function getSubagents(options: {
 
   // Process custom subagents (use defaultMiddleware WITHOUT skills)
   for (const agentParams of subagents) {
-    subagentDescriptions.push(
-      `- ${agentParams.name}: ${agentParams.description}`,
-    );
+    let desc = `- ${agentParams.name}: ${agentParams.description}`;
+    if (!("runnable" in agentParams) && agentParams.responseFormat != null) {
+      desc += " (returns structured JSON)";
+    }
+    subagentDescriptions.push(desc);
 
     if ("runnable" in agentParams) {
       agents[agentParams.name] = agentParams.runnable;
