@@ -42,6 +42,7 @@
  * | `toHaveToolCallRequests(n)` | Total tool calls across all steps. |
  * | `toHaveToolCallInStep(step, match)` | A specific tool call exists in a 1-indexed step. |
  * | `toHaveFinalTextContaining(text, ci?)` | The last step's text includes a substring. |
+ * | `toHaveTokenUsage()` | Logs total input/output tokens as LangSmith feedback. |
  *
  * Each matcher logs corresponding feedback to LangSmith automatically.
  *
@@ -105,6 +106,8 @@ export interface AgentStep {
 export interface AgentTrajectory {
   steps: AgentStep[];
   files: Record<string, string>;
+  totalInputTokens: number;
+  totalOutputTokens: number;
 }
 
 /**
@@ -251,9 +254,23 @@ function trajectoryFromResult(
     steps.push(currentStep);
   }
 
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  for (const step of steps) {
+    const usage = step.action.usage_metadata as
+      | { input_tokens?: number; output_tokens?: number }
+      | undefined;
+    if (usage) {
+      totalInputTokens += usage.input_tokens ?? 0;
+      totalOutputTokens += usage.output_tokens ?? 0;
+    }
+  }
+
   return {
     steps,
     files: coerceResultFilesToStrings(result.files),
+    totalInputTokens,
+    totalOutputTokens,
   };
 }
 
@@ -325,6 +342,13 @@ interface CustomMatchers {
    * ```
    */
   toHaveFinalTextContaining(text: string, caseInsensitive?: boolean): void;
+
+  /**
+   * Log token usage metrics to LangSmith for A/B comparison.
+   * Always passes; used purely for tracking `total_input_tokens` and
+   * `total_output_tokens` as experiment feedback.
+   */
+  toHaveTokenUsage(): void;
 }
 
 declare module "vitest" {
@@ -451,6 +475,23 @@ expect.extend({
         `expected final text to contain ${JSON.stringify(text)} (caseInsensitive=${caseInsensitive})\n\nactual final text: ${JSON.stringify(finalText)}`,
       actual: finalText,
       expected: text,
+    };
+  },
+
+  toHaveTokenUsage(received: AgentTrajectory) {
+    ls.logFeedback({
+      key: "total_input_tokens",
+      score: received.totalInputTokens,
+    });
+    ls.logFeedback({
+      key: "total_output_tokens",
+      score: received.totalOutputTokens,
+    });
+
+    return {
+      pass: true,
+      message: () =>
+        `input tokens: ${received.totalInputTokens}, output tokens: ${received.totalOutputTokens}`,
     };
   },
 });
