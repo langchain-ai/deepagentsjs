@@ -12,6 +12,7 @@ import {
   type InterruptOnConfig,
   type ReactAgent,
   type ResponseFormat,
+  type TypedToolStrategy,
   StructuredTool,
 } from "langchain";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
@@ -329,7 +330,7 @@ export interface SubAgent {
    * };
    * ```
    */
-  responseFormat?: ResponseFormat;
+  responseFormat?: ResponseFormat | TypedToolStrategy<any>;
 }
 
 /**
@@ -575,10 +576,18 @@ function createTaskTool(options: {
 
   return tool(
     async (
-      input: { description: string; subagent_type: string },
+      input: {
+        description: string;
+        subagent_type: string;
+        response_schema?: {
+          type: string;
+          properties?: Record<string, unknown>;
+          required?: string[];
+        };
+      },
       config,
     ): Promise<Command | string> => {
-      const { description, subagent_type } = input;
+      const { description, subagent_type, response_schema } = input;
 
       // Validate subagent type
       if (!(subagent_type in subagentGraphs)) {
@@ -590,7 +599,38 @@ function createTaskTool(options: {
         );
       }
 
-      const subagent = subagentGraphs[subagent_type];
+      let subagent: ReactAgent | Runnable;
+
+      if (response_schema != null) {
+        const spec = subagents.find(
+          (s): s is SubAgent =>
+            s.name === subagent_type &&
+            !("runnable" in s) &&
+            s.responseFormat == null,
+        );
+        if (spec) {
+          const baseMw = defaultMiddleware || [];
+          const mw: AgentMiddleware[] = spec.middleware
+            ? [...baseMw, ...spec.middleware]
+            : [...baseMw];
+          const interrupt = spec.interruptOn || defaultInterruptOn;
+          if (interrupt)
+            mw.push(humanInTheLoopMiddleware({ interruptOn: interrupt }));
+
+          subagent = createAgent({
+            model: spec.model ?? defaultModel,
+            systemPrompt: spec.systemPrompt,
+            tools: (spec.tools ?? defaultTools) as any,
+            middleware: mw,
+            name: spec.name,
+            responseFormat: response_schema as unknown as ResponseFormat,
+          });
+        } else {
+          subagent = subagentGraphs[subagent_type];
+        }
+      } else {
+        subagent = subagentGraphs[subagent_type];
+      }
 
       // Get current state and filter it for subagent
       const currentState = getCurrentTaskInput<Record<string, unknown>>();
@@ -621,6 +661,16 @@ function createTaskTool(options: {
           .string()
           .describe(
             `Name of the agent to use. Available: ${Object.keys(subagentGraphs).join(", ")}`,
+          ),
+        response_schema: z
+          .object({
+            type: z.string(),
+            properties: z.record(z.string(), z.unknown()).optional(),
+            required: z.array(z.string()).optional(),
+          })
+          .optional()
+          .describe(
+            "Optional JSON Schema to enforce structured output from the subagent. Only use when you need the subagent to return data in a specific structure.",
           ),
       }),
     },
