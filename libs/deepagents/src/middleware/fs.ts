@@ -136,6 +136,34 @@ export function createContentPreview(
 }
 
 /**
+ * Extract joined text from message content (string or array of content blocks).
+ */
+export function extractTextContent(
+  content: string | Array<Record<string, unknown>>,
+): string | null {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    const textParts: string[] = [];
+    for (const block of content) {
+      if (
+        typeof block === "object" &&
+        block !== null &&
+        block.type === "text" &&
+        typeof block.text === "string"
+      ) {
+        textParts.push(block.text);
+      }
+    }
+    if (textParts.length > 0) {
+      return textParts.join("");
+    }
+  }
+  return null;
+}
+
+/**
  * required for type inference
  */
 import type * as _zodTypes from "@langchain/core/utils/types";
@@ -853,9 +881,10 @@ export function createFilesystemMiddleware(
         msg: ToolMessage,
         toolTokenLimitBeforeEvict: number,
       ) {
+        const textContent = extractTextContent(msg.content);
         if (
-          typeof msg.content === "string" &&
-          msg.content.length > toolTokenLimitBeforeEvict * NUM_CHARS_PER_TOKEN
+          textContent !== null &&
+          textContent.length > toolTokenLimitBeforeEvict * NUM_CHARS_PER_TOKEN
         ) {
           // Build StateAndStore from request
           const stateAndStore: StateAndStore = {
@@ -871,7 +900,7 @@ export function createFilesystemMiddleware(
 
           const writeResult = await resolvedBackend.write(
             evictPath,
-            msg.content,
+            textContent,
           );
 
           if (writeResult.error) {
@@ -879,7 +908,7 @@ export function createFilesystemMiddleware(
           }
 
           // Create preview showing head and tail of the result
-          const contentSample = createContentPreview(msg.content);
+          const contentSample = createContentPreview(textContent);
           const replacementText = TOO_LARGE_TOOL_MSG.replace(
             "{tool_call_id}",
             msg.tool_call_id,

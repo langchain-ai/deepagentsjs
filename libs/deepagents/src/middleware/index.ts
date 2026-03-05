@@ -5,6 +5,7 @@ export {
   TOOLS_EXCLUDED_FROM_EVICTION,
   NUM_CHARS_PER_TOKEN,
   createContentPreview,
+  extractTextContent,
 } from "./fs.js";
 export {
   createSubAgentMiddleware,

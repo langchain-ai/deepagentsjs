@@ -5,6 +5,7 @@ import type { StructuredTool } from "langchain";
 import {
   createContentPreview,
   createFilesystemMiddleware,
+  extractTextContent,
   TOOLS_EXCLUDED_FROM_EVICTION,
   NUM_CHARS_PER_TOKEN,
 } from "./fs.js";
@@ -291,5 +292,43 @@ describe("read_file character-based truncation", () => {
     expect(result).not.toContain("Output was truncated");
     // Should contain the full content (formatted with line numbers)
     expect(result.length).toBeGreaterThan(100000);
+  });
+});
+
+describe("extractTextContent", () => {
+  it("should return the string directly for string content", () => {
+    expect(extractTextContent("hello world")).toBe("hello world");
+  });
+
+  it("should join text blocks from array content", () => {
+    const content = [
+      { type: "text", text: "hello " },
+      { type: "text", text: "world" },
+    ];
+    expect(extractTextContent(content)).toBe("hello world");
+  });
+
+  it("should ignore non-text blocks", () => {
+    const content = [
+      { type: "text", text: "hello" },
+      { type: "image_url", image_url: { url: "http://example.com/img.png" } },
+      { type: "text", text: " world" },
+    ];
+    expect(extractTextContent(content)).toBe("hello world");
+  });
+
+  it("should return null for array with no text blocks", () => {
+    const content = [
+      { type: "image_url", image_url: { url: "http://example.com/img.png" } },
+    ];
+    expect(extractTextContent(content)).toBeNull();
+  });
+
+  it("should return null for empty array", () => {
+    expect(extractTextContent([])).toBeNull();
+  });
+
+  it("should return empty string for string content that is empty", () => {
+    expect(extractTextContent("")).toBe("");
   });
 });
