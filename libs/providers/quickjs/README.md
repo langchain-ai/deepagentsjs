@@ -23,7 +23,9 @@ const agent = createDeepAgent({
 });
 
 const result = await agent.invoke({
-  messages: [{ role: "user", content: "Calculate the first 20 Fibonacci numbers" }],
+  messages: [
+    { role: "user", content: "Calculate the first 20 Fibonacci numbers" },
+  ],
 });
 ```
 
@@ -32,7 +34,7 @@ The agent now has a `js_eval` tool. It can write and execute JavaScript/TypeScri
 ```typescript
 // Call 1: the agent writes
 var fibs = [0, 1];
-for (let i = 2; i < 20; i++) fibs.push(fibs[i-1] + fibs[i-2]);
+for (let i = 2; i < 20; i++) fibs.push(fibs[i - 1] + fibs[i - 2]);
 console.log(fibs);
 
 // Call 2: state persists — `fibs` is still available
@@ -80,21 +82,21 @@ Inside the REPL, the agent can then write:
 ```typescript
 const urls = ["/users", "/orders", "/products"];
 const results = await Promise.all(
-  urls.map(u => tools.httpRequest({ url: "https://api.example.com" + u }))
+  urls.map((u) => tools.httpRequest({ url: "https://api.example.com" + u })),
 );
-const parsed = results.map(r => JSON.parse(r));
+const parsed = results.map((r) => JSON.parse(r));
 console.log(`Users: ${parsed[0].length}, Orders: ${parsed[1].length}`);
 ```
 
 PTC configuration is progressive:
 
-| Value | Behavior |
-|---|---|
-| `false` | Disabled (default) |
-| `true` | All agent tools except VFS builtins |
-| `string[]` | Only these tools |
-| `{ include: string[] }` | Only these tools |
-| `{ exclude: string[] }` | All tools except these |
+| Value                   | Behavior                            |
+| ----------------------- | ----------------------------------- |
+| `false`                 | Disabled (default)                  |
+| `true`                  | All agent tools except VFS builtins |
+| `string[]`              | Only these tools                    |
+| `{ include: string[] }` | Only these tools                    |
+| `{ exclude: string[] }` | All tools except these              |
 
 ### Recursive Language Model (RLM)
 
@@ -103,7 +105,13 @@ When the `task` tool is exposed via PTC, the agent can spawn sub-agents in paral
 ```typescript
 const agent = createDeepAgent({
   model: "claude-sonnet-4-5-20250929",
-  subagents: [{ name: "general-purpose", description: "Research agent", systemPrompt: "..." }],
+  subagents: [
+    {
+      name: "general-purpose",
+      description: "Research agent",
+      systemPrompt: "...",
+    },
+  ],
   middleware: [createQuickJSMiddleware({ ptc: ["task"] })],
 });
 ```
@@ -113,12 +121,12 @@ The agent then writes code like:
 ```typescript
 const topics = ["quantum computing", "fusion energy", "CRISPR"];
 const results = await Promise.all(
-  topics.map(topic =>
+  topics.map((topic) =>
     tools.task({
       description: `Research ${topic} in depth`,
       subagentType: "general-purpose",
-    })
-  )
+    }),
+  ),
 );
 const report = topics.map((t, i) => `## ${t}\n${results[i]}`).join("\n\n");
 await writeFile("/research.md", report);
@@ -134,10 +142,10 @@ Creates a middleware that adds the `js_eval` tool to your agent.
 interface QuickJSMiddlewareOptions {
   backend?: BackendProtocol | BackendFactory; // File I/O backend (default: StateBackend)
   ptc?: boolean | string[] | { include: string[] } | { exclude: string[] }; // PTC config
-  memoryLimitBytes?: number;     // Default: 50MB
-  maxStackSizeBytes?: number;    // Default: 320KB
-  executionTimeoutMs?: number;   // Default: 30s (-1 to disable)
-  systemPrompt?: string | null;  // Override the built-in REPL system prompt
+  memoryLimitBytes?: number; // Default: 50MB
+  maxStackSizeBytes?: number; // Default: 320KB
+  executionTimeoutMs?: number; // Default: 30s (-1 to disable)
+  systemPrompt?: string | null; // Override the built-in REPL system prompt
 }
 ```
 
