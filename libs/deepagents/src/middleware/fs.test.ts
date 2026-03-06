@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   fileDataReducer,
   type FilesRecord,
@@ -10,7 +10,15 @@ import {
 import type { FileData, BackendProtocol } from "../backends/protocol.js";
 import { SystemMessage } from "@langchain/core/messages";
 import { ToolMessage } from "langchain";
-import { Command, isCommand } from "@langchain/langgraph";
+import { Command, isCommand, getCurrentTaskInput } from "@langchain/langgraph";
+
+vi.mock("@langchain/langgraph", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...(actual as any),
+    getCurrentTaskInput: vi.fn(),
+  };
+});
 
 describe("fileDataReducer", () => {
   // Helper to create a FileData object
@@ -805,10 +813,171 @@ describe("createFilesystemMiddleware", () => {
       expect(parsed.file_path).toBe("/app/test.c");
       expect(parsed.content).toBe("");
     });
+  });
 
-    // Note: truncateIfTooLong is tested in backends/utils.test.ts (lines 290-314)
-    // The truncation logic for ls, grep, and glob tools uses this utility function
-    // and is covered by those existing tests. Full integration tests with LangGraph
-    // context would require complex setup and are better suited for end-to-end testing.
+  describe("tool result truncation integration", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it("ls tool should truncate results when backend returns many files", async () => {
+      const manyFiles = Array.from({ length: 5000 }, (_, i) => ({
+        path: `/very/long/path/to/deeply/nested/directory/structure/file${i}.txt`,
+        is_dir: false,
+        size: 1024,
+      }));
+
+      const mockBackend = createMockBackend();
+      mockBackend.lsInfo = vi.fn().mockResolvedValue(manyFiles);
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+
+      const lsTool = middleware.tools!.find((t: any) => t.name === "ls") as any;
+      const result = await lsTool.invoke({ path: "/" });
+
+      expect(typeof result).toBe("string");
+      expect(result).toContain("truncated");
+      const originalLength = manyFiles
+        .map((f) => `${f.path} (${f.size} bytes)`)
+        .join("\n").length;
+      expect(result.length).toBeLessThan(originalLength);
+    });
+
+    it("glob tool should truncate results when backend returns many paths", async () => {
+      const manyPaths = Array.from({ length: 5000 }, (_, i) => ({
+        path: `/src/components/deeply/nested/directory/structure/Component${i}.tsx`,
+        is_dir: false,
+      }));
+
+      const mockBackend = createMockBackend();
+      mockBackend.globInfo = vi.fn().mockResolvedValue(manyPaths);
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+
+      const globTool = middleware.tools!.find(
+        (t: any) => t.name === "glob",
+      ) as any;
+      const result = await globTool.invoke({ pattern: "**/*.tsx", path: "/" });
+
+      expect(typeof result).toBe("string");
+      expect(result).toContain("truncated");
+      const originalLength = manyPaths.map((p) => p.path).join("\n").length;
+      expect(result.length).toBeLessThan(originalLength);
+    });
+
+    it("grep tool should truncate results when backend returns many matches", async () => {
+      const manyMatches = Array.from({ length: 2000 }, (_, i) => ({
+        path: `/src/file${i % 10}.ts`,
+        line: i,
+        text: `This is a long line that matches - line ${i}`,
+      }));
+
+      const mockBackend = createMockBackend();
+      mockBackend.grepRaw = vi.fn().mockResolvedValue(manyMatches);
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+
+      const grepTool = middleware.tools!.find(
+        (t: any) => t.name === "grep",
+      ) as any;
+      const result = await grepTool.invoke({ pattern: "matches", path: "/" });
+
+      expect(typeof result).toBe("string");
+      expect(result).toContain("truncated");
+    });
+
+    it("ls tool should not truncate small results", async () => {
+      const smallFiles = [
+        { path: "/file1.txt", is_dir: false, size: 100 },
+        { path: "/file2.txt", is_dir: false, size: 200 },
+      ];
+
+      const mockBackend = createMockBackend();
+      mockBackend.lsInfo = vi.fn().mockResolvedValue(smallFiles);
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+
+      const lsTool = middleware.tools!.find((t: any) => t.name === "ls") as any;
+      const result = await lsTool.invoke({ path: "/" });
+
+      expect(typeof result).toBe("string");
+      expect(result).not.toContain("truncated");
+      expect(result).toContain("/file1.txt (100 bytes)");
+      expect(result).toContain("/file2.txt (200 bytes)");
+    });
+
+    it("glob tool should not truncate small results", async () => {
+      const smallPaths = [
+        { path: "/src/file1.ts", is_dir: false },
+        { path: "/src/file2.ts", is_dir: false },
+      ];
+
+      const mockBackend = createMockBackend();
+      mockBackend.globInfo = vi.fn().mockResolvedValue(smallPaths);
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+
+      const globTool = middleware.tools!.find(
+        (t: any) => t.name === "glob",
+      ) as any;
+      const result = await globTool.invoke({ pattern: "**/*.ts", path: "/" });
+
+      expect(typeof result).toBe("string");
+      expect(result).not.toContain("truncated");
+      expect(result).toContain("/src/file1.ts");
+      expect(result).toContain("/src/file2.ts");
+    });
+
+    it("grep tool should not truncate small results", async () => {
+      const smallMatches = [
+        { path: "/src/file1.ts", line: 10, text: "const pattern = 'test'" },
+        { path: "/src/file2.ts", line: 20, text: "pattern.match(/test/)" },
+      ];
+
+      const mockBackend = createMockBackend();
+      mockBackend.grepRaw = vi.fn().mockResolvedValue(smallMatches);
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+
+      const grepTool = middleware.tools!.find(
+        (t: any) => t.name === "grep",
+      ) as any;
+      const result = await grepTool.invoke({ pattern: "pattern", path: "/" });
+
+      expect(typeof result).toBe("string");
+      expect(result).not.toContain("truncated");
+      expect(result).toContain("/src/file1.ts");
+      expect(result).toContain("const pattern = 'test'");
+    });
   });
 });
