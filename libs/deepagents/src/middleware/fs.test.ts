@@ -805,5 +805,10 @@ describe("createFilesystemMiddleware", () => {
       expect(parsed.file_path).toBe("/app/test.c");
       expect(parsed.content).toBe("");
     });
+
+    // Note: truncateIfTooLong is tested in backends/utils.test.ts (lines 290-314)
+    // The truncation logic for ls, grep, and glob tools uses this utility function
+    // and is covered by those existing tests. Full integration tests with LangGraph
+    // context would require complex setup and are better suited for end-to-end testing.
   });
 });
