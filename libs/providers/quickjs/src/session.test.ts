@@ -197,9 +197,9 @@ describe("REPL Engine", () => {
 
     it("should have standard built-ins", async () => {
       session = ReplSession.getOrCreate(uniqueThreadId());
-      expect(
-        (await session.eval("JSON.stringify({a:1})", TIMEOUT)).value,
-      ).toBe('{"a":1}');
+      expect((await session.eval("JSON.stringify({a:1})", TIMEOUT)).value).toBe(
+        '{"a":1}',
+      );
       expect((await session.eval("Math.max(1,2,3)", TIMEOUT)).value).toBe(3);
     });
   });
@@ -286,10 +286,7 @@ describe("REPL Engine", () => {
         tools: [addTool],
       });
 
-      const result = await session.eval(
-        "tools.add({ a: 10, b: 5 })",
-        TIMEOUT,
-      );
+      const result = await session.eval("tools.add({ a: 10, b: 5 })", TIMEOUT);
       expect(result.ok).toBe(true);
       expect(result.value).toBe("15");
     });
@@ -390,7 +387,7 @@ describe("REPL Engine", () => {
       });
 
       const result = await session.eval(
-        'var msg; try { await tools.failing({}) } catch(e) { msg = e.message }\nmsg',
+        "var msg; try { await tools.failing({}) } catch(e) { msg = e.message }\nmsg",
         TIMEOUT,
       );
       expect(result.ok).toBe(true);

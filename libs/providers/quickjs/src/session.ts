@@ -314,12 +314,13 @@ export class ReplSession {
 
   private injectVfs(): void {
     const context = this.context!;
-    const session = this;
+    const getBackend = () => this._backend;
+    const { pendingWrites } = this;
 
     const readFileHandle = context.newFunction(
       "readFile",
       (pathHandle: QuickJSHandle) => {
-        const backend = session._backend;
+        const backend = getBackend();
         if (!backend) {
           const promise = context.newPromise();
           const err = context.newError("Backend not available");
@@ -357,7 +358,7 @@ export class ReplSession {
         const path = context.getString(pathHandle);
         const content = context.getString(contentHandle);
         const promise = context.newPromise();
-        session.pendingWrites.push({ path, content });
+        pendingWrites.push({ path, content });
         promise.resolve(context.undefined);
         promise.settled.then(context.runtime.executePendingJobs);
         return promise.handle;
@@ -389,7 +390,10 @@ export class ReplSession {
               promise.resolve(val);
               val.dispose();
             } catch (e: unknown) {
-              const msg = e instanceof Error ? e.message : String(e);
+              const msg =
+                e != null && typeof (e as Error).message === "string"
+                  ? (e as Error).message
+                  : String(e);
               const err = context.newError(`Tool '${t.name}' failed: ${msg}`);
               promise.reject(err);
               err.dispose();

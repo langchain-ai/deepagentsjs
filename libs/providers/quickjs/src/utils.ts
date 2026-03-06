@@ -113,5 +113,3 @@ export async function toolToTypeSignature(
     async tools.${name}(input: ${inputType}): Promise<string>
   `;
 }
-
-

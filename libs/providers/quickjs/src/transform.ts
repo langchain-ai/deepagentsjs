@@ -25,8 +25,17 @@ import type {
 const TSParser = Parser.extend(tsPlugin());
 
 type AcornNode = Node & { start: number; end: number };
-type AcornVariableDeclaration = EstreeVariableDeclaration & { start: number; end: number; declarations: AcornVariableDeclarator[] };
-type AcornVariableDeclarator = EstreeVariableDeclarator & { start: number; end: number; id: AcornNode; init: AcornNode | null };
+type AcornVariableDeclaration = EstreeVariableDeclaration & {
+  start: number;
+  end: number;
+  declarations: AcornVariableDeclarator[];
+};
+type AcornVariableDeclarator = EstreeVariableDeclarator & {
+  start: number;
+  end: number;
+  id: AcornNode;
+  init: AcornNode | null;
+};
 
 /**
  * Transform code for REPL evaluation.
@@ -82,7 +91,10 @@ export function transformForEval(code: string): string {
     }
 
     // Hoist function/class declarations to globalThis for cross-eval persistence
-    if (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") {
+    if (
+      node.type === "FunctionDeclaration" ||
+      node.type === "ClassDeclaration"
+    ) {
       stripTypeAnnotations(s, node);
       const name = (node as any).id?.name;
       if (name) {
@@ -100,7 +112,8 @@ export function transformForEval(code: string): string {
       node.type === "ExportNamedDeclaration" ||
       node.type === "ExportDefaultDeclaration" ||
       node.type === "ExportAllDeclaration"
-    ) continue;
+    )
+      continue;
     if (node.type !== "VariableDeclaration") {
       walk(node as any, {
         enter(n: any) {
@@ -141,19 +154,22 @@ function isTSOnlyNode(node: AcornNode): boolean {
  *
  * `const x = 1, y = 2` → `globalThis.x = 1; globalThis.y = 2`
  */
-function hoistDeclaration(s: MagicString, decl: AcornVariableDeclaration): void {
+function hoistDeclaration(
+  s: MagicString,
+  decl: AcornVariableDeclaration,
+): void {
   const parts: string[] = [];
 
   for (const d of decl.declarations) {
     const id = d.id as AcornNode;
     if (id.type === "Identifier") {
       const initCode = d.init ? extractCleanInit(s, d) : "undefined";
-      parts.push(`globalThis.${(id as unknown as Identifier).name} = ${initCode}`);
+      parts.push(
+        `globalThis.${(id as unknown as Identifier).name} = ${initCode}`,
+      );
     } else if (id.type === "ObjectPattern" || id.type === "ArrayPattern") {
       // Destructuring: keep as-is but use var for global scope
-      const initCode = d.init
-        ? s.slice(d.init.start, d.init.end)
-        : "undefined";
+      const initCode = d.init ? s.slice(d.init.start, d.init.end) : "undefined";
       // For destructuring, we can't easily hoist each binding.
       // Evaluate the init, then assign each binding to globalThis.
       const bindings = extractBindingNames(d.id as any);

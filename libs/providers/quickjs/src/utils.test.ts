@@ -64,5 +64,3 @@ describe("toCamelCase", () => {
     expect(toCamelCase("web-search")).toBe("webSearch");
   });
 });
-
-
