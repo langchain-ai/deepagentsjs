@@ -578,3 +578,294 @@ describe("Subagent content block filtering", () => {
     expect(taskToolMessage.content).toBe("Simple string result");
   });
 });
+
+/**
+ * Tests for structured response support in subagents.
+ *
+ * When a subagent produces a `structuredResponse`, the middleware should
+ * JSON-serialize it as the ToolMessage content instead of extracting the
+ * last message text. This gives the supervisor predictable, parseable data.
+ */
+describe("Subagent structured response", () => {
+  it("should serialize structuredResponse as ToolMessage content", async () => {
+    const structuredData = {
+      findings: "Renewable energy adoption is accelerating",
+      confidence: 0.92,
+      sources: 3,
+    };
+
+    const mockSubagent = RunnableLambda.from(async () => ({
+      messages: [
+        new AIMessage({
+          content: "Here are my findings about renewable energy.",
+        }),
+      ],
+      structuredResponse: structuredData,
+    }));
+
+    const taskToolCallId = `call_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "Analyze renewable energy trends",
+                subagent_type: "analyzer",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "analyzer",
+          description: "An analysis agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Analyze renewable energy")] },
+      {
+        configurable: {
+          thread_id: `test-structured-response-${Date.now()}`,
+        },
+        recursionLimit: 50,
+      },
+    );
+
+    const taskToolMessage = result.messages.find(
+      (msg: BaseMessage) =>
+        ToolMessage.isInstance(msg) && (msg as ToolMessage).name === "task",
+    ) as ToolMessage;
+    expect(taskToolMessage).toBeDefined();
+    expect(taskToolMessage.content).toBe(JSON.stringify(structuredData));
+
+    const parsed = JSON.parse(taskToolMessage.content as string);
+    expect(parsed).toEqual(structuredData);
+  });
+
+  it("should fall back to last message when no structuredResponse is present", async () => {
+    const mockSubagent = RunnableLambda.from(async () => ({
+      messages: [
+        new AIMessage({
+          content: "Plain text result without structured response",
+        }),
+      ],
+    }));
+
+    const taskToolCallId = `call_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: {
+          thread_id: `test-no-structured-response-${Date.now()}`,
+        },
+        recursionLimit: 50,
+      },
+    );
+
+    const taskToolMessage = result.messages.find(
+      (msg: BaseMessage) =>
+        ToolMessage.isInstance(msg) && (msg as ToolMessage).name === "task",
+    ) as ToolMessage;
+    expect(taskToolMessage).toBeDefined();
+    expect(taskToolMessage.content).toBe(
+      "Plain text result without structured response",
+    );
+  });
+});
+
+/**
+ * Tests for dynamic response_schema (on-the-fly agent creation).
+ *
+ * When the supervisor passes `response_schema` in the task tool args,
+ * the middleware should build a fresh agent with that schema as responseFormat
+ * -- but only for spec-based subagents without a static responseFormat.
+ * For CompiledSubAgent or subagents with static responseFormat, the
+ * response_schema is ignored and the pre-built graph is used.
+ */
+describe("Dynamic response_schema", () => {
+  it("should use pre-built agent when response_schema targets a CompiledSubAgent", async () => {
+    let mockInvoked = false;
+    const mockSubagent = RunnableLambda.from(async () => {
+      mockInvoked = true;
+      return {
+        messages: [new AIMessage({ content: "Mock compiled subagent result" })],
+      };
+    });
+
+    const taskToolCallId = `call_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "Analyze this",
+                subagent_type: "compiled-worker",
+                response_schema: {
+                  type: "object",
+                  properties: { result: { type: "string" } },
+                  required: ["result"],
+                },
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "compiled-worker",
+          description: "A compiled worker agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: {
+          thread_id: `test-compiled-response-schema-${Date.now()}`,
+        },
+        recursionLimit: 50,
+      },
+    );
+
+    expect(mockInvoked).toBe(true);
+
+    const taskToolMessage = result.messages.find(
+      (msg: BaseMessage) =>
+        ToolMessage.isInstance(msg) && (msg as ToolMessage).name === "task",
+    ) as ToolMessage;
+    expect(taskToolMessage).toBeDefined();
+    expect(taskToolMessage.content).toBe("Mock compiled subagent result");
+  });
+
+  it("should fall back to pre-built agent when response_schema targets a subagent with static responseFormat", async () => {
+    let mockInvoked = false;
+    const mockSubagent = RunnableLambda.from(async () => {
+      mockInvoked = true;
+      return {
+        messages: [new AIMessage({ content: "Static format subagent result" })],
+        structuredResponse: { fixed: true },
+      };
+    });
+
+    const taskToolCallId = `call_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "Analyze this",
+                subagent_type: "static-format-worker",
+                response_schema: {
+                  type: "object",
+                  properties: { dynamic: { type: "string" } },
+                  required: ["dynamic"],
+                },
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "static-format-worker",
+          description: "A worker with static response format",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: {
+          thread_id: `test-static-format-response-schema-${Date.now()}`,
+        },
+        recursionLimit: 50,
+      },
+    );
+
+    expect(mockInvoked).toBe(true);
+
+    const taskToolMessage = result.messages.find(
+      (msg: BaseMessage) =>
+        ToolMessage.isInstance(msg) && (msg as ToolMessage).name === "task",
+    ) as ToolMessage;
+    expect(taskToolMessage).toBeDefined();
+    expect(taskToolMessage.content).toBe(JSON.stringify({ fixed: true }));
+  });
+});

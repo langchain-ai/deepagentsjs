@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { createAgent, createMiddleware, ReactAgent, tool } from "langchain";
+import {
+  createAgent,
+  createMiddleware,
+  ReactAgent,
+  tool,
+  toolStrategy,
+} from "langchain";
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 import { z } from "zod/v4";
@@ -901,6 +907,138 @@ Use the write_file tool to save your code.`,
 
       // Verify the tool captured the correct agent name
       expect(capturedAgentName).toBe("weather-agent");
+    },
+  );
+});
+
+/**
+ * Integration test for dynamic response_schema (on-the-fly agent creation).
+ *
+ * Verifies that when the supervisor passes a response_schema in the task tool args,
+ * a fresh agent is built with that schema as responseFormat, producing a structuredResponse
+ * that gets JSON-serialized into the ToolMessage.
+ */
+describe("Dynamic response_schema Integration Tests", () => {
+  it.concurrent(
+    "should build subagent on-the-fly with response_schema and return structured JSON",
+    { timeout: 120 * 1000 },
+    async () => {
+      const agent = createDeepAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt: `You have access to a weather subagent. Use the task tool to call it.
+IMPORTANT: You MUST include the response_schema parameter in your task tool call with this exact JSON Schema:
+{"type":"object","properties":{"location":{"type":"string"},"temperature":{"type":"string"},"conditions":{"type":"string"}},"required":["location","temperature","conditions"]}`,
+        tools: [getWeather],
+        subagents: [
+          {
+            name: "weather",
+            description:
+              "This subagent can get weather in cities. Supports response_schema for structured output.",
+            systemPrompt:
+              "Use the get_weather tool to get the weather in a city, then return your findings.",
+            tools: [getWeather],
+          },
+        ],
+      });
+
+      const tools = extractToolsFromAgent(agent);
+      expect(tools.task).toBeDefined();
+
+      const response = await agent.invoke({
+        messages: [new HumanMessage("What is the weather in Tokyo?")],
+      });
+
+      const toolCalls = extractAllToolCalls(response);
+      const taskCall = toolCalls.find((tc) => tc.name === "task");
+
+      expect(taskCall).toBeDefined();
+      expect(taskCall!.args.subagent_type).toBe("weather");
+
+      if (taskCall!.args.response_schema) {
+        const taskToolMessage = response.messages.find(
+          (msg: BaseMessage) =>
+            msg._getType() === "tool" && (msg as any).name === "task",
+        );
+        expect(taskToolMessage).toBeDefined();
+
+        const content = taskToolMessage!.content as string;
+        const parsed = JSON.parse(content);
+        expect(parsed).toHaveProperty("location");
+        expect(parsed).toHaveProperty("temperature");
+        expect(parsed).toHaveProperty("conditions");
+      }
+    },
+  );
+
+  it.concurrent(
+    "should use static responseFormat and return structured JSON without response_schema",
+    { timeout: 120 * 1000 },
+    async () => {
+      const agent = createDeepAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt:
+          "You have access to a research subagent. Use the task tool with subagent_type 'researcher' to answer the user's question. Do NOT include a response_schema parameter — the subagent already has a built-in response format.",
+        subagents: [
+          {
+            name: "researcher",
+            description:
+              "A research subagent that returns structured analysis. Always returns findings, confidence score, and sources count.",
+            systemPrompt:
+              "You are a research analyst. When asked about a topic, provide your analysis. Use the get_weather tool if the topic is weather-related.",
+            tools: [getWeather],
+            responseFormat: toolStrategy(
+              z.object({
+                findings: z
+                  .string()
+                  .describe("A summary of the research findings"),
+                confidence: z
+                  .number()
+                  .describe("Confidence score between 0 and 1"),
+                sources_count: z
+                  .number()
+                  .describe("Number of sources consulted"),
+              }),
+            ),
+          },
+        ],
+      });
+
+      const tools = extractToolsFromAgent(agent);
+      expect(tools.task).toBeDefined();
+
+      const response = await agent.invoke(
+        {
+          messages: [
+            new HumanMessage(
+              "Research the weather conditions in Paris and provide your analysis.",
+            ),
+          ],
+        },
+        { recursionLimit: 100 },
+      );
+
+      const toolCalls = extractAllToolCalls(response);
+      const taskCall = toolCalls.find((tc) => tc.name === "task");
+
+      expect(taskCall).toBeDefined();
+      expect(taskCall!.args.subagent_type).toBe("researcher");
+
+      const taskToolMessage = response.messages.find(
+        (msg: BaseMessage) =>
+          msg._getType() === "tool" && (msg as any).name === "task",
+      );
+      expect(taskToolMessage).toBeDefined();
+
+      const content = taskToolMessage!.content as string;
+      const parsed = JSON.parse(content);
+      expect(parsed).toHaveProperty("findings");
+      expect(typeof parsed.findings).toBe("string");
+      expect(parsed).toHaveProperty("confidence");
+      expect(typeof parsed.confidence).toBe("number");
+      expect(parsed.confidence).toBeGreaterThanOrEqual(0);
+      expect(parsed.confidence).toBeLessThanOrEqual(1);
+      expect(parsed).toHaveProperty("sources_count");
+      expect(typeof parsed.sources_count).toBe("number");
     },
   );
 });
