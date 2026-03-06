@@ -61,7 +61,7 @@
     "@vitest/coverage-v8": "^4.0.18",
     "deepagents": "workspace:*",
     "dotenv": "^17.2.3",
-    "langchain": "1.2.26",
+    "langchain": "1.2.30",
     "tsdown": "^0.20.3",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
