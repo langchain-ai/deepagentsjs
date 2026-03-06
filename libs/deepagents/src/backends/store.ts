@@ -311,6 +311,7 @@ export class StoreBackend implements BackendProtocol {
     filePath: string,
     offset: number = 0,
     limit: number = 500,
+    _encoding?: string,
   ): Promise<string> {
     try {
       const fileData = await this.readRaw(filePath);
@@ -326,7 +327,7 @@ export class StoreBackend implements BackendProtocol {
    * @param filePath - Absolute file path
    * @returns Raw file content as FileData
    */
-  async readRaw(filePath: string): Promise<FileData> {
+  async readRaw(filePath: string, _encoding?: string): Promise<FileData> {
     const store = this.getStore();
     const namespace = this.getNamespace();
     const item = await store.get(namespace, filePath);
@@ -339,7 +340,7 @@ export class StoreBackend implements BackendProtocol {
    * Create a new file with content.
    * Returns WriteResult. External storage sets filesUpdate=null.
    */
-  async write(filePath: string, content: string): Promise<WriteResult> {
+  async write(filePath: string, content: string, _encoding?: string): Promise<WriteResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
 
@@ -367,6 +368,7 @@ export class StoreBackend implements BackendProtocol {
     oldString: string,
     newString: string,
     replaceAll: boolean = false,
+    _encoding?: string,
   ): Promise<EditResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
@@ -410,6 +412,7 @@ export class StoreBackend implements BackendProtocol {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
+    _encoding?: string,
   ): Promise<GrepMatch[] | string> {
     const store = this.getStore();
     const namespace = this.getNamespace();
