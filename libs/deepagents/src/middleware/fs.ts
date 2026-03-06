@@ -31,6 +31,7 @@ import { StateBackend } from "../backends/state.js";
 import {
   sanitizeToolCallId,
   formatContentWithLineNumbers,
+  truncateIfTooLong,
 } from "../backends/utils.js";
 
 /**
@@ -394,7 +395,13 @@ function createLsTool(
           lines.push(`${info.path}${size}`);
         }
       }
-      return lines.join("\n");
+
+      const result = truncateIfTooLong(lines);
+
+      if (Array.isArray(result)) {
+        return result.join("\n");
+      }
+      return result;
     },
     {
       name: "ls",
@@ -616,7 +623,13 @@ function createGlobTool(
         return `No files found matching pattern '${pattern}'`;
       }
 
-      return infos.map((info) => info.path).join("\n");
+      const paths = infos.map((info) => info.path);
+      const result = truncateIfTooLong(paths);
+
+      if (Array.isArray(result)) {
+        return result.join("\n");
+      }
+      return result;
     },
     {
       name: "glob",
@@ -671,7 +684,12 @@ function createGrepTool(
         lines.push(`  ${match.line}: ${match.text}`);
       }
 
-      return lines.join("\n");
+      const truncated = truncateIfTooLong(lines);
+
+      if (Array.isArray(truncated)) {
+        return truncated.join("\n");
+      }
+      return truncated;
     },
     {
       name: "grep",
