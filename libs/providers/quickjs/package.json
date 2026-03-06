@@ -1,0 +1,87 @@
+{
+  "name": "@langchain/quickjs",
+  "version": "0.1.0",
+  "description": "Sandboxed JavaScript REPL for deepagents using QuickJS (WASM)",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsdown",
+    "clean": "rm -rf dist/ .tsdown/",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:int": "vitest run --mode int"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/langchain-ai/deepagentsjs.git"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "langgraph",
+    "langchain",
+    "typescript",
+    "llm",
+    "quickjs",
+    "sandbox",
+    "repl"
+  ],
+  "author": "LangChain",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/langchain-ai/deepagentsjs/issues"
+  },
+  "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
+  "dependencies": {
+    "@jitl/quickjs-ng-wasmfile-release-asyncify": "^0.32.0",
+    "@sveltejs/acorn-typescript": "^1.0.9",
+    "acorn": "^8.16.0",
+    "dedent": "^1.7.1",
+    "estree-walker": "^3.0.3",
+    "json-schema-to-typescript": "^15.0.4",
+    "magic-string": "^0.30.21",
+    "quickjs-emscripten": "^0.32.0",
+    "quickjs-emscripten-core": "^0.32.0"
+  },
+  "peerDependencies": {
+    "deepagents": ">=1.6.0"
+  },
+  "devDependencies": {
+    "@langchain/core": "^1.1.25",
+    "@langchain/langgraph": "^1.1.4",
+    "@tsconfig/recommended": "^1.0.13",
+    "@types/dedent": "^0.7.2",
+    "@types/estree": "^1.0.8",
+    "@types/node": "^25.2.3",
+    "@vitest/coverage-v8": "^4.0.18",
+    "deepagents": "workspace:*",
+    "dotenv": "^17.2.3",
+    "langchain": "1.2.26",
+    "tsdown": "^0.20.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18",
+    "zod": "^4.3.6"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/**/*"
+  ]
+}
