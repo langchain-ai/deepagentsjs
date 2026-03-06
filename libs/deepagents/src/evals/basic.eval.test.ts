@@ -346,4 +346,249 @@ ls.describe("deepagents-js-basic", () => {
       expect(answer).not.toContain("/foo/b.txt");
     },
   );
+
+  ls.test(
+    "files: tool error recovery read file then ls",
+    {
+      inputs: {
+        query:
+          "First, try reading /docs/notes_for_release.md and tell me the MAGIC_TOKEN value.",
+      },
+      referenceOutputs: { expectedText: "SAPPHIRE-13" },
+    },
+    async ({ inputs }) => {
+      const result = await runAgent(agent, {
+        query: inputs.query,
+        initialFiles: {
+          "/docs/readme.md": "hello\n",
+          "/docs/release_notes.md":
+            "Version: 1.2.3\n\nImportant: The MAGIC_TOKEN is SAPPHIRE-13.\n",
+        },
+      });
+
+      expect(result).toHaveAgentSteps(4);
+      expect(result).toHaveToolCallRequests(3);
+      expect(result).toHaveToolCallInStep(1, {
+        name: "read_file",
+        argsContains: { file_path: "/docs/notes_for_release.md" },
+      });
+      expect(result).toHaveToolCallInStep(2, {
+        name: "ls",
+        argsContains: { path: "/docs" },
+      });
+      expect(result).toHaveToolCallInStep(3, {
+        name: "read_file",
+        argsContains: { file_path: "/docs/release_notes.md" },
+      });
+      expect(result).toHaveFinalTextContaining("SAPPHIRE-13");
+    },
+  );
+
+  ls.test(
+    "files: write files in parallel with verification",
+    {
+      inputs: {
+        query:
+          'Write "bar" to /a.md and "bar" to /b.md in parallel. Then read both files in parallel to verify. Reply with DONE only.',
+      },
+      referenceOutputs: { expectedText: "DONE" },
+    },
+    async ({ inputs }) => {
+      const result = await runAgent(agent, { query: inputs.query });
+
+      expect(result).toHaveAgentSteps(3);
+      expect(result).toHaveToolCallRequests(4);
+      expect(result).toHaveToolCallInStep(1, {
+        name: "write_file",
+        argsContains: { file_path: "/a.md" },
+      });
+      expect(result).toHaveToolCallInStep(1, {
+        name: "write_file",
+        argsContains: { file_path: "/b.md" },
+      });
+      expect(result).toHaveToolCallInStep(2, {
+        name: "read_file",
+        argsContains: { file_path: "/a.md" },
+      });
+      expect(result).toHaveToolCallInStep(2, {
+        name: "read_file",
+        argsContains: { file_path: "/b.md" },
+      });
+      expect(result).toHaveFinalTextContaining("DONE");
+      expect(result.files["/a.md"]).toBe("bar");
+      expect(result.files["/b.md"]).toBe("bar");
+    },
+  );
+
+  ls.test(
+    "files: write files in parallel ambiguous confirmation",
+    {
+      inputs: {
+        query:
+          'Write "bar" to /a.md and "bar" to /b.md. Do the writes in parallel, then reply DONE.',
+      },
+    },
+    async ({ inputs }) => {
+      const result = await runAgent(agent, { query: inputs.query });
+
+      expect(result).toHaveToolCallInStep(1, {
+        name: "write_file",
+        argsContains: { file_path: "/a.md" },
+      });
+      expect(result).toHaveToolCallInStep(1, {
+        name: "write_file",
+        argsContains: { file_path: "/b.md" },
+      });
+      expect(result.files["/a.md"]).toBe("bar");
+      expect(result.files["/b.md"]).toBe("bar");
+    },
+  );
+
+  ls.test(
+    "files: find magic phrase deep nesting",
+    {
+      inputs: {
+        query:
+          "Find the file that contains the line starting with 'MAGIC_PHRASE:' and reply with the phrase value only. Be efficient: use grep.",
+      },
+      referenceOutputs: { expectedText: "cobalt-otter-17" },
+    },
+    async ({ inputs }) => {
+      const result = await runAgent(agent, {
+        query: inputs.query,
+        initialFiles: {
+          "/a/b/c/d/e/notes.txt": "just some notes\n",
+          "/a/b/c/d/e/readme.md": "project readme\n",
+          "/a/b/c/d/e/answer.txt": "MAGIC_PHRASE: cobalt-otter-17\n",
+          "/a/b/c/d/other.txt": "nothing here\n",
+          "/a/b/x/y/z/nope.txt": "still nothing\n",
+        },
+      });
+
+      expect(result).toHaveAgentSteps(2);
+      expect(result).toHaveToolCallRequests(1);
+      expect(result).toHaveToolCallInStep(1, {
+        name: "grep",
+        argsContains: { pattern: "MAGIC_PHRASE:" },
+      });
+      expect(result).toHaveFinalTextContaining("cobalt-otter-17");
+      expect(getFinalText(result)).not.toContain("MAGIC_PHRASE");
+    },
+  );
+
+  ls.test(
+    "files: identify quote author from directory parallel reads",
+    {
+      inputs: {
+        query:
+          "In the /quotes directory, there are several small quote files. " +
+          "Which file most likely contains a quote by Grace Hopper? Reply with the file path only. " +
+          "Be efficient: list the directory, then read the quote files in parallel to decide. " +
+          "Do not use grep.",
+      },
+      referenceOutputs: { expectedText: "/quotes/q3.txt" },
+    },
+    async ({ inputs }) => {
+      const result = await runAgent(agent, {
+        query: inputs.query,
+        initialFiles: {
+          "/quotes/q1.txt":
+            "Quote: The analytical engine weaves algebraic patterns.\nClues: discusses an engine for computation and weaving patterns.\n",
+          "/quotes/q2.txt":
+            "Quote: I have always been more interested in the future than in the past.\nClues: talks about anticipating the future; broad and general.\n",
+          "/quotes/q3.txt":
+            "Quote: The most dangerous phrase in the language is, 'We've always done it this way.'\nClues: emphasizes changing established processes; often associated with early computing leadership.\n",
+          "/quotes/q4.txt":
+            "Quote: Sometimes it is the people no one can imagine anything of who do the things no one can imagine.\nClues: about imagination and doing the impossible; inspirational.\n",
+          "/quotes/q5.txt":
+            "Quote: Programs must be written for people to read, and only incidentally for machines to execute.\nClues: about programming readability; software craftsmanship.\n",
+        },
+      });
+
+      expect(result).toHaveAgentSteps(3);
+      expect(result).toHaveToolCallRequests(6);
+      expect(result).toHaveToolCallInStep(1, {
+        name: "ls",
+        argsContains: { path: "/quotes" },
+      });
+      expect(result).toHaveToolCallInStep(2, {
+        name: "read_file",
+        argsContains: { file_path: "/quotes/q1.txt" },
+      });
+      expect(result).toHaveToolCallInStep(2, {
+        name: "read_file",
+        argsContains: { file_path: "/quotes/q2.txt" },
+      });
+      expect(result).toHaveToolCallInStep(2, {
+        name: "read_file",
+        argsContains: { file_path: "/quotes/q3.txt" },
+      });
+      expect(result).toHaveToolCallInStep(2, {
+        name: "read_file",
+        argsContains: { file_path: "/quotes/q4.txt" },
+      });
+      expect(result).toHaveToolCallInStep(2, {
+        name: "read_file",
+        argsContains: { file_path: "/quotes/q5.txt" },
+      });
+      expect(result).toHaveFinalTextContaining("/quotes/q3.txt");
+    },
+  );
+
+  ls.test(
+    "files: identify quote author from directory unprompted efficiency",
+    {
+      inputs: {
+        query:
+          "In the /quotes directory, there are a few small quote files. " +
+          "Which file most likely contains a quote by Grace Hopper? Reply with the file path only.",
+      },
+      referenceOutputs: { expectedText: "/quotes/q3.txt" },
+    },
+    async ({ inputs }) => {
+      const result = await runAgent(agent, {
+        query: inputs.query,
+        initialFiles: {
+          "/quotes/q1.txt":
+            "Quote: The analytical engine weaves algebraic patterns.\nClues: discusses an engine for computation and weaving patterns.\n",
+          "/quotes/q2.txt":
+            "Quote: I have always been more interested in the future than in the past.\nClues: talks about anticipating the future; broad and general.\n",
+          "/quotes/q3.txt":
+            "Quote: The most dangerous phrase in the language is, 'We've always done it this way.'\nClues: emphasizes changing established processes; often associated with early computing leadership.\n",
+          "/quotes/q4.txt":
+            "Quote: Sometimes it is the people no one can imagine anything of who do the things no one can imagine.\nClues: about imagination and doing the impossible; inspirational.\n",
+          "/quotes/q5.txt":
+            "Quote: Programs must be written for people to read, and only incidentally for machines to execute.\nClues: about programming readability; software craftsmanship.\n",
+        },
+      });
+
+      expect(result).toHaveAgentSteps(3);
+      expect(result).toHaveToolCallRequests(6);
+      expect(result).toHaveToolCallInStep(1, {
+        name: "ls",
+        argsContains: { path: "/quotes" },
+      });
+      expect(result).toHaveToolCallInStep(2, {
+        name: "read_file",
+        argsContains: { file_path: "/quotes/q1.txt" },
+      });
+      expect(result).toHaveToolCallInStep(2, {
+        name: "read_file",
+        argsContains: { file_path: "/quotes/q2.txt" },
+      });
+      expect(result).toHaveToolCallInStep(2, {
+        name: "read_file",
+        argsContains: { file_path: "/quotes/q3.txt" },
+      });
+      expect(result).toHaveToolCallInStep(2, {
+        name: "read_file",
+        argsContains: { file_path: "/quotes/q4.txt" },
+      });
+      expect(result).toHaveToolCallInStep(2, {
+        name: "read_file",
+        argsContains: { file_path: "/quotes/q5.txt" },
+      });
+      expect(result).toHaveFinalTextContaining("/quotes/q3.txt");
+    },
+  );
 });
