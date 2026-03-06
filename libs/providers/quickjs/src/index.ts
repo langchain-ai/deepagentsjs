@@ -11,7 +11,7 @@
  * - Persistent REPL state across evaluations
  * - VFS integration via readFile/writeFile
  * - Programmatic tool calling (PTC) — agent tools available inside the REPL
- * - Secret/env isolation
+ * - Serializable sessions (safe across graph interrupts)
  *
  * @packageDocumentation
  */
@@ -25,8 +25,6 @@ export type {
   QuickJSMiddlewareOptions,
   ReplSessionOptions,
   ReplResult,
-  EnvConfig,
-  EnvVarConfig,
 } from "./types.js";
 
 export {
@@ -35,6 +33,8 @@ export {
   DEFAULT_MAX_STACK_SIZE,
   DEFAULT_EXECUTION_TIMEOUT,
 } from "./session.js";
+
+export type { PendingWrite } from "./session.js";
 
 export { formatReplResult, toCamelCase } from "./utils.js";
 

@@ -23,12 +23,13 @@ import {
 } from "deepagents";
 
 import dedent from "dedent";
-import type { QuickJSMiddlewareOptions, EnvConfig } from "./types.js";
+import type { QuickJSMiddlewareOptions } from "./types.js";
 import {
   ReplSession,
   DEFAULT_EXECUTION_TIMEOUT,
   DEFAULT_MEMORY_LIMIT,
   DEFAULT_MAX_STACK_SIZE,
+  DEFAULT_SESSION_ID,
 } from "./session.js";
 import {
   formatReplResult,
@@ -46,6 +47,7 @@ import {
 import type * as _zodTypes from "@langchain/core/utils/types";
 import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
+import { getCurrentTaskInput } from "@langchain/langgraph";
 
 /**
  * Backend-provided tools excluded from PTC by default.
@@ -107,30 +109,6 @@ const REPL_SYSTEM_PROMPT = dedent`
   - Output is truncated beyond a fixed character limit — be selective about what you log.
   - Execution timeout per call (default 30 s).
 `;
-
-function generateEnvPrompt(env: EnvConfig): string {
-  const keys = Object.keys(env);
-  if (keys.length === 0) return "";
-
-  const lines = keys.map((key) => {
-    const entry = env[key];
-    if (typeof entry === "string") return `- \`env.${key}\` — available`;
-    const parts: string[] = [];
-    if (entry.secret) parts.push("secret");
-    if (entry.allowedTools)
-      parts.push(`allowed tools: ${entry.allowedTools.join(", ")}`);
-    return `- \`env.${key}\` — ${parts.length > 0 ? parts.join("; ") : "available"}`;
-  });
-
-  return dedent`
-
-    ### Environment Variables
-
-    Access via the \`env\` global (e.g. \`env.KEY\`). Secret values are obfuscated — pass them directly to tools without trying to read or log them.
-
-    ${lines.join("\n")}
-  `;
-}
 
 /**
  * Generate the PTC API Reference section for the system prompt.
@@ -205,13 +183,14 @@ export function createQuickJSMiddleware(
     maxStackSizeBytes = DEFAULT_MAX_STACK_SIZE,
     executionTimeoutMs = DEFAULT_EXECUTION_TIMEOUT,
     systemPrompt: customSystemPrompt = null,
-    env,
   } = options;
 
   const usePtc = ptc !== false;
   const baseSystemPrompt = customSystemPrompt || REPL_SYSTEM_PROMPT;
 
   let cachedPtcPrompt: string | null = null;
+
+  let ptcTools: StructuredToolInterface[] = [];
 
   function filterToolsForPtc(
     allTools: StructuredToolInterface[],
@@ -245,13 +224,23 @@ export function createQuickJSMiddleware(
 
   const jsEvalTool = tool(
     async (input, config) => {
-      const threadId = config.configurable?.thread_id || "__default__";
-      const session = ReplSession.get(threadId);
-      if (!session) {
-        return "[error] REPL session not initialized";
-      }
+      const threadId = config.configurable?.thread_id || DEFAULT_SESSION_ID;
+
+      const stateAndStore: StateAndStore = {
+        state: getCurrentTaskInput(config) || {},
+        store: config.configurable?.__pregel_store,
+      };
+      const resolvedBackend = getBackend(backend, stateAndStore);
+
+      const session = ReplSession.getOrCreate(threadId, {
+        memoryLimitBytes,
+        maxStackSizeBytes,
+        backend: resolvedBackend,
+        tools: ptcTools,
+      });
 
       const result = await session.eval(input.code, executionTimeoutMs);
+      await session.flushWrites(resolvedBackend);
 
       return formatReplResult(result);
     },
@@ -276,33 +265,17 @@ export function createQuickJSMiddleware(
     name: "QuickJSMiddleware",
     tools: [jsEvalTool],
     wrapModelCall: async (request, handler) => {
-      const threadId = request.runtime.configurable?.thread_id || "__default__";
-
-      const stateAndStore: StateAndStore = {
-        state: request.state || {},
-        store: request.runtime.store,
-      };
-      const resolvedBackend = getBackend(backend, stateAndStore);
-
       const agentTools = (request.tools || []) as StructuredToolInterface[];
-      const ptcTools = usePtc ? filterToolsForPtc(agentTools) : [];
-
-      await ReplSession.getOrCreate(threadId, {
-        memoryLimitBytes,
-        maxStackSizeBytes,
-        backend: resolvedBackend,
-        tools: ptcTools,
-        env,
-      });
+      ptcTools = usePtc ? filterToolsForPtc(agentTools) : [];
 
       if (ptcTools.length > 0 && !cachedPtcPrompt) {
         cachedPtcPrompt = await generatePtcPrompt(ptcTools);
       }
 
-      const envPrompt = env ? generateEnvPrompt(env) : "";
-      const fullPrompt = baseSystemPrompt + envPrompt + (cachedPtcPrompt || "");
-      const newSystemMessage = request.systemMessage.concat(fullPrompt);
-      return handler({ ...request, systemMessage: newSystemMessage });
+      const systemMessage = request.systemMessage
+        .concat(baseSystemPrompt)
+        .concat(cachedPtcPrompt || "");
+      return handler({ ...request, systemMessage });
     },
   });
 }

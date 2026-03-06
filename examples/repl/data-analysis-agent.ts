@@ -19,7 +19,7 @@ import { createDeepAgent } from "deepagents";
 import { createQuickJSMiddleware } from "@langchain/quickjs";
 
 const model = new ChatAnthropic({
-  model: "claude-sonnet-4-20250514",
+  model: "claude-sonnet-4-5",
   temperature: 0,
 });
 
@@ -45,7 +45,5 @@ const result = await agent.invoke({
 
 const last = result.messages[result.messages.length - 1];
 console.log(
-  typeof last.content === "string"
-    ? last.content.slice(0, 500)
-    : last.content,
+  typeof last.content === "string" ? last.content.slice(0, 500) : last.content,
 );

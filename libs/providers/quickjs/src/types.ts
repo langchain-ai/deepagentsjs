@@ -2,47 +2,6 @@ import type { BackendProtocol, BackendFactory } from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
 /**
- * An environment variable with access control.
- *
- * When `secret: true`, the real value is never exposed inside the REPL —
- * `env[key]` returns an opaque placeholder. The real value is
- * substituted back only when the agent calls a tool in `allowedTools`.
- *
- * When `secret` is omitted or false, the value is exposed as-is inside the
- * REPL, but `allowedTools` still restricts which PTC tools may receive it.
- *
- * **Note:** Non-secret `allowedTools` restrictions rely on exact string matching
- * against tool input values. Use this sparingly and only with distinctive values
- * (e.g. API URLs, hostnames) — not short or common strings.
- */
-export interface EnvVarConfig {
-  /**
-   * The actual value of the environment variable.
-   */
-  value: string;
-  
-  /**
-   * When true, the value is hidden inside the REPL (replaced with an opaque placeholder).
-   * The real value is only substituted when calling tools in `allowedTools`.
-   * @default false
-   */
-  secret?: boolean;
-  
-  /**
-   * List of tool names that are allowed to receive this environment variable value.
-   * If specified, only these tools will have access to the value during PTC calls.
-   */
-  allowedTools?: string[];
-}
-
-/**
- * Environment variable configuration. Each key maps to either:
- * - A plain string (exposed as-is, no tool restrictions)
- * - An `EnvVarConfig` object (with optional secrecy and tool allowlisting)
- */
-export type EnvConfig = Record<string, string | EnvVarConfig>;
-
-/**
  * Configuration options for the QuickJS REPL middleware.
  */
 export interface QuickJSMiddlewareOptions {
@@ -91,24 +50,6 @@ export interface QuickJSMiddlewareOptions {
    * @default null (uses built-in prompt)
    */
   systemPrompt?: string | null;
-
-  /**
-   * Environment variables available as `env` inside the REPL.
-   *
-   * Plain string values are exposed as-is. Secret values (`{ secret: true }`)
-   * are replaced with opaque placeholders inside the REPL. The real value is
-   * only substituted when the agent calls a tool in the secret's `allowedTools`.
-   *
-   * @example
-   * ```ts
-   * env: {
-   *   NODE_ENV: "production",
-   *   DB_HOST: { value: "10.0.0.1", allowedTools: ["db_query"] },
-   *   API_KEY: { value: "sk-real-key", secret: true, allowedTools: ["http_request"] },
-   * }
-   * ```
-   */
-  env?: EnvConfig;
 }
 
 /**
@@ -119,7 +60,6 @@ export interface ReplSessionOptions {
   maxStackSizeBytes?: number;
   backend?: BackendProtocol;
   tools?: StructuredToolInterface[];
-  env?: EnvConfig;
 }
 
 /**
@@ -130,11 +70,4 @@ export interface ReplResult {
   value?: unknown;
   error?: { name?: string; message?: string; stack?: string };
   logs: string[];
-}
-
-/**
- * Type guard to check if a value is an EnvVarConfig object.
- */
-export function isEnvVarConfig(v: string | EnvVarConfig): v is EnvVarConfig {
-  return typeof v === "object";
 }

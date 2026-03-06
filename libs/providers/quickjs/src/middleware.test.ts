@@ -1,10 +1,15 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { tool } from "langchain";
-import { z } from "zod/v4";
-import { createQuickJSMiddleware, generatePtcPrompt } from "./middleware.js";
+import * as z from "zod";
 import { SystemMessage } from "@langchain/core/messages";
+import { createQuickJSMiddleware, generatePtcPrompt } from "./middleware.js";
+import { ReplSession } from "./session.js";
 
 describe("createQuickJSMiddleware", () => {
+  beforeEach(() => {
+    ReplSession.clearCache();
+  });
+
   describe("tool registration", () => {
     it("should register js_eval tool", () => {
       const middleware = createQuickJSMiddleware();
@@ -42,7 +47,9 @@ describe("createQuickJSMiddleware", () => {
       expect(text).toContain("### First-time usage");
       expect(text).toContain("### API Reference");
       expect(text).toContain("async readFile(path: string): Promise<string>");
-      expect(text).toContain("async writeFile(path: string, content: string): Promise<void>");
+      expect(text).toContain(
+        "async writeFile(path: string, content: string): Promise<void>",
+      );
     });
 
     it("should use custom system prompt when provided", async () => {
