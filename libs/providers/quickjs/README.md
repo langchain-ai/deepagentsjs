@@ -1,15 +1,9 @@
 # @langchain/quickjs
 
-Sandboxed JavaScript/TypeScript REPL for [deepagents](https://github.com/langchain-ai/deepagentsjs), powered by [QuickJS-NG](https://github.com/nickmessing/quickjs-emscripten) compiled to WebAssembly.
+Sandboxed JavaScript/TypeScript REPL for [deepagents](https://github.com/langchain-ai/deepagentsjs), powered by [QuickJS-NG](https://github.com/quickjs-ng/quickjs) through [QuickJS-Emscripten](https://github.com/justjake/quickjs-emscripten)
 
 [![npm version](https://img.shields.io/npm/v/@langchain/quickjs.svg)](https://www.npmjs.com/package/@langchain/quickjs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-## Why?
-
-LLMs hallucinate arithmetic, lose track of intermediate state, and can't natively express patterns like parallel fan-out or aggregation. Giving them a code execution tool fixes this — but traditional approaches require either an unsandboxed `eval` or a heavyweight container.
-
-`@langchain/quickjs` provides a third option: a WASM-sandboxed QuickJS interpreter that runs **in-process** with no network access, no filesystem access, and no Node.js APIs. The sandbox boundary is the WebAssembly memory model — guest code physically cannot reach host resources unless explicitly bridged.
 
 ## Installation
 
@@ -24,7 +18,7 @@ import { createDeepAgent } from "deepagents";
 import { createQuickJSMiddleware } from "@langchain/quickjs";
 
 const agent = createDeepAgent({
-  model: "claude-sonnet-4-5-20250929",
+  model: "claude-sonnet-4-5",
   middleware: [createQuickJSMiddleware()],
 });
 
