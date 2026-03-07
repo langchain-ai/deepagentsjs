@@ -17,6 +17,7 @@ import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
+import { mergeMiddleware } from "./utils.js";
 
 export type { AgentMiddleware };
 
@@ -476,7 +477,7 @@ function getSubagents(options: {
       agents[agentParams.name] = agentParams.runnable;
     } else {
       const middleware = agentParams.middleware
-        ? [...defaultSubagentMiddleware, ...agentParams.middleware]
+        ? mergeMiddleware(defaultSubagentMiddleware, agentParams.middleware)
         : [...defaultSubagentMiddleware];
 
       const interruptOn = agentParams.interruptOn || defaultInterruptOn;
