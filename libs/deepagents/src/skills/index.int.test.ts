@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { SystemMessage } from "@langchain/core/messages";
 import { createSettings } from "../config.js";
 import { listSkills } from "./loader.js";
 import { createSkillsMiddleware } from "../middleware/skills.js";
@@ -72,19 +73,20 @@ Use this skill when the user asks about integration testing.
       expect(stateUpdate!.skillsMetadata[0].name).toBe("my-skill");
 
       // Step 5: Verify skills are injected into system prompt
-      let capturedPrompt = "";
+      let capturedMessage: SystemMessage | undefined;
       const mockHandler = (req: any) => {
-        capturedPrompt = req.systemPrompt;
+        capturedMessage = req.systemMessage;
         return { response: "ok" };
       };
       middleware.wrapModelCall!(
         {
-          systemPrompt: "Base prompt",
+          systemMessage: new SystemMessage("Base prompt"),
           state: stateUpdate,
         } as any,
         mockHandler as any,
       );
 
+      const capturedPrompt = capturedMessage!.text;
       expect(capturedPrompt).toContain("my-skill");
       expect(capturedPrompt).toContain("A test skill for integration testing");
       // Check for the new format with priority indicator
@@ -241,21 +243,22 @@ description: Test skill
       // Run wrapModelCall for both in sequence
       let finalPrompt = "";
 
-      // First, memory middleware
+      // First, memory middleware (uses systemPrompt string API)
       memoryMiddleware.wrapModelCall!(
         {
           systemPrompt: "Base prompt",
           state: combinedState,
         } as any,
         ((req: any) => {
-          // Then, skills middleware
+          // Then, skills middleware (uses systemMessage API)
+          // Bridge: wrap memory middleware's string output as SystemMessage
           skillsMiddleware.wrapModelCall!(
             {
-              systemPrompt: req.systemPrompt,
+              systemMessage: new SystemMessage(req.systemPrompt),
               state: combinedState,
             } as any,
             ((innerReq: any) => {
-              finalPrompt = innerReq.systemPrompt;
+              finalPrompt = innerReq.systemMessage.text;
               return { response: "ok" };
             }) as any,
           );

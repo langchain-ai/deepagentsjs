@@ -24,19 +24,89 @@ import {
   updateFileData,
 } from "./utils.js";
 
+const NAMESPACE_COMPONENT_RE = /^[A-Za-z0-9\-_.@+:~]+$/;
+
+/**
+ * Validate a namespace array.
+ *
+ * Each component must be a non-empty string containing only safe characters:
+ * alphanumeric (a-z, A-Z, 0-9), hyphen (-), underscore (_), dot (.),
+ * at sign (@), plus (+), colon (:), and tilde (~).
+ *
+ * Characters like *, ?, [, ], {, } etc. are rejected to prevent
+ * wildcard or glob injection in store lookups.
+ */
+function validateNamespace(namespace: string[]): string[] {
+  if (namespace.length === 0) {
+    throw new Error("Namespace array must not be empty.");
+  }
+  for (let i = 0; i < namespace.length; i++) {
+    const component = namespace[i];
+    if (typeof component !== "string") {
+      throw new TypeError(
+        `Namespace component at index ${i} must be a string, got ${typeof component}.`,
+      );
+    }
+    if (!component) {
+      throw new Error(`Namespace component at index ${i} must not be empty.`);
+    }
+    if (!NAMESPACE_COMPONENT_RE.test(component)) {
+      throw new Error(
+        `Namespace component at index ${i} contains disallowed characters: "${component}". ` +
+          `Only alphanumeric characters, hyphens, underscores, dots, @, +, colons, and tildes are allowed.`,
+      );
+    }
+  }
+  return namespace;
+}
+
+/**
+ * Options for StoreBackend constructor.
+ */
+export interface StoreBackendOptions {
+  /**
+   * Custom namespace for store operations.
+   *
+   * Determines where files are stored in the LangGraph store, enabling
+   * user-scoped, org-scoped, or any custom isolation pattern.
+   *
+   * If not provided, falls back to legacy behavior using assistantId from StateAndStore.
+   *
+   * @example
+   * ```typescript
+   * // User-scoped storage
+   * new StoreBackend(stateAndStore, {
+   *   namespace: ["memories", orgId, userId, "filesystem"],
+   * });
+   *
+   * // Org-scoped storage
+   * new StoreBackend(stateAndStore, {
+   *   namespace: ["memories", orgId, "filesystem"],
+   * });
+   * ```
+   */
+  namespace?: string[];
+}
+
 /**
  * Backend that stores files in LangGraph's BaseStore (persistent).
  *
  * Uses LangGraph's Store for persistent, cross-conversation storage.
  * Files are organized via namespaces and persist across all threads.
  *
- * The namespace can include an optional assistant_id for multi-agent isolation.
+ * The namespace can be customized via a factory function for flexible
+ * isolation patterns (user-scoped, org-scoped, etc.), or falls back
+ * to legacy assistant_id-based isolation.
  */
 export class StoreBackend implements BackendProtocol {
   private stateAndStore: StateAndStore;
+  private _namespace: string[] | undefined;
 
-  constructor(stateAndStore: StateAndStore) {
+  constructor(stateAndStore: StateAndStore, options?: StoreBackendOptions) {
     this.stateAndStore = stateAndStore;
+    if (options?.namespace) {
+      this._namespace = validateNamespace(options.namespace);
+    }
   }
 
   /**
@@ -56,19 +126,21 @@ export class StoreBackend implements BackendProtocol {
   /**
    * Get the namespace for store operations.
    *
-   * If an assistant_id is available in stateAndStore, return
-   * [assistant_id, "filesystem"] to provide per-assistant isolation.
-   * Otherwise return ["filesystem"].
+   * If a custom namespace was provided, returns it directly.
+   *
+   * Otherwise, falls back to legacy behavior:
+   * - If assistantId is set: [assistantId, "filesystem"]
+   * - Otherwise: ["filesystem"]
    */
   protected getNamespace(): string[] {
-    const namespace = "filesystem";
-    const assistantId = this.stateAndStore.assistantId;
-
-    if (assistantId) {
-      return [assistantId, namespace];
+    if (this._namespace) {
+      return this._namespace;
     }
-
-    return [namespace];
+    const assistantId = this.stateAndStore.assistantId;
+    if (assistantId) {
+      return [assistantId, "filesystem"];
+    }
+    return ["filesystem"];
   }
 
   /**

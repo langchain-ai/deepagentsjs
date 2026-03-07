@@ -28,6 +28,7 @@ export default defineConfig([
           caughtErrorsIgnorePattern: "^_",
         },
       ],
+      "@typescript-eslint/no-empty-object-type": "off",
       "no-console": ["error"],
       "no-instanceof/no-instanceof": "error",
     },
@@ -36,6 +37,12 @@ export default defineConfig([
     files: ["libs/cli/scripts/**/*.ts", "libs/cli/src/cli.ts"],
     rules: {
       "no-console": "off",
+    },
+  },
+  {
+    files: ["**/evals/**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-empty-object-type": "off",
     },
   },
 ]);

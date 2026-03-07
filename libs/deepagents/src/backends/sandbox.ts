@@ -101,11 +101,18 @@ function globToPathRegex(pattern: string): RegExp {
 }
 
 /**
- * Parse a single line of stat output in the format: size\tmtime\ttype\tpath
+ * Parse a single line of stat/find output in the format: size\tmtime\ttype\tpath
  *
  * The first three tab-delimited fields are always fixed (number, number, string),
  * so we safely take everything after the third tab as the file path — even if the
  * path itself contains tabs.
+ *
+ * The type field varies by platform / tool:
+ * - GNU find -printf %y: single letter "d", "f", "l"
+ * - BSD stat -f %Sp: permission strings like "drwxr-xr-x", "-rw-r--r--"
+ *
+ * The mtime field may be a float (GNU find %T@ → "1234567890.0000000000")
+ * or an integer (BSD stat %m → "1234567890"); parseInt handles both.
  */
 function parseStatLine(
   line: string,
@@ -129,31 +136,70 @@ function parseStatLine(
   return {
     size,
     mtime,
-    isDir: fileType === "directory",
+    // GNU find %y outputs "d"; BSD stat %Sp outputs "drwxr-xr-x"
+    isDir:
+      fileType === "d" || fileType === "directory" || fileType.startsWith("d"),
     fullPath,
   };
 }
 
 /**
- * Pure POSIX shell command for listing directory contents with metadata.
- * Uses find -maxdepth 1 + stat — works on any Linux including Alpine (busybox).
+ * BusyBox/Alpine fallback script for stat -c.
+ *
+ * Determines file type with POSIX test builtins, then uses stat -c
+ * (supported by both GNU coreutils and BusyBox) for size and mtime.
+ * printf handles tab-delimited output formatting.
+ */
+const STAT_C_SCRIPT =
+  "for f; do " +
+  'if [ -d "$f" ]; then t=d; elif [ -L "$f" ]; then t=l; else t=f; fi; ' +
+  'sz=$(stat -c %s "$f" 2>/dev/null) || continue; ' +
+  'mt=$(stat -c %Y "$f" 2>/dev/null) || continue; ' +
+  'printf "%s\\t%s\\t%s\\t%s\\n" "$sz" "$mt" "$t" "$f"; ' +
+  "done";
+
+/**
+ * Shell command for listing directory contents with metadata.
+ *
+ * Detects the environment at runtime with three-way probing:
+ * 1. GNU find (full Linux): uses built-in `-printf` (most efficient)
+ * 2. BusyBox / Alpine: uses `find -exec sh -c` with `stat -c` fallback
+ * 3. BSD / macOS: uses `find -exec stat -f`
  *
  * Output format per line: size\tmtime\ttype\tpath
  */
 function buildLsCommand(dirPath: string): string {
   const quotedPath = shellQuote(dirPath);
-  return `find ${quotedPath} -maxdepth 1 -not -path ${quotedPath} -exec stat -c '%s\\t%Y\\t%F\\t%n' {} + 2>/dev/null || true`;
+  const findBase = `find ${quotedPath} -maxdepth 1 -not -path ${quotedPath}`;
+  return (
+    `if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then ` +
+    `${findBase} -printf '%s\\t%T@\\t%y\\t%p\\n' 2>/dev/null; ` +
+    `elif stat -c %s /dev/null >/dev/null 2>&1; then ` +
+    `${findBase} -exec sh -c '${STAT_C_SCRIPT}' _ {} +; ` +
+    `else ` +
+    `${findBase} -exec stat -f '%z\t%m\t%Sp\t%N' {} + 2>/dev/null; ` +
+    `fi || true`
+  );
 }
 
 /**
- * Pure POSIX shell command for listing files recursively with metadata.
- * Uses find + stat — works on any Linux including Alpine (busybox).
+ * Shell command for listing files recursively with metadata.
+ * Same three-way detection as buildLsCommand (GNU -printf / stat -c / BSD stat -f).
  *
  * Output format per line: size\tmtime\ttype\tpath
  */
 function buildFindCommand(searchPath: string): string {
   const quotedPath = shellQuote(searchPath);
-  return `find ${quotedPath} -not -path ${quotedPath} -exec stat -c '%s\\t%Y\\t%F\\t%n' {} + 2>/dev/null || true`;
+  const findBase = `find ${quotedPath} -not -path ${quotedPath}`;
+  return (
+    `if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then ` +
+    `${findBase} -printf '%s\\t%T@\\t%y\\t%p\\n' 2>/dev/null; ` +
+    `elif stat -c %s /dev/null >/dev/null 2>&1; then ` +
+    `${findBase} -exec sh -c '${STAT_C_SCRIPT}' _ {} +; ` +
+    `else ` +
+    `${findBase} -exec stat -f '%z\t%m\t%Sp\t%N' {} + 2>/dev/null; ` +
+    `fi || true`
+  );
 }
 
 /**
@@ -187,7 +233,9 @@ function buildReadCommand(
 /**
  * Build a grep command for literal (fixed-string) search.
  * Uses grep -rHnF for recursive, with-filename, with-line-number, fixed-string search.
- * Pure POSIX — works on any Linux including Alpine.
+ *
+ * When a glob pattern is provided, uses `find -name GLOB -exec grep` instead of
+ * `grep --include=GLOB` for universal compatibility (BusyBox grep lacks --include).
  *
  * @param pattern - Literal string to search for (NOT regex).
  * @param searchPath - Base path to search in.
@@ -200,9 +248,14 @@ function buildGrepCommand(
 ): string {
   const patternEscaped = shellQuote(pattern);
   const searchPathQuoted = shellQuote(searchPath);
-  const globOpt = globPattern ? `--include=${shellQuote(globPattern)}` : "";
 
-  return `grep -rHnF ${globOpt} -e ${patternEscaped} ${searchPathQuoted} 2>/dev/null || true`;
+  if (globPattern) {
+    // Use find + grep for BusyBox compatibility (BusyBox grep lacks --include)
+    const globEscaped = shellQuote(globPattern);
+    return `find ${searchPathQuoted} -type f -name ${globEscaped} -exec grep -HnF -e ${patternEscaped} {} + 2>/dev/null || true`;
+  }
+
+  return `grep -rHnF -e ${patternEscaped} ${searchPathQuoted} 2>/dev/null || true`;
 }
 
 /**
@@ -288,6 +341,9 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     offset: number = 0,
     limit: number = 500,
   ): Promise<string> {
+    // limit=0 means return nothing
+    if (limit === 0) return "";
+
     const command = buildReadCommand(filePath, offset, limit);
     const result = await this.execute(command);
 
@@ -447,6 +503,9 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
    *
    * Uses downloadFiles() to read, performs string replacement in TypeScript,
    * then uploadFiles() to write back. No runtime needed on the sandbox host.
+   *
+   * Memory-conscious: releases intermediate references early so the GC can
+   * reclaim buffers before the next large allocation is made.
    */
   async edit(
     filePath: string,
@@ -454,34 +513,101 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     newString: string,
     replaceAll: boolean = false,
   ): Promise<EditResult> {
-    // Read the file
     const results = await this.downloadFiles([filePath]);
     if (results[0].error || !results[0].content) {
       return { error: `Error: File '${filePath}' not found` };
     }
 
     const text = new TextDecoder().decode(results[0].content);
-    const count = text.split(oldString).length - 1;
+    results[0].content = null as unknown as Uint8Array;
 
-    if (count === 0) {
+    /**
+     * are we editing an empty file?
+     */
+    if (oldString.length === 0) {
+      /**
+       * if the file is not empty, we cannot edit it with an empty oldString
+       */
+      if (text.length !== 0) {
+        return {
+          error: "oldString must not be empty unless the file is empty",
+        };
+      }
+      /**
+       * if the newString is empty, we can just return the file as is
+       */
+      if (newString.length === 0) {
+        return { path: filePath, filesUpdate: null, occurrences: 0 };
+      }
+
+      /**
+       * if the newString is not empty, we can edit the file
+       */
+      const encoded = new TextEncoder().encode(newString);
+      const uploadResults = await this.uploadFiles([[filePath, encoded]]);
+      /**
+       * if the upload fails, we return an error
+       */
+      if (uploadResults[0].error) {
+        return {
+          error: `Failed to write edited file '${filePath}': ${uploadResults[0].error}`,
+        };
+      }
+      return { path: filePath, filesUpdate: null, occurrences: 1 };
+    }
+
+    const firstIdx = text.indexOf(oldString);
+    if (firstIdx === -1) {
       return { error: `String not found in file '${filePath}'` };
     }
-    if (count > 1 && !replaceAll) {
-      return {
-        error: `Multiple occurrences found in '${filePath}'. Use replaceAll=true to replace all.`,
-      };
+
+    if (oldString === newString) {
+      return { path: filePath, filesUpdate: null, occurrences: 1 };
     }
 
-    // Perform replacement
-    const newText = replaceAll
-      ? text.split(oldString).join(newString)
-      : text.replace(oldString, newString);
+    let newText: string;
+    let count: number;
 
-    // Write back
-    const encoder = new TextEncoder();
-    const uploadResults = await this.uploadFiles([
-      [filePath, encoder.encode(newText)],
-    ]);
+    if (replaceAll) {
+      newText = text.replaceAll(oldString, newString);
+      /**
+       * Derive count from the length delta to avoid a separate O(n) counting pass
+       */
+      const lenDiff = oldString.length - newString.length;
+      if (lenDiff !== 0) {
+        count = (text.length - newText.length) / lenDiff;
+      } else {
+        /**
+         * Lengths are equal — count via indexOf (we already found the first)
+         */
+        count = 1;
+        let pos = firstIdx + oldString.length;
+        while (pos <= text.length) {
+          const idx = text.indexOf(oldString, pos);
+          if (idx === -1) break;
+          count++;
+          pos = idx + oldString.length;
+        }
+      }
+    } else {
+      const secondIdx = text.indexOf(oldString, firstIdx + oldString.length);
+      if (secondIdx !== -1) {
+        return {
+          error: `Multiple occurrences found in '${filePath}'. Use replaceAll=true to replace all.`,
+        };
+      }
+      count = 1;
+      /**
+       * Build result from the known index — avoids a redundant search by .replace()
+       */
+      newText =
+        text.slice(0, firstIdx) +
+        newString +
+        text.slice(firstIdx + oldString.length);
+    }
+
+    const encoded = new TextEncoder().encode(newText);
+    const uploadResults = await this.uploadFiles([[filePath, encoded]]);
 
     if (uploadResults[0].error) {
       return {

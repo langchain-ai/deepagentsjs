@@ -213,7 +213,7 @@ export function performStringReplacement(
   }
 
   if (occurrences > 1 && !replaceAll) {
-    return `Error: String '${oldString}' appears ${occurrences} times in file. Use replace_all=True to replace all instances, or provide a more specific string with surrounding context.`;
+    return `Error: String '${oldString}' has multiple occurrences (appears ${occurrences} times) in file. Use replace_all=True to replace all instances, or provide a more specific string with surrounding context.`;
   }
 
   // Python's str.replace() replaces ALL occurrences

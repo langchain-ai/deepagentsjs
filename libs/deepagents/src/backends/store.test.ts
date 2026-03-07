@@ -211,7 +211,7 @@ describe("StoreBackend", () => {
     );
   });
 
-  it("should use custom namespace when assistant_id is provided", async () => {
+  it("should use assistantId-based namespace when no custom namespace provided", async () => {
     const { store } = makeConfig();
     const stateAndStoreWithAssistant = {
       state: { files: {}, messages: [] },
@@ -317,6 +317,99 @@ describe("StoreBackend", () => {
       expect(result[1].error).toBe("file_not_found");
       expect(result[1].content).toBeNull();
     });
+  });
+
+  it("should use custom namespace", async () => {
+    const { store } = makeConfig();
+    const stateAndStore = {
+      state: { files: {}, messages: [] },
+      store,
+    };
+
+    const backend = new StoreBackend(stateAndStore, {
+      namespace: ["org-123", "user-456", "filesystem"],
+    });
+
+    await backend.write("/test.txt", "namespaced content");
+
+    const items = await store.search(["org-123", "user-456", "filesystem"]);
+    expect(items.some((item) => item.key === "/test.txt")).toBe(true);
+
+    const defaultItems = await store.search(["filesystem"]);
+    expect(defaultItems.some((item) => item.key === "/test.txt")).toBe(false);
+  });
+
+  it("should isolate data between different namespaces", async () => {
+    const { store } = makeConfig();
+    const stateAndStore = {
+      state: { files: {}, messages: [] },
+      store,
+    };
+
+    const userABackend = new StoreBackend(stateAndStore, {
+      namespace: ["org-1", "user-a", "filesystem"],
+    });
+
+    const userBBackend = new StoreBackend(stateAndStore, {
+      namespace: ["org-1", "user-b", "filesystem"],
+    });
+
+    await userABackend.write("/notes.txt", "user A notes");
+    await userBBackend.write("/notes.txt", "user B notes");
+
+    const contentA = await userABackend.read("/notes.txt");
+    expect(contentA).toContain("user A notes");
+
+    const contentB = await userBBackend.read("/notes.txt");
+    expect(contentB).toContain("user B notes");
+
+    const userAItems = await store.search(["org-1", "user-a", "filesystem"]);
+    const userBItems = await store.search(["org-1", "user-b", "filesystem"]);
+    expect(userAItems).toHaveLength(1);
+    expect(userBItems).toHaveLength(1);
+  });
+
+  it("should validate namespace components", async () => {
+    const { store } = makeConfig();
+    const stateAndStore = {
+      state: { files: {}, messages: [] },
+      store,
+    };
+
+    expect(
+      () =>
+        new StoreBackend(stateAndStore, {
+          namespace: ["filesystem", "*"],
+        }),
+    ).toThrow("disallowed characters");
+
+    expect(
+      () =>
+        new StoreBackend(stateAndStore, {
+          namespace: [],
+        }),
+    ).toThrow("must not be empty");
+  });
+
+  it("should work with backend factory pattern for dynamic namespaces", async () => {
+    const { store } = makeConfig();
+    const userId = "ctx-user-789";
+
+    const backendFactory = (stateAndStore: any) =>
+      new StoreBackend(stateAndStore, {
+        namespace: ["filesystem", userId],
+      });
+
+    const stateAndStore = {
+      state: { files: {}, messages: [] },
+      store,
+    };
+    const backend = backendFactory(stateAndStore);
+
+    await backend.write("/test.txt", "context-derived namespace");
+
+    const items = await store.search(["filesystem", "ctx-user-789"]);
+    expect(items.some((item) => item.key === "/test.txt")).toBe(true);
   });
 
   it("should handle large tool result interception via middleware", async () => {

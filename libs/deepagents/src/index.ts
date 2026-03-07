@@ -22,6 +22,9 @@ export type {
   ExtractSubAgentMiddleware,
   FlattenSubAgentMiddleware,
   InferSubAgentMiddlewareStates,
+  // Response format type utilities
+  SupportedResponseFormat,
+  InferStructuredResponse,
 } from "./types.js";
 
 // Export config
@@ -37,6 +40,8 @@ export {
   createFilesystemMiddleware,
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
+  createSummarizationMiddleware,
+  computeSummarizationDefaults,
   createMemoryMiddleware,
   // Skills middleware - matches Python's SkillsMiddleware interface
   createSkillsMiddleware,
@@ -80,6 +85,7 @@ export {
 export {
   StateBackend,
   StoreBackend,
+  type StoreBackendOptions,
   FilesystemBackend,
   CompositeBackend,
   BaseSandbox,
@@ -98,6 +104,7 @@ export {
   type FileDownloadResponse,
   type FileUploadResponse,
   type SandboxBackendProtocol,
+  type StateAndStore,
   type MaybePromise,
   // Sandbox provider types
   type SandboxInfo,
@@ -107,4 +114,7 @@ export {
   type SandboxDeleteOptions,
   // Sandbox error types
   type SandboxErrorCode,
+  // Local shell backend
+  LocalShellBackend,
+  type LocalShellBackendOptions,
 } from "./backends/index.js";

@@ -3,10 +3,8 @@ import {
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
   todoListMiddleware,
-  summarizationMiddleware,
   SystemMessage,
   type AgentMiddleware,
-  type ResponseFormat,
 } from "langchain";
 import type {
   ClientTool,
@@ -20,6 +18,7 @@ import {
   createFilesystemMiddleware,
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
+  createSummarizationMiddleware,
   createMemoryMiddleware,
   createSkillsMiddleware,
   type SubAgent,
@@ -33,6 +32,8 @@ import type {
   DeepAgent,
   DeepAgentTypeConfig,
   FlattenSubAgentMiddleware,
+  InferStructuredResponse,
+  SupportedResponseFormat,
 } from "./types.js";
 
 /**
@@ -50,7 +51,7 @@ const BASE_PROMPT = `In order to complete the objective that the user asks of yo
  * - Todo management (todoListMiddleware)
  * - Filesystem tools (createFilesystemMiddleware)
  * - Subagent delegation (createSubAgentMiddleware)
- * - Conversation summarization (summarizationMiddleware)
+ * - Conversation summarization (createSummarizationMiddleware) with backend offloading
  * - Prompt caching (anthropicPromptCachingMiddleware)
  * - Tool call patching (createPatchToolCallsMiddleware)
  * - Human-in-the-loop (humanInTheLoopMiddleware) - optional
@@ -75,7 +76,7 @@ const BASE_PROMPT = `In order to complete the objective that the user asks of yo
  * ```
  */
 export function createDeepAgent<
-  TResponse extends ResponseFormat = ResponseFormat,
+  TResponse extends SupportedResponseFormat = SupportedResponseFormat,
   ContextSchema extends InteropZodObject = InteropZodObject,
   const TMiddleware extends readonly AgentMiddleware[] = readonly [],
   const TSubagents extends readonly (SubAgent | CompiledSubAgent)[] =
@@ -211,16 +212,21 @@ export function createDeepAgent<
   /**
    * Middleware for custom subagents (does NOT include skills from main agent).
    * Custom subagents must define their own `skills` property to get skills.
+   *
+   * Uses createSummarizationMiddleware (deepagents version) with backend support
+   * and auto-computed defaults from model profile, matching Python's create_deep_agent.
+   * When trigger is not provided, defaults are lazily computed:
+   *   - With model profile: fraction-based (trigger=0.85, keep=0.10)
+   *   - Without profile: fixed (trigger=170k tokens, keep=6 messages)
    */
   const subagentMiddleware = [
     todoListMiddleware(),
     createFilesystemMiddleware({
       backend: filesystemBackend,
     }),
-    summarizationMiddleware({
+    createSummarizationMiddleware({
       model,
-      trigger: { tokens: 170_000 },
-      keep: { messages: 6 },
+      backend: filesystemBackend,
     }),
     anthropicPromptCachingMiddleware({
       unsupportedModelBehavior: "ignore",
@@ -264,12 +270,13 @@ export function createDeepAgent<
       generalPurposeAgent: true,
     }),
     /**
-     * Automatically summarizes conversation history when token limits are approached
+     * Automatically summarizes conversation history when token limits are approached.
+     * Uses createSummarizationMiddleware (deepagents version) with backend support
+     * for conversation history offloading and auto-computed defaults from model profile.
      */
-    summarizationMiddleware({
+    createSummarizationMiddleware({
       model,
-      trigger: { tokens: 170_000 },
-      keep: { messages: 6 },
+      backend: filesystemBackend,
     }),
     /**
      * Enables Anthropic prompt caching for improved performance and reduced costs
@@ -302,7 +309,7 @@ export function createDeepAgent<
     systemPrompt: finalSystemPrompt,
     tools: tools as StructuredTool[],
     middleware: runtimeMiddleware,
-    responseFormat: responseFormat as ResponseFormat,
+    ...(responseFormat != null && { responseFormat }),
     contextSchema,
     checkpointer,
     store,
@@ -321,7 +328,7 @@ export function createDeepAgent<
 
   /**
    * Return as DeepAgent with proper DeepAgentTypeConfig
-   * - Response: TResponse (from responseFormat parameter)
+   * - Response: InferStructuredResponse<TResponse> (unwraps ToolStrategy<T>/ProviderStrategy<T> → T)
    * - State: undefined (state comes from middleware)
    * - Context: ContextSchema
    * - Middleware: AllMiddleware (built-in + custom + subagent middleware for state inference)
@@ -330,7 +337,7 @@ export function createDeepAgent<
    */
   return agent as unknown as DeepAgent<
     DeepAgentTypeConfig<
-      TResponse,
+      InferStructuredResponse<TResponse>,
       undefined,
       ContextSchema,
       AllMiddleware,

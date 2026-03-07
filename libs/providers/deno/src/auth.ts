@@ -7,6 +7,7 @@
  */
 
 import type { DenoSandboxOptions } from "./types.js";
+import { DenoSandboxError } from "./types.js";
 
 /**
  * Authentication credentials for Deno Sandbox API.
@@ -36,7 +37,7 @@ export interface DenoCredentials {
  *
  * @param options - Optional authentication configuration from DenoSandboxOptions
  * @returns The authentication token string
- * @throws {Error} If no authentication token is available
+ * @throws {DenoSandboxError} If no authentication token is available
  *
  * @example
  * ```typescript
@@ -66,13 +67,14 @@ export function getAuthToken(options?: DenoSandboxOptions["auth"]): string {
   }
 
   // No token found - throw descriptive error
-  throw new Error(
+  throw new DenoSandboxError(
     "Deno Deploy authentication required. Provide a token using one of these methods:\n\n" +
       "1. Set DENO_DEPLOY_TOKEN environment variable:\n" +
       "   Go to https://app.deno.com -> Settings -> Organization Tokens\n" +
       "   Create a new token and run: export DENO_DEPLOY_TOKEN=your_token_here\n\n" +
       "2. Pass token directly in options:\n" +
-      "   new DenoSandbox({ auth: { token: '...' } })",
+      '   new DenoSandbox({ token: "..." })',
+    "AUTHENTICATION_FAILED",
   );
 }
 
@@ -83,7 +85,7 @@ export function getAuthToken(options?: DenoSandboxOptions["auth"]): string {
  *
  * @param options - Optional authentication configuration from DenoSandboxOptions
  * @returns Complete authentication credentials
- * @throws {Error} If no authentication token is available
+ * @throws {DenoSandboxError} If no authentication token is available
  */
 export function getAuthCredentials(
   options?: DenoSandboxOptions["auth"],

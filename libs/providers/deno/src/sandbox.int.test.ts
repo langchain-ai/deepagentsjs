@@ -17,7 +17,10 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { sandboxStandardTests, withRetry } from "@langchain/standard-tests";
+import {
+  sandboxStandardTests,
+  withRetry,
+} from "@langchain/sandbox-standard-tests/vitest";
 import { DenoSandbox } from "./sandbox.js";
 
 // Check if integration tests should run

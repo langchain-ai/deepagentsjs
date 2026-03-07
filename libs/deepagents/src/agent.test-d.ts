@@ -15,6 +15,8 @@ import {
   createMiddleware,
   InferAgentMiddleware,
   SystemMessage,
+  toolStrategy,
+  providerStrategy,
 } from "langchain";
 import { z } from "zod/v4";
 import { createDeepAgent } from "./agent.js";
@@ -267,6 +269,53 @@ describe("createDeepAgent types", () => {
       type Regular = InferRegularSubagents<typeof _agent>;
       expectTypeOf<Regular>().toHaveProperty("systemPrompt");
       expectTypeOf<Regular["name"]>().toEqualTypeOf<"Subagent2">();
+    });
+  });
+
+  describe("responseFormat", () => {
+    it("should infer the type of the response format", async () => {
+      const schema = z.object({
+        name: z.string(),
+      });
+      const agent = createDeepAgent({
+        responseFormat: providerStrategy(schema),
+      });
+      const result = await agent.invoke({ messages: [] });
+      expectTypeOf(result).toHaveProperty("structuredResponse");
+      expectTypeOf(result.structuredResponse).toEqualTypeOf<
+        z.infer<typeof schema>
+      >();
+    });
+
+    it("should infer the type of the response format with tool strategy", async () => {
+      const schema = z.object({
+        name: z.string(),
+      });
+      const agent = createDeepAgent({
+        responseFormat: toolStrategy(schema),
+      });
+      const result = await agent.invoke({ messages: [] });
+      expectTypeOf(result).toHaveProperty("structuredResponse");
+      expectTypeOf(result.structuredResponse).toEqualTypeOf<
+        z.infer<typeof schema>
+      >();
+    });
+
+    it("should infer multiple tool response formats as enum", async () => {
+      const schema1 = z.object({
+        foo: z.string(),
+      });
+      const schema2 = z.object({
+        bar: z.string(),
+      });
+      const agent = createDeepAgent({
+        responseFormat: toolStrategy([schema1, schema2]),
+      });
+      const result = await agent.invoke({ messages: [] });
+      expectTypeOf(result).toHaveProperty("structuredResponse");
+      expectTypeOf(result.structuredResponse).toEqualTypeOf<
+        z.infer<typeof schema1> | z.infer<typeof schema2>
+      >();
     });
   });
 });

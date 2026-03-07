@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { createAgent, createMiddleware, ReactAgent } from "langchain";
+import { createAgent, createMiddleware, ReactAgent, tool } from "langchain";
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
+import { z } from "zod/v4";
 import {
   createSubAgentMiddleware,
   createFilesystemMiddleware,
+  type CompiledSubAgent,
 } from "../index.js";
 import { createDeepAgent } from "../agent.js";
 import { createFileData } from "../backends/utils.js";
@@ -536,6 +538,181 @@ Each subagent should write ONE file. Do NOT write files sequentially - spawn all
 });
 
 /**
+ * Integration tests for hierarchical deep agent patterns (agent-as-subagent).
+ *
+ * These tests verify that a `createDeepAgent` instance can be used as a
+ * `CompiledSubAgent` within another agent, enabling multi-level agent hierarchies.
+ */
+describe("Hierarchical Deep Agent Integration Tests", () => {
+  it.concurrent(
+    "should use a deep agent as a compiled subagent and invoke its tools",
+    { timeout: 120 * 1000 }, // 120s
+    async () => {
+      // Create a deep agent that will be used as a subagent
+      const weatherDeepAgent = createDeepAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt:
+          "You are a weather specialist. Use the get_weather tool to get weather information.",
+        tools: [getWeather],
+      });
+
+      // Use it as a CompiledSubAgent in a parent agent
+      const parentAgent = createAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt: "Use the task tool to call a subagent.",
+        middleware: [
+          createSubAgentMiddleware({
+            defaultModel: SAMPLE_MODEL,
+            defaultTools: [],
+            subagents: [
+              {
+                name: "weather-deep-agent",
+                description: "A deep agent specialized in weather information.",
+                runnable: weatherDeepAgent,
+              } satisfies CompiledSubAgent,
+            ],
+          }),
+        ],
+      });
+
+      // Verify the task tool was created with the weather-deep-agent
+      const tools = extractToolsFromAgent(parentAgent);
+      expect(tools.task).toBeDefined();
+      expect(tools.task.description).toContain("weather-deep-agent");
+
+      // Verify tool calls flow through the hierarchy:
+      // parent -> task(weather-deep-agent) -> get_weather
+      const expectedToolCalls = [
+        { name: "task", args: { subagent_type: "weather-deep-agent" } },
+        { name: "get_weather" },
+      ];
+
+      await assertExpectedSubgraphActions(expectedToolCalls, parentAgent, {
+        messages: [new HumanMessage("What is the weather in Tokyo?")],
+      });
+    },
+  );
+
+  it.concurrent(
+    "should support a deep agent with its own subagents as a compiled subagent",
+    { timeout: 120 * 1000 }, // 120s
+    async () => {
+      // Level 2: Create a deep agent that has its own subagents
+      const sportsDeepAgent = createDeepAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt:
+          "You are a sports information agent. " +
+          "Use the get_soccer_scores tool for soccer scores. " +
+          "For weather-related queries about match conditions, delegate to the weather-helper subagent.",
+        tools: [getSoccerScores],
+        subagents: [
+          {
+            name: "weather-helper",
+            description:
+              "Gets weather info for match day conditions at stadiums.",
+            systemPrompt:
+              "Use the get_weather tool to get weather information.",
+            tools: [getWeather],
+            model: SAMPLE_MODEL,
+          },
+        ],
+      });
+
+      // Level 1: Use the deep agent as a CompiledSubAgent in a parent
+      const parentAgent = createAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt:
+          "Use the task tool with the sports-info subagent for any sports question.",
+        middleware: [
+          createSubAgentMiddleware({
+            defaultModel: SAMPLE_MODEL,
+            defaultTools: [],
+            subagents: [
+              {
+                name: "sports-info",
+                description:
+                  "A deep agent that knows about sports scores and match conditions.",
+                runnable: sportsDeepAgent,
+              } satisfies CompiledSubAgent,
+            ],
+          }),
+        ],
+      });
+
+      // Verify the parent delegates to the sports-info deep agent
+      // which in turn calls get_soccer_scores
+      const expectedToolCalls = [
+        { name: "task", args: { subagent_type: "sports-info" } },
+        { name: "get_soccer_scores" },
+      ];
+
+      await assertExpectedSubgraphActions(expectedToolCalls, parentAgent, {
+        messages: [
+          new HumanMessage("What are the latest scores for Manchester United?"),
+        ],
+      });
+    },
+  );
+
+  it.concurrent(
+    "should support a createDeepAgent as a compiled subagent in another createDeepAgent",
+    { timeout: 120 * 1000 }, // 120s
+    async () => {
+      // Create the inner deep agent
+      const innerAgent = createDeepAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt:
+          "You are a weather agent. Use the get_weather tool to answer weather questions.",
+        tools: [getWeather],
+      });
+
+      // Create the outer deep agent using the inner as a compiled subagent
+      const outerAgent = createDeepAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt:
+          "You are an orchestrator. Use the weather-agent subagent for weather queries.",
+        subagents: [
+          {
+            name: "weather-agent",
+            description: "A specialized deep agent for weather information.",
+            runnable: innerAgent,
+          } satisfies CompiledSubAgent,
+        ],
+      });
+
+      // Verify agent creation
+      const tools = extractToolsFromAgent(outerAgent);
+      expect(tools.task).toBeDefined();
+      expect(tools.task.description).toContain("weather-agent");
+
+      // Invoke and verify the delegation chain works
+      const response = await outerAgent.invoke(
+        {
+          messages: [new HumanMessage("What is the weather in Tokyo?")],
+        },
+        { recursionLimit: 100 },
+      );
+
+      const allToolCalls = response.messages
+        .filter(AIMessage.isInstance)
+        .flatMap((msg) => msg.tool_calls || []);
+
+      // The outer agent should have delegated to weather-agent
+      expect(
+        allToolCalls.some(
+          (tc) =>
+            tc.name === "task" && tc.args?.subagent_type === "weather-agent",
+        ),
+      ).toBe(true);
+
+      // The response should contain weather information
+      const lastMessage = response.messages[response.messages.length - 1];
+      expect(lastMessage.content).toBeTruthy();
+    },
+  );
+});
+
+/**
  * Integration tests for subagent skills via createDeepAgent.
  *
  * These tests verify that subagents with their own `skills` property
@@ -664,6 +841,66 @@ Use the write_file tool to save your code.`,
       // If the skill is properly loaded and followed, the subagent MUST use process.stdout.write
       expect(usedProcessStdout).toBe(true);
       expect(usedConsoleLog).toBe(false);
+    },
+  );
+
+  it.concurrent(
+    "should propagate lc_agent_name metadata to tools inside subagents",
+    { timeout: 90 * 1000 }, // 90s
+    async () => {
+      /**
+       * This test verifies that when a subagent is created with a name,
+       * its tools can access the agent name via config.metadata.lc_agent_name.
+       * This is critical for identifying which agent invoked a shared tool.
+       */
+      let capturedAgentName: string | undefined;
+
+      const identifyingTool = tool(
+        (input, config) => {
+          capturedAgentName = config.metadata?.lc_agent_name;
+          return `Weather in ${input.location} is sunny. Agent: ${capturedAgentName}`;
+        },
+        {
+          name: "get_weather_with_identity",
+          description: "Get the weather and identify the calling agent",
+          schema: z.object({ location: z.string() }),
+        },
+      );
+
+      const agent = createAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt:
+          "Use the weather-agent subagent to get the weather. Always delegate to the subagent.",
+        middleware: [
+          createSubAgentMiddleware({
+            defaultModel: SAMPLE_MODEL,
+            defaultTools: [],
+            subagents: [
+              {
+                name: "weather-agent",
+                description:
+                  "A weather specialist agent. Use this for any weather queries.",
+                systemPrompt:
+                  "You are a weather specialist. Use the get_weather_with_identity tool to answer weather questions.",
+                tools: [identifyingTool],
+              },
+            ],
+          }),
+        ],
+      });
+
+      const response = await agent.invoke({
+        messages: [new HumanMessage("What is the weather in Tokyo?")],
+      });
+
+      // Verify the task tool was called with the weather-agent subagent
+      const toolCalls = extractAllToolCalls(response);
+      const taskCall = toolCalls.find((tc) => tc.name === "task");
+      expect(taskCall).toBeDefined();
+      expect(taskCall!.args.subagent_type).toBe("weather-agent");
+
+      // Verify the tool captured the correct agent name
+      expect(capturedAgentName).toBe("weather-agent");
     },
   );
 });

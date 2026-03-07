@@ -41,8 +41,8 @@ const SUPPORTS_NOFOLLOW = fsSync.constants.O_NOFOLLOW !== undefined;
  * as plain text, and metadata (timestamps) are derived from filesystem stats.
  */
 export class FilesystemBackend implements BackendProtocol {
-  private cwd: string;
-  private virtualMode: boolean;
+  protected cwd: string;
+  protected virtualMode: boolean;
   private maxFileSizeBytes: number;
 
   constructor(

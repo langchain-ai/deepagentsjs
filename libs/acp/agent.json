@@ -1,0 +1,14 @@
+{
+  "id": "deepagents",
+  "name": "DeepAgents",
+  "version": "0.0.1",
+  "description": "Batteries-included AI coding agent powered by LangChain. Planning, subagents, filesystem, skills, memory — any model, any IDE.",
+  "repository": "https://github.com/langchain-ai/deepagentsjs",
+  "authors": ["LangChain"],
+  "license": "MIT",
+  "distribution": {
+    "npx": {
+      "package": "deepagents-acp"
+    }
+  }
+}

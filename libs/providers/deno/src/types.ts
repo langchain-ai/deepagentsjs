@@ -5,6 +5,15 @@
  * including options and error types.
  */
 
+import type {
+  Memory,
+  Region,
+  SecretConfig,
+  SnapshotId,
+  SnapshotSlug,
+  VolumeId,
+  VolumeSlug,
+} from "@deno/sandbox";
 import { type SandboxErrorCode, SandboxError } from "deepagents";
 
 /**
@@ -14,10 +23,12 @@ import { type SandboxErrorCode, SandboxError } from "deepagents";
  * - `ams`: Amsterdam
  * - `ord`: Chicago
  */
-export type DenoSandboxRegion = "ams" | "ord";
+export type DenoSandboxRegion = Region;
 
 /**
  * Sandbox lifetime configuration.
+ *
+ * @deprecated Use {@link SandboxTimeout} instead. This type will be removed in a future release.
  *
  * - `"session"`: Sandbox shuts down when you close/dispose the client (default)
  * - Duration string: Keep sandbox alive for a specific time (e.g., "5m", "30s")
@@ -25,20 +36,33 @@ export type DenoSandboxRegion = "ams" | "ord";
 export type SandboxLifetime = "session" | `${number}s` | `${number}m`;
 
 /**
+ * Sandbox timeout configuration.
+ *
+ * - `"session"`: Sandbox shuts down when the primary client disconnects (default)
+ * - Duration string: Keep sandbox alive for a specific time (e.g., "600s", "20m")
+ *
+ * Note: when using a duration, the sandbox will be terminated after the specified
+ * time even if clients are still connected.
+ */
+export type SandboxTimeout = "session" | `${number}s` | `${number}m`;
+
+/**
  * Configuration options for creating a Deno Sandbox.
  *
  * @example
  * ```typescript
  * const options: DenoSandboxOptions = {
- *   memoryMb: 1024, // 1GB memory
- *   lifetime: "5m", // 5 minutes
- *   region: "iad", // US East
+ *   memory: "1GiB", // 1GB memory
+ *   timeout: "5m", // 5 minutes
+ *   region: "ord", // Chicago
  * };
  * ```
  */
 export interface DenoSandboxOptions {
   /**
    * Amount of memory allocated to the sandbox in megabytes.
+   *
+   * @deprecated Use {@link DenoSandboxOptions.memory} instead. This option will be removed in a future release.
    *
    * Memory limits:
    * - Minimum: 768MB
@@ -49,7 +73,23 @@ export interface DenoSandboxOptions {
   memoryMb?: number;
 
   /**
+   * The memory size of the sandbox. Supports plain numbers (interpreted as bytes)
+   * and human-readable strings with binary (GiB, MiB, KiB) or decimal (GB, MB, kB)
+   * units.
+   *
+   * Takes precedence over the deprecated `memoryMb` option.
+   *
+   * @example 1342177280
+   * @example "1GiB"
+   * @example "1280MiB"
+   * @default "1280MiB"
+   */
+  memory?: Memory;
+
+  /**
    * Sandbox lifetime configuration.
+   *
+   * @deprecated Use {@link DenoSandboxOptions.timeout} instead. This option will be removed in a future release.
    *
    * - `"session"`: Sandbox shuts down when you close/dispose the client (default)
    * - Duration string: Keep sandbox alive for a specific time (e.g., "5m", "30s")
@@ -59,6 +99,23 @@ export interface DenoSandboxOptions {
    * @default "session"
    */
   lifetime?: SandboxLifetime;
+
+  /**
+   * The timeout of the sandbox. When not specified, it defaults to `"session"`.
+   *
+   * Takes precedence over the deprecated `lifetime` option.
+   *
+   * - `"session"`: Sandbox is destroyed when the primary client disconnects.
+   * - Duration string: Keep sandbox alive for a specific time (e.g., "600s", "20m").
+   *   Note that when this duration has passed, the sandbox will be terminated even
+   *   if there are still clients connected to it.
+   *
+   * @example "session"
+   * @example "600s"
+   * @example "20m"
+   * @default "session"
+   */
+  timeout?: SandboxTimeout;
 
   /**
    * Region where the sandbox will be created.
@@ -79,7 +136,7 @@ export interface DenoSandboxOptions {
    * @example
    * ```typescript
    * const options: DenoSandboxOptions = {
-   *   memoryMb: 1024,
+   *   memory: "1GiB",
    *   initialFiles: {
    *     "/home/app/index.js": "console.log('Hello')",
    *     "/home/app/package.json": '{"name": "test"}',
@@ -91,6 +148,9 @@ export interface DenoSandboxOptions {
 
   /**
    * Authentication configuration for Deno Deploy API.
+   *
+   * @deprecated Use the top-level {@link DenoSandboxOptions.token} and {@link DenoSandboxOptions.org} options instead.
+   * This option will be removed in a future release.
    *
    * ### Environment Variable Setup
    *
@@ -109,6 +169,161 @@ export interface DenoSandboxOptions {
      */
     token?: string;
   };
+
+  /**
+   * The Deno Deploy access token that should be used to authenticate requests.
+   *
+   * - When passing an organization token (starts with `ddo_`), no further
+   *   organization information is required.
+   * - When passing a personal token (starts with `ddp_`), the `org` option
+   *   must also be provided.
+   *
+   * If not provided, the `DENO_DEPLOY_TOKEN` environment variable will be used.
+   *
+   * Takes precedence over the deprecated `auth.token` option.
+   */
+  token?: string;
+
+  /**
+   * The Deno Deploy organization slug to operate within.
+   *
+   * This is required when using a personal access token (starts with `ddp_`).
+   * If not provided, the `DENO_DEPLOY_ORG` environment variable will be used.
+   */
+  org?: string;
+
+  /**
+   * Environment variables to start the sandbox with, in addition to the default
+   * environment variables such as `DENO_DEPLOY_ORGANIZATION_ID`.
+   */
+  env?: Record<string, string>;
+
+  /**
+   * Whether to enable debug logging.
+   *
+   * @default false
+   */
+  debug?: boolean;
+
+  /**
+   * Labels to set on the sandbox. Up to 5 labels can be specified.
+   * Each label key must be at most 64 bytes, and each label value
+   * must be at most 128 bytes.
+   */
+  labels?: Record<string, string>;
+
+  /**
+   * A volume or snapshot to use as the root filesystem of the sandbox.
+   *
+   * If not specified, the default base image will be used. The volume or
+   * snapshot must be bootable.
+   *
+   * - Volumes will be mounted read-write (writes are persisted).
+   * - Snapshots will be mounted read-only (writes are not persisted).
+   *
+   * @example
+   * ```typescript
+   * const options: DenoSandboxOptions = {
+   *   root: "my-volume-slug",
+   * };
+   * ```
+   */
+  root?: VolumeId | VolumeSlug | SnapshotId | SnapshotSlug;
+
+  /**
+   * Volumes to mount on the sandbox.
+   *
+   * The key is the mount path inside the sandbox, and the value is the
+   * volume ID or slug.
+   *
+   * @example
+   * ```typescript
+   * const options: DenoSandboxOptions = {
+   *   volumes: {
+   *     "/data/volume1": "volume-slug-or-id-1",
+   *   },
+   * };
+   * ```
+   */
+  volumes?: Record<string, VolumeId | VolumeSlug>;
+
+  /**
+   * List of hostnames / IP addresses with optional port numbers that the
+   * sandbox can make outbound network requests to.
+   *
+   * If not specified, no network restrictions are applied.
+   *
+   * @example []
+   * @example ["example.com"]
+   * @example ["*.example.com"]
+   * @example ["example.com:443"]
+   */
+  allowNet?: string[];
+
+  /**
+   * Secret environment variables that are never exposed to sandbox code.
+   * The real secret values are injected on the wire when the sandbox makes
+   * HTTPS requests to the specified hosts.
+   *
+   * The key is the environment variable name.
+   *
+   * @example
+   * ```typescript
+   * const options: DenoSandboxOptions = {
+   *   secrets: {
+   *     OPENAI_API_KEY: {
+   *       hosts: ["api.openai.com"],
+   *       value: "sk-proj-your-real-key",
+   *     },
+   *   },
+   * };
+   * ```
+   */
+  secrets?: Record<string, SecretConfig>;
+
+  /**
+   * Whether to expose SSH access to the sandbox. If true, the sandbox's
+   * `ssh` property will be populated once the sandbox is ready.
+   *
+   * @example
+   * ```typescript
+   * const sandbox = await DenoSandbox.create({ ssh: true });
+   * console.log(sandbox.instance.ssh);
+   * // => { username: "...", hostname: "..." }
+   * ```
+   */
+  ssh?: boolean;
+
+  /**
+   * The port number to expose for HTTP access. If specified, the sandbox's
+   * `url` property will be populated once the sandbox is ready, and can
+   * be used to access the sandbox over HTTP.
+   *
+   * @example
+   * ```typescript
+   * const sandbox = await DenoSandbox.create({ port: 8080 });
+   * console.log(sandbox.instance.url);
+   * // => "http://..."
+   * ```
+   */
+  port?: number;
+
+  /**
+   * Override the Sandbox API endpoint URL to use to create and communicate
+   * with the sandboxes.
+   *
+   * The default can also be overridden by setting the `DENO_SANDBOX_ENDPOINT`
+   * or `DENO_SANDBOX_BASE_DOMAIN` environment variables.
+   */
+  sandboxEndpoint?: string | ((region: string) => string);
+
+  /**
+   * Override the API endpoint to use to connect to Deno Deploy.
+   *
+   * The default can also be overridden by setting the `DENO_DEPLOY_ENDPOINT`
+   * environment variable.
+   */
+  apiEndpoint?: string;
 }
 
 /**

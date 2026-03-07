@@ -21,8 +21,10 @@ import {
   BaseSandbox,
   type ExecuteResponse,
   type FileDownloadResponse,
+  type FileInfo,
   type FileOperationError,
   type FileUploadResponse,
+  type GrepMatch,
   type BackendFactory,
 } from "deepagents";
 
@@ -455,6 +457,72 @@ export class VfsSandbox extends BaseSandbox {
     this.#vfs = undefined;
     this.#initialized = false;
     this.#workingDirectory = "/workspace";
+  }
+
+  /**
+   * Normalize a user-supplied file path for use in execute()-based operations.
+   *
+   * Since execute() runs commands in a temp directory, absolute paths like
+   * `/src/index.js` would resolve against the real filesystem instead of
+   * the sandbox working directory. This method strips the leading `/` so
+   * paths resolve relative to the temp directory (cwd of the shell).
+   *
+   * Both `/src/index.js` and `src/index.js` refer to the same sandbox file.
+   */
+  #normalizeExecPath(filePath: string): string {
+    const stripped = filePath.startsWith("/") ? filePath.slice(1) : filePath;
+    return stripped || ".";
+  }
+
+  /**
+   * Read file content with line numbers.
+   *
+   * Overrides BaseSandbox.read() to normalize paths with a leading `/`
+   * so they resolve correctly in the temp execution directory.
+   */
+  async read(
+    filePath: string,
+    offset: number = 0,
+    limit: number = 500,
+  ): Promise<string> {
+    return super.read(this.#normalizeExecPath(filePath), offset, limit);
+  }
+
+  /**
+   * List files and directories in the specified directory.
+   *
+   * Overrides BaseSandbox.lsInfo() to normalize paths with a leading `/`
+   * so they resolve correctly in the temp execution directory.
+   */
+  async lsInfo(dirPath: string): Promise<FileInfo[]> {
+    return super.lsInfo(this.#normalizeExecPath(dirPath));
+  }
+
+  /**
+   * Search for a literal text pattern in files.
+   *
+   * Overrides BaseSandbox.grepRaw() to normalize paths with a leading `/`
+   * so they resolve correctly in the temp execution directory.
+   */
+  async grepRaw(
+    pattern: string,
+    searchPath: string = "/",
+    glob: string | null = null,
+  ): Promise<GrepMatch[] | string> {
+    return super.grepRaw(pattern, this.#normalizeExecPath(searchPath), glob);
+  }
+
+  /**
+   * Structured glob matching returning FileInfo objects.
+   *
+   * Overrides BaseSandbox.globInfo() to normalize paths with a leading `/`
+   * so they resolve correctly in the temp execution directory.
+   */
+  async globInfo(
+    pattern: string,
+    searchPath: string = "/",
+  ): Promise<FileInfo[]> {
+    return super.globInfo(pattern, this.#normalizeExecPath(searchPath));
   }
 
   /**

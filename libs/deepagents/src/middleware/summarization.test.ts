@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { HumanMessage, AIMessage } from "@langchain/core/messages";
-import { createSummarizationMiddleware } from "./summarization.js";
+import { HumanMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
+import type { BaseMessage } from "@langchain/core/messages";
+import { isCommand } from "@langchain/langgraph";
+import { ContextOverflowError } from "@langchain/core/errors";
+import {
+  createSummarizationMiddleware,
+  type SummarizationEvent,
+} from "./summarization.js";
 import type {
   BackendProtocol,
   FileDownloadResponse,
@@ -27,25 +33,73 @@ vi.mock("langchain/chat_models/universal", () => {
   };
 });
 
+/**
+ * Helper to call wrapModelCall and capture what was passed to the handler.
+ *
+ * Returns { result, capturedRequest } where:
+ * - result: the return value from wrapModelCall (AIMessage or Command)
+ * - capturedRequest: the request passed to the handler (or null if handler wasn't called)
+ */
+async function callWrapModelCall(
+  middleware: ReturnType<typeof createSummarizationMiddleware>,
+  state: Record<string, unknown>,
+  handlerOverride?: (req: any) => any,
+): Promise<{
+  result: any;
+  capturedRequest: { messages: BaseMessage[]; [key: string]: any } | null;
+}> {
+  const messages = (state.messages ?? []) as BaseMessage[];
+  let capturedRequest: { messages: BaseMessage[]; [key: string]: any } | null =
+    null;
+
+  const mockResponse = new AIMessage({ content: "Mock response" });
+
+  const handler = handlerOverride
+    ? (req: any) => {
+        capturedRequest = req;
+        return handlerOverride(req);
+      }
+    : (req: any) => {
+        capturedRequest = req;
+        return mockResponse;
+      };
+
+  const request: any = {
+    messages,
+    state,
+    model: {},
+    systemPrompt: "",
+    systemMessage: {},
+    tools: [],
+    runtime: {},
+  };
+
+  const result = await middleware.wrapModelCall!(request, handler);
+  return { result, capturedRequest };
+}
+
 describe("createSummarizationMiddleware", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   describe("basic functionality", () => {
-    it("should return undefined when no messages", async () => {
+    it("should pass through when no messages", async () => {
       const middleware = createSummarizationMiddleware({
         model: "gpt-4o-mini",
         backend: createMockBackend(),
         trigger: { type: "messages", value: 5 },
       });
 
-      // @ts-expect-error - typing issue
-      const result = await middleware.beforeModel?.({ messages: [] });
-      expect(result).toBeUndefined();
+      const { result, capturedRequest } = await callWrapModelCall(middleware, {
+        messages: [],
+      });
+      // Handler is called with original request (pass-through)
+      expect(AIMessage.isInstance(result)).toBe(true);
+      expect(capturedRequest).not.toBeNull();
     });
 
-    it("should return undefined when under trigger threshold", async () => {
+    it("should pass through when under trigger threshold", async () => {
       const middleware = createSummarizationMiddleware({
         model: "gpt-4o-mini",
         backend: createMockBackend(),
@@ -57,9 +111,13 @@ describe("createSummarizationMiddleware", () => {
         new AIMessage({ content: "Hi there!" }),
       ];
 
-      // @ts-expect-error - typing issue
-      const result = await middleware.beforeModel?.({ messages });
-      expect(result).toBeUndefined();
+      const { result, capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
+      expect(AIMessage.isInstance(result)).toBe(true);
+      expect(capturedRequest).not.toBeNull();
+      // Messages should be passed through unchanged
+      expect(capturedRequest!.messages).toHaveLength(2);
     });
 
     it("should not summarize when no trigger configured", async () => {
@@ -74,9 +132,11 @@ describe("createSummarizationMiddleware", () => {
         (_, i) => new HumanMessage({ content: `Message ${i}` }),
       );
 
-      // @ts-expect-error - typing issue
-      const result = await middleware.beforeModel?.({ messages });
-      expect(result).toBeUndefined();
+      const { result, capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
+      expect(AIMessage.isInstance(result)).toBe(true);
+      expect(capturedRequest).not.toBeNull();
     });
   });
 
@@ -95,16 +155,23 @@ describe("createSummarizationMiddleware", () => {
         (_, i) => new HumanMessage({ content: `Message ${i}` }),
       );
 
-      // @ts-expect-error - typing issue
-      const result = await middleware.beforeModel?.({ messages });
+      const { result, capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
 
-      expect(result).toBeDefined();
-      expect(result?.messages).toBeDefined();
+      // Should return a Command with summarization event
+      expect(isCommand(result)).toBe(true);
+      const cmd = result as any;
+      expect(cmd.update).toBeDefined();
+      expect(cmd.update._summarizationEvent).toBeDefined();
+
+      // Handler should have been called with summarized messages
+      expect(capturedRequest).not.toBeNull();
       // Should have summary message + 2 preserved messages
-      expect(result?.messages.length).toBe(3);
+      expect(capturedRequest!.messages).toHaveLength(3);
       // First message should be the summary
-      expect(result?.messages[0]).toBeInstanceOf(HumanMessage);
-      expect(result?.messages[0].content).toContain("summary");
+      expect(HumanMessage.isInstance(capturedRequest!.messages[0])).toBe(true);
+      expect(capturedRequest!.messages[0].content).toContain("summary");
     });
   });
 
@@ -127,11 +194,13 @@ describe("createSummarizationMiddleware", () => {
           }),
       );
 
-      // @ts-expect-error - typing issue
-      const result = await middleware.beforeModel?.({ messages });
+      const { result, capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
 
-      expect(result).toBeDefined();
-      expect(result?.messages).toBeDefined();
+      expect(isCommand(result)).toBe(true);
+      expect(capturedRequest).not.toBeNull();
+      expect(capturedRequest!.messages).toBeDefined();
     });
   });
 
@@ -167,13 +236,14 @@ describe("createSummarizationMiddleware", () => {
           }),
       );
 
-      // @ts-expect-error - typing issue
-      const result = await middleware.beforeModel?.({ messages });
+      const { result, capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
 
-      expect(result).toBeDefined();
-      expect(result?.messages).toBeDefined();
+      expect(isCommand(result)).toBe(true);
+      expect(capturedRequest).not.toBeNull();
       // Should have summary message + 2 preserved messages
-      expect(result?.messages.length).toBe(3);
+      expect(capturedRequest!.messages).toHaveLength(3);
     });
 
     it("should not trigger fraction-based summarization when model has no profile", async () => {
@@ -206,11 +276,12 @@ describe("createSummarizationMiddleware", () => {
           }),
       );
 
-      // @ts-expect-error - typing issue
-      const result = await middleware.beforeModel?.({ messages });
+      const { result } = await callWrapModelCall(middleware, { messages });
 
       // Without maxInputTokens (no explicit option and no model profile), fraction trigger should not fire
-      expect(result).toBeUndefined();
+      // Result should be a pass-through AIMessage, not a Command
+      expect(AIMessage.isInstance(result)).toBe(true);
+      expect(isCommand(result)).toBe(false);
     });
 
     it("should not trigger when token count is below fraction threshold", async () => {
@@ -241,11 +312,11 @@ describe("createSummarizationMiddleware", () => {
         new AIMessage({ content: "Hi" }),
       ];
 
-      // @ts-expect-error - typing issue
-      const result = await middleware.beforeModel?.({ messages });
+      const { result } = await callWrapModelCall(middleware, { messages });
 
       // Token count is far below 90% of 100000, so should not trigger
-      expect(result).toBeUndefined();
+      expect(AIMessage.isInstance(result)).toBe(true);
+      expect(isCommand(result)).toBe(false);
     });
   });
 
@@ -264,16 +335,18 @@ describe("createSummarizationMiddleware", () => {
         (_, i) => new HumanMessage({ content: `Message ${i}` }),
       );
 
-      // @ts-expect-error - typing issue
-      const result = await middleware.beforeModel?.({ messages });
+      const { result, capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
 
-      expect(result).toBeDefined();
+      expect(isCommand(result)).toBe(true);
+      expect(capturedRequest).not.toBeNull();
       // Summary message (1) + preserved messages (3) = 4
-      expect(result?.messages.length).toBe(4);
+      expect(capturedRequest!.messages).toHaveLength(4);
       // Last 3 messages should be preserved (Message 7, 8, 9)
-      expect(result?.messages[1].content).toBe("Message 7");
-      expect(result?.messages[2].content).toBe("Message 8");
-      expect(result?.messages[3].content).toBe("Message 9");
+      expect(capturedRequest!.messages[1].content).toBe("Message 7");
+      expect(capturedRequest!.messages[2].content).toBe("Message 8");
+      expect(capturedRequest!.messages[3].content).toBe("Message 9");
     });
   });
 
@@ -300,8 +373,7 @@ describe("createSummarizationMiddleware", () => {
         (_, i) => new HumanMessage({ content: `Message ${i}` }),
       );
 
-      // @ts-expect-error - typing issue
-      await middleware.beforeModel?.({ messages });
+      await callWrapModelCall(middleware, { messages });
 
       expect(writtenContent.length).toBe(1);
       expect(writtenContent[0]).toContain("Summarized at");
@@ -309,7 +381,7 @@ describe("createSummarizationMiddleware", () => {
       expect(writtenContent[0]).toContain("Message 0");
     });
 
-    it("should not proceed with summarization if backend write fails", async () => {
+    it("should still summarize if backend write fails (matching Python behavior)", async () => {
       const mockBackend = createMockBackend({ writeError: "Write failed" });
 
       const middleware = createSummarizationMiddleware({
@@ -324,11 +396,18 @@ describe("createSummarizationMiddleware", () => {
         (_, i) => new HumanMessage({ content: `Message ${i}` }),
       );
 
-      // @ts-expect-error - typing issue
-      const result = await middleware.beforeModel?.({ messages });
+      const { result, capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
 
-      // Should return undefined if offloading fails
-      expect(result).toBeUndefined();
+      // Should still summarize even if offloading fails (to prevent context overflow).
+      // This matches the Python implementation which warns but continues.
+      expect(isCommand(result)).toBe(true);
+      // The handler should still be called with summarized messages
+      expect(capturedRequest).not.toBeNull();
+      // First message should be the summary
+      expect(HumanMessage.isInstance(capturedRequest!.messages[0])).toBe(true);
+      expect(capturedRequest!.messages[0].content).toContain("summary");
     });
   });
 
@@ -347,11 +426,13 @@ describe("createSummarizationMiddleware", () => {
         (_, i) => new HumanMessage({ content: `Message ${i}` }),
       );
 
-      // @ts-expect-error - typing issue
-      const result = await middleware.beforeModel?.({ messages });
+      const { result, capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
 
-      expect(result).toBeDefined();
-      const summaryMessage = result?.messages[0];
+      expect(isCommand(result)).toBe(true);
+      expect(capturedRequest).not.toBeNull();
+      const summaryMessage = capturedRequest!.messages[0];
       expect(summaryMessage.content).toContain("/conversation_history/");
       expect(summaryMessage.content).toContain("saved to");
     });
@@ -370,10 +451,12 @@ describe("createSummarizationMiddleware", () => {
         (_, i) => new HumanMessage({ content: `Message ${i}` }),
       );
 
-      // @ts-expect-error - typing issue
-      const result = await middleware.beforeModel?.({ messages });
+      const { capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
 
-      const summaryMessage = result?.messages[0];
+      expect(capturedRequest).not.toBeNull();
+      const summaryMessage = capturedRequest!.messages[0];
       expect(summaryMessage.additional_kwargs?.lc_source).toBe("summarization");
     });
   });
@@ -410,14 +493,16 @@ describe("createSummarizationMiddleware", () => {
         new HumanMessage({ content: "Recent message" }),
       ];
 
-      // @ts-expect-error - typing issue
-      const result = await middleware.beforeModel?.({ messages });
+      const { result, capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
 
-      expect(result).toBeDefined();
-      expect(result?.messages).toBeDefined();
+      // Truncation only - should pass through (no Command)
+      expect(AIMessage.isInstance(result)).toBe(true);
+      expect(capturedRequest).not.toBeNull();
       // The truncated AI message should have truncated content
-      const aiMessage = result?.messages.find(AIMessage.isInstance);
-      if (aiMessage) {
+      const aiMessage = capturedRequest!.messages.find(AIMessage.isInstance);
+      if (aiMessage?.tool_calls) {
         expect(aiMessage.tool_calls[0].args.content).toContain(
           "...(truncated)",
         );
@@ -447,10 +532,9 @@ describe("createSummarizationMiddleware", () => {
           new HumanMessage({ content: `Message ${i} with some content` }),
       );
 
-      // @ts-expect-error - typing issue
-      const result = await middleware.beforeModel?.({ messages });
+      const { result } = await callWrapModelCall(middleware, { messages });
 
-      expect(result).toBeDefined();
+      expect(isCommand(result)).toBe(true);
     });
   });
 
@@ -471,8 +555,7 @@ describe("createSummarizationMiddleware", () => {
         (_, i) => new HumanMessage({ content: `Message ${i}` }),
       );
 
-      // @ts-expect-error - typing issue
-      await middleware.beforeModel?.({ messages });
+      await callWrapModelCall(middleware, { messages });
 
       expect(backendFactory).toHaveBeenCalled();
     });
@@ -507,10 +590,647 @@ describe("createSummarizationMiddleware", () => {
         (_, i) => new HumanMessage({ content: `Message ${i}` }),
       );
 
-      // @ts-expect-error - typing issue
-      await middleware.beforeModel?.({ messages });
+      await callWrapModelCall(middleware, { messages });
 
       expect(writtenPath).toContain("/custom/history/");
+    });
+  });
+
+  describe("summarization event tracking", () => {
+    it("should return Command with _summarizationEvent on summarization", async () => {
+      const mockBackend = createMockBackend();
+      const middleware = createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: mockBackend,
+        trigger: { type: "messages", value: 5 },
+        keep: { type: "messages", value: 2 },
+      });
+
+      const messages = Array.from(
+        { length: 10 },
+        (_, i) => new HumanMessage({ content: `Message ${i}` }),
+      );
+
+      const { result } = await callWrapModelCall(middleware, { messages });
+
+      expect(isCommand(result)).toBe(true);
+      const cmd = result as any;
+      const event = cmd.update._summarizationEvent as SummarizationEvent;
+      expect(event).toBeDefined();
+      expect(event.cutoffIndex).toBe(8); // 10 messages - 2 kept = 8
+      expect(HumanMessage.isInstance(event.summaryMessage)).toBe(true);
+      expect(event.filePath).not.toBeNull();
+    });
+
+    it("should track session ID in Command update", async () => {
+      const mockBackend = createMockBackend();
+      const middleware = createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: mockBackend,
+        trigger: { type: "messages", value: 5 },
+        keep: { type: "messages", value: 2 },
+      });
+
+      const messages = Array.from(
+        { length: 10 },
+        (_, i) => new HumanMessage({ content: `Message ${i}` }),
+      );
+
+      const { result } = await callWrapModelCall(middleware, { messages });
+
+      expect(isCommand(result)).toBe(true);
+      const cmd = result as any;
+      expect(cmd.update._summarizationSessionId).toBeDefined();
+      expect(typeof cmd.update._summarizationSessionId).toBe("string");
+    });
+  });
+
+  describe("chained summarization", () => {
+    it("should compute cutoff index correctly across three chained summarizations", async () => {
+      const mockBackend = createMockBackend();
+      const middleware = createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: mockBackend,
+        trigger: { type: "messages", value: 5 },
+        keep: { type: "messages", value: 2 },
+      });
+
+      function makeStateMessages(n: number): BaseMessage[] {
+        return Array.from({ length: n }, (_, i) =>
+          i % 2 === 0
+            ? new HumanMessage({ content: `S${i}`, id: `s${i}` })
+            : new AIMessage({ content: `S${i}`, id: `s${i}` }),
+        );
+      }
+
+      // --- Round 1: first summarization, no previous event ---
+      // State: [S0..S7] (8 messages), cutoff = 8 - 2 = 6
+      // Preserved: [S6, S7]. Event: cutoffIndex=6
+      const { result: result1, capturedRequest: req1 } =
+        await callWrapModelCall(middleware, {
+          messages: makeStateMessages(8),
+        });
+
+      expect(isCommand(result1)).toBe(true);
+      const event1 = (result1 as any).update
+        ._summarizationEvent as SummarizationEvent;
+      expect(event1.cutoffIndex).toBe(6);
+      expect(req1).not.toBeNull();
+      // Captured request should have [summary, S6, S7]
+      expect(
+        req1!.messages.slice(1).map((m: BaseMessage) => m.content),
+      ).toEqual(["S6", "S7"]);
+
+      // --- Round 2: second summarization, feed back event from round 1 ---
+      // State: [S0..S13] (14 messages)
+      // effective = [summary_1, S6..S13] (9 messages), effective cutoff = 9 - 2 = 7
+      // state_cutoff = 6 + 7 - 1 = 12. Preserved: [S12, S13]
+      const { result: result2, capturedRequest: req2 } =
+        await callWrapModelCall(middleware, {
+          messages: makeStateMessages(14),
+          _summarizationEvent: event1,
+        });
+
+      expect(isCommand(result2)).toBe(true);
+      const event2 = (result2 as any).update
+        ._summarizationEvent as SummarizationEvent;
+      expect(event2.cutoffIndex).toBe(12);
+      expect(req2).not.toBeNull();
+      expect(
+        req2!.messages.slice(1).map((m: BaseMessage) => m.content),
+      ).toEqual(["S12", "S13"]);
+
+      // --- Round 3: third summarization, feed back event from round 2 ---
+      // State: [S0..S19] (20 messages)
+      // effective = [summary_2, S12..S19] (9 messages), effective cutoff = 9 - 2 = 7
+      // state_cutoff = 12 + 7 - 1 = 18. Preserved: [S18, S19]
+      const { result: result3, capturedRequest: req3 } =
+        await callWrapModelCall(middleware, {
+          messages: makeStateMessages(20),
+          _summarizationEvent: event2,
+        });
+
+      expect(isCommand(result3)).toBe(true);
+      const event3 = (result3 as any).update
+        ._summarizationEvent as SummarizationEvent;
+      expect(event3.cutoffIndex).toBe(18);
+      expect(req3).not.toBeNull();
+      expect(
+        req3!.messages.slice(1).map((m: BaseMessage) => m.content),
+      ).toEqual(["S18", "S19"]);
+    });
+  });
+
+  describe("safe cutoff for tool call/result pairs", () => {
+    it("should not split AI tool_call from its ToolMessage responses", async () => {
+      const mockBackend = createMockBackend();
+      const middleware = createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: mockBackend,
+        trigger: { type: "messages", value: 5 },
+        // keep: 3 messages would normally place the cutoff at index 7 (10 - 3)
+        // but if message[7] is a ToolMessage, it should adjust
+        keep: { type: "messages", value: 3 },
+      });
+
+      // Create a conversation where the naive cutoff (index 7) lands on a ToolMessage
+      const messages: BaseMessage[] = [
+        new HumanMessage({ content: "Message 0" }),
+        new AIMessage({ content: "Message 1" }),
+        new HumanMessage({ content: "Message 2" }),
+        new AIMessage({ content: "Message 3" }),
+        new HumanMessage({ content: "Message 4" }),
+        new AIMessage({ content: "Message 5" }),
+        // Index 6: AIMessage with tool calls
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "tool_call_1",
+              name: "read_file",
+              args: { path: "/test.txt" },
+            },
+          ],
+        }),
+        // Index 7: ToolMessage (naive cutoff would land here, splitting the pair)
+        new ToolMessage({
+          content: "file contents",
+          tool_call_id: "tool_call_1",
+        }),
+        new HumanMessage({ content: "Message 8" }),
+        new AIMessage({ content: "Message 9" }),
+      ];
+
+      const { capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
+
+      expect(capturedRequest).not.toBeNull();
+      // The cutoff should be adjusted so the AIMessage (index 6) and its
+      // ToolMessage (index 7) stay together in the preserved set.
+      // Safe cutoff moves back to index 6, so preserved = [AI+tool_calls, ToolMessage, msg8, msg9]
+      // The summary message is prepended, so total = 5
+      const preservedMessages = capturedRequest!.messages.slice(1); // skip summary
+      expect(preservedMessages.length).toBe(4);
+      // Verify no orphaned ToolMessages
+      for (const msg of preservedMessages) {
+        if (ToolMessage.isInstance(msg)) {
+          // Find the corresponding AIMessage with matching tool_call
+          const toolCallId = msg.tool_call_id;
+          const hasMatchingAI = preservedMessages.some(
+            (m) =>
+              AIMessage.isInstance(m) &&
+              m.tool_calls?.some((tc) => tc.id === toolCallId),
+          );
+          expect(hasMatchingAI).toBe(true);
+        }
+      }
+    });
+
+    it("should handle multiple consecutive ToolMessages", async () => {
+      const mockBackend = createMockBackend();
+      const middleware = createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: mockBackend,
+        trigger: { type: "messages", value: 5 },
+        keep: { type: "messages", value: 2 },
+      });
+
+      // Naive cutoff at index 8 (10 - 2) lands on a ToolMessage
+      const messages: BaseMessage[] = [
+        new HumanMessage({ content: "Message 0" }),
+        new AIMessage({ content: "Message 1" }),
+        new HumanMessage({ content: "Message 2" }),
+        new AIMessage({ content: "Message 3" }),
+        new HumanMessage({ content: "Message 4" }),
+        new AIMessage({ content: "Message 5" }),
+        // Index 6: AIMessage with multiple tool calls
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            { id: "tc_1", name: "read_file", args: { path: "/a.txt" } },
+            { id: "tc_2", name: "read_file", args: { path: "/b.txt" } },
+          ],
+        }),
+        // Index 7: First ToolMessage
+        new ToolMessage({
+          content: "file a contents",
+          tool_call_id: "tc_1",
+        }),
+        // Index 8: Second ToolMessage (naive cutoff lands here)
+        new ToolMessage({
+          content: "file b contents",
+          tool_call_id: "tc_2",
+        }),
+        new HumanMessage({ content: "Message 9" }),
+      ];
+
+      const { capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
+
+      expect(capturedRequest).not.toBeNull();
+      const preservedMessages = capturedRequest!.messages.slice(1);
+      // Safe cutoff should move back to include the AIMessage at index 6
+      // Preserved: [AI+tool_calls, ToolMsg1, ToolMsg2, msg9] = 4 messages
+      expect(preservedMessages.length).toBe(4);
+      // Verify all ToolMessages have matching AI tool_calls
+      for (const msg of preservedMessages) {
+        if (ToolMessage.isInstance(msg)) {
+          const toolCallId = msg.tool_call_id;
+          const hasMatchingAI = preservedMessages.some(
+            (m) =>
+              AIMessage.isInstance(m) &&
+              m.tool_calls?.some((tc) => tc.id === toolCallId),
+          );
+          expect(hasMatchingAI).toBe(true);
+        }
+      }
+    });
+  });
+
+  describe("ContextOverflowError handling", () => {
+    it("should catch ContextOverflowError and fall back to summarization", async () => {
+      const mockBackend = createMockBackend();
+      let callCount = 0;
+
+      const mockModel = {
+        profile: { maxInputTokens: 200 },
+        async invoke() {
+          return { content: "Summary of conversation." };
+        },
+      };
+
+      const middleware = createSummarizationMiddleware({
+        model: mockModel as any,
+        backend: mockBackend,
+        trigger: { type: "tokens", value: 999999 },
+        keep: { type: "messages", value: 2 },
+      });
+
+      const messages = Array.from(
+        { length: 8 },
+        (_, i) => new HumanMessage({ content: `Message ${i}` }),
+      );
+
+      const { result, capturedRequest } = await callWrapModelCall(
+        middleware,
+        { messages },
+        () => {
+          callCount++;
+          if (callCount === 1) {
+            throw new ContextOverflowError("prompt is too long");
+          }
+          return new AIMessage({ content: "OK" });
+        },
+      );
+
+      expect(isCommand(result)).toBe(true);
+      expect(capturedRequest).not.toBeNull();
+      expect(capturedRequest!.messages[0].content).toContain("summary");
+      expect(callCount).toBe(2);
+    });
+
+    it("should re-summarize all messages when handler overflows after initial summarization", async () => {
+      const mockBackend = createMockBackend();
+      let callCount = 0;
+
+      const mockModel = {
+        profile: { maxInputTokens: 200 },
+        async invoke() {
+          return { content: "Summary of conversation." };
+        },
+      };
+
+      // Use a high token trigger so proactive summarization does NOT fire.
+      // The first ContextOverflowError from the handler (callCount=1)
+      // triggers emergency summarization inside wrapModelCall, which calls
+      // performSummarization. Inside performSummarization the handler is
+      // retried (callCount=2) and throws again → re-summarization happens,
+      // then handler is retried a final time (callCount=3) and succeeds.
+      const middleware = createSummarizationMiddleware({
+        model: mockModel as any,
+        backend: mockBackend,
+        trigger: { type: "tokens", value: 999999 },
+        keep: { type: "messages", value: 3 },
+      });
+
+      const messages = Array.from(
+        { length: 10 },
+        (_, i) => new HumanMessage({ content: `Message ${i}` }),
+      );
+
+      const { result, capturedRequest } = await callWrapModelCall(
+        middleware,
+        { messages },
+        () => {
+          callCount++;
+          if (callCount <= 2) {
+            throw new ContextOverflowError("prompt is too long");
+          }
+          return new AIMessage({ content: "OK" });
+        },
+      );
+
+      expect(isCommand(result)).toBe(true);
+      expect(capturedRequest).not.toBeNull();
+      // After re-summarization, should have only the summary message
+      expect(capturedRequest!.messages).toHaveLength(1);
+      expect(capturedRequest!.messages[0].content).toContain("summary");
+      expect(callCount).toBe(3);
+    });
+  });
+
+  describe("token estimation calibration", () => {
+    it("should calibrate multiplier after ContextOverflowError and trigger proactive summarization on subsequent calls", async () => {
+      const mockBackend = createMockBackend();
+      let callCount = 0;
+
+      const mockModel = {
+        profile: { maxInputTokens: 200 },
+        async invoke() {
+          return { content: "Summary of conversation." };
+        },
+      };
+
+      const middleware = createSummarizationMiddleware({
+        model: mockModel as any,
+        backend: mockBackend,
+        trigger: { type: "fraction", value: 0.85 },
+        keep: { type: "messages", value: 2 },
+      });
+
+      const messages = Array.from(
+        { length: 6 },
+        (_, i) =>
+          new HumanMessage({
+            content: `Message ${i} with enough content to generate tokens`,
+          }),
+      );
+
+      // First call: handler throws ContextOverflowError, middleware catches
+      // and summarizes. This calibrates the token estimation multiplier.
+      const { result: result1 } = await callWrapModelCall(
+        middleware,
+        { messages },
+        () => {
+          callCount++;
+          if (callCount === 1) {
+            throw new ContextOverflowError("prompt is too long");
+          }
+          return new AIMessage({ content: "OK" });
+        },
+      );
+
+      expect(isCommand(result1)).toBe(true);
+
+      // Second call with the same messages: the calibrated multiplier
+      // should cause proactive summarization (shouldSummarize = true)
+      // instead of passing through and hitting another overflow.
+      callCount = 0;
+      const { result: result2 } = await callWrapModelCall(
+        middleware,
+        { messages },
+        () => {
+          callCount++;
+          return new AIMessage({ content: "OK" });
+        },
+      );
+
+      // Should proactively summarize (return Command) without the handler
+      // ever throwing ContextOverflowError
+      expect(isCommand(result2)).toBe(true);
+      expect(callCount).toBe(1);
+    });
+  });
+
+  describe("tool result compaction", () => {
+    it("should compact tool results when all messages would be summarized", async () => {
+      const mockBackend = createMockBackend();
+
+      const mockModel = {
+        profile: { maxInputTokens: 500 },
+        async invoke() {
+          return { content: "Summary of conversation." };
+        },
+      };
+
+      const middleware = createSummarizationMiddleware({
+        model: mockModel as any,
+        backend: mockBackend,
+        trigger: { type: "messages", value: 3 },
+        keep: { type: "messages", value: 1 },
+      });
+
+      const largeContent = "x".repeat(5000);
+      const messages: BaseMessage[] = [
+        new HumanMessage({ content: "Analyze these files" }),
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            { id: "tc1", name: "read_file", args: { path: "/a.json" } },
+            { id: "tc2", name: "read_file", args: { path: "/b.json" } },
+            { id: "tc3", name: "read_file", args: { path: "/c.json" } },
+          ],
+        }),
+        new ToolMessage({
+          content: largeContent,
+          tool_call_id: "tc1",
+          name: "read_file",
+        }),
+        new ToolMessage({
+          content: largeContent,
+          tool_call_id: "tc2",
+          name: "read_file",
+        }),
+        new ToolMessage({
+          content: largeContent,
+          tool_call_id: "tc3",
+          name: "read_file",
+        }),
+      ];
+
+      const { capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
+
+      expect(capturedRequest).not.toBeNull();
+      // Should still have all messages (compacted, not summarized)
+      expect(capturedRequest!.messages.length).toBe(5);
+      // ToolMessage content should be truncated
+      for (const msg of capturedRequest!.messages) {
+        if (ToolMessage.isInstance(msg)) {
+          expect(typeof msg.content).toBe("string");
+          expect((msg.content as string).length).toBeLessThan(
+            largeContent.length,
+          );
+          expect(msg.content).toContain("...(result truncated)");
+        }
+      }
+    });
+
+    it("should preserve AI/Tool message structure after compaction", async () => {
+      const mockBackend = createMockBackend();
+
+      const mockModel = {
+        profile: { maxInputTokens: 500 },
+        async invoke() {
+          return { content: "Summary of conversation." };
+        },
+      };
+
+      const middleware = createSummarizationMiddleware({
+        model: mockModel as any,
+        backend: mockBackend,
+        trigger: { type: "messages", value: 3 },
+        keep: { type: "messages", value: 1 },
+      });
+
+      const messages: BaseMessage[] = [
+        new HumanMessage({ content: "Analyze" }),
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            { id: "tc1", name: "read_file", args: { path: "/a.json" } },
+            { id: "tc2", name: "read_file", args: { path: "/b.json" } },
+          ],
+        }),
+        new ToolMessage({
+          content: "x".repeat(5000),
+          tool_call_id: "tc1",
+          name: "read_file",
+        }),
+        new ToolMessage({
+          content: "x".repeat(5000),
+          tool_call_id: "tc2",
+          name: "read_file",
+        }),
+      ];
+
+      const { capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
+
+      expect(capturedRequest).not.toBeNull();
+      // Every ToolMessage should still have its tool_call_id
+      for (const msg of capturedRequest!.messages) {
+        if (ToolMessage.isInstance(msg)) {
+          expect(msg.tool_call_id).toBeDefined();
+          const matchingAI = capturedRequest!.messages.find(
+            (m) =>
+              AIMessage.isInstance(m) &&
+              m.tool_calls?.some((tc) => tc.id === msg.tool_call_id),
+          );
+          expect(matchingAI).toBeDefined();
+        }
+      }
+    });
+
+    it("should not compact when tool results are already small enough", async () => {
+      const mockBackend = createMockBackend();
+
+      const mockModel = {
+        profile: { maxInputTokens: 100000 },
+        async invoke() {
+          return { content: "Summary of conversation." };
+        },
+      };
+
+      const middleware = createSummarizationMiddleware({
+        model: mockModel as any,
+        backend: mockBackend,
+        trigger: { type: "messages", value: 3 },
+        keep: { type: "messages", value: 1 },
+      });
+
+      const messages: BaseMessage[] = [
+        new HumanMessage({ content: "Analyze" }),
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            { id: "tc1", name: "read_file", args: { path: "/a.json" } },
+          ],
+        }),
+        new ToolMessage({
+          content: "small result",
+          tool_call_id: "tc1",
+          name: "read_file",
+        }),
+        new HumanMessage({ content: "Thanks" }),
+      ];
+
+      const { capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
+
+      expect(capturedRequest).not.toBeNull();
+      // Content should be unchanged (not truncated)
+      const toolMsg = capturedRequest!.messages.find(ToolMessage.isInstance);
+      if (toolMsg) {
+        expect(toolMsg.content).toBe("small result");
+      }
+    });
+  });
+
+  describe("forward cutoff for large tool groups", () => {
+    it("should advance cutoff forward past entire AI/Tool group when backward adjustment is too large", async () => {
+      const mockBackend = createMockBackend();
+
+      const mockModel = {
+        profile: { maxInputTokens: 500 },
+        async invoke() {
+          return { content: "Summary of conversation." };
+        },
+      };
+
+      const middleware = createSummarizationMiddleware({
+        model: mockModel as any,
+        backend: mockBackend,
+        trigger: { type: "messages", value: 5 },
+        keep: { type: "messages", value: 2 },
+      });
+
+      // Single AIMessage with many tool calls — backward adjustment would
+      // move from index ~8 all the way to index 1, which is more than half.
+      // Large tool results ensure compaction actually modifies them.
+      const largeContent = "x".repeat(5000);
+      const toolCalls = Array.from({ length: 8 }, (_, i) => ({
+        id: `tc_${i}`,
+        name: "read_file",
+        args: { path: `/file${i}.txt` },
+      }));
+
+      const messages: BaseMessage[] = [
+        new HumanMessage({ content: "Read all files" }),
+        new AIMessage({ content: "", tool_calls: toolCalls }),
+        ...toolCalls.map(
+          (tc) =>
+            new ToolMessage({
+              content: largeContent,
+              tool_call_id: tc.id,
+              name: "read_file",
+            }),
+        ),
+      ];
+
+      const { capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
+
+      // With forward advancement, all messages are in the summarized set.
+      // Compaction should kick in instead of full summarization, preserving
+      // the AI/Tool message structure with truncated tool results.
+      expect(capturedRequest).not.toBeNull();
+      expect(capturedRequest!.messages.length).toBe(messages.length);
+      // Tool results should be truncated
+      for (const msg of capturedRequest!.messages) {
+        if (ToolMessage.isInstance(msg)) {
+          expect((msg.content as string).length).toBeLessThan(
+            largeContent.length,
+          );
+          expect(msg.content).toContain("...(result truncated)");
+        }
+      }
     });
   });
 });

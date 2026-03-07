@@ -1,9 +1,9 @@
 <div align="center">
   <a href="https://docs.langchain.com/oss/python/deepagents/overview#deep-agents-overview">
     <picture>
-      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/langchain-ai/deepagentsjs/refs/heads/main/.github/images/logo-dark.svg">
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/langchain-ai/deepagentsjs/refs/heads/main/.github/images/logo-light.svg">
-      <img alt="Deep Agents Logo" src="https://raw.githubusercontent.com/langchain-ai/deepagentsjs/refs/heads/main/.github/images/logo-dark.svg" width="80%">
+      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/langchain-ai/deepagentsjs/refs/heads/main/.github/images/logo-light.svg">
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/langchain-ai/deepagentsjs/refs/heads/main/.github/images/logo-dark.svg">
+      <img alt="Deep Agents Logo" src="https://raw.githubusercontent.com/langchain-ai/deepagentsjs/refs/heads/main/.github/images/logo-dark.svg" width="50%">
     </picture>
   </a>
 </div>
@@ -131,6 +131,9 @@ const internetSearch = tool(
 const researchInstructions = `You are an expert researcher. Your job is to conduct thorough research, and then write a polished report.
 
 You have access to an internet search tool as your primary means of gathering information.
+
+> [!TIP]
+> For developing, debugging, and deploying AI agents and LLM applications, see [LangSmith](https://docs.langchain.com/langsmith/home).
 
 ## \`internet_search\`
 
@@ -479,6 +482,7 @@ import {
   StateBackend,
   StoreBackend,
   FilesystemBackend,
+  LocalShellBackend,
   CompositeBackend,
 } from "deepagents";
 import { MemorySaver } from "@langchain/langgraph";
@@ -501,8 +505,16 @@ const agent3 = createDeepAgent({
   backend: (config) => new FilesystemBackend({ rootDir: "./agent-workspace" }),
 });
 
-// CompositeBackend: Combine multiple backends
+// LocalShellBackend: Filesystem access + local shell command execution
 const agent4 = createDeepAgent({
+  backend: new LocalShellBackend({
+    rootDir: "./agent-workspace",
+    inheritEnv: true,
+  }),
+});
+
+// CompositeBackend: Combine multiple backends
+const agent5 = createDeepAgent({
   backend: (config) =>
     new CompositeBackend({
       state: new StateBackend(config),
@@ -704,3 +716,52 @@ const agent = createAgent({
   ],
 });
 ```
+
+## ACP (Agent Client Protocol) Support
+
+Deep Agents can be exposed as an [Agent Client Protocol](https://agentclientprotocol.com) server, enabling integration with IDEs like [Zed](https://zed.dev), JetBrains, and other ACP-compatible clients through a standardized JSON-RPC 2.0 protocol over stdio.
+
+The `deepagents-acp` package wraps your Deep Agent with ACP support:
+
+```bash
+npm install deepagents-acp
+```
+
+The quickest way to get started is via the CLI:
+
+```bash
+npx deepagents-acp --name my-agent --workspace /path/to/project
+```
+
+Or programmatically:
+
+```typescript
+import { startServer } from "deepagents-acp";
+
+await startServer({
+  agents: {
+    name: "coding-assistant",
+    description: "AI coding assistant with filesystem access",
+    skills: ["./skills/"],
+  },
+  workspaceRoot: process.cwd(),
+});
+```
+
+To use with Zed, add the following to your Zed settings:
+
+```json
+{
+  "agent": {
+    "profiles": {
+      "deepagents": {
+        "name": "DeepAgents",
+        "command": "npx",
+        "args": ["deepagents-acp"]
+      }
+    }
+  }
+}
+```
+
+See the [deepagents-acp README](libs/acp/README.md) and the [ACP server example](examples/acp-server/) for full documentation and advanced configuration.

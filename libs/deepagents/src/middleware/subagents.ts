@@ -7,6 +7,8 @@ import {
   ToolMessage,
   humanInTheLoopMiddleware,
   SystemMessage,
+  type ContentBlock,
+  type BaseMessage,
   type InterruptOnConfig,
   type ReactAgent,
   StructuredTool,
@@ -213,10 +215,12 @@ When NOT to use the task tool:
  * Type definitions for pre-compiled agents.
  *
  * @typeParam TRunnable - The type of the runnable (ReactAgent or Runnable).
- *   When using `createAgent`, this preserves the middleware types for type inference.
+ *   When using `createAgent` or `createDeepAgent`, this preserves the middleware
+ *   types for type inference. Uses `ReactAgent<any>` to accept agents with any
+ *   type configuration (including DeepAgent instances).
  */
 export interface CompiledSubAgent<
-  TRunnable extends ReactAgent | Runnable = ReactAgent | Runnable,
+  TRunnable extends ReactAgent<any> | Runnable = ReactAgent<any> | Runnable,
 > {
   /** The name of the agent */
   name: string;
@@ -363,6 +367,15 @@ function filterStateForSubagent(
 }
 
 /**
+ * Invalid tool message block types
+ */
+const INVALID_TOOL_MESSAGE_BLOCK_TYPES = [
+  "tool_use",
+  "thinking",
+  "redacted_thinking",
+];
+
+/**
  * Create Command with filtered state update from subagent result
  */
 function returnCommandWithStateUpdate(
@@ -370,15 +383,26 @@ function returnCommandWithStateUpdate(
   toolCallId: string,
 ): Command {
   const stateUpdate = filterStateForSubagent(result);
-  const messages = result.messages as Array<{ content: string }>;
+  const messages = result.messages as BaseMessage[];
   const lastMessage = messages?.[messages.length - 1];
+
+  let content: string | ContentBlock[] =
+    lastMessage?.content || "Task completed";
+  if (Array.isArray(content)) {
+    content = content.filter(
+      (block) => !INVALID_TOOL_MESSAGE_BLOCK_TYPES.includes(block.type),
+    );
+    if (content.length === 0) {
+      content = "Task completed";
+    }
+  }
 
   return new Command({
     update: {
       ...stateUpdate,
       messages: [
         new ToolMessage({
-          content: lastMessage?.content || "Task completed",
+          content,
           tool_call_id: toolCallId,
           name: "task",
         }),
@@ -434,6 +458,7 @@ function getSubagents(options: {
       systemPrompt: DEFAULT_SUBAGENT_PROMPT,
       tools: defaultTools as any,
       middleware: generalPurposeMiddleware,
+      name: "general-purpose",
     });
 
     agents["general-purpose"] = generalPurposeSubagent;
@@ -464,6 +489,7 @@ function getSubagents(options: {
         systemPrompt: agentParams.systemPrompt,
         tools: agentParams.tools ?? defaultTools,
         middleware,
+        name: agentParams.name,
       });
     }
   }
@@ -541,9 +567,25 @@ function createTaskTool(options: {
         unknown
       >;
 
-      // Return command with filtered state update
       if (!config.toolCall?.id) {
-        throw new Error("Tool call ID is required for subagent invocation");
+        const messages = result.messages as BaseMessage[];
+        const lastMessage = messages?.[messages.length - 1];
+        let content: string | ContentBlock[] =
+          lastMessage?.content || "Task completed";
+        if (Array.isArray(content)) {
+          content = content.filter(
+            (block) => !INVALID_TOOL_MESSAGE_BLOCK_TYPES.includes(block.type),
+          );
+          if (content.length === 0) {
+            return "Task completed";
+          }
+          return content
+            .map((block) =>
+              "text" in block ? block.text : JSON.stringify(block),
+            )
+            .join("\n");
+        }
+        return content;
       }
 
       return returnCommandWithStateUpdate(result, config.toolCall.id);
