@@ -305,15 +305,30 @@ export function createMemoryMiddleware(options: MemoryMiddlewareOptions) {
 
       // Format memory section
       const formattedContents = formatMemoryContents(memoryContents, sources);
-
       const memorySection = MEMORY_SYSTEM_PROMPT.replace(
         "{memory_contents}",
         formattedContents,
       );
 
-      // Concat memory section to system prompt
-      const memoryMessage = new SystemMessage(memorySection);
-      const newSystemMessage = memoryMessage.concat(request.systemMessage);
+      const existingContent = request.systemMessage.content;
+      const existingBlocks =
+        typeof existingContent === "string"
+          ? [{ type: "text" as const, text: existingContent }]
+          : Array.isArray(existingContent)
+            ? existingContent
+            : [];
+
+      // Add cache control breakpoint for memory block
+      const newSystemMessage = new SystemMessage({
+        content: [
+          ...existingBlocks,
+          {
+            type: "text" as const,
+            text: memorySection,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+      });
 
       return handler({
         ...request,

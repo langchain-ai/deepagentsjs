@@ -116,21 +116,23 @@ export function createDeepAgent<
   /**
    * Combine system prompt with base prompt like Python implementation
    */
-  const finalSystemPrompt = systemPrompt
+  const systemPromptBlocks: _messages.ContentBlock[] = systemPrompt
     ? typeof systemPrompt === "string"
-      ? `${systemPrompt}\n\n${BASE_PROMPT}`
-      : new SystemMessage({
-          content: [
-            {
-              type: "text",
-              text: BASE_PROMPT,
-            },
-            ...(typeof systemPrompt.content === "string"
-              ? [{ type: "text", text: systemPrompt.content }]
-              : systemPrompt.content),
-          ],
-        })
-    : BASE_PROMPT;
+      ? [{ type: "text", text: `${systemPrompt}\n\n${BASE_PROMPT}` }]
+      : [
+          { type: "text", text: BASE_PROMPT },
+          ...(typeof systemPrompt.content === "string"
+            ? [{ type: "text", text: systemPrompt.content }]
+            : systemPrompt.content),
+        ]
+    : [{ type: "text", text: BASE_PROMPT }];
+
+  systemPromptBlocks[systemPromptBlocks.length - 1] = {
+    ...systemPromptBlocks[systemPromptBlocks.length - 1],
+    cache_control: { type: "ephemeral" },
+  };
+
+  const finalSystemPrompt = new SystemMessage({ content: systemPromptBlocks });
 
   /**
    * Create backend configuration for filesystem middleware
@@ -229,6 +231,7 @@ export function createDeepAgent<
     }),
     anthropicPromptCachingMiddleware({
       unsupportedModelBehavior: "ignore",
+      minMessagesToCache: 1,
     }),
     createPatchToolCallsMiddleware(),
   ];
@@ -282,6 +285,7 @@ export function createDeepAgent<
      */
     anthropicPromptCachingMiddleware({
       unsupportedModelBehavior: "ignore",
+      minMessagesToCache: 1,
     }),
     /**
      * Patches tool calls to ensure compatibility across different model providers
