@@ -18,6 +18,7 @@ import type {
   SandboxBackendProtocol,
   GrepMatch,
 } from "./protocol.js";
+import { isSandboxBackend } from "./protocol.js";
 
 /**
  * Mock sandbox backend for testing execute delegation
@@ -607,6 +608,38 @@ describe("CompositeBackend", () => {
       expect(() => composite.execute("echo hello")).toThrow(
         "doesn't support command execution",
       );
+    });
+
+    it("should pass isSandboxBackend check when default backend supports execution", () => {
+      const mockSandbox = new MockSandboxBackend();
+      const { stateAndStore } = makeConfig();
+
+      const composite = new CompositeBackend(mockSandbox, {
+        "/store/": new StoreBackend(stateAndStore),
+      });
+
+      expect(isSandboxBackend(composite)).toBe(true);
+    });
+
+    it("should delegate id to default sandbox backend", () => {
+      const mockSandbox = new MockSandboxBackend();
+      const { stateAndStore } = makeConfig();
+
+      const composite = new CompositeBackend(mockSandbox, {
+        "/store/": new StoreBackend(stateAndStore),
+      });
+
+      expect(composite.id).toBe("mock-sandbox");
+    });
+
+    it("should return empty string id when default backend is not sandbox", () => {
+      const { stateAndStore } = makeConfig();
+
+      const composite = new CompositeBackend(new StateBackend(stateAndStore), {
+        "/store/": new StoreBackend(stateAndStore),
+      });
+
+      expect(composite.id).toBe("");
     });
   });
 
