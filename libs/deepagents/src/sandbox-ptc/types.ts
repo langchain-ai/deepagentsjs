@@ -1,0 +1,60 @@
+/**
+ * Types for the Sandbox PTC (Programmatic Tool Calling) system.
+ *
+ * Defines the IPC protocol between instrumented scripts running inside
+ * sandboxes and the host-side PTC engine.
+ */
+
+import type {
+  BackendProtocol,
+  BackendFactory,
+} from "../backends/protocol.js";
+
+/**
+ * IPC request parsed from stdout markers.
+ * The sandbox script writes these between __DA_REQ_START__ / __DA_REQ_END__ markers.
+ */
+export interface IpcRequest {
+  type: "tool_call";
+  name: string;
+  input: Record<string, unknown>;
+}
+
+/**
+ * Options for the sandbox PTC middleware.
+ */
+export interface SandboxPtcMiddlewareOptions {
+  /**
+   * Backend instance or factory that implements SandboxBackendProtocol.
+   * Must support `spawnInteractive()` for PTC to be active.
+   */
+  backend: BackendProtocol | BackendFactory;
+
+  /**
+   * Which tools to expose inside the sandbox via PTC.
+   *
+   * - `true`  — expose all tools except filesystem tools (default)
+   * - `false` — disable PTC
+   * - `string[]` — expose only the named tools
+   * - `{ include: string[] }` — expose only the named tools
+   * - `{ exclude: string[] }` — expose all except the named tools
+   */
+  ptc?: boolean | string[] | { include: string[] } | { exclude: string[] };
+
+  /** Execution timeout in milliseconds (default: 300_000 — 5 minutes) */
+  timeoutMs?: number;
+}
+
+/**
+ * Tools excluded from PTC by default (redundant inside the sandbox
+ * since the sandbox already has filesystem access via shell commands).
+ */
+export const DEFAULT_PTC_EXCLUDED_TOOLS = [
+  "ls",
+  "read_file",
+  "write_file",
+  "edit_file",
+  "glob",
+  "grep",
+  "execute",
+] as const;

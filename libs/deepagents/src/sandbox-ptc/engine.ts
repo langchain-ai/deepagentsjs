@@ -1,0 +1,240 @@
+/**
+ * PTC Execution Engine — orchestrates IPC between host tools and sandbox scripts.
+ *
+ * Monitors an interactive process's stdout for IPC request markers,
+ * dispatches tool calls on the host, and writes response files into
+ * the sandbox filesystem so the instrumented script can resume.
+ */
+
+import type { StructuredToolInterface } from "@langchain/core/tools";
+import type {
+  SandboxBackendProtocol,
+  InteractiveProcess,
+  ExecuteResponse,
+} from "../backends/protocol.js";
+import type { IpcRequest } from "./types.js";
+import {
+  BASH_RUNTIME,
+  PYTHON_RUNTIME,
+  NODE_RUNTIME,
+  IPC_RES_DIR,
+  REQ_LINE_MARKER,
+  RUNTIME_SETUP_COMMAND,
+} from "./runtimes.js";
+
+const DEFAULT_TIMEOUT_MS = 300_000; // 5 minutes
+
+/**
+ * Parses a stream (stderr) line-by-line, extracting IPC request markers
+ * and passing through all other content.
+ *
+ * Marker format (single line, atomic under PIPE_BUF):
+ *   `__DA_REQ__<uuid> <json_payload>`
+ */
+export class StdoutScanner {
+  private buffer = "";
+
+  processChunk(
+    chunk: string,
+  ): Array<
+    | { type: "output"; text: string }
+    | { type: "request"; uuid: string; payload: string }
+  > {
+    this.buffer += chunk;
+    const lines = this.buffer.split("\n");
+    this.buffer = lines.pop() ?? "";
+
+    const events: Array<
+      | { type: "output"; text: string }
+      | { type: "request"; uuid: string; payload: string }
+    > = [];
+
+    for (const line of lines) {
+      if (line.startsWith(REQ_LINE_MARKER)) {
+        const rest = line.slice(REQ_LINE_MARKER.length);
+        const spaceIdx = rest.indexOf(" ");
+        if (spaceIdx !== -1) {
+          events.push({
+            type: "request",
+            uuid: rest.slice(0, spaceIdx),
+            payload: rest.slice(spaceIdx + 1),
+          });
+        } else {
+          events.push({ type: "output", text: line + "\n" });
+        }
+      } else {
+        events.push({ type: "output", text: line + "\n" });
+      }
+    }
+
+    return events;
+  }
+
+  flush(): string {
+    const remaining = this.buffer;
+    this.buffer = "";
+    return remaining;
+  }
+}
+
+export interface PtcEngineOptions {
+  timeoutMs?: number;
+}
+
+export class PtcExecutionEngine {
+  private runtimeInstalled = false;
+
+  constructor(
+    private sandbox: SandboxBackendProtocol,
+    private tools: StructuredToolInterface[],
+    private options: PtcEngineOptions = {},
+  ) {}
+
+  async execute(command: string): Promise<ExecuteResponse> {
+    if (!this.sandbox.spawnInteractive) {
+      throw new Error(
+        "Sandbox does not support spawnInteractive() — PTC is unavailable",
+      );
+    }
+
+    await this.ensureRuntimeInstalled();
+
+    const instrumented = this.instrumentCommand(command);
+    const proc = await this.sandbox.spawnInteractive(instrumented);
+
+    const timeoutMs = this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+    const stdoutChunks: string[] = [];
+    const stderrClean: string[] = [];
+    const pendingRequests: Promise<void>[] = [];
+    const decoder = new TextDecoder();
+
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (timeoutMs > 0) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        proc.kill().catch(() => {});
+      }, timeoutMs);
+    }
+
+    // IPC markers are written to STDERR by the runtimes (so they aren't
+    // captured by bash $(...) command substitution). We scan stderr for
+    // markers and collect any non-marker lines as regular error output.
+    const scanner = new StdoutScanner();
+    const stderrPromise = (async () => {
+      try {
+        for await (const chunk of proc.stderr) {
+          if (timedOut) break;
+          const text = decoder.decode(chunk, { stream: true });
+          const events = scanner.processChunk(text);
+
+          for (const event of events) {
+            if (event.type === "output") {
+              stderrClean.push(event.text);
+            } else {
+              pendingRequests.push(
+                this.handleRequest(event.uuid, event.payload, proc),
+              );
+            }
+          }
+        }
+      } catch {
+        // stderr may error on kill — ignore
+      }
+      const remaining = scanner.flush();
+      if (remaining) stderrClean.push(remaining);
+    })();
+
+    // Stdout is passed through unchanged (no markers).
+    try {
+      for await (const chunk of proc.stdout) {
+        if (timedOut) break;
+        stdoutChunks.push(decoder.decode(chunk, { stream: true }));
+      }
+    } catch {
+      // stdout may error on kill — ignore
+    }
+
+    // Await stderr first to ensure all markers have been parsed and
+    // their handleRequest promises pushed into pendingRequests.
+    await stderrPromise;
+    await Promise.all(pendingRequests);
+
+    if (timer) clearTimeout(timer);
+
+    const { exitCode } = await proc.waitForExit();
+
+    const combinedOutput = stdoutChunks.join("") + stderrClean.join("");
+    if (timedOut) {
+      return {
+        output: combinedOutput + "\n[Command timed out]",
+        exitCode: null,
+        truncated: false,
+      };
+    }
+
+    return {
+      output: combinedOutput,
+      exitCode,
+      truncated: false,
+    };
+  }
+
+  private async handleRequest(
+    uuid: string,
+    payload: string,
+    proc: InteractiveProcess,
+  ): Promise<void> {
+    const resPath = `${IPC_RES_DIR}/${uuid}`;
+
+    try {
+      const request: IpcRequest = JSON.parse(payload);
+      const tool = this.tools.find((t) => t.name === request.name);
+
+      if (!tool) {
+        await proc.writeFile(resPath, `1\nUnknown tool: ${request.name}`);
+        return;
+      }
+
+      const result = await tool.invoke(request.input);
+      const resultStr =
+        typeof result === "string" ? result : JSON.stringify(result);
+      await proc.writeFile(resPath, `0\n${resultStr}`);
+    } catch (e: unknown) {
+      const msg =
+        // eslint-disable-next-line no-instanceof/no-instanceof
+        e instanceof Error ? e.message : String(e);
+      await proc.writeFile(resPath, `1\n${msg}`);
+    }
+  }
+
+  private instrumentCommand(command: string): string {
+    return `${RUNTIME_SETUP_COMMAND}source /tmp/.da_runtime.sh\n${command}`;
+  }
+
+  /**
+   * Install runtime libraries into the sandbox via `execute()` + heredoc.
+   *
+   * Using `execute()` instead of `uploadFiles()` ensures the files land at
+   * the correct absolute path regardless of whether the sandbox is a remote
+   * container (Deno/Modal/Daytona) or a local process (Node-VFS/LocalShell).
+   */
+  private async ensureRuntimeInstalled(): Promise<void> {
+    if (this.runtimeInstalled) return;
+
+    const runtimes: Array<[string, string]> = [
+      ["/tmp/.da_runtime.sh", BASH_RUNTIME],
+      ["/tmp/.da_runtime.py", PYTHON_RUNTIME],
+      ["/tmp/.da_runtime.js", NODE_RUNTIME],
+    ];
+
+    for (const [filePath, content] of runtimes) {
+      await this.sandbox.execute(
+        `mkdir -p "$(dirname "${filePath}")" && cat > "${filePath}" << 'DA_RUNTIME_EOF'\n${content}\nDA_RUNTIME_EOF`,
+      );
+    }
+
+    this.runtimeInstalled = true;
+  }
+}

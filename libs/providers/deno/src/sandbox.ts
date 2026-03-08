@@ -17,6 +17,7 @@ import {
   type FileOperationError,
   type FileUploadResponse,
   type BackendFactory,
+  type InteractiveProcess,
 } from "deepagents";
 
 import { getAuthCredentials } from "./auth.js";
@@ -402,6 +403,67 @@ export class DenoSandbox extends BaseSandbox {
     }
 
     return results;
+  }
+
+  /**
+   * Spawn an interactive process with streaming stdout/stderr.
+   * Required for PTC (Programmatic Tool Calling) support.
+   */
+  async spawnInteractive(command: string): Promise<InteractiveProcess> {
+    const sandbox = this.instance;
+    const exitCodePath = `/tmp/.da_exit_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const wrappedCommand = `trap 'echo $? > "${exitCodePath}"' EXIT\n${command}`;
+
+    const child = await sandbox.spawn("/bin/bash", {
+      args: ["-c", wrappedCommand],
+      stdout: "piped",
+      stderr: "piped",
+    });
+
+    async function* readStream(
+      stream: ReadableStream<Uint8Array> | null,
+    ): AsyncGenerator<Uint8Array> {
+      if (!stream) return;
+      const reader = stream.getReader();
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) yield value;
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    }
+
+    return {
+      stdout: readStream(child.stdout as ReadableStream<Uint8Array> | null),
+      stderr: readStream(child.stderr as ReadableStream<Uint8Array> | null),
+      async writeFile(path: string, content: string) {
+        await sandbox.fs.writeTextFile(path, content);
+      },
+      async waitForExit() {
+        try {
+          const exitChild = await sandbox.spawn("/bin/bash", {
+            args: ["-c", `cat "${exitCodePath}" && rm -f "${exitCodePath}"`],
+            stdout: "piped",
+            stderr: "piped",
+          });
+          const { stdoutText } = await exitChild.output();
+          const code = parseInt((stdoutText ?? "").trim(), 10);
+          return { exitCode: isNaN(code) ? null : code };
+        } catch {
+          return { exitCode: null };
+        }
+      },
+      async kill() {
+        try {
+          (child as any).kill?.();
+        } catch {
+          // best-effort
+        }
+      },
+    };
   }
 
   /**

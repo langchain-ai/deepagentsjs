@@ -52,3 +52,9 @@ export {
   // Re-export base summarization middleware from langchain for users who don't need backend offloading
   summarizationMiddleware,
 } from "./summarization.js";
+
+// Sandbox PTC middleware — programmatic tool calling from within sandboxes
+export {
+  createSandboxPtcMiddleware,
+  type SandboxPtcMiddlewareOptions,
+} from "../sandbox-ptc/index.js";

@@ -26,6 +26,7 @@ import {
   type FileUploadResponse,
   type GrepMatch,
   type BackendFactory,
+  type InteractiveProcess,
 } from "deepagents";
 
 import { VirtualFileSystem } from "node-vfs-polyfill";
@@ -351,6 +352,59 @@ export class VfsSandbox extends BaseSandbox {
         });
       });
     });
+  }
+
+  /**
+   * Spawn an interactive process with streaming stdout/stderr.
+   * Required for PTC (Programmatic Tool Calling) support.
+   */
+  async spawnInteractive(command: string): Promise<InteractiveProcess> {
+    this.#ensureInitialized();
+    const execDir = await this.#syncToTempDir();
+
+    const child = cp.spawn("/bin/bash", ["-c", command], {
+      cwd: execDir,
+      env: { ...process.env, HOME: process.env.HOME },
+    });
+
+    const exitCodePromise = new Promise<number | null>((resolve) => {
+      child.on("close", (code) => resolve(code));
+      child.on("error", () => resolve(null));
+    });
+
+    async function* nodeStreamToAsyncIterable(
+      stream: NodeJS.ReadableStream,
+    ): AsyncGenerator<Uint8Array> {
+      for await (const chunk of stream) {
+        yield chunk instanceof Buffer ? new Uint8Array(chunk) : (chunk as Uint8Array);
+      }
+    }
+
+    const syncFromTemp = () => this.#syncFromTempDir();
+
+    return {
+      stdout: nodeStreamToAsyncIterable(child.stdout!),
+      stderr: nodeStreamToAsyncIterable(child.stderr!),
+      async writeFile(filePath: string, content: string) {
+        const fullPath = path.isAbsolute(filePath)
+          ? filePath
+          : path.join(execDir, filePath);
+        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+        fs.writeFileSync(fullPath, content, "utf8");
+      },
+      async waitForExit() {
+        const exitCode = await exitCodePromise;
+        await syncFromTemp();
+        return { exitCode };
+      },
+      async kill() {
+        try {
+          child.kill("SIGTERM");
+        } catch {
+          // best-effort
+        }
+      },
+    };
   }
 
   /**
