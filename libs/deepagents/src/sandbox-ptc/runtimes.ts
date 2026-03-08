@@ -42,7 +42,7 @@ __da_uuid() {
 }
 
 tool_call() {
-  local tool_name="\$1"
+  local tool_name="$1"
   local tool_input="\${2:-\\{\\}}"
   local rid
   rid=$(__da_uuid)
@@ -74,9 +74,14 @@ tool_call() {
 }
 
 spawn_agent() {
-  local description="\$1"
+  local description="$1"
   local agent_type="\${2:-general-purpose}"
-  tool_call "task" "{\\"description\\":\\"\${description}\\",\\"subagent_type\\":\\"\${agent_type}\\"}"
+  # Escape description for safe JSON embedding (handle newlines, quotes, backslashes)
+  local esc
+  esc=$(printf '%s' "\${description}" | \\
+    sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g; s/	/\\\\t/g' | \\
+    awk '{if(NR>1) printf "\\\\n"; printf "%s", $0}')
+  tool_call "task" "{\\"description\\":\\"\${esc}\\",\\"subagent_type\\":\\"\${agent_type}\\"}"
 }
 `;
 
@@ -158,5 +163,4 @@ function spawnAgent(description, agentType) {
 module.exports = { toolCall, spawnAgent };
 `;
 
-export const RUNTIME_SETUP_COMMAND =
-  `mkdir -p ${IPC_RES_DIR} 2>/dev/null; `;
+export const RUNTIME_SETUP_COMMAND = `mkdir -p ${IPC_RES_DIR} 2>/dev/null; `;

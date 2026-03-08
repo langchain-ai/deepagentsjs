@@ -264,4 +264,39 @@ echo "TOTAL=$COUNT files"
     expect(result.output).toContain("Unknown tool: no_such_tool");
     expect(result.output).toContain("exit_code=1");
   });
+
+  it("spawn_agent handles multi-line descriptions (JSON escaping)", async () => {
+    const sandbox = makeSandbox();
+
+    const taskTool = tool(
+      async (input: { description: string; subagent_type: string }) =>
+        `Analysed: ${input.description.slice(0, 50)}... (agent=${input.subagent_type})`,
+      {
+        name: "task",
+        description: "Spawn a subagent",
+        schema: z.object({ description: z.string(), subagent_type: z.string() }),
+      },
+    );
+
+    const engine = new PtcExecutionEngine(sandbox, [taskTool]);
+
+    const script = `
+cat > /tmp/report.txt << 'EOF'
+Line 1: summary stats
+Line 2: more "quoted" data
+Line 3: backslash \\ test
+EOF
+result=$(spawn_agent "Analyse this report: $(cat /tmp/report.txt)" "analyst")
+echo "AGENT_RESULT=$result"
+`;
+
+    const result = await engine.execute(script);
+
+    console.log("-- spawn_agent multiline --\n" + result.output + "-- end --");
+
+    expect(result.output).toContain("AGENT_RESULT=Analysed:");
+    expect(result.output).toContain("agent=analyst");
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].name).toBe("task");
+  });
 });

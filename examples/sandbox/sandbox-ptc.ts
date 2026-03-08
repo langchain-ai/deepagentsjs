@@ -2,27 +2,15 @@
 /**
  * Sandbox PTC (Programmatic Tool Calling) Example
  *
- * Demonstrates how to use `createDeepAgent` with the PTC middleware so the
- * LLM can write bash scripts that call tools and spawn subagents in
- * parallel — directly from within the sandbox.
+ * Demonstrates `createDeepAgent` with PTC middleware: the agent writes a
+ * bash script that runs two parallel phases inside a single `execute` call:
  *
- * The agent is given:
- * - A CSV of 100 employee records
- * - A TSV of 100 research topics
- * - Two PTC-only tools: `classify_record` and `research_topic`
+ *   Phase 1 — 100 parallel `tool_call classify_record` (pure function)
+ *   Phase 2 — 100 parallel `spawn_agent` "analyst" (real LLM subagents)
  *
- * These tools are hidden from the model (it cannot call them directly).
- * Instead, the system prompt teaches the agent to use `tool_call` inside
- * `execute` to fire all 200 calls as parallel bash background jobs.
- *
- * ## How PTC integrates with createDeepAgent
- *
- * `createSandboxPtcMiddleware` is applied as custom middleware. Because
- * custom middleware runs after built-in middleware, the PTC middleware sees
- * all registered tools — including the `task` tool from
- * `createSubAgentMiddleware`. It intercepts `execute` tool calls, instruments
- * the command with the PTC bash runtime, and routes IPC markers through the
- * `PtcExecutionEngine`.
+ * Each analyst subagent receives one classified employee record and returns
+ * a one-sentence career recommendation. All 200 calls run as bash
+ * background jobs.
  *
  * ## Running
  *
@@ -42,7 +30,7 @@ import { createDeepAgent, createSandboxPtcMiddleware } from "deepagents";
 import { VfsSandbox } from "@langchain/node-vfs";
 
 // ---------------------------------------------------------------------------
-// 1. Data: 100 employee records + 100 research topics
+// 1. Data: 100 employee records
 // ---------------------------------------------------------------------------
 
 const DEPARTMENTS = [
@@ -79,28 +67,6 @@ const LAST_NAMES = [
   "Nguyen",
   "Lopez",
 ];
-const TOPICS = [
-  "quantum computing",
-  "fusion energy",
-  "CRISPR gene editing",
-  "neural interfaces",
-  "solid-state batteries",
-  "carbon capture",
-  "autonomous vehicles",
-  "protein folding",
-  "room-temp superconductors",
-  "space mining",
-  "synthetic biology",
-  "ocean thermal energy",
-  "topological qubits",
-  "metamaterials",
-  "microbiome therapeutics",
-  "plasma propulsion",
-  "photonic chips",
-  "biodegradable electronics",
-  "swarm robotics",
-  "holographic displays",
-];
 
 function generateCsv(n: number): string {
   const rows = ["id,name,age,department,years_at_company"];
@@ -115,18 +81,8 @@ function generateCsv(n: number): string {
   return rows.join("\n") + "\n";
 }
 
-function generateTopics(n: number): string {
-  return (
-    Array.from(
-      { length: n },
-      (_, i) =>
-        `${TOPICS[i % TOPICS.length]}\t${i % 3 === 0 ? "deep" : "standard"}`,
-    ).join("\n") + "\n"
-  );
-}
-
 // ---------------------------------------------------------------------------
-// 2. PTC-only tools (registered but hidden from the model)
+// 2. PTC-only tool (registered but hidden from the model)
 // ---------------------------------------------------------------------------
 
 const classifyTool = tool(
@@ -172,40 +128,12 @@ const classifyTool = tool(
   },
 );
 
-const researchTool = tool(
-  async (input: { topic: string; depth: string }) => {
-    const wordCount = input.depth === "deep" ? 120 : 60;
-    return JSON.stringify({
-      topic: input.topic,
-      summary: `${input.topic}: A ${input.depth} analysis covering ${wordCount} words of findings.`,
-      key_findings: [
-        `Breakthrough in ${input.topic} expected within 3-5 years`,
-        `Global investment grew 40% YoY`,
-        `${Math.floor(Math.random() * 50 + 10)} active research groups worldwide`,
-      ],
-      confidence: +(0.85 + Math.random() * 0.1).toFixed(2),
-    });
-  },
-  {
-    name: "research_topic",
-    description:
-      "Research a topic in depth — simulates subagent work, returns summary + key findings",
-    schema: z.object({ topic: z.string(), depth: z.string() }),
-  },
-);
-
-/**
- * Middleware that registers the PTC-only tools with the agent (so the PTC
- * engine can discover them) but hides them from the model so it must use
- * `tool_call` inside `execute` to reach them.
- */
 const ptcOnlyToolsMiddleware = createMiddleware({
   name: "PtcOnlyTools",
-  tools: [classifyTool, researchTool],
+  tools: [classifyTool],
   wrapModelCall: async (request, handler) => {
-    const hidden = new Set(["classify_record", "research_topic"]);
     const visibleTools = (request.tools as { name: string }[]).filter(
-      (t) => !hidden.has(t.name),
+      (t) => t.name !== "classify_record",
     );
     return handler({ ...request, tools: visibleTools });
   },
@@ -215,79 +143,70 @@ const ptcOnlyToolsMiddleware = createMiddleware({
 // 3. System prompt
 // ---------------------------------------------------------------------------
 
-const systemPrompt = `You are a data-processing agent with access to a sandboxed shell and
-Programmatic Tool Calling (PTC).
+const systemPrompt = `You are a data-processing agent with PTC (Programmatic Tool Calling)
+and an "analyst" subagent.
 
-## PTC — calling tools from bash
+## PTC functions available inside \`execute\`
 
-Inside any \`execute\` command the shell function \`tool_call\` is pre-loaded.
-Two tools are available ONLY via \`tool_call\` — you CANNOT call them as direct tool calls.
+### tool_call classify_record '<json>'
+Input: \`{"name":"<str>","age":<int>,"department":"<str>","years_at_company":<int>}\`
+Output: \`{"name":"...","seniority":"junior"|"mid-level"|"senior","age_group":"under-30"|"30-39"|"40-54"|"55+","department":"...","promotion_eligible":true|false}\`
 
-### classify_record
-
-Input: \`{"name":"<string>","age":<int>,"department":"<string>","years_at_company":<int>}\`
-Output JSON fields: \`name\` (string), \`seniority\` ("junior"|"mid-level"|"senior"), \`age_group\` ("under-30"|"30-39"|"40-54"|"55+"), \`department\` (string), \`promotion_eligible\` (boolean)
-
-Example:
-\`\`\`bash
-result=$(tool_call classify_record '{"name":"Alice","age":30,"department":"Engineering","years_at_company":5}')
-# → {"name":"Alice","seniority":"mid-level","age_group":"30-39","department":"Engineering","promotion_eligible":true}
-\`\`\`
-
-### research_topic
-
-Input: \`{"topic":"<string>","depth":"standard"|"deep"}\`
-Output JSON fields: \`topic\`, \`summary\`, \`key_findings\` (array of 3 strings), \`confidence\` (float)
-
-Example:
-\`\`\`bash
-result=$(tool_call research_topic '{"topic":"quantum computing","depth":"deep"}')
-# → {"topic":"quantum computing","summary":"...","key_findings":["...","...","..."],"confidence":0.91}
-\`\`\`
+### spawn_agent "<description>" "analyst"
+Spawns the analyst subagent with the given task description. Returns the analyst's text response.
+The description must be a single argument — use quotes around it.
 
 ## Sandbox filesystem
+Files use **relative paths**. Data: \`data/employees.csv\` (CSV: id,name,age,department,years_at_company)
 
-All file paths are **relative to the working directory**. Do NOT use absolute paths.
-Data files are at:
-- \`data/employees.csv\` — CSV with columns: id, name, age, department, years_at_company
-- \`data/topics.tsv\` — TSV with columns: topic, depth
-
-## Script template
-
-Use this exact pattern — launch every tool_call as a background job, then wait:
+## Exact script to use
 
 \`\`\`bash
 #!/bin/bash
-mkdir -p /tmp/cls /tmp/res
+mkdir -p /tmp/cls /tmp/analysis
 
-# Classify all employees in parallel
+# Phase 1: classify all 100 employees in parallel
+echo "Phase 1: classifying 100 employees..."
 line_num=0
 while IFS=, read -r id name age dept years; do
-  line_num=$((line_num + 1))
-  [ $line_num -eq 1 ] && continue
+  line_num=$((line_num + 1)); [ $line_num -eq 1 ] && continue
   ( result=$(tool_call classify_record "{\\"name\\":\\"$name\\",\\"age\\":$age,\\"department\\":\\"$dept\\",\\"years_at_company\\":$years}")
     echo "$result" > /tmp/cls/$id.json ) &
 done < data/employees.csv
-
-# Research all topics in parallel
-idx=0
-while IFS=$'\\t' read -r topic depth; do
-  idx=$((idx + 1))
-  ( result=$(tool_call research_topic "{\\"topic\\":\\"$topic\\",\\"depth\\":\\"$depth\\"}")
-    echo "$result" > /tmp/res/$idx.json ) &
-done < data/topics.tsv
-
 wait
-echo "Done — $(ls /tmp/cls/*.json | wc -l) employees, $(ls /tmp/res/*.json | wc -l) topics"
+echo "Phase 1 done: $(ls /tmp/cls/*.json | wc -l | tr -d ' ') classified"
+
+# Phase 2: spawn 100 analyst subagents in parallel, one per record
+echo "Phase 2: spawning 100 analyst subagents..."
+for id in $(seq 1 100); do
+  ( record=$(cat /tmp/cls/$id.json 2>/dev/null)
+    if [ -n "$record" ]; then
+      analysis=$(spawn_agent "Give a one-sentence career recommendation for this employee: $record" "analyst")
+      echo "$analysis" > /tmp/analysis/$id.txt
+    fi ) &
+done
+wait
+echo "Phase 2 done: $(ls /tmp/analysis/*.txt 2>/dev/null | wc -l | tr -d ' ') analysed"
+
+# Print sample results
+echo ""
+echo "=== Sample results (first 5) ==="
+for id in $(seq 1 5); do
+  echo "--- Employee $id ---"
+  echo "Classification: $(cat /tmp/cls/$id.json 2>/dev/null)"
+  echo "Recommendation: $(cat /tmp/analysis/$id.txt 2>/dev/null)"
+  echo ""
+done
+
+echo "=== TOTALS ==="
+echo "Classified: $(ls /tmp/cls/*.json | wc -l | tr -d ' ')"
+echo "Analysed:   $(ls /tmp/analysis/*.txt 2>/dev/null | wc -l | tr -d ' ')"
 \`\`\`
 
 ## Rules
-
-1. Use a SINGLE \`execute\` call with the complete script.
-2. Do NOT explore files first — the schema above is authoritative.
-3. Do NOT call classify_record or research_topic as direct tool calls.
-4. Use \`data/...\` (relative), never \`/data/...\` (absolute).
-5. Match the exact output field values above when counting results (e.g. "junior" not "Junior", "under-30" not "Young").`;
+1. Use a SINGLE \`execute\` call with the EXACT script above — do not modify it.
+2. Do NOT explore files or call tools directly.
+3. Use relative paths (\`data/...\`), never absolute (\`/data/...\`).`;
 
 // ---------------------------------------------------------------------------
 // 4. Main
@@ -295,17 +214,13 @@ echo "Done — $(ls /tmp/cls/*.json | wc -l) employees, $(ls /tmp/res/*.json | w
 
 async function main() {
   const csv = generateCsv(100);
-  const topics = generateTopics(100);
 
   console.log("Creating VFS Sandbox...\n");
   const sandbox = await VfsSandbox.create({
-    initialFiles: {
-      "/data/employees.csv": csv,
-      "/data/topics.tsv": topics,
-    },
+    initialFiles: { "/data/employees.csv": csv },
   });
   console.log(`  Sandbox ID: ${sandbox.id}`);
-  console.log(`  100 employee records + 100 research topics loaded\n`);
+  console.log(`  100 employee records loaded\n`);
 
   try {
     const agent = createDeepAgent({
@@ -315,20 +230,28 @@ async function main() {
       }),
       systemPrompt,
       backend: sandbox,
+      subagents: [
+        {
+          name: "analyst",
+          description:
+            "Provides career recommendations for individual employees",
+          systemPrompt: `You are an HR analyst. Given an employee's classification data,
+provide exactly ONE sentence of career recommendation. Be specific and actionable.
+Do not use markdown. Keep it under 30 words.`,
+          model: new ChatAnthropic({
+            model: "claude-haiku-4-5",
+            temperature: 0,
+          }),
+        },
+      ],
       middleware: [
-        // PTC middleware intercepts `execute` tool calls and instruments
-        // them with the PTC bash runtime. It discovers classify_record and
-        // research_topic from the agent's tool list and makes them callable
-        // via `tool_call <name> '<json>'` inside bash scripts.
         createSandboxPtcMiddleware({ backend: sandbox, ptc: true }),
-        // This middleware registers the tools but hides them from the model,
-        // forcing it to use tool_call in bash rather than direct tool calls.
         ptcOnlyToolsMiddleware,
       ],
     });
 
     console.log(
-      "Running agent — it will write and execute a bash script with 200 parallel tool_call invocations...\n",
+      "Running: 100 parallel classify + 100 parallel analyst subagents...\n",
     );
     const t0 = performance.now();
 
@@ -336,7 +259,7 @@ async function main() {
       {
         messages: [
           new HumanMessage(
-            "Process all 100 employee records and all 100 research topics in parallel using tool_call inside a single execute call. Print summary statistics when done.",
+            "Run the script to classify all 100 employees and spawn 100 analyst subagents in parallel.",
           ),
         ],
       },
@@ -345,13 +268,10 @@ async function main() {
 
     const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
 
-    // Show the final AI response
     const last = result.messages.findLast(AIMessage.isInstance);
     if (last) {
       console.log(`\nAgent Response (${elapsed}s total):\n`);
       console.log(last.content);
-
-      console.log(result.messages);
     }
   } finally {
     console.log("\nCleaning up sandbox...");
