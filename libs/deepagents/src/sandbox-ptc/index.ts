@@ -7,7 +7,11 @@ export {
   createSandboxPtcMiddleware,
 } from "./middleware.js";
 
-export type { SandboxPtcMiddlewareOptions } from "./types.js";
+export type {
+  SandboxPtcMiddlewareOptions,
+  PtcToolCallTrace,
+  PtcExecuteResult,
+} from "./types.js";
 export { DEFAULT_PTC_EXCLUDED_TOOLS } from "./types.js";
 
 export {

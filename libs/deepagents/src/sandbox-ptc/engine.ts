@@ -10,9 +10,12 @@ import type { StructuredToolInterface } from "@langchain/core/tools";
 import type {
   SandboxBackendProtocol,
   InteractiveProcess,
-  ExecuteResponse,
 } from "../backends/protocol.js";
-import type { IpcRequest } from "./types.js";
+import type {
+  IpcRequest,
+  PtcToolCallTrace,
+  PtcExecuteResult,
+} from "./types.js";
 import {
   BASH_RUNTIME,
   PYTHON_RUNTIME,
@@ -90,7 +93,7 @@ export class PtcExecutionEngine {
     private options: PtcEngineOptions = {},
   ) {}
 
-  async execute(command: string): Promise<ExecuteResponse> {
+  async execute(command: string): Promise<PtcExecuteResult> {
     if (!this.sandbox.spawnInteractive) {
       throw new Error(
         "Sandbox does not support spawnInteractive() — PTC is unavailable",
@@ -107,6 +110,7 @@ export class PtcExecutionEngine {
     const stdoutChunks: string[] = [];
     const stderrClean: string[] = [];
     const pendingRequests: Promise<void>[] = [];
+    const toolCallTraces: PtcToolCallTrace[] = [];
     const decoder = new TextDecoder();
 
     let timedOut = false;
@@ -134,7 +138,12 @@ export class PtcExecutionEngine {
               stderrClean.push(event.text);
             } else {
               pendingRequests.push(
-                this.handleRequest(event.uuid, event.payload, proc),
+                this.handleRequest(
+                  event.uuid,
+                  event.payload,
+                  proc,
+                  toolCallTraces,
+                ),
               );
             }
           }
@@ -171,6 +180,7 @@ export class PtcExecutionEngine {
         output: combinedOutput + "\n[Command timed out]",
         exitCode: null,
         truncated: false,
+        toolCalls: toolCallTraces,
       };
     }
 
@@ -178,6 +188,7 @@ export class PtcExecutionEngine {
       output: combinedOutput,
       exitCode,
       truncated: false,
+      toolCalls: toolCallTraces,
     };
   }
 
@@ -185,14 +196,22 @@ export class PtcExecutionEngine {
     uuid: string,
     payload: string,
     proc: InteractiveProcess,
+    traces: PtcToolCallTrace[],
   ): Promise<void> {
     const resPath = `${IPC_RES_DIR}/${uuid}`;
+    const t0 = performance.now();
 
     try {
       const request: IpcRequest = JSON.parse(payload);
       const tool = this.tools.find((t) => t.name === request.name);
 
       if (!tool) {
+        traces.push({
+          name: request.name,
+          input: request.input,
+          error: `Unknown tool: ${request.name}`,
+          durationMs: performance.now() - t0,
+        });
         await proc.writeFile(resPath, `1\nUnknown tool: ${request.name}`);
         return;
       }
@@ -200,11 +219,23 @@ export class PtcExecutionEngine {
       const result = await tool.invoke(request.input);
       const resultStr =
         typeof result === "string" ? result : JSON.stringify(result);
+      traces.push({
+        name: request.name,
+        input: request.input,
+        result: resultStr,
+        durationMs: performance.now() - t0,
+      });
       await proc.writeFile(resPath, `0\n${resultStr}`);
     } catch (e: unknown) {
       const msg =
         // eslint-disable-next-line no-instanceof/no-instanceof
         e instanceof Error ? e.message : String(e);
+      traces.push({
+        name: (JSON.parse(payload) as IpcRequest).name,
+        input: (JSON.parse(payload) as IpcRequest).input,
+        error: msg,
+        durationMs: performance.now() - t0,
+      });
       await proc.writeFile(resPath, `1\n${msg}`);
     }
   }

@@ -167,6 +167,24 @@ export function createSandboxPtcMiddleware(
         parts.push("\n[Output was truncated due to size limits]");
       }
 
+      if (result.toolCalls.length > 0) {
+        const succeeded = result.toolCalls.filter((tc) => !tc.error).length;
+        const failed = result.toolCalls.length - succeeded;
+        const totalMs = result.toolCalls.reduce((s, tc) => s + tc.durationMs, 0);
+
+        const counts = new Map<string, number>();
+        for (const tc of result.toolCalls) {
+          counts.set(tc.name, (counts.get(tc.name) ?? 0) + 1);
+        }
+        const breakdown = [...counts.entries()]
+          .map(([name, count]) => `${name}=${count}`)
+          .join(", ");
+
+        parts.push(
+          `\n[PTC: ${result.toolCalls.length} tool calls (${breakdown}), ${succeeded} succeeded, ${failed} failed, ${totalMs.toFixed(0)}ms total]`,
+        );
+      }
+
       return new ToolMessage({
         content: parts.join(""),
         tool_call_id: request.toolCall.id ?? "",

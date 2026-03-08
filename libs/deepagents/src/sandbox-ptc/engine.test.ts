@@ -158,6 +158,7 @@ describe("PtcExecutionEngine", () => {
 
     expect(result.output).toContain("hello world");
     expect(result.exitCode).toBe(0);
+    expect(result.toolCalls).toEqual([]);
     expect(sandbox.spawnInteractive).toHaveBeenCalled();
   });
 
@@ -193,6 +194,13 @@ describe("PtcExecutionEngine", () => {
     const response = writtenFiles.get(responsePath)!;
     expect(response).toMatch(/^0\n/);
     expect(response).toContain("Hello, Alice!");
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].name).toBe("greet");
+    expect(result.toolCalls[0].input).toEqual({ name: "Alice" });
+    expect(result.toolCalls[0].result).toBe("Hello, Alice!");
+    expect(result.toolCalls[0].error).toBeUndefined();
+    expect(result.toolCalls[0].durationMs).toBeGreaterThanOrEqual(0);
   });
 
   it("should handle tool call errors gracefully", async () => {
@@ -217,12 +225,17 @@ describe("PtcExecutionEngine", () => {
     );
 
     const engine = new PtcExecutionEngine(sandbox, [failTool]);
-    await engine.execute("test");
+    const result = await engine.execute("test");
 
     const responsePath = `/tmp/.da_ipc/res/${uuid}`;
     const response = writtenFiles.get(responsePath)!;
     expect(response).toMatch(/^1\n/);
     expect(response).toContain("Tool failed intentionally");
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].name).toBe("fail");
+    expect(result.toolCalls[0].error).toContain("Tool failed intentionally");
+    expect(result.toolCalls[0].result).toBeUndefined();
   });
 
   it("should handle unknown tool names", async () => {
@@ -273,12 +286,15 @@ describe("PtcExecutionEngine", () => {
     );
 
     const engine = new PtcExecutionEngine(sandbox, [echoTool]);
-    await engine.execute("test");
+    const result = await engine.execute("test");
 
     expect(writtenFiles.has("/tmp/.da_ipc/res/uuid-1")).toBe(true);
     expect(writtenFiles.has("/tmp/.da_ipc/res/uuid-2")).toBe(true);
     expect(writtenFiles.get("/tmp/.da_ipc/res/uuid-1")).toBe("0\none");
     expect(writtenFiles.get("/tmp/.da_ipc/res/uuid-2")).toBe("0\ntwo");
+
+    expect(result.toolCalls).toHaveLength(2);
+    expect(result.toolCalls.map((tc) => tc.name)).toEqual(["echo", "echo"]);
   });
 
   it("should collect non-marker stderr output", async () => {

@@ -46,6 +46,33 @@ export interface SandboxPtcMiddlewareOptions {
 }
 
 /**
+ * A single tool invocation recorded during PTC execution.
+ */
+export interface PtcToolCallTrace {
+  /** Tool name that was invoked */
+  name: string;
+  /** Input arguments passed to the tool */
+  input: Record<string, unknown>;
+  /** Result string on success, undefined on error */
+  result?: string;
+  /** Error message on failure */
+  error?: string;
+  /** Wall-clock duration of the tool invocation in milliseconds */
+  durationMs: number;
+}
+
+/**
+ * Extended execute response that includes PTC tool call traces.
+ */
+export interface PtcExecuteResult {
+  output: string;
+  exitCode: number | null;
+  truncated: boolean;
+  /** Every tool_call invocation that occurred during execution */
+  toolCalls: PtcToolCallTrace[];
+}
+
+/**
  * Tools excluded from PTC by default (redundant inside the sandbox
  * since the sandbox already has filesystem access via shell commands).
  */
