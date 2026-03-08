@@ -13,9 +13,10 @@ function safeToJsonSchema(
   schema: unknown,
 ): Record<string, unknown> | undefined {
   try {
-    return toJsonSchema(
-      schema as Parameters<typeof toJsonSchema>[0],
-    ) as Record<string, unknown>;
+    return toJsonSchema(schema as Parameters<typeof toJsonSchema>[0]) as Record<
+      string,
+      unknown
+    >;
   } catch {
     return undefined;
   }

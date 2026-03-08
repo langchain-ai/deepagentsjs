@@ -403,7 +403,9 @@ export class ModalSandbox extends BaseSandbox {
     });
 
     async function* readModalStream(
-      stream: { getReader?: () => ReadableStreamDefaultReader<Uint8Array> } & Record<string, unknown>,
+      stream: {
+        getReader?: () => ReadableStreamDefaultReader<Uint8Array>;
+      } & Record<string, unknown>,
     ): AsyncGenerator<Uint8Array> {
       if (typeof stream.getReader === "function") {
         const reader = stream.getReader();
@@ -429,7 +431,10 @@ export class ModalSandbox extends BaseSandbox {
         const parentDir = path.substring(0, path.lastIndexOf("/"));
         if (parentDir) {
           await sandbox
-            .exec(["mkdir", "-p", parentDir], { stdout: "pipe", stderr: "pipe" })
+            .exec(["mkdir", "-p", parentDir], {
+              stdout: "pipe",
+              stderr: "pipe",
+            })
             .then((p: any) => p.wait());
         }
         const writeHandle = await sandbox.open(path, "w");

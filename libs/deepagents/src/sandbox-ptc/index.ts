@@ -3,9 +3,7 @@
  * subagent spawning from within any sandbox environment.
  */
 
-export {
-  createSandboxPtcMiddleware,
-} from "./middleware.js";
+export { createSandboxPtcMiddleware } from "./middleware.js";
 
 export type {
   SandboxPtcMiddlewareOptions,

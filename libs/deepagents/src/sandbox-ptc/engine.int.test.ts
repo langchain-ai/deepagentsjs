@@ -274,7 +274,10 @@ echo "TOTAL=$COUNT files"
       {
         name: "task",
         description: "Spawn a subagent",
-        schema: z.object({ description: z.string(), subagent_type: z.string() }),
+        schema: z.object({
+          description: z.string(),
+          subagent_type: z.string(),
+        }),
       },
     );
 
@@ -291,8 +294,6 @@ echo "AGENT_RESULT=$result"
 `;
 
     const result = await engine.execute(script);
-
-    console.log("-- spawn_agent multiline --\n" + result.output + "-- end --");
 
     expect(result.output).toContain("AGENT_RESULT=Analysed:");
     expect(result.output).toContain("agent=analyst");

@@ -68,10 +68,7 @@ function filterToolsForPtc(
   }
 
   if ("exclude" in ptc) {
-    const excluded = new Set([
-      ...DEFAULT_PTC_EXCLUDED_TOOLS,
-      ...ptc.exclude,
-    ]);
+    const excluded = new Set([...DEFAULT_PTC_EXCLUDED_TOOLS, ...ptc.exclude]);
     return candidates.filter((t) => !excluded.has(t.name));
   }
 
@@ -94,11 +91,7 @@ function filterToolsForPtc(
 export function createSandboxPtcMiddleware(
   options: SandboxPtcMiddlewareOptions,
 ) {
-  const {
-    backend,
-    ptc = true,
-    timeoutMs = 300_000,
-  } = options;
+  const { backend, ptc = true, timeoutMs = 300_000 } = options;
 
   let ptcTools: StructuredToolInterface[] = [];
   let cachedPrompt: string | null = null;
@@ -122,10 +115,7 @@ export function createSandboxPtcMiddleware(
     },
 
     wrapToolCall: async (request, handler) => {
-      if (
-        request.toolCall?.name !== "execute" ||
-        ptcTools.length === 0
-      ) {
+      if (request.toolCall?.name !== "execute" || ptcTools.length === 0) {
         return handler(request);
       }
 
@@ -170,7 +160,10 @@ export function createSandboxPtcMiddleware(
       if (result.toolCalls.length > 0) {
         const succeeded = result.toolCalls.filter((tc) => !tc.error).length;
         const failed = result.toolCalls.length - succeeded;
-        const totalMs = result.toolCalls.reduce((s, tc) => s + tc.durationMs, 0);
+        const totalMs = result.toolCalls.reduce(
+          (s, tc) => s + tc.durationMs,
+          0,
+        );
 
         const counts = new Map<string, number>();
         for (const tc of result.toolCalls) {

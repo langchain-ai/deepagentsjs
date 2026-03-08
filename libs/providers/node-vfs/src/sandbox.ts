@@ -376,7 +376,9 @@ export class VfsSandbox extends BaseSandbox {
       stream: NodeJS.ReadableStream,
     ): AsyncGenerator<Uint8Array> {
       for await (const chunk of stream) {
-        yield chunk instanceof Buffer ? new Uint8Array(chunk) : (chunk as Uint8Array);
+        yield chunk instanceof Buffer
+          ? new Uint8Array(chunk)
+          : (chunk as Uint8Array);
       }
     }
 

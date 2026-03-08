@@ -397,25 +397,38 @@ export class DaytonaSandbox extends BaseSandbox {
       `echo $! > "${pidPath}"`,
     ].join(" && ");
 
-    await sandbox.process.executeCommand(bgCommand, undefined, undefined, this.#timeout);
+    await sandbox.process.executeCommand(
+      bgCommand,
+      undefined,
+      undefined,
+      this.#timeout,
+    );
 
     const pidResult = await sandbox.process.executeCommand(
-      `cat "${pidPath}"`, undefined, undefined, 5,
+      `cat "${pidPath}"`,
+      undefined,
+      undefined,
+      5,
     );
     const pid = parseInt((pidResult.result ?? "").trim(), 10);
 
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     const encoder = new TextEncoder();
     const POLL_MS = 100;
 
-    async function* pollOutputStream(filePath: string): AsyncGenerator<Uint8Array> {
+    async function* pollOutputStream(
+      filePath: string,
+    ): AsyncGenerator<Uint8Array> {
       let offset = 0;
       for (;;) {
         const isRunning = await self.#isProcessRunning(pid);
 
         const result = await sandbox.process.executeCommand(
           `tail -c +${offset + 1} "${filePath}" 2>/dev/null`,
-          undefined, undefined, 5,
+          undefined,
+          undefined,
+          5,
         );
         const chunk = result.result ?? "";
 
@@ -428,7 +441,9 @@ export class DaytonaSandbox extends BaseSandbox {
           await new Promise((r) => setTimeout(r, 50));
           const finalResult = await sandbox.process.executeCommand(
             `tail -c +${offset + 1} "${filePath}" 2>/dev/null`,
-            undefined, undefined, 5,
+            undefined,
+            undefined,
+            5,
           );
           const finalChunk = finalResult.result ?? "";
           if (finalChunk.length > 0) {
@@ -455,13 +470,20 @@ export class DaytonaSandbox extends BaseSandbox {
       async waitForExit() {
         try {
           const exitResult = await sandbox.process.executeCommand(
-            `cat "${exitCodePath}"`, undefined, undefined, 5,
+            `cat "${exitCodePath}"`,
+            undefined,
+            undefined,
+            5,
           );
           const code = parseInt((exitResult.result ?? "").trim(), 10);
-          await sandbox.process.executeCommand(
-            `rm -f "${stdoutPath}" "${stderrPath}" "${pidPath}" "${exitCodePath}"`,
-            undefined, undefined, 5,
-          ).catch(() => {});
+          await sandbox.process
+            .executeCommand(
+              `rm -f "${stdoutPath}" "${stderrPath}" "${pidPath}" "${exitCodePath}"`,
+              undefined,
+              undefined,
+              5,
+            )
+            .catch(() => {});
           return { exitCode: isNaN(code) ? null : code };
         } catch {
           return { exitCode: null };
@@ -470,7 +492,10 @@ export class DaytonaSandbox extends BaseSandbox {
       async kill() {
         try {
           await sandbox.process.executeCommand(
-            `kill -9 ${pid} 2>/dev/null`, undefined, undefined, 5,
+            `kill -9 ${pid} 2>/dev/null`,
+            undefined,
+            undefined,
+            5,
           );
         } catch {
           // best-effort
@@ -483,7 +508,9 @@ export class DaytonaSandbox extends BaseSandbox {
     try {
       const result = await this.instance.process.executeCommand(
         `kill -0 ${pid} 2>/dev/null; echo $?`,
-        undefined, undefined, 5,
+        undefined,
+        undefined,
+        5,
       );
       return (result.result ?? "").trim() === "0";
     } catch {

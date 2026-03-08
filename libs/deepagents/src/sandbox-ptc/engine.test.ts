@@ -25,23 +25,22 @@ describe("StdoutScanner", () => {
 
   it("should detect a single-line IPC request", () => {
     const uuid = "test-uuid-123";
-    const payload = '{"type":"tool_call","name":"web_search","input":{"query":"test"}}';
+    const payload =
+      '{"type":"tool_call","name":"web_search","input":{"query":"test"}}';
     const chunk = `${REQ_LINE_MARKER}${uuid} ${payload}\n`;
     const events = scanner.processChunk(chunk);
 
-    expect(events).toEqual([
-      { type: "request", uuid, payload },
-    ]);
+    expect(events).toEqual([{ type: "request", uuid, payload }]);
   });
 
   it("should handle request split across chunks", () => {
     const uuid = "split-uuid";
     const payload = '{"type":"tool_call","name":"test","input":{}}';
 
-    const events1 = scanner.processChunk(`some output\n${REQ_LINE_MARKER}${uuid} ${payload}`);
-    expect(events1).toEqual([
-      { type: "output", text: "some output\n" },
-    ]);
+    const events1 = scanner.processChunk(
+      `some output\n${REQ_LINE_MARKER}${uuid} ${payload}`,
+    );
+    expect(events1).toEqual([{ type: "output", text: "some output\n" }]);
 
     const events2 = scanner.processChunk(`\nmore output\n`);
     expect(events2).toEqual([
@@ -62,12 +61,22 @@ describe("StdoutScanner", () => {
     const req1 = `${REQ_LINE_MARKER}uuid1 {"type":"tool_call","name":"a","input":{}}\n`;
     const req2 = `${REQ_LINE_MARKER}uuid2 {"type":"tool_call","name":"b","input":{}}\n`;
 
-    const events = scanner.processChunk(`output1\n${req1}output2\n${req2}output3\n`);
+    const events = scanner.processChunk(
+      `output1\n${req1}output2\n${req2}output3\n`,
+    );
     expect(events).toEqual([
       { type: "output", text: "output1\n" },
-      { type: "request", uuid: "uuid1", payload: '{"type":"tool_call","name":"a","input":{}}' },
+      {
+        type: "request",
+        uuid: "uuid1",
+        payload: '{"type":"tool_call","name":"a","input":{}}',
+      },
       { type: "output", text: "output2\n" },
-      { type: "request", uuid: "uuid2", payload: '{"type":"tool_call","name":"b","input":{}}' },
+      {
+        type: "request",
+        uuid: "uuid2",
+        payload: '{"type":"tool_call","name":"b","input":{}}',
+      },
       { type: "output", text: "output3\n" },
     ]);
   });
@@ -86,28 +95,28 @@ describe("StdoutScanner", () => {
 });
 
 describe("PtcExecutionEngine", () => {
-  function createMockSandbox(opts: {
-    stdoutChunks?: string[];
-    stderrChunks?: string[];
-    writtenFiles?: Map<string, string>;
-    exitCode?: number;
-  } = {}): SandboxBackendProtocol & { writtenFiles: Map<string, string> } {
-    const {
-      stdoutChunks = [],
-      stderrChunks = [],
-      exitCode = 0,
-    } = opts;
+  function createMockSandbox(
+    opts: {
+      stdoutChunks?: string[];
+      stderrChunks?: string[];
+      writtenFiles?: Map<string, string>;
+      exitCode?: number;
+    } = {},
+  ): SandboxBackendProtocol & { writtenFiles: Map<string, string> } {
+    const { stdoutChunks = [], stderrChunks = [], exitCode = 0 } = opts;
     const writtenFiles = opts.writtenFiles ?? new Map<string, string>();
     const encoder = new TextEncoder();
 
     return {
       id: "test-sandbox",
       writtenFiles,
-      execute: vi.fn(async (): Promise<ExecuteResponse> => ({
-        output: "",
-        exitCode: 0,
-        truncated: false,
-      })),
+      execute: vi.fn(
+        async (): Promise<ExecuteResponse> => ({
+          output: "",
+          exitCode: 0,
+          truncated: false,
+        }),
+      ),
       lsInfo: async () => [],
       read: async () => "",
       readRaw: async (): Promise<FileData> => ({
@@ -117,32 +126,36 @@ describe("PtcExecutionEngine", () => {
       }),
       grepRaw: async () => [],
       globInfo: async () => [],
-      write: async (_p: string, _c: string): Promise<WriteResult> => ({ path: _p }),
+      write: async (_p: string, _c: string): Promise<WriteResult> => ({
+        path: _p,
+      }),
       edit: async () => ({ error: "not implemented" }),
       uploadFiles: vi.fn(async (files: Array<[string, Uint8Array]>) => {
         return files.map(([p]) => ({ path: p, error: null }));
       }),
       downloadFiles: async () => [],
 
-      spawnInteractive: vi.fn(async (): Promise<InteractiveProcess> => ({
-        stdout: (async function* () {
-          for (const chunk of stdoutChunks) {
-            yield encoder.encode(chunk);
-          }
-        })(),
-        stderr: (async function* () {
-          for (const chunk of stderrChunks) {
-            yield encoder.encode(chunk);
-          }
-        })(),
-        async writeFile(path: string, content: string) {
-          writtenFiles.set(path, content);
-        },
-        async waitForExit() {
-          return { exitCode };
-        },
-        async kill() {},
-      })),
+      spawnInteractive: vi.fn(
+        async (): Promise<InteractiveProcess> => ({
+          stdout: (async function* () {
+            for (const chunk of stdoutChunks) {
+              yield encoder.encode(chunk);
+            }
+          })(),
+          stderr: (async function* () {
+            for (const chunk of stderrChunks) {
+              yield encoder.encode(chunk);
+            }
+          })(),
+          async writeFile(path: string, content: string) {
+            writtenFiles.set(path, content);
+          },
+          async waitForExit() {
+            return { exitCode };
+          },
+          async kill() {},
+        }),
+      ),
     };
   }
 
@@ -164,14 +177,17 @@ describe("PtcExecutionEngine", () => {
 
   it("should process a tool call IPC request", async () => {
     const uuid = "test-uuid-1";
-    const payload = '{"type":"tool_call","name":"greet","input":{"name":"Alice"}}';
-    const stderrChunks = [
-      `${REQ_LINE_MARKER}${uuid} ${payload}\n`,
-    ];
+    const payload =
+      '{"type":"tool_call","name":"greet","input":{"name":"Alice"}}';
+    const stderrChunks = [`${REQ_LINE_MARKER}${uuid} ${payload}\n`];
     const stdoutChunks = ["before\nafter\n"];
 
     const writtenFiles = new Map<string, string>();
-    const sandbox = createMockSandbox({ stdoutChunks, stderrChunks, writtenFiles });
+    const sandbox = createMockSandbox({
+      stdoutChunks,
+      stderrChunks,
+      writtenFiles,
+    });
 
     const greetTool = tool(
       async (input: { name: string }) => `Hello, ${input.name}!`,
@@ -206,9 +222,7 @@ describe("PtcExecutionEngine", () => {
   it("should handle tool call errors gracefully", async () => {
     const uuid = "error-uuid";
     const payload = '{"type":"tool_call","name":"fail","input":{}}';
-    const stderrChunks = [
-      `${REQ_LINE_MARKER}${uuid} ${payload}\n`,
-    ];
+    const stderrChunks = [`${REQ_LINE_MARKER}${uuid} ${payload}\n`];
 
     const writtenFiles = new Map<string, string>();
     const sandbox = createMockSandbox({ stderrChunks, writtenFiles });
@@ -241,9 +255,7 @@ describe("PtcExecutionEngine", () => {
   it("should handle unknown tool names", async () => {
     const uuid = "unknown-uuid";
     const payload = '{"type":"tool_call","name":"nonexistent","input":{}}';
-    const stderrChunks = [
-      `${REQ_LINE_MARKER}${uuid} ${payload}\n`,
-    ];
+    const stderrChunks = [`${REQ_LINE_MARKER}${uuid} ${payload}\n`];
 
     const writtenFiles = new Map<string, string>();
     const sandbox = createMockSandbox({ stderrChunks, writtenFiles });
@@ -276,14 +288,11 @@ describe("PtcExecutionEngine", () => {
     const writtenFiles = new Map<string, string>();
     const sandbox = createMockSandbox({ stderrChunks, writtenFiles });
 
-    const echoTool = tool(
-      async (input: { msg: string }) => input.msg,
-      {
-        name: "echo",
-        description: "Echo a message",
-        schema: z.object({ msg: z.string() }),
-      },
-    );
+    const echoTool = tool(async (input: { msg: string }) => input.msg, {
+      name: "echo",
+      description: "Echo a message",
+      schema: z.object({ msg: z.string() }),
+    });
 
     const engine = new PtcExecutionEngine(sandbox, [echoTool]);
     const result = await engine.execute("test");
@@ -319,9 +328,15 @@ describe("PtcExecutionEngine", () => {
     // 3 execute() calls for runtime install + 1 spawnInteractive for the command
     const executeCalls = (sandbox.execute as any).mock.calls as Array<[string]>;
     expect(executeCalls.length).toBe(3);
-    expect(executeCalls.some(([cmd]: [string]) => cmd.includes("da_runtime.sh"))).toBe(true);
-    expect(executeCalls.some(([cmd]: [string]) => cmd.includes("da_runtime.py"))).toBe(true);
-    expect(executeCalls.some(([cmd]: [string]) => cmd.includes("da_runtime.js"))).toBe(true);
+    expect(
+      executeCalls.some(([cmd]: [string]) => cmd.includes("da_runtime.sh")),
+    ).toBe(true);
+    expect(
+      executeCalls.some(([cmd]: [string]) => cmd.includes("da_runtime.py")),
+    ).toBe(true);
+    expect(
+      executeCalls.some(([cmd]: [string]) => cmd.includes("da_runtime.js")),
+    ).toBe(true);
   });
 
   it("should not re-install runtime libraries on subsequent executions", async () => {

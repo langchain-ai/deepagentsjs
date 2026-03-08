@@ -5,10 +5,7 @@
  * sandboxes and the host-side PTC engine.
  */
 
-import type {
-  BackendProtocol,
-  BackendFactory,
-} from "../backends/protocol.js";
+import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
 
 /**
  * IPC request parsed from stdout markers.
