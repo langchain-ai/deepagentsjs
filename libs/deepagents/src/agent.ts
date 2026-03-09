@@ -40,8 +40,21 @@ import type {
  */
 import type * as _messages from "@langchain/core/messages";
 import type * as _Command from "@langchain/langgraph";
+import type { BaseLanguageModel } from "@langchain/core/language_models/base";
 
 const BASE_PROMPT = `In order to complete the objective that the user asks of you, you have access to a number of standard tools.`;
+
+/**
+ * Detect whether a model is an Anthropic model.
+ * Used to gate Anthropic-specific prompt caching optimizations (cache_control breakpoints).
+ */
+function isAnthropicModel(model: BaseLanguageModel | string): boolean {
+  if (typeof model === "string") {
+    if (model.includes(":")) return model.split(":")[0] === "anthropic";
+    return model.startsWith("claude");
+  }
+  return model.getName() === "ChatAnthropic";
+}
 
 /**
  * Create a Deep Agent with middleware-based architecture.
@@ -113,6 +126,8 @@ export function createDeepAgent<
     skills,
   } = params;
 
+  const anthropicModel = isAnthropicModel(model);
+
   /**
    * Combine system prompt with base prompt like Python implementation
    */
@@ -127,10 +142,12 @@ export function createDeepAgent<
         ]
     : [{ type: "text", text: BASE_PROMPT }];
 
-  systemPromptBlocks[systemPromptBlocks.length - 1] = {
-    ...systemPromptBlocks[systemPromptBlocks.length - 1],
-    cache_control: { type: "ephemeral" },
-  };
+  if (anthropicModel) {
+    systemPromptBlocks[systemPromptBlocks.length - 1] = {
+      ...systemPromptBlocks[systemPromptBlocks.length - 1],
+      cache_control: { type: "ephemeral" },
+    };
+  }
 
   const finalSystemPrompt = new SystemMessage({ content: systemPromptBlocks });
 
@@ -165,6 +182,7 @@ export function createDeepAgent<
           createMemoryMiddleware({
             backend: filesystemBackend,
             sources: memory,
+            addCacheControl: anthropicModel,
           }),
         ]
       : [];

@@ -244,10 +244,11 @@ describe("createMemoryMiddleware", () => {
   });
 
   describe("cache control breakpoints", () => {
-    it("should add cache_control to the memory content block", () => {
+    it("should add cache_control to the memory content block when addCacheControl is true", () => {
       const middleware = createMemoryMiddleware({
         backend: createMockBackend({}),
         sources: ["~/.deepagents/AGENTS.md"],
+        addCacheControl: true,
       });
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
@@ -263,18 +264,19 @@ describe("createMemoryMiddleware", () => {
       middleware.wrapModelCall!(request as any, mockHandler);
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      const content = modifiedRequest.systemMessage.content;
-      expect(Array.isArray(content)).toBe(true);
-
-      const lastBlock = (content as ContentBlock.Text[])[content.length - 1];
-      expect(lastBlock.text).toContain("<agent_memory>");
-      expect(lastBlock.cache_control).toEqual({ type: "ephemeral" });
+      const content = modifiedRequest.systemMessage
+        .content as ContentBlock.Text[];
+      expect(content).toHaveLength(2);
+      expect(content[0].text).toBe("Base prompt");
+      expect(content[1].text).toContain("<agent_memory>");
+      expect(content[1].cache_control).toEqual({ type: "ephemeral" });
     });
 
     it("should preserve existing cache_control on system prompt blocks", () => {
       const middleware = createMemoryMiddleware({
         backend: createMockBackend({}),
         sources: ["~/.deepagents/AGENTS.md"],
+        addCacheControl: true,
       });
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
@@ -302,32 +304,6 @@ describe("createMemoryMiddleware", () => {
         .content as ContentBlock.Text[];
       expect(content[0].cache_control).toEqual({ type: "ephemeral" });
       expect(content[1].cache_control).toEqual({ type: "ephemeral" });
-    });
-
-    it("should produce separate content blocks for stable prompt and volatile memory", () => {
-      const middleware = createMemoryMiddleware({
-        backend: createMockBackend({}),
-        sources: ["~/.deepagents/AGENTS.md"],
-      });
-
-      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
-      const request = {
-        systemMessage: new SystemMessage("Stable system instructions"),
-        state: {
-          memoryContents: {
-            "~/.deepagents/AGENTS.md": "Volatile memory content",
-          },
-        },
-      };
-
-      middleware.wrapModelCall!(request as any, mockHandler);
-
-      const modifiedRequest = mockHandler.mock.calls[0][0];
-      const content = modifiedRequest.systemMessage
-        .content as ContentBlock.Text[];
-      expect(content).toHaveLength(2);
-      expect(content[0].text).toBe("Stable system instructions");
-      expect(content[1].text).toContain("Volatile memory content");
     });
 
     it("should keep stable blocks unchanged when memory content changes", () => {
@@ -368,10 +344,37 @@ describe("createMemoryMiddleware", () => {
       expect(content2[1].text).toContain("Memory v2");
     });
 
+    it("should not add cache_control when addCacheControl is false", () => {
+      const middleware = createMemoryMiddleware({
+        backend: createMockBackend({}),
+        sources: ["~/.deepagents/AGENTS.md"],
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {
+          memoryContents: {
+            "~/.deepagents/AGENTS.md": "User memory content",
+          },
+        },
+      };
+
+      middleware.wrapModelCall!(request as any, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      const content = modifiedRequest.systemMessage
+        .content as ContentBlock.Text[];
+      expect(content).toHaveLength(2);
+      expect(content[1].text).toContain("<agent_memory>");
+      expect(content[1].cache_control).toBeUndefined();
+    });
+
     it("should handle array content blocks from system message", () => {
       const middleware = createMemoryMiddleware({
         backend: createMockBackend({}),
         sources: ["~/.deepagents/AGENTS.md"],
+        addCacheControl: true,
       });
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });

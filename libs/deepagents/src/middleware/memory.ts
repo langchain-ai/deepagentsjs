@@ -83,6 +83,14 @@ export interface MemoryMiddlewareOptions {
    * Sources are loaded in order.
    */
   sources: string[];
+
+  /**
+   * Whether to add cache_control breakpoints to the memory content block.
+   * When true, the memory block is tagged with `cache_control: { type: "ephemeral" }`
+   * to enable prompt caching for providers that support it (e.g., Anthropic).
+   * @default false
+   */
+  addCacheControl?: boolean;
 }
 
 /**
@@ -256,7 +264,7 @@ async function loadMemoryFromBackend(
  * ```
  */
 export function createMemoryMiddleware(options: MemoryMiddlewareOptions) {
-  const { backend, sources } = options;
+  const { backend, sources, addCacheControl = false } = options;
 
   /**
    * Resolve backend from instance or factory.
@@ -318,14 +326,15 @@ export function createMemoryMiddleware(options: MemoryMiddlewareOptions) {
             ? existingContent
             : [];
 
-      // Add cache control breakpoint for memory block
       const newSystemMessage = new SystemMessage({
         content: [
           ...existingBlocks,
           {
             type: "text" as const,
             text: memorySection,
-            cache_control: { type: "ephemeral" },
+            ...(addCacheControl && {
+              cache_control: { type: "ephemeral" as const },
+            }),
           },
         ],
       });
