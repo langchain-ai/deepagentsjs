@@ -90,8 +90,7 @@ const DEFAULT_AUTH_METHODS: ACPAuthMethod[] = [
   {
     id: "deepagents-setup",
     name: "DeepAgents Setup",
-    description:
-      "Configure LLM provider credentials via environment variables",
+    description: "Configure LLM provider credentials via environment variables",
   },
 ];
 
