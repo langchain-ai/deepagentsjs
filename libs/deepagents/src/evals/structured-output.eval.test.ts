@@ -4,6 +4,7 @@ import { tool, toolStrategy } from "langchain";
 import type { StructuredTool } from "@langchain/core/tools";
 import { z } from "zod/v4";
 import { createDeepAgent, runAgent } from "./index.js";
+import { createQuickJSMiddleware } from "@langchain/quickjs";
 
 // ---------------------------------------------------------------------------
 // Fake tool data
@@ -420,7 +421,44 @@ function createEvalAgents(params: {
     ],
   });
 
-  return { staticAgent, dynamicAgent, freeTextAgent };
+  const quickjsAgent = createDeepAgent({
+    systemPrompt:
+      `${params.supervisorContext}\n\n` +
+      `You have a subagent called "${params.subagentName}". ` +
+      `You MUST use the js_eval REPL to orchestrate subagent calls — do NOT call the task tool directly.\n\n` +
+      `When you need to delegate work to subagents, write a single js_eval call that:\n` +
+      `1. Defines the response_schema ONCE as a variable\n` +
+      `2. Uses Promise.all to spawn all subagents in parallel\n` +
+      `3. Parses the JSON results and logs a summary\n\n` +
+      `Example:\n` +
+      `\`\`\`typescript\n` +
+      `const schema = ${params.dynamicSchemaJson};\n` +
+      `const items = ["item1", "item2"];\n` +
+      `const results = await Promise.all(\n` +
+      `  items.map(item => tools.task({\n` +
+      `    description: \`Analyze \${item}\`,\n` +
+      `    subagent_type: "${params.subagentName}",\n` +
+      `    response_schema: schema,\n` +
+      `  }))\n` +
+      `);\n` +
+      `const parsed = results.map(r => JSON.parse(r));\n` +
+      `console.log(JSON.stringify(parsed, null, 2));\n` +
+      `\`\`\`\n\n` +
+      `After receiving the js_eval output, analyze the data and answer the user's questions.`,
+    subagents: [
+      {
+        name: params.subagentName,
+        description: `${params.description} Supports response_schema for structured output.`,
+        systemPrompt: params.systemPrompt,
+        tools: params.tools,
+      },
+    ],
+    middleware: [
+      createQuickJSMiddleware({ ptc: ["task"] }),
+    ],
+  });
+
+  return { staticAgent, dynamicAgent, freeTextAgent, quickjsAgent };
 }
 
 // ---------------------------------------------------------------------------
@@ -539,6 +577,23 @@ ls.describe("structured-output-eval-A-freetext", () => {
   );
 });
 
+ls.describe("structured-output-eval-A-quickjs", () => {
+  ls.test(
+    "scale: 8 cities with QuickJS REPL + PTC",
+    { inputs: { query: EVAL_A_QUERY } },
+    async ({ inputs }) => {
+      const result = await runAgent(evalAAgents.quickjsAgent, {
+        query: inputs.query,
+      });
+
+      expect(result).toHaveFinalTextContaining("Mumbai", true);
+      expect(result).toHaveFinalTextContaining("Asia/Kolkata", true);
+      expect(result).toHaveFinalTextContaining("770", true);
+      expect(result).toHaveTokenUsage();
+    },
+  );
+});
+
 // ---------------------------------------------------------------------------
 // Eval B: Multi-hop chaining
 // ---------------------------------------------------------------------------
@@ -609,7 +664,49 @@ const evalBAgents = (() => {
     ],
   });
 
-  return { staticAgent, dynamicAgent, freeTextAgent };
+  const flightSchemaJson = JSON.stringify({ type: "object", properties: { airline: { type: "string" }, price: { type: "number" }, duration_hours: { type: "number" }, destination_city: { type: "string" } }, required: ["airline", "price", "duration_hours", "destination_city"] });
+  const hotelSchemaJson = JSON.stringify({ type: "object", properties: { name: { type: "string" }, price_per_night: { type: "number" }, rating: { type: "number" }, availability: { type: "boolean" } }, required: ["name", "price_per_night", "rating", "availability"] });
+
+  const quickjsAgent = createDeepAgent({
+    systemPrompt:
+      `${baseSupervisorContext}\n\n` +
+      `You have a subagent called "travel_agent". ` +
+      `You MUST use the js_eval REPL to orchestrate subagent calls — do NOT call the task tool directly.\n\n` +
+      `When you need to delegate work to subagents, write a single js_eval call that:\n` +
+      `1. Defines the response_schema ONCE as a variable\n` +
+      `2. Uses Promise.all to spawn all subagents in parallel\n` +
+      `3. Parses the JSON results and logs a summary\n\n` +
+      `For flight searches use this schema: ${flightSchemaJson}\n` +
+      `For hotel checks use this schema: ${hotelSchemaJson}\n\n` +
+      `Example for parallel flight search:\n` +
+      `\`\`\`typescript\n` +
+      `const flightSchema = ${flightSchemaJson};\n` +
+      `const destinations = ["London", "Paris", "Tokyo"];\n` +
+      `const results = await Promise.all(\n` +
+      `  destinations.map(dest => tools.task({\n` +
+      `    description: \`Search flights from NYC to \${dest}\`,\n` +
+      `    subagent_type: "travel_agent",\n` +
+      `    response_schema: flightSchema,\n` +
+      `  }))\n` +
+      `);\n` +
+      `const parsed = results.map(r => JSON.parse(r));\n` +
+      `console.log(JSON.stringify(parsed, null, 2));\n` +
+      `\`\`\`\n\n` +
+      `After receiving js_eval output, analyze the data and answer the user's questions.`,
+    subagents: [
+      {
+        name: "travel_agent",
+        description: `${baseDescription} Supports response_schema for structured output.`,
+        systemPrompt: baseSystemPrompt,
+        tools: [searchFlights, checkHotels],
+      },
+    ],
+    middleware: [
+      createQuickJSMiddleware({ ptc: ["task"] }),
+    ],
+  });
+
+  return { staticAgent, dynamicAgent, freeTextAgent, quickjsAgent };
 })();
 
 ls.describe("structured-output-eval-B-static", () => {
@@ -650,6 +747,22 @@ ls.describe("structured-output-eval-B-freetext", () => {
     { inputs: { query: EVAL_B_QUERY } },
     async ({ inputs }) => {
       const result = await runAgent(evalBAgents.freeTextAgent, {
+        query: inputs.query,
+      });
+
+      expect(result).toHaveFinalTextContaining("Paris", true);
+      expect(result).toHaveFinalTextContaining("Plaza", true);
+      expect(result).toHaveTokenUsage();
+    },
+  );
+});
+
+ls.describe("structured-output-eval-B-quickjs", () => {
+  ls.test(
+    "multi-hop: flights then hotels with QuickJS REPL + PTC",
+    { inputs: { query: EVAL_B_QUERY } },
+    async ({ inputs }) => {
+      const result = await runAgent(evalBAgents.quickjsAgent, {
         query: inputs.query,
       });
 
@@ -728,6 +841,22 @@ ls.describe("structured-output-eval-C-freetext", () => {
     { inputs: { query: EVAL_C_QUERY } },
     async ({ inputs }) => {
       const result = await runAgent(evalCAgents.freeTextAgent, {
+        query: inputs.query,
+      });
+
+      expect(result).toHaveFinalTextContaining("Candidate B", true);
+      expect(result).toHaveFinalTextContaining("4,500", true);
+      expect(result).toHaveTokenUsage();
+    },
+  );
+});
+
+ls.describe("structured-output-eval-C-quickjs", () => {
+  ls.test(
+    "conditional: candidate selection with QuickJS REPL + PTC",
+    { inputs: { query: EVAL_C_QUERY } },
+    async ({ inputs }) => {
+      const result = await runAgent(evalCAgents.quickjsAgent, {
         query: inputs.query,
       });
 
@@ -1049,6 +1178,22 @@ ls.describe("structured-output-eval-D-freetext", () => {
     { inputs: { query: EVAL_D_QUERY } },
     async ({ inputs }) => {
       const result = await runAgent(evalDAgents.freeTextAgent, {
+        query: inputs.query,
+      });
+
+      expect(result).toHaveFinalTextContaining("NovaPharma", true);
+      expect(result).toHaveFinalTextContaining("AquaPure", true);
+      expect(result).toHaveTokenUsage();
+    },
+  );
+});
+
+ls.describe("structured-output-eval-D-quickjs", () => {
+  ls.test(
+    "stress: 40 companies noisy cross-reference with QuickJS REPL + PTC",
+    { inputs: { query: EVAL_D_QUERY } },
+    async ({ inputs }) => {
+      const result = await runAgent(evalDAgents.quickjsAgent, {
         query: inputs.query,
       });
 
@@ -1469,6 +1614,23 @@ ls.describe("structured-output-eval-E-freetext", () => {
     { inputs: { query: EVAL_E_QUERY } },
     async ({ inputs }) => {
       const result = await runAgent(evalEAgents.freeTextAgent, {
+        query: inputs.query,
+      });
+
+      expect(result).toHaveFinalTextContaining("Pacifica", true);
+      expect(result).toHaveFinalTextContaining("Helvetia", true);
+      expect(result).toHaveFinalTextContaining("Gobi", true);
+      expect(result).toHaveTokenUsage();
+    },
+  );
+});
+
+ls.describe("structured-output-eval-E-quickjs", () => {
+  ls.test(
+    "extreme: 96 suppliers noisy wall-of-text with QuickJS REPL + PTC",
+    { inputs: { query: EVAL_E_QUERY } },
+    async ({ inputs }) => {
+      const result = await runAgent(evalEAgents.quickjsAgent, {
         query: inputs.query,
       });
 

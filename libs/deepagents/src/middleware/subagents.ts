@@ -672,6 +672,9 @@ function createTaskTool(options: {
       >;
 
       if (!config.toolCall?.id) {
+        if (result.structuredResponse != null) {
+          return JSON.stringify(result.structuredResponse);
+        }
         const messages = result.messages as BaseMessage[];
         const lastMessage = messages?.[messages.length - 1];
         let content: string | ContentBlock[] =
