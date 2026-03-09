@@ -26,6 +26,7 @@ import {
 import { StateBackend } from "./backends/index.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { CompiledSubAgent } from "./middleware/subagents.js";
+import { mergeMiddleware } from "./middleware/utils.js";
 import type {
   CreateDeepAgentParams,
   DeepAgent,
@@ -201,10 +202,10 @@ export function createDeepAgent<
 
     return {
       ...subagent,
-      middleware: [
-        subagentSkillsMiddleware,
-        ...(subagent.middleware || []),
-      ] as readonly AgentMiddleware[],
+      middleware: mergeMiddleware(
+        [subagentSkillsMiddleware],
+        subagent.middleware || [],
+      ) as readonly AgentMiddleware[],
     };
   });
 
@@ -293,13 +294,15 @@ export function createDeepAgent<
    * Runtime middleware array: combine built-in + optional middleware
    * Note: The type is handled separately via AllMiddleware type alias
    */
-  const runtimeMiddleware: AgentMiddleware[] = [
-    ...builtInMiddleware,
-    ...skillsMiddlewareArray,
-    ...memoryMiddlewareArray,
-    ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
-    ...(customMiddleware as unknown as AgentMiddleware[]),
-  ];
+  const runtimeMiddleware: AgentMiddleware[] = mergeMiddleware(
+    [
+      ...builtInMiddleware,
+      ...skillsMiddlewareArray,
+      ...memoryMiddlewareArray,
+      ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
+    ],
+    customMiddleware as unknown as AgentMiddleware[],
+  );
 
   const agent = createAgent({
     model,

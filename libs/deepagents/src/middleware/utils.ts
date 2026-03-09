@@ -5,6 +5,7 @@
  */
 
 import { SystemMessage } from "@langchain/core/messages";
+import { AgentMiddleware } from "langchain";
 
 /**
  * Append text to a system message.
@@ -93,4 +94,46 @@ export function prependToSystemMessage(
 
   // Fallback for unknown content type
   return new SystemMessage({ content: text });
+}
+
+/**
+ * Merge default and custom middleware arrays.
+ *
+ * Default middleware that share a name with a custom middleware are replaced
+ * in-place (preserving the default's position). Custom middleware that do not
+ * override any default are appended at the end.
+ *
+ * @param defaults - Base middleware array.
+ * @param custom - User-provided overrides and additions.
+ * @returns Merged middleware array with no duplicate names.
+ *
+ * @example
+ * ```typescript
+ * const defaults = [mw1, mw2, mw3];
+ * const custom   = [mw2Override, mw4];
+ * const result   = mergeMiddleware(defaults, custom);
+ * // Result: [mw1, mw2Override, mw3, mw4]
+ * ```
+ */
+export function mergeMiddleware(
+  defaults: readonly AgentMiddleware[],
+  custom: readonly AgentMiddleware[],
+): AgentMiddleware[] {
+  const customByName = new Map<string, AgentMiddleware>();
+  for (const mw of custom) {
+    customByName.set(mw.name, mw);
+  }
+
+  // Replace defaults in-place when a custom override exists
+  const merged = defaults.map((mw) => customByName.get(mw.name) ?? mw);
+
+  // Append custom middleware that didn't override any default
+  const defaultNames = new Set(defaults.map((mw) => mw.name));
+  for (const mw of custom) {
+    if (!defaultNames.has(mw.name)) {
+      merged.push(mw);
+    }
+  }
+
+  return merged;
 }
