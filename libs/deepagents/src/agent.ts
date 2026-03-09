@@ -48,7 +48,7 @@ const BASE_PROMPT = `In order to complete the objective that the user asks of yo
  * Detect whether a model is an Anthropic model.
  * Used to gate Anthropic-specific prompt caching optimizations (cache_control breakpoints).
  */
-function isAnthropicModel(model: BaseLanguageModel | string): boolean {
+export function isAnthropicModel(model: BaseLanguageModel | string): boolean {
   if (typeof model === "string") {
     if (model.includes(":")) return model.split(":")[0] === "anthropic";
     return model.startsWith("claude");

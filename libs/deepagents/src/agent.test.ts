@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createDeepAgent } from "./agent.js";
+import { createDeepAgent, isAnthropicModel } from "./agent.js";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
 import {
   HumanMessage,
@@ -8,6 +8,37 @@ import {
 } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 import { createFileData } from "./backends/utils.js";
+
+describe("isAnthropicModel", () => {
+  it("should detect claude model strings", () => {
+    expect(isAnthropicModel("claude-sonnet-4-5-20250929")).toBe(true);
+    expect(isAnthropicModel("claude-3-opus")).toBe(true);
+    expect(isAnthropicModel("claude-haiku")).toBe(true);
+  });
+
+  it("should detect anthropic: prefixed model strings", () => {
+    expect(isAnthropicModel("anthropic:claude-3-opus")).toBe(true);
+    expect(isAnthropicModel("anthropic:claude-sonnet")).toBe(true);
+  });
+
+  it("should reject non-Anthropic model strings", () => {
+    expect(isAnthropicModel("gpt-4")).toBe(false);
+    expect(isAnthropicModel("gemini-pro")).toBe(false);
+    expect(isAnthropicModel("openai:gpt-4")).toBe(false);
+  });
+
+  it("should detect ChatAnthropic model objects", () => {
+    const model = new FakeListChatModel({ responses: [] });
+    vi.spyOn(model, "getName").mockReturnValue("ChatAnthropic");
+    expect(isAnthropicModel(model)).toBe(true);
+  });
+
+  it("should reject non-Anthropic model objects", () => {
+    const model = new FakeListChatModel({ responses: [] });
+    vi.spyOn(model, "getName").mockReturnValue("ChatOpenAI");
+    expect(isAnthropicModel(model)).toBe(false);
+  });
+});
 
 describe("System prompt cache control breakpoints", () => {
   function getSystemMessageFromSpy(
