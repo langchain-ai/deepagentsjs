@@ -40,6 +40,7 @@ import type {
   ToolCallInfo,
   StopReason,
   ACPCapabilities,
+  ACPAuthMethod,
 } from "./types.js";
 
 import { Logger, createLogger } from "./logger.js";
@@ -70,6 +71,29 @@ type SetSessionModeResponse = Record<string, unknown>;
 type AuthenticateRequest = Record<string, unknown>;
 type AuthenticateResponse = Record<string, unknown>;
 type SessionNotification = Record<string, unknown>;
+
+const DEFAULT_AUTH_METHODS: ACPAuthMethod[] = [
+  {
+    id: "anthropic",
+    name: "Anthropic API Key",
+    type: "env_var",
+    vars: [{ name: "ANTHROPIC_API_KEY" }],
+    link: "https://console.anthropic.com/settings/keys",
+  },
+  {
+    id: "openai",
+    name: "OpenAI API Key",
+    type: "env_var",
+    vars: [{ name: "OPENAI_API_KEY" }],
+    link: "https://platform.openai.com/api-keys",
+  },
+  {
+    id: "deepagents-setup",
+    name: "DeepAgents Setup",
+    description:
+      "Configure LLM provider credentials via environment variables",
+  },
+];
 
 const AVAILABLE_MODES = [
   { id: "agent", name: "Agent Mode", description: "Full autonomous agent" },
@@ -124,6 +148,7 @@ export class DeepAgentsServer {
   private readonly serverVersion: string;
   private readonly debug: boolean;
   private readonly workspaceRoot: string;
+  private readonly authMethods: ACPAuthMethod[];
   private readonly logger: Logger;
 
   constructor(options: DeepAgentsServerOptions) {
@@ -131,6 +156,7 @@ export class DeepAgentsServer {
     this.serverVersion = options.serverVersion ?? "0.0.1";
     this.debug = options.debug ?? false;
     this.workspaceRoot = options.workspaceRoot ?? process.cwd();
+    this.authMethods = options.authMethods ?? DEFAULT_AUTH_METHODS;
 
     // Initialize logger with debug and/or file logging
     this.logger = createLogger({
@@ -386,6 +412,7 @@ export class DeepAgentsServer {
           commands: true,
         },
       },
+      authMethods: this.authMethods,
     };
 
     this.log("Initialize response:", JSON.stringify(response));

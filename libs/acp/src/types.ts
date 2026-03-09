@@ -37,6 +37,92 @@ export interface DeepAgentConfig extends CreateDeepAgentParams {
 }
 
 /**
+ * Environment variable descriptor for env_var auth methods.
+ *
+ * @see https://agentclientprotocol.com/rfds/auth-methods
+ */
+export interface ACPAuthEnvVar {
+  /** Environment variable name (e.g. "OPENAI_API_KEY") */
+  name: string;
+  /** Human-readable label shown in client UI */
+  label?: string;
+  /** Whether this value is a secret (default: true). Clients use password-style input for secrets. */
+  secret?: boolean;
+  /** Whether this variable is optional (default: false) */
+  optional?: boolean;
+}
+
+/**
+ * Agent-type auth method — the agent handles authentication itself.
+ * This is the default type when no `type` is provided.
+ */
+export interface ACPAuthMethodAgent {
+  id: string;
+  name: string;
+  type?: "agent";
+  description?: string;
+}
+
+/**
+ * Env-var auth method — credentials are passed as environment variables.
+ * Clients can show input UI for each variable and restart the agent with them set.
+ */
+export interface ACPAuthMethodEnvVar {
+  id: string;
+  name: string;
+  type: "env_var";
+  description?: string;
+  /** URL where the user can obtain credentials */
+  link?: string;
+  /** Environment variables required for this auth method */
+  vars: ACPAuthEnvVar[];
+}
+
+/**
+ * Terminal auth method — requires an interactive terminal for login (e.g. TUI).
+ * Only used when the client advertises `auth.terminal` capability.
+ */
+export interface ACPAuthMethodTerminal {
+  id: string;
+  name: string;
+  type: "terminal";
+  description?: string;
+  /** Additional arguments passed when running the agent binary for login */
+  args?: string[];
+  /** Additional environment variables set during the login invocation */
+  env?: Record<string, string>;
+}
+
+/**
+ * Union of all ACP authentication method types.
+ *
+ * Advertised in the `InitializeResponse` so clients know how to help
+ * users authenticate with the agent.
+ *
+ * @see https://agentclientprotocol.com/rfds/auth-methods
+ *
+ * @example
+ * ```typescript
+ * const server = new DeepAgentsServer({
+ *   agents: { name: "my-agent" },
+ *   authMethods: [
+ *     {
+ *       id: "anthropic",
+ *       name: "Anthropic API Key",
+ *       type: "env_var",
+ *       vars: [{ name: "ANTHROPIC_API_KEY" }],
+ *       link: "https://console.anthropic.com/settings/keys",
+ *     },
+ *   ],
+ * });
+ * ```
+ */
+export type ACPAuthMethod =
+  | ACPAuthMethodAgent
+  | ACPAuthMethodEnvVar
+  | ACPAuthMethodTerminal;
+
+/**
  * Server configuration options
  */
 export interface DeepAgentsServerOptions {
@@ -70,6 +156,16 @@ export interface DeepAgentsServerOptions {
    * Workspace root directory (defaults to cwd)
    */
   workspaceRoot?: string;
+
+  /**
+   * Authentication methods advertised to ACP clients during initialization.
+   *
+   * If not provided, defaults to env_var methods for common LLM provider
+   * API keys (Anthropic, OpenAI) plus a generic agent-type fallback.
+   *
+   * @see https://agentclientprotocol.com/rfds/auth-methods
+   */
+  authMethods?: ACPAuthMethod[];
 }
 
 /**
