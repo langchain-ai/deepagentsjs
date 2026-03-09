@@ -39,6 +39,20 @@ describe("isAnthropicModel", () => {
     vi.spyOn(model, "getName").mockReturnValue("ChatOpenAI");
     expect(isAnthropicModel(model)).toBe(false);
   });
+
+  it("should detect ConfigurableModel wrapping an Anthropic provider", () => {
+    const model = new FakeListChatModel({ responses: [] });
+    vi.spyOn(model, "getName").mockReturnValue("ConfigurableModel");
+    (model as any)._defaultConfig = { modelProvider: "anthropic" };
+    expect(isAnthropicModel(model)).toBe(true);
+  });
+
+  it("should reject ConfigurableModel wrapping a non-Anthropic provider", () => {
+    const model = new FakeListChatModel({ responses: [] });
+    vi.spyOn(model, "getName").mockReturnValue("ConfigurableModel");
+    (model as any)._defaultConfig = { modelProvider: "openai" };
+    expect(isAnthropicModel(model)).toBe(false);
+  });
 });
 
 describe("System prompt cache control breakpoints", () => {

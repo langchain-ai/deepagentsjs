@@ -54,6 +54,9 @@ export function isAnthropicModel(model: BaseLanguageModel | string): boolean {
     if (model.includes(":")) return model.split(":")[0] === "anthropic";
     return model.startsWith("claude");
   }
+  if (model.getName() === "ConfigurableModel") {
+    return (model as any)._defaultConfig?.modelProvider === "anthropic";
+  }
   return model.getName() === "ChatAnthropic";
 }
 
@@ -246,9 +249,6 @@ export function createDeepAgent<
       minMessagesToCache: 1,
     }),
     createPatchToolCallsMiddleware(),
-    ...((anthropicModel
-      ? [createCacheBreakpointMiddleware()]
-      : []) as AgentMiddleware[]),
   ];
 
   /**
@@ -274,13 +274,21 @@ export function createDeepAgent<
       /**
        * Custom subagents must define their own `skills` property to get skills.
        */
-      defaultMiddleware: subagentMiddleware,
+      defaultMiddleware: [
+        ...subagentMiddleware,
+        ...((anthropicModel
+          ? [createCacheBreakpointMiddleware()]
+          : []) as AgentMiddleware[]),
+      ],
       /**
        * Middleware for the general-purpose subagent (inherits skills from main agent).
        */
       generalPurposeMiddleware: [
         ...subagentMiddleware,
         ...skillsMiddlewareArray,
+        ...((anthropicModel
+          ? [createCacheBreakpointMiddleware()]
+          : []) as AgentMiddleware[]),
       ],
       defaultInterruptOn: interruptOn,
       subagents: processedSubagents,
