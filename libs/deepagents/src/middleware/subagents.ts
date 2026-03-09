@@ -11,6 +11,7 @@ import {
   type BaseMessage,
   type InterruptOnConfig,
   type ReactAgent,
+  type ResponseFormat,
   StructuredTool,
 } from "langchain";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
@@ -302,6 +303,33 @@ export interface SubAgent {
    * ```
    */
   skills?: string[];
+
+  /**
+   * Structured output response format for the subagent.
+   *
+   * When specified, the subagent will produce a `structuredResponse` conforming to the
+   * given schema. The structured response is JSON-serialized and returned as the
+   * ToolMessage content to the parent agent, replacing the default last-message extraction.
+   *
+   * Accepts any format supported by `createAgent`: Zod schemas, `toolStrategy(schema)`,
+   * `providerStrategy(schema)`, etc.
+   *
+   * @example
+   * ```typescript
+   * import { z } from "zod"
+   *
+   * const analyzer: SubAgent = {
+   *   name: "analyzer",
+   *   description: "Analyzes data and returns structured findings",
+   *   systemPrompt: "Analyze the data and return your findings.",
+   *   responseFormat: z.object({
+   *     findings: z.string(),
+   *     confidence: z.number(),
+   *   }),
+   * };
+   * ```
+   */
+  responseFormat?: ResponseFormat;
 }
 
 /**
@@ -382,17 +410,23 @@ function returnCommandWithStateUpdate(
   toolCallId: string,
 ): Command {
   const stateUpdate = filterStateForSubagent(result);
-  const messages = result.messages as BaseMessage[];
-  const lastMessage = messages?.[messages.length - 1];
 
-  let content: string | ContentBlock[] =
-    lastMessage?.content || "Task completed";
-  if (Array.isArray(content)) {
-    content = content.filter(
-      (block) => !INVALID_TOOL_MESSAGE_BLOCK_TYPES.includes(block.type),
-    );
-    if (content.length === 0) {
-      content = "Task completed";
+  let content: string | ContentBlock[];
+
+  if (result.structuredResponse != null) {
+    content = JSON.stringify(result.structuredResponse);
+  } else {
+    const messages = result.messages as BaseMessage[];
+    const lastMessage = messages?.[messages.length - 1];
+
+    content = lastMessage?.content || "Task completed";
+    if (Array.isArray(content)) {
+      content = content.filter(
+        (block) => !INVALID_TOOL_MESSAGE_BLOCK_TYPES.includes(block.type),
+      );
+      if (content.length === 0) {
+        content = "Task completed";
+      }
     }
   }
 
@@ -489,6 +523,9 @@ function getSubagents(options: {
         tools: agentParams.tools ?? defaultTools,
         middleware,
         name: agentParams.name,
+        ...(agentParams.responseFormat != null && {
+          responseFormat: agentParams.responseFormat,
+        }),
       });
     }
   }
@@ -567,6 +604,9 @@ function createTaskTool(options: {
       >;
 
       if (!config.toolCall?.id) {
+        if (result.structuredResponse != null) {
+          return JSON.stringify(result.structuredResponse);
+        }
         const messages = result.messages as BaseMessage[];
         const lastMessage = messages?.[messages.length - 1];
         let content: string | ContentBlock[] =
