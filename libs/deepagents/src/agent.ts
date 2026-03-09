@@ -246,7 +246,9 @@ export function createDeepAgent<
       minMessagesToCache: 1,
     }),
     createPatchToolCallsMiddleware(),
-    ...(anthropicModel ? [createCacheBreakpointMiddleware()] : []),
+    ...((anthropicModel
+      ? [createCacheBreakpointMiddleware()]
+      : []) as AgentMiddleware[]),
   ];
 
   /**
@@ -304,7 +306,6 @@ export function createDeepAgent<
      * Patches tool calls to ensure compatibility across different model providers
      */
     createPatchToolCallsMiddleware(),
-    ...(anthropicModel ? [createCacheBreakpointMiddleware()] : []),
   ] as const;
 
   /**
@@ -314,6 +315,7 @@ export function createDeepAgent<
   const runtimeMiddleware: AgentMiddleware[] = [
     ...builtInMiddleware,
     ...skillsMiddlewareArray,
+    ...(anthropicModel ? [createCacheBreakpointMiddleware()] : []),
     ...memoryMiddlewareArray,
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
     ...(customMiddleware as unknown as AgentMiddleware[]),
