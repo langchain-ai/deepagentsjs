@@ -41,6 +41,7 @@ import type {
 import type * as _messages from "@langchain/core/messages";
 import type * as _Command from "@langchain/langgraph";
 import type { BaseLanguageModel } from "@langchain/core/language_models/base";
+import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
 
 const BASE_PROMPT = `In order to complete the objective that the user asks of you, you have access to a number of standard tools.`;
 
@@ -141,13 +142,6 @@ export function createDeepAgent<
             : systemPrompt.content),
         ]
     : [{ type: "text", text: BASE_PROMPT }];
-
-  if (anthropicModel) {
-    systemPromptBlocks[systemPromptBlocks.length - 1] = {
-      ...systemPromptBlocks[systemPromptBlocks.length - 1],
-      cache_control: { type: "ephemeral" },
-    };
-  }
 
   const finalSystemPrompt = new SystemMessage({ content: systemPromptBlocks });
 
@@ -252,6 +246,7 @@ export function createDeepAgent<
       minMessagesToCache: 1,
     }),
     createPatchToolCallsMiddleware(),
+    ...(anthropicModel ? [createCacheBreakpointMiddleware()] : []),
   ];
 
   /**
@@ -309,6 +304,7 @@ export function createDeepAgent<
      * Patches tool calls to ensure compatibility across different model providers
      */
     createPatchToolCallsMiddleware(),
+    ...(anthropicModel ? [createCacheBreakpointMiddleware()] : []),
   ] as const;
 
   /**

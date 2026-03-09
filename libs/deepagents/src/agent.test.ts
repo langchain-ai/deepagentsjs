@@ -25,6 +25,7 @@ describe("isAnthropicModel", () => {
     expect(isAnthropicModel("gpt-4")).toBe(false);
     expect(isAnthropicModel("gemini-pro")).toBe(false);
     expect(isAnthropicModel("openai:gpt-4")).toBe(false);
+    expect(isAnthropicModel("google:gemini-pro")).toBe(false);
   });
 
   it("should detect ChatAnthropic model objects", () => {
@@ -82,14 +83,18 @@ describe("System prompt cache control breakpoints", () => {
     const blocks = systemMessage!.contentBlocks;
     expect(Array.isArray(blocks)).toBe(true);
 
-    // Should have at least 2 blocks: system prompt + memory
-    expect(blocks.length).toBeGreaterThanOrEqual(2);
+    // Should have at least 3 blocks: system prompt + static middleware blocks + memory
+    expect(blocks.length).toBeGreaterThanOrEqual(3);
 
-    // System prompt block should have cache_control (set by agent.ts,
-    // preserved by memory middleware when it spreads existing blocks)
+    // System prompt block (first) should NOT have cache_control — the breakpoint
+    // is placed on the last static block by createCacheBreakpointMiddleware
     const systemBlock = blocks[0];
-    expect(systemBlock.cache_control).toEqual({ type: "ephemeral" });
+    expect(systemBlock.cache_control).toBeUndefined();
     expect(systemBlock.text).toContain("You are a helpful assistant.");
+
+    // Second-to-last block is the last static block — has cache_control
+    const lastStaticBlock = blocks[blocks.length - 2];
+    expect(lastStaticBlock.cache_control).toEqual({ type: "ephemeral" });
 
     // Memory block (last) should have its own cache_control (set by memory middleware)
     const memoryBlock = blocks[blocks.length - 1];
