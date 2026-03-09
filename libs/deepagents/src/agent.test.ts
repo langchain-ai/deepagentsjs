@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from "vitest";
 import { createDeepAgent } from "./agent.js";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
 import {
-  ContentBlock,
   HumanMessage,
   SystemMessage,
   type BaseMessage,
@@ -49,10 +48,9 @@ describe("System prompt cache control breakpoints", () => {
 
     const systemMessage = getSystemMessageFromSpy(invokeSpy);
     expect(systemMessage).toBeDefined();
-    const content = systemMessage!.content;
-    expect(Array.isArray(content)).toBe(true);
+    const blocks = systemMessage!.contentBlocks;
+    expect(Array.isArray(blocks)).toBe(true);
 
-    const blocks = content as ContentBlock.Text[];
     // Should have at least 2 blocks: system prompt + memory
     expect(blocks.length).toBeGreaterThanOrEqual(2);
 

@@ -3,7 +3,6 @@ import { createMemoryMiddleware } from "./memory.js";
 import { createDeepAgent } from "../agent.js";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
 import {
-  ContentBlock,
   HumanMessage,
   SystemMessage,
   type BaseMessage,
@@ -211,14 +210,12 @@ describe("createMemoryMiddleware", () => {
       middleware.wrapModelCall!(request as any, mockHandler);
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      const content = modifiedRequest.systemMessage.content;
-      expect(Array.isArray(content)).toBe(true);
+      const blocks = modifiedRequest.systemMessage.contentBlocks;
+      expect(Array.isArray(blocks)).toBe(true);
       // First block: original system prompt
-      expect((content as ContentBlock.Text[])[0].text).toBe(
-        "Original system prompt content",
-      );
+      expect(blocks[0].text).toBe("Original system prompt content");
       // Last block: memory section
-      const lastBlock = (content as ContentBlock.Text[])[content.length - 1];
+      const lastBlock = blocks[blocks.length - 1];
       expect(lastBlock.text).toContain("<agent_memory>");
     });
 
@@ -264,12 +261,11 @@ describe("createMemoryMiddleware", () => {
       middleware.wrapModelCall!(request as any, mockHandler);
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      const content = modifiedRequest.systemMessage
-        .content as ContentBlock.Text[];
-      expect(content).toHaveLength(2);
-      expect(content[0].text).toBe("Base prompt");
-      expect(content[1].text).toContain("<agent_memory>");
-      expect(content[1].cache_control).toEqual({ type: "ephemeral" });
+      const blocks = modifiedRequest.systemMessage.contentBlocks;
+      expect(blocks).toHaveLength(2);
+      expect(blocks[0].text).toBe("Base prompt");
+      expect(blocks[1].text).toContain("<agent_memory>");
+      expect(blocks[1].cache_control).toEqual({ type: "ephemeral" });
     });
 
     it("should preserve existing cache_control on system prompt blocks", () => {
@@ -300,10 +296,9 @@ describe("createMemoryMiddleware", () => {
       middleware.wrapModelCall!(request as any, mockHandler);
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      const content = modifiedRequest.systemMessage
-        .content as ContentBlock.Text[];
-      expect(content[0].cache_control).toEqual({ type: "ephemeral" });
-      expect(content[1].cache_control).toEqual({ type: "ephemeral" });
+      const blocks = modifiedRequest.systemMessage.contentBlocks;
+      expect(blocks[0].cache_control).toEqual({ type: "ephemeral" });
+      expect(blocks[1].cache_control).toEqual({ type: "ephemeral" });
     });
 
     it("should keep stable blocks unchanged when memory content changes", () => {
@@ -322,8 +317,7 @@ describe("createMemoryMiddleware", () => {
         },
       };
       middleware.wrapModelCall!(request1 as any, mockHandler);
-      const content1 = mockHandler.mock.calls[0][0].systemMessage
-        .content as ContentBlock.Text[];
+      const content1 = mockHandler.mock.calls[0][0].systemMessage.contentBlocks;
 
       // Second call with memory v2
       const request2 = {
@@ -333,8 +327,7 @@ describe("createMemoryMiddleware", () => {
         },
       };
       middleware.wrapModelCall!(request2 as any, mockHandler);
-      const content2 = mockHandler.mock.calls[1][0].systemMessage
-        .content as ContentBlock.Text[];
+      const content2 = mockHandler.mock.calls[1][0].systemMessage.contentBlocks;
 
       // Stable block should be identical
       expect(content1[0].text).toBe(content2[0].text);
@@ -363,11 +356,10 @@ describe("createMemoryMiddleware", () => {
       middleware.wrapModelCall!(request as any, mockHandler);
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      const content = modifiedRequest.systemMessage
-        .content as ContentBlock.Text[];
-      expect(content).toHaveLength(2);
-      expect(content[1].text).toContain("<agent_memory>");
-      expect(content[1].cache_control).toBeUndefined();
+      const blocks = modifiedRequest.systemMessage.contentBlocks;
+      expect(blocks).toHaveLength(2);
+      expect(blocks[1].text).toContain("<agent_memory>");
+      expect(blocks[1].cache_control).toBeUndefined();
     });
 
     it("should handle array content blocks from system message", () => {
@@ -395,12 +387,12 @@ describe("createMemoryMiddleware", () => {
       middleware.wrapModelCall!(request as any, mockHandler);
 
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      const content = modifiedRequest.systemMessage.content as any[];
-      expect(content).toHaveLength(3);
-      expect(content[0].text).toBe("Block 1");
-      expect(content[1].text).toBe("Block 2");
-      expect(content[2].text).toContain("<agent_memory>");
-      expect(content[2].cache_control).toEqual({ type: "ephemeral" });
+      const blocks = modifiedRequest.systemMessage.contentBlocks;
+      expect(blocks).toHaveLength(3);
+      expect(blocks[0].text).toBe("Block 1");
+      expect(blocks[1].text).toBe("Block 2");
+      expect(blocks[2].text).toContain("<agent_memory>");
+      expect(blocks[2].cache_control).toEqual({ type: "ephemeral" });
     });
   });
 
