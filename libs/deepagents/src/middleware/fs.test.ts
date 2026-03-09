@@ -795,6 +795,97 @@ describe("createFilesystemMiddleware", () => {
         expect(result.content).toBe(largeContent);
       }
     });
+
+    it("should evict large array-based content blocks", async () => {
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: null,
+        filesUpdate: {
+          "/large_tool_results/test-id": {
+            content: ["large content"],
+            created_at: "2024-01-01T00:00:00Z",
+            modified_at: "2024-01-01T00:00:00Z",
+          },
+        },
+      });
+      mockBackend.write = mockWrite;
+
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        toolTokenLimitBeforeEvict: 100,
+      });
+
+      const largeText = "x".repeat(100 * NUM_CHARS_PER_TOKEN + 1000);
+      const mockMessage = new ToolMessage({
+        content: [
+          { type: "text", text: largeText },
+          { type: "text", text: " extra" },
+        ],
+        tool_call_id: "test-id",
+        name: "some_tool",
+      });
+      const mockHandler = vi.fn().mockResolvedValue(mockMessage);
+      const request = {
+        toolCall: { id: "test-id", name: "some_tool" },
+        state: {},
+        config: {},
+      };
+
+      const result = await middleware.wrapToolCall!(
+        request as any,
+        mockHandler,
+      );
+
+      expect(mockWrite).toHaveBeenCalledWith(
+        "/large_tool_results/test-id",
+        largeText + " extra",
+      );
+
+      expect(isCommand(result)).toBe(true);
+      if (isCommand(result)) {
+        const update = result.update as any;
+        expect(update.messages).toHaveLength(1);
+        const truncatedMsg = update.messages[0];
+        expect(truncatedMsg.content).toContain("Tool result too large");
+        expect(truncatedMsg.content).toContain("/large_tool_results/test-id");
+        expect(truncatedMsg.tool_call_id).toBe("test-id");
+      }
+    });
+
+    it("should not evict small array-based content blocks", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        toolTokenLimitBeforeEvict: 1000,
+      });
+
+      const mockMessage = new ToolMessage({
+        content: [
+          { type: "text", text: "small result" },
+          { type: "text", text: " part two" },
+        ],
+        tool_call_id: "test-id",
+        name: "some_tool",
+      });
+      const mockHandler = vi.fn().mockResolvedValue(mockMessage);
+      const request = {
+        toolCall: { id: "test-id", name: "some_tool" },
+        state: {},
+        config: {},
+      };
+
+      const result = await middleware.wrapToolCall!(
+        request as any,
+        mockHandler,
+      );
+
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.content).toEqual([
+          { type: "text", text: "small result" },
+          { type: "text", text: " part two" },
+        ]);
+      }
+    });
   });
 
   describe("tools", () => {

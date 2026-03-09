@@ -871,9 +871,10 @@ export function createFilesystemMiddleware(
         msg: ToolMessage,
         toolTokenLimitBeforeEvict: number,
       ) {
+        const textContent = msg.text;
         if (
-          typeof msg.content === "string" &&
-          msg.content.length > toolTokenLimitBeforeEvict * NUM_CHARS_PER_TOKEN
+          textContent.length >
+          toolTokenLimitBeforeEvict * NUM_CHARS_PER_TOKEN
         ) {
           // Build StateAndStore from request
           const stateAndStore: StateAndStore = {
@@ -889,7 +890,7 @@ export function createFilesystemMiddleware(
 
           const writeResult = await resolvedBackend.write(
             evictPath,
-            msg.content,
+            textContent,
           );
 
           if (writeResult.error) {
@@ -897,7 +898,7 @@ export function createFilesystemMiddleware(
           }
 
           // Create preview showing head and tail of the result
-          const contentSample = createContentPreview(msg.content);
+          const contentSample = createContentPreview(textContent);
           const replacementText = TOO_LARGE_TOOL_MSG.replace(
             "{tool_call_id}",
             msg.tool_call_id,
