@@ -40,8 +40,25 @@ import type {
  */
 import type * as _messages from "@langchain/core/messages";
 import type * as _Command from "@langchain/langgraph";
+import type { BaseLanguageModel } from "@langchain/core/language_models/base";
+import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
 
 const BASE_PROMPT = `In order to complete the objective that the user asks of you, you have access to a number of standard tools.`;
+
+/**
+ * Detect whether a model is an Anthropic model.
+ * Used to gate Anthropic-specific prompt caching optimizations (cache_control breakpoints).
+ */
+export function isAnthropicModel(model: BaseLanguageModel | string): boolean {
+  if (typeof model === "string") {
+    if (model.includes(":")) return model.split(":")[0] === "anthropic";
+    return model.startsWith("claude");
+  }
+  if (model.getName() === "ConfigurableModel") {
+    return (model as any)._defaultConfig?.modelProvider === "anthropic";
+  }
+  return model.getName() === "ChatAnthropic";
+}
 
 /**
  * Create a Deep Agent with middleware-based architecture.
@@ -113,24 +130,23 @@ export function createDeepAgent<
     skills,
   } = params;
 
+  const anthropicModel = isAnthropicModel(model);
+
   /**
    * Combine system prompt with base prompt like Python implementation
    */
-  const finalSystemPrompt = systemPrompt
+  const systemPromptBlocks: _messages.ContentBlock[] = systemPrompt
     ? typeof systemPrompt === "string"
-      ? `${systemPrompt}\n\n${BASE_PROMPT}`
-      : new SystemMessage({
-          content: [
-            {
-              type: "text",
-              text: BASE_PROMPT,
-            },
-            ...(typeof systemPrompt.content === "string"
-              ? [{ type: "text", text: systemPrompt.content }]
-              : systemPrompt.content),
-          ],
-        })
-    : BASE_PROMPT;
+      ? [{ type: "text", text: `${systemPrompt}\n\n${BASE_PROMPT}` }]
+      : [
+          { type: "text", text: BASE_PROMPT },
+          ...(typeof systemPrompt.content === "string"
+            ? [{ type: "text", text: systemPrompt.content }]
+            : systemPrompt.content),
+        ]
+    : [{ type: "text", text: BASE_PROMPT }];
+
+  const finalSystemPrompt = new SystemMessage({ content: systemPromptBlocks });
 
   /**
    * Create backend configuration for filesystem middleware
@@ -163,6 +179,7 @@ export function createDeepAgent<
           createMemoryMiddleware({
             backend: filesystemBackend,
             sources: memory,
+            addCacheControl: anthropicModel,
           }),
         ]
       : [];
@@ -229,6 +246,7 @@ export function createDeepAgent<
     }),
     anthropicPromptCachingMiddleware({
       unsupportedModelBehavior: "ignore",
+      minMessagesToCache: 1,
     }),
     createPatchToolCallsMiddleware(),
   ];
@@ -256,13 +274,21 @@ export function createDeepAgent<
       /**
        * Custom subagents must define their own `skills` property to get skills.
        */
-      defaultMiddleware: subagentMiddleware,
+      defaultMiddleware: [
+        ...subagentMiddleware,
+        ...((anthropicModel
+          ? [createCacheBreakpointMiddleware()]
+          : []) as AgentMiddleware[]),
+      ],
       /**
        * Middleware for the general-purpose subagent (inherits skills from main agent).
        */
       generalPurposeMiddleware: [
         ...subagentMiddleware,
         ...skillsMiddlewareArray,
+        ...((anthropicModel
+          ? [createCacheBreakpointMiddleware()]
+          : []) as AgentMiddleware[]),
       ],
       defaultInterruptOn: interruptOn,
       subagents: processedSubagents,
@@ -282,6 +308,7 @@ export function createDeepAgent<
      */
     anthropicPromptCachingMiddleware({
       unsupportedModelBehavior: "ignore",
+      minMessagesToCache: 1,
     }),
     /**
      * Patches tool calls to ensure compatibility across different model providers
@@ -296,6 +323,7 @@ export function createDeepAgent<
   const runtimeMiddleware: AgentMiddleware[] = [
     ...builtInMiddleware,
     ...skillsMiddlewareArray,
+    ...(anthropicModel ? [createCacheBreakpointMiddleware()] : []),
     ...memoryMiddlewareArray,
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
     ...(customMiddleware as unknown as AgentMiddleware[]),
