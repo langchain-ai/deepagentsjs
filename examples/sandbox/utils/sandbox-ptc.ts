@@ -1,7 +1,10 @@
 /* eslint-disable no-console */
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { VfsSandbox } from "@langchain/node-vfs";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const DEPARTMENTS = [
   "Engineering",
@@ -52,6 +55,31 @@ export function generateCsv(n: number): string {
     );
   }
   return rows.join("\n") + "\n";
+}
+
+/**
+ * Load all SKILL.md files from the skills/ directory next to the examples
+ * and return them as a record suitable for VfsSandbox `initialFiles`.
+ * Skills are placed at `/skills/<name>/SKILL.md` inside the VFS.
+ */
+export function loadSkillFiles(): Record<string, string> {
+  const skillsDir = path.resolve(__dirname, "..", "skills");
+  const files: Record<string, string> = {};
+
+  if (!fs.existsSync(skillsDir)) return files;
+
+  for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const skillMd = path.join(skillsDir, entry.name, "SKILL.md");
+    if (fs.existsSync(skillMd)) {
+      files[`/skills/${entry.name}/SKILL.md`] = fs.readFileSync(
+        skillMd,
+        "utf8",
+      );
+    }
+  }
+
+  return files;
 }
 
 /**

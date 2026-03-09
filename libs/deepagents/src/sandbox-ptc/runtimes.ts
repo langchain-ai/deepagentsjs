@@ -129,38 +129,61 @@ const __DA_IPC_DIR = "${IPC_DIR}";
 const __DA_IPC_RES_DIR = __da_path.join(__DA_IPC_DIR, "res");
 try { __da_fs.mkdirSync(__DA_IPC_RES_DIR, { recursive: true }); } catch {}
 
-function toolCall(name, input) {
-  input = input || {};
-  const rid = __da_crypto.randomUUID();
-  const resFile = __da_path.join(__DA_IPC_RES_DIR, rid);
-
-  const req = JSON.stringify({ type: "tool_call", name, input });
-  process.stderr.write("${REQ_LINE_MARKER}" + rid + " " + req + "\\n");
-
-  // Busy-wait for response (sync context)
-  let wait = 5;
-  while (!__da_fs.existsSync(resFile)) {
-    const start = Date.now();
-    while (Date.now() - start < wait) { /* spin */ }
-    wait = Math.min(wait * 2, 500);
-  }
-
+function __da_readResponse(resFile) {
   const content = __da_fs.readFileSync(resFile, "utf8");
   __da_fs.unlinkSync(resFile);
-
   const nl = content.indexOf("\\n");
   const status = content.slice(0, nl);
   const result = content.slice(nl + 1);
-
   if (status === "1") throw new Error(result);
   return result;
 }
 
+function __da_sendRequest(name, input) {
+  input = input || {};
+  const rid = __da_crypto.randomUUID();
+  const resFile = __da_path.join(__DA_IPC_RES_DIR, rid);
+  const req = JSON.stringify({ type: "tool_call", name, input });
+  process.stderr.write("${REQ_LINE_MARKER}" + rid + " " + req + "\\n");
+  return resFile;
+}
+
+// Synchronous version (blocks the event loop)
+function toolCallSync(name, input) {
+  const resFile = __da_sendRequest(name, input);
+  let wait = 5;
+  while (!__da_fs.existsSync(resFile)) {
+    const start = Date.now();
+    while (Date.now() - start < wait) {}
+    wait = Math.min(wait * 2, 500);
+  }
+  return __da_readResponse(resFile);
+}
+
+// Async version — returns a Promise, does NOT block the event loop.
+// Use with Promise.all() for parallel execution.
+function toolCall(name, input) {
+  const resFile = __da_sendRequest(name, input);
+  return new Promise((resolve, reject) => {
+    const poll = setInterval(() => {
+      if (__da_fs.existsSync(resFile)) {
+        clearInterval(poll);
+        try { resolve(__da_readResponse(resFile)); }
+        catch (e) { reject(e); }
+      }
+    }, 50);
+  });
+}
+
+// Async subagent spawn — returns a Promise
 function spawnAgent(description, agentType) {
   return toolCall("task", { description, subagent_type: agentType || "general-purpose" });
 }
 
-module.exports = { toolCall, spawnAgent };
+module.exports = { toolCall, toolCallSync, spawnAgent };
+globalThis.toolCall = toolCall;
+globalThis.toolCallSync = toolCallSync;
+globalThis.spawnAgent = spawnAgent;
 `;
 
 export const RUNTIME_SETUP_COMMAND = `mkdir -p ${IPC_RES_DIR} 2>/dev/null; `;

@@ -105,33 +105,83 @@ wait
   return `
 ## Sandbox Programmatic Tool Calling (PTC)
 
-When running commands via the \`execute\` tool, the following shell functions
-are automatically available inside the sandbox. Use them to call agent tools
-and spawn subagents directly from bash scripts.
+When running commands via the \`execute\` tool, PTC functions are automatically
+available for calling agent tools and spawning subagents from scripts.
+PTC is auto-injected for **bash**, **Python**, and **Node.js** — use whichever
+language fits the task best.
 
 **Key behavior:**
-- \`tool_call\` and \`spawn_agent\` are real shell functions injected into every \`execute\` call.
-  You MUST use them instead of calling tools directly whenever you need to process
+- Use PTC functions instead of calling tools directly whenever you need to process
   data in bulk or orchestrate multiple operations from a script.
-- Always maximise parallelism: launch every \`tool_call\` / \`spawn_agent\` as a
-  background job (\`&\`) and collect results after \`wait\`.
+- Always maximise parallelism where possible.
 - Use a SINGLE \`execute\` call containing the complete script.
 - All file paths inside the sandbox are **relative to the working directory** — use
   \`data/file.csv\`, never \`/data/file.csv\`.
 
-### Calling tools
+### Bash
+
+\`tool_call\` and \`spawn_agent\` are shell functions. Use background jobs for parallelism.
 
 \`\`\`bash
-# Single call — blocks until the tool returns
 result=$(tool_call <tool_name> '<json_input>')
 
-# Parallel: launch every call as a background job, then wait
-mkdir -p /tmp/results
-while IFS=, read -r id name value; do
-  ( result=$(tool_call <tool_name> "{\\"id\\":\\"$id\\",\\"name\\":\\"$name\\"}")
-    echo "$result" > /tmp/results/$id.json ) &
-done < data/input.csv
+# Parallel execution
+for i in $(seq 1 N); do
+  ( result=$(tool_call <tool_name> '{"id":'$i'}')
+    echo "$result" > /tmp/results/$i.json ) &
+done
 wait
+\`\`\`
+
+### Python
+
+\`tool_call()\` and \`spawn_agent()\` are auto-imported when running \`python3\`.
+Use \`concurrent.futures\` for parallelism.
+
+\`\`\`python
+# Functions are pre-loaded — just call them
+result = tool_call("tool_name", {"key": "value"})
+
+# Parallel execution
+from concurrent.futures import ThreadPoolExecutor, as_completed
+with ThreadPoolExecutor(max_workers=100) as pool:
+    futures = {pool.submit(tool_call, "tool_name", {"id": i}): i for i in range(100)}
+    for future in as_completed(futures):
+        result = future.result()
+
+# Spawn subagent
+analysis = spawn_agent("Analyse this data", "general-purpose")
+\`\`\`
+
+### Node.js
+
+\`toolCall()\` and \`spawnAgent()\` are auto-injected as globals when running \`node\`.
+Both are **async** (return Promises). Use \`Promise.all()\` for parallelism.
+
+\`\`\`javascript
+// Single call
+const result = await toolCall("tool_name", { key: "value" });
+
+// Parallel execution with Promise.all
+const results = await Promise.all(
+  items.map(item => toolCall("tool_name", { id: item.id }))
+);
+
+// Parallel subagent spawning
+const analyses = await Promise.all(
+  records.map(r => spawnAgent(\`Analyse: \${JSON.stringify(r)}\`, "general-purpose"))
+);
+
+// toolCallSync() is also available for synchronous (blocking) calls
+const syncResult = toolCallSync("tool_name", { key: "value" });
+\`\`\`
+
+**Important:** Write the script as an async IIFE or use top-level await:
+\`\`\`javascript
+(async () => {
+  const results = await Promise.all([...]);
+  console.log(results);
+})();
 \`\`\`
 
 ### Available tools

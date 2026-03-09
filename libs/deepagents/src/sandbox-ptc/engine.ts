@@ -240,8 +240,43 @@ export class PtcExecutionEngine {
     }
   }
 
+  /**
+   * Instrument a command with the PTC runtime.
+   *
+   * - Always sources the bash runtime (for tool_call / spawn_agent in bash)
+   * - If the command invokes python3/python, prepends an auto-import of
+   *   the Python PTC runtime so tool_call() and spawn_agent() are available
+   * - If the command invokes node, prepends a --require for the Node runtime
+   */
   private instrumentCommand(command: string): string {
-    return `${RUNTIME_SETUP_COMMAND}source /tmp/.da_runtime.sh\n${command}`;
+    let instrumented = `${RUNTIME_SETUP_COMMAND}source /tmp/.da_runtime.sh\n`;
+
+    // Auto-inject Python runtime: set PYTHONSTARTUP so interactive python
+    // gets it, and prepend the import for script execution via -c or file
+    if (/\bpython[3]?\b/.test(command)) {
+      instrumented += `export PYTHONSTARTUP=/tmp/.da_runtime.py\n`;
+      // Rewrite `python3 script.py` → `python3 -c "exec(open('/tmp/.da_runtime.py').read())" && python3 script.py`
+      // is fragile. Instead, prepend the import to any -c argument or wrap script execution.
+      // Simplest: set PYTHONPATH and have scripts import explicitly, OR
+      // use a wrapper that sources the runtime then exec's the real command.
+      instrumented += command.replace(
+        /\b(python[3]?)\s+(?!-)/,
+        `$1 -c "import sys; sys.path.insert(0,'/tmp'); exec(open('/tmp/.da_runtime.py').read()); exec(open(sys.argv[1]).read())" `,
+      );
+      return instrumented;
+    }
+
+    // Auto-inject Node.js runtime via --require
+    if (/\bnode\b/.test(command)) {
+      instrumented += command.replace(
+        /\bnode\b/,
+        `node --require /tmp/.da_runtime.js`,
+      );
+      return instrumented;
+    }
+
+    instrumented += command;
+    return instrumented;
   }
 
   /**
