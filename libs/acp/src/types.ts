@@ -71,7 +71,6 @@ export interface ACPAuthMethodEnvVar {
   id: string;
   name: string;
   type: "env_var";
-  description?: string;
   /** URL where the user can obtain credentials */
   link?: string;
   /** Environment variables required for this auth method */
@@ -86,7 +85,6 @@ export interface ACPAuthMethodTerminal {
   id: string;
   name: string;
   type: "terminal";
-  description?: string;
   /** Additional arguments passed when running the agent binary for login */
   args?: string[];
   /** Additional environment variables set during the login invocation */
