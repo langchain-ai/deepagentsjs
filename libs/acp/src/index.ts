@@ -49,6 +49,11 @@ export type {
   PlanEntry,
   StopReason,
   ACPCapabilities,
+  ACPAuthMethod,
+  ACPAuthMethodAgent,
+  ACPAuthMethodEnvVar,
+  ACPAuthMethodTerminal,
+  ACPAuthEnvVar,
   ServerEvents,
 } from "./types.js";
 
