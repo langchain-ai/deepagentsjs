@@ -41,40 +41,6 @@ describe("formatReplResult", () => {
     const result: ReplResult = { ok: true, value: undefined, logs: [] };
     expect(formatReplResult(result)).toBe("(no output)");
   });
-
-  it("should include state hint when availableNames is present", () => {
-    const result: ReplResult = {
-      ok: true,
-      value: 42,
-      logs: [],
-      availableNames: ["x", "y"],
-    };
-    const formatted = formatReplResult(result);
-    expect(formatted).toContain("→ 42");
-    expect(formatted).toContain("↳ State: x, y (available in next cell)");
-  });
-
-  it("should omit state hint when availableNames is empty", () => {
-    const result: ReplResult = {
-      ok: true,
-      value: 42,
-      logs: [],
-      availableNames: [],
-    };
-    expect(formatReplResult(result)).toBe("→ 42");
-  });
-
-  it("should include state hint even on errors", () => {
-    const result: ReplResult = {
-      ok: false,
-      error: { name: "ReferenceError", message: "x is not defined" },
-      logs: [],
-      availableNames: ["prevVar"],
-    };
-    const formatted = formatReplResult(result);
-    expect(formatted).toContain("ReferenceError");
-    expect(formatted).toContain("↳ State: prevVar (available in next cell)");
-  });
 });
 
 describe("toCamelCase", () => {

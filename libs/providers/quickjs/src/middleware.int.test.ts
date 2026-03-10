@@ -91,11 +91,8 @@ describe("QuickJS REPL integration", () => {
         config,
       );
 
-      // Verify the state hint appears in the first tool response
       const toolMessages = result.messages.filter(ToolMessage.isInstance);
       expect(toolMessages.length).toBeGreaterThanOrEqual(2);
-      const firstToolContent = toolMessages[0].content as string;
-      expect(firstToolContent).toContain("available in next cell");
 
       // Verify the second js_eval call does not re-embed the array literal
       const aiMessages = result.messages.filter(AIMessage.isInstance);

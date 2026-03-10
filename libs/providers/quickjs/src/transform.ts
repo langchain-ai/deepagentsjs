@@ -41,11 +41,6 @@ type AcornVariableDeclarator = EstreeVariableDeclarator & {
   init: AcornNode | null;
 };
 
-export interface TransformResult {
-  code: string;
-  declaredNames: string[];
-}
-
 /**
  * Transform code for REPL evaluation.
  *
@@ -53,9 +48,8 @@ export interface TransformResult {
  * - Hoists top-level variable declarations to globalThis
  * - Auto-returns the last expression
  * - Wraps in async IIFE for top-level await support
- * - Collects declared variable/function/class names for state tracking
  */
-export function transformForEval(code: string): TransformResult {
+export function transformForEval(code: string): string {
   let ast: AcornNode;
   try {
     ast = TSParser.parse(code, {
@@ -65,14 +59,12 @@ export function transformForEval(code: string): TransformResult {
     }) as unknown as AcornNode;
   } catch {
     // If parsing fails, return the code as-is and let QuickJS report the error
-    return { code: `(async () => {\n${code}\n})()`, declaredNames: [] };
+    return `(async () => {\n${code}\n})()`;
   }
 
   const s = new MagicString(code);
   const program = ast as unknown as { body: AcornNode[] };
   const topLevelNodes = program.body;
-  const declaredNames: string[] = [];
-
   for (let i = 0; i < topLevelNodes.length; i++) {
     const node = topLevelNodes[i];
 
@@ -95,11 +87,7 @@ export function transformForEval(code: string): TransformResult {
 
     // Hoist top-level variable declarations
     if (node.type === "VariableDeclaration") {
-      hoistDeclaration(
-        s,
-        node as unknown as AcornVariableDeclaration,
-        declaredNames,
-      );
+      hoistDeclaration(s, node as unknown as AcornVariableDeclaration);
       continue;
     }
 
@@ -111,7 +99,6 @@ export function transformForEval(code: string): TransformResult {
       stripTypeAnnotations(s, node);
       const name = (node as any).id?.name;
       if (name) {
-        declaredNames.push(name);
         s.appendRight(node.end, `\nglobalThis.${name} = ${name};`);
       }
       continue;
@@ -152,7 +139,7 @@ export function transformForEval(code: string): TransformResult {
   s.prepend("(async () => {\n");
   s.append("\n})()");
 
-  return { code: s.toString(), declaredNames };
+  return s.toString();
 }
 
 function isTSOnlyNode(node: AcornNode): boolean {
@@ -172,25 +159,22 @@ function isTSOnlyNode(node: AcornNode): boolean {
  *
  * `const x = 1, y = 2` → `globalThis.x = 1; globalThis.y = 2`
  *
- * Collects declared names into `declaredNames` for state tracking.
  */
 function hoistDeclaration(
   s: MagicString,
   decl: AcornVariableDeclaration,
-  declaredNames: string[],
 ): void {
   const parts: string[] = [];
 
   for (const d of decl.declarations) {
     const id = d.id as AcornNode;
     if (id.type === "Identifier") {
-      const name = (id as unknown as Identifier).name;
-      declaredNames.push(name);
       const initCode = d.init ? extractCleanInit(s, d) : "undefined";
-      parts.push(`globalThis.${name} = ${initCode}`);
+      parts.push(
+        `globalThis.${(id as unknown as Identifier).name} = ${initCode}`,
+      );
     } else if (id.type === "ObjectPattern" || id.type === "ArrayPattern") {
       const bindings = extractBindingNames(d.id as any);
-      declaredNames.push(...bindings);
       const initCode = d.init ? extractCleanInit(s, d) : "undefined";
       const patternCode = extractCleanSource(s, d.id as AcornNode);
       parts.push(`var ${patternCode} = ${initCode}`);

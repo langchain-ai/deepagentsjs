@@ -81,7 +81,6 @@ export class ReplSession {
   private context: QuickJSAsyncContext | null = null;
   private logs: string[] = [];
   private _options: ReplSessionOptions;
-  private _availableNames = new Set<string>();
 
   private _backend: BackendProtocol | null = null;
 
@@ -183,62 +182,34 @@ export class ReplSession {
       runtime.setInterruptHandler(() => false);
     }
 
-    const { code: transformed, declaredNames } = transformForEval(code);
+    const transformed = transformForEval(code);
     const result = await context.evalCodeAsync(transformed);
-
-    const availableNames = () => [...this._availableNames];
 
     if (result.error) {
       const error = context.dump(result.error);
       result.error.dispose();
-      return {
-        ok: false,
-        error,
-        logs: [...this.logs],
-        availableNames: availableNames(),
-      };
+      return { ok: false, error, logs: [...this.logs] };
     }
-
-    // On successful parse + execution, record the newly declared names
-    const recordNames = () => {
-      for (const name of declaredNames) this._availableNames.add(name);
-    };
 
     const promiseState = context.getPromiseState(result.value);
 
     if (promiseState.type === "fulfilled") {
-      recordNames();
       if (promiseState.notAPromise) {
         const value = context.dump(result.value);
         result.value.dispose();
-        return {
-          ok: true,
-          value,
-          logs: [...this.logs],
-          availableNames: availableNames(),
-        };
+        return { ok: true, value, logs: [...this.logs] };
       }
       const value = context.dump(promiseState.value);
       promiseState.value.dispose();
       result.value.dispose();
-      return {
-        ok: true,
-        value,
-        logs: [...this.logs],
-        availableNames: availableNames(),
-      };
+      return { ok: true, value, logs: [...this.logs] };
     }
 
     if (promiseState.type === "rejected") {
       const error = context.dump(promiseState.error);
       promiseState.error.dispose();
       result.value.dispose();
-      return {
-        ok: false,
-        error,
-        logs: [...this.logs],
-        availableNames: availableNames(),
-      };
+      return { ok: false, error, logs: [...this.logs] };
     }
 
     const noTimeout = timeoutMs < 0;
@@ -247,27 +218,16 @@ export class ReplSession {
       context.runtime.executePendingJobs();
       const state = context.getPromiseState(result.value);
       if (state.type === "fulfilled") {
-        recordNames();
         const value = context.dump(state.value);
         state.value.dispose();
         result.value.dispose();
-        return {
-          ok: true,
-          value,
-          logs: [...this.logs],
-          availableNames: availableNames(),
-        };
+        return { ok: true, value, logs: [...this.logs] };
       }
       if (state.type === "rejected") {
         const error = context.dump(state.error);
         state.error.dispose();
         result.value.dispose();
-        return {
-          ok: false,
-          error,
-          logs: [...this.logs],
-          availableNames: availableNames(),
-        };
+        return { ok: false, error, logs: [...this.logs] };
       }
       await new Promise((r) => setTimeout(r, 1));
     }
@@ -277,7 +237,6 @@ export class ReplSession {
       ok: false,
       error: { message: "Promise timed out — execution interrupted" },
       logs: [...this.logs],
-      availableNames: availableNames(),
     };
   }
 

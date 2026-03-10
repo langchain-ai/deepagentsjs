@@ -39,5 +39,3 @@ export type { PendingWrite } from "./session.js";
 export { formatReplResult, toCamelCase } from "./utils.js";
 
 export { transformForEval } from "./transform.js";
-
-export type { TransformResult } from "./transform.js";

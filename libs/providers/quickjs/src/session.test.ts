@@ -514,42 +514,6 @@ describe("REPL Engine", () => {
     });
   });
 
-  describe("availableNames tracking", () => {
-    it("should include declared variable names in result", async () => {
-      session = ReplSession.getOrCreate(uniqueThreadId());
-      const r1 = await session.eval("const x = 42", TIMEOUT);
-      expect(r1.ok).toBe(true);
-      expect(r1.availableNames).toContain("x");
-    });
-
-    it("should accumulate names across evaluations", async () => {
-      session = ReplSession.getOrCreate(uniqueThreadId());
-      const r1 = await session.eval("const x = 1", TIMEOUT);
-      expect(r1.availableNames).toEqual(["x"]);
-
-      const r2 = await session.eval("const y = x + 1", TIMEOUT);
-      expect(r2.availableNames).toContain("x");
-      expect(r2.availableNames).toContain("y");
-    });
-
-    it("should include function names", async () => {
-      session = ReplSession.getOrCreate(uniqueThreadId());
-      const r = await session.eval(
-        "function double(n) { return n * 2 }",
-        TIMEOUT,
-      );
-      expect(r.availableNames).toContain("double");
-    });
-
-    it("should still report prior names on error", async () => {
-      session = ReplSession.getOrCreate(uniqueThreadId());
-      await session.eval("const x = 1", TIMEOUT);
-      const r = await session.eval("undefinedVar.prop", TIMEOUT);
-      expect(r.ok).toBe(false);
-      expect(r.availableNames).toContain("x");
-    });
-  });
-
   describe("serialization", () => {
     it("should serialize to JSON and restore", async () => {
       const id = uniqueThreadId();
