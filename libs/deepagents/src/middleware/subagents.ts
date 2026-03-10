@@ -11,7 +11,7 @@ import {
   type BaseMessage,
   type InterruptOnConfig,
   type ReactAgent,
-  type ResponseFormat,
+  type CreateAgentParams,
   StructuredTool,
 } from "langchain";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
@@ -311,8 +311,8 @@ export interface SubAgent {
    * given schema. The structured response is JSON-serialized and returned as the
    * ToolMessage content to the parent agent, replacing the default last-message extraction.
    *
-   * Accepts any format supported by `createAgent`: Zod schemas, `toolStrategy(schema)`,
-   * `providerStrategy(schema)`, etc.
+   * Accepts any format supported by `createAgent`: Zod schemas, JSON schema objects,
+   * `toolStrategy(schema)`, `providerStrategy(schema)`, etc.
    *
    * @example
    * ```typescript
@@ -329,7 +329,7 @@ export interface SubAgent {
    * };
    * ```
    */
-  responseFormat?: ResponseFormat;
+  responseFormat?: CreateAgentParams["responseFormat"];
 }
 
 /**
