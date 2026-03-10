@@ -101,6 +101,33 @@ describe("REPL Engine", () => {
       expect(result.value).toBe(42);
     });
 
+    it("should reference prior cell data by variable name instead of re-embedding", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+
+      // Cell 1: store a dataset (mimics Promise.all result)
+      await session.eval(
+        `const cities = [
+          { city: "Tokyo", population: 13960000, area_sq_km: 2194 },
+          { city: "Seoul", population: 9776000, area_sq_km: 605 },
+          { city: "London", population: 8982000, area_sq_km: 1572 }
+        ]`,
+        TIMEOUT,
+      );
+
+      // Cell 2: reference `cities` by name — not re-embedded as a literal
+      const result = await session.eval(
+        "const densities = cities.map(c => ({ city: c.city, density: Math.round(c.population / c.area_sq_km) }))\ndensities",
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toEqual([
+        { city: "Tokyo", density: Math.round(13960000 / 2194) },
+        { city: "Seoul", density: Math.round(9776000 / 605) },
+        { city: "London", density: Math.round(8982000 / 1572) },
+      ]);
+    });
+
     it("should persist closures", async () => {
       session = ReplSession.getOrCreate(uniqueThreadId());
       await session.eval(
@@ -138,6 +165,64 @@ describe("REPL Engine", () => {
       await session.eval('console.log("first")', TIMEOUT);
       const result = await session.eval('console.log("second")', TIMEOUT);
       expect(result.logs).toEqual(["second"]);
+    });
+  });
+
+  describe("semicolons in expressions", () => {
+    it("should execute code with trailing semicolons on the last expression", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result = await session.eval("const x = 42;\nx;", TIMEOUT);
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe(42);
+    });
+
+    it("should handle console.log with trailing semicolon", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result = await session.eval('console.log("hi");', TIMEOUT);
+      expect(result.ok).toBe(true);
+      expect(result.logs).toEqual(["hi"]);
+    });
+
+    it("should handle multi-statement code where all lines have semicolons", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result = await session.eval(
+        "const a = 1;\nconst b = 2;\na + b;",
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe(3);
+    });
+  });
+
+  describe("TypeScript in initializers", () => {
+    it("should execute 'as' expressions in variable initializers", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result = await session.eval(
+        'const data = JSON.parse(\'{"n":42}\') as { n: number }\ndata.n',
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe(42);
+    });
+
+    it("should execute typed arrow functions in initializers", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result = await session.eval(
+        "const fn = (x: number): number => x * 2\nfn(21)",
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe(42);
+    });
+
+    it("should execute non-null assertions in initializers", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result = await session.eval(
+        'const obj = { a: 1 } as { a: number } | null\nconst val = obj!\nval.a',
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe(1);
     });
   });
 

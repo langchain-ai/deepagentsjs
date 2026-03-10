@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createAgent } from "langchain";
-import { HumanMessage, ToolMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 import { createQuickJSMiddleware } from "./middleware.js";
 import { ReplSession } from "./session.js";
@@ -54,6 +54,63 @@ describe("QuickJS REPL integration", () => {
 
       const session = ReplSession.get(threadId);
       expect(session).not.toBeNull();
+    },
+  );
+
+  it(
+    "should reference variables from prior cells instead of re-embedding data",
+    { timeout: 90_000 },
+    async () => {
+      const quickjsMiddleware = createQuickJSMiddleware();
+      const checkpointer = new MemorySaver();
+      const threadId = `int-repl-reuse-${Date.now()}`;
+
+      const agent = createAgent({
+        model: MODEL,
+        middleware: [quickjsMiddleware],
+        checkpointer,
+      });
+
+      const config = {
+        configurable: { thread_id: threadId },
+        recursionLimit: 50,
+      };
+
+      // Natural prompt — doesn't tell the LLM HOW to structure its cells.
+      // The system prompt + state hint should guide it to reuse variables.
+      const result = await agent.invoke(
+        {
+          messages: [
+            new HumanMessage(
+              "Using js_eval, first store this data: " +
+              '[{name: "a", value: 10}, {name: "b", value: 20}, {name: "c", value: 30}]. ' +
+              "Then in a separate js_eval call, compute the sum of all the values.",
+            ),
+          ],
+        },
+        config,
+      );
+
+      // Verify the state hint appears in the first tool response
+      const toolMessages = result.messages.filter(ToolMessage.isInstance);
+      expect(toolMessages.length).toBeGreaterThanOrEqual(2);
+      const firstToolContent = toolMessages[0].content as string;
+      expect(firstToolContent).toContain("available in next cell");
+
+      // Verify the second js_eval call does not re-embed the array literal
+      const aiMessages = result.messages.filter(AIMessage.isInstance);
+      const jsEvalCalls = aiMessages.flatMap(
+        (msg) => (msg.tool_calls || []).filter((tc) => tc.name === "js_eval"),
+      );
+      expect(jsEvalCalls.length).toBeGreaterThanOrEqual(2);
+
+      const secondCallCode = jsEvalCalls[1].args?.code as string;
+      expect(secondCallCode).not.toContain('"name": "a"');
+      expect(secondCallCode).not.toContain('"name": "b"');
+
+      // Verify the computation succeeded (10 + 20 + 30 = 60)
+      const lastToolContent = toolMessages[toolMessages.length - 1].content as string;
+      expect(lastToolContent).toContain("60");
     },
   );
 });
