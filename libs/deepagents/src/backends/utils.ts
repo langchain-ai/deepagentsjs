@@ -9,19 +9,10 @@
 import micromatch from "micromatch";
 import path, { basename } from "path";
 import type {
-  AnyBackendProtocol,
-  AnySandboxProtocol,
-  BackendProtocolV2,
   FileData,
   FileDataV1,
   FileDataV2,
-  GlobResult,
   GrepMatch,
-  GrepResult,
-  LsResult,
-  ReadRawResult,
-  ReadResult,
-  SandboxBackendProtocolV2,
 } from "./protocol.js";
 
 // Constants
@@ -40,7 +31,6 @@ const MIME_TYPES: Record<string, string> = {
   ".jpeg": "image/jpeg",
   ".gif": "image/gif",
   ".webp": "image/webp",
-  ".svg": "image/svg+xml",
 
   // audio
   ".mp3": "audio/mpeg",
@@ -144,77 +134,35 @@ export function fileDataToString(fileData: FileData): string {
   if (Array.isArray(fileData.content)) {
     return fileData.content.join("\n");
   }
-  if (typeof fileData.content === "string") {
-    return fileData.content;
-  }
-  throw new Error("Cannot convert binary FileData to string");
+  return fileData.content;
 }
 
 /**
- * Type guard to check if FileData contains binary content (Uint8Array).
+ * ...
  *
- * @param data - FileData to check
- * @returns True if the content is a Uint8Array (binary)
- */
-export function isFileDataBinary(
-  data: FileData,
-): data is FileDataV2 & { content: Uint8Array } {
-  return ArrayBuffer.isView(data.content);
-}
-
-/**
- * Create a FileData object.
- *
- * Defaults to v2 format (content as single string). Pass `fileFormat: "v1"` for
- * backward compatibility with older readers during a rolling deployment.
- * Binary content (Uint8Array) is only supported with v2.
- *
- * @param content - File content as a string or binary Uint8Array (v2 only)
- * @param createdAt - Optional creation timestamp (ISO format), defaults to now
- * @param fileFormat - Storage format: "v2" (default) or "v1" (legacy line array)
- * @returns FileData in the requested format
+ * @param content
+ * @param createdAt
+ * @returns
  */
 export function createFileData(
   content: string | Uint8Array,
   createdAt?: string,
-  fileFormat: "v1" | "v2" = "v2",
-  mimeType?: string,
-): FileData {
+): FileDataV2 {
   const now = new Date().toISOString();
 
-  if (fileFormat === "v1" && ArrayBuffer.isView(content)) {
-    throw new Error(
-      "Binary data is not supported with v1 file formats. Please use v2 file format",
-    );
-  }
-
-  if (fileFormat === "v2") {
-    if (ArrayBuffer.isView(content)) {
-      return {
-        content: new Uint8Array(
-          content.buffer,
-          content.byteOffset,
-          content.byteLength,
-        ),
-        mimeType: mimeType ?? "application/octet-stream",
-        created_at: createdAt || now,
-        modified_at: now,
-      } as FileDataV2;
-    }
+  if (content instanceof Uint8Array) {
     return {
-      content,
-      mimeType: mimeType ?? "text/plain",
+      content: Buffer.from(content).toString("base64"),
       created_at: createdAt || now,
       modified_at: now,
-    } as FileDataV2;
+    };
   }
 
-  const lines = typeof content === "string" ? content.split("\n") : content;
   return {
-    content: lines,
+    content,
     created_at: createdAt || now,
     modified_at: now,
-  } as FileDataV1;
+  };
 }
 
 /**
@@ -225,20 +173,11 @@ export function createFileData(
  * @returns Updated FileData object
  */
 export function updateFileData(fileData: FileData, content: string): FileData {
+  const lines = typeof content === "string" ? content.split("\n") : content;
   const now = new Date().toISOString();
 
-  if (isFileDataV1(fileData)) {
-    const lines = typeof content === "string" ? content.split("\n") : content;
-    return {
-      content: lines,
-      created_at: fileData.created_at,
-      modified_at: now,
-    };
-  }
-
   return {
-    content,
-    mimeType: fileData.mimeType,
+    content: lines,
     created_at: fileData.created_at,
     modified_at: now,
   };
@@ -257,9 +196,6 @@ export function formatReadResponse(
   offset: number,
   limit: number,
 ): string {
-  if (isFileDataBinary(fileData)) {
-    return "Error: Cannot format binary FileData as text";
-  }
   const content = fileDataToString(fileData);
   const emptyMsg = checkEmptyContent(content);
   if (emptyMsg) {
@@ -610,16 +546,8 @@ export function grepSearchFiles(
 
   const results: Record<string, Array<[number, string]>> = {};
   for (const [filePath, fileData] of Object.entries(filtered)) {
-    const fileDataV2 = migrateToFileDataV2(fileData, filePath);
-    if (!isTextMimeType(fileDataV2.mimeType)) {
-      continue;
-    }
-
-    const content = fileDataToString(fileData);
-    const lines = content.split("\n");
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+    for (let i = 0; i < fileData.content.length; i++) {
+      const line = fileData.content[i];
       const lineNum = i + 1;
       // Simple substring search for literal matching
       if (line.includes(pattern)) {
@@ -640,15 +568,18 @@ export function grepSearchFiles(
 /**
  * Return structured grep matches from an in-memory files mapping.
  *
- * Performs literal text search (not regex). Binary files are skipped.
- * Returns an empty array when no matches are found or on invalid input.
+ * Performs literal text search (not regex).
+ *
+ * Returns a list of GrepMatch on success, or a string for invalid inputs.
+ * We deliberately do not raise here to keep backends non-throwing in tool
+ * contexts and preserve user-facing error messages.
  */
 export function grepMatchesFromFiles(
   files: Record<string, FileData>,
   pattern: string,
   path: string | null = null,
   glob: string | null = null,
-): GrepMatch[] {
+): GrepMatch[] | string {
   let normalizedPath: string;
   try {
     normalizedPath = validatePath(path);
@@ -670,16 +601,8 @@ export function grepMatchesFromFiles(
 
   const matches: GrepMatch[] = [];
   for (const [filePath, fileData] of Object.entries(filtered)) {
-    const fileDataV2 = migrateToFileDataV2(fileData, filePath);
-    if (!isTextMimeType(fileDataV2.mimeType)) {
-      continue;
-    }
-
-    const content = fileDataToString(fileData);
-    const lines = content.split("\n");
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+    for (let i = 0; i < fileData.content.length; i++) {
+      const line = fileData.content[i];
       const lineNum = i + 1;
       // Simple substring search for literal matching
       if (line.includes(pattern)) {
@@ -721,12 +644,7 @@ export function formatGrepMatches(
 }
 
 /**
- * Determine MIME type from a file path's extension.
  *
- * Returns "text/plain" for unknown extensions.
- *
- * @param filePath - File path to inspect
- * @returns MIME type string (e.g., "image/png", "text/plain")
  */
 export function getMimeType(filePath: string): string {
   const ext = path.extname(filePath).toLocaleLowerCase();
@@ -734,142 +652,33 @@ export function getMimeType(filePath: string): string {
 }
 
 /**
- * Check whether a MIME type represents text content.
  *
- * @param mimeType - MIME type string to check
- * @returns True if the MIME type is text-based
  */
 export function isTextMimeType(mimeType: string): boolean {
   return (
     mimeType.startsWith("text/") ||
     mimeType === "application/json" ||
-    mimeType === "application/javascript" ||
-    mimeType === "image/svg+xml"
+    mimeType === "application/javascript"
   );
 }
 
 /**
- * Type guard to check if FileData is v1 format (content as line array).
  *
- * @param data - FileData to check
- * @returns True if data is FileDataV1
  */
 export function isFileDataV1(data: FileData): data is FileDataV1 {
   return Array.isArray(data.content);
 }
 
 /**
- * Convert FileData to v2 format, joining v1 line arrays into a single string.
  *
- * If the data is already v2, returns it unchanged.
- *
- * @param data - FileData in either format
- * @returns FileDataV2 with content as string (text) or Uint8Array (binary)
  */
-export function migrateToFileDataV2(
-  data: FileDataV1 | FileDataV2,
-  filePath: string,
-): FileDataV2 {
+export function migrateToFileDataV2(data: FileDataV1 | FileDataV2): FileDataV2 {
   if (isFileDataV1(data)) {
     return {
       content: data.content.join("\n"),
-      mimeType: getMimeType(filePath),
       created_at: data.created_at,
       modified_at: data.modified_at,
     };
   }
-  if (!("mimeType" in data) || !data.mimeType) {
-    return { ...data, mimeType: getMimeType(filePath) };
-  }
   return data;
-}
-
-/**
- * Adapt a v1 {@link BackendProtocol} to {@link BackendProtocolV2}.
- *
- * If the backend already implements v2, it is returned as-is.
- * For v1 backends, wraps returns in Result types:
- * - `read()` string returns wrapped in {@link ReadResult}
- * - `readRaw()` FileData returns wrapped in {@link ReadRawResult}
- * - `grepRaw()` returns wrapped in {@link GrepResult}
- * - `lsInfo()` FileInfo[] returns wrapped in {@link LsResult}
- * - `globInfo()` FileInfo[] returns wrapped in {@link GlobResult}
- *
- * Note: For sandbox instances, use {@link adaptSandboxProtocol} instead.
- *
- * @param backend - Backend instance (v1 or v2)
- * @returns BackendProtocolV2-compatible backend
- */
-export function adaptBackendProtocol(
-  backend: AnyBackendProtocol,
-): BackendProtocolV2 {
-  const adapted: BackendProtocolV2 = {
-    async lsInfo(path): Promise<LsResult> {
-      const result = await backend.lsInfo(path);
-      if (Array.isArray(result)) return { files: result };
-      return result as LsResult;
-    },
-    async readRaw(filePath): Promise<ReadRawResult> {
-      const result = await backend.readRaw(filePath);
-      if ("data" in result || "error" in result) {
-        return result as ReadRawResult;
-      }
-      return { data: migrateToFileDataV2(result as FileData, filePath) };
-    },
-    async globInfo(pattern, path): Promise<GlobResult> {
-      const result = await backend.globInfo(pattern, path);
-      if (Array.isArray(result)) return { files: result };
-      return result as GlobResult;
-    },
-    write: (filePath, content) => backend.write(filePath, content),
-    edit: (filePath, oldString, newString, replaceAll) =>
-      backend.edit(filePath, oldString, newString, replaceAll),
-    uploadFiles: backend.uploadFiles
-      ? (files) => backend.uploadFiles!(files)
-      : undefined,
-    downloadFiles: backend.downloadFiles
-      ? (paths) => backend.downloadFiles!(paths)
-      : undefined,
-    async read(filePath, offset, limit): Promise<ReadResult> {
-      const result = await backend.read(filePath, offset, limit);
-      if (typeof result === "string") return { content: result };
-      return result as ReadResult;
-    },
-    async grepRaw(pattern, path, glob): Promise<GrepResult> {
-      const result = await backend.grepRaw(pattern, path, glob);
-      if (Array.isArray(result)) return { matches: result };
-      if (typeof result === "string") return { error: result };
-      return result as GrepResult;
-    },
-  };
-
-  return adapted;
-}
-
-/**
- * Adapt a sandbox backend from v1 to v2 interface.
- *
- * This extends {@link adaptBackendProtocol} to also preserve sandbox-specific
- * properties from {@link SandboxBackendProtocol}: `execute` and `id`.
- *
- * @param sandbox - Sandbox backend (v1 or v2)
- * @returns SandboxBackendProtocolV2-compatible sandbox
- */
-export function adaptSandboxProtocol(
-  sandbox: AnySandboxProtocol,
-): SandboxBackendProtocolV2 {
-  // First adapt the backend protocol methods to v2
-  const adapted = adaptBackendProtocol(sandbox);
-
-  // Preserve sandbox protocol properties (execute, id)
-  // Both SandboxBackendProtocol and SandboxBackendProtocolV2 have these
-  (adapted as SandboxBackendProtocolV2).execute = (cmd: string) =>
-    sandbox.execute(cmd);
-  Object.defineProperty(adapted, "id", {
-    value: sandbox.id,
-    enumerable: true,
-    configurable: true,
-  });
-
-  return adapted as SandboxBackendProtocolV2;
 }

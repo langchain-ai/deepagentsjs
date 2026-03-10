@@ -1,36 +1,12 @@
 /**
  * Protocol definition for pluggable memory backends.
  *
- * This module defines the shared types and re-exports the versioned protocol
- * interfaces. Backend protocol interfaces are split by version:
- * - v1 (deprecated): {@link ./v1/protocol.js}
- * - v2 (current): {@link ./v2/protocol.js}
+ * This module defines the BackendProtocol that all backend implementations
+ * must follow. Backends can store files in different locations (state, filesystem,
+ * database, etc.) and provide a uniform interface for file operations.
  */
 
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
-import type {
-  BackendProtocolV1,
-  SandboxBackendProtocolV1,
-} from "./v1/protocol.js";
-import type {
-  BackendProtocolV2,
-  SandboxBackendProtocolV2,
-} from "./v2/protocol.js";
-
-export type {
-  BackendProtocolV1,
-  SandboxBackendProtocolV1,
-} from "./v1/protocol.js";
-export type {
-  BackendProtocolV2,
-  SandboxBackendProtocolV2,
-} from "./v2/protocol.js";
-
-/** @deprecated Use {@link BackendProtocolV2} instead. */
-export interface BackendProtocol extends BackendProtocolV1 {}
-
-/** @deprecated Use {@link SandboxBackendProtocolV2} instead. */
-export interface SandboxBackendProtocol extends SandboxBackendProtocolV1 {}
 
 export type MaybePromise<T> = T | Promise<T>;
 
@@ -64,24 +40,22 @@ export interface GrepMatch {
 }
 
 /**
- * Structured result from grep/search operations.
+ *
  */
 export interface GrepResult {
   /** Error message on failure, undefined on success */
   error?: string;
-  /** Structured grep match entries, undefined on failure */
+  /** Structured grep match entries */
   matches?: GrepMatch[];
 }
 
 /**
- * Legacy file data format (v1).
+ * File data structure used by backends.
  *
- * Content is stored as an array of lines (split on "\n"). This format
- * only supports text files and is retained for backwards compatibility
- * with existing state/store data.
+ * All file data is represented as objects with this structure:
  */
 export interface FileDataV1 {
-  /** File content as an array of lines */
+  /** Lines of text content */
   content: string[];
   /** ISO format timestamp of creation */
   created_at: string;
@@ -90,19 +64,11 @@ export interface FileDataV1 {
 }
 
 /**
- * Current file data format (v2).
  *
- * Content is stored as a string for text files, or as a Uint8Array for
- * binary files (images, PDFs, audio, etc.). The MIME type is stored
- * alongside the content, allowing backend implementations to determine
- * it however they see fit (e.g. from file extension, HTTP headers,
- * database metadata, etc.).
  */
 export interface FileDataV2 {
-  /** File content: string for text, Uint8Array for binary */
-  content: string | Uint8Array;
-  /** MIME type of the file (e.g. "image/png", "text/plain") */
-  mimeType: string;
+  /** Lines of text content */
+  content: string;
   /** ISO format timestamp of creation */
   created_at: string;
   /** ISO format timestamp of last modification */
@@ -110,57 +76,18 @@ export interface FileDataV2 {
 }
 
 /**
- * Union of v1 and v2 file data formats.
  *
- * Backends may encounter either format when reading from state or store
- * (v1 from legacy data, v2 from new writes). Use {@link isFileDataV1}
- * from utils for runtime discrimination.
  */
 export type FileData = FileDataV1 | FileDataV2;
 
 /**
- * Structured result from backend read operations.
  *
- * Replaces the previous plain string return, giving callers a
- * programmatic way to distinguish errors from content.
  */
 export interface ReadResult {
   /** Error message on failure, undefined on success */
   error?: string;
-  /** File content: string for text, Uint8Array for binary. Undefined on failure. */
-  content?: string | Uint8Array;
-  /** MIME type of the file, when available */
-  mimeType?: string;
-}
-
-/**
- * Structured result from backend readRaw operations.
- */
-export interface ReadRawResult {
-  /** Error message on failure, undefined on success */
-  error?: string;
-  /** Raw file data, undefined on failure */
-  data?: FileData;
-}
-
-/**
- * Structured result from backend lsInfo operations.
- */
-export interface LsResult {
-  /** Error message on failure, undefined on success */
-  error?: string;
-  /** List of FileInfo objects, undefined on failure */
-  files?: FileInfo[];
-}
-
-/**
- * Structured result from backend globInfo operations.
- */
-export interface GlobResult {
-  /** Error message on failure, undefined on success */
-  error?: string;
-  /** List of FileInfo objects matching the pattern, undefined on failure */
-  files?: FileInfo[];
+  /** Lines of text content */
+  content?: string;
 }
 
 /**
@@ -252,57 +179,151 @@ export interface FileUploadResponse {
 }
 
 /**
- * Common options shared across backend constructors.
+ * Protocol for pluggable memory backends (single, unified).
+ *
+ * Backends can store files in different locations (state, filesystem, database, etc.)
+ * and provide a uniform interface for file operations.
+ *
+ * All file data is represented as objects with the FileData structure.
+ *
+ * Methods can return either direct values or Promises, allowing both
+ * synchronous and asynchronous implementations.
  */
-export interface BackendOptions {
-  /** File data format to use for new writes. Defaults to "v2". */
-  fileFormat?: "v1" | "v2";
+export interface BackendProtocol {
+  /**
+   * Structured listing with file metadata.
+   *
+   * Lists files and directories in the specified directory (non-recursive).
+   * Directories have a trailing / in their path and is_dir=true.
+   *
+   * @param path - Absolute path to directory
+   * @returns List of FileInfo objects for files and directories directly in the directory
+   */
+  lsInfo(path: string): MaybePromise<FileInfo[]>;
+
+  /**
+   * Read file content with line numbers or an error string.
+   *
+   * @param filePath - Absolute file path
+   * @param offset - Line offset to start reading from (0-indexed), default 0
+   * @param limit - Maximum number of lines to read, default 500
+   * @returns TODO
+   */
+  read(
+    filePath: string,
+    offset?: number,
+    limit?: number,
+  ): MaybePromise<ReadResult>;
+
+  /**
+   * Read file content as raw FileData.
+   *
+   * @param filePath - Absolute file path
+   * @returns Raw file content as FileData
+   */
+  readRaw(filePath: string): MaybePromise<FileData>;
+
+  /**
+   * Structured search results or error string for invalid input.
+   *
+   * Searches file contents for a regex pattern.
+   *
+   * @param pattern - Regex pattern to search for
+   * @param path - Base path to search from (default: null)
+   * @param glob - Optional glob pattern to filter files (e.g., "*.py")
+   * @returns TODO
+   */
+  grepRaw(
+    pattern: string,
+    path?: string | null,
+    glob?: string | null,
+  ): MaybePromise<GrepResult>;
+
+  /**
+   * Structured glob matching returning FileInfo objects.
+   *
+   * @param pattern - Glob pattern (e.g., `*.py`, `**\/*.ts`)
+   * @param path - Base path to search from (default: "/")
+   * @returns List of FileInfo objects matching the pattern
+   */
+  globInfo(pattern: string, path?: string): MaybePromise<FileInfo[]>;
+
+  /**
+   * Create a new file.
+   *
+   * @param filePath - Absolute file path
+   * @param content - File content as string
+   * @returns WriteResult with error populated on failure
+   */
+  write(filePath: string, content: string): MaybePromise<WriteResult>;
+
+  /**
+   * Edit a file by replacing string occurrences.
+   *
+   * @param filePath - Absolute file path
+   * @param oldString - String to find and replace
+   * @param newString - Replacement string
+   * @param replaceAll - If true, replace all occurrences (default: false)
+   * @returns EditResult with error, path, filesUpdate, and occurrences
+   */
+  edit(
+    filePath: string,
+    oldString: string,
+    newString: string,
+    replaceAll?: boolean,
+  ): MaybePromise<EditResult>;
+
+  /**
+   * Upload multiple files.
+   * Optional - backends that don't support file upload can omit this.
+   *
+   * @param files - List of [path, content] tuples to upload
+   * @returns List of FileUploadResponse objects, one per input file
+   */
+  uploadFiles?(
+    files: Array<[string, Uint8Array]>,
+  ): MaybePromise<FileUploadResponse[]>;
+
+  /**
+   * Download multiple files.
+   * Optional - backends that don't support file download can omit this.
+   *
+   * @param paths - List of file paths to download
+   * @returns List of FileDownloadResponse objects, one per input path
+   */
+  downloadFiles?(paths: string[]): MaybePromise<FileDownloadResponse[]>;
+}
+
+/**
+ * Protocol for sandboxed backends with isolated runtime.
+ * Sandboxed backends run in isolated environments (e.g., containers)
+ * and communicate via defined interfaces.
+ */
+export interface SandboxBackendProtocol extends BackendProtocol {
+  /**
+   * Execute a command in the sandbox.
+   *
+   * @param command - Full shell command string to execute
+   * @returns ExecuteResponse with combined output, exit code, and truncation flag
+   */
+  execute(command: string): MaybePromise<ExecuteResponse>;
+
+  /** Unique identifier for the sandbox backend instance */
+  readonly id: string;
 }
 
 /**
  * Type guard to check if a backend supports execution.
  *
  * @param backend - Backend instance to check
- * @returns True if the backend implements SandboxBackendProtocolV2
+ * @returns True if the backend implements SandboxBackendProtocol
  */
 export function isSandboxBackend(
-  backend: unknown,
-): backend is SandboxBackendProtocolV2 {
+  backend: BackendProtocol,
+): backend is SandboxBackendProtocol {
   return (
-    backend != null &&
-    typeof backend === "object" &&
-    typeof (backend as SandboxBackendProtocolV2).execute === "function" &&
-    typeof (backend as SandboxBackendProtocolV2).id === "string"
-  );
-}
-
-/**
- * Union of v1 and v2 sandbox backend protocols.
- *
- * Use this when accepting either protocol version. Pass through
- * {@link adaptSandboxProtocol} to normalize to {@link SandboxBackendProtocolV2}.
- */
-export type AnySandboxProtocol =
-  | SandboxBackendProtocol
-  | SandboxBackendProtocolV2;
-
-/**
- * Type guard to check if a backend is a sandbox protocol (v1 or v2).
- *
- * Checks for the presence of `execute` function and `id` string,
- * which are the defining features of sandbox protocols.
- *
- * @param backend - Backend instance to check
- * @returns True if the backend implements sandbox protocol (v1 or v2)
- */
-export function isSandboxProtocol(
-  backend: unknown,
-): backend is AnySandboxProtocol {
-  return (
-    backend != null &&
-    typeof backend === "object" &&
-    typeof (backend as any).execute === "function" &&
-    typeof (backend as any).id === "string"
+    typeof (backend as SandboxBackendProtocol).execute === "function" &&
+    typeof (backend as SandboxBackendProtocol).id === "string"
   );
 }
 
@@ -509,14 +530,6 @@ export interface StateAndStore {
 }
 
 /**
- * Union of v1 and v2 backend protocols.
- *
- * Use this when accepting either protocol version. Pass through
- * {@link adaptBackendProtocol} to normalize to {@link BackendProtocolV2}.
- */
-export type AnyBackendProtocol = BackendProtocolV1 | BackendProtocolV2;
-
-/**
  * Factory function type for creating backend instances.
  *
  * Backends receive StateAndStore which contains the current state
@@ -530,6 +543,4 @@ export type AnyBackendProtocol = BackendProtocolV1 | BackendProtocolV2;
  * });
  * ```
  */
-export type BackendFactory = (
-  stateAndStore: StateAndStore,
-) => AnyBackendProtocol;
+export type BackendFactory = (stateAndStore: StateAndStore) => BackendProtocol;
