@@ -7,8 +7,13 @@
  */
 
 import micromatch from "micromatch";
-import { basename } from "path";
-import type { FileData, GrepMatch } from "./protocol.js";
+import path, { basename } from "path";
+import type {
+  FileData,
+  FileDataV1,
+  FileDataV2,
+  GrepMatch,
+} from "./protocol.js";
 
 // Constants
 export const EMPTY_CONTENT_WARNING =
@@ -18,6 +23,26 @@ export const LINE_NUMBER_WIDTH = 6;
 export const TOOL_RESULT_TOKEN_LIMIT = 20000; // Same threshold as eviction
 export const TRUNCATION_GUIDANCE =
   "... [results truncated, try being more specific with your parameters]";
+
+const MIME_TYPES: Record<string, string> = {
+  // images
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+
+  // audio
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+
+  // video
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+
+  // documents
+  ".pdf": "application/pdf",
+};
 
 /**
  * Sanitize tool_call_id to prevent path traversal and separator issues.
@@ -106,22 +131,35 @@ export function checkEmptyContent(content: string): string | null {
  * @returns Content as string with lines joined by newlines
  */
 export function fileDataToString(fileData: FileData): string {
-  return fileData.content.join("\n");
+  if (Array.isArray(fileData.content)) {
+    return fileData.content.join("\n");
+  }
+  return fileData.content;
 }
 
 /**
- * Create a FileData object with timestamps.
+ * ...
  *
- * @param content - File content as string
- * @param createdAt - Optional creation timestamp (ISO format)
- * @returns FileData object with content and timestamps
+ * @param content
+ * @param createdAt
+ * @returns
  */
-export function createFileData(content: string, createdAt?: string): FileData {
-  const lines = typeof content === "string" ? content.split("\n") : content;
+export function createFileData(
+  content: string | Uint8Array,
+  createdAt?: string,
+): FileDataV2 {
   const now = new Date().toISOString();
 
+  if (content instanceof Uint8Array) {
+    return {
+      content: Buffer.from(content).toString("base64"),
+      created_at: createdAt || now,
+      modified_at: now,
+    };
+  }
+
   return {
-    content: lines,
+    content,
     created_at: createdAt || now,
     modified_at: now,
   };
@@ -603,4 +641,44 @@ export function formatGrepMatches(
     return "No matches found";
   }
   return formatGrepResults(buildGrepResultsDict(matches), outputMode);
+}
+
+/**
+ *
+ */
+export function getMimeType(filePath: string): string {
+  const ext = path.extname(filePath).toLocaleLowerCase();
+  return MIME_TYPES[ext] || "text/plain";
+}
+
+/**
+ *
+ */
+export function isTextMimeType(mimeType: string): boolean {
+  return (
+    mimeType.startsWith("text/") ||
+    mimeType === "application/json" ||
+    mimeType === "application/javascript"
+  );
+}
+
+/**
+ *
+ */
+export function isFileDataV1(data: FileData): data is FileDataV1 {
+  return Array.isArray(data.content);
+}
+
+/**
+ *
+ */
+export function migrateToFileDataV2(data: FileDataV1 | FileDataV2): FileDataV2 {
+  if (isFileDataV1(data)) {
+    return {
+      content: data.content.join("\n"),
+      created_at: data.created_at,
+      modified_at: data.modified_at,
+    };
+  }
+  return data;
 }

@@ -40,17 +40,54 @@ export interface GrepMatch {
 }
 
 /**
+ *
+ */
+export interface GrepResult {
+  /** Error message on failure, undefined on success */
+  error?: string;
+  /** Structured grep match entries */
+  matches?: GrepMatch[];
+}
+
+/**
  * File data structure used by backends.
  *
  * All file data is represented as objects with this structure:
  */
-export interface FileData {
+export interface FileDataV1 {
   /** Lines of text content */
   content: string[];
   /** ISO format timestamp of creation */
   created_at: string;
   /** ISO format timestamp of last modification */
   modified_at: string;
+}
+
+/**
+ *
+ */
+export interface FileDataV2 {
+  /** Lines of text content */
+  content: string;
+  /** ISO format timestamp of creation */
+  created_at: string;
+  /** ISO format timestamp of last modification */
+  modified_at: string;
+}
+
+/**
+ *
+ */
+export type FileData = FileDataV1 | FileDataV2;
+
+/**
+ *
+ */
+export interface ReadResult {
+  /** Error message on failure, undefined on success */
+  error?: string;
+  /** Lines of text content */
+  content?: string;
 }
 
 /**
@@ -170,9 +207,13 @@ export interface BackendProtocol {
    * @param filePath - Absolute file path
    * @param offset - Line offset to start reading from (0-indexed), default 0
    * @param limit - Maximum number of lines to read, default 500
-   * @returns Formatted file content with line numbers, or error message
+   * @returns TODO
    */
-  read(filePath: string, offset?: number, limit?: number): MaybePromise<string>;
+  read(
+    filePath: string,
+    offset?: number,
+    limit?: number,
+  ): MaybePromise<ReadResult>;
 
   /**
    * Read file content as raw FileData.
@@ -190,13 +231,13 @@ export interface BackendProtocol {
    * @param pattern - Regex pattern to search for
    * @param path - Base path to search from (default: null)
    * @param glob - Optional glob pattern to filter files (e.g., "*.py")
-   * @returns List of GrepMatch objects or error string for invalid regex
+   * @returns TODO
    */
   grepRaw(
     pattern: string,
     path?: string | null,
     glob?: string | null,
-  ): MaybePromise<GrepMatch[] | string>;
+  ): MaybePromise<GrepResult>;
 
   /**
    * Structured glob matching returning FileInfo objects.
