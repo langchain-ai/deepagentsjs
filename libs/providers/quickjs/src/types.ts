@@ -70,4 +70,6 @@ export interface ReplResult {
   value?: unknown;
   error?: { name?: string; message?: string; stack?: string };
   logs: string[];
+  /** Cumulative variable names available in subsequent cells via globalThis. */
+  availableNames?: string[];
 }

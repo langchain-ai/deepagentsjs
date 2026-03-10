@@ -76,6 +76,7 @@ const REPL_SYSTEM_PROMPT = dedent`
   - **No network, no filesystem** — only the helpers below. Do not attempt \`fetch\`, \`require\`, or \`import\`.
   - **Cite your sources** — when reporting values from files, include the path and key/index so the user can verify.
   - **Use console.log()** for output — it is captured and returned. \`console.warn()\` and \`console.error()\` are also available.
+  - **Reuse state from previous cells** — variables, functions, and results from earlier \`js_eval\` calls persist via \`globalThis\`. Reference them by name in follow-up cells instead of re-embedding data as inline JSON literals. The tool response lists available variable names after each cell.
 
   ### First-time usage
 

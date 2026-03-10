@@ -30,6 +30,10 @@ export function collectStrings(obj: unknown): string[] {
 
 /**
  * Format the result of a REPL evaluation for the agent.
+ *
+ * When `availableNames` is present, appends a state hint so the LLM
+ * knows which variables it can reference in subsequent cells instead
+ * of re-embedding data.
  */
 export function formatReplResult(result: ReplResult): string {
   const parts: string[] = [];
@@ -53,6 +57,12 @@ export function formatReplResult(result: ReplResult): string {
     if (result.error.stack) {
       parts.push(result.error.stack);
     }
+  }
+
+  if (result.availableNames && result.availableNames.length > 0) {
+    parts.push(
+      `↳ State: ${result.availableNames.join(", ")} (available in next cell)`,
+    );
   }
 
   return parts.join("\n") || "(no output)";
