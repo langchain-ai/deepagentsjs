@@ -44,9 +44,7 @@ describe("transformForEval", () => {
     });
 
     it("should hoist function declarations", () => {
-      const result = transformForEval(
-        "function add(a, b) { return a + b }",
-      );
+      const result = transformForEval("function add(a, b) { return a + b }");
       expect(result).toContain("function add(a, b)");
       expect(result).toContain("globalThis.add = add");
     });
@@ -91,7 +89,7 @@ describe("transformForEval", () => {
 
     it("should strip 'as' expressions in variable initializers", () => {
       const result = transformForEval(
-        'const data = JSON.parse(raw) as { n: number }',
+        "const data = JSON.parse(raw) as { n: number }",
       );
       expect(result).toContain("globalThis.data = JSON.parse(raw)");
       expect(result).not.toContain("as {");
@@ -106,9 +104,7 @@ describe("transformForEval", () => {
     });
 
     it("should strip generics from call expressions in initializers", () => {
-      const result = transformForEval(
-        "const arr = Array.from<number>([1, 2])",
-      );
+      const result = transformForEval("const arr = Array.from<number>([1, 2])");
       expect(result).toContain("globalThis.arr = Array.from([1, 2])");
       expect(result).not.toContain("<number>");
     });

@@ -198,7 +198,7 @@ describe("REPL Engine", () => {
     it("should execute 'as' expressions in variable initializers", async () => {
       session = ReplSession.getOrCreate(uniqueThreadId());
       const result = await session.eval(
-        'const data = JSON.parse(\'{"n":42}\') as { n: number }\ndata.n',
+        "const data = JSON.parse('{\"n\":42}') as { n: number }\ndata.n",
         TIMEOUT,
       );
       expect(result.ok).toBe(true);
@@ -218,7 +218,7 @@ describe("REPL Engine", () => {
     it("should execute non-null assertions in initializers", async () => {
       session = ReplSession.getOrCreate(uniqueThreadId());
       const result = await session.eval(
-        'const obj = { a: 1 } as { a: number } | null\nconst val = obj!\nval.a',
+        "const obj = { a: 1 } as { a: number } | null\nconst val = obj!\nval.a",
         TIMEOUT,
       );
       expect(result.ok).toBe(true);

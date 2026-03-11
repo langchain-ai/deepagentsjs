@@ -83,8 +83,8 @@ describe("QuickJS REPL integration", () => {
           messages: [
             new HumanMessage(
               "Using js_eval, first store this data: " +
-              '[{name: "a", value: 10}, {name: "b", value: 20}, {name: "c", value: 30}]. ' +
-              "Then in a separate js_eval call, compute the sum of all the values.",
+                '[{name: "a", value: 10}, {name: "b", value: 20}, {name: "c", value: 30}]. ' +
+                "Then in a separate js_eval call, compute the sum of all the values.",
             ),
           ],
         },
@@ -96,8 +96,8 @@ describe("QuickJS REPL integration", () => {
 
       // Verify the second js_eval call does not re-embed the array literal
       const aiMessages = result.messages.filter(AIMessage.isInstance);
-      const jsEvalCalls = aiMessages.flatMap(
-        (msg) => (msg.tool_calls || []).filter((tc) => tc.name === "js_eval"),
+      const jsEvalCalls = aiMessages.flatMap((msg) =>
+        (msg.tool_calls || []).filter((tc) => tc.name === "js_eval"),
       );
       expect(jsEvalCalls.length).toBeGreaterThanOrEqual(2);
 
@@ -106,7 +106,8 @@ describe("QuickJS REPL integration", () => {
       expect(secondCallCode).not.toContain('"name": "b"');
 
       // Verify the computation succeeded (10 + 20 + 30 = 60)
-      const lastToolContent = toolMessages[toolMessages.length - 1].content as string;
+      const lastToolContent = toolMessages[toolMessages.length - 1]
+        .content as string;
       expect(lastToolContent).toContain("60");
     },
   );
