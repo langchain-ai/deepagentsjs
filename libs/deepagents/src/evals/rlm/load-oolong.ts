@@ -127,6 +127,7 @@ async function fetchAndCache(cachePath: string): Promise<void> {
 
   const jsonl = records.map((r) => JSON.stringify(r)).join("\n") + "\n";
   writeFileSync(cachePath, jsonl, "utf-8");
+  // eslint-disable-next-line no-console
   console.log(
     `Fetched ${records.length} OOLONG tasks from HuggingFace -> ${cachePath}`,
   );

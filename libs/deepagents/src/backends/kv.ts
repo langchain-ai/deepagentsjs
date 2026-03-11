@@ -145,9 +145,7 @@ export class KVBackend implements BackendProtocol {
     });
   }
 
-  uploadFiles(
-    files: Array<[string, Uint8Array]>,
-  ): FileUploadResponse[] {
+  uploadFiles(files: Array<[string, Uint8Array]>): FileUploadResponse[] {
     const responses: FileUploadResponse[] = [];
     for (const [path, content] of files) {
       try {
@@ -164,7 +162,8 @@ export class KVBackend implements BackendProtocol {
   downloadFiles(paths: string[]): FileDownloadResponse[] {
     return paths.map((path) => {
       const fileData = this.files.get(path);
-      if (!fileData) return { path, content: null, error: "file_not_found" as const };
+      if (!fileData)
+        return { path, content: null, error: "file_not_found" as const };
       const content = new TextEncoder().encode(fileDataToString(fileData));
       return { path, content, error: null };
     });

@@ -36,10 +36,7 @@ const httpRequest = tool(
     description: "Make an HTTP GET request",
     schema: z.object({
       url: z.string().describe("The URL to fetch"),
-      headers: z
-        .string()
-        .optional()
-        .describe("JSON-encoded headers object"),
+      headers: z.string().optional().describe("JSON-encoded headers object"),
     }),
   },
 );
@@ -82,8 +79,7 @@ const result = await agent.invoke({
 });
 
 const last = result.messages[result.messages.length - 1];
+// eslint-disable-next-line no-console
 console.log(
-  typeof last.content === "string"
-    ? last.content.slice(0, 500)
-    : last.content,
+  typeof last.content === "string" ? last.content.slice(0, 500) : last.content,
 );

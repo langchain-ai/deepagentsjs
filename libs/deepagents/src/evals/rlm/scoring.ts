@@ -33,11 +33,7 @@ function stripMarkdown(value: string): string {
   while (text.startsWith("**") && text.endsWith("**")) {
     text = text.slice(2, -2).trim();
   }
-  while (
-    text.startsWith("*") &&
-    text.endsWith("*") &&
-    !text.startsWith("**")
-  ) {
+  while (text.startsWith("*") && text.endsWith("*") && !text.startsWith("**")) {
     text = text.slice(1, -1).trim();
   }
   return text;
@@ -115,9 +111,7 @@ export function scoreOutput(output: string, goldAnswer: string): Score {
   const pred = canonicalPrediction(output);
   const exactMatch = pred.trim() === goldAnswer.trim();
   const normalizedMatch = normalizeText(pred) === normalizeText(goldAnswer);
-  const containsMatch = normalizeText(pred).includes(
-    normalizeText(goldAnswer),
-  );
+  const containsMatch = normalizeText(pred).includes(normalizeText(goldAnswer));
 
   const goldNum = firstNumber(goldAnswer);
   const predNum = firstNumber(pred);

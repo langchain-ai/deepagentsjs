@@ -23,4 +23,3 @@ The file /question.txt contains the question you must answer.
 The context is very large — too large to reason about in a single pass. Use the REPL to break it into manageable pieces. For any task that requires language understanding (classification, summarization, extraction, etc.), delegate to a sub-LLM by calling tools.task() inside the REPL. You can run multiple sub-LLM calls concurrently with Promise.all. Use the REPL for computation and aggregation of sub-LLM results.
 
 Make sure to process the entire context before answering. After computing your answer, state ONLY the final answer — no explanation, no markdown.`;
-
