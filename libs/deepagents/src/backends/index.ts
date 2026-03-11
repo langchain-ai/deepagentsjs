@@ -11,6 +11,8 @@ export type {
   FileData,
   FileInfo,
   GrepMatch,
+  ReadResult,
+  GrepResult,
   WriteResult,
   EditResult,
   StateAndStore,

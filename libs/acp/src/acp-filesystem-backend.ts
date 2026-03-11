@@ -7,7 +7,11 @@
  */
 
 import type { AgentSideConnection } from "@agentclientprotocol/sdk";
-import { FilesystemBackend, type WriteResult } from "deepagents";
+import {
+  FilesystemBackend,
+  type WriteResult,
+  type ReadResult,
+} from "deepagents";
 import path from "node:path";
 
 /**
@@ -40,7 +44,7 @@ export class ACPFilesystemBackend extends FilesystemBackend {
     filePath: string,
     offset?: number,
     limit?: number,
-  ): Promise<string> {
+  ): Promise<ReadResult> {
     if (!this.currentSessionId) {
       return super.read(filePath, offset, limit);
     }
@@ -61,7 +65,7 @@ export class ACPFilesystemBackend extends FilesystemBackend {
         text = lines.slice(start, end).join("\n");
       }
 
-      return text;
+      return { content: text };
     } catch {
       return super.read(filePath, offset, limit);
     }
