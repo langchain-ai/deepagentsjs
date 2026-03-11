@@ -23,6 +23,7 @@ import { isSandboxBackend } from "./protocol.js";
  * Mock sandbox backend for testing execute delegation
  */
 class MockSandboxBackend implements SandboxBackendProtocol {
+  readonly protocolVersion = "v2" as const;
   readonly id = "mock-sandbox";
   public lastCommand: string | null = null;
 

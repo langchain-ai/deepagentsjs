@@ -4,6 +4,7 @@
 
 import type {
   BackendProtocol,
+  BackendProtocolV2,
   EditResult,
   ExecuteResponse,
   FileData,
@@ -16,6 +17,7 @@ import type {
   WriteResult,
 } from "./protocol.js";
 import { isSandboxBackend } from "./protocol.js";
+import { adaptBackendProtocol } from "./utils.js";
 
 /**
  * Backend that routes file operations to different backends based on path prefix.
@@ -26,20 +28,24 @@ import { isSandboxBackend } from "./protocol.js";
  *
  * The CompositeBackend handles path prefix stripping/re-adding transparently.
  */
-export class CompositeBackend implements BackendProtocol {
-  private default: BackendProtocol;
-  private routes: Record<string, BackendProtocol>;
-  private sortedRoutes: Array<[string, BackendProtocol]>;
+export class CompositeBackend implements BackendProtocolV2 {
+  private default: BackendProtocolV2;
+  private routes: Record<string, BackendProtocolV2>;
+  private sortedRoutes: Array<[string, BackendProtocolV2]>;
+
+  readonly protocolVersion = "v2" as const;
 
   constructor(
-    defaultBackend: BackendProtocol,
-    routes: Record<string, BackendProtocol>,
+    defaultBackend: BackendProtocol | BackendProtocolV2,
+    routes: Record<string, BackendProtocol | BackendProtocolV2>,
   ) {
-    this.default = defaultBackend;
-    this.routes = routes;
+    this.default = adaptBackendProtocol(defaultBackend);
+    this.routes = Object.fromEntries(
+      Object.entries(routes).map(([k, v]) => [k, adaptBackendProtocol(v)]),
+    );
 
     // Sort routes by length (longest first) for correct prefix matching
-    this.sortedRoutes = Object.entries(routes).sort(
+    this.sortedRoutes = Object.entries(this.routes).sort(
       (a, b) => b[0].length - a[0].length,
     );
   }
@@ -56,7 +62,7 @@ export class CompositeBackend implements BackendProtocol {
    * @returns Tuple of [backend, stripped_key] where stripped_key has the route
    *          prefix removed (but keeps leading slash).
    */
-  private getBackendAndKey(key: string): [BackendProtocol, string] {
+  private getBackendAndKey(key: string): [BackendProtocolV2, string] {
     // Check routes in order of length (longest first)
     for (const [prefix, backend] of this.sortedRoutes) {
       if (key.startsWith(prefix)) {
@@ -309,7 +315,7 @@ export class CompositeBackend implements BackendProtocol {
       () => null,
     );
     const batchesByBackend = new Map<
-      BackendProtocol,
+      BackendProtocolV2,
       Array<{ idx: number; path: string; content: Uint8Array }>
     >();
 
@@ -357,7 +363,7 @@ export class CompositeBackend implements BackendProtocol {
       () => null,
     );
     const batchesByBackend = new Map<
-      BackendProtocol,
+      BackendProtocolV2,
       Array<{ idx: number; path: string }>
     >();
 

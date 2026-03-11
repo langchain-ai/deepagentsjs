@@ -58,11 +58,16 @@ import {
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
 
-import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
+import type {
+  BackendFactory,
+  BackendProtocol,
+  BackendProtocolV2,
+} from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import { filesValue } from "../values.js";
 import { StateSchema } from "@langchain/langgraph";
+import { adaptBackendProtocol } from "../backends/utils.js";
 
 /**
  * Options for the memory middleware.
@@ -74,6 +79,7 @@ export interface MemoryMiddlewareOptions {
    */
   backend:
     | BackendProtocol
+    | BackendProtocolV2
     | BackendFactory
     | ((config: { state: unknown; store?: BaseStore }) => StateBackend);
 
@@ -203,19 +209,21 @@ function formatMemoryContents(
  * @returns File content if found, null otherwise.
  */
 async function loadMemoryFromBackend(
-  backend: BackendProtocol,
+  backend: BackendProtocol | BackendProtocolV2,
   path: string,
 ): Promise<string | null> {
+  const adaptedBackend = adaptBackendProtocol(backend);
+
   // Use downloadFiles if available, otherwise fall back to read
-  if (!backend.downloadFiles) {
-    const content = await backend.read(path);
+  if (!adaptedBackend.downloadFiles) {
+    const content = await adaptedBackend.read(path);
     if (content.error) {
       return null;
     }
     return content.content ?? null;
   }
 
-  const results = await backend.downloadFiles([path]);
+  const results = await adaptedBackend.downloadFiles([path]);
 
   // Should get exactly one response for one path
   if (results.length !== 1) {
@@ -269,12 +277,12 @@ export function createMemoryMiddleware(options: MemoryMiddlewareOptions) {
   /**
    * Resolve backend from instance or factory.
    */
-  function getBackend(state: unknown): BackendProtocol {
+  function getBackend(state: unknown): BackendProtocolV2 {
     if (typeof backend === "function") {
       // It's a factory - call it with state
-      return backend({ state }) as BackendProtocol;
+      return adaptBackendProtocol(backend({ state }));
     }
-    return backend;
+    return adaptBackendProtocol(backend);
   }
 
   return createMiddleware({

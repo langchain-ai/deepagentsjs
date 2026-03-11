@@ -5,7 +5,7 @@
 import type { Item } from "@langchain/langgraph";
 import type {
   BackendOptions,
-  BackendProtocol,
+  BackendProtocolV2,
   EditResult,
   FileData,
   FileDownloadResponse,
@@ -104,10 +104,12 @@ export interface StoreBackendOptions extends BackendOptions {
  * isolation patterns (user-scoped, org-scoped, etc.), or falls back
  * to legacy assistant_id-based isolation.
  */
-export class StoreBackend implements BackendProtocol {
+export class StoreBackend implements BackendProtocolV2 {
   private stateAndStore: StateAndStore;
   private _namespace: string[] | undefined;
   private fileFormat: "v1" | "v2";
+
+  readonly protocolVersion = "v2" as const;
 
   constructor(stateAndStore: StateAndStore, options?: StoreBackendOptions) {
     this.stateAndStore = stateAndStore;
