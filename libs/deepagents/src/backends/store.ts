@@ -4,6 +4,7 @@
 
 import type { Item } from "@langchain/langgraph";
 import type {
+  BackendOptions,
   BackendProtocol,
   EditResult,
   FileData,
@@ -11,15 +12,21 @@ import type {
   FileInfo,
   FileUploadResponse,
   GrepMatch,
+  GrepResult,
+  ReadResult,
   StateAndStore,
   WriteResult,
 } from "./protocol.js";
 import {
-  createFileData,
+  createFileDataV1,
+  createFileDataV2,
   fileDataToString,
-  formatReadResponse,
+  getMimeType,
   globSearchFiles,
   grepMatchesFromFiles,
+  isFileDataV1,
+  isTextMimeType,
+  migrateToFileDataV2,
   performStringReplacement,
   updateFileData,
 } from "./utils.js";
@@ -63,7 +70,7 @@ function validateNamespace(namespace: string[]): string[] {
 /**
  * Options for StoreBackend constructor.
  */
-export interface StoreBackendOptions {
+export interface StoreBackendOptions extends BackendOptions {
   /**
    * Custom namespace for store operations.
    *
@@ -101,12 +108,14 @@ export interface StoreBackendOptions {
 export class StoreBackend implements BackendProtocol {
   private stateAndStore: StateAndStore;
   private _namespace: string[] | undefined;
+  private fileFormat: "v1" | "v2";
 
   constructor(stateAndStore: StateAndStore, options?: StoreBackendOptions) {
     this.stateAndStore = stateAndStore;
     if (options?.namespace) {
       this._namespace = validateNamespace(options.namespace);
     }
+    this.fileFormat = options?.fileFormat ?? "v2";
   }
 
   /**
@@ -153,9 +162,12 @@ export class StoreBackend implements BackendProtocol {
   private convertStoreItemToFileData(storeItem: Item): FileData {
     const value = storeItem.value as any;
 
+    const hasValidContent =
+      value.content !== undefined &&
+      (Array.isArray(value.content) || typeof value.content === "string");
+
     if (
-      !value.content ||
-      !Array.isArray(value.content) ||
+      !hasValidContent ||
       typeof value.created_at !== "string" ||
       typeof value.modified_at !== "string"
     ) {
@@ -272,7 +284,9 @@ export class StoreBackend implements BackendProtocol {
       // This is a file directly in the current directory
       try {
         const fd = this.convertStoreItemToFileData(item);
-        const size = fd.content.join("\n").length;
+        const size = isFileDataV1(fd)
+          ? fd.content.join("\n").length
+          : fd.content.length;
         infos.push({
           path: itemKey,
           is_dir: false,
@@ -311,12 +325,22 @@ export class StoreBackend implements BackendProtocol {
     filePath: string,
     offset: number = 0,
     limit: number = 500,
-  ): Promise<string> {
+  ): Promise<ReadResult> {
     try {
       const fileData = await this.readRaw(filePath);
-      return formatReadResponse(fileData, offset, limit);
+      const fileDataV2 = migrateToFileDataV2(fileData);
+      const mimeType = getMimeType(filePath);
+
+      // ignore pagination and return full content
+      if (!isTextMimeType(mimeType)) {
+        return { content: fileDataV2.content };
+      }
+
+      const lines = fileDataV2.content.split("\n");
+      const selected = lines.slice(offset, offset + limit);
+      return { content: selected.join("\n") };
     } catch (e: any) {
-      return `Error: ${e.message}`;
+      return { error: e.message };
     }
   }
 
@@ -352,7 +376,10 @@ export class StoreBackend implements BackendProtocol {
     }
 
     // Create new file
-    const fileData = createFileData(content);
+    const fileData =
+      this.fileFormat === "v1"
+        ? createFileDataV1(content)
+        : createFileDataV2(content);
     const storeValue = this.convertFileDataToStoreValue(fileData);
     await store.put(namespace, filePath, storeValue);
     return { path: filePath, filesUpdate: null };
@@ -410,7 +437,7 @@ export class StoreBackend implements BackendProtocol {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
-  ): Promise<GrepMatch[] | string> {
+  ): Promise<GrepResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
     const items = await this.searchStorePaginated(store, namespace);
@@ -425,7 +452,8 @@ export class StoreBackend implements BackendProtocol {
       }
     }
 
-    return grepMatchesFromFiles(files, pattern, path, glob);
+    const matches = grepMatchesFromFiles(files, pattern, path, glob);
+    return { matches };
   }
 
   /**
@@ -455,7 +483,11 @@ export class StoreBackend implements BackendProtocol {
     const infos: FileInfo[] = [];
     for (const p of paths) {
       const fd = files[p];
-      const size = fd ? fd.content.join("\n").length : 0;
+      const size = fd
+        ? isFileDataV1(fd)
+          ? fd.content.join("\n").length
+          : fd.content.length
+        : 0;
       infos.push({
         path: p,
         is_dir: false,
@@ -481,8 +513,20 @@ export class StoreBackend implements BackendProtocol {
 
     for (const [path, content] of files) {
       try {
-        const contentStr = new TextDecoder().decode(content);
-        const fileData = createFileData(contentStr);
+        const mimeType = getMimeType(path);
+        const isBinary = this.fileFormat === "v2" && !isTextMimeType(mimeType);
+
+        let fileData: FileData;
+        if (isBinary) {
+          fileData = createFileDataV2(content);
+        } else {
+          const contentStr = new TextDecoder().decode(content);
+          fileData =
+            this.fileFormat === "v1"
+              ? createFileDataV1(contentStr)
+              : createFileDataV2(contentStr);
+        }
+
         const storeValue = this.convertFileDataToStoreValue(fileData);
         await store.put(namespace, path, storeValue);
         responses.push({ path, error: null });
