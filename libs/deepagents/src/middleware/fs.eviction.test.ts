@@ -7,7 +7,6 @@ import {
   createFilesystemMiddleware,
   TOOLS_EXCLUDED_FROM_EVICTION,
   NUM_CHARS_PER_TOKEN,
-  MAX_BINARY_READ_SIZE_BYTES,
 } from "./fs.js";
 import { StateBackend } from "../backends/state.js";
 import type { FileData } from "../backends/protocol.js";
@@ -171,13 +170,9 @@ describe("read_file character-based truncation", () => {
   /**
    * Helper to create a file with specific content
    */
-  function createFileData(
-    content: string | Uint8Array,
-    mimeType: string = "text/plain",
-  ): FileData {
+  function createFileData(content: string): FileData {
     return {
       content,
-      mimeType,
       created_at: new Date().toISOString(),
       modified_at: new Date().toISOString(),
     };
@@ -324,23 +319,17 @@ describe("read_file multimodal content blocks", () => {
     return { stateAndStore: { state, store: undefined } };
   }
 
-  function createFileData(
-    content: string | Uint8Array,
-    mimeType: string = "text/plain",
-  ): FileData {
+  function createFileData(content: string): FileData {
     return {
       content,
-      mimeType,
       created_at: new Date().toISOString(),
       modified_at: new Date().toISOString(),
     };
   }
 
   it("should return an image content block for .png files", async () => {
-    const binaryData = new Uint8Array([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-    ]);
-    const files = { "/image.png": createFileData(binaryData, "image/png") };
+    const base64Data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ";
+    const files = { "/image.png": createFileData(base64Data) };
     const { stateAndStore } = setupStateWithFiles(files);
 
     const middleware = createFilesystemMiddleware({
@@ -359,12 +348,12 @@ describe("read_file multimodal content blocks", () => {
     expect(Array.isArray(result)).toBe(true);
     expect(result[0].type).toBe("image");
     expect(result[0].mimeType).toBe("image/png");
-    expect(result[0].data).toBe(Buffer.from(binaryData).toString("base64"));
+    expect(result[0].data).toBe(base64Data);
   });
 
   it("should return an image content block for .jpg files", async () => {
-    const binaryData = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
-    const files = { "/photo.jpg": createFileData(binaryData, "image/jpeg") };
+    const base64Data = "/9j/4AAQSkZJRgABAQEASABIAAD";
+    const files = { "/photo.jpg": createFileData(base64Data) };
     const { stateAndStore } = setupStateWithFiles(files);
 
     const middleware = createFilesystemMiddleware({
@@ -385,8 +374,8 @@ describe("read_file multimodal content blocks", () => {
   });
 
   it("should return an audio content block for .mp3 files", async () => {
-    const binaryData = new Uint8Array([0x49, 0x44, 0x33, 0x04]);
-    const files = { "/audio.mp3": createFileData(binaryData, "audio/mpeg") };
+    const base64Data = "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMA==";
+    const files = { "/audio.mp3": createFileData(base64Data) };
     const { stateAndStore } = setupStateWithFiles(files);
 
     const middleware = createFilesystemMiddleware({
@@ -405,14 +394,12 @@ describe("read_file multimodal content blocks", () => {
     expect(Array.isArray(result)).toBe(true);
     expect(result[0].type).toBe("audio");
     expect(result[0].mimeType).toBe("audio/mpeg");
-    expect(result[0].data).toBe(Buffer.from(binaryData).toString("base64"));
+    expect(result[0].data).toBe(base64Data);
   });
 
   it("should return a video content block for .mp4 files", async () => {
-    const binaryData = new Uint8Array([
-      0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70,
-    ]);
-    const files = { "/video.mp4": createFileData(binaryData, "video/mp4") };
+    const base64Data = "AAAAIGZ0eXBpc29tAAACAGlzb20=";
+    const files = { "/video.mp4": createFileData(base64Data) };
     const { stateAndStore } = setupStateWithFiles(files);
 
     const middleware = createFilesystemMiddleware({
@@ -431,16 +418,12 @@ describe("read_file multimodal content blocks", () => {
     expect(Array.isArray(result)).toBe(true);
     expect(result[0].type).toBe("video");
     expect(result[0].mimeType).toBe("video/mp4");
-    expect(result[0].data).toBe(Buffer.from(binaryData).toString("base64"));
+    expect(result[0].data).toBe(base64Data);
   });
 
   it("should return a file content block for .pdf files", async () => {
-    const binaryData = new Uint8Array([
-      0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34,
-    ]);
-    const files = {
-      "/document.pdf": createFileData(binaryData, "application/pdf"),
-    };
+    const base64Data = "JVBERi0xLjQKJcfsj6IKNSAwIG9iago=";
+    const files = { "/document.pdf": createFileData(base64Data) };
     const { stateAndStore } = setupStateWithFiles(files);
 
     const middleware = createFilesystemMiddleware({
@@ -459,7 +442,7 @@ describe("read_file multimodal content blocks", () => {
     expect(Array.isArray(result)).toBe(true);
     expect(result[0].type).toBe("file");
     expect(result[0].mimeType).toBe("application/pdf");
-    expect(result[0].data).toBe(Buffer.from(binaryData).toString("base64"));
+    expect(result[0].data).toBe(base64Data);
   });
 
   it("should return a text content block with line numbers for text files", async () => {
@@ -486,55 +469,6 @@ describe("read_file multimodal content blocks", () => {
     // Line numbers should be present
     expect(result[0].text).toMatch(/1\s+hello/);
     expect(result[0].text).toMatch(/2\s+world/);
-  });
-
-  it("should return an error for binary files exceeding MAX_BINARY_READ_SIZE_BYTES", async () => {
-    const oversizeData = new Uint8Array(MAX_BINARY_READ_SIZE_BYTES + 1);
-    const files = { "/large.png": createFileData(oversizeData, "image/png") };
-    const { stateAndStore } = setupStateWithFiles(files);
-
-    const middleware = createFilesystemMiddleware({
-      backend: () => new StateBackend(stateAndStore),
-    });
-
-    const readFileTool = (middleware as any).tools.find(
-      (t: any) => t.name === "read_file",
-    );
-
-    const result = await readFileTool.invoke(
-      { file_path: "/large.png" },
-      { store: undefined },
-    );
-
-    expect(Array.isArray(result)).toBe(true);
-    expect(result[0].type).toBe("text");
-    expect(result[0].text).toContain("Error");
-    expect(result[0].text).toContain("too large");
-    expect(result[0].text).toContain(
-      `${MAX_BINARY_READ_SIZE_BYTES / (1024 * 1024)}MB`,
-    );
-  });
-
-  it("should return an image block for binary files under MAX_BINARY_READ_SIZE_BYTES", async () => {
-    const undersizeData = new Uint8Array(MAX_BINARY_READ_SIZE_BYTES - 1);
-    const files = { "/ok.png": createFileData(undersizeData, "image/png") };
-    const { stateAndStore } = setupStateWithFiles(files);
-
-    const middleware = createFilesystemMiddleware({
-      backend: () => new StateBackend(stateAndStore),
-    });
-
-    const readFileTool = (middleware as any).tools.find(
-      (t: any) => t.name === "read_file",
-    );
-
-    const result = await readFileTool.invoke(
-      { file_path: "/ok.png" },
-      { store: undefined },
-    );
-
-    expect(result[0].type).toBe("image");
-    expect(typeof result[0].data).toBe("string");
   });
 
   it("should return an error text content block for missing files", async () => {
