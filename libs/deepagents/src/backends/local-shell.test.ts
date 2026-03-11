@@ -289,10 +289,9 @@ describe("LocalShellBackend", () => {
       await backend.write("/file2.txt", "content2");
 
       const files = await backend.lsInfo("/");
-      expect(files.error).toBeUndefined();
 
-      expect(files.files!.length).toBe(2);
-      const paths = files.files!.map((f) => f.path);
+      expect(files.length).toBe(2);
+      const paths = files.map((f) => f.path);
       expect(paths).toContain("/file1.txt");
       expect(paths).toContain("/file2.txt");
     });
@@ -313,33 +312,6 @@ describe("LocalShellBackend", () => {
       expect(result.matches![0].text).toBe("TODO: implement this");
     });
 
-    it("should return ReadRawResult from readRaw", async () => {
-      const backend = new LocalShellBackend({
-        rootDir: tmpDir,
-        virtualMode: true,
-      });
-
-      await backend.write("/test.txt", "hello\nworld");
-
-      const raw = await backend.readRaw("/test.txt");
-      expect(raw.error).toBeUndefined();
-      expect(raw.data).toBeDefined();
-      expect(typeof raw.data!.content).toBe("string");
-      expect(raw.data!.content).toContain("hello");
-      expect((raw.data as any).mimeType).toBe("text/plain");
-      expect(raw.data!.created_at).toBeDefined();
-      expect(raw.data!.modified_at).toBeDefined();
-    });
-
-    it("should return ReadRawResult error for missing file", async () => {
-      const backend = new LocalShellBackend({
-        rootDir: tmpDir,
-        virtualMode: true,
-      });
-
-      await expect(backend.readRaw("/nonexistent.txt")).rejects.toThrow();
-    });
-
     it("should support glob", async () => {
       const backend = new LocalShellBackend({
         rootDir: tmpDir,
@@ -351,10 +323,9 @@ describe("LocalShellBackend", () => {
       await backend.write("/file3.txt", "content");
 
       const txtFiles = await backend.globInfo("*.txt");
-      expect(txtFiles.error).toBeUndefined();
 
-      expect(txtFiles.files!.length).toBe(2);
-      const paths = txtFiles.files!.map((f) => f.path);
+      expect(txtFiles.length).toBe(2);
+      const paths = txtFiles.map((f) => f.path);
       expect(paths).toContain("/file1.txt");
       expect(paths).toContain("/file3.txt");
       expect(paths).not.toContain("/file2.py");
