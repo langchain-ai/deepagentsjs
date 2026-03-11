@@ -116,7 +116,7 @@ try {
    */
   const agent = createDeepAgent({
     model: new ChatAnthropic({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-haiku-4-5",
       temperature: 0,
     }),
     systemPrompt,
@@ -136,6 +136,7 @@ Do not use markdown. Keep it under 30 words.`,
     ],
     middleware: [
       createSandboxPtcMiddleware({ backend: sandbox, ptc: true }),
+      // @ts-expect-error type issue with branded AgentMiddleware type
       ptcOnlyToolsMiddleware,
     ],
   });

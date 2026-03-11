@@ -66,7 +66,7 @@ console.log(`  100 employee records loaded\n`);
 try {
   const agent = createDeepAgent({
     model: new ChatAnthropic({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-haiku-4-5",
       temperature: 0,
     }),
     systemPrompt,
