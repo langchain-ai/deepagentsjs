@@ -5,27 +5,25 @@
 import type { Item } from "@langchain/langgraph";
 import type {
   BackendOptions,
-  BackendProtocolV2,
+  BackendProtocol,
   EditResult,
   FileData,
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
-  GlobResult,
+  GrepMatch,
   GrepResult,
-  LsResult,
-  ReadRawResult,
   ReadResult,
   StateAndStore,
   WriteResult,
 } from "./protocol.js";
 import {
-  createFileData,
+  createFileDataV1,
+  createFileDataV2,
   fileDataToString,
   getMimeType,
   globSearchFiles,
   grepMatchesFromFiles,
-  isFileDataBinary,
   isFileDataV1,
   isTextMimeType,
   migrateToFileDataV2,
@@ -107,7 +105,7 @@ export interface StoreBackendOptions extends BackendOptions {
  * isolation patterns (user-scoped, org-scoped, etc.), or falls back
  * to legacy assistant_id-based isolation.
  */
-export class StoreBackend implements BackendProtocolV2 {
+export class StoreBackend implements BackendProtocol {
   private stateAndStore: StateAndStore;
   private _namespace: string[] | undefined;
   private fileFormat: "v1" | "v2";
@@ -166,9 +164,7 @@ export class StoreBackend implements BackendProtocolV2 {
 
     const hasValidContent =
       value.content !== undefined &&
-      (Array.isArray(value.content) ||
-        typeof value.content === "string" ||
-        ArrayBuffer.isView(value.content));
+      (Array.isArray(value.content) || typeof value.content === "string");
 
     if (
       !hasValidContent ||
@@ -182,7 +178,6 @@ export class StoreBackend implements BackendProtocolV2 {
 
     return {
       content: value.content,
-      ...(value.mimeType ? { mimeType: value.mimeType } : {}),
       created_at: value.created_at,
       modified_at: value.modified_at,
     };
@@ -192,12 +187,11 @@ export class StoreBackend implements BackendProtocolV2 {
    * Convert FileData to a value suitable for store.put().
    *
    * @param fileData - The FileData to convert
-   * @returns Object with content, mimeType, created_at, and modified_at fields
+   * @returns Object with content, created_at, and modified_at fields
    */
   private convertFileDataToStoreValue(fileData: FileData): Record<string, any> {
     return {
       content: fileData.content,
-      ...("mimeType" in fileData ? { mimeType: fileData.mimeType } : {}),
       created_at: fileData.created_at,
       modified_at: fileData.modified_at,
     };
@@ -252,10 +246,10 @@ export class StoreBackend implements BackendProtocolV2 {
    * List files and directories in the specified directory (non-recursive).
    *
    * @param path - Absolute path to directory
-   * @returns LsResult with list of FileInfo objects on success or error on failure.
+   * @returns List of FileInfo objects for files and directories directly in the directory.
    *          Directories have a trailing / in their path and is_dir=true.
    */
-  async lsInfo(path: string): Promise<LsResult> {
+  async lsInfo(path: string): Promise<FileInfo[]> {
     const store = this.getStore();
     const namespace = this.getNamespace();
 
@@ -292,9 +286,7 @@ export class StoreBackend implements BackendProtocolV2 {
         const fd = this.convertStoreItemToFileData(item);
         const size = isFileDataV1(fd)
           ? fd.content.join("\n").length
-          : isFileDataBinary(fd)
-            ? fd.content.byteLength
-            : fd.content.length;
+          : fd.content.length;
         infos.push({
           path: itemKey,
           is_dir: false,
@@ -318,19 +310,16 @@ export class StoreBackend implements BackendProtocolV2 {
     }
 
     infos.sort((a, b) => a.path.localeCompare(b.path));
-    return { files: infos };
+    return infos;
   }
 
   /**
-   * Read file content.
-   *
-   * Text files are paginated by line offset/limit.
-   * Binary files return full Uint8Array content (offset/limit ignored).
+   * Read file content with line numbers.
    *
    * @param filePath - Absolute file path
    * @param offset - Line offset to start reading from (0-indexed)
    * @param limit - Maximum number of lines to read
-   * @returns ReadResult with content on success or error on failure
+   * @returns Formatted file content with line numbers, or error message
    */
   async read(
     filePath: string,
@@ -338,26 +327,18 @@ export class StoreBackend implements BackendProtocolV2 {
     limit: number = 500,
   ): Promise<ReadResult> {
     try {
-      const readRawResult = await this.readRaw(filePath);
-      if (readRawResult.error || !readRawResult.data) {
-        return { error: readRawResult.error || "File data not found" };
-      }
-
-      const fileDataV2 = migrateToFileDataV2(readRawResult.data, filePath);
+      const fileData = await this.readRaw(filePath);
+      const fileDataV2 = migrateToFileDataV2(fileData);
+      const mimeType = getMimeType(filePath);
 
       // ignore pagination and return full content
-      if (!isTextMimeType(fileDataV2.mimeType)) {
-        return { content: fileDataV2.content, mimeType: fileDataV2.mimeType };
+      if (!isTextMimeType(mimeType)) {
+        return { content: fileDataV2.content };
       }
 
-      if (typeof fileDataV2.content !== "string") {
-        return {
-          error: `File '${filePath}' has binary content but text MIME type`,
-        };
-      }
       const lines = fileDataV2.content.split("\n");
       const selected = lines.slice(offset, offset + limit);
-      return { content: selected.join("\n"), mimeType: fileDataV2.mimeType };
+      return { content: selected.join("\n") };
     } catch (e: any) {
       return { error: e.message };
     }
@@ -367,17 +348,15 @@ export class StoreBackend implements BackendProtocolV2 {
    * Read file content as raw FileData.
    *
    * @param filePath - Absolute file path
-   * @returns ReadRawResult with raw file data on success or error on failure
+   * @returns Raw file content as FileData
    */
-  async readRaw(filePath: string): Promise<ReadRawResult> {
+  async readRaw(filePath: string): Promise<FileData> {
     const store = this.getStore();
     const namespace = this.getNamespace();
     const item = await store.get(namespace, filePath);
 
-    if (!item) {
-      return { error: `File '${filePath}' not found` };
-    }
-    return { data: this.convertStoreItemToFileData(item) };
+    if (!item) throw new Error(`File '${filePath}' not found`);
+    return this.convertStoreItemToFileData(item);
   }
 
   /**
@@ -397,13 +376,10 @@ export class StoreBackend implements BackendProtocolV2 {
     }
 
     // Create new file
-    const mimeType = getMimeType(filePath);
-    const fileData = createFileData(
-      content,
-      undefined,
-      this.fileFormat,
-      mimeType,
-    );
+    const fileData =
+      this.fileFormat === "v1"
+        ? createFileDataV1(content)
+        : createFileDataV2(content);
     const storeValue = this.convertFileDataToStoreValue(fileData);
     await store.put(namespace, filePath, storeValue);
     return { path: filePath, filesUpdate: null };
@@ -455,8 +431,7 @@ export class StoreBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Search file contents for a literal text pattern.
-   * Binary files are skipped.
+   * Structured search results or error string for invalid input.
    */
   async grepRaw(
     pattern: string,
@@ -484,7 +459,7 @@ export class StoreBackend implements BackendProtocolV2 {
   /**
    * Structured glob matching returning FileInfo objects.
    */
-  async globInfo(pattern: string, path: string = "/"): Promise<GlobResult> {
+  async globInfo(pattern: string, path: string = "/"): Promise<FileInfo[]> {
     const store = this.getStore();
     const namespace = this.getNamespace();
     const items = await this.searchStorePaginated(store, namespace);
@@ -501,7 +476,7 @@ export class StoreBackend implements BackendProtocolV2 {
 
     const result = globSearchFiles(files, pattern, path);
     if (result === "No files found") {
-      return { files: [] };
+      return [];
     }
 
     const paths = result.split("\n");
@@ -511,9 +486,7 @@ export class StoreBackend implements BackendProtocolV2 {
       const size = fd
         ? isFileDataV1(fd)
           ? fd.content.join("\n").length
-          : isFileDataBinary(fd)
-            ? fd.content.byteLength
-            : fd.content.length
+          : fd.content.length
         : 0;
       infos.push({
         path: p,
@@ -522,7 +495,7 @@ export class StoreBackend implements BackendProtocolV2 {
         modified_at: fd?.modified_at || "",
       });
     }
-    return { files: infos };
+    return infos;
   }
 
   /**
@@ -545,15 +518,13 @@ export class StoreBackend implements BackendProtocolV2 {
 
         let fileData: FileData;
         if (isBinary) {
-          fileData = createFileData(content, undefined, "v2", mimeType);
+          fileData = createFileDataV2(content);
         } else {
           const contentStr = new TextDecoder().decode(content);
-          fileData = createFileData(
-            contentStr,
-            undefined,
-            this.fileFormat,
-            mimeType,
-          );
+          fileData =
+            this.fileFormat === "v1"
+              ? createFileDataV1(contentStr)
+              : createFileDataV2(contentStr);
         }
 
         const storeValue = this.convertFileDataToStoreValue(fileData);
@@ -587,14 +558,9 @@ export class StoreBackend implements BackendProtocolV2 {
         }
 
         const fileData = this.convertStoreItemToFileData(item);
-        const fileDataV2 = migrateToFileDataV2(fileData, path);
-
-        if (typeof fileDataV2.content === "string") {
-          const content = new TextEncoder().encode(fileDataV2.content);
-          responses.push({ path, content, error: null });
-        } else {
-          responses.push({ path, content: fileDataV2.content, error: null });
-        }
+        const contentStr = fileDataToString(fileData);
+        const content = new TextEncoder().encode(contentStr);
+        responses.push({ path, content, error: null });
       } catch {
         responses.push({ path, content: null, error: "file_not_found" });
       }
