@@ -4,27 +4,24 @@
 
 import type {
   BackendOptions,
-  BackendProtocolV2,
+  BackendProtocol,
   EditResult,
   FileData,
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
-  GlobResult,
   GrepResult,
-  LsResult,
-  ReadRawResult,
   ReadResult,
   StateAndStore,
   WriteResult,
 } from "./protocol.js";
 import {
-  createFileData,
+  createFileDataV1,
+  createFileDataV2,
   fileDataToString,
   getMimeType,
   globSearchFiles,
   grepMatchesFromFiles,
-  isFileDataBinary,
   isFileDataV1,
   isTextMimeType,
   migrateToFileDataV2,
@@ -43,7 +40,7 @@ import {
  * (not direct mutation), operations return filesUpdate in WriteResult/EditResult
  * for the middleware to apply via Command.
  */
-export class StateBackend implements BackendProtocolV2 {
+export class StateBackend implements BackendProtocol {
   private stateAndStore: StateAndStore;
   private fileFormat: "v1" | "v2";
 
@@ -66,10 +63,10 @@ export class StateBackend implements BackendProtocolV2 {
    * List files and directories in the specified directory (non-recursive).
    *
    * @param path - Absolute path to directory
-   * @returns LsResult with list of FileInfo objects on success or error on failure.
+   * @returns List of FileInfo objects for files and directories directly in the directory.
    *          Directories have a trailing / in their path and is_dir=true.
    */
-  lsInfo(path: string): LsResult {
+  lsInfo(path: string): FileInfo[] {
     const files = this.getFiles();
     const infos: FileInfo[] = [];
     const subdirs = new Set<string>();
@@ -97,9 +94,7 @@ export class StateBackend implements BackendProtocolV2 {
       // This is a file directly in the current directory
       const size = isFileDataV1(fd)
         ? fd.content.join("\n").length
-        : isFileDataBinary(fd)
-          ? fd.content.byteLength
-          : fd.content.length;
+        : fd.content.length;
       infos.push({
         path: k,
         is_dir: false,
@@ -119,19 +114,16 @@ export class StateBackend implements BackendProtocolV2 {
     }
 
     infos.sort((a, b) => a.path.localeCompare(b.path));
-    return { files: infos };
+    return infos;
   }
 
   /**
-   * Read file content.
-   *
-   * Text files are paginated by line offset/limit.
-   * Binary files return full Uint8Array content (offset/limit ignored).
+   * Read file content with line numbers.
    *
    * @param filePath - Absolute file path
    * @param offset - Line offset to start reading from (0-indexed)
    * @param limit - Maximum number of lines to read
-   * @returns ReadResult with content on success or error on failure
+   * @returns TODO
    */
   read(filePath: string, offset: number = 0, limit: number = 500): ReadResult {
     const files = this.getFiles();
@@ -141,38 +133,32 @@ export class StateBackend implements BackendProtocolV2 {
       return { error: `File '${filePath}' not found` };
     }
 
-    const fileDataV2 = migrateToFileDataV2(fileData, filePath);
+    const fileDataV2 = migrateToFileDataV2(fileData);
+    const mimeType = getMimeType(filePath);
 
     // ignore pagination for binary data, return full content
-    if (!isTextMimeType(fileDataV2.mimeType)) {
-      return { content: fileDataV2.content, mimeType: fileDataV2.mimeType };
+    if (!isTextMimeType(mimeType)) {
+      return { content: fileDataV2.content };
     }
 
     // apply pagination logic for text data
-    if (typeof fileDataV2.content !== "string") {
-      return {
-        error: `File '${filePath}' has binary content but text MIME type`,
-      };
-    }
     const lines = fileDataV2.content.split("\n");
     const selected = lines.slice(offset, offset + limit);
-    return { content: selected.join("\n"), mimeType: fileDataV2.mimeType };
+    return { content: selected.join("\n") };
   }
 
   /**
    * Read file content as raw FileData.
    *
    * @param filePath - Absolute file path
-   * @returns ReadRawResult with raw file data on success or error on failure
+   * @returns Raw file content as FileData
    */
-  readRaw(filePath: string): ReadRawResult {
+  readRaw(filePath: string): FileData {
     const files = this.getFiles();
     const fileData = files[filePath];
 
-    if (!fileData) {
-      return { error: `File '${filePath}' not found` };
-    }
-    return { data: fileData };
+    if (!fileData) throw new Error(`File '${filePath}' not found`);
+    return fileData;
   }
 
   /**
@@ -188,13 +174,10 @@ export class StateBackend implements BackendProtocolV2 {
       };
     }
 
-    const mimeType = getMimeType(filePath);
-    const newFileData = createFileData(
-      content,
-      undefined,
-      this.fileFormat,
-      mimeType,
-    );
+    const newFileData =
+      this.fileFormat === "v1"
+        ? createFileDataV1(content)
+        : createFileDataV2(content);
     return {
       path: filePath,
       filesUpdate: { [filePath]: newFileData },
@@ -240,8 +223,7 @@ export class StateBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Search file contents for a literal text pattern.
-   * Binary files are skipped.
+   * Structured search results or error string for invalid input.
    */
   grepRaw(
     pattern: string,
@@ -256,12 +238,12 @@ export class StateBackend implements BackendProtocolV2 {
   /**
    * Structured glob matching returning FileInfo objects.
    */
-  globInfo(pattern: string, path: string = "/"): GlobResult {
+  globInfo(pattern: string, path: string = "/"): FileInfo[] {
     const files = this.getFiles();
     const result = globSearchFiles(files, pattern, path);
 
     if (result === "No files found") {
-      return { files: [] };
+      return [];
     }
 
     const paths = result.split("\n");
@@ -271,9 +253,7 @@ export class StateBackend implements BackendProtocolV2 {
       const size = fd
         ? isFileDataV1(fd)
           ? fd.content.join("\n").length
-          : isFileDataBinary(fd)
-            ? fd.content.byteLength
-            : fd.content.length
+          : fd.content.length
         : 0;
       infos.push({
         path: p,
@@ -282,7 +262,7 @@ export class StateBackend implements BackendProtocolV2 {
         modified_at: fd?.modified_at || "",
       });
     }
-    return { files: infos };
+    return infos;
   }
 
   /**
@@ -305,15 +285,13 @@ export class StateBackend implements BackendProtocolV2 {
         const mimeType = getMimeType(path);
 
         if (this.fileFormat === "v2" && !isTextMimeType(mimeType)) {
-          updates[path] = createFileData(content, undefined, "v2", mimeType);
+          updates[path] = createFileDataV2(content);
         } else {
           const contentStr = new TextDecoder().decode(content);
-          updates[path] = createFileData(
-            contentStr,
-            undefined,
-            this.fileFormat,
-            mimeType,
-          );
+          updates[path] =
+            this.fileFormat === "v1"
+              ? createFileDataV1(contentStr)
+              : createFileDataV2(contentStr);
         }
 
         responses.push({ path, error: null });
@@ -347,14 +325,9 @@ export class StateBackend implements BackendProtocolV2 {
         continue;
       }
 
-      const fileDataV2 = migrateToFileDataV2(fileData, path);
-
-      if (typeof fileDataV2.content === "string") {
-        const content = new TextEncoder().encode(fileDataV2.content);
-        responses.push({ path, content, error: null });
-      } else {
-        responses.push({ path, content: fileDataV2.content, error: null });
-      }
+      const contentStr = fileDataToString(fileData);
+      const content = new TextEncoder().encode(contentStr);
+      responses.push({ path, content, error: null });
     }
 
     return responses;
