@@ -331,7 +331,7 @@ describe("createFilesystemMiddleware", () => {
   // Helper to create a mock backend that doesn't support execution
   function createMockBackend(): BackendProtocol {
     return {
-      lsInfo: vi.fn().mockResolvedValue({ files: [] }),
+      lsInfo: vi.fn().mockResolvedValue([]),
       read: vi.fn().mockResolvedValue({ content: "" }),
       write: vi.fn().mockResolvedValue({ error: null, filesUpdate: null }),
       edit: vi.fn().mockResolvedValue({
@@ -339,7 +339,7 @@ describe("createFilesystemMiddleware", () => {
         occurrences: 1,
         filesUpdate: null,
       }),
-      globInfo: vi.fn().mockResolvedValue({ files: [] }),
+      globInfo: vi.fn().mockResolvedValue([]),
       grepRaw: vi.fn().mockResolvedValue({ matches: [] }),
     } as unknown as BackendProtocol;
   }
@@ -828,7 +828,7 @@ describe("createFilesystemMiddleware", () => {
       }));
 
       const mockBackend = createMockBackend();
-      mockBackend.lsInfo = vi.fn().mockResolvedValue({ files: manyFiles });
+      mockBackend.lsInfo = vi.fn().mockResolvedValue(manyFiles);
 
       const state = { messages: [], files: {} };
       vi.mocked(getCurrentTaskInput).mockReturnValue(state);
@@ -855,7 +855,7 @@ describe("createFilesystemMiddleware", () => {
       }));
 
       const mockBackend = createMockBackend();
-      mockBackend.globInfo = vi.fn().mockResolvedValue({ files: manyPaths });
+      mockBackend.globInfo = vi.fn().mockResolvedValue(manyPaths);
 
       const state = { messages: [], files: {} };
       vi.mocked(getCurrentTaskInput).mockReturnValue(state);
@@ -908,7 +908,7 @@ describe("createFilesystemMiddleware", () => {
       ];
 
       const mockBackend = createMockBackend();
-      mockBackend.lsInfo = vi.fn().mockResolvedValue({ files: smallFiles });
+      mockBackend.lsInfo = vi.fn().mockResolvedValue(smallFiles);
 
       const state = { messages: [], files: {} };
       vi.mocked(getCurrentTaskInput).mockReturnValue(state);
@@ -933,7 +933,7 @@ describe("createFilesystemMiddleware", () => {
       ];
 
       const mockBackend = createMockBackend();
-      mockBackend.globInfo = vi.fn().mockResolvedValue({ files: smallPaths });
+      mockBackend.globInfo = vi.fn().mockResolvedValue(smallPaths);
 
       const state = { messages: [], files: {} };
       vi.mocked(getCurrentTaskInput).mockReturnValue(state);

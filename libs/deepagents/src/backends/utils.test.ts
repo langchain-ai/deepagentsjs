@@ -4,8 +4,6 @@ import {
   validateFilePath,
   sanitizeToolCallId,
   formatContentWithLineNumbers,
-  createFileDataV1,
-  createFileDataV2,
   updateFileData,
   fileDataToString,
   checkEmptyContent,
@@ -16,6 +14,8 @@ import {
   getMimeType,
   isTextMimeType,
   TOOL_RESULT_TOKEN_LIMIT,
+  createFileData,
+  createFileDataV2,
 } from "./utils.js";
 
 describe("validatePath", () => {
@@ -175,14 +175,14 @@ describe("formatContentWithLineNumbers", () => {
   });
 });
 
-describe("createFileDataV1", () => {
-  it("should create FileData with content split into lines", () => {
-    const result = createFileDataV1("line1\nline2");
+describe("createFileData (v1 default)", () => {
+  it("should create FileData with content split into lines by default", () => {
+    const result = createFileData("line1\nline2");
     expect(result.content).toEqual(["line1", "line2"]);
   });
 
   it("should set created_at and modified_at timestamps", () => {
-    const result = createFileDataV1("content");
+    const result = createFileData("content");
     expect(result.created_at).toBeDefined();
     expect(result.modified_at).toBeDefined();
     expect(new Date(result.created_at).getTime()).toBeGreaterThan(0);
@@ -190,7 +190,7 @@ describe("createFileDataV1", () => {
 
   it("should use provided createdAt timestamp", () => {
     const timestamp = "2023-01-01T00:00:00.000Z";
-    const result = createFileDataV1("content", timestamp);
+    const result = createFileData("content", timestamp);
     expect(result.created_at).toBe(timestamp);
   });
 });
@@ -222,7 +222,7 @@ describe("createFileDataV2", () => {
 
 describe("updateFileData", () => {
   it("should update v1 content while preserving created_at", () => {
-    const original = createFileDataV1("old content");
+    const original = createFileData("old content");
     const originalCreatedAt = original.created_at;
 
     const updated = updateFileData(original, "new content");
@@ -240,7 +240,7 @@ describe("updateFileData", () => {
   });
 
   it("should update modified_at timestamp", () => {
-    const original = createFileDataV1("old content");
+    const original = createFileData("old content");
     const updated = updateFileData(original, "new content");
     expect(updated.modified_at).toBeDefined();
   });
@@ -248,7 +248,7 @@ describe("updateFileData", () => {
 
 describe("fileDataToString", () => {
   it("should join v1 lines with newlines", () => {
-    const fileData = createFileDataV1("line1\nline2\nline3");
+    const fileData = createFileData("line1\nline2\nline3");
     const result = fileDataToString(fileData);
     expect(result).toBe("line1\nline2\nline3");
   });
@@ -358,7 +358,7 @@ describe("truncateIfTooLong", () => {
 
 describe("isFileDataV1", () => {
   it("should return true for v1 data", () => {
-    const v1 = createFileDataV1("hello");
+    const v1 = createFileData("hello");
     expect(isFileDataV1(v1)).toBe(true);
   });
 
@@ -370,7 +370,7 @@ describe("isFileDataV1", () => {
 
 describe("migrateToFileDataV2", () => {
   it("should convert v1 data by joining lines", () => {
-    const v1 = createFileDataV1("line1\nline2");
+    const v1 = createFileData("line1\nline2");
     const v2 = migrateToFileDataV2(v1);
     expect(v2.content).toBe("line1\nline2");
     expect(v2.created_at).toBe(v1.created_at);

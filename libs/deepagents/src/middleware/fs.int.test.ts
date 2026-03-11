@@ -14,7 +14,6 @@ import {
   CompositeBackend,
 } from "../backends/index.js";
 import { fileDataToString } from "../backends/utils.js";
-import type { FileData } from "../backends/protocol.js";
 import { v4 as uuidv4 } from "uuid";
 import {
   SAMPLE_MODEL,
@@ -296,7 +295,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       );
 
       expect(readMessage).toBeDefined();
-      expect(JSON.stringify(readMessage!.content)).toContain(
+      expect(readMessage!.content.toString()).toContain(
         "Pepperoni is the best",
       );
     },
@@ -343,9 +342,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       );
 
       expect(readMessage).toBeDefined();
-      expect(JSON.stringify(readMessage!.content)).toContain(
-        "Hello from store",
-      );
+      expect(readMessage!.content.toString()).toContain("Hello from store");
     },
   );
 
@@ -392,7 +389,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       );
 
       expect(readMessage).toBeDefined();
-      expect(JSON.stringify(readMessage!.content)).toContain(
+      expect(readMessage!.content.toString()).toContain(
         "Hello from runtime store",
       );
     },
@@ -1121,7 +1118,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         (msg) => ToolMessage.isInstance(msg) && msg.name === "read_file",
       );
       expect(readMessage).toBeDefined();
-      expect(JSON.stringify(readMessage!.content)).toContain("Hello World");
+      expect(readMessage!.content.toString()).toContain("Hello World");
     },
   );
 
@@ -1162,7 +1159,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         (msg) => ToolMessage.isInstance(msg) && msg.name === "read_file",
       );
       expect(readMessage).toBeDefined();
-      expect(JSON.stringify(readMessage!.content)).toContain("Charmander");
+      expect(readMessage!.content.toString()).toContain("Charmander");
 
       // List from another thread
       const config2 = { configurable: { thread_id: uuidv4() } };
@@ -1202,10 +1199,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       // Verify the edit persisted in the store
       const updatedFile = await store.get(["filesystem"], "/pokemon.txt");
       expect(updatedFile).toBeDefined();
-      const rawContent = (updatedFile!.value as any).content;
-      const content = Array.isArray(rawContent)
-        ? rawContent.join("\n")
-        : rawContent;
+      const content = (updatedFile!.value as any).content.join("\n");
       expect(content).toContain("blazing");
     },
   );
@@ -1258,7 +1252,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         .find((msg) => ToolMessage.isInstance(msg) && msg.name === "read_file");
       expect(readMessage).toBeDefined();
       expect(
-        JSON.stringify(readMessage!.content).toLowerCase().includes("fiery"),
+        readMessage!.content.toString().toLowerCase().includes("fiery"),
       ).toBe(true);
 
       // List all files in shortterm memory
@@ -1293,7 +1287,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       const editedFiles = editResponse.files || {};
       expect(editedFiles["/charmander.txt"]).toBeDefined();
       const content = editedFiles["/charmander.txt"]
-        ? fileDataToString(editedFiles["/charmander.txt"] as FileData)
+        ? fileDataToString(editedFiles["/charmander.txt"])
         : undefined;
       expect(content?.toLowerCase().includes("ember")).toBe(true);
 
@@ -1315,9 +1309,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         .find((msg) => ToolMessage.isInstance(msg) && msg.name === "read_file");
       expect(verifyReadMessage).toBeDefined();
       expect(
-        JSON.stringify(verifyReadMessage!.content)
-          .toLowerCase()
-          .includes("ember"),
+        verifyReadMessage!.content.toString().toLowerCase().includes("ember"),
       ).toBe(true);
     },
   );
@@ -1360,7 +1352,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       );
 
       expect(readMessage).toBeDefined();
-      expect(JSON.stringify(readMessage!.content)).toContain(
+      expect(readMessage!.content.toString()).toContain(
         "Hello from cloud runtime store",
       );
     },
