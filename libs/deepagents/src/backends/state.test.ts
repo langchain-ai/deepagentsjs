@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { StateBackend } from "./state.js";
-import type { FileData } from "./protocol.js";
+import type { FileData, FileDataV1 } from "./protocol.js";
 import { getCurrentTaskInput, Command } from "@langchain/langgraph";
 import { ToolMessage } from "@langchain/core/messages";
 
@@ -44,8 +44,9 @@ describe("StateBackend", () => {
 
     Object.assign(state.files, writeRes.filesUpdate);
 
-    const content = backend.read("/notes.txt");
-    expect(content).toContain("hello world");
+    const readRes = backend.read("/notes.txt");
+    expect(readRes.error).toBeUndefined();
+    expect(readRes.content).toContain("hello world");
 
     const editRes = backend.edit("/notes.txt", "hello", "hi", false);
     expect(editRes).toBeDefined();
@@ -53,21 +54,22 @@ describe("StateBackend", () => {
     expect(editRes.filesUpdate).toBeDefined();
     Object.assign(state.files, editRes.filesUpdate);
 
-    const content2 = backend.read("/notes.txt");
-    expect(content2).toContain("hi world");
+    const readRes2 = backend.read("/notes.txt");
+    expect(readRes2.error).toBeUndefined();
+    expect(readRes2.content).toContain("hi world");
 
     const listing = backend.lsInfo("/");
     expect(listing.some((fi) => fi.path === "/notes.txt")).toBe(true);
 
-    const matches = backend.grepRaw("hi", "/");
-    expect(Array.isArray(matches)).toBe(true);
-    if (Array.isArray(matches)) {
-      expect(matches.some((m) => m.path === "/notes.txt")).toBe(true);
-    }
+    const grepRes = backend.grepRaw("hi", "/");
+    expect(grepRes.error).toBeUndefined();
+    expect(grepRes.matches).toBeDefined();
+    expect(grepRes.matches!.some((m) => m.path === "/notes.txt")).toBe(true);
 
-    // Special characters like "[" are treated literally (not regex), returns empty list or matches
+    // Special characters like "[" are treated literally (not regex)
     const literalResult = backend.grepRaw("[", "/");
-    expect(Array.isArray(literalResult)).toBe(true);
+    expect(literalResult.error).toBeUndefined();
+    expect(literalResult.matches).toBeDefined();
 
     const infos = backend.globInfo("*.txt", "/");
     expect(infos.some((i) => i.path === "/notes.txt")).toBe(true);
@@ -168,10 +170,11 @@ describe("StateBackend", () => {
     Object.assign(state.files, writeRes.filesUpdate!);
 
     const readWithOffset = backend.read("/multiline.txt", 2, 2);
-    expect(readWithOffset).toContain("line3");
-    expect(readWithOffset).toContain("line4");
-    expect(readWithOffset).not.toContain("line1");
-    expect(readWithOffset).not.toContain("line5");
+    expect(readWithOffset.error).toBeUndefined();
+    expect(readWithOffset.content).toContain("line3");
+    expect(readWithOffset.content).toContain("line4");
+    expect(readWithOffset.content).not.toContain("line1");
+    expect(readWithOffset.content).not.toContain("line5");
   });
 
   it("should handle edit with replace_all", () => {
@@ -191,8 +194,8 @@ describe("StateBackend", () => {
     Object.assign(state.files, editAll.filesUpdate!);
 
     const readAfter = backend.read("/repeat.txt");
-    expect(readAfter).toContain("qux bar qux baz qux");
-    expect(readAfter).not.toContain("foo");
+    expect(readAfter.content).toContain("qux bar qux baz qux");
+    expect(readAfter.content).not.toContain("foo");
   });
 
   it("should handle grep with glob filter", () => {
@@ -210,12 +213,10 @@ describe("StateBackend", () => {
       Object.assign(state.files, res.filesUpdate!);
     }
 
-    const matches = backend.grepRaw("import", "/", "*.py");
-    expect(Array.isArray(matches)).toBe(true);
-    if (Array.isArray(matches)) {
-      expect(matches).toHaveLength(1);
-      expect(matches[0].path).toBe("/test.py");
-    }
+    const grepRes = backend.grepRaw("import", "/", "*.py");
+    expect(grepRes.error).toBeUndefined();
+    expect(grepRes.matches).toHaveLength(1);
+    expect(grepRes.matches![0].path).toBe("/test.py");
   });
 
   it("should return empty content warning for empty files", () => {
@@ -225,10 +226,8 @@ describe("StateBackend", () => {
     const writeRes = backend.write("/empty.txt", "");
     Object.assign(state.files, writeRes.filesUpdate!);
 
-    const content = backend.read("/empty.txt");
-    expect(content).toContain(
-      "System reminder: File exists but has empty contents",
-    );
+    const readRes = backend.read("/empty.txt");
+    expect(readRes.content).toBe("");
   });
 
   describe("uploadFiles", () => {
@@ -265,9 +264,7 @@ describe("StateBackend", () => {
 
       const result = backend.uploadFiles(files);
       expect(result[0].error).toBeNull();
-      expect((result as any).filesUpdate["/hello.txt"].content).toEqual([
-        "Hello",
-      ]);
+      expect((result as any).filesUpdate["/hello.txt"].content).toBe("Hello");
     });
   });
 
@@ -349,8 +346,8 @@ describe("StateBackend", () => {
     expect(result).toBeInstanceOf(Command);
     expect(result.update.files).toBeDefined();
     expect(result.update.files["/large_tool_results/test_123"]).toBeDefined();
-    expect(result.update.files["/large_tool_results/test_123"].content).toEqual(
-      [largeContent],
+    expect(result.update.files["/large_tool_results/test_123"].content).toBe(
+      largeContent,
     );
 
     expect(result.update.messages).toHaveLength(1);
@@ -360,5 +357,154 @@ describe("StateBackend", () => {
     expect(result.update.messages[0].content).toContain(
       "/large_tool_results/test_123",
     );
+  });
+
+  describe("fileFormat: v1", () => {
+    it("should write v1 format (content as line array)", () => {
+      const { state, stateAndStore } = makeConfig();
+      const backend = new StateBackend(stateAndStore, { fileFormat: "v1" });
+
+      const writeRes = backend.write("/notes.txt", "line1\nline2");
+      expect(writeRes.error).toBeUndefined();
+      Object.assign(state.files, writeRes.filesUpdate!);
+
+      const fileData = state.files["/notes.txt"];
+      expect(Array.isArray(fileData.content)).toBe(true);
+      expect(fileData.content).toEqual(["line1", "line2"]);
+    });
+
+    it("should read v1 data correctly", () => {
+      const { state, stateAndStore } = makeConfig();
+      const backend = new StateBackend(stateAndStore, { fileFormat: "v1" });
+
+      const writeRes = backend.write("/notes.txt", "hello world");
+      Object.assign(state.files, writeRes.filesUpdate!);
+
+      const readRes = backend.read("/notes.txt");
+      expect(readRes.error).toBeUndefined();
+      expect(readRes.content).toContain("hello world");
+    });
+
+    it("should edit v1 data and produce v1 output", () => {
+      const { state, stateAndStore } = makeConfig();
+      const backend = new StateBackend(stateAndStore, { fileFormat: "v1" });
+
+      const writeRes = backend.write("/notes.txt", "hello world");
+      Object.assign(state.files, writeRes.filesUpdate!);
+
+      const editRes = backend.edit("/notes.txt", "hello", "hi");
+      expect(editRes.error).toBeUndefined();
+      Object.assign(state.files, editRes.filesUpdate!);
+
+      const fileData = state.files["/notes.txt"];
+      expect(Array.isArray(fileData.content)).toBe(true);
+      expect(fileData.content).toEqual(["hi world"]);
+    });
+
+    it("should upload files as v1 format", () => {
+      const { stateAndStore } = makeConfig();
+      const backend = new StateBackend(stateAndStore, { fileFormat: "v1" });
+
+      const files: Array<[string, Uint8Array]> = [
+        ["/hello.txt", new TextEncoder().encode("Hello")],
+      ];
+
+      const result = backend.uploadFiles(files);
+      expect(result[0].error).toBeNull();
+      expect((result as any).filesUpdate["/hello.txt"].content).toEqual([
+        "Hello",
+      ]);
+    });
+  });
+
+  describe("backwards compatibility: v2 backend reading v1 data", () => {
+    it("should read pre-existing v1 data from state", () => {
+      const v1FileData: FileDataV1 = {
+        content: ["line1", "line2", "line3"],
+        created_at: "2024-01-01T00:00:00.000Z",
+        modified_at: "2024-01-01T00:00:00.000Z",
+      };
+      const { stateAndStore } = makeConfig({ "/legacy.txt": v1FileData });
+      const backend = new StateBackend(stateAndStore); // default v2
+
+      const readRes = backend.read("/legacy.txt");
+      expect(readRes.error).toBeUndefined();
+      expect(readRes.content).toBe("line1\nline2\nline3");
+    });
+
+    it("should read v1 data with offset/limit", () => {
+      const v1FileData: FileDataV1 = {
+        content: ["a", "b", "c", "d", "e"],
+        created_at: "2024-01-01T00:00:00.000Z",
+        modified_at: "2024-01-01T00:00:00.000Z",
+      };
+      const { stateAndStore } = makeConfig({ "/legacy.txt": v1FileData });
+      const backend = new StateBackend(stateAndStore);
+
+      const readRes = backend.read("/legacy.txt", 1, 2);
+      expect(readRes.content).toBe("b\nc");
+    });
+
+    it("should edit v1 data and produce v2 output", () => {
+      const v1FileData: FileDataV1 = {
+        content: ["hello world"],
+        created_at: "2024-01-01T00:00:00.000Z",
+        modified_at: "2024-01-01T00:00:00.000Z",
+      };
+      const { state, stateAndStore } = makeConfig({
+        "/legacy.txt": v1FileData,
+      });
+      const backend = new StateBackend(stateAndStore); // default v2
+
+      const editRes = backend.edit("/legacy.txt", "hello", "hi");
+      expect(editRes.error).toBeUndefined();
+      Object.assign(state.files, editRes.filesUpdate!);
+
+      // Edit of v1 data preserves v1 format (updateFileData detects format)
+      const fileData = state.files["/legacy.txt"];
+      expect(Array.isArray(fileData.content)).toBe(true);
+    });
+
+    it("should grep across mixed v1 and v2 files", () => {
+      const v1FileData: FileDataV1 = {
+        content: ["import os", "print('v1')"],
+        created_at: "2024-01-01T00:00:00.000Z",
+        modified_at: "2024-01-01T00:00:00.000Z",
+      };
+      const { state, stateAndStore } = makeConfig({
+        "/legacy.py": v1FileData,
+      });
+      const backend = new StateBackend(stateAndStore); // default v2
+
+      // Write a v2 file
+      const writeRes = backend.write("/modern.py", "import sys\nprint('v2')");
+      Object.assign(state.files, writeRes.filesUpdate!);
+
+      const grepRes = backend.grepRaw("import", "/");
+      expect(grepRes.matches).toHaveLength(2);
+      const paths = grepRes.matches!.map((m) => m.path).sort();
+      expect(paths).toEqual(["/legacy.py", "/modern.py"]);
+    });
+
+    it("should list mixed v1 and v2 files with correct sizes", () => {
+      const v1FileData: FileDataV1 = {
+        content: ["hello"],
+        created_at: "2024-01-01T00:00:00.000Z",
+        modified_at: "2024-01-01T00:00:00.000Z",
+      };
+      const { state, stateAndStore } = makeConfig({
+        "/legacy.txt": v1FileData,
+      });
+      const backend = new StateBackend(stateAndStore);
+
+      const writeRes = backend.write("/modern.txt", "world");
+      Object.assign(state.files, writeRes.filesUpdate!);
+
+      const listing = backend.lsInfo("/");
+      expect(listing).toHaveLength(2);
+      for (const info of listing) {
+        expect(info.size).toBe(5);
+      }
+    });
   });
 });
