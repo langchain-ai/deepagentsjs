@@ -92,6 +92,7 @@ export {
   isSandboxBackend,
   SandboxError,
   type BackendProtocol,
+  type BackendProtocolV2,
   type BackendFactory,
   type FileInfo,
   type GrepMatch,

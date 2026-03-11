@@ -23,7 +23,7 @@ import type {
 } from "@langchain/langgraph-checkpoint";
 
 import type { SubAgent } from "./middleware/index.js";
-import type { BackendProtocol } from "./backends/index.js";
+import type { BackendProtocol, BackendProtocolV2 } from "./backends/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type { AnnotationRoot } from "@langchain/langgraph";
 import type { CompiledSubAgent } from "./middleware/subagents.js";
@@ -392,7 +392,11 @@ export interface CreateDeepAgentParams<
    */
   backend?:
     | BackendProtocol
-    | ((config: { state: unknown; store?: BaseStore }) => BackendProtocol);
+    | BackendProtocolV2
+    | ((config: {
+        state: unknown;
+        store?: BaseStore;
+      }) => BackendProtocol | BackendProtocolV2);
   /** Optional interrupt configuration mapping tool names to interrupt configs */
   interruptOn?: Record<string, boolean | InterruptOnConfig>;
   /** The name of the agent */
