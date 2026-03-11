@@ -56,14 +56,11 @@ describe("WorkerRepl", { timeout: 15_000 }, () => {
   });
 
   it("should handle parallel toolCalls via Promise.all", async () => {
-    const echoTool = tool(
-      async (input: { id: number }) => `echo-${input.id}`,
-      {
-        name: "echo",
-        description: "Echo an id",
-        schema: z.object({ id: z.number() }),
-      },
-    );
+    const echoTool = tool(async (input: { id: number }) => `echo-${input.id}`, {
+      name: "echo",
+      description: "Echo an id",
+      schema: z.object({ id: z.number() }),
+    });
 
     const repl = new WorkerRepl([echoTool]);
     const result = await repl.eval(`
@@ -74,14 +71,18 @@ describe("WorkerRepl", { timeout: 15_000 }, () => {
       console.log("results: " + results.join(","));
     `);
 
-    expect(result.output).toContain("results: echo-1,echo-2,echo-3,echo-4,echo-5");
+    expect(result.output).toContain(
+      "results: echo-1,echo-2,echo-3,echo-4,echo-5",
+    );
     expect(result.exitCode).toBe(0);
     expect(result.toolCalls).toHaveLength(5);
   });
 
   it("should handle tool call errors", async () => {
     const failTool = tool(
-      async () => { throw new Error("intentional failure"); },
+      async () => {
+        throw new Error("intentional failure");
+      },
       {
         name: "fail",
         description: "Always fails",
