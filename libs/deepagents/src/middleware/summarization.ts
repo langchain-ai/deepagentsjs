@@ -60,7 +60,12 @@ import { ContextOverflowError } from "@langchain/core/errors";
 import { initChatModel } from "langchain/chat_models/universal";
 import { Command } from "@langchain/langgraph";
 
-import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
+import type {
+  BackendProtocol,
+  BackendProtocolV2,
+  BackendFactory,
+} from "../backends/protocol.js";
+import { adaptBackendProtocol } from "../backends/utils.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 
@@ -121,6 +126,7 @@ export interface SummarizationMiddlewareOptions {
    */
   backend:
     | BackendProtocol
+    | BackendProtocolV2
     | BackendFactory
     | ((config: { state: unknown; store?: BaseStore }) => StateBackend);
 
@@ -358,11 +364,11 @@ export function createSummarizationMiddleware(
   /**
    * Resolve backend from instance or factory.
    */
-  function getBackend(state: unknown): BackendProtocol {
+  function getBackend(state: unknown): BackendProtocolV2 {
     if (typeof backend === "function") {
-      return backend({ state }) as BackendProtocol;
+      return adaptBackendProtocol(backend({ state }));
     }
-    return backend;
+    return adaptBackendProtocol(backend);
   }
 
   /**
@@ -829,7 +835,7 @@ export function createSummarizationMiddleware(
    * download → edit(oldContent, newContent) approach.
    */
   async function offloadToBackend(
-    resolvedBackend: BackendProtocol,
+    resolvedBackend: BackendProtocolV2,
     messages: BaseMessage[],
     state: Record<string, unknown>,
   ): Promise<string | null> {

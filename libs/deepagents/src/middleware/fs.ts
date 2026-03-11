@@ -21,10 +21,11 @@ import {
 } from "@langchain/langgraph";
 import { z } from "zod/v4";
 import type {
-  BackendProtocol,
   BackendFactory,
   FileData,
   StateAndStore,
+  BackendProtocol,
+  BackendProtocolV2,
 } from "../backends/protocol.js";
 import { isSandboxBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
@@ -33,6 +34,7 @@ import {
   formatContentWithLineNumbers,
   truncateIfTooLong,
   getMimeType,
+  adaptBackendProtocol,
 } from "../backends/utils.js";
 
 /**
@@ -246,13 +248,13 @@ const FilesystemStateSchema = new StateSchema({
  * @param stateAndStore - State and store container for backend initialization
  */
 function getBackend(
-  backend: BackendProtocol | BackendFactory,
+  backend: BackendProtocol | BackendProtocolV2 | BackendFactory,
   stateAndStore: StateAndStore,
-): BackendProtocol {
+): BackendProtocolV2 {
   if (typeof backend === "function") {
-    return backend(stateAndStore);
+    return adaptBackendProtocol(backend(stateAndStore));
   }
-  return backend;
+  return adaptBackendProtocol(backend);
 }
 
 // System prompts
@@ -382,7 +384,7 @@ Use this tool to run commands, scripts, tests, builds, and other shell operation
  * Create ls tool using backend.
  */
 function createLsTool(
-  backend: BackendProtocol | BackendFactory,
+  backend: BackendProtocol | BackendProtocolV2 | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -436,7 +438,7 @@ function createLsTool(
  * Create read_file tool using backend.
  */
 function createReadFileTool(
-  backend: BackendProtocol | BackendFactory,
+  backend: BackendProtocol | BackendProtocolV2 | BackendFactory,
   options: {
     customDescription: string | undefined;
     toolTokenLimitBeforeEvict: number | null;
@@ -531,7 +533,7 @@ function createReadFileTool(
  * Create write_file tool using backend.
  */
 function createWriteFileTool(
-  backend: BackendProtocol | BackendFactory,
+  backend: BackendProtocol | BackendProtocolV2 | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -583,7 +585,7 @@ function createWriteFileTool(
  * Create edit_file tool using backend.
  */
 function createEditFileTool(
-  backend: BackendProtocol | BackendFactory,
+  backend: BackendProtocol | BackendProtocolV2 | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -646,7 +648,7 @@ function createEditFileTool(
  * Create glob tool using backend.
  */
 function createGlobTool(
-  backend: BackendProtocol | BackendFactory,
+  backend: BackendProtocol | BackendProtocolV2 | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -691,7 +693,7 @@ function createGlobTool(
  * Create grep tool using backend.
  */
 function createGrepTool(
-  backend: BackendProtocol | BackendFactory,
+  backend: BackendProtocol | BackendProtocolV2 | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -758,7 +760,7 @@ function createGrepTool(
  * Create execute tool using backend.
  */
 function createExecuteTool(
-  backend: BackendProtocol | BackendFactory,
+  backend: BackendProtocol | BackendProtocolV2 | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -810,7 +812,7 @@ function createExecuteTool(
  */
 export interface FilesystemMiddlewareOptions {
   /** Backend instance or factory (default: StateBackend) */
-  backend?: BackendProtocol | BackendFactory;
+  backend?: BackendProtocol | BackendProtocolV2 | BackendFactory;
   /** Optional custom system prompt override */
   systemPrompt?: string | null;
   /** Optional custom tool descriptions override */

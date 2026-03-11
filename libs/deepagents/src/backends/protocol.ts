@@ -210,8 +210,122 @@ export interface BackendOptions {
  *
  * Methods can return either direct values or Promises, allowing both
  * synchronous and asynchronous implementations.
+ *
+ * @deprecated
  */
 export interface BackendProtocol {
+  /**
+   * Structured listing with file metadata.
+   *
+   * Lists files and directories in the specified directory (non-recursive).
+   * Directories have a trailing / in their path and is_dir=true.
+   *
+   * @param path - Absolute path to directory
+   * @returns List of FileInfo objects for files and directories directly in the directory
+   */
+  lsInfo(path: string): MaybePromise<FileInfo[]>;
+
+  /**
+   * Read file content.
+   *
+   * For text files, content is paginated by line offset/limit.
+   * For binary files, the full base64-encoded content is returned.
+   *
+   * @param filePath - Absolute file path
+   * @param offset - Line offset to start reading from (0-indexed), default 0
+   * @param limit - Maximum number of lines to read, default 500
+   * @returns ReadResult with content on success or error on failure
+   */
+  read(filePath: string, offset?: number, limit?: number): MaybePromise<string>;
+
+  /**
+   * Read file content as raw FileData.
+   *
+   * @param filePath - Absolute file path
+   * @returns Raw file content as FileData
+   */
+  readRaw(filePath: string): MaybePromise<FileData>;
+
+  /**
+   * Search file contents for a literal text pattern.
+   *
+   * Binary files (determined by MIME type) are skipped.
+   *
+   * @param pattern - Literal text pattern to search for
+   * @param path - Base path to search from (default: null)
+   * @param glob - Optional glob pattern to filter files (e.g., "*.py")
+   * @returns GrepResult with matches on success or error on failure
+   */
+  grepRaw(
+    pattern: string,
+    path?: string | null,
+    glob?: string | null,
+  ): MaybePromise<GrepMatch[] | string>;
+
+  /**
+   * Structured glob matching returning FileInfo objects.
+   *
+   * @param pattern - Glob pattern (e.g., `*.py`, `**\/*.ts`)
+   * @param path - Base path to search from (default: "/")
+   * @returns List of FileInfo objects matching the pattern
+   */
+  globInfo(pattern: string, path?: string): MaybePromise<FileInfo[]>;
+
+  /**
+   * Create a new file.
+   *
+   * @param filePath - Absolute file path
+   * @param content - File content as string
+   * @returns WriteResult with error populated on failure
+   */
+  write(filePath: string, content: string): MaybePromise<WriteResult>;
+
+  /**
+   * Edit a file by replacing string occurrences.
+   *
+   * @param filePath - Absolute file path
+   * @param oldString - String to find and replace
+   * @param newString - Replacement string
+   * @param replaceAll - If true, replace all occurrences (default: false)
+   * @returns EditResult with error, path, filesUpdate, and occurrences
+   */
+  edit(
+    filePath: string,
+    oldString: string,
+    newString: string,
+    replaceAll?: boolean,
+  ): MaybePromise<EditResult>;
+
+  /**
+   * Upload multiple files.
+   * Optional - backends that don't support file upload can omit this.
+   *
+   * @param files - List of [path, content] tuples to upload
+   * @returns List of FileUploadResponse objects, one per input file
+   */
+  uploadFiles?(
+    files: Array<[string, Uint8Array]>,
+  ): MaybePromise<FileUploadResponse[]>;
+
+  /**
+   * Download multiple files.
+   * Optional - backends that don't support file download can omit this.
+   *
+   * @param paths - List of file paths to download
+   * @returns List of FileDownloadResponse objects, one per input path
+   */
+  downloadFiles?(paths: string[]): MaybePromise<FileDownloadResponse[]>;
+}
+
+/**
+ * ...
+ */
+export interface BackendProtocolV2 {
+  /**
+   * ...
+   */
+  readonly protocolVersion: "v2";
+
   /**
    * Structured listing with file metadata.
    *
@@ -324,7 +438,7 @@ export interface BackendProtocol {
  * Sandboxed backends run in isolated environments (e.g., containers)
  * and communicate via defined interfaces.
  */
-export interface SandboxBackendProtocol extends BackendProtocol {
+export interface SandboxBackendProtocol extends BackendProtocolV2 {
   /**
    * Execute a command in the sandbox.
    *
@@ -344,7 +458,7 @@ export interface SandboxBackendProtocol extends BackendProtocol {
  * @returns True if the backend implements SandboxBackendProtocol
  */
 export function isSandboxBackend(
-  backend: BackendProtocol,
+  backend: BackendProtocol | BackendProtocolV2,
 ): backend is SandboxBackendProtocol {
   return (
     typeof (backend as SandboxBackendProtocol).execute === "function" &&
@@ -568,4 +682,6 @@ export interface StateAndStore {
  * });
  * ```
  */
-export type BackendFactory = (stateAndStore: StateAndStore) => BackendProtocol;
+export type BackendFactory = (
+  stateAndStore: StateAndStore,
+) => BackendProtocol | BackendProtocolV2;
