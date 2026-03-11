@@ -3,22 +3,28 @@
  */
 
 import type {
+  BackendOptions,
   BackendProtocol,
   EditResult,
   FileData,
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
-  GrepMatch,
+  GrepResult,
+  ReadResult,
   StateAndStore,
   WriteResult,
 } from "./protocol.js";
 import {
-  createFileData,
+  createFileDataV1,
+  createFileDataV2,
   fileDataToString,
-  formatReadResponse,
+  getMimeType,
   globSearchFiles,
   grepMatchesFromFiles,
+  isFileDataV1,
+  isTextMimeType,
+  migrateToFileDataV2,
   performStringReplacement,
   updateFileData,
 } from "./utils.js";
@@ -36,9 +42,11 @@ import {
  */
 export class StateBackend implements BackendProtocol {
   private stateAndStore: StateAndStore;
+  private fileFormat: "v1" | "v2";
 
-  constructor(stateAndStore: StateAndStore) {
+  constructor(stateAndStore: StateAndStore, options?: BackendOptions) {
     this.stateAndStore = stateAndStore;
+    this.fileFormat = options?.fileFormat ?? "v2";
   }
 
   /**
@@ -84,7 +92,9 @@ export class StateBackend implements BackendProtocol {
       }
 
       // This is a file directly in the current directory
-      const size = fd.content.join("\n").length;
+      const size = isFileDataV1(fd)
+        ? fd.content.join("\n").length
+        : fd.content.length;
       infos.push({
         path: k,
         is_dir: false,
@@ -113,17 +123,28 @@ export class StateBackend implements BackendProtocol {
    * @param filePath - Absolute file path
    * @param offset - Line offset to start reading from (0-indexed)
    * @param limit - Maximum number of lines to read
-   * @returns Formatted file content with line numbers, or error message
+   * @returns TODO
    */
-  read(filePath: string, offset: number = 0, limit: number = 500): string {
+  read(filePath: string, offset: number = 0, limit: number = 500): ReadResult {
     const files = this.getFiles();
     const fileData = files[filePath];
 
     if (!fileData) {
-      return `Error: File '${filePath}' not found`;
+      return { error: `File '${filePath}' not found` };
     }
 
-    return formatReadResponse(fileData, offset, limit);
+    const fileDataV2 = migrateToFileDataV2(fileData);
+    const mimeType = getMimeType(filePath);
+
+    // ignore pagination for binary data, return full content
+    if (!isTextMimeType(mimeType)) {
+      return { content: fileDataV2.content };
+    }
+
+    // apply pagination logic for text data
+    const lines = fileDataV2.content.split("\n");
+    const selected = lines.slice(offset, offset + limit);
+    return { content: selected.join("\n") };
   }
 
   /**
@@ -153,7 +174,10 @@ export class StateBackend implements BackendProtocol {
       };
     }
 
-    const newFileData = createFileData(content);
+    const newFileData =
+      this.fileFormat === "v1"
+        ? createFileDataV1(content)
+        : createFileDataV2(content);
     return {
       path: filePath,
       filesUpdate: { [filePath]: newFileData },
@@ -205,9 +229,10 @@ export class StateBackend implements BackendProtocol {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
-  ): GrepMatch[] | string {
+  ): GrepResult {
     const files = this.getFiles();
-    return grepMatchesFromFiles(files, pattern, path, glob);
+    const result = grepMatchesFromFiles(files, pattern, path, glob);
+    return { matches: result };
   }
 
   /**
@@ -225,7 +250,11 @@ export class StateBackend implements BackendProtocol {
     const infos: FileInfo[] = [];
     for (const p of paths) {
       const fd = files[p];
-      const size = fd ? fd.content.join("\n").length : 0;
+      const size = fd
+        ? isFileDataV1(fd)
+          ? fd.content.join("\n").length
+          : fd.content.length
+        : 0;
       infos.push({
         path: p,
         is_dir: false,
@@ -253,9 +282,18 @@ export class StateBackend implements BackendProtocol {
 
     for (const [path, content] of files) {
       try {
-        const contentStr = new TextDecoder().decode(content);
-        const fileData = createFileData(contentStr);
-        updates[path] = fileData;
+        const mimeType = getMimeType(path);
+
+        if (this.fileFormat === "v2" && !isTextMimeType(mimeType)) {
+          updates[path] = createFileDataV2(content);
+        } else {
+          const contentStr = new TextDecoder().decode(content);
+          updates[path] =
+            this.fileFormat === "v1"
+              ? createFileDataV1(contentStr)
+              : createFileDataV2(contentStr);
+        }
+
         responses.push({ path, error: null });
       } catch {
         responses.push({ path, error: "invalid_path" });
