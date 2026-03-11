@@ -125,7 +125,9 @@ export {
   createSandboxPtcMiddleware,
   PtcExecutionEngine,
   StdoutScanner,
+  WorkerRepl,
   generateSandboxPtcPrompt,
+  generateWorkerReplPrompt,
   type SandboxPtcMiddlewareOptions,
   type PtcEngineOptions,
 } from "./sandbox-ptc/index.js";

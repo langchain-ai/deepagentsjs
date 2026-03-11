@@ -24,8 +24,13 @@ export interface SandboxPtcMiddlewareOptions {
   /**
    * Backend instance or factory that implements SandboxBackendProtocol.
    * Must support `spawnInteractive()` for PTC to be active.
+   *
+   * If not provided, an in-process Worker-based JavaScript REPL is used
+   * instead (Web Worker in browsers, Node.js Worker Threads in Node).
+   * In this mode, a `js_eval` tool is added so the agent can run JS code
+   * with `toolCall()` and `spawnAgent()` available as globals.
    */
-  backend: BackendProtocol | BackendFactory;
+  backend?: BackendProtocol | BackendFactory;
 
   /**
    * Which tools to expose inside the sandbox via PTC.

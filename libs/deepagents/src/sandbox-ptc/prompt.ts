@@ -1,9 +1,11 @@
 /**
- * System prompt generation for Sandbox PTC.
+ * System prompt generation for PTC.
  *
- * Auto-generates complete API documentation from the actual tool schemas
- * so the LLM knows exactly how to call tools and spawn subagents from
- * within bash scripts. Injected by the PTC middleware into wrapModelCall.
+ * Two prompt generators:
+ * - `generateSandboxPtcPrompt` — for sandbox mode (bash/python/node scripts via execute)
+ * - `generateWorkerReplPrompt` — for Worker REPL mode (JS code via js_eval)
+ *
+ * Both auto-generate API documentation from actual tool schemas.
  */
 
 import type { StructuredToolInterface } from "@langchain/core/tools";
@@ -182,6 +184,95 @@ const syncResult = toolCallSync("tool_name", { key: "value" });
   const results = await Promise.all([...]);
   console.log(results);
 })();
+\`\`\`
+
+### Available tools
+
+${toolEntries}
+${subagentSection}
+`;
+}
+
+/**
+ * Build the Worker REPL system prompt section from actual tool definitions.
+ * Used when no sandbox backend is provided (Worker REPL mode).
+ */
+export function generateWorkerReplPrompt(
+  tools: StructuredToolInterface[],
+): string {
+  if (tools.length === 0) return "";
+
+  const isTaskTool = (t: StructuredToolInterface) => t.name === "task";
+  const regularTools = tools.filter((t) => !isTaskTool(t));
+  const taskTool = tools.find(isTaskTool);
+
+  const toolEntries = regularTools
+    .map((t) => {
+      const schema = t.schema ? safeToJsonSchema(t.schema) : undefined;
+      const example = schemaToExample(schema);
+      return `- **\`${t.name}\`** — ${t.description}
+  \`\`\`javascript
+  const result = await toolCall("${t.name}", ${example});
+  \`\`\``;
+    })
+    .join("\n\n");
+
+  let subagentSection = "";
+  if (taskTool) {
+    const agentTypesMatch = taskTool.description.match(
+      /Available(?:\\s+agent\\s+types)?:?\\s*((?:- .+\\n?)+)/i,
+    );
+    const agentTypes = agentTypesMatch
+      ? agentTypesMatch[1].trim()
+      : "- general-purpose: General-purpose agent";
+
+    subagentSection = `
+### Spawning subagents
+
+\`spawnAgent()\` launches a subagent. Returns a Promise with the agent's response.
+
+\`\`\`javascript
+const analysis = await spawnAgent("Analyse this data and provide recommendations", "general-purpose");
+console.log(analysis);
+
+// Parallel subagent spawning
+const results = await Promise.all(
+  items.map(item => spawnAgent(\`Analyse: \${JSON.stringify(item)}\`, "general-purpose"))
+);
+\`\`\`
+
+Available agent types:
+${agentTypes}
+`;
+  }
+
+  return `
+## JavaScript REPL (\`js_eval\`)
+
+You have access to a sandboxed JavaScript REPL running in an isolated Worker.
+Variables and closures do NOT persist across calls.
+Use \`console.log()\` for output — it is captured and returned.
+
+### Key behavior
+
+- \`toolCall(name, input)\` and \`spawnAgent(description, type)\` are async globals.
+  Always use \`await\` when calling them.
+- Maximise parallelism with \`Promise.all()\` whenever possible.
+- Top-level \`await\` is supported — no need for async IIFE wrappers.
+- No \`require\`, \`import\`, \`fetch\`, or filesystem access.
+
+### Calling tools
+
+\`\`\`javascript
+// Single tool call
+const result = await toolCall("tool_name", { key: "value" });
+console.log(result);
+
+// Parallel tool calls
+const results = await Promise.all(
+  items.map(item => toolCall("tool_name", { id: item.id }))
+);
+console.log(results);
 \`\`\`
 
 ### Available tools
