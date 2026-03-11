@@ -243,16 +243,18 @@ describe("LocalShellBackend", () => {
       expect(writeResult.path).toBe("/test.txt");
 
       const content = await backend.read("/test.txt");
-      expect(content).toContain("Hello");
-      expect(content).toContain("World");
+      expect(content.error).toBeUndefined();
+      expect(content.content).toContain("Hello");
+      expect(content.content).toContain("World");
 
       const editResult = await backend.edit("/test.txt", "World", "Universe");
       expect(editResult.error).toBeUndefined();
       expect(editResult.occurrences).toBe(1);
 
       const updated = await backend.read("/test.txt");
-      expect(updated).toContain("Universe");
-      expect(updated).not.toContain("World");
+      expect(updated.error).toBeUndefined();
+      expect(updated.content).toContain("Universe");
+      expect(updated.content).not.toContain("World");
     });
 
     it("should allow shell and filesystem operations together", async () => {
@@ -273,7 +275,8 @@ describe("LocalShellBackend", () => {
       await backend.execute("echo 'Shell created' > shell_file.txt");
 
       const content = await backend.read("/shell_file.txt");
-      expect(content).toContain("Shell created");
+      expect(content.error).toBeUndefined();
+      expect(content.content).toContain("Shell created");
     });
 
     it("should list directory contents", async () => {
@@ -302,13 +305,11 @@ describe("LocalShellBackend", () => {
       await backend.write("/file1.txt", "TODO: implement this");
       await backend.write("/file2.txt", "DONE: completed");
 
-      const matches = await backend.grepRaw("TODO");
+      const result = await backend.grepRaw("TODO");
 
-      expect(Array.isArray(matches)).toBe(true);
-      expect((matches as Array<{ text: string }>).length).toBe(1);
-      expect((matches as Array<{ text: string }>)[0].text).toBe(
-        "TODO: implement this",
-      );
+      expect(result.error).toBeUndefined();
+      expect(result.matches!.length).toBe(1);
+      expect(result.matches![0].text).toBe("TODO: implement this");
     });
 
     it("should support glob", async () => {
@@ -339,7 +340,7 @@ describe("LocalShellBackend", () => {
       });
 
       const content = await backend.read("/../etc/passwd");
-      expect(content).toContain("Error");
+      expect(content.error).toContain("not allowed");
 
       const result = await backend.execute("cat /etc/passwd");
       expect(result).toBeDefined();
