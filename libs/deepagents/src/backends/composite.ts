@@ -11,6 +11,8 @@ import type {
   FileInfo,
   FileUploadResponse,
   GrepMatch,
+  GrepResult,
+  ReadResult,
   WriteResult,
 } from "./protocol.js";
 import { isSandboxBackend } from "./protocol.js";
@@ -133,7 +135,7 @@ export class CompositeBackend implements BackendProtocol {
     filePath: string,
     offset: number = 0,
     limit: number = 500,
-  ): Promise<string> {
+  ): Promise<ReadResult> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
     return await backend.read(strippedKey, offset, limit);
   }
@@ -156,7 +158,7 @@ export class CompositeBackend implements BackendProtocol {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
-  ): Promise<GrepMatch[] | string> {
+  ): Promise<GrepResult> {
     // If path targets a specific route, search only that backend
     for (const [routePrefix, backend] of this.sortedRoutes) {
       if (path.startsWith(routePrefix.replace(/\/$/, ""))) {
@@ -168,10 +170,11 @@ export class CompositeBackend implements BackendProtocol {
         }
 
         // Add route prefix back
-        return raw.map((m) => ({
+        const matches = raw.matches?.map((m) => ({
           ...m,
           path: routePrefix.slice(0, -1) + m.path,
         }));
+        return { matches };
       }
     }
 
@@ -183,7 +186,7 @@ export class CompositeBackend implements BackendProtocol {
       return rawDefault;
     }
 
-    allMatches.push(...rawDefault);
+    allMatches.push(...(rawDefault.matches || []));
 
     // Search all routes
     for (const [routePrefix, backend] of Object.entries(this.routes)) {
@@ -194,15 +197,14 @@ export class CompositeBackend implements BackendProtocol {
       }
 
       // Add route prefix back
-      allMatches.push(
-        ...raw.map((m) => ({
-          ...m,
-          path: routePrefix.slice(0, -1) + m.path,
-        })),
-      );
+      const matches = (raw.matches || []).map((m) => ({
+        ...m,
+        path: routePrefix.slice(0, -1) + m.path,
+      }));
+      allMatches.push(...matches);
     }
 
-    return allMatches;
+    return { matches: allMatches };
   }
 
   /**
