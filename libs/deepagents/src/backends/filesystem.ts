@@ -16,16 +16,14 @@ import { spawn } from "node:child_process";
 import fg from "fast-glob";
 import micromatch from "micromatch";
 import type {
-  BackendProtocolV2,
+  BackendProtocol,
   EditResult,
+  FileData,
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
-  GlobResult,
   GrepMatch,
   GrepResult,
-  LsResult,
-  ReadRawResult,
   ReadResult,
   WriteResult,
 } from "./protocol.js";
@@ -45,7 +43,7 @@ const SUPPORTS_NOFOLLOW = fsSync.constants.O_NOFOLLOW !== undefined;
  * resolved relative to the current working directory. Content is read/written
  * as plain text, and metadata (timestamps) are derived from filesystem stats.
  */
-export class FilesystemBackend implements BackendProtocolV2 {
+export class FilesystemBackend implements BackendProtocol {
   protected cwd: string;
   protected virtualMode: boolean;
   private maxFileSizeBytes: number;
@@ -102,13 +100,13 @@ export class FilesystemBackend implements BackendProtocolV2 {
    * @returns List of FileInfo objects for files and directories directly in the directory.
    *          Directories have a trailing / in their path and is_dir=true.
    */
-  async lsInfo(dirPath: string): Promise<LsResult> {
+  async lsInfo(dirPath: string): Promise<FileInfo[]> {
     try {
       const resolvedPath = this.resolvePath(dirPath);
       const stat = await fs.stat(resolvedPath);
 
       if (!stat.isDirectory()) {
-        return { files: [] };
+        return [];
       }
 
       const entries = await fs.readdir(resolvedPath, { withFileTypes: true });
@@ -181,9 +179,9 @@ export class FilesystemBackend implements BackendProtocolV2 {
       }
 
       results.sort((a, b) => a.path.localeCompare(b.path));
-      return { files: results };
+      return results;
     } catch {
-      return { files: [] };
+      return [];
     }
   }
 
@@ -219,7 +217,8 @@ export class FilesystemBackend implements BackendProtocolV2 {
         try {
           if (isBinary) {
             const buffer = await fd.readFile();
-            return { content: new Uint8Array(buffer), mimeType };
+            const contentStr = Buffer.from(buffer).toString("base64");
+            return { content: contentStr };
           }
           content = await fd.readFile({ encoding: "utf-8" });
         } finally {
@@ -235,14 +234,15 @@ export class FilesystemBackend implements BackendProtocolV2 {
         }
         if (isBinary) {
           const buffer = await fs.readFile(resolvedPath);
-          return { content: new Uint8Array(buffer), mimeType };
+          const contentStr = Buffer.from(buffer).toString("base64");
+          return { content: contentStr };
         }
         content = await fs.readFile(resolvedPath, "utf-8");
       }
 
       const emptyMsg = checkEmptyContent(content);
       if (emptyMsg) {
-        return { content: emptyMsg, mimeType };
+        return { content: emptyMsg };
       }
 
       const lines = content.split("\n");
@@ -256,7 +256,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
       }
 
       const selectedLines = lines.slice(startIdx, endIdx);
-      return { content: selectedLines.join("\n"), mimeType };
+      return { content: selectedLines.join("\n") };
     } catch (e: any) {
       return { error: `Error reading file '${filePath}': ${e.message}` };
     }
@@ -266,9 +266,9 @@ export class FilesystemBackend implements BackendProtocolV2 {
    * Read file content as raw FileData.
    *
    * @param filePath - Absolute file path
-   * @returns ReadRawResult with raw file data on success or error on failure
+   * @returns Raw file content as FileData
    */
-  async readRaw(filePath: string): Promise<ReadRawResult> {
+  async readRaw(filePath: string): Promise<FileData> {
     const resolvedPath = this.resolvePath(filePath);
 
     const mimeType = getMimeType(filePath);
@@ -279,9 +279,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
 
     if (SUPPORTS_NOFOLLOW) {
       stat = await fs.stat(resolvedPath);
-      if (!stat.isFile()) {
-        return { error: `File '${filePath}' not found` };
-      }
+      if (!stat.isFile()) throw new Error(`File '${filePath}' not found`);
       const fd = await fs.open(
         resolvedPath,
         fsSync.constants.O_RDONLY | fsSync.constants.O_NOFOLLOW,
@@ -289,48 +287,31 @@ export class FilesystemBackend implements BackendProtocolV2 {
       try {
         if (isBinary) {
           const buffer = await fd.readFile();
-          return {
-            data: {
-              content: new Uint8Array(buffer),
-              mimeType,
-              created_at: stat.ctime.toISOString(),
-              modified_at: stat.mtime.toISOString(),
-            },
-          };
+          content = Buffer.from(buffer).toString("base64");
+        } else {
+          content = await fd.readFile({ encoding: "utf-8" });
         }
-        content = await fd.readFile({ encoding: "utf-8" });
       } finally {
         await fd.close();
       }
     } else {
       stat = await fs.lstat(resolvedPath);
       if (stat.isSymbolicLink()) {
-        return { error: `Symlinks are not allowed: ${filePath}` };
+        throw new Error(`Symlinks are not allowed: ${filePath}`);
       }
-      if (!stat.isFile()) {
-        return { error: `File '${filePath}' not found` };
-      }
+      if (!stat.isFile()) throw new Error(`File '${filePath}' not found`);
       if (isBinary) {
         const buffer = await fs.readFile(resolvedPath);
-        return {
-          data: {
-            content: new Uint8Array(buffer),
-            mimeType,
-            created_at: stat.ctime.toISOString(),
-            modified_at: stat.mtime.toISOString(),
-          },
-        };
+        content = Buffer.from(buffer).toString("base64");
+      } else {
+        content = await fs.readFile(resolvedPath, "utf-8");
       }
-      content = await fs.readFile(resolvedPath, "utf-8");
     }
 
     return {
-      data: {
-        content,
-        mimeType,
-        created_at: stat.ctime.toISOString(),
-        modified_at: stat.mtime.toISOString(),
-      },
+      content,
+      created_at: stat.ctime.toISOString(),
+      modified_at: stat.mtime.toISOString(),
     };
   }
 
@@ -629,12 +610,6 @@ export class FilesystemBackend implements BackendProtocolV2 {
 
     for (const fp of files) {
       try {
-        // Skip binary files
-        const mimeType = getMimeType(fp);
-        if (!isTextMimeType(mimeType)) {
-          continue;
-        }
-
         // Filter by glob if provided
         if (
           includeGlob &&
@@ -692,7 +667,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
   async globInfo(
     pattern: string,
     searchPath: string = "/",
-  ): Promise<GlobResult> {
+  ): Promise<FileInfo[]> {
     if (pattern.startsWith("/")) {
       pattern = pattern.substring(1);
     }
@@ -703,10 +678,10 @@ export class FilesystemBackend implements BackendProtocolV2 {
     try {
       const stat = await fs.stat(resolvedSearchPath);
       if (!stat.isDirectory()) {
-        return { files: [] };
+        return [];
       }
     } catch {
-      return { files: [] };
+      return [];
     }
 
     const results: FileInfo[] = [];
@@ -772,7 +747,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
     }
 
     results.sort((a, b) => a.path.localeCompare(b.path));
-    return { files: results };
+    return results;
   }
 
   /**
