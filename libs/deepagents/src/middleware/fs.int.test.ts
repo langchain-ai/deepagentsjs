@@ -13,6 +13,7 @@ import {
   StoreBackend,
   CompositeBackend,
 } from "../backends/index.js";
+import { fileDataToString } from "../backends/utils.js";
 import { v4 as uuidv4 } from "uuid";
 import {
   SAMPLE_MODEL,
@@ -1285,7 +1286,9 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const editedFiles = editResponse.files || {};
       expect(editedFiles["/charmander.txt"]).toBeDefined();
-      const content = editedFiles["/charmander.txt"]?.content.join("\n");
+      const content = editedFiles["/charmander.txt"]
+        ? fileDataToString(editedFiles["/charmander.txt"])
+        : undefined;
       expect(content?.toLowerCase().includes("ember")).toBe(true);
 
       // Read again to verify edit

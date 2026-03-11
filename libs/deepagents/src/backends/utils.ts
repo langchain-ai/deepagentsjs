@@ -138,13 +138,19 @@ export function fileDataToString(fileData: FileData): string {
 }
 
 /**
- * Create a v1 FileData object (content as line array).
+ * Create a v1 FileData object with content stored as an array of lines.
  *
- * @param content - File content as a string (will be split on "\n")
+ * This is the default format for backward compatibility. Use this when writing
+ * to state that may be read by older code that does not support v2.
+ *
+ * For binary content or new deployments that fully support v2, use
+ * {@link createFileDataV2} instead.
+ *
+ * @param content - File content as a string (split on "\n" for storage)
  * @param createdAt - Optional creation timestamp (ISO format), defaults to now
- * @returns FileDataV1 with content split into lines
+ * @returns FileDataV1 with content stored as a line array
  */
-export function createFileDataV1(
+export function createFileData(
   content: string,
   createdAt?: string,
 ): FileDataV1 {
@@ -159,21 +165,23 @@ export function createFileDataV1(
 }
 
 /**
- * Create a v2 FileData object (content as single string).
+ * Create a v2 FileData object with content stored as a single string.
  *
- * String content is stored as-is. Uint8Array content (binary) is
- * base64-encoded for JSON-safe storage in LangGraph state/store.
+ * Prefer this format for new deployments. It supports both text and binary
+ * files — binary content (Uint8Array) is base64-encoded for JSON-safe storage.
+ *
+ * Use {@link createFileData} instead if you need to write v1 format for
+ * compatibility with older readers during a rolling deployment.
  *
  * @param content - File content as a string or binary Uint8Array
  * @param createdAt - Optional creation timestamp (ISO format), defaults to now
- * @returns FileDataV2 with content as a single string
+ * @returns FileDataV2 with content stored as a single string (base64 if binary)
  */
 export function createFileDataV2(
   content: string | Uint8Array,
   createdAt?: string,
 ): FileDataV2 {
   const now = new Date().toISOString();
-
   if (ArrayBuffer.isView(content)) {
     return {
       content: Buffer.from(content).toString("base64"),
@@ -181,7 +189,6 @@ export function createFileDataV2(
       modified_at: now,
     };
   }
-
   return {
     content,
     created_at: createdAt || now,

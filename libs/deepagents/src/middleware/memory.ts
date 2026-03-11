@@ -209,10 +209,10 @@ async function loadMemoryFromBackend(
   // Use downloadFiles if available, otherwise fall back to read
   if (!backend.downloadFiles) {
     const content = await backend.read(path);
-    if (content.startsWith("Error:")) {
+    if (content.error) {
       return null;
     }
-    return content;
+    return content.content ?? null;
   }
 
   const results = await backend.downloadFiles([path]);

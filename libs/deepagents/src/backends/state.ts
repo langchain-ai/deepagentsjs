@@ -16,7 +16,7 @@ import type {
   WriteResult,
 } from "./protocol.js";
 import {
-  createFileDataV1,
+  createFileData,
   createFileDataV2,
   fileDataToString,
   getMimeType,
@@ -178,9 +178,9 @@ export class StateBackend implements BackendProtocol {
     }
 
     const newFileData =
-      this.fileFormat === "v1"
-        ? createFileDataV1(content)
-        : createFileDataV2(content);
+      this.fileFormat === "v2"
+        ? createFileDataV2(content)
+        : createFileData(content);
     return {
       path: filePath,
       filesUpdate: { [filePath]: newFileData },
@@ -293,9 +293,9 @@ export class StateBackend implements BackendProtocol {
         } else {
           const contentStr = new TextDecoder().decode(content);
           updates[path] =
-            this.fileFormat === "v1"
-              ? createFileDataV1(contentStr)
-              : createFileDataV2(contentStr);
+            this.fileFormat === "v2"
+              ? createFileDataV2(contentStr)
+              : createFileData(contentStr);
         }
 
         responses.push({ path, error: null });
