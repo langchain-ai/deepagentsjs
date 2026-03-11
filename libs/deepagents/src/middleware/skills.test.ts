@@ -338,9 +338,9 @@ description: A skill with very large content
         },
         async read(path: string) {
           if (path === "/skills/user/web-research/SKILL.md") {
-            return VALID_SKILL_CONTENT;
+            return { content: VALID_SKILL_CONTENT };
           }
-          return "Error: file not found";
+          return { error: "Error: file not found" };
         },
         // downloadFiles is NOT defined
         readFiles: vi.fn(),
@@ -375,7 +375,7 @@ description: A skill with very large content
           return [];
         },
         async read(_path: string) {
-          return "Error: permission denied";
+          return { error: "Error: permission denied" };
         },
         readFiles: vi.fn(),
         write: vi.fn(),

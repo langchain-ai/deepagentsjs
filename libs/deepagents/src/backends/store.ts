@@ -17,7 +17,7 @@ import type {
   WriteResult,
 } from "./protocol.js";
 import {
-  createFileDataV1,
+  createFileData,
   createFileDataV2,
   fileDataToString,
   getMimeType,
@@ -379,9 +379,9 @@ export class StoreBackend implements BackendProtocol {
 
     // Create new file
     const fileData =
-      this.fileFormat === "v1"
-        ? createFileDataV1(content)
-        : createFileDataV2(content);
+      this.fileFormat === "v2"
+        ? createFileDataV2(content)
+        : createFileData(content);
     const storeValue = this.convertFileDataToStoreValue(fileData);
     await store.put(namespace, filePath, storeValue);
     return { path: filePath, filesUpdate: null };
@@ -525,9 +525,9 @@ export class StoreBackend implements BackendProtocol {
         } else {
           const contentStr = new TextDecoder().decode(content);
           fileData =
-            this.fileFormat === "v1"
-              ? createFileDataV1(contentStr)
-              : createFileDataV2(contentStr);
+            this.fileFormat === "v2"
+              ? createFileDataV2(contentStr)
+              : createFileData(contentStr);
         }
 
         const storeValue = this.convertFileDataToStoreValue(fileData);
