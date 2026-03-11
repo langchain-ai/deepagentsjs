@@ -61,7 +61,7 @@ describe("FilesystemBackend", () => {
     expect(paths.has(path.join(root, "dir") + path.sep)).toBe(true);
 
     const txt = await backend.read(f1);
-    expect(txt).toContain("hello fs");
+    expect(txt.content).toContain("hello fs");
 
     const editMsg = await backend.edit(f1, "fs", "filesystem", false);
     expect(editMsg).toBeDefined();
@@ -77,10 +77,8 @@ describe("FilesystemBackend", () => {
     expect(writeMsg.path).toContain("new.txt");
 
     const matches = await backend.grepRaw("hello", root);
-    expect(Array.isArray(matches)).toBe(true);
-    if (Array.isArray(matches)) {
-      expect(matches.some((m) => m.path.endsWith("a.txt"))).toBe(true);
-    }
+    expect(matches.matches).toBeDefined();
+    expect(matches.matches!.some((m) => m.path.endsWith("a.txt"))).toBe(true);
 
     const globResults = await backend.globInfo("**/*.py", root);
     expect(globResults.some((i) => i.path === f2)).toBe(true);
@@ -105,7 +103,7 @@ describe("FilesystemBackend", () => {
     expect(paths.has("/dir/")).toBe(true);
 
     const txt = await backend.read("/a.txt");
-    expect(txt).toContain("hello virtual");
+    expect(txt.content).toContain("hello virtual");
 
     const editMsg = await backend.edit("/a.txt", "virtual", "virt", false);
     expect(editMsg).toBeDefined();
@@ -118,21 +116,19 @@ describe("FilesystemBackend", () => {
     expect(fsSync.existsSync(path.join(root, "new.txt"))).toBe(true);
 
     const matches = await backend.grepRaw("virt", "/");
-    expect(Array.isArray(matches)).toBe(true);
-    if (Array.isArray(matches)) {
-      expect(matches.some((m) => m.path === "/a.txt")).toBe(true);
-    }
+    expect(matches.matches).toBeDefined();
+    expect(matches.matches!.some((m) => m.path === "/a.txt")).toBe(true);
 
     const globResults = await backend.globInfo("**/*.md", "/");
     expect(globResults.some((i) => i.path === "/dir/b.md")).toBe(true);
 
     // Special characters like "[" are treated literally (not regex), returns empty list or matches
     const literalResult = await backend.grepRaw("[", "/");
-    expect(Array.isArray(literalResult)).toBe(true);
+    expect(literalResult.matches).toBeDefined();
 
     const traversalError = await backend.read("/../a.txt");
-    expect(traversalError).toContain("Error");
-    expect(traversalError).toContain("Path traversal not allowed");
+    expect(traversalError.error).toBeDefined();
+    expect(traversalError.error).toContain("Path traversal not allowed");
   });
 
   it("should list nested directories correctly in virtual mode", async () => {
@@ -264,7 +260,7 @@ describe("FilesystemBackend", () => {
     expect(writeResult.path).toBe("/large_file.txt");
 
     const readContent = await backend.read("/large_file.txt");
-    expect(readContent).toContain(largeContent.substring(0, 100));
+    expect(readContent.content).toContain(largeContent.substring(0, 100));
 
     const savedFile = path.join(root, "large_file.txt");
     expect(fsSync.existsSync(savedFile)).toBe(true);
@@ -281,9 +277,9 @@ describe("FilesystemBackend", () => {
     });
 
     const txt = await backend.read(filePath);
-    expect(txt).toContain("line1");
-    expect(txt).toContain("line2");
-    expect(txt).toContain("line3");
+    expect(txt.content).toContain("line1");
+    expect(txt.content).toContain("line2");
+    expect(txt.content).toContain("line3");
   });
 
   it("should handle empty files", async () => {
@@ -297,7 +293,7 @@ describe("FilesystemBackend", () => {
     });
 
     const txt = await backend.read(filePath);
-    expect(txt).toContain("empty contents");
+    expect(txt.content).toContain("empty contents");
   });
 
   it("should return error when editing non-empty file with empty oldString", async () => {
@@ -333,7 +329,7 @@ describe("FilesystemBackend", () => {
 
     // Verify the file now has content
     const content = await backend.read(filePath);
-    expect(content).toContain("initial content");
+    expect(content.content).toContain("initial content");
   });
 
   it("should handle files with trailing newlines", async () => {
@@ -347,8 +343,8 @@ describe("FilesystemBackend", () => {
     });
 
     const txt = await backend.read(filePath);
-    expect(txt).toContain("line1");
-    expect(txt).toContain("line2");
+    expect(txt.content).toContain("line1");
+    expect(txt.content).toContain("line2");
   });
 
   it("should handle unicode content", async () => {
@@ -362,9 +358,9 @@ describe("FilesystemBackend", () => {
     });
 
     const txt = await backend.read(filePath);
-    expect(txt).toContain("Hello 世界");
-    expect(txt).toContain("🚀 emoji");
-    expect(txt).toContain("Ω omega");
+    expect(txt.content).toContain("Hello 世界");
+    expect(txt.content).toContain("🚀 emoji");
+    expect(txt.content).toContain("Ω omega");
   });
 
   it("should handle non-existent files consistently", async () => {
@@ -377,7 +373,7 @@ describe("FilesystemBackend", () => {
     const nonexistentPath = path.join(root, "nonexistent.txt");
 
     const readResult = await backend.read(nonexistentPath);
-    expect(readResult).toContain("Error");
+    expect(readResult.error).toBeDefined();
   });
 
   it("should handle symlinks securely", async () => {
@@ -399,6 +395,120 @@ describe("FilesystemBackend", () => {
     });
 
     const readResult = await backend.read(symlinkFile);
-    expect(readResult).toContain("Error");
+    expect(readResult.error).toBeDefined();
+  });
+
+  describe("binary file handling", () => {
+    it("should read binary files as base64", async () => {
+      const root = tmpDir;
+      // PNG header bytes
+      const pngHeader = Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+      const filePath = path.join(root, "image.png");
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.writeFile(filePath, pngHeader);
+
+      const backend = new FilesystemBackend({
+        rootDir: root,
+        virtualMode: false,
+      });
+
+      const result = await backend.read(filePath);
+      expect(result.error).toBeUndefined();
+      expect(result.content).toBe(pngHeader.toString("base64"));
+    });
+
+    it("should write binary files by decoding base64", async () => {
+      const root = tmpDir;
+      const pngHeader = Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+      const base64Content = pngHeader.toString("base64");
+
+      const backend = new FilesystemBackend({
+        rootDir: root,
+        virtualMode: true,
+      });
+
+      const writeResult = await backend.write("/image.png", base64Content);
+      expect(writeResult.error).toBeUndefined();
+
+      // Verify raw bytes on disk match the original
+      const rawBytes = await fs.readFile(path.join(root, "image.png"));
+      expect(Buffer.compare(rawBytes, pngHeader)).toBe(0);
+    });
+
+    it("should roundtrip binary files through write and read", async () => {
+      const root = tmpDir;
+      const pngHeader = Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+      const base64Content = pngHeader.toString("base64");
+
+      const backend = new FilesystemBackend({
+        rootDir: root,
+        virtualMode: true,
+      });
+
+      await backend.write("/image.png", base64Content);
+      const result = await backend.read("/image.png");
+      expect(result.content).toBe(base64Content);
+    });
+
+    it("should not paginate binary files", async () => {
+      const root = tmpDir;
+      // Create binary content larger than a few lines
+      const binaryData = Buffer.alloc(2000, 0xab);
+      const filePath = path.join(root, "data.pdf");
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.writeFile(filePath, binaryData);
+
+      const backend = new FilesystemBackend({
+        rootDir: root,
+        virtualMode: false,
+      });
+
+      // Read with a small limit — should still return full base64 content
+      const result = await backend.read(filePath, 0, 1);
+      expect(result.error).toBeUndefined();
+      expect(result.content).toBe(binaryData.toString("base64"));
+    });
+  });
+
+  describe("readRaw", () => {
+    it("should return v2 format for text files", async () => {
+      const root = tmpDir;
+      const filePath = path.join(root, "test.txt");
+      await writeFile(filePath, "line1\nline2");
+
+      const backend = new FilesystemBackend({
+        rootDir: root,
+        virtualMode: false,
+      });
+
+      const result = await backend.readRaw(filePath);
+      expect(typeof result.content).toBe("string");
+      expect(result.content).toBe("line1\nline2");
+      expect(result.created_at).toBeDefined();
+      expect(result.modified_at).toBeDefined();
+    });
+
+    it("should return base64-encoded v2 format for binary files", async () => {
+      const root = tmpDir;
+      const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+      const filePath = path.join(root, "image.png");
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.writeFile(filePath, pngHeader);
+
+      const backend = new FilesystemBackend({
+        rootDir: root,
+        virtualMode: false,
+      });
+
+      const result = await backend.readRaw(filePath);
+      expect(typeof result.content).toBe("string");
+      expect(result.content).toBe(pngHeader.toString("base64"));
+    });
   });
 });
