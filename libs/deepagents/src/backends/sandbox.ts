@@ -388,22 +388,19 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
 
     const now = new Date().toISOString();
     const mimeType = getMimeType(filePath);
-    const buffer = results[0].content;
-    let content = Buffer.from(buffer).toString("base64");
 
+    // Binary: store as base64
     if (!isTextMimeType(mimeType)) {
       return {
-        content,
+        content: Buffer.from(results[0].content).toString("base64"),
         created_at: now,
         modified_at: now,
       };
     }
 
-    content = new TextDecoder().decode(results[0].content);
-    const lines = content.split("\n");
-
+    // Text: store as string (v2 format)
     return {
-      content: lines,
+      content: new TextDecoder().decode(results[0].content),
       created_at: now,
       modified_at: now,
     };
