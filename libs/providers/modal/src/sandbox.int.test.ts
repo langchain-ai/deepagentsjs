@@ -34,9 +34,11 @@ sandboxStandardTests({
   name: "ModalSandbox",
   skip: !hasCredentials,
   timeout: TEST_TIMEOUT,
+  sequential: true,
   createSandbox: async (options) =>
     ModalSandbox.create({
       imageName: "alpine:3.21",
+      timeoutMs: 900_000,
       ...options,
     }),
   createUninitializedSandbox: () =>
@@ -55,6 +57,7 @@ describe.skipIf(!hasCredentials)("ModalSandbox Provider-Specific Tests", () => {
         sandbox = await withRetry(() =>
           ModalSandbox.create({
             imageName: "alpine:3.21",
+            timeoutMs: 300_000,
             initialFiles: {
               "/tmp/binary-init.txt": encoder.encode("Binary content test"),
             },
@@ -88,6 +91,7 @@ describe.skipIf(!hasCredentials)("ModalSandbox Provider-Specific Tests", () => {
         sandbox = await withRetry(() =>
           ModalSandbox.create({
             imageName: "alpine:3.21",
+            timeoutMs: 300_000,
             initialFiles: {
               "/tmp/download-init.txt": "Content to download",
             },
@@ -133,6 +137,7 @@ describe.skipIf(!hasCredentials)("ModalSandbox Provider-Specific Tests", () => {
         sandbox = await withRetry(() =>
           ModalSandbox.create({
             imageName: "alpine:3.21",
+            timeoutMs: 300_000,
             initialFiles: {
               "/app/config.json": configContent,
             },
