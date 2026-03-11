@@ -81,6 +81,31 @@ export {
   type ListSkillsOptions,
 } from "./skills/index.js";
 
+// Export observer middleware
+export { createObserverMiddleware } from "./middleware/observer.js";
+
+// Export observer module
+export {
+  createSessionHandle,
+  createCompanionAgent,
+  createObserveTool,
+  createSteerTool,
+  type ActivityEvent,
+  type ActivityEventType,
+  type ControlCommand,
+  type ControlCommandKind,
+  type SessionHandle,
+  type SessionSnapshot,
+  type SessionEventPage,
+  type CreateSessionHandleParams,
+  type CreateCompanionAgentParams,
+  type ObserverMiddlewareOptions,
+  type CaptureConfig,
+  type ObserveAgentInput,
+  type SteerAgentInput,
+  type TodoItem,
+} from "./observer/index.js";
+
 // Export backends
 export {
   StateBackend,

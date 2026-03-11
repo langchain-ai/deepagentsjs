@@ -37,6 +37,11 @@ export {
   MAX_SKILL_DESCRIPTION_LENGTH,
 } from "./skills.js";
 
+// Observer middleware
+export {
+  createObserverMiddleware,
+} from "./observer.js";
+
 // Middleware utilities
 export { appendToSystemMessage, prependToSystemMessage } from "./utils.js";
 
