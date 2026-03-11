@@ -32,6 +32,7 @@ import {
   sanitizeToolCallId,
   formatContentWithLineNumbers,
   truncateIfTooLong,
+  getMimeType,
 } from "../backends/utils.js";
 
 /**
@@ -144,13 +145,27 @@ import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
 
 /**
- * Zod v3 schema for FileData (re-export from backends)
+ * ...
  */
-export const FileDataSchema = z.object({
+export const FileDataV1Schema = z.object({
   content: z.array(z.string()),
   created_at: z.string(),
   modified_at: z.string(),
 });
+
+/**
+ * ...
+ */
+export const FileDataV2Schema = z.object({
+  content: z.string(),
+  created_at: z.string(),
+  modified_at: z.string(),
+});
+
+/**
+ * Zod v3 schema for FileData (re-export from backends)
+ */
+export const FileDataSchema = z.union([FileDataV1Schema, FileDataV2Schema]);
 
 /**
  * Type for the files state record.
@@ -440,18 +455,44 @@ function createReadFileTool(
         offset = DEFAULT_READ_LINE_OFFSET,
         limit = DEFAULT_READ_LINE_LIMIT,
       } = input;
-      let result = await resolvedBackend.read(file_path, offset, limit);
+
+      const readResult = await resolvedBackend.read(file_path, offset, limit);
+      if (readResult.error) {
+        return [{ type: "text", text: `Error: ${readResult.error}` }];
+      }
+
+      const mimeType = getMimeType(file_path);
+
+      if (mimeType.startsWith("image/")) {
+        return [{ type: "image", mimeType, data: readResult.content }];
+      }
+
+      if (mimeType.startsWith("audio/")) {
+        return [{ type: "audio", mimeType, data: readResult.content }];
+      }
+
+      if (mimeType.startsWith("video/")) {
+        return [{ type: "video", mimeType, data: readResult.content }];
+      }
+
+      if (mimeType === "application/pdf") {
+        return [{ type: "file", mimeType, data: readResult.content }];
+      }
+
+      let content = readResult.content ?? "";
 
       // Enforce line limit on result (in case backend returns more)
-      const lines = result.split("\n");
+      const lines = content.split("\n");
       if (lines.length > limit) {
-        result = lines.slice(0, limit).join("\n");
+        content = lines.slice(0, limit).join("\n");
       }
+
+      let formatted = formatContentWithLineNumbers(content, offset + 1);
 
       // Check if result exceeds token threshold and truncate if necessary
       if (
         toolTokenLimitBeforeEvict &&
-        result.length >= NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict
+        formatted.length >= NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict
       ) {
         // Calculate truncation message length to ensure final result stays under threshold
         const truncationMsg = READ_FILE_TRUNCATION_MSG.replace(
@@ -461,10 +502,10 @@ function createReadFileTool(
         const maxContentLength =
           NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict -
           truncationMsg.length;
-        result = result.substring(0, maxContentLength) + truncationMsg;
+        formatted = formatted.substring(0, maxContentLength) + truncationMsg;
       }
 
-      return result;
+      return [{ type: "text", text: formatted }];
     },
     {
       name: "read_file",
@@ -665,18 +706,20 @@ function createGrepTool(
       const result = await resolvedBackend.grepRaw(pattern, path, glob);
 
       // If string, it's an error
-      if (typeof result === "string") {
-        return result;
+      if (result.error) {
+        return result.error;
       }
 
-      if (result.length === 0) {
+      const matches = result.matches ?? [];
+
+      if (matches.length === 0) {
         return `No matches found for pattern '${pattern}'`;
       }
 
       // Format output: group by file
       const lines: string[] = [];
       let currentFile: string | null = null;
-      for (const match of result) {
+      for (const match of matches) {
         if (match.path !== currentFile) {
           currentFile = match.path;
           lines.push(`\n${currentFile}:`);
