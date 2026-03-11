@@ -118,12 +118,15 @@ export class StateBackend implements BackendProtocol {
   }
 
   /**
-   * Read file content with line numbers.
+   * Read file content.
+   *
+   * Text files are paginated by line offset/limit.
+   * Binary files return full base64-encoded content (offset/limit ignored).
    *
    * @param filePath - Absolute file path
    * @param offset - Line offset to start reading from (0-indexed)
    * @param limit - Maximum number of lines to read
-   * @returns TODO
+   * @returns ReadResult with content on success or error on failure
    */
   read(filePath: string, offset: number = 0, limit: number = 500): ReadResult {
     const files = this.getFiles();
@@ -223,7 +226,8 @@ export class StateBackend implements BackendProtocol {
   }
 
   /**
-   * Structured search results or error string for invalid input.
+   * Search file contents for a literal text pattern.
+   * Binary files are skipped.
    */
   grepRaw(
     pattern: string,
