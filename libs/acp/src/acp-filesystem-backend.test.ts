@@ -47,7 +47,7 @@ describe("ACPFilesystemBackend", () => {
       const result = await backend.read(path.join(tmpDir, "local.txt"));
 
       expect(mockConn.readTextFile).toHaveBeenCalledTimes(1);
-      expect(result).toBe("acp file content");
+      expect(result.content).toBe("acp file content");
     });
 
     it("should resolve relative paths using cwd", async () => {
@@ -73,7 +73,7 @@ describe("ACPFilesystemBackend", () => {
       const result = await backend.read(path.join(tmpDir, "local.txt"));
 
       expect(mockConn.readTextFile).not.toHaveBeenCalled();
-      expect(result).toContain("local file content");
+      expect(result.content).toContain("local file content");
     });
 
     it("should fall back to local FS when ACP read fails", async () => {
@@ -87,7 +87,7 @@ describe("ACPFilesystemBackend", () => {
       const result = await backend.read(path.join(tmpDir, "local.txt"));
 
       expect(mockConn.readTextFile).toHaveBeenCalledTimes(1);
-      expect(result).toContain("local file content");
+      expect(result.content).toContain("local file content");
     });
 
     it("should handle offset and limit when reading via ACP", async () => {
@@ -102,7 +102,7 @@ describe("ACPFilesystemBackend", () => {
 
       const result = await backend.read(path.join(tmpDir, "local.txt"), 1, 2);
 
-      expect(result).toBe("line1\nline2");
+      expect(result.content).toBe("line1\nline2");
     });
 
     it("should pass sessionId in readTextFile call", async () => {
