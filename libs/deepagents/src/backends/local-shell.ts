@@ -19,6 +19,7 @@ import type {
   EditResult,
   ExecuteResponse,
   FileInfo,
+  ReadResult,
   SandboxBackendProtocol,
 } from "./protocol.js";
 import { SandboxError } from "./protocol.js";
@@ -218,14 +219,10 @@ export class LocalShellBackend
     filePath: string,
     offset: number = 0,
     limit: number = 500,
-  ): Promise<string> {
+  ): Promise<ReadResult> {
     const result = await super.read(filePath, offset, limit);
-    if (
-      typeof result === "string" &&
-      result.startsWith("Error reading file") &&
-      result.includes("ENOENT")
-    ) {
-      return `Error: File '${filePath}' not found`;
+    if (result.error?.includes("ENOENT")) {
+      return { error: `File '${filePath}' not found` };
     }
     return result;
   }
