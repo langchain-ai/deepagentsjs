@@ -7,6 +7,7 @@
 
 export type {
   BackendProtocol,
+  BackendProtocolV2,
   BackendFactory,
   FileData,
   FileInfo,
