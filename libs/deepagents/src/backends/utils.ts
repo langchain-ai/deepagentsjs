@@ -142,9 +142,30 @@ export function fileDataToString(fileData: FileData): string {
  *
  * @param content
  * @param createdAt
+ */
+export function createFileDataV1(
+  content: string,
+  createdAt?: string,
+): FileDataV1 {
+  const lines = typeof content === "string" ? content.split("\n") : content;
+  const now = new Date().toISOString();
+
+  return {
+    content: lines,
+    created_at: createdAt || now,
+    modified_at: now,
+  };
+}
+
+/**
+ * ...
+ *
+ * @param content
+ * @param fileFormat
+ * @param createdAt
  * @returns
  */
-export function createFileData(
+export function createFileDataV2(
   content: string | Uint8Array,
   createdAt?: string,
 ): FileDataV2 {
@@ -173,11 +194,19 @@ export function createFileData(
  * @returns Updated FileData object
  */
 export function updateFileData(fileData: FileData, content: string): FileData {
-  const lines = typeof content === "string" ? content.split("\n") : content;
   const now = new Date().toISOString();
 
+  if (isFileDataV1(fileData)) {
+    const lines = typeof content === "string" ? content.split("\n") : content;
+    return {
+      content: lines,
+      created_at: fileData.created_at,
+      modified_at: now,
+    };
+  }
+
   return {
-    content: lines,
+    content,
     created_at: fileData.created_at,
     modified_at: now,
   };
@@ -546,8 +575,17 @@ export function grepSearchFiles(
 
   const results: Record<string, Array<[number, string]>> = {};
   for (const [filePath, fileData] of Object.entries(filtered)) {
-    for (let i = 0; i < fileData.content.length; i++) {
-      const line = fileData.content[i];
+    const mimeType = getMimeType(filePath);
+
+    if (!isTextMimeType(mimeType)) {
+      continue;
+    }
+
+    const content = fileDataToString(fileData);
+    const lines = content.split("\n");
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       const lineNum = i + 1;
       // Simple substring search for literal matching
       if (line.includes(pattern)) {
@@ -579,7 +617,7 @@ export function grepMatchesFromFiles(
   pattern: string,
   path: string | null = null,
   glob: string | null = null,
-): GrepMatch[] | string {
+): GrepMatch[] {
   let normalizedPath: string;
   try {
     normalizedPath = validatePath(path);
@@ -601,8 +639,17 @@ export function grepMatchesFromFiles(
 
   const matches: GrepMatch[] = [];
   for (const [filePath, fileData] of Object.entries(filtered)) {
-    for (let i = 0; i < fileData.content.length; i++) {
-      const line = fileData.content[i];
+    const mimeType = getMimeType(filePath);
+
+    if (!isTextMimeType(mimeType)) {
+      continue;
+    }
+
+    const content = fileDataToString(fileData);
+    const lines = content.split("\n");
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       const lineNum = i + 1;
       // Simple substring search for literal matching
       if (line.includes(pattern)) {

@@ -178,6 +178,10 @@ export interface FileUploadResponse {
   error: FileOperationError | null;
 }
 
+export interface BackendOptions {
+  fileFormat?: "v1" | "v2";
+}
+
 /**
  * Protocol for pluggable memory backends (single, unified).
  *
