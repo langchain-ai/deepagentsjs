@@ -59,8 +59,7 @@ describe("StateBackend", () => {
     expect(readRes2.content).toContain("hi world");
 
     const listing = backend.lsInfo("/");
-    expect(listing.error).toBeUndefined();
-    expect(listing.files!.some((fi) => fi.path === "/notes.txt")).toBe(true);
+    expect(listing.some((fi) => fi.path === "/notes.txt")).toBe(true);
 
     const grepRes = backend.grepRaw("hi", "/");
     expect(grepRes.error).toBeUndefined();
@@ -73,8 +72,7 @@ describe("StateBackend", () => {
     expect(literalResult.matches).toBeDefined();
 
     const infos = backend.globInfo("*.txt", "/");
-    expect(infos.error).toBeUndefined();
-    expect(infos.files!.some((i) => i.path === "/notes.txt")).toBe(true);
+    expect(infos.some((i) => i.path === "/notes.txt")).toBe(true);
   });
 
   it("should handle errors correctly", () => {
@@ -114,8 +112,7 @@ describe("StateBackend", () => {
     }
 
     const rootListing = backend.lsInfo("/");
-    expect(rootListing.error).toBeUndefined();
-    const rootPaths = rootListing.files!.map((fi) => fi.path);
+    const rootPaths = rootListing.map((fi) => fi.path);
     expect(rootPaths).toContain("/config.json");
     expect(rootPaths).toContain("/src/");
     expect(rootPaths).toContain("/docs/");
@@ -123,22 +120,19 @@ describe("StateBackend", () => {
     expect(rootPaths).not.toContain("/src/utils/helper.py");
 
     const srcListing = backend.lsInfo("/src/");
-    expect(srcListing.error).toBeUndefined();
-    const srcPaths = srcListing.files!.map((fi) => fi.path);
+    const srcPaths = srcListing.map((fi) => fi.path);
     expect(srcPaths).toContain("/src/main.py");
     expect(srcPaths).toContain("/src/utils/");
     expect(srcPaths).not.toContain("/src/utils/helper.py");
 
     const utilsListing = backend.lsInfo("/src/utils/");
-    expect(utilsListing.error).toBeUndefined();
-    const utilsPaths = utilsListing.files!.map((fi) => fi.path);
+    const utilsPaths = utilsListing.map((fi) => fi.path);
     expect(utilsPaths).toContain("/src/utils/helper.py");
     expect(utilsPaths).toContain("/src/utils/common.py");
     expect(utilsPaths).toHaveLength(2);
 
     const emptyListing = backend.lsInfo("/nonexistent/");
-    expect(emptyListing.error).toBeUndefined();
-    expect(emptyListing.files).toEqual([]);
+    expect(emptyListing).toEqual([]);
   });
 
   it("should handle trailing slashes in ls", () => {
@@ -157,16 +151,14 @@ describe("StateBackend", () => {
     }
 
     const listingWithSlash = backend.lsInfo("/");
-    expect(listingWithSlash.error).toBeUndefined();
-    expect(listingWithSlash.files).toHaveLength(2);
-    const rootPaths = listingWithSlash.files!.map((fi) => fi.path);
+    expect(listingWithSlash).toHaveLength(2);
+    const rootPaths = listingWithSlash.map((fi) => fi.path);
     expect(rootPaths).toContain("/file.txt");
     expect(rootPaths).toContain("/dir/");
 
     const listingFromDir = backend.lsInfo("/dir/");
-    expect(listingFromDir.error).toBeUndefined();
-    expect(listingFromDir.files).toHaveLength(1);
-    expect(listingFromDir.files![0].path).toBe("/dir/nested.txt");
+    expect(listingFromDir).toHaveLength(1);
+    expect(listingFromDir[0].path).toBe("/dir/nested.txt");
   });
 
   it("should handle read with offset and limit", () => {
@@ -227,66 +219,6 @@ describe("StateBackend", () => {
     expect(grepRes.matches![0].path).toBe("/test.py");
   });
 
-  it("should return ReadRawResult with v2 shape from readRaw", () => {
-    const { state, stateAndStore } = makeConfig();
-    const backend = new StateBackend(stateAndStore);
-
-    const writeRes = backend.write("/data.txt", "hello world");
-    Object.assign(state.files, writeRes.filesUpdate!);
-
-    const raw = backend.readRaw("/data.txt");
-    expect(raw.error).toBeUndefined();
-    expect(raw.data).toBeDefined();
-    expect(typeof raw.data!.content).toBe("string");
-    expect(raw.data!.content).toBe("hello world");
-    expect((raw.data as any).mimeType).toBe("text/plain");
-    expect(raw.data!.created_at).toBeDefined();
-    expect(raw.data!.modified_at).toBeDefined();
-  });
-
-  it("should return ReadRawResult with error for missing file", () => {
-    const { stateAndStore } = makeConfig();
-    const backend = new StateBackend(stateAndStore);
-
-    const raw = backend.readRaw("/nonexistent.txt");
-    expect(raw.error).toBeDefined();
-    expect(raw.data).toBeUndefined();
-  });
-
-  it("should return ReadRawResult for binary files with Uint8Array content", () => {
-    const { state, stateAndStore } = makeConfig();
-    const backend = new StateBackend(stateAndStore);
-
-    const pngBytes = new Uint8Array([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-    ]);
-    const uploadResult = backend.uploadFiles([["/image.png", pngBytes]]);
-    Object.assign(state.files, (uploadResult as any).filesUpdate);
-
-    const raw = backend.readRaw("/image.png");
-    expect(raw.error).toBeUndefined();
-    expect(raw.data).toBeDefined();
-    expect(raw.data!.content).toBeInstanceOf(Uint8Array);
-    expect(raw.data!.content).toEqual(pngBytes);
-    expect((raw.data as any).mimeType).toBe("image/png");
-  });
-
-  it("should return ReadRawResult for v1 data with joined content", () => {
-    const v1FileData: FileDataV1 = {
-      content: ["line1", "line2", "line3"],
-      created_at: "2024-01-01T00:00:00.000Z",
-      modified_at: "2024-01-01T00:00:00.000Z",
-    };
-    const { stateAndStore } = makeConfig({ "/legacy.txt": v1FileData });
-    const backend = new StateBackend(stateAndStore);
-
-    const raw = backend.readRaw("/legacy.txt");
-    expect(raw.error).toBeUndefined();
-    expect(raw.data).toBeDefined();
-    // v1 data should still be returned as-is (content as string[])
-    expect(Array.isArray(raw.data!.content)).toBe(true);
-  });
-
   it("should return empty content warning for empty files", () => {
     const { state, stateAndStore } = makeConfig();
     const backend = new StateBackend(stateAndStore);
@@ -334,22 +266,6 @@ describe("StateBackend", () => {
       expect(result[0].error).toBeNull();
       expect((result as any).filesUpdate["/hello.txt"].content).toBe("Hello");
     });
-
-    it("should upload binary (image) files as Uint8Array", () => {
-      const { state, stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore);
-
-      const pngBytes = new Uint8Array([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      ]);
-      const result = backend.uploadFiles([["/image.png", pngBytes]]);
-      expect(result[0].error).toBeNull();
-
-      Object.assign(state.files, (result as any).filesUpdate);
-      const stored = state.files["/image.png"];
-      expect(stored.content).toBeInstanceOf(Uint8Array);
-      expect(stored.content).toEqual(pngBytes);
-    });
   });
 
   describe("downloadFiles", () => {
@@ -396,92 +312,6 @@ describe("StateBackend", () => {
 
       expect(result[1].error).toBe("file_not_found");
       expect(result[1].content).toBeNull();
-    });
-
-    it("should download binary files as raw bytes", () => {
-      const { state, stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore);
-
-      const pngBytes = new Uint8Array([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      ]);
-
-      const uploadResult = backend.uploadFiles([["/image.png", pngBytes]]);
-      Object.assign(state.files, (uploadResult as any).filesUpdate);
-
-      const result = backend.downloadFiles(["/image.png"]);
-      expect(result).toHaveLength(1);
-      expect(result[0].error).toBeNull();
-      expect(result[0].content).not.toBeNull();
-      expect(new Uint8Array(result[0].content!)).toEqual(pngBytes);
-    });
-  });
-
-  describe("binary file round-trip", () => {
-    it("should upload and download binary files with identical bytes", () => {
-      const { state, stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore);
-
-      const originalBytes = new Uint8Array(256);
-      for (let i = 0; i < 256; i++) originalBytes[i] = i;
-
-      const uploadResult = backend.uploadFiles([["/data.png", originalBytes]]);
-      expect(uploadResult[0].error).toBeNull();
-      Object.assign(state.files, (uploadResult as any).filesUpdate);
-
-      const downloadResult = backend.downloadFiles(["/data.png"]);
-      expect(downloadResult[0].error).toBeNull();
-      expect(new Uint8Array(downloadResult[0].content!)).toEqual(originalBytes);
-    });
-
-    it("should read binary files as Uint8Array content", () => {
-      const { state, stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore);
-
-      const pngBytes = new Uint8Array([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      ]);
-
-      const uploadResult = backend.uploadFiles([["/photo.png", pngBytes]]);
-      Object.assign(state.files, (uploadResult as any).filesUpdate);
-
-      const readResult = backend.read("/photo.png");
-      expect(readResult.error).toBeUndefined();
-      expect(readResult.content).toBeInstanceOf(Uint8Array);
-      expect(readResult.content).toEqual(pngBytes);
-    });
-
-    it("should skip binary files in grep", () => {
-      const { state, stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore);
-
-      const pngBytes = new Uint8Array([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      ]);
-      const uploadResult = backend.uploadFiles([["/image.png", pngBytes]]);
-      Object.assign(state.files, (uploadResult as any).filesUpdate);
-
-      const writeRes = backend.write("/notes.txt", "hello PNG");
-      Object.assign(state.files, writeRes.filesUpdate);
-
-      const grepRes = backend.grepRaw("PNG", "/");
-      expect(grepRes.matches).toHaveLength(1);
-      expect(grepRes.matches![0].path).toBe("/notes.txt");
-    });
-
-    it("should ignore offset/limit for binary reads", () => {
-      const { state, stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore);
-
-      const pngBytes = new Uint8Array([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      ]);
-      const uploadResult = backend.uploadFiles([["/img.png", pngBytes]]);
-      Object.assign(state.files, (uploadResult as any).filesUpdate);
-
-      const full = backend.read("/img.png");
-      const withOffsetLimit = backend.read("/img.png", 5, 2);
-      expect(withOffsetLimit.content).toBe(full.content);
     });
   });
 
@@ -671,9 +501,8 @@ describe("StateBackend", () => {
       Object.assign(state.files, writeRes.filesUpdate!);
 
       const listing = backend.lsInfo("/");
-      expect(listing.error).toBeUndefined();
-      expect(listing.files).toHaveLength(2);
-      for (const info of listing.files!) {
+      expect(listing).toHaveLength(2);
+      for (const info of listing) {
         expect(info.size).toBe(5);
       }
     });
