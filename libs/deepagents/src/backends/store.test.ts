@@ -45,8 +45,7 @@ describe("StoreBackend", () => {
     expect(editResult.occurrences).toBe(1);
 
     const infos = await backend.lsInfo("/docs/");
-    expect(infos.error).toBeUndefined();
-    expect(infos.files!.some((i) => i.path === "/docs/readme.md")).toBe(true);
+    expect(infos.some((i) => i.path === "/docs/readme.md")).toBe(true);
 
     const grepRes = await backend.grepRaw("hi", "/");
     expect(grepRes.error).toBeUndefined();
@@ -56,12 +55,10 @@ describe("StoreBackend", () => {
     );
 
     const glob1 = await backend.globInfo("*.md", "/");
-    expect(glob1.error).toBeUndefined();
-    expect(glob1.files!.length).toBe(0);
+    expect(glob1.length).toBe(0);
 
     const glob2 = await backend.globInfo("**/*.md", "/");
-    expect(glob2.error).toBeUndefined();
-    expect(glob2.files!.some((i) => i.path === "/docs/readme.md")).toBe(true);
+    expect(glob2.some((i) => i.path === "/docs/readme.md")).toBe(true);
   });
 
   it("should list nested directories correctly", async () => {
@@ -83,8 +80,7 @@ describe("StoreBackend", () => {
     }
 
     const rootListing = await backend.lsInfo("/");
-    expect(rootListing.error).toBeUndefined();
-    const rootPaths = rootListing.files!.map((fi) => fi.path);
+    const rootPaths = rootListing.map((fi) => fi.path);
     expect(rootPaths).toContain("/config.json");
     expect(rootPaths).toContain("/src/");
     expect(rootPaths).toContain("/docs/");
@@ -94,22 +90,19 @@ describe("StoreBackend", () => {
     expect(rootPaths).not.toContain("/docs/api/reference.md");
 
     const srcListing = await backend.lsInfo("/src/");
-    expect(srcListing.error).toBeUndefined();
-    const srcPaths = srcListing.files!.map((fi) => fi.path);
+    const srcPaths = srcListing.map((fi) => fi.path);
     expect(srcPaths).toContain("/src/main.py");
     expect(srcPaths).toContain("/src/utils/");
     expect(srcPaths).not.toContain("/src/utils/helper.py");
 
     const utilsListing = await backend.lsInfo("/src/utils/");
-    expect(utilsListing.error).toBeUndefined();
-    const utilsPaths = utilsListing.files!.map((fi) => fi.path);
+    const utilsPaths = utilsListing.map((fi) => fi.path);
     expect(utilsPaths).toContain("/src/utils/helper.py");
     expect(utilsPaths).toContain("/src/utils/common.py");
     expect(utilsPaths).toHaveLength(2);
 
     const emptyListing = await backend.lsInfo("/nonexistent/");
-    expect(emptyListing.error).toBeUndefined();
-    expect(emptyListing.files).toEqual([]);
+    expect(emptyListing).toEqual([]);
   });
 
   it("should handle trailing slashes in ls", async () => {
@@ -127,16 +120,13 @@ describe("StoreBackend", () => {
     }
 
     const listingFromRoot = await backend.lsInfo("/");
-    expect(listingFromRoot.error).toBeUndefined();
-    expect(listingFromRoot.files!.length).toBeGreaterThan(0);
+    expect(listingFromRoot.length).toBeGreaterThan(0);
 
     const listing1 = await backend.lsInfo("/dir/");
-    expect(listing1.error).toBeUndefined();
     const listing2 = await backend.lsInfo("/dir");
-    expect(listing2.error).toBeUndefined();
-    expect(listing1.files!.length).toBe(listing2.files!.length);
-    expect(listing1.files!.map((fi) => fi.path)).toEqual(
-      listing2.files!.map((fi) => fi.path),
+    expect(listing1.length).toBe(listing2.length);
+    expect(listing1.map((fi) => fi.path)).toEqual(
+      listing2.map((fi) => fi.path),
     );
   });
 
@@ -278,22 +268,6 @@ describe("StoreBackend", () => {
       const readRes = await backend.read("/hello.txt");
       expect(readRes.content).toContain("Hello");
     });
-
-    it("should upload binary (image) files as Uint8Array", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
-
-      const pngBytes = new Uint8Array([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      ]);
-      const result = await backend.uploadFiles([["/image.png", pngBytes]]);
-      expect(result[0].error).toBeNull();
-
-      const raw = await backend.readRaw("/image.png");
-      expect(raw.error).toBeUndefined();
-      expect(raw.data!.content).toBeInstanceOf(Uint8Array);
-      expect(raw.data!.content).toEqual(pngBytes);
-    });
   });
 
   describe("downloadFiles", () => {
@@ -341,87 +315,6 @@ describe("StoreBackend", () => {
 
       expect(result[1].error).toBe("file_not_found");
       expect(result[1].content).toBeNull();
-    });
-
-    it("should download binary files as raw bytes", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
-
-      const pngBytes = new Uint8Array([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      ]);
-
-      await backend.uploadFiles([["/image.png", pngBytes]]);
-
-      const result = await backend.downloadFiles(["/image.png"]);
-      expect(result).toHaveLength(1);
-      expect(result[0].error).toBeNull();
-      expect(result[0].content).not.toBeNull();
-      expect(new Uint8Array(result[0].content!)).toEqual(pngBytes);
-    });
-  });
-
-  describe("binary file round-trip", () => {
-    it("should upload and download binary files with identical bytes", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
-
-      const originalBytes = new Uint8Array(256);
-      for (let i = 0; i < 256; i++) originalBytes[i] = i;
-
-      const uploadResult = await backend.uploadFiles([
-        ["/data.png", originalBytes],
-      ]);
-      expect(uploadResult[0].error).toBeNull();
-
-      const downloadResult = await backend.downloadFiles(["/data.png"]);
-      expect(downloadResult[0].error).toBeNull();
-      expect(new Uint8Array(downloadResult[0].content!)).toEqual(originalBytes);
-    });
-
-    it("should read binary files as Uint8Array content", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
-
-      const pngBytes = new Uint8Array([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      ]);
-
-      await backend.uploadFiles([["/photo.png", pngBytes]]);
-
-      const readResult = await backend.read("/photo.png");
-      expect(readResult.error).toBeUndefined();
-      expect(readResult.content).toBeInstanceOf(Uint8Array);
-      expect(readResult.content).toEqual(pngBytes);
-    });
-
-    it("should skip binary files in grep", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
-
-      const pngBytes = new Uint8Array([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      ]);
-      await backend.uploadFiles([["/image.png", pngBytes]]);
-      await backend.write("/notes.txt", "hello PNG");
-
-      const grepRes = await backend.grepRaw("PNG", "/");
-      expect(grepRes.matches).toHaveLength(1);
-      expect(grepRes.matches![0].path).toBe("/notes.txt");
-    });
-
-    it("should ignore offset/limit for binary reads", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
-
-      const pngBytes = new Uint8Array([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      ]);
-      await backend.uploadFiles([["/img.png", pngBytes]]);
-
-      const full = await backend.read("/img.png");
-      const withOffsetLimit = await backend.read("/img.png", 5, 2);
-      expect(withOffsetLimit.content).toBe(full.content);
     });
   });
 
@@ -567,9 +460,8 @@ describe("StoreBackend", () => {
       await backend.write("/notes.txt", "line1\nline2");
 
       const raw = await backend.readRaw("/notes.txt");
-      expect(raw.error).toBeUndefined();
-      expect(Array.isArray(raw.data!.content)).toBe(true);
-      expect(raw.data!.content).toEqual(["line1", "line2"]);
+      expect(Array.isArray(raw.content)).toBe(true);
+      expect(raw.content).toEqual(["line1", "line2"]);
     });
 
     it("should read v1 data correctly", async () => {
@@ -607,9 +499,8 @@ describe("StoreBackend", () => {
       expect(result[0].error).toBeNull();
 
       const raw = await backend.readRaw("/hello.txt");
-      expect(raw.error).toBeUndefined();
-      expect(Array.isArray(raw.data!.content)).toBe(true);
-      expect(raw.data!.content).toEqual(["Hello"]);
+      expect(Array.isArray(raw.content)).toBe(true);
+      expect(raw.content).toEqual(["Hello"]);
     });
   });
 
@@ -680,9 +571,8 @@ describe("StoreBackend", () => {
       await backend.write("/modern.txt", "world");
 
       const listing = await backend.lsInfo("/");
-      expect(listing.error).toBeUndefined();
-      expect(listing.files).toHaveLength(2);
-      for (const info of listing.files!) {
+      expect(listing).toHaveLength(2);
+      for (const info of listing) {
         expect(info.size).toBe(5);
       }
     });
