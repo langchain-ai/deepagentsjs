@@ -610,6 +610,12 @@ export class FilesystemBackend implements BackendProtocol {
 
     for (const fp of files) {
       try {
+        // Skip binary files
+        const mimeType = getMimeType(fp);
+        if (!isTextMimeType(mimeType)) {
+          continue;
+        }
+
         // Filter by glob if provided
         if (
           includeGlob &&
