@@ -1,73 +1,60 @@
 /**
  * Worker-side JavaScript runtime for PTC.
  *
- * This code is injected into Web Workers or Node.js Worker Threads before
- * the user's script. It provides `toolCall()`, `spawnAgent()`, and
- * `console.log` via `postMessage` IPC — no filesystem or process.stderr needed.
+ * Security model:
+ * - **Node.js Worker Threads**: User code runs inside a `vm.createContext()`
+ *   with only whitelisted globals. No `require`, `process`, `fs`, `Buffer`,
+ *   `fetch`, or `import` — only `toolCall`, `spawnAgent`, `console`, `JSON`,
+ *   `Math`, `Promise`, `Array`, `Object`, etc.
+ * - **Web Workers**: Already restricted by the browser — no filesystem,
+ *   no `require`, no `process`. Code runs directly in the Worker scope.
  *
  * Communication protocol (Worker <-> Main thread):
- *
  *   Worker  -> Main:  { type: "tool_call", uuid, name, input }
  *   Main    -> Worker: { type: "tool_result", uuid, ok, result?, error? }
- *   Worker  -> Main:  { type: "log", args }
+ *   Worker  -> Main:  { type: "log", text }
  *   Worker  -> Main:  { type: "result", ok, value?, error? }
  */
 
 /**
- * Runtime source code evaluated inside the Worker.
+ * Node.js Worker Thread bootstrap.
  *
- * Uses an async message-based IPC pattern:
- * - `toolCall(name, input)` returns a Promise that resolves when the
- *   main thread replies with the matching uuid.
- * - `spawnAgent(description, type)` is sugar for `toolCall("task", {...})`.
- * - `console.log/warn/error` are overridden to forward output to the main thread.
+ * Sets up the IPC bridge (parentPort), then runs the user's code inside
+ * a restricted `vm.createContext()` that only exposes safe globals +
+ * PTC functions. This prevents the agent's code from accessing `require`,
+ * `process`, `fs`, network APIs, or any Node.js built-ins.
  */
-export const WORKER_JS_RUNTIME = `
-// ── PTC Worker Runtime ──────────────────────────────────────────────
+export const NODE_WORKER_BOOTSTRAP = `
 "use strict";
+const { parentPort } = require("worker_threads");
+const vm = require("vm");
 
 const __da_pending = new Map();
+const __da_logs = [];
 
-// Detect environment: Node.js worker_threads vs Web Worker
-const __da_isNode = typeof require === "function" && typeof self === "undefined";
-let __da_port;
-let __da_postMessage;
+function __da_postMessage(msg) { parentPort.postMessage(msg); }
 
-if (__da_isNode) {
-  const { parentPort } = require("worker_threads");
-  __da_port = parentPort;
-  __da_postMessage = (msg) => parentPort.postMessage(msg);
-  parentPort.on("message", __da_onMessage);
-} else {
-  __da_port = self;
-  __da_postMessage = (msg) => self.postMessage(msg);
-  self.onmessage = (e) => __da_onMessage(e.data);
-}
-
-function __da_onMessage(msg) {
+parentPort.on("message", (msg) => {
   if (msg.type === "tool_result" && __da_pending.has(msg.uuid)) {
     const { resolve, reject } = __da_pending.get(msg.uuid);
     __da_pending.delete(msg.uuid);
     if (msg.ok) resolve(msg.result);
     else reject(new Error(msg.error || "Tool call failed"));
   }
-}
+});
 
 function __da_uuid() {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
-  // Fallback
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
-  });
+  return require("crypto").randomUUID();
 }
 
-// ── Public API ──────────────────────────────────────────────────────
+function __da_formatArgs(args) {
+  return args
+    .map((a) => (typeof a === "object" && a !== null ? JSON.stringify(a) : String(a)))
+    .join(" ");
+}
 
-/**
- * Call a host-side tool. Returns a Promise.
- * Use with await or Promise.all() for parallelism.
- */
+// ── PTC functions exposed to the sandbox ────────────────────────────
+
 function toolCall(name, input) {
   input = input || {};
   const uuid = __da_uuid();
@@ -77,9 +64,6 @@ function toolCall(name, input) {
   });
 }
 
-/**
- * Spawn a subagent. Returns a Promise with the agent's text response.
- */
 function spawnAgent(description, agentType) {
   return toolCall("task", {
     description: description,
@@ -87,19 +71,144 @@ function spawnAgent(description, agentType) {
   });
 }
 
-// Override console to forward output to main thread
-const __da_origConsole = {
-  log: typeof console !== "undefined" ? console.log : () => {},
-  warn: typeof console !== "undefined" ? console.warn : () => {},
-  error: typeof console !== "undefined" ? console.error : () => {},
+const __da_console = {
+  log: (...args) => {
+    const line = __da_formatArgs(args);
+    __da_logs.push(line);
+    __da_postMessage({ type: "log", text: line });
+  },
+  warn: (...args) => {
+    const line = "[warn] " + __da_formatArgs(args);
+    __da_logs.push(line);
+    __da_postMessage({ type: "log", text: line });
+  },
+  error: (...args) => {
+    const line = "[error] " + __da_formatArgs(args);
+    __da_logs.push(line);
+    __da_postMessage({ type: "log", text: line });
+  },
 };
 
+// ── Run user code in a restricted VM context ────────────────────────
+
+const __da_sandbox = vm.createContext({
+  // PTC globals
+  toolCall,
+  spawnAgent,
+  console: __da_console,
+
+  // Safe JS built-ins
+  Promise,
+  JSON,
+  Math,
+  Array,
+  Object,
+  String,
+  Number,
+  Boolean,
+  Date,
+  RegExp,
+  Map,
+  Set,
+  WeakMap,
+  WeakSet,
+  Symbol,
+  Error,
+  TypeError,
+  RangeError,
+  SyntaxError,
+  URIError,
+  parseInt,
+  parseFloat,
+  isNaN,
+  isFinite,
+  encodeURI,
+  decodeURI,
+  encodeURIComponent,
+  decodeURIComponent,
+  undefined,
+  NaN,
+  Infinity,
+  globalThis: undefined,
+  // Timers (needed for Promise resolution polling in some edge cases)
+  setTimeout,
+  clearTimeout,
+  setInterval,
+  clearInterval,
+});
+
+const __da_userCode = "@@SPLIT@@";
+
+const __da_script = new vm.Script(
+  "(async () => {\\n" +
+  "  try {\\n" +
+  "    const __result = await (async () => {\\n" +
+  __da_userCode + "\\n" +
+  "    })();\\n" +
+  "    return { ok: true, value: __result !== undefined ? String(__result) : undefined };\\n" +
+  "  } catch (__err) {\\n" +
+  "    return { ok: false, error: __err?.message || String(__err) };\\n" +
+  "  }\\n" +
+  "})()",
+  { filename: "js_eval" }
+);
+
+const __da_promise = __da_script.runInContext(__da_sandbox);
+__da_promise.then((res) => {
+  __da_postMessage({ type: "result", ok: res.ok, value: res.value, error: res.error, logs: __da_logs });
+}).catch((err) => {
+  __da_postMessage({ type: "result", ok: false, error: err?.message || String(err), logs: __da_logs });
+});
+`;
+
+/**
+ * Web Worker bootstrap.
+ *
+ * Web Workers are already restricted (no `require`, `process`, `fs`).
+ * We just set up the IPC bridge and run the user's code directly.
+ */
+export const WEB_WORKER_BOOTSTRAP = `
+"use strict";
+
+const __da_pending = new Map();
 const __da_logs = [];
+
+function __da_postMessage(msg) { self.postMessage(msg); }
+
+self.onmessage = (e) => {
+  const msg = e.data;
+  if (msg.type === "tool_result" && __da_pending.has(msg.uuid)) {
+    const { resolve, reject } = __da_pending.get(msg.uuid);
+    __da_pending.delete(msg.uuid);
+    if (msg.ok) resolve(msg.result);
+    else reject(new Error(msg.error || "Tool call failed"));
+  }
+};
+
+function __da_uuid() {
+  return crypto.randomUUID();
+}
 
 function __da_formatArgs(args) {
   return args
     .map((a) => (typeof a === "object" && a !== null ? JSON.stringify(a) : String(a)))
     .join(" ");
+}
+
+function toolCall(name, input) {
+  input = input || {};
+  const uuid = __da_uuid();
+  return new Promise((resolve, reject) => {
+    __da_pending.set(uuid, { resolve, reject });
+    __da_postMessage({ type: "tool_call", uuid, name, input });
+  });
+}
+
+function spawnAgent(description, agentType) {
+  return toolCall("task", {
+    description: description,
+    subagent_type: agentType || "general-purpose",
+  });
 }
 
 console.log = (...args) => {
@@ -117,22 +226,22 @@ console.error = (...args) => {
   __da_logs.push(line);
   __da_postMessage({ type: "log", text: line });
 };
-
-// Make available as globals
-if (typeof globalThis !== "undefined") {
-  globalThis.toolCall = toolCall;
-  globalThis.spawnAgent = spawnAgent;
-}
 `;
 
 /**
- * Wraps user code in an async IIFE so top-level await works,
- * and sends the result (or error) back to the main thread.
+ * Build the complete Worker code by injecting the user's code into the
+ * appropriate bootstrap (Node.js with vm sandbox, or Web Worker).
  */
-export function wrapUserCode(code: string): string {
-  return `${WORKER_JS_RUNTIME}
+export function wrapUserCode(code: string, impl: "node" | "web"): string {
+  if (impl === "node") {
+    const escaped = JSON.stringify(code);
+    const [before, after] = NODE_WORKER_BOOTSTRAP.split('"@@SPLIT@@"');
+    return before + escaped + after;
+  }
 
-// ── User code (async IIFE) ──────────────────────────────────────────
+  // Web Worker: run code directly (already sandboxed by the browser)
+  return `${WEB_WORKER_BOOTSTRAP}
+
 (async () => {
   try {
     const __da_userResult = await (async () => {

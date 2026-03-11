@@ -88,7 +88,7 @@ export class WorkerRepl {
 
   async eval(code: string, config?: ToolRuntime): Promise<PtcExecuteResult> {
     const timeoutMs = this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    const wrappedCode = wrapUserCode(code);
+    const wrappedCode = wrapUserCode(code, this.impl);
     const toolCallTraces: PtcToolCallTrace[] = [];
     const logs: string[] = [];
 

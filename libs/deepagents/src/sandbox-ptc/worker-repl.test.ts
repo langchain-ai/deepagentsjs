@@ -146,6 +146,21 @@ describe("WorkerRepl", { timeout: 15_000 }, () => {
     expect(result.toolCalls[0].name).toBe("task");
   });
 
+  it("should block access to require, process, and fs (vm sandbox)", async () => {
+    const repl = new WorkerRepl([]);
+
+    const r1 = await repl.eval('try { require("fs"); console.log("FAIL: require accessible"); } catch(e) { console.log("OK: " + e.message); }');
+    expect(r1.output).toContain("OK:");
+    expect(r1.output).not.toContain("FAIL");
+
+    const r2 = await repl.eval('try { console.log("env=" + process.env.HOME); console.log("FAIL: process accessible"); } catch(e) { console.log("OK: " + e.message); }');
+    expect(r2.output).toContain("OK:");
+    expect(r2.output).not.toContain("FAIL");
+
+    const r3 = await repl.eval('try { const f = globalThis; console.log("globalThis=" + typeof f); } catch(e) { console.log("OK: " + e.message); }');
+    expect(r3.output).not.toContain("object");
+  });
+
   it("should timeout long-running code", async () => {
     const repl = new WorkerRepl([], { timeoutMs: 500 });
     const result = await repl.eval(`
