@@ -1,0 +1,46 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.layout {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+section,
+header {
+  background: #111827;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  padding: 16px;
+}
+
+h1,
+h2 {
+  margin-top: 0;
+}
+
+ul {
+  padding-left: 20px;
+}
+
+label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+input,
+select,
+button {
+  margin-top: 4px;
+  padding: 8px;
+}
+
+.hint {
+  color: #94a3b8;
+}

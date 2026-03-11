@@ -5,6 +5,7 @@ import type {
   SessionHandle,
   SessionSnapshot,
   SessionEventPage,
+  SessionUpdatePage,
 } from "./types.js";
 import { createObserveTool, createSteerTool } from "./tool.js";
 import { createCompanionAgent } from "./agent.js";
@@ -47,6 +48,11 @@ function makeMockSession(
     nextCursor: undefined,
   };
 
+  const defaultUpdatePage: SessionUpdatePage = {
+    updates: [],
+    nextCursor: undefined,
+  };
+
   return {
     getSnapshot: vi.fn().mockResolvedValue(defaultSnapshot),
     getEvents: vi.fn().mockResolvedValue(defaultEventPage),
@@ -54,6 +60,9 @@ function makeMockSession(
       commandId: "cmd-123",
       status: "queued" as const,
     }),
+    poll: vi.fn().mockResolvedValue(defaultUpdatePage),
+    subscribe: vi.fn().mockReturnValue(() => {}),
+    attachACPClient: vi.fn(),
     ...overrides,
   };
 }
