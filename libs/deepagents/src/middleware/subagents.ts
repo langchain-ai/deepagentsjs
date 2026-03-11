@@ -566,9 +566,25 @@ function createTaskTool(options: {
         unknown
       >;
 
-      // Return command with filtered state update
       if (!config.toolCall?.id) {
-        throw new Error("Tool call ID is required for subagent invocation");
+        const messages = result.messages as BaseMessage[];
+        const lastMessage = messages?.[messages.length - 1];
+        let content: string | ContentBlock[] =
+          lastMessage?.content || "Task completed";
+        if (Array.isArray(content)) {
+          content = content.filter(
+            (block) => !INVALID_TOOL_MESSAGE_BLOCK_TYPES.includes(block.type),
+          );
+          if (content.length === 0) {
+            return "Task completed";
+          }
+          return content
+            .map((block) =>
+              "text" in block ? block.text : JSON.stringify(block),
+            )
+            .join("\n");
+        }
+        return content;
       }
 
       return returnCommandWithStateUpdate(result, config.toolCall.id);

@@ -42,6 +42,11 @@ export class CompositeBackend implements BackendProtocol {
     );
   }
 
+  /** Delegates to default backend's id if it is a sandbox, otherwise empty string. */
+  get id(): string {
+    return isSandboxBackend(this.default) ? this.default.id : "";
+  }
+
   /**
    * Determine which backend handles this key and strip prefix.
    *

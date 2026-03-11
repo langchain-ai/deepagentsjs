@@ -1,5 +1,19 @@
 # deepagents
 
+## 1.8.2
+
+### Patch Changes
+
+- [#261](https://github.com/langchain-ai/deepagentsjs/pull/261) [`454fa26`](https://github.com/langchain-ai/deepagentsjs/commit/454fa268041a5ad08af2eff991102079e5d5d50b) Thanks [@hntrl](https://github.com/hntrl)! - fix(subagents): support PTC invocation of task tool
+
+  Task tool now returns plain string when invoked without a tool call ID (i.e. via programmatic tool calling inside the REPL), instead of throwing.
+
+- [#286](https://github.com/langchain-ai/deepagentsjs/pull/286) [`5f499ed`](https://github.com/langchain-ai/deepagentsjs/commit/5f499ed5af8aeab21dfe7a596a7339eef374d92a) Thanks [@JadenKim-dev](https://github.com/JadenKim-dev)! - fix: delegate CompositeBackend.id to default sandbox backend
+
+- [#281](https://github.com/langchain-ai/deepagentsjs/pull/281) [`1b8bde9`](https://github.com/langchain-ai/deepagentsjs/commit/1b8bde902f071803781761c48a7d3f3c0fec5578) Thanks [@JadenKim-dev](https://github.com/JadenKim-dev)! - fix: add truncation to grep/glob/ls tool results
+
+- [#285](https://github.com/langchain-ai/deepagentsjs/pull/285) [`5af9514`](https://github.com/langchain-ai/deepagentsjs/commit/5af9514ac4f51a909f202eacaabbc13972978791) Thanks [@colifran](https://github.com/colifran)! - fix(deepagents): prompt caching with anthropic models results in higher than expected cache miss rates
+
 ## 1.8.1
 
 ### Patch Changes
