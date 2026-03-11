@@ -11,8 +11,13 @@
 
 import type { ToolRuntime } from "langchain";
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import type { PtcToolCallTrace, PtcExecuteResult } from "./types.js";
+import type {
+  PtcToolCallTrace,
+  PtcExecuteResult,
+  NetworkPolicy,
+} from "./types.js";
 import { wrapUserCode } from "./worker-runtime.js";
+import { policyFetch } from "./network-policy.js";
 
 interface NodeProcess {
   getBuiltinModule?: (id: string) => Record<string, unknown> | undefined;
@@ -73,7 +78,7 @@ export class WorkerRepl {
 
   constructor(
     tools: StructuredToolInterface[],
-    private options: { timeoutMs?: number } = {},
+    private options: { timeoutMs?: number; network?: NetworkPolicy } = {},
   ) {
     this.tools = tools;
     const detected = detectWorkerImpl();
@@ -88,7 +93,9 @@ export class WorkerRepl {
 
   async eval(code: string, config?: ToolRuntime): Promise<PtcExecuteResult> {
     const timeoutMs = this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    const wrappedCode = wrapUserCode(code, this.impl);
+    const wrappedCode = wrapUserCode(code, this.impl, {
+      hasFetch: !!this.options.network,
+    });
     const toolCallTraces: PtcToolCallTrace[] = [];
     const logs: string[] = [];
 
@@ -175,6 +182,50 @@ export class WorkerRepl {
               error: errMsg,
             });
           }
+        } else if (msg.type === "fetch") {
+          const uuid = msg.uuid as string;
+          const network = this.options.network;
+          if (!network) {
+            postToWorker({
+              type: "tool_result",
+              uuid,
+              ok: false,
+              error: "fetch is not available",
+            });
+            return;
+          }
+          (async () => {
+            try {
+              const result = await policyFetch(
+                msg.url as string,
+                {
+                  method: msg.method as string,
+                  headers: msg.headers as Record<string, string>,
+                  body: msg.body as string | undefined,
+                },
+                network,
+              );
+              postToWorker({
+                type: "tool_result",
+                uuid,
+                ok: true,
+                result: JSON.stringify({
+                  ok: result.ok,
+                  status: result.status,
+                  body: result.body,
+                }),
+              });
+            } catch (e: unknown) {
+              // eslint-disable-next-line no-instanceof/no-instanceof
+              const errMsg = e instanceof Error ? e.message : String(e);
+              postToWorker({
+                type: "tool_result",
+                uuid,
+                ok: false,
+                error: errMsg,
+              });
+            }
+          })();
         } else if (msg.type === "log") {
           logs.push(msg.text as string);
         } else if (msg.type === "result") {

@@ -44,7 +44,12 @@ import {
   generateWorkerReplPrompt,
 } from "./prompt.js";
 import { WorkerRepl } from "./worker-repl.js";
-import type { SandboxPtcMiddlewareOptions, PtcExecuteResult } from "./types.js";
+import { policyFetch } from "./network-policy.js";
+import type {
+  SandboxPtcMiddlewareOptions,
+  PtcExecuteResult,
+  NetworkPolicy,
+} from "./types.js";
 import { DEFAULT_PTC_EXCLUDED_TOOLS } from "./types.js";
 
 function getBackend(
@@ -126,6 +131,37 @@ function isSandboxWithInteractive(
 }
 
 /**
+ * Create a synthetic __http_fetch tool for sandbox PTC runtimes.
+ * The tool enforces the network policy and delegates to real fetch.
+ */
+function createHttpFetchTool(network: NetworkPolicy) {
+  return tool(
+    async (input: { url: string; method?: string; headers?: Record<string, string>; body?: string }) => {
+      const result = await policyFetch(
+        input.url,
+        {
+          method: input.method || "GET",
+          headers: input.headers,
+          body: input.body,
+        },
+        network,
+      );
+      return JSON.stringify({ ok: result.ok, status: result.status, body: result.body });
+    },
+    {
+      name: "__http_fetch",
+      description: "Policy-enforced HTTP fetch (internal, used by PTC runtimes)",
+      schema: z.object({
+        url: z.string(),
+        method: z.string().optional(),
+        headers: z.record(z.string(), z.string()).optional(),
+        body: z.string().optional(),
+      }),
+    },
+  );
+}
+
+/**
  * Create a middleware that enables Programmatic Tool Calling (PTC).
  *
  * - **Sandbox backend** (has `spawnInteractive`): intercepts `execute` and
@@ -138,7 +174,7 @@ function isSandboxWithInteractive(
 export function createSandboxPtcMiddleware(
   options: SandboxPtcMiddlewareOptions = {},
 ) {
-  const { backend, ptc = true, timeoutMs = 300_000 } = options;
+  const { backend, ptc = true, timeoutMs = 300_000, network } = options;
 
   let ptcTools: StructuredToolInterface[] = [];
   let cachedSandboxPrompt: string | null = null;
@@ -146,10 +182,12 @@ export function createSandboxPtcMiddleware(
   let repl: WorkerRepl | null = null;
   let detectedSandbox: boolean | null = null;
 
+  const httpFetchTool = network ? createHttpFetchTool(network) : null;
+
   const jsEvalTool = tool(
     async (input: { code: string }, runnableConfig: ToolRuntime) => {
       if (!repl) {
-        repl = new WorkerRepl(ptcTools, { timeoutMs });
+        repl = new WorkerRepl(ptcTools, { timeoutMs, network });
       }
       repl.tools = ptcTools;
 
@@ -182,6 +220,9 @@ export function createSandboxPtcMiddleware(
     wrapModelCall: async (request, handler) => {
       const agentTools = (request.tools || []) as StructuredToolInterface[];
       ptcTools = filterToolsForPtc(agentTools, ptc);
+      if (httpFetchTool && !ptcTools.some((t) => t.name === "__http_fetch")) {
+        ptcTools.push(httpFetchTool);
+      }
 
       // Detect sandbox support lazily (once)
       if (detectedSandbox === null) {
@@ -196,7 +237,7 @@ export function createSandboxPtcMiddleware(
       if (detectedSandbox) {
         // Sandbox mode: inject bash/python/node PTC prompt, hide js_eval
         if (ptcTools.length > 0 && !cachedSandboxPrompt) {
-          cachedSandboxPrompt = generateSandboxPtcPrompt(ptcTools);
+          cachedSandboxPrompt = generateSandboxPtcPrompt(ptcTools, network);
         }
         const tools = (request.tools as { name: string }[]).filter(
           (t) => t.name !== "js_eval",
@@ -210,7 +251,7 @@ export function createSandboxPtcMiddleware(
       // Worker REPL mode: inject JS REPL prompt, hide PTC tools from the
       // model so it must use toolCall()/spawnAgent() inside js_eval
       if (ptcTools.length > 0 && !cachedReplPrompt) {
-        cachedReplPrompt = generateWorkerReplPrompt(ptcTools);
+        cachedReplPrompt = generateWorkerReplPrompt(ptcTools, network);
       }
       const ptcToolNames = new Set(ptcTools.map((t) => t.name));
       const visibleTools = (request.tools as { name: string }[]).filter(

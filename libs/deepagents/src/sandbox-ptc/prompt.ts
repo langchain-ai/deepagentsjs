@@ -10,6 +10,8 @@
 
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { toJsonSchema } from "@langchain/core/utils/json_schema";
+import type { NetworkPolicy } from "./types.js";
+import { summarizePolicy } from "./network-policy.js";
 
 function safeToJsonSchema(
   schema: unknown,
@@ -51,6 +53,7 @@ function schemaToExample(
  */
 export function generateSandboxPtcPrompt(
   tools: StructuredToolInterface[],
+  network?: NetworkPolicy,
 ): string {
   if (tools.length === 0) return "";
 
@@ -190,6 +193,7 @@ const syncResult = toolCallSync("tool_name", { key: "value" });
 
 ${toolEntries}
 ${subagentSection}
+${network ? `### Network access (fetch)\n\n${summarizePolicy(network)}\n` : ""}
 `;
 }
 
@@ -199,6 +203,7 @@ ${subagentSection}
  */
 export function generateWorkerReplPrompt(
   tools: StructuredToolInterface[],
+  network?: NetworkPolicy,
 ): string {
   if (tools.length === 0) return "";
 
@@ -279,5 +284,6 @@ console.log(results);
 
 ${toolEntries}
 ${subagentSection}
+${network ? `### Network access (fetch)\n\n${summarizePolicy(network)}\n` : ""}
 `;
 }
