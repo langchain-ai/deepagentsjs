@@ -4,7 +4,7 @@
 
 import type {
   BackendOptions,
-  BackendProtocol,
+  BackendProtocolV2,
   EditResult,
   FileData,
   FileDownloadResponse,
@@ -40,9 +40,11 @@ import {
  * (not direct mutation), operations return filesUpdate in WriteResult/EditResult
  * for the middleware to apply via Command.
  */
-export class StateBackend implements BackendProtocol {
+export class StateBackend implements BackendProtocolV2 {
   private stateAndStore: StateAndStore;
   private fileFormat: "v1" | "v2";
+
+  readonly protocolVersion = "v2" as const;
 
   constructor(stateAndStore: StateAndStore, options?: BackendOptions) {
     this.stateAndStore = stateAndStore;

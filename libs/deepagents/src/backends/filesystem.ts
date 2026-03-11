@@ -16,7 +16,7 @@ import { spawn } from "node:child_process";
 import fg from "fast-glob";
 import micromatch from "micromatch";
 import type {
-  BackendProtocol,
+  BackendProtocolV2,
   EditResult,
   FileData,
   FileDownloadResponse,
@@ -43,10 +43,12 @@ const SUPPORTS_NOFOLLOW = fsSync.constants.O_NOFOLLOW !== undefined;
  * resolved relative to the current working directory. Content is read/written
  * as plain text, and metadata (timestamps) are derived from filesystem stats.
  */
-export class FilesystemBackend implements BackendProtocol {
+export class FilesystemBackend implements BackendProtocolV2 {
   protected cwd: string;
   protected virtualMode: boolean;
   private maxFileSizeBytes: number;
+
+  readonly protocolVersion = "v2" as const;
 
   constructor(
     options: {

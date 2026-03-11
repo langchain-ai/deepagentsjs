@@ -9,10 +9,14 @@
 import micromatch from "micromatch";
 import path, { basename } from "path";
 import type {
+  BackendProtocol,
+  BackendProtocolV2,
   FileData,
   FileDataV1,
   FileDataV2,
   GrepMatch,
+  ReadResult,
+  GrepResult,
 } from "./protocol.js";
 
 // Constants
@@ -751,4 +755,61 @@ export function migrateToFileDataV2(data: FileDataV1 | FileDataV2): FileDataV2 {
     };
   }
   return data;
+}
+
+/**
+ * ...
+ *
+ * @param protocol
+ * @returns
+ */
+export function isBackendProtocolV2(
+  protocol: BackendProtocol | BackendProtocolV2,
+): protocol is BackendProtocolV2 {
+  return (protocol as any).protocolVersion === "v2";
+}
+
+/**
+ *
+ * @param backend
+ * @returns
+ */
+export function adaptBackendProtocol(
+  backend: BackendProtocol | BackendProtocolV2,
+): BackendProtocolV2 {
+  if (isBackendProtocolV2(backend)) {
+    return backend;
+  }
+
+  return {
+    protocolVersion: "v2",
+    ...backend,
+    async read(
+      filePath: string,
+      offset?: number,
+      limit?: number,
+    ): Promise<ReadResult> {
+      const result = await (backend as BackendProtocol).read(
+        filePath,
+        offset,
+        limit,
+      );
+      if (typeof result === "string") return { content: result };
+      return result;
+    },
+    async grepRaw(
+      pattern: string,
+      path?: string | null,
+      glob?: string | null,
+    ): Promise<GrepResult> {
+      const result = await (backend as BackendProtocol).grepRaw(
+        pattern,
+        path,
+        glob,
+      );
+      if (Array.isArray(result)) return { matches: result };
+      if (typeof result === "string") return { error: result };
+      return result;
+    },
+  };
 }

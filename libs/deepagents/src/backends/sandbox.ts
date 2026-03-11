@@ -296,6 +296,8 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
    */
   abstract downloadFiles(paths: string[]): MaybePromise<FileDownloadResponse[]>;
 
+  readonly protocolVersion = "v2" as const;
+
   /**
    * List files and directories in the specified directory (non-recursive).
    *
