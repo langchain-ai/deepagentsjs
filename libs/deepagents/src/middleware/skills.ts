@@ -547,10 +547,10 @@ async function listSkillsFromBackend(
     } else {
       // Fall back to read if downloadFiles is not available
       const readResult = await backend.read(skillMdPath);
-      if (readResult.startsWith("Error:")) {
+      if (readResult.error) {
         continue;
       }
-      content = readResult;
+      content = readResult.content ?? "";
     }
     const metadata = parseSkillMetadataFromContent(
       content,

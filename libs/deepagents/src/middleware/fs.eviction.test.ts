@@ -172,7 +172,7 @@ describe("read_file character-based truncation", () => {
    */
   function createFileData(content: string): FileData {
     return {
-      content: content.split("\n"),
+      content,
       created_at: new Date().toISOString(),
       modified_at: new Date().toISOString(),
     };
@@ -204,11 +204,14 @@ describe("read_file character-based truncation", () => {
       { store: undefined },
     );
 
+    // Should return a text content block
+    expect(Array.isArray(result)).toBe(true);
+    expect(result[0].type).toBe("text");
     // Should be truncated
-    expect(result.length).toBeLessThan(fileContent.length);
+    expect(result[0].text.length).toBeLessThan(fileContent.length);
     // Should contain truncation message
-    expect(result).toContain("Output was truncated due to size limits");
-    expect(result).toContain("jq");
+    expect(result[0].text).toContain("Output was truncated due to size limits");
+    expect(result[0].text).toContain("jq");
   });
 
   it("should not truncate read_file output when under character limit", async () => {
@@ -230,12 +233,15 @@ describe("read_file character-based truncation", () => {
       { store: undefined },
     );
 
+    // Should return a text content block
+    expect(Array.isArray(result)).toBe(true);
+    expect(result[0].type).toBe("text");
     // Should NOT contain truncation message
-    expect(result).not.toContain("Output was truncated");
+    expect(result[0].text).not.toContain("Output was truncated");
     // Should contain all content
-    expect(result).toContain("line1");
-    expect(result).toContain("line2");
-    expect(result).toContain("line3");
+    expect(result[0].text).toContain("line1");
+    expect(result[0].text).toContain("line2");
+    expect(result[0].text).toContain("line3");
   });
 
   it("should respect line limit when reading files", async () => {
@@ -260,12 +266,15 @@ describe("read_file character-based truncation", () => {
       { store: undefined },
     );
 
+    // Should return a text content block
+    expect(Array.isArray(result)).toBe(true);
+    expect(result[0].type).toBe("text");
     // Should contain first 50 lines
-    expect(result).toContain("line1");
-    expect(result).toContain("line50");
+    expect(result[0].text).toContain("line1");
+    expect(result[0].text).toContain("line50");
     // Should NOT contain lines beyond the limit
-    expect(result).not.toContain("line51");
-    expect(result).not.toContain("line200");
+    expect(result[0].text).not.toContain("line51");
+    expect(result[0].text).not.toContain("line200");
   });
 
   it("should not truncate when toolTokenLimitBeforeEvict is null", async () => {
@@ -287,9 +296,199 @@ describe("read_file character-based truncation", () => {
       { store: undefined },
     );
 
+    // Should return a text content block
+    expect(Array.isArray(result)).toBe(true);
+    expect(result[0].type).toBe("text");
     // Should NOT contain truncation message (truncation disabled)
-    expect(result).not.toContain("Output was truncated");
+    expect(result[0].text).not.toContain("Output was truncated");
     // Should contain the full content (formatted with line numbers)
-    expect(result.length).toBeGreaterThan(100000);
+    expect(result[0].text.length).toBeGreaterThan(100000);
+  });
+});
+
+describe("read_file multimodal content blocks", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function setupStateWithFiles(files: Record<string, FileData>): {
+    stateAndStore: any;
+  } {
+    const state = { messages: [], files };
+    vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+    return { stateAndStore: { state, store: undefined } };
+  }
+
+  function createFileData(content: string): FileData {
+    return {
+      content,
+      created_at: new Date().toISOString(),
+      modified_at: new Date().toISOString(),
+    };
+  }
+
+  it("should return an image content block for .png files", async () => {
+    const base64Data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ";
+    const files = { "/image.png": createFileData(base64Data) };
+    const { stateAndStore } = setupStateWithFiles(files);
+
+    const middleware = createFilesystemMiddleware({
+      backend: () => new StateBackend(stateAndStore),
+    });
+
+    const readFileTool = (middleware as any).tools.find(
+      (t: any) => t.name === "read_file",
+    );
+
+    const result = await readFileTool.invoke(
+      { file_path: "/image.png" },
+      { store: undefined },
+    );
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result[0].type).toBe("image");
+    expect(result[0].mimeType).toBe("image/png");
+    expect(result[0].data).toBe(base64Data);
+  });
+
+  it("should return an image content block for .jpg files", async () => {
+    const base64Data = "/9j/4AAQSkZJRgABAQEASABIAAD";
+    const files = { "/photo.jpg": createFileData(base64Data) };
+    const { stateAndStore } = setupStateWithFiles(files);
+
+    const middleware = createFilesystemMiddleware({
+      backend: () => new StateBackend(stateAndStore),
+    });
+
+    const readFileTool = (middleware as any).tools.find(
+      (t: any) => t.name === "read_file",
+    );
+
+    const result = await readFileTool.invoke(
+      { file_path: "/photo.jpg" },
+      { store: undefined },
+    );
+
+    expect(result[0].type).toBe("image");
+    expect(result[0].mimeType).toBe("image/jpeg");
+  });
+
+  it("should return an audio content block for .mp3 files", async () => {
+    const base64Data = "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMA==";
+    const files = { "/audio.mp3": createFileData(base64Data) };
+    const { stateAndStore } = setupStateWithFiles(files);
+
+    const middleware = createFilesystemMiddleware({
+      backend: () => new StateBackend(stateAndStore),
+    });
+
+    const readFileTool = (middleware as any).tools.find(
+      (t: any) => t.name === "read_file",
+    );
+
+    const result = await readFileTool.invoke(
+      { file_path: "/audio.mp3" },
+      { store: undefined },
+    );
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result[0].type).toBe("audio");
+    expect(result[0].mimeType).toBe("audio/mpeg");
+    expect(result[0].data).toBe(base64Data);
+  });
+
+  it("should return a video content block for .mp4 files", async () => {
+    const base64Data = "AAAAIGZ0eXBpc29tAAACAGlzb20=";
+    const files = { "/video.mp4": createFileData(base64Data) };
+    const { stateAndStore } = setupStateWithFiles(files);
+
+    const middleware = createFilesystemMiddleware({
+      backend: () => new StateBackend(stateAndStore),
+    });
+
+    const readFileTool = (middleware as any).tools.find(
+      (t: any) => t.name === "read_file",
+    );
+
+    const result = await readFileTool.invoke(
+      { file_path: "/video.mp4" },
+      { store: undefined },
+    );
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result[0].type).toBe("video");
+    expect(result[0].mimeType).toBe("video/mp4");
+    expect(result[0].data).toBe(base64Data);
+  });
+
+  it("should return a file content block for .pdf files", async () => {
+    const base64Data = "JVBERi0xLjQKJcfsj6IKNSAwIG9iago=";
+    const files = { "/document.pdf": createFileData(base64Data) };
+    const { stateAndStore } = setupStateWithFiles(files);
+
+    const middleware = createFilesystemMiddleware({
+      backend: () => new StateBackend(stateAndStore),
+    });
+
+    const readFileTool = (middleware as any).tools.find(
+      (t: any) => t.name === "read_file",
+    );
+
+    const result = await readFileTool.invoke(
+      { file_path: "/document.pdf" },
+      { store: undefined },
+    );
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result[0].type).toBe("file");
+    expect(result[0].mimeType).toBe("application/pdf");
+    expect(result[0].data).toBe(base64Data);
+  });
+
+  it("should return a text content block with line numbers for text files", async () => {
+    const files = { "/notes.txt": createFileData("hello\nworld") };
+    const { stateAndStore } = setupStateWithFiles(files);
+
+    const middleware = createFilesystemMiddleware({
+      backend: () => new StateBackend(stateAndStore),
+    });
+
+    const readFileTool = (middleware as any).tools.find(
+      (t: any) => t.name === "read_file",
+    );
+
+    const result = await readFileTool.invoke(
+      { file_path: "/notes.txt" },
+      { store: undefined },
+    );
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result[0].type).toBe("text");
+    expect(result[0].text).toContain("hello");
+    expect(result[0].text).toContain("world");
+    // Line numbers should be present
+    expect(result[0].text).toMatch(/1\s+hello/);
+    expect(result[0].text).toMatch(/2\s+world/);
+  });
+
+  it("should return an error text content block for missing files", async () => {
+    const { stateAndStore } = setupStateWithFiles({});
+
+    const middleware = createFilesystemMiddleware({
+      backend: () => new StateBackend(stateAndStore),
+    });
+
+    const readFileTool = (middleware as any).tools.find(
+      (t: any) => t.name === "read_file",
+    );
+
+    const result = await readFileTool.invoke(
+      { file_path: "/nonexistent.txt" },
+      { store: undefined },
+    );
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result[0].type).toBe("text");
+    expect(result[0].text).toContain("not found");
   });
 });
