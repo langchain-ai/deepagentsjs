@@ -23,11 +23,14 @@ import type {
   FileInfo,
   FileUploadResponse,
   GrepMatch,
+  GrepResult,
+  ReadResult,
   WriteResult,
 } from "./protocol.js";
 import {
   checkEmptyContent,
-  formatContentWithLineNumbers,
+  getMimeType,
+  isTextMimeType,
   performStringReplacement,
 } from "./utils.js";
 
@@ -194,22 +197,29 @@ export class FilesystemBackend implements BackendProtocol {
     filePath: string,
     offset: number = 0,
     limit: number = 500,
-  ): Promise<string> {
+  ): Promise<ReadResult> {
     try {
       const resolvedPath = this.resolvePath(filePath);
 
-      let content: string;
+      const mimeType = getMimeType(filePath);
+      const isBinary = !isTextMimeType(mimeType);
 
+      let content: string;
       if (SUPPORTS_NOFOLLOW) {
         const stat = await fs.stat(resolvedPath);
         if (!stat.isFile()) {
-          return `Error: File '${filePath}' not found`;
+          return { error: `File '${filePath}' not found` };
         }
         const fd = await fs.open(
           resolvedPath,
           fsSync.constants.O_RDONLY | fsSync.constants.O_NOFOLLOW,
         );
         try {
+          if (isBinary) {
+            const buffer = await fd.readFile();
+            const contentStr = Buffer.from(buffer).toString("base64");
+            return { content: contentStr };
+          }
           content = await fd.readFile({ encoding: "utf-8" });
         } finally {
           await fd.close();
@@ -217,17 +227,22 @@ export class FilesystemBackend implements BackendProtocol {
       } else {
         const stat = await fs.lstat(resolvedPath);
         if (stat.isSymbolicLink()) {
-          return `Error: Symlinks are not allowed: ${filePath}`;
+          return { error: `Symlinks are not allowed: ${filePath}` };
         }
         if (!stat.isFile()) {
-          return `Error: File '${filePath}' not found`;
+          return { error: `File '${filePath}' not found` };
+        }
+        if (isBinary) {
+          const buffer = await fs.readFile(resolvedPath);
+          const contentStr = Buffer.from(buffer).toString("base64");
+          return { content: contentStr };
         }
         content = await fs.readFile(resolvedPath, "utf-8");
       }
 
       const emptyMsg = checkEmptyContent(content);
       if (emptyMsg) {
-        return emptyMsg;
+        return { content: emptyMsg };
       }
 
       const lines = content.split("\n");
@@ -235,13 +250,15 @@ export class FilesystemBackend implements BackendProtocol {
       const endIdx = Math.min(startIdx + limit, lines.length);
 
       if (startIdx >= lines.length) {
-        return `Error: Line offset ${offset} exceeds file length (${lines.length} lines)`;
+        return {
+          error: `Line offset ${offset} exceeds file length (${lines.length} lines)`,
+        };
       }
 
       const selectedLines = lines.slice(startIdx, endIdx);
-      return formatContentWithLineNumbers(selectedLines, startIdx + 1);
+      return { content: selectedLines.join("\n") };
     } catch (e: any) {
-      return `Error reading file '${filePath}': ${e.message}`;
+      return { error: `Error reading file '${filePath}': ${e.message}` };
     }
   }
 
@@ -254,6 +271,9 @@ export class FilesystemBackend implements BackendProtocol {
   async readRaw(filePath: string): Promise<FileData> {
     const resolvedPath = this.resolvePath(filePath);
 
+    const mimeType = getMimeType(filePath);
+    const isBinary = !isTextMimeType(mimeType);
+
     let content: string;
     let stat: fsSync.Stats;
 
@@ -265,7 +285,12 @@ export class FilesystemBackend implements BackendProtocol {
         fsSync.constants.O_RDONLY | fsSync.constants.O_NOFOLLOW,
       );
       try {
-        content = await fd.readFile({ encoding: "utf-8" });
+        if (isBinary) {
+          const buffer = await fd.readFile();
+          content = Buffer.from(buffer).toString("base64");
+        } else {
+          content = await fd.readFile({ encoding: "utf-8" });
+        }
       } finally {
         await fd.close();
       }
@@ -275,11 +300,16 @@ export class FilesystemBackend implements BackendProtocol {
         throw new Error(`Symlinks are not allowed: ${filePath}`);
       }
       if (!stat.isFile()) throw new Error(`File '${filePath}' not found`);
-      content = await fs.readFile(resolvedPath, "utf-8");
+      if (isBinary) {
+        const buffer = await fs.readFile(resolvedPath);
+        content = Buffer.from(buffer).toString("base64");
+      } else {
+        content = await fs.readFile(resolvedPath, "utf-8");
+      }
     }
 
     return {
-      content: content.split("\n"),
+      content,
       created_at: stat.ctime.toISOString(),
       modified_at: stat.mtime.toISOString(),
     };
@@ -292,6 +322,9 @@ export class FilesystemBackend implements BackendProtocol {
   async write(filePath: string, content: string): Promise<WriteResult> {
     try {
       const resolvedPath = this.resolvePath(filePath);
+
+      const mimeType = getMimeType(filePath);
+      const isBinary = !isTextMimeType(mimeType);
 
       try {
         const stat = await fs.lstat(resolvedPath);
@@ -318,12 +351,22 @@ export class FilesystemBackend implements BackendProtocol {
 
         const fd = await fs.open(resolvedPath, flags, 0o644);
         try {
-          await fd.writeFile(content, "utf-8");
+          if (isBinary) {
+            const buffer = Buffer.from(content, "base64");
+            await fd.writeFile(buffer);
+          } else {
+            await fd.writeFile(content, "utf-8");
+          }
         } finally {
           await fd.close();
         }
       } else {
-        await fs.writeFile(resolvedPath, content, "utf-8");
+        if (isBinary) {
+          const buffer = Buffer.from(content, "base64");
+          await fs.writeFile(resolvedPath, buffer);
+        } else {
+          await fs.writeFile(resolvedPath, content, "utf-8");
+        }
       }
 
       return { path: filePath, filesUpdate: null };
@@ -423,19 +466,19 @@ export class FilesystemBackend implements BackendProtocol {
     pattern: string,
     dirPath: string = "/",
     glob: string | null = null,
-  ): Promise<GrepMatch[] | string> {
+  ): Promise<GrepResult> {
     // Resolve base path
     let baseFull: string;
     try {
       baseFull = this.resolvePath(dirPath || ".");
     } catch {
-      return [];
+      return { matches: [] };
     }
 
     try {
       await fs.stat(baseFull);
     } catch {
-      return [];
+      return { matches: [] };
     }
 
     // Try ripgrep first (with -F flag for literal search), fallback to substring search
@@ -450,7 +493,7 @@ export class FilesystemBackend implements BackendProtocol {
         matches.push({ path: fpath, line: lineNum, text: lineText });
       }
     }
-    return matches;
+    return { matches };
   }
 
   /**
