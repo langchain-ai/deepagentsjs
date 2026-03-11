@@ -138,10 +138,11 @@ export function fileDataToString(fileData: FileData): string {
 }
 
 /**
- * ...
+ * Create a v1 FileData object (content as line array).
  *
- * @param content
- * @param createdAt
+ * @param content - File content as a string (will be split on "\n")
+ * @param createdAt - Optional creation timestamp (ISO format), defaults to now
+ * @returns FileDataV1 with content split into lines
  */
 export function createFileDataV1(
   content: string,
@@ -158,12 +159,14 @@ export function createFileDataV1(
 }
 
 /**
- * ...
+ * Create a v2 FileData object (content as single string).
  *
- * @param content
- * @param fileFormat
- * @param createdAt
- * @returns
+ * String content is stored as-is. Uint8Array content (binary) is
+ * base64-encoded for JSON-safe storage in LangGraph state/store.
+ *
+ * @param content - File content as a string or binary Uint8Array
+ * @param createdAt - Optional creation timestamp (ISO format), defaults to now
+ * @returns FileDataV2 with content as a single string
  */
 export function createFileDataV2(
   content: string | Uint8Array,
@@ -171,7 +174,7 @@ export function createFileDataV2(
 ): FileDataV2 {
   const now = new Date().toISOString();
 
-  if (content instanceof Uint8Array) {
+  if (ArrayBuffer.isView(content)) {
     return {
       content: Buffer.from(content).toString("base64"),
       created_at: createdAt || now,
@@ -606,11 +609,8 @@ export function grepSearchFiles(
 /**
  * Return structured grep matches from an in-memory files mapping.
  *
- * Performs literal text search (not regex).
- *
- * Returns a list of GrepMatch on success, or a string for invalid inputs.
- * We deliberately do not raise here to keep backends non-throwing in tool
- * contexts and preserve user-facing error messages.
+ * Performs literal text search (not regex). Binary files are skipped.
+ * Returns an empty array when no matches are found or on invalid input.
  */
 export function grepMatchesFromFiles(
   files: Record<string, FileData>,
@@ -691,7 +691,12 @@ export function formatGrepMatches(
 }
 
 /**
+ * Determine MIME type from a file path's extension.
  *
+ * Returns "text/plain" for unknown extensions.
+ *
+ * @param filePath - File path to inspect
+ * @returns MIME type string (e.g., "image/png", "text/plain")
  */
 export function getMimeType(filePath: string): string {
   const ext = path.extname(filePath).toLocaleLowerCase();
@@ -699,7 +704,10 @@ export function getMimeType(filePath: string): string {
 }
 
 /**
+ * Check whether a MIME type represents text content.
  *
+ * @param mimeType - MIME type string to check
+ * @returns True if the MIME type is text-based
  */
 export function isTextMimeType(mimeType: string): boolean {
   return (
@@ -710,14 +718,22 @@ export function isTextMimeType(mimeType: string): boolean {
 }
 
 /**
+ * Type guard to check if FileData is v1 format (content as line array).
  *
+ * @param data - FileData to check
+ * @returns True if data is FileDataV1
  */
 export function isFileDataV1(data: FileData): data is FileDataV1 {
   return Array.isArray(data.content);
 }
 
 /**
+ * Convert FileData to v2 format, joining v1 line arrays into a single string.
  *
+ * If the data is already v2, returns it unchanged.
+ *
+ * @param data - FileData in either format
+ * @returns FileDataV2 with content as a single string
  */
 export function migrateToFileDataV2(data: FileDataV1 | FileDataV2): FileDataV2 {
   if (isFileDataV1(data)) {

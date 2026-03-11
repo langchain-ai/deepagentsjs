@@ -11,7 +11,6 @@ import type {
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
-  GrepMatch,
   GrepResult,
   ReadResult,
   StateAndStore,
@@ -314,12 +313,15 @@ export class StoreBackend implements BackendProtocol {
   }
 
   /**
-   * Read file content with line numbers.
+   * Read file content.
+   *
+   * Text files are paginated by line offset/limit.
+   * Binary files return full base64-encoded content (offset/limit ignored).
    *
    * @param filePath - Absolute file path
    * @param offset - Line offset to start reading from (0-indexed)
    * @param limit - Maximum number of lines to read
-   * @returns Formatted file content with line numbers, or error message
+   * @returns ReadResult with content on success or error on failure
    */
   async read(
     filePath: string,
@@ -431,7 +433,8 @@ export class StoreBackend implements BackendProtocol {
   }
 
   /**
-   * Structured search results or error string for invalid input.
+   * Search file contents for a literal text pattern.
+   * Binary files are skipped.
    */
   async grepRaw(
     pattern: string,

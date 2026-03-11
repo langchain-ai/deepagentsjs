@@ -40,22 +40,24 @@ export interface GrepMatch {
 }
 
 /**
- *
+ * Structured result from grep/search operations.
  */
 export interface GrepResult {
   /** Error message on failure, undefined on success */
   error?: string;
-  /** Structured grep match entries */
+  /** Structured grep match entries, undefined on failure */
   matches?: GrepMatch[];
 }
 
 /**
- * File data structure used by backends.
+ * Legacy file data format (v1).
  *
- * All file data is represented as objects with this structure:
+ * Content is stored as an array of lines (split on "\n"). This format
+ * only supports text files and is retained for backwards compatibility
+ * with existing state/store data.
  */
 export interface FileDataV1 {
-  /** Lines of text content */
+  /** File content as an array of lines */
   content: string[];
   /** ISO format timestamp of creation */
   created_at: string;
@@ -64,10 +66,15 @@ export interface FileDataV1 {
 }
 
 /**
+ * Current file data format (v2).
  *
+ * Content is stored as a single string — plain text for text files,
+ * base64-encoded for binary files (images, PDFs, audio, etc.).
+ * The MIME type is determined from the file extension at read time,
+ * not stored on the data itself.
  */
 export interface FileDataV2 {
-  /** Lines of text content */
+  /** File content as a single string (text or base64-encoded binary) */
   content: string;
   /** ISO format timestamp of creation */
   created_at: string;
@@ -76,17 +83,24 @@ export interface FileDataV2 {
 }
 
 /**
+ * Union of v1 and v2 file data formats.
  *
+ * Backends may encounter either format when reading from state or store
+ * (v1 from legacy data, v2 from new writes). Use {@link isFileDataV1}
+ * from utils for runtime discrimination.
  */
 export type FileData = FileDataV1 | FileDataV2;
 
 /**
+ * Structured result from backend read operations.
  *
+ * Replaces the previous plain string return, giving callers a
+ * programmatic way to distinguish errors from content.
  */
 export interface ReadResult {
   /** Error message on failure, undefined on success */
   error?: string;
-  /** Lines of text content */
+  /** File content as a string (text or base64-encoded binary), undefined on failure */
   content?: string;
 }
 
@@ -178,7 +192,11 @@ export interface FileUploadResponse {
   error: FileOperationError | null;
 }
 
+/**
+ * Common options shared across backend constructors.
+ */
 export interface BackendOptions {
+  /** File data format to use for new writes. Defaults to "v2". */
   fileFormat?: "v1" | "v2";
 }
 
@@ -206,12 +224,15 @@ export interface BackendProtocol {
   lsInfo(path: string): MaybePromise<FileInfo[]>;
 
   /**
-   * Read file content with line numbers or an error string.
+   * Read file content.
+   *
+   * For text files, content is paginated by line offset/limit.
+   * For binary files, the full base64-encoded content is returned.
    *
    * @param filePath - Absolute file path
    * @param offset - Line offset to start reading from (0-indexed), default 0
    * @param limit - Maximum number of lines to read, default 500
-   * @returns TODO
+   * @returns ReadResult with content on success or error on failure
    */
   read(
     filePath: string,
@@ -228,14 +249,14 @@ export interface BackendProtocol {
   readRaw(filePath: string): MaybePromise<FileData>;
 
   /**
-   * Structured search results or error string for invalid input.
+   * Search file contents for a literal text pattern.
    *
-   * Searches file contents for a regex pattern.
+   * Binary files (determined by MIME type) are skipped.
    *
-   * @param pattern - Regex pattern to search for
+   * @param pattern - Literal text pattern to search for
    * @param path - Base path to search from (default: null)
    * @param glob - Optional glob pattern to filter files (e.g., "*.py")
-   * @returns TODO
+   * @returns GrepResult with matches on success or error on failure
    */
   grepRaw(
     pattern: string,
