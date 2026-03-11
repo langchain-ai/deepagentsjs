@@ -189,8 +189,7 @@ describe("BaseSandbox", () => {
       });
 
       const result = await sandbox.lsInfo("/nonexistent");
-      expect(result.error).toBeUndefined();
-      expect(result.files).toEqual([]);
+      expect(result).toEqual([]);
     });
   });
 
@@ -224,15 +223,16 @@ describe("BaseSandbox", () => {
     });
 
     describe("binary files", () => {
-      it("should return Uint8Array content for image files", async () => {
+      it("should return base64 content for image files", async () => {
         const sandbox = new MockSandbox();
         const binaryContent = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
         sandbox.addBinaryFile("/image.png", binaryContent);
 
         const result = await sandbox.read("/image.png");
         expect(result.error).toBeUndefined();
-        expect(result.content).toBeInstanceOf(Uint8Array);
-        expect(result.content).toEqual(binaryContent);
+        expect(result.content).toBe(
+          Buffer.from(binaryContent).toString("base64"),
+        );
       });
 
       it("should use downloadFiles for binary files, not execute", async () => {
@@ -260,32 +260,31 @@ describe("BaseSandbox", () => {
       sandbox.addFile("/test.txt", "line1\nline2\nline3");
 
       const result = await sandbox.readRaw("/test.txt");
-      expect(result.error).toBeUndefined();
       // v2 format: content is a string, not an array
-      expect(result.data!.content).toBe("line1\nline2\nline3");
-      expect(typeof result.data!.content).toBe("string");
+      expect(result.content).toBe("line1\nline2\nline3");
+      expect(typeof result.content).toBe("string");
       // Should NOT go through execute
       expect(sandbox.executedCommands.length).toBe(0);
     });
 
-    it("should return error for non-existent file", async () => {
+    it("should throw for non-existent file", async () => {
       const sandbox = new MockSandbox();
 
-      const result = await sandbox.readRaw("/nonexistent.txt");
-      expect(result.error).toBeDefined();
-      expect(result.error).toContain("not found");
+      await expect(sandbox.readRaw("/nonexistent.txt")).rejects.toThrow(
+        "not found",
+      );
     });
 
     describe("binary files", () => {
-      it("should return Uint8Array content for binary files", async () => {
+      it("should return base64 content for binary files", async () => {
         const sandbox = new MockSandbox();
         const binaryContent = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
         sandbox.addBinaryFile("/image.png", binaryContent);
 
         const result = await sandbox.readRaw("/image.png");
-        expect(result.error).toBeUndefined();
-        expect(result.data!.content).toBeInstanceOf(Uint8Array);
-        expect(result.data!.content).toEqual(binaryContent);
+        expect(result.content).toBe(
+          Buffer.from(binaryContent).toString("base64"),
+        );
       });
     });
   });
@@ -665,12 +664,11 @@ describe("BaseSandbox", () => {
       });
 
       const result = await sandbox.globInfo("*.py", "/");
-      expect(result.error).toBeUndefined();
       // Only .py files should match, readme.md should be filtered out
-      expect(result.files!.length).toBe(2);
-      expect(result.files!.some((f) => f.path === "test.py")).toBe(true);
-      expect(result.files!.some((f) => f.path === "main.py")).toBe(true);
-      expect(result.files!.some((f) => f.path === "readme.md")).toBe(false);
+      expect(result.length).toBe(2);
+      expect(result.some((f) => f.path === "test.py")).toBe(true);
+      expect(result.some((f) => f.path === "main.py")).toBe(true);
+      expect(result.some((f) => f.path === "readme.md")).toBe(false);
     });
 
     it("should support recursive ** glob patterns", async () => {
@@ -688,12 +686,9 @@ describe("BaseSandbox", () => {
       });
 
       const result = await sandbox.globInfo("**/*.ts", "/workspace");
-      expect(result.error).toBeUndefined();
-      expect(result.files!.length).toBe(2);
-      expect(result.files!.some((f) => f.path === "src/main.ts")).toBe(true);
-      expect(result.files!.some((f) => f.path === "src/utils/helper.ts")).toBe(
-        true,
-      );
+      expect(result.length).toBe(2);
+      expect(result.some((f) => f.path === "src/main.ts")).toBe(true);
+      expect(result.some((f) => f.path === "src/utils/helper.ts")).toBe(true);
     });
 
     it("should return empty array for no matches", async () => {
@@ -705,8 +700,7 @@ describe("BaseSandbox", () => {
       });
 
       const result = await sandbox.globInfo("*.nonexistent", "/");
-      expect(result.error).toBeUndefined();
-      expect(result.files).toEqual([]);
+      expect(result).toEqual([]);
     });
   });
 
