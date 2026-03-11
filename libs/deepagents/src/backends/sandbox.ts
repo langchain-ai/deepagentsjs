@@ -21,10 +21,13 @@ import type {
   FileInfo,
   FileUploadResponse,
   GrepMatch,
+  GrepResult,
   MaybePromise,
+  ReadResult,
   SandboxBackendProtocol,
   WriteResult,
 } from "./protocol.js";
+import { getMimeType, isTextMimeType } from "./utils.js";
 
 /**
  * Shell-quote a string using single quotes (POSIX).
@@ -340,18 +343,33 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     filePath: string,
     offset: number = 0,
     limit: number = 500,
-  ): Promise<string> {
+  ): Promise<ReadResult> {
+    const mimeType = getMimeType(filePath);
+
+    // for binary, download full file and return as base64
+    if (!isTextMimeType(mimeType)) {
+      const results = await this.downloadFiles([filePath]);
+      if (results[0].error || !results[0].content) {
+        return { error: `File '${filePath}' not found` };
+      }
+
+      const buffer = results[0].content;
+      const content = Buffer.from(buffer).toString("base64");
+
+      return { content };
+    }
+
     // limit=0 means return nothing
-    if (limit === 0) return "";
+    if (limit === 0) return { content: "" };
 
     const command = buildReadCommand(filePath, offset, limit);
     const result = await this.execute(command);
 
     if (result.exitCode !== 0) {
-      return `Error: File '${filePath}' not found`;
+      return { error: `File '${filePath}' not found` };
     }
 
-    return result.output;
+    return { content: result.output };
   }
 
   /**
@@ -368,10 +386,22 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
       throw new Error(`File '${filePath}' not found`);
     }
 
-    const content = new TextDecoder().decode(results[0].content);
+    const now = new Date().toISOString();
+    const mimeType = getMimeType(filePath);
+    const buffer = results[0].content;
+    let content = Buffer.from(buffer).toString("base64");
+
+    if (!isTextMimeType(mimeType)) {
+      return {
+        content,
+        created_at: now,
+        modified_at: now,
+      };
+    }
+
+    content = new TextDecoder().decode(results[0].content);
     const lines = content.split("\n");
 
-    const now = new Date().toISOString();
     return {
       content: lines,
       created_at: now,
@@ -391,13 +421,13 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
-  ): Promise<GrepMatch[] | string> {
+  ): Promise<GrepResult> {
     const command = buildGrepCommand(pattern, path, glob);
     const result = await this.execute(command);
 
     const output = result.output.trim();
     if (!output) {
-      return [];
+      return { matches: [] };
     }
 
     // Parse grep output format: path:line_number:text
@@ -405,10 +435,18 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     for (const line of output.split("\n")) {
       const parts = line.split(":");
       if (parts.length >= 3) {
+        const filePath = parts[0];
+
+        // Skip binary files
+        const mimeType = getMimeType(filePath);
+        if (!isTextMimeType(mimeType)) {
+          continue;
+        }
+
         const lineNum = parseInt(parts[1], 10);
         if (!isNaN(lineNum)) {
           matches.push({
-            path: parts[0],
+            path: filePath,
             line: lineNum,
             text: parts.slice(2).join(":"),
           });
@@ -416,7 +454,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
       }
     }
 
-    return matches;
+    return { matches };
   }
 
   /**
@@ -484,10 +522,16 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
       // File doesn't exist, which is what we want for write
     }
 
-    const encoder = new TextEncoder();
-    const results = await this.uploadFiles([
-      [filePath, encoder.encode(content)],
-    ]);
+    const mimeType = getMimeType(filePath);
+    let fileContent: Uint8Array;
+
+    if (isTextMimeType(mimeType)) {
+      fileContent = new TextEncoder().encode(content);
+    } else {
+      fileContent = Buffer.from(content, "base64");
+    }
+
+    const results = await this.uploadFiles([[filePath, fileContent]]);
 
     if (results[0].error) {
       return {
