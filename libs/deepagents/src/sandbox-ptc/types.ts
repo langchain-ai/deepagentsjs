@@ -45,6 +45,61 @@ export interface SandboxPtcMiddlewareOptions {
 
   /** Execution timeout in milliseconds (default: 300_000 — 5 minutes) */
   timeoutMs?: number;
+
+  /**
+   * Network policy for `fetch()`. When set, a policy-enforced `fetch`
+   * function is exposed inside scripts.
+   * If not set, `fetch` is not available (fully locked down).
+   */
+  network?: NetworkPolicy;
+}
+
+/**
+ * Per-origin network rule. Overrides defaults for requests matching
+ * this origin prefix.
+ */
+export interface NetworkRule {
+  /** Headers to inject for requests to this origin. Merged with defaultHeaders. */
+  headers?: Record<string, string>;
+  /** Allowed HTTP methods for this origin. Overrides default (all methods). */
+  methods?: string[];
+  /** Maximum response size in bytes. Overrides defaultMaxResponseBytes. */
+  maxResponseBytes?: number;
+  /** Request timeout in ms. Overrides defaultTimeoutMs. */
+  timeoutMs?: number;
+}
+
+/**
+ * Network access policy for the PTC sandbox/REPL.
+ *
+ * Uses origin+path keys for fine-grained control:
+ * - `"google.com"` — all paths on google.com
+ * - `"api.google.com/v1"` — only api.google.com/v1/*
+ *
+ * A `blocked` list takes precedence over `allowed`.
+ */
+export interface NetworkPolicy {
+  /**
+   * Allowed origins with optional per-origin rules.
+   * Keys are `hostname` or `hostname/path-prefix`.
+   * An empty `{}` means "allow with defaults".
+   *
+   * Matching is prefix-based on host+path. The most specific match wins.
+   */
+  allowed: Record<string, NetworkRule>;
+
+  /**
+   * Blocked origin prefixes. Takes precedence over `allowed`.
+   * E.g. `["169.254.169.254", "api.google.com/v2"]`
+   */
+  blocked?: string[];
+
+  /** Headers injected into every request (merged with per-origin headers). */
+  defaultHeaders?: Record<string, string>;
+  /** Default max response size in bytes. Default: 10MB */
+  defaultMaxResponseBytes?: number;
+  /** Default request timeout in ms. Default: 30_000 */
+  defaultTimeoutMs?: number;
 }
 
 /**

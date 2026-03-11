@@ -89,12 +89,33 @@ const __da_console = {
   },
 };
 
+// ── fetch proxy (only if network policy is configured) ──────────────
+// __DA_HAS_FETCH__ is replaced with "true" or "false" at build time
+const __da_hasFetch = __DA_HAS_FETCH__;
+
+function fetch(url, init) {
+  if (!__da_hasFetch) return Promise.reject(new Error("fetch is not available (no network policy configured)"));
+  const uuid = __da_uuid();
+  return new Promise((resolve, reject) => {
+    __da_pending.set(uuid, { resolve, reject });
+    __da_postMessage({
+      type: "fetch",
+      uuid,
+      url: String(url),
+      method: (init && init.method) || "GET",
+      headers: (init && init.headers) || {},
+      body: (init && init.body) || undefined,
+    });
+  });
+}
+
 // ── Run user code in a restricted VM context ────────────────────────
 
 const __da_sandbox = vm.createContext({
   // PTC globals
   toolCall,
   spawnAgent,
+  fetch: __da_hasFetch ? fetch : undefined,
   console: __da_console,
 
   // Safe JS built-ins
@@ -226,21 +247,52 @@ console.error = (...args) => {
   __da_logs.push(line);
   __da_postMessage({ type: "log", text: line });
 };
+
+// fetch proxy (only if network policy is configured)
+const __da_hasFetch_web = __DA_HAS_FETCH_WEB__;
+
+if (__da_hasFetch_web) {
+  const __origFetch = typeof self.fetch === "function" ? self.fetch.bind(self) : null;
+  self.fetch = function(url, init) {
+    const uuid = __da_uuid();
+    return new Promise((resolve, reject) => {
+      __da_pending.set(uuid, { resolve, reject });
+      __da_postMessage({
+        type: "fetch",
+        uuid,
+        url: String(url),
+        method: (init && init.method) || "GET",
+        headers: (init && init.headers) || {},
+        body: (init && init.body) || undefined,
+      });
+    });
+  };
+} else {
+  self.fetch = function() { return Promise.reject(new Error("fetch is not available (no network policy configured)")); };
+}
 `;
 
 /**
  * Build the complete Worker code by injecting the user's code into the
  * appropriate bootstrap (Node.js with vm sandbox, or Web Worker).
  */
-export function wrapUserCode(code: string, impl: "node" | "web"): string {
+export function wrapUserCode(
+  code: string,
+  impl: "node" | "web",
+  options: { hasFetch?: boolean } = {},
+): string {
+  const hasFetch = options.hasFetch ?? false;
+
   if (impl === "node") {
     const escaped = JSON.stringify(code);
-    const [before, after] = NODE_WORKER_BOOTSTRAP.split('"@@SPLIT@@"');
+    let bootstrap = NODE_WORKER_BOOTSTRAP.split("__DA_HAS_FETCH__").join(String(hasFetch));
+    const [before, after] = bootstrap.split('"@@SPLIT@@"');
     return before + escaped + after;
   }
 
   // Web Worker: run code directly (already sandboxed by the browser)
-  return `${WEB_WORKER_BOOTSTRAP}
+  const webBootstrap = WEB_WORKER_BOOTSTRAP.split("__DA_HAS_FETCH_WEB__").join(String(hasFetch));
+  return `${webBootstrap}
 
 (async () => {
   try {

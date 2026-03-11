@@ -9,6 +9,8 @@ export type {
   SandboxPtcMiddlewareOptions,
   PtcToolCallTrace,
   PtcExecuteResult,
+  NetworkPolicy,
+  NetworkRule,
 } from "./types.js";
 export { DEFAULT_PTC_EXCLUDED_TOOLS } from "./types.js";
 
