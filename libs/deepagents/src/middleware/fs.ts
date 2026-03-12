@@ -83,6 +83,13 @@ export const DEFAULT_READ_LINE_OFFSET = 0;
 export const DEFAULT_READ_LINE_LIMIT = 100;
 
 /**
+ * Maximum size for binary (non-text) files read via read_file, in bytes.
+ * Base64-encoded content is ~33% larger, so 10MB raw ≈ 13.3MB in context.
+ * This keeps inline multimodal payloads within all major provider limits.
+ */
+export const MAX_BINARY_READ_SIZE_BYTES = 10 * 1024 * 1024;
+
+/**
  * Template for truncation message in read_file.
  * {file_path} will be filled in at runtime.
  */
@@ -465,20 +472,33 @@ function createReadFileTool(
 
       const mimeType = getMimeType(file_path);
 
-      if (mimeType.startsWith("image/")) {
-        return [{ type: "image", mimeType, data: readResult.content }];
-      }
+      if (
+        mimeType.startsWith("image/") ||
+        mimeType.startsWith("audio/") ||
+        mimeType.startsWith("video/") ||
+        mimeType === "application/pdf"
+      ) {
+        const base64Content = readResult.content ?? "";
+        const approxBytes = base64Content.length * 0.75;
+        if (approxBytes > MAX_BINARY_READ_SIZE_BYTES) {
+          return [
+            {
+              type: "text",
+              text: `Error: file too large to read (${Math.round(approxBytes / (1024 * 1024))}MB exceeds ${MAX_BINARY_READ_SIZE_BYTES / (1024 * 1024)}MB limit for binary files)`,
+            },
+          ];
+        }
 
-      if (mimeType.startsWith("audio/")) {
-        return [{ type: "audio", mimeType, data: readResult.content }];
-      }
-
-      if (mimeType.startsWith("video/")) {
-        return [{ type: "video", mimeType, data: readResult.content }];
-      }
-
-      if (mimeType === "application/pdf") {
-        return [{ type: "file", mimeType, data: readResult.content }];
+        if (mimeType.startsWith("image/")) {
+          return [{ type: "image", mimeType, data: base64Content }];
+        }
+        if (mimeType.startsWith("audio/")) {
+          return [{ type: "audio", mimeType, data: base64Content }];
+        }
+        if (mimeType.startsWith("video/")) {
+          return [{ type: "video", mimeType, data: base64Content }];
+        }
+        return [{ type: "file", mimeType, data: base64Content }];
       }
 
       let content = readResult.content ?? "";
