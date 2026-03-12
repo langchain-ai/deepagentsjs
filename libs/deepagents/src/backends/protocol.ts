@@ -413,7 +413,7 @@ export interface SandboxBackendProtocolV2 extends BackendProtocolV2 {
  * @returns True if the backend implements SandboxBackendProtocolV2
  */
 export function isSandboxBackend(
-  backend: AnyBackendProtocol,
+  backend: unknown,
 ): backend is SandboxBackendProtocolV2 {
   return (
     typeof (backend as SandboxBackendProtocolV2).execute === "function" &&
