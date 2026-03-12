@@ -15,14 +15,14 @@ import type {
   ExecuteResponse,
   FileDownloadResponse,
   FileUploadResponse,
-  SandboxBackendProtocol,
+  SandboxBackendProtocolV2,
 } from "./protocol.js";
 import { isSandboxBackend } from "./protocol.js";
 
 /**
  * Mock sandbox backend for testing execute delegation
  */
-class MockSandboxBackend implements SandboxBackendProtocol {
+class MockSandboxBackend implements SandboxBackendProtocolV2 {
   readonly id = "mock-sandbox";
   public lastCommand: string | null = null;
 

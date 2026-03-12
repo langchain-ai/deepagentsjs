@@ -22,6 +22,7 @@ import type {
   BackendProtocolV2,
   GrepMatch,
   SandboxBackendProtocol,
+  SandboxBackendProtocolV2,
 } from "./protocol.js";
 import { isSandboxBackend } from "./protocol.js";
 
@@ -524,6 +525,24 @@ describe("adaptBackendProtocol", () => {
 
       const sb = adapted as unknown as SandboxBackendProtocol;
       expect(sb.id).toBe("sandbox-1");
+      const execResult = await sb.execute("echo hi");
+      expect(execResult.output).toBe("ran: echo hi");
+    });
+
+    it("should preserve execute and id for V2 sandbox backends", async () => {
+      const v2 = createV2Backend() as unknown as SandboxBackendProtocolV2;
+      (v2 as any).execute = (cmd: string) => ({
+        output: `ran: ${cmd}`,
+        exitCode: 0,
+        truncated: false,
+      });
+      Object.defineProperty(v2, "id", { value: "sandbox-2", enumerable: true });
+
+      const adapted = adaptBackendProtocol(v2);
+      expect(isSandboxBackend(adapted)).toBe(true);
+
+      const sb = adapted as unknown as SandboxBackendProtocolV2;
+      expect(sb.id).toBe("sandbox-2");
       const execResult = await sb.execute("echo hi");
       expect(execResult.output).toBe("ran: echo hi");
     });
