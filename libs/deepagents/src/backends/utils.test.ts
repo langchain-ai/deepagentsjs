@@ -404,6 +404,10 @@ describe("isTextMimeType", () => {
     expect(isTextMimeType("application/javascript")).toBe(true);
   });
 
+  it("should return true for image/svg+xml", () => {
+    expect(isTextMimeType("image/svg+xml")).toBe(true);
+  });
+
   it("should return false for binary types", () => {
     expect(isTextMimeType("image/png")).toBe(false);
     expect(isTextMimeType("application/pdf")).toBe(false);
