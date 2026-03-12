@@ -748,9 +748,15 @@ export function migrateToFileDataV2(data: FileDataV1 | FileDataV2): FileDataV2 {
 }
 
 /**
+ * Adapt a v1 {@link BackendProtocol} to {@link BackendProtocolV2}.
  *
- * @param backend
- * @returns
+ * If the backend already implements v2, it is returned as-is.
+ * For v1 backends, `read()` string returns are wrapped in {@link ReadResult}
+ * and `grepRaw()` returns are wrapped in {@link GrepResult}.
+ * Sandbox properties (`execute`, `id`) are preserved when present.
+ *
+ * @param backend - Backend instance (v1 or v2)
+ * @returns BackendProtocolV2-compatible backend
  */
 export function adaptBackendProtocol(
   backend: BackendProtocol | BackendProtocolV2,
