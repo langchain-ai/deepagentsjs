@@ -15,7 +15,6 @@ import {
   isTextMimeType,
   TOOL_RESULT_TOKEN_LIMIT,
   createFileData,
-  createFileDataV2,
 } from "./utils.js";
 
 describe("validatePath", () => {
@@ -175,9 +174,14 @@ describe("formatContentWithLineNumbers", () => {
   });
 });
 
-describe("createFileData (v1 default)", () => {
-  it("should create FileData with content split into lines by default", () => {
+describe("createFileData", () => {
+  it("should default to v2 format (content as single string)", () => {
     const result = createFileData("line1\nline2");
+    expect(result.content).toBe("line1\nline2");
+  });
+
+  it("should create v1 format when fileFormat is v1", () => {
+    const result = createFileData("line1\nline2", undefined, "v1");
     expect(result.content).toEqual(["line1", "line2"]);
   });
 
@@ -193,36 +197,22 @@ describe("createFileData (v1 default)", () => {
     const result = createFileData("content", timestamp);
     expect(result.created_at).toBe(timestamp);
   });
-});
 
-describe("createFileDataV2", () => {
-  it("should create FileData with content as a single string", () => {
-    const result = createFileDataV2("line1\nline2");
-    expect(result.content).toBe("line1\nline2");
-  });
-
-  it("should base64-encode Uint8Array content", () => {
+  it("should base64-encode Uint8Array content in v2 format", () => {
     const binary = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-    const result = createFileDataV2(binary);
+    const result = createFileData(binary);
     expect(result.content).toBe(Buffer.from(binary).toString("base64"));
   });
 
-  it("should set created_at and modified_at timestamps", () => {
-    const result = createFileDataV2("content");
-    expect(result.created_at).toBeDefined();
-    expect(result.modified_at).toBeDefined();
-  });
-
-  it("should use provided createdAt timestamp", () => {
-    const timestamp = "2023-01-01T00:00:00.000Z";
-    const result = createFileDataV2("content", timestamp);
-    expect(result.created_at).toBe(timestamp);
+  it("should throw when passing binary data with v1 format", () => {
+    const binary = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    expect(() => createFileData(binary, undefined, "v1")).toThrow();
   });
 });
 
 describe("updateFileData", () => {
   it("should update v1 content while preserving created_at", () => {
-    const original = createFileData("old content");
+    const original = createFileData("old content", undefined, "v1");
     const originalCreatedAt = original.created_at;
 
     const updated = updateFileData(original, "new content");
@@ -231,7 +221,7 @@ describe("updateFileData", () => {
   });
 
   it("should update v2 content while preserving created_at", () => {
-    const original = createFileDataV2("old content");
+    const original = createFileData("old content");
     const originalCreatedAt = original.created_at;
 
     const updated = updateFileData(original, "new content");
@@ -240,7 +230,7 @@ describe("updateFileData", () => {
   });
 
   it("should update modified_at timestamp", () => {
-    const original = createFileData("old content");
+    const original = createFileData("old content", undefined, "v1");
     const updated = updateFileData(original, "new content");
     expect(updated.modified_at).toBeDefined();
   });
@@ -248,13 +238,13 @@ describe("updateFileData", () => {
 
 describe("fileDataToString", () => {
   it("should join v1 lines with newlines", () => {
-    const fileData = createFileData("line1\nline2\nline3");
+    const fileData = createFileData("line1\nline2\nline3", undefined, "v1");
     const result = fileDataToString(fileData);
     expect(result).toBe("line1\nline2\nline3");
   });
 
   it("should return v2 content as-is", () => {
-    const fileData = createFileDataV2("line1\nline2\nline3");
+    const fileData = createFileData("line1\nline2\nline3");
     const result = fileDataToString(fileData);
     expect(result).toBe("line1\nline2\nline3");
   });
@@ -358,19 +348,19 @@ describe("truncateIfTooLong", () => {
 
 describe("isFileDataV1", () => {
   it("should return true for v1 data", () => {
-    const v1 = createFileData("hello");
+    const v1 = createFileData("hello", undefined, "v1");
     expect(isFileDataV1(v1)).toBe(true);
   });
 
   it("should return false for v2 data", () => {
-    const v2 = createFileDataV2("hello");
+    const v2 = createFileData("hello");
     expect(isFileDataV1(v2)).toBe(false);
   });
 });
 
 describe("migrateToFileDataV2", () => {
   it("should convert v1 data by joining lines", () => {
-    const v1 = createFileData("line1\nline2");
+    const v1 = createFileData("line1\nline2", undefined, "v1");
     const v2 = migrateToFileDataV2(v1);
     expect(v2.content).toBe("line1\nline2");
     expect(v2.created_at).toBe(v1.created_at);
@@ -378,7 +368,7 @@ describe("migrateToFileDataV2", () => {
   });
 
   it("should return v2 data unchanged", () => {
-    const v2 = createFileDataV2("hello");
+    const v2 = createFileData("hello");
     expect(migrateToFileDataV2(v2)).toBe(v2);
   });
 });
