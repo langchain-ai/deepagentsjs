@@ -52,8 +52,8 @@ import {
 import { StateSchema, ReducedValue } from "@langchain/langgraph";
 
 import type {
+  AnyBackendProtocol,
   BackendFactory,
-  BackendProtocol,
   BackendProtocolV2,
 } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
@@ -144,8 +144,7 @@ export interface SkillsMiddlewareOptions {
    * Use a factory for StateBackend since it requires runtime state.
    */
   backend:
-    | BackendProtocol
-    | BackendProtocolV2
+    | AnyBackendProtocol
     | BackendFactory
     | ((config: { state: unknown; store?: BaseStore }) => StateBackend);
 
@@ -493,7 +492,7 @@ export function parseSkillMetadataFromContent(
  * List all skills from a backend source.
  */
 async function listSkillsFromBackend(
-  backend: BackendProtocol | BackendProtocolV2,
+  backend: AnyBackendProtocol,
   sourcePath: string,
 ): Promise<SkillMetadata[]> {
   const adaptedBackend = adaptBackendProtocol(backend);

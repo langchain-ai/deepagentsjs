@@ -3,7 +3,7 @@
  */
 
 import type {
-  BackendProtocol,
+  AnyBackendProtocol,
   BackendProtocolV2,
   EditResult,
   ExecuteResponse,
@@ -34,8 +34,8 @@ export class CompositeBackend implements BackendProtocolV2 {
   private sortedRoutes: Array<[string, BackendProtocolV2]>;
 
   constructor(
-    defaultBackend: BackendProtocol | BackendProtocolV2,
-    routes: Record<string, BackendProtocol | BackendProtocolV2>,
+    defaultBackend: AnyBackendProtocol,
+    routes: Record<string, AnyBackendProtocol>,
   ) {
     this.default = adaptBackendProtocol(defaultBackend);
     this.routes = Object.fromEntries(
