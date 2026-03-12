@@ -59,8 +59,8 @@ import {
 } from "langchain";
 
 import type {
+  AnyBackendProtocol,
   BackendFactory,
-  BackendProtocol,
   BackendProtocolV2,
 } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
@@ -78,8 +78,7 @@ export interface MemoryMiddlewareOptions {
    * Use a factory for StateBackend since it requires runtime state.
    */
   backend:
-    | BackendProtocol
-    | BackendProtocolV2
+    | AnyBackendProtocol
     | BackendFactory
     | ((config: { state: unknown; store?: BaseStore }) => StateBackend);
 
@@ -209,7 +208,7 @@ function formatMemoryContents(
  * @returns File content if found, null otherwise.
  */
 async function loadMemoryFromBackend(
-  backend: BackendProtocol | BackendProtocolV2,
+  backend: AnyBackendProtocol,
   path: string,
 ): Promise<string | null> {
   const adaptedBackend = adaptBackendProtocol(backend);

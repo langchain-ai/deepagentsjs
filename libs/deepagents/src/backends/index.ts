@@ -6,6 +6,7 @@
  */
 
 export type {
+  AnyBackendProtocol,
   BackendProtocol,
   BackendProtocolV2,
   BackendFactory,

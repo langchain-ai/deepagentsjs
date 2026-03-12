@@ -9,7 +9,7 @@
 import micromatch from "micromatch";
 import path, { basename } from "path";
 import type {
-  BackendProtocol,
+  AnyBackendProtocol,
   BackendProtocolV2,
   FileData,
   FileDataV1,
@@ -759,7 +759,7 @@ export function migrateToFileDataV2(data: FileDataV1 | FileDataV2): FileDataV2 {
  * @returns BackendProtocolV2-compatible backend
  */
 export function adaptBackendProtocol(
-  backend: BackendProtocol | BackendProtocolV2,
+  backend: AnyBackendProtocol,
 ): BackendProtocolV2 {
   const adapted: BackendProtocolV2 = {
     lsInfo: (path) => backend.lsInfo(path),

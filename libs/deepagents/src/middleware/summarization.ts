@@ -61,9 +61,9 @@ import { initChatModel } from "langchain/chat_models/universal";
 import { Command } from "@langchain/langgraph";
 
 import type {
-  BackendProtocol,
-  BackendProtocolV2,
+  AnyBackendProtocol,
   BackendFactory,
+  BackendProtocolV2,
 } from "../backends/protocol.js";
 import { adaptBackendProtocol } from "../backends/utils.js";
 import type { StateBackend } from "../backends/state.js";
@@ -125,8 +125,7 @@ export interface SummarizationMiddlewareOptions {
    * Backend instance or factory for persisting conversation history.
    */
   backend:
-    | BackendProtocol
-    | BackendProtocolV2
+    | AnyBackendProtocol
     | BackendFactory
     | ((config: { state: unknown; store?: BaseStore }) => StateBackend);
 
