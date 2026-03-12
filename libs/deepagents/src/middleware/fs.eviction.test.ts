@@ -7,6 +7,7 @@ import {
   createFilesystemMiddleware,
   TOOLS_EXCLUDED_FROM_EVICTION,
   NUM_CHARS_PER_TOKEN,
+  MAX_BINARY_READ_SIZE_BYTES,
 } from "./fs.js";
 import { StateBackend } from "../backends/state.js";
 import type { FileData } from "../backends/protocol.js";
@@ -469,6 +470,60 @@ describe("read_file multimodal content blocks", () => {
     // Line numbers should be present
     expect(result[0].text).toMatch(/1\s+hello/);
     expect(result[0].text).toMatch(/2\s+world/);
+  });
+
+  it("should return an error for binary files exceeding MAX_BINARY_READ_SIZE_BYTES", async () => {
+    // base64 where length * 0.75 > 10MB — use a string just over the threshold
+    const oversizeBase64 = "A".repeat(
+      Math.ceil(MAX_BINARY_READ_SIZE_BYTES / 0.75 + 4),
+    );
+    const files = { "/large.png": createFileData(oversizeBase64) };
+    const { stateAndStore } = setupStateWithFiles(files);
+
+    const middleware = createFilesystemMiddleware({
+      backend: () => new StateBackend(stateAndStore),
+    });
+
+    const readFileTool = (middleware as any).tools.find(
+      (t: any) => t.name === "read_file",
+    );
+
+    const result = await readFileTool.invoke(
+      { file_path: "/large.png" },
+      { store: undefined },
+    );
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result[0].type).toBe("text");
+    expect(result[0].text).toContain("Error");
+    expect(result[0].text).toContain("too large");
+    expect(result[0].text).toContain(
+      `${MAX_BINARY_READ_SIZE_BYTES / (1024 * 1024)}MB`,
+    );
+  });
+
+  it("should return an image block for binary files under MAX_BINARY_READ_SIZE_BYTES", async () => {
+    const undersizeBase64 = "A".repeat(
+      Math.floor(MAX_BINARY_READ_SIZE_BYTES / 0.75 - 4),
+    );
+    const files = { "/ok.png": createFileData(undersizeBase64) };
+    const { stateAndStore } = setupStateWithFiles(files);
+
+    const middleware = createFilesystemMiddleware({
+      backend: () => new StateBackend(stateAndStore),
+    });
+
+    const readFileTool = (middleware as any).tools.find(
+      (t: any) => t.name === "read_file",
+    );
+
+    const result = await readFileTool.invoke(
+      { file_path: "/ok.png" },
+      { store: undefined },
+    );
+
+    expect(result[0].type).toBe("image");
+    expect(result[0].data).toBe(undersizeBase64);
   });
 
   it("should return an error text content block for missing files", async () => {
