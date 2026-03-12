@@ -20,7 +20,7 @@ import type {
   ExecuteResponse,
   FileInfo,
   ReadResult,
-  SandboxBackendProtocol,
+  SandboxBackendProtocolV2,
 } from "./protocol.js";
 import { SandboxError } from "./protocol.js";
 
@@ -131,7 +131,7 @@ export interface LocalShellBackendOptions {
  */
 export class LocalShellBackend
   extends FilesystemBackend
-  implements SandboxBackendProtocol
+  implements SandboxBackendProtocolV2
 {
   #timeout: number;
   #maxOutputBytes: number;
