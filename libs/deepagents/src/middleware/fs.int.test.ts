@@ -1314,7 +1314,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         .find((msg) => ToolMessage.isInstance(msg) && msg.name === "read_file");
       expect(verifyReadMessage).toBeDefined();
       expect(
-        verifyReadMessage!.content.toString().toLowerCase().includes("ember"),
+        JSON.stringify(verifyReadMessage!.content)
+          .toLowerCase()
+          .includes("ember"),
       ).toBe(true);
     },
   );
