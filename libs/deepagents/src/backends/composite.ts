@@ -33,8 +33,6 @@ export class CompositeBackend implements BackendProtocolV2 {
   private routes: Record<string, BackendProtocolV2>;
   private sortedRoutes: Array<[string, BackendProtocolV2]>;
 
-  readonly protocolVersion = "v2" as const;
-
   constructor(
     defaultBackend: BackendProtocol | BackendProtocolV2,
     routes: Record<string, BackendProtocol | BackendProtocolV2>,

@@ -48,8 +48,6 @@ export class FilesystemBackend implements BackendProtocolV2 {
   protected virtualMode: boolean;
   private maxFileSizeBytes: number;
 
-  readonly protocolVersion = "v2" as const;
-
   constructor(
     options: {
       rootDir?: string;
