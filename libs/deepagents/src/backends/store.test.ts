@@ -268,6 +268,21 @@ describe("StoreBackend", () => {
       const readRes = await backend.read("/hello.txt");
       expect(readRes.content).toContain("Hello");
     });
+
+    it("should upload binary (image) files as base64", async () => {
+      const { stateAndStore } = makeConfig();
+      const backend = new StoreBackend(stateAndStore);
+
+      const pngBytes = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+      const result = await backend.uploadFiles([["/image.png", pngBytes]]);
+      expect(result[0].error).toBeNull();
+
+      const raw = await backend.readRaw("/image.png");
+      expect(typeof raw.content).toBe("string");
+      expect(raw.content).toBe(Buffer.from(pngBytes).toString("base64"));
+    });
   });
 
   describe("downloadFiles", () => {
@@ -315,6 +330,86 @@ describe("StoreBackend", () => {
 
       expect(result[1].error).toBe("file_not_found");
       expect(result[1].content).toBeNull();
+    });
+
+    it("should download binary files as raw bytes (base64 decoded)", async () => {
+      const { stateAndStore } = makeConfig();
+      const backend = new StoreBackend(stateAndStore);
+
+      const pngBytes = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+
+      await backend.uploadFiles([["/image.png", pngBytes]]);
+
+      const result = await backend.downloadFiles(["/image.png"]);
+      expect(result).toHaveLength(1);
+      expect(result[0].error).toBeNull();
+      expect(result[0].content).not.toBeNull();
+      expect(new Uint8Array(result[0].content!)).toEqual(pngBytes);
+    });
+  });
+
+  describe("binary file round-trip", () => {
+    it("should upload and download binary files with identical bytes", async () => {
+      const { stateAndStore } = makeConfig();
+      const backend = new StoreBackend(stateAndStore);
+
+      const originalBytes = new Uint8Array(256);
+      for (let i = 0; i < 256; i++) originalBytes[i] = i;
+
+      const uploadResult = await backend.uploadFiles([
+        ["/data.png", originalBytes],
+      ]);
+      expect(uploadResult[0].error).toBeNull();
+
+      const downloadResult = await backend.downloadFiles(["/data.png"]);
+      expect(downloadResult[0].error).toBeNull();
+      expect(new Uint8Array(downloadResult[0].content!)).toEqual(originalBytes);
+    });
+
+    it("should read binary files as base64 content", async () => {
+      const { stateAndStore } = makeConfig();
+      const backend = new StoreBackend(stateAndStore);
+
+      const pngBytes = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+
+      await backend.uploadFiles([["/photo.png", pngBytes]]);
+
+      const readResult = await backend.read("/photo.png");
+      expect(readResult.error).toBeUndefined();
+      expect(readResult.content).toBe(Buffer.from(pngBytes).toString("base64"));
+    });
+
+    it("should skip binary files in grep", async () => {
+      const { stateAndStore } = makeConfig();
+      const backend = new StoreBackend(stateAndStore);
+
+      const pngBytes = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+      await backend.uploadFiles([["/image.png", pngBytes]]);
+      await backend.write("/notes.txt", "hello PNG");
+
+      const grepRes = await backend.grepRaw("PNG", "/");
+      expect(grepRes.matches).toHaveLength(1);
+      expect(grepRes.matches![0].path).toBe("/notes.txt");
+    });
+
+    it("should ignore offset/limit for binary reads", async () => {
+      const { stateAndStore } = makeConfig();
+      const backend = new StoreBackend(stateAndStore);
+
+      const pngBytes = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+      await backend.uploadFiles([["/img.png", pngBytes]]);
+
+      const full = await backend.read("/img.png");
+      const withOffsetLimit = await backend.read("/img.png", 5, 2);
+      expect(withOffsetLimit.content).toBe(full.content);
     });
   });
 

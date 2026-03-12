@@ -266,6 +266,22 @@ describe("StateBackend", () => {
       expect(result[0].error).toBeNull();
       expect((result as any).filesUpdate["/hello.txt"].content).toBe("Hello");
     });
+
+    it("should upload binary (image) files as base64", () => {
+      const { state, stateAndStore } = makeConfig();
+      const backend = new StateBackend(stateAndStore);
+
+      const pngBytes = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+      const result = backend.uploadFiles([["/image.png", pngBytes]]);
+      expect(result[0].error).toBeNull();
+
+      Object.assign(state.files, (result as any).filesUpdate);
+      const stored = state.files["/image.png"];
+      expect(typeof stored.content).toBe("string");
+      expect(stored.content).toBe(Buffer.from(pngBytes).toString("base64"));
+    });
   });
 
   describe("downloadFiles", () => {
@@ -312,6 +328,91 @@ describe("StateBackend", () => {
 
       expect(result[1].error).toBe("file_not_found");
       expect(result[1].content).toBeNull();
+    });
+
+    it("should download binary files as raw bytes (base64 decoded)", () => {
+      const { state, stateAndStore } = makeConfig();
+      const backend = new StateBackend(stateAndStore);
+
+      const pngBytes = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+
+      const uploadResult = backend.uploadFiles([["/image.png", pngBytes]]);
+      Object.assign(state.files, (uploadResult as any).filesUpdate);
+
+      const result = backend.downloadFiles(["/image.png"]);
+      expect(result).toHaveLength(1);
+      expect(result[0].error).toBeNull();
+      expect(result[0].content).not.toBeNull();
+      expect(new Uint8Array(result[0].content!)).toEqual(pngBytes);
+    });
+  });
+
+  describe("binary file round-trip", () => {
+    it("should upload and download binary files with identical bytes", () => {
+      const { state, stateAndStore } = makeConfig();
+      const backend = new StateBackend(stateAndStore);
+
+      const originalBytes = new Uint8Array(256);
+      for (let i = 0; i < 256; i++) originalBytes[i] = i;
+
+      const uploadResult = backend.uploadFiles([["/data.png", originalBytes]]);
+      expect(uploadResult[0].error).toBeNull();
+      Object.assign(state.files, (uploadResult as any).filesUpdate);
+
+      const downloadResult = backend.downloadFiles(["/data.png"]);
+      expect(downloadResult[0].error).toBeNull();
+      expect(new Uint8Array(downloadResult[0].content!)).toEqual(originalBytes);
+    });
+
+    it("should read binary files as base64 content", () => {
+      const { state, stateAndStore } = makeConfig();
+      const backend = new StateBackend(stateAndStore);
+
+      const pngBytes = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+
+      const uploadResult = backend.uploadFiles([["/photo.png", pngBytes]]);
+      Object.assign(state.files, (uploadResult as any).filesUpdate);
+
+      const readResult = backend.read("/photo.png");
+      expect(readResult.error).toBeUndefined();
+      expect(readResult.content).toBe(Buffer.from(pngBytes).toString("base64"));
+    });
+
+    it("should skip binary files in grep", () => {
+      const { state, stateAndStore } = makeConfig();
+      const backend = new StateBackend(stateAndStore);
+
+      const pngBytes = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+      const uploadResult = backend.uploadFiles([["/image.png", pngBytes]]);
+      Object.assign(state.files, (uploadResult as any).filesUpdate);
+
+      const writeRes = backend.write("/notes.txt", "hello PNG");
+      Object.assign(state.files, writeRes.filesUpdate);
+
+      const grepRes = backend.grepRaw("PNG", "/");
+      expect(grepRes.matches).toHaveLength(1);
+      expect(grepRes.matches![0].path).toBe("/notes.txt");
+    });
+
+    it("should ignore offset/limit for binary reads", () => {
+      const { state, stateAndStore } = makeConfig();
+      const backend = new StateBackend(stateAndStore);
+
+      const pngBytes = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+      const uploadResult = backend.uploadFiles([["/img.png", pngBytes]]);
+      Object.assign(state.files, (uploadResult as any).filesUpdate);
+
+      const full = backend.read("/img.png");
+      const withOffsetLimit = backend.read("/img.png", 5, 2);
+      expect(withOffsetLimit.content).toBe(full.content);
     });
   });
 
