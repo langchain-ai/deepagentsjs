@@ -18,7 +18,6 @@ import type {
 } from "./protocol.js";
 import {
   createFileData,
-  createFileDataV2,
   fileDataToString,
   getMimeType,
   globSearchFiles,
@@ -108,8 +107,6 @@ export class StoreBackend implements BackendProtocolV2 {
   private stateAndStore: StateAndStore;
   private _namespace: string[] | undefined;
   private fileFormat: "v1" | "v2";
-
-  readonly protocolVersion = "v2" as const;
 
   constructor(stateAndStore: StateAndStore, options?: StoreBackendOptions) {
     this.stateAndStore = stateAndStore;
@@ -380,10 +377,7 @@ export class StoreBackend implements BackendProtocolV2 {
     }
 
     // Create new file
-    const fileData =
-      this.fileFormat === "v2"
-        ? createFileDataV2(content)
-        : createFileData(content);
+    const fileData = createFileData(content, undefined, this.fileFormat);
     const storeValue = this.convertFileDataToStoreValue(fileData);
     await store.put(namespace, filePath, storeValue);
     return { path: filePath, filesUpdate: null };
@@ -523,13 +517,10 @@ export class StoreBackend implements BackendProtocolV2 {
 
         let fileData: FileData;
         if (isBinary) {
-          fileData = createFileDataV2(content);
+          fileData = createFileData(content, undefined, "v2");
         } else {
           const contentStr = new TextDecoder().decode(content);
-          fileData =
-            this.fileFormat === "v2"
-              ? createFileDataV2(contentStr)
-              : createFileData(contentStr);
+          fileData = createFileData(contentStr, undefined, this.fileFormat);
         }
 
         const storeValue = this.convertFileDataToStoreValue(fileData);

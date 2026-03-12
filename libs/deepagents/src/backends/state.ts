@@ -17,7 +17,6 @@ import type {
 } from "./protocol.js";
 import {
   createFileData,
-  createFileDataV2,
   fileDataToString,
   getMimeType,
   globSearchFiles,
@@ -43,8 +42,6 @@ import {
 export class StateBackend implements BackendProtocolV2 {
   private stateAndStore: StateAndStore;
   private fileFormat: "v1" | "v2";
-
-  readonly protocolVersion = "v2" as const;
 
   constructor(stateAndStore: StateAndStore, options?: BackendOptions) {
     this.stateAndStore = stateAndStore;
@@ -179,10 +176,7 @@ export class StateBackend implements BackendProtocolV2 {
       };
     }
 
-    const newFileData =
-      this.fileFormat === "v2"
-        ? createFileDataV2(content)
-        : createFileData(content);
+    const newFileData = createFileData(content, undefined, this.fileFormat);
     return {
       path: filePath,
       filesUpdate: { [filePath]: newFileData },
@@ -291,13 +285,14 @@ export class StateBackend implements BackendProtocolV2 {
         const mimeType = getMimeType(path);
 
         if (this.fileFormat === "v2" && !isTextMimeType(mimeType)) {
-          updates[path] = createFileDataV2(content);
+          updates[path] = createFileData(content, undefined, "v2");
         } else {
           const contentStr = new TextDecoder().decode(content);
-          updates[path] =
-            this.fileFormat === "v2"
-              ? createFileDataV2(contentStr)
-              : createFileData(contentStr);
+          updates[path] = createFileData(
+            contentStr,
+            undefined,
+            this.fileFormat,
+          );
         }
 
         responses.push({ path, error: null });
