@@ -5,9 +5,7 @@
  * V1 backends can be adapted using {@link adaptBackendProtocol} from utils.
  */
 
-import type {
-  BackendProtocol,
-} from "../v1/protocol.js";
+import type { BackendProtocol } from "../v1/protocol.js";
 import type {
   ExecuteResponse,
   GrepResult,
