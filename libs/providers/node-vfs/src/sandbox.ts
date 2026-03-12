@@ -24,7 +24,6 @@ import {
   type FileInfo,
   type FileOperationError,
   type FileUploadResponse,
-  type GrepMatch,
   type GrepResult,
   type ReadResult,
   type BackendFactory,
