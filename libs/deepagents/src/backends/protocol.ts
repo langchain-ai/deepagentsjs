@@ -211,7 +211,7 @@ export interface BackendOptions {
  * Methods can return either direct values or Promises, allowing both
  * synchronous and asynchronous implementations.
  *
- * @deprecated
+ * @deprecated Use {@link BackendProtocolV2} instead.
  */
 export interface BackendProtocol {
   /**
