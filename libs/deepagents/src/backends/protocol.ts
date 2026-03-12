@@ -456,7 +456,7 @@ export interface SandboxBackendProtocol extends BackendProtocol {
 }
 
 /**
- * Updated protocol for sandboxed backends with isolated runtime.
+ * Protocol for sandboxed backends with isolated runtime.
  *
  * Key differences from {@link SandboxBackendProtocol}:
  * - Extends {@link BackendProtocolV2} instead of {@link BackendProtocol}
@@ -483,7 +483,7 @@ export interface SandboxBackendProtocolV2 extends BackendProtocolV2 {
  * @returns True if the backend implements SandboxBackendProtocolV2
  */
 export function isSandboxBackend(
-  backend: BackendProtocol | BackendProtocolV2,
+  backend: AnyBackendProtocol,
 ): backend is SandboxBackendProtocolV2 {
   return (
     typeof (backend as SandboxBackendProtocolV2).execute === "function" &&
@@ -694,6 +694,14 @@ export interface StateAndStore {
 }
 
 /**
+ * Union of v1 and v2 backend protocols.
+ *
+ * Use this when accepting either protocol version. Pass through
+ * {@link adaptBackendProtocol} to normalize to {@link BackendProtocolV2}.
+ */
+export type AnyBackendProtocol = BackendProtocol | BackendProtocolV2;
+
+/**
  * Factory function type for creating backend instances.
  *
  * Backends receive StateAndStore which contains the current state
@@ -709,4 +717,4 @@ export interface StateAndStore {
  */
 export type BackendFactory = (
   stateAndStore: StateAndStore,
-) => BackendProtocol | BackendProtocolV2;
+) => AnyBackendProtocol;
