@@ -15,7 +15,10 @@ import type {
 } from "./v2/protocol.js";
 
 export type { BackendProtocol, SandboxBackendProtocol } from "./v1/protocol.js";
-export type { BackendProtocolV2, SandboxBackendProtocolV2 } from "./v2/protocol.js";
+export type {
+  BackendProtocolV2,
+  SandboxBackendProtocolV2,
+} from "./v2/protocol.js";
 
 export type MaybePromise<T> = T | Promise<T>;
 
