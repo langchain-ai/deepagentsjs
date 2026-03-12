@@ -327,18 +327,10 @@ export interface BackendProtocol {
  * Existing v1 backends can be adapted to this interface using
  * {@link adaptBackendProtocol} from utils.
  */
-export interface BackendProtocolV2 {
-  /**
-   * Structured listing with file metadata.
-   *
-   * Lists files and directories in the specified directory (non-recursive).
-   * Directories have a trailing / in their path and is_dir=true.
-   *
-   * @param path - Absolute path to directory
-   * @returns List of FileInfo objects for files and directories directly in the directory
-   */
-  lsInfo(path: string): MaybePromise<FileInfo[]>;
-
+export interface BackendProtocolV2 extends Omit<
+  BackendProtocol,
+  "read" | "grepRaw"
+> {
   /**
    * Read file content.
    *
@@ -357,14 +349,6 @@ export interface BackendProtocolV2 {
   ): MaybePromise<ReadResult>;
 
   /**
-   * Read file content as raw FileData.
-   *
-   * @param filePath - Absolute file path
-   * @returns Raw file content as FileData
-   */
-  readRaw(filePath: string): MaybePromise<FileData>;
-
-  /**
    * Search file contents for a literal text pattern.
    *
    * Binary files (determined by MIME type) are skipped.
@@ -379,60 +363,6 @@ export interface BackendProtocolV2 {
     path?: string | null,
     glob?: string | null,
   ): MaybePromise<GrepResult>;
-
-  /**
-   * Structured glob matching returning FileInfo objects.
-   *
-   * @param pattern - Glob pattern (e.g., `*.py`, `**\/*.ts`)
-   * @param path - Base path to search from (default: "/")
-   * @returns List of FileInfo objects matching the pattern
-   */
-  globInfo(pattern: string, path?: string): MaybePromise<FileInfo[]>;
-
-  /**
-   * Create a new file.
-   *
-   * @param filePath - Absolute file path
-   * @param content - File content as string
-   * @returns WriteResult with error populated on failure
-   */
-  write(filePath: string, content: string): MaybePromise<WriteResult>;
-
-  /**
-   * Edit a file by replacing string occurrences.
-   *
-   * @param filePath - Absolute file path
-   * @param oldString - String to find and replace
-   * @param newString - Replacement string
-   * @param replaceAll - If true, replace all occurrences (default: false)
-   * @returns EditResult with error, path, filesUpdate, and occurrences
-   */
-  edit(
-    filePath: string,
-    oldString: string,
-    newString: string,
-    replaceAll?: boolean,
-  ): MaybePromise<EditResult>;
-
-  /**
-   * Upload multiple files.
-   * Optional - backends that don't support file upload can omit this.
-   *
-   * @param files - List of [path, content] tuples to upload
-   * @returns List of FileUploadResponse objects, one per input file
-   */
-  uploadFiles?(
-    files: Array<[string, Uint8Array]>,
-  ): MaybePromise<FileUploadResponse[]>;
-
-  /**
-   * Download multiple files.
-   * Optional - backends that don't support file download can omit this.
-   *
-   * @param paths - List of file paths to download
-   * @returns List of FileDownloadResponse objects, one per input path
-   */
-  downloadFiles?(paths: string[]): MaybePromise<FileDownloadResponse[]>;
 }
 
 /**
