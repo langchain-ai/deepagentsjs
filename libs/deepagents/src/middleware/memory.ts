@@ -83,6 +83,14 @@ export interface MemoryMiddlewareOptions {
    * Sources are loaded in order.
    */
   sources: string[];
+
+  /**
+   * Whether to add cache_control breakpoints to the memory content block.
+   * When true, the memory block is tagged with `cache_control: { type: "ephemeral" }`
+   * to enable prompt caching for providers that support it (e.g., Anthropic).
+   * @default false
+   */
+  addCacheControl?: boolean;
 }
 
 /**
@@ -256,7 +264,7 @@ async function loadMemoryFromBackend(
  * ```
  */
 export function createMemoryMiddleware(options: MemoryMiddlewareOptions) {
-  const { backend, sources } = options;
+  const { backend, sources, addCacheControl = false } = options;
 
   /**
    * Resolve backend from instance or factory.
@@ -305,15 +313,31 @@ export function createMemoryMiddleware(options: MemoryMiddlewareOptions) {
 
       // Format memory section
       const formattedContents = formatMemoryContents(memoryContents, sources);
-
       const memorySection = MEMORY_SYSTEM_PROMPT.replace(
         "{memory_contents}",
         formattedContents,
       );
 
-      // Concat memory section to system prompt
-      const memoryMessage = new SystemMessage(memorySection);
-      const newSystemMessage = memoryMessage.concat(request.systemMessage);
+      const existingContent = request.systemMessage.content;
+      const existingBlocks =
+        typeof existingContent === "string"
+          ? [{ type: "text" as const, text: existingContent }]
+          : Array.isArray(existingContent)
+            ? existingContent
+            : [];
+
+      const newSystemMessage = new SystemMessage({
+        content: [
+          ...existingBlocks,
+          {
+            type: "text" as const,
+            text: memorySection,
+            ...(addCacheControl && {
+              cache_control: { type: "ephemeral" as const },
+            }),
+          },
+        ],
+      });
 
       return handler({
         ...request,

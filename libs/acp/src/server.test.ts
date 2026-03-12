@@ -221,6 +221,45 @@ describe("DeepAgentsServer handlers", () => {
       // ACP spec: agentCapabilities with promptCapabilities nested
       expect(result.agentCapabilities).toBeDefined();
       expect(result.agentCapabilities.promptCapabilities).toBeDefined();
+      // ACP spec: default authMethods for registry compliance
+      expect(result.authMethods).toBeDefined();
+      expect(Array.isArray(result.authMethods)).toBe(true);
+      expect(result.authMethods.length).toBe(3);
+      expect(
+        result.authMethods.find((m: any) => m.type === "env_var"),
+      ).toBeDefined();
+      expect(
+        result.authMethods.find((m: any) => m.id === "deepagents-setup"),
+      ).toBeDefined();
+    });
+
+    it("should use custom authMethods when provided", async () => {
+      const customAuth = [
+        {
+          id: "my-login",
+          name: "My Login",
+          type: "terminal" as const,
+          args: ["--login"],
+        },
+      ];
+
+      const server = new DeepAgentsServer({
+        agents: { name: "test" },
+        authMethods: customAuth,
+      });
+
+      const serverAny = server as unknown as {
+        handleInitialize: (
+          params: Record<string, unknown>,
+        ) => Promise<Record<string, unknown>>;
+      };
+
+      const result: any = await serverAny.handleInitialize({
+        clientInfo: { name: "test-client", version: "1.0.0" },
+        protocolVersion: 1,
+      });
+
+      expect(result.authMethods).toEqual(customAuth);
     });
 
     it("should store client capabilities", async () => {
