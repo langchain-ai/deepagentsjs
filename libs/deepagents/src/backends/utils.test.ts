@@ -563,7 +563,9 @@ describe("adaptBackendProtocol", () => {
 
     it("should preserve downloadFiles when present", () => {
       const v1 = createV1Backend();
-      v1.downloadFiles = () => [{ path: "/f.txt", content: new Uint8Array(), error: null }];
+      v1.downloadFiles = () => [
+        { path: "/f.txt", content: new Uint8Array(), error: null },
+      ];
       const adapted = adaptBackendProtocol(v1);
       expect(adapted.downloadFiles).toBeDefined();
     });
