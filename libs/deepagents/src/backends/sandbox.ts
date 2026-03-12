@@ -24,7 +24,7 @@ import type {
   GrepResult,
   MaybePromise,
   ReadResult,
-  SandboxBackendProtocol,
+  SandboxBackendProtocolV2,
   WriteResult,
 } from "./protocol.js";
 import { getMimeType, isTextMimeType } from "./utils.js";
@@ -272,7 +272,7 @@ function buildGrepCommand(
  * available on any Linux including Alpine/busybox. No Python, Node.js, or
  * other runtime is required on the sandbox host.
  */
-export abstract class BaseSandbox implements SandboxBackendProtocol {
+export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
   /** Unique identifier for the sandbox backend */
   abstract readonly id: string;
 
