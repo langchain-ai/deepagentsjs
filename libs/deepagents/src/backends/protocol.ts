@@ -318,7 +318,14 @@ export interface BackendProtocol {
 }
 
 /**
- * ...
+ * Updated protocol for pluggable memory backends.
+ *
+ * Key differences from {@link BackendProtocol}:
+ * - `read()` returns {@link ReadResult} instead of a plain string
+ * - `grepRaw()` returns {@link GrepResult} instead of `GrepMatch[] | string`
+ *
+ * Existing v1 backends can be adapted to this interface using
+ * {@link adaptBackendProtocol} from utils.
  */
 export interface BackendProtocolV2 {
   /**
