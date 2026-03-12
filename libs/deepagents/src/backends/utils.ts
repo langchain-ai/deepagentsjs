@@ -763,7 +763,10 @@ export function adaptBackendProtocol(
 ): BackendProtocolV2 {
   const adapted: BackendProtocolV2 = {
     lsInfo: (path) => backend.lsInfo(path),
-    readRaw: (filePath) => backend.readRaw(filePath),
+    async readRaw(filePath): Promise<FileData> {
+      const data = await backend.readRaw(filePath);
+      return migrateToFileDataV2(data);
+    },
     globInfo: (pattern, path) => backend.globInfo(pattern, path),
     write: (filePath, content) => backend.write(filePath, content),
     edit: (filePath, oldString, newString, replaceAll) =>
