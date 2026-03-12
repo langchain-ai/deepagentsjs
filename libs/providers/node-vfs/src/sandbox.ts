@@ -25,6 +25,8 @@ import {
   type FileOperationError,
   type FileUploadResponse,
   type GrepMatch,
+  type GrepResult,
+  type ReadResult,
   type BackendFactory,
 } from "deepagents";
 
@@ -484,7 +486,7 @@ export class VfsSandbox extends BaseSandbox {
     filePath: string,
     offset: number = 0,
     limit: number = 500,
-  ): Promise<string> {
+  ): Promise<ReadResult> {
     return super.read(this.#normalizeExecPath(filePath), offset, limit);
   }
 
@@ -508,7 +510,7 @@ export class VfsSandbox extends BaseSandbox {
     pattern: string,
     searchPath: string = "/",
     glob: string | null = null,
-  ): Promise<GrepMatch[] | string> {
+  ): Promise<GrepResult> {
     return super.grepRaw(pattern, this.#normalizeExecPath(searchPath), glob);
   }
 
