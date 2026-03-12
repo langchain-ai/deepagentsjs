@@ -392,10 +392,7 @@ export interface CreateDeepAgentParams<
    */
   backend?:
     | AnyBackendProtocol
-    | ((config: {
-        state: unknown;
-        store?: BaseStore;
-      }) => AnyBackendProtocol);
+    | ((config: { state: unknown; store?: BaseStore }) => AnyBackendProtocol);
   /** Optional interrupt configuration mapping tool names to interrupt configs */
   interruptOn?: Record<string, boolean | InterruptOnConfig>;
   /** The name of the agent */
