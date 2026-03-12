@@ -8,7 +8,6 @@
 
 import type {
   EditResult,
-  ExecuteResponse,
   FileData,
   FileDownloadResponse,
   FileInfo,
@@ -31,7 +30,7 @@ import type {
  *
  * @deprecated Use {@link BackendProtocolV2} instead.
  */
-export interface BackendProtocolV1 {
+export interface BackendProtocol {
   /**
    * Structured listing with file metadata.
    *
@@ -139,14 +138,16 @@ export interface BackendProtocolV1 {
  *
  * @deprecated Use {@link SandboxBackendProtocolV2} instead.
  */
-export interface SandboxBackendProtocolV1 extends BackendProtocolV1 {
+export interface SandboxBackendProtocol extends BackendProtocol {
   /**
    * Execute a command in the sandbox.
    *
    * @param command - Full shell command string to execute
    * @returns ExecuteResponse with combined output, exit code, and truncation flag
    */
-  execute(command: string): MaybePromise<ExecuteResponse>;
+  execute(
+    command: string,
+  ): MaybePromise<import("../protocol.js").ExecuteResponse>;
 
   /** Unique identifier for the sandbox backend instance */
   readonly id: string;
