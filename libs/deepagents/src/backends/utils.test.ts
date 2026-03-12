@@ -416,7 +416,7 @@ describe("adaptBackendProtocol", () => {
     return {
       lsInfo: () => [],
       read: (filePath: string) => `content of ${filePath}`,
-      readRaw: (filePath: string) => ({
+      readRaw: (_filePath: string) => ({
         content: ["line1", "line2"],
         created_at: "2024-01-01T00:00:00.000Z",
         modified_at: "2024-01-01T00:00:00.000Z",
