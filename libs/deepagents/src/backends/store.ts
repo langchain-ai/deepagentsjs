@@ -555,8 +555,15 @@ export class StoreBackend implements BackendProtocolV2 {
 
         const fileData = this.convertStoreItemToFileData(item);
         const contentStr = fileDataToString(fileData);
-        const content = new TextEncoder().encode(contentStr);
-        responses.push({ path, content, error: null });
+
+        const mimeType = getMimeType(path);
+        if (!isTextMimeType(mimeType)) {
+          const content = Buffer.from(contentStr, "base64");
+          responses.push({ path, content, error: null });
+        } else {
+          const content = new TextEncoder().encode(contentStr);
+          responses.push({ path, content, error: null });
+        }
       } catch {
         responses.push({ path, content: null, error: "file_not_found" });
       }
