@@ -7,7 +7,6 @@
 
 import type {
   BackendProtocol,
-  SandboxBackendProtocol,
 } from "../v1/protocol.js";
 import type {
   ExecuteResponse,
