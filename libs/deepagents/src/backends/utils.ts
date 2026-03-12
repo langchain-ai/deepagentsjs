@@ -17,6 +17,7 @@ import type {
   GrepMatch,
   ReadResult,
   GrepResult,
+  SandboxBackendProtocol,
 } from "./protocol.js";
 
 // Constants
@@ -142,62 +143,51 @@ export function fileDataToString(fileData: FileData): string {
 }
 
 /**
- * Create a v1 FileData object with content stored as an array of lines.
+ * Create a FileData object.
  *
- * This is the default format for backward compatibility. Use this when writing
- * to state that may be read by older code that does not support v2.
+ * Defaults to v2 format (content as single string). Pass `fileFormat: "v1"` for
+ * backward compatibility with older readers during a rolling deployment.
+ * Binary content (Uint8Array) is only supported with v2.
  *
- * For binary content or new deployments that fully support v2, use
- * {@link createFileDataV2} instead.
- *
- * @param content - File content as a string (split on "\n" for storage)
+ * @param content - File content as a string or binary Uint8Array (v2 only)
  * @param createdAt - Optional creation timestamp (ISO format), defaults to now
- * @returns FileDataV1 with content stored as a line array
+ * @param fileFormat - Storage format: "v2" (default) or "v1" (legacy line array)
+ * @returns FileData in the requested format
  */
 export function createFileData(
-  content: string,
+  content: string | Uint8Array,
   createdAt?: string,
-): FileDataV1 {
-  const lines = typeof content === "string" ? content.split("\n") : content;
+  fileFormat: "v1" | "v2" = "v2",
+): FileData {
   const now = new Date().toISOString();
 
+  if (fileFormat === "v1" && ArrayBuffer.isView(content)) {
+    throw new Error(
+      "Binary data is not supported with v1 file formats. Please use v2 file format",
+    );
+  }
+
+  if (fileFormat === "v2") {
+    if (ArrayBuffer.isView(content)) {
+      return {
+        content: Buffer.from(content).toString("base64"),
+        created_at: createdAt || now,
+        modified_at: now,
+      } as FileDataV2;
+    }
+    return {
+      content,
+      created_at: createdAt || now,
+      modified_at: now,
+    } as FileDataV2;
+  }
+
+  const lines = typeof content === "string" ? content.split("\n") : content;
   return {
     content: lines,
     created_at: createdAt || now,
     modified_at: now,
-  };
-}
-
-/**
- * Create a v2 FileData object with content stored as a single string.
- *
- * Prefer this format for new deployments. It supports both text and binary
- * files — binary content (Uint8Array) is base64-encoded for JSON-safe storage.
- *
- * Use {@link createFileData} instead if you need to write v1 format for
- * compatibility with older readers during a rolling deployment.
- *
- * @param content - File content as a string or binary Uint8Array
- * @param createdAt - Optional creation timestamp (ISO format), defaults to now
- * @returns FileDataV2 with content stored as a single string (base64 if binary)
- */
-export function createFileDataV2(
-  content: string | Uint8Array,
-  createdAt?: string,
-): FileDataV2 {
-  const now = new Date().toISOString();
-  if (ArrayBuffer.isView(content)) {
-    return {
-      content: Buffer.from(content).toString("base64"),
-      created_at: createdAt || now,
-      modified_at: now,
-    };
-  }
-  return {
-    content,
-    created_at: createdAt || now,
-    modified_at: now,
-  };
+  } as FileDataV1;
 }
 
 /**
@@ -758,18 +748,6 @@ export function migrateToFileDataV2(data: FileDataV1 | FileDataV2): FileDataV2 {
 }
 
 /**
- * ...
- *
- * @param protocol
- * @returns
- */
-export function isBackendProtocolV2(
-  protocol: BackendProtocol | BackendProtocolV2,
-): protocol is BackendProtocolV2 {
-  return (protocol as any).protocolVersion === "v2";
-}
-
-/**
  *
  * @param backend
  * @returns
@@ -777,39 +755,37 @@ export function isBackendProtocolV2(
 export function adaptBackendProtocol(
   backend: BackendProtocol | BackendProtocolV2,
 ): BackendProtocolV2 {
-  if (isBackendProtocolV2(backend)) {
-    return backend;
-  }
-
-  return {
-    protocolVersion: "v2",
-    ...backend,
-    async read(
-      filePath: string,
-      offset?: number,
-      limit?: number,
-    ): Promise<ReadResult> {
-      const result = await (backend as BackendProtocol).read(
-        filePath,
-        offset,
-        limit,
-      );
+  const adapted: BackendProtocolV2 = {
+    lsInfo: (path) => backend.lsInfo(path),
+    readRaw: (filePath) => backend.readRaw(filePath),
+    globInfo: (pattern, path) => backend.globInfo(pattern, path),
+    write: (filePath, content) => backend.write(filePath, content),
+    edit: (filePath, oldString, newString, replaceAll) =>
+      backend.edit(filePath, oldString, newString, replaceAll),
+    uploadFiles: backend.uploadFiles
+      ? (files) => backend.uploadFiles!(files)
+      : undefined,
+    downloadFiles: backend.downloadFiles
+      ? (paths) => backend.downloadFiles!(paths)
+      : undefined,
+    async read(filePath, offset, limit): Promise<ReadResult> {
+      const result = await backend.read(filePath, offset, limit);
       if (typeof result === "string") return { content: result };
-      return result;
+      return result as ReadResult;
     },
-    async grepRaw(
-      pattern: string,
-      path?: string | null,
-      glob?: string | null,
-    ): Promise<GrepResult> {
-      const result = await (backend as BackendProtocol).grepRaw(
-        pattern,
-        path,
-        glob,
-      );
+    async grepRaw(pattern, path, glob): Promise<GrepResult> {
+      const result = await backend.grepRaw(pattern, path, glob);
       if (Array.isArray(result)) return { matches: result };
       if (typeof result === "string") return { error: result };
-      return result;
+      return result as GrepResult;
     },
   };
+
+  const sb = backend as SandboxBackendProtocol;
+  if (typeof sb.execute === "function") {
+    (adapted as SandboxBackendProtocol).execute = (cmd) => sb.execute(cmd);
+    Object.defineProperty(adapted, "id", { value: sb.id, enumerable: true });
+  }
+
+  return adapted;
 }

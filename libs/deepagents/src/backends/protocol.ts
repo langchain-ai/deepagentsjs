@@ -322,11 +322,6 @@ export interface BackendProtocol {
  */
 export interface BackendProtocolV2 {
   /**
-   * ...
-   */
-  readonly protocolVersion: "v2";
-
-  /**
    * Structured listing with file metadata.
    *
    * Lists files and directories in the specified directory (non-recursive).
