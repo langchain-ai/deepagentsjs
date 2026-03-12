@@ -116,7 +116,7 @@ export function registerInitialFilesTests<T extends SandboxInstance>(
 
         try {
           const content = await tmp.read(filePath);
-          expect(content).toContain("Content for read test");
+          expect(content.content).toContain("Content for read test");
         } finally {
           await config.closeSandbox?.(tmp);
         }
