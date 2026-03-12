@@ -96,6 +96,8 @@ export {
   type BackendFactory,
   type FileInfo,
   type GrepMatch,
+  type GrepResult,
+  type ReadResult,
   type WriteResult,
   type EditResult,
   // Sandbox execution types
