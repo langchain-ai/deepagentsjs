@@ -17,7 +17,7 @@ import type {
   GrepMatch,
   ReadResult,
   GrepResult,
-  SandboxBackendProtocol,
+  SandboxBackendProtocolV2,
 } from "./protocol.js";
 
 // Constants
@@ -790,9 +790,9 @@ export function adaptBackendProtocol(
     },
   };
 
-  const sb = backend as SandboxBackendProtocol;
+  const sb = backend as SandboxBackendProtocolV2;
   if (typeof sb.execute === "function") {
-    (adapted as SandboxBackendProtocol).execute = (cmd) => sb.execute(cmd);
+    (adapted as SandboxBackendProtocolV2).execute = (cmd) => sb.execute(cmd);
     Object.defineProperty(adapted, "id", { value: sb.id, enumerable: true });
   }
 

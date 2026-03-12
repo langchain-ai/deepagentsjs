@@ -120,18 +120,15 @@ describe("isSandboxBackend", () => {
     const sandboxBackend: SandboxBackendProtocolV2 = {
       id: "test-sandbox-v2",
       execute: async () => ({ output: "", exitCode: 0, truncated: false }),
-      lsInfo: async () => ({ files: [] }),
+      lsInfo: async () => [],
       read: async () => ({ content: "hello" }),
       readRaw: async () => ({
-        data: {
-          content: "hello",
-          mimeType: "text/plain",
-          created_at: "2024-01-01T00:00:00.000Z",
-          modified_at: "2024-01-01T00:00:00.000Z",
-        },
+        content: "hello",
+        created_at: "2024-01-01T00:00:00.000Z",
+        modified_at: "2024-01-01T00:00:00.000Z",
       }),
       grepRaw: async () => ({ matches: [] }),
-      globInfo: async () => ({ files: [] }),
+      globInfo: async () => [],
       write: async () => ({ path: "" }),
       edit: async () => ({ path: "" }),
     };
@@ -156,18 +153,15 @@ describe("isSandboxBackend", () => {
 
   it("should return false for V2 backends without execute", () => {
     const nonSandboxBackend: BackendProtocolV2 = {
-      lsInfo: async () => ({ files: [] }),
+      lsInfo: async () => [],
       read: async () => ({ content: "hello" }),
       readRaw: async () => ({
-        data: {
-          content: "hello",
-          mimeType: "text/plain",
-          created_at: "2024-01-01T00:00:00.000Z",
-          modified_at: "2024-01-01T00:00:00.000Z",
-        },
+        content: "hello",
+        created_at: "2024-01-01T00:00:00.000Z",
+        modified_at: "2024-01-01T00:00:00.000Z",
       }),
       grepRaw: async () => ({ matches: [] }),
-      globInfo: async () => ({ files: [] }),
+      globInfo: async () => [],
       write: async () => ({ path: "" }),
       edit: async () => ({ path: "" }),
     };

@@ -23,6 +23,7 @@ export type {
   FileDownloadResponse,
   FileUploadResponse,
   SandboxBackendProtocol,
+  SandboxBackendProtocolV2,
   MaybePromise,
   // Sandbox provider types
   SandboxInfo,
