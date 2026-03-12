@@ -1,12 +1,21 @@
 /**
  * Protocol definition for pluggable memory backends.
  *
- * This module defines the BackendProtocol that all backend implementations
- * must follow. Backends can store files in different locations (state, filesystem,
- * database, etc.) and provide a uniform interface for file operations.
+ * This module defines the shared types and re-exports the versioned protocol
+ * interfaces. Backend protocol interfaces are split by version:
+ * - v1 (deprecated): {@link ./v1/protocol.js}
+ * - v2 (current): {@link ./v2/protocol.js}
  */
 
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
+import type { BackendProtocol } from "./v1/protocol.js";
+import type {
+  BackendProtocolV2,
+  SandboxBackendProtocolV2,
+} from "./v2/protocol.js";
+
+export type { BackendProtocol, SandboxBackendProtocol } from "./v1/protocol.js";
+export type { BackendProtocolV2, SandboxBackendProtocolV2 } from "./v2/protocol.js";
 
 export type MaybePromise<T> = T | Promise<T>;
 
@@ -198,212 +207,6 @@ export interface FileUploadResponse {
 export interface BackendOptions {
   /** File data format to use for new writes. Defaults to "v2". */
   fileFormat?: "v1" | "v2";
-}
-
-/**
- * Protocol for pluggable memory backends (single, unified).
- *
- * Backends can store files in different locations (state, filesystem, database, etc.)
- * and provide a uniform interface for file operations.
- *
- * All file data is represented as objects with the FileData structure.
- *
- * Methods can return either direct values or Promises, allowing both
- * synchronous and asynchronous implementations.
- *
- * @deprecated Use {@link BackendProtocolV2} instead.
- */
-export interface BackendProtocol {
-  /**
-   * Structured listing with file metadata.
-   *
-   * Lists files and directories in the specified directory (non-recursive).
-   * Directories have a trailing / in their path and is_dir=true.
-   *
-   * @param path - Absolute path to directory
-   * @returns List of FileInfo objects for files and directories directly in the directory
-   */
-  lsInfo(path: string): MaybePromise<FileInfo[]>;
-
-  /**
-   * Read file content.
-   *
-   * For text files, content is paginated by line offset/limit.
-   * For binary files, the full base64-encoded content is returned.
-   *
-   * @param filePath - Absolute file path
-   * @param offset - Line offset to start reading from (0-indexed), default 0
-   * @param limit - Maximum number of lines to read, default 500
-   * @returns ReadResult with content on success or error on failure
-   */
-  read(filePath: string, offset?: number, limit?: number): MaybePromise<string>;
-
-  /**
-   * Read file content as raw FileData.
-   *
-   * @param filePath - Absolute file path
-   * @returns Raw file content as FileData
-   */
-  readRaw(filePath: string): MaybePromise<FileData>;
-
-  /**
-   * Search file contents for a literal text pattern.
-   *
-   * Binary files (determined by MIME type) are skipped.
-   *
-   * @param pattern - Literal text pattern to search for
-   * @param path - Base path to search from (default: null)
-   * @param glob - Optional glob pattern to filter files (e.g., "*.py")
-   * @returns GrepResult with matches on success or error on failure
-   */
-  grepRaw(
-    pattern: string,
-    path?: string | null,
-    glob?: string | null,
-  ): MaybePromise<GrepMatch[] | string>;
-
-  /**
-   * Structured glob matching returning FileInfo objects.
-   *
-   * @param pattern - Glob pattern (e.g., `*.py`, `**\/*.ts`)
-   * @param path - Base path to search from (default: "/")
-   * @returns List of FileInfo objects matching the pattern
-   */
-  globInfo(pattern: string, path?: string): MaybePromise<FileInfo[]>;
-
-  /**
-   * Create a new file.
-   *
-   * @param filePath - Absolute file path
-   * @param content - File content as string
-   * @returns WriteResult with error populated on failure
-   */
-  write(filePath: string, content: string): MaybePromise<WriteResult>;
-
-  /**
-   * Edit a file by replacing string occurrences.
-   *
-   * @param filePath - Absolute file path
-   * @param oldString - String to find and replace
-   * @param newString - Replacement string
-   * @param replaceAll - If true, replace all occurrences (default: false)
-   * @returns EditResult with error, path, filesUpdate, and occurrences
-   */
-  edit(
-    filePath: string,
-    oldString: string,
-    newString: string,
-    replaceAll?: boolean,
-  ): MaybePromise<EditResult>;
-
-  /**
-   * Upload multiple files.
-   * Optional - backends that don't support file upload can omit this.
-   *
-   * @param files - List of [path, content] tuples to upload
-   * @returns List of FileUploadResponse objects, one per input file
-   */
-  uploadFiles?(
-    files: Array<[string, Uint8Array]>,
-  ): MaybePromise<FileUploadResponse[]>;
-
-  /**
-   * Download multiple files.
-   * Optional - backends that don't support file download can omit this.
-   *
-   * @param paths - List of file paths to download
-   * @returns List of FileDownloadResponse objects, one per input path
-   */
-  downloadFiles?(paths: string[]): MaybePromise<FileDownloadResponse[]>;
-}
-
-/**
- * Updated protocol for pluggable memory backends.
- *
- * Key differences from {@link BackendProtocol}:
- * - `read()` returns {@link ReadResult} instead of a plain string
- * - `grepRaw()` returns {@link GrepResult} instead of `GrepMatch[] | string`
- *
- * Existing v1 backends can be adapted to this interface using
- * {@link adaptBackendProtocol} from utils.
- */
-export interface BackendProtocolV2 extends Omit<
-  BackendProtocol,
-  "read" | "grepRaw"
-> {
-  /**
-   * Read file content.
-   *
-   * For text files, content is paginated by line offset/limit.
-   * For binary files, the full base64-encoded content is returned.
-   *
-   * @param filePath - Absolute file path
-   * @param offset - Line offset to start reading from (0-indexed), default 0
-   * @param limit - Maximum number of lines to read, default 500
-   * @returns ReadResult with content on success or error on failure
-   */
-  read(
-    filePath: string,
-    offset?: number,
-    limit?: number,
-  ): MaybePromise<ReadResult>;
-
-  /**
-   * Search file contents for a literal text pattern.
-   *
-   * Binary files (determined by MIME type) are skipped.
-   *
-   * @param pattern - Literal text pattern to search for
-   * @param path - Base path to search from (default: null)
-   * @param glob - Optional glob pattern to filter files (e.g., "*.py")
-   * @returns GrepResult with matches on success or error on failure
-   */
-  grepRaw(
-    pattern: string,
-    path?: string | null,
-    glob?: string | null,
-  ): MaybePromise<GrepResult>;
-}
-
-/**
- * Protocol for sandboxed backends with isolated runtime.
- * Sandboxed backends run in isolated environments (e.g., containers)
- * and communicate via defined interfaces.
- *
- * @deprecated Use {@link SandboxBackendProtocolV2} instead.
- */
-export interface SandboxBackendProtocol extends BackendProtocol {
-  /**
-   * Execute a command in the sandbox.
-   *
-   * @param command - Full shell command string to execute
-   * @returns ExecuteResponse with combined output, exit code, and truncation flag
-   */
-  execute(command: string): MaybePromise<ExecuteResponse>;
-
-  /** Unique identifier for the sandbox backend instance */
-  readonly id: string;
-}
-
-/**
- * Protocol for sandboxed backends with isolated runtime.
- *
- * Key differences from {@link SandboxBackendProtocol}:
- * - Extends {@link BackendProtocolV2} instead of {@link BackendProtocol}
- * - `read()` returns {@link ReadResult} instead of a plain string
- * - `grepRaw()` returns {@link GrepResult} instead of `GrepMatch[] | string`
- */
-export interface SandboxBackendProtocolV2 extends BackendProtocolV2 {
-  /**
-   * Execute a command in the sandbox.
-   *
-   * @param command - Full shell command string to execute
-   * @returns ExecuteResponse with combined output, exit code, and truncation flag
-   */
-  execute(command: string): MaybePromise<ExecuteResponse>;
-
-  /** Unique identifier for the sandbox backend instance */
-  readonly id: string;
 }
 
 /**
