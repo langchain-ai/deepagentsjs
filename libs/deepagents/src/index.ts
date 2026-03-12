@@ -91,6 +91,7 @@ export {
   BaseSandbox,
   isSandboxBackend,
   SandboxError,
+  type AnyBackendProtocol,
   type BackendProtocol,
   type BackendProtocolV2,
   type BackendFactory,
