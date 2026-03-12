@@ -327,8 +327,15 @@ export class StateBackend implements BackendProtocolV2 {
       }
 
       const contentStr = fileDataToString(fileData);
-      const content = new TextEncoder().encode(contentStr);
-      responses.push({ path, content, error: null });
+      const mimeType = getMimeType(path);
+
+      if (!isTextMimeType(mimeType)) {
+        const content = Buffer.from(contentStr, "base64");
+        responses.push({ path, content, error: null });
+      } else {
+        const content = new TextEncoder().encode(contentStr);
+        responses.push({ path, content, error: null });
+      }
     }
 
     return responses;
