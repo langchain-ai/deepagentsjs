@@ -439,8 +439,31 @@ export interface BackendProtocolV2 {
  * Protocol for sandboxed backends with isolated runtime.
  * Sandboxed backends run in isolated environments (e.g., containers)
  * and communicate via defined interfaces.
+ *
+ * @deprecated Use {@link SandboxBackendProtocolV2} instead.
  */
-export interface SandboxBackendProtocol extends BackendProtocolV2 {
+export interface SandboxBackendProtocol extends BackendProtocol {
+  /**
+   * Execute a command in the sandbox.
+   *
+   * @param command - Full shell command string to execute
+   * @returns ExecuteResponse with combined output, exit code, and truncation flag
+   */
+  execute(command: string): MaybePromise<ExecuteResponse>;
+
+  /** Unique identifier for the sandbox backend instance */
+  readonly id: string;
+}
+
+/**
+ * Updated protocol for sandboxed backends with isolated runtime.
+ *
+ * Key differences from {@link SandboxBackendProtocol}:
+ * - Extends {@link BackendProtocolV2} instead of {@link BackendProtocol}
+ * - `read()` returns {@link ReadResult} instead of a plain string
+ * - `grepRaw()` returns {@link GrepResult} instead of `GrepMatch[] | string`
+ */
+export interface SandboxBackendProtocolV2 extends BackendProtocolV2 {
   /**
    * Execute a command in the sandbox.
    *
@@ -457,14 +480,14 @@ export interface SandboxBackendProtocol extends BackendProtocolV2 {
  * Type guard to check if a backend supports execution.
  *
  * @param backend - Backend instance to check
- * @returns True if the backend implements SandboxBackendProtocol
+ * @returns True if the backend implements SandboxBackendProtocolV2
  */
 export function isSandboxBackend(
   backend: BackendProtocol | BackendProtocolV2,
-): backend is SandboxBackendProtocol {
+): backend is SandboxBackendProtocolV2 {
   return (
-    typeof (backend as SandboxBackendProtocol).execute === "function" &&
-    typeof (backend as SandboxBackendProtocol).id === "string"
+    typeof (backend as SandboxBackendProtocolV2).execute === "function" &&
+    typeof (backend as SandboxBackendProtocolV2).id === "string"
   );
 }
 
