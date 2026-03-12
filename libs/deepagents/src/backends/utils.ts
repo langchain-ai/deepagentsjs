@@ -36,6 +36,7 @@ const MIME_TYPES: Record<string, string> = {
   ".jpeg": "image/jpeg",
   ".gif": "image/gif",
   ".webp": "image/webp",
+  ".svg": "image/svg+xml",
 
   // audio
   ".mp3": "audio/mpeg",
@@ -714,7 +715,8 @@ export function isTextMimeType(mimeType: string): boolean {
   return (
     mimeType.startsWith("text/") ||
     mimeType === "application/json" ||
-    mimeType === "application/javascript"
+    mimeType === "application/javascript" ||
+    mimeType === "image/svg+xml"
   );
 }
 
