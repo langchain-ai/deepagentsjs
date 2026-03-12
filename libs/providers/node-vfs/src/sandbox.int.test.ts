@@ -413,8 +413,8 @@ try {
         },
       });
 
-      const content = await sandbox.read("/src/index.js");
-      expect(content).toContain("console.log('Hello from VFS!')");
+      const result = await sandbox.read("/src/index.js");
+      expect(result.content).toContain("console.log('Hello from VFS!')");
     });
 
     it("should access initialFiles with leading slash via downloadFiles()", async () => {
