@@ -147,7 +147,7 @@ import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
 
 /**
- * ...
+ * Zod schema for legacy FileDataV1 (content as line array).
  */
 export const FileDataV1Schema = z.object({
   content: z.array(z.string()),
@@ -156,7 +156,7 @@ export const FileDataV1Schema = z.object({
 });
 
 /**
- * ...
+ * Zod schema for FileDataV2 (content as single string).
  */
 export const FileDataV2Schema = z.object({
   content: z.string(),
