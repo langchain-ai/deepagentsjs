@@ -84,5 +84,3 @@ export interface SandboxBackendProtocolV2 extends BackendProtocolV2 {
   /** Unique identifier for the sandbox backend instance */
   readonly id: string;
 }
-
-
