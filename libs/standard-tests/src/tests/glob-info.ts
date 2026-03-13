@@ -1,11 +1,12 @@
-import type { SandboxInstance, StandardTestsConfig } from "../types.js";
+import { adaptSandboxInstance } from "../adapter.js";
+import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register globInfo() tests (wildcard, recursive, no matches, directories,
  * extension filter, hidden files, character classes, question mark,
  * multiple extensions, deeply nested).
  */
-export function registerGlobInfoTests<T extends SandboxInstance>(
+export function registerGlobInfoTests<T extends AnySandboxInstance>(
   getShared: () => T,
   config: StandardTestsConfig<T>,
   timeout: number,
@@ -16,7 +17,7 @@ export function registerGlobInfoTests<T extends SandboxInstance>(
     it(
       "should match basic wildcard pattern",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gl-basic");
         await shared.write(`${baseDir}/file1.txt`, "content");
         await shared.write(`${baseDir}/file2.txt`, "content");
@@ -38,7 +39,7 @@ export function registerGlobInfoTests<T extends SandboxInstance>(
     it(
       "should match recursive pattern (**)",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gl-recursive");
         await shared.write(`${baseDir}/root.txt`, "content");
         await shared.write(`${baseDir}/subdir1/nested1.txt`, "content");
@@ -59,7 +60,7 @@ export function registerGlobInfoTests<T extends SandboxInstance>(
     it(
       "should return empty array when no matches",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gl-no-match");
         await shared.write(`${baseDir}/file.txt`, "content");
 
@@ -74,7 +75,7 @@ export function registerGlobInfoTests<T extends SandboxInstance>(
     it(
       "should include directories in results",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gl-dirs");
         await shared.execute(`mkdir -p '${baseDir}/dir1' '${baseDir}/dir2'`);
         await shared.write(`${baseDir}/file.txt`, "content");
@@ -96,7 +97,7 @@ export function registerGlobInfoTests<T extends SandboxInstance>(
     it(
       "should match specific file extensions",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gl-ext");
         await shared.write(`${baseDir}/test.py`, "content");
         await shared.write(`${baseDir}/test.txt`, "content");
@@ -115,7 +116,7 @@ export function registerGlobInfoTests<T extends SandboxInstance>(
     it(
       "should match hidden files explicitly",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gl-hidden");
         await shared.write(`${baseDir}/.hidden1`, "content");
         await shared.write(`${baseDir}/.hidden2`, "content");
@@ -138,7 +139,7 @@ export function registerGlobInfoTests<T extends SandboxInstance>(
     it(
       "should match character class patterns",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gl-charclass");
         await shared.write(`${baseDir}/file1.txt`, "content");
         await shared.write(`${baseDir}/file2.txt`, "content");
@@ -162,7 +163,7 @@ export function registerGlobInfoTests<T extends SandboxInstance>(
     it(
       "should match single character wildcard (?)",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gl-question");
         await shared.write(`${baseDir}/file1.txt`, "content");
         await shared.write(`${baseDir}/file2.txt`, "content");
@@ -183,7 +184,7 @@ export function registerGlobInfoTests<T extends SandboxInstance>(
     it(
       "should match multiple extensions separately",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gl-multi-ext");
         await shared.write(`${baseDir}/file.txt`, "content");
         await shared.write(`${baseDir}/file.py`, "content");
@@ -206,7 +207,7 @@ export function registerGlobInfoTests<T extends SandboxInstance>(
     it(
       "should match deeply nested patterns",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gl-deep");
         await shared.write(`${baseDir}/a/b/c/d/deep.txt`, "content");
         await shared.write(`${baseDir}/a/b/other.txt`, "content");

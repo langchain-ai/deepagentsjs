@@ -1,11 +1,16 @@
-import type { SandboxInstance, StandardTestsConfig } from "../types.js";
+import { adaptSandboxInstance } from "../adapter.js";
+import type {
+  AnySandboxInstance,
+  SandboxInstanceV2,
+  StandardTestsConfig,
+} from "../types.js";
 
 /**
  * Register lsInfo() tests (absolute paths, files + subdirs, empty dir,
  * nonexistent dir, hidden files, spaces, unicode, large dir, trailing slash,
  * special characters).
  */
-export function registerLsInfoTests<T extends SandboxInstance>(
+export function registerLsInfoTests<T extends AnySandboxInstance>(
   getShared: () => T,
   config: StandardTestsConfig<T>,
   timeout: number,
@@ -16,7 +21,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
     it(
       "should return absolute paths",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("li-absolute");
         await shared.write(`${baseDir}/file.txt`, "content");
 
@@ -33,7 +38,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
     it(
       "should list files and subdirectories",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("li-basic");
         await shared.write(`${baseDir}/file1.txt`, "content1");
         await shared.write(`${baseDir}/file2.txt`, "content2");
@@ -64,7 +69,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
     it(
       "should return empty list for empty directory",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const emptyDir = config.resolvePath("li-empty-dir");
         await shared.execute(`mkdir -p '${emptyDir}'`);
 
@@ -81,7 +86,8 @@ export function registerLsInfoTests<T extends SandboxInstance>(
       async () => {
         const nonexistentDir = config.resolvePath("li-does-not-exist-12345");
 
-        const lsResult = await getShared().lsInfo(nonexistentDir);
+        const lsResult =
+          await adaptSandboxInstance(getShared()).lsInfo(nonexistentDir);
         expect(lsResult.error).toBeUndefined();
 
         expect(lsResult.files).toEqual([]);
@@ -92,7 +98,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
     it(
       "should include hidden files",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("li-hidden");
         await shared.write(`${baseDir}/.hidden`, "hidden content");
         await shared.write(`${baseDir}/visible.txt`, "visible content");
@@ -111,7 +117,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
     it(
       "should handle directories with spaces in names",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("li-spaces");
         await shared.write(`${baseDir}/file with spaces.txt`, "content");
         await shared.execute(`mkdir -p '${baseDir}/dir with spaces'`);
@@ -130,7 +136,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
     it(
       "should handle unicode filenames",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("li-unicode");
         await shared.write(
           `${baseDir}/\u6D4B\u8BD5\u6587\u4EF6.txt`,
@@ -153,7 +159,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
     it(
       "should handle large directories",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("li-large");
         // Create 50 files in a single command for speed
         await shared.execute(
@@ -177,7 +183,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
     it(
       "should handle trailing slash in path",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("li-trailing");
         await shared.write(`${baseDir}/file.txt`, "content");
 
@@ -195,7 +201,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
     it(
       "should handle special characters in filenames",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("li-special-chars");
         await shared.write(`${baseDir}/file(1).txt`, "content");
         await shared.write(`${baseDir}/file-3.txt`, "content");

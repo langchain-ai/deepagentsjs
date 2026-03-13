@@ -1,11 +1,12 @@
-import type { SandboxInstance, StandardTestsConfig } from "../types.js";
+import { adaptSandboxInstance } from "../adapter.js";
+import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register detailed edit() tests (single/multi occurrence, replaceAll,
  * not found, special chars, multiline, delete, identical, unicode,
  * whitespace, long strings, line endings, partial match).
  */
-export function registerEditTests<T extends SandboxInstance>(
+export function registerEditTests<T extends AnySandboxInstance>(
   getShared: () => T,
   config: StandardTestsConfig<T>,
   timeout: number,
@@ -16,7 +17,7 @@ export function registerEditTests<T extends SandboxInstance>(
     it(
       "should edit a single occurrence",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("ed-single.txt");
         await shared.write(filePath, "Hello world\nGoodbye world\nHello again");
 
@@ -35,7 +36,7 @@ export function registerEditTests<T extends SandboxInstance>(
     it(
       "should fail with multiple occurrences without replaceAll",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("ed-multi-fail.txt");
         await shared.write(filePath, "apple\nbanana\napple\norange\napple");
 
@@ -108,7 +109,7 @@ export function registerEditTests<T extends SandboxInstance>(
     it(
       "should handle special characters and regex metacharacters",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("ed-special.txt");
         await shared.write(
           filePath,
@@ -134,7 +135,7 @@ export function registerEditTests<T extends SandboxInstance>(
     it(
       "should handle multiline string replacement",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("ed-multiline.txt");
         await shared.write(filePath, "Line 1\nLine 2\nLine 3");
 
@@ -158,7 +159,7 @@ export function registerEditTests<T extends SandboxInstance>(
     it(
       "should delete content by replacing with empty string",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("ed-delete.txt");
         await shared.write(
           filePath,
@@ -181,7 +182,7 @@ export function registerEditTests<T extends SandboxInstance>(
     it(
       "should handle identical old and new strings",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("ed-identical.txt");
         await shared.write(filePath, "Same text");
 
@@ -200,7 +201,7 @@ export function registerEditTests<T extends SandboxInstance>(
     it(
       "should handle unicode content",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("ed-unicode.txt");
         await shared.write(
           filePath,
@@ -222,7 +223,7 @@ export function registerEditTests<T extends SandboxInstance>(
     it(
       "should handle whitespace-only strings",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("ed-whitespace.txt");
         await shared.write(filePath, "Line1    Line2"); // 4 spaces
 
@@ -240,7 +241,7 @@ export function registerEditTests<T extends SandboxInstance>(
     it(
       "should handle very long old and new strings",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("ed-long.txt");
         const oldString = "x".repeat(1000);
         const newString = "y".repeat(1000);
@@ -261,7 +262,7 @@ export function registerEditTests<T extends SandboxInstance>(
     it(
       "should preserve line endings correctly",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("ed-line-endings.txt");
         await shared.write(filePath, "Line 1\nLine 2\nLine 3\n");
 

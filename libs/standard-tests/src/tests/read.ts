@@ -1,10 +1,11 @@
-import type { SandboxInstance, StandardTestsConfig } from "../types.js";
+import { adaptSandboxInstance } from "../adapter.js";
+import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register detailed read() tests (basic, nonexistent, empty, offset, limit,
  * offset+limit, unicode, long lines, zero limit, offset beyond, chunked).
  */
-export function registerReadTests<T extends SandboxInstance>(
+export function registerReadTests<T extends AnySandboxInstance>(
   getShared: () => T,
   config: StandardTestsConfig<T>,
   timeout: number,
@@ -15,7 +16,7 @@ export function registerReadTests<T extends SandboxInstance>(
     it(
       "should read a file with line numbers",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("rd-basic.txt");
         await shared.write(filePath, "Line 1\nLine 2\nLine 3");
 
@@ -34,7 +35,7 @@ export function registerReadTests<T extends SandboxInstance>(
       async () => {
         const filePath = config.resolvePath("rd-nonexistent-xyz.txt");
 
-        const result = await getShared().read(filePath);
+        const result = await adaptSandboxInstance(getShared()).read(filePath);
 
         expect(result.error).toBeDefined();
         expect(result.error!.toLowerCase()).toContain("not found");
@@ -45,7 +46,7 @@ export function registerReadTests<T extends SandboxInstance>(
     it(
       "should handle reading an empty file",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("rd-empty.txt");
         await shared.write(filePath, "");
 
@@ -60,7 +61,7 @@ export function registerReadTests<T extends SandboxInstance>(
     it(
       "should read with offset parameter",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("rd-offset.txt");
         const content = Array.from(
           { length: 10 },
@@ -80,7 +81,7 @@ export function registerReadTests<T extends SandboxInstance>(
     it(
       "should read with limit parameter",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("rd-limit.txt");
         const content = Array.from(
           { length: 100 },
@@ -100,7 +101,7 @@ export function registerReadTests<T extends SandboxInstance>(
     it(
       "should read with both offset and limit",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("rd-offset-limit.txt");
         const content = Array.from(
           { length: 20 },
@@ -122,7 +123,7 @@ export function registerReadTests<T extends SandboxInstance>(
     it(
       "should read unicode content",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("rd-unicode.txt");
         const content =
           "Hello \u{1F44B} \u4E16\u754C\n\u041F\u0440\u0438\u0432\u0435\u0442 \u043C\u0438\u0440\n\u0645\u0631\u062D\u0628\u0627 \u0627\u0644\u0639\u0627\u0644\u0645";
@@ -143,7 +144,7 @@ export function registerReadTests<T extends SandboxInstance>(
     it(
       "should handle files with very long lines",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("rd-long-lines.txt");
         const longLine = "x".repeat(3000);
         const content = `Short line\n${longLine}\nAnother short line`;
@@ -161,7 +162,7 @@ export function registerReadTests<T extends SandboxInstance>(
     it(
       "should return nothing with limit=0",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("rd-zero-limit.txt");
         await shared.write(filePath, "Line 1\nLine 2\nLine 3");
 
@@ -176,7 +177,7 @@ export function registerReadTests<T extends SandboxInstance>(
     it(
       "should handle offset beyond file length",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("rd-offset-beyond.txt");
         await shared.write(filePath, "Line 1\nLine 2\nLine 3");
 
@@ -192,7 +193,7 @@ export function registerReadTests<T extends SandboxInstance>(
     it(
       "should handle offset exactly at file length",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("rd-offset-exact.txt");
         // 5 lines
         const content = Array.from(
@@ -213,7 +214,7 @@ export function registerReadTests<T extends SandboxInstance>(
     it(
       "should read a large file in chunks",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("rd-chunked.txt");
         const content = Array.from(
           { length: 1000 },
