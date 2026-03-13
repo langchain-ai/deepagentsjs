@@ -1,5 +1,13 @@
 # deepagents
 
+## 1.8.4
+
+### Patch Changes
+
+- [#290](https://github.com/langchain-ai/deepagentsjs/pull/290) [`ab4a515`](https://github.com/langchain-ai/deepagentsjs/commit/ab4a515f37cc166cb5015afa3617f625b343bcbb) Thanks [@maahir30](https://github.com/maahir30)! - Add static structured output to subagent response
+
+- [#289](https://github.com/langchain-ai/deepagentsjs/pull/289) [`5a4df6c`](https://github.com/langchain-ai/deepagentsjs/commit/5a4df6c050284e6024229ece108d58bcff3fdc66) Thanks [@alvedder](https://github.com/alvedder)! - fix(deepagents): move uuid from devDependencies to dependencies
+
 ## 1.8.3
 
 ### Patch Changes
