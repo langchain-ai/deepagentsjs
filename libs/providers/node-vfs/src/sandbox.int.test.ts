@@ -440,7 +440,9 @@ try {
       });
 
       // Leading `/` is normalized to relative paths for temp-dir execution
-      const entries = await sandbox.lsInfo("/src");
+      const result = await sandbox.lsInfo("/src");
+      expect(result.error).toBeUndefined();
+      const entries = result.files || [];
       const paths = entries.map((e) => e.path.replace(/\/$/, ""));
       expect(paths).toContain("src/index.js");
       expect(paths).toContain("src/utils.js");
