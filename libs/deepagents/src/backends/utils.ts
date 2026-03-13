@@ -10,6 +10,7 @@ import micromatch from "micromatch";
 import path, { basename } from "path";
 import type {
   AnyBackendProtocol,
+  AnySandboxProtocol,
   BackendProtocolV2,
   FileData,
   FileDataV1,
@@ -763,7 +764,7 @@ export function migrateToFileDataV2(data: FileDataV1 | FileDataV2): FileDataV2 {
  * - `lsInfo()` FileInfo[] returns wrapped in {@link LsResult}
  * - `globInfo()` FileInfo[] returns wrapped in {@link GlobResult}
  *
- * Sandbox properties (`execute`, `id`) are preserved when present.
+ * Note: For sandbox instances, use {@link adaptSandboxProtocol} instead.
  *
  * @param backend - Backend instance (v1 or v2)
  * @returns BackendProtocolV2-compatible backend
@@ -811,28 +812,33 @@ export function adaptBackendProtocol(
     },
   };
 
-  const sb = backend as SandboxBackendProtocolV2;
-  if (typeof sb.execute === "function") {
-    (adapted as SandboxBackendProtocolV2).execute = (cmd) => sb.execute(cmd);
-    Object.defineProperty(adapted, "id", { value: sb.id, enumerable: true });
-  }
-
-  // Preserve close method if present
-  if (typeof (backend as any).close === "function") {
-    (adapted as any).close = () => (backend as any).close();
-  }
-
-  // Preserve isRunning getter if present
-  const isRunningDescriptor = Object.getOwnPropertyDescriptor(
-    Object.getPrototypeOf(backend),
-    "isRunning",
-  );
-  if (isRunningDescriptor?.get) {
-    Object.defineProperty(adapted, "isRunning", {
-      get: () => (backend as any).isRunning,
-      enumerable: true,
-    });
-  }
-
   return adapted;
+}
+
+/**
+ * Adapt a sandbox backend from v1 to v2 interface.
+ *
+ * This extends {@link adaptBackendProtocol} to also preserve sandbox-specific
+ * properties from {@link SandboxBackendProtocol}: `execute` and `id`.
+ *
+ * @param sandbox - Sandbox backend (v1 or v2)
+ * @returns SandboxBackendProtocolV2-compatible sandbox
+ */
+export function adaptSandboxProtocol(
+  sandbox: AnySandboxProtocol,
+): SandboxBackendProtocolV2 {
+  // First adapt the backend protocol methods to v2
+  const adapted = adaptBackendProtocol(sandbox);
+
+  // Preserve sandbox protocol properties (execute, id)
+  // Both SandboxBackendProtocol and SandboxBackendProtocolV2 have these
+  (adapted as SandboxBackendProtocolV2).execute = (cmd: string) =>
+    sandbox.execute(cmd);
+  Object.defineProperty(adapted, "id", {
+    value: sandbox.id,
+    enumerable: true,
+    configurable: true,
+  });
+
+  return adapted as SandboxBackendProtocolV2;
 }
