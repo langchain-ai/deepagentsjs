@@ -90,6 +90,7 @@ export {
   CompositeBackend,
   BaseSandbox,
   isSandboxBackend,
+  isSandboxProtocol,
   SandboxError,
   type AnyBackendProtocol,
   type BackendProtocol,

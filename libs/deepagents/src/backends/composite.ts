@@ -18,7 +18,7 @@ import type {
   ReadResult,
   WriteResult,
 } from "./protocol.js";
-import { isSandboxBackend } from "./protocol.js";
+import { isSandboxBackend, isSandboxProtocol } from "./protocol.js";
 import { adaptBackendProtocol, adaptSandboxProtocol } from "./utils.js";
 
 /**
@@ -40,22 +40,18 @@ export class CompositeBackend implements BackendProtocolV2 {
     routes: Record<string, AnyBackendProtocol>,
   ) {
     // Check if default backend is a sandbox and adapt accordingly
-    const hasExecute = typeof (defaultBackend as any).execute === "function";
-    this.default = hasExecute
-      ? adaptSandboxProtocol(defaultBackend as any)
+    this.default = isSandboxProtocol(defaultBackend)
+      ? adaptSandboxProtocol(defaultBackend)
       : adaptBackendProtocol(defaultBackend);
 
     // Adapt route backends (check each one for sandbox properties)
     this.routes = Object.fromEntries(
-      Object.entries(routes).map(([k, v]) => {
-        const routeHasExecute = typeof (v as any).execute === "function";
-        return [
-          k,
-          routeHasExecute
-            ? adaptSandboxProtocol(v as any)
-            : adaptBackendProtocol(v),
-        ];
-      }),
+      Object.entries(routes).map(([k, v]) => [
+        k,
+        isSandboxProtocol(v)
+          ? adaptSandboxProtocol(v)
+          : adaptBackendProtocol(v),
+      ]),
     );
 
     // Sort routes by length (longest first) for correct prefix matching
