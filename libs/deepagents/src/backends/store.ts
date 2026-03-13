@@ -11,7 +11,10 @@ import type {
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
+  GlobResult,
   GrepResult,
+  LsResult,
+  ReadRawResult,
   ReadResult,
   StateAndStore,
   WriteResult,
@@ -244,10 +247,10 @@ export class StoreBackend implements BackendProtocolV2 {
    * List files and directories in the specified directory (non-recursive).
    *
    * @param path - Absolute path to directory
-   * @returns List of FileInfo objects for files and directories directly in the directory.
+   * @returns LsResult with list of FileInfo objects on success or error on failure.
    *          Directories have a trailing / in their path and is_dir=true.
    */
-  async lsInfo(path: string): Promise<FileInfo[]> {
+  async lsInfo(path: string): Promise<LsResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
 
@@ -308,7 +311,7 @@ export class StoreBackend implements BackendProtocolV2 {
     }
 
     infos.sort((a, b) => a.path.localeCompare(b.path));
-    return infos;
+    return { files: infos };
   }
 
   /**
@@ -328,8 +331,12 @@ export class StoreBackend implements BackendProtocolV2 {
     limit: number = 500,
   ): Promise<ReadResult> {
     try {
-      const fileData = await this.readRaw(filePath);
-      const fileDataV2 = migrateToFileDataV2(fileData);
+      const readRawResult = await this.readRaw(filePath);
+      if (readRawResult.error || !readRawResult.data) {
+        return { error: readRawResult.error || "File data not found" };
+      }
+
+      const fileDataV2 = migrateToFileDataV2(readRawResult.data);
       const mimeType = getMimeType(filePath);
 
       // ignore pagination and return full content
@@ -349,15 +356,17 @@ export class StoreBackend implements BackendProtocolV2 {
    * Read file content as raw FileData.
    *
    * @param filePath - Absolute file path
-   * @returns Raw file content as FileData
+   * @returns ReadRawResult with raw file data on success or error on failure
    */
-  async readRaw(filePath: string): Promise<FileData> {
+  async readRaw(filePath: string): Promise<ReadRawResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
     const item = await store.get(namespace, filePath);
 
-    if (!item) throw new Error(`File '${filePath}' not found`);
-    return this.convertStoreItemToFileData(item);
+    if (!item) {
+      return { error: `File '${filePath}' not found` };
+    }
+    return { data: this.convertStoreItemToFileData(item) };
   }
 
   /**
@@ -458,7 +467,7 @@ export class StoreBackend implements BackendProtocolV2 {
   /**
    * Structured glob matching returning FileInfo objects.
    */
-  async globInfo(pattern: string, path: string = "/"): Promise<FileInfo[]> {
+  async globInfo(pattern: string, path: string = "/"): Promise<GlobResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
     const items = await this.searchStorePaginated(store, namespace);
@@ -475,7 +484,7 @@ export class StoreBackend implements BackendProtocolV2 {
 
     const result = globSearchFiles(files, pattern, path);
     if (result === "No files found") {
-      return [];
+      return { files: [] };
     }
 
     const paths = result.split("\n");
@@ -494,7 +503,7 @@ export class StoreBackend implements BackendProtocolV2 {
         modified_at: fd?.modified_at || "",
       });
     }
-    return infos;
+    return { files: infos };
   }
 
   /**

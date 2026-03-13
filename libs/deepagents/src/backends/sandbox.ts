@@ -16,13 +16,15 @@
 import type {
   EditResult,
   ExecuteResponse,
-  FileData,
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
+  GlobResult,
   GrepMatch,
   GrepResult,
+  LsResult,
   MaybePromise,
+  ReadRawResult,
   ReadResult,
   SandboxBackendProtocolV2,
   WriteResult,
@@ -303,9 +305,9 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
    * including Alpine. No Python or Node.js needed.
    *
    * @param path - Absolute path to directory
-   * @returns List of FileInfo objects for files and directories directly in the directory.
+   * @returns LsResult with list of FileInfo objects on success or error on failure.
    */
-  async lsInfo(path: string): Promise<FileInfo[]> {
+  async lsInfo(path: string): Promise<LsResult> {
     const command = buildLsCommand(path);
     const result = await this.execute(command);
 
@@ -324,7 +326,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
       });
     }
 
-    return infos;
+    return { files: infos };
   }
 
   /**
@@ -378,12 +380,12 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
    * Uses downloadFiles() directly — no runtime needed on the sandbox host.
    *
    * @param filePath - Absolute file path
-   * @returns Raw file content as FileData
+   * @returns ReadRawResult with raw file data on success or error on failure
    */
-  async readRaw(filePath: string): Promise<FileData> {
+  async readRaw(filePath: string): Promise<ReadRawResult> {
     const results = await this.downloadFiles([filePath]);
     if (results[0].error || !results[0].content) {
-      throw new Error(`File '${filePath}' not found`);
+      return { error: `File '${filePath}' not found` };
     }
 
     const now = new Date().toISOString();
@@ -392,17 +394,21 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     // Binary: store as base64
     if (!isTextMimeType(mimeType)) {
       return {
-        content: Buffer.from(results[0].content).toString("base64"),
-        created_at: now,
-        modified_at: now,
+        data: {
+          content: Buffer.from(results[0].content).toString("base64"),
+          created_at: now,
+          modified_at: now,
+        },
       };
     }
 
     // Text: store as string (v2 format)
     return {
-      content: new TextDecoder().decode(results[0].content),
-      created_at: now,
-      modified_at: now,
+      data: {
+        content: new TextDecoder().decode(results[0].content),
+        created_at: now,
+        modified_at: now,
+      },
     };
   }
 
@@ -467,7 +473,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
    * - `?`  matches a single character except `/`
    * - `[...]` character classes
    */
-  async globInfo(pattern: string, path: string = "/"): Promise<FileInfo[]> {
+  async globInfo(pattern: string, path: string = "/"): Promise<GlobResult> {
     const command = buildFindCommand(path);
     const result = await this.execute(command);
 
@@ -497,7 +503,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
       }
     }
 
-    return infos;
+    return { files: infos };
   }
 
   /**

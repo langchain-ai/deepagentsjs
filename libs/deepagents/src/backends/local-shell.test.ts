@@ -289,9 +289,10 @@ describe("LocalShellBackend", () => {
       await backend.write("/file2.txt", "content2");
 
       const files = await backend.lsInfo("/");
+      expect(files.error).toBeUndefined();
 
-      expect(files.length).toBe(2);
-      const paths = files.map((f) => f.path);
+      expect(files.files!.length).toBe(2);
+      const paths = files.files!.map((f) => f.path);
       expect(paths).toContain("/file1.txt");
       expect(paths).toContain("/file2.txt");
     });
@@ -323,9 +324,10 @@ describe("LocalShellBackend", () => {
       await backend.write("/file3.txt", "content");
 
       const txtFiles = await backend.globInfo("*.txt");
+      expect(txtFiles.error).toBeUndefined();
 
-      expect(txtFiles.length).toBe(2);
-      const paths = txtFiles.map((f) => f.path);
+      expect(txtFiles.files!.length).toBe(2);
+      const paths = txtFiles.files!.map((f) => f.path);
       expect(paths).toContain("/file1.txt");
       expect(paths).toContain("/file3.txt");
       expect(paths).not.toContain("/file2.py");

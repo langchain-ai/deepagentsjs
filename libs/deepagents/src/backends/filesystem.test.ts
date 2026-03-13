@@ -54,8 +54,9 @@ describe("FilesystemBackend", () => {
       virtualMode: false,
     });
 
-    const infos = await backend.lsInfo(root);
-    const paths = new Set(infos.map((i) => i.path));
+    const lsResult = await backend.lsInfo(root);
+    expect(lsResult.error).toBeUndefined();
+    const paths = new Set(lsResult.files!.map((i) => i.path));
     expect(paths.has(f1)).toBe(true);
     expect(paths.has(f2)).toBe(false);
     expect(paths.has(path.join(root, "dir") + path.sep)).toBe(true);
@@ -81,7 +82,8 @@ describe("FilesystemBackend", () => {
     expect(matches.matches!.some((m) => m.path.endsWith("a.txt"))).toBe(true);
 
     const globResults = await backend.globInfo("**/*.py", root);
-    expect(globResults.some((i) => i.path === f2)).toBe(true);
+    expect(globResults.error).toBeUndefined();
+    expect(globResults.files!.some((i) => i.path === f2)).toBe(true);
   });
 
   it("should work in virtual mode with sandboxed paths", async () => {
@@ -96,8 +98,9 @@ describe("FilesystemBackend", () => {
       virtualMode: true,
     });
 
-    const infos = await backend.lsInfo("/");
-    const paths = new Set(infos.map((i) => i.path));
+    const lsResult = await backend.lsInfo("/");
+    expect(lsResult.error).toBeUndefined();
+    const paths = new Set(lsResult.files!.map((i) => i.path));
     expect(paths.has("/a.txt")).toBe(true);
     expect(paths.has("/dir/b.md")).toBe(false);
     expect(paths.has("/dir/")).toBe(true);
@@ -120,7 +123,8 @@ describe("FilesystemBackend", () => {
     expect(matches.matches!.some((m) => m.path === "/a.txt")).toBe(true);
 
     const globResults = await backend.globInfo("**/*.md", "/");
-    expect(globResults.some((i) => i.path === "/dir/b.md")).toBe(true);
+    expect(globResults.error).toBeUndefined();
+    expect(globResults.files!.some((i) => i.path === "/dir/b.md")).toBe(true);
 
     // Special characters like "[" are treated literally (not regex), returns empty list or matches
     const literalResult = await backend.grepRaw("[", "/");
@@ -153,7 +157,8 @@ describe("FilesystemBackend", () => {
     });
 
     const rootListing = await backend.lsInfo("/");
-    const rootPaths = rootListing.map((fi) => fi.path);
+    expect(rootListing.error).toBeUndefined();
+    const rootPaths = rootListing.files!.map((fi) => fi.path);
     expect(rootPaths).toContain("/config.json");
     expect(rootPaths).toContain("/src/");
     expect(rootPaths).toContain("/docs/");
@@ -161,19 +166,22 @@ describe("FilesystemBackend", () => {
     expect(rootPaths).not.toContain("/src/utils/helper.py");
 
     const srcListing = await backend.lsInfo("/src/");
-    const srcPaths = srcListing.map((fi) => fi.path);
+    expect(srcListing.error).toBeUndefined();
+    const srcPaths = srcListing.files!.map((fi) => fi.path);
     expect(srcPaths).toContain("/src/main.py");
     expect(srcPaths).toContain("/src/utils/");
     expect(srcPaths).not.toContain("/src/utils/helper.py");
 
     const utilsListing = await backend.lsInfo("/src/utils/");
-    const utilsPaths = utilsListing.map((fi) => fi.path);
+    expect(utilsListing.error).toBeUndefined();
+    const utilsPaths = utilsListing.files!.map((fi) => fi.path);
     expect(utilsPaths).toContain("/src/utils/helper.py");
     expect(utilsPaths).toContain("/src/utils/common.py");
     expect(utilsPaths.length).toBe(2);
 
     const emptyListing = await backend.lsInfo("/nonexistent/");
-    expect(emptyListing).toEqual([]);
+    expect(emptyListing.error).toBeUndefined();
+    expect(emptyListing.files).toEqual([]);
   });
 
   it("should list nested directories correctly in normal mode", async () => {
@@ -195,13 +203,15 @@ describe("FilesystemBackend", () => {
     });
 
     const rootListing = await backend.lsInfo(root);
-    const rootPaths = rootListing.map((fi) => fi.path);
+    expect(rootListing.error).toBeUndefined();
+    const rootPaths = rootListing.files!.map((fi) => fi.path);
     expect(rootPaths).toContain(path.join(root, "file1.txt"));
     expect(rootPaths).toContain(path.join(root, "subdir") + path.sep);
     expect(rootPaths).not.toContain(path.join(root, "subdir", "file2.txt"));
 
     const subdirListing = await backend.lsInfo(path.join(root, "subdir"));
-    const subdirPaths = subdirListing.map((fi) => fi.path);
+    expect(subdirListing.error).toBeUndefined();
+    const subdirPaths = subdirListing.files!.map((fi) => fi.path);
     expect(subdirPaths).toContain(path.join(root, "subdir", "file2.txt"));
     expect(subdirPaths).toContain(
       path.join(root, "subdir", "nested") + path.sep,
@@ -229,21 +239,26 @@ describe("FilesystemBackend", () => {
     });
 
     const listingWithSlash = await backend.lsInfo("/");
-    expect(listingWithSlash.length).toBeGreaterThan(0);
+    expect(listingWithSlash.error).toBeUndefined();
+    expect(listingWithSlash.files!.length).toBeGreaterThan(0);
 
     const listing = await backend.lsInfo("/");
-    const paths = listing.map((fi) => fi.path);
+    expect(listing.error).toBeUndefined();
+    const paths = listing.files!.map((fi) => fi.path);
     expect(paths).toEqual([...paths].sort());
 
     const listing1 = await backend.lsInfo("/dir/");
+    expect(listing1.error).toBeUndefined();
     const listing2 = await backend.lsInfo("/dir");
-    expect(listing1.length).toBe(listing2.length);
-    expect(listing1.map((fi) => fi.path)).toEqual(
-      listing2.map((fi) => fi.path),
+    expect(listing2.error).toBeUndefined();
+    expect(listing1.files!.length).toBe(listing2.files!.length);
+    expect(listing1.files!.map((fi) => fi.path)).toEqual(
+      listing2.files!.map((fi) => fi.path),
     );
 
     const empty = await backend.lsInfo("/nonexistent/");
-    expect(empty).toEqual([]);
+    expect(empty.error).toBeUndefined();
+    expect(empty.files).toEqual([]);
   });
 
   it("should handle large file writes correctly", async () => {
@@ -488,10 +503,11 @@ describe("FilesystemBackend", () => {
       });
 
       const result = await backend.readRaw(filePath);
-      expect(typeof result.content).toBe("string");
-      expect(result.content).toBe("line1\nline2");
-      expect(result.created_at).toBeDefined();
-      expect(result.modified_at).toBeDefined();
+      expect(result.error).toBeUndefined();
+      expect(typeof result.data!.content).toBe("string");
+      expect(result.data!.content).toBe("line1\nline2");
+      expect(result.data!.created_at).toBeDefined();
+      expect(result.data!.modified_at).toBeDefined();
     });
 
     it("should return base64-encoded v2 format for binary files", async () => {
@@ -507,8 +523,9 @@ describe("FilesystemBackend", () => {
       });
 
       const result = await backend.readRaw(filePath);
-      expect(typeof result.content).toBe("string");
-      expect(result.content).toBe(pngHeader.toString("base64"));
+      expect(result.error).toBeUndefined();
+      expect(typeof result.data!.content).toBe("string");
+      expect(result.data!.content).toBe(pngHeader.toString("base64"));
     });
   });
 });
