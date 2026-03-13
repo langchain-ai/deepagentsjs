@@ -22,10 +22,10 @@ export function registerReadTests<T extends AnySandboxInstance>(
 
         const result = await shared.read(filePath);
 
-        expect(result).not.toContain("Error:");
-        expect(result).toContain("Line 1");
-        expect(result).toContain("Line 2");
-        expect(result).toContain("Line 3");
+        expect(result.error).toBeUndefined();
+        expect(result.content).toContain("Line 1");
+        expect(result.content).toContain("Line 2");
+        expect(result.content).toContain("Line 3");
       },
       timeout,
     );
@@ -37,8 +37,8 @@ export function registerReadTests<T extends AnySandboxInstance>(
 
         const result = await adaptSandboxInstance(getShared()).read(filePath);
 
-        expect(result).toContain("Error:");
-        expect(result.toLowerCase()).toContain("not found");
+        expect(result.error).toBeDefined();
+        expect(result.error!.toLowerCase()).toContain("not found");
       },
       timeout,
     );
@@ -53,7 +53,7 @@ export function registerReadTests<T extends AnySandboxInstance>(
         const result = await shared.read(filePath);
 
         // Empty files should return empty or a system message
-        expect(result.toLowerCase()).not.toContain("error:");
+        expect(result.error).toBeUndefined();
       },
       timeout,
     );
@@ -72,8 +72,8 @@ export function registerReadTests<T extends AnySandboxInstance>(
         const result = await shared.read(filePath, 5);
 
         // offset=5 means skip first 5 lines → start from line 6
-        expect(result).toContain("Row_6_content");
-        expect(result).not.toContain("Row_1_content");
+        expect(result.content).toContain("Row_6_content");
+        expect(result.content).not.toContain("Row_1_content");
       },
       timeout,
     );
@@ -91,9 +91,9 @@ export function registerReadTests<T extends AnySandboxInstance>(
 
         const result = await shared.read(filePath, 0, 5);
 
-        expect(result).toContain("Row_1_content");
-        expect(result).toContain("Row_5_content");
-        expect(result).not.toContain("Row_6_content");
+        expect(result.content).toContain("Row_1_content");
+        expect(result.content).toContain("Row_5_content");
+        expect(result.content).not.toContain("Row_6_content");
       },
       timeout,
     );
@@ -112,10 +112,10 @@ export function registerReadTests<T extends AnySandboxInstance>(
         const result = await shared.read(filePath, 10, 5);
 
         // Should have lines 11–15
-        expect(result).toContain("Row_11_content");
-        expect(result).toContain("Row_15_content");
-        expect(result).not.toContain("Row_10_content");
-        expect(result).not.toContain("Row_16_content");
+        expect(result.content).toContain("Row_11_content");
+        expect(result.content).toContain("Row_15_content");
+        expect(result.content).not.toContain("Row_10_content");
+        expect(result.content).not.toContain("Row_16_content");
       },
       timeout,
     );
@@ -131,10 +131,12 @@ export function registerReadTests<T extends AnySandboxInstance>(
 
         const result = await shared.read(filePath);
 
-        expect(result).not.toContain("Error:");
-        expect(result).toContain("\u{1F44B}");
-        expect(result).toContain("\u4E16\u754C");
-        expect(result).toContain("\u041F\u0440\u0438\u0432\u0435\u0442");
+        expect(result.error).toBeUndefined();
+        expect(result.content).toContain("\u{1F44B}");
+        expect(result.content).toContain("\u4E16\u754C");
+        expect(result.content).toContain(
+          "\u041F\u0440\u0438\u0432\u0435\u0442",
+        );
       },
       timeout,
     );
@@ -151,8 +153,8 @@ export function registerReadTests<T extends AnySandboxInstance>(
         const result = await shared.read(filePath);
 
         // Should still read successfully (implementation may truncate)
-        expect(result).not.toContain("Error:");
-        expect(result).toContain("Short line");
+        expect(result.error).toBeUndefined();
+        expect(result.content).toContain("Short line");
       },
       timeout,
     );
@@ -167,7 +169,7 @@ export function registerReadTests<T extends AnySandboxInstance>(
         const result = await shared.read(filePath, 0, 0);
 
         // Should return empty or no content lines
-        expect(result).not.toContain("Line 1");
+        expect(result.content).not.toContain("Line 1");
       },
       timeout,
     );
@@ -181,9 +183,9 @@ export function registerReadTests<T extends AnySandboxInstance>(
 
         const result = await shared.read(filePath, 100, 10);
 
-        expect(result).not.toContain("Line 1");
-        expect(result).not.toContain("Line 2");
-        expect(result).not.toContain("Line 3");
+        expect(result.content ?? "").not.toContain("Line 1");
+        expect(result.content ?? "").not.toContain("Line 2");
+        expect(result.content ?? "").not.toContain("Line 3");
       },
       timeout,
     );
@@ -203,8 +205,8 @@ export function registerReadTests<T extends AnySandboxInstance>(
         const result = await shared.read(filePath, 5, 10);
 
         // offset=5 means skip all 5 lines → nothing left
-        expect(result).not.toContain("Line 1");
-        expect(result).not.toContain("Line 5");
+        expect(result.content ?? "").not.toContain("Line 1");
+        expect(result.content ?? "").not.toContain("Line 5");
       },
       timeout,
     );
@@ -222,20 +224,20 @@ export function registerReadTests<T extends AnySandboxInstance>(
 
         // Read first chunk
         const chunk1 = await shared.read(filePath, 0, 100);
-        expect(chunk1).toContain("Line_0000_content");
-        expect(chunk1).toContain("Line_0099_content");
-        expect(chunk1).not.toContain("Line_0100_content");
+        expect(chunk1.content).toContain("Line_0000_content");
+        expect(chunk1.content).toContain("Line_0099_content");
+        expect(chunk1.content).not.toContain("Line_0100_content");
 
         // Read middle chunk
         const chunk2 = await shared.read(filePath, 500, 100);
-        expect(chunk2).toContain("Line_0500_content");
-        expect(chunk2).toContain("Line_0599_content");
-        expect(chunk2).not.toContain("Line_0499_content");
+        expect(chunk2.content).toContain("Line_0500_content");
+        expect(chunk2.content).toContain("Line_0599_content");
+        expect(chunk2.content).not.toContain("Line_0499_content");
 
         // Read last chunk
         const chunk3 = await shared.read(filePath, 900, 100);
-        expect(chunk3).toContain("Line_0900_content");
-        expect(chunk3).toContain("Line_0999_content");
+        expect(chunk3.content).toContain("Line_0900_content");
+        expect(chunk3.content).toContain("Line_0999_content");
       },
       timeout,
     );

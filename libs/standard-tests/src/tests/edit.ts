@@ -27,8 +27,8 @@ export function registerEditTests<T extends AnySandboxInstance>(
         expect(result.occurrences).toBe(1);
 
         const content = await shared.read(filePath);
-        expect(content).toContain("Farewell world");
-        expect(content).not.toContain("Goodbye");
+        expect(content.content).toContain("Farewell world");
+        expect(content.content).not.toContain("Goodbye");
       },
       timeout,
     );
@@ -47,8 +47,8 @@ export function registerEditTests<T extends AnySandboxInstance>(
 
         // Verify file unchanged
         const content = await shared.read(filePath);
-        expect(content).toContain("apple");
-        expect(content).not.toContain("pear");
+        expect(content.content).toContain("apple");
+        expect(content.content).not.toContain("pear");
       },
       timeout,
     );
@@ -126,8 +126,8 @@ export function registerEditTests<T extends AnySandboxInstance>(
 
         // Verify changes
         const content = await shared.read(filePath);
-        expect(content).toContain("$200.00");
-        expect(content).toContain("[0-9]+");
+        expect(content.content).toContain("$200.00");
+        expect(content.content).toContain("[0-9]+");
       },
       timeout,
     );
@@ -149,9 +149,9 @@ export function registerEditTests<T extends AnySandboxInstance>(
         expect(result.occurrences).toBe(1);
 
         const content = await shared.read(filePath);
-        expect(content).toContain("Combined");
-        expect(content).toContain("Line 3");
-        expect(content).not.toContain("Line 1");
+        expect(content.content).toContain("Combined");
+        expect(content.content).toContain("Line 3");
+        expect(content.content).not.toContain("Line 1");
       },
       timeout,
     );
@@ -172,9 +172,9 @@ export function registerEditTests<T extends AnySandboxInstance>(
         expect(result.occurrences).toBe(1);
 
         const content = await shared.read(filePath);
-        expect(content).toContain("Keep this");
-        expect(content).toContain("Keep this too");
-        expect(content).not.toContain("Delete this part");
+        expect(content.content).toContain("Keep this");
+        expect(content.content).toContain("Keep this too");
+        expect(content.content).not.toContain("Delete this part");
       },
       timeout,
     );
@@ -193,7 +193,7 @@ export function registerEditTests<T extends AnySandboxInstance>(
         expect(result.occurrences).toBe(1);
 
         const content = await shared.read(filePath);
-        expect(content).toContain("Same text");
+        expect(content.content).toContain("Same text");
       },
       timeout,
     );
@@ -214,8 +214,8 @@ export function registerEditTests<T extends AnySandboxInstance>(
         expect(result.occurrences).toBe(1);
 
         const content = await shared.read(filePath);
-        expect(content).toContain("\u{1F30D}");
-        expect(content).not.toContain("\u{1F44B}");
+        expect(content.content).toContain("\u{1F30D}");
+        expect(content.content).not.toContain("\u{1F44B}");
       },
       timeout,
     );
@@ -233,7 +233,7 @@ export function registerEditTests<T extends AnySandboxInstance>(
         expect(result.occurrences).toBe(1);
 
         const content = await shared.read(filePath);
-        expect(content).toContain("Line1 Line2");
+        expect(content.content).toContain("Line1 Line2");
       },
       timeout,
     );
@@ -253,8 +253,8 @@ export function registerEditTests<T extends AnySandboxInstance>(
         expect(result.occurrences).toBe(1);
 
         const content = await shared.read(filePath);
-        expect(content).toContain("y".repeat(100)); // partial check
-        expect(content).not.toContain("x".repeat(100));
+        expect(content.content).toContain("y".repeat(100)); // partial check
+        expect(content.content).not.toContain("x".repeat(100));
       },
       timeout,
     );
@@ -271,9 +271,9 @@ export function registerEditTests<T extends AnySandboxInstance>(
         expect(result.error).toBeUndefined();
 
         const content = await shared.read(filePath);
-        expect(content).toContain("Line 1");
-        expect(content).toContain("Modified Line 2");
-        expect(content).toContain("Line 3");
+        expect(content.content).toContain("Line 1");
+        expect(content.content).toContain("Modified Line 2");
+        expect(content.content).toContain("Line 3");
       },
       timeout,
     );
