@@ -16,6 +16,7 @@ import {
   adaptBackendProtocol,
   TOOL_RESULT_TOKEN_LIMIT,
   createFileData,
+  adaptSandboxProtocol,
 } from "./utils.js";
 import type {
   BackendProtocol,
@@ -533,7 +534,7 @@ describe("adaptBackendProtocol", () => {
       });
       Object.defineProperty(v1, "id", { value: "sandbox-1", enumerable: true });
 
-      const adapted = adaptBackendProtocol(v1);
+      const adapted = adaptSandboxProtocol(v1 as any);
       expect(isSandboxBackend(adapted)).toBe(true);
 
       const sb = adapted as unknown as SandboxBackendProtocol;
@@ -551,7 +552,7 @@ describe("adaptBackendProtocol", () => {
       });
       Object.defineProperty(v2, "id", { value: "sandbox-2", enumerable: true });
 
-      const adapted = adaptBackendProtocol(v2);
+      const adapted = adaptSandboxProtocol(v2 as any);
       expect(isSandboxBackend(adapted)).toBe(true);
 
       const sb = adapted as unknown as SandboxBackendProtocolV2;

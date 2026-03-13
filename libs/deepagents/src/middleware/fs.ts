@@ -35,6 +35,7 @@ import {
   truncateIfTooLong,
   getMimeType,
   adaptBackendProtocol,
+  adaptSandboxProtocol,
 } from "../backends/utils.js";
 
 /**
@@ -258,10 +259,17 @@ function getBackend(
   backend: AnyBackendProtocol | BackendFactory,
   stateAndStore: StateAndStore,
 ): BackendProtocolV2 {
-  if (typeof backend === "function") {
-    return adaptBackendProtocol(backend(stateAndStore));
-  }
-  return adaptBackendProtocol(backend);
+  const actualBackend =
+    typeof backend === "function" ? backend(stateAndStore) : backend;
+
+  // Check if it's a sandbox backend (has execute and id)
+  const isSandbox =
+    typeof (actualBackend as any).execute === "function" &&
+    typeof (actualBackend as any).id === "string";
+
+  return isSandbox
+    ? adaptSandboxProtocol(actualBackend as any)
+    : adaptBackendProtocol(actualBackend);
 }
 
 // System prompts
