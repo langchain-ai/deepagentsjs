@@ -23,7 +23,7 @@ export function registerIntegrationTests<T extends SandboxInstance>(
 
         // Read it back
         const content = await shared.read(filePath);
-        expect(content).toContain("Original content");
+        expect(content.content).toContain("Original content");
 
         // Edit it
         const editResult = await shared.edit(filePath, "Original", "Modified");
@@ -31,8 +31,8 @@ export function registerIntegrationTests<T extends SandboxInstance>(
 
         // Read again to verify
         const updatedContent = await shared.read(filePath);
-        expect(updatedContent).toContain("Modified content");
-        expect(updatedContent).not.toContain("Original");
+        expect(updatedContent.content).toContain("Modified content");
+        expect(updatedContent.content).not.toContain("Original");
       },
       timeout,
     );
@@ -51,27 +51,23 @@ export function registerIntegrationTests<T extends SandboxInstance>(
 
         // List root directory
         const lsResult = await shared.lsInfo(baseDir);
-        const lsPaths = lsResult.map((info) => info.path.replace(/\/$/, ""));
+        expect(lsResult.error).toBeUndefined();
+        const result = lsResult.files || [];
+        const lsPaths = result.map((info) => info.path.replace(/\/$/, ""));
         expect(lsPaths).toContain(`${baseDir}/root.txt`);
         expect(lsPaths).toContain(`${baseDir}/subdir1`);
         expect(lsPaths).toContain(`${baseDir}/subdir2`);
 
         // Glob for txt files
         const globResult = await shared.globInfo("**/*.txt", baseDir);
-        expect(globResult.length).toBe(3);
+        expect(globResult.error).toBeUndefined();
+        const files = globResult.files || [];
+        expect(files.length).toBe(3);
 
         // Grep for a pattern
         const grepResult = await shared.grepRaw("file", baseDir);
-        expect(Array.isArray(grepResult)).toBe(true);
-        expect(
-          (
-            grepResult as Array<{
-              path: string;
-              line: number;
-              text: string;
-            }>
-          ).length,
-        ).toBeGreaterThanOrEqual(3);
+        expect(grepResult.error).toBeUndefined();
+        expect(grepResult.matches!.length).toBeGreaterThanOrEqual(3);
       },
       timeout,
     );
