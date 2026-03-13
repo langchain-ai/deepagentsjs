@@ -817,5 +817,22 @@ export function adaptBackendProtocol(
     Object.defineProperty(adapted, "id", { value: sb.id, enumerable: true });
   }
 
+  // Preserve close method if present
+  if (typeof (backend as any).close === "function") {
+    (adapted as any).close = () => (backend as any).close();
+  }
+
+  // Preserve isRunning getter if present
+  const isRunningDescriptor = Object.getOwnPropertyDescriptor(
+    Object.getPrototypeOf(backend),
+    "isRunning",
+  );
+  if (isRunningDescriptor?.get) {
+    Object.defineProperty(adapted, "isRunning", {
+      get: () => (backend as any).isRunning,
+      enumerable: true,
+    });
+  }
+
   return adapted;
 }

@@ -122,4 +122,7 @@ export {
   // Local shell backend
   LocalShellBackend,
   type LocalShellBackendOptions,
+  // Backend protocol adapters
+  adaptBackendProtocol,
+  adaptSandboxProtocol,
 } from "./backends/index.js";

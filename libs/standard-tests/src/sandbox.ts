@@ -39,11 +39,8 @@ import { registerGrepRawTests } from "./tests/grep-raw.js";
 import { registerGlobInfoTests } from "./tests/glob-info.js";
 import { registerInitialFilesTests } from "./tests/initial-files.js";
 import { registerIntegrationTests } from "./tests/integration.js";
-import type {
-  AnySandboxInstance,
-  StandardTestsConfig,
-  SuiteFn,
-} from "./types.js";
+import type { SandboxInstance, StandardTestsConfig, SuiteFn } from "./types.js";
+import { adaptBackendProtocol } from "deepagents";
 /**
  * Default number of retry attempts for sandbox creation.
  */
@@ -121,7 +118,7 @@ export async function withRetry<T>(
  * });
  * ```
  */
-export function sandboxStandardTests<T extends AnySandboxInstance>(
+export function sandboxStandardTests<T extends SandboxInstance>(
   config: StandardTestsConfig<T>,
 ): void {
   const { describe, beforeAll, afterAll } = config.runner;
@@ -144,7 +141,9 @@ export function sandboxStandardTests<T extends AnySandboxInstance>(
     const getShared = () => shared;
 
     beforeAll(async () => {
-      shared = await withRetry(() => config.createSandbox());
+      const sandbox = await withRetry(() => config.createSandbox());
+      // Adapt v1 backends to v2 interface internally for backward compatibility
+      shared = adaptBackendProtocol(sandbox as any) as T;
     }, timeout);
 
     afterAll(async () => {
