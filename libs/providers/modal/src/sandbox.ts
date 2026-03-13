@@ -18,6 +18,7 @@ import {
   type FileDownloadResponse,
   type FileOperationError,
   type FileUploadResponse,
+  type InteractiveProcess,
 } from "deepagents";
 
 import { getAuthCredentials } from "./auth.js";
@@ -385,6 +386,83 @@ export class ModalSandbox extends BaseSandbox {
         error instanceof Error ? error : undefined,
       );
     }
+  }
+
+  /**
+   * Spawn an interactive process with streaming stdout/stderr.
+   * Required for PTC (Programmatic Tool Calling) support.
+   */
+  async spawnInteractive(command: string): Promise<InteractiveProcess> {
+    const sandbox = this.instance;
+    const exitCodePath = `/tmp/.da_exit_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const wrappedCommand = `trap 'echo $? > "${exitCodePath}"' EXIT\n${command}`;
+
+    const proc = await sandbox.exec(["sh", "-c", wrappedCommand], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    async function* readModalStream(
+      stream: {
+        getReader?: () => ReadableStreamDefaultReader<Uint8Array>;
+      } & Record<string, unknown>,
+    ): AsyncGenerator<Uint8Array> {
+      if (typeof stream.getReader === "function") {
+        const reader = stream.getReader();
+        try {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (value) yield value;
+          }
+        } finally {
+          reader.releaseLock();
+        }
+      } else {
+        const text = await (stream as any).readText();
+        if (text) yield new TextEncoder().encode(text);
+      }
+    }
+
+    return {
+      stdout: readModalStream(proc.stdout as any),
+      stderr: readModalStream(proc.stderr as any),
+      async writeFile(path: string, content: string) {
+        const parentDir = path.substring(0, path.lastIndexOf("/"));
+        if (parentDir) {
+          await sandbox
+            .exec(["mkdir", "-p", parentDir], {
+              stdout: "pipe",
+              stderr: "pipe",
+            })
+            .then((p: any) => p.wait());
+        }
+        const writeHandle = await sandbox.open(path, "w");
+        await writeHandle.write(new TextEncoder().encode(content));
+        await writeHandle.close();
+      },
+      async waitForExit() {
+        try {
+          await proc.wait();
+          const exitProc = await sandbox.exec(
+            ["sh", "-c", `cat "${exitCodePath}" && rm -f "${exitCodePath}"`],
+            { stdout: "pipe", stderr: "pipe" },
+          );
+          const text = await exitProc.stdout.readText();
+          const code = parseInt(text.trim(), 10);
+          return { exitCode: isNaN(code) ? null : code };
+        } catch {
+          return { exitCode: null };
+        }
+      },
+      async kill() {
+        try {
+          (proc as any).kill?.();
+        } catch {
+          // best-effort
+        }
+      },
+    };
   }
 
   /**

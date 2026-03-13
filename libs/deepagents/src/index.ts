@@ -114,7 +114,18 @@ export {
   type SandboxDeleteOptions,
   // Sandbox error types
   type SandboxErrorCode,
+  type InteractiveProcess,
   // Local shell backend
   LocalShellBackend,
   type LocalShellBackendOptions,
 } from "./backends/index.js";
+
+// Sandbox PTC (Programmatic Tool Calling)
+export {
+  createSandboxPtcMiddleware,
+  PtcExecutionEngine,
+  StdoutScanner,
+  generateSandboxPtcPrompt,
+  type SandboxPtcMiddlewareOptions,
+  type PtcEngineOptions,
+} from "./sandbox-ptc/index.js";

@@ -254,6 +254,30 @@ export interface BackendProtocol {
 }
 
 /**
+ * Handle to a running interactive process inside a sandbox.
+ *
+ * Used by the PTC (Programmatic Tool Calling) engine to communicate with
+ * scripts during execution — reading stdout for IPC markers and writing
+ * response files back into the sandbox filesystem.
+ */
+export interface InteractiveProcess {
+  /** Streaming stdout chunks. Consumed by the PTC engine to detect IPC markers. */
+  readonly stdout: AsyncIterable<Uint8Array>;
+  /** Streaming stderr chunks. Collected separately from stdout. */
+  readonly stderr: AsyncIterable<Uint8Array>;
+  /**
+   * Write a file into the running process's filesystem.
+   * Used by the PTC engine to deliver IPC response files that the
+   * instrumented script polls for.
+   */
+  writeFile(path: string, content: string): Promise<void>;
+  /** Resolves when the process exits. */
+  waitForExit(): Promise<{ exitCode: number | null }>;
+  /** Forcefully terminate the process. */
+  kill(): Promise<void>;
+}
+
+/**
  * Protocol for sandboxed backends with isolated runtime.
  * Sandboxed backends run in isolated environments (e.g., containers)
  * and communicate via defined interfaces.
@@ -266,6 +290,18 @@ export interface SandboxBackendProtocol extends BackendProtocol {
    * @returns ExecuteResponse with combined output, exit code, and truncation flag
    */
   execute(command: string): MaybePromise<ExecuteResponse>;
+
+  /**
+   * Spawn an interactive process with streaming stdout/stderr access.
+   *
+   * Required for Programmatic Tool Calling (PTC) support.
+   * The PTC engine monitors stdout for IPC markers and writes response
+   * files via {@link InteractiveProcess.writeFile} during execution.
+   *
+   * Providers that do not support streaming can omit this method;
+   * PTC will be unavailable for those providers.
+   */
+  spawnInteractive?(command: string): Promise<InteractiveProcess>;
 
   /** Unique identifier for the sandbox backend instance */
   readonly id: string;

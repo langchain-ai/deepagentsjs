@@ -17,6 +17,7 @@ import {
   type FileOperationError,
   type FileUploadResponse,
   type BackendFactory,
+  type InteractiveProcess,
 } from "deepagents";
 
 import { getAuthCredentials } from "./auth.js";
@@ -374,6 +375,146 @@ export class DaytonaSandbox extends BaseSandbox {
         "COMMAND_FAILED",
         error instanceof Error ? error : undefined,
       );
+    }
+  }
+
+  /**
+   * Spawn an interactive process with streaming stdout/stderr.
+   * Uses a background process + polling approach since the Daytona SDK
+   * does not support streaming output natively.
+   */
+  async spawnInteractive(command: string): Promise<InteractiveProcess> {
+    const sandbox = this.instance;
+    const runId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const stdoutPath = `/tmp/.da_run_${runId}_out`;
+    const stderrPath = `/tmp/.da_run_${runId}_err`;
+    const pidPath = `/tmp/.da_run_${runId}_pid`;
+    const exitCodePath = `/tmp/.da_run_${runId}_exit`;
+
+    const bgCommand = [
+      `touch "${stdoutPath}" "${stderrPath}"`,
+      `( ${command} ; echo $? > "${exitCodePath}" ) > "${stdoutPath}" 2> "${stderrPath}" &`,
+      `echo $! > "${pidPath}"`,
+    ].join(" && ");
+
+    await sandbox.process.executeCommand(
+      bgCommand,
+      undefined,
+      undefined,
+      this.#timeout,
+    );
+
+    const pidResult = await sandbox.process.executeCommand(
+      `cat "${pidPath}"`,
+      undefined,
+      undefined,
+      5,
+    );
+    const pid = parseInt((pidResult.result ?? "").trim(), 10);
+
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    const encoder = new TextEncoder();
+    const POLL_MS = 100;
+
+    async function* pollOutputStream(
+      filePath: string,
+    ): AsyncGenerator<Uint8Array> {
+      let offset = 0;
+      for (;;) {
+        const isRunning = await self.#isProcessRunning(pid);
+
+        const result = await sandbox.process.executeCommand(
+          `tail -c +${offset + 1} "${filePath}" 2>/dev/null`,
+          undefined,
+          undefined,
+          5,
+        );
+        const chunk = result.result ?? "";
+
+        if (chunk.length > 0) {
+          offset += chunk.length;
+          yield encoder.encode(chunk);
+        }
+
+        if (!isRunning) {
+          await new Promise((r) => setTimeout(r, 50));
+          const finalResult = await sandbox.process.executeCommand(
+            `tail -c +${offset + 1} "${filePath}" 2>/dev/null`,
+            undefined,
+            undefined,
+            5,
+          );
+          const finalChunk = finalResult.result ?? "";
+          if (finalChunk.length > 0) {
+            yield encoder.encode(finalChunk);
+          }
+          break;
+        }
+
+        await new Promise((r) => setTimeout(r, POLL_MS));
+      }
+    }
+
+    return {
+      stdout: pollOutputStream(stdoutPath),
+      stderr: pollOutputStream(stderrPath),
+      async writeFile(filePath: string, content: string) {
+        const parentDir = filePath.substring(0, filePath.lastIndexOf("/"));
+        if (parentDir) {
+          await sandbox.fs.createFolder(parentDir, "755").catch(() => {});
+        }
+        const buffer = Buffer.from(content);
+        await sandbox.fs.uploadFile(buffer, filePath);
+      },
+      async waitForExit() {
+        try {
+          const exitResult = await sandbox.process.executeCommand(
+            `cat "${exitCodePath}"`,
+            undefined,
+            undefined,
+            5,
+          );
+          const code = parseInt((exitResult.result ?? "").trim(), 10);
+          await sandbox.process
+            .executeCommand(
+              `rm -f "${stdoutPath}" "${stderrPath}" "${pidPath}" "${exitCodePath}"`,
+              undefined,
+              undefined,
+              5,
+            )
+            .catch(() => {});
+          return { exitCode: isNaN(code) ? null : code };
+        } catch {
+          return { exitCode: null };
+        }
+      },
+      async kill() {
+        try {
+          await sandbox.process.executeCommand(
+            `kill -9 ${pid} 2>/dev/null`,
+            undefined,
+            undefined,
+            5,
+          );
+        } catch {
+          // best-effort
+        }
+      },
+    };
+  }
+
+  async #isProcessRunning(pid: number): Promise<boolean> {
+    try {
+      const result = await this.instance.process.executeCommand(
+        `kill -0 ${pid} 2>/dev/null; echo $?`,
+        undefined,
+        undefined,
+        5,
+      );
+      return (result.result ?? "").trim() === "0";
+    } catch {
+      return false;
     }
   }
 
