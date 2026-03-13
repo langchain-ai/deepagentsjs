@@ -124,5 +124,4 @@ export {
   type LocalShellBackendOptions,
   // Backend protocol adapters
   adaptBackendProtocol,
-  adaptSandboxProtocol,
 } from "./backends/index.js";
