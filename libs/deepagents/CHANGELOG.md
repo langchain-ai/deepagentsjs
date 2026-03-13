@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.8.3
+
+### Patch Changes
+
+- [#305](https://github.com/langchain-ai/deepagentsjs/pull/305) [`7ffb0b6`](https://github.com/langchain-ai/deepagentsjs/commit/7ffb0b637524ec5469adde419f2ef309d2d78356) Thanks [@tanushree-sharma](https://github.com/tanushree-sharma)! - Add LangSmith integration metadata to deepagentsjs
+
 ## 1.8.2
 
 ### Patch Changes
