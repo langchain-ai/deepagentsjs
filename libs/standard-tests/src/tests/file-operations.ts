@@ -85,7 +85,7 @@ export function registerFileOperationTests<T extends SandboxInstance>(
         // Use inherited read method
         const content = await shared.read(filePath);
 
-        expect(content.content).toContain("Read test content");
+        expect(content).toContain("Read test content");
       },
       timeout,
     );
