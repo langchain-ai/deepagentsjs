@@ -20,9 +20,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
         const baseDir = config.resolvePath("li-absolute");
         await shared.write(`${baseDir}/file.txt`, "content");
 
-        const lsResult = await shared.lsInfo(baseDir);
-        expect(lsResult.error).toBeUndefined();
-        const result = lsResult.files || [];
+        const result = await shared.lsInfo(baseDir);
 
         expect(result.length).toBe(1);
         expect(result[0].path).toBe(`${baseDir}/file.txt`);
@@ -39,9 +37,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
         await shared.write(`${baseDir}/file2.txt`, "content2");
         await shared.execute(`mkdir -p '${baseDir}/subdir'`);
 
-        const lsResult = await shared.lsInfo(baseDir);
-        expect(lsResult.error).toBeUndefined();
-        const result = lsResult.files || [];
+        const result = await shared.lsInfo(baseDir);
 
         expect(result.length).toBe(3);
         const paths = result.map((info) => info.path.replace(/\/$/, ""));
@@ -68,10 +64,9 @@ export function registerLsInfoTests<T extends SandboxInstance>(
         const emptyDir = config.resolvePath("li-empty-dir");
         await shared.execute(`mkdir -p '${emptyDir}'`);
 
-        const lsResult = await shared.lsInfo(emptyDir);
-        expect(lsResult.error).toBeUndefined();
+        const result = await shared.lsInfo(emptyDir);
 
-        expect(lsResult.files).toEqual([]);
+        expect(result).toEqual([]);
       },
       timeout,
     );
@@ -81,10 +76,9 @@ export function registerLsInfoTests<T extends SandboxInstance>(
       async () => {
         const nonexistentDir = config.resolvePath("li-does-not-exist-12345");
 
-        const lsResult = await getShared().lsInfo(nonexistentDir);
-        expect(lsResult.error).toBeUndefined();
+        const result = await getShared().lsInfo(nonexistentDir);
 
-        expect(lsResult.files).toEqual([]);
+        expect(result).toEqual([]);
       },
       timeout,
     );
@@ -97,9 +91,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
         await shared.write(`${baseDir}/.hidden`, "hidden content");
         await shared.write(`${baseDir}/visible.txt`, "visible content");
 
-        const lsResult = await shared.lsInfo(baseDir);
-        expect(lsResult.error).toBeUndefined();
-        const result = lsResult.files || [];
+        const result = await shared.lsInfo(baseDir);
 
         const paths = result.map((info) => info.path);
         expect(paths).toContain(`${baseDir}/.hidden`);
@@ -116,9 +108,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
         await shared.write(`${baseDir}/file with spaces.txt`, "content");
         await shared.execute(`mkdir -p '${baseDir}/dir with spaces'`);
 
-        const lsResult = await shared.lsInfo(baseDir);
-        expect(lsResult.error).toBeUndefined();
-        const result = lsResult.files || [];
+        const result = await shared.lsInfo(baseDir);
 
         const paths = result.map((info) => info.path.replace(/\/$/, ""));
         expect(paths).toContain(`${baseDir}/file with spaces.txt`);
@@ -141,9 +131,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
           "content",
         );
 
-        const lsResult = await shared.lsInfo(baseDir);
-        expect(lsResult.error).toBeUndefined();
-        const result = lsResult.files || [];
+        const result = await shared.lsInfo(baseDir);
 
         expect(result.length).toBe(2);
       },
@@ -162,9 +150,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
             "echo 'content' > file_$(printf '%03d' $i).txt; done",
         );
 
-        const lsResult = await shared.lsInfo(baseDir);
-        expect(lsResult.error).toBeUndefined();
-        const result = lsResult.files || [];
+        const result = await shared.lsInfo(baseDir);
 
         expect(result.length).toBe(50);
         const paths = result.map((info) => info.path);
@@ -182,9 +168,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
         await shared.write(`${baseDir}/file.txt`, "content");
 
         // List with trailing slash
-        const lsResult = await shared.lsInfo(`${baseDir}/`);
-        expect(lsResult.error).toBeUndefined();
-        const result = lsResult.files || [];
+        const result = await shared.lsInfo(`${baseDir}/`);
 
         // Should work the same as without trailing slash
         expect(result.length).toBeGreaterThanOrEqual(1);
@@ -200,9 +184,7 @@ export function registerLsInfoTests<T extends SandboxInstance>(
         await shared.write(`${baseDir}/file(1).txt`, "content");
         await shared.write(`${baseDir}/file-3.txt`, "content");
 
-        const lsResult = await shared.lsInfo(baseDir);
-        expect(lsResult.error).toBeUndefined();
-        const result = lsResult.files || [];
+        const result = await shared.lsInfo(baseDir);
 
         const paths = result.map((info) => info.path);
         expect(paths).toContain(`${baseDir}/file(1).txt`);
