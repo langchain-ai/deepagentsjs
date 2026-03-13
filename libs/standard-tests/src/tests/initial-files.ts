@@ -186,7 +186,9 @@ export function registerInitialFilesTests<T extends SandboxInstance>(
         );
 
         try {
-          const entries = await tmp.lsInfo(dirPath);
+          const lsResult = await tmp.lsInfo(dirPath);
+          expect(lsResult.error).toBeUndefined();
+          const entries = lsResult.files || [];
           const paths = entries.map((e) => e.path.replace(/\/$/, ""));
           expect(paths).toContain(filePath);
         } finally {

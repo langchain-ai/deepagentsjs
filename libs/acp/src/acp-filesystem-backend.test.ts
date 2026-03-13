@@ -206,10 +206,12 @@ describe("ACPFilesystemBackend", () => {
       });
       backend.setSessionId("sess_123");
 
-      const entries = await backend.lsInfo(tmpDir);
+      const lsResult = await backend.lsInfo(tmpDir);
 
       expect(mockConn.readTextFile).not.toHaveBeenCalled();
       expect(mockConn.writeTextFile).not.toHaveBeenCalled();
+      expect(lsResult.error).toBeUndefined();
+      const entries = lsResult.files || [];
       expect(entries.some((e: any) => e.path.includes("local.txt"))).toBe(true);
     });
 
@@ -232,9 +234,11 @@ describe("ACPFilesystemBackend", () => {
       });
       backend.setSessionId("sess_123");
 
-      const matches = await backend.globInfo("*.txt", tmpDir);
+      const globResult = await backend.globInfo("*.txt", tmpDir);
 
       expect(mockConn.readTextFile).not.toHaveBeenCalled();
+      expect(globResult.error).toBeUndefined();
+      const matches = globResult.files || [];
       expect(matches.length).toBeGreaterThan(0);
     });
   });
