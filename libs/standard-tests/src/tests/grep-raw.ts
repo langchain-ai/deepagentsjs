@@ -1,11 +1,12 @@
-import type { SandboxInstance, StandardTestsConfig } from "../types.js";
+import { adaptSandboxInstance } from "../adapter.js";
+import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register grepRaw() tests (basic search, glob filter, no matches,
  * multi matches, literal matching, unicode, case sensitivity, special chars,
  * empty dir, nested dirs, line numbers).
  */
-export function registerGrepRawTests<T extends SandboxInstance>(
+export function registerGrepRawTests<T extends AnySandboxInstance>(
   getShared: () => T,
   config: StandardTestsConfig<T>,
   timeout: number,
@@ -16,7 +17,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should find basic literal pattern matches",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-basic");
         await shared.write(
           `${baseDir}/file1.txt`,
@@ -48,7 +49,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should filter files with glob pattern",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-glob");
         await shared.write(`${baseDir}/test.txt`, "pattern_match");
         await shared.write(`${baseDir}/test.py`, "pattern_match");
@@ -67,7 +68,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should return empty matches when no matches found",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-no-match");
         await shared.write(`${baseDir}/file.txt`, "Hello world");
 
@@ -82,7 +83,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should find multiple matches in a single file",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-multi");
         await shared.write(
           `${baseDir}/fruits.txt`,
@@ -104,7 +105,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should match literal strings not regex",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-literal");
         await shared.write(
           `${baseDir}/numbers.txt`,
@@ -124,7 +125,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should find unicode patterns",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-unicode");
         await shared.write(
           `${baseDir}/unicode.txt`,
@@ -144,7 +145,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should be case-sensitive by default",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-case");
         await shared.write(`${baseDir}/case.txt`, "Hello\nhello\nHELLO");
 
@@ -162,7 +163,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should handle special characters as literals",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-special");
         await shared.write(
           `${baseDir}/special.txt`,
@@ -189,7 +190,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should return empty matches for empty directory",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-empty-dir");
         await shared.execute(`mkdir -p '${baseDir}'`);
 
@@ -204,7 +205,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should search recursively across nested directories",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-nested");
         await shared.write(`${baseDir}/root.txt`, "target_nested here");
         await shared.write(`${baseDir}/sub1/level1.txt`, "target_nested here");
@@ -225,7 +226,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should report correct line numbers",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-line-nums");
         const content = Array.from(
           { length: 100 },

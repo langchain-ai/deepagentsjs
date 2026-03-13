@@ -1,9 +1,14 @@
-import type { SandboxInstance, StandardTestsConfig } from "../types.js";
+import { adaptSandboxInstance } from "../adapter.js";
+import type {
+  AnySandboxInstance,
+  SandboxInstanceV2,
+  StandardTestsConfig,
+} from "../types.js";
 
 /**
  * Register integration workflow tests that combine multiple operations.
  */
-export function registerIntegrationTests<T extends SandboxInstance>(
+export function registerIntegrationTests<T extends AnySandboxInstance>(
   getShared: () => T,
   config: StandardTestsConfig<T>,
   timeout: number,
@@ -14,7 +19,7 @@ export function registerIntegrationTests<T extends SandboxInstance>(
     it(
       "should complete a write-read-edit-read workflow",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("intg-workflow.txt");
 
         // Write initial content
@@ -40,7 +45,7 @@ export function registerIntegrationTests<T extends SandboxInstance>(
     it(
       "should handle complex directory operations",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("intg-complex");
 
         // Create directory structure with files
