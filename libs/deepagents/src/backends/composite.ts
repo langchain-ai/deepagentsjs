@@ -19,7 +19,7 @@ import type {
   WriteResult,
 } from "./protocol.js";
 import { isSandboxBackend } from "./protocol.js";
-import { adaptBackendProtocol } from "./utils.js";
+import { adaptBackendProtocol, adaptSandboxProtocol } from "./utils.js";
 
 /**
  * Backend that routes file operations to different backends based on path prefix.
@@ -39,9 +39,23 @@ export class CompositeBackend implements BackendProtocolV2 {
     defaultBackend: AnyBackendProtocol,
     routes: Record<string, AnyBackendProtocol>,
   ) {
-    this.default = adaptBackendProtocol(defaultBackend);
+    // Check if default backend is a sandbox and adapt accordingly
+    const hasExecute = typeof (defaultBackend as any).execute === "function";
+    this.default = hasExecute
+      ? adaptSandboxProtocol(defaultBackend as any)
+      : adaptBackendProtocol(defaultBackend);
+
+    // Adapt route backends (check each one for sandbox properties)
     this.routes = Object.fromEntries(
-      Object.entries(routes).map(([k, v]) => [k, adaptBackendProtocol(v)]),
+      Object.entries(routes).map(([k, v]) => {
+        const routeHasExecute = typeof (v as any).execute === "function";
+        return [
+          k,
+          routeHasExecute
+            ? adaptSandboxProtocol(v as any)
+            : adaptBackendProtocol(v),
+        ];
+      }),
     );
 
     // Sort routes by length (longest first) for correct prefix matching
