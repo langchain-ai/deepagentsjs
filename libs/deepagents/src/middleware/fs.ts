@@ -27,7 +27,7 @@ import type {
   FileData,
   StateAndStore,
 } from "../backends/protocol.js";
-import { isSandboxBackend } from "../backends/protocol.js";
+import { isSandboxBackend, isSandboxProtocol } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
 import {
   sanitizeToolCallId,
@@ -262,13 +262,9 @@ function getBackend(
   const actualBackend =
     typeof backend === "function" ? backend(stateAndStore) : backend;
 
-  // Check if it's a sandbox backend (has execute and id)
-  const isSandbox =
-    typeof (actualBackend as any).execute === "function" &&
-    typeof (actualBackend as any).id === "string";
-
-  return isSandbox
-    ? adaptSandboxProtocol(actualBackend as any)
+  // Check if it's a sandbox protocol and adapt accordingly
+  return isSandboxProtocol(actualBackend)
+    ? adaptSandboxProtocol(actualBackend)
     : adaptBackendProtocol(actualBackend);
 }
 

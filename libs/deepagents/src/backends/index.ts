@@ -39,8 +39,12 @@ export type {
   SandboxErrorCode,
 } from "./protocol.js";
 
-// Export type guard and error class
-export { isSandboxBackend, SandboxError } from "./protocol.js";
+// Export type guards and error class
+export {
+  isSandboxBackend,
+  isSandboxProtocol,
+  SandboxError,
+} from "./protocol.js";
 
 export { StateBackend } from "./state.js";
 export { StoreBackend, type StoreBackendOptions } from "./store.js";
