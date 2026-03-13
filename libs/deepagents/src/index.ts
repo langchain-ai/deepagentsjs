@@ -81,6 +81,43 @@ export {
   type ListSkillsOptions,
 } from "./skills/index.js";
 
+// Export observer middleware
+export { createObserverMiddleware } from "./middleware/observer.js";
+
+// Export observer module
+export {
+  createSessionHandle,
+  createCompanionAgent,
+  createObserveTool,
+  createSteerTool,
+  type ActivityEvent,
+  type ActivityEventType,
+  type ACPAttachedSession,
+  type AttachACPClientOptions,
+  type AttachedClientInfo,
+  type ControlCommand,
+  type ControlCommandKind,
+  type FileTouch,
+  type SessionHandle,
+  type SessionSnapshot,
+  type SessionEventPage,
+  type SessionThreadSnapshot,
+  type SessionUpdate,
+  type SessionUpdateKind,
+  type SessionUpdatePage,
+  type SessionUpdatePlanEntry,
+  type SessionUpdateToolCall,
+  type SessionAttachmentErrorCode,
+  type CreateSessionHandleParams,
+  type CreateCompanionAgentParams,
+  type ObserverMiddlewareOptions,
+  type CaptureConfig,
+  type ObserveAgentInput,
+  type SteerAgentInput,
+  type TodoItem,
+  SessionAttachmentError,
+} from "./observer/index.js";
+
 // Export backends
 export {
   StateBackend,
