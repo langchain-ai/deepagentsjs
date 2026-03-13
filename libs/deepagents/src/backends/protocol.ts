@@ -8,7 +8,7 @@
  */
 
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
-import type { BackendProtocol } from "./v1/protocol.js";
+import type { BackendProtocol, SandboxBackendProtocol } from "./v1/protocol.js";
 import type {
   BackendProtocolV2,
   SandboxBackendProtocolV2,
@@ -256,6 +256,16 @@ export function isSandboxBackend(
     typeof (backend as SandboxBackendProtocolV2).id === "string"
   );
 }
+
+/**
+ * Union of v1 and v2 sandbox backend protocols.
+ *
+ * Use this when accepting either protocol version. Pass through
+ * {@link adaptSandboxProtocol} to normalize to {@link SandboxBackendProtocolV2}.
+ */
+export type AnySandboxProtocol =
+  | SandboxBackendProtocol
+  | SandboxBackendProtocolV2;
 
 /**
  * Metadata for a single sandbox instance.
