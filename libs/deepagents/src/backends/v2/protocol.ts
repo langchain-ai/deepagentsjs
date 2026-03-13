@@ -8,8 +8,11 @@
 import type { BackendProtocol } from "../v1/protocol.js";
 import type {
   ExecuteResponse,
+  GlobResult,
   GrepResult,
+  LsResult,
   MaybePromise,
+  ReadRawResult,
   ReadResult,
 } from "../protocol.js";
 
@@ -18,15 +21,29 @@ import type {
  *
  * Key differences from {@link BackendProtocol}:
  * - `read()` returns {@link ReadResult} instead of a plain string
+ * - `readRaw()` returns {@link ReadRawResult} instead of FileData
  * - `grepRaw()` returns {@link GrepResult} instead of `GrepMatch[] | string`
+ * - `lsInfo()` returns {@link LsResult} instead of FileInfo[]
+ * - `globInfo()` returns {@link GlobResult} instead of FileInfo[]
  *
  * Existing v1 backends can be adapted to this interface using
  * {@link adaptBackendProtocol} from utils.
  */
 export interface BackendProtocolV2 extends Omit<
   BackendProtocol,
-  "read" | "grepRaw"
+  "read" | "readRaw" | "grepRaw" | "lsInfo" | "globInfo"
 > {
+  /**
+   * Structured listing with file metadata.
+   *
+   * Lists files and directories in the specified directory (non-recursive).
+   * Directories have a trailing / in their path and is_dir=true.
+   *
+   * @param path - Absolute path to directory
+   * @returns LsResult with list of FileInfo objects on success or error on failure
+   */
+  lsInfo(path: string): MaybePromise<LsResult>;
+
   /**
    * Read file content.
    *
@@ -45,6 +62,14 @@ export interface BackendProtocolV2 extends Omit<
   ): MaybePromise<ReadResult>;
 
   /**
+   * Read file content as raw FileData.
+   *
+   * @param filePath - Absolute file path
+   * @returns ReadRawResult with raw file data on success or error on failure
+   */
+  readRaw(filePath: string): MaybePromise<ReadRawResult>;
+
+  /**
    * Search file contents for a literal text pattern.
    *
    * Binary files (determined by MIME type) are skipped.
@@ -59,6 +84,15 @@ export interface BackendProtocolV2 extends Omit<
     path?: string | null,
     glob?: string | null,
   ): MaybePromise<GrepResult>;
+
+  /**
+   * Structured glob matching returning FileInfo objects.
+   *
+   * @param pattern - Glob pattern (e.g., `*.py`, `**\/*.ts`)
+   * @param path - Base path to search from (default: "/")
+   * @returns GlobResult with list of FileInfo objects matching the pattern on success or error on failure
+   */
+  globInfo(pattern: string, path?: string): MaybePromise<GlobResult>;
 }
 
 /**
@@ -66,8 +100,7 @@ export interface BackendProtocolV2 extends Omit<
  *
  * Key differences from {@link SandboxBackendProtocol}:
  * - Extends {@link BackendProtocolV2} instead of {@link BackendProtocol}
- * - `read()` returns {@link ReadResult} instead of a plain string
- * - `grepRaw()` returns {@link GrepResult} instead of `GrepMatch[] | string`
+ * - All methods return structured Result types for consistent error handling
  */
 export interface SandboxBackendProtocolV2 extends BackendProtocolV2 {
   /**

@@ -14,9 +14,12 @@ import type {
   FileData,
   FileDataV1,
   FileDataV2,
+  GlobResult,
   GrepMatch,
-  ReadResult,
   GrepResult,
+  LsResult,
+  ReadRawResult,
+  ReadResult,
   SandboxBackendProtocolV2,
 } from "./protocol.js";
 
@@ -753,8 +756,13 @@ export function migrateToFileDataV2(data: FileDataV1 | FileDataV2): FileDataV2 {
  * Adapt a v1 {@link BackendProtocol} to {@link BackendProtocolV2}.
  *
  * If the backend already implements v2, it is returned as-is.
- * For v1 backends, `read()` string returns are wrapped in {@link ReadResult}
- * and `grepRaw()` returns are wrapped in {@link GrepResult}.
+ * For v1 backends, wraps returns in Result types:
+ * - `read()` string returns wrapped in {@link ReadResult}
+ * - `readRaw()` FileData returns wrapped in {@link ReadRawResult}
+ * - `grepRaw()` returns wrapped in {@link GrepResult}
+ * - `lsInfo()` FileInfo[] returns wrapped in {@link LsResult}
+ * - `globInfo()` FileInfo[] returns wrapped in {@link GlobResult}
+ *
  * Sandbox properties (`execute`, `id`) are preserved when present.
  *
  * @param backend - Backend instance (v1 or v2)
@@ -764,12 +772,23 @@ export function adaptBackendProtocol(
   backend: AnyBackendProtocol,
 ): BackendProtocolV2 {
   const adapted: BackendProtocolV2 = {
-    lsInfo: (path) => backend.lsInfo(path),
-    async readRaw(filePath): Promise<FileData> {
-      const data = await backend.readRaw(filePath);
-      return migrateToFileDataV2(data);
+    async lsInfo(path): Promise<LsResult> {
+      const result = await backend.lsInfo(path);
+      if (Array.isArray(result)) return { files: result };
+      return result as LsResult;
     },
-    globInfo: (pattern, path) => backend.globInfo(pattern, path),
+    async readRaw(filePath): Promise<ReadRawResult> {
+      const result = await backend.readRaw(filePath);
+      if ("data" in result || "error" in result) {
+        return result as ReadRawResult;
+      }
+      return { data: migrateToFileDataV2(result as FileData) };
+    },
+    async globInfo(pattern, path): Promise<GlobResult> {
+      const result = await backend.globInfo(pattern, path);
+      if (Array.isArray(result)) return { files: result };
+      return result as GlobResult;
+    },
     write: (filePath, content) => backend.write(filePath, content),
     edit: (filePath, oldString, newString, replaceAll) =>
       backend.edit(filePath, oldString, newString, replaceAll),

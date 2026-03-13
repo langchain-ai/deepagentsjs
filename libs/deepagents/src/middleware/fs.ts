@@ -403,8 +403,13 @@ function createLsTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const path = input.path || "/";
-      const infos = await resolvedBackend.lsInfo(path);
+      const lsResult = await resolvedBackend.lsInfo(path);
 
+      if (lsResult.error) {
+        return `Error listing files: ${lsResult.error}`;
+      }
+
+      const infos = lsResult.files || [];
       if (infos.length === 0) {
         return `No files found in ${path}`;
       }
@@ -680,8 +685,13 @@ function createGlobTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const { pattern, path = "/" } = input;
-      const infos = await resolvedBackend.globInfo(pattern, path);
+      const globResult = await resolvedBackend.globInfo(pattern, path);
 
+      if (globResult.error) {
+        return `Error finding files: ${globResult.error}`;
+      }
+
+      const infos = globResult.files || [];
       if (infos.length === 0) {
         return `No files found matching pattern '${pattern}'`;
       }
