@@ -510,7 +510,12 @@ async function listSkillsFromBackend(
   // List directories in the source path using lsInfo
   let fileInfos: { path: string; is_dir?: boolean }[];
   try {
-    fileInfos = await adaptedBackend.lsInfo(normalizedPath);
+    const lsResult = await adaptedBackend.lsInfo(normalizedPath);
+    if (lsResult.error || !lsResult.files) {
+      // Source path doesn't exist or can't be listed
+      return [];
+    }
+    fileInfos = lsResult.files;
   } catch {
     // Source path doesn't exist or can't be listed
     return [];

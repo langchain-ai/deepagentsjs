@@ -7,12 +7,14 @@ import type {
   BackendProtocolV2,
   EditResult,
   ExecuteResponse,
-  FileData,
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
+  GlobResult,
   GrepMatch,
   GrepResult,
+  LsResult,
+  ReadRawResult,
   ReadResult,
   WriteResult,
 } from "./protocol.js";
@@ -79,35 +81,44 @@ export class CompositeBackend implements BackendProtocolV2 {
    * List files and directories in the specified directory (non-recursive).
    *
    * @param path - Absolute path to directory
-   * @returns List of FileInfo objects with route prefixes added, for files and directories
-   *          directly in the directory. Directories have a trailing / in their path and is_dir=true.
+   * @returns LsResult with list of FileInfo objects (with route prefixes added) on success or error on failure.
+   *          Directories have a trailing / in their path and is_dir=true.
    */
-  async lsInfo(path: string): Promise<FileInfo[]> {
+  async lsInfo(path: string): Promise<LsResult> {
     // Check if path matches a specific route
     for (const [routePrefix, backend] of this.sortedRoutes) {
       if (path.startsWith(routePrefix.replace(/\/$/, ""))) {
         // Query only the matching routed backend
         const suffix = path.substring(routePrefix.length);
         const searchPath = suffix ? "/" + suffix : "/";
-        const infos = await backend.lsInfo(searchPath);
+        const result = await backend.lsInfo(searchPath);
+
+        if (result.error) {
+          return result;
+        }
 
         // Add route prefix back to paths
         const prefixed: FileInfo[] = [];
-        for (const fi of infos) {
+        for (const fi of result.files || []) {
           prefixed.push({
             ...fi,
             path: routePrefix.slice(0, -1) + fi.path,
           });
         }
-        return prefixed;
+        return { files: prefixed };
       }
     }
 
     // At root, aggregate default and all routed backends
     if (path === "/") {
       const results: FileInfo[] = [];
-      const defaultInfos = await this.default.lsInfo(path);
-      results.push(...defaultInfos);
+      const defaultResult = await this.default.lsInfo(path);
+
+      if (defaultResult.error) {
+        return defaultResult;
+      }
+
+      results.push(...(defaultResult.files || []));
 
       // Add the route itself as a directory (e.g., /memories/)
       for (const [routePrefix] of this.sortedRoutes) {
@@ -120,7 +131,7 @@ export class CompositeBackend implements BackendProtocolV2 {
       }
 
       results.sort((a, b) => a.path.localeCompare(b.path));
-      return results;
+      return { files: results };
     }
 
     // Path doesn't match a route: query only default backend
@@ -148,9 +159,9 @@ export class CompositeBackend implements BackendProtocolV2 {
    * Read file content as raw FileData.
    *
    * @param filePath - Absolute file path
-   * @returns Raw file content as FileData
+   * @returns ReadRawResult with raw file data on success or error on failure
    */
-  async readRaw(filePath: string): Promise<FileData> {
+  async readRaw(filePath: string): Promise<ReadRawResult> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
     return await backend.readRaw(strippedKey);
   }
@@ -214,40 +225,50 @@ export class CompositeBackend implements BackendProtocolV2 {
   /**
    * Structured glob matching returning FileInfo objects.
    */
-  async globInfo(pattern: string, path: string = "/"): Promise<FileInfo[]> {
+  async globInfo(pattern: string, path: string = "/"): Promise<GlobResult> {
     const results: FileInfo[] = [];
 
     // Route based on path, not pattern
     for (const [routePrefix, backend] of this.sortedRoutes) {
       if (path.startsWith(routePrefix.replace(/\/$/, ""))) {
         const searchPath = path.substring(routePrefix.length - 1);
-        const infos = await backend.globInfo(pattern, searchPath || "/");
+        const result = await backend.globInfo(pattern, searchPath || "/");
+
+        if (result.error) {
+          return result;
+        }
 
         // Add route prefix back
-        return infos.map((fi) => ({
+        const files = (result.files || []).map((fi) => ({
           ...fi,
           path: routePrefix.slice(0, -1) + fi.path,
         }));
+        return { files };
       }
     }
 
     // Path doesn't match any specific route - search default backend AND all routed backends
-    const defaultInfos = await this.default.globInfo(pattern, path);
-    results.push(...defaultInfos);
+    const defaultResult = await this.default.globInfo(pattern, path);
+    if (defaultResult.error) {
+      return defaultResult;
+    }
+    results.push(...(defaultResult.files || []));
 
     for (const [routePrefix, backend] of Object.entries(this.routes)) {
-      const infos = await backend.globInfo(pattern, "/");
-      results.push(
-        ...infos.map((fi) => ({
-          ...fi,
-          path: routePrefix.slice(0, -1) + fi.path,
-        })),
-      );
+      const result = await backend.globInfo(pattern, "/");
+      if (result.error) {
+        continue; // Skip backends that error
+      }
+      const files = (result.files || []).map((fi) => ({
+        ...fi,
+        path: routePrefix.slice(0, -1) + fi.path,
+      }));
+      results.push(...files);
     }
 
     // Deterministic ordering
     results.sort((a, b) => a.path.localeCompare(b.path));
-    return results;
+    return { files: results };
   }
 
   /**

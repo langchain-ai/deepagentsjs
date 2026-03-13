@@ -10,7 +10,10 @@ import type {
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
+  GlobResult,
   GrepResult,
+  LsResult,
+  ReadRawResult,
   ReadResult,
   StateAndStore,
   WriteResult,
@@ -62,10 +65,10 @@ export class StateBackend implements BackendProtocolV2 {
    * List files and directories in the specified directory (non-recursive).
    *
    * @param path - Absolute path to directory
-   * @returns List of FileInfo objects for files and directories directly in the directory.
+   * @returns LsResult with list of FileInfo objects on success or error on failure.
    *          Directories have a trailing / in their path and is_dir=true.
    */
-  lsInfo(path: string): FileInfo[] {
+  lsInfo(path: string): LsResult {
     const files = this.getFiles();
     const infos: FileInfo[] = [];
     const subdirs = new Set<string>();
@@ -113,7 +116,7 @@ export class StateBackend implements BackendProtocolV2 {
     }
 
     infos.sort((a, b) => a.path.localeCompare(b.path));
-    return infos;
+    return { files: infos };
   }
 
   /**
@@ -153,14 +156,16 @@ export class StateBackend implements BackendProtocolV2 {
    * Read file content as raw FileData.
    *
    * @param filePath - Absolute file path
-   * @returns Raw file content as FileData
+   * @returns ReadRawResult with raw file data on success or error on failure
    */
-  readRaw(filePath: string): FileData {
+  readRaw(filePath: string): ReadRawResult {
     const files = this.getFiles();
     const fileData = files[filePath];
 
-    if (!fileData) throw new Error(`File '${filePath}' not found`);
-    return fileData;
+    if (!fileData) {
+      return { error: `File '${filePath}' not found` };
+    }
+    return { data: fileData };
   }
 
   /**
@@ -238,12 +243,12 @@ export class StateBackend implements BackendProtocolV2 {
   /**
    * Structured glob matching returning FileInfo objects.
    */
-  globInfo(pattern: string, path: string = "/"): FileInfo[] {
+  globInfo(pattern: string, path: string = "/"): GlobResult {
     const files = this.getFiles();
     const result = globSearchFiles(files, pattern, path);
 
     if (result === "No files found") {
-      return [];
+      return { files: [] };
     }
 
     const paths = result.split("\n");
@@ -262,7 +267,7 @@ export class StateBackend implements BackendProtocolV2 {
         modified_at: fd?.modified_at || "",
       });
     }
-    return infos;
+    return { files: infos };
   }
 
   /**

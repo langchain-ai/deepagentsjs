@@ -117,6 +117,36 @@ export interface ReadResult {
 }
 
 /**
+ * Structured result from backend readRaw operations.
+ */
+export interface ReadRawResult {
+  /** Error message on failure, undefined on success */
+  error?: string;
+  /** Raw file data, undefined on failure */
+  data?: FileData;
+}
+
+/**
+ * Structured result from backend lsInfo operations.
+ */
+export interface LsResult {
+  /** Error message on failure, undefined on success */
+  error?: string;
+  /** List of FileInfo objects, undefined on failure */
+  files?: FileInfo[];
+}
+
+/**
+ * Structured result from backend globInfo operations.
+ */
+export interface GlobResult {
+  /** Error message on failure, undefined on success */
+  error?: string;
+  /** List of FileInfo objects matching the pattern, undefined on failure */
+  files?: FileInfo[];
+}
+
+/**
  * Result from backend write operations.
  *
  * Checkpoint backends populate filesUpdate with {file_path: file_data} for LangGraph state.

@@ -828,7 +828,7 @@ describe("createFilesystemMiddleware", () => {
       }));
 
       const mockBackend = createMockBackend();
-      mockBackend.lsInfo = vi.fn().mockResolvedValue(manyFiles);
+      mockBackend.lsInfo = vi.fn().mockResolvedValue({ files: manyFiles });
 
       const state = { messages: [], files: {} };
       vi.mocked(getCurrentTaskInput).mockReturnValue(state);
@@ -855,7 +855,7 @@ describe("createFilesystemMiddleware", () => {
       }));
 
       const mockBackend = createMockBackend();
-      mockBackend.globInfo = vi.fn().mockResolvedValue(manyPaths);
+      mockBackend.globInfo = vi.fn().mockResolvedValue({ files: manyPaths });
 
       const state = { messages: [], files: {} };
       vi.mocked(getCurrentTaskInput).mockReturnValue(state);
@@ -908,7 +908,7 @@ describe("createFilesystemMiddleware", () => {
       ];
 
       const mockBackend = createMockBackend();
-      mockBackend.lsInfo = vi.fn().mockResolvedValue(smallFiles);
+      mockBackend.lsInfo = vi.fn().mockResolvedValue({ files: smallFiles });
 
       const state = { messages: [], files: {} };
       vi.mocked(getCurrentTaskInput).mockReturnValue(state);
@@ -933,7 +933,7 @@ describe("createFilesystemMiddleware", () => {
       ];
 
       const mockBackend = createMockBackend();
-      mockBackend.globInfo = vi.fn().mockResolvedValue(smallPaths);
+      mockBackend.globInfo = vi.fn().mockResolvedValue({ files: smallPaths });
 
       const state = { messages: [], files: {} };
       vi.mocked(getCurrentTaskInput).mockReturnValue(state);

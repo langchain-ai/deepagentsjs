@@ -435,17 +435,19 @@ describe("adaptBackendProtocol", () => {
 
   function createV2Backend(): BackendProtocolV2 {
     return {
-      lsInfo: () => [],
+      lsInfo: () => ({ files: [] }),
       read: () => ({ content: "v2 content" }),
       readRaw: () => ({
-        content: "v2 raw",
-        created_at: "2024-01-01T00:00:00.000Z",
-        modified_at: "2024-01-01T00:00:00.000Z",
+        data: {
+          content: "v2 raw",
+          created_at: "2024-01-01T00:00:00.000Z",
+          modified_at: "2024-01-01T00:00:00.000Z",
+        },
       }),
       grepRaw: () => ({
         matches: [{ path: "/file.txt", line: 1, text: "match" }],
       }),
-      globInfo: () => [],
+      globInfo: () => ({ files: [] }),
       write: () => ({ path: "/file.txt", filesUpdate: null }),
       edit: () => ({ path: "/file.txt", filesUpdate: null, occurrences: 1 }),
     };
@@ -477,14 +479,20 @@ describe("adaptBackendProtocol", () => {
     it("should migrate readRaw() v1 content to v2", async () => {
       const adapted = adaptBackendProtocol(createV1Backend());
       const result = await adapted.readRaw("/test.txt");
-      expect(typeof result.content).toBe("string");
-      expect(result.content).toBe("line1\nline2");
+      expect(result.error).toBeUndefined();
+      expect(typeof result.data!.content).toBe("string");
+      expect(result.data!.content).toBe("line1\nline2");
     });
 
     it("should pass through lsInfo, globInfo, write, edit", async () => {
       const adapted = adaptBackendProtocol(createV1Backend());
-      expect(await adapted.lsInfo("/")).toEqual([]);
-      expect(await adapted.globInfo("*")).toEqual([]);
+      const lsResult = await adapted.lsInfo("/");
+      expect(lsResult.error).toBeUndefined();
+      expect(lsResult.files).toEqual([]);
+
+      const globResult = await adapted.globInfo("*");
+      expect(globResult.error).toBeUndefined();
+      expect(globResult.files).toEqual([]);
 
       const writeRes = await adapted.write("/f.txt", "content");
       expect(writeRes.path).toBe("/file.txt");
@@ -510,7 +518,8 @@ describe("adaptBackendProtocol", () => {
     it("should pass through readRaw() v2 content unchanged", async () => {
       const adapted = adaptBackendProtocol(createV2Backend());
       const result = await adapted.readRaw("/test.txt");
-      expect(result.content).toBe("v2 raw");
+      expect(result.error).toBeUndefined();
+      expect(result.data!.content).toBe("v2 raw");
     });
   });
 

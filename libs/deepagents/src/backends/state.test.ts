@@ -59,7 +59,8 @@ describe("StateBackend", () => {
     expect(readRes2.content).toContain("hi world");
 
     const listing = backend.lsInfo("/");
-    expect(listing.some((fi) => fi.path === "/notes.txt")).toBe(true);
+    expect(listing.error).toBeUndefined();
+    expect(listing.files!.some((fi) => fi.path === "/notes.txt")).toBe(true);
 
     const grepRes = backend.grepRaw("hi", "/");
     expect(grepRes.error).toBeUndefined();
@@ -72,7 +73,8 @@ describe("StateBackend", () => {
     expect(literalResult.matches).toBeDefined();
 
     const infos = backend.globInfo("*.txt", "/");
-    expect(infos.some((i) => i.path === "/notes.txt")).toBe(true);
+    expect(infos.error).toBeUndefined();
+    expect(infos.files!.some((i) => i.path === "/notes.txt")).toBe(true);
   });
 
   it("should handle errors correctly", () => {
@@ -112,7 +114,8 @@ describe("StateBackend", () => {
     }
 
     const rootListing = backend.lsInfo("/");
-    const rootPaths = rootListing.map((fi) => fi.path);
+    expect(rootListing.error).toBeUndefined();
+    const rootPaths = rootListing.files!.map((fi) => fi.path);
     expect(rootPaths).toContain("/config.json");
     expect(rootPaths).toContain("/src/");
     expect(rootPaths).toContain("/docs/");
@@ -120,19 +123,22 @@ describe("StateBackend", () => {
     expect(rootPaths).not.toContain("/src/utils/helper.py");
 
     const srcListing = backend.lsInfo("/src/");
-    const srcPaths = srcListing.map((fi) => fi.path);
+    expect(srcListing.error).toBeUndefined();
+    const srcPaths = srcListing.files!.map((fi) => fi.path);
     expect(srcPaths).toContain("/src/main.py");
     expect(srcPaths).toContain("/src/utils/");
     expect(srcPaths).not.toContain("/src/utils/helper.py");
 
     const utilsListing = backend.lsInfo("/src/utils/");
-    const utilsPaths = utilsListing.map((fi) => fi.path);
+    expect(utilsListing.error).toBeUndefined();
+    const utilsPaths = utilsListing.files!.map((fi) => fi.path);
     expect(utilsPaths).toContain("/src/utils/helper.py");
     expect(utilsPaths).toContain("/src/utils/common.py");
     expect(utilsPaths).toHaveLength(2);
 
     const emptyListing = backend.lsInfo("/nonexistent/");
-    expect(emptyListing).toEqual([]);
+    expect(emptyListing.error).toBeUndefined();
+    expect(emptyListing.files).toEqual([]);
   });
 
   it("should handle trailing slashes in ls", () => {
@@ -151,14 +157,16 @@ describe("StateBackend", () => {
     }
 
     const listingWithSlash = backend.lsInfo("/");
-    expect(listingWithSlash).toHaveLength(2);
-    const rootPaths = listingWithSlash.map((fi) => fi.path);
+    expect(listingWithSlash.error).toBeUndefined();
+    expect(listingWithSlash.files).toHaveLength(2);
+    const rootPaths = listingWithSlash.files!.map((fi) => fi.path);
     expect(rootPaths).toContain("/file.txt");
     expect(rootPaths).toContain("/dir/");
 
     const listingFromDir = backend.lsInfo("/dir/");
-    expect(listingFromDir).toHaveLength(1);
-    expect(listingFromDir[0].path).toBe("/dir/nested.txt");
+    expect(listingFromDir.error).toBeUndefined();
+    expect(listingFromDir.files).toHaveLength(1);
+    expect(listingFromDir.files![0].path).toBe("/dir/nested.txt");
   });
 
   it("should handle read with offset and limit", () => {
@@ -602,8 +610,9 @@ describe("StateBackend", () => {
       Object.assign(state.files, writeRes.filesUpdate!);
 
       const listing = backend.lsInfo("/");
-      expect(listing).toHaveLength(2);
-      for (const info of listing) {
+      expect(listing.error).toBeUndefined();
+      expect(listing.files).toHaveLength(2);
+      for (const info of listing.files!) {
         expect(info.size).toBe(5);
       }
     });
