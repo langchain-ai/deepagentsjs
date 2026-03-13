@@ -1,9 +1,5 @@
 import { adaptSandboxInstance } from "../adapter.js";
-import type {
-  AnySandboxInstance,
-  SandboxInstanceV2,
-  StandardTestsConfig,
-} from "../types.js";
+import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register integration workflow tests that combine multiple operations.

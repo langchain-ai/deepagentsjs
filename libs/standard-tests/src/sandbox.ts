@@ -41,11 +41,9 @@ import { registerInitialFilesTests } from "./tests/initial-files.js";
 import { registerIntegrationTests } from "./tests/integration.js";
 import type {
   AnySandboxInstance,
-  SandboxInstanceV2,
   StandardTestsConfig,
   SuiteFn,
 } from "./types.js";
-import { adaptSandboxInstance } from "./adapter.js";
 /**
  * Default number of retry attempts for sandbox creation.
  */
