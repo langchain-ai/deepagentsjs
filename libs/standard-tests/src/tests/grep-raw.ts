@@ -30,8 +30,12 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
 
         const result = await shared.grepRaw("Hello", baseDir);
 
-        expect(result.error).toBeUndefined();
-        const matches = result.matches!;
+        expect(Array.isArray(result)).toBe(true);
+        const matches = result as Array<{
+          path: string;
+          line: number;
+          text: string;
+        }>;
         expect(matches.length).toBe(2);
 
         const paths = matches.map((m) => m.path);
@@ -57,8 +61,12 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
 
         const result = await shared.grepRaw("pattern_match", baseDir, "*.py");
 
-        expect(result.error).toBeUndefined();
-        const matches = result.matches!;
+        expect(Array.isArray(result)).toBe(true);
+        const matches = result as Array<{
+          path: string;
+          line: number;
+          text: string;
+        }>;
         expect(matches.length).toBe(1);
         expect(matches[0].path).toContain("test.py");
       },
@@ -66,7 +74,7 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
     );
 
     it(
-      "should return empty matches when no matches found",
+      "should return empty array when no matches found",
       async () => {
         const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-no-match");
@@ -74,8 +82,16 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
 
         const result = await shared.grepRaw("nonexistent_str", baseDir);
 
-        expect(result.error).toBeUndefined();
-        expect(result.matches!.length).toBe(0);
+        expect(Array.isArray(result)).toBe(true);
+        expect(
+          (
+            result as Array<{
+              path: string;
+              line: number;
+              text: string;
+            }>
+          ).length,
+        ).toBe(0);
       },
       timeout,
     );
@@ -92,8 +108,12 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
 
         const result = await shared.grepRaw("apple", baseDir);
 
-        expect(result.error).toBeUndefined();
-        const matches = result.matches!;
+        expect(Array.isArray(result)).toBe(true);
+        const matches = result as Array<{
+          path: string;
+          line: number;
+          text: string;
+        }>;
         expect(matches.length).toBe(3);
 
         const lineNumbers = matches.map((m) => m.line);
@@ -114,8 +134,12 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
 
         const result = await shared.grepRaw("test123", baseDir);
 
-        expect(result.error).toBeUndefined();
-        const matches = result.matches!;
+        expect(Array.isArray(result)).toBe(true);
+        const matches = result as Array<{
+          path: string;
+          line: number;
+          text: string;
+        }>;
         expect(matches.length).toBe(1);
         expect(matches[0].text).toContain("test123");
       },
@@ -134,8 +158,12 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
 
         const result = await shared.grepRaw("\u4E16\u754C", baseDir);
 
-        expect(result.error).toBeUndefined();
-        const matches = result.matches!;
+        expect(Array.isArray(result)).toBe(true);
+        const matches = result as Array<{
+          path: string;
+          line: number;
+          text: string;
+        }>;
         expect(matches.length).toBe(1);
         expect(matches[0].text).toContain("\u4E16\u754C");
       },
@@ -151,8 +179,12 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
 
         const result = await shared.grepRaw("Hello", baseDir);
 
-        expect(result.error).toBeUndefined();
-        const matches = result.matches!;
+        expect(Array.isArray(result)).toBe(true);
+        const matches = result as Array<{
+          path: string;
+          line: number;
+          text: string;
+        }>;
         // Should only match "Hello", not "hello" or "HELLO"
         expect(matches.length).toBe(1);
         expect(matches[0].text).toContain("Hello");
@@ -172,15 +204,23 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
 
         // Test with dollar sign (literal)
         const result1 = await shared.grepRaw("$100", baseDir);
-        expect(result1.error).toBeUndefined();
-        const matches1 = result1.matches!;
+        expect(Array.isArray(result1)).toBe(true);
+        const matches1 = result1 as Array<{
+          path: string;
+          line: number;
+          text: string;
+        }>;
         expect(matches1.length).toBe(1);
         expect(matches1[0].text).toContain("$100");
 
         // Test with brackets (literal)
         const result2 = await shared.grepRaw("[a-z]*", baseDir);
-        expect(result2.error).toBeUndefined();
-        const matches2 = result2.matches!;
+        expect(Array.isArray(result2)).toBe(true);
+        const matches2 = result2 as Array<{
+          path: string;
+          line: number;
+          text: string;
+        }>;
         expect(matches2.length).toBe(1);
         expect(matches2[0].text).toContain("[a-z]*");
       },
@@ -188,7 +228,7 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
     );
 
     it(
-      "should return empty matches for empty directory",
+      "should return empty array for empty directory",
       async () => {
         const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-empty-dir");
@@ -196,8 +236,16 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
 
         const result = await shared.grepRaw("anything", baseDir);
 
-        expect(result.error).toBeUndefined();
-        expect(result.matches!.length).toBe(0);
+        expect(Array.isArray(result)).toBe(true);
+        expect(
+          (
+            result as Array<{
+              path: string;
+              line: number;
+              text: string;
+            }>
+          ).length,
+        ).toBe(0);
       },
       timeout,
     );
@@ -216,8 +264,12 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
 
         const result = await shared.grepRaw("target_nested", baseDir);
 
-        expect(result.error).toBeUndefined();
-        const matches = result.matches!;
+        expect(Array.isArray(result)).toBe(true);
+        const matches = result as Array<{
+          path: string;
+          line: number;
+          text: string;
+        }>;
         expect(matches.length).toBe(3);
       },
       timeout,
@@ -236,8 +288,12 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
 
         const result = await shared.grepRaw("Line 50", baseDir);
 
-        expect(result.error).toBeUndefined();
-        const matches = result.matches!;
+        expect(Array.isArray(result)).toBe(true);
+        const matches = result as Array<{
+          path: string;
+          line: number;
+          text: string;
+        }>;
         expect(matches.length).toBe(1);
         expect(matches[0].line).toBe(50);
       },

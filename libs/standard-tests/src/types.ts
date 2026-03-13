@@ -1,7 +1,7 @@
 import type {
   MaybePromise,
   FileUploadResponse,
-  SandboxBackendProtocolV2,
+  SandboxBackendProtocol,
   FileDownloadResponse,
 } from "deepagents";
 
@@ -57,12 +57,12 @@ export interface TestRunner {
 /**
  * Interface for sandbox instances used in standard tests.
  *
- * Extends the canonical `SandboxBackendProtocolV2` from deepagents with
+ * Extends the canonical `SandboxBackendProtocol` from deepagents with
  * test-specific properties (`isRunning`, `initialize`) and makes
  * `uploadFiles`/`downloadFiles` required (they are optional in the
  * base protocol).
  */
-export interface SandboxInstance extends SandboxBackendProtocolV2 {
+export interface SandboxInstance extends SandboxBackendProtocol {
   /** Whether the sandbox is currently running */
   readonly isRunning: boolean;
   /** Upload multiple files (required for standard tests) */
