@@ -252,6 +252,8 @@ export function isSandboxBackend(
   backend: unknown,
 ): backend is SandboxBackendProtocolV2 {
   return (
+    backend != null &&
+    typeof backend === "object" &&
     typeof (backend as SandboxBackendProtocolV2).execute === "function" &&
     typeof (backend as SandboxBackendProtocolV2).id === "string"
   );
@@ -266,6 +268,26 @@ export function isSandboxBackend(
 export type AnySandboxProtocol =
   | SandboxBackendProtocol
   | SandboxBackendProtocolV2;
+
+/**
+ * Type guard to check if a backend is a sandbox protocol (v1 or v2).
+ *
+ * Checks for the presence of `execute` function and `id` string,
+ * which are the defining features of sandbox protocols.
+ *
+ * @param backend - Backend instance to check
+ * @returns True if the backend implements sandbox protocol (v1 or v2)
+ */
+export function isSandboxProtocol(
+  backend: unknown,
+): backend is AnySandboxProtocol {
+  return (
+    backend != null &&
+    typeof backend === "object" &&
+    typeof (backend as any).execute === "function" &&
+    typeof (backend as any).id === "string"
+  );
+}
 
 /**
  * Metadata for a single sandbox instance.
