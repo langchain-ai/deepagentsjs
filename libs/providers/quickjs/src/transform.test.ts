@@ -86,6 +86,55 @@ describe("transformForEval", () => {
       expect(result).toContain("function add(a, b)");
       expect(result).not.toContain(": number");
     });
+
+    it("should strip 'as' expressions in variable initializers", () => {
+      const result = transformForEval(
+        "const data = JSON.parse(raw) as { n: number }",
+      );
+      expect(result).toContain("globalThis.data = JSON.parse(raw)");
+      expect(result).not.toContain("as {");
+    });
+
+    it("should strip type annotations from arrow function initializers", () => {
+      const result = transformForEval(
+        "const fn = (x: number): number => x + 1",
+      );
+      expect(result).toContain("globalThis.fn = (x) => x + 1");
+      expect(result).not.toContain(": number");
+    });
+
+    it("should strip generics from call expressions in initializers", () => {
+      const result = transformForEval("const arr = Array.from<number>([1, 2])");
+      expect(result).toContain("globalThis.arr = Array.from([1, 2])");
+      expect(result).not.toContain("<number>");
+    });
+
+    it("should strip non-null assertions in initializers", () => {
+      const result = transformForEval(
+        "const el = document.getElementById('x')!",
+      );
+      expect(result).toContain("globalThis.el = document.getElementById('x')");
+      expect(result).not.toContain("!");
+    });
+  });
+
+  describe("auto-return with semicolons", () => {
+    it("should not wrap trailing semicolons inside return parens", () => {
+      const result = transformForEval("console.log(42);");
+      expect(result).toContain("return (console.log(42))");
+      expect(result).not.toContain("return (console.log(42);)");
+    });
+
+    it("should handle expressions without trailing semicolons", () => {
+      const result = transformForEval("console.log(42)");
+      expect(result).toContain("return (console.log(42))");
+    });
+
+    it("should auto-return after declarations with semicolons", () => {
+      const result = transformForEval("const x = 1;\nx;");
+      expect(result).toContain("return (x)");
+      expect(result).not.toContain("return (x;)");
+    });
   });
 
   describe("top-level await", () => {

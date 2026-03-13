@@ -25,6 +25,10 @@ import type {
 const TSParser = Parser.extend(tsPlugin());
 
 type AcornNode = Node & { start: number; end: number };
+type AcornExpressionStatement = AcornNode & {
+  type: "ExpressionStatement";
+  expression: AcornNode;
+};
 type AcornVariableDeclaration = EstreeVariableDeclaration & {
   start: number;
   end: number;
@@ -61,9 +65,6 @@ export function transformForEval(code: string): string {
   const s = new MagicString(code);
   const program = ast as unknown as { body: AcornNode[] };
   const topLevelNodes = program.body;
-
-  // Track which ranges to remove (TS-only nodes)
-  // Track which declarations to hoist
   for (let i = 0; i < topLevelNodes.length; i++) {
     const node = topLevelNodes[i];
 
@@ -123,11 +124,15 @@ export function transformForEval(code: string): string {
     }
   }
 
-  // Auto-return the last expression
+  // Auto-return the last expression. We insert `return (` before the
+  // ExpressionStatement (to preserve any grouping parens like `({...})`),
+  // but close `)` after the inner expression — not after the statement —
+  // so any trailing semicolon stays outside: `return (expr);` not `return (expr;)`.
   const lastNode = findLastNonEmptyNode(topLevelNodes, s);
   if (lastNode && isExpression(lastNode)) {
+    const { expression } = lastNode as AcornExpressionStatement;
     s.prependLeft(lastNode.start, "return (");
-    s.appendRight(lastNode.end, ")");
+    s.appendRight(expression.end, ")");
   }
 
   // Wrap in async IIFE
@@ -153,6 +158,7 @@ function isTSOnlyNode(node: AcornNode): boolean {
  * Rewrite a top-level VariableDeclaration to globalThis assignments.
  *
  * `const x = 1, y = 2` → `globalThis.x = 1; globalThis.y = 2`
+ *
  */
 function hoistDeclaration(
   s: MagicString,
@@ -168,12 +174,10 @@ function hoistDeclaration(
         `globalThis.${(id as unknown as Identifier).name} = ${initCode}`,
       );
     } else if (id.type === "ObjectPattern" || id.type === "ArrayPattern") {
-      // Destructuring: keep as-is but use var for global scope
-      const initCode = d.init ? s.slice(d.init.start, d.init.end) : "undefined";
-      // For destructuring, we can't easily hoist each binding.
-      // Evaluate the init, then assign each binding to globalThis.
       const bindings = extractBindingNames(d.id as any);
-      parts.push(`var ${s.slice(d.id.start, d.id.end)} = ${initCode}`);
+      const initCode = d.init ? extractCleanInit(s, d) : "undefined";
+      const patternCode = extractCleanSource(s, d.id as AcornNode);
+      parts.push(`var ${patternCode} = ${initCode}`);
       for (const name of bindings) {
         parts.push(`globalThis.${name} = ${name}`);
       }
@@ -184,14 +188,13 @@ function hoistDeclaration(
 }
 
 /**
- * Extract the initializer code, stripping any type annotation between
- * the identifier and the `=`.
+ * Extract the initializer code, stripping TypeScript annotations from
+ * within the expression (e.g. `as Type`, generics, parameter types in
+ * arrow functions).
  */
 function extractCleanInit(s: MagicString, d: AcornVariableDeclarator): string {
   if (!d.init) return "undefined";
-  // Walk the init subtree to strip type annotations inside it
-  const initSource = new MagicString(s.slice(d.init.start, d.init.end));
-  return initSource.toString();
+  return extractCleanSource(s, d.init as AcornNode);
 }
 
 function extractBindingNames(pattern: any): string[] {
@@ -226,35 +229,51 @@ function stripTypeAnnotations(s: MagicString, node: AcornNode): void {
   });
 }
 
-function stripTypeAnnotationFromNode(s: MagicString, n: any): void {
+function stripTypeAnnotationFromNode(s: MagicString, n: any, offset = 0): void {
   // Type annotations on parameters, variables, return types
   if (n.typeAnnotation && n.typeAnnotation.start != null) {
-    s.remove(n.typeAnnotation.start, n.typeAnnotation.end);
+    s.remove(n.typeAnnotation.start - offset, n.typeAnnotation.end - offset);
   }
   // Return type on functions
   if (n.returnType && n.returnType.start != null) {
-    s.remove(n.returnType.start, n.returnType.end);
+    s.remove(n.returnType.start - offset, n.returnType.end - offset);
   }
   // Type parameters (generics)
   if (n.typeParameters && n.typeParameters.start != null) {
-    s.remove(n.typeParameters.start, n.typeParameters.end);
+    s.remove(n.typeParameters.start - offset, n.typeParameters.end - offset);
   }
   // Type arguments on calls
   if (n.typeArguments && n.typeArguments.start != null) {
-    s.remove(n.typeArguments.start, n.typeArguments.end);
+    s.remove(n.typeArguments.start - offset, n.typeArguments.end - offset);
   }
   // `as` expressions: keep the expression, remove `as Type`
   if (n.type === "TSAsExpression" && n.expression) {
-    s.remove(n.expression.end, n.end);
+    s.remove(n.expression.end - offset, n.end - offset);
   }
   // Non-null assertion: `x!` → `x`
   if (n.type === "TSNonNullExpression" && n.expression) {
-    s.remove(n.expression.end, n.end);
+    s.remove(n.expression.end - offset, n.end - offset);
   }
   // Satisfies expression: `x satisfies Type` → `x`
   if (n.type === "TSSatisfiesExpression" && n.expression) {
-    s.remove(n.expression.end, n.end);
+    s.remove(n.expression.end - offset, n.end - offset);
   }
+}
+
+/**
+ * Extract a clean JS source string from an AST node, stripping all
+ * TypeScript annotations. Works on a copy so the main MagicString is
+ * not mutated.
+ */
+function extractCleanSource(s: MagicString, node: AcornNode): string {
+  const offset = node.start;
+  const source = new MagicString(s.slice(node.start, node.end));
+  walk(node as any, {
+    enter(n: any) {
+      stripTypeAnnotationFromNode(source, n, offset);
+    },
+  });
+  return source.toString();
 }
 
 function findLastNonEmptyNode(

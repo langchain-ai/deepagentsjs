@@ -339,7 +339,12 @@ export function createDeepAgent<
     checkpointer,
     store,
     name,
-  }).withConfig({ recursionLimit: 10_000 });
+  }).withConfig({
+    recursionLimit: 10_000,
+    metadata: {
+      ls_integration: "deepagents",
+    },
+  });
 
   /**
    * Combine custom middleware with flattened subagent middleware for complete type inference
