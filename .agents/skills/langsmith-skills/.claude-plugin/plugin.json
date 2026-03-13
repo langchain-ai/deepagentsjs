@@ -1,0 +1,14 @@
+{
+  "name": "langsmith-skills",
+  "version": "0.1.0",
+  "description": "LangSmith skills for tracing, dataset management, and evaluation pipelines",
+  "author": {
+    "name": "LangChain",
+    "url": "https://langchain.com"
+  },
+  "homepage": "https://docs.smith.langchain.com",
+  "repository": "https://github.com/langchain-ai/langsmith-skills",
+  "license": "MIT",
+  "keywords": ["langsmith", "langchain", "tracing", "evaluation", "datasets", "llm"],
+  "skills": "./config/skills/"
+}
