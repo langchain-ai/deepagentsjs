@@ -3,4 +3,4 @@ import "./matchers.js";
 
 export * from "./deepagent.js";
 export * from "./matchers.js";
-export * from "./runner.js";
+export * from "./runners.js";

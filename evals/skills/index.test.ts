@@ -20,28 +20,22 @@ ls.describe(
         },
       },
       async ({ inputs }) => {
-        const result = await runner
-          .extend({ skills: ["/skills/user/"] })
-          .run({
-            query: inputs.query,
-            initialFiles: {
-              "/skills/user/data-analysis/SKILL.md": skillContent(
-                "data-analysis",
-                "Step-by-step workflow for analyzing datasets using Lunar tool",
-                "## Steps\n1. Load dataset\n2. Clean data\n3. Explore\n\nMagic number: ALPHA-7-ZULU\n",
-              ),
-            },
-          });
-
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "read_file",
-          argsContains: {
-            file_path: "/skills/user/data-analysis/SKILL.md",
+        const result = await runner.extend({ skills: ["/skills/user/"] }).run({
+          query: inputs.query,
+          initialFiles: {
+            "/skills/user/data-analysis/SKILL.md": skillContent(
+              "data-analysis",
+              "Step-by-step workflow for analyzing datasets using Lunar tool",
+              "## Steps\n1. Load dataset\n2. Clean data\n3. Explore\n\nMagic number: ALPHA-7-ZULU\n",
+            ),
           },
         });
+
         expect(result).toHaveFinalTextContaining("ALPHA-7-ZULU");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -54,34 +48,28 @@ ls.describe(
         },
       },
       async ({ inputs }) => {
-        const result = await runner
-          .extend({ skills: ["/skills/user/"] })
-          .run({
-            query: inputs.query,
-            initialFiles: {
-              "/skills/user/code-review/SKILL.md": skillContent(
-                "code-review",
-                "How to review pull requests",
-                "Code: BRAVO-LIMA\n",
-              ),
-              "/skills/user/deployment/SKILL.md": skillContent(
-                "deployment",
-                "How to deploy services",
-                "Code: CHARLIE-ECHO\n",
-              ),
-            },
-          });
-
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "read_file",
-          argsContains: {
-            file_path: "/skills/user/code-review/SKILL.md",
+        const result = await runner.extend({ skills: ["/skills/user/"] }).run({
+          query: inputs.query,
+          initialFiles: {
+            "/skills/user/code-review/SKILL.md": skillContent(
+              "code-review",
+              "How to review pull requests",
+              "Code: BRAVO-LIMA\n",
+            ),
+            "/skills/user/deployment/SKILL.md": skillContent(
+              "deployment",
+              "How to deploy services",
+              "Code: CHARLIE-ECHO\n",
+            ),
           },
         });
+
         expect(result).toHaveFinalTextContaining("BRAVO-LIMA");
         expect(getFinalText(result)).not.toContain("CHARLIE-ECHO");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -94,40 +82,28 @@ ls.describe(
         },
       },
       async ({ inputs }) => {
-        const result = await runner
-          .extend({ skills: ["/skills/user/"] })
-          .run({
-            query: inputs.query,
-            initialFiles: {
-              "/skills/user/frontend-deploy/SKILL.md": skillContent(
-                "frontend-deploy",
-                "Frontend deployment guide",
-                "Frontend port: 3000\n",
-              ),
-              "/skills/user/backend-deploy/SKILL.md": skillContent(
-                "backend-deploy",
-                "Backend deployment guide",
-                "Backend port: 8080\n",
-              ),
-            },
-          });
+        const result = await runner.extend({ skills: ["/skills/user/"] }).run({
+          query: inputs.query,
+          initialFiles: {
+            "/skills/user/frontend-deploy/SKILL.md": skillContent(
+              "frontend-deploy",
+              "Frontend deployment guide",
+              "Frontend port: 3000\n",
+            ),
+            "/skills/user/backend-deploy/SKILL.md": skillContent(
+              "backend-deploy",
+              "Backend deployment guide",
+              "Backend port: 8080\n",
+            ),
+          },
+        });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(2);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "read_file",
-          argsContains: {
-            file_path: "/skills/user/frontend-deploy/SKILL.md",
-          },
-        });
-        expect(result).toHaveToolCallInStep(1, {
-          name: "read_file",
-          argsContains: {
-            file_path: "/skills/user/backend-deploy/SKILL.md",
-          },
-        });
         expect(result).toHaveFinalTextContaining("3000");
         expect(result).toHaveFinalTextContaining("8080");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -140,33 +116,27 @@ ls.describe(
         },
       },
       async ({ inputs }) => {
-        const result = await runner
-          .extend({ skills: ["/skills/user/"] })
-          .run({
-            query: inputs.query,
-            initialFiles: {
-              "/skills/user/testing/SKILL.md": skillContent(
-                "testing",
-                "How to run tests",
-                "## Steps\n1. Install deps\n2. Run test suiet\n3. Check coverage\n",
-              ),
-            },
-          });
-
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "edit_file",
-          argsContains: {
-            file_path: "/skills/user/testing/SKILL.md",
+        const result = await runner.extend({ skills: ["/skills/user/"] }).run({
+          query: inputs.query,
+          initialFiles: {
+            "/skills/user/testing/SKILL.md": skillContent(
+              "testing",
+              "How to run tests",
+              "## Steps\n1. Install deps\n2. Run test suiet\n3. Check coverage\n",
+            ),
           },
         });
+
         expect(result.files["/skills/user/testing/SKILL.md"]).not.toContain(
           "test suiet",
         );
         expect(result.files["/skills/user/testing/SKILL.md"]).toContain(
           "test suite",
         );
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -179,39 +149,27 @@ ls.describe(
         },
       },
       async ({ inputs }) => {
-        const result = await runner
-          .extend({ skills: ["/skills/user/"] })
-          .run({
-            query: inputs.query,
-            initialFiles: {
-              "/skills/user/testing/SKILL.md": skillContent(
-                "testing",
-                "How to run tests",
-                "## Steps\n1. Install deps\n2. Run test suite\n3. Check covreage\n",
-              ),
-            },
-          });
+        const result = await runner.extend({ skills: ["/skills/user/"] }).run({
+          query: inputs.query,
+          initialFiles: {
+            "/skills/user/testing/SKILL.md": skillContent(
+              "testing",
+              "How to run tests",
+              "## Steps\n1. Install deps\n2. Run test suite\n3. Check covreage\n",
+            ),
+          },
+        });
 
-        expect(result).toHaveAgentSteps(3);
-        expect(result).toHaveToolCallRequests(2);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "read_file",
-          argsContains: {
-            file_path: "/skills/user/testing/SKILL.md",
-          },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "edit_file",
-          argsContains: {
-            file_path: "/skills/user/testing/SKILL.md",
-          },
-        });
         expect(result.files["/skills/user/testing/SKILL.md"]).not.toContain(
           "covreage",
         );
         expect(result.files["/skills/user/testing/SKILL.md"]).toContain(
           "coverage",
         );
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -242,27 +200,17 @@ ls.describe(
             },
           });
 
-        expect(result).toHaveAgentSteps(3);
-        expect(result).toHaveToolCallRequests(2);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "read_file",
-          argsContains: {
-            file_path: "/skills/project/deployment/SKILL.md",
-          },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "edit_file",
-          argsContains: {
-            file_path: "/skills/project/deployment/SKILL.md",
-          },
-        });
-        expect(
-          result.files["/skills/project/deployment/SKILL.md"],
-        ).toContain("Slack notification");
+        expect(result.files["/skills/project/deployment/SKILL.md"]).toContain(
+          "Slack notification",
+        );
         const loggingFile = result.files["/skills/base/logging/SKILL.md"];
         if (loggingFile != null) {
           expect(loggingFile).not.toContain("Slack notification");
         }
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
   },

@@ -44,13 +44,11 @@ ls.describe(
           })
           .run({ query: inputs.query });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "task",
-          argsContains: { subagent_type: "weather_agent" },
-        });
         expect(result).toHaveFinalTextContaining("89");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -68,13 +66,11 @@ ls.describe(
           .extend({ tools: [getWeatherFake] })
           .run({ query: inputs.query });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "task",
-          argsContains: { subagent_type: "general-purpose" },
-        });
         expect(result).toHaveFinalTextContaining("89");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
   },

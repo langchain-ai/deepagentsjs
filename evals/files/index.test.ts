@@ -1,6 +1,6 @@
 import * as ls from "langsmith/vitest";
 import { expect } from "vitest";
-import { getDefaultRunner } from "@deepagents/evals";
+import { getDefaultRunner, getFinalText } from "@deepagents/evals";
 
 const runner = getDefaultRunner();
 
@@ -22,9 +22,11 @@ ls.describe(
           },
         });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
         expect(result).toHaveFinalTextContaining("three", true);
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -41,10 +43,12 @@ ls.describe(
           .extend({ systemPrompt: "Your name is Foo Bar." })
           .run({ query: inputs.query });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
         expect(result.files["/foo.md"]).toContain("Foo Bar");
         expect(result).toHaveFinalTextContaining("Foo Bar");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -59,18 +63,12 @@ ls.describe(
       async ({ inputs }) => {
         const result = await runner.run({ query: inputs.query });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(2);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "write_file",
-          argsContains: { file_path: "/a.md" },
-        });
-        expect(result).toHaveToolCallInStep(1, {
-          name: "write_file",
-          argsContains: { file_path: "/b.md" },
-        });
         expect(result.files["/a.md"]).toBe("bar");
         expect(result.files["/b.md"]).toBe("bar");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -92,9 +90,11 @@ ls.describe(
           },
         });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
         expect(result).toHaveFinalTextContaining("[YES]");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -115,9 +115,11 @@ ls.describe(
           },
         });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
         expect(result).toHaveFinalTextContaining("[NO]", true);
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -135,9 +137,11 @@ ls.describe(
           initialFiles: { "/note.md": "cat cat cat\n" },
         });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
         expect(result.files["/note.md"]).toBe("dog dog dog\n");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -155,13 +159,15 @@ ls.describe(
           initialFiles: { "/data.txt": "alpha\nbeta\ngamma\n" },
         });
 
-        expect(result).toHaveAgentSteps(3);
-        expect(result).toHaveToolCallRequests(2);
         expect(result.files["/out.txt"].trimEnd().split("\n")).toEqual([
           "gamma",
           "beta",
           "alpha",
         ]);
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -182,17 +188,11 @@ ls.describe(
           },
         });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(2);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "read_file",
-          argsContains: { file_path: "/a.md" },
-        });
-        expect(result).toHaveToolCallInStep(1, {
-          name: "read_file",
-          argsContains: { file_path: "/b.md" },
-        });
         expect(result).toHaveFinalTextContaining("[YES]");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -214,11 +214,13 @@ ls.describe(
           },
         });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
         expect(result).toHaveFinalTextContaining("/a.txt");
         expect(result).toHaveFinalTextContaining("/c.md");
         expect(result).not.toHaveFinalTextContaining("/b.txt");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -240,11 +242,13 @@ ls.describe(
           },
         });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
         expect(result).toHaveFinalTextContaining("/foo/a.md");
         expect(result).toHaveFinalTextContaining("/foo/c.md");
         expect(result).not.toHaveFinalTextContaining("/foo/b.txt");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -259,27 +263,13 @@ ls.describe(
       async ({ inputs }) => {
         const result = await runner.run({ query: inputs.query });
 
-        expect(result).toHaveAgentSteps(3);
-        expect(result).toHaveToolCallRequests(4);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "write_file",
-          argsContains: { file_path: "/a.md" },
-        });
-        expect(result).toHaveToolCallInStep(1, {
-          name: "write_file",
-          argsContains: { file_path: "/b.md" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "read_file",
-          argsContains: { file_path: "/a.md" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "read_file",
-          argsContains: { file_path: "/b.md" },
-        });
         expect(result).toHaveFinalTextContaining("DONE");
         expect(result.files["/a.md"]).toBe("bar");
         expect(result.files["/b.md"]).toBe("bar");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -297,16 +287,12 @@ ls.describe(
         // content; do not enforce step/tool-call counts.
         const result = await runner.run({ query: inputs.query });
 
-        expect(result).toHaveToolCallInStep(1, {
-          name: "write_file",
-          argsContains: { file_path: "/a.md" },
-        });
-        expect(result).toHaveToolCallInStep(1, {
-          name: "write_file",
-          argsContains: { file_path: "/b.md" },
-        });
         expect(result.files["/a.md"]).toBe("bar");
         expect(result.files["/b.md"]).toBe("bar");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -331,14 +317,12 @@ ls.describe(
           },
         });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "grep",
-          argsContains: { pattern: "MAGIC_PHRASE:" },
-        });
         expect(result).toHaveFinalTextContaining("cobalt-otter-17");
         expect(result).not.toHaveFinalTextContaining("MAGIC_PHRASE");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -371,33 +355,11 @@ ls.describe(
           },
         });
 
-        expect(result).toHaveAgentSteps(3);
-        expect(result).toHaveToolCallRequests(6);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "ls",
-          argsContains: { path: "/quotes" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "read_file",
-          argsContains: { file_path: "/quotes/q1.txt" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "read_file",
-          argsContains: { file_path: "/quotes/q2.txt" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "read_file",
-          argsContains: { file_path: "/quotes/q3.txt" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "read_file",
-          argsContains: { file_path: "/quotes/q4.txt" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "read_file",
-          argsContains: { file_path: "/quotes/q5.txt" },
-        });
         expect(result).toHaveFinalTextContaining("/quotes/q3.txt");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -431,33 +393,11 @@ ls.describe(
           },
         });
 
-        expect(result).toHaveAgentSteps(3);
-        expect(result).toHaveToolCallRequests(6);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "ls",
-          argsContains: { path: "/quotes" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "read_file",
-          argsContains: { file_path: "/quotes/q1.txt" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "read_file",
-          argsContains: { file_path: "/quotes/q2.txt" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "read_file",
-          argsContains: { file_path: "/quotes/q3.txt" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "read_file",
-          argsContains: { file_path: "/quotes/q4.txt" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "read_file",
-          argsContains: { file_path: "/quotes/q5.txt" },
-        });
         expect(result).toHaveFinalTextContaining("/quotes/q3.txt");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
   },

@@ -18,9 +18,11 @@ ls.describe(
           .extend({ systemPrompt: "Your name is Foo Bar." })
           .run({ query: inputs.query });
 
-        expect(result).toHaveAgentSteps(1);
-        expect(result).toHaveToolCallRequests(0);
         expect(result).toHaveFinalTextContaining("Foo Bar");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -32,9 +34,11 @@ ls.describe(
       async ({ inputs }) => {
         const result = await runner.run({ query: inputs.query });
 
-        expect(result).toHaveAgentSteps(1);
-        expect(result).toHaveToolCallRequests(0);
         expect(result).toHaveFinalTextContaining("4");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
   },

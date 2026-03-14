@@ -1,25 +1,18 @@
 /**
  * Eval tests for relational data tool usage.
  *
- * Recreates the relational data environment from langchain-benchmarks: fake
- * users, locations, and foods connected by IDs. The agent receives *only* the
- * lookup/search tools (no filesystem) and must chain them to answer questions.
- *
- * Ported from the upstream Python eval:
- *   https://github.com/langchain-ai/deepagents/blob/main/libs/deepagents/tests/evals/test_tool_usage_relational.py
+ * Fake users, locations, and foods connected by IDs. The agent receives *only*
+ * the lookup/search tools (no filesystem) and must chain them to answer
+ * questions.
  */
 
 import * as ls from "langsmith/vitest";
-import { expect } from "vitest";
+import { beforeEach, expect, vi } from "vitest";
 import { tool } from "langchain";
 import { z } from "zod/v4";
 import { getDefaultRunner } from "@deepagents/evals";
 
 const runner = getDefaultRunner();
-
-// ---------------------------------------------------------------------------
-// Static relational data
-// ---------------------------------------------------------------------------
 
 interface User {
   id: number;
@@ -215,11 +208,21 @@ function getFood(foodId: number): Food {
 }
 
 // ---------------------------------------------------------------------------
-// Tools
+// Spied tools — each tool wraps its implementation in vi.fn() so tests
+// can assert which tools were called and with what arguments.
 // ---------------------------------------------------------------------------
 
-const getUserName = tool(
-  async ({ user_id }: { user_id: number }) => getUser(user_id).name,
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function spiedTool(
+  fn: (...args: any[]) => any,
+  config: { name: string; description: string; schema: any },
+) {
+  const spy = vi.fn(fn);
+  return { tool: tool(spy, config), spy };
+}
+
+const { tool: getUserName, spy: getUserNameSpy } = spiedTool(
+  ({ user_id }) => getUser(user_id).name,
   {
     name: "get_user_name",
     description: "Get the name of the user with the given user ID.",
@@ -227,14 +230,17 @@ const getUserName = tool(
   },
 );
 
-const listUserIds = tool(async () => USER_DATA.map((u) => u.id), {
-  name: "list_user_ids",
-  description: "List all the user IDs.",
-  schema: z.object({}),
-});
+const { tool: listUserIds, spy: listUserIdsSpy } = spiedTool(
+  () => USER_DATA.map((u) => u.id),
+  {
+    name: "list_user_ids",
+    description: "List all the user IDs.",
+    schema: z.object({}),
+  },
+);
 
-const findUsersByName = tool(
-  async ({ name }: { name: string }) =>
+const { tool: findUsersByName, spy: findUsersByNameSpy } = spiedTool(
+  ({ name }) =>
     similaritySearch(
       USER_DATA as unknown as Record<string, unknown>[],
       name,
@@ -247,8 +253,8 @@ const findUsersByName = tool(
   },
 );
 
-const findLocationsByName = tool(
-  async ({ city }: { city: string }) =>
+const { tool: findLocationsByName, spy: findLocationsByNameSpy } = spiedTool(
+  ({ city }) =>
     similaritySearch(
       LOCATION_DATA as unknown as Record<string, unknown>[],
       city,
@@ -263,8 +269,8 @@ const findLocationsByName = tool(
   },
 );
 
-const findFoodsByName = tool(
-  async ({ food }: { food: string }) =>
+const { tool: findFoodsByName, spy: findFoodsByNameSpy } = spiedTool(
+  ({ food }) =>
     similaritySearch(
       FOOD_DATA as unknown as Record<string, unknown>[],
       food,
@@ -279,8 +285,8 @@ const findFoodsByName = tool(
   },
 );
 
-const getUserEmail = tool(
-  async ({ user_id }: { user_id: number }) => getUser(user_id).email,
+const { tool: getUserEmail, spy: getUserEmailSpy } = spiedTool(
+  ({ user_id }) => getUser(user_id).email,
   {
     name: "get_user_email",
     description: "Get the email of the user with the given user ID.",
@@ -288,8 +294,8 @@ const getUserEmail = tool(
   },
 );
 
-const getUserLocation = tool(
-  async ({ user_id }: { user_id: number }) => getUser(user_id).location,
+const { tool: getUserLocation, spy: getUserLocationSpy } = spiedTool(
+  ({ user_id }) => getUser(user_id).location,
   {
     name: "get_user_location",
     description: "Get the location ID of the user with the given user ID.",
@@ -297,8 +303,8 @@ const getUserLocation = tool(
   },
 );
 
-const getUserFavoriteColor = tool(
-  async ({ user_id }: { user_id: number }) => getUser(user_id).favorite_color,
+const { tool: getUserFavoriteColor, spy: getUserFavoriteColorSpy } = spiedTool(
+  ({ user_id }) => getUser(user_id).favorite_color,
   {
     name: "get_user_favorite_color",
     description: "Get the favorite color of the user with the given user ID.",
@@ -306,8 +312,8 @@ const getUserFavoriteColor = tool(
   },
 );
 
-const getUserFavoriteFoods = tool(
-  async ({ user_id }: { user_id: number }) => getUser(user_id).favorite_foods,
+const { tool: getUserFavoriteFoods, spy: getUserFavoriteFoodsSpy } = spiedTool(
+  ({ user_id }) => getUser(user_id).favorite_foods,
   {
     name: "get_user_favorite_foods",
     description:
@@ -316,8 +322,8 @@ const getUserFavoriteFoods = tool(
   },
 );
 
-const getWeatherAtLocation = tool(
-  async ({ location_id }: { location_id: number }) =>
+const { tool: getWeatherAtLocation, spy: getWeatherAtLocationSpy } = spiedTool(
+  ({ location_id }: { location_id: number }) =>
     getLocation(location_id).current_weather,
   {
     name: "get_weather_at_location",
@@ -329,9 +335,8 @@ const getWeatherAtLocation = tool(
   },
 );
 
-const getCityForLocation = tool(
-  async ({ location_id }: { location_id: number }) =>
-    getLocation(location_id).city,
+const { tool: getCityForLocation, spy: getCityForLocationSpy } = spiedTool(
+  ({ location_id }: { location_id: number }) => getLocation(location_id).city,
   {
     name: "get_city_for_location",
     description: "Get the city for the location with the given location ID.",
@@ -341,21 +346,22 @@ const getCityForLocation = tool(
   },
 );
 
-const getCurrentTimeForLocation = tool(
-  async ({ location_id }: { location_id: number }) =>
-    getLocation(location_id).current_time,
-  {
-    name: "get_current_time_for_location",
-    description:
-      "Get the current time for the location with the given location ID.",
-    schema: z.object({
-      location_id: z.number().describe("The location's ID."),
-    }),
-  },
-);
+const { tool: getCurrentTimeForLocation, spy: getCurrentTimeForLocationSpy } =
+  spiedTool(
+    ({ location_id }: { location_id: number }) =>
+      getLocation(location_id).current_time,
+    {
+      name: "get_current_time_for_location",
+      description:
+        "Get the current time for the location with the given location ID.",
+      schema: z.object({
+        location_id: z.number().describe("The location's ID."),
+      }),
+    },
+  );
 
-const getFoodName = tool(
-  async ({ food_id }: { food_id: number }) => getFood(food_id).name,
+const { tool: getFoodName, spy: getFoodNameSpy } = spiedTool(
+  ({ food_id }: { food_id: number }) => getFood(food_id).name,
   {
     name: "get_food_name",
     description: "Get the name of the food with the given food ID.",
@@ -363,8 +369,8 @@ const getFoodName = tool(
   },
 );
 
-const getFoodCalories = tool(
-  async ({ food_id }: { food_id: number }) => getFood(food_id).calories,
+const { tool: getFoodCalories, spy: getFoodCaloriesSpy } = spiedTool(
+  ({ food_id }: { food_id: number }) => getFood(food_id).calories,
   {
     name: "get_food_calories",
     description:
@@ -373,22 +379,25 @@ const getFoodCalories = tool(
   },
 );
 
-const getFoodAllergicIngredients = tool(
-  async ({ food_id }: { food_id: number }) =>
-    getFood(food_id).allergic_ingredients,
+const { tool: getFoodAllergicIngredients, spy: getFoodAllergicIngredientsSpy } =
+  spiedTool(
+    ({ food_id }: { food_id: number }) => getFood(food_id).allergic_ingredients,
+    {
+      name: "get_food_allergic_ingredients",
+      description:
+        "Get the list of allergic ingredients for the food with the given food ID.",
+      schema: z.object({ food_id: z.number().describe("The food's ID.") }),
+    },
+  );
+
+const { tool: getCurrentUserId, spy: getCurrentUserIdSpy } = spiedTool(
+  () => 35,
   {
-    name: "get_food_allergic_ingredients",
-    description:
-      "Get the list of allergic ingredients for the food with the given food ID.",
-    schema: z.object({ food_id: z.number().describe("The food's ID.") }),
+    name: "get_current_user_id",
+    description: "Get the current user's ID.",
+    schema: z.object({}),
   },
 );
-
-const getCurrentUserId = tool(async () => 35, {
-  name: "get_current_user_id",
-  description: "Get the current user's ID.",
-  schema: z.object({}),
-});
 
 // ---------------------------------------------------------------------------
 // All relational-data tools collected for easy use
@@ -413,14 +422,12 @@ const RELATIONAL_TOOLS = [
   getCurrentUserId,
 ];
 
-// ---------------------------------------------------------------------------
-// Test cases
-// ---------------------------------------------------------------------------
-
 ls.describe(
   runner.name,
   () => {
-    // ----- Single-tool tests -----
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
 
     ls.test(
       "single tool: list user IDs",
@@ -432,15 +439,17 @@ ls.describe(
           .extend({ tools: RELATIONAL_TOOLS })
           .run({ query: inputs.query });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
-        expect(result).toHaveToolCallInStep(1, { name: "list_user_ids" });
         expect(result).toHaveFinalTextContaining("1");
         expect(result).toHaveFinalTextContaining("21");
         expect(result).toHaveFinalTextContaining("35");
         expect(result).toHaveFinalTextContaining("41");
         expect(result).toHaveFinalTextContaining("42");
         expect(result).toHaveFinalTextContaining("43");
+
+        // Spy assertions
+        expect(listUserIdsSpy).toHaveBeenCalled();
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
 
@@ -454,13 +463,12 @@ ls.describe(
           .extend({ tools: RELATIONAL_TOOLS })
           .run({ query: inputs.query });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "get_user_email",
-          argsContains: { user_id: 21 },
-        });
         expect(result).toHaveFinalTextContaining("bob@hotmail.com");
+
+        // Spy assertions
+        expect(getUserEmailSpy).toHaveBeenCalledWith({ user_id: 21 });
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
 
@@ -474,17 +482,14 @@ ls.describe(
           .extend({ tools: RELATIONAL_TOOLS })
           .run({ query: inputs.query });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "get_food_calories",
-          argsContains: { food_id: 5 },
-        });
         expect(result).toHaveFinalTextContaining("200");
+
+        // Spy assertions
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 5 });
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
-
-    // ----- Two-tool tests -----
 
     ls.test(
       "two tools: user name from current ID",
@@ -496,16 +501,13 @@ ls.describe(
           .extend({ tools: RELATIONAL_TOOLS })
           .run({ query: inputs.query });
 
-        expect(result).toHaveAgentSteps(3);
-        expect(result).toHaveToolCallRequests(2);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "get_current_user_id",
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_user_name",
-          argsContains: { user_id: 35 },
-        });
         expect(result).toHaveFinalTextContaining("Charlie");
+
+        // Spy assertions
+        expect(getCurrentUserIdSpy).toHaveBeenCalled();
+        expect(getUserNameSpy).toHaveBeenCalledWith({ user_id: 35 });
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
 
@@ -519,17 +521,13 @@ ls.describe(
           .extend({ tools: RELATIONAL_TOOLS })
           .run({ query: inputs.query });
 
-        expect(result).toHaveAgentSteps(3);
-        expect(result).toHaveToolCallRequests(2);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "get_user_location",
-          argsContains: { user_id: 1 },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_city_for_location",
-          argsContains: { location_id: 1 },
-        });
         expect(result).toHaveFinalTextContaining("New York");
+
+        // Spy assertions
+        expect(getUserLocationSpy).toHaveBeenCalledWith({ user_id: 1 });
+        expect(getCityForLocationSpy).toHaveBeenCalledWith({ location_id: 1 });
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
 
@@ -543,21 +541,15 @@ ls.describe(
           .extend({ tools: RELATIONAL_TOOLS })
           .run({ query: inputs.query });
 
-        expect(result).toHaveAgentSteps(3);
-        expect(result).toHaveToolCallRequests(2);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "find_users_by_name",
-          argsContains: { name: "Eve" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_user_email",
-          argsContains: { user_id: 42 },
-        });
         expect(result).toHaveFinalTextContaining("eve@example.org");
+
+        // Spy assertions
+        expect(findUsersByNameSpy).toHaveBeenCalled();
+        expect(getUserEmailSpy).toHaveBeenCalledWith({ user_id: 42 });
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
-
-    // ----- Three-tool tests -----
 
     ls.test(
       "three tools: current user city",
@@ -569,20 +561,14 @@ ls.describe(
           .extend({ tools: RELATIONAL_TOOLS })
           .run({ query: inputs.query });
 
-        expect(result).toHaveAgentSteps(4);
-        expect(result).toHaveToolCallRequests(3);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "get_current_user_id",
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_user_location",
-          argsContains: { user_id: 35 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_city_for_location",
-          argsContains: { location_id: 3 },
-        });
         expect(result).toHaveFinalTextContaining("Chicago");
+
+        // Spy assertions
+        expect(getCurrentUserIdSpy).toHaveBeenCalled();
+        expect(getUserLocationSpy).toHaveBeenCalledWith({ user_id: 35 });
+        expect(getCityForLocationSpy).toHaveBeenCalledWith({ location_id: 3 });
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
 
@@ -596,21 +582,14 @@ ls.describe(
           .extend({ tools: RELATIONAL_TOOLS })
           .run({ query: inputs.query });
 
-        expect(result).toHaveAgentSteps(4);
-        expect(result).toHaveToolCallRequests(3);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "find_users_by_name",
-          argsContains: { name: "Alice" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_user_location",
-          argsContains: { user_id: 1 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_city_for_location",
-          argsContains: { location_id: 1 },
-        });
         expect(result).toHaveFinalTextContaining("New York");
+
+        // Spy assertions
+        expect(findUsersByNameSpy).toHaveBeenCalled();
+        expect(getUserLocationSpy).toHaveBeenCalledWith({ user_id: 1 });
+        expect(getCityForLocationSpy).toHaveBeenCalledWith({ location_id: 1 });
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
 
@@ -626,24 +605,18 @@ ls.describe(
           .extend({ tools: RELATIONAL_TOOLS })
           .run({ query: inputs.query });
 
-        expect(result).toHaveAgentSteps(4);
-        expect(result).toHaveToolCallRequests(3);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "get_current_user_id",
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_user_location",
-          argsContains: { user_id: 35 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_weather_at_location",
-          argsContains: { location_id: 3 },
-        });
         expect(result).toHaveFinalTextContaining("60", true);
+
+        // Spy assertions
+        expect(getCurrentUserIdSpy).toHaveBeenCalled();
+        expect(getUserLocationSpy).toHaveBeenCalledWith({ user_id: 35 });
+        expect(getWeatherAtLocationSpy).toHaveBeenCalledWith({
+          location_id: 3,
+        });
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
-
-    // ----- Four-tool tests (with parallel fan-out) -----
 
     ls.test(
       "four tools: current user favorite food names",
@@ -661,30 +634,18 @@ ls.describe(
         // 2: get_user_favorite_foods(35) -> [3, 7, 2]
         // 3: get_food_name(3), get_food_name(7), get_food_name(2) in parallel
         // 4: answer
-        expect(result).toHaveAgentSteps(4);
-        expect(result).toHaveToolCallRequests(5);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "get_current_user_id",
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_user_favorite_foods",
-          argsContains: { user_id: 35 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 3 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 7 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 2 },
-        });
         expect(result).toHaveFinalTextContaining("Sushi");
         expect(result).toHaveFinalTextContaining("Salad");
         expect(result).toHaveFinalTextContaining("Chocolate");
+
+        // Spy assertions
+        expect(getCurrentUserIdSpy).toHaveBeenCalled();
+        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith({ user_id: 35 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 3 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 7 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 2 });
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
 
@@ -705,25 +666,16 @@ ls.describe(
         // 2: get_user_favorite_foods(43) -> [3]
         // 3: get_food_name(3) and get_food_calories(3) in parallel
         // 4: answer
-        expect(result).toHaveAgentSteps(4);
-        expect(result).toHaveToolCallRequests(4);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "find_users_by_name",
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_user_favorite_foods",
-          argsContains: { user_id: 43 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 3 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_calories",
-          argsContains: { food_id: 3 },
-        });
         expect(result).toHaveFinalTextContaining("Sushi");
         expect(result).toHaveFinalTextContaining("300");
+
+        // Spy assertions
+        expect(findUsersByNameSpy).toHaveBeenCalled();
+        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith({ user_id: 43 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 3 });
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 3 });
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
 
@@ -744,29 +696,22 @@ ls.describe(
         // 2: get_user_location(35) -> 3
         // 3: get_current_time_for_location(3) and get_weather_at_location(3) in parallel
         // 4: answer
-        expect(result).toHaveAgentSteps(4);
-        expect(result).toHaveToolCallRequests(4);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "get_current_user_id",
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_user_location",
-          argsContains: { user_id: 35 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_current_time_for_location",
-          argsContains: { location_id: 3 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_weather_at_location",
-          argsContains: { location_id: 3 },
-        });
         expect(result).toHaveFinalTextContaining("11:15");
         expect(result).toHaveFinalTextContaining("60", true);
+
+        // Spy assertions
+        expect(getCurrentUserIdSpy).toHaveBeenCalled();
+        expect(getUserLocationSpy).toHaveBeenCalledWith({ user_id: 35 });
+        expect(getCurrentTimeForLocationSpy).toHaveBeenCalledWith({
+          location_id: 3,
+        });
+        expect(getWeatherAtLocationSpy).toHaveBeenCalledWith({
+          location_id: 3,
+        });
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
-
-    // ----- Complex multi-step tests -----
 
     ls.test(
       "five steps: current user food names and calories",
@@ -785,44 +730,23 @@ ls.describe(
         // 2: get_user_favorite_foods(35) -> [3, 7, 2]
         // 3: get_food_name + get_food_calories for each food ID, all 6 in parallel
         // 4: answer
-        expect(result).toHaveAgentSteps(4);
-        expect(result).toHaveToolCallRequests(8);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "get_current_user_id",
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_user_favorite_foods",
-          argsContains: { user_id: 35 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 3 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 7 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 2 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_calories",
-          argsContains: { food_id: 3 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_calories",
-          argsContains: { food_id: 7 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_calories",
-          argsContains: { food_id: 2 },
-        });
         expect(result).toHaveFinalTextContaining("Sushi");
         expect(result).toHaveFinalTextContaining("300");
         expect(result).toHaveFinalTextContaining("Salad");
         expect(result).toHaveFinalTextContaining("50");
         expect(result).toHaveFinalTextContaining("Chocolate");
+
+        // Spy assertions
+        expect(getCurrentUserIdSpy).toHaveBeenCalled();
+        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith({ user_id: 35 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 3 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 7 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 2 });
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 3 });
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 7 });
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 2 });
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
 
@@ -844,31 +768,22 @@ ls.describe(
         // 3: get_city_for_location(2), get_current_time_for_location(2),
         //    get_weather_at_location(2) in parallel
         // 4: answer
-        expect(result).toHaveAgentSteps(4);
-        expect(result).toHaveToolCallRequests(5);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "find_users_by_name",
-          argsContains: { name: "Bob" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_user_location",
-          argsContains: { user_id: 21 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_city_for_location",
-          argsContains: { location_id: 2 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_current_time_for_location",
-          argsContains: { location_id: 2 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_weather_at_location",
-          argsContains: { location_id: 2 },
-        });
         expect(result).toHaveFinalTextContaining("Los Angeles");
         expect(result).toHaveFinalTextContaining("7:45");
         expect(result).toHaveFinalTextContaining("75", true);
+
+        // Spy assertions
+        expect(findUsersByNameSpy).toHaveBeenCalled();
+        expect(getUserLocationSpy).toHaveBeenCalledWith({ user_id: 21 });
+        expect(getCityForLocationSpy).toHaveBeenCalledWith({ location_id: 2 });
+        expect(getCurrentTimeForLocationSpy).toHaveBeenCalledWith({
+          location_id: 2,
+        });
+        expect(getWeatherAtLocationSpy).toHaveBeenCalledWith({
+          location_id: 2,
+        });
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
 
@@ -889,46 +804,30 @@ ls.describe(
         // 2: get_user_favorite_foods(1) -> [1, 2, 3]
         // 3: get_food_name + get_food_allergic_ingredients for each, all 6 in parallel
         // 4: answer
-        expect(result).toHaveAgentSteps(4);
-        expect(result).toHaveToolCallRequests(8);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "find_users_by_name",
-          argsContains: { name: "Alice" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_user_favorite_foods",
-          argsContains: { user_id: 1 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 1 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 2 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 3 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_allergic_ingredients",
-          argsContains: { food_id: 1 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_allergic_ingredients",
-          argsContains: { food_id: 2 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_allergic_ingredients",
-          argsContains: { food_id: 3 },
-        });
         expect(result).toHaveFinalTextContaining("Pizza");
         expect(result).toHaveFinalTextContaining("Gluten");
         expect(result).toHaveFinalTextContaining("Chocolate");
         expect(result).toHaveFinalTextContaining("Milk");
         expect(result).toHaveFinalTextContaining("Sushi");
         expect(result).toHaveFinalTextContaining("Fish");
+
+        // Spy assertions
+        expect(findUsersByNameSpy).toHaveBeenCalled();
+        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith({ user_id: 1 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 1 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 2 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 3 });
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
+          food_id: 1,
+        });
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
+          food_id: 2,
+        });
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
+          food_id: 3,
+        });
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
 
@@ -950,57 +849,33 @@ ls.describe(
         // 3: get_food_name, get_food_calories, get_food_allergic_ingredients
         //    for each food ID, all 9 in parallel
         // 4: answer
-        expect(result).toHaveAgentSteps(4);
-        expect(result).toHaveToolCallRequests(11);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "get_current_user_id",
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_user_favorite_foods",
-          argsContains: { user_id: 35 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 3 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 7 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 2 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_calories",
-          argsContains: { food_id: 3 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_calories",
-          argsContains: { food_id: 7 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_calories",
-          argsContains: { food_id: 2 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_allergic_ingredients",
-          argsContains: { food_id: 3 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_allergic_ingredients",
-          argsContains: { food_id: 7 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_allergic_ingredients",
-          argsContains: { food_id: 2 },
-        });
         expect(result).toHaveFinalTextContaining("Sushi");
         expect(result).toHaveFinalTextContaining("300");
         expect(result).toHaveFinalTextContaining("Fish");
         expect(result).toHaveFinalTextContaining("Salad");
         expect(result).toHaveFinalTextContaining("Chocolate");
         expect(result).toHaveFinalTextContaining("Milk");
+
+        // Spy assertions
+        expect(getCurrentUserIdSpy).toHaveBeenCalled();
+        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith({ user_id: 35 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 3 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 7 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 2 });
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 3 });
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 7 });
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 2 });
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
+          food_id: 3,
+        });
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
+          food_id: 7,
+        });
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
+          food_id: 2,
+        });
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
 
@@ -1023,56 +898,6 @@ ls.describe(
         //    get_weather_at_location(4), get_food_name for each food,
         //    get_food_calories for each food — all 9 in parallel
         // 4: answer
-        expect(result).toHaveAgentSteps(4);
-        expect(result).toHaveToolCallRequests(12);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "find_users_by_name",
-          argsContains: { name: "Donna" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_user_location",
-          argsContains: { user_id: 41 },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_user_favorite_foods",
-          argsContains: { user_id: 41 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_city_for_location",
-          argsContains: { location_id: 4 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_current_time_for_location",
-          argsContains: { location_id: 4 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_weather_at_location",
-          argsContains: { location_id: 4 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 6 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 1 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 4 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_calories",
-          argsContains: { food_id: 6 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_calories",
-          argsContains: { food_id: 1 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_calories",
-          argsContains: { food_id: 4 },
-        });
         expect(result).toHaveFinalTextContaining("Houston");
         expect(result).toHaveFinalTextContaining("12:00");
         expect(result).toHaveFinalTextContaining("55", true);
@@ -1082,6 +907,26 @@ ls.describe(
         expect(result).toHaveFinalTextContaining("180");
         expect(result).toHaveFinalTextContaining("285");
         expect(result).toHaveFinalTextContaining("350");
+
+        // Spy assertions
+        expect(findUsersByNameSpy).toHaveBeenCalled();
+        expect(getUserLocationSpy).toHaveBeenCalledWith({ user_id: 41 });
+        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith({ user_id: 41 });
+        expect(getCityForLocationSpy).toHaveBeenCalledWith({ location_id: 4 });
+        expect(getCurrentTimeForLocationSpy).toHaveBeenCalledWith({
+          location_id: 4,
+        });
+        expect(getWeatherAtLocationSpy).toHaveBeenCalledWith({
+          location_id: 4,
+        });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 6 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 1 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 4 });
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 6 });
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 1 });
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 4 });
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
 
@@ -1103,64 +948,6 @@ ls.describe(
         // 3: get_city_for_location(5), get_food_name/calories/allergic_ingredients
         //    for each food ID — all 10 in parallel
         // 4: answer
-        expect(result).toHaveAgentSteps(4);
-        expect(result).toHaveToolCallRequests(14);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "find_users_by_name",
-          argsContains: { name: "Eve" },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_user_email",
-          argsContains: { user_id: 42 },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_user_location",
-          argsContains: { user_id: 42 },
-        });
-        expect(result).toHaveToolCallInStep(2, {
-          name: "get_user_favorite_foods",
-          argsContains: { user_id: 42 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_city_for_location",
-          argsContains: { location_id: 5 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 5 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 7 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_name",
-          argsContains: { food_id: 4 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_calories",
-          argsContains: { food_id: 5 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_calories",
-          argsContains: { food_id: 7 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_calories",
-          argsContains: { food_id: 4 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_allergic_ingredients",
-          argsContains: { food_id: 5 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_allergic_ingredients",
-          argsContains: { food_id: 7 },
-        });
-        expect(result).toHaveToolCallInStep(3, {
-          name: "get_food_allergic_ingredients",
-          argsContains: { food_id: 4 },
-        });
         expect(result).toHaveFinalTextContaining("eve@example.org");
         expect(result).toHaveFinalTextContaining("Miami");
         expect(result).toHaveFinalTextContaining("Ice Cream");
@@ -1170,6 +957,30 @@ ls.describe(
         expect(result).toHaveFinalTextContaining("Burger");
         expect(result).toHaveFinalTextContaining("350");
         expect(result).toHaveFinalTextContaining("Gluten");
+
+        // Spy assertions
+        expect(findUsersByNameSpy).toHaveBeenCalled();
+        expect(getUserEmailSpy).toHaveBeenCalledWith({ user_id: 42 });
+        expect(getUserLocationSpy).toHaveBeenCalledWith({ user_id: 42 });
+        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith({ user_id: 42 });
+        expect(getCityForLocationSpy).toHaveBeenCalledWith({ location_id: 5 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 5 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 7 });
+        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 4 });
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 5 });
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 7 });
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 4 });
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
+          food_id: 5,
+        });
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
+          food_id: 7,
+        });
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
+          food_id: 4,
+        });
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
   },

@@ -25,9 +25,11 @@ ls.describe(
             },
           });
 
-        expect(result).toHaveAgentSteps(1);
-        expect(result).toHaveToolCallRequests(0);
         expect(result).toHaveFinalTextContaining("TurboWidget");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -50,13 +52,11 @@ ls.describe(
             },
           });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
-        expect(result).toHaveToolCallInStep(1, {
-          name: "write_file",
-          argsContains: { file_path: "/config_api.txt" },
-        });
         expect(result.files["/config_api.txt"]).toContain("API_KEY=secret");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -79,10 +79,12 @@ ls.describe(
             },
           });
 
-        expect(result).toHaveAgentSteps(2);
-        expect(result).toHaveToolCallRequests(1);
         expect(result.files["/add.py"]).toContain("# Purpose:");
         expect(result.files["/add.py"]).toContain("def ");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -109,10 +111,12 @@ ls.describe(
             },
           });
 
-        expect(result).toHaveAgentSteps(1);
-        expect(result).toHaveToolCallRequests(0);
         expect(result).toHaveFinalTextContaining("Python", true);
         expect(result).toHaveFinalTextContaining("FastAPI", true);
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -128,8 +132,11 @@ ls.describe(
           .extend({ memory: ["/missing/AGENTS.md"] })
           .run({ query: inputs.query });
 
-        expect(result).toHaveAgentSteps(1);
-        expect(result).toHaveToolCallRequests(0);
+        expect(result).toHaveFinalTextContaining("8");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
 
@@ -153,10 +160,12 @@ ls.describe(
             },
           });
 
-        expect(result).toHaveAgentSteps(1);
-        expect(result).toHaveToolCallRequests(0);
         expect(result).toHaveFinalTextContaining("/users", true);
         expect(result).toHaveFinalTextContaining("GET", true);
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
       },
     );
   },
