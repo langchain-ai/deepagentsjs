@@ -14,6 +14,7 @@ import {
   CompositeBackend,
 } from "../backends/index.js";
 import { fileDataToString } from "../backends/utils.js";
+import type { FileData } from "../backends/protocol.js";
 import { v4 as uuidv4 } from "uuid";
 import {
   SAMPLE_MODEL,
@@ -1292,7 +1293,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       const editedFiles = editResponse.files || {};
       expect(editedFiles["/charmander.txt"]).toBeDefined();
       const content = editedFiles["/charmander.txt"]
-        ? fileDataToString(editedFiles["/charmander.txt"])
+        ? fileDataToString(editedFiles["/charmander.txt"] as FileData)
         : undefined;
       expect(content?.toLowerCase().includes("ember")).toBe(true);
 

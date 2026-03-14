@@ -220,7 +220,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
           if (isBinary) {
             const buffer = await fd.readFile();
             const contentStr = Buffer.from(buffer).toString("base64");
-            return { content: contentStr };
+            return { content: contentStr, mimeType };
           }
           content = await fd.readFile({ encoding: "utf-8" });
         } finally {
@@ -237,14 +237,14 @@ export class FilesystemBackend implements BackendProtocolV2 {
         if (isBinary) {
           const buffer = await fs.readFile(resolvedPath);
           const contentStr = Buffer.from(buffer).toString("base64");
-          return { content: contentStr };
+          return { content: contentStr, mimeType };
         }
         content = await fs.readFile(resolvedPath, "utf-8");
       }
 
       const emptyMsg = checkEmptyContent(content);
       if (emptyMsg) {
-        return { content: emptyMsg };
+        return { content: emptyMsg, mimeType };
       }
 
       const lines = content.split("\n");
@@ -258,7 +258,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
       }
 
       const selectedLines = lines.slice(startIdx, endIdx);
-      return { content: selectedLines.join("\n") };
+      return { content: selectedLines.join("\n"), mimeType };
     } catch (e: any) {
       return { error: `Error reading file '${filePath}': ${e.message}` };
     }
@@ -317,6 +317,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
     return {
       data: {
         content,
+        mimeType,
         created_at: stat.ctime.toISOString(),
         modified_at: stat.mtime.toISOString(),
       },
