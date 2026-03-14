@@ -8,17 +8,29 @@
  */
 
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
-import type { BackendProtocol, SandboxBackendProtocol } from "./v1/protocol.js";
+import type {
+  BackendProtocolV1,
+  SandboxBackendProtocolV1,
+} from "./v1/protocol.js";
 import type {
   BackendProtocolV2,
   SandboxBackendProtocolV2,
 } from "./v2/protocol.js";
 
-export type { BackendProtocol, SandboxBackendProtocol } from "./v1/protocol.js";
+export type {
+  BackendProtocolV1,
+  SandboxBackendProtocolV1,
+} from "./v1/protocol.js";
 export type {
   BackendProtocolV2,
   SandboxBackendProtocolV2,
 } from "./v2/protocol.js";
+
+/** @deprecated Use {@link BackendProtocolV2} instead. */
+export interface BackendProtocol extends BackendProtocolV1 {}
+
+/** @deprecated Use {@link SandboxBackendProtocolV2} instead. */
+export interface SandboxBackendProtocol extends SandboxBackendProtocolV1 {}
 
 export type MaybePromise<T> = T | Promise<T>;
 
@@ -502,7 +514,7 @@ export interface StateAndStore {
  * Use this when accepting either protocol version. Pass through
  * {@link adaptBackendProtocol} to normalize to {@link BackendProtocolV2}.
  */
-export type AnyBackendProtocol = BackendProtocol | BackendProtocolV2;
+export type AnyBackendProtocol = BackendProtocolV1 | BackendProtocolV2;
 
 /**
  * Factory function type for creating backend instances.
