@@ -171,9 +171,13 @@ describe("read_file character-based truncation", () => {
   /**
    * Helper to create a file with specific content
    */
-  function createFileData(content: string): FileData {
+  function createFileData(
+    content: string,
+    mimeType: string = "text/plain",
+  ): FileData {
     return {
       content,
+      mimeType,
       created_at: new Date().toISOString(),
       modified_at: new Date().toISOString(),
     };
@@ -320,9 +324,13 @@ describe("read_file multimodal content blocks", () => {
     return { stateAndStore: { state, store: undefined } };
   }
 
-  function createFileData(content: string): FileData {
+  function createFileData(
+    content: string,
+    mimeType: string = "text/plain",
+  ): FileData {
     return {
       content,
+      mimeType,
       created_at: new Date().toISOString(),
       modified_at: new Date().toISOString(),
     };
@@ -330,7 +338,7 @@ describe("read_file multimodal content blocks", () => {
 
   it("should return an image content block for .png files", async () => {
     const base64Data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ";
-    const files = { "/image.png": createFileData(base64Data) };
+    const files = { "/image.png": createFileData(base64Data, "image/png") };
     const { stateAndStore } = setupStateWithFiles(files);
 
     const middleware = createFilesystemMiddleware({
@@ -354,7 +362,7 @@ describe("read_file multimodal content blocks", () => {
 
   it("should return an image content block for .jpg files", async () => {
     const base64Data = "/9j/4AAQSkZJRgABAQEASABIAAD";
-    const files = { "/photo.jpg": createFileData(base64Data) };
+    const files = { "/photo.jpg": createFileData(base64Data, "image/jpeg") };
     const { stateAndStore } = setupStateWithFiles(files);
 
     const middleware = createFilesystemMiddleware({
@@ -376,7 +384,7 @@ describe("read_file multimodal content blocks", () => {
 
   it("should return an audio content block for .mp3 files", async () => {
     const base64Data = "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMA==";
-    const files = { "/audio.mp3": createFileData(base64Data) };
+    const files = { "/audio.mp3": createFileData(base64Data, "audio/mpeg") };
     const { stateAndStore } = setupStateWithFiles(files);
 
     const middleware = createFilesystemMiddleware({
@@ -400,7 +408,7 @@ describe("read_file multimodal content blocks", () => {
 
   it("should return a video content block for .mp4 files", async () => {
     const base64Data = "AAAAIGZ0eXBpc29tAAACAGlzb20=";
-    const files = { "/video.mp4": createFileData(base64Data) };
+    const files = { "/video.mp4": createFileData(base64Data, "video/mp4") };
     const { stateAndStore } = setupStateWithFiles(files);
 
     const middleware = createFilesystemMiddleware({
@@ -424,7 +432,9 @@ describe("read_file multimodal content blocks", () => {
 
   it("should return a file content block for .pdf files", async () => {
     const base64Data = "JVBERi0xLjQKJcfsj6IKNSAwIG9iago=";
-    const files = { "/document.pdf": createFileData(base64Data) };
+    const files = {
+      "/document.pdf": createFileData(base64Data, "application/pdf"),
+    };
     const { stateAndStore } = setupStateWithFiles(files);
 
     const middleware = createFilesystemMiddleware({
@@ -477,7 +487,7 @@ describe("read_file multimodal content blocks", () => {
     const oversizeBase64 = "A".repeat(
       Math.ceil(MAX_BINARY_READ_SIZE_BYTES / 0.75 + 4),
     );
-    const files = { "/large.png": createFileData(oversizeBase64) };
+    const files = { "/large.png": createFileData(oversizeBase64, "image/png") };
     const { stateAndStore } = setupStateWithFiles(files);
 
     const middleware = createFilesystemMiddleware({
@@ -506,7 +516,7 @@ describe("read_file multimodal content blocks", () => {
     const undersizeBase64 = "A".repeat(
       Math.floor(MAX_BINARY_READ_SIZE_BYTES / 0.75 - 4),
     );
-    const files = { "/ok.png": createFileData(undersizeBase64) };
+    const files = { "/ok.png": createFileData(undersizeBase64, "image/png") };
     const { stateAndStore } = setupStateWithFiles(files);
 
     const middleware = createFilesystemMiddleware({

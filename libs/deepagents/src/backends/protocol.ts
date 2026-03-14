@@ -82,12 +82,15 @@ export interface FileDataV1 {
  *
  * Content is stored as a single string — plain text for text files,
  * base64-encoded for binary files (images, PDFs, audio, etc.).
- * The MIME type is determined from the file extension at read time,
- * not stored on the data itself.
+ * The MIME type is stored alongside the content, allowing backend
+ * implementations to determine it however they see fit (e.g. from
+ * file extension, HTTP headers, database metadata, etc.).
  */
 export interface FileDataV2 {
   /** File content as a single string (text or base64-encoded binary) */
   content: string;
+  /** MIME type of the file (e.g. "image/png", "text/plain") */
+  mimeType: string;
   /** ISO format timestamp of creation */
   created_at: string;
   /** ISO format timestamp of last modification */
@@ -114,6 +117,8 @@ export interface ReadResult {
   error?: string;
   /** File content as a string (text or base64-encoded binary), undefined on failure */
   content?: string;
+  /** MIME type of the file, when available */
+  mimeType?: string;
 }
 
 /**

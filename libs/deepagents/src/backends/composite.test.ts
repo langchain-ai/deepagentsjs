@@ -46,7 +46,12 @@ class MockSandboxBackend implements SandboxBackendProtocolV2 {
   }
   readRaw(): ReadRawResult {
     return {
-      data: { content: "", created_at: "", modified_at: "" },
+      data: {
+        content: "",
+        mimeType: "text/plain",
+        created_at: "",
+        modified_at: "",
+      },
     };
   }
   grepRaw(): GrepResult {

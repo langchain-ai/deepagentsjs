@@ -125,6 +125,7 @@ describe("isSandboxBackend", () => {
       readRaw: async () => ({
         data: {
           content: "hello",
+          mimeType: "text/plain",
           created_at: "2024-01-01T00:00:00.000Z",
           modified_at: "2024-01-01T00:00:00.000Z",
         },
@@ -160,6 +161,7 @@ describe("isSandboxBackend", () => {
       readRaw: async () => ({
         data: {
           content: "hello",
+          mimeType: "text/plain",
           created_at: "2024-01-01T00:00:00.000Z",
           modified_at: "2024-01-01T00:00:00.000Z",
         },

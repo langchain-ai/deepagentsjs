@@ -168,6 +168,7 @@ export const FileDataV1Schema = z.object({
  */
 export const FileDataV2Schema = z.object({
   content: z.string(),
+  mimeType: z.string(),
   created_at: z.string(),
   modified_at: z.string(),
 });
@@ -479,7 +480,7 @@ function createReadFileTool(
         return [{ type: "text", text: `Error: ${readResult.error}` }];
       }
 
-      const mimeType = getMimeType(file_path);
+      const mimeType = readResult.mimeType ?? getMimeType(file_path);
 
       if (
         mimeType.startsWith("image/") ||

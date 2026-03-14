@@ -179,6 +179,7 @@ export class StoreBackend implements BackendProtocolV2 {
 
     return {
       content: value.content,
+      ...(value.mimeType ? { mimeType: value.mimeType } : {}),
       created_at: value.created_at,
       modified_at: value.modified_at,
     };
@@ -188,11 +189,12 @@ export class StoreBackend implements BackendProtocolV2 {
    * Convert FileData to a value suitable for store.put().
    *
    * @param fileData - The FileData to convert
-   * @returns Object with content, created_at, and modified_at fields
+   * @returns Object with content, mimeType, created_at, and modified_at fields
    */
   private convertFileDataToStoreValue(fileData: FileData): Record<string, any> {
     return {
       content: fileData.content,
+      ...("mimeType" in fileData ? { mimeType: fileData.mimeType } : {}),
       created_at: fileData.created_at,
       modified_at: fileData.modified_at,
     };
@@ -336,17 +338,16 @@ export class StoreBackend implements BackendProtocolV2 {
         return { error: readRawResult.error || "File data not found" };
       }
 
-      const fileDataV2 = migrateToFileDataV2(readRawResult.data);
-      const mimeType = getMimeType(filePath);
+      const fileDataV2 = migrateToFileDataV2(readRawResult.data, filePath);
 
       // ignore pagination and return full content
-      if (!isTextMimeType(mimeType)) {
-        return { content: fileDataV2.content };
+      if (!isTextMimeType(fileDataV2.mimeType)) {
+        return { content: fileDataV2.content, mimeType: fileDataV2.mimeType };
       }
 
       const lines = fileDataV2.content.split("\n");
       const selected = lines.slice(offset, offset + limit);
-      return { content: selected.join("\n") };
+      return { content: selected.join("\n"), mimeType: fileDataV2.mimeType };
     } catch (e: any) {
       return { error: e.message };
     }
@@ -386,7 +387,13 @@ export class StoreBackend implements BackendProtocolV2 {
     }
 
     // Create new file
-    const fileData = createFileData(content, undefined, this.fileFormat);
+    const mimeType = getMimeType(filePath);
+    const fileData = createFileData(
+      content,
+      undefined,
+      this.fileFormat,
+      mimeType,
+    );
     const storeValue = this.convertFileDataToStoreValue(fileData);
     await store.put(namespace, filePath, storeValue);
     return { path: filePath, filesUpdate: null };
@@ -526,10 +533,15 @@ export class StoreBackend implements BackendProtocolV2 {
 
         let fileData: FileData;
         if (isBinary) {
-          fileData = createFileData(content, undefined, "v2");
+          fileData = createFileData(content, undefined, "v2", mimeType);
         } else {
           const contentStr = new TextDecoder().decode(content);
-          fileData = createFileData(contentStr, undefined, this.fileFormat);
+          fileData = createFileData(
+            contentStr,
+            undefined,
+            this.fileFormat,
+            mimeType,
+          );
         }
 
         const storeValue = this.convertFileDataToStoreValue(fileData);
@@ -564,9 +576,9 @@ export class StoreBackend implements BackendProtocolV2 {
 
         const fileData = this.convertStoreItemToFileData(item);
         const contentStr = fileDataToString(fileData);
+        const fileDataV2 = migrateToFileDataV2(fileData, path);
 
-        const mimeType = getMimeType(path);
-        if (!isTextMimeType(mimeType)) {
+        if (!isTextMimeType(fileDataV2.mimeType)) {
           const content = Buffer.from(contentStr, "base64");
           responses.push({ path, content, error: null });
         } else {
