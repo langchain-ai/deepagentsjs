@@ -4,7 +4,7 @@ const external = [/^[^./]/];
 
 export default defineConfig([
   {
-    entry: ["./src/index.ts", "./src/deepagent.ts", "./src/setup.ts"],
+    entry: ["./src/index.ts"],
     format: ["esm"],
     dts: true,
     clean: true,

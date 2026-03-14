@@ -17,7 +17,7 @@ import { type CreateDeepAgentParams, type DeepAgent } from "deepagents";
  * configuration (system prompt, tools, subagents, etc.) — the derived
  * runner builds a fresh agent on each {@link run} call.
  */
-class DeepAgentEvalRunner implements EvalRunner {
+export class DeepAgentEvalRunner implements EvalRunner {
   name: string;
   private agent: DeepAgent;
 
