@@ -756,6 +756,9 @@ export function migrateToFileDataV2(
       modified_at: data.modified_at,
     };
   }
+  if (!("mimeType" in data) || !data.mimeType) {
+    return { ...data, mimeType: getMimeType(filePath) };
+  }
   return data;
 }
 
