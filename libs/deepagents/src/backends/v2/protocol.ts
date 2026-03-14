@@ -5,7 +5,7 @@
  * V1 backends can be adapted using {@link adaptBackendProtocol} from utils.
  */
 
-import type { BackendProtocol } from "../v1/protocol.js";
+import type { BackendProtocolV1 } from "../v1/protocol.js";
 import type {
   ExecuteResponse,
   GlobResult,
@@ -30,7 +30,7 @@ import type {
  * {@link adaptBackendProtocol} from utils.
  */
 export interface BackendProtocolV2 extends Omit<
-  BackendProtocol,
+  BackendProtocolV1,
   "read" | "readRaw" | "grepRaw" | "lsInfo" | "globInfo"
 > {
   /**

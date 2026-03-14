@@ -65,7 +65,7 @@ export interface TestRunner {
  *
  * @deprecated Use {@link SandboxInstanceV2} for new implementations
  */
-export interface SandboxInstance extends SandboxBackendProtocol {
+export interface SandboxInstanceV1 extends SandboxBackendProtocol {
   /** Whether the sandbox is currently running */
   readonly isRunning: boolean;
   /** Upload multiple files (required for standard tests) */
@@ -77,6 +77,9 @@ export interface SandboxInstance extends SandboxBackendProtocol {
   /** Optional two-step initialization */
   initialize?(): Promise<void>;
 }
+
+/** @deprecated Use {@link SandboxInstanceV2} instead. */
+export interface SandboxInstance extends SandboxInstanceV1 {}
 
 /**
  * Interface for sandbox instances used in standard tests (v2).
@@ -104,7 +107,7 @@ export interface SandboxInstanceV2 extends SandboxBackendProtocolV2 {
 /**
  * Union type for any sandbox instance (v1 or v2).
  */
-export type AnySandboxInstance = SandboxInstance | SandboxInstanceV2;
+export type AnySandboxInstance = SandboxInstanceV1 | SandboxInstanceV2;
 
 /**
  * Configuration for the standard sandbox test suite.
