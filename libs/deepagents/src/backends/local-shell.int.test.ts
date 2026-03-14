@@ -28,7 +28,7 @@ sandboxStandardTests({
       rootDir: tmpDir,
       inheritEnv: true,
       ...options,
-    }) as any;
+    });
   },
   createUninitializedSandbox: () => {
     const tmpDir = fs.mkdtempSync(
@@ -37,8 +37,8 @@ sandboxStandardTests({
     return new LocalShellBackend({
       rootDir: tmpDir,
       inheritEnv: true,
-    }) as any;
+    });
   },
-  closeSandbox: (sandbox: any) => sandbox.close(),
+  closeSandbox: (sandbox: LocalShellBackend) => sandbox.close(),
   resolvePath: (name) => name,
 });
