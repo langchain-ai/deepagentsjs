@@ -331,6 +331,40 @@ describe("CompositeBackend", () => {
     expect(archPaths).not.toContain("/archive/2023/log.txt");
   });
 
+  it("should return ReadRawResult from readRaw across backends", async () => {
+    const { state, stateAndStore } = makeConfig();
+
+    const composite = new CompositeBackend(new StateBackend(stateAndStore), {
+      "/store/": new StoreBackend(stateAndStore),
+    });
+
+    // Write to both backends
+    const stateRes = await composite.write("/file.txt", "state content");
+    Object.assign(state.files, stateRes.filesUpdate!);
+
+    await composite.write("/store/file.txt", "store content");
+
+    // readRaw from state backend
+    const raw1 = await composite.readRaw("/file.txt");
+    expect(raw1.error).toBeUndefined();
+    expect(raw1.data).toBeDefined();
+    expect(typeof raw1.data!.content).toBe("string");
+    expect(raw1.data!.content).toBe("state content");
+    expect((raw1.data as any).mimeType).toBe("text/plain");
+
+    // readRaw from store backend
+    const raw2 = await composite.readRaw("/store/file.txt");
+    expect(raw2.error).toBeUndefined();
+    expect(raw2.data).toBeDefined();
+    expect(typeof raw2.data!.content).toBe("string");
+    expect(raw2.data!.content).toBe("store content");
+
+    // readRaw error for missing file
+    const raw3 = await composite.readRaw("/missing.txt");
+    expect(raw3.error).toBeDefined();
+    expect(raw3.data).toBeUndefined();
+  });
+
   it("should handle trailing slashes in ls", async () => {
     const { state, stateAndStore } = makeConfig();
 

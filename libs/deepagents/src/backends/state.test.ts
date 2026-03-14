@@ -227,6 +227,66 @@ describe("StateBackend", () => {
     expect(grepRes.matches![0].path).toBe("/test.py");
   });
 
+  it("should return ReadRawResult with v2 shape from readRaw", () => {
+    const { state, stateAndStore } = makeConfig();
+    const backend = new StateBackend(stateAndStore);
+
+    const writeRes = backend.write("/data.txt", "hello world");
+    Object.assign(state.files, writeRes.filesUpdate!);
+
+    const raw = backend.readRaw("/data.txt");
+    expect(raw.error).toBeUndefined();
+    expect(raw.data).toBeDefined();
+    expect(typeof raw.data!.content).toBe("string");
+    expect(raw.data!.content).toBe("hello world");
+    expect((raw.data as any).mimeType).toBe("text/plain");
+    expect(raw.data!.created_at).toBeDefined();
+    expect(raw.data!.modified_at).toBeDefined();
+  });
+
+  it("should return ReadRawResult with error for missing file", () => {
+    const { stateAndStore } = makeConfig();
+    const backend = new StateBackend(stateAndStore);
+
+    const raw = backend.readRaw("/nonexistent.txt");
+    expect(raw.error).toBeDefined();
+    expect(raw.data).toBeUndefined();
+  });
+
+  it("should return ReadRawResult for binary files with base64 content", () => {
+    const { state, stateAndStore } = makeConfig();
+    const backend = new StateBackend(stateAndStore);
+
+    const pngBytes = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
+    const uploadResult = backend.uploadFiles([["/image.png", pngBytes]]);
+    Object.assign(state.files, (uploadResult as any).filesUpdate);
+
+    const raw = backend.readRaw("/image.png");
+    expect(raw.error).toBeUndefined();
+    expect(raw.data).toBeDefined();
+    expect(typeof raw.data!.content).toBe("string");
+    expect(raw.data!.content).toBe(Buffer.from(pngBytes).toString("base64"));
+    expect((raw.data as any).mimeType).toBe("image/png");
+  });
+
+  it("should return ReadRawResult for v1 data with joined content", () => {
+    const v1FileData: FileDataV1 = {
+      content: ["line1", "line2", "line3"],
+      created_at: "2024-01-01T00:00:00.000Z",
+      modified_at: "2024-01-01T00:00:00.000Z",
+    };
+    const { stateAndStore } = makeConfig({ "/legacy.txt": v1FileData });
+    const backend = new StateBackend(stateAndStore);
+
+    const raw = backend.readRaw("/legacy.txt");
+    expect(raw.error).toBeUndefined();
+    expect(raw.data).toBeDefined();
+    // v1 data should still be returned as-is (content as string[])
+    expect(Array.isArray(raw.data!.content)).toBe(true);
+  });
+
   it("should return empty content warning for empty files", () => {
     const { state, stateAndStore } = makeConfig();
     const backend = new StateBackend(stateAndStore);
