@@ -28,7 +28,8 @@ import type {
   QuickJSAsyncContext,
   QuickJSAsyncRuntime,
 } from "quickjs-emscripten-core";
-import type { BackendProtocolV2 } from "deepagents";
+import type { AnyBackendProtocol, BackendProtocolV2 } from "deepagents";
+import { adaptBackendProtocol } from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
 import type { ReplSessionOptions, ReplResult } from "./types.js";
@@ -93,8 +94,8 @@ export class ReplSession {
     return this._backend;
   }
 
-  set backend(b: BackendProtocolV2 | null) {
-    this._backend = b;
+  set backend(b: AnyBackendProtocol | null) {
+    this._backend = b ? adaptBackendProtocol(b) : null;
   }
 
   private async ensureStarted(): Promise<void> {
@@ -119,7 +120,7 @@ export class ReplSession {
     this.setupConsole();
 
     if (backend) {
-      this._backend = backend;
+      this._backend = adaptBackendProtocol(backend);
     }
     this.injectVfs();
     if (tools && tools.length > 0) {
@@ -141,7 +142,7 @@ export class ReplSession {
     const existing = ReplSession.sessions.get(id);
     if (existing) {
       if (options.backend) {
-        existing._backend = options.backend;
+        existing._backend = adaptBackendProtocol(options.backend);
       }
       return existing;
     }
@@ -240,10 +241,11 @@ export class ReplSession {
     };
   }
 
-  async flushWrites(backend: BackendProtocolV2): Promise<void> {
+  async flushWrites(backend: AnyBackendProtocol): Promise<void> {
+    const adapted = adaptBackendProtocol(backend);
     const writes = this.pendingWrites.splice(0);
     for (const { path, content } of writes) {
-      await backend.write(path, content);
+      await adapted.write(path, content);
     }
   }
 
