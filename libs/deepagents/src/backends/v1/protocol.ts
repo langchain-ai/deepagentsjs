@@ -30,7 +30,7 @@ import type {
  *
  * @deprecated Use {@link BackendProtocolV2} instead.
  */
-export interface BackendProtocol {
+export interface BackendProtocolV1 {
   /**
    * Structured listing with file metadata.
    *
@@ -138,7 +138,7 @@ export interface BackendProtocol {
  *
  * @deprecated Use {@link SandboxBackendProtocolV2} instead.
  */
-export interface SandboxBackendProtocol extends BackendProtocol {
+export interface SandboxBackendProtocolV1 extends BackendProtocolV1 {
   /**
    * Execute a command in the sandbox.
    *

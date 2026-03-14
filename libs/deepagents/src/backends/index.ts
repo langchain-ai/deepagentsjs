@@ -8,6 +8,7 @@
 export type {
   AnyBackendProtocol,
   BackendProtocol,
+  BackendProtocolV1,
   BackendProtocolV2,
   BackendFactory,
   FileData,
@@ -27,6 +28,7 @@ export type {
   FileDownloadResponse,
   FileUploadResponse,
   SandboxBackendProtocol,
+  SandboxBackendProtocolV1,
   SandboxBackendProtocolV2,
   MaybePromise,
   // Sandbox provider types
