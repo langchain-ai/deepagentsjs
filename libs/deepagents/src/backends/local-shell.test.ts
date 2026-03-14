@@ -313,6 +313,33 @@ describe("LocalShellBackend", () => {
       expect(result.matches![0].text).toBe("TODO: implement this");
     });
 
+    it("should return ReadRawResult from readRaw", async () => {
+      const backend = new LocalShellBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      await backend.write("/test.txt", "hello\nworld");
+
+      const raw = await backend.readRaw("/test.txt");
+      expect(raw.error).toBeUndefined();
+      expect(raw.data).toBeDefined();
+      expect(typeof raw.data!.content).toBe("string");
+      expect(raw.data!.content).toContain("hello");
+      expect((raw.data as any).mimeType).toBe("text/plain");
+      expect(raw.data!.created_at).toBeDefined();
+      expect(raw.data!.modified_at).toBeDefined();
+    });
+
+    it("should return ReadRawResult error for missing file", async () => {
+      const backend = new LocalShellBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      await expect(backend.readRaw("/nonexistent.txt")).rejects.toThrow();
+    });
+
     it("should support glob", async () => {
       const backend = new LocalShellBackend({
         rootDir: tmpDir,
