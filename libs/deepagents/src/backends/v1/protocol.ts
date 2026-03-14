@@ -8,6 +8,7 @@
 
 import type {
   EditResult,
+  ExecuteResponse,
   FileData,
   FileDownloadResponse,
   FileInfo,
@@ -145,9 +146,7 @@ export interface SandboxBackendProtocolV1 extends BackendProtocolV1 {
    * @param command - Full shell command string to execute
    * @returns ExecuteResponse with combined output, exit code, and truncation flag
    */
-  execute(
-    command: string,
-  ): MaybePromise<import("../protocol.js").ExecuteResponse>;
+  execute(command: string): MaybePromise<ExecuteResponse>;
 
   /** Unique identifier for the sandbox backend instance */
   readonly id: string;
