@@ -190,12 +190,12 @@ export class CompositeBackend implements BackendProtocolV2 {
         const searchPath = path.substring(routePrefix.length - 1);
         const raw = await backend.grepRaw(pattern, searchPath || "/", glob);
 
-        if (typeof raw === "string") {
+        if (raw.error) {
           return raw;
         }
 
         // Add route prefix back
-        const matches = raw.matches?.map((m) => ({
+        const matches = (raw.matches || []).map((m) => ({
           ...m,
           path: routePrefix.slice(0, -1) + m.path,
         }));
@@ -207,7 +207,7 @@ export class CompositeBackend implements BackendProtocolV2 {
     const allMatches: GrepMatch[] = [];
     const rawDefault = await this.default.grepRaw(pattern, path, glob);
 
-    if (typeof rawDefault === "string") {
+    if (rawDefault.error) {
       return rawDefault;
     }
 
@@ -217,7 +217,7 @@ export class CompositeBackend implements BackendProtocolV2 {
     for (const [routePrefix, backend] of Object.entries(this.routes)) {
       const raw = await backend.grepRaw(pattern, "/", glob);
 
-      if (typeof raw === "string") {
+      if (raw.error) {
         return raw;
       }
 
