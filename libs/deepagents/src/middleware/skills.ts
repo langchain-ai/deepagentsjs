@@ -51,10 +51,15 @@ import {
 } from "langchain";
 import { StateSchema, ReducedValue } from "@langchain/langgraph";
 
-import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
+import type {
+  AnyBackendProtocol,
+  BackendFactory,
+  BackendProtocolV2,
+} from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import { filesValue } from "../values.js";
+import { adaptBackendProtocol } from "../backends/utils.js";
 
 // Security: Maximum size for SKILL.md files to prevent DoS attacks (10MB)
 export const MAX_SKILL_FILE_SIZE = 10 * 1024 * 1024;
@@ -139,7 +144,7 @@ export interface SkillsMiddlewareOptions {
    * Use a factory for StateBackend since it requires runtime state.
    */
   backend:
-    | BackendProtocol
+    | AnyBackendProtocol
     | BackendFactory
     | ((config: { state: unknown; store?: BaseStore }) => StateBackend);
 
@@ -487,9 +492,10 @@ export function parseSkillMetadataFromContent(
  * List all skills from a backend source.
  */
 async function listSkillsFromBackend(
-  backend: BackendProtocol,
+  backend: AnyBackendProtocol,
   sourcePath: string,
 ): Promise<SkillMetadata[]> {
+  const adaptedBackend = adaptBackendProtocol(backend);
   const skills: SkillMetadata[] = [];
 
   // Detect path separator (Windows uses \, Unix uses /)
@@ -504,7 +510,12 @@ async function listSkillsFromBackend(
   // List directories in the source path using lsInfo
   let fileInfos: { path: string; is_dir?: boolean }[];
   try {
-    fileInfos = await backend.lsInfo(normalizedPath);
+    const lsResult = await adaptedBackend.lsInfo(normalizedPath);
+    if (lsResult.error || !lsResult.files) {
+      // Source path doesn't exist or can't be listed
+      return [];
+    }
+    fileInfos = lsResult.files;
   } catch {
     // Source path doesn't exist or can't be listed
     return [];
@@ -531,8 +542,8 @@ async function listSkillsFromBackend(
 
     // Try to download the SKILL.md file
     let content: string;
-    if (backend.downloadFiles) {
-      const results = await backend.downloadFiles([skillMdPath]);
+    if (adaptedBackend.downloadFiles) {
+      const results = await adaptedBackend.downloadFiles([skillMdPath]);
       if (results.length !== 1) {
         continue;
       }
@@ -546,11 +557,11 @@ async function listSkillsFromBackend(
       content = new TextDecoder().decode(response.content);
     } else {
       // Fall back to read if downloadFiles is not available
-      const readResult = await backend.read(skillMdPath);
-      if (readResult.startsWith("Error:")) {
+      const readResult = await adaptedBackend.read(skillMdPath);
+      if (readResult.error) {
         continue;
       }
-      content = readResult;
+      content = readResult.content ?? "";
     }
     const metadata = parseSkillMetadataFromContent(
       content,
@@ -652,11 +663,11 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
   /**
    * Resolve backend from instance or factory.
    */
-  function getBackend(state: unknown): BackendProtocol {
+  function getBackend(state: unknown): BackendProtocolV2 {
     if (typeof backend === "function") {
-      return backend({ state }) as BackendProtocol;
+      return adaptBackendProtocol(backend({ state }));
     }
-    return backend;
+    return adaptBackendProtocol(backend);
   }
 
   return createMiddleware({

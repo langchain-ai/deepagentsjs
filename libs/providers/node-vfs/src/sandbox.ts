@@ -21,10 +21,12 @@ import {
   BaseSandbox,
   type ExecuteResponse,
   type FileDownloadResponse,
-  type FileInfo,
   type FileOperationError,
   type FileUploadResponse,
-  type GrepMatch,
+  type GlobResult,
+  type GrepResult,
+  type LsResult,
+  type ReadResult,
   type BackendFactory,
 } from "deepagents";
 
@@ -484,7 +486,7 @@ export class VfsSandbox extends BaseSandbox {
     filePath: string,
     offset: number = 0,
     limit: number = 500,
-  ): Promise<string> {
+  ): Promise<ReadResult> {
     return super.read(this.#normalizeExecPath(filePath), offset, limit);
   }
 
@@ -494,7 +496,7 @@ export class VfsSandbox extends BaseSandbox {
    * Overrides BaseSandbox.lsInfo() to normalize paths with a leading `/`
    * so they resolve correctly in the temp execution directory.
    */
-  async lsInfo(dirPath: string): Promise<FileInfo[]> {
+  async lsInfo(dirPath: string): Promise<LsResult> {
     return super.lsInfo(this.#normalizeExecPath(dirPath));
   }
 
@@ -508,7 +510,7 @@ export class VfsSandbox extends BaseSandbox {
     pattern: string,
     searchPath: string = "/",
     glob: string | null = null,
-  ): Promise<GrepMatch[] | string> {
+  ): Promise<GrepResult> {
     return super.grepRaw(pattern, this.#normalizeExecPath(searchPath), glob);
   }
 
@@ -521,7 +523,7 @@ export class VfsSandbox extends BaseSandbox {
   async globInfo(
     pattern: string,
     searchPath: string = "/",
-  ): Promise<FileInfo[]> {
+  ): Promise<GlobResult> {
     return super.globInfo(pattern, this.#normalizeExecPath(searchPath));
   }
 
