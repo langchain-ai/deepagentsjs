@@ -327,14 +327,16 @@ description: A skill with very large content
       const mockBackend = {
         async lsInfo(dirPath: string) {
           if (dirPath === "/skills/user/") {
-            return [
-              {
-                path: "web-research/",
-                is_dir: true,
-              },
-            ];
+            return {
+              files: [
+                {
+                  path: "web-research/",
+                  is_dir: true,
+                },
+              ],
+            };
           }
-          return [];
+          return { files: [] };
         },
         async read(path: string) {
           if (path === "/skills/user/web-research/SKILL.md") {
@@ -365,14 +367,16 @@ description: A skill with very large content
       const mockBackend = {
         async lsInfo(dirPath: string) {
           if (dirPath === "/skills/user/") {
-            return [
-              {
-                path: "broken-skill/",
-                is_dir: true,
-              },
-            ];
+            return {
+              files: [
+                {
+                  path: "broken-skill/",
+                  is_dir: true,
+                },
+              ],
+            };
           }
-          return [];
+          return { files: [] };
         },
         async read(_path: string) {
           return { error: "Error: permission denied" };

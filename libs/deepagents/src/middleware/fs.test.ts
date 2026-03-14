@@ -331,7 +331,7 @@ describe("createFilesystemMiddleware", () => {
   // Helper to create a mock backend that doesn't support execution
   function createMockBackend(): BackendProtocol {
     return {
-      lsInfo: vi.fn().mockResolvedValue([]),
+      lsInfo: vi.fn().mockResolvedValue({ files: [] }),
       read: vi.fn().mockResolvedValue({ content: "" }),
       write: vi.fn().mockResolvedValue({ error: null, filesUpdate: null }),
       edit: vi.fn().mockResolvedValue({
@@ -339,7 +339,7 @@ describe("createFilesystemMiddleware", () => {
         occurrences: 1,
         filesUpdate: null,
       }),
-      globInfo: vi.fn().mockResolvedValue([]),
+      globInfo: vi.fn().mockResolvedValue({ files: [] }),
       grepRaw: vi.fn().mockResolvedValue({ matches: [] }),
     } as unknown as BackendProtocol;
   }
