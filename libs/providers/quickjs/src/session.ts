@@ -28,7 +28,7 @@ import type {
   QuickJSAsyncContext,
   QuickJSAsyncRuntime,
 } from "quickjs-emscripten-core";
-import type { BackendProtocol } from "deepagents";
+import type { BackendProtocolV2V2 } from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
 import type { ReplSessionOptions, ReplResult } from "./types.js";
@@ -82,18 +82,18 @@ export class ReplSession {
   private logs: string[] = [];
   private _options: ReplSessionOptions;
 
-  private _backend: BackendProtocol | null = null;
+  private _backend: BackendProtocolV2 | null = null;
 
   constructor(id: string, options: ReplSessionOptions = {}) {
     this.id = id;
     this._options = options;
   }
 
-  get backend(): BackendProtocol | null {
+  get backend(): BackendProtocolV2 | null {
     return this._backend;
   }
 
-  set backend(b: BackendProtocol | null) {
+  set backend(b: BackendProtocolV2 | null) {
     this._backend = b;
   }
 
@@ -240,7 +240,7 @@ export class ReplSession {
     };
   }
 
-  async flushWrites(backend: BackendProtocol): Promise<void> {
+  async flushWrites(backend: BackendProtocolV2): Promise<void> {
     const writes = this.pendingWrites.splice(0);
     for (const { path, content } of writes) {
       await backend.write(path, content);
@@ -333,10 +333,21 @@ export class ReplSession {
         const promise = context.newPromise();
         (async () => {
           try {
-            const fileData = await backend.readRaw(path);
-            const val = context.newString(fileData.content.join("\n"));
-            promise.resolve(val);
-            val.dispose();
+            const result = await backend.readRaw(path);
+            if (result.error || !result.data) {
+              const err = context.newError(
+                `ENOENT: no such file or directory '${path}'.`,
+              );
+              promise.reject(err);
+              err.dispose();
+            } else {
+              const content = Array.isArray(result.data.content)
+                ? result.data.content.join("\n")
+                : result.data.content;
+              const val = context.newString(content);
+              promise.resolve(val);
+              val.dispose();
+            }
           } catch {
             const err = context.newError(
               `ENOENT: no such file or directory '${path}'.`,
