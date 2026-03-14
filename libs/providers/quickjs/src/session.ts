@@ -28,8 +28,7 @@ import type {
   QuickJSAsyncContext,
   QuickJSAsyncRuntime,
 } from "quickjs-emscripten-core";
-import type { AnyBackendProtocol, BackendProtocolV2 } from "deepagents";
-import { adaptBackendProtocol } from "deepagents";
+import type { BackendProtocolV2V2 } from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
 import type { ReplSessionOptions, ReplResult } from "./types.js";
@@ -94,8 +93,8 @@ export class ReplSession {
     return this._backend;
   }
 
-  set backend(b: AnyBackendProtocol | null) {
-    this._backend = b ? adaptBackendProtocol(b) : null;
+  set backend(b: BackendProtocolV2 | null) {
+    this._backend = b;
   }
 
   private async ensureStarted(): Promise<void> {
@@ -120,7 +119,7 @@ export class ReplSession {
     this.setupConsole();
 
     if (backend) {
-      this._backend = adaptBackendProtocol(backend);
+      this._backend = backend;
     }
     this.injectVfs();
     if (tools && tools.length > 0) {
@@ -142,7 +141,7 @@ export class ReplSession {
     const existing = ReplSession.sessions.get(id);
     if (existing) {
       if (options.backend) {
-        existing._backend = adaptBackendProtocol(options.backend);
+        existing._backend = options.backend;
       }
       return existing;
     }
@@ -241,11 +240,10 @@ export class ReplSession {
     };
   }
 
-  async flushWrites(backend: AnyBackendProtocol): Promise<void> {
-    const adapted = adaptBackendProtocol(backend);
+  async flushWrites(backend: BackendProtocolV2): Promise<void> {
     const writes = this.pendingWrites.splice(0);
     for (const { path, content } of writes) {
-      await adapted.write(path, content);
+      await backend.write(path, content);
     }
   }
 
@@ -345,17 +343,7 @@ export class ReplSession {
             } else {
               const content = Array.isArray(result.data.content)
                 ? result.data.content.join("\n")
-                : typeof result.data.content === "string"
-                  ? result.data.content
-                  : null;
-              if (content === null) {
-                const err = context.newError(
-                  `Cannot read binary file '${path}' as text.`,
-                );
-                promise.reject(err);
-                err.dispose();
-                return;
-              }
+                : result.data.content;
               const val = context.newString(content);
               promise.resolve(val);
               val.dispose();
