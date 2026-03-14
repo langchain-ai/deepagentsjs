@@ -371,15 +371,16 @@ describe("isFileDataV1", () => {
 describe("migrateToFileDataV2", () => {
   it("should convert v1 data by joining lines", () => {
     const v1 = createFileData("line1\nline2", undefined, "v1");
-    const v2 = migrateToFileDataV2(v1);
+    const v2 = migrateToFileDataV2(v1, "/test.txt");
     expect(v2.content).toBe("line1\nline2");
+    expect(v2.mimeType).toBe("text/plain");
     expect(v2.created_at).toBe(v1.created_at);
     expect(v2.modified_at).toBe(v1.modified_at);
   });
 
   it("should return v2 data unchanged", () => {
     const v2 = createFileData("hello");
-    expect(migrateToFileDataV2(v2)).toBe(v2);
+    expect(migrateToFileDataV2(v2, "/test.txt")).toBe(v2);
   });
 });
 
@@ -441,6 +442,7 @@ describe("adaptBackendProtocol", () => {
       readRaw: () => ({
         data: {
           content: "v2 raw",
+          mimeType: "text/plain",
           created_at: "2024-01-01T00:00:00.000Z",
           modified_at: "2024-01-01T00:00:00.000Z",
         },
