@@ -17,7 +17,9 @@ import { z } from "zod/v4";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import {
   StateBackend,
+  adaptBackendProtocol,
   type AnyBackendProtocol,
+  type BackendProtocolV2,
   type BackendFactory,
   type StateAndStore,
 } from "deepagents";
@@ -167,11 +169,11 @@ export async function generatePtcPrompt(
 function getBackend(
   backend: AnyBackendProtocol | BackendFactory,
   stateAndStore: StateAndStore,
-): AnyBackendProtocol {
+): BackendProtocolV2 {
   if (typeof backend === "function") {
-    return backend(stateAndStore);
+    return adaptBackendProtocol(backend(stateAndStore));
   }
-  return backend;
+  return adaptBackendProtocol(backend);
 }
 
 /**
