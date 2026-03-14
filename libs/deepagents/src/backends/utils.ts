@@ -163,6 +163,7 @@ export function createFileData(
   content: string | Uint8Array,
   createdAt?: string,
   fileFormat: "v1" | "v2" = "v2",
+  mimeType?: string,
 ): FileData {
   const now = new Date().toISOString();
 
@@ -176,12 +177,14 @@ export function createFileData(
     if (ArrayBuffer.isView(content)) {
       return {
         content: Buffer.from(content).toString("base64"),
+        mimeType: mimeType ?? "application/octet-stream",
         created_at: createdAt || now,
         modified_at: now,
       } as FileDataV2;
     }
     return {
       content,
+      mimeType: mimeType ?? "text/plain",
       created_at: createdAt || now,
       modified_at: now,
     } as FileDataV2;
@@ -216,6 +219,7 @@ export function updateFileData(fileData: FileData, content: string): FileData {
 
   return {
     content,
+    mimeType: (fileData as FileDataV2).mimeType,
     created_at: fileData.created_at,
     modified_at: now,
   };
@@ -584,9 +588,8 @@ export function grepSearchFiles(
 
   const results: Record<string, Array<[number, string]>> = {};
   for (const [filePath, fileData] of Object.entries(filtered)) {
-    const mimeType = getMimeType(filePath);
-
-    if (!isTextMimeType(mimeType)) {
+    const fileDataV2 = migrateToFileDataV2(fileData, filePath);
+    if (!isTextMimeType(fileDataV2.mimeType)) {
       continue;
     }
 
@@ -645,9 +648,8 @@ export function grepMatchesFromFiles(
 
   const matches: GrepMatch[] = [];
   for (const [filePath, fileData] of Object.entries(filtered)) {
-    const mimeType = getMimeType(filePath);
-
-    if (!isTextMimeType(mimeType)) {
+    const fileDataV2 = migrateToFileDataV2(fileData, filePath);
+    if (!isTextMimeType(fileDataV2.mimeType)) {
       continue;
     }
 
@@ -742,10 +744,14 @@ export function isFileDataV1(data: FileData): data is FileDataV1 {
  * @param data - FileData in either format
  * @returns FileDataV2 with content as a single string
  */
-export function migrateToFileDataV2(data: FileDataV1 | FileDataV2): FileDataV2 {
+export function migrateToFileDataV2(
+  data: FileDataV1 | FileDataV2,
+  filePath: string,
+): FileDataV2 {
   if (isFileDataV1(data)) {
     return {
       content: data.content.join("\n"),
+      mimeType: getMimeType(filePath),
       created_at: data.created_at,
       modified_at: data.modified_at,
     };
@@ -783,7 +789,7 @@ export function adaptBackendProtocol(
       if ("data" in result || "error" in result) {
         return result as ReadRawResult;
       }
-      return { data: migrateToFileDataV2(result as FileData) };
+      return { data: migrateToFileDataV2(result as FileData, filePath) };
     },
     async globInfo(pattern, path): Promise<GlobResult> {
       const result = await backend.globInfo(pattern, path);

@@ -358,11 +358,11 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
       const buffer = results[0].content;
       const content = Buffer.from(buffer).toString("base64");
 
-      return { content };
+      return { content, mimeType };
     }
 
     // limit=0 means return nothing
-    if (limit === 0) return { content: "" };
+    if (limit === 0) return { content: "", mimeType };
 
     const command = buildReadCommand(filePath, offset, limit);
     const result = await this.execute(command);
@@ -371,7 +371,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
       return { error: `File '${filePath}' not found` };
     }
 
-    return { content: result.output };
+    return { content: result.output, mimeType };
   }
 
   /**
@@ -396,6 +396,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
       return {
         data: {
           content: Buffer.from(results[0].content).toString("base64"),
+          mimeType,
           created_at: now,
           modified_at: now,
         },
@@ -406,6 +407,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     return {
       data: {
         content: new TextDecoder().decode(results[0].content),
+        mimeType,
         created_at: now,
         modified_at: now,
       },
