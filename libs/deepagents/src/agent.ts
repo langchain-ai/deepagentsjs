@@ -293,7 +293,6 @@ export function createDeepAgent<
       defaultInterruptOn: interruptOn,
       subagents: processedSubagents,
       generalPurposeAgent: true,
-      checkpointer,
     }),
     /**
      * Automatically summarizes conversation history when token limits are approached.
