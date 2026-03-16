@@ -733,6 +733,229 @@ description: [invalid yaml syntax: unclosed bracket
         "C:\\skills\\user\\web-research\\SKILL.md",
       );
     });
+
+    describe("direct skill path mode", () => {
+      it("should load a skill when source is a direct skill directory", async () => {
+        const mockBackend = createMockBackend({
+          files: {
+            "/skills/web-research/SKILL.md": VALID_SKILL_CONTENT,
+          },
+          directories: {
+            // Source points directly at the skill dir; SKILL.md is a file entry
+            "/skills/web-research/": [{ name: "SKILL.md", type: "file" }],
+          },
+        });
+
+        const middleware = createSkillsMiddleware({
+          backend: mockBackend,
+          sources: ["/skills/web-research/"],
+        });
+
+        // @ts-expect-error - typing issue in LangChain
+        const result = await middleware.beforeAgent?.({});
+
+        expect(result?.skillsMetadata).toHaveLength(1);
+        expect(result?.skillsMetadata[0].name).toBe("web-research");
+        expect(result?.skillsMetadata[0].description).toBe(
+          "Structured approach to conducting thorough web research",
+        );
+        expect(result?.skillsMetadata[0].path).toBe(
+          "/skills/web-research/SKILL.md",
+        );
+      });
+
+      it("should load multiple skills from a list of direct skill paths", async () => {
+        const mockBackend = createMockBackend({
+          files: {
+            "/skills/web-research/SKILL.md": VALID_SKILL_CONTENT,
+            "/skills/code-review/SKILL.md": VALID_SKILL_CONTENT_2,
+          },
+          directories: {
+            "/skills/web-research/": [{ name: "SKILL.md", type: "file" }],
+            "/skills/code-review/": [{ name: "SKILL.md", type: "file" }],
+          },
+        });
+
+        const middleware = createSkillsMiddleware({
+          backend: mockBackend,
+          sources: ["/skills/web-research/", "/skills/code-review/"],
+        });
+
+        // @ts-expect-error - typing issue in LangChain
+        const result = await middleware.beforeAgent?.({});
+
+        expect(result?.skillsMetadata).toHaveLength(2);
+        expect(result?.skillsMetadata.map((s: any) => s.name).sort()).toEqual([
+          "code-review",
+          "web-research",
+        ]);
+      });
+
+      it("should mix direct skill paths and parent directory sources", async () => {
+        const mockBackend = createMockBackend({
+          files: {
+            "/skills/web-research/SKILL.md": VALID_SKILL_CONTENT,
+            "/skills/shared/code-review/SKILL.md": VALID_SKILL_CONTENT_2,
+          },
+          directories: {
+            "/skills/web-research/": [{ name: "SKILL.md", type: "file" }],
+            "/skills/shared/": [{ name: "code-review", type: "directory" }],
+          },
+        });
+
+        const middleware = createSkillsMiddleware({
+          backend: mockBackend,
+          sources: ["/skills/shared/", "/skills/web-research/"],
+        });
+
+        // @ts-expect-error - typing issue in LangChain
+        const result = await middleware.beforeAgent?.({});
+
+        expect(result?.skillsMetadata).toHaveLength(2);
+        expect(result?.skillsMetadata.map((s: any) => s.name).sort()).toEqual([
+          "code-review",
+          "web-research",
+        ]);
+      });
+
+      it("should use directory name as skill name (for spec validation)", async () => {
+        const mockBackend = createMockBackend({
+          files: {
+            "/skills/web-research/SKILL.md": VALID_SKILL_CONTENT,
+          },
+          directories: {
+            "/skills/web-research/": [{ name: "SKILL.md", type: "file" }],
+          },
+        });
+
+        const middleware = createSkillsMiddleware({
+          backend: mockBackend,
+          sources: ["/skills/web-research/"],
+        });
+
+        // @ts-expect-error - typing issue in LangChain
+        const result = await middleware.beforeAgent?.({});
+
+        // directoryName extracted from source path must match the skill name
+        expect(result?.skillsMetadata[0].name).toBe("web-research");
+      });
+
+      it("should skip direct skill path when SKILL.md content is invalid", async () => {
+        const invalidContent = `# No YAML frontmatter here`;
+
+        const mockBackend = createMockBackend({
+          files: {
+            "/skills/bad-skill/SKILL.md": invalidContent,
+          },
+          directories: {
+            "/skills/bad-skill/": [{ name: "SKILL.md", type: "file" }],
+          },
+        });
+
+        const middleware = createSkillsMiddleware({
+          backend: mockBackend,
+          sources: ["/skills/bad-skill/"],
+        });
+
+        const consoleWarnSpy = vi
+          .spyOn(console, "warn")
+          .mockImplementation(() => {});
+
+        // @ts-expect-error - typing issue in LangChain
+        const result = await middleware.beforeAgent?.({});
+
+        expect(result?.skillsMetadata).toEqual([]);
+        consoleWarnSpy.mockRestore();
+      });
+
+      it("should normalize direct skill path without trailing slash", async () => {
+        const mockBackend = createMockBackend({
+          files: {
+            "/skills/web-research/SKILL.md": VALID_SKILL_CONTENT,
+          },
+          directories: {
+            "/skills/web-research/": [{ name: "SKILL.md", type: "file" }],
+          },
+        });
+
+        const middleware = createSkillsMiddleware({
+          backend: mockBackend,
+          sources: ["/skills/web-research"], // no trailing slash
+        });
+
+        // @ts-expect-error - typing issue in LangChain
+        const result = await middleware.beforeAgent?.({});
+
+        expect(result?.skillsMetadata).toHaveLength(1);
+        expect(result?.skillsMetadata[0].name).toBe("web-research");
+      });
+
+      it("should use read() fallback when downloadFiles is not available (direct path)", async () => {
+        const mockBackend = {
+          async lsInfo(dirPath: string) {
+            if (dirPath === "/skills/web-research/") {
+              return [{ path: "SKILL.md", is_dir: false }];
+            }
+            return [];
+          },
+          async read(path: string) {
+            if (path === "/skills/web-research/SKILL.md") {
+              return VALID_SKILL_CONTENT;
+            }
+            return "Error: file not found";
+          },
+          // downloadFiles is NOT defined
+          readFiles: vi.fn(),
+          write: vi.fn(),
+          edit: vi.fn(),
+          grep: vi.fn(),
+        } as unknown as BackendProtocol;
+
+        const middleware = createSkillsMiddleware({
+          backend: mockBackend,
+          sources: ["/skills/web-research/"],
+        });
+
+        // @ts-expect-error - typing issue in LangChain
+        const result = await middleware.beforeAgent?.({});
+
+        expect(result?.skillsMetadata).toHaveLength(1);
+        expect(result?.skillsMetadata[0].name).toBe("web-research");
+      });
+
+      it("should apply last-wins override when direct and parent-dir sources define the same skill", async () => {
+        const overriddenContent = `---
+name: web-research
+description: Overridden version of web research
+---
+# Overridden`;
+
+        const mockBackend = createMockBackend({
+          files: {
+            "/skills/shared/web-research/SKILL.md": VALID_SKILL_CONTENT,
+            "/skills/web-research/SKILL.md": overriddenContent,
+          },
+          directories: {
+            "/skills/shared/": [{ name: "web-research", type: "directory" }],
+            "/skills/web-research/": [{ name: "SKILL.md", type: "file" }],
+          },
+        });
+
+        const middleware = createSkillsMiddleware({
+          backend: mockBackend,
+          // direct path is listed last → should win
+          sources: ["/skills/shared/", "/skills/web-research/"],
+        });
+
+        // @ts-expect-error - typing issue in LangChain
+        const result = await middleware.beforeAgent?.({});
+
+        expect(result?.skillsMetadata).toHaveLength(1);
+        expect(result?.skillsMetadata[0].description).toBe(
+          "Overridden version of web research",
+        );
+      });
+    });
   });
 
   describe("wrapModelCall", () => {
@@ -1810,6 +2033,40 @@ description: Project-level skill for team collaboration
     expect(systemPrompt).toContain("/skills/test-skill/SKILL.md");
     // Verify progressive disclosure instructions are present
     expect(systemPrompt).toContain("Progressive Disclosure");
+    invokeSpy.mockRestore();
+  });
+
+  it("should load a skill when source is a direct skill path (StateBackend)", async () => {
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    const model = new FakeListChatModel({ responses: ["Done"] });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model: model as any,
+      // Direct skill path: source points at the skill directory itself
+      skills: ["/skills/test-skill/"],
+      checkpointer,
+    });
+
+    await agent.invoke(
+      {
+        messages: [new HumanMessage("What skills are available?")],
+        files: {
+          "/skills/test-skill/SKILL.md": createFileData(VALID_SKILL_MD),
+        },
+      } as any,
+      {
+        configurable: { thread_id: `test-direct-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    expect(invokeSpy).toHaveBeenCalled();
+    const systemPrompt = getSystemPromptFromSpy(invokeSpy);
+
+    expect(systemPrompt).toContain("test-skill");
+    expect(systemPrompt).toContain("A test skill for StateBackend integration");
+    expect(systemPrompt).toContain("/skills/test-skill/SKILL.md");
     invokeSpy.mockRestore();
   });
 
