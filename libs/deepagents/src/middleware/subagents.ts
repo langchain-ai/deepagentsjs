@@ -15,11 +15,18 @@ import {
   StructuredTool,
 } from "langchain";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
+import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
 
 export type { AgentMiddleware };
+
+/**
+ * The key for the checkpointer in the config.
+ * This is used to store the checkpointer in the config so that the subagent can use it.
+ */
+const CONFIG_KEY_CHECKPOINTER = "__pregel_checkpointer";
 
 /**
  * Default system prompt for subagents.
@@ -546,6 +553,14 @@ function createTaskTool(options: {
   subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
   taskDescription: string | null;
+  /**
+   * The parent agent's checkpointer. When provided, it is injected into each
+   * subagent invocation via CONFIG_KEY_CHECKPOINTER so that the subagent's
+   * internal messages are persisted under the tool-call checkpoint_ns
+   * (e.g. "tools:call_abc123"). This allows the SDK to restore subagent
+   * conversation history after a page reload.
+   */
+  checkpointer?: BaseCheckpointSaver | boolean | null;
 }) {
   const {
     defaultModel,
@@ -556,6 +571,7 @@ function createTaskTool(options: {
     subagents,
     generalPurposeAgent,
     taskDescription,
+    checkpointer,
   } = options;
 
   const { agents: subagentGraphs, descriptions: subagentDescriptions } =
@@ -597,11 +613,23 @@ function createTaskTool(options: {
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
 
+      // If the parent has a checkpointer, inject it into the subagent's config
+      // so the subagent persists its state under the tool-call checkpoint_ns
+      // (e.g. "tools:call_abc123"). This allows the SDK to restore subagent
+      // conversation history after a page reload via getHistory with checkpoint_ns.
+      const subagentConfig =
+        checkpointer != null && checkpointer !== false
+          ? {
+              ...config,
+              configurable: {
+                ...config?.configurable,
+                [CONFIG_KEY_CHECKPOINTER]: checkpointer,
+              },
+            }
+          : config;
+
       // Invoke the subagent
-      const result = (await subagent.invoke(subagentState, config)) as Record<
-        string,
-        unknown
-      >;
+      const result = await subagent.invoke(subagentState, subagentConfig);
 
       if (!config.toolCall?.id) {
         if (result.structuredResponse != null) {
@@ -671,6 +699,13 @@ export interface SubAgentMiddlewareOptions {
   generalPurposeAgent?: boolean;
   /** Custom description for the task tool */
   taskDescription?: string | null;
+  /**
+   * The parent agent's checkpointer. When provided, it is injected into each
+   * subagent invocation so the subagent persists its state under the tool-call
+   * checkpoint_ns (e.g. "tools:call_abc123"). This allows the LangGraph SDK to
+   * restore subagent conversation history after a page reload.
+   */
+  checkpointer?: BaseCheckpointSaver | boolean | null;
 }
 
 /**
@@ -687,6 +722,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     systemPrompt = TASK_SYSTEM_PROMPT,
     generalPurposeAgent = true,
     taskDescription = null,
+    checkpointer = null,
   } = options;
 
   const taskTool = createTaskTool({
@@ -698,6 +734,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     subagents,
     generalPurposeAgent,
     taskDescription,
+    checkpointer,
   });
 
   return createMiddleware({
