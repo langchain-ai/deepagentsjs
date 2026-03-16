@@ -410,8 +410,9 @@ describe("FilesystemBackend", () => {
     });
 
     const file = path.join(root, "encoding-test.txt");
-    const text = "Hello encoding with utf-16le";
+    const text = "Hello 你好, café";
     const encoding = "utf-16le";
+    const decoder = new TextDecoder(encoding);
 
     // 1. Write with utf-16le encoding
     const writeRes = await backend.write(file, text, encoding);
@@ -419,7 +420,7 @@ describe("FilesystemBackend", () => {
 
     // Verify raw file content on disk is actually utf-16le encoded
     const diskContentRaw = await fs.readFile(file);
-    const decodedDiskContent = Buffer.from(diskContentRaw).toString(encoding);
+    const decodedDiskContent = decoder.decode(diskContentRaw);
     expect(decodedDiskContent).toBe(text);
 
     // 2. Read with utf-16le encoding
@@ -431,12 +432,13 @@ describe("FilesystemBackend", () => {
     expect(readRawResult.content.join("\n")).toContain(text);
 
     // 4. Edit with utf-16le encoding
-    const newTextSegment = "World";
-    const replacedText = text.replace("Hello", newTextSegment);
+    const oldTextSegment = "你好";
+    const newTextSegment = "世界";
+    const replacedText = text.replace(oldTextSegment, newTextSegment);
 
     const editRes = await backend.edit(
       file,
-      "Hello",
+      oldTextSegment,
       newTextSegment,
       false,
       encoding,
@@ -445,8 +447,7 @@ describe("FilesystemBackend", () => {
     expect(editRes.occurrences).toBe(1);
 
     const newDiskContentRaw = await fs.readFile(file);
-    const newDecodedDiskContent =
-      Buffer.from(newDiskContentRaw).toString(encoding);
+    const newDecodedDiskContent = decoder.decode(newDiskContentRaw);
     expect(newDecodedDiskContent).toBe(replacedText);
 
     // 5. Grep with utf-16le encoding
