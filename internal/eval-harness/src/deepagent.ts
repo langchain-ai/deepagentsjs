@@ -55,9 +55,7 @@ export class DeepAgentEvalRunner implements EvalRunner {
     const threadId = uuidv4();
     const config = { configurable: { thread_id: threadId } };
 
-    ls.logOutputs(inputs);
     const result = await this.agent.invoke(inputs, config);
-    ls.logOutputs(result);
 
     if (typeof result !== "object" || result == null) {
       throw new TypeError(

@@ -20,7 +20,7 @@ const getWeatherFake = tool(
 );
 
 ls.describe(
-  runner.name,
+  "deepagents-js-subagents",
   () => {
     ls.test(
       "task calls weather subagent",
@@ -74,5 +74,5 @@ ls.describe(
       },
     );
   },
-  { projectName: "deepagents-js-subagents", upsert: true },
+  { projectName: runner.name, upsert: true },
 );

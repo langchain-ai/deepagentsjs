@@ -9,6 +9,6 @@ export default defineConfig({
     teardownTimeout: 60_000,
     include: ["**/*.test.ts"],
     setupFiles: ["@deepagents/evals/setup"],
-    reporters: ["default", "langsmith/vitest/reporter"],
+    reporters: ["langsmith/vitest/reporter"],
   },
 });

@@ -44,7 +44,7 @@ export interface RunAgentParams {
  * A named eval runner that can execute an agent and return a trajectory.
  *
  * Register implementations via {@link registerRunner} and look them up
- * with {@link resolveRunner}.
+ * with {@link getRunner}.
  */
 export interface EvalRunner {
   /** Unique identifier for this runner (e.g. `"sonnet-4-5"`). */
@@ -73,12 +73,12 @@ export function registerRunner(runner: EvalRunner): void {
 }
 
 /**
- * Look up a registered runner by name.
+ * Get a registered runner by name.
  *
  * @param name - The runner name (must match a previously registered runner).
  * @throws If no runner is registered under that name.
  */
-export function resolveRunner(name: string): EvalRunner {
+export function getRunner(name: string): EvalRunner {
   const runner = runners[name];
   if (!runner) {
     const available = Object.keys(runners).join(", ");
@@ -105,7 +105,7 @@ export function getDefaultRunner(): EvalRunner {
     );
   }
   if (_resolved == null) {
-    _resolved = resolveRunner(name);
+    _resolved = getRunner(name);
   }
   return _resolved;
 }

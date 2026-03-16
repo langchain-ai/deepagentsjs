@@ -423,7 +423,7 @@ const RELATIONAL_TOOLS = [
 ];
 
 ls.describe(
-  runner.name,
+  "deepagents-js-tool-usage-relational",
   () => {
     beforeEach(() => {
       vi.clearAllMocks();
@@ -466,7 +466,10 @@ ls.describe(
         expect(result).toHaveFinalTextContaining("bob@hotmail.com");
 
         // Spy assertions
-        expect(getUserEmailSpy).toHaveBeenCalledWith({ user_id: 21 });
+        expect(getUserEmailSpy).toHaveBeenCalledWith(
+          { user_id: 21 },
+          expect.anything(),
+        );
 
         ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
@@ -485,7 +488,10 @@ ls.describe(
         expect(result).toHaveFinalTextContaining("200");
 
         // Spy assertions
-        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 5 });
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith(
+          { food_id: 5 },
+          expect.anything(),
+        );
 
         ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
@@ -505,7 +511,10 @@ ls.describe(
 
         // Spy assertions
         expect(getCurrentUserIdSpy).toHaveBeenCalled();
-        expect(getUserNameSpy).toHaveBeenCalledWith({ user_id: 35 });
+        expect(getUserNameSpy).toHaveBeenCalledWith(
+          { user_id: 35 },
+          expect.anything(),
+        );
 
         ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
@@ -524,8 +533,14 @@ ls.describe(
         expect(result).toHaveFinalTextContaining("New York");
 
         // Spy assertions
-        expect(getUserLocationSpy).toHaveBeenCalledWith({ user_id: 1 });
-        expect(getCityForLocationSpy).toHaveBeenCalledWith({ location_id: 1 });
+        expect(getUserLocationSpy).toHaveBeenCalledWith(
+          { user_id: 1 },
+          expect.anything(),
+        );
+        expect(getCityForLocationSpy).toHaveBeenCalledWith(
+          { location_id: 1 },
+          expect.anything(),
+        );
 
         ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
@@ -545,7 +560,10 @@ ls.describe(
 
         // Spy assertions
         expect(findUsersByNameSpy).toHaveBeenCalled();
-        expect(getUserEmailSpy).toHaveBeenCalledWith({ user_id: 42 });
+        expect(getUserEmailSpy).toHaveBeenCalledWith(
+          { user_id: 42 },
+          expect.anything(),
+        );
 
         ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
@@ -565,8 +583,14 @@ ls.describe(
 
         // Spy assertions
         expect(getCurrentUserIdSpy).toHaveBeenCalled();
-        expect(getUserLocationSpy).toHaveBeenCalledWith({ user_id: 35 });
-        expect(getCityForLocationSpy).toHaveBeenCalledWith({ location_id: 3 });
+        expect(getUserLocationSpy).toHaveBeenCalledWith(
+          { user_id: 35 },
+          expect.anything(),
+        );
+        expect(getCityForLocationSpy).toHaveBeenCalledWith(
+          { location_id: 3 },
+          expect.anything(),
+        );
 
         ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
@@ -586,8 +610,14 @@ ls.describe(
 
         // Spy assertions
         expect(findUsersByNameSpy).toHaveBeenCalled();
-        expect(getUserLocationSpy).toHaveBeenCalledWith({ user_id: 1 });
-        expect(getCityForLocationSpy).toHaveBeenCalledWith({ location_id: 1 });
+        expect(getUserLocationSpy).toHaveBeenCalledWith(
+          { user_id: 1 },
+          expect.anything(),
+        );
+        expect(getCityForLocationSpy).toHaveBeenCalledWith(
+          { location_id: 1 },
+          expect.anything(),
+        );
 
         ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
@@ -609,10 +639,16 @@ ls.describe(
 
         // Spy assertions
         expect(getCurrentUserIdSpy).toHaveBeenCalled();
-        expect(getUserLocationSpy).toHaveBeenCalledWith({ user_id: 35 });
-        expect(getWeatherAtLocationSpy).toHaveBeenCalledWith({
-          location_id: 3,
-        });
+        expect(getUserLocationSpy).toHaveBeenCalledWith(
+          { user_id: 35 },
+          expect.anything(),
+        );
+        expect(getWeatherAtLocationSpy).toHaveBeenCalledWith(
+          {
+            location_id: 3,
+          },
+          expect.anything(),
+        );
 
         ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
@@ -640,10 +676,22 @@ ls.describe(
 
         // Spy assertions
         expect(getCurrentUserIdSpy).toHaveBeenCalled();
-        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith({ user_id: 35 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 3 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 7 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 2 });
+        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith(
+          { user_id: 35 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 3 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 7 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 2 },
+          expect.anything(),
+        );
 
         ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
@@ -671,9 +719,18 @@ ls.describe(
 
         // Spy assertions
         expect(findUsersByNameSpy).toHaveBeenCalled();
-        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith({ user_id: 43 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 3 });
-        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 3 });
+        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith(
+          { user_id: 43 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 3 },
+          expect.anything(),
+        );
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith(
+          { food_id: 3 },
+          expect.anything(),
+        );
 
         ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
@@ -701,13 +758,22 @@ ls.describe(
 
         // Spy assertions
         expect(getCurrentUserIdSpy).toHaveBeenCalled();
-        expect(getUserLocationSpy).toHaveBeenCalledWith({ user_id: 35 });
-        expect(getCurrentTimeForLocationSpy).toHaveBeenCalledWith({
-          location_id: 3,
-        });
-        expect(getWeatherAtLocationSpy).toHaveBeenCalledWith({
-          location_id: 3,
-        });
+        expect(getUserLocationSpy).toHaveBeenCalledWith(
+          { user_id: 35 },
+          expect.anything(),
+        );
+        expect(getCurrentTimeForLocationSpy).toHaveBeenCalledWith(
+          {
+            location_id: 3,
+          },
+          expect.anything(),
+        );
+        expect(getWeatherAtLocationSpy).toHaveBeenCalledWith(
+          {
+            location_id: 3,
+          },
+          expect.anything(),
+        );
 
         ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
@@ -738,13 +804,34 @@ ls.describe(
 
         // Spy assertions
         expect(getCurrentUserIdSpy).toHaveBeenCalled();
-        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith({ user_id: 35 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 3 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 7 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 2 });
-        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 3 });
-        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 7 });
-        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 2 });
+        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith(
+          { user_id: 35 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 3 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 7 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 2 },
+          expect.anything(),
+        );
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith(
+          { food_id: 3 },
+          expect.anything(),
+        );
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith(
+          { food_id: 7 },
+          expect.anything(),
+        );
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith(
+          { food_id: 2 },
+          expect.anything(),
+        );
 
         ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
@@ -774,14 +861,26 @@ ls.describe(
 
         // Spy assertions
         expect(findUsersByNameSpy).toHaveBeenCalled();
-        expect(getUserLocationSpy).toHaveBeenCalledWith({ user_id: 21 });
-        expect(getCityForLocationSpy).toHaveBeenCalledWith({ location_id: 2 });
-        expect(getCurrentTimeForLocationSpy).toHaveBeenCalledWith({
-          location_id: 2,
-        });
-        expect(getWeatherAtLocationSpy).toHaveBeenCalledWith({
-          location_id: 2,
-        });
+        expect(getUserLocationSpy).toHaveBeenCalledWith(
+          { user_id: 21 },
+          expect.anything(),
+        );
+        expect(getCityForLocationSpy).toHaveBeenCalledWith(
+          { location_id: 2 },
+          expect.anything(),
+        );
+        expect(getCurrentTimeForLocationSpy).toHaveBeenCalledWith(
+          {
+            location_id: 2,
+          },
+          expect.anything(),
+        );
+        expect(getWeatherAtLocationSpy).toHaveBeenCalledWith(
+          {
+            location_id: 2,
+          },
+          expect.anything(),
+        );
 
         ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
@@ -813,19 +912,40 @@ ls.describe(
 
         // Spy assertions
         expect(findUsersByNameSpy).toHaveBeenCalled();
-        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith({ user_id: 1 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 1 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 2 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 3 });
-        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
-          food_id: 1,
-        });
-        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
-          food_id: 2,
-        });
-        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
-          food_id: 3,
-        });
+        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith(
+          { user_id: 1 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 1 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 2 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 3 },
+          expect.anything(),
+        );
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith(
+          {
+            food_id: 1,
+          },
+          expect.anything(),
+        );
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith(
+          {
+            food_id: 2,
+          },
+          expect.anything(),
+        );
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith(
+          {
+            food_id: 3,
+          },
+          expect.anything(),
+        );
 
         ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
@@ -858,22 +978,52 @@ ls.describe(
 
         // Spy assertions
         expect(getCurrentUserIdSpy).toHaveBeenCalled();
-        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith({ user_id: 35 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 3 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 7 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 2 });
-        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 3 });
-        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 7 });
-        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 2 });
-        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
-          food_id: 3,
-        });
-        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
-          food_id: 7,
-        });
-        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
-          food_id: 2,
-        });
+        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith(
+          { user_id: 35 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 3 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 7 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 2 },
+          expect.anything(),
+        );
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith(
+          { food_id: 3 },
+          expect.anything(),
+        );
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith(
+          { food_id: 7 },
+          expect.anything(),
+        );
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith(
+          { food_id: 2 },
+          expect.anything(),
+        );
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith(
+          {
+            food_id: 3,
+          },
+          expect.anything(),
+        );
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith(
+          {
+            food_id: 7,
+          },
+          expect.anything(),
+        );
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith(
+          {
+            food_id: 2,
+          },
+          expect.anything(),
+        );
 
         ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
@@ -910,21 +1060,54 @@ ls.describe(
 
         // Spy assertions
         expect(findUsersByNameSpy).toHaveBeenCalled();
-        expect(getUserLocationSpy).toHaveBeenCalledWith({ user_id: 41 });
-        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith({ user_id: 41 });
-        expect(getCityForLocationSpy).toHaveBeenCalledWith({ location_id: 4 });
-        expect(getCurrentTimeForLocationSpy).toHaveBeenCalledWith({
-          location_id: 4,
-        });
-        expect(getWeatherAtLocationSpy).toHaveBeenCalledWith({
-          location_id: 4,
-        });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 6 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 1 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 4 });
-        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 6 });
-        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 1 });
-        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 4 });
+        expect(getUserLocationSpy).toHaveBeenCalledWith(
+          { user_id: 41 },
+          expect.anything(),
+        );
+        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith(
+          { user_id: 41 },
+          expect.anything(),
+        );
+        expect(getCityForLocationSpy).toHaveBeenCalledWith(
+          { location_id: 4 },
+          expect.anything(),
+        );
+        expect(getCurrentTimeForLocationSpy).toHaveBeenCalledWith(
+          {
+            location_id: 4,
+          },
+          expect.anything(),
+        );
+        expect(getWeatherAtLocationSpy).toHaveBeenCalledWith(
+          {
+            location_id: 4,
+          },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 6 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 1 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 4 },
+          expect.anything(),
+        );
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith(
+          { food_id: 6 },
+          expect.anything(),
+        );
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith(
+          { food_id: 1 },
+          expect.anything(),
+        );
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith(
+          { food_id: 4 },
+          expect.anything(),
+        );
 
         ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
@@ -960,29 +1143,68 @@ ls.describe(
 
         // Spy assertions
         expect(findUsersByNameSpy).toHaveBeenCalled();
-        expect(getUserEmailSpy).toHaveBeenCalledWith({ user_id: 42 });
-        expect(getUserLocationSpy).toHaveBeenCalledWith({ user_id: 42 });
-        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith({ user_id: 42 });
-        expect(getCityForLocationSpy).toHaveBeenCalledWith({ location_id: 5 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 5 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 7 });
-        expect(getFoodNameSpy).toHaveBeenCalledWith({ food_id: 4 });
-        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 5 });
-        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 7 });
-        expect(getFoodCaloriesSpy).toHaveBeenCalledWith({ food_id: 4 });
-        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
-          food_id: 5,
-        });
-        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
-          food_id: 7,
-        });
-        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith({
-          food_id: 4,
-        });
+        expect(getUserEmailSpy).toHaveBeenCalledWith(
+          { user_id: 42 },
+          expect.anything(),
+        );
+        expect(getUserLocationSpy).toHaveBeenCalledWith(
+          { user_id: 42 },
+          expect.anything(),
+        );
+        expect(getUserFavoriteFoodsSpy).toHaveBeenCalledWith(
+          { user_id: 42 },
+          expect.anything(),
+        );
+        expect(getCityForLocationSpy).toHaveBeenCalledWith(
+          { location_id: 5 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 5 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 7 },
+          expect.anything(),
+        );
+        expect(getFoodNameSpy).toHaveBeenCalledWith(
+          { food_id: 4 },
+          expect.anything(),
+        );
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith(
+          { food_id: 5 },
+          expect.anything(),
+        );
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith(
+          { food_id: 7 },
+          expect.anything(),
+        );
+        expect(getFoodCaloriesSpy).toHaveBeenCalledWith(
+          { food_id: 4 },
+          expect.anything(),
+        );
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith(
+          {
+            food_id: 5,
+          },
+          expect.anything(),
+        );
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith(
+          {
+            food_id: 7,
+          },
+          expect.anything(),
+        );
+        expect(getFoodAllergicIngredientsSpy).toHaveBeenCalledWith(
+          {
+            food_id: 4,
+          },
+          expect.anything(),
+        );
 
         ls.logFeedback({ key: "agent_steps", score: result.steps.length });
       },
     );
   },
-  { projectName: "deepagents-js-tool-usage-relational", upsert: true },
+  { projectName: runner.name, upsert: true },
 );

@@ -9,7 +9,7 @@ function skillContent(name: string, description: string, body: string): string {
 }
 
 ls.describe(
-  runner.name,
+  "deepagents-js-skills",
   () => {
     ls.test(
       "read skill full content",
@@ -214,5 +214,5 @@ ls.describe(
       },
     );
   },
-  { projectName: "deepagents-js-skills", upsert: true },
+  { projectName: runner.name, upsert: true },
 );

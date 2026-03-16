@@ -5,7 +5,7 @@ import { getDefaultRunner } from "@deepagents/evals";
 const runner = getDefaultRunner();
 
 ls.describe(
-  runner.name,
+  "deepagents-js-memory",
   () => {
     ls.test(
       "memory basic recall",
@@ -169,5 +169,5 @@ ls.describe(
       },
     );
   },
-  { projectName: "deepagents-js-memory", upsert: true },
+  { projectName: runner.name, upsert: true },
 );

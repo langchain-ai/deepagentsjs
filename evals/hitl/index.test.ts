@@ -38,7 +38,7 @@ const SAMPLE_TOOL_CONFIG: Record<string, boolean | InterruptOnConfig> = {
 };
 
 ls.describe(
-  "hitl",
+  "deepagents-js-hitl",
   () => {
     ls.test(
       "test_hitl_agent",
@@ -69,9 +69,7 @@ ls.describe(
         ls.logOutputs({ result });
 
         const agentMessages = result.messages.filter(AIMessage.isInstance);
-        const toolCalls = agentMessages.flatMap(
-          (msg) => msg.tool_calls || [],
-        );
+        const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
 
         expect(toolCalls.some((tc) => tc.name === "sample_tool")).toBe(true);
         expect(toolCalls.some((tc) => tc.name === "get_weather")).toBe(true);
@@ -227,8 +225,7 @@ ls.describe(
           subagents: [
             {
               name: "task_handler",
-              description:
-                "A subagent that can handle all sorts of tasks",
+              description: "A subagent that can handle all sorts of tasks",
               systemPrompt: "You are a task handler.",
               tools: [sampleTool, getWeather, getSoccerScores],
               interruptOn: {
@@ -286,5 +283,5 @@ ls.describe(
       },
     );
   },
-  { projectName: "deepagents-js-hitl", upsert: true },
+  { projectName: runner.name, upsert: true },
 );

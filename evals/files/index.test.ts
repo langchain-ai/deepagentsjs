@@ -1,11 +1,11 @@
 import * as ls from "langsmith/vitest";
 import { expect } from "vitest";
-import { getDefaultRunner, getFinalText } from "@deepagents/evals";
+import { getDefaultRunner } from "@deepagents/evals";
 
 const runner = getDefaultRunner();
 
 ls.describe(
-  runner.name,
+  "deepagents-js-files",
   () => {
     ls.test(
       "read file seeded state backend file",
@@ -401,5 +401,5 @@ ls.describe(
       },
     );
   },
-  { projectName: "deepagents-js-files", upsert: true },
+  { projectName: runner.name, upsert: true },
 );

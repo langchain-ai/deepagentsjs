@@ -5,7 +5,7 @@ import { getDefaultRunner } from "@deepagents/evals";
 const runner = getDefaultRunner();
 
 ls.describe(
-  runner.name,
+  "deepagents-js-basic",
   () => {
     ls.test(
       "system prompt: custom system prompt",
@@ -42,5 +42,5 @@ ls.describe(
       },
     );
   },
-  { projectName: "deepagents-js-basic", upsert: true },
+  { projectName: runner.name, upsert: true },
 );
