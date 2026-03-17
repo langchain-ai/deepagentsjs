@@ -27,6 +27,13 @@ registerDeepAgentRunner("opus-4-6", (config) =>
   }),
 );
 
+registerDeepAgentRunner("sonnet-4-6", (config) =>
+  createDeepAgent({
+    ...config,
+    model: new ChatAnthropic({ model: "claude-sonnet-4-6" }),
+  }),
+);
+
 registerDeepAgentRunner("gpt-4.1", (config) =>
   createDeepAgent({ ...config, model: new ChatOpenAI({ model: "gpt-4.1" }) }),
 );
