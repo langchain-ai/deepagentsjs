@@ -224,16 +224,15 @@ describe("BaseSandbox", () => {
     });
 
     describe("binary files", () => {
-      it("should return base64 content for image files", async () => {
+      it("should return Uint8Array content for image files", async () => {
         const sandbox = new MockSandbox();
         const binaryContent = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
         sandbox.addBinaryFile("/image.png", binaryContent);
 
         const result = await sandbox.read("/image.png");
         expect(result.error).toBeUndefined();
-        expect(result.content).toBe(
-          Buffer.from(binaryContent).toString("base64"),
-        );
+        expect(result.content).toBeInstanceOf(Uint8Array);
+        expect(result.content).toEqual(binaryContent);
       });
 
       it("should use downloadFiles for binary files, not execute", async () => {
@@ -278,16 +277,15 @@ describe("BaseSandbox", () => {
     });
 
     describe("binary files", () => {
-      it("should return base64 content for binary files", async () => {
+      it("should return Uint8Array content for binary files", async () => {
         const sandbox = new MockSandbox();
         const binaryContent = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
         sandbox.addBinaryFile("/image.png", binaryContent);
 
         const result = await sandbox.readRaw("/image.png");
         expect(result.error).toBeUndefined();
-        expect(result.data!.content).toBe(
-          Buffer.from(binaryContent).toString("base64"),
-        );
+        expect(result.data!.content).toBeInstanceOf(Uint8Array);
+        expect(result.data!.content).toEqual(binaryContent);
       });
     });
   });

@@ -208,10 +208,11 @@ describe("createFileData", () => {
     expect(result.created_at).toBe(timestamp);
   });
 
-  it("should base64-encode Uint8Array content in v2 format", () => {
+  it("should store Uint8Array content directly in v2 format", () => {
     const binary = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
     const result = createFileData(binary);
-    expect(result.content).toBe(Buffer.from(binary).toString("base64"));
+    expect(result.content).toBeInstanceOf(Uint8Array);
+    expect(result.content).toEqual(binary);
   });
 
   it("should throw when passing binary data with v1 format", () => {
