@@ -253,7 +253,7 @@ describe("StateBackend", () => {
     expect(raw.data).toBeUndefined();
   });
 
-  it("should return ReadRawResult for binary files with base64 content", () => {
+  it("should return ReadRawResult for binary files with Uint8Array content", () => {
     const { state, stateAndStore } = makeConfig();
     const backend = new StateBackend(stateAndStore);
 
@@ -266,8 +266,8 @@ describe("StateBackend", () => {
     const raw = backend.readRaw("/image.png");
     expect(raw.error).toBeUndefined();
     expect(raw.data).toBeDefined();
-    expect(typeof raw.data!.content).toBe("string");
-    expect(raw.data!.content).toBe(Buffer.from(pngBytes).toString("base64"));
+    expect(raw.data!.content).toBeInstanceOf(Uint8Array);
+    expect(raw.data!.content).toEqual(pngBytes);
     expect((raw.data as any).mimeType).toBe("image/png");
   });
 
@@ -335,7 +335,7 @@ describe("StateBackend", () => {
       expect((result as any).filesUpdate["/hello.txt"].content).toBe("Hello");
     });
 
-    it("should upload binary (image) files as base64", () => {
+    it("should upload binary (image) files as Uint8Array", () => {
       const { state, stateAndStore } = makeConfig();
       const backend = new StateBackend(stateAndStore);
 
@@ -347,8 +347,8 @@ describe("StateBackend", () => {
 
       Object.assign(state.files, (result as any).filesUpdate);
       const stored = state.files["/image.png"];
-      expect(typeof stored.content).toBe("string");
-      expect(stored.content).toBe(Buffer.from(pngBytes).toString("base64"));
+      expect(stored.content).toBeInstanceOf(Uint8Array);
+      expect(stored.content).toEqual(pngBytes);
     });
   });
 
@@ -434,7 +434,7 @@ describe("StateBackend", () => {
       expect(new Uint8Array(downloadResult[0].content!)).toEqual(originalBytes);
     });
 
-    it("should read binary files as base64 content", () => {
+    it("should read binary files as Uint8Array content", () => {
       const { state, stateAndStore } = makeConfig();
       const backend = new StateBackend(stateAndStore);
 
@@ -447,7 +447,8 @@ describe("StateBackend", () => {
 
       const readResult = backend.read("/photo.png");
       expect(readResult.error).toBeUndefined();
-      expect(readResult.content).toBe(Buffer.from(pngBytes).toString("base64"));
+      expect(readResult.content).toBeInstanceOf(Uint8Array);
+      expect(readResult.content).toEqual(pngBytes);
     });
 
     it("should skip binary files in grep", () => {

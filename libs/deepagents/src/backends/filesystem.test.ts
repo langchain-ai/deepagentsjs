@@ -414,7 +414,7 @@ describe("FilesystemBackend", () => {
   });
 
   describe("binary file handling", () => {
-    it("should read binary files as base64", async () => {
+    it("should read binary files as Uint8Array", async () => {
       const root = tmpDir;
       // PNG header bytes
       const pngHeader = Buffer.from([
@@ -431,7 +431,8 @@ describe("FilesystemBackend", () => {
 
       const result = await backend.read(filePath);
       expect(result.error).toBeUndefined();
-      expect(result.content).toBe(pngHeader.toString("base64"));
+      expect(result.content).toBeInstanceOf(Uint8Array);
+      expect(result.content).toEqual(new Uint8Array(pngHeader));
     });
 
     it("should write binary files by decoding base64", async () => {
@@ -456,10 +457,10 @@ describe("FilesystemBackend", () => {
 
     it("should roundtrip binary files through write and read", async () => {
       const root = tmpDir;
-      const pngHeader = Buffer.from([
+      const pngHeader = new Uint8Array([
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
       ]);
-      const base64Content = pngHeader.toString("base64");
+      const base64Content = Buffer.from(pngHeader).toString("base64");
 
       const backend = new FilesystemBackend({
         rootDir: root,
@@ -468,7 +469,8 @@ describe("FilesystemBackend", () => {
 
       await backend.write("/image.png", base64Content);
       const result = await backend.read("/image.png");
-      expect(result.content).toBe(base64Content);
+      expect(result.content).toBeInstanceOf(Uint8Array);
+      expect(result.content).toEqual(pngHeader);
     });
 
     it("should not paginate binary files", async () => {
@@ -484,10 +486,11 @@ describe("FilesystemBackend", () => {
         virtualMode: false,
       });
 
-      // Read with a small limit — should still return full base64 content
+      // Read with a small limit — should still return full Uint8Array content
       const result = await backend.read(filePath, 0, 1);
       expect(result.error).toBeUndefined();
-      expect(result.content).toBe(binaryData.toString("base64"));
+      expect(result.content).toBeInstanceOf(Uint8Array);
+      expect(result.content).toEqual(new Uint8Array(binaryData));
     });
   });
 
@@ -510,7 +513,7 @@ describe("FilesystemBackend", () => {
       expect(result.data!.modified_at).toBeDefined();
     });
 
-    it("should return base64-encoded v2 format for binary files", async () => {
+    it("should return Uint8Array v2 format for binary files", async () => {
       const root = tmpDir;
       const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
       const filePath = path.join(root, "image.png");
@@ -524,8 +527,8 @@ describe("FilesystemBackend", () => {
 
       const result = await backend.readRaw(filePath);
       expect(result.error).toBeUndefined();
-      expect(typeof result.data!.content).toBe("string");
-      expect(result.data!.content).toBe(pngHeader.toString("base64"));
+      expect(result.data!.content).toBeInstanceOf(Uint8Array);
+      expect(result.data!.content).toEqual(new Uint8Array(pngHeader));
     });
   });
 });

@@ -279,7 +279,7 @@ describe("StoreBackend", () => {
       expect(readRes.content).toContain("Hello");
     });
 
-    it("should upload binary (image) files as base64", async () => {
+    it("should upload binary (image) files as Uint8Array", async () => {
       const { stateAndStore } = makeConfig();
       const backend = new StoreBackend(stateAndStore);
 
@@ -291,8 +291,8 @@ describe("StoreBackend", () => {
 
       const raw = await backend.readRaw("/image.png");
       expect(raw.error).toBeUndefined();
-      expect(typeof raw.data!.content).toBe("string");
-      expect(raw.data!.content).toBe(Buffer.from(pngBytes).toString("base64"));
+      expect(raw.data!.content).toBeInstanceOf(Uint8Array);
+      expect(raw.data!.content).toEqual(pngBytes);
     });
   });
 
@@ -379,7 +379,7 @@ describe("StoreBackend", () => {
       expect(new Uint8Array(downloadResult[0].content!)).toEqual(originalBytes);
     });
 
-    it("should read binary files as base64 content", async () => {
+    it("should read binary files as Uint8Array content", async () => {
       const { stateAndStore } = makeConfig();
       const backend = new StoreBackend(stateAndStore);
 
@@ -391,7 +391,8 @@ describe("StoreBackend", () => {
 
       const readResult = await backend.read("/photo.png");
       expect(readResult.error).toBeUndefined();
-      expect(readResult.content).toBe(Buffer.from(pngBytes).toString("base64"));
+      expect(readResult.content).toBeInstanceOf(Uint8Array);
+      expect(readResult.content).toEqual(pngBytes);
     });
 
     it("should skip binary files in grep", async () => {

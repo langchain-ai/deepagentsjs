@@ -561,7 +561,10 @@ async function listSkillsFromBackend(
       if (readResult.error) {
         continue;
       }
-      content = readResult.content ?? "";
+      if (typeof readResult.content !== "string") {
+        continue;
+      }
+      content = readResult.content;
     }
     const metadata = parseSkillMetadataFromContent(
       content,

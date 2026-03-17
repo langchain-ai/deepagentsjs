@@ -25,6 +25,7 @@ import {
   getMimeType,
   globSearchFiles,
   grepMatchesFromFiles,
+  isFileDataBinary,
   isFileDataV1,
   isTextMimeType,
   migrateToFileDataV2,
@@ -165,7 +166,9 @@ export class StoreBackend implements BackendProtocolV2 {
 
     const hasValidContent =
       value.content !== undefined &&
-      (Array.isArray(value.content) || typeof value.content === "string");
+      (Array.isArray(value.content) ||
+        typeof value.content === "string" ||
+        ArrayBuffer.isView(value.content));
 
     if (
       !hasValidContent ||
@@ -289,7 +292,9 @@ export class StoreBackend implements BackendProtocolV2 {
         const fd = this.convertStoreItemToFileData(item);
         const size = isFileDataV1(fd)
           ? fd.content.join("\n").length
-          : fd.content.length;
+          : isFileDataBinary(fd)
+            ? fd.content.byteLength
+            : fd.content.length;
         infos.push({
           path: itemKey,
           is_dir: false,
@@ -345,6 +350,11 @@ export class StoreBackend implements BackendProtocolV2 {
         return { content: fileDataV2.content, mimeType: fileDataV2.mimeType };
       }
 
+      if (typeof fileDataV2.content !== "string") {
+        return {
+          error: `File '${filePath}' has binary content but text MIME type`,
+        };
+      }
       const lines = fileDataV2.content.split("\n");
       const selected = lines.slice(offset, offset + limit);
       return { content: selected.join("\n"), mimeType: fileDataV2.mimeType };
@@ -501,7 +511,9 @@ export class StoreBackend implements BackendProtocolV2 {
       const size = fd
         ? isFileDataV1(fd)
           ? fd.content.join("\n").length
-          : fd.content.length
+          : isFileDataBinary(fd)
+            ? fd.content.byteLength
+            : fd.content.length
         : 0;
       infos.push({
         path: p,
@@ -575,15 +587,13 @@ export class StoreBackend implements BackendProtocolV2 {
         }
 
         const fileData = this.convertStoreItemToFileData(item);
-        const contentStr = fileDataToString(fileData);
         const fileDataV2 = migrateToFileDataV2(fileData, path);
 
-        if (!isTextMimeType(fileDataV2.mimeType)) {
-          const content = Buffer.from(contentStr, "base64");
+        if (typeof fileDataV2.content === "string") {
+          const content = new TextEncoder().encode(fileDataV2.content);
           responses.push({ path, content, error: null });
         } else {
-          const content = new TextEncoder().encode(contentStr);
-          responses.push({ path, content, error: null });
+          responses.push({ path, content: fileDataV2.content, error: null });
         }
       } catch {
         responses.push({ path, content: null, error: "file_not_found" });
