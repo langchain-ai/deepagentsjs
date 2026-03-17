@@ -258,7 +258,7 @@ export function formatReadResponse(
   limit: number,
 ): string {
   if (isFileDataBinary(fileData)) {
-    throw "Error: Cannot format binary FileData as text";
+    return "Error: Cannot format binary FileData as text";
   }
   const content = fileDataToString(fileData);
   const emptyMsg = checkEmptyContent(content);

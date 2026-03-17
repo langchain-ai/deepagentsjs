@@ -348,7 +348,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
   ): Promise<ReadResult> {
     const mimeType = getMimeType(filePath);
 
-    // for binary, download full file and return as base64
+    // for binary, download full file and return as Uint8Array
     if (!isTextMimeType(mimeType)) {
       const results = await this.downloadFiles([filePath]);
       if (results[0].error || !results[0].content) {
