@@ -413,7 +413,7 @@ describe("StoreBackend", () => {
   });
 
   it("should handle large tool result interception via middleware", async () => {
-    const { store, config } = makeConfig();
+    const { store } = makeConfig();
     const { createFilesystemMiddleware } = await import("../middleware/fs.js");
     const { ToolMessage } = await import("@langchain/core/messages");
 
@@ -435,9 +435,8 @@ describe("StoreBackend", () => {
     const result = await (middleware as any).wrapToolCall(
       {
         toolCall: mockToolCall,
-        config: config,
         state: { files: {}, messages: [] },
-        runtime: {},
+        runtime: { store },
       },
       mockToolFn,
     );

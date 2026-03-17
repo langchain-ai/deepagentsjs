@@ -47,7 +47,10 @@ import {
 import type * as _zodTypes from "@langchain/core/utils/types";
 import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
-import { getCurrentTaskInput } from "@langchain/langgraph";
+import {
+  getCurrentTaskInput,
+  LangGraphRunnableConfig,
+} from "@langchain/langgraph";
 
 /**
  * Backend-provided tools excluded from PTC by default.
@@ -224,12 +227,12 @@ export function createQuickJSMiddleware(
   }
 
   const jsEvalTool = tool(
-    async (input, config) => {
+    async (input, config: LangGraphRunnableConfig) => {
       const threadId = config.configurable?.thread_id || DEFAULT_SESSION_ID;
 
       const stateAndStore: StateAndStore = {
         state: getCurrentTaskInput(config) || {},
-        store: config.configurable?.__pregel_store,
+        store: config.store,
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
 

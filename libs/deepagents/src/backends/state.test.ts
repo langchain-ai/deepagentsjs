@@ -339,7 +339,7 @@ describe("StateBackend", () => {
     const result = await (middleware as any).wrapToolCall(
       {
         toolCall: mockToolCall,
-        config: config,
+        config,
         state: { files: {}, messages: [] },
         runtime: {},
       },
