@@ -355,9 +355,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
         return { error: `File '${filePath}' not found` };
       }
 
-      const content = new Uint8Array(results[0].content);
-
-      return { content, mimeType };
+      return { content: results[0].content, mimeType };
     }
 
     // limit=0 means return nothing
@@ -394,7 +392,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     if (!isTextMimeType(mimeType)) {
       return {
         data: {
-          content: new Uint8Array(results[0].content),
+          content: results[0].content,
           mimeType,
           created_at: now,
           modified_at: now,
