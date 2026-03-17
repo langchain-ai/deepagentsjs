@@ -238,7 +238,7 @@ export function updateFileData(fileData: FileData, content: string): FileData {
 
   return {
     content,
-    mimeType: (fileData as FileDataV2).mimeType,
+    mimeType: fileData.mimeType,
     created_at: fileData.created_at,
     modified_at: now,
   };
