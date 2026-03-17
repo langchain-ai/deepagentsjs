@@ -126,7 +126,7 @@ export class StateBackend implements BackendProtocolV2 {
    * Read file content.
    *
    * Text files are paginated by line offset/limit.
-   * Binary files return full base64-encoded content (offset/limit ignored).
+   * Binary files return full Uint8Array content (offset/limit ignored).
    *
    * @param filePath - Absolute file path
    * @param offset - Line offset to start reading from (0-indexed)
