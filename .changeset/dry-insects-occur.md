@@ -3,7 +3,7 @@
 "@langchain/quickjs": patch
 "@langchain/modal": patch
 "@langchain/sandbox-standard-tests": patch
-"deepagents": patch
+"deepagents": minor
 "deepagents-acp": patch
 ---
 
