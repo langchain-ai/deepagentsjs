@@ -19,12 +19,12 @@ vi.mock("deepagents", () => {
     constructor(options: { rootDir: string }) {
       this.rootDir = options.rootDir;
     }
-    lsInfo = vi.fn();
+    ls = vi.fn();
     read = vi.fn();
     write = vi.fn();
     edit = vi.fn();
-    grepRaw = vi.fn();
-    globInfo = vi.fn();
+    grep = vi.fn();
+    glob = vi.fn();
     downloadFiles = vi.fn().mockResolvedValue([]);
     uploadFiles = vi.fn().mockResolvedValue([]);
   }

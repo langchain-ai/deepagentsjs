@@ -19,7 +19,7 @@ function createMockBackend(
 
   return {
     written,
-    lsInfo: async () => ({ files: [] }),
+    ls: async () => ({ files: [] }),
     read: async (filePath: string) => ({ content: store[filePath] ?? "" }),
     readRaw: async (filePath: string): Promise<ReadRawResult> => {
       if (!(filePath in store)) {
@@ -35,8 +35,8 @@ function createMockBackend(
         },
       };
     },
-    grepRaw: async () => ({ matches: [] }),
-    globInfo: async () => ({ files: [] }),
+    grep: async () => ({ matches: [] }),
+    glob: async () => ({ files: [] }),
     write: async (filePath: string, content: string): Promise<WriteResult> => {
       store[filePath] = content;
       written[filePath] = content;

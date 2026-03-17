@@ -248,8 +248,8 @@ export class LocalShellBackend
   /**
    * List directory contents, returning paths relative to rootDir.
    */
-  override async lsInfo(dirPath: string): Promise<LsResult> {
-    const result = await super.lsInfo(dirPath);
+  override async ls(dirPath: string): Promise<LsResult> {
+    const result = await super.ls(dirPath);
     if (result.error) {
       return result;
     }
@@ -273,7 +273,7 @@ export class LocalShellBackend
   /**
    * Glob matching that returns relative paths and includes directories.
    */
-  override async globInfo(
+  override async glob(
     pattern: string,
     searchPath: string = "/",
   ): Promise<GlobResult> {
