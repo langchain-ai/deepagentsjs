@@ -176,12 +176,6 @@ importers:
       '@deepagents/evals':
         specifier: workspace:*
         version: link:../../internal/eval-harness
-      '@langchain/anthropic':
-        specifier: ^1.3.23
-        version: 1.3.23(@langchain/core@1.1.32(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.29.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0))
-      '@langchain/quickjs':
-        specifier: workspace:*
-        version: link:../../libs/providers/quickjs
       deepagents:
         specifier: workspace:*
         version: link:../../libs/deepagents
