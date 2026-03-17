@@ -525,17 +525,13 @@ function createReadFileTool(
         if (mimeType.startsWith("image/")) {
           return [{ type: "image", mimeType, data: base64Data }];
         }
-        if (mimeType === "application/pdf") {
-          return [{ type: "file", mimeType, data: base64Data }];
+        if (mimeType.startsWith("audio/")) {
+          return [{ type: "audio", mimeType, data: base64Data }];
         }
-        // Audio, video, and other binary types aren't universally supported
-        // across LLM providers. Return a text description instead.
-        return [
-          {
-            type: "text",
-            text: `Binary file '${file_path}' (${mimeType}, ${sizeBytes} bytes). This file type cannot be displayed inline.`,
-          },
-        ];
+        if (mimeType.startsWith("video/")) {
+          return [{ type: "video", mimeType, data: base64Data }];
+        }
+        return [{ type: "file", mimeType, data: base64Data }];
       }
 
       let content =
