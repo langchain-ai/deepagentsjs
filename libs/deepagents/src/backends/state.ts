@@ -115,7 +115,7 @@ export class StateBackend implements BackendProtocol {
    * @param limit - Maximum number of lines to read
    * @returns Formatted file content with line numbers, or error message
    */
-  read(filePath: string, offset: number = 0, limit: number = 500): string {
+  read(filePath: string, offset: number = 0, limit: number = 500, _encoding?: string): string {
     const files = this.getFiles();
     const fileData = files[filePath];
 
@@ -132,7 +132,7 @@ export class StateBackend implements BackendProtocol {
    * @param filePath - Absolute file path
    * @returns Raw file content as FileData
    */
-  readRaw(filePath: string): FileData {
+  readRaw(filePath: string, _encoding?: string): FileData {
     const files = this.getFiles();
     const fileData = files[filePath];
 
@@ -144,7 +144,7 @@ export class StateBackend implements BackendProtocol {
    * Create a new file with content.
    * Returns WriteResult with filesUpdate to update LangGraph state.
    */
-  write(filePath: string, content: string): WriteResult {
+  write(filePath: string, content: string, _encoding?: string): WriteResult {
     const files = this.getFiles();
 
     if (filePath in files) {
@@ -169,6 +169,7 @@ export class StateBackend implements BackendProtocol {
     oldString: string,
     newString: string,
     replaceAll: boolean = false,
+    _encoding?: string,
   ): EditResult {
     const files = this.getFiles();
     const fileData = files[filePath];
@@ -205,6 +206,7 @@ export class StateBackend implements BackendProtocol {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
+    _encoding?: string,
   ): GrepMatch[] | string {
     const files = this.getFiles();
     return grepMatchesFromFiles(files, pattern, path, glob);

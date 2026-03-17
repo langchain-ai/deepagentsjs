@@ -340,6 +340,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     filePath: string,
     offset: number = 0,
     limit: number = 500,
+    _encoding?: string,
   ): Promise<string> {
     // limit=0 means return nothing
     if (limit === 0) return "";
@@ -362,13 +363,13 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
    * @param filePath - Absolute file path
    * @returns Raw file content as FileData
    */
-  async readRaw(filePath: string): Promise<FileData> {
+  async readRaw(filePath: string, encoding?: string): Promise<FileData> {
     const results = await this.downloadFiles([filePath]);
     if (results[0].error || !results[0].content) {
       throw new Error(`File '${filePath}' not found`);
     }
 
-    const content = new TextDecoder().decode(results[0].content);
+    const content = new TextDecoder(encoding || "utf-8").decode(results[0].content);
     const lines = content.split("\n");
 
     const now = new Date().toISOString();
@@ -391,6 +392,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
+    _encoding?: string,
   ): Promise<GrepMatch[] | string> {
     const command = buildGrepCommand(pattern, path, glob);
     const result = await this.execute(command);
@@ -471,7 +473,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
    * Uses downloadFiles() to check existence and uploadFiles() to write.
    * No runtime needed on the sandbox host.
    */
-  async write(filePath: string, content: string): Promise<WriteResult> {
+  async write(filePath: string, content: string, encoding?: string): Promise<WriteResult> {
     // Check if file already exists
     try {
       const existCheck = await this.downloadFiles([filePath]);
@@ -484,9 +486,15 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
       // File doesn't exist, which is what we want for write
     }
 
-    const encoder = new TextEncoder();
+    let encodedContent: Uint8Array;
+    if (typeof Buffer !== "undefined" && encoding && encoding !== "utf-8") {
+      encodedContent = Buffer.from(content, encoding as BufferEncoding);
+    } else {
+      encodedContent = new TextEncoder().encode(content);
+    }
+
     const results = await this.uploadFiles([
-      [filePath, encoder.encode(content)],
+      [filePath, encodedContent],
     ]);
 
     if (results[0].error) {
@@ -512,13 +520,14 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     oldString: string,
     newString: string,
     replaceAll: boolean = false,
+    encoding?: string,
   ): Promise<EditResult> {
     const results = await this.downloadFiles([filePath]);
     if (results[0].error || !results[0].content) {
       return { error: `Error: File '${filePath}' not found` };
     }
 
-    const text = new TextDecoder().decode(results[0].content);
+    const text = new TextDecoder(encoding || "utf-8").decode(results[0].content);
     results[0].content = null as unknown as Uint8Array;
 
     /**
@@ -543,7 +552,12 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
       /**
        * if the newString is not empty, we can edit the file
        */
-      const encoded = new TextEncoder().encode(newString);
+      let encoded: Uint8Array;
+      if (typeof Buffer !== "undefined" && encoding && encoding !== "utf-8") {
+        encoded = Buffer.from(newString, encoding as BufferEncoding);
+      } else {
+        encoded = new TextEncoder().encode(newString);
+      }
       const uploadResults = await this.uploadFiles([[filePath, encoded]]);
       /**
        * if the upload fails, we return an error
@@ -606,7 +620,12 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
         text.slice(firstIdx + oldString.length);
     }
 
-    const encoded = new TextEncoder().encode(newText);
+    let encoded: Uint8Array;
+    if (typeof Buffer !== "undefined" && encoding && encoding !== "utf-8") {
+      encoded = Buffer.from(newText, encoding as BufferEncoding);
+    } else {
+      encoded = new TextEncoder().encode(newText);
+    }
     const uploadResults = await this.uploadFiles([[filePath, encoded]]);
 
     if (uploadResults[0].error) {
