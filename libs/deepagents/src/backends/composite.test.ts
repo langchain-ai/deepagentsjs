@@ -365,7 +365,7 @@ describe("CompositeBackend", () => {
     const result = await (middleware as any).wrapToolCall(
       {
         toolCall: mockToolCall,
-        config: config,
+        config,
         state: { files: {}, messages: [] },
         runtime: {},
       },
@@ -386,7 +386,7 @@ describe("CompositeBackend", () => {
   });
 
   it("should handle large tool result interception routed to store", async () => {
-    const { config } = makeConfig();
+    const { store } = makeConfig();
     const { createFilesystemMiddleware } = await import("../middleware/fs.js");
     const { ToolMessage } = await import("@langchain/core/messages");
 
@@ -411,9 +411,8 @@ describe("CompositeBackend", () => {
     const result = await (middleware as any).wrapToolCall(
       {
         toolCall: mockToolCall,
-        config: config,
         state: { files: {}, messages: [] },
-        runtime: {},
+        runtime: { store },
       },
       mockToolFn,
     );
@@ -422,10 +421,7 @@ describe("CompositeBackend", () => {
     expect(result.content).toContain("Tool result too large");
     expect(result.content).toContain("/large_tool_results/test_routed_123");
 
-    const storedContent = await config.store.get(
-      ["filesystem"],
-      "/test_routed_123",
-    );
+    const storedContent = await store.get(["filesystem"], "/test_routed_123");
     expect(storedContent).toBeDefined();
     expect((storedContent!.value as any).content).toEqual([largeContent]);
   });
