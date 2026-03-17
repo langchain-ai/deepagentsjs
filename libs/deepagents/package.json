@@ -41,7 +41,7 @@
     "@langchain/core": "^1.1.25",
     "@langchain/langgraph": "^1.1.4",
     "fast-glob": "^3.3.3",
-    "langchain": "1.2.26",
+    "langchain": "1.2.34",
     "micromatch": "^4.0.8",
     "uuid": "^13.0.0",
     "yaml": "^2.8.2",
