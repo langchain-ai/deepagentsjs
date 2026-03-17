@@ -398,7 +398,7 @@ describe("StateBackend", () => {
       expect(result[1].content).toBeNull();
     });
 
-    it("should download binary files as raw bytes (base64 decoded)", () => {
+    it("should download binary files as raw bytes", () => {
       const { state, stateAndStore } = makeConfig();
       const backend = new StateBackend(stateAndStore);
 
