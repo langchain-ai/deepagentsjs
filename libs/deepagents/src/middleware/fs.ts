@@ -168,10 +168,7 @@ export const FileDataV1Schema = z.object({
  * Zod schema for FileDataV2 (content as string for text or Uint8Array for binary).
  */
 export const FileDataV2Schema = z.object({
-  content: z.union([
-    z.string(),
-    z.custom<Uint8Array>((val) => ArrayBuffer.isView(val)),
-  ]),
+  content: z.union([z.string(), z.instanceof(Uint8Array)]),
   mimeType: z.string(),
   created_at: z.string(),
   modified_at: z.string(),
