@@ -345,7 +345,17 @@ export class ReplSession {
             } else {
               const content = Array.isArray(result.data.content)
                 ? result.data.content.join("\n")
-                : result.data.content;
+                : typeof result.data.content === "string"
+                  ? result.data.content
+                  : null;
+              if (content === null) {
+                const err = context.newError(
+                  `Cannot read binary file '${path}' as text.`,
+                );
+                promise.reject(err);
+                err.dispose();
+                return;
+              }
               const val = context.newString(content);
               promise.resolve(val);
               val.dispose();
