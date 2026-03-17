@@ -34,6 +34,7 @@ import {
   formatContentWithLineNumbers,
   truncateIfTooLong,
   getMimeType,
+  isTextMimeType,
   adaptBackendProtocol,
   adaptSandboxProtocol,
 } from "../backends/utils.js";
@@ -485,14 +486,9 @@ function createReadFileTool(
 
       const mimeType = readResult.mimeType ?? getMimeType(file_path);
 
-      if (
-        mimeType.startsWith("image/") ||
-        mimeType.startsWith("audio/") ||
-        mimeType.startsWith("video/") ||
-        mimeType === "application/pdf"
-      ) {
+      if (!isTextMimeType(mimeType)) {
         const binaryContent = readResult.content;
-        if (!binaryContent || !ArrayBuffer.isView(binaryContent)) {
+        if (!binaryContent) {
           return [
             {
               type: "text",
@@ -500,25 +496,46 @@ function createReadFileTool(
             },
           ];
         }
-        if (binaryContent.byteLength > MAX_BINARY_READ_SIZE_BYTES) {
+
+        // Content may arrive as:
+        // - Uint8Array (direct read)
+        // - string (already base64)
+        // - plain object with numeric keys (Uint8Array lost through serialization)
+        let base64Data: string;
+        if (typeof binaryContent === "string") {
+          base64Data = binaryContent;
+        } else if (ArrayBuffer.isView(binaryContent)) {
+          base64Data = Buffer.from(binaryContent).toString("base64");
+        } else {
+          const values = Object.values(binaryContent as Record<string, number>);
+          base64Data = Buffer.from(new Uint8Array(values)).toString("base64");
+        }
+
+        const sizeBytes = Math.ceil((base64Data.length * 3) / 4);
+
+        if (sizeBytes > MAX_BINARY_READ_SIZE_BYTES) {
           return [
             {
               type: "text",
-              text: `Error: file too large to read (${Math.round(binaryContent.byteLength / (1024 * 1024))}MB exceeds ${MAX_BINARY_READ_SIZE_BYTES / (1024 * 1024)}MB limit for binary files)`,
+              text: `Error: file too large to read (${Math.round(sizeBytes / (1024 * 1024))}MB exceeds ${MAX_BINARY_READ_SIZE_BYTES / (1024 * 1024)}MB limit for binary files)`,
             },
           ];
         }
 
         if (mimeType.startsWith("image/")) {
-          return [{ type: "image", mimeType, data: binaryContent }];
+          return [{ type: "image", mimeType, data: base64Data }];
         }
-        if (mimeType.startsWith("audio/")) {
-          return [{ type: "audio", mimeType, data: binaryContent }];
+        if (mimeType === "application/pdf") {
+          return [{ type: "file", mimeType, data: base64Data }];
         }
-        if (mimeType.startsWith("video/")) {
-          return [{ type: "video", mimeType, data: binaryContent }];
-        }
-        return [{ type: "file", mimeType, data: binaryContent }];
+        // Audio, video, and other binary types aren't universally supported
+        // across LLM providers. Return a text description instead.
+        return [
+          {
+            type: "text",
+            text: `Binary file '${file_path}' (${mimeType}, ${sizeBytes} bytes). This file type cannot be displayed inline.`,
+          },
+        ];
       }
 
       let content =
