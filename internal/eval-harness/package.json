@@ -1,0 +1,53 @@
+{
+  "name": "@deepagents/evals",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Eval harness — runner interface, profile registry, and trajectory matchers",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsdown",
+    "clean": "rm -rf dist/ .tsdown/",
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./setup": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/**/*"
+  ],
+  "dependencies": {
+    "@langchain/anthropic": "^1.3.23",
+    "@langchain/core": "^1.1.32",
+    "@langchain/openai": "^1.2.13",
+    "deepagents": "workspace:*",
+    "langsmith": "^0.5.10",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@tsconfig/recommended": "^1.0.13",
+    "@types/node": "^25.2.3",
+    "@types/uuid": "^11.0.0",
+    "tsdown": "^0.20.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
