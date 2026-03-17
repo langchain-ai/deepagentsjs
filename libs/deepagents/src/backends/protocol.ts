@@ -92,15 +92,15 @@ export interface FileDataV1 {
 /**
  * Current file data format (v2).
  *
- * Content is stored as a single string — plain text for text files,
- * base64-encoded for binary files (images, PDFs, audio, etc.).
- * The MIME type is stored alongside the content, allowing backend
- * implementations to determine it however they see fit (e.g. from
- * file extension, HTTP headers, database metadata, etc.).
+ * Content is stored as a string for text files, or as a Uint8Array for
+ * binary files (images, PDFs, audio, etc.). The MIME type is stored
+ * alongside the content, allowing backend implementations to determine
+ * it however they see fit (e.g. from file extension, HTTP headers,
+ * database metadata, etc.).
  */
 export interface FileDataV2 {
-  /** File content as a single string (text or base64-encoded binary) */
-  content: string;
+  /** File content: string for text, Uint8Array for binary */
+  content: string | Uint8Array;
   /** MIME type of the file (e.g. "image/png", "text/plain") */
   mimeType: string;
   /** ISO format timestamp of creation */
@@ -127,8 +127,8 @@ export type FileData = FileDataV1 | FileDataV2;
 export interface ReadResult {
   /** Error message on failure, undefined on success */
   error?: string;
-  /** File content as a string (text or base64-encoded binary), undefined on failure */
-  content?: string;
+  /** File content: string for text, Uint8Array for binary. Undefined on failure. */
+  content?: string | Uint8Array;
   /** MIME type of the file, when available */
   mimeType?: string;
 }

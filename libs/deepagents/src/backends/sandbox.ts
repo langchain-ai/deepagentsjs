@@ -355,8 +355,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
         return { error: `File '${filePath}' not found` };
       }
 
-      const buffer = results[0].content;
-      const content = Buffer.from(buffer).toString("base64");
+      const content = new Uint8Array(results[0].content);
 
       return { content, mimeType };
     }
@@ -391,11 +390,11 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     const now = new Date().toISOString();
     const mimeType = getMimeType(filePath);
 
-    // Binary: store as base64
+    // Binary: store as Uint8Array
     if (!isTextMimeType(mimeType)) {
       return {
         data: {
-          content: Buffer.from(results[0].content).toString("base64"),
+          content: new Uint8Array(results[0].content),
           mimeType,
           created_at: now,
           modified_at: now,

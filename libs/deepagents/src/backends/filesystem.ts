@@ -219,8 +219,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
         try {
           if (isBinary) {
             const buffer = await fd.readFile();
-            const contentStr = Buffer.from(buffer).toString("base64");
-            return { content: contentStr, mimeType };
+            return { content: new Uint8Array(buffer), mimeType };
           }
           content = await fd.readFile({ encoding: "utf-8" });
         } finally {
@@ -236,8 +235,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
         }
         if (isBinary) {
           const buffer = await fs.readFile(resolvedPath);
-          const contentStr = Buffer.from(buffer).toString("base64");
-          return { content: contentStr, mimeType };
+          return { content: new Uint8Array(buffer), mimeType };
         }
         content = await fs.readFile(resolvedPath, "utf-8");
       }
@@ -291,10 +289,16 @@ export class FilesystemBackend implements BackendProtocolV2 {
       try {
         if (isBinary) {
           const buffer = await fd.readFile();
-          content = Buffer.from(buffer).toString("base64");
-        } else {
-          content = await fd.readFile({ encoding: "utf-8" });
+          return {
+            data: {
+              content: new Uint8Array(buffer),
+              mimeType,
+              created_at: stat.ctime.toISOString(),
+              modified_at: stat.mtime.toISOString(),
+            },
+          };
         }
+        content = await fd.readFile({ encoding: "utf-8" });
       } finally {
         await fd.close();
       }
@@ -308,10 +312,16 @@ export class FilesystemBackend implements BackendProtocolV2 {
       }
       if (isBinary) {
         const buffer = await fs.readFile(resolvedPath);
-        content = Buffer.from(buffer).toString("base64");
-      } else {
-        content = await fs.readFile(resolvedPath, "utf-8");
+        return {
+          data: {
+            content: new Uint8Array(buffer),
+            mimeType,
+            created_at: stat.ctime.toISOString(),
+            modified_at: stat.mtime.toISOString(),
+          },
+        };
       }
+      content = await fs.readFile(resolvedPath, "utf-8");
     }
 
     return {

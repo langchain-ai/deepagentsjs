@@ -219,7 +219,10 @@ async function loadMemoryFromBackend(
     if (content.error) {
       return null;
     }
-    return content.content ?? null;
+    if (typeof content.content !== "string") {
+      return null;
+    }
+    return content.content;
   }
 
   const results = await adaptedBackend.downloadFiles([path]);

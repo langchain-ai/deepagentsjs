@@ -144,7 +144,22 @@ export function fileDataToString(fileData: FileData): string {
   if (Array.isArray(fileData.content)) {
     return fileData.content.join("\n");
   }
-  return fileData.content;
+  if (typeof fileData.content === "string") {
+    return fileData.content;
+  }
+  throw new Error("Cannot convert binary FileData to string");
+}
+
+/**
+ * Type guard to check if FileData contains binary content (Uint8Array).
+ *
+ * @param data - FileData to check
+ * @returns True if the content is a Uint8Array (binary)
+ */
+export function isFileDataBinary(
+  data: FileData,
+): data is FileDataV2 & { content: Uint8Array } {
+  return ArrayBuffer.isView(data.content);
 }
 
 /**
@@ -176,7 +191,11 @@ export function createFileData(
   if (fileFormat === "v2") {
     if (ArrayBuffer.isView(content)) {
       return {
-        content: Buffer.from(content).toString("base64"),
+        content: new Uint8Array(
+          content.buffer,
+          content.byteOffset,
+          content.byteLength,
+        ),
         mimeType: mimeType ?? "application/octet-stream",
         created_at: createdAt || now,
         modified_at: now,
@@ -238,6 +257,9 @@ export function formatReadResponse(
   offset: number,
   limit: number,
 ): string {
+  if (isFileDataBinary(fileData)) {
+    throw "Error: Cannot format binary FileData as text";
+  }
   const content = fileDataToString(fileData);
   const emptyMsg = checkEmptyContent(content);
   if (emptyMsg) {
@@ -742,7 +764,7 @@ export function isFileDataV1(data: FileData): data is FileDataV1 {
  * If the data is already v2, returns it unchanged.
  *
  * @param data - FileData in either format
- * @returns FileDataV2 with content as a single string
+ * @returns FileDataV2 with content as string (text) or Uint8Array (binary)
  */
 export function migrateToFileDataV2(
   data: FileDataV1 | FileDataV2,

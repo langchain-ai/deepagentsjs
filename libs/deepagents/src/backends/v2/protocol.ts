@@ -48,7 +48,7 @@ export interface BackendProtocolV2 extends Omit<
    * Read file content.
    *
    * For text files, content is paginated by line offset/limit.
-   * For binary files, the full base64-encoded content is returned.
+   * For binary files, the full raw Uint8Array content is returned.
    *
    * @param filePath - Absolute file path
    * @param offset - Line offset to start reading from (0-indexed), default 0

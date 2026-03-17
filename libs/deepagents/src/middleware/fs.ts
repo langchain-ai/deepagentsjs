@@ -164,10 +164,13 @@ export const FileDataV1Schema = z.object({
 });
 
 /**
- * Zod schema for FileDataV2 (content as single string).
+ * Zod schema for FileDataV2 (content as string for text or Uint8Array for binary).
  */
 export const FileDataV2Schema = z.object({
-  content: z.string(),
+  content: z.union([
+    z.string(),
+    z.custom<Uint8Array>((val) => ArrayBuffer.isView(val)),
+  ]),
   mimeType: z.string(),
   created_at: z.string(),
   modified_at: z.string(),
@@ -488,30 +491,38 @@ function createReadFileTool(
         mimeType.startsWith("video/") ||
         mimeType === "application/pdf"
       ) {
-        const base64Content = readResult.content ?? "";
-        const approxBytes = base64Content.length * 0.75;
-        if (approxBytes > MAX_BINARY_READ_SIZE_BYTES) {
+        const binaryContent = readResult.content;
+        if (!binaryContent || !ArrayBuffer.isView(binaryContent)) {
           return [
             {
               type: "text",
-              text: `Error: file too large to read (${Math.round(approxBytes / (1024 * 1024))}MB exceeds ${MAX_BINARY_READ_SIZE_BYTES / (1024 * 1024)}MB limit for binary files)`,
+              text: `Error: expected binary content for '${file_path}'`,
+            },
+          ];
+        }
+        if (binaryContent.byteLength > MAX_BINARY_READ_SIZE_BYTES) {
+          return [
+            {
+              type: "text",
+              text: `Error: file too large to read (${Math.round(binaryContent.byteLength / (1024 * 1024))}MB exceeds ${MAX_BINARY_READ_SIZE_BYTES / (1024 * 1024)}MB limit for binary files)`,
             },
           ];
         }
 
         if (mimeType.startsWith("image/")) {
-          return [{ type: "image", mimeType, data: base64Content }];
+          return [{ type: "image", mimeType, data: binaryContent }];
         }
         if (mimeType.startsWith("audio/")) {
-          return [{ type: "audio", mimeType, data: base64Content }];
+          return [{ type: "audio", mimeType, data: binaryContent }];
         }
         if (mimeType.startsWith("video/")) {
-          return [{ type: "video", mimeType, data: base64Content }];
+          return [{ type: "video", mimeType, data: binaryContent }];
         }
-        return [{ type: "file", mimeType, data: base64Content }];
+        return [{ type: "file", mimeType, data: binaryContent }];
       }
 
-      let content = readResult.content ?? "";
+      let content =
+        typeof readResult.content === "string" ? readResult.content : "";
 
       // Enforce line limit on result (in case backend returns more)
       const lines = content.split("\n");

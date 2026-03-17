@@ -24,6 +24,7 @@ import {
   getMimeType,
   globSearchFiles,
   grepMatchesFromFiles,
+  isFileDataBinary,
   isFileDataV1,
   isTextMimeType,
   migrateToFileDataV2,
@@ -96,7 +97,9 @@ export class StateBackend implements BackendProtocolV2 {
       // This is a file directly in the current directory
       const size = isFileDataV1(fd)
         ? fd.content.join("\n").length
-        : fd.content.length;
+        : isFileDataBinary(fd)
+          ? fd.content.byteLength
+          : fd.content.length;
       infos.push({
         path: k,
         is_dir: false,
@@ -146,6 +149,11 @@ export class StateBackend implements BackendProtocolV2 {
     }
 
     // apply pagination logic for text data
+    if (typeof fileDataV2.content !== "string") {
+      return {
+        error: `File '${filePath}' has binary content but text MIME type`,
+      };
+    }
     const lines = fileDataV2.content.split("\n");
     const selected = lines.slice(offset, offset + limit);
     return { content: selected.join("\n"), mimeType: fileDataV2.mimeType };
@@ -263,7 +271,9 @@ export class StateBackend implements BackendProtocolV2 {
       const size = fd
         ? isFileDataV1(fd)
           ? fd.content.join("\n").length
-          : fd.content.length
+          : isFileDataBinary(fd)
+            ? fd.content.byteLength
+            : fd.content.length
         : 0;
       infos.push({
         path: p,
@@ -337,15 +347,13 @@ export class StateBackend implements BackendProtocolV2 {
         continue;
       }
 
-      const contentStr = fileDataToString(fileData);
       const fileDataV2 = migrateToFileDataV2(fileData, path);
 
-      if (!isTextMimeType(fileDataV2.mimeType)) {
-        const content = Buffer.from(contentStr, "base64");
+      if (typeof fileDataV2.content === "string") {
+        const content = new TextEncoder().encode(fileDataV2.content);
         responses.push({ path, content, error: null });
       } else {
-        const content = new TextEncoder().encode(contentStr);
-        responses.push({ path, content, error: null });
+        responses.push({ path, content: fileDataV2.content, error: null });
       }
     }
 
