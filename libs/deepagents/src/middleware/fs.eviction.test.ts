@@ -359,7 +359,7 @@ describe("read_file multimodal content blocks", () => {
     expect(Array.isArray(result)).toBe(true);
     expect(result[0].type).toBe("image");
     expect(result[0].mimeType).toBe("image/png");
-    expect(result[0].data).toEqual(binaryData);
+    expect(result[0].data).toBe(Buffer.from(binaryData).toString("base64"));
   });
 
   it("should return an image content block for .jpg files", async () => {
@@ -384,7 +384,7 @@ describe("read_file multimodal content blocks", () => {
     expect(result[0].mimeType).toBe("image/jpeg");
   });
 
-  it("should return an audio content block for .mp3 files", async () => {
+  it("should return a text fallback for .mp3 files", async () => {
     const binaryData = new Uint8Array([0x49, 0x44, 0x33, 0x04]);
     const files = { "/audio.mp3": createFileData(binaryData, "audio/mpeg") };
     const { stateAndStore } = setupStateWithFiles(files);
@@ -403,12 +403,12 @@ describe("read_file multimodal content blocks", () => {
     );
 
     expect(Array.isArray(result)).toBe(true);
-    expect(result[0].type).toBe("audio");
-    expect(result[0].mimeType).toBe("audio/mpeg");
-    expect(result[0].data).toEqual(binaryData);
+    expect(result[0].type).toBe("text");
+    expect(result[0].text).toContain("audio/mpeg");
+    expect(result[0].text).toContain("cannot be displayed inline");
   });
 
-  it("should return a video content block for .mp4 files", async () => {
+  it("should return a text fallback for .mp4 files", async () => {
     const binaryData = new Uint8Array([
       0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70,
     ]);
@@ -429,9 +429,9 @@ describe("read_file multimodal content blocks", () => {
     );
 
     expect(Array.isArray(result)).toBe(true);
-    expect(result[0].type).toBe("video");
-    expect(result[0].mimeType).toBe("video/mp4");
-    expect(result[0].data).toEqual(binaryData);
+    expect(result[0].type).toBe("text");
+    expect(result[0].text).toContain("video/mp4");
+    expect(result[0].text).toContain("cannot be displayed inline");
   });
 
   it("should return a file content block for .pdf files", async () => {
@@ -459,7 +459,7 @@ describe("read_file multimodal content blocks", () => {
     expect(Array.isArray(result)).toBe(true);
     expect(result[0].type).toBe("file");
     expect(result[0].mimeType).toBe("application/pdf");
-    expect(result[0].data).toEqual(binaryData);
+    expect(result[0].data).toBe(Buffer.from(binaryData).toString("base64"));
   });
 
   it("should return a text content block with line numbers for text files", async () => {
@@ -534,7 +534,7 @@ describe("read_file multimodal content blocks", () => {
     );
 
     expect(result[0].type).toBe("image");
-    expect(result[0].data).toEqual(undersizeData);
+    expect(typeof result[0].data).toBe("string");
   });
 
   it("should return an error text content block for missing files", async () => {
