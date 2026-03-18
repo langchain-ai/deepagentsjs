@@ -1,4 +1,9 @@
-import { Command, getCurrentTaskInput } from "@langchain/langgraph";
+import {
+  Command,
+  getCurrentTaskInput,
+  ReducedValue,
+  StateSchema,
+} from "@langchain/langgraph";
 import { Client, type DefaultValues, type Run } from "@langchain/langgraph-sdk";
 import { createMiddleware, tool, ToolMessage, SystemMessage } from "langchain";
 import { z } from "zod/v4";
@@ -94,12 +99,29 @@ interface CheckResult {
  * Used by the {@link ReducedValue} in the state schema so that LangGraph
  * can validate and serialize job records stored in `asyncSubagentJobs`.
  */
-const AsyncSubAgentJobSchema = z.object({
+const AsyncSubagentJobSchema = z.object({
   jobId: z.string(),
   agentName: z.string(),
   threadId: z.string(),
   runId: z.string(),
   status: z.string(),
+});
+
+/**
+ * State schema for the async subagent middleware.
+ *
+ * Declares `asyncSubagentJobs` as a reduced state channel so that individual
+ * tool updates (launch, check, update, cancel, list) merge into the existing
+ * jobs dict rather than replacing it wholesale.
+ */
+const AsyncSubagentStateSchema = new StateSchema({
+  asyncSubagentJobs: new ReducedValue(
+    z.record(z.string(), AsyncSubagentJobSchema).default(() => ({})),
+    {
+      inputSchema: z.record(z.string(), AsyncSubagentJobSchema).optional(),
+      reducer: asyncSubagentJobsReducer,
+    },
+  ),
 });
 
 /**
@@ -393,7 +415,7 @@ export function buildLaunchTool(
         const client = clients.getClient(input.agentName);
         const thread = await client.threads.create();
         const run = await client.runs.create(thread.thread_id, spec.graphId, {
-          input: { message: [{ role: "user", content: input.description }] },
+          input: { messages: [{ role: "user", content: input.description }] },
         });
 
         const jobId = thread.thread_id;
@@ -779,7 +801,7 @@ export function createAsyncSubagentMiddleware(
 
   return createMiddleware({
     name: "asyncSubagentMiddleware",
-    stateSchema: AsyncSubAgentJobSchema,
+    stateSchema: AsyncSubagentStateSchema,
     tools,
     wrapModelCall: async (request, handler) => {
       if (fullSystemPrompt !== null) {
