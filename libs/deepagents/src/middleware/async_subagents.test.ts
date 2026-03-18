@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import { Client } from "@langchain/langgraph-sdk";
 import { ToolMessage } from "@langchain/core/messages";
@@ -9,6 +9,8 @@ import {
   buildCheckTool,
   buildUpdateTool,
   buildCancelTool,
+  buildListTool,
+  createAsyncSubagentMiddleware,
   ClientCache,
   ASYNC_TASK_SYSTEM_PROMPT,
   TERMINAL_STATUSES,
@@ -116,14 +118,14 @@ describe("asyncSubagentJobsReducer", () => {
 describe("TERMINAL_STATUSES", () => {
   it.each(["cancelled", "success", "error", "timeout", "interrupted"])(
     "should include '%s'",
-    (status) => {
+    (status: AsyncSubagentStatus) => {
       expect(TERMINAL_STATUSES.has(status)).toBe(true);
     },
   );
 
   it.each(["running", "pending", "queued"])(
     "should NOT include '%s'",
-    (status) => {
+    (status: AsyncSubagentStatus) => {
       expect(TERMINAL_STATUSES.has(status)).toBe(false);
     },
   );
@@ -234,10 +236,8 @@ describe("ClientCache", () => {
   });
 
   it("should add x-auth-scheme: langsmith header by default", () => {
-    const constructorSpy = vi.spyOn(Client.prototype, "constructor" as any);
-    // We can't easily inspect the headers passed to Client constructor,
-    // so we verify indirectly: agents with and without x-auth-scheme
-    // explicitly set should produce the same cache key (same Client).
+    // Verified indirectly: agents with and without x-auth-scheme explicitly
+    // set should produce the same resolved headers → same cache key → same Client.
     const agents = {
       withHeader: makeAgent({
         name: "withHeader",
@@ -253,7 +253,6 @@ describe("ClientCache", () => {
     const client2 = cache.getClient("withoutHeader");
     // Same resolved headers → same cache key → same Client
     expect(client1).toBe(client2);
-    constructorSpy.mockRestore();
   });
 
   it("should not overwrite a custom x-auth-scheme header", () => {
@@ -393,7 +392,7 @@ describe("buildLaunchTool", () => {
       "research_graph",
       expect.objectContaining({
         input: {
-          message: [{ role: "user", content: "analyze the data" }],
+          messages: [{ role: "user", content: "analyze the data" }],
         },
       }),
     );
@@ -819,5 +818,399 @@ describe("buildCancelTool", () => {
     expect(result).toBeInstanceOf(ToolMessage);
     expect((result as ToolMessage).content).toContain("Failed to cancel run");
     expect((result as ToolMessage).content).toContain("permission denied");
+  });
+});
+
+// ─── buildListTool ───
+
+describe("buildListTool", () => {
+  const agentMap = { researcher: makeAgent() };
+  const toolCallId = "call-list-1";
+  const config = { toolCall: { id: toolCallId } } as any;
+  const mockGetCurrentTaskInput = vi.mocked(getCurrentTaskInput);
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("should return a string when state has no jobs", async () => {
+    const { cache } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({ asyncSubagentJobs: {} });
+
+    const listTool = buildListTool(cache);
+    const result = await listTool.invoke({ statusFilter: undefined }, config);
+
+    expect(result).toBeInstanceOf(ToolMessage);
+    expect((result as ToolMessage).content).toContain(
+      "No async subagent jobs tracked",
+    );
+  });
+
+  it("should return a string when asyncSubagentJobs is undefined", async () => {
+    const { cache } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({});
+
+    const listTool = buildListTool(cache);
+    const result = await listTool.invoke({ statusFilter: undefined }, config);
+
+    expect(result).toBeInstanceOf(ToolMessage);
+    expect((result as ToolMessage).content).toContain(
+      "No async subagent jobs tracked",
+    );
+  });
+
+  it("should return a string when the status filter matches no jobs", async () => {
+    const runningJob = makeJob({ status: "running" });
+    const { cache, runsGet } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubagentJobs: { [runningJob.jobId]: runningJob },
+    });
+
+    const listTool = buildListTool(cache);
+    // Filter for "success" but the only job is "running" → no match
+    const result = await listTool.invoke({ statusFilter: "success" }, config);
+
+    expect(result).toBeInstanceOf(ToolMessage);
+    expect((result as ToolMessage).content).toContain(
+      "No async subagent jobs tracked",
+    );
+    // Filtering happens before the SDK call — no live fetch needed
+    expect(runsGet).not.toHaveBeenCalled();
+  });
+
+  it("should return a Command listing all jobs when no filter is provided", async () => {
+    const job1 = makeJob({ jobId: "t-1", threadId: "t-1", runId: "r-1" });
+    const job2 = makeJob({ jobId: "t-2", threadId: "t-2", runId: "r-2" });
+    const { cache, runsGet } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubagentJobs: { [job1.jobId]: job1, [job2.jobId]: job2 },
+    });
+    runsGet.mockResolvedValue({ status: "running" });
+
+    const listTool = buildListTool(cache);
+    const result = await listTool.invoke({ statusFilter: undefined }, config);
+
+    expect(result).toBeInstanceOf(Command);
+    const messages = ((result as Command).update as Record<string, unknown>)
+      .messages as ToolMessage[];
+    expect(messages[0].content).toContain("2 tracked job(s)");
+  });
+
+  it("should return all jobs when statusFilter is 'all'", async () => {
+    const job1 = makeJob({ jobId: "t-1", threadId: "t-1", status: "running" });
+    const job2 = makeJob({ jobId: "t-2", threadId: "t-2", status: "success" });
+    const { cache, runsGet } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubagentJobs: { [job1.jobId]: job1, [job2.jobId]: job2 },
+    });
+    runsGet.mockResolvedValue({ status: "running" });
+
+    const listTool = buildListTool(cache);
+    const result = await listTool.invoke({ statusFilter: "all" }, config);
+
+    expect(result).toBeInstanceOf(Command);
+    const messages = ((result as Command).update as Record<string, unknown>)
+      .messages as ToolMessage[];
+    expect(messages[0].content).toContain("2 tracked job(s)");
+  });
+
+  it("should filter jobs by cached status", async () => {
+    const runningJob = makeJob({
+      jobId: "t-run",
+      threadId: "t-run",
+      status: "running",
+    });
+    const successJob = makeJob({
+      jobId: "t-ok",
+      threadId: "t-ok",
+      status: "success",
+    });
+    const { cache, runsGet } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubagentJobs: {
+        [runningJob.jobId]: runningJob,
+        [successJob.jobId]: successJob,
+      },
+    });
+    runsGet.mockResolvedValue({ status: "running" });
+
+    const listTool = buildListTool(cache);
+    const result = await listTool.invoke({ statusFilter: "running" }, config);
+
+    expect(result).toBeInstanceOf(Command);
+    const messages = ((result as Command).update as Record<string, unknown>)
+      .messages as ToolMessage[];
+    expect(messages[0].content).toContain("1 tracked job(s)");
+    expect(messages[0].content).toContain("t-run");
+    expect(messages[0].content).not.toContain("t-ok");
+  });
+
+  it("should fetch live status from the server for non-terminal jobs", async () => {
+    const job = makeJob({ status: "running" });
+    const { cache, runsGet } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubagentJobs: { [job.jobId]: job },
+    });
+    runsGet.mockResolvedValue({ run_id: job.runId, status: "success" });
+
+    const listTool = buildListTool(cache);
+    const result = await listTool.invoke({ statusFilter: undefined }, config);
+
+    expect(runsGet).toHaveBeenCalledWith(job.threadId, job.runId);
+    const messages = ((result as Command).update as Record<string, unknown>)
+      .messages as ToolMessage[];
+    // The live status should appear in the formatted output
+    expect(messages[0].content).toContain("success");
+  });
+
+  it.each(["success", "cancelled", "error", "timeout", "interrupted"] as const)(
+    "should skip SDK call for terminal status '%s'",
+    async (status) => {
+      const job = makeJob({
+        jobId: `t-${status}`,
+        threadId: `t-${status}`,
+        status,
+      });
+      const { cache, runsGet } = createMockClientCache(agentMap);
+      mockGetCurrentTaskInput.mockReturnValue({
+        asyncSubagentJobs: { [job.jobId]: job },
+      });
+
+      const listTool = buildListTool(cache);
+      await listTool.invoke({ statusFilter: undefined }, config);
+
+      expect(runsGet).not.toHaveBeenCalled();
+    },
+  );
+
+  it("should fall back to cached status when runsGet throws", async () => {
+    const job = makeJob({ status: "running" });
+    const { cache, runsGet } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubagentJobs: { [job.jobId]: job },
+    });
+    runsGet.mockRejectedValue(new Error("connection refused"));
+
+    const listTool = buildListTool(cache);
+    const result = await listTool.invoke({ statusFilter: undefined }, config);
+
+    expect(result).toBeInstanceOf(Command);
+    const updatedJobs = ((result as Command).update as Record<string, unknown>)
+      .asyncSubagentJobs as Record<string, AsyncSubagentJob>;
+    // Falls back to cached "running" status
+    expect(updatedJobs[job.jobId].status).toBe("running");
+  });
+
+  it("should update asyncSubagentJobs in state with live statuses", async () => {
+    const job = makeJob({ status: "running" });
+    const { cache, runsGet } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubagentJobs: { [job.jobId]: job },
+    });
+    runsGet.mockResolvedValue({ run_id: job.runId, status: "success" });
+
+    const listTool = buildListTool(cache);
+    const result = await listTool.invoke({ statusFilter: undefined }, config);
+
+    const updatedJobs = ((result as Command).update as Record<string, unknown>)
+      .asyncSubagentJobs as Record<string, AsyncSubagentJob>;
+    expect(updatedJobs[job.jobId].status).toBe("success");
+    expect(updatedJobs[job.jobId].jobId).toBe(job.jobId);
+    expect(updatedJobs[job.jobId].agentName).toBe(job.agentName);
+    expect(updatedJobs[job.jobId].threadId).toBe(job.threadId);
+    expect(updatedJobs[job.jobId].runId).toBe(job.runId);
+  });
+
+  it("should format each entry with jobId, agentName, and status", async () => {
+    const job = makeJob({ status: "running" });
+    const { cache, runsGet } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubagentJobs: { [job.jobId]: job },
+    });
+    runsGet.mockResolvedValue({ run_id: job.runId, status: "running" });
+
+    const listTool = buildListTool(cache);
+    const result = await listTool.invoke({ statusFilter: undefined }, config);
+
+    const messages = ((result as Command).update as Record<string, unknown>)
+      .messages as ToolMessage[];
+    const text = messages[0].content as string;
+    expect(text).toContain(`jobId: ${job.jobId}`);
+    expect(text).toContain(`agent: ${job.agentName}`);
+    expect(text).toContain(`status: running`);
+  });
+
+  it("should use the correct tool_call_id from config", async () => {
+    const job = makeJob({ status: "success" });
+    const { cache } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubagentJobs: { [job.jobId]: job },
+    });
+
+    const listTool = buildListTool(cache);
+    const result = await listTool.invoke({ statusFilter: undefined }, config);
+
+    const messages = ((result as Command).update as Record<string, unknown>)
+      .messages as ToolMessage[];
+    expect(messages[0].tool_call_id).toBe(toolCallId);
+  });
+
+  it("should fetch all job statuses in parallel", async () => {
+    const job1 = makeJob({
+      jobId: "t-1",
+      threadId: "t-1",
+      runId: "r-1",
+      status: "running",
+    });
+    const job2 = makeJob({
+      jobId: "t-2",
+      threadId: "t-2",
+      runId: "r-2",
+      status: "running",
+    });
+    const { cache, runsGet } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubagentJobs: { [job1.jobId]: job1, [job2.jobId]: job2 },
+    });
+    runsGet.mockResolvedValue({ status: "running" });
+
+    const listTool = buildListTool(cache);
+    await listTool.invoke({ statusFilter: undefined }, config);
+
+    // Both jobs should have been fetched
+    expect(runsGet).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ─── createAsyncSubagentMiddleware ───
+
+describe("createAsyncSubagentMiddleware", () => {
+  it("should throw when asyncSubagents array is empty", () => {
+    expect(() => createAsyncSubagentMiddleware({ asyncSubagents: [] })).toThrow(
+      "At least one async subagent must be specified",
+    );
+  });
+
+  it("should throw when duplicate agent names are provided", () => {
+    expect(() =>
+      createAsyncSubagentMiddleware({
+        asyncSubagents: [makeAgent(), makeAgent()],
+      }),
+    ).toThrow("Duplicate async subagent names: researcher");
+  });
+
+  it("should report all unique duplicate names in the error", () => {
+    expect(() =>
+      createAsyncSubagentMiddleware({
+        asyncSubagents: [
+          makeAgent({ name: "alpha" }),
+          makeAgent({ name: "beta" }),
+          makeAgent({ name: "alpha" }),
+          makeAgent({ name: "beta" }),
+        ],
+      }),
+    ).toThrow("Duplicate async subagent names: alpha, beta");
+  });
+
+  it("should return a middleware object for a valid config", () => {
+    const middleware = createAsyncSubagentMiddleware({
+      asyncSubagents: [makeAgent()],
+    });
+    expect(middleware).toBeDefined();
+  });
+
+  it("should have name 'asyncSubagentMiddleware'", () => {
+    const middleware = createAsyncSubagentMiddleware({
+      asyncSubagents: [makeAgent()],
+    });
+    expect(middleware.name).toBe("asyncSubagentMiddleware");
+  });
+
+  it("should have exactly 5 tools", () => {
+    const middleware = createAsyncSubagentMiddleware({
+      asyncSubagents: [makeAgent()],
+    });
+    expect(middleware.tools).toHaveLength(5);
+  });
+
+  it("should include all 5 async subagent tool names", () => {
+    const middleware = createAsyncSubagentMiddleware({
+      asyncSubagents: [makeAgent()],
+    });
+    const toolNames = (middleware.tools ?? []).map((t) => t.name);
+    expect(toolNames).toContain("launch_async_subagent");
+    expect(toolNames).toContain("check_async_subagent");
+    expect(toolNames).toContain("update_async_subagent");
+    expect(toolNames).toContain("cancel_async_subagent");
+    expect(toolNames).toContain("list_async_subagent_jobs");
+  });
+
+  it("should inject the agent name and description into the launch tool", () => {
+    const agent = makeAgent({
+      name: "my-worker",
+      description: "Does hard work",
+    });
+    const middleware = createAsyncSubagentMiddleware({
+      asyncSubagents: [agent],
+    });
+    const launchTool = (middleware.tools ?? []).find(
+      (t) => t.name === "launch_async_subagent",
+    );
+    expect(launchTool?.description).toContain("my-worker");
+    expect(launchTool?.description).toContain("Does hard work");
+  });
+
+  it("should include all agent names in the launch tool description for multiple agents", () => {
+    const middleware = createAsyncSubagentMiddleware({
+      asyncSubagents: [
+        makeAgent({ name: "researcher" }),
+        makeAgent({ name: "analyst", graphId: "analyst_graph" }),
+        makeAgent({ name: "writer", graphId: "writer_graph" }),
+      ],
+    });
+    const launchTool = (middleware.tools ?? []).find(
+      (t) => t.name === "launch_async_subagent",
+    );
+    expect(launchTool?.description).toContain("researcher");
+    expect(launchTool?.description).toContain("analyst");
+    expect(launchTool?.description).toContain("writer");
+  });
+
+  it("should accept a custom system prompt", () => {
+    const middleware = createAsyncSubagentMiddleware({
+      asyncSubagents: [makeAgent()],
+      systemPrompt: "Custom async subagent instructions",
+    });
+    expect(middleware).toBeDefined();
+    expect(middleware.name).toBe("asyncSubagentMiddleware");
+  });
+
+  it("should accept empty string to disable system prompt injection", () => {
+    // Empty string is falsy → fullSystemPrompt becomes null → no injection
+    const middleware = createAsyncSubagentMiddleware({
+      asyncSubagents: [makeAgent()],
+      systemPrompt: "",
+    });
+    expect(middleware).toBeDefined();
+    expect(middleware.name).toBe("asyncSubagentMiddleware");
+  });
+
+  it("should create independent middleware instances for separate calls", () => {
+    const m1 = createAsyncSubagentMiddleware({
+      asyncSubagents: [makeAgent({ name: "agent-a" })],
+    });
+    const m2 = createAsyncSubagentMiddleware({
+      asyncSubagents: [makeAgent({ name: "agent-b" })],
+    });
+    const launchDesc1 = (m1.tools ?? []).find(
+      (t) => t.name === "launch_async_subagent",
+    )?.description;
+    const launchDesc2 = (m2.tools ?? []).find(
+      (t) => t.name === "launch_async_subagent",
+    )?.description;
+    expect(launchDesc1).toContain("agent-a");
+    expect(launchDesc1).not.toContain("agent-b");
+    expect(launchDesc2).toContain("agent-b");
+    expect(launchDesc2).not.toContain("agent-a");
   });
 });

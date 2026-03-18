@@ -12,6 +12,7 @@ import {
   createFilesystemMiddleware,
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
+  createAsyncSubagentMiddleware,
 } from "../index.js";
 
 import { SAMPLE_MODEL } from "../testing/utils.js";
@@ -390,5 +391,70 @@ describe("PatchToolCallsMiddleware", () => {
     expect(updatedMessages[6].type).toBe("tool");
     expect((updatedMessages[6] as any).tool_call_id).toBe("456");
     expect(updatedMessages[7]).toBe(inputMessages[5]);
+  });
+});
+
+describe("AsyncSubagentMiddleware", () => {
+  const sampleAgent = {
+    name: "researcher",
+    description: "A research agent",
+    graphId: "research_graph",
+    url: "https://example.langsmith.dev",
+  };
+
+  it("should be importable and callable from the package index", () => {
+    expect(createAsyncSubagentMiddleware).toBeDefined();
+    expect(typeof createAsyncSubagentMiddleware).toBe("function");
+  });
+
+  it("should add asyncSubagentJobs channel to the agent graph", () => {
+    const middleware = createAsyncSubagentMiddleware({
+      asyncSubagents: [sampleAgent],
+    });
+    const agent = createAgent({
+      model: SAMPLE_MODEL,
+      middleware: [middleware],
+      tools: [],
+    });
+    const channels = Object.keys((agent as any).graph?.channels || {});
+    expect(channels).toContain("asyncSubagentJobs");
+  });
+
+  it("should register all 5 async subagent tools on the agent", () => {
+    const middleware = createAsyncSubagentMiddleware({
+      asyncSubagents: [sampleAgent],
+    });
+    const agent = createAgent({
+      model: SAMPLE_MODEL,
+      middleware: [middleware],
+      tools: [],
+    });
+    const tools = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
+    const toolNames = tools.map((t: any) => t.name);
+    expect(toolNames).toContain("launch_async_subagent");
+    expect(toolNames).toContain("check_async_subagent");
+    expect(toolNames).toContain("update_async_subagent");
+    expect(toolNames).toContain("cancel_async_subagent");
+    expect(toolNames).toContain("list_async_subagent_jobs");
+  });
+
+  it("should compose with other middleware without conflicts", () => {
+    const asyncMiddleware = createAsyncSubagentMiddleware({
+      asyncSubagents: [sampleAgent],
+    });
+    const fsMiddleware = createFilesystemMiddleware();
+    const agent = createAgent({
+      model: SAMPLE_MODEL,
+      middleware: [asyncMiddleware, fsMiddleware],
+      tools: [],
+    });
+    const channels = Object.keys((agent as any).graph?.channels || {});
+    expect(channels).toContain("asyncSubagentJobs");
+    expect(channels).toContain("files");
+
+    const tools = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
+    const toolNames = tools.map((t: any) => t.name);
+    expect(toolNames).toContain("launch_async_subagent");
+    expect(toolNames).toContain("ls");
   });
 });
