@@ -53,12 +53,11 @@ export {
   summarizationMiddleware,
 } from "./summarization.js";
 
-// Async SubAgent middleware
+// Async subagehnt middleware
 export {
-  createAsyncSubAgentMiddleware,
-  type AsyncSubAgentMiddlewareOptions,
-  type AsyncSubAgent,
-  type AsyncTask,
-  type AsyncTaskStatus,
+  createAsyncSubagentMiddleware,
+  type AsyncSubagentMiddlewareOptions,
+  type AsyncSubagent,
+  type AsyncSubagentJob,
   ASYNC_TASK_SYSTEM_PROMPT,
 } from "./async_subagents.js";

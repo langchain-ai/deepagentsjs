@@ -22,11 +22,11 @@ import type {
   BaseStore,
 } from "@langchain/langgraph-checkpoint";
 
-import type { AsyncSubAgent, SubAgent } from "./middleware/index.js";
-import type { AnyBackendProtocol } from "./backends/index.js";
+import type { AsyncSubagent, SubAgent } from "./middleware/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type { AnnotationRoot } from "@langchain/langgraph";
 import type { CompiledSubAgent } from "./middleware/subagents.js";
+import { AnyBackendProtocol } from "./backends/protocol.js";
 
 // LangChain uses AnyAnnotationRoot internally but doesn't export it
 // We use AnnotationRoot<any> as a compatible equivalent
@@ -446,7 +446,7 @@ export interface CreateDeepAgentParams<
    * @example
    * ```ts
    * const agent = createDeepAgent({
-   *   asyncSubAgents: [{
+   *   asyncSubagents: [{
    *     name: "researcher",
    *     description: "Research agent for deep analysis",
    *     url: "https://my-deployment.langsmith.dev",
@@ -455,5 +455,5 @@ export interface CreateDeepAgentParams<
    * });
    * ```
    */
-  asyncSubAgents?: AsyncSubAgent[];
+  asyncSubagents?: AsyncSubagent[];
 }
