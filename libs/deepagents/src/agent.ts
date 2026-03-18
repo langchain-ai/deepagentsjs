@@ -22,6 +22,7 @@ import {
   createMemoryMiddleware,
   createSkillsMiddleware,
   type SubAgent,
+  createAsyncSubagentMiddleware,
 } from "./middleware/index.js";
 import { StateBackend } from "./backends/index.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
@@ -128,6 +129,7 @@ export function createDeepAgent<
     name,
     memory,
     skills,
+    asyncSubagents,
   } = params;
 
   const anthropicModel = isAnthropicModel(model);
@@ -327,6 +329,9 @@ export function createDeepAgent<
     ...memoryMiddlewareArray,
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
     ...(customMiddleware as unknown as AgentMiddleware[]),
+    ...(asyncSubagents && asyncSubagents.length > 0
+      ? [createAsyncSubagentMiddleware({ asyncSubagents })]
+      : []),
   ];
 
   const agent = createAgent({

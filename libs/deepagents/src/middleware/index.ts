@@ -52,3 +52,12 @@ export {
   // Re-export base summarization middleware from langchain for users who don't need backend offloading
   summarizationMiddleware,
 } from "./summarization.js";
+
+// Async subagehnt middleware
+export {
+  createAsyncSubagentMiddleware,
+  type AsyncSubagentMiddlewareOptions,
+  type AsyncSubagent,
+  type AsyncSubagentJob,
+  ASYNC_TASK_SYSTEM_PROMPT,
+} from "./async_subagents.js";

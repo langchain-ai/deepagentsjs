@@ -22,11 +22,11 @@ import type {
   BaseStore,
 } from "@langchain/langgraph-checkpoint";
 
-import type { SubAgent } from "./middleware/index.js";
-import type { AnyBackendProtocol } from "./backends/index.js";
+import type { AsyncSubagent, SubAgent } from "./middleware/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type { AnnotationRoot } from "@langchain/langgraph";
 import type { CompiledSubAgent } from "./middleware/subagents.js";
+import { AnyBackendProtocol } from "./backends/protocol.js";
 
 // LangChain uses AnyAnnotationRoot internally but doesn't export it
 // We use AnnotationRoot<any> as a compatible equivalent
@@ -435,4 +435,25 @@ export interface CreateDeepAgentParams<
    * ```
    */
   skills?: string[];
+
+  /**
+   * Optional list of async subagent specifications for background jobs on
+   * remote LangGraph servers.
+   *
+   * Async subagents connect to LangGraph deployments via the LangGraph SDK.
+   * They run as background jobs that the main agent can monitor and update.
+   *
+   * @example
+   * ```ts
+   * const agent = createDeepAgent({
+   *   asyncSubagents: [{
+   *     name: "researcher",
+   *     description: "Research agent for deep analysis",
+   *     url: "https://my-deployment.langsmith.dev",
+   *     graphId: "research_agent",
+   *   }],
+   * });
+   * ```
+   */
+  asyncSubagents?: AsyncSubagent[];
 }

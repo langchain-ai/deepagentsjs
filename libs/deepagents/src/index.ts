@@ -43,6 +43,7 @@ export {
   createSummarizationMiddleware,
   computeSummarizationDefaults,
   createMemoryMiddleware,
+  createAsyncSubagentMiddleware,
   // Skills middleware - matches Python's SkillsMiddleware interface
   createSkillsMiddleware,
   type SkillsMiddlewareOptions,
@@ -56,12 +57,17 @@ export {
   DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
   DEFAULT_SUBAGENT_PROMPT,
   TASK_SYSTEM_PROMPT,
+  // Async subagent constants
+  ASYNC_TASK_SYSTEM_PROMPT,
   // Other middleware types
   type FilesystemMiddlewareOptions,
   type SubAgentMiddlewareOptions,
   type MemoryMiddlewareOptions,
   type SubAgent,
   type CompiledSubAgent,
+  type AsyncSubagentMiddlewareOptions,
+  type AsyncSubagent,
+  type AsyncSubagentJob,
 } from "./middleware/index.js";
 
 // Export shared state values (similar to LangGraph's messagesValue pattern)
