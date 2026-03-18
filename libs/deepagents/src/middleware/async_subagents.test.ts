@@ -7,6 +7,8 @@ import {
   asyncSubagentJobsReducer,
   buildLaunchTool,
   buildCheckTool,
+  buildUpdateTool,
+  buildCancelTool,
   ClientCache,
   ASYNC_TASK_SYSTEM_PROMPT,
   TERMINAL_STATUSES,
@@ -298,14 +300,23 @@ function createMockClientCache(agentMap: Record<string, AsyncSubagent>) {
   const threadsCreate = vi.fn();
   const runsCreate = vi.fn();
   const runsGet = vi.fn();
+  const runsCancel = vi.fn();
   const threadsGetState = vi.fn();
 
   clientInstance.threads.create = threadsCreate;
   clientInstance.runs.create = runsCreate;
   clientInstance.runs.get = runsGet;
+  clientInstance.runs.cancel = runsCancel;
   clientInstance.threads.getState = threadsGetState;
 
-  return { cache, threadsCreate, runsCreate, runsGet, threadsGetState };
+  return {
+    cache,
+    threadsCreate,
+    runsCreate,
+    runsGet,
+    runsCancel,
+    threadsGetState,
+  };
 }
 
 describe("buildLaunchTool", () => {
@@ -619,5 +630,194 @@ describe("buildCheckTool", () => {
         .content as string,
     );
     expect(content.result).toBe("plain string result");
+  });
+});
+
+// ─── buildUpdateTool ───
+
+describe("buildUpdateTool", () => {
+  const agentMap = { researcher: makeAgent() };
+  const toolCallId = "call-update-1";
+  const config = { toolCall: { id: toolCallId } } as any;
+  const trackedJob = makeJob();
+  const mockGetCurrentTaskInput = vi.mocked(getCurrentTaskInput);
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("should return an error for an unknown job ID", async () => {
+    const { cache } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({ asyncSubagentJobs: {} });
+
+    const updateTool = buildUpdateTool(agentMap, cache);
+    const result = await updateTool.invoke(
+      { jobId: "unknown-id", message: "new instructions" },
+      config,
+    );
+
+    expect(result).toBeInstanceOf(ToolMessage);
+    expect((result as ToolMessage).content).toContain(
+      "No tracked job found for jobId",
+    );
+  });
+
+  it("should create a new run on the same thread and return a Command", async () => {
+    const newRunId = "run-updated";
+    const { cache, runsCreate } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubagentJobs: { [trackedJob.jobId]: trackedJob },
+    });
+    runsCreate.mockResolvedValue({ run_id: newRunId, status: "running" });
+
+    const updateTool = buildUpdateTool(agentMap, cache);
+    const result = await updateTool.invoke(
+      { jobId: trackedJob.jobId, message: "focus on quantum entanglement" },
+      config,
+    );
+
+    expect(result).toBeInstanceOf(Command);
+    const cmd = result as Command;
+    const update = cmd.update as Record<string, unknown>;
+
+    // Job should keep the same jobId but have a new runId
+    const jobs = update.asyncSubagentJobs as Record<string, AsyncSubagentJob>;
+    expect(jobs[trackedJob.jobId]).toEqual({
+      jobId: trackedJob.jobId,
+      agentName: trackedJob.agentName,
+      threadId: trackedJob.threadId,
+      runId: newRunId,
+      status: "running",
+    });
+
+    // Tool message should confirm the update
+    const messages = update.messages as ToolMessage[];
+    expect(messages[0].content).toContain(trackedJob.jobId);
+  });
+
+  it("should pass multitaskStrategy: interrupt to runs.create", async () => {
+    const { cache, runsCreate } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubagentJobs: { [trackedJob.jobId]: trackedJob },
+    });
+    runsCreate.mockResolvedValue({ run_id: "run-2", status: "running" });
+
+    const updateTool = buildUpdateTool(agentMap, cache);
+    await updateTool.invoke(
+      { jobId: trackedJob.jobId, message: "new instructions" },
+      config,
+    );
+
+    expect(runsCreate).toHaveBeenCalledWith(
+      trackedJob.threadId,
+      "research_graph",
+      expect.objectContaining({
+        multitaskStrategy: "interrupt",
+      }),
+    );
+  });
+
+  it("should return an error when the SDK throws", async () => {
+    const { cache, runsCreate } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubagentJobs: { [trackedJob.jobId]: trackedJob },
+    });
+    runsCreate.mockRejectedValue(new Error("server unavailable"));
+
+    const updateTool = buildUpdateTool(agentMap, cache);
+    const result = await updateTool.invoke(
+      { jobId: trackedJob.jobId, message: "new instructions" },
+      config,
+    );
+
+    expect(result).toBeInstanceOf(ToolMessage);
+    expect((result as ToolMessage).content).toContain(
+      "Failed to update async subagent",
+    );
+    expect((result as ToolMessage).content).toContain("server unavailable");
+  });
+});
+
+// ─── buildCancelTool ───
+
+describe("buildCancelTool", () => {
+  const agentMap = { researcher: makeAgent() };
+  const toolCallId = "call-cancel-1";
+  const config = { toolCall: { id: toolCallId } } as any;
+  const trackedJob = makeJob();
+  const mockGetCurrentTaskInput = vi.mocked(getCurrentTaskInput);
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("should return an error for an unknown job ID", async () => {
+    const { cache } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({ asyncSubagentJobs: {} });
+
+    const cancelTool = buildCancelTool(cache);
+    const result = await cancelTool.invoke({ jobId: "unknown-id" }, config);
+
+    expect(result).toBeInstanceOf(ToolMessage);
+    expect((result as ToolMessage).content).toContain(
+      "No tracked job found for jobId",
+    );
+  });
+
+  it("should cancel the run and return a Command with cancelled status", async () => {
+    const { cache, runsCancel } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubagentJobs: { [trackedJob.jobId]: trackedJob },
+    });
+    runsCancel.mockResolvedValue(undefined);
+
+    const cancelTool = buildCancelTool(cache);
+    const result = await cancelTool.invoke({ jobId: trackedJob.jobId }, config);
+
+    expect(result).toBeInstanceOf(Command);
+    const cmd = result as Command;
+    const update = cmd.update as Record<string, unknown>;
+
+    // Job status should be updated to cancelled
+    const jobs = update.asyncSubagentJobs as Record<string, AsyncSubagentJob>;
+    expect(jobs[trackedJob.jobId].status).toBe("cancelled");
+
+    // Should keep the same runId (cancel doesn't create a new run)
+    expect(jobs[trackedJob.jobId].runId).toBe(trackedJob.runId);
+
+    // Tool message should confirm cancellation
+    const messages = update.messages as ToolMessage[];
+    expect(messages[0].content).toContain(trackedJob.jobId);
+  });
+
+  it("should call runs.cancel with the correct thread and run IDs", async () => {
+    const { cache, runsCancel } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubagentJobs: { [trackedJob.jobId]: trackedJob },
+    });
+    runsCancel.mockResolvedValue(undefined);
+
+    const cancelTool = buildCancelTool(cache);
+    await cancelTool.invoke({ jobId: trackedJob.jobId }, config);
+
+    expect(runsCancel).toHaveBeenCalledWith(
+      trackedJob.threadId,
+      trackedJob.runId,
+    );
+  });
+
+  it("should return an error when the SDK throws", async () => {
+    const { cache, runsCancel } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubagentJobs: { [trackedJob.jobId]: trackedJob },
+    });
+    runsCancel.mockRejectedValue(new Error("permission denied"));
+
+    const cancelTool = buildCancelTool(cache);
+    const result = await cancelTool.invoke({ jobId: trackedJob.jobId }, config);
+
+    expect(result).toBeInstanceOf(ToolMessage);
+    expect((result as ToolMessage).content).toContain("Failed to cancel run");
+    expect((result as ToolMessage).content).toContain("permission denied");
   });
 });
