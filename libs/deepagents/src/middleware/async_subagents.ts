@@ -9,35 +9,39 @@ import { createMiddleware, tool, ToolMessage, SystemMessage } from "langchain";
 import { z } from "zod/v4";
 
 /**
- * Specification for an async subagent running on a remote LangGraph server.
+ * Specification for an async SubAgent running on a remote LangGraph server.
  *
- * Async subagents connect to LangGraph deployments via the LangGraph SDK.
+ * Async SubAgents connect to LangGraph deployments via the LangGraph SDK.
  * They run as background jobs that the main agent can monitor and update.
  *
  * Authentication is handled via environment variables (`LANGGRAPH_API_KEY`,
  * `LANGSMITH_API_KEY`, or `LANGCHAIN_API_KEY`), which the LangGraph SDK
  * reads automatically.
  */
-export interface AsyncSubagent {
-  /** Unique identifier for the async subagent. */
+export interface AsyncSubAgent {
+  /** Unique identifier for the async SubAgent. */
   name: string;
-  /** What this subagent does. The main agent uses this to decide when to delegate. */
+
+  /** What this SubAgent does. The main agent uses this to decide when to delegate. */
   description: string;
+
   /** The graph name or assistant ID on the remote server. */
   graphId: string;
+
   /** URL of the LangGraph server. Omit for local ASGI transport. */
   url?: string;
+
   /** Additional headers to include in requests to the remote server. */
   headers?: Record<string, string>;
 }
 
 /**
- * Possible statuses for an async subagent job.
+ * Possible statuses for an async SubAgent job.
  *
  * Statuses set by the middleware tools: `"running"`, `"success"`, `"error"`, `"cancelled"`.
  * Statuses that may be returned by the LangGraph Platform: `"timeout"`, `"interrupted"`.
  */
-export type AsyncSubagentStatus =
+export type AsyncSubAgentStatus =
   | "running"
   | "success"
   | "error"
@@ -46,60 +50,67 @@ export type AsyncSubagentStatus =
   | "interrupted";
 
 /**
- * A tracked async subagent job persisted in agent state.
+ * A tracked async SubAgent job persisted in agent state.
  *
  * Each job maps to a single thread + run on a remote LangGraph server.
  * The `jobId` is the same as `threadId`, so it can be used to look up
  * the thread directly via the SDK.
  */
-export interface AsyncSubagentJob {
+export interface AsyncSubAgentJob {
   /** Unique identifier for the job (same as thread id). */
   jobId: string;
-  /** Name of the async subagent type that is running. */
+
+  /** Name of the async SubAgent type that is running. */
   agentName: string;
+
   /** LangGraph thread ID for the remote run. */
   threadId: string;
+
   /** LangGraph run ID for the current execution on the thread. */
   runId: string;
+
   /** Current job status. */
-  status: AsyncSubagentStatus;
+  status: AsyncSubAgentStatus;
 }
 
 /**
- * Shape of the async subagent state channel.
+ * Shape of the async SubAgent state channel.
  *
  * Used as the generic parameter for `getCurrentTaskInput()` so tools
- * get typed access to `asyncSubagentJobs` without casting.
+ * get typed access to `asyncSubAgentJobs` without casting.
  */
-interface AsyncSubagentState {
-  /** All tracked async subagent jobs, keyed by job ID. */
-  asyncSubagentJobs?: Record<string, AsyncSubagentJob>;
+interface AsyncSubAgentState {
+  /** All tracked async SubAgent jobs, keyed by job ID. */
+  asyncSubAgentJobs?: Record<string, AsyncSubAgentJob>;
 }
 
 /**
- * Result of checking an async subagent's run status.
+ * Result of checking an async SubAgent's run status.
  *
  * Returned by `buildCheckResult` and used by `buildCheckTool`
  * to construct the `Command` update.
  */
 interface CheckResult {
   /** Current status of the run. */
-  status: AsyncSubagentStatus;
+  status: AsyncSubAgentStatus;
+
   /** The thread ID on the remote server. */
   threadId: string;
-  /** The last message content from the subagent, if the run succeeded. */
+
+  /** The last message content from the SubAgent, if the run succeeded. */
   result?: string;
+
   /** Error description, if the run errored. */
   error?: string;
 }
 
 /**
- * Zod schema for {@link AsyncSubagentJob}.
+ * Zod schema for {@link AsyncSubAgentJob}.
  *
  * Used by the {@link ReducedValue} in the state schema so that LangGraph
- * can validate and serialize job records stored in `asyncSubagentJobs`.
+ * can validate and serialize job records stored in `asyncSubAgentJobs`.
  */
-const AsyncSubagentJobSchema = z.object({
+const AsyncSubAgentJobSchema = z.object({
   jobId: z.string(),
   agentName: z.string(),
   threadId: z.string(),
@@ -108,24 +119,24 @@ const AsyncSubagentJobSchema = z.object({
 });
 
 /**
- * State schema for the async subagent middleware.
+ * State schema for the async SubAgent middleware.
  *
- * Declares `asyncSubagentJobs` as a reduced state channel so that individual
+ * Declares `asyncSubAgentJobs` as a reduced state channel so that individual
  * tool updates (launch, check, update, cancel, list) merge into the existing
  * jobs dict rather than replacing it wholesale.
  */
-const AsyncSubagentStateSchema = new StateSchema({
-  asyncSubagentJobs: new ReducedValue(
-    z.record(z.string(), AsyncSubagentJobSchema).default(() => ({})),
+const AsyncSubAgentStateSchema = new StateSchema({
+  asyncSubAgentJobs: new ReducedValue(
+    z.record(z.string(), AsyncSubAgentJobSchema).default(() => ({})),
     {
-      inputSchema: z.record(z.string(), AsyncSubagentJobSchema).optional(),
-      reducer: asyncSubagentJobsReducer,
+      inputSchema: z.record(z.string(), AsyncSubAgentJobSchema).optional(),
+      reducer: asyncSubAgentJobsReducer,
     },
   ),
 });
 
 /**
- * Reducer for the `asyncSubagentJobs` state channel.
+ * Reducer for the `asyncSubAgentJobs` state channel.
  *
  * Merges job updates into the existing jobs dict using shallow spread.
  * This allows individual tools to update a single job without overwriting
@@ -135,73 +146,73 @@ const AsyncSubagentStateSchema = new StateSchema({
  * @param update - New or updated job entries to merge in.
  * @returns Merged jobs dict.
  */
-export function asyncSubagentJobsReducer(
-  existing?: Record<string, AsyncSubagentJob>,
-  update?: Record<string, AsyncSubagentJob>,
-): Record<string, AsyncSubagentJob> {
+export function asyncSubAgentJobsReducer(
+  existing?: Record<string, AsyncSubAgentJob>,
+  update?: Record<string, AsyncSubAgentJob>,
+): Record<string, AsyncSubAgentJob> {
   return { ...(existing || {}), ...(update || {}) };
 }
 
 /**
- * Description template for the `launch_async_subagent` tool.
+ * Description template for the `launch_async_SubAgent` tool.
  *
  * The `{available_agents}` placeholder is replaced at middleware creation
- * time with a formatted list of configured async subagent names and descriptions.
+ * time with a formatted list of configured async SubAgent names and descriptions.
  */
-const ASYNC_TASK_TOOL_DESCRIPTION = `Launch an async subagent on a remote LangGraph server. The subagent runs in the background and returns a job ID immediately.
+const ASYNC_TASK_TOOL_DESCRIPTION = `Launch an async SubAgent on a remote LangGraph server. The SubAgent runs in the background and returns a job ID immediately.
 
 Available async agent types:
 {available_agents}
 
 ## Usage notes:
 1. This tool launches a background job and returns immediately with a job ID. Report the job ID to the user and stop — do NOT immediately check status.
-2. Use \`check_async_subagent\` only when the user asks for a status update or result.
-3. Use \`update_async_subagent\` to send new instructions to a running job.
-4. Multiple async subagents can run concurrently — launch several and let them run in the background.
-5. The subagent runs on a remote LangGraph server, so it has its own tools and capabilities.`;
+2. Use \`check_async_SubAgent\` only when the user asks for a status update or result.
+3. Use \`update_async_SubAgent\` to send new instructions to a running job.
+4. Multiple async SubAgents can run concurrently — launch several and let them run in the background.
+5. The SubAgent runs on a remote LangGraph server, so it has its own tools and capabilities.`;
 
 /**
  * Default system prompt appended to the main agent's system message when
- * async subagent middleware is active.
+ * async SubAgent middleware is active.
  *
- * Provides the agent with instructions on how to use the five async subagent
+ * Provides the agent with instructions on how to use the five async SubAgent
  * tools (launch, check, update, cancel, list) including workflow ordering,
  * critical rules about polling behavior, and guidance on when to use async
- * subagents vs. synchronous delegation.
+ * SubAgents vs. synchronous delegation.
  */
-export const ASYNC_TASK_SYSTEM_PROMPT = `## Async subagents (remote LangGraph servers)
+export const ASYNC_TASK_SYSTEM_PROMPT = `## Async SubAgents (remote LangGraph servers)
 
-You have access to async subagent tools that launch background jobs on remote LangGraph servers.
+You have access to async SubAgent tools that launch background jobs on remote LangGraph servers.
 
 ### Tools:
-- \`launch_async_subagent\`: Start a new background job. Returns a job ID immediately.
-- \`check_async_subagent\`: Check the status of a running job. Returns status and result if complete.
-- \`update_async_subagent\`: Send an update or new instructions to a running job.
-- \`cancel_async_subagent\`: Cancel a running job that is no longer needed.
-- \`list_async_subagent_jobs\`: List all tracked jobs with live statuses. Use this to check all jobs at once.
+- \`launch_async_SubAgent\`: Start a new background job. Returns a job ID immediately.
+- \`check_async_SubAgent\`: Check the status of a running job. Returns status and result if complete.
+- \`update_async_SubAgent\`: Send an update or new instructions to a running job.
+- \`cancel_async_SubAgent\`: Cancel a running job that is no longer needed.
+- \`list_async_SubAgent_jobs\`: List all tracked jobs with live statuses. Use this to check all jobs at once.
 
 ### Workflow:
-1. **Launch** — Use \`launch_async_subagent\` to start a job. Report the job ID to the user and stop.
+1. **Launch** — Use \`launch_async_SubAgent\` to start a job. Report the job ID to the user and stop.
    Do NOT immediately check the status — the job runs in the background while you and the user continue other work.
-2. **Check (on request)** — Only use \`check_async_subagent\` when the user explicitly asks for a status update or
+2. **Check (on request)** — Only use \`check_async_SubAgent\` when the user explicitly asks for a status update or
    result. If the status is "running", report that and stop — do not poll in a loop.
-3. **Update** (optional) — Use \`update_async_subagent\` to send new instructions to a running job. This interrupts
+3. **Update** (optional) — Use \`update_async_SubAgent\` to send new instructions to a running job. This interrupts
    the current run and starts a fresh one on the same thread. The job_id stays the same.
-4. **Cancel** (optional) — Use \`cancel_async_subagent\` to stop a job that is no longer needed.
-5. **Collect** — When \`check_async_subagent\` returns status "success", the result is included in the response.
-6. **List** — Use \`list_async_subagent_jobs\` to see live statuses for all jobs at once, or to recall job IDs after context compaction.
+4. **Cancel** (optional) — Use \`cancel_async_SubAgent\` to stop a job that is no longer needed.
+5. **Collect** — When \`check_async_SubAgent\` returns status "success", the result is included in the response.
+6. **List** — Use \`list_async_SubAgent_jobs\` to see live statuses for all jobs at once, or to recall job IDs after context compaction.
 
 ### Critical rules:
 - After launching, ALWAYS return control to the user immediately. Never auto-check after launching.
-- Never poll \`check_async_subagent\` in a loop. Check once per user request, then stop.
+- Never poll \`check_async_SubAgent\` in a loop. Check once per user request, then stop.
 - If a check returns "running", tell the user and wait for them to ask again.
 - Job statuses in conversation history are ALWAYS stale — a job that was "running" may now be done.
   NEVER report a status from a previous tool result. ALWAYS call a tool to get the current status:
-  use \`list_async_subagent_jobs\` when the user asks about multiple jobs or "all jobs",
-  use \`check_async_subagent\` when the user asks about a specific job.
+  use \`list_async_SubAgent_jobs\` when the user asks about multiple jobs or "all jobs",
+  use \`check_async_SubAgent\` when the user asks about a specific job.
 - Always show the full job_id — never truncate or abbreviate it.
 
-### When to use async subagents:
+### When to use async SubAgents:
 - Long-running tasks that would block the main agent
 - Tasks that benefit from running on specialized remote deployments
 - When you want to run multiple tasks concurrently and collect results later`;
@@ -212,7 +223,7 @@ You have access to async subagent tools that launch background jobs on remote La
  * When listing jobs, live-status fetches are skipped for jobs whose
  * cached status is in this set, since they are guaranteed to be final.
  */
-export const TERMINAL_STATUSES = new Set<AsyncSubagentStatus>([
+export const TERMINAL_STATUSES = new Set<AsyncSubAgentStatus>([
   "cancelled",
   "success",
   "error",
@@ -224,14 +235,14 @@ export const TERMINAL_STATUSES = new Set<AsyncSubagentStatus>([
  * Look up a tracked job from state by its `jobId`.
  *
  * @param jobId - The job ID to look up (will be trimmed).
- * @param state - The current agent state containing `asyncSubagentJobs`.
+ * @param state - The current agent state containing `asyncSubAgentJobs`.
  * @returns The tracked job on success, or an error string.
  */
 function resolveTrackedJob(
   jobId: string,
-  state: AsyncSubagentState,
-): AsyncSubagentJob | string {
-  const jobs = state.asyncSubagentJobs ?? {};
+  state: AsyncSubAgentState,
+): AsyncSubAgentJob | string {
+  const jobs = state.asyncSubAgentJobs ?? {};
   const tracked = jobs[jobId.trim()];
   if (!tracked) {
     return `No tracked job found for jobId: '${jobId}'`;
@@ -247,7 +258,7 @@ function resolveTrackedJob(
  *
  * @param run - The run object from the SDK.
  * @param threadId - The thread ID for the run.
- * @param threadValues - The `values` from `ThreadState` (the remote subagent's state).
+ * @param threadValues - The `values` from `ThreadState` (the remote SubAgent's state).
  */
 function buildCheckResult(
   run: Run,
@@ -255,7 +266,7 @@ function buildCheckResult(
   threadValues: DefaultValues,
 ): CheckResult {
   const checkResult: CheckResult = {
-    status: run.status as AsyncSubagentStatus,
+    status: run.status as AsyncSubAgentStatus,
     threadId,
   };
 
@@ -272,7 +283,7 @@ function buildCheckResult(
       checkResult.result = "Completed with no output messages.";
     }
   } else if (run.status === "error") {
-    checkResult.error = "The async subagent encountered an error.";
+    checkResult.error = "The async SubAgent encountered an error.";
   }
 
   return checkResult;
@@ -289,9 +300,9 @@ function buildCheckResult(
  *   Otherwise return only jobs whose cached status matches.
  */
 function filterJobs(
-  jobs: Record<string, AsyncSubagentJob>,
+  jobs: Record<string, AsyncSubAgentJob>,
   statusFilter?: string,
-): AsyncSubagentJob[] {
+): AsyncSubAgentJob[] {
   if (!statusFilter || statusFilter === "all") {
     return Object.values(jobs);
   }
@@ -306,8 +317,8 @@ function filterJobs(
  */
 async function fetchLiveJobStatus(
   clients: ClientCache,
-  job: AsyncSubagentJob,
-): Promise<AsyncSubagentStatus> {
+  job: AsyncSubAgentJob,
+): Promise<AsyncSubAgentStatus> {
   if (TERMINAL_STATUSES.has(job.status)) {
     return job.status;
   }
@@ -315,7 +326,7 @@ async function fetchLiveJobStatus(
   try {
     const client = clients.getClient(job.agentName);
     const run = await client.runs.get(job.threadId, job.runId);
-    return run.status as AsyncSubagentStatus;
+    return run.status as AsyncSubAgentStatus;
   } catch {
     return job.status;
   }
@@ -325,8 +336,8 @@ async function fetchLiveJobStatus(
  * Format a single job as a display string for list output.
  */
 function formatJobEntry(
-  job: AsyncSubagentJob,
-  status: AsyncSubagentStatus,
+  job: AsyncSubAgentJob,
+  status: AsyncSubAgentStatus,
 ): string {
   return `- jobId: ${job.jobId} agent: ${job.agentName} status: ${status}`;
 }
@@ -338,10 +349,10 @@ function formatJobEntry(
  * instance, avoiding unnecessary connections.
  */
 export class ClientCache {
-  private agents: Record<string, AsyncSubagent>;
+  private agents: Record<string, AsyncSubAgent>;
   private clients = new Map<string, Client>();
 
-  constructor(agents: Record<string, AsyncSubagent>) {
+  constructor(agents: Record<string, AsyncSubAgent>) {
     this.agents = agents;
   }
 
@@ -349,7 +360,7 @@ export class ClientCache {
    * Build headers for a remote LangGraph server, adding the default
    * `x-auth-scheme: langsmith` header if not already present.
    */
-  private resolveHeaders(spec: AsyncSubagent): Record<string, string> {
+  private resolveHeaders(spec: AsyncSubAgent): Record<string, string> {
     const headers = { ...(spec.headers || {}) };
     if (!("x-auth-scheme" in headers)) {
       headers["x-auth-scheme"] = "langsmith";
@@ -360,7 +371,7 @@ export class ClientCache {
   /**
    * Build a stable cache key from a spec's url and resolved headers.
    */
-  private cacheKey(spec: AsyncSubagent): string {
+  private cacheKey(spec: AsyncSubAgent): string {
     const headers = this.resolveHeaders(spec);
     const headerStr = Object.entries(headers).sort().flat().join(":");
     return `${spec.url ?? ""}|${headerStr}`;
@@ -388,13 +399,13 @@ export class ClientCache {
 }
 
 /**
- * Build the `launch_async_subagent` tool.
+ * Build the `launch_async_SubAgent` tool.
  *
  * Creates a thread on the remote server, starts a run, and returns a
  * `Command` that persists the new job in state.
  */
 export function buildLaunchTool(
-  agentMap: Record<string, AsyncSubagent>,
+  agentMap: Record<string, AsyncSubAgent>,
   clients: ClientCache,
   toolDescription: string,
 ) {
@@ -407,7 +418,7 @@ export function buildLaunchTool(
         const allowed = Object.keys(agentMap)
           .map((k) => `\`${k}\``)
           .join(", ");
-        return `Unknown async subagent type \`${input.agentName}\`. Available types: ${allowed}`;
+        return `Unknown async SubAgent type \`${input.agentName}\`. Available types: ${allowed}`;
       }
 
       const spec = agentMap[input.agentName];
@@ -419,7 +430,7 @@ export function buildLaunchTool(
         });
 
         const jobId = thread.thread_id;
-        const job: AsyncSubagentJob = {
+        const job: AsyncSubAgentJob = {
           jobId,
           agentName: input.agentName,
           threadId: jobId,
@@ -431,30 +442,30 @@ export function buildLaunchTool(
           update: {
             message: [
               new ToolMessage({
-                content: `Launched async subagent. jobId: ${jobId}`,
+                content: `Launched async SubAgent. jobId: ${jobId}`,
                 tool_call_id: config.toolCall?.id ?? "",
               }),
             ],
-            asyncSubagentJobs: { [jobId]: job },
+            asyncSubAgentJobs: { [jobId]: job },
           },
         });
       } catch (e) {
-        return `Failed to launch async subagent '${input.agentName}': ${e}`;
+        return `Failed to launch async SubAgent '${input.agentName}': ${e}`;
       }
     },
     {
-      name: "launch_async_subagent",
+      name: "launch_async_SubAgent",
       description: toolDescription,
       schema: z.object({
         description: z
           .string()
           .describe(
-            "A detailed description of the task for the async subagent to perform.",
+            "A detailed description of the task for the async SubAgent to perform.",
           ),
         agentName: z
           .string()
           .describe(
-            "The type of async subagent to use. Must be one of the available types listed in the tool description.",
+            "The type of async SubAgent to use. Must be one of the available types listed in the tool description.",
           ),
       }),
     },
@@ -462,7 +473,7 @@ export function buildLaunchTool(
 }
 
 /**
- * Build the `check_async_subagent` tool.
+ * Build the `check_async_SubAgent` tool.
  *
  * Fetches the current run status from the remote server and, if the run
  * succeeded, retrieves the thread state to extract the result.
@@ -470,7 +481,7 @@ export function buildLaunchTool(
 export function buildCheckTool(clients: ClientCache) {
   return tool(
     async (input: { jobId: string }, config): Promise<Command | string> => {
-      const state = getCurrentTaskInput<AsyncSubagentState>();
+      const state = getCurrentTaskInput<AsyncSubAgentState>();
       const job = resolveTrackedJob(input.jobId, state);
       if (typeof job === "string") return job;
 
@@ -493,7 +504,7 @@ export function buildCheckTool(clients: ClientCache) {
       }
 
       const result = buildCheckResult(run, job.threadId, threadValues);
-      const updatedJob: AsyncSubagentJob = {
+      const updatedJob: AsyncSubAgentJob = {
         jobId: job.jobId,
         agentName: job.agentName,
         threadId: job.threadId,
@@ -509,19 +520,19 @@ export function buildCheckTool(clients: ClientCache) {
               tool_call_id: config.toolCall?.id ?? "",
             }),
           ],
-          asyncSubagentJobs: { [job.jobId]: updatedJob },
+          asyncSubAgentJobs: { [job.jobId]: updatedJob },
         },
       });
     },
     {
-      name: "check_async_subagent",
+      name: "check_async_SubAgent",
       description:
-        "Check the status of an async subagent job. Returns the current status and, if complete, the result.",
+        "Check the status of an async SubAgent job. Returns the current status and, if complete, the result.",
       schema: z.object({
         jobId: z
           .string()
           .describe(
-            "The exact jobId string returned by launch_async_subagent. Pass it verbatim.",
+            "The exact jobId string returned by launch_async_SubAgent. Pass it verbatim.",
           ),
       }),
     },
@@ -529,15 +540,15 @@ export function buildCheckTool(clients: ClientCache) {
 }
 
 /**
- * Build the `update_async_subagent` tool.
+ * Build the `update_async_SubAgent` tool.
  *
- * Sends a follow-up message to a running async subagent by creating a new
- * run on the same thread with `multitaskStrategy: "interrupt"`. The subagent
+ * Sends a follow-up message to a running async SubAgent by creating a new
+ * run on the same thread with `multitaskStrategy: "interrupt"`. The SubAgent
  * sees the full conversation history plus the new message. The `jobId`
  * remains the same; only the internal `runId` is updated.
  */
 export function buildUpdateTool(
-  agentMap: Record<string, AsyncSubagent>,
+  agentMap: Record<string, AsyncSubAgent>,
   clients: ClientCache,
 ) {
   return tool(
@@ -545,7 +556,7 @@ export function buildUpdateTool(
       input: { jobId: string; message: string },
       config,
     ): Promise<Command | string> => {
-      const state = getCurrentTaskInput<AsyncSubagentState>();
+      const state = getCurrentTaskInput<AsyncSubAgentState>();
       const tracked = resolveTrackedJob(input.jobId, state);
       if (typeof tracked === "string") return tracked;
 
@@ -559,7 +570,7 @@ export function buildUpdateTool(
           multitaskStrategy: "interrupt",
         });
 
-        const job: AsyncSubagentJob = {
+        const job: AsyncSubAgentJob = {
           jobId: tracked.jobId,
           agentName: tracked.agentName,
           threadId: tracked.threadId,
@@ -571,31 +582,31 @@ export function buildUpdateTool(
           update: {
             messages: [
               new ToolMessage({
-                content: `Updated async subagent. jobId: ${tracked.jobId}`,
+                content: `Updated async SubAgent. jobId: ${tracked.jobId}`,
                 tool_call_id: config.toolCall?.id ?? "",
               }),
             ],
-            asyncSubagentJobs: { [tracked.jobId]: job },
+            asyncSubAgentJobs: { [tracked.jobId]: job },
           },
         });
       } catch (e) {
-        return `Failed to update async subagent: ${e}`;
+        return `Failed to update async SubAgent: ${e}`;
       }
     },
     {
-      name: "update_async_subagent",
+      name: "update_async_SubAgent",
       description:
-        "send updated instructions to an async subagent. Interrupts the current run and starts a new one on the same thread so the subagent sees the full conversation history plus your new message. The jobId remains the same.",
+        "send updated instructions to an async SubAgent. Interrupts the current run and starts a new one on the same thread so the SubAgent sees the full conversation history plus your new message. The jobId remains the same.",
       schema: z.object({
         jobId: z
           .string()
           .describe(
-            "The exact jobId string returned by launch_async_subagent. Pass it verbatim.",
+            "The exact jobId string returned by launch_async_SubAgent. Pass it verbatim.",
           ),
         message: z
           .string()
           .describe(
-            "Follow-up instructions or context to send to the subagent",
+            "Follow-up instructions or context to send to the SubAgent",
           ),
       }),
     },
@@ -603,7 +614,7 @@ export function buildUpdateTool(
 }
 
 /**
- * Build the `cancel_async_subagent` tool.
+ * Build the `cancel_async_SubAgent` tool.
  *
  * Cancels the current run on the remote server and updates the job's
  * cached status to `"cancelled"`.
@@ -611,7 +622,7 @@ export function buildUpdateTool(
 export function buildCancelTool(clients: ClientCache) {
   return tool(
     async (input: { jobId: string }, config): Promise<Command | string> => {
-      const state = getCurrentTaskInput<AsyncSubagentState>();
+      const state = getCurrentTaskInput<AsyncSubAgentState>();
       const tracked = resolveTrackedJob(input.jobId, state);
       if (typeof tracked === "string") return tracked;
 
@@ -622,7 +633,7 @@ export function buildCancelTool(clients: ClientCache) {
         return `Failed to cancel run: ${e}`;
       }
 
-      const updated: AsyncSubagentJob = {
+      const updated: AsyncSubAgentJob = {
         jobId: tracked.jobId,
         agentName: tracked.agentName,
         threadId: tracked.threadId,
@@ -634,23 +645,23 @@ export function buildCancelTool(clients: ClientCache) {
         update: {
           messages: [
             new ToolMessage({
-              content: `Cancelled async subagent job: ${tracked.jobId}`,
+              content: `Cancelled async SubAgent job: ${tracked.jobId}`,
               tool_call_id: config.toolCall?.id ?? "",
             }),
           ],
-          asyncSubagentJobs: { [tracked.jobId]: updated },
+          asyncSubAgentJobs: { [tracked.jobId]: updated },
         },
       });
     },
     {
-      name: "cancel_async_subagent",
+      name: "cancel_async_SubAgent",
       description:
-        "Cancel a running async subagent job. Use this to stop a job that is no longer needed.",
+        "Cancel a running async SubAgent job. Use this to stop a job that is no longer needed.",
       schema: z.object({
         jobId: z
           .string()
           .describe(
-            "The exact jobId string returned by launch_async_subagent. Pass it verbatim.",
+            "The exact jobId string returned by launch_async_SubAgent. Pass it verbatim.",
           ),
       }),
     },
@@ -658,7 +669,7 @@ export function buildCancelTool(clients: ClientCache) {
 }
 
 /**
- * Build the `list_async_subagent_jobs` tool.
+ * Build the `list_async_SubAgent_jobs` tool.
  *
  * Lists all tracked jobs with their live statuses fetched in parallel.
  * Supports optional filtering by cached status.
@@ -669,19 +680,19 @@ export function buildListTool(clients: ClientCache) {
       input: { statusFilter?: string },
       config,
     ): Promise<Command | string> => {
-      const state = getCurrentTaskInput<AsyncSubagentState>();
-      const jobs = state.asyncSubagentJobs ?? {};
+      const state = getCurrentTaskInput<AsyncSubAgentState>();
+      const jobs = state.asyncSubAgentJobs ?? {};
       const filtered = filterJobs(jobs, input.statusFilter);
 
       if (filtered.length === 0) {
-        return "No async subagent jobs tracked";
+        return "No async SubAgent jobs tracked";
       }
 
       const statuses = await Promise.all(
         filtered.map((job) => fetchLiveJobStatus(clients, job)),
       );
 
-      const updatedJobs: Record<string, AsyncSubagentJob> = {};
+      const updatedJobs: Record<string, AsyncSubAgentJob> = {};
       const entries: string[] = [];
       for (let idx = 0; idx < filtered.length; idx++) {
         const job = filtered[idx];
@@ -707,14 +718,14 @@ export function buildListTool(clients: ClientCache) {
               tool_call_id: config.toolCall?.id ?? "",
             }),
           ],
-          asyncSubagentJobs: updatedJobs,
+          asyncSubAgentJobs: updatedJobs,
         },
       });
     },
     {
-      name: "list_async_subagent_jobs",
+      name: "list_async_SubAgent_jobs",
       description:
-        "List tracked async subagent jobs with their current live statuses. Be default shows all jobs. Use `statusFilter` to narrow by status (e.g., 'running', 'success', 'error', 'cancelled'). Use `check_async_subagent` to get the full result of a specific completed job.",
+        "List tracked async SubAgent jobs with their current live statuses. Be default shows all jobs. Use `statusFilter` to narrow by status (e.g., 'running', 'success', 'error', 'cancelled'). Use `check_async_SubAgent` to get the full result of a specific completed job.",
       schema: z.object({
         statusFilter: z
           .string()
@@ -728,29 +739,29 @@ export function buildListTool(clients: ClientCache) {
 }
 
 /**
- * Options for creating async subagent middleware.
+ * Options for creating async SubAgent middleware.
  */
-export interface AsyncSubagentMiddlewareOptions {
-  /** List of async subagent specifications. Must have at least one. */
-  asyncSubagents: AsyncSubagent[];
+export interface AsyncSubAgentMiddlewareOptions {
+  /** List of async SubAgent specifications. Must have at least one. */
+  asyncSubAgents: AsyncSubAgent[];
   /** System prompt override. Set to `null` to disable. Defaults to {@link ASYNC_TASK_SYSTEM_PROMPT}. */
   systemPrompt?: string;
 }
 
 /**
- * Create middleware that adds async subagent tools to an agent.
+ * Create middleware that adds async SubAgent tools to an agent.
  *
  * Provides five tools for launching, checking, updating, cancelling, and
  * listing background jobs on remote LangGraph deployments. Job state is
- * persisted in the `asyncSubagentJobs` state channel so it survives
+ * persisted in the `asyncSubAgentJobs` state channel so it survives
  * context compaction.
  *
- * @throws {Error} If no async subagents are provided or names are duplicated.
+ * @throws {Error} If no async SubAgents are provided or names are duplicated.
  *
  * @example
  * ```ts
- * const middleware = createAsyncSubagentMiddleware({
- *   asyncSubagents: [{
+ * const middleware = createAsyncSubAgentMiddleware({
+ *   asyncSubAgents: [{
  *     name: "researcher",
  *     description: "Research agent for deep analysis",
  *     url: "https://my-deployment.langsmith.dev",
@@ -759,27 +770,27 @@ export interface AsyncSubagentMiddlewareOptions {
  * });
  * ```
  */
-export function createAsyncSubagentMiddleware(
-  options: AsyncSubagentMiddlewareOptions,
+export function createAsyncSubAgentMiddleware(
+  options: AsyncSubAgentMiddlewareOptions,
 ) {
-  const { asyncSubagents, systemPrompt = ASYNC_TASK_SYSTEM_PROMPT } = options;
+  const { asyncSubAgents, systemPrompt = ASYNC_TASK_SYSTEM_PROMPT } = options;
 
-  if (!asyncSubagents || asyncSubagents.length === 0) {
-    throw new Error("At least one async subagent must be specified");
+  if (!asyncSubAgents || asyncSubAgents.length === 0) {
+    throw new Error("At least one async SubAgent must be specified");
   }
 
-  const names = asyncSubagents.map((a) => a.name);
+  const names = asyncSubAgents.map((a) => a.name);
   const duplicates = names.filter((n, i) => names.indexOf(n) !== i);
   if (duplicates.length > 0) {
     throw new Error(
-      `Duplicate async subagent names: ${[...new Set(duplicates)].join(", ")}`,
+      `Duplicate async SubAgent names: ${[...new Set(duplicates)].join(", ")}`,
     );
   }
 
-  const agentMap = Object.fromEntries(asyncSubagents.map((a) => [a.name, a]));
+  const agentMap = Object.fromEntries(asyncSubAgents.map((a) => [a.name, a]));
   const clients = new ClientCache(agentMap);
 
-  const agentsDescription = asyncSubagents
+  const agentsDescription = asyncSubAgents
     .map((a) => `- ${a.name}: ${a.description}`)
     .join("\n");
   const launchDescription = ASYNC_TASK_TOOL_DESCRIPTION.replace(
@@ -796,12 +807,12 @@ export function createAsyncSubagentMiddleware(
   ];
 
   const fullSystemPrompt = systemPrompt
-    ? `${systemPrompt}\n\nAvailable async subagent types:\n${agentsDescription}`
+    ? `${systemPrompt}\n\nAvailable async SubAgent types:\n${agentsDescription}`
     : null;
 
   return createMiddleware({
-    name: "asyncSubagentMiddleware",
-    stateSchema: AsyncSubagentStateSchema,
+    name: "asyncSubAgentMiddleware",
+    stateSchema: AsyncSubAgentStateSchema,
     tools,
     wrapModelCall: async (request, handler) => {
       if (fullSystemPrompt !== null) {
