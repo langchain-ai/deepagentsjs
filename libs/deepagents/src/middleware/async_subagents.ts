@@ -257,6 +257,59 @@ function buildCheckResult(
 }
 
 /**
+ * Filter jobs by cached status from agent state.
+ *
+ * Filtering uses the cached status, not live server status. Live statuses
+ * are fetched after filtering by the calling tool.
+ *
+ * @param jobs - All tracked jobs from state.
+ * @param statusFilter - If nullish or `'all'`, return all jobs.
+ *   Otherwise return only jobs whose cached status matches.
+ */
+function filterJobs(
+  jobs: Record<string, AsyncSubagentJob>,
+  statusFilter?: string,
+): AsyncSubagentJob[] {
+  if (!statusFilter || statusFilter === "all") {
+    return Object.values(jobs);
+  }
+  return Object.values(jobs).filter((job) => job.status === statusFilter);
+}
+
+/**
+ * Fetch the current run status from the server.
+ *
+ * Returns the cached status immediately for terminal jobs (avoiding
+ * unnecessary API calls). Falls back to the cached status on SDK errors.
+ */
+async function fetchLiveJobStatus(
+  clients: ClientCache,
+  job: AsyncSubagentJob,
+): Promise<AsyncSubagentStatus> {
+  if (TERMINAL_STATUSES.has(job.status)) {
+    return job.status;
+  }
+
+  try {
+    const client = clients.getClient(job.agentName);
+    const run = await client.runs.get(job.threadId, job.runId);
+    return run.status as AsyncSubagentStatus;
+  } catch {
+    return job.status;
+  }
+}
+
+/**
+ * Format a single job as a display string for list output.
+ */
+function formatJobEntry(
+  job: AsyncSubagentJob,
+  status: AsyncSubagentStatus,
+): string {
+  return `- jobId: ${job.jobId} agent: ${job.agentName} status: ${status}`;
+}
+
+/**
  * Lazily-created, cached LangGraph SDK clients keyed by (url, headers).
  *
  * Agents that share the same URL and headers will reuse a single `Client`
@@ -576,6 +629,76 @@ export function buildCancelTool(clients: ClientCache) {
           .string()
           .describe(
             "The exact jobId string returned by launch_async_subagent. Pass it verbatim.",
+          ),
+      }),
+    },
+  );
+}
+
+/**
+ * Build the `list_async_subagent_jobs` tool.
+ *
+ * Lists all tracked jobs with their live statuses fetched in parallel.
+ * Supports optional filtering by cached status.
+ */
+export function buildListTool(clients: ClientCache) {
+  return tool(
+    async (
+      input: { statusFilter?: string },
+      config,
+    ): Promise<Command | string> => {
+      const state = getCurrentTaskInput<AsyncSubagentState>();
+      const jobs = state.asyncSubagentJobs ?? {};
+      const filtered = filterJobs(jobs, input.statusFilter);
+
+      if (filtered.length === 0) {
+        return "No async subagent jobs tracked";
+      }
+
+      const statuses = await Promise.all(
+        filtered.map((job) => fetchLiveJobStatus(clients, job)),
+      );
+
+      const updatedJobs: Record<string, AsyncSubagentJob> = {};
+      const entries: string[] = [];
+      for (let idx = 0; idx < filtered.length; idx++) {
+        const job = filtered[idx];
+        const status = statuses[idx];
+
+        const jobEntry = formatJobEntry(job, status);
+        entries.push(jobEntry);
+
+        updatedJobs[job.jobId] = {
+          jobId: job.jobId,
+          agentName: job.agentName,
+          threadId: job.threadId,
+          runId: job.runId,
+          status,
+        };
+      }
+
+      return new Command({
+        update: {
+          messages: [
+            new ToolMessage({
+              content: `${entries.length} tracked job(s):\n${entries.join("\n")}`,
+              tool_call_id: config.toolCall?.id ?? "",
+            }),
+          ],
+          asyncSubagentJobs: updatedJobs,
+        },
+      });
+    },
+    {
+      name: "list_async_subagent_jobs",
+      description:
+        "List tracked async subagent jobs with their current live statuses. Be default shows all jobs. Use `statusFilter` to narrow by status (e.g., 'running', 'success', 'error', 'cancelled'). Use `check_async_subagent` to get the full result of a specific completed job.",
+      schema: z.object({
+        statusFilter: z
+          .string()
+          .nullish()
+          .describe(
+            "Filter jobs by status. One of: 'running', 'success', 'error', 'cancelled', 'all'. Defaults to 'all'.",
           ),
       }),
     },
