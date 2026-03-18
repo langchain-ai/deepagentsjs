@@ -39,7 +39,11 @@ import { registerGrepRawTests } from "./tests/grep-raw.js";
 import { registerGlobInfoTests } from "./tests/glob-info.js";
 import { registerInitialFilesTests } from "./tests/initial-files.js";
 import { registerIntegrationTests } from "./tests/integration.js";
-import type { SandboxInstance, StandardTestsConfig, SuiteFn } from "./types.js";
+import type {
+  AnySandboxInstance,
+  StandardTestsConfig,
+  SuiteFn,
+} from "./types.js";
 /**
  * Default number of retry attempts for sandbox creation.
  */
@@ -117,7 +121,7 @@ export async function withRetry<T>(
  * });
  * ```
  */
-export function sandboxStandardTests<T extends SandboxInstance>(
+export function sandboxStandardTests<T extends AnySandboxInstance>(
   config: StandardTestsConfig<T>,
 ): void {
   const { describe, beforeAll, afterAll } = config.runner;

@@ -1,12 +1,13 @@
+import { adaptSandboxInstance } from "../adapter.js";
 import { withRetry } from "../sandbox.js";
-import type { SandboxInstance, StandardTestsConfig } from "../types.js";
+import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register initialFiles tests (basic, deeply nested, empty).
  *
  * These tests create temporary sandboxes and tear them down immediately.
  */
-export function registerInitialFilesTests<T extends SandboxInstance>(
+export function registerInitialFilesTests<T extends AnySandboxInstance>(
   config: StandardTestsConfig<T>,
   timeout: number,
 ): void {
@@ -115,8 +116,8 @@ export function registerInitialFilesTests<T extends SandboxInstance>(
         );
 
         try {
-          const content = await tmp.read(filePath);
-          expect(content).toContain("Content for read test");
+          const content = await adaptSandboxInstance(tmp).read(filePath);
+          expect(content.content).toContain("Content for read test");
         } finally {
           await config.closeSandbox?.(tmp);
         }
@@ -186,7 +187,9 @@ export function registerInitialFilesTests<T extends SandboxInstance>(
         );
 
         try {
-          const entries = await tmp.lsInfo(dirPath);
+          const lsResult = await adaptSandboxInstance(tmp).lsInfo(dirPath);
+          expect(lsResult.error).toBeUndefined();
+          const entries = lsResult.files || [];
           const paths = entries.map((e) => e.path.replace(/\/$/, ""));
           expect(paths).toContain(filePath);
         } finally {
