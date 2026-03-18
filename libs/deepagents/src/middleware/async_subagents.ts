@@ -67,19 +67,24 @@ export interface AsyncSubagentJob {
  * get typed access to `asyncSubagentJobs` without casting.
  */
 interface AsyncSubagentState {
+  /** All tracked async subagent jobs, keyed by job ID. */
   asyncSubagentJobs?: Record<string, AsyncSubagentJob>;
 }
 
 /**
  * Result of checking an async subagent's run status.
  *
- * Returned by `buildCheckResult` and consumed by `buildCheckCommand`
+ * Returned by `buildCheckResult` and used by `buildCheckTool`
  * to construct the `Command` update.
  */
 interface CheckResult {
+  /** Current status of the run. */
   status: AsyncSubagentStatus;
+  /** The thread ID on the remote server. */
   threadId: string;
+  /** The last message content from the subagent, if the run succeeded. */
   result?: string;
+  /** Error description, if the run errored. */
   error?: string;
 }
 
@@ -87,7 +92,7 @@ interface CheckResult {
  * Zod schema for {@link AsyncSubagentJob}.
  *
  * Used by the {@link ReducedValue} in the state schema so that LangGraph
- * can validate and serialize job records stored in `async_subagent_jobs`.
+ * can validate and serialize job records stored in `asyncSubagentJobs`.
  */
 const AsyncSubAgentJobSchema = z.object({
   jobId: z.string(),
@@ -213,17 +218,14 @@ function resolveTrackedJob(
 }
 
 /**
- * Build a typed check result from a run's current status and thread state values.
+ * Build a check result from a run's current status and thread state values.
  *
- * For successful runs, extracts the last message's content from thread values.
- * For errored runs, returns a generic error message (the JS SDK's `Run` type
- * does not expose error details — check the deployment UI for specifics).
+ * For successful runs, extracts the last message's content from the remote
+ * thread's state values. For errored runs, includes a generic error message.
  *
  * @param run - The run object from the SDK.
  * @param threadId - The thread ID for the run.
- * @param threadValues - The `values` from `ThreadState`, typed as `DefaultValues`
- *   from the SDK. We narrow the array case (unused by LangGraph agents) to
- *   access `messages` safely.
+ * @param threadValues - The `values` from `ThreadState` (the remote subagent's state).
  */
 function buildCheckResult(
   run: Run,
@@ -440,6 +442,135 @@ export function buildCheckTool(clients: ClientCache) {
       name: "check_async_subagent",
       description:
         "Check the status of an async subagent job. Returns the current status and, if complete, the result.",
+      schema: z.object({
+        jobId: z
+          .string()
+          .describe(
+            "The exact jobId string returned by launch_async_subagent. Pass it verbatim.",
+          ),
+      }),
+    },
+  );
+}
+
+/**
+ * Build the `update_async_subagent` tool.
+ *
+ * Sends a follow-up message to a running async subagent by creating a new
+ * run on the same thread with `multitaskStrategy: "interrupt"`. The subagent
+ * sees the full conversation history plus the new message. The `jobId`
+ * remains the same; only the internal `runId` is updated.
+ */
+export function buildUpdateTool(
+  agentMap: Record<string, AsyncSubagent>,
+  clients: ClientCache,
+) {
+  return tool(
+    async (
+      input: { jobId: string; message: string },
+      config,
+    ): Promise<Command | string> => {
+      const state = getCurrentTaskInput<AsyncSubagentState>();
+      const tracked = resolveTrackedJob(input.jobId, state);
+      if (typeof tracked === "string") return tracked;
+
+      const spec = agentMap[tracked.agentName];
+      try {
+        const client = clients.getClient(tracked.agentName);
+        const run = await client.runs.create(tracked.threadId, spec.graphId, {
+          input: {
+            messages: [{ role: "user", content: input.message }],
+          },
+          multitaskStrategy: "interrupt",
+        });
+
+        const job: AsyncSubagentJob = {
+          jobId: tracked.jobId,
+          agentName: tracked.agentName,
+          threadId: tracked.threadId,
+          runId: run.run_id,
+          status: "running",
+        };
+
+        return new Command({
+          update: {
+            messages: [
+              new ToolMessage({
+                content: `Updated async subagent. jobId: ${tracked.jobId}`,
+                tool_call_id: config.toolCall?.id ?? "",
+              }),
+            ],
+            asyncSubagentJobs: { [tracked.jobId]: job },
+          },
+        });
+      } catch (e) {
+        return `Failed to update async subagent: ${e}`;
+      }
+    },
+    {
+      name: "update_async_subagent",
+      description:
+        "send updated instructions to an async subagent. Interrupts the current run and starts a new one on the same thread so the subagent sees the full conversation history plus your new message. The jobId remains the same.",
+      schema: z.object({
+        jobId: z
+          .string()
+          .describe(
+            "The exact jobId string returned by launch_async_subagent. Pass it verbatim.",
+          ),
+        message: z
+          .string()
+          .describe(
+            "Follow-up instructions or context to send to the subagent",
+          ),
+      }),
+    },
+  );
+}
+
+/**
+ * Build the `cancel_async_subagent` tool.
+ *
+ * Cancels the current run on the remote server and updates the job's
+ * cached status to `"cancelled"`.
+ */
+export function buildCancelTool(clients: ClientCache) {
+  return tool(
+    async (input: { jobId: string }, config): Promise<Command | string> => {
+      const state = getCurrentTaskInput<AsyncSubagentState>();
+      const tracked = resolveTrackedJob(input.jobId, state);
+      if (typeof tracked === "string") return tracked;
+
+      const client = clients.getClient(tracked.agentName);
+      try {
+        await client.runs.cancel(tracked.threadId, tracked.runId);
+      } catch (e) {
+        return `Failed to cancel run: ${e}`;
+      }
+
+      const updated: AsyncSubagentJob = {
+        jobId: tracked.jobId,
+        agentName: tracked.agentName,
+        threadId: tracked.threadId,
+        runId: tracked.runId,
+        status: "cancelled",
+      };
+
+      return new Command({
+        update: {
+          messages: [
+            new ToolMessage({
+              content: `Cancelled async subagent job: ${tracked.jobId}`,
+              tool_call_id: config.toolCall?.id ?? "",
+            }),
+          ],
+          asyncSubagentJobs: { [tracked.jobId]: updated },
+        },
+      });
+    },
+    {
+      name: "cancel_async_subagent",
+      description:
+        "Cancel a running async subagent job. Use this to stop a job that is no longer needed.",
       schema: z.object({
         jobId: z
           .string()
