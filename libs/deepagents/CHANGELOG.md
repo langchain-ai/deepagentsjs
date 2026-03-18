@@ -1,5 +1,17 @@
 # deepagents
 
+## 1.8.4
+
+### Patch Changes
+
+- [#290](https://github.com/langchain-ai/deepagentsjs/pull/290) [`ab4a515`](https://github.com/langchain-ai/deepagentsjs/commit/ab4a515f37cc166cb5015afa3617f625b343bcbb) Thanks [@maahir30](https://github.com/maahir30)! - Add static structured output to subagent response
+
+- [#289](https://github.com/langchain-ai/deepagentsjs/pull/289) [`5a4df6c`](https://github.com/langchain-ai/deepagentsjs/commit/5a4df6c050284e6024229ece108d58bcff3fdc66) Thanks [@alvedder](https://github.com/alvedder)! - fix(deepagents): move uuid from devDependencies to dependencies
+
+- [#317](https://github.com/langchain-ai/deepagentsjs/pull/317) [`01da088`](https://github.com/langchain-ai/deepagentsjs/commit/01da08863acd74da303b78950050f3df850216fe) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents, quickjs): read store from runtime/config.store instead of config.configurable
+
+  The filesystem middleware was reading the store from `request.config.store` (with a `@ts-expect-error`) and the QuickJS middleware from `config.configurable.__pregel_store`. Both now use the properly typed paths: `request.runtime.store` and `config.store` respectively.
+
 ## 1.8.3
 
 ### Patch Changes
