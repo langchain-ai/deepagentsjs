@@ -5,7 +5,7 @@
 "@langchain/modal": patch
 "@langchain/deno": patch
 "@langchain/sandbox-standard-tests": patch
-"deepagents": patch
+"deepagents": minor
 "deepagents-acp": patch
 ---
 
