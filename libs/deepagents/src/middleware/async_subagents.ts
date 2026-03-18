@@ -1,6 +1,6 @@
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import { Client, type DefaultValues, type Run } from "@langchain/langgraph-sdk";
-import { tool, ToolMessage } from "langchain";
+import { createMiddleware, tool, ToolMessage, SystemMessage } from "langchain";
 import { z } from "zod/v4";
 
 /**
@@ -703,4 +703,94 @@ export function buildListTool(clients: ClientCache) {
       }),
     },
   );
+}
+
+/**
+ * Options for creating async subagent middleware.
+ */
+export interface AsyncSubagentMiddlewareOptions {
+  /** List of async subagent specifications. Must have at least one. */
+  asyncSubagents: AsyncSubagent[];
+  /** System prompt override. Set to `null` to disable. Defaults to {@link ASYNC_TASK_SYSTEM_PROMPT}. */
+  systemPrompt?: string;
+}
+
+/**
+ * Create middleware that adds async subagent tools to an agent.
+ *
+ * Provides five tools for launching, checking, updating, cancelling, and
+ * listing background jobs on remote LangGraph deployments. Job state is
+ * persisted in the `asyncSubagentJobs` state channel so it survives
+ * context compaction.
+ *
+ * @throws {Error} If no async subagents are provided or names are duplicated.
+ *
+ * @example
+ * ```ts
+ * const middleware = createAsyncSubagentMiddleware({
+ *   asyncSubagents: [{
+ *     name: "researcher",
+ *     description: "Research agent for deep analysis",
+ *     url: "https://my-deployment.langsmith.dev",
+ *     graphId: "research_agent",
+ *   }],
+ * });
+ * ```
+ */
+export function createAsyncSubagentMiddleware(
+  options: AsyncSubagentMiddlewareOptions,
+) {
+  const { asyncSubagents, systemPrompt = ASYNC_TASK_SYSTEM_PROMPT } = options;
+
+  if (!asyncSubagents || asyncSubagents.length === 0) {
+    throw new Error("At least one async subagent must be specified");
+  }
+
+  const names = asyncSubagents.map((a) => a.name);
+  const duplicates = names.filter((n, i) => names.indexOf(n) !== i);
+  if (duplicates.length > 0) {
+    throw new Error(
+      `Duplicate async subagent names: ${[...new Set(duplicates)].join(", ")}`,
+    );
+  }
+
+  const agentMap = Object.fromEntries(asyncSubagents.map((a) => [a.name, a]));
+  const clients = new ClientCache(agentMap);
+
+  const agentsDescription = asyncSubagents
+    .map((a) => `- ${a.name}: ${a.description}`)
+    .join("\n");
+  const launchDescription = ASYNC_TASK_TOOL_DESCRIPTION.replace(
+    "{available_agents}",
+    agentsDescription,
+  );
+
+  const tools = [
+    buildLaunchTool(agentMap, clients, launchDescription),
+    buildCheckTool(clients),
+    buildUpdateTool(agentMap, clients),
+    buildCancelTool(clients),
+    buildListTool(clients),
+  ];
+
+  const fullSystemPrompt = systemPrompt
+    ? `${systemPrompt}\n\nAvailable async subagent types:\n${agentsDescription}`
+    : null;
+
+  return createMiddleware({
+    name: "asyncSubagentMiddleware",
+    stateSchema: AsyncSubAgentJobSchema,
+    tools,
+    wrapModelCall: async (request, handler) => {
+      if (fullSystemPrompt !== null) {
+        return handler({
+          ...request,
+          systemMessage: request.systemMessage.concat(
+            new SystemMessage({ content: systemPrompt }),
+          ),
+        });
+      }
+      return handler(request);
+    },
+  });
 }
