@@ -12,7 +12,7 @@ import {
   createFilesystemMiddleware,
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
-  createAsyncSubAgentMiddleware,
+  createAsyncSubagentMiddleware,
 } from "../index.js";
 
 import { SAMPLE_MODEL } from "../testing/utils.js";
@@ -394,7 +394,7 @@ describe("PatchToolCallsMiddleware", () => {
   });
 });
 
-describe("AsyncSubAgentMiddleware", () => {
+describe("AsyncSubagentMiddleware", () => {
   const sampleAgent = {
     name: "researcher",
     description: "A research agent",
@@ -403,13 +403,13 @@ describe("AsyncSubAgentMiddleware", () => {
   };
 
   it("should be importable and callable from the package index", () => {
-    expect(createAsyncSubAgentMiddleware).toBeDefined();
-    expect(typeof createAsyncSubAgentMiddleware).toBe("function");
+    expect(createAsyncSubagentMiddleware).toBeDefined();
+    expect(typeof createAsyncSubagentMiddleware).toBe("function");
   });
 
-  it("should add asyncTasks channel to the agent graph", () => {
-    const middleware = createAsyncSubAgentMiddleware({
-      asyncSubAgents: [sampleAgent],
+  it("should add asyncSubagentJobs channel to the agent graph", () => {
+    const middleware = createAsyncSubagentMiddleware({
+      asyncSubagents: [sampleAgent],
     });
     const agent = createAgent({
       model: SAMPLE_MODEL,
@@ -417,12 +417,12 @@ describe("AsyncSubAgentMiddleware", () => {
       tools: [],
     });
     const channels = Object.keys((agent as any).graph?.channels || {});
-    expect(channels).toContain("asyncTasks");
+    expect(channels).toContain("asyncSubagentJobs");
   });
 
   it("should register all 5 async subagent tools on the agent", () => {
-    const middleware = createAsyncSubAgentMiddleware({
-      asyncSubAgents: [sampleAgent],
+    const middleware = createAsyncSubagentMiddleware({
+      asyncSubagents: [sampleAgent],
     });
     const agent = createAgent({
       model: SAMPLE_MODEL,
@@ -431,16 +431,16 @@ describe("AsyncSubAgentMiddleware", () => {
     });
     const tools = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
     const toolNames = tools.map((t: any) => t.name);
-    expect(toolNames).toContain("start_async_task");
-    expect(toolNames).toContain("check_async_task");
-    expect(toolNames).toContain("update_async_task");
-    expect(toolNames).toContain("cancel_async_task");
-    expect(toolNames).toContain("list_async_tasks");
+    expect(toolNames).toContain("launch_async_subagent");
+    expect(toolNames).toContain("check_async_subagent");
+    expect(toolNames).toContain("update_async_subagent");
+    expect(toolNames).toContain("cancel_async_subagent");
+    expect(toolNames).toContain("list_async_subagent_jobs");
   });
 
   it("should compose with other middleware without conflicts", () => {
-    const asyncMiddleware = createAsyncSubAgentMiddleware({
-      asyncSubAgents: [sampleAgent],
+    const asyncMiddleware = createAsyncSubagentMiddleware({
+      asyncSubagents: [sampleAgent],
     });
     const fsMiddleware = createFilesystemMiddleware();
     const agent = createAgent({
@@ -449,12 +449,12 @@ describe("AsyncSubAgentMiddleware", () => {
       tools: [],
     });
     const channels = Object.keys((agent as any).graph?.channels || {});
-    expect(channels).toContain("asyncTasks");
+    expect(channels).toContain("asyncSubagentJobs");
     expect(channels).toContain("files");
 
     const tools = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
     const toolNames = tools.map((t: any) => t.name);
-    expect(toolNames).toContain("start_async_task");
+    expect(toolNames).toContain("launch_async_subagent");
     expect(toolNames).toContain("ls");
   });
 });
