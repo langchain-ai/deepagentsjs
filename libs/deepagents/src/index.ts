@@ -43,7 +43,7 @@ export {
   createSummarizationMiddleware,
   computeSummarizationDefaults,
   createMemoryMiddleware,
-  createAsyncSubagentMiddleware,
+  createAsyncSubAgentMiddleware,
   // Skills middleware - matches Python's SkillsMiddleware interface
   createSkillsMiddleware,
   type SkillsMiddlewareOptions,
@@ -65,9 +65,9 @@ export {
   type MemoryMiddlewareOptions,
   type SubAgent,
   type CompiledSubAgent,
-  type AsyncSubagentMiddlewareOptions,
-  type AsyncSubagent,
-  type AsyncSubagentJob,
+  type AsyncSubAgentMiddlewareOptions,
+  type AsyncSubAgent,
+  type AsyncSubAgentJob,
 } from "./middleware/index.js";
 
 // Export shared state values (similar to LangGraph's messagesValue pattern)

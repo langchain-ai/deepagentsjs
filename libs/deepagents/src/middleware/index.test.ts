@@ -12,7 +12,7 @@ import {
   createFilesystemMiddleware,
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
-  createAsyncSubagentMiddleware,
+  createAsyncSubAgentMiddleware,
 } from "../index.js";
 
 import { SAMPLE_MODEL } from "../testing/utils.js";
@@ -394,7 +394,7 @@ describe("PatchToolCallsMiddleware", () => {
   });
 });
 
-describe("AsyncSubagentMiddleware", () => {
+describe("AsyncSubAgentMiddleware", () => {
   const sampleAgent = {
     name: "researcher",
     description: "A research agent",
@@ -403,13 +403,13 @@ describe("AsyncSubagentMiddleware", () => {
   };
 
   it("should be importable and callable from the package index", () => {
-    expect(createAsyncSubagentMiddleware).toBeDefined();
-    expect(typeof createAsyncSubagentMiddleware).toBe("function");
+    expect(createAsyncSubAgentMiddleware).toBeDefined();
+    expect(typeof createAsyncSubAgentMiddleware).toBe("function");
   });
 
   it("should add asyncSubagentJobs channel to the agent graph", () => {
-    const middleware = createAsyncSubagentMiddleware({
-      asyncSubagents: [sampleAgent],
+    const middleware = createAsyncSubAgentMiddleware({
+      asyncSubAgents: [sampleAgent],
     });
     const agent = createAgent({
       model: SAMPLE_MODEL,
@@ -421,8 +421,8 @@ describe("AsyncSubagentMiddleware", () => {
   });
 
   it("should register all 5 async subagent tools on the agent", () => {
-    const middleware = createAsyncSubagentMiddleware({
-      asyncSubagents: [sampleAgent],
+    const middleware = createAsyncSubAgentMiddleware({
+      asyncSubAgents: [sampleAgent],
     });
     const agent = createAgent({
       model: SAMPLE_MODEL,
@@ -439,8 +439,8 @@ describe("AsyncSubagentMiddleware", () => {
   });
 
   it("should compose with other middleware without conflicts", () => {
-    const asyncMiddleware = createAsyncSubagentMiddleware({
-      asyncSubagents: [sampleAgent],
+    const asyncMiddleware = createAsyncSubAgentMiddleware({
+      asyncSubAgents: [sampleAgent],
     });
     const fsMiddleware = createFilesystemMiddleware();
     const agent = createAgent({
