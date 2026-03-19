@@ -1,0 +1,82 @@
+{
+  "name": "@langchain/secure-exec",
+  "version": "0.1.0",
+  "description": "Sandboxed JavaScript/TypeScript REPL for deepagents using secure-exec (Node.js V8 isolate)",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsdown",
+    "clean": "rm -rf dist/ .tsdown/",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build",
+    "test": "vitest run",
+    "test:unit": "vitest run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/langchain-ai/deepagentsjs.git"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "langgraph",
+    "langchain",
+    "typescript",
+    "llm",
+    "secure-exec",
+    "sandbox",
+    "repl",
+    "v8"
+  ],
+  "author": "LangChain",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/langchain-ai/deepagentsjs/issues"
+  },
+  "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
+  "dependencies": {
+    "@secure-exec/typescript": "^0.1.0",
+    "@sveltejs/acorn-typescript": "^1.0.9",
+    "acorn": "^8.16.0",
+    "dedent": "^1.7.1",
+    "estree-walker": "^3.0.3",
+    "json-schema-to-typescript": "^15.0.4",
+    "magic-string": "^0.30.21",
+    "secure-exec": "^0.1.0"
+  },
+  "peerDependencies": {
+    "deepagents": ">=1.6.0"
+  },
+  "devDependencies": {
+    "@langchain/core": "^1.1.33",
+    "@langchain/langgraph": "^1.1.4",
+    "@tsconfig/recommended": "^1.0.13",
+    "@types/estree": "^1.0.8",
+    "@types/node": "^25.0.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "deepagents": "workspace:*",
+    "langchain": "1.2.34",
+    "tsdown": "^0.20.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18",
+    "zod": "^4.3.6"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/**/*"
+  ]
+}
