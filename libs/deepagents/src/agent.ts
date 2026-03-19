@@ -95,8 +95,10 @@ export function createDeepAgent<
   TResponse extends SupportedResponseFormat = SupportedResponseFormat,
   ContextSchema extends InteropZodObject = InteropZodObject,
   const TMiddleware extends readonly AgentMiddleware[] = readonly [],
-  const TSubagents extends readonly (SubAgent | CompiledSubAgent)[] =
-    readonly [],
+  const TSubagents extends readonly (
+    | SubAgent
+    | CompiledSubAgent
+  )[] = readonly [],
   const TTools extends readonly (ClientTool | ServerTool)[] = readonly [],
 >(
   params: CreateDeepAgentParams<
@@ -244,10 +246,6 @@ export function createDeepAgent<
       model,
       backend: filesystemBackend,
     }),
-    anthropicPromptCachingMiddleware({
-      unsupportedModelBehavior: "ignore",
-      minMessagesToCache: 1,
-    }),
     createPatchToolCallsMiddleware(),
   ];
 
@@ -276,9 +274,15 @@ export function createDeepAgent<
        */
       defaultMiddleware: [
         ...subagentMiddleware,
-        ...((anthropicModel
-          ? [createCacheBreakpointMiddleware()]
-          : []) as AgentMiddleware[]),
+        ...(anthropicModel
+          ? [
+              anthropicPromptCachingMiddleware({
+                unsupportedModelBehavior: "ignore",
+                minMessagesToCache: 1,
+              }),
+              createCacheBreakpointMiddleware(),
+            ]
+          : ([] as AgentMiddleware[])),
       ],
       /**
        * Middleware for the general-purpose subagent (inherits skills from main agent).
@@ -286,9 +290,15 @@ export function createDeepAgent<
       generalPurposeMiddleware: [
         ...subagentMiddleware,
         ...skillsMiddlewareArray,
-        ...((anthropicModel
-          ? [createCacheBreakpointMiddleware()]
-          : []) as AgentMiddleware[]),
+        ...(anthropicModel
+          ? [
+              anthropicPromptCachingMiddleware({
+                unsupportedModelBehavior: "ignore",
+                minMessagesToCache: 1,
+              }),
+              createCacheBreakpointMiddleware(),
+            ]
+          : ([] as AgentMiddleware[])),
       ],
       defaultInterruptOn: interruptOn,
       subagents: processedSubagents,
@@ -304,13 +314,6 @@ export function createDeepAgent<
       backend: filesystemBackend,
     }),
     /**
-     * Enables Anthropic prompt caching for improved performance and reduced costs
-     */
-    anthropicPromptCachingMiddleware({
-      unsupportedModelBehavior: "ignore",
-      minMessagesToCache: 1,
-    }),
-    /**
      * Patches tool calls to ensure compatibility across different model providers
      */
     createPatchToolCallsMiddleware(),
@@ -323,10 +326,18 @@ export function createDeepAgent<
   const runtimeMiddleware: AgentMiddleware[] = [
     ...builtInMiddleware,
     ...skillsMiddlewareArray,
-    ...(anthropicModel ? [createCacheBreakpointMiddleware()] : []),
+    ...(customMiddleware as unknown as AgentMiddleware[]),
+    ...(anthropicModel
+      ? [
+          anthropicPromptCachingMiddleware({
+            unsupportedModelBehavior: "ignore",
+            minMessagesToCache: 1,
+          }),
+          createCacheBreakpointMiddleware(),
+        ]
+      : []),
     ...memoryMiddlewareArray,
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
-    ...(customMiddleware as unknown as AgentMiddleware[]),
   ];
 
   const agent = createAgent({
