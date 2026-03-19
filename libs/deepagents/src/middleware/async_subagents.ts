@@ -71,6 +71,15 @@ export interface AsyncSubAgentJob {
 
   /** Current job status. */
   status: AsyncSubAgentStatus;
+
+  /** ISO timestamp of when the job was launched. */
+  createdAt: string;
+
+  /** ISO timestamp of the most recent follow-up message sent to the SubAgent via the update tool. */
+  updatedAt?: string;
+
+  /** ISO timestamp of the most recent status poll via the check tool. */
+  checkedAt?: string;
 }
 
 /**
@@ -116,6 +125,9 @@ const AsyncSubAgentJobSchema = z.object({
   threadId: z.string(),
   runId: z.string(),
   status: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string().optional(),
+  checkedAt: z.string().optional(),
 });
 
 /**
@@ -437,6 +449,7 @@ export function buildLaunchTool(
           threadId: jobId,
           runId: run.run_id,
           status: "running",
+          createdAt: new Date().toISOString(),
         };
 
         return new Command({
@@ -511,6 +524,9 @@ export function buildCheckTool(clients: ClientCache) {
         threadId: job.threadId,
         runId: job.runId,
         status: result.status,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+        checkedAt: new Date().toISOString(),
       };
 
       return new Command({
@@ -574,6 +590,9 @@ export function buildUpdateTool(
           threadId: tracked.threadId,
           runId: run.run_id,
           status: "running",
+          createdAt: tracked.createdAt,
+          updatedAt: new Date().toISOString(),
+          checkedAt: tracked.checkedAt,
         };
 
         return new Command({
@@ -637,6 +656,9 @@ export function buildCancelTool(clients: ClientCache) {
         threadId: tracked.threadId,
         runId: tracked.runId,
         status: "cancelled",
+        createdAt: tracked.createdAt,
+        updatedAt: tracked.updatedAt,
+        checkedAt: tracked.checkedAt,
       };
 
       return new Command({
@@ -702,6 +724,9 @@ export function buildListTool(clients: ClientCache) {
           threadId: job.threadId,
           runId: job.runId,
           status,
+          createdAt: job.createdAt,
+          updatedAt: job.updatedAt,
+          checkedAt: job.checkedAt,
         };
       }
 
