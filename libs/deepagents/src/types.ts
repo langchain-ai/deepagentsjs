@@ -23,10 +23,10 @@ import type {
 } from "@langchain/langgraph-checkpoint";
 
 import type { AsyncSubagent, SubAgent } from "./middleware/index.js";
+import type { AnyBackendProtocol } from "./backends/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type { AnnotationRoot } from "@langchain/langgraph";
 import type { CompiledSubAgent } from "./middleware/subagents.js";
-import { AnyBackendProtocol } from "./backends/protocol.js";
 
 // LangChain uses AnyAnnotationRoot internally but doesn't export it
 // We use AnnotationRoot<any> as a compatible equivalent
