@@ -242,4 +242,27 @@ describe("isSandboxBackend", () => {
 
     expect(isSandboxBackend(backendWithBadId as any)).toBe(false);
   });
+
+  it("should return false for backends with execute and empty string id (#325)", () => {
+    const backendWithEmptyId = {
+      id: "",
+      execute: async () => ({ output: "", exitCode: 0, truncated: false }),
+      ls: async () => ({ files: [] }),
+      read: async () => ({ content: "" }),
+      readRaw: async () => ({
+        data: {
+          content: "",
+          mimeType: "text/plain",
+          created_at: "",
+          modified_at: "",
+        },
+      }),
+      grep: async () => ({ matches: [] }),
+      glob: async () => ({ files: [] }),
+      write: async () => ({ path: "" }),
+      edit: async () => ({ path: "" }),
+    };
+
+    expect(isSandboxBackend(backendWithEmptyId as any)).toBe(false);
+  });
 });
