@@ -135,11 +135,11 @@ describe("TERMINAL_STATUSES", () => {
 
 describe("ASYNC_TASK_SYSTEM_PROMPT", () => {
   it("should mention all five tool names", () => {
-    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("launch_async_SubAgent");
-    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("check_async_SubAgent");
-    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("update_async_SubAgent");
-    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("cancel_async_SubAgent");
-    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("list_async_SubAgent_jobs");
+    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("launch_async_subagent");
+    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("check_async_subagent");
+    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("update_async_subagent");
+    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("cancel_async_subagent");
+    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("list_async_subagent_jobs");
   });
 
   it("should include critical behavioral rules", () => {
@@ -1138,11 +1138,11 @@ describe("createAsyncSubAgentMiddleware", () => {
       asyncSubAgents: [makeAgent()],
     });
     const toolNames = (middleware.tools ?? []).map((t) => t.name);
-    expect(toolNames).toContain("launch_async_SubAgent");
-    expect(toolNames).toContain("check_async_SubAgent");
-    expect(toolNames).toContain("update_async_SubAgent");
-    expect(toolNames).toContain("cancel_async_SubAgent");
-    expect(toolNames).toContain("list_async_SubAgent_jobs");
+    expect(toolNames).toContain("launch_async_subagent");
+    expect(toolNames).toContain("check_async_subagent");
+    expect(toolNames).toContain("update_async_subagent");
+    expect(toolNames).toContain("cancel_async_subagent");
+    expect(toolNames).toContain("list_async_subagent_jobs");
   });
 
   it("should inject the agent name and description into the launch tool", () => {
@@ -1154,7 +1154,7 @@ describe("createAsyncSubAgentMiddleware", () => {
       asyncSubAgents: [agent],
     });
     const launchTool = (middleware.tools ?? []).find(
-      (t) => t.name === "launch_async_SubAgent",
+      (t) => t.name === "launch_async_subagent",
     );
     expect(launchTool?.description).toContain("my-worker");
     expect(launchTool?.description).toContain("Does hard work");
@@ -1169,7 +1169,7 @@ describe("createAsyncSubAgentMiddleware", () => {
       ],
     });
     const launchTool = (middleware.tools ?? []).find(
-      (t) => t.name === "launch_async_SubAgent",
+      (t) => t.name === "launch_async_subagent",
     );
     expect(launchTool?.description).toContain("researcher");
     expect(launchTool?.description).toContain("analyst");
@@ -1203,10 +1203,10 @@ describe("createAsyncSubAgentMiddleware", () => {
       asyncSubAgents: [makeAgent({ name: "agent-b" })],
     });
     const launchDesc1 = (m1.tools ?? []).find(
-      (t) => t.name === "launch_async_SubAgent",
+      (t) => t.name === "launch_async_subagent",
     )?.description;
     const launchDesc2 = (m2.tools ?? []).find(
-      (t) => t.name === "launch_async_SubAgent",
+      (t) => t.name === "launch_async_subagent",
     )?.description;
     expect(launchDesc1).toContain("agent-a");
     expect(launchDesc1).not.toContain("agent-b");

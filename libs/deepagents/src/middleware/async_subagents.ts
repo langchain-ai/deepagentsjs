@@ -155,7 +155,7 @@ export function asyncSubAgentJobsReducer(
 }
 
 /**
- * Description template for the `launch_async_SubAgent` tool.
+ * Description template for the `launch_async_subagent` tool.
  *
  * The `{available_agents}` placeholder is replaced at middleware creation
  * time with a formatted list of configured async SubAgent names and descriptions.
@@ -167,8 +167,8 @@ Available async agent types:
 
 ## Usage notes:
 1. This tool launches a background job and returns immediately with a job ID. Report the job ID to the user and stop — do NOT immediately check status.
-2. Use \`check_async_SubAgent\` only when the user asks for a status update or result.
-3. Use \`update_async_SubAgent\` to send new instructions to a running job.
+2. Use \`check_async_subagent\` only when the user asks for a status update or result.
+3. Use \`update_async_subagent\` to send new instructions to a running job.
 4. Multiple async SubAgents can run concurrently — launch several and let them run in the background.
 5. The SubAgent runs on a remote LangGraph server, so it has its own tools and capabilities.`;
 
@@ -186,31 +186,31 @@ export const ASYNC_TASK_SYSTEM_PROMPT = `## Async SubAgents (remote LangGraph se
 You have access to async SubAgent tools that launch background jobs on remote LangGraph servers.
 
 ### Tools:
-- \`launch_async_SubAgent\`: Start a new background job. Returns a job ID immediately.
-- \`check_async_SubAgent\`: Check the status of a running job. Returns status and result if complete.
-- \`update_async_SubAgent\`: Send an update or new instructions to a running job.
-- \`cancel_async_SubAgent\`: Cancel a running job that is no longer needed.
-- \`list_async_SubAgent_jobs\`: List all tracked jobs with live statuses. Use this to check all jobs at once.
+- \`launch_async_subagent\`: Start a new background job. Returns a job ID immediately.
+- \`check_async_subagent\`: Check the status of a running job. Returns status and result if complete.
+- \`update_async_subagent\`: Send an update or new instructions to a running job.
+- \`cancel_async_subagent\`: Cancel a running job that is no longer needed.
+- \`list_async_subagent_jobs\`: List all tracked jobs with live statuses. Use this to check all jobs at once.
 
 ### Workflow:
-1. **Launch** — Use \`launch_async_SubAgent\` to start a job. Report the job ID to the user and stop.
+1. **Launch** — Use \`launch_async_subagent\` to start a job. Report the job ID to the user and stop.
    Do NOT immediately check the status — the job runs in the background while you and the user continue other work.
-2. **Check (on request)** — Only use \`check_async_SubAgent\` when the user explicitly asks for a status update or
+2. **Check (on request)** — Only use \`check_async_subagent\` when the user explicitly asks for a status update or
    result. If the status is "running", report that and stop — do not poll in a loop.
-3. **Update** (optional) — Use \`update_async_SubAgent\` to send new instructions to a running job. This interrupts
+3. **Update** (optional) — Use \`update_async_subagent\` to send new instructions to a running job. This interrupts
    the current run and starts a fresh one on the same thread. The job_id stays the same.
-4. **Cancel** (optional) — Use \`cancel_async_SubAgent\` to stop a job that is no longer needed.
-5. **Collect** — When \`check_async_SubAgent\` returns status "success", the result is included in the response.
-6. **List** — Use \`list_async_SubAgent_jobs\` to see live statuses for all jobs at once, or to recall job IDs after context compaction.
+4. **Cancel** (optional) — Use \`cancel_async_subagent\` to stop a job that is no longer needed.
+5. **Collect** — When \`check_async_subagent\` returns status "success", the result is included in the response.
+6. **List** — Use \`list_async_subagent_jobs\` to see live statuses for all jobs at once, or to recall job IDs after context compaction.
 
 ### Critical rules:
 - After launching, ALWAYS return control to the user immediately. Never auto-check after launching.
-- Never poll \`check_async_SubAgent\` in a loop. Check once per user request, then stop.
+- Never poll \`check_async_subagent\` in a loop. Check once per user request, then stop.
 - If a check returns "running", tell the user and wait for them to ask again.
 - Job statuses in conversation history are ALWAYS stale — a job that was "running" may now be done.
   NEVER report a status from a previous tool result. ALWAYS call a tool to get the current status:
-  use \`list_async_SubAgent_jobs\` when the user asks about multiple jobs or "all jobs",
-  use \`check_async_SubAgent\` when the user asks about a specific job.
+  use \`list_async_subagent_jobs\` when the user asks about multiple jobs or "all jobs",
+  use \`check_async_subagent\` when the user asks about a specific job.
 - Always show the full job_id — never truncate or abbreviate it.
 
 ### When to use async SubAgents:
@@ -400,7 +400,7 @@ export class ClientCache {
 }
 
 /**
- * Build the `launch_async_SubAgent` tool.
+ * Build the `launch_async_subagent` tool.
  *
  * Creates a thread on the remote server, starts a run, and returns a
  * `Command` that persists the new job in state.
@@ -455,7 +455,7 @@ export function buildLaunchTool(
       }
     },
     {
-      name: "launch_async_SubAgent",
+      name: "launch_async_subagent",
       description: toolDescription,
       schema: z.object({
         description: z
@@ -474,7 +474,7 @@ export function buildLaunchTool(
 }
 
 /**
- * Build the `check_async_SubAgent` tool.
+ * Build the `check_async_subagent` tool.
  *
  * Fetches the current run status from the remote server and, if the run
  * succeeded, retrieves the thread state to extract the result.
@@ -526,14 +526,14 @@ export function buildCheckTool(clients: ClientCache) {
       });
     },
     {
-      name: "check_async_SubAgent",
+      name: "check_async_subagent",
       description:
         "Check the status of an async SubAgent job. Returns the current status and, if complete, the result.",
       schema: z.object({
         jobId: z
           .string()
           .describe(
-            "The exact jobId string returned by launch_async_SubAgent. Pass it verbatim.",
+            "The exact jobId string returned by launch_async_subagent. Pass it verbatim.",
           ),
       }),
     },
@@ -541,7 +541,7 @@ export function buildCheckTool(clients: ClientCache) {
 }
 
 /**
- * Build the `update_async_SubAgent` tool.
+ * Build the `update_async_subagent` tool.
  *
  * Sends a follow-up message to a running async SubAgent by creating a new
  * run on the same thread with `multitaskStrategy: "interrupt"`. The SubAgent
@@ -595,14 +595,14 @@ export function buildUpdateTool(
       }
     },
     {
-      name: "update_async_SubAgent",
+      name: "update_async_subagent",
       description:
         "send updated instructions to an async SubAgent. Interrupts the current run and starts a new one on the same thread so the SubAgent sees the full conversation history plus your new message. The jobId remains the same.",
       schema: z.object({
         jobId: z
           .string()
           .describe(
-            "The exact jobId string returned by launch_async_SubAgent. Pass it verbatim.",
+            "The exact jobId string returned by launch_async_subagent. Pass it verbatim.",
           ),
         message: z
           .string()
@@ -615,7 +615,7 @@ export function buildUpdateTool(
 }
 
 /**
- * Build the `cancel_async_SubAgent` tool.
+ * Build the `cancel_async_subagent` tool.
  *
  * Cancels the current run on the remote server and updates the job's
  * cached status to `"cancelled"`.
@@ -655,14 +655,14 @@ export function buildCancelTool(clients: ClientCache) {
       });
     },
     {
-      name: "cancel_async_SubAgent",
+      name: "cancel_async_subagent",
       description:
         "Cancel a running async SubAgent job. Use this to stop a job that is no longer needed.",
       schema: z.object({
         jobId: z
           .string()
           .describe(
-            "The exact jobId string returned by launch_async_SubAgent. Pass it verbatim.",
+            "The exact jobId string returned by launch_async_subagent. Pass it verbatim.",
           ),
       }),
     },
@@ -670,7 +670,7 @@ export function buildCancelTool(clients: ClientCache) {
 }
 
 /**
- * Build the `list_async_SubAgent_jobs` tool.
+ * Build the `list_async_subagent_jobs` tool.
  *
  * Lists all tracked jobs with their live statuses fetched in parallel.
  * Supports optional filtering by cached status.
@@ -724,9 +724,9 @@ export function buildListTool(clients: ClientCache) {
       });
     },
     {
-      name: "list_async_SubAgent_jobs",
+      name: "list_async_subagent_jobs",
       description:
-        "List tracked async SubAgent jobs with their current live statuses. Be default shows all jobs. Use `statusFilter` to narrow by status (e.g., 'running', 'success', 'error', 'cancelled'). Use `check_async_SubAgent` to get the full result of a specific completed job.",
+        "List tracked async SubAgent jobs with their current live statuses. Be default shows all jobs. Use `statusFilter` to narrow by status (e.g., 'running', 'success', 'error', 'cancelled'). Use `check_async_subagent` to get the full result of a specific completed job.",
       schema: z.object({
         statusFilter: z
           .string()
