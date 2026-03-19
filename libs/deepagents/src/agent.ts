@@ -133,6 +133,37 @@ export function createDeepAgent<
   const anthropicModel = isAnthropicModel(model);
 
   /**
+   * Built-in tool names registered by FilesystemMiddleware / LocalShellBackend.
+   * If a caller-supplied tool shares one of these names it will shadow the built-in,
+   * causing the model to call it with wrong (or empty) arguments because the two
+   * tool definitions expose different schemas. Warn early so the problem is caught
+   * at construction time rather than as a cryptic runtime schema-validation failure.
+   */
+  const BUILTIN_TOOL_NAMES = new Set([
+    "ls",
+    "read_file",
+    "write_file",
+    "edit_file",
+    "glob",
+    "grep",
+    "execute",
+  ]);
+
+  const collidingTools = (tools as Array<{ name?: string }>)
+    .map((t) => t.name)
+    .filter((name): name is string => !!name && BUILTIN_TOOL_NAMES.has(name));
+
+  if (collidingTools.length > 0) {
+    console.warn(
+      `[deepagents] Warning: the following tool name(s) passed to createDeepAgent ` +
+        `conflict with built-in filesystem/shell tools: ${collidingTools.join(", ")}. ` +
+        `The custom tools will shadow the built-ins, which may cause schema-validation ` +
+        `errors at runtime (e.g. "Invalid input: expected string, received undefined"). ` +
+        `Rename your tools or remove the conflicting entries to avoid this issue.`,
+    );
+  }
+
+  /**
    * Combine system prompt with base prompt like Python implementation
    */
   const systemPromptBlocks: _messages.ContentBlock[] = systemPrompt
