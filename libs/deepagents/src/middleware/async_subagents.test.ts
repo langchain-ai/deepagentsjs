@@ -33,6 +33,7 @@ function makeJob(overrides: Partial<AsyncSubAgentJob> = {}): AsyncSubAgentJob {
     threadId: "thread-1",
     runId: "run-1",
     status: "running" as AsyncSubAgentStatus,
+    createdAt: "2024-01-01T00:00:00.000Z",
     ...overrides,
   };
 }
@@ -359,7 +360,7 @@ describe("buildLaunchTool", () => {
 
     // Check job is persisted in state
     const jobs = update.asyncSubAgentJobs as Record<string, AsyncSubAgentJob>;
-    expect(jobs[mockThreadId]).toEqual({
+    expect(jobs[mockThreadId]).toMatchObject({
       jobId: mockThreadId,
       agentName: "researcher",
       threadId: mockThreadId,
@@ -433,6 +434,29 @@ describe("buildLaunchTool", () => {
     const messages = (cmd.update as Record<string, unknown>)
       .messages as ToolMessage[];
     expect(messages[0].tool_call_id).toBe("");
+  });
+
+  it("should set createdAt to a valid ISO timestamp on the launched job", async () => {
+    const before = new Date();
+    const { cache, threadsCreate, runsCreate } =
+      createMockClientCache(agentMap);
+    threadsCreate.mockResolvedValue({ thread_id: "t-ts" });
+    runsCreate.mockResolvedValue({ run_id: "r-ts", status: "running" });
+
+    const launchTool = buildLaunchTool(agentMap, cache, "Launch a SubAgent");
+    const result = await launchTool.invoke(
+      { description: "do work", agentName: "researcher" },
+      config,
+    );
+    const after = new Date();
+
+    const jobs = ((result as Command).update as Record<string, unknown>)
+      .asyncSubAgentJobs as Record<string, AsyncSubAgentJob>;
+    const createdAt = new Date(jobs["t-ts"].createdAt);
+    expect(createdAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(createdAt.getTime()).toBeLessThanOrEqual(after.getTime());
+    expect(jobs["t-ts"].updatedAt).toBeUndefined();
+    expect(jobs["t-ts"].checkedAt).toBeUndefined();
   });
 });
 
@@ -630,6 +654,55 @@ describe("buildCheckTool", () => {
     );
     expect(content.result).toBe("plain string result");
   });
+
+  it("should set checkedAt to a valid ISO timestamp on the updated job", async () => {
+    const before = new Date();
+    const { cache, runsGet } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubAgentJobs: { [trackedJob.jobId]: trackedJob },
+    });
+    runsGet.mockResolvedValue({ run_id: trackedJob.runId, status: "running" });
+
+    const checkTool = buildCheckTool(cache);
+    const result = await checkTool.invoke({ jobId: trackedJob.jobId }, config);
+    const after = new Date();
+
+    const jobs = ((result as Command).update as Record<string, unknown>)
+      .asyncSubAgentJobs as Record<string, AsyncSubAgentJob>;
+    const checkedAt = new Date(jobs[trackedJob.jobId].checkedAt!);
+    expect(checkedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(checkedAt.getTime()).toBeLessThanOrEqual(after.getTime());
+  });
+
+  it("should preserve createdAt and updatedAt from the existing job", async () => {
+    const jobWithTimestamps = makeJob({
+      createdAt: "2024-06-01T10:00:00.000Z",
+      updatedAt: "2024-06-01T11:00:00.000Z",
+    });
+    const { cache, runsGet } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubAgentJobs: { [jobWithTimestamps.jobId]: jobWithTimestamps },
+    });
+    runsGet.mockResolvedValue({
+      run_id: jobWithTimestamps.runId,
+      status: "running",
+    });
+
+    const checkTool = buildCheckTool(cache);
+    const result = await checkTool.invoke(
+      { jobId: jobWithTimestamps.jobId },
+      config,
+    );
+
+    const jobs = ((result as Command).update as Record<string, unknown>)
+      .asyncSubAgentJobs as Record<string, AsyncSubAgentJob>;
+    expect(jobs[jobWithTimestamps.jobId].createdAt).toBe(
+      "2024-06-01T10:00:00.000Z",
+    );
+    expect(jobs[jobWithTimestamps.jobId].updatedAt).toBe(
+      "2024-06-01T11:00:00.000Z",
+    );
+  });
 });
 
 // ─── buildUpdateTool ───
@@ -681,7 +754,7 @@ describe("buildUpdateTool", () => {
 
     // Job should keep the same jobId but have a new runId
     const jobs = update.asyncSubAgentJobs as Record<string, AsyncSubAgentJob>;
-    expect(jobs[trackedJob.jobId]).toEqual({
+    expect(jobs[trackedJob.jobId]).toMatchObject({
       jobId: trackedJob.jobId,
       agentName: trackedJob.agentName,
       threadId: trackedJob.threadId,
@@ -734,6 +807,55 @@ describe("buildUpdateTool", () => {
       "Failed to update async SubAgent",
     );
     expect((result as ToolMessage).content).toContain("server unavailable");
+  });
+
+  it("should set updatedAt to a valid ISO timestamp on the updated job", async () => {
+    const before = new Date();
+    const { cache, runsCreate } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubAgentJobs: { [trackedJob.jobId]: trackedJob },
+    });
+    runsCreate.mockResolvedValue({ run_id: "run-new", status: "running" });
+
+    const updateTool = buildUpdateTool(agentMap, cache);
+    const result = await updateTool.invoke(
+      { jobId: trackedJob.jobId, message: "new instructions" },
+      config,
+    );
+    const after = new Date();
+
+    const jobs = ((result as Command).update as Record<string, unknown>)
+      .asyncSubAgentJobs as Record<string, AsyncSubAgentJob>;
+    const updatedAt = new Date(jobs[trackedJob.jobId].updatedAt!);
+    expect(updatedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(updatedAt.getTime()).toBeLessThanOrEqual(after.getTime());
+  });
+
+  it("should preserve createdAt and checkedAt from the existing job", async () => {
+    const jobWithTimestamps = makeJob({
+      createdAt: "2024-06-01T10:00:00.000Z",
+      checkedAt: "2024-06-01T10:30:00.000Z",
+    });
+    const { cache, runsCreate } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubAgentJobs: { [jobWithTimestamps.jobId]: jobWithTimestamps },
+    });
+    runsCreate.mockResolvedValue({ run_id: "run-new", status: "running" });
+
+    const updateTool = buildUpdateTool(agentMap, cache);
+    const result = await updateTool.invoke(
+      { jobId: jobWithTimestamps.jobId, message: "follow-up" },
+      config,
+    );
+
+    const jobs = ((result as Command).update as Record<string, unknown>)
+      .asyncSubAgentJobs as Record<string, AsyncSubAgentJob>;
+    expect(jobs[jobWithTimestamps.jobId].createdAt).toBe(
+      "2024-06-01T10:00:00.000Z",
+    );
+    expect(jobs[jobWithTimestamps.jobId].checkedAt).toBe(
+      "2024-06-01T10:30:00.000Z",
+    );
   });
 });
 
@@ -818,6 +940,37 @@ describe("buildCancelTool", () => {
     expect(result).toBeInstanceOf(ToolMessage);
     expect((result as ToolMessage).content).toContain("Failed to cancel run");
     expect((result as ToolMessage).content).toContain("permission denied");
+  });
+
+  it("should preserve all timestamps from the existing job unchanged", async () => {
+    const jobWithTimestamps = makeJob({
+      createdAt: "2024-06-01T10:00:00.000Z",
+      updatedAt: "2024-06-01T11:00:00.000Z",
+      checkedAt: "2024-06-01T11:30:00.000Z",
+    });
+    const { cache, runsCancel } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubAgentJobs: { [jobWithTimestamps.jobId]: jobWithTimestamps },
+    });
+    runsCancel.mockResolvedValue(undefined);
+
+    const cancelTool = buildCancelTool(cache);
+    const result = await cancelTool.invoke(
+      { jobId: jobWithTimestamps.jobId },
+      config,
+    );
+
+    const jobs = ((result as Command).update as Record<string, unknown>)
+      .asyncSubAgentJobs as Record<string, AsyncSubAgentJob>;
+    expect(jobs[jobWithTimestamps.jobId].createdAt).toBe(
+      "2024-06-01T10:00:00.000Z",
+    );
+    expect(jobs[jobWithTimestamps.jobId].updatedAt).toBe(
+      "2024-06-01T11:00:00.000Z",
+    );
+    expect(jobs[jobWithTimestamps.jobId].checkedAt).toBe(
+      "2024-06-01T11:30:00.000Z",
+    );
   });
 });
 
@@ -1079,6 +1232,29 @@ describe("buildListTool", () => {
 
     // Both jobs should have been fetched
     expect(runsGet).toHaveBeenCalledTimes(2);
+  });
+
+  it("should preserve all timestamps from existing jobs unchanged", async () => {
+    const job = makeJob({
+      status: "running",
+      createdAt: "2024-06-01T10:00:00.000Z",
+      updatedAt: "2024-06-01T11:00:00.000Z",
+      checkedAt: "2024-06-01T11:30:00.000Z",
+    });
+    const { cache, runsGet } = createMockClientCache(agentMap);
+    mockGetCurrentTaskInput.mockReturnValue({
+      asyncSubAgentJobs: { [job.jobId]: job },
+    });
+    runsGet.mockResolvedValue({ run_id: job.runId, status: "running" });
+
+    const listTool = buildListTool(cache);
+    const result = await listTool.invoke({ statusFilter: undefined }, config);
+
+    const updatedJobs = ((result as Command).update as Record<string, unknown>)
+      .asyncSubAgentJobs as Record<string, AsyncSubAgentJob>;
+    expect(updatedJobs[job.jobId].createdAt).toBe("2024-06-01T10:00:00.000Z");
+    expect(updatedJobs[job.jobId].updatedAt).toBe("2024-06-01T11:00:00.000Z");
+    expect(updatedJobs[job.jobId].checkedAt).toBe("2024-06-01T11:30:00.000Z");
   });
 });
 
