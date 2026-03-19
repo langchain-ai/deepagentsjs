@@ -205,7 +205,7 @@ export function createDeepAgent<
    * Only the general-purpose subagent inherits the main agent's skills (via defaultMiddleware).
    * If a custom subagent needs skills, it must specify its own `skills` array.
    */
-  const processedSubAgents = syncSubAgents.map((subagent) => {
+  const processedSubagents = syncSubAgents.map((subagent) => {
     /**
      * CompiledSubAgent - use as-is (already has its own middleware baked in)
      */
@@ -313,7 +313,7 @@ export function createDeepAgent<
           : ([] as AgentMiddleware[])),
       ],
       defaultInterruptOn: interruptOn,
-      subagents: processedSubAgents,
+      subagents: processedSubagents,
       generalPurposeAgent: true,
     }),
     /**
