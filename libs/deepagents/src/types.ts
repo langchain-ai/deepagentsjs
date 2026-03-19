@@ -22,7 +22,7 @@ import type {
   BaseStore,
 } from "@langchain/langgraph-checkpoint";
 
-import type { AsyncSubagent, SubAgent } from "./middleware/index.js";
+import type { AsyncSubAgent, SubAgent } from "./middleware/index.js";
 import type { AnyBackendProtocol } from "./backends/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type { AnnotationRoot } from "@langchain/langgraph";
@@ -446,7 +446,7 @@ export interface CreateDeepAgentParams<
    * @example
    * ```ts
    * const agent = createDeepAgent({
-   *   asyncSubagents: [{
+   *   asyncSubAgents: [{
    *     name: "researcher",
    *     description: "Research agent for deep analysis",
    *     url: "https://my-deployment.langsmith.dev",
@@ -455,5 +455,5 @@ export interface CreateDeepAgentParams<
    * });
    * ```
    */
-  asyncSubagents?: AsyncSubagent[];
+  asyncSubAgents?: AsyncSubAgent[];
 }
