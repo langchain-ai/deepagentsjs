@@ -276,10 +276,14 @@ function buildCheckResult(
     const messages = (values?.messages ?? []) as unknown[];
     if (messages.length > 0) {
       const last = messages[messages.length - 1];
-      checkResult.result =
+      const rawContent =
         typeof last === "object" && last !== null && "content" in last
-          ? String((last as Record<string, unknown>).content)
-          : String(last);
+          ? (last as Record<string, unknown>).content
+          : last;
+      checkResult.result =
+        typeof rawContent === "string"
+          ? rawContent
+          : JSON.stringify(rawContent);
     } else {
       checkResult.result = "Completed with no output messages.";
     }
