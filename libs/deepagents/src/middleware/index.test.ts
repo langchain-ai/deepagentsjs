@@ -431,10 +431,10 @@ describe("AsyncSubAgentMiddleware", () => {
     });
     const tools = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
     const toolNames = tools.map((t: any) => t.name);
-    expect(toolNames).toContain("launch_async_subagent");
-    expect(toolNames).toContain("check_async_subagent");
-    expect(toolNames).toContain("update_async_subagent");
-    expect(toolNames).toContain("cancel_async_subagent");
+    expect(toolNames).toContain("launch_async_subagent_job");
+    expect(toolNames).toContain("check_async_subagent_job");
+    expect(toolNames).toContain("update_async_subagent_job");
+    expect(toolNames).toContain("cancel_async_subagent_job");
     expect(toolNames).toContain("list_async_subagent_jobs");
   });
 
@@ -454,7 +454,7 @@ describe("AsyncSubAgentMiddleware", () => {
 
     const tools = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
     const toolNames = tools.map((t: any) => t.name);
-    expect(toolNames).toContain("launch_async_subagent");
+    expect(toolNames).toContain("launch_async_subagent_job");
     expect(toolNames).toContain("ls");
   });
 });
