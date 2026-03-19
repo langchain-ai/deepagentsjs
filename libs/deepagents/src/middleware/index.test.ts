@@ -407,7 +407,7 @@ describe("AsyncSubAgentMiddleware", () => {
     expect(typeof createAsyncSubAgentMiddleware).toBe("function");
   });
 
-  it("should add asyncSubagentJobs channel to the agent graph", () => {
+  it("should add asyncSubAgentJobs channel to the agent graph", () => {
     const middleware = createAsyncSubAgentMiddleware({
       asyncSubAgents: [sampleAgent],
     });
@@ -417,7 +417,7 @@ describe("AsyncSubAgentMiddleware", () => {
       tools: [],
     });
     const channels = Object.keys((agent as any).graph?.channels || {});
-    expect(channels).toContain("asyncSubagentJobs");
+    expect(channels).toContain("asyncSubAgentJobs");
   });
 
   it("should register all 5 async subagent tools on the agent", () => {
@@ -449,7 +449,7 @@ describe("AsyncSubAgentMiddleware", () => {
       tools: [],
     });
     const channels = Object.keys((agent as any).graph?.channels || {});
-    expect(channels).toContain("asyncSubagentJobs");
+    expect(channels).toContain("asyncSubAgentJobs");
     expect(channels).toContain("files");
 
     const tools = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
