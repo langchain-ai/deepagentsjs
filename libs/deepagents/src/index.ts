@@ -67,7 +67,7 @@ export {
   type CompiledSubAgent,
   type AsyncSubAgentMiddlewareOptions,
   type AsyncSubAgent,
-  type AsyncSubAgentJob,
+  type AsyncSubAgentTask,
 } from "./middleware/index.js";
 
 // Export shared state values (similar to LangGraph's messagesValue pattern)

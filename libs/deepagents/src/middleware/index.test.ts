@@ -407,7 +407,7 @@ describe("AsyncSubAgentMiddleware", () => {
     expect(typeof createAsyncSubAgentMiddleware).toBe("function");
   });
 
-  it("should add asyncSubAgentJobs channel to the agent graph", () => {
+  it("should add asyncSubAgentTasks channel to the agent graph", () => {
     const middleware = createAsyncSubAgentMiddleware({
       asyncSubAgents: [sampleAgent],
     });
@@ -417,7 +417,7 @@ describe("AsyncSubAgentMiddleware", () => {
       tools: [],
     });
     const channels = Object.keys((agent as any).graph?.channels || {});
-    expect(channels).toContain("asyncSubAgentJobs");
+    expect(channels).toContain("asyncSubAgentTasks");
   });
 
   it("should register all 5 async subagent tools on the agent", () => {
@@ -431,11 +431,11 @@ describe("AsyncSubAgentMiddleware", () => {
     });
     const tools = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
     const toolNames = tools.map((t: any) => t.name);
-    expect(toolNames).toContain("launch_async_subagent_job");
-    expect(toolNames).toContain("check_async_subagent_job");
-    expect(toolNames).toContain("update_async_subagent_job");
-    expect(toolNames).toContain("cancel_async_subagent_job");
-    expect(toolNames).toContain("list_async_subagent_jobs");
+    expect(toolNames).toContain("launch_async_subagent_task");
+    expect(toolNames).toContain("check_async_subagent_task");
+    expect(toolNames).toContain("update_async_subagent_task");
+    expect(toolNames).toContain("cancel_async_subagent_task");
+    expect(toolNames).toContain("list_async_subagent_tasks");
   });
 
   it("should compose with other middleware without conflicts", () => {
@@ -449,12 +449,12 @@ describe("AsyncSubAgentMiddleware", () => {
       tools: [],
     });
     const channels = Object.keys((agent as any).graph?.channels || {});
-    expect(channels).toContain("asyncSubAgentJobs");
+    expect(channels).toContain("asyncSubAgentTasks");
     expect(channels).toContain("files");
 
     const tools = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
     const toolNames = tools.map((t: any) => t.name);
-    expect(toolNames).toContain("launch_async_subagent_job");
+    expect(toolNames).toContain("launch_async_subagent_task");
     expect(toolNames).toContain("ls");
   });
 });
