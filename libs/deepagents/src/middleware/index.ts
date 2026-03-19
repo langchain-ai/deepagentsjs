@@ -59,6 +59,6 @@ export {
   isAsyncSubAgent,
   type AsyncSubAgentMiddlewareOptions,
   type AsyncSubAgent,
-  type AsyncSubAgentJob,
+  type AsyncSubAgentTask,
   ASYNC_TASK_SYSTEM_PROMPT,
 } from "./async_subagents.js";
