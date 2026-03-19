@@ -133,7 +133,7 @@ export class LangSmithSandbox extends BaseSandbox {
         // eslint-disable-next-line no-instanceof/no-instanceof
         if (err instanceof LangSmithResourceNotFoundError) {
           responses.push({ path, content: null, error: "file_not_found" });
-        // eslint-disable-next-line no-instanceof/no-instanceof
+          // eslint-disable-next-line no-instanceof/no-instanceof
         } else if (err instanceof LangSmithSandboxError) {
           const msg = String(err.message).toLowerCase();
           const error: FileOperationError = msg.includes("is a directory")
