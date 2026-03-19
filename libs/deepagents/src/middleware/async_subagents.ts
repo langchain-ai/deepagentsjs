@@ -7,6 +7,7 @@ import {
 import { Client, type DefaultValues, type Run } from "@langchain/langgraph-sdk";
 import { createMiddleware, tool, ToolMessage, SystemMessage } from "langchain";
 import { z } from "zod/v4";
+import type { AnySubAgent } from "../types.js";
 
 /**
  * Specification for an async SubAgent running on a remote LangGraph server.
@@ -770,6 +771,19 @@ export interface AsyncSubAgentMiddlewareOptions {
  * });
  * ```
  */
+
+/**
+ * Type guard to distinguish async SubAgents from sync SubAgents/CompiledSubAgents.
+ *
+ * Uses the presence of the `graphId` field as the runtime discriminant —
+ * `AsyncSubAgent` requires it, while `SubAgent` and `CompiledSubAgent` do not have it.
+ */
+export function isAsyncSubAgent(
+  subAgent: AnySubAgent,
+): subAgent is AsyncSubAgent {
+  return "graphId" in subAgent;
+}
+
 export function createAsyncSubAgentMiddleware(
   options: AsyncSubAgentMiddlewareOptions,
 ) {
