@@ -368,7 +368,7 @@ describe("buildLaunchTool", () => {
     });
 
     // Check tool message
-    const messages = update.message as ToolMessage[];
+    const messages = update.messages as ToolMessage[];
     expect(messages).toHaveLength(1);
     expect(messages[0]).toBeInstanceOf(ToolMessage);
     expect(messages[0].content).toContain(mockThreadId);
@@ -431,7 +431,7 @@ describe("buildLaunchTool", () => {
     expect(result).toBeInstanceOf(Command);
     const cmd = result as Command;
     const messages = (cmd.update as Record<string, unknown>)
-      .message as ToolMessage[];
+      .messages as ToolMessage[];
     expect(messages[0].tool_call_id).toBe("");
   });
 });

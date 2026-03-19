@@ -440,7 +440,7 @@ export function buildLaunchTool(
 
         return new Command({
           update: {
-            message: [
+            messages: [
               new ToolMessage({
                 content: `Launched async SubAgent. jobId: ${jobId}`,
                 tool_call_id: config.toolCall?.id ?? "",
@@ -819,7 +819,7 @@ export function createAsyncSubAgentMiddleware(
         return handler({
           ...request,
           systemMessage: request.systemMessage.concat(
-            new SystemMessage({ content: systemPrompt }),
+            new SystemMessage({ content: fullSystemPrompt }),
           ),
         });
       }
