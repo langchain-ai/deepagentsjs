@@ -337,7 +337,7 @@ describe("buildLaunchTool", () => {
     // tool().invoke() wraps string returns into a ToolMessage
     expect(result).toBeInstanceOf(ToolMessage);
     const msg = result as ToolMessage;
-    expect(msg.content).toContain("Unknown async SubAgent type");
+    expect(msg.content).toContain("Unknown async subagent type");
     expect(msg.content).toContain("`researcher`");
   });
 
@@ -414,7 +414,7 @@ describe("buildLaunchTool", () => {
     // tool().invoke() wraps string returns into a ToolMessage
     expect(result).toBeInstanceOf(ToolMessage);
     const msg = result as ToolMessage;
-    expect(msg.content).toContain("Failed to launch async SubAgent");
+    expect(msg.content).toContain("Failed to launch async subagent");
     expect(msg.content).toContain("network error");
   });
 
@@ -600,7 +600,7 @@ describe("buildCheckTool", () => {
         .content as string,
     );
     expect(content.status).toBe("error");
-    expect(content.error).toBe("The async SubAgent encountered an error.");
+    expect(content.error).toBe("The async subagent encountered an error.");
   });
 
   it("should return an error when runs.get throws", async () => {
@@ -830,7 +830,7 @@ describe("buildUpdateTool", () => {
 
     expect(result).toBeInstanceOf(ToolMessage);
     expect((result as ToolMessage).content).toContain(
-      "Failed to update async SubAgent",
+      "Failed to update async subagent",
     );
     expect((result as ToolMessage).content).toContain("server unavailable");
   });
@@ -1027,7 +1027,7 @@ describe("buildListTool", () => {
 
     expect(result).toBeInstanceOf(ToolMessage);
     expect((result as ToolMessage).content).toContain(
-      "No async SubAgent tasks tracked",
+      "No async subagent tasks tracked",
     );
   });
 
@@ -1040,7 +1040,7 @@ describe("buildListTool", () => {
 
     expect(result).toBeInstanceOf(ToolMessage);
     expect((result as ToolMessage).content).toContain(
-      "No async SubAgent tasks tracked",
+      "No async subagent tasks tracked",
     );
   });
 
@@ -1057,7 +1057,7 @@ describe("buildListTool", () => {
 
     expect(result).toBeInstanceOf(ToolMessage);
     expect((result as ToolMessage).content).toContain(
-      "No async SubAgent tasks tracked",
+      "No async subagent tasks tracked",
     );
     // Filtering happens before the SDK call — no live fetch needed
     expect(runsGet).not.toHaveBeenCalled();
@@ -1303,7 +1303,7 @@ describe("buildListTool", () => {
 describe("createAsyncSubAgentMiddleware", () => {
   it("should throw when asyncSubAgents array is empty", () => {
     expect(() => createAsyncSubAgentMiddleware({ asyncSubAgents: [] })).toThrow(
-      "At least one async SubAgent must be specified",
+      "At least one async subagent must be specified",
     );
   });
 
@@ -1312,7 +1312,7 @@ describe("createAsyncSubAgentMiddleware", () => {
       createAsyncSubAgentMiddleware({
         asyncSubAgents: [makeAgent(), makeAgent()],
       }),
-    ).toThrow("Duplicate async SubAgent names: researcher");
+    ).toThrow("Duplicate async subagent names: researcher");
   });
 
   it("should report all unique duplicate names in the error", () => {
@@ -1325,7 +1325,7 @@ describe("createAsyncSubAgentMiddleware", () => {
           makeAgent({ name: "beta" }),
         ],
       }),
-    ).toThrow("Duplicate async SubAgent names: alpha, beta");
+    ).toThrow("Duplicate async subagent names: alpha, beta");
   });
 
   it("should return a middleware object for a valid config", () => {
@@ -1349,7 +1349,7 @@ describe("createAsyncSubAgentMiddleware", () => {
     expect(middleware.tools).toHaveLength(5);
   });
 
-  it("should include all 5 async SubAgent tool names", () => {
+  it("should include all 5 async subagent tool names", () => {
     const middleware = createAsyncSubAgentMiddleware({
       asyncSubAgents: [makeAgent()],
     });
