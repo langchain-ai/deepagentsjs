@@ -1,6 +1,6 @@
 {
   "name": "@langchain/sandbox-standard-tests",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Standard integration tests for deepagents sandbox providers",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

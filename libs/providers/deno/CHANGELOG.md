@@ -1,5 +1,11 @@
 # @langchain/deno
 
+## 0.2.2
+
+### Patch Changes
+
+- [#318](https://github.com/langchain-ai/deepagentsjs/pull/318) [`a5ba74e`](https://github.com/langchain-ai/deepagentsjs/commit/a5ba74eac26bc96a9d9d392f5b7ceffd20abfe07) Thanks [@colifran](https://github.com/colifran)! - chore(deepagents): refactor backend method names - lsInfo -> ls, grepRaw -> grep, globInfo -> glob
+
 ## 0.2.1
 
 ### Patch Changes
