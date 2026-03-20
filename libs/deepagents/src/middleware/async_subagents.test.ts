@@ -6,7 +6,7 @@ import type { ToolRuntime } from "langchain";
 
 import {
   asyncTasksReducer,
-  buildLaunchTool,
+  buildStartTool,
   buildCheckTool,
   buildUpdateTool,
   buildCancelTool,
@@ -299,7 +299,7 @@ describe("ClientCache", () => {
   });
 });
 
-// ─── buildLaunchTool ───
+// ─── buildStartTool ───
 
 /**
  * Create a ClientCache with mocked SDK methods on the underlying Client.
@@ -334,14 +334,14 @@ function createMockClientCache(agentMap: Record<string, AsyncSubAgent>) {
   };
 }
 
-describe("buildLaunchTool", () => {
+describe("buildStartTool", () => {
   const agentMap = { researcher: makeAgent() };
   const toolCallId = "call-123";
   const config = asyncAgentToolInvokeConfig(toolCallId, {});
 
   it("should return an error for an unknown agent name", async () => {
     const { cache } = createMockClientCache(agentMap);
-    const launchTool = buildLaunchTool(agentMap, cache, "Launch a SubAgent");
+    const launchTool = buildStartTool(agentMap, cache, "Launch a SubAgent");
 
     const result = await launchTool.invoke(
       { description: "do research", agentName: "unknown" },
@@ -363,7 +363,7 @@ describe("buildLaunchTool", () => {
     threadsCreate.mockResolvedValue({ thread_id: mockThreadId });
     runsCreate.mockResolvedValue({ run_id: mockRunId, status: "running" });
 
-    const launchTool = buildLaunchTool(agentMap, cache, "Launch a SubAgent");
+    const launchTool = buildStartTool(agentMap, cache, "Launch a SubAgent");
     const result = await launchTool.invoke(
       { description: "research quantum computing", agentName: "researcher" },
       config,
@@ -397,7 +397,7 @@ describe("buildLaunchTool", () => {
     threadsCreate.mockResolvedValue({ thread_id: "t-1" });
     runsCreate.mockResolvedValue({ run_id: "r-1", status: "running" });
 
-    const launchTool = buildLaunchTool(agentMap, cache, "Launch a SubAgent");
+    const launchTool = buildStartTool(agentMap, cache, "Launch a SubAgent");
     await launchTool.invoke(
       { description: "analyze the data", agentName: "researcher" },
       config,
@@ -418,7 +418,7 @@ describe("buildLaunchTool", () => {
     const { cache, threadsCreate } = createMockClientCache(agentMap);
     threadsCreate.mockRejectedValue(new Error("network error"));
 
-    const launchTool = buildLaunchTool(agentMap, cache, "Launch a SubAgent");
+    const launchTool = buildStartTool(agentMap, cache, "Launch a SubAgent");
     const result = await launchTool.invoke(
       { description: "do research", agentName: "researcher" },
       config,
@@ -438,7 +438,7 @@ describe("buildLaunchTool", () => {
     threadsCreate.mockResolvedValue({ thread_id: "t-notc" });
     runsCreate.mockResolvedValue({ run_id: "r-notc", status: "running" });
 
-    const launchTool = buildLaunchTool(agentMap, cache, "Launch a SubAgent");
+    const launchTool = buildStartTool(agentMap, cache, "Launch a SubAgent");
     const result = await launchTool.invoke(
       { description: "do work", agentName: "researcher" },
       {} as any,
@@ -458,7 +458,7 @@ describe("buildLaunchTool", () => {
     threadsCreate.mockResolvedValue({ thread_id: "t-ts" });
     runsCreate.mockResolvedValue({ run_id: "r-ts", status: "running" });
 
-    const launchTool = buildLaunchTool(agentMap, cache, "Launch a SubAgent");
+    const launchTool = buildStartTool(agentMap, cache, "Launch a SubAgent");
     const result = await launchTool.invoke(
       { description: "do work", agentName: "researcher" },
       config,

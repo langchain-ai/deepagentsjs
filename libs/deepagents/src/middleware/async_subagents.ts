@@ -425,7 +425,7 @@ export class ClientCache {
  * Creates a thread on the remote server, starts a run, and returns a
  * `Command` that persists the new task in state.
  */
-export function buildLaunchTool(
+export function buildStartTool(
   agentMap: Record<string, AsyncSubAgent>,
   clients: ClientCache,
   toolDescription: string,
@@ -848,7 +848,7 @@ export function createAsyncSubAgentMiddleware(
   );
 
   const tools = [
-    buildLaunchTool(agentMap, clients, launchDescription),
+    buildStartTool(agentMap, clients, launchDescription),
     buildCheckTool(clients),
     buildUpdateTool(agentMap, clients),
     buildCancelTool(clients),
