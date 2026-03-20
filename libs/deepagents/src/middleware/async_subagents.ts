@@ -174,7 +174,7 @@ export function asyncTasksReducer(
 }
 
 /**
- * Description template for the `launch_async_task` tool.
+ * Description template for the `start_async_task` tool.
  *
  * The `{available_agents}` placeholder is replaced at middleware creation
  * time with a formatted list of configured async subagent names and descriptions.
@@ -205,14 +205,14 @@ export const ASYNC_TASK_SYSTEM_PROMPT = `## Async subagents (remote LangGraph se
 You have access to async subagent tools that launch background tasks on remote LangGraph servers.
 
 ### Tools:
-- \`launch_async_task\`: Start a new background task. Returns a task ID immediately.
+- \`start_async_task\`: Start a new background task. Returns a task ID immediately.
 - \`check_async_task\`: Check the status of a running task. Returns status and result if complete.
 - \`update_async_task\`: Send an update or new instructions to a running task.
 - \`cancel_async_task\`: Cancel a running task that is no longer needed.
 - \`list_async_tasks\`: List all tracked tasks with live statuses. Use this to check all tasks at once.
 
 ### Workflow:
-1. **Launch** — Use \`launch_async_task\` to start a task. Report the task ID to the user and stop.
+1. **Launch** — Use \`start_async_task\` to start a task. Report the task ID to the user and stop.
    Do NOT immediately check the status — the task runs in the background while you and the user continue other work.
 2. **Check (on request)** — Only use \`check_async_task\` when the user explicitly asks for a status update or
    result. If the status is "running", report that and stop — do not poll in a loop.
@@ -420,7 +420,7 @@ export class ClientCache {
 }
 
 /**
- * Build the `launch_async_task` tool.
+ * Build the `start_async_task` tool.
  *
  * Creates a thread on the remote server, starts a run, and returns a
  * `Command` that persists the new task in state.
@@ -476,7 +476,7 @@ export function buildLaunchTool(
       }
     },
     {
-      name: "launch_async_task",
+      name: "start_async_task",
       description: toolDescription,
       schema: z.object({
         description: z
@@ -559,7 +559,7 @@ export function buildCheckTool(clients: ClientCache) {
         taskId: z
           .string()
           .describe(
-            "The exact taskId string returned by launch_async_task. Pass it verbatim.",
+            "The exact taskId string returned by start_async_task. Pass it verbatim.",
           ),
       }),
     },
@@ -630,7 +630,7 @@ export function buildUpdateTool(
         taskId: z
           .string()
           .describe(
-            "The exact taskId string returned by launch_async_task. Pass it verbatim.",
+            "The exact taskId string returned by start_async_task. Pass it verbatim.",
           ),
         message: z
           .string()
@@ -695,7 +695,7 @@ export function buildCancelTool(clients: ClientCache) {
         taskId: z
           .string()
           .describe(
-            "The exact taskId string returned by launch_async_task. Pass it verbatim.",
+            "The exact taskId string returned by start_async_task. Pass it verbatim.",
           ),
       }),
     },

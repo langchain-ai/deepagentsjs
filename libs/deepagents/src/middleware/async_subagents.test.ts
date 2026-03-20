@@ -151,7 +151,7 @@ describe("TERMINAL_STATUSES", () => {
 
 describe("ASYNC_TASK_SYSTEM_PROMPT", () => {
   it("should mention all five tool names", () => {
-    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("launch_async_task");
+    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("start_async_task");
     expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("check_async_task");
     expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("update_async_task");
     expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("cancel_async_task");
@@ -1381,7 +1381,7 @@ describe("createAsyncSubAgentMiddleware", () => {
       asyncSubAgents: [makeAgent()],
     });
     const toolNames = (middleware.tools ?? []).map((t) => t.name);
-    expect(toolNames).toContain("launch_async_task");
+    expect(toolNames).toContain("start_async_task");
     expect(toolNames).toContain("check_async_task");
     expect(toolNames).toContain("update_async_task");
     expect(toolNames).toContain("cancel_async_task");
@@ -1397,7 +1397,7 @@ describe("createAsyncSubAgentMiddleware", () => {
       asyncSubAgents: [agent],
     });
     const launchTool = (middleware.tools ?? []).find(
-      (t) => t.name === "launch_async_task",
+      (t) => t.name === "start_async_task",
     );
     expect(launchTool?.description).toContain("my-worker");
     expect(launchTool?.description).toContain("Does hard work");
@@ -1412,7 +1412,7 @@ describe("createAsyncSubAgentMiddleware", () => {
       ],
     });
     const launchTool = (middleware.tools ?? []).find(
-      (t) => t.name === "launch_async_task",
+      (t) => t.name === "start_async_task",
     );
     expect(launchTool?.description).toContain("researcher");
     expect(launchTool?.description).toContain("analyst");
@@ -1446,10 +1446,10 @@ describe("createAsyncSubAgentMiddleware", () => {
       asyncSubAgents: [makeAgent({ name: "agent-b" })],
     });
     const launchDesc1 = (m1.tools ?? []).find(
-      (t) => t.name === "launch_async_task",
+      (t) => t.name === "start_async_task",
     )?.description;
     const launchDesc2 = (m2.tools ?? []).find(
-      (t) => t.name === "launch_async_task",
+      (t) => t.name === "start_async_task",
     )?.description;
     expect(launchDesc1).toContain("agent-a");
     expect(launchDesc1).not.toContain("agent-b");
