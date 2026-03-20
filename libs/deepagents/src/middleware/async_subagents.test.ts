@@ -5,7 +5,7 @@ import { ToolMessage } from "@langchain/core/messages";
 import type { ToolRuntime } from "langchain";
 
 import {
-  asyncSubAgentTasksReducer,
+  asyncTasksReducer,
   buildLaunchTool,
   buildCheckTool,
   buildUpdateTool,
@@ -16,8 +16,8 @@ import {
   ASYNC_TASK_SYSTEM_PROMPT,
   TERMINAL_STATUSES,
   type AsyncSubAgent,
-  type AsyncSubAgentTask,
-  type AsyncSubAgentStatus,
+  type AsyncTask,
+  type AsyncTaskStatus,
 } from "./async_subagents.js";
 
 /**
@@ -25,7 +25,7 @@ import {
  * `state` is the graph state, same source as the former `getCurrentTaskInput(config)`.
  */
 type AsyncToolInvokeState = {
-  asyncSubAgentTasks?: Record<string, AsyncSubAgentTask>;
+  asyncTasks?: Record<string, AsyncTask>;
 };
 
 function asyncAgentToolInvokeConfig(
@@ -41,15 +41,13 @@ function asyncAgentToolInvokeConfig(
 
 // ─── Helper factories ───
 
-function makeTask(
-  overrides: Partial<AsyncSubAgentTask> = {},
-): AsyncSubAgentTask {
+function makeTask(overrides: Partial<AsyncTask> = {}): AsyncTask {
   return {
     taskId: "thread-1",
     agentName: "researcher",
     threadId: "thread-1",
     runId: "run-1",
-    status: "running" as AsyncSubAgentStatus,
+    status: "running" as AsyncTaskStatus,
     createdAt: "2024-01-01T00:00:00.000Z",
     ...overrides,
   };
@@ -65,24 +63,24 @@ function makeAgent(overrides: Partial<AsyncSubAgent> = {}): AsyncSubAgent {
   };
 }
 
-// ─── asyncSubAgentTasksReducer ───
+// ─── asyncTasksReducer ───
 
-describe("asyncSubAgentTasksReducer", () => {
+describe("asyncTasksReducer", () => {
   it("should return update when existing is undefined", () => {
     const job = makeTask();
-    const result = asyncSubAgentTasksReducer(undefined, { [job.taskId]: job });
+    const result = asyncTasksReducer(undefined, { [job.taskId]: job });
     expect(result).toEqual({ "thread-1": job });
   });
 
   it("should return empty dict when both are undefined", () => {
-    const result = asyncSubAgentTasksReducer(undefined, undefined);
+    const result = asyncTasksReducer(undefined, undefined);
     expect(result).toEqual({});
   });
 
   it("should return existing when update is undefined", () => {
     const job = makeTask();
     const existing = { [job.taskId]: job };
-    const result = asyncSubAgentTasksReducer(existing, undefined);
+    const result = asyncTasksReducer(existing, undefined);
     expect(result).toEqual(existing);
   });
 
@@ -97,7 +95,7 @@ describe("asyncSubAgentTasksReducer", () => {
     const existing = { [job1.taskId]: job1 };
     const update = { [job2.taskId]: job2 };
 
-    const result = asyncSubAgentTasksReducer(existing, update);
+    const result = asyncTasksReducer(existing, update);
     expect(result).toEqual({
       "thread-1": job1,
       "thread-2": job2,
@@ -108,7 +106,7 @@ describe("asyncSubAgentTasksReducer", () => {
     const original = makeTask({ status: "running" });
     const updated = makeTask({ status: "success" });
 
-    const result = asyncSubAgentTasksReducer(
+    const result = asyncTasksReducer(
       { [original.taskId]: original },
       { [updated.taskId]: updated },
     );
@@ -125,7 +123,7 @@ describe("asyncSubAgentTasksReducer", () => {
     const existing = { [job1.taskId]: job1 };
     const frozenExisting = { ...existing };
 
-    asyncSubAgentTasksReducer(existing, { [job2.taskId]: job2 });
+    asyncTasksReducer(existing, { [job2.taskId]: job2 });
 
     expect(existing).toEqual(frozenExisting);
   });
@@ -136,14 +134,14 @@ describe("asyncSubAgentTasksReducer", () => {
 describe("TERMINAL_STATUSES", () => {
   it.each(["cancelled", "success", "error", "timeout", "interrupted"])(
     "should include '%s'",
-    (status: AsyncSubAgentStatus) => {
+    (status: AsyncTaskStatus) => {
       expect(TERMINAL_STATUSES.has(status)).toBe(true);
     },
   );
 
   it.each(["running", "pending", "queued"])(
     "should NOT include '%s'",
-    (status: AsyncSubAgentStatus) => {
+    (status: AsyncTaskStatus) => {
       expect(TERMINAL_STATUSES.has(status)).toBe(false);
     },
   );
@@ -188,7 +186,7 @@ describe("type instantiation", () => {
     expect(agent.headers).toBeUndefined();
   });
 
-  it("should allow creating a valid AsyncSubAgentTask", () => {
+  it("should allow creating a valid AsyncTask", () => {
     const job = makeTask();
     expect(job.taskId).toBe("thread-1");
     expect(job.agentName).toBe("researcher");
@@ -376,7 +374,7 @@ describe("buildLaunchTool", () => {
     const update = cmd.update as Record<string, unknown>;
 
     // Check job is persisted in state
-    const jobs = update.asyncSubAgentTasks as Record<string, AsyncSubAgentTask>;
+    const jobs = update.asyncTasks as Record<string, AsyncTask>;
     expect(jobs[mockThreadId]).toMatchObject({
       taskId: mockThreadId,
       agentName: "researcher",
@@ -468,7 +466,7 @@ describe("buildLaunchTool", () => {
     const after = new Date();
 
     const jobs = ((result as Command).update as Record<string, unknown>)
-      .asyncSubAgentTasks as Record<string, AsyncSubAgentTask>;
+      .asyncTasks as Record<string, AsyncTask>;
     const createdAt = new Date(jobs["t-ts"].createdAt);
     expect(createdAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
     expect(createdAt.getTime()).toBeLessThanOrEqual(after.getTime());
@@ -494,7 +492,7 @@ describe("buildCheckTool", () => {
     const checkTool = buildCheckTool(cache);
     const result = await checkTool.invoke(
       { taskId: "unknown-id" },
-      asyncAgentToolInvokeConfig(toolCallId, { asyncSubAgentTasks: {} }),
+      asyncAgentToolInvokeConfig(toolCallId, { asyncTasks: {} }),
     );
 
     expect(result).toBeInstanceOf(ToolMessage);
@@ -514,7 +512,7 @@ describe("buildCheckTool", () => {
     const result = await checkTool.invoke(
       { taskId: trackedJob.taskId },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+        asyncTasks: { [trackedJob.taskId]: trackedJob },
       }),
     );
 
@@ -545,7 +543,7 @@ describe("buildCheckTool", () => {
     const result = await checkTool.invoke(
       { taskId: trackedJob.taskId },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+        asyncTasks: { [trackedJob.taskId]: trackedJob },
       }),
     );
 
@@ -559,7 +557,7 @@ describe("buildCheckTool", () => {
     expect(content.result).toBe("Here are the research findings.");
 
     // Job status should be updated in state
-    const jobs = update.asyncSubAgentTasks as Record<string, AsyncSubAgentTask>;
+    const jobs = update.asyncTasks as Record<string, AsyncTask>;
     expect(jobs[trackedJob.taskId].status).toBe("success");
   });
 
@@ -575,7 +573,7 @@ describe("buildCheckTool", () => {
     const result = await checkTool.invoke(
       { taskId: trackedJob.taskId },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+        asyncTasks: { [trackedJob.taskId]: trackedJob },
       }),
     );
 
@@ -598,7 +596,7 @@ describe("buildCheckTool", () => {
     const result = await checkTool.invoke(
       { taskId: trackedJob.taskId },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+        asyncTasks: { [trackedJob.taskId]: trackedJob },
       }),
     );
 
@@ -620,7 +618,7 @@ describe("buildCheckTool", () => {
     const result = await checkTool.invoke(
       { taskId: trackedJob.taskId },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+        asyncTasks: { [trackedJob.taskId]: trackedJob },
       }),
     );
 
@@ -645,7 +643,7 @@ describe("buildCheckTool", () => {
     const result = await checkTool.invoke(
       { taskId: trackedJob.taskId },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+        asyncTasks: { [trackedJob.taskId]: trackedJob },
       }),
     );
 
@@ -674,7 +672,7 @@ describe("buildCheckTool", () => {
     const result = await checkTool.invoke(
       { taskId: trackedJob.taskId },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+        asyncTasks: { [trackedJob.taskId]: trackedJob },
       }),
     );
 
@@ -695,13 +693,13 @@ describe("buildCheckTool", () => {
     const result = await checkTool.invoke(
       { taskId: trackedJob.taskId },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+        asyncTasks: { [trackedJob.taskId]: trackedJob },
       }),
     );
     const after = new Date();
 
     const jobs = ((result as Command).update as Record<string, unknown>)
-      .asyncSubAgentTasks as Record<string, AsyncSubAgentTask>;
+      .asyncTasks as Record<string, AsyncTask>;
     const checkedAt = new Date(jobs[trackedJob.taskId].checkedAt!);
     expect(checkedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
     expect(checkedAt.getTime()).toBeLessThanOrEqual(after.getTime());
@@ -722,12 +720,12 @@ describe("buildCheckTool", () => {
     const result = await checkTool.invoke(
       { taskId: jobWithTimestamps.taskId },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [jobWithTimestamps.taskId]: jobWithTimestamps },
+        asyncTasks: { [jobWithTimestamps.taskId]: jobWithTimestamps },
       }),
     );
 
     const jobs = ((result as Command).update as Record<string, unknown>)
-      .asyncSubAgentTasks as Record<string, AsyncSubAgentTask>;
+      .asyncTasks as Record<string, AsyncTask>;
     expect(jobs[jobWithTimestamps.taskId].createdAt).toBe(
       "2024-06-01T10:00:00.000Z",
     );
@@ -754,7 +752,7 @@ describe("buildUpdateTool", () => {
     const updateTool = buildUpdateTool(agentMap, cache);
     const result = await updateTool.invoke(
       { taskId: "unknown-id", message: "new instructions" },
-      asyncAgentToolInvokeConfig(toolCallId, { asyncSubAgentTasks: {} }),
+      asyncAgentToolInvokeConfig(toolCallId, { asyncTasks: {} }),
     );
 
     expect(result).toBeInstanceOf(ToolMessage);
@@ -772,7 +770,7 @@ describe("buildUpdateTool", () => {
     const result = await updateTool.invoke(
       { taskId: trackedJob.taskId, message: "focus on quantum entanglement" },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+        asyncTasks: { [trackedJob.taskId]: trackedJob },
       }),
     );
 
@@ -781,7 +779,7 @@ describe("buildUpdateTool", () => {
     const update = cmd.update as Record<string, unknown>;
 
     // Task should keep the same taskId but have a new runId
-    const jobs = update.asyncSubAgentTasks as Record<string, AsyncSubAgentTask>;
+    const jobs = update.asyncTasks as Record<string, AsyncTask>;
     expect(jobs[trackedJob.taskId]).toMatchObject({
       taskId: trackedJob.taskId,
       agentName: trackedJob.agentName,
@@ -803,7 +801,7 @@ describe("buildUpdateTool", () => {
     await updateTool.invoke(
       { taskId: trackedJob.taskId, message: "new instructions" },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+        asyncTasks: { [trackedJob.taskId]: trackedJob },
       }),
     );
 
@@ -824,7 +822,7 @@ describe("buildUpdateTool", () => {
     const result = await updateTool.invoke(
       { taskId: trackedJob.taskId, message: "new instructions" },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+        asyncTasks: { [trackedJob.taskId]: trackedJob },
       }),
     );
 
@@ -846,13 +844,13 @@ describe("buildUpdateTool", () => {
     const result = await updateTool.invoke(
       { taskId: trackedJob.taskId, message: "new instructions" },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+        asyncTasks: { [trackedJob.taskId]: trackedJob },
       }),
     );
     const after = new Date();
 
     const jobs = ((result as Command).update as Record<string, unknown>)
-      .asyncSubAgentTasks as Record<string, AsyncSubAgentTask>;
+      .asyncTasks as Record<string, AsyncTask>;
     const updatedAt = new Date(jobs[trackedJob.taskId].updatedAt!);
     expect(updatedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
     expect(updatedAt.getTime()).toBeLessThanOrEqual(after.getTime());
@@ -870,12 +868,12 @@ describe("buildUpdateTool", () => {
     const result = await updateTool.invoke(
       { taskId: jobWithTimestamps.taskId, message: "follow-up" },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [jobWithTimestamps.taskId]: jobWithTimestamps },
+        asyncTasks: { [jobWithTimestamps.taskId]: jobWithTimestamps },
       }),
     );
 
     const jobs = ((result as Command).update as Record<string, unknown>)
-      .asyncSubAgentTasks as Record<string, AsyncSubAgentTask>;
+      .asyncTasks as Record<string, AsyncTask>;
     expect(jobs[jobWithTimestamps.taskId].createdAt).toBe(
       "2024-06-01T10:00:00.000Z",
     );
@@ -902,7 +900,7 @@ describe("buildCancelTool", () => {
     const cancelTool = buildCancelTool(cache);
     const result = await cancelTool.invoke(
       { taskId: "unknown-id" },
-      asyncAgentToolInvokeConfig(toolCallId, { asyncSubAgentTasks: {} }),
+      asyncAgentToolInvokeConfig(toolCallId, { asyncTasks: {} }),
     );
 
     expect(result).toBeInstanceOf(ToolMessage);
@@ -919,7 +917,7 @@ describe("buildCancelTool", () => {
     const result = await cancelTool.invoke(
       { taskId: trackedJob.taskId },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+        asyncTasks: { [trackedJob.taskId]: trackedJob },
       }),
     );
 
@@ -928,7 +926,7 @@ describe("buildCancelTool", () => {
     const update = cmd.update as Record<string, unknown>;
 
     // Job status should be updated to cancelled
-    const jobs = update.asyncSubAgentTasks as Record<string, AsyncSubAgentTask>;
+    const jobs = update.asyncTasks as Record<string, AsyncTask>;
     expect(jobs[trackedJob.taskId].status).toBe("cancelled");
 
     // Should keep the same runId (cancel doesn't create a new run)
@@ -947,7 +945,7 @@ describe("buildCancelTool", () => {
     await cancelTool.invoke(
       { taskId: trackedJob.taskId },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+        asyncTasks: { [trackedJob.taskId]: trackedJob },
       }),
     );
 
@@ -965,7 +963,7 @@ describe("buildCancelTool", () => {
     const result = await cancelTool.invoke(
       { taskId: trackedJob.taskId },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+        asyncTasks: { [trackedJob.taskId]: trackedJob },
       }),
     );
 
@@ -991,12 +989,12 @@ describe("buildCancelTool", () => {
     const result = await cancelTool.invoke(
       { taskId: jobWithTimestamps.taskId },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [jobWithTimestamps.taskId]: jobWithTimestamps },
+        asyncTasks: { [jobWithTimestamps.taskId]: jobWithTimestamps },
       }),
     );
 
     const jobs = ((result as Command).update as Record<string, unknown>)
-      .asyncSubAgentTasks as Record<string, AsyncSubAgentTask>;
+      .asyncTasks as Record<string, AsyncTask>;
     expect(jobs[jobWithTimestamps.taskId].createdAt).toBe(
       "2024-06-01T10:00:00.000Z",
     );
@@ -1025,7 +1023,7 @@ describe("buildListTool", () => {
     const listTool = buildListTool(cache);
     const result = await listTool.invoke(
       { statusFilter: undefined },
-      asyncAgentToolInvokeConfig(toolCallId, { asyncSubAgentTasks: {} }),
+      asyncAgentToolInvokeConfig(toolCallId, { asyncTasks: {} }),
     );
 
     expect(result).toBeInstanceOf(ToolMessage);
@@ -1034,7 +1032,7 @@ describe("buildListTool", () => {
     );
   });
 
-  it("should return a string when asyncSubAgentTasks is undefined", async () => {
+  it("should return a string when asyncTasks is undefined", async () => {
     const { cache } = createMockClientCache(agentMap);
 
     const listTool = buildListTool(cache);
@@ -1058,7 +1056,7 @@ describe("buildListTool", () => {
     const result = await listTool.invoke(
       { statusFilter: "success" },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [runningJob.taskId]: runningJob },
+        asyncTasks: { [runningJob.taskId]: runningJob },
       }),
     );
 
@@ -1080,7 +1078,7 @@ describe("buildListTool", () => {
     const result = await listTool.invoke(
       { statusFilter: undefined },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [job1.taskId]: job1, [job2.taskId]: job2 },
+        asyncTasks: { [job1.taskId]: job1, [job2.taskId]: job2 },
       }),
     );
 
@@ -1108,7 +1106,7 @@ describe("buildListTool", () => {
     const result = await listTool.invoke(
       { statusFilter: "all" },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [job1.taskId]: job1, [job2.taskId]: job2 },
+        asyncTasks: { [job1.taskId]: job1, [job2.taskId]: job2 },
       }),
     );
 
@@ -1136,7 +1134,7 @@ describe("buildListTool", () => {
     const result = await listTool.invoke(
       { statusFilter: "running" },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: {
+        asyncTasks: {
           [runningJob.taskId]: runningJob,
           [successJob.taskId]: successJob,
         },
@@ -1160,7 +1158,7 @@ describe("buildListTool", () => {
     const result = await listTool.invoke(
       { statusFilter: undefined },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [job.taskId]: job },
+        asyncTasks: { [job.taskId]: job },
       }),
     );
 
@@ -1185,7 +1183,7 @@ describe("buildListTool", () => {
       await listTool.invoke(
         { statusFilter: undefined },
         asyncAgentToolInvokeConfig(toolCallId, {
-          asyncSubAgentTasks: { [job.taskId]: job },
+          asyncTasks: { [job.taskId]: job },
         }),
       );
 
@@ -1202,18 +1200,18 @@ describe("buildListTool", () => {
     const result = await listTool.invoke(
       { statusFilter: undefined },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [job.taskId]: job },
+        asyncTasks: { [job.taskId]: job },
       }),
     );
 
     expect(result).toBeInstanceOf(Command);
     const updatedJobs = ((result as Command).update as Record<string, unknown>)
-      .asyncSubAgentTasks as Record<string, AsyncSubAgentTask>;
+      .asyncTasks as Record<string, AsyncTask>;
     // Falls back to cached "running" status
     expect(updatedJobs[job.taskId].status).toBe("running");
   });
 
-  it("should update asyncSubAgentTasks in state with live statuses", async () => {
+  it("should update asyncTasks in state with live statuses", async () => {
     const job = makeTask({ status: "running" });
     const { cache, runsGet } = createMockClientCache(agentMap);
     runsGet.mockResolvedValue({ run_id: job.runId, status: "success" });
@@ -1222,12 +1220,12 @@ describe("buildListTool", () => {
     const result = await listTool.invoke(
       { statusFilter: undefined },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [job.taskId]: job },
+        asyncTasks: { [job.taskId]: job },
       }),
     );
 
     const updatedJobs = ((result as Command).update as Record<string, unknown>)
-      .asyncSubAgentTasks as Record<string, AsyncSubAgentTask>;
+      .asyncTasks as Record<string, AsyncTask>;
     expect(updatedJobs[job.taskId].status).toBe("success");
     expect(updatedJobs[job.taskId].taskId).toBe(job.taskId);
     expect(updatedJobs[job.taskId].agentName).toBe(job.agentName);
@@ -1244,7 +1242,7 @@ describe("buildListTool", () => {
     const result = await listTool.invoke(
       { statusFilter: undefined },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [job.taskId]: job },
+        asyncTasks: { [job.taskId]: job },
       }),
     );
 
@@ -1264,7 +1262,7 @@ describe("buildListTool", () => {
     const result = await listTool.invoke(
       { statusFilter: undefined },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [job.taskId]: job },
+        asyncTasks: { [job.taskId]: job },
       }),
     );
 
@@ -1293,7 +1291,7 @@ describe("buildListTool", () => {
     await listTool.invoke(
       { statusFilter: undefined },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [job1.taskId]: job1, [job2.taskId]: job2 },
+        asyncTasks: { [job1.taskId]: job1, [job2.taskId]: job2 },
       }),
     );
 
@@ -1315,12 +1313,12 @@ describe("buildListTool", () => {
     const result = await listTool.invoke(
       { statusFilter: undefined },
       asyncAgentToolInvokeConfig(toolCallId, {
-        asyncSubAgentTasks: { [job.taskId]: job },
+        asyncTasks: { [job.taskId]: job },
       }),
     );
 
     const updatedJobs = ((result as Command).update as Record<string, unknown>)
-      .asyncSubAgentTasks as Record<string, AsyncSubAgentTask>;
+      .asyncTasks as Record<string, AsyncTask>;
     expect(updatedJobs[job.taskId].createdAt).toBe("2024-06-01T10:00:00.000Z");
     expect(updatedJobs[job.taskId].updatedAt).toBe("2024-06-01T11:00:00.000Z");
     expect(updatedJobs[job.taskId].checkedAt).toBe("2024-06-01T11:30:00.000Z");

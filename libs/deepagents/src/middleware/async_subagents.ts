@@ -42,7 +42,7 @@ export interface AsyncSubAgent {
  * Statuses set by the middleware tools: `"running"`, `"success"`, `"error"`, `"cancelled"`.
  * Statuses that may be returned by the LangGraph Platform: `"timeout"`, `"interrupted"`.
  */
-export type AsyncSubAgentStatus =
+export type AsyncTaskStatus =
   | "running"
   | "success"
   | "error"
@@ -57,7 +57,7 @@ export type AsyncSubAgentStatus =
  * The `taskId` is the same as `threadId`, so it can be used to look up
  * the thread directly via the SDK.
  */
-export interface AsyncSubAgentTask {
+export interface AsyncTask {
   /** Unique identifier for the task (same as thread id). */
   taskId: string;
 
@@ -71,7 +71,7 @@ export interface AsyncSubAgentTask {
   runId: string;
 
   /** Current task status. */
-  status: AsyncSubAgentStatus;
+  status: AsyncTaskStatus;
 
   /** ISO timestamp of when the task was launched. */
   createdAt: string;
@@ -86,19 +86,17 @@ export interface AsyncSubAgentTask {
 /**
  * Shape of the async subagent state channel.
  *
- * Used with {@link ToolRuntime} so tools get typed access to `asyncSubAgentTasks`.
+ * Used with {@link ToolRuntime} so tools get typed access to `asyncTasks`.
  *
- * Declared as a `type` (not `interface`) so `ToolRuntime<AsyncSubAgentState>` narrows
+ * Declared as a `type` (not `interface`) so `ToolRuntime<AsyncTaskState>` narrows
  * `runtime.state` correctly (see `@langchain/core` `ToolRuntime` conditional).
  */
-type AsyncSubAgentState = {
+type AsyncTaskState = {
   /** All tracked async subagent tasks, keyed by task ID. */
-  asyncSubAgentTasks?: Record<string, AsyncSubAgentTask>;
+  asyncTasks?: Record<string, AsyncTask>;
 };
 
-function toolCallIdFromRuntime(
-  runtime: ToolRuntime<AsyncSubAgentState>,
-): string {
+function toolCallIdFromRuntime(runtime: ToolRuntime<AsyncTaskState>): string {
   return runtime.toolCall?.id ?? runtime.toolCallId ?? "";
 }
 
@@ -110,7 +108,7 @@ function toolCallIdFromRuntime(
  */
 interface CheckResult {
   /** Current status of the run. */
-  status: AsyncSubAgentStatus;
+  status: AsyncTaskStatus;
 
   /** The thread ID on the remote server. */
   threadId: string;
@@ -123,12 +121,12 @@ interface CheckResult {
 }
 
 /**
- * Zod schema for {@link AsyncSubAgentTask}.
+ * Zod schema for {@link AsyncTask}.
  *
  * Used by the {@link ReducedValue} in the state schema so that LangGraph
- * can validate and serialize task records stored in `asyncSubAgentTasks`.
+ * can validate and serialize task records stored in `asyncTasks`.
  */
-const AsyncSubAgentTaskSchema = z.object({
+const AsyncTaskSchema = z.object({
   taskId: z.string(),
   agentName: z.string(),
   threadId: z.string(),
@@ -142,22 +140,22 @@ const AsyncSubAgentTaskSchema = z.object({
 /**
  * State schema for the async subagent middleware.
  *
- * Declares `asyncSubAgentTasks` as a reduced state channel so that individual
+ * Declares `asyncTasks` as a reduced state channel so that individual
  * tool updates (launch, check, update, cancel, list) merge into the existing
  * tasks dict rather than replacing it wholesale.
  */
-const AsyncSubAgentStateSchema = new StateSchema({
-  asyncSubAgentTasks: new ReducedValue(
-    z.record(z.string(), AsyncSubAgentTaskSchema).default(() => ({})),
+const AsyncTaskStateSchema = new StateSchema({
+  asyncTasks: new ReducedValue(
+    z.record(z.string(), AsyncTaskSchema).default(() => ({})),
     {
-      inputSchema: z.record(z.string(), AsyncSubAgentTaskSchema).optional(),
-      reducer: asyncSubAgentTasksReducer,
+      inputSchema: z.record(z.string(), AsyncTaskSchema).optional(),
+      reducer: asyncTasksReducer,
     },
   ),
 });
 
 /**
- * Reducer for the `asyncSubAgentTasks` state channel.
+ * Reducer for the `asyncTasks` state channel.
  *
  * Merges task updates into the existing tasks dict using shallow spread.
  * This allows individual tools to update a single task without overwriting
@@ -167,10 +165,10 @@ const AsyncSubAgentStateSchema = new StateSchema({
  * @param update - New or updated task entries to merge in.
  * @returns Merged tasks dict.
  */
-export function asyncSubAgentTasksReducer(
-  existing?: Record<string, AsyncSubAgentTask>,
-  update?: Record<string, AsyncSubAgentTask>,
-): Record<string, AsyncSubAgentTask> {
+export function asyncTasksReducer(
+  existing?: Record<string, AsyncTask>,
+  update?: Record<string, AsyncTask>,
+): Record<string, AsyncTask> {
   return { ...(existing || {}), ...(update || {}) };
 }
 
@@ -244,7 +242,7 @@ You have access to async subagent tools that launch background tasks on remote L
  * When listing tasks, live-status fetches are skipped for tasks whose
  * cached status is in this set, since they are guaranteed to be final.
  */
-export const TERMINAL_STATUSES = new Set<AsyncSubAgentStatus>([
+export const TERMINAL_STATUSES = new Set<AsyncTaskStatus>([
   "cancelled",
   "success",
   "error",
@@ -256,14 +254,14 @@ export const TERMINAL_STATUSES = new Set<AsyncSubAgentStatus>([
  * Look up a tracked task from state by its `taskId`.
  *
  * @param taskId - The task ID to look up (will be trimmed).
- * @param state - The current agent state containing `asyncSubAgentTasks`.
+ * @param state - The current agent state containing `asyncTasks`.
  * @returns The tracked task on success, or an error string.
  */
 function resolveTrackedTask(
   taskId: string,
-  state: AsyncSubAgentState,
-): AsyncSubAgentTask | string {
-  const tasks = state.asyncSubAgentTasks ?? {};
+  state: AsyncTaskState,
+): AsyncTask | string {
+  const tasks = state.asyncTasks ?? {};
   const tracked = tasks[taskId.trim()];
   if (!tracked) {
     return `No tracked task found for taskId: '${taskId}'`;
@@ -287,7 +285,7 @@ function buildCheckResult(
   threadValues: DefaultValues,
 ): CheckResult {
   const checkResult: CheckResult = {
-    status: run.status as AsyncSubAgentStatus,
+    status: run.status as AsyncTaskStatus,
     threadId,
   };
 
@@ -325,9 +323,9 @@ function buildCheckResult(
  *   Otherwise return only tasks whose cached status matches.
  */
 function filterTasks(
-  tasks: Record<string, AsyncSubAgentTask>,
+  tasks: Record<string, AsyncTask>,
   statusFilter?: string,
-): AsyncSubAgentTask[] {
+): AsyncTask[] {
   if (!statusFilter || statusFilter === "all") {
     return Object.values(tasks);
   }
@@ -342,8 +340,8 @@ function filterTasks(
  */
 async function fetchLiveTaskStatus(
   clients: ClientCache,
-  task: AsyncSubAgentTask,
-): Promise<AsyncSubAgentStatus> {
+  task: AsyncTask,
+): Promise<AsyncTaskStatus> {
   if (TERMINAL_STATUSES.has(task.status)) {
     return task.status;
   }
@@ -351,7 +349,7 @@ async function fetchLiveTaskStatus(
   try {
     const client = clients.getClient(task.agentName);
     const run = await client.runs.get(task.threadId, task.runId);
-    return run.status as AsyncSubAgentStatus;
+    return run.status as AsyncTaskStatus;
   } catch {
     return task.status;
   }
@@ -360,10 +358,7 @@ async function fetchLiveTaskStatus(
 /**
  * Format a single task as a display string for list output.
  */
-function formatTaskEntry(
-  task: AsyncSubAgentTask,
-  status: AsyncSubAgentStatus,
-): string {
+function formatTaskEntry(task: AsyncTask, status: AsyncTaskStatus): string {
   return `- taskId: ${task.taskId} agent: ${task.agentName} status: ${status}`;
 }
 
@@ -437,7 +432,7 @@ export function buildLaunchTool(
   return tool(
     async (
       input,
-      runtime: ToolRuntime<AsyncSubAgentState>,
+      runtime: ToolRuntime<AsyncTaskState>,
     ): Promise<Command | string> => {
       if (!(input.agentName in agentMap)) {
         const allowed = Object.keys(agentMap)
@@ -455,7 +450,7 @@ export function buildLaunchTool(
         });
 
         const taskId = thread.thread_id;
-        const task: AsyncSubAgentTask = {
+        const task: AsyncTask = {
           taskId,
           agentName: input.agentName,
           threadId: taskId,
@@ -472,7 +467,7 @@ export function buildLaunchTool(
                 tool_call_id: toolCallIdFromRuntime(runtime),
               }),
             ],
-            asyncSubAgentTasks: { [taskId]: task },
+            asyncTasks: { [taskId]: task },
           },
         });
       } catch (e) {
@@ -508,7 +503,7 @@ export function buildCheckTool(clients: ClientCache) {
   return tool(
     async (
       input,
-      runtime: ToolRuntime<AsyncSubAgentState>,
+      runtime: ToolRuntime<AsyncTaskState>,
     ): Promise<Command | string> => {
       const task = resolveTrackedTask(input.taskId, runtime.state);
       if (typeof task === "string") return task;
@@ -532,7 +527,7 @@ export function buildCheckTool(clients: ClientCache) {
       }
 
       const result = buildCheckResult(run, task.threadId, threadValues);
-      const updatedTask: AsyncSubAgentTask = {
+      const updatedTask: AsyncTask = {
         taskId: task.taskId,
         agentName: task.agentName,
         threadId: task.threadId,
@@ -551,7 +546,7 @@ export function buildCheckTool(clients: ClientCache) {
               tool_call_id: toolCallIdFromRuntime(runtime),
             }),
           ],
-          asyncSubAgentTasks: { [task.taskId]: updatedTask },
+          asyncTasks: { [task.taskId]: updatedTask },
         },
       });
     },
@@ -585,7 +580,7 @@ export function buildUpdateTool(
   return tool(
     async (
       input,
-      runtime: ToolRuntime<AsyncSubAgentState>,
+      runtime: ToolRuntime<AsyncTaskState>,
     ): Promise<Command | string> => {
       const tracked = resolveTrackedTask(input.taskId, runtime.state);
       if (typeof tracked === "string") return tracked;
@@ -600,7 +595,7 @@ export function buildUpdateTool(
           multitaskStrategy: "interrupt",
         });
 
-        const task: AsyncSubAgentTask = {
+        const task: AsyncTask = {
           taskId: tracked.taskId,
           agentName: tracked.agentName,
           threadId: tracked.threadId,
@@ -619,7 +614,7 @@ export function buildUpdateTool(
                 tool_call_id: toolCallIdFromRuntime(runtime),
               }),
             ],
-            asyncSubAgentTasks: { [tracked.taskId]: task },
+            asyncTasks: { [tracked.taskId]: task },
           },
         });
       } catch (e) {
@@ -656,7 +651,7 @@ export function buildCancelTool(clients: ClientCache) {
   return tool(
     async (
       input,
-      runtime: ToolRuntime<AsyncSubAgentState>,
+      runtime: ToolRuntime<AsyncTaskState>,
     ): Promise<Command | string> => {
       const tracked = resolveTrackedTask(input.taskId, runtime.state);
       if (typeof tracked === "string") return tracked;
@@ -668,7 +663,7 @@ export function buildCancelTool(clients: ClientCache) {
         return `Failed to cancel run: ${e}`;
       }
 
-      const updated: AsyncSubAgentTask = {
+      const updated: AsyncTask = {
         taskId: tracked.taskId,
         agentName: tracked.agentName,
         threadId: tracked.threadId,
@@ -687,7 +682,7 @@ export function buildCancelTool(clients: ClientCache) {
               tool_call_id: toolCallIdFromRuntime(runtime),
             }),
           ],
-          asyncSubAgentTasks: { [tracked.taskId]: updated },
+          asyncTasks: { [tracked.taskId]: updated },
         },
       });
     },
@@ -716,9 +711,9 @@ export function buildListTool(clients: ClientCache) {
   return tool(
     async (
       input,
-      runtime: ToolRuntime<AsyncSubAgentState>,
+      runtime: ToolRuntime<AsyncTaskState>,
     ): Promise<Command | string> => {
-      const tasks = runtime.state.asyncSubAgentTasks ?? {};
+      const tasks = runtime.state.asyncTasks ?? {};
       const filtered = filterTasks(tasks, input.statusFilter ?? undefined);
 
       if (filtered.length === 0) {
@@ -729,7 +724,7 @@ export function buildListTool(clients: ClientCache) {
         filtered.map((task) => fetchLiveTaskStatus(clients, task)),
       );
 
-      const updatedTasks: Record<string, AsyncSubAgentTask> = {};
+      const updatedTasks: Record<string, AsyncTask> = {};
       const entries: string[] = [];
       for (let idx = 0; idx < filtered.length; idx++) {
         const task = filtered[idx];
@@ -758,7 +753,7 @@ export function buildListTool(clients: ClientCache) {
               tool_call_id: toolCallIdFromRuntime(runtime),
             }),
           ],
-          asyncSubAgentTasks: updatedTasks,
+          asyncTasks: updatedTasks,
         },
       });
     },
@@ -793,7 +788,7 @@ export interface AsyncSubAgentMiddlewareOptions {
  *
  * Provides five tools for launching, checking, updating, cancelling, and
  * listing background tasks on remote LangGraph deployments. Task state is
- * persisted in the `asyncSubAgentTasks` state channel so it survives
+ * persisted in the `asyncTasks` state channel so it survives
  * context compaction.
  *
  * @throws {Error} If no async subagents are provided or names are duplicated.
@@ -852,7 +847,7 @@ export function createAsyncSubAgentMiddleware(
 
   return createMiddleware({
     name: "asyncSubAgentMiddleware",
-    stateSchema: AsyncSubAgentStateSchema,
+    stateSchema: AsyncTaskStateSchema,
     tools,
     wrapModelCall: async (request, handler) => {
       if (fullSystemPrompt !== null) {
