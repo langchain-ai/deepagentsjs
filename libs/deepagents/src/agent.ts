@@ -25,6 +25,7 @@ import {
   type SubAgent,
 } from "./middleware/index.js";
 import { StateBackend } from "./backends/index.js";
+import { ConfigurationError } from "./errors.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { CompiledSubAgent } from "./middleware/subagents.js";
 import type {
@@ -144,10 +145,10 @@ export function createDeepAgent<
     );
 
   if (collidingTools.length > 0) {
-    throw new Error(
-      `[deepagents] Tool name(s) [${collidingTools.join(", ")}] ` +
-        `conflict with built-in tools. ` +
+    throw new ConfigurationError(
+      `Tool name(s) [${collidingTools.join(", ")}] conflict with built-in tools. ` +
         `Rename your custom tools to avoid this.`,
+      "TOOL_NAME_COLLISION",
     );
   }
 

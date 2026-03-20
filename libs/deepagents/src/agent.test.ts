@@ -8,6 +8,7 @@ import {
 } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 import { createFileData } from "./backends/utils.js";
+import { ConfigurationError } from "./errors.js";
 
 describe("isAnthropicModel", () => {
   it("should detect claude model strings", () => {
@@ -132,16 +133,24 @@ describe("Built-in tool name collision detection", () => {
     } as any;
   }
 
-  it("should throw when a user-provided tool collides with a filesystem tool", () => {
+  it("should throw ConfigurationError when a user-provided tool collides with a filesystem tool", () => {
     expect(() =>
       createDeepAgent({ model, tools: [makeTool("write_file")] }),
-    ).toThrowError(/write_file/);
+    ).toThrow(ConfigurationError);
+
+    try {
+      createDeepAgent({ model, tools: [makeTool("write_file")] });
+    } catch (e) {
+      expect(ConfigurationError.isInstance(e)).toBe(true);
+      expect((e as ConfigurationError).code).toBe("TOOL_NAME_COLLISION");
+      expect((e as ConfigurationError).message).toMatch(/write_file/);
+    }
   });
 
   it("should list all colliding names in the error", () => {
     expect(() =>
       createDeepAgent({ model, tools: [makeTool("ls"), makeTool("grep")] }),
-    ).toThrowError(/ls.*grep|grep.*ls/);
+    ).toThrow(ConfigurationError);
   });
 
   it("should throw when colliding with subagent or todo tool names", () => {
@@ -150,7 +159,7 @@ describe("Built-in tool name collision detection", () => {
         model,
         tools: [makeTool("task"), makeTool("write_todos")],
       }),
-    ).toThrowError(/task/);
+    ).toThrow(ConfigurationError);
   });
 
   it("should not throw when tool names do not collide", () => {
