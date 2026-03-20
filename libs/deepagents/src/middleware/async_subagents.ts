@@ -1,11 +1,12 @@
-import {
-  Command,
-  getCurrentTaskInput,
-  ReducedValue,
-  StateSchema,
-} from "@langchain/langgraph";
+import { Command, ReducedValue, StateSchema } from "@langchain/langgraph";
 import { Client, type DefaultValues, type Run } from "@langchain/langgraph-sdk";
-import { createMiddleware, tool, ToolMessage, SystemMessage } from "langchain";
+import {
+  createMiddleware,
+  tool,
+  ToolMessage,
+  SystemMessage,
+  type ToolRuntime,
+} from "langchain";
 import { z } from "zod/v4";
 
 /**
@@ -85,12 +86,20 @@ export interface AsyncSubAgentTask {
 /**
  * Shape of the async subagent state channel.
  *
- * Used as the generic parameter for `getCurrentTaskInput()` so tools
- * get typed access to `asyncSubAgentTasks` without casting.
+ * Used with {@link ToolRuntime} so tools get typed access to `asyncSubAgentTasks`.
+ *
+ * Declared as a `type` (not `interface`) so `ToolRuntime<AsyncSubAgentState>` narrows
+ * `runtime.state` correctly (see `@langchain/core` `ToolRuntime` conditional).
  */
-interface AsyncSubAgentState {
+type AsyncSubAgentState = {
   /** All tracked async subagent tasks, keyed by task ID. */
   asyncSubAgentTasks?: Record<string, AsyncSubAgentTask>;
+};
+
+function toolCallIdFromRuntime(
+  runtime: ToolRuntime<AsyncSubAgentState>,
+): string {
+  return runtime.toolCall?.id ?? runtime.toolCallId ?? "";
 }
 
 /**
@@ -426,7 +435,10 @@ export function buildLaunchTool(
   toolDescription: string,
 ) {
   return tool(
-    async (input, config): Promise<Command | string> => {
+    async (
+      input,
+      runtime: ToolRuntime<AsyncSubAgentState>,
+    ): Promise<Command | string> => {
       if (!(input.agentName in agentMap)) {
         const allowed = Object.keys(agentMap)
           .map((k) => `\`${k}\``)
@@ -457,7 +469,7 @@ export function buildLaunchTool(
             messages: [
               new ToolMessage({
                 content: `Launched async subagent. taskId: ${taskId}`,
-                tool_call_id: config.toolCall?.id ?? "",
+                tool_call_id: toolCallIdFromRuntime(runtime),
               }),
             ],
             asyncSubAgentTasks: { [taskId]: task },
@@ -494,9 +506,11 @@ export function buildLaunchTool(
  */
 export function buildCheckTool(clients: ClientCache) {
   return tool(
-    async (input, config): Promise<Command | string> => {
-      const state = getCurrentTaskInput<AsyncSubAgentState>();
-      const task = resolveTrackedTask(input.taskId, state);
+    async (
+      input,
+      runtime: ToolRuntime<AsyncSubAgentState>,
+    ): Promise<Command | string> => {
+      const task = resolveTrackedTask(input.taskId, runtime.state);
       if (typeof task === "string") return task;
 
       const client = clients.getClient(task.agentName);
@@ -534,7 +548,7 @@ export function buildCheckTool(clients: ClientCache) {
           messages: [
             new ToolMessage({
               content: JSON.stringify(result),
-              tool_call_id: config.toolCall?.id ?? "",
+              tool_call_id: toolCallIdFromRuntime(runtime),
             }),
           ],
           asyncSubAgentTasks: { [task.taskId]: updatedTask },
@@ -569,9 +583,11 @@ export function buildUpdateTool(
   clients: ClientCache,
 ) {
   return tool(
-    async (input, config): Promise<Command | string> => {
-      const state = getCurrentTaskInput<AsyncSubAgentState>();
-      const tracked = resolveTrackedTask(input.taskId, state);
+    async (
+      input,
+      runtime: ToolRuntime<AsyncSubAgentState>,
+    ): Promise<Command | string> => {
+      const tracked = resolveTrackedTask(input.taskId, runtime.state);
       if (typeof tracked === "string") return tracked;
 
       const spec = agentMap[tracked.agentName];
@@ -600,7 +616,7 @@ export function buildUpdateTool(
             messages: [
               new ToolMessage({
                 content: `Updated async subagent. taskId: ${tracked.taskId}`,
-                tool_call_id: config.toolCall?.id ?? "",
+                tool_call_id: toolCallIdFromRuntime(runtime),
               }),
             ],
             asyncSubAgentTasks: { [tracked.taskId]: task },
@@ -638,9 +654,11 @@ export function buildUpdateTool(
  */
 export function buildCancelTool(clients: ClientCache) {
   return tool(
-    async (input, config): Promise<Command | string> => {
-      const state = getCurrentTaskInput<AsyncSubAgentState>();
-      const tracked = resolveTrackedTask(input.taskId, state);
+    async (
+      input,
+      runtime: ToolRuntime<AsyncSubAgentState>,
+    ): Promise<Command | string> => {
+      const tracked = resolveTrackedTask(input.taskId, runtime.state);
       if (typeof tracked === "string") return tracked;
 
       const client = clients.getClient(tracked.agentName);
@@ -666,7 +684,7 @@ export function buildCancelTool(clients: ClientCache) {
           messages: [
             new ToolMessage({
               content: `Cancelled async subagent task: ${tracked.taskId}`,
-              tool_call_id: config.toolCall?.id ?? "",
+              tool_call_id: toolCallIdFromRuntime(runtime),
             }),
           ],
           asyncSubAgentTasks: { [tracked.taskId]: updated },
@@ -696,9 +714,11 @@ export function buildCancelTool(clients: ClientCache) {
  */
 export function buildListTool(clients: ClientCache) {
   return tool(
-    async (input, config): Promise<Command | string> => {
-      const state = getCurrentTaskInput<AsyncSubAgentState>();
-      const tasks = state.asyncSubAgentTasks ?? {};
+    async (
+      input,
+      runtime: ToolRuntime<AsyncSubAgentState>,
+    ): Promise<Command | string> => {
+      const tasks = runtime.state.asyncSubAgentTasks ?? {};
       const filtered = filterTasks(tasks, input.statusFilter ?? undefined);
 
       if (filtered.length === 0) {
@@ -735,7 +755,7 @@ export function buildListTool(clients: ClientCache) {
           messages: [
             new ToolMessage({
               content: `${entries.length} tracked task(s):\n${entries.join("\n")}`,
-              tool_call_id: config.toolCall?.id ?? "",
+              tool_call_id: toolCallIdFromRuntime(runtime),
             }),
           ],
           asyncSubAgentTasks: updatedTasks,

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { Command, getCurrentTaskInput } from "@langchain/langgraph";
+import { Command } from "@langchain/langgraph";
 import { Client } from "@langchain/langgraph-sdk";
 import { ToolMessage } from "@langchain/core/messages";
+import type { ToolRuntime } from "langchain";
 
 import {
   asyncSubAgentTasksReducer,
@@ -19,10 +20,24 @@ import {
   type AsyncSubAgentStatus,
 } from "./async_subagents.js";
 
-vi.mock("@langchain/langgraph", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@langchain/langgraph")>();
-  return { ...actual, getCurrentTaskInput: vi.fn() };
-});
+/**
+ * Matches what LangChain `ToolNode` passes to `tool.invoke` (see `agents/nodes/ToolNode.js`):
+ * `state` is the graph state, same source as the former `getCurrentTaskInput(config)`.
+ */
+type AsyncToolInvokeState = {
+  asyncSubAgentTasks?: Record<string, AsyncSubAgentTask>;
+};
+
+function asyncAgentToolInvokeConfig(
+  toolCallId: string,
+  state: AsyncToolInvokeState,
+): ToolRuntime<AsyncToolInvokeState> {
+  return {
+    toolCall: { id: toolCallId },
+    toolCallId,
+    state,
+  } as ToolRuntime<AsyncToolInvokeState>;
+}
 
 // ─── Helper factories ───
 
@@ -324,7 +339,7 @@ function createMockClientCache(agentMap: Record<string, AsyncSubAgent>) {
 describe("buildLaunchTool", () => {
   const agentMap = { researcher: makeAgent() };
   const toolCallId = "call-123";
-  const config = { toolCall: { id: toolCallId } } as any;
+  const config = asyncAgentToolInvokeConfig(toolCallId, {});
 
   it("should return an error for an unknown agent name", async () => {
     const { cache } = createMockClientCache(agentMap);
@@ -336,7 +351,7 @@ describe("buildLaunchTool", () => {
     );
     // tool().invoke() wraps string returns into a ToolMessage
     expect(result).toBeInstanceOf(ToolMessage);
-    const msg = result as ToolMessage;
+    const msg = result as unknown as ToolMessage;
     expect(msg.content).toContain("Unknown async subagent type");
     expect(msg.content).toContain("`researcher`");
   });
@@ -413,7 +428,7 @@ describe("buildLaunchTool", () => {
 
     // tool().invoke() wraps string returns into a ToolMessage
     expect(result).toBeInstanceOf(ToolMessage);
-    const msg = result as ToolMessage;
+    const msg = result as unknown as ToolMessage;
     expect(msg.content).toContain("Failed to launch async subagent");
     expect(msg.content).toContain("network error");
   });
@@ -467,9 +482,7 @@ describe("buildLaunchTool", () => {
 describe("buildCheckTool", () => {
   const agentMap = { researcher: makeAgent() };
   const toolCallId = "call-check-1";
-  const config = { toolCall: { id: toolCallId } } as any;
   const trackedJob = makeTask();
-  const mockGetCurrentTaskInput = vi.mocked(getCurrentTaskInput);
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -477,24 +490,21 @@ describe("buildCheckTool", () => {
 
   it("should return an error for an unknown job ID", async () => {
     const { cache } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: {},
-    });
 
     const checkTool = buildCheckTool(cache);
-    const result = await checkTool.invoke({ taskId: "unknown-id" }, config);
+    const result = await checkTool.invoke(
+      { taskId: "unknown-id" },
+      asyncAgentToolInvokeConfig(toolCallId, { asyncSubAgentTasks: {} }),
+    );
 
     expect(result).toBeInstanceOf(ToolMessage);
-    expect((result as ToolMessage).content).toContain(
+    expect((result as unknown as ToolMessage).content).toContain(
       "No tracked task found for taskId",
     );
   });
 
   it("should return a Command with running status", async () => {
     const { cache, runsGet } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
-    });
     runsGet.mockResolvedValue({
       run_id: trackedJob.runId,
       status: "running",
@@ -503,7 +513,9 @@ describe("buildCheckTool", () => {
     const checkTool = buildCheckTool(cache);
     const result = await checkTool.invoke(
       { taskId: trackedJob.taskId },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+      }),
     );
 
     expect(result).toBeInstanceOf(Command);
@@ -519,9 +531,6 @@ describe("buildCheckTool", () => {
 
   it("should return a Command with result on success", async () => {
     const { cache, runsGet, threadsGetState } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
-    });
     runsGet.mockResolvedValue({
       run_id: trackedJob.runId,
       status: "success",
@@ -535,7 +544,9 @@ describe("buildCheckTool", () => {
     const checkTool = buildCheckTool(cache);
     const result = await checkTool.invoke(
       { taskId: trackedJob.taskId },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+      }),
     );
 
     expect(result).toBeInstanceOf(Command);
@@ -554,9 +565,6 @@ describe("buildCheckTool", () => {
 
   it("should return fallback result when success but no messages", async () => {
     const { cache, runsGet, threadsGetState } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
-    });
     runsGet.mockResolvedValue({
       run_id: trackedJob.runId,
       status: "success",
@@ -566,7 +574,9 @@ describe("buildCheckTool", () => {
     const checkTool = buildCheckTool(cache);
     const result = await checkTool.invoke(
       { taskId: trackedJob.taskId },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+      }),
     );
 
     const cmd = result as Command;
@@ -579,9 +589,6 @@ describe("buildCheckTool", () => {
 
   it("should return a Command with error on error status", async () => {
     const { cache, runsGet } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
-    });
     runsGet.mockResolvedValue({
       run_id: trackedJob.runId,
       status: "error",
@@ -590,7 +597,9 @@ describe("buildCheckTool", () => {
     const checkTool = buildCheckTool(cache);
     const result = await checkTool.invoke(
       { taskId: trackedJob.taskId },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+      }),
     );
 
     expect(result).toBeInstanceOf(Command);
@@ -605,29 +614,27 @@ describe("buildCheckTool", () => {
 
   it("should return an error when runs.get throws", async () => {
     const { cache, runsGet } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
-    });
     runsGet.mockRejectedValue(new Error("connection refused"));
 
     const checkTool = buildCheckTool(cache);
     const result = await checkTool.invoke(
       { taskId: trackedJob.taskId },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+      }),
     );
 
     expect(result).toBeInstanceOf(ToolMessage);
-    expect((result as ToolMessage).content).toContain(
+    expect((result as unknown as ToolMessage).content).toContain(
       "Failed to get run status",
     );
-    expect((result as ToolMessage).content).toContain("connection refused");
+    expect((result as unknown as ToolMessage).content).toContain(
+      "connection refused",
+    );
   });
 
   it("should degrade gracefully when threads.getState throws on success", async () => {
     const { cache, runsGet, threadsGetState } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
-    });
     runsGet.mockResolvedValue({
       run_id: trackedJob.runId,
       status: "success",
@@ -637,7 +644,9 @@ describe("buildCheckTool", () => {
     const checkTool = buildCheckTool(cache);
     const result = await checkTool.invoke(
       { taskId: trackedJob.taskId },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+      }),
     );
 
     // Should still return a Command (not an error string)
@@ -653,9 +662,6 @@ describe("buildCheckTool", () => {
 
   it("should extract content from non-object messages via String()", async () => {
     const { cache, runsGet, threadsGetState } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
-    });
     runsGet.mockResolvedValue({
       run_id: trackedJob.runId,
       status: "success",
@@ -667,7 +673,9 @@ describe("buildCheckTool", () => {
     const checkTool = buildCheckTool(cache);
     const result = await checkTool.invoke(
       { taskId: trackedJob.taskId },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+      }),
     );
 
     const cmd = result as Command;
@@ -681,15 +689,14 @@ describe("buildCheckTool", () => {
   it("should set checkedAt to a valid ISO timestamp on the updated job", async () => {
     const before = new Date();
     const { cache, runsGet } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
-    });
     runsGet.mockResolvedValue({ run_id: trackedJob.runId, status: "running" });
 
     const checkTool = buildCheckTool(cache);
     const result = await checkTool.invoke(
       { taskId: trackedJob.taskId },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+      }),
     );
     const after = new Date();
 
@@ -706,9 +713,6 @@ describe("buildCheckTool", () => {
       updatedAt: "2024-06-01T11:00:00.000Z",
     });
     const { cache, runsGet } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [jobWithTimestamps.taskId]: jobWithTimestamps },
-    });
     runsGet.mockResolvedValue({
       run_id: jobWithTimestamps.runId,
       status: "running",
@@ -717,7 +721,9 @@ describe("buildCheckTool", () => {
     const checkTool = buildCheckTool(cache);
     const result = await checkTool.invoke(
       { taskId: jobWithTimestamps.taskId },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [jobWithTimestamps.taskId]: jobWithTimestamps },
+      }),
     );
 
     const jobs = ((result as Command).update as Record<string, unknown>)
@@ -736,9 +742,7 @@ describe("buildCheckTool", () => {
 describe("buildUpdateTool", () => {
   const agentMap = { researcher: makeAgent() };
   const toolCallId = "call-update-1";
-  const config = { toolCall: { id: toolCallId } } as any;
   const trackedJob = makeTask();
-  const mockGetCurrentTaskInput = vi.mocked(getCurrentTaskInput);
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -746,16 +750,15 @@ describe("buildUpdateTool", () => {
 
   it("should return an error for an unknown job ID", async () => {
     const { cache } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({ asyncSubAgentTasks: {} });
 
     const updateTool = buildUpdateTool(agentMap, cache);
     const result = await updateTool.invoke(
       { taskId: "unknown-id", message: "new instructions" },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, { asyncSubAgentTasks: {} }),
     );
 
     expect(result).toBeInstanceOf(ToolMessage);
-    expect((result as ToolMessage).content).toContain(
+    expect((result as unknown as ToolMessage).content).toContain(
       "No tracked task found for taskId",
     );
   });
@@ -763,15 +766,14 @@ describe("buildUpdateTool", () => {
   it("should create a new run on the same thread and return a Command", async () => {
     const newRunId = "run-updated";
     const { cache, runsCreate } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
-    });
     runsCreate.mockResolvedValue({ run_id: newRunId, status: "running" });
 
     const updateTool = buildUpdateTool(agentMap, cache);
     const result = await updateTool.invoke(
       { taskId: trackedJob.taskId, message: "focus on quantum entanglement" },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+      }),
     );
 
     expect(result).toBeInstanceOf(Command);
@@ -795,15 +797,14 @@ describe("buildUpdateTool", () => {
 
   it("should pass multitaskStrategy: interrupt to runs.create", async () => {
     const { cache, runsCreate } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
-    });
     runsCreate.mockResolvedValue({ run_id: "run-2", status: "running" });
 
     const updateTool = buildUpdateTool(agentMap, cache);
     await updateTool.invoke(
       { taskId: trackedJob.taskId, message: "new instructions" },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+      }),
     );
 
     expect(runsCreate).toHaveBeenCalledWith(
@@ -817,36 +818,36 @@ describe("buildUpdateTool", () => {
 
   it("should return an error when the SDK throws", async () => {
     const { cache, runsCreate } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
-    });
     runsCreate.mockRejectedValue(new Error("server unavailable"));
 
     const updateTool = buildUpdateTool(agentMap, cache);
     const result = await updateTool.invoke(
       { taskId: trackedJob.taskId, message: "new instructions" },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+      }),
     );
 
     expect(result).toBeInstanceOf(ToolMessage);
-    expect((result as ToolMessage).content).toContain(
+    expect((result as unknown as ToolMessage).content).toContain(
       "Failed to update async subagent",
     );
-    expect((result as ToolMessage).content).toContain("server unavailable");
+    expect((result as unknown as ToolMessage).content).toContain(
+      "server unavailable",
+    );
   });
 
   it("should set updatedAt to a valid ISO timestamp on the updated job", async () => {
     const before = new Date();
     const { cache, runsCreate } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
-    });
     runsCreate.mockResolvedValue({ run_id: "run-new", status: "running" });
 
     const updateTool = buildUpdateTool(agentMap, cache);
     const result = await updateTool.invoke(
       { taskId: trackedJob.taskId, message: "new instructions" },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+      }),
     );
     const after = new Date();
 
@@ -863,15 +864,14 @@ describe("buildUpdateTool", () => {
       checkedAt: "2024-06-01T10:30:00.000Z",
     });
     const { cache, runsCreate } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [jobWithTimestamps.taskId]: jobWithTimestamps },
-    });
     runsCreate.mockResolvedValue({ run_id: "run-new", status: "running" });
 
     const updateTool = buildUpdateTool(agentMap, cache);
     const result = await updateTool.invoke(
       { taskId: jobWithTimestamps.taskId, message: "follow-up" },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [jobWithTimestamps.taskId]: jobWithTimestamps },
+      }),
     );
 
     const jobs = ((result as Command).update as Record<string, unknown>)
@@ -890,9 +890,7 @@ describe("buildUpdateTool", () => {
 describe("buildCancelTool", () => {
   const agentMap = { researcher: makeAgent() };
   const toolCallId = "call-cancel-1";
-  const config = { toolCall: { id: toolCallId } } as any;
   const trackedJob = makeTask();
-  const mockGetCurrentTaskInput = vi.mocked(getCurrentTaskInput);
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -900,28 +898,29 @@ describe("buildCancelTool", () => {
 
   it("should return an error for an unknown job ID", async () => {
     const { cache } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({ asyncSubAgentTasks: {} });
 
     const cancelTool = buildCancelTool(cache);
-    const result = await cancelTool.invoke({ taskId: "unknown-id" }, config);
+    const result = await cancelTool.invoke(
+      { taskId: "unknown-id" },
+      asyncAgentToolInvokeConfig(toolCallId, { asyncSubAgentTasks: {} }),
+    );
 
     expect(result).toBeInstanceOf(ToolMessage);
-    expect((result as ToolMessage).content).toContain(
+    expect((result as unknown as ToolMessage).content).toContain(
       "No tracked task found for taskId",
     );
   });
 
   it("should cancel the run and return a Command with cancelled status", async () => {
     const { cache, runsCancel } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
-    });
     runsCancel.mockResolvedValue(undefined);
 
     const cancelTool = buildCancelTool(cache);
     const result = await cancelTool.invoke(
       { taskId: trackedJob.taskId },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+      }),
     );
 
     expect(result).toBeInstanceOf(Command);
@@ -942,13 +941,15 @@ describe("buildCancelTool", () => {
 
   it("should call runs.cancel with the correct thread and run IDs", async () => {
     const { cache, runsCancel } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
-    });
     runsCancel.mockResolvedValue(undefined);
 
     const cancelTool = buildCancelTool(cache);
-    await cancelTool.invoke({ taskId: trackedJob.taskId }, config);
+    await cancelTool.invoke(
+      { taskId: trackedJob.taskId },
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+      }),
+    );
 
     expect(runsCancel).toHaveBeenCalledWith(
       trackedJob.threadId,
@@ -958,20 +959,23 @@ describe("buildCancelTool", () => {
 
   it("should return an error when the SDK throws", async () => {
     const { cache, runsCancel } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
-    });
     runsCancel.mockRejectedValue(new Error("permission denied"));
 
     const cancelTool = buildCancelTool(cache);
     const result = await cancelTool.invoke(
       { taskId: trackedJob.taskId },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [trackedJob.taskId]: trackedJob },
+      }),
     );
 
     expect(result).toBeInstanceOf(ToolMessage);
-    expect((result as ToolMessage).content).toContain("Failed to cancel run");
-    expect((result as ToolMessage).content).toContain("permission denied");
+    expect((result as unknown as ToolMessage).content).toContain(
+      "Failed to cancel run",
+    );
+    expect((result as unknown as ToolMessage).content).toContain(
+      "permission denied",
+    );
   });
 
   it("should preserve all timestamps from the existing job unchanged", async () => {
@@ -981,15 +985,14 @@ describe("buildCancelTool", () => {
       checkedAt: "2024-06-01T11:30:00.000Z",
     });
     const { cache, runsCancel } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [jobWithTimestamps.taskId]: jobWithTimestamps },
-    });
     runsCancel.mockResolvedValue(undefined);
 
     const cancelTool = buildCancelTool(cache);
     const result = await cancelTool.invoke(
       { taskId: jobWithTimestamps.taskId },
-      config,
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [jobWithTimestamps.taskId]: jobWithTimestamps },
+      }),
     );
 
     const jobs = ((result as Command).update as Record<string, unknown>)
@@ -1011,8 +1014,6 @@ describe("buildCancelTool", () => {
 describe("buildListTool", () => {
   const agentMap = { researcher: makeAgent() };
   const toolCallId = "call-list-1";
-  const config = { toolCall: { id: toolCallId } } as any;
-  const mockGetCurrentTaskInput = vi.mocked(getCurrentTaskInput);
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -1020,26 +1021,30 @@ describe("buildListTool", () => {
 
   it("should return a string when state has no jobs", async () => {
     const { cache } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({ asyncSubAgentTasks: {} });
 
     const listTool = buildListTool(cache);
-    const result = await listTool.invoke({ statusFilter: undefined }, config);
+    const result = await listTool.invoke(
+      { statusFilter: undefined },
+      asyncAgentToolInvokeConfig(toolCallId, { asyncSubAgentTasks: {} }),
+    );
 
     expect(result).toBeInstanceOf(ToolMessage);
-    expect((result as ToolMessage).content).toContain(
+    expect((result as unknown as ToolMessage).content).toContain(
       "No async subagent tasks tracked",
     );
   });
 
   it("should return a string when asyncSubAgentTasks is undefined", async () => {
     const { cache } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({});
 
     const listTool = buildListTool(cache);
-    const result = await listTool.invoke({ statusFilter: undefined }, config);
+    const result = await listTool.invoke(
+      { statusFilter: undefined },
+      asyncAgentToolInvokeConfig(toolCallId, {}),
+    );
 
     expect(result).toBeInstanceOf(ToolMessage);
-    expect((result as ToolMessage).content).toContain(
+    expect((result as unknown as ToolMessage).content).toContain(
       "No async subagent tasks tracked",
     );
   });
@@ -1047,16 +1052,18 @@ describe("buildListTool", () => {
   it("should return a string when the status filter matches no jobs", async () => {
     const runningJob = makeTask({ status: "running" });
     const { cache, runsGet } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [runningJob.taskId]: runningJob },
-    });
 
     const listTool = buildListTool(cache);
     // Filter for "success" but the only job is "running" → no match
-    const result = await listTool.invoke({ statusFilter: "success" }, config);
+    const result = await listTool.invoke(
+      { statusFilter: "success" },
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [runningJob.taskId]: runningJob },
+      }),
+    );
 
     expect(result).toBeInstanceOf(ToolMessage);
-    expect((result as ToolMessage).content).toContain(
+    expect((result as unknown as ToolMessage).content).toContain(
       "No async subagent tasks tracked",
     );
     // Filtering happens before the SDK call — no live fetch needed
@@ -1067,13 +1074,15 @@ describe("buildListTool", () => {
     const job1 = makeTask({ taskId: "t-1", threadId: "t-1", runId: "r-1" });
     const job2 = makeTask({ taskId: "t-2", threadId: "t-2", runId: "r-2" });
     const { cache, runsGet } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [job1.taskId]: job1, [job2.taskId]: job2 },
-    });
     runsGet.mockResolvedValue({ status: "running" });
 
     const listTool = buildListTool(cache);
-    const result = await listTool.invoke({ statusFilter: undefined }, config);
+    const result = await listTool.invoke(
+      { statusFilter: undefined },
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [job1.taskId]: job1, [job2.taskId]: job2 },
+      }),
+    );
 
     expect(result).toBeInstanceOf(Command);
     const messages = ((result as Command).update as Record<string, unknown>)
@@ -1093,13 +1102,15 @@ describe("buildListTool", () => {
       status: "success",
     });
     const { cache, runsGet } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [job1.taskId]: job1, [job2.taskId]: job2 },
-    });
     runsGet.mockResolvedValue({ status: "running" });
 
     const listTool = buildListTool(cache);
-    const result = await listTool.invoke({ statusFilter: "all" }, config);
+    const result = await listTool.invoke(
+      { statusFilter: "all" },
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [job1.taskId]: job1, [job2.taskId]: job2 },
+      }),
+    );
 
     expect(result).toBeInstanceOf(Command);
     const messages = ((result as Command).update as Record<string, unknown>)
@@ -1119,16 +1130,18 @@ describe("buildListTool", () => {
       status: "success",
     });
     const { cache, runsGet } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: {
-        [runningJob.taskId]: runningJob,
-        [successJob.taskId]: successJob,
-      },
-    });
     runsGet.mockResolvedValue({ status: "running" });
 
     const listTool = buildListTool(cache);
-    const result = await listTool.invoke({ statusFilter: "running" }, config);
+    const result = await listTool.invoke(
+      { statusFilter: "running" },
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: {
+          [runningJob.taskId]: runningJob,
+          [successJob.taskId]: successJob,
+        },
+      }),
+    );
 
     expect(result).toBeInstanceOf(Command);
     const messages = ((result as Command).update as Record<string, unknown>)
@@ -1141,13 +1154,15 @@ describe("buildListTool", () => {
   it("should fetch live status from the server for non-terminal jobs", async () => {
     const job = makeTask({ status: "running" });
     const { cache, runsGet } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [job.taskId]: job },
-    });
     runsGet.mockResolvedValue({ run_id: job.runId, status: "success" });
 
     const listTool = buildListTool(cache);
-    const result = await listTool.invoke({ statusFilter: undefined }, config);
+    const result = await listTool.invoke(
+      { statusFilter: undefined },
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [job.taskId]: job },
+      }),
+    );
 
     expect(runsGet).toHaveBeenCalledWith(job.threadId, job.runId);
     const messages = ((result as Command).update as Record<string, unknown>)
@@ -1165,12 +1180,14 @@ describe("buildListTool", () => {
         status,
       });
       const { cache, runsGet } = createMockClientCache(agentMap);
-      mockGetCurrentTaskInput.mockReturnValue({
-        asyncSubAgentTasks: { [job.taskId]: job },
-      });
 
       const listTool = buildListTool(cache);
-      await listTool.invoke({ statusFilter: undefined }, config);
+      await listTool.invoke(
+        { statusFilter: undefined },
+        asyncAgentToolInvokeConfig(toolCallId, {
+          asyncSubAgentTasks: { [job.taskId]: job },
+        }),
+      );
 
       expect(runsGet).not.toHaveBeenCalled();
     },
@@ -1179,13 +1196,15 @@ describe("buildListTool", () => {
   it("should fall back to cached status when runsGet throws", async () => {
     const job = makeTask({ status: "running" });
     const { cache, runsGet } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [job.taskId]: job },
-    });
     runsGet.mockRejectedValue(new Error("connection refused"));
 
     const listTool = buildListTool(cache);
-    const result = await listTool.invoke({ statusFilter: undefined }, config);
+    const result = await listTool.invoke(
+      { statusFilter: undefined },
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [job.taskId]: job },
+      }),
+    );
 
     expect(result).toBeInstanceOf(Command);
     const updatedJobs = ((result as Command).update as Record<string, unknown>)
@@ -1197,13 +1216,15 @@ describe("buildListTool", () => {
   it("should update asyncSubAgentTasks in state with live statuses", async () => {
     const job = makeTask({ status: "running" });
     const { cache, runsGet } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [job.taskId]: job },
-    });
     runsGet.mockResolvedValue({ run_id: job.runId, status: "success" });
 
     const listTool = buildListTool(cache);
-    const result = await listTool.invoke({ statusFilter: undefined }, config);
+    const result = await listTool.invoke(
+      { statusFilter: undefined },
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [job.taskId]: job },
+      }),
+    );
 
     const updatedJobs = ((result as Command).update as Record<string, unknown>)
       .asyncSubAgentTasks as Record<string, AsyncSubAgentTask>;
@@ -1217,13 +1238,15 @@ describe("buildListTool", () => {
   it("should format each entry with taskId, agentName, and status", async () => {
     const job = makeTask({ status: "running" });
     const { cache, runsGet } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [job.taskId]: job },
-    });
     runsGet.mockResolvedValue({ run_id: job.runId, status: "running" });
 
     const listTool = buildListTool(cache);
-    const result = await listTool.invoke({ statusFilter: undefined }, config);
+    const result = await listTool.invoke(
+      { statusFilter: undefined },
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [job.taskId]: job },
+      }),
+    );
 
     const messages = ((result as Command).update as Record<string, unknown>)
       .messages as ToolMessage[];
@@ -1236,12 +1259,14 @@ describe("buildListTool", () => {
   it("should use the correct tool_call_id from config", async () => {
     const job = makeTask({ status: "success" });
     const { cache } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [job.taskId]: job },
-    });
 
     const listTool = buildListTool(cache);
-    const result = await listTool.invoke({ statusFilter: undefined }, config);
+    const result = await listTool.invoke(
+      { statusFilter: undefined },
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [job.taskId]: job },
+      }),
+    );
 
     const messages = ((result as Command).update as Record<string, unknown>)
       .messages as ToolMessage[];
@@ -1262,13 +1287,15 @@ describe("buildListTool", () => {
       status: "running",
     });
     const { cache, runsGet } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [job1.taskId]: job1, [job2.taskId]: job2 },
-    });
     runsGet.mockResolvedValue({ status: "running" });
 
     const listTool = buildListTool(cache);
-    await listTool.invoke({ statusFilter: undefined }, config);
+    await listTool.invoke(
+      { statusFilter: undefined },
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [job1.taskId]: job1, [job2.taskId]: job2 },
+      }),
+    );
 
     // Both jobs should have been fetched
     expect(runsGet).toHaveBeenCalledTimes(2);
@@ -1282,13 +1309,15 @@ describe("buildListTool", () => {
       checkedAt: "2024-06-01T11:30:00.000Z",
     });
     const { cache, runsGet } = createMockClientCache(agentMap);
-    mockGetCurrentTaskInput.mockReturnValue({
-      asyncSubAgentTasks: { [job.taskId]: job },
-    });
     runsGet.mockResolvedValue({ run_id: job.runId, status: "running" });
 
     const listTool = buildListTool(cache);
-    const result = await listTool.invoke({ statusFilter: undefined }, config);
+    const result = await listTool.invoke(
+      { statusFilter: undefined },
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncSubAgentTasks: { [job.taskId]: job },
+      }),
+    );
 
     const updatedJobs = ((result as Command).update as Record<string, unknown>)
       .asyncSubAgentTasks as Record<string, AsyncSubAgentTask>;
