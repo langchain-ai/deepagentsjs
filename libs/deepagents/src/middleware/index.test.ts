@@ -431,11 +431,11 @@ describe("AsyncSubAgentMiddleware", () => {
     });
     const tools = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
     const toolNames = tools.map((t: any) => t.name);
-    expect(toolNames).toContain("launch_async_subagent_task");
-    expect(toolNames).toContain("check_async_subagent_task");
-    expect(toolNames).toContain("update_async_subagent_task");
-    expect(toolNames).toContain("cancel_async_subagent_task");
-    expect(toolNames).toContain("list_async_subagent_tasks");
+    expect(toolNames).toContain("launch_async_task");
+    expect(toolNames).toContain("check_async_task");
+    expect(toolNames).toContain("update_async_task");
+    expect(toolNames).toContain("cancel_async_task");
+    expect(toolNames).toContain("list_async_tasks");
   });
 
   it("should compose with other middleware without conflicts", () => {
@@ -454,7 +454,7 @@ describe("AsyncSubAgentMiddleware", () => {
 
     const tools = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
     const toolNames = tools.map((t: any) => t.name);
-    expect(toolNames).toContain("launch_async_subagent_task");
+    expect(toolNames).toContain("launch_async_task");
     expect(toolNames).toContain("ls");
   });
 });
