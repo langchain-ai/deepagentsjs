@@ -1,5 +1,13 @@
 # @langchain/sandbox-standard-tests
 
+## 0.1.1
+
+### Patch Changes
+
+- [#298](https://github.com/langchain-ai/deepagentsjs/pull/298) [`aab678a`](https://github.com/langchain-ai/deepagentsjs/commit/aab678ad66b2373bea35ee05b1d1340155cf73b2) Thanks [@colifran](https://github.com/colifran)! - feat(deepagents): support multimodal files for backends
+
+- [#318](https://github.com/langchain-ai/deepagentsjs/pull/318) [`a5ba74e`](https://github.com/langchain-ai/deepagentsjs/commit/a5ba74eac26bc96a9d9d392f5b7ceffd20abfe07) Thanks [@colifran](https://github.com/colifran)! - chore(deepagents): refactor backend method names - lsInfo -> ls, grepRaw -> grep, globInfo -> glob
+
 ## 0.1.0
 
 ### Minor Changes

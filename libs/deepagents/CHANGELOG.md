@@ -1,5 +1,25 @@
 # deepagents
 
+## 1.9.0
+
+### Minor Changes
+
+- [#298](https://github.com/langchain-ai/deepagentsjs/pull/298) [`aab678a`](https://github.com/langchain-ai/deepagentsjs/commit/aab678ad66b2373bea35ee05b1d1340155cf73b2) Thanks [@colifran](https://github.com/colifran)! - feat(deepagents): support multimodal files for backends
+
+- [#318](https://github.com/langchain-ai/deepagentsjs/pull/318) [`a5ba74e`](https://github.com/langchain-ai/deepagentsjs/commit/a5ba74eac26bc96a9d9d392f5b7ceffd20abfe07) Thanks [@colifran](https://github.com/colifran)! - chore(deepagents): refactor backend method names - lsInfo -> ls, grepRaw -> grep, globInfo -> glob
+
+- [#323](https://github.com/langchain-ai/deepagentsjs/pull/323) [`2bebf30`](https://github.com/langchain-ai/deepagentsjs/commit/2bebf306f5a706f58ed689fb1312c0550060068a) Thanks [@colifran](https://github.com/colifran)! - feat(sdk): add async subagent middleware for remote LangGraph servers
+
+### Patch Changes
+
+- [#326](https://github.com/langchain-ai/deepagentsjs/pull/326) [`ab85866`](https://github.com/langchain-ai/deepagentsjs/commit/ab85866549067fb9a6e93b90c543390916748c7b) Thanks [@colifran](https://github.com/colifran)! - chore(sdk): unify sync subagents and async subagents into a single property
+
+- [#331](https://github.com/langchain-ai/deepagentsjs/pull/331) [`759fe19`](https://github.com/langchain-ai/deepagentsjs/commit/759fe19a776eb0befb55d83b1030824c28704a32) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): reorder middleware so prompt caching and memory run last
+
+  Move `anthropicPromptCachingMiddleware` and `memoryMiddleware` after all static and user-supplied middleware. This ensures that updates to memory contents do not invalidate Anthropic prompt caches.
+
+- [#332](https://github.com/langchain-ai/deepagentsjs/pull/332) [`3ff382e`](https://github.com/langchain-ai/deepagentsjs/commit/3ff382e2ba0aa3ffa1f7431eec5bdf908075fa74) Thanks [@maahir30](https://github.com/maahir30)! - improve condition for checking sandbox backends
+
 ## 1.8.4
 
 ### Patch Changes
