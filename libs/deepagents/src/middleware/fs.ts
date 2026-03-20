@@ -62,6 +62,21 @@ import {
  *    These tools return minimal confirmation messages and are never expected to produce
  *    output large enough to exceed token limits, so checking them would be unnecessary.
  */
+/**
+ * All tool names registered by FilesystemMiddleware.
+ * This is the single source of truth — used by createDeepAgent to detect
+ * collisions with user-supplied tools at construction time.
+ */
+export const FILESYSTEM_TOOL_NAMES = [
+  "ls",
+  "read_file",
+  "write_file",
+  "edit_file",
+  "glob",
+  "grep",
+  "execute",
+] as const;
+
 export const TOOLS_EXCLUDED_FROM_EVICTION = [
   "ls",
   "glob",
