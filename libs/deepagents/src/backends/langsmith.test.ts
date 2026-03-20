@@ -345,17 +345,13 @@ describe("LangSmithSandbox", () => {
   });
 
   describe("BaseSandbox inherited methods", () => {
-    it.each([
-      "read",
-      "write",
-      "edit",
-      "ls",
-      "grep",
-      "glob",
-    ] as const)("%s() is available on the sandbox", (method) => {
-      const sandbox = makeSandbox();
-      expect(typeof sandbox[method]).toBe("function");
-    });
+    it.each(["read", "write", "edit", "ls", "grep", "glob"] as const)(
+      "%s() is available on the sandbox",
+      (method) => {
+        const sandbox = makeSandbox();
+        expect(typeof sandbox[method]).toBe("function");
+      },
+    );
 
     it("read() delegates to execute() via a shell command", async () => {
       const sandbox = makeSandbox();
