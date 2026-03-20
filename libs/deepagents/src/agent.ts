@@ -95,10 +95,8 @@ export function createDeepAgent<
   TResponse extends SupportedResponseFormat = SupportedResponseFormat,
   ContextSchema extends InteropZodObject = InteropZodObject,
   const TMiddleware extends readonly AgentMiddleware[] = readonly [],
-  const TSubagents extends readonly (
-    | SubAgent
-    | CompiledSubAgent
-  )[] = readonly [],
+  const TSubagents extends readonly (SubAgent | CompiledSubAgent)[] =
+    readonly [],
   const TTools extends readonly (ClientTool | ServerTool)[] = readonly [],
 >(
   params: CreateDeepAgentParams<
