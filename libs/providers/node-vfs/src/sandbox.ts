@@ -308,10 +308,7 @@ export class VfsSandbox extends BaseSandbox {
       //   inside longer paths like "foo/src" or "../src")
       // - Followed by /, whitespace, quotes, shell operators, or end
       result = result.replace(
-        new RegExp(
-          `(?<![\\w/.-])/${escaped}(?=/|[\\s"';|&><!\\])]|$)`,
-          "gm",
-        ),
+        new RegExp(`(?<![\\w/.-])/${escaped}(?=/|[\\s"';|&><!\\])]|$)`, "gm"),
         `${execDir}/${name}`,
       );
     }
