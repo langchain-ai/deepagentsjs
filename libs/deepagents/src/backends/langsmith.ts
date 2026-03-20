@@ -17,8 +17,8 @@
  * ```
  */
 
-import type { Sandbox } from "langsmith/experimental/sandbox";
 import {
+  type Sandbox,
   LangSmithResourceNotFoundError,
   LangSmithSandboxError,
   SandboxClient,
