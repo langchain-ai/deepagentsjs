@@ -109,7 +109,9 @@ describe("notifyParent", () => {
   it("sends a run to the parent thread", async () => {
     mockRunsCreate.mockResolvedValueOnce({});
 
-    await notifyParent("thread-123", "supervisor", "Job completed");
+    await notifyParent("thread-123", "supervisor", "Job completed", {
+      url: "http://localhost:8123",
+    });
 
     expect(mockRunsCreate).toHaveBeenCalledWith("thread-123", "supervisor", {
       input: {
@@ -141,6 +143,7 @@ describe("notifyParent", () => {
     mockRunsCreate.mockResolvedValueOnce({});
 
     await notifyParent("thread-123", "supervisor", "done", {
+      url: "http://localhost:8123",
       headers: { "x-auth-scheme": "custom" },
     });
 
@@ -157,7 +160,9 @@ describe("notifyParent", () => {
     mockRunsCreate.mockRejectedValueOnce(new Error("network error"));
 
     // Should not throw
-    await notifyParent("thread-123", "supervisor", "Job completed");
+    await notifyParent("thread-123", "supervisor", "Job completed", {
+      url: "http://localhost:8123",
+    });
   });
 });
 
@@ -173,6 +178,7 @@ describe("createCompletionNotifierMiddleware", () => {
   it("has a stateSchema with parent_thread_id", () => {
     const mw = createCompletionNotifierMiddleware({
       parentGraphId: "supervisor",
+      url: "http://localhost:8123",
     });
     expect(mw.stateSchema).toBeDefined();
   });
@@ -180,6 +186,7 @@ describe("createCompletionNotifierMiddleware", () => {
   it("has name CompletionNotifierMiddleware", () => {
     const mw = createCompletionNotifierMiddleware({
       parentGraphId: "supervisor",
+      url: "http://localhost:8123",
     });
     expect(mw.name).toBe("CompletionNotifierMiddleware");
   });

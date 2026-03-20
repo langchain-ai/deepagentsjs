@@ -39,9 +39,10 @@
  * - `parentGraphId` is passed as a **constructor argument** to the middleware.
  *   This is the supervisor's graph ID (or assistant ID), which the subagent
  *   developer knows at configuration time.
- * - `url` and `headers` are optional constructor arguments for reaching the
- *   supervisor on a remote deployment. Omit `url` for same-deployment ASGI
- *   transport.
+ * - `url` is the URL of the LangGraph server where the supervisor is deployed.
+ *   This is required since JS does not support in-process ASGI transport.
+ * - `headers` are optional additional headers for authenticating with the
+ *   supervisor's server.
  * - `parent_thread_id` is injected into the subagent's input state by the
  *   supervisor's `start_async_task` tool. It survives thread interrupts and
  *   updates because it lives in state, not config.
@@ -52,15 +53,9 @@
  * ```typescript
  * import { createCompletionNotifierMiddleware } from "deepagents";
  *
- * // Same deployment (ASGI transport — supervisor and subagent share a server):
  * const notifier = createCompletionNotifierMiddleware({
  *   parentGraphId: "supervisor",
- * });
- *
- * // Remote deployment (supervisor on a different server):
- * const notifier = createCompletionNotifierMiddleware({
- *   parentGraphId: "supervisor",
- *   url: "https://supervisor.langsmith.dev",
+ *   url: "https://my-deployment.langsmith.dev",
  * });
  *
  * const agent = createDeepAgent({
@@ -130,10 +125,11 @@ export interface CompletionNotifierOptions {
 
   /**
    * URL of the supervisor's LangGraph server (e.g.,
-   * `"https://my-deployment.langsmith.dev"`). Omit to use ASGI transport for
-   * same-deployment communication.
+   * `"https://my-deployment.langsmith.dev"`).
+   *
+   * Required — JS does not support in-process ASGI transport like Python.
    */
-  url?: string;
+  url: string;
 
   /**
    * Additional headers to include in requests to the supervisor's server.
@@ -167,16 +163,16 @@ export async function notifyParent(
   parentThreadId: string,
   parentGraphId: string,
   notification: string,
-  options?: {
-    url?: string;
+  options: {
+    url: string;
     headers?: Record<string, string>;
   },
 ): Promise<void> {
   try {
     const client = new Client({
-      apiUrl: options?.url ?? "http://localhost:8123",
+      apiUrl: options.url,
       apiKey: null,
-      defaultHeaders: resolveHeaders(options?.headers),
+      defaultHeaders: resolveHeaders(options.headers),
     });
     await client.runs.create(parentThreadId, parentGraphId, {
       input: {
@@ -249,15 +245,9 @@ export function extractLastMessage(state: Record<string, unknown>): string {
  * ```typescript
  * import { createCompletionNotifierMiddleware } from "deepagents";
  *
- * // Same deployment (ASGI transport):
  * const notifier = createCompletionNotifierMiddleware({
  *   parentGraphId: "supervisor",
- * });
- *
- * // Remote deployment:
- * const notifier = createCompletionNotifierMiddleware({
- *   parentGraphId: "supervisor",
- *   url: "https://supervisor.langsmith.dev",
+ *   url: "https://my-deployment.langsmith.dev",
  * });
  *
  * const agent = createDeepAgent({
