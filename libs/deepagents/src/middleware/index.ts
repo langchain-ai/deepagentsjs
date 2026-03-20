@@ -40,6 +40,12 @@ export {
 // Middleware utilities
 export { appendToSystemMessage, prependToSystemMessage } from "./utils.js";
 
+// Completion notifier middleware for async subagents
+export {
+  createCompletionNotifierMiddleware,
+  type CompletionNotifierOptions,
+} from "./completion_notifier.js";
+
 // Summarization middleware
 export {
   // Backend-aware summarization middleware with history offloading
