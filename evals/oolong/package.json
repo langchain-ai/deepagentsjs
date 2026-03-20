@@ -1,0 +1,17 @@
+{
+  "name": "@deepagents/eval-oolong",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:eval": "vitest run"
+  },
+  "dependencies": {
+    "@deepagents/evals": "workspace:*",
+    "deepagents": "workspace:*",
+    "langsmith": "^0.5.4",
+    "vitest": "^4.0.18"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0"
+  }
+}
