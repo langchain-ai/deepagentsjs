@@ -338,7 +338,6 @@ export function createDeepAgent<
       : []),
     ...memoryMiddlewareArray,
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
-    ...(customMiddleware as unknown as AgentMiddleware[]),
     ...(asyncSubAgents && asyncSubAgents.length > 0
       ? [createAsyncSubAgentMiddleware({ asyncSubAgents })]
       : []),
