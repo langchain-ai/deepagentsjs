@@ -272,7 +272,8 @@ export function isSandboxBackend(
     backend != null &&
     typeof backend === "object" &&
     typeof (backend as SandboxBackendProtocolV2).execute === "function" &&
-    typeof (backend as SandboxBackendProtocolV2).id === "string"
+    typeof (backend as SandboxBackendProtocolV2).id === "string" &&
+    (backend as SandboxBackendProtocolV2).id !== ""
   );
 }
 
@@ -302,7 +303,8 @@ export function isSandboxProtocol(
     backend != null &&
     typeof backend === "object" &&
     typeof (backend as any).execute === "function" &&
-    typeof (backend as any).id === "string"
+    typeof (backend as any).id === "string" &&
+    (backend as any).id !== ""
   );
 }
 
