@@ -15,7 +15,6 @@ import {
 } from "../backends/index.js";
 import { fileDataToString } from "../backends/utils.js";
 import type { FileData } from "../backends/protocol.js";
-import { v4 as uuidv4 } from "uuid";
 import {
   SAMPLE_MODEL,
   getPremierLeagueStandings,
@@ -55,7 +54,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       });
 
       const config = useComposite
-        ? { configurable: { thread_id: uuidv4() } }
+        ? { configurable: { thread_id: crypto.randomUUID() } }
         : undefined;
       const response = await agent.invoke(
         {
@@ -156,7 +155,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [new HumanMessage("List all of your files")],
@@ -221,7 +220,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [new HumanMessage("List all files in /pokemon")],
@@ -275,7 +274,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [new HumanMessage("Read the file /pizza.txt")],
@@ -329,7 +328,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [new HumanMessage("Read the file /memories/test.txt")],
@@ -376,7 +375,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       });
 
       const config = {
-        configurable: { thread_id: uuidv4() },
+        configurable: { thread_id: crypto.randomUUID() },
         store,
       };
       const response = await agent.invoke(
@@ -419,7 +418,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       await agent.invoke(
         {
           messages: [
@@ -471,7 +470,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [
@@ -518,7 +517,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       await agent.invoke(
         {
           messages: [
@@ -561,7 +560,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [new HumanMessage("Get NBA standings")],
@@ -602,7 +601,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       });
 
       const config = {
-        configurable: { thread_id: uuidv4() },
+        configurable: { thread_id: crypto.randomUUID() },
         recursionLimit: 1000,
       };
       const response = await agent.invoke(
@@ -695,7 +694,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [new HumanMessage("Write 'new content' to /existing.txt")],
@@ -732,7 +731,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         checkpointer,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [new HumanMessage("Use glob to find all Python files")],
@@ -807,7 +806,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [
@@ -863,7 +862,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [new HumanMessage("Use glob to find all Python files")],
@@ -909,7 +908,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         checkpointer,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [
@@ -988,7 +987,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [
@@ -1046,7 +1045,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [
@@ -1094,7 +1093,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         checkpointer,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
 
       const response = await agent.invoke(
         {
@@ -1149,7 +1148,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       });
 
       // Read from one thread
-      const config1 = { configurable: { thread_id: uuidv4() } };
+      const config1 = { configurable: { thread_id: crypto.randomUUID() } };
       const readResponse = await agent.invoke(
         {
           messages: [new HumanMessage("Read /memories/pokemon.txt")],
@@ -1165,7 +1164,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       expect(JSON.stringify(readMessage!.content)).toContain("Charmander");
 
       // List from another thread
-      const config2 = { configurable: { thread_id: uuidv4() } };
+      const config2 = { configurable: { thread_id: crypto.randomUUID() } };
       const listResponse = await agent.invoke(
         {
           messages: [new HumanMessage("List files in /memories")],
@@ -1181,7 +1180,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       expect(lsMessage!.content.toString()).toContain("/memories/pokemon.txt");
 
       // Edit from yet another thread
-      const config3 = { configurable: { thread_id: uuidv4() } };
+      const config3 = { configurable: { thread_id: crypto.randomUUID() } };
       const editResponse = await agent.invoke(
         {
           messages: [
@@ -1223,7 +1222,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
 
       // Write a shortterm memory file
       const writeResponse = await agent.invoke(
@@ -1344,7 +1343,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       });
 
       const config = {
-        configurable: { thread_id: uuidv4() },
+        configurable: { thread_id: crypto.randomUUID() },
         store,
       };
       const response = await agent.invoke(
