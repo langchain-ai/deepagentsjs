@@ -32,9 +32,6 @@ import type { CompiledSubAgent } from "./middleware/subagents.js";
 // We use AnnotationRoot<any> as a compatible equivalent
 type AnyAnnotationRoot = AnnotationRoot<any>;
 
-/** Any subagent specification — sync, compiled, or async. */
-export type AnySubAgent = SubAgent | CompiledSubAgent | AsyncSubAgent;
-
 // TODO: import TypedToolStrategy from "langchain" once exported from the top-level entry point
 // (currently only available via "langchain/dist/agents/responses.js")
 interface TypedToolStrategy<T = unknown> extends Array<ToolStrategy<any>> {
@@ -56,30 +53,32 @@ export type ExtractSubAgentMiddleware<T> = T extends { middleware?: infer M }
 /**
  * Helper type to flatten and merge middleware from all subagents
  */
-export type FlattenSubAgentMiddleware<T extends readonly AnySubAgent[]> =
-  T extends readonly []
-    ? readonly []
-    : T extends readonly [infer First, ...infer Rest]
-      ? Rest extends readonly AnySubAgent[]
-        ? readonly [
-            ...ExtractSubAgentMiddleware<First>,
-            ...FlattenSubAgentMiddleware<Rest>,
-          ]
-        : ExtractSubAgentMiddleware<First>
-      : readonly [];
+export type FlattenSubAgentMiddleware<
+  T extends readonly (SubAgent | CompiledSubAgent)[],
+> = T extends readonly []
+  ? readonly []
+  : T extends readonly [infer First, ...infer Rest]
+    ? Rest extends readonly (SubAgent | CompiledSubAgent)[]
+      ? readonly [
+          ...ExtractSubAgentMiddleware<First>,
+          ...FlattenSubAgentMiddleware<Rest>,
+        ]
+      : ExtractSubAgentMiddleware<First>
+    : readonly [];
 
 /**
  * Helper type to merge states from subagent middleware
  */
-export type InferSubAgentMiddlewareStates<T extends readonly AnySubAgent[]> =
-  InferMiddlewareStates<FlattenSubAgentMiddleware<T>>;
+export type InferSubAgentMiddlewareStates<
+  T extends readonly (SubAgent | CompiledSubAgent)[],
+> = InferMiddlewareStates<FlattenSubAgentMiddleware<T>>;
 
 /**
  * Combined state type including custom middleware and subagent middleware states
  */
 export type MergedDeepAgentState<
   TMiddleware extends readonly AgentMiddleware[],
-  TSubagents extends readonly AnySubAgent[],
+  TSubagents extends readonly (SubAgent | CompiledSubAgent)[],
 > = InferMiddlewareStates<TMiddleware> &
   InferSubAgentMiddlewareStates<TSubagents>;
 
@@ -166,7 +165,10 @@ export interface DeepAgentTypeConfig<
     | ClientTool
     | ServerTool
   )[],
-  TSubagents extends readonly AnySubAgent[] = readonly AnySubAgent[],
+  TSubagents extends readonly (SubAgent | CompiledSubAgent)[] = readonly (
+    | SubAgent
+    | CompiledSubAgent
+  )[],
 > extends AgentTypeConfig<TResponse, TState, TContext, TMiddleware, TTools> {
   /** The subagents array type for type-safe streaming */
   Subagents: TSubagents;
@@ -182,7 +184,7 @@ export interface DefaultDeepAgentTypeConfig extends DeepAgentTypeConfig {
   Context: AnyAnnotationRoot;
   Middleware: readonly AgentMiddleware[];
   Tools: readonly (ClientTool | ServerTool)[];
-  Subagents: readonly AnySubAgent[];
+  Subagents: readonly (SubAgent | CompiledSubAgent)[];
 }
 
 /**
@@ -356,7 +358,10 @@ export interface CreateDeepAgentParams<
   ContextSchema extends AnnotationRoot<any> | InteropZodObject =
     AnnotationRoot<any>,
   TMiddleware extends readonly AgentMiddleware[] = readonly AgentMiddleware[],
-  TSubagents extends readonly AnySubAgent[] = readonly AnySubAgent[],
+  TSubagents extends readonly (SubAgent | CompiledSubAgent)[] = readonly (
+    | SubAgent
+    | CompiledSubAgent
+  )[],
   TTools extends readonly (ClientTool | ServerTool)[] = readonly (
     | ClientTool
     | ServerTool
@@ -370,13 +375,7 @@ export interface CreateDeepAgentParams<
   systemPrompt?: string | SystemMessage;
   /** Custom middleware to apply after standard middleware */
   middleware?: TMiddleware;
-  /**
-   * List of subagent specifications for task delegation.
-   *
-   * Supports sync SubAgents, CompiledSubAgents, and AsyncSubAgents in the same array.
-   * AsyncSubAgents (identified by their `graphId` field) are automatically separated
-   * at runtime and wired to the async SubAgent middleware.
-   */
+  /** List of subagent specifications for task delegation */
   subagents?: TSubagents;
   /** Structured output response format for the agent (Zod schema or other format) */
   responseFormat?: TResponse;
@@ -436,4 +435,25 @@ export interface CreateDeepAgentParams<
    * ```
    */
   skills?: string[];
+
+  /**
+   * Optional list of async subagent specifications for background jobs on
+   * remote LangGraph servers.
+   *
+   * Async subagents connect to LangGraph deployments via the LangGraph SDK.
+   * They run as background jobs that the main agent can monitor and update.
+   *
+   * @example
+   * ```ts
+   * const agent = createDeepAgent({
+   *   asyncSubAgents: [{
+   *     name: "researcher",
+   *     description: "Research agent for deep analysis",
+   *     url: "https://my-deployment.langsmith.dev",
+   *     graphId: "research_agent",
+   *   }],
+   * });
+   * ```
+   */
+  asyncSubAgents?: AsyncSubAgent[];
 }
