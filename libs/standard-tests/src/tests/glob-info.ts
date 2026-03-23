@@ -2,7 +2,7 @@ import { adaptSandboxInstance } from "../adapter.js";
 import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
- * Register glob() tests (wildcard, recursive, no matches, directories,
+ * Register globInfo() tests (wildcard, recursive, no matches, directories,
  * extension filter, hidden files, character classes, question mark,
  * multiple extensions, deeply nested).
  */
@@ -13,7 +13,7 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
 ): void {
   const { describe, it, expect } = config.runner;
 
-  describe("glob", () => {
+  describe("globInfo", () => {
     it(
       "should match basic wildcard pattern",
       async () => {
@@ -23,7 +23,7 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
         await shared.write(`${baseDir}/file2.txt`, "content");
         await shared.write(`${baseDir}/file3.py`, "content");
 
-        const globResult = await shared.glob("*.txt", baseDir);
+        const globResult = await shared.globInfo("*.txt", baseDir);
         expect(globResult.error).toBeUndefined();
         const result = globResult.files || [];
 
@@ -45,7 +45,7 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
         await shared.write(`${baseDir}/subdir1/nested1.txt`, "content");
         await shared.write(`${baseDir}/subdir2/nested2.txt`, "content");
 
-        const globResult = await shared.glob("**/*.txt", baseDir);
+        const globResult = await shared.globInfo("**/*.txt", baseDir);
         expect(globResult.error).toBeUndefined();
         const result = globResult.files || [];
 
@@ -64,7 +64,7 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
         const baseDir = config.resolvePath("gl-no-match");
         await shared.write(`${baseDir}/file.txt`, "content");
 
-        const globResult = await shared.glob("*.py", baseDir);
+        const globResult = await shared.globInfo("*.py", baseDir);
         expect(globResult.error).toBeUndefined();
 
         expect(globResult.files).toEqual([]);
@@ -80,7 +80,7 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
         await shared.execute(`mkdir -p '${baseDir}/dir1' '${baseDir}/dir2'`);
         await shared.write(`${baseDir}/file.txt`, "content");
 
-        const globResult = await shared.glob("*", baseDir);
+        const globResult = await shared.globInfo("*", baseDir);
         expect(globResult.error).toBeUndefined();
         const result = globResult.files || [];
 
@@ -103,7 +103,7 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
         await shared.write(`${baseDir}/test.txt`, "content");
         await shared.write(`${baseDir}/test.md`, "content");
 
-        const globResult = await shared.glob("*.py", baseDir);
+        const globResult = await shared.globInfo("*.py", baseDir);
         expect(globResult.error).toBeUndefined();
         const result = globResult.files || [];
 
@@ -122,7 +122,7 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
         await shared.write(`${baseDir}/.hidden2`, "content");
         await shared.write(`${baseDir}/visible.txt`, "content");
 
-        const globResult = await shared.glob(".*", baseDir);
+        const globResult = await shared.globInfo(".*", baseDir);
         expect(globResult.error).toBeUndefined();
         const result = globResult.files || [];
 
@@ -146,7 +146,7 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
         await shared.write(`${baseDir}/file3.txt`, "content");
         await shared.write(`${baseDir}/fileA.txt`, "content");
 
-        const globResult = await shared.glob("file[1-2].txt", baseDir);
+        const globResult = await shared.globInfo("file[1-2].txt", baseDir);
         expect(globResult.error).toBeUndefined();
         const result = globResult.files || [];
 
@@ -169,7 +169,7 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
         await shared.write(`${baseDir}/file2.txt`, "content");
         await shared.write(`${baseDir}/file10.txt`, "content");
 
-        const globResult = await shared.glob("file?.txt", baseDir);
+        const globResult = await shared.globInfo("file?.txt", baseDir);
         expect(globResult.error).toBeUndefined();
         const result = globResult.files || [];
 
@@ -191,10 +191,10 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
         await shared.write(`${baseDir}/file.md`, "content");
         await shared.write(`${baseDir}/file.js`, "content");
 
-        const globResultTxt = await shared.glob("*.txt", baseDir);
+        const globResultTxt = await shared.globInfo("*.txt", baseDir);
         expect(globResultTxt.error).toBeUndefined();
         const resultTxt = globResultTxt.files || [];
-        const globResultPy = await shared.glob("*.py", baseDir);
+        const globResultPy = await shared.globInfo("*.py", baseDir);
         expect(globResultPy.error).toBeUndefined();
         const resultPy = globResultPy.files || [];
 
@@ -212,7 +212,7 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
         await shared.write(`${baseDir}/a/b/c/d/deep.txt`, "content");
         await shared.write(`${baseDir}/a/b/other.txt`, "content");
 
-        const globResult = await shared.glob("**/deep.txt", baseDir);
+        const globResult = await shared.globInfo("**/deep.txt", baseDir);
         expect(globResult.error).toBeUndefined();
         const result = globResult.files || [];
 

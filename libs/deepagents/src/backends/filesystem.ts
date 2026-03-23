@@ -102,7 +102,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
    * @returns List of FileInfo objects for files and directories directly in the directory.
    *          Directories have a trailing / in their path and is_dir=true.
    */
-  async ls(dirPath: string): Promise<LsResult> {
+  async lsInfo(dirPath: string): Promise<LsResult> {
     try {
       const resolvedPath = this.resolvePath(dirPath);
       const stat = await fs.stat(resolvedPath);
@@ -481,7 +481,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
    * @param glob - Optional glob pattern to filter which files to search.
    * @returns List of GrepMatch dicts containing path, line number, and matched text.
    */
-  async grep(
+  async grepRaw(
     pattern: string,
     dirPath: string = "/",
     glob: string | null = null,
@@ -689,7 +689,10 @@ export class FilesystemBackend implements BackendProtocolV2 {
   /**
    * Structured glob matching returning FileInfo objects.
    */
-  async glob(pattern: string, searchPath: string = "/"): Promise<GlobResult> {
+  async globInfo(
+    pattern: string,
+    searchPath: string = "/",
+  ): Promise<GlobResult> {
     if (pattern.startsWith("/")) {
       pattern = pattern.substring(1);
     }

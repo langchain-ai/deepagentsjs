@@ -166,13 +166,13 @@ describe("BaseSandbox", () => {
     });
   });
 
-  describe("ls", () => {
+  describe("lsInfo", () => {
     it("should list files via execute using find + stat", async () => {
       const sandbox = new MockSandbox();
       sandbox.addFile("/test.txt", "content");
       sandbox.addFile("/dir/nested.txt", "nested");
 
-      await sandbox.ls("/");
+      await sandbox.lsInfo("/");
       expect(sandbox.executedCommands.length).toBeGreaterThan(0);
       expect(sandbox.executedCommands[0]).toContain("find");
       expect(sandbox.executedCommands[0]).toContain("stat");
@@ -188,7 +188,7 @@ describe("BaseSandbox", () => {
         truncated: false,
       });
 
-      const result = await sandbox.ls("/nonexistent");
+      const result = await sandbox.lsInfo("/nonexistent");
       expect(result.error).toBeUndefined();
       expect(result.files).toEqual([]);
     });
@@ -605,12 +605,12 @@ describe("BaseSandbox", () => {
     });
   });
 
-  describe("grep", () => {
+  describe("grepRaw", () => {
     it("should search files via grep command and return GrepResult", async () => {
       const sandbox = new MockSandbox();
       sandbox.addFile("/test.txt", "hello world\ngoodbye world");
 
-      const result = await sandbox.grep("hello", "/");
+      const result = await sandbox.grepRaw("hello", "/");
       expect(result.error).toBeUndefined();
       expect(result.matches).toBeDefined();
       expect(result.matches!.length).toBe(1);
@@ -628,7 +628,7 @@ describe("BaseSandbox", () => {
         truncated: false,
       });
 
-      const result = await sandbox.grep("nonexistent", "/");
+      const result = await sandbox.grepRaw("nonexistent", "/");
       expect(result.error).toBeUndefined();
       expect(result.matches).toBeDefined();
       expect(result.matches!.length).toBe(0);
@@ -643,14 +643,14 @@ describe("BaseSandbox", () => {
         truncated: false,
       });
 
-      const result = await sandbox.grep("hello", "/");
+      const result = await sandbox.grepRaw("hello", "/");
       expect(result.matches!.length).toBe(1);
       expect(result.matches![0].path).toBe("/test.txt");
       // image.png should be filtered out based on extension
     });
   });
 
-  describe("glob", () => {
+  describe("globInfo", () => {
     it("should find matching files via execute with find + stat", async () => {
       const sandbox = new MockSandbox();
       const now = Math.floor(Date.now() / 1000);
@@ -664,7 +664,7 @@ describe("BaseSandbox", () => {
         truncated: false,
       });
 
-      const result = await sandbox.glob("*.py", "/");
+      const result = await sandbox.globInfo("*.py", "/");
       expect(result.error).toBeUndefined();
       // Only .py files should match, readme.md should be filtered out
       expect(result.files!.length).toBe(2);
@@ -687,7 +687,7 @@ describe("BaseSandbox", () => {
         truncated: false,
       });
 
-      const result = await sandbox.glob("**/*.ts", "/workspace");
+      const result = await sandbox.globInfo("**/*.ts", "/workspace");
       expect(result.error).toBeUndefined();
       expect(result.files!.length).toBe(2);
       expect(result.files!.some((f) => f.path === "src/main.ts")).toBe(true);
@@ -704,7 +704,7 @@ describe("BaseSandbox", () => {
         truncated: false,
       });
 
-      const result = await sandbox.glob("*.nonexistent", "/");
+      const result = await sandbox.globInfo("*.nonexistent", "/");
       expect(result.error).toBeUndefined();
       expect(result.files).toEqual([]);
     });

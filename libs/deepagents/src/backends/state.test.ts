@@ -58,21 +58,21 @@ describe("StateBackend", () => {
     expect(readRes2.error).toBeUndefined();
     expect(readRes2.content).toContain("hi world");
 
-    const listing = backend.ls("/");
+    const listing = backend.lsInfo("/");
     expect(listing.error).toBeUndefined();
     expect(listing.files!.some((fi) => fi.path === "/notes.txt")).toBe(true);
 
-    const grepRes = backend.grep("hi", "/");
+    const grepRes = backend.grepRaw("hi", "/");
     expect(grepRes.error).toBeUndefined();
     expect(grepRes.matches).toBeDefined();
     expect(grepRes.matches!.some((m) => m.path === "/notes.txt")).toBe(true);
 
     // Special characters like "[" are treated literally (not regex)
-    const literalResult = backend.grep("[", "/");
+    const literalResult = backend.grepRaw("[", "/");
     expect(literalResult.error).toBeUndefined();
     expect(literalResult.matches).toBeDefined();
 
-    const infos = backend.glob("*.txt", "/");
+    const infos = backend.globInfo("*.txt", "/");
     expect(infos.error).toBeUndefined();
     expect(infos.files!.some((i) => i.path === "/notes.txt")).toBe(true);
   });
@@ -113,7 +113,7 @@ describe("StateBackend", () => {
       Object.assign(state.files, res.filesUpdate!);
     }
 
-    const rootListing = backend.ls("/");
+    const rootListing = backend.lsInfo("/");
     expect(rootListing.error).toBeUndefined();
     const rootPaths = rootListing.files!.map((fi) => fi.path);
     expect(rootPaths).toContain("/config.json");
@@ -122,21 +122,21 @@ describe("StateBackend", () => {
     expect(rootPaths).not.toContain("/src/main.py");
     expect(rootPaths).not.toContain("/src/utils/helper.py");
 
-    const srcListing = backend.ls("/src/");
+    const srcListing = backend.lsInfo("/src/");
     expect(srcListing.error).toBeUndefined();
     const srcPaths = srcListing.files!.map((fi) => fi.path);
     expect(srcPaths).toContain("/src/main.py");
     expect(srcPaths).toContain("/src/utils/");
     expect(srcPaths).not.toContain("/src/utils/helper.py");
 
-    const utilsListing = backend.ls("/src/utils/");
+    const utilsListing = backend.lsInfo("/src/utils/");
     expect(utilsListing.error).toBeUndefined();
     const utilsPaths = utilsListing.files!.map((fi) => fi.path);
     expect(utilsPaths).toContain("/src/utils/helper.py");
     expect(utilsPaths).toContain("/src/utils/common.py");
     expect(utilsPaths).toHaveLength(2);
 
-    const emptyListing = backend.ls("/nonexistent/");
+    const emptyListing = backend.lsInfo("/nonexistent/");
     expect(emptyListing.error).toBeUndefined();
     expect(emptyListing.files).toEqual([]);
   });
@@ -156,14 +156,14 @@ describe("StateBackend", () => {
       Object.assign(state.files, res.filesUpdate!);
     }
 
-    const listingWithSlash = backend.ls("/");
+    const listingWithSlash = backend.lsInfo("/");
     expect(listingWithSlash.error).toBeUndefined();
     expect(listingWithSlash.files).toHaveLength(2);
     const rootPaths = listingWithSlash.files!.map((fi) => fi.path);
     expect(rootPaths).toContain("/file.txt");
     expect(rootPaths).toContain("/dir/");
 
-    const listingFromDir = backend.ls("/dir/");
+    const listingFromDir = backend.lsInfo("/dir/");
     expect(listingFromDir.error).toBeUndefined();
     expect(listingFromDir.files).toHaveLength(1);
     expect(listingFromDir.files![0].path).toBe("/dir/nested.txt");
@@ -221,7 +221,7 @@ describe("StateBackend", () => {
       Object.assign(state.files, res.filesUpdate!);
     }
 
-    const grepRes = backend.grep("import", "/", "*.py");
+    const grepRes = backend.grepRaw("import", "/", "*.py");
     expect(grepRes.error).toBeUndefined();
     expect(grepRes.matches).toHaveLength(1);
     expect(grepRes.matches![0].path).toBe("/test.py");
@@ -464,7 +464,7 @@ describe("StateBackend", () => {
       const writeRes = backend.write("/notes.txt", "hello PNG");
       Object.assign(state.files, writeRes.filesUpdate);
 
-      const grepRes = backend.grep("PNG", "/");
+      const grepRes = backend.grepRaw("PNG", "/");
       expect(grepRes.matches).toHaveLength(1);
       expect(grepRes.matches![0].path).toBe("/notes.txt");
     });
@@ -650,7 +650,7 @@ describe("StateBackend", () => {
       const writeRes = backend.write("/modern.py", "import sys\nprint('v2')");
       Object.assign(state.files, writeRes.filesUpdate!);
 
-      const grepRes = backend.grep("import", "/");
+      const grepRes = backend.grepRaw("import", "/");
       expect(grepRes.matches).toHaveLength(2);
       const paths = grepRes.matches!.map((m) => m.path).sort();
       expect(paths).toEqual(["/legacy.py", "/modern.py"]);
@@ -670,7 +670,7 @@ describe("StateBackend", () => {
       const writeRes = backend.write("/modern.txt", "world");
       Object.assign(state.files, writeRes.filesUpdate!);
 
-      const listing = backend.ls("/");
+      const listing = backend.lsInfo("/");
       expect(listing.error).toBeUndefined();
       expect(listing.files).toHaveLength(2);
       for (const info of listing.files!) {

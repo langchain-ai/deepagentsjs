@@ -306,7 +306,7 @@ description: A skill with very large content
         },
         directories: {
           "/skills/good/": [{ name: "web-research", type: "directory" }],
-          // /skills/bad/ not in directories, so ls will fail
+          // /skills/bad/ not in directories, so lsInfo will fail
         },
       });
 
@@ -325,7 +325,7 @@ description: A skill with very large content
 
     it("should use backend.read() fallback when downloadFiles is not available", async () => {
       const mockBackend = {
-        async ls(dirPath: string) {
+        async lsInfo(dirPath: string) {
           if (dirPath === "/skills/user/") {
             return {
               files: [
@@ -365,7 +365,7 @@ description: A skill with very large content
 
     it("should skip skill when backend.read() returns error", async () => {
       const mockBackend = {
-        async ls(dirPath: string) {
+        async lsInfo(dirPath: string) {
           if (dirPath === "/skills/user/") {
             return {
               files: [

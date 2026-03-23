@@ -536,35 +536,38 @@ export class VfsSandbox extends BaseSandbox {
   /**
    * List files and directories in the specified directory.
    *
-   * Overrides BaseSandbox.ls() to normalize paths with a leading `/`
+   * Overrides BaseSandbox.lsInfo() to normalize paths with a leading `/`
    * so they resolve correctly in the temp execution directory.
    */
-  async ls(dirPath: string): Promise<LsResult> {
-    return super.ls(this.#normalizeExecPath(dirPath));
+  async lsInfo(dirPath: string): Promise<LsResult> {
+    return super.lsInfo(this.#normalizeExecPath(dirPath));
   }
 
   /**
    * Search for a literal text pattern in files.
    *
-   * Overrides BaseSandbox.grep() to normalize paths with a leading `/`
+   * Overrides BaseSandbox.grepRaw() to normalize paths with a leading `/`
    * so they resolve correctly in the temp execution directory.
    */
-  async grep(
+  async grepRaw(
     pattern: string,
     searchPath: string = "/",
     glob: string | null = null,
   ): Promise<GrepResult> {
-    return super.grep(pattern, this.#normalizeExecPath(searchPath), glob);
+    return super.grepRaw(pattern, this.#normalizeExecPath(searchPath), glob);
   }
 
   /**
    * Structured glob matching returning FileInfo objects.
    *
-   * Overrides BaseSandbox.glob() to normalize paths with a leading `/`
+   * Overrides BaseSandbox.globInfo() to normalize paths with a leading `/`
    * so they resolve correctly in the temp execution directory.
    */
-  async glob(pattern: string, searchPath: string = "/"): Promise<GlobResult> {
-    return super.glob(pattern, this.#normalizeExecPath(searchPath));
+  async globInfo(
+    pattern: string,
+    searchPath: string = "/",
+  ): Promise<GlobResult> {
+    return super.globInfo(pattern, this.#normalizeExecPath(searchPath));
   }
 
   /**

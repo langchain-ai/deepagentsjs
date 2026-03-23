@@ -2,7 +2,7 @@ import { adaptSandboxInstance } from "../adapter.js";
 import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
- * Register grep() tests (basic search, glob filter, no matches,
+ * Register grepRaw() tests (basic search, glob filter, no matches,
  * multi matches, literal matching, unicode, case sensitivity, special chars,
  * empty dir, nested dirs, line numbers).
  */
@@ -13,7 +13,7 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
 ): void {
   const { describe, it, expect } = config.runner;
 
-  describe("grep", () => {
+  describe("grepRaw", () => {
     it(
       "should find basic literal pattern matches",
       async () => {
@@ -28,7 +28,7 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
           "Hello there\nGoodbye friend",
         );
 
-        const result = await shared.grep("Hello", baseDir);
+        const result = await shared.grepRaw("Hello", baseDir);
 
         expect(result.error).toBeUndefined();
         const matches = result.matches!;
@@ -55,7 +55,7 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
         await shared.write(`${baseDir}/test.py`, "pattern_match");
         await shared.write(`${baseDir}/test.md`, "pattern_match");
 
-        const result = await shared.grep("pattern_match", baseDir, "*.py");
+        const result = await shared.grepRaw("pattern_match", baseDir, "*.py");
 
         expect(result.error).toBeUndefined();
         const matches = result.matches!;
@@ -72,7 +72,7 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
         const baseDir = config.resolvePath("gr-no-match");
         await shared.write(`${baseDir}/file.txt`, "Hello world");
 
-        const result = await shared.grep("nonexistent_str", baseDir);
+        const result = await shared.grepRaw("nonexistent_str", baseDir);
 
         expect(result.error).toBeUndefined();
         expect(result.matches!.length).toBe(0);
@@ -90,7 +90,7 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
           "apple\nbanana\napple\norange\napple",
         );
 
-        const result = await shared.grep("apple", baseDir);
+        const result = await shared.grepRaw("apple", baseDir);
 
         expect(result.error).toBeUndefined();
         const matches = result.matches!;
@@ -112,7 +112,7 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
           "test123\ntest456\nabcdef",
         );
 
-        const result = await shared.grep("test123", baseDir);
+        const result = await shared.grepRaw("test123", baseDir);
 
         expect(result.error).toBeUndefined();
         const matches = result.matches!;
@@ -132,7 +132,7 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
           "Hello \u4E16\u754C\n\u041F\u0440\u0438\u0432\u0435\u0442 \u043C\u0438\u0440\n\u6D4B\u8BD5 pattern",
         );
 
-        const result = await shared.grep("\u4E16\u754C", baseDir);
+        const result = await shared.grepRaw("\u4E16\u754C", baseDir);
 
         expect(result.error).toBeUndefined();
         const matches = result.matches!;
@@ -149,7 +149,7 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
         const baseDir = config.resolvePath("gr-case");
         await shared.write(`${baseDir}/case.txt`, "Hello\nhello\nHELLO");
 
-        const result = await shared.grep("Hello", baseDir);
+        const result = await shared.grepRaw("Hello", baseDir);
 
         expect(result.error).toBeUndefined();
         const matches = result.matches!;
@@ -171,14 +171,14 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
         );
 
         // Test with dollar sign (literal)
-        const result1 = await shared.grep("$100", baseDir);
+        const result1 = await shared.grepRaw("$100", baseDir);
         expect(result1.error).toBeUndefined();
         const matches1 = result1.matches!;
         expect(matches1.length).toBe(1);
         expect(matches1[0].text).toContain("$100");
 
         // Test with brackets (literal)
-        const result2 = await shared.grep("[a-z]*", baseDir);
+        const result2 = await shared.grepRaw("[a-z]*", baseDir);
         expect(result2.error).toBeUndefined();
         const matches2 = result2.matches!;
         expect(matches2.length).toBe(1);
@@ -194,7 +194,7 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
         const baseDir = config.resolvePath("gr-empty-dir");
         await shared.execute(`mkdir -p '${baseDir}'`);
 
-        const result = await shared.grep("anything", baseDir);
+        const result = await shared.grepRaw("anything", baseDir);
 
         expect(result.error).toBeUndefined();
         expect(result.matches!.length).toBe(0);
@@ -214,7 +214,7 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
           "target_nested here",
         );
 
-        const result = await shared.grep("target_nested", baseDir);
+        const result = await shared.grepRaw("target_nested", baseDir);
 
         expect(result.error).toBeUndefined();
         const matches = result.matches!;
@@ -234,7 +234,7 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
         ).join("\n");
         await shared.write(`${baseDir}/long.txt`, content);
 
-        const result = await shared.grep("Line 50", baseDir);
+        const result = await shared.grepRaw("Line 50", baseDir);
 
         expect(result.error).toBeUndefined();
         const matches = result.matches!;
