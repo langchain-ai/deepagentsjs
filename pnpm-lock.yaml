@@ -350,7 +350,7 @@ importers:
         version: 25.3.3
       '@vitest/coverage-v8':
         specifier: ^4.0.18
-        version: 4.0.18(vitest@4.1.1)
+        version: 4.1.1(vitest@4.1.1)
       '@vitest/ui':
         specifier: ^4.0.18
         version: 4.0.18(vitest@4.1.1)
@@ -423,7 +423,7 @@ importers:
         version: 25.3.3
       '@vitest/coverage-v8':
         specifier: ^4.0.18
-        version: 4.0.18(vitest@4.1.1)
+        version: 4.1.1(vitest@4.1.1)
       '@vitest/ui':
         specifier: ^4.0.18
         version: 4.0.18(vitest@4.1.1)
@@ -460,7 +460,7 @@ importers:
         version: 25.3.3
       '@vitest/coverage-v8':
         specifier: ^4.0.18
-        version: 4.0.18(vitest@4.1.1(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)))
+        version: 4.1.1(vitest@4.1.1(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)))
       deepagents:
         specifier: workspace:*
         version: link:../../deepagents
@@ -497,7 +497,7 @@ importers:
         version: 25.3.3
       '@vitest/coverage-v8':
         specifier: ^4.0.18
-        version: 4.0.18(vitest@4.1.1(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)))
+        version: 4.1.1(vitest@4.1.1(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)))
       deepagents:
         specifier: workspace:*
         version: link:../../deepagents
@@ -534,7 +534,7 @@ importers:
         version: 25.3.3
       '@vitest/coverage-v8':
         specifier: ^4.0.18
-        version: 4.0.18(vitest@4.1.1(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)))
+        version: 4.1.1(vitest@4.1.1(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)))
       deepagents:
         specifier: workspace:*
         version: link:../../deepagents
@@ -571,7 +571,7 @@ importers:
         version: 25.3.3
       '@vitest/coverage-v8':
         specifier: ^4.0.18
-        version: 4.0.18(vitest@4.1.1(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)))
+        version: 4.1.1(vitest@4.1.1(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)))
       deepagents:
         specifier: workspace:*
         version: link:../../deepagents
@@ -638,7 +638,7 @@ importers:
         version: 25.3.3
       '@vitest/coverage-v8':
         specifier: ^4.0.18
-        version: 4.0.18(vitest@4.1.1(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)))
+        version: 4.1.1(vitest@4.1.1(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)))
       deepagents:
         specifier: workspace:*
         version: link:../../deepagents
@@ -890,8 +890,8 @@ packages:
     resolution: {integrity: sha512-xExUBkuXWJjVuIbO7z6q7/BA9bgfJDEhVL0ggrggLMbg0IzCUWGT1hZGE8qUH7Il7/RD/a6cZ3AAFrrlp1LF/A==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
-  '@babel/parser@7.29.0':
-    resolution: {integrity: sha512-IyDgFV5GeDUVX4YdF/3CPULtVGSXXMLh1xVIgdCgxApktqnQV0r7/8Nqthg+8YLGaAtdyIlo2qIdZrbCv4+7ww==}
+  '@babel/parser@7.29.2':
+    resolution: {integrity: sha512-4GgRzy/+fsBa72/RZVJmGKPmZu9Byn8o4MoLpmNe1m8ZfYnz5emHLQz3U4gLud6Zwl0RZIcgiLD7Uq7ySFuDLA==}
     engines: {node: '>=6.0.0'}
     hasBin: true
 
@@ -2403,11 +2403,11 @@ packages:
     resolution: {integrity: sha512-q+SL+b+05Ud6LbEE35qe4A99P+htKTKVbyiNEe45eCbJFyh/HVK9QXwlrbz+Q4L8SOW4roxSVwXYj4DMBT7Ieg==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@vitest/coverage-v8@4.0.18':
-    resolution: {integrity: sha512-7i+N2i0+ME+2JFZhfuz7Tg/FqKtilHjGyGvoHYQ6iLV0zahbsJ9sljC9OcFcPDbhYKCet+sG8SsVqlyGvPflZg==}
+  '@vitest/coverage-v8@4.1.1':
+    resolution: {integrity: sha512-nZ4RWwGCoGOQRMmU/Q9wlUY540RVRxJZ9lxFsFfy0QV7Zmo5VVBhB6Sl9Xa0KIp2iIs3zWfPlo9LcY1iqbpzCw==}
     peerDependencies:
-      '@vitest/browser': 4.0.18
-      vitest: 4.0.18
+      '@vitest/browser': 4.1.1
+      vitest: 4.1.1
     peerDependenciesMeta:
       '@vitest/browser':
         optional: true
@@ -2535,8 +2535,8 @@ packages:
     resolution: {integrity: sha512-trmleAnZ2PxN/loHWVhhx1qeOHSRXq4TDsBBxq3GqeJitfk3+jTQ+v/C1km/KYq9M7wKqCewMh+/NAvVH7m+bw==}
     engines: {node: '>=20.19.0'}
 
-  ast-v8-to-istanbul@0.3.11:
-    resolution: {integrity: sha512-Qya9fkoofMjCBNVdWINMjB5KZvkYfaO9/anwkWnjxibpWUxo5iHl2sOdP7/uAqaRuUYuoo8rDwnbaaKVFxoUvw==}
+  ast-v8-to-istanbul@1.0.0:
+    resolution: {integrity: sha512-1fSfIwuDICFA4LKkCzRPO7F0hzFf0B7+Xqrl27ynQaa+Rh0e1Es0v6kWHPott3lU10AyAr7oKHa65OppjLn3Rg==}
 
   async-function@1.0.0:
     resolution: {integrity: sha512-hsU18Ae8CDTR6Kgu9DYf0EbCr/a5iGL0rytQDobUcdpYOKokk8LEjVphnXkDkgpi0wYVsqrXuP0bZxJaTqdgoA==}
@@ -3959,9 +3959,6 @@ packages:
   stackback@0.0.2:
     resolution: {integrity: sha512-1XMJE5fQo1jGH6Y/7ebnwPOBEkIEnT4QF32d5R1+VXdXveM0IBMJt8zfaxX1P3QhVwrYe+576+jkANtSS2mBbw==}
 
-  std-env@3.10.0:
-    resolution: {integrity: sha512-5GS12FdOZNliM5mAOxFRg7Ir0pWz8MdpYm6AY6VPkGpbA7ZzmbzNcBJQ0GPvvyWgcY7QAhCgf9Uy89I03faLkg==}
-
   std-env@4.0.0:
     resolution: {integrity: sha512-zUMPtQ/HBY3/50VbpkupYHbRroTRZJPRLvreamgErJVys0ceuzMkD44J/QjqhHjOzK42GQ3QZIeFG1OYfOtKqQ==}
 
@@ -4032,10 +4029,6 @@ packages:
 
   tinybench@2.9.0:
     resolution: {integrity: sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg==}
-
-  tinyexec@1.0.2:
-    resolution: {integrity: sha512-W/KYk+NFhkmsYpuHq5JykngiOCnxeVL8v8dFnqxSD8qEEdRfXk1SDM6JzNqcERbcGYj9tMrDQBYV9cjgnunFIg==}
-    engines: {node: '>=18'}
 
   tinyexec@1.0.4:
     resolution: {integrity: sha512-u9r3uZC0bdpGOXtlxUIdwf9pkmvhqJdrVCH9fapQtgy/OeTTMZ1nqH7agtvEfmGui6e1XxjcdrlxvxJvc3sMqw==}
@@ -4841,7 +4834,7 @@ snapshots:
 
   '@babel/helper-validator-identifier@8.0.0-rc.2': {}
 
-  '@babel/parser@7.29.0':
+  '@babel/parser@7.29.2':
     dependencies:
       '@babel/types': 7.29.0
 
@@ -6438,32 +6431,32 @@ snapshots:
       '@typescript-eslint/types': 8.56.0
       eslint-visitor-keys: 5.0.0
 
-  '@vitest/coverage-v8@4.0.18(vitest@4.1.1(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)))':
+  '@vitest/coverage-v8@4.1.1(vitest@4.1.1(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)))':
     dependencies:
       '@bcoe/v8-coverage': 1.0.2
-      '@vitest/utils': 4.0.18
-      ast-v8-to-istanbul: 0.3.11
+      '@vitest/utils': 4.1.1
+      ast-v8-to-istanbul: 1.0.0
       istanbul-lib-coverage: 3.2.2
       istanbul-lib-report: 3.0.1
       istanbul-reports: 3.2.0
       magicast: 0.5.2
       obug: 2.1.1
-      std-env: 3.10.0
-      tinyrainbow: 3.0.3
+      std-env: 4.0.0
+      tinyrainbow: 3.1.0
       vitest: 4.1.1(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
 
-  '@vitest/coverage-v8@4.0.18(vitest@4.1.1)':
+  '@vitest/coverage-v8@4.1.1(vitest@4.1.1)':
     dependencies:
       '@bcoe/v8-coverage': 1.0.2
-      '@vitest/utils': 4.0.18
-      ast-v8-to-istanbul: 0.3.11
+      '@vitest/utils': 4.1.1
+      ast-v8-to-istanbul: 1.0.0
       istanbul-lib-coverage: 3.2.2
       istanbul-lib-report: 3.0.1
       istanbul-reports: 3.2.0
       magicast: 0.5.2
       obug: 2.1.1
-      std-env: 3.10.0
-      tinyrainbow: 3.0.3
+      std-env: 4.0.0
+      tinyrainbow: 3.1.0
       vitest: 4.1.1(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(@vitest/ui@4.0.18)(vite@7.3.1(@types/node@25.3.3)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2))
 
   '@vitest/expect@4.1.1':
@@ -6632,7 +6625,7 @@ snapshots:
       estree-walker: 3.0.3
       pathe: 2.0.3
 
-  ast-v8-to-istanbul@0.3.11:
+  ast-v8-to-istanbul@1.0.0:
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       estree-walker: 3.0.3
@@ -7681,7 +7674,7 @@ snapshots:
 
   magicast@0.5.2:
     dependencies:
-      '@babel/parser': 7.29.0
+      '@babel/parser': 7.29.2
       '@babel/types': 7.29.0
       source-map-js: 1.2.1
 
@@ -8196,8 +8189,6 @@ snapshots:
 
   stackback@0.0.2: {}
 
-  std-env@3.10.0: {}
-
   std-env@4.0.0: {}
 
   stop-iteration-iterator@1.1.0:
@@ -8276,8 +8267,6 @@ snapshots:
   term-size@2.2.1: {}
 
   tinybench@2.9.0: {}
-
-  tinyexec@1.0.2: {}
 
   tinyexec@1.0.4: {}
 
