@@ -1,10 +1,10 @@
-import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
+import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register detailed write() tests (new file, parent dirs, existing file,
  * special chars, empty, spaces, unicode, slashes, long content, newlines).
  */
-export function registerWriteTests<T extends AnySandboxInstance>(
+export function registerWriteTests<T extends SandboxInstance>(
   getShared: () => T,
   config: StandardTestsConfig<T>,
   timeout: number,

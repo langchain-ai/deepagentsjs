@@ -2,7 +2,6 @@ import type {
   MaybePromise,
   FileUploadResponse,
   SandboxBackendProtocol,
-  SandboxBackendProtocolV2,
   FileDownloadResponse,
 } from "deepagents";
 
@@ -56,16 +55,14 @@ export interface TestRunner {
 /* ------------------------------------------------------------------ */
 
 /**
- * Interface for sandbox instances used in standard tests (v1).
+ * Interface for sandbox instances used in standard tests.
  *
  * Extends the canonical `SandboxBackendProtocol` from deepagents with
  * test-specific properties (`isRunning`, `initialize`) and makes
  * `uploadFiles`/`downloadFiles` required (they are optional in the
  * base protocol).
- *
- * @deprecated Use {@link SandboxInstanceV2} for new implementations
  */
-export interface SandboxInstanceV1 extends SandboxBackendProtocol {
+export interface SandboxInstance extends SandboxBackendProtocol {
   /** Whether the sandbox is currently running */
   readonly isRunning: boolean;
   /** Upload multiple files (required for standard tests) */
@@ -77,46 +74,14 @@ export interface SandboxInstanceV1 extends SandboxBackendProtocol {
   /** Optional two-step initialization */
   initialize?(): Promise<void>;
 }
-
-/** @deprecated Use {@link SandboxInstanceV2} instead. */
-export interface SandboxInstance extends SandboxInstanceV1 {}
-
-/**
- * Interface for sandbox instances used in standard tests (v2).
- *
- * Extends the canonical `SandboxBackendProtocolV2` from deepagents with
- * test-specific properties (`isRunning`, `initialize`) and makes
- * `uploadFiles`/`downloadFiles` required (they are optional in the
- * base protocol).
- *
- * V2 uses Result types for better error handling.
- */
-export interface SandboxInstanceV2 extends SandboxBackendProtocolV2 {
-  /** Whether the sandbox is currently running */
-  readonly isRunning: boolean;
-  /** Upload multiple files (required for standard tests) */
-  uploadFiles(
-    files: Array<[string, Uint8Array]>,
-  ): MaybePromise<FileUploadResponse[]>;
-  /** Download multiple files (required for standard tests) */
-  downloadFiles(paths: string[]): MaybePromise<FileDownloadResponse[]>;
-  /** Optional two-step initialization */
-  initialize?(): Promise<void>;
-}
-
-/**
- * Union type for any sandbox instance (v1 or v2).
- */
-export type AnySandboxInstance = SandboxInstanceV1 | SandboxInstanceV2;
 
 /**
  * Configuration for the standard sandbox test suite.
  *
  * @typeParam T - The concrete sandbox type (e.g., ModalSandbox, DenoSandbox)
- *                Supports both v1 (SandboxInstance) and v2 (SandboxInstanceV2)
  */
 export interface StandardTestsConfig<
-  T extends AnySandboxInstance = AnySandboxInstance,
+  T extends SandboxInstance = SandboxInstance,
 > {
   /**
    * Display name for the test suite (e.g., "ModalSandbox", "DenoSandbox").

@@ -1,4 +1,4 @@
-import type { AnyBackendProtocol, BackendFactory } from "deepagents";
+import type { BackendProtocol, BackendFactory } from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
 /**
@@ -7,11 +7,11 @@ import type { StructuredToolInterface } from "@langchain/core/tools";
 export interface QuickJSMiddlewareOptions {
   /**
    * Backend for file I/O (readFile/writeFile) inside the REPL.
-   * Accepts a AnyBackendProtocol instance or a BackendFactory function.
+   * Accepts a BackendProtocol instance or a BackendFactory function.
    * Defaults to StateBackend (reads/writes LangGraph checkpoint state).
    * @default StateBackend
    */
-  backend?: AnyBackendProtocol | BackendFactory;
+  backend?: BackendProtocol | BackendFactory;
 
   /**
    * Enable programmatic tool calling from within the REPL.
@@ -58,7 +58,7 @@ export interface QuickJSMiddlewareOptions {
 export interface ReplSessionOptions {
   memoryLimitBytes?: number;
   maxStackSizeBytes?: number;
-  backend?: AnyBackendProtocol;
+  backend?: BackendProtocol;
   tools?: StructuredToolInterface[];
 }
 
