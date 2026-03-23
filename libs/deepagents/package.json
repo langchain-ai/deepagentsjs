@@ -40,7 +40,6 @@
   "dependencies": {
     "@langchain/core": "^1.1.33",
     "@langchain/langgraph": "^1.1.4",
-    "@langchain/langgraph-sdk": "^1.7.3",
     "fast-glob": "^3.3.3",
     "langchain": "1.2.36",
     "micromatch": "^4.0.8",
