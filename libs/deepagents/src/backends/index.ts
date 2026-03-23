@@ -6,11 +6,19 @@
  */
 
 export type {
+  AnyBackendProtocol,
   BackendProtocol,
+  BackendProtocolV1,
+  BackendProtocolV2,
   BackendFactory,
   FileData,
   FileInfo,
   GrepMatch,
+  ReadResult,
+  ReadRawResult,
+  GrepResult,
+  LsResult,
+  GlobResult,
   WriteResult,
   EditResult,
   StateAndStore,
@@ -20,6 +28,8 @@ export type {
   FileDownloadResponse,
   FileUploadResponse,
   SandboxBackendProtocol,
+  SandboxBackendProtocolV1,
+  SandboxBackendProtocolV2,
   MaybePromise,
   // Sandbox provider types
   SandboxInfo,
@@ -31,8 +41,12 @@ export type {
   SandboxErrorCode,
 } from "./protocol.js";
 
-// Export type guard and error class
-export { isSandboxBackend, SandboxError } from "./protocol.js";
+// Export type guards and error class
+export {
+  isSandboxBackend,
+  isSandboxProtocol,
+  SandboxError,
+} from "./protocol.js";
 
 export { StateBackend } from "./state.js";
 export { StoreBackend, type StoreBackendOptions } from "./store.js";

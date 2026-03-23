@@ -1,11 +1,12 @@
-import type { SandboxInstance, StandardTestsConfig } from "../types.js";
+import { adaptSandboxInstance } from "../adapter.js";
+import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register grepRaw() tests (basic search, glob filter, no matches,
  * multi matches, literal matching, unicode, case sensitivity, special chars,
  * empty dir, nested dirs, line numbers).
  */
-export function registerGrepRawTests<T extends SandboxInstance>(
+export function registerGrepRawTests<T extends AnySandboxInstance>(
   getShared: () => T,
   config: StandardTestsConfig<T>,
   timeout: number,
@@ -16,7 +17,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should find basic literal pattern matches",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-basic");
         await shared.write(
           `${baseDir}/file1.txt`,
@@ -29,12 +30,8 @@ export function registerGrepRawTests<T extends SandboxInstance>(
 
         const result = await shared.grepRaw("Hello", baseDir);
 
-        expect(Array.isArray(result)).toBe(true);
-        const matches = result as Array<{
-          path: string;
-          line: number;
-          text: string;
-        }>;
+        expect(result.error).toBeUndefined();
+        const matches = result.matches!;
         expect(matches.length).toBe(2);
 
         const paths = matches.map((m) => m.path);
@@ -52,7 +49,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should filter files with glob pattern",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-glob");
         await shared.write(`${baseDir}/test.txt`, "pattern_match");
         await shared.write(`${baseDir}/test.py`, "pattern_match");
@@ -60,12 +57,8 @@ export function registerGrepRawTests<T extends SandboxInstance>(
 
         const result = await shared.grepRaw("pattern_match", baseDir, "*.py");
 
-        expect(Array.isArray(result)).toBe(true);
-        const matches = result as Array<{
-          path: string;
-          line: number;
-          text: string;
-        }>;
+        expect(result.error).toBeUndefined();
+        const matches = result.matches!;
         expect(matches.length).toBe(1);
         expect(matches[0].path).toContain("test.py");
       },
@@ -73,24 +66,16 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     );
 
     it(
-      "should return empty array when no matches found",
+      "should return empty matches when no matches found",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-no-match");
         await shared.write(`${baseDir}/file.txt`, "Hello world");
 
         const result = await shared.grepRaw("nonexistent_str", baseDir);
 
-        expect(Array.isArray(result)).toBe(true);
-        expect(
-          (
-            result as Array<{
-              path: string;
-              line: number;
-              text: string;
-            }>
-          ).length,
-        ).toBe(0);
+        expect(result.error).toBeUndefined();
+        expect(result.matches!.length).toBe(0);
       },
       timeout,
     );
@@ -98,7 +83,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should find multiple matches in a single file",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-multi");
         await shared.write(
           `${baseDir}/fruits.txt`,
@@ -107,12 +92,8 @@ export function registerGrepRawTests<T extends SandboxInstance>(
 
         const result = await shared.grepRaw("apple", baseDir);
 
-        expect(Array.isArray(result)).toBe(true);
-        const matches = result as Array<{
-          path: string;
-          line: number;
-          text: string;
-        }>;
+        expect(result.error).toBeUndefined();
+        const matches = result.matches!;
         expect(matches.length).toBe(3);
 
         const lineNumbers = matches.map((m) => m.line);
@@ -124,7 +105,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should match literal strings not regex",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-literal");
         await shared.write(
           `${baseDir}/numbers.txt`,
@@ -133,12 +114,8 @@ export function registerGrepRawTests<T extends SandboxInstance>(
 
         const result = await shared.grepRaw("test123", baseDir);
 
-        expect(Array.isArray(result)).toBe(true);
-        const matches = result as Array<{
-          path: string;
-          line: number;
-          text: string;
-        }>;
+        expect(result.error).toBeUndefined();
+        const matches = result.matches!;
         expect(matches.length).toBe(1);
         expect(matches[0].text).toContain("test123");
       },
@@ -148,7 +125,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should find unicode patterns",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-unicode");
         await shared.write(
           `${baseDir}/unicode.txt`,
@@ -157,12 +134,8 @@ export function registerGrepRawTests<T extends SandboxInstance>(
 
         const result = await shared.grepRaw("\u4E16\u754C", baseDir);
 
-        expect(Array.isArray(result)).toBe(true);
-        const matches = result as Array<{
-          path: string;
-          line: number;
-          text: string;
-        }>;
+        expect(result.error).toBeUndefined();
+        const matches = result.matches!;
         expect(matches.length).toBe(1);
         expect(matches[0].text).toContain("\u4E16\u754C");
       },
@@ -172,18 +145,14 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should be case-sensitive by default",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-case");
         await shared.write(`${baseDir}/case.txt`, "Hello\nhello\nHELLO");
 
         const result = await shared.grepRaw("Hello", baseDir);
 
-        expect(Array.isArray(result)).toBe(true);
-        const matches = result as Array<{
-          path: string;
-          line: number;
-          text: string;
-        }>;
+        expect(result.error).toBeUndefined();
+        const matches = result.matches!;
         // Should only match "Hello", not "hello" or "HELLO"
         expect(matches.length).toBe(1);
         expect(matches[0].text).toContain("Hello");
@@ -194,7 +163,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should handle special characters as literals",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-special");
         await shared.write(
           `${baseDir}/special.txt`,
@@ -203,23 +172,15 @@ export function registerGrepRawTests<T extends SandboxInstance>(
 
         // Test with dollar sign (literal)
         const result1 = await shared.grepRaw("$100", baseDir);
-        expect(Array.isArray(result1)).toBe(true);
-        const matches1 = result1 as Array<{
-          path: string;
-          line: number;
-          text: string;
-        }>;
+        expect(result1.error).toBeUndefined();
+        const matches1 = result1.matches!;
         expect(matches1.length).toBe(1);
         expect(matches1[0].text).toContain("$100");
 
         // Test with brackets (literal)
         const result2 = await shared.grepRaw("[a-z]*", baseDir);
-        expect(Array.isArray(result2)).toBe(true);
-        const matches2 = result2 as Array<{
-          path: string;
-          line: number;
-          text: string;
-        }>;
+        expect(result2.error).toBeUndefined();
+        const matches2 = result2.matches!;
         expect(matches2.length).toBe(1);
         expect(matches2[0].text).toContain("[a-z]*");
       },
@@ -227,24 +188,16 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     );
 
     it(
-      "should return empty array for empty directory",
+      "should return empty matches for empty directory",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-empty-dir");
         await shared.execute(`mkdir -p '${baseDir}'`);
 
         const result = await shared.grepRaw("anything", baseDir);
 
-        expect(Array.isArray(result)).toBe(true);
-        expect(
-          (
-            result as Array<{
-              path: string;
-              line: number;
-              text: string;
-            }>
-          ).length,
-        ).toBe(0);
+        expect(result.error).toBeUndefined();
+        expect(result.matches!.length).toBe(0);
       },
       timeout,
     );
@@ -252,7 +205,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should search recursively across nested directories",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-nested");
         await shared.write(`${baseDir}/root.txt`, "target_nested here");
         await shared.write(`${baseDir}/sub1/level1.txt`, "target_nested here");
@@ -263,12 +216,8 @@ export function registerGrepRawTests<T extends SandboxInstance>(
 
         const result = await shared.grepRaw("target_nested", baseDir);
 
-        expect(Array.isArray(result)).toBe(true);
-        const matches = result as Array<{
-          path: string;
-          line: number;
-          text: string;
-        }>;
+        expect(result.error).toBeUndefined();
+        const matches = result.matches!;
         expect(matches.length).toBe(3);
       },
       timeout,
@@ -277,7 +226,7 @@ export function registerGrepRawTests<T extends SandboxInstance>(
     it(
       "should report correct line numbers",
       async () => {
-        const shared = getShared();
+        const shared = adaptSandboxInstance(getShared());
         const baseDir = config.resolvePath("gr-line-nums");
         const content = Array.from(
           { length: 100 },
@@ -287,12 +236,8 @@ export function registerGrepRawTests<T extends SandboxInstance>(
 
         const result = await shared.grepRaw("Line 50", baseDir);
 
-        expect(Array.isArray(result)).toBe(true);
-        const matches = result as Array<{
-          path: string;
-          line: number;
-          text: string;
-        }>;
+        expect(result.error).toBeUndefined();
+        const matches = result.matches!;
         expect(matches.length).toBe(1);
         expect(matches[0].line).toBe(50);
       },
