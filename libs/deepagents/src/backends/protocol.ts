@@ -282,7 +282,8 @@ export function isSandboxBackend(
 ): backend is SandboxBackendProtocol {
   return (
     typeof (backend as SandboxBackendProtocol).execute === "function" &&
-    typeof (backend as SandboxBackendProtocol).id === "string"
+    typeof (backend as SandboxBackendProtocol).id === "string" &&
+    (backend as SandboxBackendProtocol).id !== ""
   );
 }
 
