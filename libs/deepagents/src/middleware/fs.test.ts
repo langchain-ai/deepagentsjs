@@ -331,16 +331,16 @@ describe("createFilesystemMiddleware", () => {
   // Helper to create a mock backend that doesn't support execution
   function createMockBackend(): BackendProtocol {
     return {
-      lsInfo: vi.fn().mockResolvedValue({ files: [] }),
-      read: vi.fn().mockResolvedValue({ content: "" }),
+      lsInfo: vi.fn().mockResolvedValue([]),
+      read: vi.fn().mockResolvedValue(""),
       write: vi.fn().mockResolvedValue({ error: null, filesUpdate: null }),
       edit: vi.fn().mockResolvedValue({
         error: null,
         occurrences: 1,
         filesUpdate: null,
       }),
-      globInfo: vi.fn().mockResolvedValue({ files: [] }),
-      grepRaw: vi.fn().mockResolvedValue({ matches: [] }),
+      globInfo: vi.fn().mockResolvedValue([]),
+      grepRaw: vi.fn().mockResolvedValue([]),
     } as unknown as BackendProtocol;
   }
 
@@ -828,7 +828,7 @@ describe("createFilesystemMiddleware", () => {
       }));
 
       const mockBackend = createMockBackend();
-      mockBackend.lsInfo = vi.fn().mockResolvedValue({ files: manyFiles });
+      mockBackend.lsInfo = vi.fn().mockResolvedValue(manyFiles);
 
       const state = { messages: [], files: {} };
       vi.mocked(getCurrentTaskInput).mockReturnValue(state);
@@ -855,7 +855,7 @@ describe("createFilesystemMiddleware", () => {
       }));
 
       const mockBackend = createMockBackend();
-      mockBackend.globInfo = vi.fn().mockResolvedValue({ files: manyPaths });
+      mockBackend.globInfo = vi.fn().mockResolvedValue(manyPaths);
 
       const state = { messages: [], files: {} };
       vi.mocked(getCurrentTaskInput).mockReturnValue(state);
@@ -883,7 +883,7 @@ describe("createFilesystemMiddleware", () => {
       }));
 
       const mockBackend = createMockBackend();
-      mockBackend.grepRaw = vi.fn().mockResolvedValue({ matches: manyMatches });
+      mockBackend.grepRaw = vi.fn().mockResolvedValue(manyMatches);
 
       const state = { messages: [], files: {} };
       vi.mocked(getCurrentTaskInput).mockReturnValue(state);
@@ -908,7 +908,7 @@ describe("createFilesystemMiddleware", () => {
       ];
 
       const mockBackend = createMockBackend();
-      mockBackend.lsInfo = vi.fn().mockResolvedValue({ files: smallFiles });
+      mockBackend.lsInfo = vi.fn().mockResolvedValue(smallFiles);
 
       const state = { messages: [], files: {} };
       vi.mocked(getCurrentTaskInput).mockReturnValue(state);
@@ -933,7 +933,7 @@ describe("createFilesystemMiddleware", () => {
       ];
 
       const mockBackend = createMockBackend();
-      mockBackend.globInfo = vi.fn().mockResolvedValue({ files: smallPaths });
+      mockBackend.globInfo = vi.fn().mockResolvedValue(smallPaths);
 
       const state = { messages: [], files: {} };
       vi.mocked(getCurrentTaskInput).mockReturnValue(state);
@@ -960,9 +960,7 @@ describe("createFilesystemMiddleware", () => {
       ];
 
       const mockBackend = createMockBackend();
-      mockBackend.grepRaw = vi
-        .fn()
-        .mockResolvedValue({ matches: smallMatches });
+      mockBackend.grepRaw = vi.fn().mockResolvedValue(smallMatches);
 
       const state = { messages: [], files: {} };
       vi.mocked(getCurrentTaskInput).mockReturnValue(state);
@@ -980,48 +978,6 @@ describe("createFilesystemMiddleware", () => {
       expect(result).not.toContain("truncated");
       expect(result).toContain("/src/file1.ts");
       expect(result).toContain("const pattern = 'test'");
-    });
-
-    it("grep tool should return error message when backend returns an error", async () => {
-      const mockBackend = createMockBackend();
-      mockBackend.grepRaw = vi
-        .fn()
-        .mockResolvedValue({ error: "Permission denied: /restricted" });
-
-      const state = { messages: [], files: {} };
-      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
-
-      const middleware = createFilesystemMiddleware({
-        backend: () => mockBackend,
-      });
-
-      const grepTool = middleware.tools!.find(
-        (t: any) => t.name === "grep",
-      ) as any;
-      const result = await grepTool.invoke({ pattern: "secret", path: "/" });
-
-      expect(typeof result).toBe("string");
-      expect(result).toContain("Permission denied: /restricted");
-    });
-
-    it("grep tool should return no-matches message when backend returns empty matches", async () => {
-      const mockBackend = createMockBackend();
-      mockBackend.grepRaw = vi.fn().mockResolvedValue({ matches: [] });
-
-      const state = { messages: [], files: {} };
-      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
-
-      const middleware = createFilesystemMiddleware({
-        backend: () => mockBackend,
-      });
-
-      const grepTool = middleware.tools!.find(
-        (t: any) => t.name === "grep",
-      ) as any;
-      const result = await grepTool.invoke({ pattern: "nope", path: "/" });
-
-      expect(typeof result).toBe("string");
-      expect(result).toContain("No matches found");
     });
   });
 });

@@ -30,9 +30,8 @@ describe("StoreBackend", () => {
     expect(writeResult.path).toBe("/docs/readme.md");
     expect(writeResult.filesUpdate).toBeNull();
 
-    const readRes = await backend.read("/docs/readme.md");
-    expect(readRes.error).toBeUndefined();
-    expect(readRes.content).toContain("hello store");
+    const content = await backend.read("/docs/readme.md");
+    expect(content).toContain("hello store");
 
     const editResult = await backend.edit(
       "/docs/readme.md",
@@ -45,23 +44,19 @@ describe("StoreBackend", () => {
     expect(editResult.occurrences).toBe(1);
 
     const infos = await backend.lsInfo("/docs/");
-    expect(infos.error).toBeUndefined();
-    expect(infos.files!.some((i) => i.path === "/docs/readme.md")).toBe(true);
+    expect(infos.some((i) => i.path === "/docs/readme.md")).toBe(true);
 
-    const grepRes = await backend.grepRaw("hi", "/");
-    expect(grepRes.error).toBeUndefined();
-    expect(grepRes.matches).toBeDefined();
-    expect(grepRes.matches!.some((m) => m.path === "/docs/readme.md")).toBe(
-      true,
-    );
+    const matches = await backend.grepRaw("hi", "/");
+    expect(Array.isArray(matches)).toBe(true);
+    if (Array.isArray(matches)) {
+      expect(matches.some((m) => m.path === "/docs/readme.md")).toBe(true);
+    }
 
     const glob1 = await backend.globInfo("*.md", "/");
-    expect(glob1.error).toBeUndefined();
-    expect(glob1.files!.length).toBe(0);
+    expect(glob1.length).toBe(0);
 
     const glob2 = await backend.globInfo("**/*.md", "/");
-    expect(glob2.error).toBeUndefined();
-    expect(glob2.files!.some((i) => i.path === "/docs/readme.md")).toBe(true);
+    expect(glob2.some((i) => i.path === "/docs/readme.md")).toBe(true);
   });
 
   it("should list nested directories correctly", async () => {
@@ -83,8 +78,7 @@ describe("StoreBackend", () => {
     }
 
     const rootListing = await backend.lsInfo("/");
-    expect(rootListing.error).toBeUndefined();
-    const rootPaths = rootListing.files!.map((fi) => fi.path);
+    const rootPaths = rootListing.map((fi) => fi.path);
     expect(rootPaths).toContain("/config.json");
     expect(rootPaths).toContain("/src/");
     expect(rootPaths).toContain("/docs/");
@@ -94,22 +88,19 @@ describe("StoreBackend", () => {
     expect(rootPaths).not.toContain("/docs/api/reference.md");
 
     const srcListing = await backend.lsInfo("/src/");
-    expect(srcListing.error).toBeUndefined();
-    const srcPaths = srcListing.files!.map((fi) => fi.path);
+    const srcPaths = srcListing.map((fi) => fi.path);
     expect(srcPaths).toContain("/src/main.py");
     expect(srcPaths).toContain("/src/utils/");
     expect(srcPaths).not.toContain("/src/utils/helper.py");
 
     const utilsListing = await backend.lsInfo("/src/utils/");
-    expect(utilsListing.error).toBeUndefined();
-    const utilsPaths = utilsListing.files!.map((fi) => fi.path);
+    const utilsPaths = utilsListing.map((fi) => fi.path);
     expect(utilsPaths).toContain("/src/utils/helper.py");
     expect(utilsPaths).toContain("/src/utils/common.py");
     expect(utilsPaths).toHaveLength(2);
 
     const emptyListing = await backend.lsInfo("/nonexistent/");
-    expect(emptyListing.error).toBeUndefined();
-    expect(emptyListing.files).toEqual([]);
+    expect(emptyListing).toEqual([]);
   });
 
   it("should handle trailing slashes in ls", async () => {
@@ -127,16 +118,13 @@ describe("StoreBackend", () => {
     }
 
     const listingFromRoot = await backend.lsInfo("/");
-    expect(listingFromRoot.error).toBeUndefined();
-    expect(listingFromRoot.files!.length).toBeGreaterThan(0);
+    expect(listingFromRoot.length).toBeGreaterThan(0);
 
     const listing1 = await backend.lsInfo("/dir/");
-    expect(listing1.error).toBeUndefined();
     const listing2 = await backend.lsInfo("/dir");
-    expect(listing2.error).toBeUndefined();
-    expect(listing1.files!.length).toBe(listing2.files!.length);
-    expect(listing1.files!.map((fi) => fi.path)).toEqual(
-      listing2.files!.map((fi) => fi.path),
+    expect(listing1.length).toBe(listing2.length);
+    expect(listing1.map((fi) => fi.path)).toEqual(
+      listing2.map((fi) => fi.path),
     );
   });
 
@@ -164,11 +152,10 @@ describe("StoreBackend", () => {
     await backend.write("/multiline.txt", content);
 
     const readWithOffset = await backend.read("/multiline.txt", 2, 2);
-    expect(readWithOffset.error).toBeUndefined();
-    expect(readWithOffset.content).toContain("line3");
-    expect(readWithOffset.content).toContain("line4");
-    expect(readWithOffset.content).not.toContain("line1");
-    expect(readWithOffset.content).not.toContain("line5");
+    expect(readWithOffset).toContain("line3");
+    expect(readWithOffset).toContain("line4");
+    expect(readWithOffset).not.toContain("line1");
+    expect(readWithOffset).not.toContain("line5");
   });
 
   it("should handle edit with replace_all", async () => {
@@ -186,8 +173,8 @@ describe("StoreBackend", () => {
     expect(editAll.occurrences).toBe(3);
 
     const readAfter = await backend.read("/repeat.txt");
-    expect(readAfter.content).toContain("qux bar qux baz qux");
-    expect(readAfter.content).not.toContain("foo");
+    expect(readAfter).toContain("qux bar qux baz qux");
+    expect(readAfter).not.toContain("foo");
   });
 
   it("should handle grep with glob filter", async () => {
@@ -204,10 +191,12 @@ describe("StoreBackend", () => {
       await backend.write(path, content);
     }
 
-    const grepRes = await backend.grepRaw("import", "/", "*.py");
-    expect(grepRes.error).toBeUndefined();
-    expect(grepRes.matches).toHaveLength(1);
-    expect(grepRes.matches![0].path).toBe("/test.py");
+    const matches = await backend.grepRaw("import", "/", "*.py");
+    expect(Array.isArray(matches)).toBe(true);
+    if (Array.isArray(matches)) {
+      expect(matches).toHaveLength(1);
+      expect(matches[0].path).toBe("/test.py");
+    }
   });
 
   it("should return empty content warning for empty files", async () => {
@@ -216,8 +205,10 @@ describe("StoreBackend", () => {
 
     await backend.write("/empty.txt", "");
 
-    const readRes = await backend.read("/empty.txt");
-    expect(readRes.content).toBe("");
+    const content = await backend.read("/empty.txt");
+    expect(content).toContain(
+      "System reminder: File exists but has empty contents",
+    );
   });
 
   it("should use assistantId-based namespace when no custom namespace provided", async () => {
@@ -257,10 +248,10 @@ describe("StoreBackend", () => {
       expect(result[1].error).toBeNull();
 
       // Verify files are stored
-      const readRes1 = await backend.read("/file1.txt");
-      expect(readRes1.content).toContain("content1");
-      const readRes2 = await backend.read("/file2.txt");
-      expect(readRes2.content).toContain("content2");
+      const content1 = await backend.read("/file1.txt");
+      expect(content1).toContain("content1");
+      const content2 = await backend.read("/file2.txt");
+      expect(content2).toContain("content2");
     });
 
     it("should handle binary content", async () => {
@@ -275,24 +266,8 @@ describe("StoreBackend", () => {
       const result = await backend.uploadFiles(files);
       expect(result[0].error).toBeNull();
 
-      const readRes = await backend.read("/hello.txt");
-      expect(readRes.content).toContain("Hello");
-    });
-
-    it("should upload binary (image) files as Uint8Array", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
-
-      const pngBytes = new Uint8Array([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      ]);
-      const result = await backend.uploadFiles([["/image.png", pngBytes]]);
-      expect(result[0].error).toBeNull();
-
-      const raw = await backend.readRaw("/image.png");
-      expect(raw.error).toBeUndefined();
-      expect(raw.data!.content).toBeInstanceOf(Uint8Array);
-      expect(raw.data!.content).toEqual(pngBytes);
+      const content = await backend.read("/hello.txt");
+      expect(content).toContain("Hello");
     });
   });
 
@@ -342,87 +317,6 @@ describe("StoreBackend", () => {
       expect(result[1].error).toBe("file_not_found");
       expect(result[1].content).toBeNull();
     });
-
-    it("should download binary files as raw bytes", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
-
-      const pngBytes = new Uint8Array([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      ]);
-
-      await backend.uploadFiles([["/image.png", pngBytes]]);
-
-      const result = await backend.downloadFiles(["/image.png"]);
-      expect(result).toHaveLength(1);
-      expect(result[0].error).toBeNull();
-      expect(result[0].content).not.toBeNull();
-      expect(new Uint8Array(result[0].content!)).toEqual(pngBytes);
-    });
-  });
-
-  describe("binary file round-trip", () => {
-    it("should upload and download binary files with identical bytes", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
-
-      const originalBytes = new Uint8Array(256);
-      for (let i = 0; i < 256; i++) originalBytes[i] = i;
-
-      const uploadResult = await backend.uploadFiles([
-        ["/data.png", originalBytes],
-      ]);
-      expect(uploadResult[0].error).toBeNull();
-
-      const downloadResult = await backend.downloadFiles(["/data.png"]);
-      expect(downloadResult[0].error).toBeNull();
-      expect(new Uint8Array(downloadResult[0].content!)).toEqual(originalBytes);
-    });
-
-    it("should read binary files as Uint8Array content", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
-
-      const pngBytes = new Uint8Array([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      ]);
-
-      await backend.uploadFiles([["/photo.png", pngBytes]]);
-
-      const readResult = await backend.read("/photo.png");
-      expect(readResult.error).toBeUndefined();
-      expect(readResult.content).toBeInstanceOf(Uint8Array);
-      expect(readResult.content).toEqual(pngBytes);
-    });
-
-    it("should skip binary files in grep", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
-
-      const pngBytes = new Uint8Array([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      ]);
-      await backend.uploadFiles([["/image.png", pngBytes]]);
-      await backend.write("/notes.txt", "hello PNG");
-
-      const grepRes = await backend.grepRaw("PNG", "/");
-      expect(grepRes.matches).toHaveLength(1);
-      expect(grepRes.matches![0].path).toBe("/notes.txt");
-    });
-
-    it("should ignore offset/limit for binary reads", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
-
-      const pngBytes = new Uint8Array([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      ]);
-      await backend.uploadFiles([["/img.png", pngBytes]]);
-
-      const full = await backend.read("/img.png");
-      const withOffsetLimit = await backend.read("/img.png", 5, 2);
-      expect(withOffsetLimit.content).toBe(full.content);
-    });
   });
 
   it("should use custom namespace", async () => {
@@ -463,11 +357,11 @@ describe("StoreBackend", () => {
     await userABackend.write("/notes.txt", "user A notes");
     await userBBackend.write("/notes.txt", "user B notes");
 
-    const readA = await userABackend.read("/notes.txt");
-    expect(readA.content).toContain("user A notes");
+    const contentA = await userABackend.read("/notes.txt");
+    expect(contentA).toContain("user A notes");
 
-    const readB = await userBBackend.read("/notes.txt");
-    expect(readB.content).toContain("user B notes");
+    const contentB = await userBBackend.read("/notes.txt");
+    expect(contentB).toContain("user B notes");
 
     const userAItems = await store.search(["org-1", "user-a", "filesystem"]);
     const userBItems = await store.search(["org-1", "user-b", "filesystem"]);
@@ -556,135 +450,6 @@ describe("StoreBackend", () => {
       "/large_tool_results/test_456",
     );
     expect(storedContent).toBeDefined();
-    expect((storedContent!.value as any).content).toBe(largeContent);
-  });
-
-  describe("fileFormat: v1", () => {
-    it("should write v1 format (content as line array)", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore, { fileFormat: "v1" });
-
-      await backend.write("/notes.txt", "line1\nline2");
-
-      const raw = await backend.readRaw("/notes.txt");
-      expect(raw.error).toBeUndefined();
-      expect(Array.isArray(raw.data!.content)).toBe(true);
-      expect(raw.data!.content).toEqual(["line1", "line2"]);
-    });
-
-    it("should read v1 data correctly", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore, { fileFormat: "v1" });
-
-      await backend.write("/notes.txt", "hello world");
-
-      const readRes = await backend.read("/notes.txt");
-      expect(readRes.error).toBeUndefined();
-      expect(readRes.content).toContain("hello world");
-    });
-
-    it("should edit v1 data correctly", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore, { fileFormat: "v1" });
-
-      await backend.write("/notes.txt", "hello world");
-      const editRes = await backend.edit("/notes.txt", "hello", "hi");
-      expect(editRes.error).toBeUndefined();
-
-      const readRes = await backend.read("/notes.txt");
-      expect(readRes.content).toContain("hi world");
-    });
-
-    it("should upload files as v1 format", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore, { fileFormat: "v1" });
-
-      const files: Array<[string, Uint8Array]> = [
-        ["/hello.txt", new TextEncoder().encode("Hello")],
-      ];
-
-      const result = await backend.uploadFiles(files);
-      expect(result[0].error).toBeNull();
-
-      const raw = await backend.readRaw("/hello.txt");
-      expect(raw.error).toBeUndefined();
-      expect(Array.isArray(raw.data!.content)).toBe(true);
-      expect(raw.data!.content).toEqual(["Hello"]);
-    });
-  });
-
-  describe("backwards compatibility: v2 backend reading v1 data", () => {
-    it("should read pre-existing v1 data from store", async () => {
-      const { store, stateAndStore } = makeConfig();
-
-      // Simulate legacy v1 data already in store
-      await store.put(["filesystem"], "/legacy.txt", {
-        content: ["line1", "line2", "line3"],
-        created_at: "2024-01-01T00:00:00.000Z",
-        modified_at: "2024-01-01T00:00:00.000Z",
-      });
-
-      const backend = new StoreBackend(stateAndStore); // default v2
-
-      const readRes = await backend.read("/legacy.txt");
-      expect(readRes.error).toBeUndefined();
-      expect(readRes.content).toBe("line1\nline2\nline3");
-    });
-
-    it("should read v1 data with offset/limit", async () => {
-      const { store, stateAndStore } = makeConfig();
-
-      await store.put(["filesystem"], "/legacy.txt", {
-        content: ["a", "b", "c", "d", "e"],
-        created_at: "2024-01-01T00:00:00.000Z",
-        modified_at: "2024-01-01T00:00:00.000Z",
-      });
-
-      const backend = new StoreBackend(stateAndStore);
-
-      const readRes = await backend.read("/legacy.txt", 1, 2);
-      expect(readRes.content).toBe("b\nc");
-    });
-
-    it("should grep across mixed v1 and v2 data in store", async () => {
-      const { store, stateAndStore } = makeConfig();
-
-      // Legacy v1 data
-      await store.put(["filesystem"], "/legacy.py", {
-        content: ["import os", "print('v1')"],
-        created_at: "2024-01-01T00:00:00.000Z",
-        modified_at: "2024-01-01T00:00:00.000Z",
-      });
-
-      const backend = new StoreBackend(stateAndStore); // default v2
-
-      // Write a v2 file
-      await backend.write("/modern.py", "import sys\nprint('v2')");
-
-      const grepRes = await backend.grepRaw("import", "/");
-      expect(grepRes.matches).toHaveLength(2);
-      const paths = grepRes.matches!.map((m) => m.path).sort();
-      expect(paths).toEqual(["/legacy.py", "/modern.py"]);
-    });
-
-    it("should list mixed v1 and v2 files with correct sizes", async () => {
-      const { store, stateAndStore } = makeConfig();
-
-      await store.put(["filesystem"], "/legacy.txt", {
-        content: ["hello"],
-        created_at: "2024-01-01T00:00:00.000Z",
-        modified_at: "2024-01-01T00:00:00.000Z",
-      });
-
-      const backend = new StoreBackend(stateAndStore);
-      await backend.write("/modern.txt", "world");
-
-      const listing = await backend.lsInfo("/");
-      expect(listing.error).toBeUndefined();
-      expect(listing.files).toHaveLength(2);
-      for (const info of listing.files!) {
-        expect(info.size).toBe(5);
-      }
-    });
+    expect((storedContent!.value as any).content).toEqual([largeContent]);
   });
 });

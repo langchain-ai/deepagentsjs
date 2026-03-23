@@ -327,22 +327,20 @@ description: A skill with very large content
       const mockBackend = {
         async lsInfo(dirPath: string) {
           if (dirPath === "/skills/user/") {
-            return {
-              files: [
-                {
-                  path: "web-research/",
-                  is_dir: true,
-                },
-              ],
-            };
+            return [
+              {
+                path: "web-research/",
+                is_dir: true,
+              },
+            ];
           }
-          return { files: [] };
+          return [];
         },
         async read(path: string) {
           if (path === "/skills/user/web-research/SKILL.md") {
-            return { content: VALID_SKILL_CONTENT };
+            return VALID_SKILL_CONTENT;
           }
-          return { error: "Error: file not found" };
+          return "Error: file not found";
         },
         // downloadFiles is NOT defined
         readFiles: vi.fn(),
@@ -367,19 +365,17 @@ description: A skill with very large content
       const mockBackend = {
         async lsInfo(dirPath: string) {
           if (dirPath === "/skills/user/") {
-            return {
-              files: [
-                {
-                  path: "broken-skill/",
-                  is_dir: true,
-                },
-              ],
-            };
+            return [
+              {
+                path: "broken-skill/",
+                is_dir: true,
+              },
+            ];
           }
-          return { files: [] };
+          return [];
         },
         async read(_path: string) {
-          return { error: "Error: permission denied" };
+          return "Error: permission denied";
         },
         readFiles: vi.fn(),
         write: vi.fn(),

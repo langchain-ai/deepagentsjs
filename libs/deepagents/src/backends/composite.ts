@@ -3,23 +3,17 @@
  */
 
 import type {
-  AnyBackendProtocol,
-  BackendProtocolV2,
+  BackendProtocol,
   EditResult,
   ExecuteResponse,
+  FileData,
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
-  GlobResult,
   GrepMatch,
-  GrepResult,
-  LsResult,
-  ReadRawResult,
-  ReadResult,
   WriteResult,
 } from "./protocol.js";
-import { isSandboxBackend, isSandboxProtocol } from "./protocol.js";
-import { adaptBackendProtocol, adaptSandboxProtocol } from "./utils.js";
+import { isSandboxBackend } from "./protocol.js";
 
 /**
  * Backend that routes file operations to different backends based on path prefix.
@@ -30,32 +24,20 @@ import { adaptBackendProtocol, adaptSandboxProtocol } from "./utils.js";
  *
  * The CompositeBackend handles path prefix stripping/re-adding transparently.
  */
-export class CompositeBackend implements BackendProtocolV2 {
-  private default: BackendProtocolV2;
-  private routes: Record<string, BackendProtocolV2>;
-  private sortedRoutes: Array<[string, BackendProtocolV2]>;
+export class CompositeBackend implements BackendProtocol {
+  private default: BackendProtocol;
+  private routes: Record<string, BackendProtocol>;
+  private sortedRoutes: Array<[string, BackendProtocol]>;
 
   constructor(
-    defaultBackend: AnyBackendProtocol,
-    routes: Record<string, AnyBackendProtocol>,
+    defaultBackend: BackendProtocol,
+    routes: Record<string, BackendProtocol>,
   ) {
-    // Check if default backend is a sandbox and adapt accordingly
-    this.default = isSandboxProtocol(defaultBackend)
-      ? adaptSandboxProtocol(defaultBackend)
-      : adaptBackendProtocol(defaultBackend);
-
-    // Adapt route backends (check each one for sandbox properties)
-    this.routes = Object.fromEntries(
-      Object.entries(routes).map(([k, v]) => [
-        k,
-        isSandboxProtocol(v)
-          ? adaptSandboxProtocol(v)
-          : adaptBackendProtocol(v),
-      ]),
-    );
+    this.default = defaultBackend;
+    this.routes = routes;
 
     // Sort routes by length (longest first) for correct prefix matching
-    this.sortedRoutes = Object.entries(this.routes).sort(
+    this.sortedRoutes = Object.entries(routes).sort(
       (a, b) => b[0].length - a[0].length,
     );
   }
@@ -72,7 +54,7 @@ export class CompositeBackend implements BackendProtocolV2 {
    * @returns Tuple of [backend, stripped_key] where stripped_key has the route
    *          prefix removed (but keeps leading slash).
    */
-  private getBackendAndKey(key: string): [BackendProtocolV2, string] {
+  private getBackendAndKey(key: string): [BackendProtocol, string] {
     // Check routes in order of length (longest first)
     for (const [prefix, backend] of this.sortedRoutes) {
       if (key.startsWith(prefix)) {
@@ -91,44 +73,35 @@ export class CompositeBackend implements BackendProtocolV2 {
    * List files and directories in the specified directory (non-recursive).
    *
    * @param path - Absolute path to directory
-   * @returns LsResult with list of FileInfo objects (with route prefixes added) on success or error on failure.
-   *          Directories have a trailing / in their path and is_dir=true.
+   * @returns List of FileInfo objects with route prefixes added, for files and directories
+   *          directly in the directory. Directories have a trailing / in their path and is_dir=true.
    */
-  async lsInfo(path: string): Promise<LsResult> {
+  async lsInfo(path: string): Promise<FileInfo[]> {
     // Check if path matches a specific route
     for (const [routePrefix, backend] of this.sortedRoutes) {
       if (path.startsWith(routePrefix.replace(/\/$/, ""))) {
         // Query only the matching routed backend
         const suffix = path.substring(routePrefix.length);
         const searchPath = suffix ? "/" + suffix : "/";
-        const result = await backend.lsInfo(searchPath);
-
-        if (result.error) {
-          return result;
-        }
+        const infos = await backend.lsInfo(searchPath);
 
         // Add route prefix back to paths
         const prefixed: FileInfo[] = [];
-        for (const fi of result.files || []) {
+        for (const fi of infos) {
           prefixed.push({
             ...fi,
             path: routePrefix.slice(0, -1) + fi.path,
           });
         }
-        return { files: prefixed };
+        return prefixed;
       }
     }
 
     // At root, aggregate default and all routed backends
     if (path === "/") {
       const results: FileInfo[] = [];
-      const defaultResult = await this.default.lsInfo(path);
-
-      if (defaultResult.error) {
-        return defaultResult;
-      }
-
-      results.push(...(defaultResult.files || []));
+      const defaultInfos = await this.default.lsInfo(path);
+      results.push(...defaultInfos);
 
       // Add the route itself as a directory (e.g., /memories/)
       for (const [routePrefix] of this.sortedRoutes) {
@@ -141,7 +114,7 @@ export class CompositeBackend implements BackendProtocolV2 {
       }
 
       results.sort((a, b) => a.path.localeCompare(b.path));
-      return { files: results };
+      return results;
     }
 
     // Path doesn't match a route: query only default backend
@@ -160,7 +133,7 @@ export class CompositeBackend implements BackendProtocolV2 {
     filePath: string,
     offset: number = 0,
     limit: number = 500,
-  ): Promise<ReadResult> {
+  ): Promise<string> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
     return await backend.read(strippedKey, offset, limit);
   }
@@ -169,9 +142,9 @@ export class CompositeBackend implements BackendProtocolV2 {
    * Read file content as raw FileData.
    *
    * @param filePath - Absolute file path
-   * @returns ReadRawResult with raw file data on success or error on failure
+   * @returns Raw file content as FileData
    */
-  async readRaw(filePath: string): Promise<ReadRawResult> {
+  async readRaw(filePath: string): Promise<FileData> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
     return await backend.readRaw(strippedKey);
   }
@@ -183,23 +156,22 @@ export class CompositeBackend implements BackendProtocolV2 {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
-  ): Promise<GrepResult> {
+  ): Promise<GrepMatch[] | string> {
     // If path targets a specific route, search only that backend
     for (const [routePrefix, backend] of this.sortedRoutes) {
       if (path.startsWith(routePrefix.replace(/\/$/, ""))) {
         const searchPath = path.substring(routePrefix.length - 1);
         const raw = await backend.grepRaw(pattern, searchPath || "/", glob);
 
-        if (raw.error) {
+        if (typeof raw === "string") {
           return raw;
         }
 
         // Add route prefix back
-        const matches = (raw.matches || []).map((m) => ({
+        return raw.map((m) => ({
           ...m,
           path: routePrefix.slice(0, -1) + m.path,
         }));
-        return { matches };
       }
     }
 
@@ -207,78 +179,69 @@ export class CompositeBackend implements BackendProtocolV2 {
     const allMatches: GrepMatch[] = [];
     const rawDefault = await this.default.grepRaw(pattern, path, glob);
 
-    if (rawDefault.error) {
+    if (typeof rawDefault === "string") {
       return rawDefault;
     }
 
-    allMatches.push(...(rawDefault.matches || []));
+    allMatches.push(...rawDefault);
 
     // Search all routes
     for (const [routePrefix, backend] of Object.entries(this.routes)) {
       const raw = await backend.grepRaw(pattern, "/", glob);
 
-      if (raw.error) {
+      if (typeof raw === "string") {
         return raw;
       }
 
       // Add route prefix back
-      const matches = (raw.matches || []).map((m) => ({
-        ...m,
-        path: routePrefix.slice(0, -1) + m.path,
-      }));
-      allMatches.push(...matches);
+      allMatches.push(
+        ...raw.map((m) => ({
+          ...m,
+          path: routePrefix.slice(0, -1) + m.path,
+        })),
+      );
     }
 
-    return { matches: allMatches };
+    return allMatches;
   }
 
   /**
    * Structured glob matching returning FileInfo objects.
    */
-  async globInfo(pattern: string, path: string = "/"): Promise<GlobResult> {
+  async globInfo(pattern: string, path: string = "/"): Promise<FileInfo[]> {
     const results: FileInfo[] = [];
 
     // Route based on path, not pattern
     for (const [routePrefix, backend] of this.sortedRoutes) {
       if (path.startsWith(routePrefix.replace(/\/$/, ""))) {
         const searchPath = path.substring(routePrefix.length - 1);
-        const result = await backend.globInfo(pattern, searchPath || "/");
-
-        if (result.error) {
-          return result;
-        }
+        const infos = await backend.globInfo(pattern, searchPath || "/");
 
         // Add route prefix back
-        const files = (result.files || []).map((fi) => ({
+        return infos.map((fi) => ({
           ...fi,
           path: routePrefix.slice(0, -1) + fi.path,
         }));
-        return { files };
       }
     }
 
     // Path doesn't match any specific route - search default backend AND all routed backends
-    const defaultResult = await this.default.globInfo(pattern, path);
-    if (defaultResult.error) {
-      return defaultResult;
-    }
-    results.push(...(defaultResult.files || []));
+    const defaultInfos = await this.default.globInfo(pattern, path);
+    results.push(...defaultInfos);
 
     for (const [routePrefix, backend] of Object.entries(this.routes)) {
-      const result = await backend.globInfo(pattern, "/");
-      if (result.error) {
-        continue; // Skip backends that error
-      }
-      const files = (result.files || []).map((fi) => ({
-        ...fi,
-        path: routePrefix.slice(0, -1) + fi.path,
-      }));
-      results.push(...files);
+      const infos = await backend.globInfo(pattern, "/");
+      results.push(
+        ...infos.map((fi) => ({
+          ...fi,
+          path: routePrefix.slice(0, -1) + fi.path,
+        })),
+      );
     }
 
     // Deterministic ordering
     results.sort((a, b) => a.path.localeCompare(b.path));
-    return { files: results };
+    return results;
   }
 
   /**
@@ -344,7 +307,7 @@ export class CompositeBackend implements BackendProtocolV2 {
       () => null,
     );
     const batchesByBackend = new Map<
-      BackendProtocolV2,
+      BackendProtocol,
       Array<{ idx: number; path: string; content: Uint8Array }>
     >();
 
@@ -392,7 +355,7 @@ export class CompositeBackend implements BackendProtocolV2 {
       () => null,
     );
     const batchesByBackend = new Map<
-      BackendProtocolV2,
+      BackendProtocol,
       Array<{ idx: number; path: string }>
     >();
 

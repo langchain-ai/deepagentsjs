@@ -23,9 +23,6 @@ export { sandboxStandardTests, withRetry } from "./sandbox.js";
 
 export type {
   SandboxInstance,
-  SandboxInstanceV1,
-  SandboxInstanceV2,
-  AnySandboxInstance,
   StandardTestsConfig,
   TestRunner,
   SuiteFn,

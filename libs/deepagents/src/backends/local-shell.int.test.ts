@@ -39,6 +39,6 @@ sandboxStandardTests({
       inheritEnv: true,
     });
   },
-  closeSandbox: (sandbox: LocalShellBackend) => sandbox.close(),
+  closeSandbox: (sandbox) => sandbox.close(),
   resolvePath: (name) => name,
 });

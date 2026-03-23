@@ -2,9 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   isSandboxBackend,
   type BackendProtocol,
-  type BackendProtocolV2,
   type SandboxBackendProtocol,
-  type SandboxBackendProtocolV2,
   type ExecuteResponse,
   type FileOperationError,
   type FileDownloadResponse,
@@ -116,29 +114,6 @@ describe("isSandboxBackend", () => {
     expect(isSandboxBackend(sandboxBackend)).toBe(true);
   });
 
-  it("should return true for V2 sandbox backends", () => {
-    const sandboxBackend: SandboxBackendProtocolV2 = {
-      id: "test-sandbox-v2",
-      execute: async () => ({ output: "", exitCode: 0, truncated: false }),
-      lsInfo: async () => ({ files: [] }),
-      read: async () => ({ content: "hello" }),
-      readRaw: async () => ({
-        data: {
-          content: "hello",
-          mimeType: "text/plain",
-          created_at: "2024-01-01T00:00:00.000Z",
-          modified_at: "2024-01-01T00:00:00.000Z",
-        },
-      }),
-      grepRaw: async () => ({ matches: [] }),
-      globInfo: async () => ({ files: [] }),
-      write: async () => ({ path: "" }),
-      edit: async () => ({ path: "" }),
-    };
-
-    expect(isSandboxBackend(sandboxBackend)).toBe(true);
-  });
-
   it("should return false for backends without execute", () => {
     const nonSandboxBackend = {
       lsInfo: async () => [],
@@ -150,27 +125,6 @@ describe("isSandboxBackend", () => {
       uploadFiles: async () => [],
       downloadFiles: async () => [],
     } as unknown as BackendProtocol;
-
-    expect(isSandboxBackend(nonSandboxBackend)).toBe(false);
-  });
-
-  it("should return false for V2 backends without execute", () => {
-    const nonSandboxBackend: BackendProtocolV2 = {
-      lsInfo: async () => ({ files: [] }),
-      read: async () => ({ content: "hello" }),
-      readRaw: async () => ({
-        data: {
-          content: "hello",
-          mimeType: "text/plain",
-          created_at: "2024-01-01T00:00:00.000Z",
-          modified_at: "2024-01-01T00:00:00.000Z",
-        },
-      }),
-      grepRaw: async () => ({ matches: [] }),
-      globInfo: async () => ({ files: [] }),
-      write: async () => ({ path: "" }),
-      edit: async () => ({ path: "" }),
-    };
 
     expect(isSandboxBackend(nonSandboxBackend)).toBe(false);
   });

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { tool } from "langchain";
 import { z } from "zod/v4";
-import type { BackendProtocolV2, ReadRawResult, WriteResult } from "deepagents";
+import type { BackendProtocol, FileData, WriteResult } from "deepagents";
 import { ReplSession } from "./session.js";
 
 const TIMEOUT = 5000;
@@ -13,30 +13,27 @@ function uniqueThreadId() {
 
 function createMockBackend(
   files: Record<string, string> = {},
-): BackendProtocolV2 & { written: Record<string, string> } {
+): BackendProtocol & { written: Record<string, string> } {
   const store = { ...files };
   const written: Record<string, string> = {};
 
   return {
     written,
-    lsInfo: async () => ({ files: [] }),
-    read: async (filePath: string) => ({ content: store[filePath] ?? "" }),
-    readRaw: async (filePath: string): Promise<ReadRawResult> => {
+    lsInfo: async () => [],
+    read: async (filePath: string) => store[filePath] ?? "",
+    readRaw: async (filePath: string): Promise<FileData> => {
       if (!(filePath in store)) {
-        return { error: `ENOENT: ${filePath}` };
+        throw new Error(`ENOENT: ${filePath}`);
       }
       const now = new Date().toISOString();
       return {
-        data: {
-          content: store[filePath],
-          mimeType: "text/plain",
-          created_at: now,
-          modified_at: now,
-        },
+        content: store[filePath].split("\n"),
+        created_at: now,
+        modified_at: now,
       };
     },
-    grepRaw: async () => ({ matches: [] }),
-    globInfo: async () => ({ files: [] }),
+    grepRaw: async () => [],
+    globInfo: async () => [],
     write: async (filePath: string, content: string): Promise<WriteResult> => {
       store[filePath] = content;
       written[filePath] = content;
