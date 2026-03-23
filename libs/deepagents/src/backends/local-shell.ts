@@ -19,7 +19,10 @@ import type {
   EditResult,
   ExecuteResponse,
   FileInfo,
-  SandboxBackendProtocol,
+  GlobResult,
+  LsResult,
+  ReadResult,
+  SandboxBackendProtocolV2,
 } from "./protocol.js";
 import { SandboxError } from "./protocol.js";
 
@@ -130,7 +133,7 @@ export interface LocalShellBackendOptions {
  */
 export class LocalShellBackend
   extends FilesystemBackend
-  implements SandboxBackendProtocol
+  implements SandboxBackendProtocolV2
 {
   #timeout: number;
   #maxOutputBytes: number;
@@ -218,14 +221,10 @@ export class LocalShellBackend
     filePath: string,
     offset: number = 0,
     limit: number = 500,
-  ): Promise<string> {
+  ): Promise<ReadResult> {
     const result = await super.read(filePath, offset, limit);
-    if (
-      typeof result === "string" &&
-      result.startsWith("Error reading file") &&
-      result.includes("ENOENT")
-    ) {
-      return `Error: File '${filePath}' not found`;
+    if (result.error?.includes("ENOENT")) {
+      return { error: `File '${filePath}' not found` };
     }
     return result;
   }
@@ -249,20 +248,26 @@ export class LocalShellBackend
   /**
    * List directory contents, returning paths relative to rootDir.
    */
-  override async lsInfo(dirPath: string): Promise<FileInfo[]> {
-    const results = await super.lsInfo(dirPath);
-    if (this.virtualMode) {
-      return results;
+  override async lsInfo(dirPath: string): Promise<LsResult> {
+    const result = await super.lsInfo(dirPath);
+    if (result.error) {
+      return result;
     }
+
+    if (this.virtualMode) {
+      return result;
+    }
+
     const cwdPrefix = this.cwd.endsWith(path.sep)
       ? this.cwd
       : this.cwd + path.sep;
-    return results.map((info) => ({
+    const files = (result.files || []).map((info) => ({
       ...info,
       path: info.path.startsWith(cwdPrefix)
         ? info.path.slice(cwdPrefix.length)
         : info.path,
     }));
+    return { files };
   }
 
   /**
@@ -271,7 +276,7 @@ export class LocalShellBackend
   override async globInfo(
     pattern: string,
     searchPath: string = "/",
-  ): Promise<FileInfo[]> {
+  ): Promise<GlobResult> {
     if (pattern.startsWith("/")) {
       pattern = pattern.substring(1);
     }
@@ -285,9 +290,9 @@ export class LocalShellBackend
 
     try {
       const stat = await fs.stat(resolvedSearchPath);
-      if (!stat.isDirectory()) return [];
+      if (!stat.isDirectory()) return { files: [] };
     } catch {
-      return [];
+      return { files: [] };
     }
 
     const formatPath = (rel: string) => (this.virtualMode ? `/${rel}` : rel);
@@ -341,7 +346,7 @@ export class LocalShellBackend
       (info): info is FileInfo => info !== null,
     );
     results.sort((a, b) => a.path.localeCompare(b.path));
-    return results;
+    return { files: results };
   }
 
   /**

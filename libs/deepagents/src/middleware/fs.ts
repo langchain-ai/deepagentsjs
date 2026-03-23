@@ -22,9 +22,8 @@ import {
 } from "@langchain/langgraph";
 import { z } from "zod/v4";
 import type {
-  BackendProtocol,
+  AnyBackendProtocol,
   BackendFactory,
-  BackendRuntime,
   FileData,
 } from "../backends/protocol.js";
 import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";
@@ -33,6 +32,8 @@ import {
   sanitizeToolCallId,
   formatContentWithLineNumbers,
   truncateIfTooLong,
+  getMimeType,
+  isTextMimeType,
 } from "../backends/utils.js";
 
 /**
@@ -99,6 +100,13 @@ export const NUM_CHARS_PER_TOKEN = 4;
  */
 export const DEFAULT_READ_LINE_OFFSET = 0;
 export const DEFAULT_READ_LINE_LIMIT = 100;
+
+/**
+ * Maximum size for binary (non-text) files read via read_file, in bytes.
+ * Base64-encoded content is ~33% larger, so 10MB raw ≈ 13.3MB in context.
+ * This keeps inline multimodal payloads within all major provider limits.
+ */
+export const MAX_BINARY_READ_SIZE_BYTES = 10 * 1024 * 1024;
 
 /**
  * Template for truncation message in read_file.
@@ -252,13 +260,28 @@ import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
 
 /**
- * Zod v3 schema for FileData (re-export from backends)
+ * Zod schema for legacy FileDataV1 (content as line array).
  */
-export const FileDataSchema = z.object({
+export const FileDataV1Schema = z.object({
   content: z.array(z.string()),
   created_at: z.string(),
   modified_at: z.string(),
 });
+
+/**
+ * Zod schema for FileDataV2 (content as string for text or Uint8Array for binary).
+ */
+export const FileDataV2Schema = z.object({
+  content: z.union([z.string(), z.instanceof(Uint8Array)]),
+  mimeType: z.string(),
+  created_at: z.string(),
+  modified_at: z.string(),
+});
+
+/**
+ * Zod v3 schema for FileData (re-export from backends)
+ */
+export const FileDataSchema = z.union([FileDataV1Schema, FileDataV2Schema]);
 
 /**
  * Type for the files state record.
@@ -459,7 +482,7 @@ Use this tool to run commands, scripts, tests, builds, and other shell operation
  * Create ls tool using backend.
  */
 function createLsTool(
-  backend: BackendProtocol | BackendFactory,
+  backend: AnyBackendProtocol | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -467,8 +490,13 @@ function createLsTool(
     async (input, runtime: ToolRuntime) => {
       const resolvedBackend = await resolveBackend(backend, runtime);
       const path = input.path || "/";
-      const infos = await resolvedBackend.lsInfo(path);
+      const lsResult = await resolvedBackend.lsInfo(path);
 
+      if (lsResult.error) {
+        return `Error listing files: ${lsResult.error}`;
+      }
+
+      const infos = lsResult.files || [];
       if (infos.length === 0) {
         return `No files found in ${path}`;
       }
@@ -509,7 +537,7 @@ function createLsTool(
  * Create read_file tool using backend.
  */
 function createReadFileTool(
-  backend: BackendProtocol | BackendFactory,
+  backend: AnyBackendProtocol | BackendFactory,
   options: {
     customDescription: string | undefined;
     toolTokenLimitBeforeEvict: number | null;
@@ -524,18 +552,77 @@ function createReadFileTool(
         offset = DEFAULT_READ_LINE_OFFSET,
         limit = DEFAULT_READ_LINE_LIMIT,
       } = input;
-      let result = await resolvedBackend.read(file_path, offset, limit);
+
+      const readResult = await resolvedBackend.read(file_path, offset, limit);
+      if (readResult.error) {
+        return [{ type: "text", text: `Error: ${readResult.error}` }];
+      }
+
+      const mimeType = readResult.mimeType ?? getMimeType(file_path);
+
+      if (!isTextMimeType(mimeType)) {
+        const binaryContent = readResult.content;
+        if (!binaryContent) {
+          return [
+            {
+              type: "text",
+              text: `Error: expected binary content for '${file_path}'`,
+            },
+          ];
+        }
+
+        // Content may arrive as:
+        // - Uint8Array (direct read)
+        // - string (already base64)
+        // - plain object with numeric keys (Uint8Array lost through serialization)
+        let base64Data: string;
+        if (typeof binaryContent === "string") {
+          base64Data = binaryContent;
+        } else if (ArrayBuffer.isView(binaryContent)) {
+          base64Data = Buffer.from(binaryContent).toString("base64");
+        } else {
+          const values = Object.values(binaryContent as Record<string, number>);
+          base64Data = Buffer.from(new Uint8Array(values)).toString("base64");
+        }
+
+        const sizeBytes = Math.ceil((base64Data.length * 3) / 4);
+
+        if (sizeBytes > MAX_BINARY_READ_SIZE_BYTES) {
+          return [
+            {
+              type: "text",
+              text: `Error: file too large to read (${Math.round(sizeBytes / (1024 * 1024))}MB exceeds ${MAX_BINARY_READ_SIZE_BYTES / (1024 * 1024)}MB limit for binary files)`,
+            },
+          ];
+        }
+
+        if (mimeType.startsWith("image/")) {
+          return [{ type: "image", mimeType, data: base64Data }];
+        }
+        if (mimeType.startsWith("audio/")) {
+          return [{ type: "audio", mimeType, data: base64Data }];
+        }
+        if (mimeType.startsWith("video/")) {
+          return [{ type: "video", mimeType, data: base64Data }];
+        }
+        return [{ type: "file", mimeType, data: base64Data }];
+      }
+
+      let content =
+        typeof readResult.content === "string" ? readResult.content : "";
 
       // Enforce line limit on result (in case backend returns more)
-      const lines = result.split("\n");
+      const lines = content.split("\n");
       if (lines.length > limit) {
-        result = lines.slice(0, limit).join("\n");
+        content = lines.slice(0, limit).join("\n");
       }
+
+      let formatted = formatContentWithLineNumbers(content, offset + 1);
 
       // Check if result exceeds token threshold and truncate if necessary
       if (
         toolTokenLimitBeforeEvict &&
-        result.length >= NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict
+        formatted.length >= NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict
       ) {
         // Calculate truncation message length to ensure final result stays under threshold
         const truncationMsg = READ_FILE_TRUNCATION_MSG.replace(
@@ -545,10 +632,10 @@ function createReadFileTool(
         const maxContentLength =
           NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict -
           truncationMsg.length;
-        result = result.substring(0, maxContentLength) + truncationMsg;
+        formatted = formatted.substring(0, maxContentLength) + truncationMsg;
       }
 
-      return result;
+      return [{ type: "text", text: formatted }];
     },
     {
       name: "read_file",
@@ -574,7 +661,7 @@ function createReadFileTool(
  * Create write_file tool using backend.
  */
 function createWriteFileTool(
-  backend: BackendProtocol | BackendFactory,
+  backend: AnyBackendProtocol | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -622,7 +709,7 @@ function createWriteFileTool(
  * Create edit_file tool using backend.
  */
 function createEditFileTool(
-  backend: BackendProtocol | BackendFactory,
+  backend: AnyBackendProtocol | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -681,7 +768,7 @@ function createEditFileTool(
  * Create glob tool using backend.
  */
 function createGlobTool(
-  backend: BackendProtocol | BackendFactory,
+  backend: AnyBackendProtocol | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -689,8 +776,13 @@ function createGlobTool(
     async (input, runtime: ToolRuntime) => {
       const resolvedBackend = await resolveBackend(backend, runtime);
       const { pattern, path = "/" } = input;
-      const infos = await resolvedBackend.globInfo(pattern, path);
+      const globResult = await resolvedBackend.globInfo(pattern, path);
 
+      if (globResult.error) {
+        return `Error finding files: ${globResult.error}`;
+      }
+
+      const infos = globResult.files || [];
       if (infos.length === 0) {
         return `No files found matching pattern '${pattern}'`;
       }
@@ -722,7 +814,7 @@ function createGlobTool(
  * Create grep tool using backend.
  */
 function createGrepTool(
-  backend: BackendProtocol | BackendFactory,
+  backend: AnyBackendProtocol | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -733,18 +825,20 @@ function createGrepTool(
       const result = await resolvedBackend.grepRaw(pattern, path, glob);
 
       // If string, it's an error
-      if (typeof result === "string") {
-        return result;
+      if (result.error) {
+        return result.error;
       }
 
-      if (result.length === 0) {
+      const matches = result.matches ?? [];
+
+      if (matches.length === 0) {
         return `No matches found for pattern '${pattern}'`;
       }
 
       // Format output: group by file
       const lines: string[] = [];
       let currentFile: string | null = null;
-      for (const match of result) {
+      for (const match of matches) {
         if (match.path !== currentFile) {
           currentFile = match.path;
           lines.push(`\n${currentFile}:`);
@@ -783,7 +877,7 @@ function createGrepTool(
  * Create execute tool using backend.
  */
 function createExecuteTool(
-  backend: BackendProtocol | BackendFactory,
+  backend: AnyBackendProtocol | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -831,7 +925,7 @@ function createExecuteTool(
  */
 export interface FilesystemMiddlewareOptions {
   /** Backend instance or factory (default: StateBackend) */
-  backend?: BackendProtocol | BackendFactory;
+  backend?: AnyBackendProtocol | BackendFactory;
   /** Optional custom system prompt override */
   systemPrompt?: string | null;
   /** Optional custom tool descriptions override */
