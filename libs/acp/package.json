@@ -45,7 +45,7 @@
   },
   "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "dependencies": {
-    "@agentclientprotocol/sdk": "^0.14.0",
+    "@agentclientprotocol/sdk": "^0.16.1",
     "deepagents": "workspace:*"
   },
   "devDependencies": {
