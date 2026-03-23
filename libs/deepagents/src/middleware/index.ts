@@ -40,6 +40,12 @@ export {
 // Middleware utilities
 export { appendToSystemMessage, prependToSystemMessage } from "./utils.js";
 
+// Queue lookahead middleware - consumes pending queued messages mid-run
+export {
+  createQueueLookaheadMiddleware,
+  type QueueLookaheadMiddlewareOptions,
+} from "./queue_lookahead.js";
+
 // Summarization middleware
 export {
   // Backend-aware summarization middleware with history offloading
