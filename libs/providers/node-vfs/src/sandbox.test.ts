@@ -283,6 +283,33 @@ describe("VfsSandbox", () => {
     });
   });
 
+  describe("readRaw", () => {
+    beforeEach(async () => {
+      sandbox = await VfsSandbox.create({
+        initialFiles: {
+          "/test.txt": "hello world",
+        },
+      });
+    });
+
+    it("should return ReadRawResult with v2 shape", async () => {
+      const raw = await sandbox.readRaw("/test.txt");
+      expect(raw.error).toBeUndefined();
+      expect(raw.data).toBeDefined();
+      expect(typeof raw.data!.content).toBe("string");
+      expect(raw.data!.content).toBe("hello world");
+      expect((raw.data as any).mimeType).toBe("text/plain");
+      expect(raw.data!.created_at).toBeDefined();
+      expect(raw.data!.modified_at).toBeDefined();
+    });
+
+    it("should return error for missing file", async () => {
+      const raw = await sandbox.readRaw("/nonexistent.txt");
+      expect(raw.error).toBeDefined();
+      expect(raw.data).toBeUndefined();
+    });
+  });
+
   describe("stop", () => {
     it("should stop the sandbox", async () => {
       sandbox = await VfsSandbox.create();

@@ -391,8 +391,8 @@ export interface CreateDeepAgentParams<
    * The factory receives a config object with state and store.
    */
   backend?:
-    | BackendProtocol
-    | ((config: { state: unknown; store?: BaseStore }) => BackendProtocol);
+    | AnyBackendProtocol
+    | ((config: { state: unknown; store?: BaseStore }) => AnyBackendProtocol);
   /** Optional interrupt configuration mapping tool names to interrupt configs */
   interruptOn?: Record<string, boolean | InterruptOnConfig>;
   /** The name of the agent */

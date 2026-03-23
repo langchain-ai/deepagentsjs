@@ -97,11 +97,20 @@ export {
   CompositeBackend,
   BaseSandbox,
   isSandboxBackend,
+  isSandboxProtocol,
   SandboxError,
+  type AnyBackendProtocol,
   type BackendProtocol,
+  type BackendProtocolV1,
+  type BackendProtocolV2,
   type BackendFactory,
   type FileInfo,
   type GrepMatch,
+  type GlobResult,
+  type GrepResult,
+  type LsResult,
+  type ReadResult,
+  type ReadRawResult,
   type WriteResult,
   type EditResult,
   // Sandbox execution types
@@ -111,6 +120,8 @@ export {
   type FileDownloadResponse,
   type FileUploadResponse,
   type SandboxBackendProtocol,
+  type SandboxBackendProtocolV1,
+  type SandboxBackendProtocolV2,
   type StateAndStore,
   type MaybePromise,
   // Sandbox provider types
@@ -124,4 +135,7 @@ export {
   // Local shell backend
   LocalShellBackend,
   type LocalShellBackendOptions,
+  // Backend protocol adapters (v1 -> v2)
+  adaptBackendProtocol,
+  adaptSandboxProtocol,
 } from "./backends/index.js";
