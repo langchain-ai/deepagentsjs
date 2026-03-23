@@ -199,14 +199,14 @@ describe("ACPFilesystemBackend", () => {
   });
 
   describe("inherited operations", () => {
-    it("should use local FS for ls (no ACP equivalent)", async () => {
+    it("should use local FS for lsInfo (no ACP equivalent)", async () => {
       const backend = new ACPFilesystemBackend({
         conn: mockConn,
         rootDir: tmpDir,
       });
       backend.setSessionId("sess_123");
 
-      const lsResult = await backend.ls(tmpDir);
+      const lsResult = await backend.lsInfo(tmpDir);
 
       expect(mockConn.readTextFile).not.toHaveBeenCalled();
       expect(mockConn.writeTextFile).not.toHaveBeenCalled();
@@ -215,26 +215,26 @@ describe("ACPFilesystemBackend", () => {
       expect(entries.some((e: any) => e.path.includes("local.txt"))).toBe(true);
     });
 
-    it("should use local FS for grep (no ACP equivalent)", async () => {
+    it("should use local FS for grepRaw (no ACP equivalent)", async () => {
       const backend = new ACPFilesystemBackend({
         conn: mockConn,
         rootDir: tmpDir,
       });
       backend.setSessionId("sess_123");
 
-      await backend.grep("local", tmpDir);
+      await backend.grepRaw("local", tmpDir);
 
       expect(mockConn.readTextFile).not.toHaveBeenCalled();
     });
 
-    it("should use local FS for glob (no ACP equivalent)", async () => {
+    it("should use local FS for globInfo (no ACP equivalent)", async () => {
       const backend = new ACPFilesystemBackend({
         conn: mockConn,
         rootDir: tmpDir,
       });
       backend.setSessionId("sess_123");
 
-      const globResult = await backend.glob("*.txt", tmpDir);
+      const globResult = await backend.globInfo("*.txt", tmpDir);
 
       expect(mockConn.readTextFile).not.toHaveBeenCalled();
       expect(globResult.error).toBeUndefined();

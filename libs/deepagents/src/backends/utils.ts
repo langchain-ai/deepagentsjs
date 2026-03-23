@@ -11,7 +11,6 @@ import path, { basename } from "path";
 import type {
   AnyBackendProtocol,
   AnySandboxProtocol,
-  BackendProtocolV1,
   BackendProtocolV2,
   FileData,
   FileDataV1,
@@ -792,9 +791,9 @@ export function migrateToFileDataV2(
  * For v1 backends, wraps returns in Result types:
  * - `read()` string returns wrapped in {@link ReadResult}
  * - `readRaw()` FileData returns wrapped in {@link ReadRawResult}
- * - `grep()` returns wrapped in {@link GrepResult}
- * - `ls()` FileInfo[] returns wrapped in {@link LsResult}
- * - `glob()` FileInfo[] returns wrapped in {@link GlobResult}
+ * - `grepRaw()` returns wrapped in {@link GrepResult}
+ * - `lsInfo()` FileInfo[] returns wrapped in {@link LsResult}
+ * - `globInfo()` FileInfo[] returns wrapped in {@link GlobResult}
  *
  * Note: For sandbox instances, use {@link adaptSandboxProtocol} instead.
  *
@@ -805,10 +804,8 @@ export function adaptBackendProtocol(
   backend: AnyBackendProtocol,
 ): BackendProtocolV2 {
   const adapted: BackendProtocolV2 = {
-    async ls(path): Promise<LsResult> {
-      const result = await ("ls" in backend
-        ? (backend as BackendProtocolV2).ls(path)
-        : (backend as BackendProtocolV1).lsInfo(path));
+    async lsInfo(path): Promise<LsResult> {
+      const result = await backend.lsInfo(path);
       if (Array.isArray(result)) return { files: result };
       return result as LsResult;
     },
@@ -819,10 +816,8 @@ export function adaptBackendProtocol(
       }
       return { data: migrateToFileDataV2(result as FileData, filePath) };
     },
-    async glob(pattern, path): Promise<GlobResult> {
-      const result = await ("glob" in backend
-        ? (backend as BackendProtocolV2).glob(pattern, path)
-        : (backend as BackendProtocolV1).globInfo(pattern, path));
+    async globInfo(pattern, path): Promise<GlobResult> {
+      const result = await backend.globInfo(pattern, path);
       if (Array.isArray(result)) return { files: result };
       return result as GlobResult;
     },
@@ -840,10 +835,8 @@ export function adaptBackendProtocol(
       if (typeof result === "string") return { content: result };
       return result as ReadResult;
     },
-    async grep(pattern, path, glob): Promise<GrepResult> {
-      const result = await ("grep" in backend
-        ? (backend as BackendProtocolV2).grep(pattern, path, glob)
-        : (backend as BackendProtocolV1).grepRaw(pattern, path, glob));
+    async grepRaw(pattern, path, glob): Promise<GrepResult> {
+      const result = await backend.grepRaw(pattern, path, glob);
       if (Array.isArray(result)) return { matches: result };
       if (typeof result === "string") return { error: result };
       return result as GrepResult;

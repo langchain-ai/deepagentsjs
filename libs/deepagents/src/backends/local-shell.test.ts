@@ -288,7 +288,7 @@ describe("LocalShellBackend", () => {
       await backend.write("/file1.txt", "content1");
       await backend.write("/file2.txt", "content2");
 
-      const files = await backend.ls("/");
+      const files = await backend.lsInfo("/");
       expect(files.error).toBeUndefined();
 
       expect(files.files!.length).toBe(2);
@@ -306,7 +306,7 @@ describe("LocalShellBackend", () => {
       await backend.write("/file1.txt", "TODO: implement this");
       await backend.write("/file2.txt", "DONE: completed");
 
-      const result = await backend.grep("TODO");
+      const result = await backend.grepRaw("TODO");
 
       expect(result.error).toBeUndefined();
       expect(result.matches!.length).toBe(1);
@@ -350,7 +350,7 @@ describe("LocalShellBackend", () => {
       await backend.write("/file2.py", "content");
       await backend.write("/file3.txt", "content");
 
-      const txtFiles = await backend.glob("*.txt");
+      const txtFiles = await backend.globInfo("*.txt");
       expect(txtFiles.error).toBeUndefined();
 
       expect(txtFiles.files!.length).toBe(2);

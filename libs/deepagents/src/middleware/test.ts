@@ -41,7 +41,7 @@ export function createMockBackend(
         };
       });
     },
-    async ls(dirPath: string): Promise<LsResult> {
+    async lsInfo(dirPath: string): Promise<LsResult> {
       const entries = directories[dirPath];
       if (!entries) {
         throw new Error(`Directory not found: ${dirPath}`);

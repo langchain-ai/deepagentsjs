@@ -51,7 +51,7 @@ export function registerIntegrationTests<T extends AnySandboxInstance>(
         await shared.write(`${baseDir}/subdir2/file3.txt`, "file 3");
 
         // List root directory
-        const lsResult = await shared.ls(baseDir);
+        const lsResult = await shared.lsInfo(baseDir);
         expect(lsResult.error).toBeUndefined();
         const result = lsResult.files || [];
         const lsPaths = result.map((info) => info.path.replace(/\/$/, ""));
@@ -60,13 +60,13 @@ export function registerIntegrationTests<T extends AnySandboxInstance>(
         expect(lsPaths).toContain(`${baseDir}/subdir2`);
 
         // Glob for txt files
-        const globResult = await shared.glob("**/*.txt", baseDir);
+        const globResult = await shared.globInfo("**/*.txt", baseDir);
         expect(globResult.error).toBeUndefined();
         const files = globResult.files || [];
         expect(files.length).toBe(3);
 
         // Grep for a pattern
-        const grepResult = await shared.grep("file", baseDir);
+        const grepResult = await shared.grepRaw("file", baseDir);
         expect(grepResult.error).toBeUndefined();
         expect(grepResult.matches!.length).toBeGreaterThanOrEqual(3);
       },

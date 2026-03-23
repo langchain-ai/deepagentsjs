@@ -94,14 +94,14 @@ export class CompositeBackend implements BackendProtocolV2 {
    * @returns LsResult with list of FileInfo objects (with route prefixes added) on success or error on failure.
    *          Directories have a trailing / in their path and is_dir=true.
    */
-  async ls(path: string): Promise<LsResult> {
+  async lsInfo(path: string): Promise<LsResult> {
     // Check if path matches a specific route
     for (const [routePrefix, backend] of this.sortedRoutes) {
       if (path.startsWith(routePrefix.replace(/\/$/, ""))) {
         // Query only the matching routed backend
         const suffix = path.substring(routePrefix.length);
         const searchPath = suffix ? "/" + suffix : "/";
-        const result = await backend.ls(searchPath);
+        const result = await backend.lsInfo(searchPath);
 
         if (result.error) {
           return result;
@@ -122,7 +122,7 @@ export class CompositeBackend implements BackendProtocolV2 {
     // At root, aggregate default and all routed backends
     if (path === "/") {
       const results: FileInfo[] = [];
-      const defaultResult = await this.default.ls(path);
+      const defaultResult = await this.default.lsInfo(path);
 
       if (defaultResult.error) {
         return defaultResult;
@@ -145,7 +145,7 @@ export class CompositeBackend implements BackendProtocolV2 {
     }
 
     // Path doesn't match a route: query only default backend
-    return await this.default.ls(path);
+    return await this.default.lsInfo(path);
   }
 
   /**
@@ -179,7 +179,7 @@ export class CompositeBackend implements BackendProtocolV2 {
   /**
    * Structured search results or error string for invalid input.
    */
-  async grep(
+  async grepRaw(
     pattern: string,
     path: string = "/",
     glob: string | null = null,
@@ -188,7 +188,7 @@ export class CompositeBackend implements BackendProtocolV2 {
     for (const [routePrefix, backend] of this.sortedRoutes) {
       if (path.startsWith(routePrefix.replace(/\/$/, ""))) {
         const searchPath = path.substring(routePrefix.length - 1);
-        const raw = await backend.grep(pattern, searchPath || "/", glob);
+        const raw = await backend.grepRaw(pattern, searchPath || "/", glob);
 
         if (raw.error) {
           return raw;
@@ -205,7 +205,7 @@ export class CompositeBackend implements BackendProtocolV2 {
 
     // Otherwise, search default and all routed backends and merge
     const allMatches: GrepMatch[] = [];
-    const rawDefault = await this.default.grep(pattern, path, glob);
+    const rawDefault = await this.default.grepRaw(pattern, path, glob);
 
     if (rawDefault.error) {
       return rawDefault;
@@ -215,7 +215,7 @@ export class CompositeBackend implements BackendProtocolV2 {
 
     // Search all routes
     for (const [routePrefix, backend] of Object.entries(this.routes)) {
-      const raw = await backend.grep(pattern, "/", glob);
+      const raw = await backend.grepRaw(pattern, "/", glob);
 
       if (raw.error) {
         return raw;
@@ -235,14 +235,14 @@ export class CompositeBackend implements BackendProtocolV2 {
   /**
    * Structured glob matching returning FileInfo objects.
    */
-  async glob(pattern: string, path: string = "/"): Promise<GlobResult> {
+  async globInfo(pattern: string, path: string = "/"): Promise<GlobResult> {
     const results: FileInfo[] = [];
 
     // Route based on path, not pattern
     for (const [routePrefix, backend] of this.sortedRoutes) {
       if (path.startsWith(routePrefix.replace(/\/$/, ""))) {
         const searchPath = path.substring(routePrefix.length - 1);
-        const result = await backend.glob(pattern, searchPath || "/");
+        const result = await backend.globInfo(pattern, searchPath || "/");
 
         if (result.error) {
           return result;
@@ -258,14 +258,14 @@ export class CompositeBackend implements BackendProtocolV2 {
     }
 
     // Path doesn't match any specific route - search default backend AND all routed backends
-    const defaultResult = await this.default.glob(pattern, path);
+    const defaultResult = await this.default.globInfo(pattern, path);
     if (defaultResult.error) {
       return defaultResult;
     }
     results.push(...(defaultResult.files || []));
 
     for (const [routePrefix, backend] of Object.entries(this.routes)) {
-      const result = await backend.glob(pattern, "/");
+      const result = await backend.globInfo(pattern, "/");
       if (result.error) {
         continue; // Skip backends that error
       }

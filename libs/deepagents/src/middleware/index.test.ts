@@ -198,10 +198,10 @@ describe("isSandboxBackend type guard", () => {
     const mockSandbox = {
       execute: () => ({ output: "", exitCode: 0, truncated: false }),
       id: "test-sandbox",
-      ls: () => [],
+      lsInfo: () => [],
       read: () => ({ content: "" }),
-      grep: () => ({ matches: [] }),
-      glob: () => [],
+      grepRaw: () => ({ matches: [] }),
+      globInfo: () => [],
       write: () => ({}),
       edit: () => ({}),
       uploadFiles: () => [],
@@ -225,10 +225,10 @@ describe("isSandboxBackend type guard", () => {
     const mockBackend = {
       execute: () => ({ output: "", exitCode: 0, truncated: false }),
       // Missing id
-      ls: () => [],
+      lsInfo: () => [],
       read: () => ({ content: "" }),
-      grep: () => ({ matches: [] }),
-      glob: () => [],
+      grepRaw: () => ({ matches: [] }),
+      globInfo: () => [],
       write: () => ({}),
       edit: () => ({}),
       uploadFiles: () => [],

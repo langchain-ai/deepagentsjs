@@ -44,22 +44,22 @@ describe("StoreBackend", () => {
     expect(editResult.error).toBeUndefined();
     expect(editResult.occurrences).toBe(1);
 
-    const infos = await backend.ls("/docs/");
+    const infos = await backend.lsInfo("/docs/");
     expect(infos.error).toBeUndefined();
     expect(infos.files!.some((i) => i.path === "/docs/readme.md")).toBe(true);
 
-    const grepRes = await backend.grep("hi", "/");
+    const grepRes = await backend.grepRaw("hi", "/");
     expect(grepRes.error).toBeUndefined();
     expect(grepRes.matches).toBeDefined();
     expect(grepRes.matches!.some((m) => m.path === "/docs/readme.md")).toBe(
       true,
     );
 
-    const glob1 = await backend.glob("*.md", "/");
+    const glob1 = await backend.globInfo("*.md", "/");
     expect(glob1.error).toBeUndefined();
     expect(glob1.files!.length).toBe(0);
 
-    const glob2 = await backend.glob("**/*.md", "/");
+    const glob2 = await backend.globInfo("**/*.md", "/");
     expect(glob2.error).toBeUndefined();
     expect(glob2.files!.some((i) => i.path === "/docs/readme.md")).toBe(true);
   });
@@ -82,7 +82,7 @@ describe("StoreBackend", () => {
       expect(res.error).toBeUndefined();
     }
 
-    const rootListing = await backend.ls("/");
+    const rootListing = await backend.lsInfo("/");
     expect(rootListing.error).toBeUndefined();
     const rootPaths = rootListing.files!.map((fi) => fi.path);
     expect(rootPaths).toContain("/config.json");
@@ -93,21 +93,21 @@ describe("StoreBackend", () => {
     expect(rootPaths).not.toContain("/docs/readme.md");
     expect(rootPaths).not.toContain("/docs/api/reference.md");
 
-    const srcListing = await backend.ls("/src/");
+    const srcListing = await backend.lsInfo("/src/");
     expect(srcListing.error).toBeUndefined();
     const srcPaths = srcListing.files!.map((fi) => fi.path);
     expect(srcPaths).toContain("/src/main.py");
     expect(srcPaths).toContain("/src/utils/");
     expect(srcPaths).not.toContain("/src/utils/helper.py");
 
-    const utilsListing = await backend.ls("/src/utils/");
+    const utilsListing = await backend.lsInfo("/src/utils/");
     expect(utilsListing.error).toBeUndefined();
     const utilsPaths = utilsListing.files!.map((fi) => fi.path);
     expect(utilsPaths).toContain("/src/utils/helper.py");
     expect(utilsPaths).toContain("/src/utils/common.py");
     expect(utilsPaths).toHaveLength(2);
 
-    const emptyListing = await backend.ls("/nonexistent/");
+    const emptyListing = await backend.lsInfo("/nonexistent/");
     expect(emptyListing.error).toBeUndefined();
     expect(emptyListing.files).toEqual([]);
   });
@@ -126,13 +126,13 @@ describe("StoreBackend", () => {
       expect(res.error).toBeUndefined();
     }
 
-    const listingFromRoot = await backend.ls("/");
+    const listingFromRoot = await backend.lsInfo("/");
     expect(listingFromRoot.error).toBeUndefined();
     expect(listingFromRoot.files!.length).toBeGreaterThan(0);
 
-    const listing1 = await backend.ls("/dir/");
+    const listing1 = await backend.lsInfo("/dir/");
     expect(listing1.error).toBeUndefined();
-    const listing2 = await backend.ls("/dir");
+    const listing2 = await backend.lsInfo("/dir");
     expect(listing2.error).toBeUndefined();
     expect(listing1.files!.length).toBe(listing2.files!.length);
     expect(listing1.files!.map((fi) => fi.path)).toEqual(
@@ -204,7 +204,7 @@ describe("StoreBackend", () => {
       await backend.write(path, content);
     }
 
-    const grepRes = await backend.grep("import", "/", "*.py");
+    const grepRes = await backend.grepRaw("import", "/", "*.py");
     expect(grepRes.error).toBeUndefined();
     expect(grepRes.matches).toHaveLength(1);
     expect(grepRes.matches![0].path).toBe("/test.py");
@@ -405,7 +405,7 @@ describe("StoreBackend", () => {
       await backend.uploadFiles([["/image.png", pngBytes]]);
       await backend.write("/notes.txt", "hello PNG");
 
-      const grepRes = await backend.grep("PNG", "/");
+      const grepRes = await backend.grepRaw("PNG", "/");
       expect(grepRes.matches).toHaveLength(1);
       expect(grepRes.matches![0].path).toBe("/notes.txt");
     });
@@ -661,7 +661,7 @@ describe("StoreBackend", () => {
       // Write a v2 file
       await backend.write("/modern.py", "import sys\nprint('v2')");
 
-      const grepRes = await backend.grep("import", "/");
+      const grepRes = await backend.grepRaw("import", "/");
       expect(grepRes.matches).toHaveLength(2);
       const paths = grepRes.matches!.map((m) => m.path).sort();
       expect(paths).toEqual(["/legacy.py", "/modern.py"]);
@@ -679,7 +679,7 @@ describe("StoreBackend", () => {
       const backend = new StoreBackend(stateAndStore);
       await backend.write("/modern.txt", "world");
 
-      const listing = await backend.ls("/");
+      const listing = await backend.lsInfo("/");
       expect(listing.error).toBeUndefined();
       expect(listing.files).toHaveLength(2);
       for (const info of listing.files!) {

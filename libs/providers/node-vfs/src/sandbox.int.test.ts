@@ -466,7 +466,7 @@ try {
       expect(content).toBe("console.log('Hello from VFS!')");
     });
 
-    it("should list initialFiles with leading slash via ls()", async () => {
+    it("should list initialFiles with leading slash via lsInfo()", async () => {
       sandbox = await VfsSandbox.create({
         initialFiles: {
           "/src/index.js": "console.log('Hello')",
@@ -475,7 +475,7 @@ try {
       });
 
       // Leading `/` is normalized to relative paths for temp-dir execution
-      const result = await sandbox.ls("/src");
+      const result = await sandbox.lsInfo("/src");
       expect(result.error).toBeUndefined();
       const entries = result.files || [];
       const paths = entries.map((e) => e.path.replace(/\/$/, ""));

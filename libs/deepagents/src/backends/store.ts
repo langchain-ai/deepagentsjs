@@ -255,7 +255,7 @@ export class StoreBackend implements BackendProtocolV2 {
    * @returns LsResult with list of FileInfo objects on success or error on failure.
    *          Directories have a trailing / in their path and is_dir=true.
    */
-  async ls(path: string): Promise<LsResult> {
+  async lsInfo(path: string): Promise<LsResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
 
@@ -458,7 +458,7 @@ export class StoreBackend implements BackendProtocolV2 {
    * Search file contents for a literal text pattern.
    * Binary files are skipped.
    */
-  async grep(
+  async grepRaw(
     pattern: string,
     path: string = "/",
     glob: string | null = null,
@@ -484,7 +484,7 @@ export class StoreBackend implements BackendProtocolV2 {
   /**
    * Structured glob matching returning FileInfo objects.
    */
-  async glob(pattern: string, path: string = "/"): Promise<GlobResult> {
+  async globInfo(pattern: string, path: string = "/"): Promise<GlobResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
     const items = await this.searchStorePaginated(store, namespace);

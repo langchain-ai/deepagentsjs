@@ -438,7 +438,7 @@ describe("adaptBackendProtocol", () => {
 
   function createV2Backend(): BackendProtocolV2 {
     return {
-      ls: () => ({ files: [] }),
+      lsInfo: () => ({ files: [] }),
       read: () => ({ content: "v2 content" }),
       readRaw: () => ({
         data: {
@@ -448,10 +448,10 @@ describe("adaptBackendProtocol", () => {
           modified_at: "2024-01-01T00:00:00.000Z",
         },
       }),
-      grep: () => ({
+      grepRaw: () => ({
         matches: [{ path: "/file.txt", line: 1, text: "match" }],
       }),
-      glob: () => ({ files: [] }),
+      globInfo: () => ({ files: [] }),
       write: () => ({ path: "/file.txt", filesUpdate: null }),
       edit: () => ({ path: "/file.txt", filesUpdate: null, occurrences: 1 }),
     };
@@ -464,18 +464,18 @@ describe("adaptBackendProtocol", () => {
       expect(result).toEqual({ content: "content of /test.txt" });
     });
 
-    it("should wrap grep() GrepMatch[] return in GrepResult", async () => {
+    it("should wrap grepRaw() GrepMatch[] return in GrepResult", async () => {
       const adapted = adaptBackendProtocol(createV1Backend());
-      const result = await adapted.grep("match");
+      const result = await adapted.grepRaw("match");
       expect(result.matches).toHaveLength(1);
       expect(result.matches![0].path).toBe("/file.txt");
     });
 
-    it("should wrap grep() error string return in GrepResult", async () => {
+    it("should wrap grepRaw() error string return in GrepResult", async () => {
       const v1 = createV1Backend();
       v1.grepRaw = () => "Invalid pattern";
       const adapted = adaptBackendProtocol(v1);
-      const result = await adapted.grep("bad");
+      const result = await adapted.grepRaw("bad");
       expect(result.error).toBe("Invalid pattern");
       expect(result.matches).toBeUndefined();
     });
@@ -488,13 +488,13 @@ describe("adaptBackendProtocol", () => {
       expect(result.data!.content).toBe("line1\nline2");
     });
 
-    it("should pass through ls, glob, write, edit", async () => {
+    it("should pass through lsInfo, globInfo, write, edit", async () => {
       const adapted = adaptBackendProtocol(createV1Backend());
-      const lsResult = await adapted.ls("/");
+      const lsResult = await adapted.lsInfo("/");
       expect(lsResult.error).toBeUndefined();
       expect(lsResult.files).toEqual([]);
 
-      const globResult = await adapted.glob("*");
+      const globResult = await adapted.globInfo("*");
       expect(globResult.error).toBeUndefined();
       expect(globResult.files).toEqual([]);
 
@@ -513,9 +513,9 @@ describe("adaptBackendProtocol", () => {
       expect(result).toEqual({ content: "v2 content" });
     });
 
-    it("should pass through grep() GrepResult unchanged", async () => {
+    it("should pass through grepRaw() GrepResult unchanged", async () => {
       const adapted = adaptBackendProtocol(createV2Backend());
-      const result = await adapted.grep("match");
+      const result = await adapted.grepRaw("match");
       expect(result.matches).toHaveLength(1);
     });
 

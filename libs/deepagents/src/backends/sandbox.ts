@@ -307,7 +307,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
    * @param path - Absolute path to directory
    * @returns LsResult with list of FileInfo objects on success or error on failure.
    */
-  async ls(path: string): Promise<LsResult> {
+  async lsInfo(path: string): Promise<LsResult> {
     const command = buildLsCommand(path);
     const result = await this.execute(command);
 
@@ -419,7 +419,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
    * @param glob - Optional glob pattern to filter which files to search.
    * @returns List of GrepMatch dicts containing path, line number, and matched text.
    */
-  async grep(
+  async grepRaw(
     pattern: string,
     path: string = "/",
     glob: string | null = null,
@@ -472,7 +472,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
    * - `?`  matches a single character except `/`
    * - `[...]` character classes
    */
-  async glob(pattern: string, path: string = "/"): Promise<GlobResult> {
+  async globInfo(pattern: string, path: string = "/"): Promise<GlobResult> {
     const command = buildFindCommand(path);
     const result = await this.execute(command);
 

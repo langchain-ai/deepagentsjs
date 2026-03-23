@@ -409,7 +409,7 @@ function createLsTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const path = input.path || "/";
-      const lsResult = await resolvedBackend.ls(path);
+      const lsResult = await resolvedBackend.lsInfo(path);
 
       if (lsResult.error) {
         return `Error listing files: ${lsResult.error}`;
@@ -711,7 +711,7 @@ function createGlobTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const { pattern, path = "/" } = input;
-      const globResult = await resolvedBackend.glob(pattern, path);
+      const globResult = await resolvedBackend.globInfo(pattern, path);
 
       if (globResult.error) {
         return `Error finding files: ${globResult.error}`;
@@ -761,7 +761,7 @@ function createGrepTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const { pattern, path = "/", glob = null } = input;
-      const result = await resolvedBackend.grep(pattern, path, glob);
+      const result = await resolvedBackend.grepRaw(pattern, path, glob);
 
       // If string, it's an error
       if (result.error) {

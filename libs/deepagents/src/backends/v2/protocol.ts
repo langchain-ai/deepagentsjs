@@ -22,9 +22,9 @@ import type {
  * Key differences from {@link BackendProtocol}:
  * - `read()` returns {@link ReadResult} instead of a plain string
  * - `readRaw()` returns {@link ReadRawResult} instead of FileData
- * - `grep()` returns {@link GrepResult} instead of `GrepMatch[] | string`
- * - `ls()` returns {@link LsResult} instead of FileInfo[]
- * - `glob()` returns {@link GlobResult} instead of FileInfo[]
+ * - `grepRaw()` returns {@link GrepResult} instead of `GrepMatch[] | string`
+ * - `lsInfo()` returns {@link LsResult} instead of FileInfo[]
+ * - `globInfo()` returns {@link GlobResult} instead of FileInfo[]
  *
  * Existing v1 backends can be adapted to this interface using
  * {@link adaptBackendProtocol} from utils.
@@ -42,7 +42,7 @@ export interface BackendProtocolV2 extends Omit<
    * @param path - Absolute path to directory
    * @returns LsResult with list of FileInfo objects on success or error on failure
    */
-  ls(path: string): MaybePromise<LsResult>;
+  lsInfo(path: string): MaybePromise<LsResult>;
 
   /**
    * Read file content.
@@ -79,7 +79,7 @@ export interface BackendProtocolV2 extends Omit<
    * @param glob - Optional glob pattern to filter files (e.g., "*.py")
    * @returns GrepResult with matches on success or error on failure
    */
-  grep(
+  grepRaw(
     pattern: string,
     path?: string | null,
     glob?: string | null,
@@ -92,7 +92,7 @@ export interface BackendProtocolV2 extends Omit<
    * @param path - Base path to search from (default: "/")
    * @returns GlobResult with list of FileInfo objects matching the pattern on success or error on failure
    */
-  glob(pattern: string, path?: string): MaybePromise<GlobResult>;
+  globInfo(pattern: string, path?: string): MaybePromise<GlobResult>;
 }
 
 /**
