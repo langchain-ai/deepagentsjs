@@ -6,6 +6,7 @@
  */
 
 export { createDeepAgent } from "./agent.js";
+export { ConfigurationError, type ConfigurationErrorCode } from "./errors.js";
 export type {
   CreateDeepAgentParams,
   MergedDeepAgentState,

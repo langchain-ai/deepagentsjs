@@ -21,9 +21,11 @@ import {
   createSummarizationMiddleware,
   createMemoryMiddleware,
   createSkillsMiddleware,
+  FILESYSTEM_TOOL_NAMES,
   type SubAgent,
 } from "./middleware/index.js";
 import { StateBackend } from "./backends/index.js";
+import { ConfigurationError } from "./errors.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { CompiledSubAgent } from "./middleware/subagents.js";
 import type {
@@ -44,6 +46,12 @@ import type { BaseLanguageModel } from "@langchain/core/language_models/base";
 import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
 
 const BASE_PROMPT = `In order to complete the objective that the user asks of you, you have access to a number of standard tools.`;
+
+const BUILTIN_TOOL_NAMES: ReadonlySet<string> = new Set([
+  ...FILESYSTEM_TOOL_NAMES,
+  "task",
+  "write_todos",
+]);
 
 /**
  * Detect whether a model is an Anthropic model.
@@ -129,6 +137,20 @@ export function createDeepAgent<
     memory,
     skills,
   } = params;
+
+  const collidingTools = (tools as readonly { name?: string }[])
+    .map((t) => t.name)
+    .filter(
+      (n): n is string => typeof n === "string" && BUILTIN_TOOL_NAMES.has(n),
+    );
+
+  if (collidingTools.length > 0) {
+    throw new ConfigurationError(
+      `Tool name(s) [${collidingTools.join(", ")}] conflict with built-in tools. ` +
+        `Rename your custom tools to avoid this.`,
+      "TOOL_NAME_COLLISION",
+    );
+  }
 
   const anthropicModel = isAnthropicModel(model);
 
