@@ -1628,18 +1628,15 @@ packages:
     peerDependencies:
       '@langchain/core': ^1.0.1
 
-  '@langchain/langgraph-sdk@1.7.3':
-    resolution: {integrity: sha512-tjVTo8dYSd99rfMTdO1yWUHyPqCECjva9wzK95DRGxxMiQf98KjjYZWdgPpbxHmWyTcgiJaODZHbmWkctun/tg==}
+  '@langchain/langgraph-sdk@1.7.5':
+    resolution: {integrity: sha512-j6MjD5btOfVSj2nVKVTu28YPHA9vzBuDbOFnzzfa5q4F6Tbt2Dwg+EiGhJptUz/3XKmU0OKp/3gCWk0ZTHHD1Q==}
     peerDependencies:
-      '@angular/core': ^18.0.0 || ^19.0.0 || ^20.0.0
       '@langchain/core': ^1.1.16
       react: ^18 || ^19
       react-dom: ^18 || ^19
       svelte: ^4.0.0 || ^5.0.0
       vue: ^3.0.0
     peerDependenciesMeta:
-      '@angular/core':
-        optional: true
       '@langchain/core':
         optional: true
       react:
