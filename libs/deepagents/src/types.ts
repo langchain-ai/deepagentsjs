@@ -22,7 +22,7 @@ import type {
   BaseStore,
 } from "@langchain/langgraph-checkpoint";
 
-import type { BackendProtocol } from "./backends/index.js";
+import type { AnyBackendProtocol } from "./backends/index.js";
 import type { AsyncSubAgent, SubAgent } from "./middleware/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type { AnnotationRoot } from "@langchain/langgraph";
