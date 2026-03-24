@@ -24,12 +24,15 @@ import {
   FILESYSTEM_TOOL_NAMES,
   type SubAgent,
   createAsyncSubAgentMiddleware,
+  isAsyncSubAgent,
 } from "./middleware/index.js";
 import { StateBackend } from "./backends/index.js";
 import { ConfigurationError } from "./errors.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { CompiledSubAgent } from "./middleware/subagents.js";
+import type { AsyncSubAgent } from "./middleware/async_subagents.js";
 import type {
+  AnySubAgent,
   CreateDeepAgentParams,
   DeepAgent,
   DeepAgentTypeConfig,
@@ -104,8 +107,7 @@ export function createDeepAgent<
   TResponse extends SupportedResponseFormat = SupportedResponseFormat,
   ContextSchema extends InteropZodObject = InteropZodObject,
   const TMiddleware extends readonly AgentMiddleware[] = readonly [],
-  const TSubagents extends readonly (SubAgent | CompiledSubAgent)[] =
-    readonly [],
+  const TSubagents extends readonly AnySubAgent[] = readonly [],
   const TTools extends readonly (ClientTool | ServerTool)[] = readonly [],
 >(
   params: CreateDeepAgentParams<
@@ -137,7 +139,6 @@ export function createDeepAgent<
     name,
     memory,
     skills,
-    asyncSubAgents,
   } = params;
 
   const collidingTools = (tools as readonly { name?: string }[])
@@ -209,13 +210,24 @@ export function createDeepAgent<
       : [];
 
   /**
+   * Split the unified subagents array into sync and async subagents.
+   * AsyncSubAgents are identified by the presence of a `graphId` field.
+   */
+  const syncSubAgents = (subagents as readonly AnySubAgent[]).filter(
+    (a): a is SubAgent | CompiledSubAgent => !isAsyncSubAgent(a),
+  );
+  const asyncSubAgents = (subagents as readonly AnySubAgent[]).filter(
+    (a): a is AsyncSubAgent => isAsyncSubAgent(a),
+  );
+
+  /**
    * Process subagents to add SkillsMiddleware for those with their own skills.
    *
    * Custom subagents do NOT inherit skills from the main agent by default.
    * Only the general-purpose subagent inherits the main agent's skills (via defaultMiddleware).
    * If a custom subagent needs skills, it must specify its own `skills` array.
    */
-  const processedSubagents = subagents.map((subagent) => {
+  const processedSubagents = syncSubAgents.map((subagent) => {
     /**
      * CompiledSubAgent - use as-is (already has its own middleware baked in)
      */

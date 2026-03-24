@@ -8,6 +8,7 @@
 export { createDeepAgent } from "./agent.js";
 export { ConfigurationError, type ConfigurationErrorCode } from "./errors.js";
 export type {
+  AnySubAgent,
   CreateDeepAgentParams,
   MergedDeepAgentState,
   // DeepAgent type bag and helper types
@@ -45,6 +46,7 @@ export {
   computeSummarizationDefaults,
   createMemoryMiddleware,
   createAsyncSubAgentMiddleware,
+  isAsyncSubAgent,
   // Skills middleware - matches Python's SkillsMiddleware interface
   createSkillsMiddleware,
   type SkillsMiddlewareOptions,
