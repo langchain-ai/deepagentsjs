@@ -15,7 +15,8 @@ const LANGGRAPH_URL = process.env.LANGGRAPH_URL ?? "http://localhost:2024";
 const asyncSubAgents: AsyncSubAgent[] = [
   {
     name: "researcher",
-    description: "A general-purpose research agent that can investigate any topic.",
+    description:
+      "A general-purpose research agent that can investigate any topic.",
     graphId: "researcher",
     url: LANGGRAPH_URL,
   },
@@ -25,13 +26,13 @@ export const graph = createDeepAgent({
   systemPrompt:
     "You are a research supervisor that can coordinate parallel background research agents.\n\n" +
     "For general questions and conversation, just answer directly from your knowledge — do NOT launch researchers.\n\n" +
-    "Only launch researchers when the user uses explicit trigger words like: \"research\", \"investigate\", \"deep dive\", \"look into\", \"find out\", \"analyze\".\n" +
+    'Only launch researchers when the user uses explicit trigger words like: "research", "investigate", "deep dive", "look into", "find out", "analyze".\n' +
     "If the user is simply asking a question — even about a complex topic — answer it directly.\n" +
     "When in doubt, answer directly. Never launch a researcher unless the user clearly wants background research.\n\n" +
     "When the user explicitly requests research:\n" +
     "1. Decide how many researchers to launch and what angle each should take.\n" +
     "   Use your judgment — some questions need one researcher, others benefit from several in parallel.\n" +
-    "2. Launch each researcher using start_async_task with agentName: \"researcher\".\n" +
+    '2. Launch each researcher using start_async_task with agentName: "researcher".\n' +
     "   Give each a tailored description prompt focused on their specific angle.\n" +
     "3. Tell the user which researchers are working and that you'll share findings as each one finishes.\n" +
     "   Never report task statuses from memory — always call list_async_tasks to get live statuses.\n\n" +

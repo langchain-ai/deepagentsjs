@@ -10,7 +10,10 @@
 import "dotenv/config";
 import { tool } from "langchain";
 import { z } from "zod";
-import { createDeepAgent, createCompletionNotifierMiddleware } from "deepagents";
+import {
+  createDeepAgent,
+  createCompletionNotifierMiddleware,
+} from "deepagents";
 
 const LANGGRAPH_URL = process.env.LANGGRAPH_URL ?? "http://localhost:2024";
 
