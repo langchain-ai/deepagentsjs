@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Loader2, CheckCircle2, AlertCircle, Clock, ArrowDownToLine, Copy, Check } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, Clock, Copy, Check } from "lucide-react";
 import type { AsyncTask } from "../types";
 
 export interface ResearcherConfig {
@@ -31,11 +31,9 @@ function StatusIcon({ status, accentColor }: { status: string; accentColor: stri
 export function ResearcherCard({
   config,
   task,
-  onGetResults,
 }: {
   config: ResearcherConfig;
   task: AsyncTask;
-  onGetResults: (task: AsyncTask) => void;
 }) {
   const status = task.status;
   const [copied, setCopied] = useState(false);
@@ -87,8 +85,8 @@ export function ResearcherCard({
           </p>
         )}
 
-        {/* Task ID + actions */}
-        <div className="flex items-center justify-between gap-2">
+        {/* Task ID */}
+        <div className="flex items-center gap-2">
           <button
             onClick={handleCopy}
             title={task.taskId}
@@ -101,15 +99,6 @@ export function ResearcherCard({
             )}
             <span className="truncate">{task.taskId}</span>
           </button>
-          {status === "success" && (
-            <button
-              onClick={() => onGetResults(task)}
-              className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg ${config.accentColor} ${config.iconBg} hover:opacity-80 transition-opacity cursor-pointer shrink-0`}
-            >
-              <ArrowDownToLine className="w-3 h-3" />
-              Results
-            </button>
-          )}
         </div>
       </div>
     </div>

@@ -10,15 +10,12 @@
 import "dotenv/config";
 import { createDeepAgent, type AsyncSubAgent } from "deepagents";
 
-const LANGGRAPH_URL = process.env.LANGGRAPH_URL ?? "http://localhost:2024";
-
 const asyncSubAgents: AsyncSubAgent[] = [
   {
     name: "researcher",
     description:
       "A general-purpose research agent that can investigate any topic.",
     graphId: "researcher",
-    url: LANGGRAPH_URL,
   },
 ];
 

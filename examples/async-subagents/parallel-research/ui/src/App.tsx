@@ -211,6 +211,9 @@ export function App() {
     },
   });
 
+  const threadRef = useRef(thread);
+  threadRef.current = thread;
+
   // Poll running tasks for status updates
   const pollTasks = useCallback(async () => {
     const running = Object.values(asyncTasks).filter(
@@ -227,6 +230,16 @@ export function App() {
             ...prev,
             [task.taskId]: { ...prev[task.taskId], status: run.status },
           }));
+          if (run.status === "success") {
+            threadRef.current.submit({
+              messages: [
+                {
+                  role: "user",
+                  content: `What did the researcher find? (task_id: ${task.taskId})`,
+                },
+              ],
+            });
+          }
         }
       } catch {
         // ignore poll errors
@@ -282,17 +295,6 @@ export function App() {
     thread.submit({ messages: [{ role: "user", content: text }] });
   };
 
-  const handleGetResults = (task: AsyncTask) => {
-    thread.submit({
-      messages: [
-        {
-          role: "user",
-          content: `What did the researcher find? (task_id: ${task.taskId})`,
-        },
-      ],
-    });
-  };
-
   const isConnected = thread.error == null;
 
   return (
@@ -328,7 +330,6 @@ export function App() {
                 key={task.taskId}
                 config={config}
                 task={task}
-                onGetResults={handleGetResults}
               />
             );
           })}
