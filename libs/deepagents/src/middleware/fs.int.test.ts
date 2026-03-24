@@ -13,8 +13,6 @@ import {
   StoreBackend,
   CompositeBackend,
 } from "../backends/index.js";
-import { fileDataToString } from "../backends/utils.js";
-import type { FileData } from "../backends/protocol.js";
 
 import {
   SAMPLE_MODEL,
