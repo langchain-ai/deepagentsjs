@@ -8,6 +8,7 @@ import {
 } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 import { createFileData } from "./backends/utils.js";
+import { ConfigurationError } from "./errors.js";
 
 describe("isAnthropicModel", () => {
   it("should detect claude model strings", () => {
@@ -116,5 +117,54 @@ describe("System prompt cache control breakpoints", () => {
     expect(memoryBlock.text).toContain("<agent_memory>");
     expect(memoryBlock.text).toContain("Remember this.");
     invokeSpy.mockRestore();
+  });
+});
+
+describe("Built-in tool name collision detection", () => {
+  const model = new FakeListChatModel({ responses: ["Done"] });
+
+  function makeTool(name: string) {
+    return {
+      name,
+      description: `custom ${name}`,
+      schema: {} as any,
+      invoke: async () => "ok",
+      batch: async () => ["ok"],
+    } as any;
+  }
+
+  it("should throw ConfigurationError when a user-provided tool collides with a filesystem tool", () => {
+    expect(() =>
+      createDeepAgent({ model, tools: [makeTool("write_file")] }),
+    ).toThrow(ConfigurationError);
+
+    try {
+      createDeepAgent({ model, tools: [makeTool("write_file")] });
+    } catch (e) {
+      expect(ConfigurationError.isInstance(e)).toBe(true);
+      expect((e as ConfigurationError).code).toBe("TOOL_NAME_COLLISION");
+      expect((e as ConfigurationError).message).toMatch(/write_file/);
+    }
+  });
+
+  it("should list all colliding names in the error", () => {
+    expect(() =>
+      createDeepAgent({ model, tools: [makeTool("ls"), makeTool("grep")] }),
+    ).toThrow(ConfigurationError);
+  });
+
+  it("should throw when colliding with subagent or todo tool names", () => {
+    expect(() =>
+      createDeepAgent({
+        model,
+        tools: [makeTool("task"), makeTool("write_todos")],
+      }),
+    ).toThrow(ConfigurationError);
+  });
+
+  it("should not throw when tool names do not collide", () => {
+    expect(() =>
+      createDeepAgent({ model, tools: [makeTool("my_custom_tool")] }),
+    ).not.toThrow();
   });
 });

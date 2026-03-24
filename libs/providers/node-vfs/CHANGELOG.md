@@ -1,5 +1,11 @@
 # @langchain/node-vfs
 
+## 0.1.3
+
+### Patch Changes
+
+- [#322](https://github.com/langchain-ai/deepagentsjs/pull/322) [`8dc4e9c`](https://github.com/langchain-ai/deepagentsjs/commit/8dc4e9ca29c2aac0ac823b5de6de3b5c608d041e) Thanks [@hnustwjj](https://github.com/hnustwjj)! - fix(node-vfs): rewrite absolute VFS paths in execute() commands
+
 ## 0.1.2
 
 ### Patch Changes

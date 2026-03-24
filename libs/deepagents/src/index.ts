@@ -6,6 +6,7 @@
  */
 
 export { createDeepAgent } from "./agent.js";
+export { ConfigurationError, type ConfigurationErrorCode } from "./errors.js";
 export type {
   AnySubAgent,
   CreateDeepAgentParams,
@@ -132,6 +133,9 @@ export {
   type SandboxListOptions,
   type SandboxGetOrCreateOptions,
   type SandboxDeleteOptions,
+  // LangSmith sandbox backend
+  LangSmithSandbox,
+  type LangSmithSandboxOptions,
   // Sandbox error types
   type SandboxErrorCode,
   // Local shell backend

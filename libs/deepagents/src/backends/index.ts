@@ -60,5 +60,12 @@ export {
 // Export BaseSandbox abstract class
 export { BaseSandbox } from "./sandbox.js";
 
+// Export LangSmith sandbox backend
+export {
+  LangSmithSandbox,
+  type LangSmithSandboxOptions,
+  type LangSmithSandboxCreateOptions,
+} from "./langsmith.js";
+
 // Re-export utils for convenience
 export * from "./utils.js";
