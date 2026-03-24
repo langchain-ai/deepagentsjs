@@ -352,13 +352,10 @@ describe("LangSmithSandbox", () => {
       "lsInfo",
       "grepRaw",
       "globInfo",
-    ] as const)(
-      "%s() is available on the sandbox",
-      (method) => {
-        const sandbox = makeSandbox();
-        expect(typeof sandbox[method]).toBe("function");
-      },
-    );
+    ] as const)("%s() is available on the sandbox", (method) => {
+      const sandbox = makeSandbox();
+      expect(typeof sandbox[method]).toBe("function");
+    });
 
     it("read() delegates to execute() via a shell command", async () => {
       const sandbox = makeSandbox();
