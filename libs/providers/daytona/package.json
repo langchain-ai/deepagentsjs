@@ -1,6 +1,6 @@
 {
   "name": "@langchain/daytona",
-  "version": "0.1.2",
+  "version": "1.0.0-alpha.0",
   "description": "Daytona Sandbox backend for deepagents",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -40,7 +40,7 @@
     "@daytonaio/sdk": "^0.148.0"
   },
   "peerDependencies": {
-    "deepagents": ">=1.6.0"
+    "deepagents": ">=1.9.0-alpha.0"
   },
   "devDependencies": {
     "deepagents": "workspace:*",

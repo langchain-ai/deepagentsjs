@@ -1,6 +1,6 @@
 {
   "name": "@langchain/sandbox-standard-tests",
-  "version": "0.1.0",
+  "version": "1.0.0-alpha.0",
   "description": "Standard integration tests for deepagents sandbox providers",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -58,7 +58,7 @@
     "dist/**/*"
   ],
   "peerDependencies": {
-    "deepagents": ">=1.6.0",
+    "deepagents": ">=1.9.0-alpha.0",
     "vitest": ">=1.0.0"
   },
   "peerDependenciesMeta": {

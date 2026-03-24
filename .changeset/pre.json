@@ -12,5 +12,11 @@
     "@langchain/quickjs": "0.2.1",
     "@langchain/sandbox-standard-tests": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "clear-years-end",
+    "curvy-donkeys-walk",
+    "dry-insects-occur",
+    "solid-lies-worry",
+    "true-buckets-hide"
+  ]
 }

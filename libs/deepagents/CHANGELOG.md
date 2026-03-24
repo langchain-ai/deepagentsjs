@@ -1,5 +1,21 @@
 # deepagents
 
+## 1.9.0-alpha.0
+
+### Minor Changes
+
+- [`4faca20`](https://github.com/langchain-ai/deepagentsjs/commit/4faca20343089ee2d8ecaf4c8ad3b5f8fcf1e8f8) Thanks [@colifran](https://github.com/colifran)! - feat(deepagents): support multimodal files for backends
+
+- [`07800c0`](https://github.com/langchain-ai/deepagentsjs/commit/07800c04d56bf2b9cb8ed99f769fd199908fd589) Thanks [@colifran](https://github.com/colifran)! - chore(deepagents): refactor backend method names - lsInfo -> ls, grepRaw -> grep, globInfo -> glob
+
+- [`6b76b39`](https://github.com/langchain-ai/deepagentsjs/commit/6b76b39cfc6a87ccb034d6e27888f7f6f2f91b97) Thanks [@colifran](https://github.com/colifran)! - feat(sdk): add async subagent middleware for remote LangGraph servers
+
+### Patch Changes
+
+- [`b1a2c8d`](https://github.com/langchain-ai/deepagentsjs/commit/b1a2c8ddaef59f40aebe225cde458ce70d5fbdd3) Thanks [@hntrl](https://github.com/hntrl)! - feat(deepagents): add completion notifier middleware for async subagents
+
+- [`bca71ed`](https://github.com/langchain-ai/deepagentsjs/commit/bca71ed044edc438389a4ca19d81f43dabe01fa7) Thanks [@colifran](https://github.com/colifran)! - chore(sdk): unify sync subagents and async subagents into a single property
+
 ## 1.8.5
 
 ### Patch Changes
