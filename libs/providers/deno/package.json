@@ -40,7 +40,7 @@
     "@deno/sandbox": "^0.13.2"
   },
   "peerDependencies": {
-    "deepagents": ">=1.6.0"
+    "deepagents": ">=1.9.0-alpha.0"
   },
   "devDependencies": {
     "deepagents": "workspace:*",
