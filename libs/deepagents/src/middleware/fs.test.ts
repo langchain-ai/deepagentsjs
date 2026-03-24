@@ -8,7 +8,11 @@ import {
   TOOLS_EXCLUDED_FROM_EVICTION,
 } from "./fs.js";
 import type { FileData, BackendProtocol } from "../backends/protocol.js";
-import { SystemMessage, HumanMessage, AIMessage } from "@langchain/core/messages";
+import {
+  SystemMessage,
+  HumanMessage,
+  AIMessage,
+} from "@langchain/core/messages";
 import { ToolMessage } from "langchain";
 import { Command, isCommand, getCurrentTaskInput } from "@langchain/langgraph";
 
@@ -989,9 +993,7 @@ describe("createFilesystemMiddleware", () => {
       });
 
       const state = {
-        messages: [
-          new HumanMessage({ content: "x".repeat(1_000_000) }),
-        ],
+        messages: [new HumanMessage({ content: "x".repeat(1_000_000) })],
       };
 
       // @ts-expect-error - typing issue in LangChain
@@ -1034,9 +1036,7 @@ describe("createFilesystemMiddleware", () => {
       });
 
       const state = {
-        messages: [
-          new HumanMessage({ content: "small message" }),
-        ],
+        messages: [new HumanMessage({ content: "small message" })],
       };
 
       // @ts-expect-error - typing issue in LangChain
@@ -1060,9 +1060,7 @@ describe("createFilesystemMiddleware", () => {
 
       const largeContent = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
       const state = {
-        messages: [
-          new HumanMessage({ content: largeContent, id: "human-1" }),
-        ],
+        messages: [new HumanMessage({ content: largeContent, id: "human-1" })],
       };
 
       // @ts-expect-error - typing issue in LangChain
@@ -1106,10 +1104,7 @@ describe("createFilesystemMiddleware", () => {
       const state = {
         messages: [
           new HumanMessage({
-            content: [
-              { type: "text", text: largeText },
-              imageBlock,
-            ],
+            content: [{ type: "text", text: largeText }, imageBlock],
           }),
         ],
       };
@@ -1146,9 +1141,7 @@ describe("createFilesystemMiddleware", () => {
 
       const largeContent = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
       const state = {
-        messages: [
-          new HumanMessage({ content: largeContent }),
-        ],
+        messages: [new HumanMessage({ content: largeContent })],
       };
 
       // @ts-expect-error - typing issue in LangChain
@@ -1177,9 +1170,7 @@ describe("createFilesystemMiddleware", () => {
 
       const largeContent = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
       const state = {
-        messages: [
-          new HumanMessage({ content: largeContent }),
-        ],
+        messages: [new HumanMessage({ content: largeContent })],
       };
 
       // @ts-expect-error - typing issue in LangChain
@@ -1272,9 +1263,7 @@ describe("createFilesystemMiddleware", () => {
 
       const largeContent = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
       const state = {
-        messages: [
-          new HumanMessage({ content: largeContent }),
-        ],
+        messages: [new HumanMessage({ content: largeContent })],
       };
 
       // @ts-expect-error - typing issue in LangChain

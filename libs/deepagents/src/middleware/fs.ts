@@ -134,13 +134,17 @@ Here is a preview showing the head and tail of the content:
  * For string content, returns it directly. For array content (mixed block types
  * like text + image), joins all text blocks. Returns empty string if no text found.
  */
-function extractTextFromMessage(message: { content: string | Array<Record<string, unknown>> }): string {
+function extractTextFromMessage(message: {
+  content: string | Array<Record<string, unknown>>;
+}): string {
   if (typeof message.content === "string") {
     return message.content;
   }
   if (Array.isArray(message.content)) {
     return message.content
-      .filter((block) => block.type === "text" && typeof block.text === "string")
+      .filter(
+        (block) => block.type === "text" && typeof block.text === "string",
+      )
       .map((block) => block.text as string)
       .join("\n");
   }
@@ -163,7 +167,8 @@ function buildEvictedHumanContent(
   }
   if (Array.isArray(message.content)) {
     const mediaBlocks = message.content.filter(
-      (block) => typeof block === "object" && block !== null && block.type !== "text",
+      (block) =>
+        typeof block === "object" && block !== null && block.type !== "text",
     );
     if (mediaBlocks.length === 0) {
       return replacementText;
