@@ -53,14 +53,14 @@ Open the URL Vite prints (usually `http://localhost:5173`).
 ## Using the demo
 
 - Normal questions are answered by the supervisor directly.
-- To trigger **parallel researchers**, use wording that clearly asks for research, e.g. *“Research …”*, *“Investigate …”*, *“Deep dive into …”* (see the supervisor system prompt in `supervisor.ts` for the full trigger behavior).
+- To trigger **parallel researchers**, use wording that clearly asks for research, e.g. _“Research …”_, _“Investigate …”_, _“Deep dive into …”_ (see the supervisor system prompt in `supervisor.ts` for the full trigger behavior).
 - The UI shows **researcher cards** for async tasks and can **fetch results** when a run completes.
 
 ## Project layout
 
-| Path | Role |
-|------|------|
-| `supervisor.ts` | Supervisor graph (`assistantId: "supervisor"` in the UI) |
-| `researcher.ts` | Researcher graph (`graphId: "researcher"`) |
-| `langgraph.json` | LangGraph CLI config for both graphs |
-| `ui/` | Vite + React client using `@langchain/langgraph-sdk` streaming |
+| Path             | Role                                                           |
+| ---------------- | -------------------------------------------------------------- |
+| `supervisor.ts`  | Supervisor graph (`assistantId: "supervisor"` in the UI)       |
+| `researcher.ts`  | Researcher graph (`graphId: "researcher"`)                     |
+| `langgraph.json` | LangGraph CLI config for both graphs                           |
+| `ui/`            | Vite + React client using `@langchain/langgraph-sdk` streaming |
