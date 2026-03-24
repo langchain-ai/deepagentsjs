@@ -687,22 +687,22 @@ describe("DenoSandbox", () => {
       expect(typeof sandbox.edit).toBe("function");
     });
 
-    it("should have lsInfo method from BaseSandbox", async () => {
+    it("should have ls method from BaseSandbox", async () => {
       const sandbox = await DenoSandbox.create();
 
-      expect(typeof sandbox.lsInfo).toBe("function");
+      expect(typeof sandbox.ls).toBe("function");
     });
 
-    it("should have grepRaw method from BaseSandbox", async () => {
+    it("should have grep method from BaseSandbox", async () => {
       const sandbox = await DenoSandbox.create();
 
-      expect(typeof sandbox.grepRaw).toBe("function");
+      expect(typeof sandbox.grep).toBe("function");
     });
 
-    it("should have globInfo method from BaseSandbox", async () => {
+    it("should have glob method from BaseSandbox", async () => {
       const sandbox = await DenoSandbox.create();
 
-      expect(typeof sandbox.globInfo).toBe("function");
+      expect(typeof sandbox.glob).toBe("function");
     });
   });
 

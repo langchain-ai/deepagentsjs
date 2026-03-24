@@ -146,7 +146,7 @@ export interface ReadRawResult {
 }
 
 /**
- * Structured result from backend lsInfo operations.
+ * Structured result from backend ls operations.
  */
 export interface LsResult {
   /** Error message on failure, undefined on success */
@@ -156,7 +156,7 @@ export interface LsResult {
 }
 
 /**
- * Structured result from backend globInfo operations.
+ * Structured result from backend glob operations.
  */
 export interface GlobResult {
   /** Error message on failure, undefined on success */

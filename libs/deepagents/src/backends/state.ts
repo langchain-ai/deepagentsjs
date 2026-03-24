@@ -67,7 +67,7 @@ export class StateBackend implements BackendProtocolV2 {
    * @returns LsResult with list of FileInfo objects on success or error on failure.
    *          Directories have a trailing / in their path and is_dir=true.
    */
-  lsInfo(path: string): LsResult {
+  ls(path: string): LsResult {
     const files = this.getFiles();
     const infos: FileInfo[] = [];
     const subdirs = new Set<string>();
@@ -241,7 +241,7 @@ export class StateBackend implements BackendProtocolV2 {
    * Search file contents for a literal text pattern.
    * Binary files are skipped.
    */
-  grepRaw(
+  grep(
     pattern: string,
     path: string = "/",
     glob: string | null = null,
@@ -254,7 +254,7 @@ export class StateBackend implements BackendProtocolV2 {
   /**
    * Structured glob matching returning FileInfo objects.
    */
-  globInfo(pattern: string, path: string = "/"): GlobResult {
+  glob(pattern: string, path: string = "/"): GlobResult {
     const files = this.getFiles();
     const result = globSearchFiles(files, pattern, path);
 
