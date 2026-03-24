@@ -46,7 +46,7 @@ export interface LangSmithSandboxOptions {
 export interface LangSmithSandboxCreateOptions {
   /**
    * Name of the LangSmith sandbox template to use.
-   * @default "deepagents-cli"
+   * @default "deepagents"
    */
   templateName?: string;
   /**
@@ -121,7 +121,11 @@ export class LangSmithSandbox extends BaseSandbox {
     };
   }
 
-  /** Download files from the sandbox using LangSmith's native file read API. */
+  /**
+   * Download files from the sandbox using LangSmith's native file read API.
+   * @param paths - List of file paths to download
+   * @returns List of FileDownloadResponse objects, one per input path
+   */
   async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
     const responses: FileDownloadResponse[] = [];
 
@@ -149,7 +153,11 @@ export class LangSmithSandbox extends BaseSandbox {
     return responses;
   }
 
-  /** Upload files to the sandbox using LangSmith's native file write API. */
+  /**
+   * Upload files to the sandbox using LangSmith's native file write API.
+   * @param files - List of [path, content] tuples to upload
+   * @returns List of FileUploadResponse objects, one per input file
+   */
   async uploadFiles(
     files: Array<[string, Uint8Array]>,
   ): Promise<FileUploadResponse[]> {
@@ -186,7 +194,7 @@ export class LangSmithSandbox extends BaseSandbox {
    *
    * @example
    * ```typescript
-   * const sandbox = await LangSmithSandbox.create({ templateName: "deepagents-cli" });
+   * const sandbox = await LangSmithSandbox.create({ templateName: "deepagents" });
    * try {
    *   const agent = createDeepAgent({ model, backend: sandbox });
    *   await agent.invoke({ messages: [...] });
@@ -199,7 +207,7 @@ export class LangSmithSandbox extends BaseSandbox {
     options: LangSmithSandboxCreateOptions = {},
   ): Promise<LangSmithSandbox> {
     const {
-      templateName = "deepagents-cli",
+      templateName = "deepagents",
       apiKey = process.env.LANGSMITH_API_KEY,
       defaultTimeout,
     } = options;
