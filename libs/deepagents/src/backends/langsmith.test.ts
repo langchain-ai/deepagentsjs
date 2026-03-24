@@ -345,7 +345,14 @@ describe("LangSmithSandbox", () => {
   });
 
   describe("BaseSandbox inherited methods", () => {
-    it.each(["read", "write", "edit", "ls", "grep", "glob"] as const)(
+    it.each([
+      "read",
+      "write",
+      "edit",
+      "lsInfo",
+      "grepRaw",
+      "globInfo",
+    ] as const)(
       "%s() is available on the sandbox",
       (method) => {
         const sandbox = makeSandbox();
@@ -369,11 +376,11 @@ describe("LangSmithSandbox", () => {
       expect(cmd).toContain("/tmp/file.txt");
     });
 
-    it("ls() delegates to execute() via a shell command", async () => {
+    it("lsInfo() delegates to execute() via a shell command", async () => {
       const sandbox = makeSandbox();
       mockRun.mockResolvedValue({ stdout: "", stderr: "", exit_code: 0 });
 
-      await sandbox.ls("/tmp");
+      await sandbox.lsInfo("/tmp");
 
       expect(mockRun).toHaveBeenCalledOnce();
       const [cmd] = mockRun.mock.calls[0] as [string, unknown];
@@ -381,11 +388,11 @@ describe("LangSmithSandbox", () => {
       expect(cmd).toContain("find");
     });
 
-    it("grep() delegates to execute() via a shell command", async () => {
+    it("grepRaw() delegates to execute() via a shell command", async () => {
       const sandbox = makeSandbox();
       mockRun.mockResolvedValue({ stdout: "", stderr: "", exit_code: 0 });
 
-      await sandbox.grep("pattern", "/tmp");
+      await sandbox.grepRaw("pattern", "/tmp");
 
       expect(mockRun).toHaveBeenCalledOnce();
       const [cmd] = mockRun.mock.calls[0] as [string, unknown];
@@ -393,11 +400,11 @@ describe("LangSmithSandbox", () => {
       expect(cmd).toContain("grep");
     });
 
-    it("glob() delegates to execute() via a shell command", async () => {
+    it("globInfo() delegates to execute() via a shell command", async () => {
       const sandbox = makeSandbox();
       mockRun.mockResolvedValue({ stdout: "", stderr: "", exit_code: 0 });
 
-      await sandbox.glob("*.txt", "/tmp");
+      await sandbox.globInfo("*.txt", "/tmp");
 
       expect(mockRun).toHaveBeenCalledOnce();
       const [cmd] = mockRun.mock.calls[0] as [string, unknown];
