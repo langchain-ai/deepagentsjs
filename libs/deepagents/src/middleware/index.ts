@@ -57,6 +57,7 @@ export {
 // Async SubAgent middleware
 export {
   createAsyncSubAgentMiddleware,
+  isAsyncSubAgent,
   type AsyncSubAgentMiddlewareOptions,
   type AsyncSubAgent,
   type AsyncTask,
