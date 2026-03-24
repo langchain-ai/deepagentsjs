@@ -8,7 +8,7 @@ import {
   TOOLS_EXCLUDED_FROM_EVICTION,
 } from "./fs.js";
 import type { FileData, BackendProtocol } from "../backends/protocol.js";
-import { SystemMessage } from "@langchain/core/messages";
+import { SystemMessage, HumanMessage, AIMessage } from "@langchain/core/messages";
 import { ToolMessage } from "langchain";
 import { Command, isCommand, getCurrentTaskInput } from "@langchain/langgraph";
 
@@ -978,6 +978,311 @@ describe("createFilesystemMiddleware", () => {
       expect(result).not.toContain("truncated");
       expect(result).toContain("/src/file1.ts");
       expect(result).toContain("const pattern = 'test'");
+    });
+  });
+
+  describe("beforeAgent - large HumanMessage eviction", () => {
+    it("should return undefined when eviction is disabled", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        toolTokenLimitBeforeEvict: null,
+      });
+
+      const state = {
+        messages: [
+          new HumanMessage({ content: "x".repeat(1_000_000) }),
+        ],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+      expect(result).toBeUndefined();
+    });
+
+    it("should return undefined when messages is empty", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        toolTokenLimitBeforeEvict: 100,
+      });
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({ messages: [] });
+      expect(result).toBeUndefined();
+    });
+
+    it("should return undefined when last message is not a HumanMessage", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        toolTokenLimitBeforeEvict: 100,
+      });
+
+      const state = {
+        messages: [
+          new AIMessage({ content: "x".repeat(100 * NUM_CHARS_PER_TOKEN + 1) }),
+        ],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+      expect(result).toBeUndefined();
+    });
+
+    it("should return undefined when HumanMessage is below threshold", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        toolTokenLimitBeforeEvict: 1000,
+      });
+
+      const state = {
+        messages: [
+          new HumanMessage({ content: "small message" }),
+        ],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+      expect(result).toBeUndefined();
+    });
+
+    it("should evict a large HumanMessage with string content", async () => {
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: undefined,
+        filesUpdate: null,
+      });
+      mockBackend.write = mockWrite;
+
+      const threshold = 20_000;
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        toolTokenLimitBeforeEvict: threshold,
+      });
+
+      const largeContent = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
+      const state = {
+        messages: [
+          new HumanMessage({ content: largeContent, id: "human-1" }),
+        ],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+
+      expect(result).toBeDefined();
+      expect(result!.messages).toHaveLength(1);
+      const evicted = result!.messages[0];
+      expect(HumanMessage.isInstance(evicted)).toBe(true);
+      expect(evicted.id).toBe("human-1");
+      expect(typeof evicted.content).toBe("string");
+      expect(evicted.content.length).toBeLessThan(largeContent.length);
+      expect(evicted.content).toContain("/large_messages/");
+      expect(evicted.content).toContain("read_file");
+
+      expect(mockWrite).toHaveBeenCalledTimes(1);
+      const writePath = mockWrite.mock.calls[0][0] as string;
+      expect(writePath).toMatch(/^\/large_messages\/[a-f0-9]{12}$/);
+      expect(mockWrite.mock.calls[0][1]).toBe(largeContent);
+    });
+
+    it("should preserve non-text blocks when evicting list content", async () => {
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: null,
+        filesUpdate: null,
+      });
+      mockBackend.write = mockWrite;
+
+      const threshold = 100;
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        toolTokenLimitBeforeEvict: threshold,
+      });
+
+      const largeText = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
+      const imageBlock = {
+        type: "image_url",
+        image_url: { url: "data:image/png;base64,abc" },
+      };
+      const state = {
+        messages: [
+          new HumanMessage({
+            content: [
+              { type: "text", text: largeText },
+              imageBlock,
+            ],
+          }),
+        ],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+
+      expect(result).toBeDefined();
+      const evicted = result!.messages[0];
+      expect(HumanMessage.isInstance(evicted)).toBe(true);
+      expect(Array.isArray(evicted.content)).toBe(true);
+
+      const content = evicted.content as Array<Record<string, unknown>>;
+      const textBlock = content.find((b) => b.type === "text");
+      expect(textBlock).toBeDefined();
+      expect((textBlock as any).text).toContain("/large_messages/");
+
+      const preservedImage = content.find((b) => b.type === "image_url");
+      expect(preservedImage).toBeDefined();
+    });
+
+    it("should return undefined when backend write fails", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.write = vi.fn().mockResolvedValue({
+        error: "Failed to write file",
+        filesUpdate: null,
+      });
+
+      const threshold = 100;
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        toolTokenLimitBeforeEvict: threshold,
+      });
+
+      const largeContent = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
+      const state = {
+        messages: [
+          new HumanMessage({ content: largeContent }),
+        ],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+      expect(result).toBeUndefined();
+    });
+
+    it("should include filesUpdate when backend provides one", async () => {
+      const fileData: FileData = {
+        content: ["large content"],
+        created_at: "2024-01-01T00:00:00Z",
+        modified_at: "2024-01-01T00:00:00Z",
+      };
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: null,
+        filesUpdate: { "/large_messages/abc123": fileData },
+      });
+      mockBackend.write = mockWrite;
+
+      const threshold = 100;
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        toolTokenLimitBeforeEvict: threshold,
+      });
+
+      const largeContent = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
+      const state = {
+        messages: [
+          new HumanMessage({ content: largeContent }),
+        ],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+
+      expect(result).toBeDefined();
+      expect(result!.files).toBeDefined();
+    });
+
+    it("should preserve additional_kwargs and response_metadata", async () => {
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: null,
+        filesUpdate: null,
+      });
+      mockBackend.write = mockWrite;
+
+      const threshold = 100;
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        toolTokenLimitBeforeEvict: threshold,
+      });
+
+      const largeContent = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
+      const state = {
+        messages: [
+          new HumanMessage({
+            content: largeContent,
+            id: "msg-42",
+            additional_kwargs: { trace: "xyz" },
+            response_metadata: { provider: "test" },
+          }),
+        ],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+
+      expect(result).toBeDefined();
+      const evicted = result!.messages[0];
+      expect(evicted.id).toBe("msg-42");
+      expect(evicted.additional_kwargs).toEqual({ trace: "xyz" });
+      expect(evicted.response_metadata).toEqual({ provider: "test" });
+    });
+
+    it("should only check the last message", async () => {
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: null,
+        filesUpdate: null,
+      });
+      mockBackend.write = mockWrite;
+
+      const threshold = 100;
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        toolTokenLimitBeforeEvict: threshold,
+      });
+
+      const largeContent = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
+      const state = {
+        messages: [
+          new HumanMessage({ content: largeContent }),
+          new AIMessage({ content: "response" }),
+        ],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+
+      // Last message is AIMessage, not HumanMessage - no eviction
+      expect(result).toBeUndefined();
+      expect(mockWrite).not.toHaveBeenCalled();
+    });
+
+    it("should work with backend factory", async () => {
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: null,
+        filesUpdate: null,
+      });
+      mockBackend.write = mockWrite;
+      const backendFactory = vi.fn().mockReturnValue(mockBackend);
+
+      const threshold = 100;
+      const middleware = createFilesystemMiddleware({
+        backend: backendFactory,
+        toolTokenLimitBeforeEvict: threshold,
+      });
+
+      const largeContent = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
+      const state = {
+        messages: [
+          new HumanMessage({ content: largeContent }),
+        ],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+
+      expect(result).toBeDefined();
+      expect(backendFactory).toHaveBeenCalled();
+      expect(mockWrite).toHaveBeenCalled();
     });
   });
 });

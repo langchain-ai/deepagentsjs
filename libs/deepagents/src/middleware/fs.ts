@@ -9,6 +9,7 @@
 import {
   createMiddleware,
   tool,
+  HumanMessage,
   ToolMessage,
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
@@ -115,6 +116,62 @@ Here is a preview showing the head and tail of the result (lines of the form
 indicate omitted lines in the middle of the content):
 
 {content_sample}`;
+
+/**
+ * Message template for evicted HumanMessages.
+ */
+const TOO_LARGE_HUMAN_MSG = `Message content too large and was saved to the filesystem at: {file_path}
+
+You can read the full content using the read_file tool with pagination (offset and limit parameters).
+
+Here is a preview showing the head and tail of the content:
+
+{content_sample}`;
+
+/**
+ * Extract text content from a message.
+ *
+ * For string content, returns it directly. For array content (mixed block types
+ * like text + image), joins all text blocks. Returns empty string if no text found.
+ */
+function extractTextFromMessage(message: { content: string | Array<Record<string, unknown>> }): string {
+  if (typeof message.content === "string") {
+    return message.content;
+  }
+  if (Array.isArray(message.content)) {
+    return message.content
+      .filter((block) => block.type === "text" && typeof block.text === "string")
+      .map((block) => block.text as string)
+      .join("\n");
+  }
+  return String(message.content);
+}
+
+/**
+ * Build replacement content for an evicted HumanMessage, preserving non-text blocks.
+ *
+ * For plain string content, returns the replacement text directly. For list content
+ * with mixed block types (e.g., text + image), replaces all text blocks with a single
+ * text block containing the replacement text while keeping non-text blocks intact.
+ */
+function buildEvictedHumanContent(
+  message: HumanMessage,
+  replacementText: string,
+): string | Array<Record<string, unknown>> {
+  if (typeof message.content === "string") {
+    return replacementText;
+  }
+  if (Array.isArray(message.content)) {
+    const mediaBlocks = message.content.filter(
+      (block) => typeof block === "object" && block !== null && block.type !== "text",
+    );
+    if (mediaBlocks.length === 0) {
+      return replacementText;
+    }
+    return [{ type: "text", text: replacementText }, ...mediaBlocks];
+  }
+  return replacementText;
+}
 
 /**
  * Create a preview of content showing head and tail with truncation marker.
@@ -841,6 +898,64 @@ export function createFilesystemMiddleware(
     name: "FilesystemMiddleware",
     stateSchema: FilesystemStateSchema,
     tools: allTools,
+    async beforeAgent(state) {
+      if (!toolTokenLimitBeforeEvict) {
+        return undefined;
+      }
+
+      const messages = state.messages;
+      if (!messages || messages.length === 0) {
+        return undefined;
+      }
+
+      const last = messages[messages.length - 1];
+      if (!HumanMessage.isInstance(last)) {
+        return undefined;
+      }
+
+      const contentStr = extractTextFromMessage(last);
+      if (
+        contentStr.length <=
+        NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict
+      ) {
+        return undefined;
+      }
+
+      const stateAndStore: StateAndStore = {
+        state: state || {},
+      };
+      const resolvedBackend = getBackend(backend, stateAndStore);
+
+      const fileId = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+      const filePath = `/large_messages/${fileId}`;
+      const writeResult = await resolvedBackend.write(filePath, contentStr);
+
+      if (writeResult.error) {
+        return undefined;
+      }
+
+      const contentSample = createContentPreview(contentStr);
+      const replacementText = TOO_LARGE_HUMAN_MSG.replace(
+        "{file_path}",
+        filePath,
+      ).replace("{content_sample}", contentSample);
+
+      const evictedContent = buildEvictedHumanContent(last, replacementText);
+      const evictedMessage = new HumanMessage({
+        content: evictedContent as any,
+        id: last.id,
+        additional_kwargs: { ...last.additional_kwargs },
+        response_metadata: { ...last.response_metadata },
+      });
+
+      const result: Record<string, unknown> = {
+        messages: [evictedMessage],
+      };
+      if (writeResult.filesUpdate) {
+        result.files = writeResult.filesUpdate;
+      }
+      return result;
+    },
     wrapModelCall: async (request, handler) => {
       // Check if backend supports execution
       const stateAndStore: StateAndStore = {
