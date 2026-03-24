@@ -174,7 +174,7 @@ export function registerInitialFilesTests<T extends AnySandboxInstance>(
     );
 
     it(
-      "should make initialFiles in subdirectories visible via lsInfo()",
+      "should make initialFiles in subdirectories visible via ls()",
       async () => {
         const dirPath = config.resolvePath("init-ls-dir");
         const filePath = `${dirPath}/file.txt`;
@@ -187,7 +187,7 @@ export function registerInitialFilesTests<T extends AnySandboxInstance>(
         );
 
         try {
-          const lsResult = await adaptSandboxInstance(tmp).lsInfo(dirPath);
+          const lsResult = await adaptSandboxInstance(tmp).ls(dirPath);
           expect(lsResult.error).toBeUndefined();
           const entries = lsResult.files || [];
           const paths = entries.map((e) => e.path.replace(/\/$/, ""));
