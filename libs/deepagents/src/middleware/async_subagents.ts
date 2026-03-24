@@ -77,6 +77,9 @@ export interface AsyncTask {
   /** ISO timestamp of when the task was launched. */
   createdAt: string;
 
+  /** The prompt/description passed to the subagent when the task was launched. */
+  description?: string;
+
   /** ISO timestamp of the most recent follow-up message sent to the subagent via the update tool. */
   updatedAt?: string;
 
@@ -134,6 +137,7 @@ const AsyncTaskSchema = z.object({
   runId: z.string(),
   status: z.string(),
   createdAt: z.string(),
+  description: z.string().optional(),
   updatedAt: z.string().optional(),
   checkedAt: z.string().optional(),
 });
@@ -458,6 +462,7 @@ export function buildStartTool(
           runId: run.run_id,
           status: "running",
           createdAt: new Date().toISOString(),
+          description: input.description,
         };
 
         return new Command({
@@ -603,6 +608,7 @@ export function buildUpdateTool(
           runId: run.run_id,
           status: "running",
           createdAt: tracked.createdAt,
+          description: input.message,
           updatedAt: new Date().toISOString(),
           checkedAt: tracked.checkedAt,
         };
