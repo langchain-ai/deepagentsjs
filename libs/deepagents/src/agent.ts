@@ -23,6 +23,7 @@ import {
   createSkillsMiddleware,
   FILESYSTEM_TOOL_NAMES,
   type SubAgent,
+  createAsyncSubAgentMiddleware,
 } from "./middleware/index.js";
 import { StateBackend } from "./backends/index.js";
 import { ConfigurationError } from "./errors.js";
@@ -136,6 +137,7 @@ export function createDeepAgent<
     name,
     memory,
     skills,
+    asyncSubAgents,
   } = params;
 
   const collidingTools = (tools as readonly { name?: string }[])
@@ -358,6 +360,9 @@ export function createDeepAgent<
       : []),
     ...memoryMiddlewareArray,
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
+    ...(asyncSubAgents && asyncSubAgents.length > 0
+      ? [createAsyncSubAgentMiddleware({ asyncSubAgents })]
+      : []),
   ];
 
   const agent = createAgent({
