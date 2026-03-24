@@ -1,5 +1,24 @@
 # deepagents
 
+## 1.8.5
+
+### Patch Changes
+
+- [#330](https://github.com/langchain-ai/deepagentsjs/pull/330) [`140e9ef`](https://github.com/langchain-ai/deepagentsjs/commit/140e9ef5176776261ddc0775d1858eb1374a20cb) Thanks [@maahir30](https://github.com/maahir30)! - fix(deepagents): throw on built-in tool collision
+  - `createDeepAgent` now throws at construction time if any user-supplied tool name collides with a built-in tool (`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `execute`, `task`, `write_todos`). Previously, colliding tools silently shadowed the built-in, causing cryptic schema-validation errors at runtime.
+
+- [#335](https://github.com/langchain-ai/deepagentsjs/pull/335) [`3254f71`](https://github.com/langchain-ai/deepagentsjs/commit/3254f71708de076fb1e17f5065b45318394d0c9e) Thanks [@pawel-twardziak](https://github.com/pawel-twardziak)! - fix(deepagents): remove orphaned ToolMessages for Gemini compatibility
+
+- [#336](https://github.com/langchain-ai/deepagentsjs/pull/336) [`2b76272`](https://github.com/langchain-ai/deepagentsjs/commit/2b76272e9c435b5e23bede7cd79ab4ba8efae2c8) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): use `crypto.randomUUID()` instead of uuid
+
+- [#331](https://github.com/langchain-ai/deepagentsjs/pull/331) [`759fe19`](https://github.com/langchain-ai/deepagentsjs/commit/759fe19a776eb0befb55d83b1030824c28704a32) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): reorder middleware so prompt caching and memory run last
+
+  Move `anthropicPromptCachingMiddleware` and `memoryMiddleware` after all static and user-supplied middleware. This ensures that updates to memory contents do not invalidate Anthropic prompt caches.
+
+- [#332](https://github.com/langchain-ai/deepagentsjs/pull/332) [`3ff382e`](https://github.com/langchain-ai/deepagentsjs/commit/3ff382e2ba0aa3ffa1f7431eec5bdf908075fa74) Thanks [@maahir30](https://github.com/maahir30)! - improve condition for checking sandbox backends
+
+- [#324](https://github.com/langchain-ai/deepagentsjs/pull/324) [`cb352a0`](https://github.com/langchain-ai/deepagentsjs/commit/cb352a0412f2cf66109f7fbe63c65b7d14b0df88) Thanks [@christian-bromann](https://github.com/christian-bromann)! - feat(deepagent): add LangSmithSandbox
+
 ## 1.8.4
 
 ### Patch Changes
