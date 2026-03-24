@@ -187,6 +187,7 @@ export function App() {
   const thread = useStream({
     apiUrl: LANGGRAPH_URL,
     assistantId: "supervisor",
+    // eslint-disable-next-line no-console
     onError: (err) => console.error("[stream error]", err),
     onUpdateEvent: (data) => {
       if (data && typeof data === "object") {
