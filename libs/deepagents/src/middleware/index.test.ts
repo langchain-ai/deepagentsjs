@@ -12,6 +12,7 @@ import {
   createFilesystemMiddleware,
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
+  createAsyncSubAgentMiddleware,
 } from "../index.js";
 
 import { SAMPLE_MODEL } from "../testing/utils.js";
@@ -390,5 +391,70 @@ describe("PatchToolCallsMiddleware", () => {
     expect(updatedMessages[6].type).toBe("tool");
     expect((updatedMessages[6] as any).tool_call_id).toBe("456");
     expect(updatedMessages[7]).toBe(inputMessages[5]);
+  });
+});
+
+describe("AsyncSubAgentMiddleware", () => {
+  const sampleAgent = {
+    name: "researcher",
+    description: "A research agent",
+    graphId: "research_graph",
+    url: "https://example.langsmith.dev",
+  };
+
+  it("should be importable and callable from the package index", () => {
+    expect(createAsyncSubAgentMiddleware).toBeDefined();
+    expect(typeof createAsyncSubAgentMiddleware).toBe("function");
+  });
+
+  it("should add asyncTasks channel to the agent graph", () => {
+    const middleware = createAsyncSubAgentMiddleware({
+      asyncSubAgents: [sampleAgent],
+    });
+    const agent = createAgent({
+      model: SAMPLE_MODEL,
+      middleware: [middleware],
+      tools: [],
+    });
+    const channels = Object.keys((agent as any).graph?.channels || {});
+    expect(channels).toContain("asyncTasks");
+  });
+
+  it("should register all 5 async subagent tools on the agent", () => {
+    const middleware = createAsyncSubAgentMiddleware({
+      asyncSubAgents: [sampleAgent],
+    });
+    const agent = createAgent({
+      model: SAMPLE_MODEL,
+      middleware: [middleware],
+      tools: [],
+    });
+    const tools = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
+    const toolNames = tools.map((t: any) => t.name);
+    expect(toolNames).toContain("start_async_task");
+    expect(toolNames).toContain("check_async_task");
+    expect(toolNames).toContain("update_async_task");
+    expect(toolNames).toContain("cancel_async_task");
+    expect(toolNames).toContain("list_async_tasks");
+  });
+
+  it("should compose with other middleware without conflicts", () => {
+    const asyncMiddleware = createAsyncSubAgentMiddleware({
+      asyncSubAgents: [sampleAgent],
+    });
+    const fsMiddleware = createFilesystemMiddleware();
+    const agent = createAgent({
+      model: SAMPLE_MODEL,
+      middleware: [asyncMiddleware, fsMiddleware],
+      tools: [],
+    });
+    const channels = Object.keys((agent as any).graph?.channels || {});
+    expect(channels).toContain("asyncTasks");
+    expect(channels).toContain("files");
+
+    const tools = (agent as any).graph?.nodes?.tools?.bound?.tools || [];
+    const toolNames = tools.map((t: any) => t.name);
+    expect(toolNames).toContain("start_async_task");
+    expect(toolNames).toContain("ls");
   });
 });
