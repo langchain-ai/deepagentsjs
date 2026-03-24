@@ -21,7 +21,7 @@
  * ```
  *
  * You also need a sandbox template created in your LangSmith workspace.
- * The default template name used here is `"deepagents-cli"`.
+ * The default template name used here is `"deepagents"`.
  *
  * ## Running the Example
  *
@@ -69,7 +69,7 @@ async function main() {
   console.log("Creating LangSmith Sandbox...\n");
 
   const backend = await LangSmithSandbox.create({
-    templateName: "deepagents-cli",
+    templateName: "deepagents",
   });
 
   console.log(`Sandbox created with ID: ${backend.id}\n`);
