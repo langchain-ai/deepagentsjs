@@ -1,4 +1,4 @@
-import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
+import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 import { withRetry } from "../sandbox.js";
 
 /**
@@ -7,7 +7,7 @@ import { withRetry } from "../sandbox.js";
  * These tests use both the shared sandbox (for id/isRunning checks) and
  * temporary sandboxes (for close and two-step initialization).
  */
-export function registerLifecycleTests<T extends AnySandboxInstance>(
+export function registerLifecycleTests<T extends SandboxInstance>(
   getShared: () => T,
   config: StandardTestsConfig<T>,
   timeout: number,

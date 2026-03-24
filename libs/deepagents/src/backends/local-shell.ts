@@ -19,10 +19,7 @@ import type {
   EditResult,
   ExecuteResponse,
   FileInfo,
-  GlobResult,
-  LsResult,
-  ReadResult,
-  SandboxBackendProtocolV2,
+  SandboxBackendProtocol,
 } from "./protocol.js";
 import { SandboxError } from "./protocol.js";
 
@@ -133,7 +130,7 @@ export interface LocalShellBackendOptions {
  */
 export class LocalShellBackend
   extends FilesystemBackend
-  implements SandboxBackendProtocolV2
+  implements SandboxBackendProtocol
 {
   #timeout: number;
   #maxOutputBytes: number;
@@ -221,10 +218,14 @@ export class LocalShellBackend
     filePath: string,
     offset: number = 0,
     limit: number = 500,
-  ): Promise<ReadResult> {
+  ): Promise<string> {
     const result = await super.read(filePath, offset, limit);
-    if (result.error?.includes("ENOENT")) {
-      return { error: `File '${filePath}' not found` };
+    if (
+      typeof result === "string" &&
+      result.startsWith("Error reading file") &&
+      result.includes("ENOENT")
+    ) {
+      return `Error: File '${filePath}' not found`;
     }
     return result;
   }
@@ -248,35 +249,29 @@ export class LocalShellBackend
   /**
    * List directory contents, returning paths relative to rootDir.
    */
-  override async ls(dirPath: string): Promise<LsResult> {
-    const result = await super.ls(dirPath);
-    if (result.error) {
-      return result;
-    }
-
+  override async lsInfo(dirPath: string): Promise<FileInfo[]> {
+    const results = await super.lsInfo(dirPath);
     if (this.virtualMode) {
-      return result;
+      return results;
     }
-
     const cwdPrefix = this.cwd.endsWith(path.sep)
       ? this.cwd
       : this.cwd + path.sep;
-    const files = (result.files || []).map((info) => ({
+    return results.map((info) => ({
       ...info,
       path: info.path.startsWith(cwdPrefix)
         ? info.path.slice(cwdPrefix.length)
         : info.path,
     }));
-    return { files };
   }
 
   /**
    * Glob matching that returns relative paths and includes directories.
    */
-  override async glob(
+  override async globInfo(
     pattern: string,
     searchPath: string = "/",
-  ): Promise<GlobResult> {
+  ): Promise<FileInfo[]> {
     if (pattern.startsWith("/")) {
       pattern = pattern.substring(1);
     }
@@ -290,9 +285,9 @@ export class LocalShellBackend
 
     try {
       const stat = await fs.stat(resolvedSearchPath);
-      if (!stat.isDirectory()) return { files: [] };
+      if (!stat.isDirectory()) return [];
     } catch {
-      return { files: [] };
+      return [];
     }
 
     const formatPath = (rel: string) => (this.virtualMode ? `/${rel}` : rel);
@@ -346,7 +341,7 @@ export class LocalShellBackend
       (info): info is FileInfo => info !== null,
     );
     results.sort((a, b) => a.path.localeCompare(b.path));
-    return { files: results };
+    return results;
   }
 
   /**

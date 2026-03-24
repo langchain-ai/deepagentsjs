@@ -1,12 +1,11 @@
-import { adaptSandboxInstance } from "../adapter.js";
-import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
+import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register detailed edit() tests (single/multi occurrence, replaceAll,
  * not found, special chars, multiline, delete, identical, unicode,
  * whitespace, long strings, line endings, partial match).
  */
-export function registerEditTests<T extends AnySandboxInstance>(
+export function registerEditTests<T extends SandboxInstance>(
   getShared: () => T,
   config: StandardTestsConfig<T>,
   timeout: number,
@@ -17,7 +16,7 @@ export function registerEditTests<T extends AnySandboxInstance>(
     it(
       "should edit a single occurrence",
       async () => {
-        const shared = adaptSandboxInstance(getShared());
+        const shared = getShared();
         const filePath = config.resolvePath("ed-single.txt");
         await shared.write(filePath, "Hello world\nGoodbye world\nHello again");
 
@@ -27,8 +26,8 @@ export function registerEditTests<T extends AnySandboxInstance>(
         expect(result.occurrences).toBe(1);
 
         const content = await shared.read(filePath);
-        expect(content.content).toContain("Farewell world");
-        expect(content.content).not.toContain("Goodbye");
+        expect(content).toContain("Farewell world");
+        expect(content).not.toContain("Goodbye");
       },
       timeout,
     );
@@ -36,7 +35,7 @@ export function registerEditTests<T extends AnySandboxInstance>(
     it(
       "should fail with multiple occurrences without replaceAll",
       async () => {
-        const shared = adaptSandboxInstance(getShared());
+        const shared = getShared();
         const filePath = config.resolvePath("ed-multi-fail.txt");
         await shared.write(filePath, "apple\nbanana\napple\norange\napple");
 
@@ -47,8 +46,8 @@ export function registerEditTests<T extends AnySandboxInstance>(
 
         // Verify file unchanged
         const content = await shared.read(filePath);
-        expect(content.content).toContain("apple");
-        expect(content.content).not.toContain("pear");
+        expect(content).toContain("apple");
+        expect(content).not.toContain("pear");
       },
       timeout,
     );
@@ -109,7 +108,7 @@ export function registerEditTests<T extends AnySandboxInstance>(
     it(
       "should handle special characters and regex metacharacters",
       async () => {
-        const shared = adaptSandboxInstance(getShared());
+        const shared = getShared();
         const filePath = config.resolvePath("ed-special.txt");
         await shared.write(
           filePath,
@@ -126,8 +125,8 @@ export function registerEditTests<T extends AnySandboxInstance>(
 
         // Verify changes
         const content = await shared.read(filePath);
-        expect(content.content).toContain("$200.00");
-        expect(content.content).toContain("[0-9]+");
+        expect(content).toContain("$200.00");
+        expect(content).toContain("[0-9]+");
       },
       timeout,
     );
@@ -135,7 +134,7 @@ export function registerEditTests<T extends AnySandboxInstance>(
     it(
       "should handle multiline string replacement",
       async () => {
-        const shared = adaptSandboxInstance(getShared());
+        const shared = getShared();
         const filePath = config.resolvePath("ed-multiline.txt");
         await shared.write(filePath, "Line 1\nLine 2\nLine 3");
 
@@ -149,9 +148,9 @@ export function registerEditTests<T extends AnySandboxInstance>(
         expect(result.occurrences).toBe(1);
 
         const content = await shared.read(filePath);
-        expect(content.content).toContain("Combined");
-        expect(content.content).toContain("Line 3");
-        expect(content.content).not.toContain("Line 1");
+        expect(content).toContain("Combined");
+        expect(content).toContain("Line 3");
+        expect(content).not.toContain("Line 1");
       },
       timeout,
     );
@@ -159,7 +158,7 @@ export function registerEditTests<T extends AnySandboxInstance>(
     it(
       "should delete content by replacing with empty string",
       async () => {
-        const shared = adaptSandboxInstance(getShared());
+        const shared = getShared();
         const filePath = config.resolvePath("ed-delete.txt");
         await shared.write(
           filePath,
@@ -172,9 +171,9 @@ export function registerEditTests<T extends AnySandboxInstance>(
         expect(result.occurrences).toBe(1);
 
         const content = await shared.read(filePath);
-        expect(content.content).toContain("Keep this");
-        expect(content.content).toContain("Keep this too");
-        expect(content.content).not.toContain("Delete this part");
+        expect(content).toContain("Keep this");
+        expect(content).toContain("Keep this too");
+        expect(content).not.toContain("Delete this part");
       },
       timeout,
     );
@@ -182,7 +181,7 @@ export function registerEditTests<T extends AnySandboxInstance>(
     it(
       "should handle identical old and new strings",
       async () => {
-        const shared = adaptSandboxInstance(getShared());
+        const shared = getShared();
         const filePath = config.resolvePath("ed-identical.txt");
         await shared.write(filePath, "Same text");
 
@@ -193,7 +192,7 @@ export function registerEditTests<T extends AnySandboxInstance>(
         expect(result.occurrences).toBe(1);
 
         const content = await shared.read(filePath);
-        expect(content.content).toContain("Same text");
+        expect(content).toContain("Same text");
       },
       timeout,
     );
@@ -201,7 +200,7 @@ export function registerEditTests<T extends AnySandboxInstance>(
     it(
       "should handle unicode content",
       async () => {
-        const shared = adaptSandboxInstance(getShared());
+        const shared = getShared();
         const filePath = config.resolvePath("ed-unicode.txt");
         await shared.write(
           filePath,
@@ -214,8 +213,8 @@ export function registerEditTests<T extends AnySandboxInstance>(
         expect(result.occurrences).toBe(1);
 
         const content = await shared.read(filePath);
-        expect(content.content).toContain("\u{1F30D}");
-        expect(content.content).not.toContain("\u{1F44B}");
+        expect(content).toContain("\u{1F30D}");
+        expect(content).not.toContain("\u{1F44B}");
       },
       timeout,
     );
@@ -223,7 +222,7 @@ export function registerEditTests<T extends AnySandboxInstance>(
     it(
       "should handle whitespace-only strings",
       async () => {
-        const shared = adaptSandboxInstance(getShared());
+        const shared = getShared();
         const filePath = config.resolvePath("ed-whitespace.txt");
         await shared.write(filePath, "Line1    Line2"); // 4 spaces
 
@@ -233,7 +232,7 @@ export function registerEditTests<T extends AnySandboxInstance>(
         expect(result.occurrences).toBe(1);
 
         const content = await shared.read(filePath);
-        expect(content.content).toContain("Line1 Line2");
+        expect(content).toContain("Line1 Line2");
       },
       timeout,
     );
@@ -241,7 +240,7 @@ export function registerEditTests<T extends AnySandboxInstance>(
     it(
       "should handle very long old and new strings",
       async () => {
-        const shared = adaptSandboxInstance(getShared());
+        const shared = getShared();
         const filePath = config.resolvePath("ed-long.txt");
         const oldString = "x".repeat(1000);
         const newString = "y".repeat(1000);
@@ -253,8 +252,8 @@ export function registerEditTests<T extends AnySandboxInstance>(
         expect(result.occurrences).toBe(1);
 
         const content = await shared.read(filePath);
-        expect(content.content).toContain("y".repeat(100)); // partial check
-        expect(content.content).not.toContain("x".repeat(100));
+        expect(content).toContain("y".repeat(100)); // partial check
+        expect(content).not.toContain("x".repeat(100));
       },
       timeout,
     );
@@ -262,7 +261,7 @@ export function registerEditTests<T extends AnySandboxInstance>(
     it(
       "should preserve line endings correctly",
       async () => {
-        const shared = adaptSandboxInstance(getShared());
+        const shared = getShared();
         const filePath = config.resolvePath("ed-line-endings.txt");
         await shared.write(filePath, "Line 1\nLine 2\nLine 3\n");
 
@@ -271,9 +270,9 @@ export function registerEditTests<T extends AnySandboxInstance>(
         expect(result.error).toBeUndefined();
 
         const content = await shared.read(filePath);
-        expect(content.content).toContain("Line 1");
-        expect(content.content).toContain("Modified Line 2");
-        expect(content.content).toContain("Line 3");
+        expect(content).toContain("Line 1");
+        expect(content).toContain("Modified Line 2");
+        expect(content).toContain("Line 3");
       },
       timeout,
     );

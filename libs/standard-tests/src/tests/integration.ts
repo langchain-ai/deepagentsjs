@@ -1,10 +1,9 @@
-import { adaptSandboxInstance } from "../adapter.js";
-import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
+import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register integration workflow tests that combine multiple operations.
  */
-export function registerIntegrationTests<T extends AnySandboxInstance>(
+export function registerIntegrationTests<T extends SandboxInstance>(
   getShared: () => T,
   config: StandardTestsConfig<T>,
   timeout: number,
@@ -15,7 +14,7 @@ export function registerIntegrationTests<T extends AnySandboxInstance>(
     it(
       "should complete a write-read-edit-read workflow",
       async () => {
-        const shared = adaptSandboxInstance(getShared());
+        const shared = getShared();
         const filePath = config.resolvePath("intg-workflow.txt");
 
         // Write initial content
@@ -24,7 +23,7 @@ export function registerIntegrationTests<T extends AnySandboxInstance>(
 
         // Read it back
         const content = await shared.read(filePath);
-        expect(content.content).toContain("Original content");
+        expect(content).toContain("Original content");
 
         // Edit it
         const editResult = await shared.edit(filePath, "Original", "Modified");
@@ -32,8 +31,8 @@ export function registerIntegrationTests<T extends AnySandboxInstance>(
 
         // Read again to verify
         const updatedContent = await shared.read(filePath);
-        expect(updatedContent.content).toContain("Modified content");
-        expect(updatedContent.content).not.toContain("Original");
+        expect(updatedContent).toContain("Modified content");
+        expect(updatedContent).not.toContain("Original");
       },
       timeout,
     );
@@ -41,7 +40,7 @@ export function registerIntegrationTests<T extends AnySandboxInstance>(
     it(
       "should handle complex directory operations",
       async () => {
-        const shared = adaptSandboxInstance(getShared());
+        const shared = getShared();
         const baseDir = config.resolvePath("intg-complex");
 
         // Create directory structure with files
@@ -51,24 +50,28 @@ export function registerIntegrationTests<T extends AnySandboxInstance>(
         await shared.write(`${baseDir}/subdir2/file3.txt`, "file 3");
 
         // List root directory
-        const lsResult = await shared.ls(baseDir);
-        expect(lsResult.error).toBeUndefined();
-        const result = lsResult.files || [];
-        const lsPaths = result.map((info) => info.path.replace(/\/$/, ""));
+        const lsResult = await shared.lsInfo(baseDir);
+        const lsPaths = lsResult.map((info) => info.path.replace(/\/$/, ""));
         expect(lsPaths).toContain(`${baseDir}/root.txt`);
         expect(lsPaths).toContain(`${baseDir}/subdir1`);
         expect(lsPaths).toContain(`${baseDir}/subdir2`);
 
         // Glob for txt files
-        const globResult = await shared.glob("**/*.txt", baseDir);
-        expect(globResult.error).toBeUndefined();
-        const files = globResult.files || [];
-        expect(files.length).toBe(3);
+        const globResult = await shared.globInfo("**/*.txt", baseDir);
+        expect(globResult.length).toBe(3);
 
         // Grep for a pattern
-        const grepResult = await shared.grep("file", baseDir);
-        expect(grepResult.error).toBeUndefined();
-        expect(grepResult.matches!.length).toBeGreaterThanOrEqual(3);
+        const grepResult = await shared.grepRaw("file", baseDir);
+        expect(Array.isArray(grepResult)).toBe(true);
+        expect(
+          (
+            grepResult as Array<{
+              path: string;
+              line: number;
+              text: string;
+            }>
+          ).length,
+        ).toBeGreaterThanOrEqual(3);
       },
       timeout,
     );

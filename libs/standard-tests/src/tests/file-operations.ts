@@ -1,10 +1,9 @@
-import { adaptSandboxInstance } from "../adapter.js";
-import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
+import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register basic file operation tests (upload, download, read, write, edit, multiple files).
  */
-export function registerFileOperationTests<T extends AnySandboxInstance>(
+export function registerFileOperationTests<T extends SandboxInstance>(
   getShared: () => T,
   config: StandardTestsConfig<T>,
   timeout: number,
@@ -74,7 +73,7 @@ export function registerFileOperationTests<T extends AnySandboxInstance>(
     it(
       "should use inherited read method from BaseSandbox",
       async () => {
-        const shared = adaptSandboxInstance(getShared());
+        const shared = getShared();
         const filePath = config.resolvePath("read-test.txt");
 
         // Create a file first
@@ -86,7 +85,7 @@ export function registerFileOperationTests<T extends AnySandboxInstance>(
         // Use inherited read method
         const content = await shared.read(filePath);
 
-        expect(content.content).toContain("Read test content");
+        expect(content).toContain("Read test content");
       },
       timeout,
     );

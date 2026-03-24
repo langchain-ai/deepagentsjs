@@ -1,9 +1,9 @@
-import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
+import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register command execution tests (echo, exit codes, multiline, stderr, env vars).
  */
-export function registerCommandExecutionTests<T extends AnySandboxInstance>(
+export function registerCommandExecutionTests<T extends SandboxInstance>(
   getShared: () => T,
   config: StandardTestsConfig<T>,
   timeout: number,

@@ -448,8 +448,8 @@ try {
         },
       });
 
-      const result = await sandbox.read("/src/index.js");
-      expect(result.content).toContain("console.log('Hello from VFS!')");
+      const content = await sandbox.read("/src/index.js");
+      expect(content).toContain("console.log('Hello from VFS!')");
     });
 
     it("should access initialFiles with leading slash via downloadFiles()", async () => {
@@ -466,7 +466,7 @@ try {
       expect(content).toBe("console.log('Hello from VFS!')");
     });
 
-    it("should list initialFiles with leading slash via ls()", async () => {
+    it("should list initialFiles with leading slash via lsInfo()", async () => {
       sandbox = await VfsSandbox.create({
         initialFiles: {
           "/src/index.js": "console.log('Hello')",
@@ -475,9 +475,7 @@ try {
       });
 
       // Leading `/` is normalized to relative paths for temp-dir execution
-      const result = await sandbox.ls("/src");
-      expect(result.error).toBeUndefined();
-      const entries = result.files || [];
+      const entries = await sandbox.lsInfo("/src");
       const paths = entries.map((e) => e.path.replace(/\/$/, ""));
       expect(paths).toContain("src/index.js");
       expect(paths).toContain("src/utils.js");

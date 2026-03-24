@@ -21,22 +21,17 @@ import {
 } from "@langchain/langgraph";
 import { z } from "zod/v4";
 import type {
-  AnyBackendProtocol,
+  BackendProtocol,
   BackendFactory,
-  BackendProtocolV2,
   FileData,
   StateAndStore,
 } from "../backends/protocol.js";
-import { isSandboxBackend, isSandboxProtocol } from "../backends/protocol.js";
+import { isSandboxBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
 import {
   sanitizeToolCallId,
   formatContentWithLineNumbers,
   truncateIfTooLong,
-  getMimeType,
-  isTextMimeType,
-  adaptBackendProtocol,
-  adaptSandboxProtocol,
 } from "../backends/utils.js";
 
 /**
@@ -83,13 +78,6 @@ export const NUM_CHARS_PER_TOKEN = 4;
  */
 export const DEFAULT_READ_LINE_OFFSET = 0;
 export const DEFAULT_READ_LINE_LIMIT = 100;
-
-/**
- * Maximum size for binary (non-text) files read via read_file, in bytes.
- * Base64-encoded content is ~33% larger, so 10MB raw ≈ 13.3MB in context.
- * This keeps inline multimodal payloads within all major provider limits.
- */
-export const MAX_BINARY_READ_SIZE_BYTES = 10 * 1024 * 1024;
 
 /**
  * Template for truncation message in read_file.
@@ -156,28 +144,13 @@ import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
 
 /**
- * Zod schema for legacy FileDataV1 (content as line array).
+ * Zod v3 schema for FileData (re-export from backends)
  */
-export const FileDataV1Schema = z.object({
+export const FileDataSchema = z.object({
   content: z.array(z.string()),
   created_at: z.string(),
   modified_at: z.string(),
 });
-
-/**
- * Zod schema for FileDataV2 (content as string for text or Uint8Array for binary).
- */
-export const FileDataV2Schema = z.object({
-  content: z.union([z.string(), z.instanceof(Uint8Array)]),
-  mimeType: z.string(),
-  created_at: z.string(),
-  modified_at: z.string(),
-});
-
-/**
- * Zod v3 schema for FileData (re-export from backends)
- */
-export const FileDataSchema = z.union([FileDataV1Schema, FileDataV2Schema]);
 
 /**
  * Type for the files state record.
@@ -258,16 +231,13 @@ const FilesystemStateSchema = new StateSchema({
  * @param stateAndStore - State and store container for backend initialization
  */
 function getBackend(
-  backend: AnyBackendProtocol | BackendFactory,
+  backend: BackendProtocol | BackendFactory,
   stateAndStore: StateAndStore,
-): BackendProtocolV2 {
-  const actualBackend =
-    typeof backend === "function" ? backend(stateAndStore) : backend;
-
-  // Check if it's a sandbox protocol and adapt accordingly
-  return isSandboxProtocol(actualBackend)
-    ? adaptSandboxProtocol(actualBackend)
-    : adaptBackendProtocol(actualBackend);
+): BackendProtocol {
+  if (typeof backend === "function") {
+    return backend(stateAndStore);
+  }
+  return backend;
 }
 
 // System prompts
@@ -397,7 +367,7 @@ Use this tool to run commands, scripts, tests, builds, and other shell operation
  * Create ls tool using backend.
  */
 function createLsTool(
-  backend: AnyBackendProtocol | BackendFactory,
+  backend: BackendProtocol | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -409,13 +379,8 @@ function createLsTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const path = input.path || "/";
-      const lsResult = await resolvedBackend.ls(path);
+      const infos = await resolvedBackend.lsInfo(path);
 
-      if (lsResult.error) {
-        return `Error listing files: ${lsResult.error}`;
-      }
-
-      const infos = lsResult.files || [];
       if (infos.length === 0) {
         return `No files found in ${path}`;
       }
@@ -456,7 +421,7 @@ function createLsTool(
  * Create read_file tool using backend.
  */
 function createReadFileTool(
-  backend: AnyBackendProtocol | BackendFactory,
+  backend: BackendProtocol | BackendFactory,
   options: {
     customDescription: string | undefined;
     toolTokenLimitBeforeEvict: number | null;
@@ -475,77 +440,18 @@ function createReadFileTool(
         offset = DEFAULT_READ_LINE_OFFSET,
         limit = DEFAULT_READ_LINE_LIMIT,
       } = input;
-
-      const readResult = await resolvedBackend.read(file_path, offset, limit);
-      if (readResult.error) {
-        return [{ type: "text", text: `Error: ${readResult.error}` }];
-      }
-
-      const mimeType = readResult.mimeType ?? getMimeType(file_path);
-
-      if (!isTextMimeType(mimeType)) {
-        const binaryContent = readResult.content;
-        if (!binaryContent) {
-          return [
-            {
-              type: "text",
-              text: `Error: expected binary content for '${file_path}'`,
-            },
-          ];
-        }
-
-        // Content may arrive as:
-        // - Uint8Array (direct read)
-        // - string (already base64)
-        // - plain object with numeric keys (Uint8Array lost through serialization)
-        let base64Data: string;
-        if (typeof binaryContent === "string") {
-          base64Data = binaryContent;
-        } else if (ArrayBuffer.isView(binaryContent)) {
-          base64Data = Buffer.from(binaryContent).toString("base64");
-        } else {
-          const values = Object.values(binaryContent as Record<string, number>);
-          base64Data = Buffer.from(new Uint8Array(values)).toString("base64");
-        }
-
-        const sizeBytes = Math.ceil((base64Data.length * 3) / 4);
-
-        if (sizeBytes > MAX_BINARY_READ_SIZE_BYTES) {
-          return [
-            {
-              type: "text",
-              text: `Error: file too large to read (${Math.round(sizeBytes / (1024 * 1024))}MB exceeds ${MAX_BINARY_READ_SIZE_BYTES / (1024 * 1024)}MB limit for binary files)`,
-            },
-          ];
-        }
-
-        if (mimeType.startsWith("image/")) {
-          return [{ type: "image", mimeType, data: base64Data }];
-        }
-        if (mimeType.startsWith("audio/")) {
-          return [{ type: "audio", mimeType, data: base64Data }];
-        }
-        if (mimeType.startsWith("video/")) {
-          return [{ type: "video", mimeType, data: base64Data }];
-        }
-        return [{ type: "file", mimeType, data: base64Data }];
-      }
-
-      let content =
-        typeof readResult.content === "string" ? readResult.content : "";
+      let result = await resolvedBackend.read(file_path, offset, limit);
 
       // Enforce line limit on result (in case backend returns more)
-      const lines = content.split("\n");
+      const lines = result.split("\n");
       if (lines.length > limit) {
-        content = lines.slice(0, limit).join("\n");
+        result = lines.slice(0, limit).join("\n");
       }
-
-      let formatted = formatContentWithLineNumbers(content, offset + 1);
 
       // Check if result exceeds token threshold and truncate if necessary
       if (
         toolTokenLimitBeforeEvict &&
-        formatted.length >= NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict
+        result.length >= NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict
       ) {
         // Calculate truncation message length to ensure final result stays under threshold
         const truncationMsg = READ_FILE_TRUNCATION_MSG.replace(
@@ -555,10 +461,10 @@ function createReadFileTool(
         const maxContentLength =
           NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict -
           truncationMsg.length;
-        formatted = formatted.substring(0, maxContentLength) + truncationMsg;
+        result = result.substring(0, maxContentLength) + truncationMsg;
       }
 
-      return [{ type: "text", text: formatted }];
+      return result;
     },
     {
       name: "read_file",
@@ -584,7 +490,7 @@ function createReadFileTool(
  * Create write_file tool using backend.
  */
 function createWriteFileTool(
-  backend: AnyBackendProtocol | BackendFactory,
+  backend: BackendProtocol | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -636,7 +542,7 @@ function createWriteFileTool(
  * Create edit_file tool using backend.
  */
 function createEditFileTool(
-  backend: AnyBackendProtocol | BackendFactory,
+  backend: BackendProtocol | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -699,7 +605,7 @@ function createEditFileTool(
  * Create glob tool using backend.
  */
 function createGlobTool(
-  backend: AnyBackendProtocol | BackendFactory,
+  backend: BackendProtocol | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -711,13 +617,8 @@ function createGlobTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const { pattern, path = "/" } = input;
-      const globResult = await resolvedBackend.glob(pattern, path);
+      const infos = await resolvedBackend.globInfo(pattern, path);
 
-      if (globResult.error) {
-        return `Error finding files: ${globResult.error}`;
-      }
-
-      const infos = globResult.files || [];
       if (infos.length === 0) {
         return `No files found matching pattern '${pattern}'`;
       }
@@ -749,7 +650,7 @@ function createGlobTool(
  * Create grep tool using backend.
  */
 function createGrepTool(
-  backend: AnyBackendProtocol | BackendFactory,
+  backend: BackendProtocol | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -761,23 +662,21 @@ function createGrepTool(
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
       const { pattern, path = "/", glob = null } = input;
-      const result = await resolvedBackend.grep(pattern, path, glob);
+      const result = await resolvedBackend.grepRaw(pattern, path, glob);
 
       // If string, it's an error
-      if (result.error) {
-        return result.error;
+      if (typeof result === "string") {
+        return result;
       }
 
-      const matches = result.matches ?? [];
-
-      if (matches.length === 0) {
+      if (result.length === 0) {
         return `No matches found for pattern '${pattern}'`;
       }
 
       // Format output: group by file
       const lines: string[] = [];
       let currentFile: string | null = null;
-      for (const match of matches) {
+      for (const match of result) {
         if (match.path !== currentFile) {
           currentFile = match.path;
           lines.push(`\n${currentFile}:`);
@@ -816,7 +715,7 @@ function createGrepTool(
  * Create execute tool using backend.
  */
 function createExecuteTool(
-  backend: AnyBackendProtocol | BackendFactory,
+  backend: BackendProtocol | BackendFactory,
   options: { customDescription: string | undefined },
 ) {
   const { customDescription } = options;
@@ -868,7 +767,7 @@ function createExecuteTool(
  */
 export interface FilesystemMiddlewareOptions {
   /** Backend instance or factory (default: StateBackend) */
-  backend?: AnyBackendProtocol | BackendFactory;
+  backend?: BackendProtocol | BackendFactory;
   /** Optional custom system prompt override */
   systemPrompt?: string | null;
   /** Optional custom tool descriptions override */

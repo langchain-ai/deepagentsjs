@@ -13,8 +13,8 @@ import type {
 class MockSandbox extends BaseSandbox {
   readonly id = "mock-sandbox-1";
 
-  // Store for simulating file operations (stores raw bytes)
-  private files: Map<string, Uint8Array> = new Map();
+  // Store for simulating file operations
+  private files: Map<string, string> = new Map();
 
   // Track executed commands for assertions
   public executedCommands: string[] = [];
@@ -48,15 +48,14 @@ class MockSandbox extends BaseSandbox {
       const pathMatch = command.match(/'([^']+)'\s*$/);
       if (pathMatch) {
         const filePath = pathMatch[1];
-        const bytes = this.files.get(filePath);
-        if (!bytes) {
+        const content = this.files.get(filePath);
+        if (!content) {
           return {
             output: "Error: File not found",
             exitCode: 1,
             truncated: false,
           };
         }
-        const content = new TextDecoder().decode(bytes);
         if (content.length === 0) {
           return {
             output: "System reminder: File exists but has empty contents",
@@ -80,8 +79,7 @@ class MockSandbox extends BaseSandbox {
         const pattern = patternMatch[1];
 
         const results: string[] = [];
-        for (const [filePath, bytes] of this.files) {
-          const content = new TextDecoder().decode(bytes);
+        for (const [filePath, content] of this.files) {
           const lines = content.split("\n");
           for (let i = 0; i < lines.length; i++) {
             if (lines[i].includes(pattern)) {
@@ -103,7 +101,8 @@ class MockSandbox extends BaseSandbox {
     const responses: FileUploadResponse[] = [];
     for (const [path, content] of files) {
       try {
-        this.files.set(path, content);
+        const contentStr = new TextDecoder().decode(content);
+        this.files.set(path, contentStr);
         responses.push({ path, error: null });
       } catch {
         responses.push({ path, error: "invalid_path" });
@@ -119,31 +118,20 @@ class MockSandbox extends BaseSandbox {
       if (content === undefined) {
         responses.push({ path, content: null, error: "file_not_found" });
       } else {
-        responses.push({ path, content, error: null });
+        const bytes = new TextEncoder().encode(content);
+        responses.push({ path, content: bytes, error: null });
       }
     }
     return responses;
   }
 
-  // Helper to add text files for testing
+  // Helper to add files for testing
   addFile(path: string, content: string) {
-    this.files.set(path, new TextEncoder().encode(content));
-  }
-
-  // Helper to add binary files for testing
-  addBinaryFile(path: string, content: Uint8Array) {
     this.files.set(path, content);
   }
 
-  // Helper to get file content as string
+  // Helper to get file content
   getFile(path: string): string | undefined {
-    const bytes = this.files.get(path);
-    if (!bytes) return undefined;
-    return new TextDecoder().decode(bytes);
-  }
-
-  // Helper to get file content as bytes
-  getBinaryFile(path: string): Uint8Array | undefined {
     return this.files.get(path);
   }
 }
@@ -166,13 +154,13 @@ describe("BaseSandbox", () => {
     });
   });
 
-  describe("ls", () => {
+  describe("lsInfo", () => {
     it("should list files via execute using find + stat", async () => {
       const sandbox = new MockSandbox();
       sandbox.addFile("/test.txt", "content");
       sandbox.addFile("/dir/nested.txt", "nested");
 
-      await sandbox.ls("/");
+      await sandbox.lsInfo("/");
       expect(sandbox.executedCommands.length).toBeGreaterThan(0);
       expect(sandbox.executedCommands[0]).toContain("find");
       expect(sandbox.executedCommands[0]).toContain("stat");
@@ -188,9 +176,8 @@ describe("BaseSandbox", () => {
         truncated: false,
       });
 
-      const result = await sandbox.ls("/nonexistent");
-      expect(result.error).toBeUndefined();
-      expect(result.files).toEqual([]);
+      const result = await sandbox.lsInfo("/nonexistent");
+      expect(result).toEqual([]);
     });
   });
 
@@ -200,98 +187,52 @@ describe("BaseSandbox", () => {
       sandbox.addFile("/test.txt", "line1\nline2\nline3");
 
       const result = await sandbox.read("/test.txt");
-      expect(result.error).toBeUndefined();
-      expect(result.content).toContain("line1");
-      expect(result.content).toContain("line2");
+      expect(result).toContain("line1");
+      expect(result).toContain("line2");
     });
 
     it("should return error for non-existent file", async () => {
       const sandbox = new MockSandbox();
 
       const result = await sandbox.read("/nonexistent.txt");
-      expect(result.error).toBeDefined();
-      expect(result.error).toContain("not found");
+      expect(result).toContain("Error");
+      expect(result).toContain("not found");
     });
 
-    it("should use execute (not downloadFiles) for text files", async () => {
+    it("should use execute (not downloadFiles) for efficiency", async () => {
       const sandbox = new MockSandbox();
       sandbox.addFile("/test.txt", "content");
 
       await sandbox.read("/test.txt");
-      // text files should go through execute with awk
+      // read should go through execute, not downloadFiles
       expect(sandbox.executedCommands.length).toBe(1);
       expect(sandbox.executedCommands[0]).toContain("awk");
-    });
-
-    describe("binary files", () => {
-      it("should return Uint8Array content for image files", async () => {
-        const sandbox = new MockSandbox();
-        const binaryContent = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-        sandbox.addBinaryFile("/image.png", binaryContent);
-
-        const result = await sandbox.read("/image.png");
-        expect(result.error).toBeUndefined();
-        expect(result.content).toBeInstanceOf(Uint8Array);
-        expect(result.content).toEqual(binaryContent);
-      });
-
-      it("should use downloadFiles for binary files, not execute", async () => {
-        const sandbox = new MockSandbox();
-        sandbox.addBinaryFile("/image.png", new Uint8Array([1, 2, 3]));
-
-        await sandbox.read("/image.png");
-        // binary files should NOT use awk command
-        expect(sandbox.executedCommands.length).toBe(0);
-      });
-
-      it("should return error for non-existent binary file", async () => {
-        const sandbox = new MockSandbox();
-
-        const result = await sandbox.read("/nonexistent.png");
-        expect(result.error).toBeDefined();
-        expect(result.error).toContain("not found");
-      });
     });
   });
 
   describe("readRaw", () => {
-    it("should read text file via downloadFiles and return v2 format", async () => {
+    it("should read file via downloadFiles", async () => {
       const sandbox = new MockSandbox();
       sandbox.addFile("/test.txt", "line1\nline2\nline3");
 
       const result = await sandbox.readRaw("/test.txt");
-      expect(result.error).toBeUndefined();
-      // v2 format: content is a string, not an array
-      expect(result.data!.content).toBe("line1\nline2\nline3");
-      expect(typeof result.data!.content).toBe("string");
+      expect(result.content).toContain("line1");
+      expect(result.content).toContain("line2");
       // Should NOT go through execute
       expect(sandbox.executedCommands.length).toBe(0);
     });
 
-    it("should return error for non-existent file", async () => {
+    it("should throw for non-existent file", async () => {
       const sandbox = new MockSandbox();
 
-      const result = await sandbox.readRaw("/nonexistent.txt");
-      expect(result.error).toBeDefined();
-      expect(result.error).toContain("not found");
-    });
-
-    describe("binary files", () => {
-      it("should return Uint8Array content for binary files", async () => {
-        const sandbox = new MockSandbox();
-        const binaryContent = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-        sandbox.addBinaryFile("/image.png", binaryContent);
-
-        const result = await sandbox.readRaw("/image.png");
-        expect(result.error).toBeUndefined();
-        expect(result.data!.content).toBeInstanceOf(Uint8Array);
-        expect(result.data!.content).toEqual(binaryContent);
-      });
+      await expect(sandbox.readRaw("/nonexistent.txt")).rejects.toThrow(
+        "not found",
+      );
     });
   });
 
   describe("write", () => {
-    it("should write text file via uploadFiles", async () => {
+    it("should write file via uploadFiles", async () => {
       const sandbox = new MockSandbox();
 
       const result = await sandbox.write("/new.txt", "new content");
@@ -312,22 +253,6 @@ describe("BaseSandbox", () => {
       const result = await sandbox.write("/existing.txt", "content");
       expect(result.error).toBeDefined();
       expect(result.error).toContain("already exists");
-    });
-
-    describe("binary files", () => {
-      it("should decode base64 and write binary content", async () => {
-        const sandbox = new MockSandbox();
-        const binaryContent = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-        const base64Content = Buffer.from(binaryContent).toString("base64");
-
-        const result = await sandbox.write("/image.png", base64Content);
-        expect(result.error).toBeUndefined();
-        expect(result.path).toBe("/image.png");
-
-        // Verify binary was written correctly
-        const written = sandbox.getBinaryFile("/image.png");
-        expect(Buffer.from(written!).toString("base64")).toBe(base64Content);
-      });
     });
   });
 
@@ -605,22 +530,23 @@ describe("BaseSandbox", () => {
     });
   });
 
-  describe("grep", () => {
-    it("should search files via grep command and return GrepResult", async () => {
+  describe("grepRaw", () => {
+    it("should search files via grep command", async () => {
       const sandbox = new MockSandbox();
       sandbox.addFile("/test.txt", "hello world\ngoodbye world");
 
-      const result = await sandbox.grep("hello", "/");
-      expect(result.error).toBeUndefined();
-      expect(result.matches).toBeDefined();
-      expect(result.matches!.length).toBe(1);
-      expect(result.matches![0].path).toBe("/test.txt");
-      expect(result.matches![0].text).toBe("hello world");
+      const result = await sandbox.grepRaw("hello", "/");
+      expect(Array.isArray(result)).toBe(true);
+      if (Array.isArray(result)) {
+        expect(result.length).toBe(1);
+        expect(result[0].path).toBe("/test.txt");
+        expect(result[0].text).toBe("hello world");
+      }
       // Should use execute with grep
       expect(sandbox.executedCommands[0]).toContain("grep");
     });
 
-    it("should return empty matches array for no matches", async () => {
+    it("should return empty array for no matches", async () => {
       const sandbox = new MockSandbox();
       sandbox.execute = vi.fn().mockResolvedValue({
         output: "",
@@ -628,29 +554,15 @@ describe("BaseSandbox", () => {
         truncated: false,
       });
 
-      const result = await sandbox.grep("nonexistent", "/");
-      expect(result.error).toBeUndefined();
-      expect(result.matches).toBeDefined();
-      expect(result.matches!.length).toBe(0);
-    });
-
-    it("should skip binary files in grep results", async () => {
-      const sandbox = new MockSandbox();
-      // Mock grep returning matches from both text and binary files
-      sandbox.execute = vi.fn().mockResolvedValue({
-        output: "/test.txt:1:hello world\n/image.png:1:hello binary",
-        exitCode: 0,
-        truncated: false,
-      });
-
-      const result = await sandbox.grep("hello", "/");
-      expect(result.matches!.length).toBe(1);
-      expect(result.matches![0].path).toBe("/test.txt");
-      // image.png should be filtered out based on extension
+      const result = await sandbox.grepRaw("nonexistent", "/");
+      expect(Array.isArray(result)).toBe(true);
+      if (Array.isArray(result)) {
+        expect(result.length).toBe(0);
+      }
     });
   });
 
-  describe("glob", () => {
+  describe("globInfo", () => {
     it("should find matching files via execute with find + stat", async () => {
       const sandbox = new MockSandbox();
       const now = Math.floor(Date.now() / 1000);
@@ -664,13 +576,12 @@ describe("BaseSandbox", () => {
         truncated: false,
       });
 
-      const result = await sandbox.glob("*.py", "/");
-      expect(result.error).toBeUndefined();
+      const result = await sandbox.globInfo("*.py", "/");
       // Only .py files should match, readme.md should be filtered out
-      expect(result.files!.length).toBe(2);
-      expect(result.files!.some((f) => f.path === "test.py")).toBe(true);
-      expect(result.files!.some((f) => f.path === "main.py")).toBe(true);
-      expect(result.files!.some((f) => f.path === "readme.md")).toBe(false);
+      expect(result.length).toBe(2);
+      expect(result.some((f) => f.path === "test.py")).toBe(true);
+      expect(result.some((f) => f.path === "main.py")).toBe(true);
+      expect(result.some((f) => f.path === "readme.md")).toBe(false);
     });
 
     it("should support recursive ** glob patterns", async () => {
@@ -687,13 +598,10 @@ describe("BaseSandbox", () => {
         truncated: false,
       });
 
-      const result = await sandbox.glob("**/*.ts", "/workspace");
-      expect(result.error).toBeUndefined();
-      expect(result.files!.length).toBe(2);
-      expect(result.files!.some((f) => f.path === "src/main.ts")).toBe(true);
-      expect(result.files!.some((f) => f.path === "src/utils/helper.ts")).toBe(
-        true,
-      );
+      const result = await sandbox.globInfo("**/*.ts", "/workspace");
+      expect(result.length).toBe(2);
+      expect(result.some((f) => f.path === "src/main.ts")).toBe(true);
+      expect(result.some((f) => f.path === "src/utils/helper.ts")).toBe(true);
     });
 
     it("should return empty array for no matches", async () => {
@@ -704,9 +612,8 @@ describe("BaseSandbox", () => {
         truncated: false,
       });
 
-      const result = await sandbox.glob("*.nonexistent", "/");
-      expect(result.error).toBeUndefined();
-      expect(result.files).toEqual([]);
+      const result = await sandbox.globInfo("*.nonexistent", "/");
+      expect(result).toEqual([]);
     });
   });
 

@@ -1,13 +1,12 @@
-import { adaptSandboxInstance } from "../adapter.js";
 import { withRetry } from "../sandbox.js";
-import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
+import type { SandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
  * Register initialFiles tests (basic, deeply nested, empty).
  *
  * These tests create temporary sandboxes and tear them down immediately.
  */
-export function registerInitialFilesTests<T extends AnySandboxInstance>(
+export function registerInitialFilesTests<T extends SandboxInstance>(
   config: StandardTestsConfig<T>,
   timeout: number,
 ): void {
@@ -116,8 +115,8 @@ export function registerInitialFilesTests<T extends AnySandboxInstance>(
         );
 
         try {
-          const content = await adaptSandboxInstance(tmp).read(filePath);
-          expect(content.content).toContain("Content for read test");
+          const content = await tmp.read(filePath);
+          expect(content).toContain("Content for read test");
         } finally {
           await config.closeSandbox?.(tmp);
         }
@@ -174,7 +173,7 @@ export function registerInitialFilesTests<T extends AnySandboxInstance>(
     );
 
     it(
-      "should make initialFiles in subdirectories visible via ls()",
+      "should make initialFiles in subdirectories visible via lsInfo()",
       async () => {
         const dirPath = config.resolvePath("init-ls-dir");
         const filePath = `${dirPath}/file.txt`;
@@ -187,9 +186,7 @@ export function registerInitialFilesTests<T extends AnySandboxInstance>(
         );
 
         try {
-          const lsResult = await adaptSandboxInstance(tmp).ls(dirPath);
-          expect(lsResult.error).toBeUndefined();
-          const entries = lsResult.files || [];
+          const entries = await tmp.lsInfo(dirPath);
           const paths = entries.map((e) => e.path.replace(/\/$/, ""));
           expect(paths).toContain(filePath);
         } finally {

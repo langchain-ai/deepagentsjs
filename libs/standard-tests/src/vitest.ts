@@ -23,7 +23,7 @@ import {
   withRetry,
 } from "./sandbox.js";
 import type {
-  AnySandboxInstance,
+  SandboxInstance,
   StandardTestsConfig,
   TestRunner,
 } from "./types.js";
@@ -43,7 +43,7 @@ const vitestRunner: TestRunner = {
  * defaults to the Vitest primitives.
  */
 export type VitestStandardTestsConfig<
-  T extends AnySandboxInstance = AnySandboxInstance,
+  T extends SandboxInstance = SandboxInstance,
 > = Omit<StandardTestsConfig<T>, "runner"> & {
   runner?: StandardTestsConfig<T>["runner"];
 };
@@ -51,7 +51,7 @@ export type VitestStandardTestsConfig<
 /**
  * Run the standard sandbox integration tests using Vitest as the runner.
  */
-export function sandboxStandardTests<T extends AnySandboxInstance>(
+export function sandboxStandardTests<T extends SandboxInstance>(
   config: VitestStandardTestsConfig<T>,
 ): void {
   baseSandboxStandardTests({
@@ -64,9 +64,6 @@ export { withRetry };
 
 export type {
   SandboxInstance,
-  SandboxInstanceV1,
-  SandboxInstanceV2,
-  AnySandboxInstance,
   StandardTestsConfig,
   TestRunner,
   SuiteFn,

@@ -28,8 +28,7 @@ import type {
   QuickJSAsyncContext,
   QuickJSAsyncRuntime,
 } from "quickjs-emscripten-core";
-import type { AnyBackendProtocol, BackendProtocolV2 } from "deepagents";
-import { adaptBackendProtocol } from "deepagents";
+import type { BackendProtocol } from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
 import type { ReplSessionOptions, ReplResult } from "./types.js";
@@ -83,19 +82,19 @@ export class ReplSession {
   private logs: string[] = [];
   private _options: ReplSessionOptions;
 
-  private _backend: BackendProtocolV2 | null = null;
+  private _backend: BackendProtocol | null = null;
 
   constructor(id: string, options: ReplSessionOptions = {}) {
     this.id = id;
     this._options = options;
   }
 
-  get backend(): BackendProtocolV2 | null {
+  get backend(): BackendProtocol | null {
     return this._backend;
   }
 
-  set backend(b: AnyBackendProtocol | null) {
-    this._backend = b ? adaptBackendProtocol(b) : null;
+  set backend(b: BackendProtocol | null) {
+    this._backend = b;
   }
 
   private async ensureStarted(): Promise<void> {
@@ -120,7 +119,7 @@ export class ReplSession {
     this.setupConsole();
 
     if (backend) {
-      this._backend = adaptBackendProtocol(backend);
+      this._backend = backend;
     }
     this.injectVfs();
     if (tools && tools.length > 0) {
@@ -142,7 +141,7 @@ export class ReplSession {
     const existing = ReplSession.sessions.get(id);
     if (existing) {
       if (options.backend) {
-        existing._backend = adaptBackendProtocol(options.backend);
+        existing._backend = options.backend;
       }
       return existing;
     }
@@ -241,11 +240,10 @@ export class ReplSession {
     };
   }
 
-  async flushWrites(backend: AnyBackendProtocol): Promise<void> {
-    const adapted = adaptBackendProtocol(backend);
+  async flushWrites(backend: BackendProtocol): Promise<void> {
     const writes = this.pendingWrites.splice(0);
     for (const { path, content } of writes) {
-      await adapted.write(path, content);
+      await backend.write(path, content);
     }
   }
 
@@ -335,31 +333,10 @@ export class ReplSession {
         const promise = context.newPromise();
         (async () => {
           try {
-            const result = await backend.readRaw(path);
-            if (result.error || !result.data) {
-              const err = context.newError(
-                `ENOENT: no such file or directory '${path}'.`,
-              );
-              promise.reject(err);
-              err.dispose();
-            } else {
-              const content = Array.isArray(result.data.content)
-                ? result.data.content.join("\n")
-                : typeof result.data.content === "string"
-                  ? result.data.content
-                  : null;
-              if (content === null) {
-                const err = context.newError(
-                  `Cannot read binary file '${path}' as text.`,
-                );
-                promise.reject(err);
-                err.dispose();
-                return;
-              }
-              const val = context.newString(content);
-              promise.resolve(val);
-              val.dispose();
-            }
+            const fileData = await backend.readRaw(path);
+            const val = context.newString(fileData.content.join("\n"));
+            promise.resolve(val);
+            val.dispose();
           } catch {
             const err = context.newError(
               `ENOENT: no such file or directory '${path}'.`,
