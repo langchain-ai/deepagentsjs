@@ -41,7 +41,6 @@
  */
 
 import { z } from "zod";
-import { v4 as uuidv4 } from "uuid";
 import {
   createMiddleware,
   countTokensApproximately,
@@ -373,7 +372,7 @@ export function createSummarizationMiddleware(
       return state._summarizationSessionId as string;
     }
     if (!sessionId) {
-      sessionId = `session_${uuidv4().substring(0, 8)}`;
+      sessionId = `session_${crypto.randomUUID().substring(0, 8)}`;
     }
     return sessionId;
   }
