@@ -113,6 +113,9 @@ export {
   type SandboxListOptions,
   type SandboxGetOrCreateOptions,
   type SandboxDeleteOptions,
+  // LangSmith sandbox backend
+  LangSmithSandbox,
+  type LangSmithSandboxOptions,
   // Sandbox error types
   type SandboxErrorCode,
   // Local shell backend
