@@ -3,7 +3,7 @@ import {
   useRef,
   useEffect,
   useCallback,
-  type FormEvent,
+  type SubmitEventHandler,
 } from "react";
 import { Client } from "@langchain/langgraph-sdk";
 import { useStream } from "@langchain/langgraph-sdk/react";
@@ -268,7 +268,7 @@ export function App() {
   const hasMessages = visibleMessages.length > 0;
 
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit: SubmitEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
     const text = input.trim();
     if (!text || thread.isLoading) return;
@@ -289,25 +289,6 @@ export function App() {
           content: `What did the researcher find? (task_id: ${task.taskId})`,
         },
       ],
-    });
-  };
-
-  const handleCancel = (task: AsyncTask) => {
-    thread.submit({
-      messages: [
-        {
-          role: "user",
-          content: `Cancel task_id: ${task.taskId}`,
-        },
-      ],
-    });
-  };
-
-  const handleRemove = (task: AsyncTask) => {
-    setAsyncTasks((prev) => {
-      const next = { ...prev };
-      delete next[task.taskId];
-      return next;
     });
   };
 
@@ -386,6 +367,7 @@ export function App() {
           <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-red-400 text-sm flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>
+              {/* eslint-disable-next-line no-instanceof/no-instanceof */}
               {thread.error instanceof Error
                 ? thread.error.message
                 : "An error occurred"}
