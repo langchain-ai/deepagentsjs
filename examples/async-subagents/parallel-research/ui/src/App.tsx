@@ -65,8 +65,8 @@ const CARD_PALETTES: Omit<ResearcherConfig, "label">[] = [
 
 const SUGGESTIONS = [
   "Research the history of New York City",
-  "What are the latest AI developments?",
-  "Analyze Apple's current stock market position",
+  "Research the latest AI developments",
+  "Research Apple's current market position and competitors",
 ];
 
 const TERMINAL_STATUSES = new Set([
@@ -346,7 +346,7 @@ export function App() {
                 const key = msg.id ?? `msg-${i}`;
                 const text = getMessageText(msg);
                 if (msg.type === "human") {
-                  if (text.startsWith("[Async subagent") || text.startsWith("[task_id=")) {
+                  if (text.startsWith("[Async subagent") || text.startsWith("[task_id=") || text.includes("task_id:")) {
                     return <NotificationBubble key={key} content={text} />;
                   }
                   return <HumanBubble key={key} content={text} />;
