@@ -62,6 +62,21 @@ import {
  *    These tools return minimal confirmation messages and are never expected to produce
  *    output large enough to exceed token limits, so checking them would be unnecessary.
  */
+/**
+ * All tool names registered by FilesystemMiddleware.
+ * This is the single source of truth — used by createDeepAgent to detect
+ * collisions with user-supplied tools at construction time.
+ */
+export const FILESYSTEM_TOOL_NAMES = [
+  "ls",
+  "read_file",
+  "write_file",
+  "edit_file",
+  "glob",
+  "grep",
+  "execute",
+] as const;
+
 export const TOOLS_EXCLUDED_FROM_EVICTION = [
   "ls",
   "glob",
@@ -892,31 +907,36 @@ export function createFilesystemMiddleware(
 
   const baseSystemPrompt = customSystemPrompt || FILESYSTEM_SYSTEM_PROMPT;
 
-  // All tools including execute (execute will be filtered at runtime if backend doesn't support it)
-  const allTools = [
-    createLsTool(backend, {
+  /**
+   * All tools including execute
+   * (execute will be filtered at runtime if backend doesn't support it)
+   */
+  type FilesystemToolName = (typeof FILESYSTEM_TOOL_NAMES)[number];
+  const allToolsByName = {
+    ls: createLsTool(backend, {
       customDescription: customToolDescriptions?.ls,
     }),
-    createReadFileTool(backend, {
+    read_file: createReadFileTool(backend, {
       customDescription: customToolDescriptions?.read_file,
       toolTokenLimitBeforeEvict,
     }),
-    createWriteFileTool(backend, {
+    write_file: createWriteFileTool(backend, {
       customDescription: customToolDescriptions?.write_file,
     }),
-    createEditFileTool(backend, {
+    edit_file: createEditFileTool(backend, {
       customDescription: customToolDescriptions?.edit_file,
     }),
-    createGlobTool(backend, {
+    glob: createGlobTool(backend, {
       customDescription: customToolDescriptions?.glob,
     }),
-    createGrepTool(backend, {
+    grep: createGrepTool(backend, {
       customDescription: customToolDescriptions?.grep,
     }),
-    createExecuteTool(backend, {
+    execute: createExecuteTool(backend, {
       customDescription: customToolDescriptions?.execute,
     }),
-  ];
+  } satisfies Record<FilesystemToolName, unknown>;
+  const allTools = Object.values(allToolsByName);
 
   return createMiddleware({
     name: "FilesystemMiddleware",
