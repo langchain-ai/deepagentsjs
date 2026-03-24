@@ -349,9 +349,9 @@ describe("LangSmithSandbox", () => {
       "read",
       "write",
       "edit",
-      "lsInfo",
-      "grepRaw",
-      "globInfo",
+      "ls",
+      "grep",
+      "glob",
     ] as const)("%s() is available on the sandbox", (method) => {
       const sandbox = makeSandbox();
       expect(typeof sandbox[method]).toBe("function");
@@ -377,7 +377,7 @@ describe("LangSmithSandbox", () => {
       const sandbox = makeSandbox();
       mockRun.mockResolvedValue({ stdout: "", stderr: "", exit_code: 0 });
 
-      await sandbox.lsInfo("/tmp");
+      await sandbox.ls("/tmp");
 
       expect(mockRun).toHaveBeenCalledOnce();
       const [cmd] = mockRun.mock.calls[0] as [string, unknown];
@@ -389,7 +389,7 @@ describe("LangSmithSandbox", () => {
       const sandbox = makeSandbox();
       mockRun.mockResolvedValue({ stdout: "", stderr: "", exit_code: 0 });
 
-      await sandbox.grepRaw("pattern", "/tmp");
+      await sandbox.grep("pattern", "/tmp");
 
       expect(mockRun).toHaveBeenCalledOnce();
       const [cmd] = mockRun.mock.calls[0] as [string, unknown];
@@ -401,7 +401,7 @@ describe("LangSmithSandbox", () => {
       const sandbox = makeSandbox();
       mockRun.mockResolvedValue({ stdout: "", stderr: "", exit_code: 0 });
 
-      await sandbox.globInfo("*.txt", "/tmp");
+      await sandbox.glob("*.txt", "/tmp");
 
       expect(mockRun).toHaveBeenCalledOnce();
       const [cmd] = mockRun.mock.calls[0] as [string, unknown];
