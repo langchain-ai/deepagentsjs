@@ -51,11 +51,7 @@ import {
 } from "langchain";
 import { StateSchema, ReducedValue } from "@langchain/langgraph";
 
-import type {
-  BackendProtocol,
-  BackendFactory,
-  BackendRuntime,
-} from "../backends/protocol.js";
+import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
 import { resolveBackend } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
@@ -676,7 +672,7 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
 
       const resolvedBackend = await resolveBackend(backend, {
         state,
-      } as BackendRuntime);
+      });
       const allSkills: Map<string, SkillMetadata> = new Map();
 
       // Load skills from each source in order (later sources override earlier)
