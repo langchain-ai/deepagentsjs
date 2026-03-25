@@ -420,6 +420,28 @@ export class ClientCache {
 }
 
 /**
+ * Extract the callback thread ID from the tool runtime.
+ *
+ * The thread ID is included in the subagent's input state so the subagent
+ * can notify the parent when it completes (via
+ * `CompletionCallbackMiddleware`).
+ *
+ * @returns Object with `callbackThreadId` if available. Empty object otherwise.
+ */
+export function extractCallbackContext(
+  runtime: ToolRuntime<AsyncTaskState>,
+): Record<string, string> {
+  const configurable = runtime.config?.configurable as
+    | Record<string, unknown>
+    | undefined;
+  const threadId = configurable?.thread_id;
+  if (typeof threadId === "string" && threadId) {
+    return { callbackThreadId: threadId };
+  }
+  return {};
+}
+
+/**
  * Build the `start_async_task` tool.
  *
  * Creates a thread on the remote server, starts a run, and returns a
@@ -443,11 +465,15 @@ export function buildStartTool(
       }
 
       const spec = agentMap[input.agentName];
+      const callbackContext = extractCallbackContext(runtime);
       try {
         const client = clients.getClient(input.agentName);
         const thread = await client.threads.create();
         const run = await client.runs.create(thread.thread_id, spec.graphId, {
-          input: { messages: [{ role: "user", content: input.description }] },
+          input: {
+            messages: [{ role: "user", content: input.description }],
+            ...callbackContext,
+          },
         });
 
         const taskId = thread.thread_id;
