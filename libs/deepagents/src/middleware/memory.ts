@@ -58,11 +58,7 @@ import {
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
 
-import type {
-  BackendProtocol,
-  BackendFactory,
-  BackendRuntime,
-} from "../backends/protocol.js";
+import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
 import { resolveBackend } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
@@ -281,10 +277,7 @@ export function createMemoryMiddleware(options: MemoryMiddlewareOptions) {
         return undefined;
       }
 
-      const resolvedBackend = await resolveBackend(
-        backend as BackendProtocol | BackendFactory,
-        { state } as BackendRuntime,
-      );
+      const resolvedBackend = await resolveBackend(backend, { state });
       const contents: Record<string, string> = {};
 
       for (const path of sources) {
