@@ -59,11 +59,7 @@ import { ContextOverflowError } from "@langchain/core/errors";
 import { initChatModel } from "langchain/chat_models/universal";
 import { Command } from "@langchain/langgraph";
 
-import type {
-  BackendProtocol,
-  BackendFactory,
-  BackendRuntime,
-} from "../backends/protocol.js";
+import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
 import { resolveBackend } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
@@ -358,12 +354,6 @@ export function createSummarizationMiddleware(
   // gap between estimated and actual tokens and adjust future comparisons
   // so proactive summarization fires before the hard limit is hit.
   let tokenEstimationMultiplier = 1.0;
-
-  async function resolveSummarizationBackend(
-    state: unknown,
-  ): Promise<BackendProtocol> {
-    return resolveBackend(backend, { state } as BackendRuntime);
-  }
 
   /**
    * Get or create session ID for history file naming.
@@ -1009,7 +999,7 @@ ${summary}
     filePath: string | null;
     stateCutoffIndex: number;
   }> {
-    const resolvedBackend = await resolveSummarizationBackend(state);
+    const resolvedBackend = await resolveBackend(backend, { state });
     const filePath = await offloadToBackend(
       resolvedBackend,
       messagesToSummarize,
