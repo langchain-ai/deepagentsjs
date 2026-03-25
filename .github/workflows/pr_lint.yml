@@ -1,7 +1,7 @@
 name: PR Title Lint
 
 permissions:
-  pull-requests: read
+  contents: read
 
 on:
   pull_request:
