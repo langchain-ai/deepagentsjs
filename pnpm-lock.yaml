@@ -327,8 +327,8 @@ importers:
   libs/acp:
     dependencies:
       '@agentclientprotocol/sdk':
-        specifier: ^0.16.1
-        version: 0.16.1(zod@4.3.6)
+        specifier: ^0.17.0
+        version: 0.17.0(zod@4.3.6)
       deepagents:
         specifier: workspace:*
         version: link:../deepagents
@@ -684,8 +684,8 @@ importers:
 
 packages:
 
-  '@agentclientprotocol/sdk@0.16.1':
-    resolution: {integrity: sha512-1ad+Sc/0sCtZGHthxxvgEUo5Wsbw16I+aF+YwdiLnPwkZG8KAGUEAPK6LM6Pf69lCyJPt1Aomk1d+8oE3C4ZEw==}
+  '@agentclientprotocol/sdk@0.17.0':
+    resolution: {integrity: sha512-inBMYAEd9t4E+ULZK2os9kmLG5jbPvMLbPvY71XDDem1YteW/uDwkahg6OwsGR3tvvgVhYbRJ9mJCp2VXqG4xQ==}
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
 
@@ -4151,7 +4151,7 @@ packages:
 
 snapshots:
 
-  '@agentclientprotocol/sdk@0.16.1(zod@4.3.6)':
+  '@agentclientprotocol/sdk@0.17.0(zod@4.3.6)':
     dependencies:
       zod: 4.3.6
 
