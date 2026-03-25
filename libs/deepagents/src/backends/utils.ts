@@ -42,17 +42,33 @@ const MIME_TYPES: Record<string, string> = {
   ".gif": "image/gif",
   ".webp": "image/webp",
   ".svg": "image/svg+xml",
+  ".heic": "image/heic",
+  ".heif": "image/heif",
 
   // audio
   ".mp3": "audio/mpeg",
   ".wav": "audio/wav",
+  ".aiff": "audio/aiff",
+  ".aac": "audio/aac",
+  ".ogg": "audio/ogg",
+  ".flac": "audio/flac",
 
   // video
   ".mp4": "video/mp4",
   ".webm": "video/webm",
+  ".mpeg": "video/mpeg",
+  ".mov": "video/quicktime",
+  ".avi": "video/x-msvideo",
+  ".flv": "video/x-flv",
+  ".mpg": "video/mpeg",
+  ".wmv": "video/x-ms-wmv",
+  ".3gpp": "video/3gpp",
 
   // documents
   ".pdf": "application/pdf",
+  ".ppt": "application/vnd.ms-powerpoint",
+  ".pptx":
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 };
 
 /**
