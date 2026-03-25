@@ -427,6 +427,11 @@ function createLsTool(
           .optional()
           .default("/")
           .describe("Directory path to list (default: /)"),
+        encoding: z
+          .string()
+          .optional()
+          .default("utf-8")
+          .describe("Encoding format"),
       }),
     },
   );
@@ -454,8 +459,9 @@ function createReadFileTool(
         file_path,
         offset = DEFAULT_READ_LINE_OFFSET,
         limit = DEFAULT_READ_LINE_LIMIT,
+        encoding = "utf-8",
       } = input;
-      let result = await resolvedBackend.read(file_path, offset, limit);
+      let result = await resolvedBackend.read(file_path, offset, limit, encoding);
 
       // Enforce line limit on result (in case backend returns more)
       const lines = result.split("\n");
@@ -496,6 +502,11 @@ function createReadFileTool(
           .optional()
           .default(DEFAULT_READ_LINE_LIMIT)
           .describe("Maximum number of lines to read"),
+        encoding: z
+          .string()
+          .optional()
+          .default("utf-8")
+          .describe("Encoding format"),
       }),
     },
   );
@@ -516,8 +527,8 @@ function createWriteFileTool(
         store: (config as any).store,
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
-      const { file_path, content } = input;
-      const result = await resolvedBackend.write(file_path, content);
+      const { file_path, content, encoding = "utf-8" } = input;
+      const result = await resolvedBackend.write(file_path, content, encoding);
 
       if (result.error) {
         return result.error;
@@ -548,6 +559,11 @@ function createWriteFileTool(
           .string()
           .default("")
           .describe("Content to write to the file"),
+        encoding: z
+          .string()
+          .optional()
+          .default("utf-8")
+          .describe("Encoding format"),
       }),
     },
   );
@@ -568,12 +584,13 @@ function createEditFileTool(
         store: (config as any).store,
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
-      const { file_path, old_string, new_string, replace_all = false } = input;
+      const { file_path, old_string, new_string, replace_all = false, encoding = "utf-8" } = input;
       const result = await resolvedBackend.edit(
         file_path,
         old_string,
         new_string,
         replace_all,
+        encoding,
       );
 
       if (result.error) {
@@ -611,6 +628,11 @@ function createEditFileTool(
           .optional()
           .default(false)
           .describe("Whether to replace all occurrences"),
+        encoding: z
+          .string()
+          .optional()
+          .default("utf-8")
+          .describe("Encoding format"),
       }),
     },
   );
@@ -656,6 +678,11 @@ function createGlobTool(
           .optional()
           .default("/")
           .describe("Base path to search from (default: /)"),
+        encoding: z
+          .string()
+          .optional()
+          .default("utf-8")
+          .describe("Encoding format"),
       }),
     },
   );
@@ -676,8 +703,8 @@ function createGrepTool(
         store: (config as any).store,
       };
       const resolvedBackend = getBackend(backend, stateAndStore);
-      const { pattern, path = "/", glob = null } = input;
-      const result = await resolvedBackend.grepRaw(pattern, path, glob);
+      const { pattern, path = "/", glob = null, encoding = "utf-8" } = input;
+      const result = await resolvedBackend.grepRaw(pattern, path, glob, encoding);
 
       // If string, it's an error
       if (typeof result === "string") {
@@ -721,6 +748,11 @@ function createGrepTool(
           .optional()
           .nullable()
           .describe("Optional glob pattern to filter files (e.g., '*.py')"),
+        encoding: z
+          .string()
+          .optional()
+          .default("utf-8")
+          .describe("Encoding format"),
       }),
     },
   );
@@ -772,6 +804,11 @@ function createExecuteTool(
       description: customDescription || EXECUTE_TOOL_DESCRIPTION,
       schema: z.object({
         command: z.string().describe("The shell command to execute"),
+        encoding: z
+          .string()
+          .optional()
+          .default("utf-8")
+          .describe("Encoding format"),
       }),
     },
   );

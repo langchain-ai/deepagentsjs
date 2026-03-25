@@ -133,9 +133,10 @@ export class CompositeBackend implements BackendProtocol {
     filePath: string,
     offset: number = 0,
     limit: number = 500,
+    encoding?: string,
   ): Promise<string> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
-    return await backend.read(strippedKey, offset, limit);
+    return await backend.read(strippedKey, offset, limit, encoding);
   }
 
   /**
@@ -144,9 +145,9 @@ export class CompositeBackend implements BackendProtocol {
    * @param filePath - Absolute file path
    * @returns Raw file content as FileData
    */
-  async readRaw(filePath: string): Promise<FileData> {
+  async readRaw(filePath: string, encoding?: string): Promise<FileData> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
-    return await backend.readRaw(strippedKey);
+    return await backend.readRaw(strippedKey, encoding);
   }
 
   /**
@@ -156,12 +157,13 @@ export class CompositeBackend implements BackendProtocol {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
+    encoding?: string,
   ): Promise<GrepMatch[] | string> {
     // If path targets a specific route, search only that backend
     for (const [routePrefix, backend] of this.sortedRoutes) {
       if (path.startsWith(routePrefix.replace(/\/$/, ""))) {
         const searchPath = path.substring(routePrefix.length - 1);
-        const raw = await backend.grepRaw(pattern, searchPath || "/", glob);
+        const raw = await backend.grepRaw(pattern, searchPath || "/", glob, encoding);
 
         if (typeof raw === "string") {
           return raw;
@@ -177,7 +179,7 @@ export class CompositeBackend implements BackendProtocol {
 
     // Otherwise, search default and all routed backends and merge
     const allMatches: GrepMatch[] = [];
-    const rawDefault = await this.default.grepRaw(pattern, path, glob);
+    const rawDefault = await this.default.grepRaw(pattern, path, glob, encoding);
 
     if (typeof rawDefault === "string") {
       return rawDefault;
@@ -187,7 +189,7 @@ export class CompositeBackend implements BackendProtocol {
 
     // Search all routes
     for (const [routePrefix, backend] of Object.entries(this.routes)) {
-      const raw = await backend.grepRaw(pattern, "/", glob);
+      const raw = await backend.grepRaw(pattern, "/", glob, encoding);
 
       if (typeof raw === "string") {
         return raw;
@@ -251,9 +253,9 @@ export class CompositeBackend implements BackendProtocol {
    * @param content - File content as string
    * @returns WriteResult with path or error
    */
-  async write(filePath: string, content: string): Promise<WriteResult> {
+  async write(filePath: string, content: string, encoding?: string): Promise<WriteResult> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
-    return await backend.write(strippedKey, content);
+    return await backend.write(strippedKey, content, encoding);
   }
 
   /**
@@ -270,9 +272,10 @@ export class CompositeBackend implements BackendProtocol {
     oldString: string,
     newString: string,
     replaceAll: boolean = false,
+    encoding?: string,
   ): Promise<EditResult> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
-    return await backend.edit(strippedKey, oldString, newString, replaceAll);
+    return await backend.edit(strippedKey, oldString, newString, replaceAll, encoding);
   }
 
   /**
