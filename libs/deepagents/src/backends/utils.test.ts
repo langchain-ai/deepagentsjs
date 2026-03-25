@@ -392,6 +392,52 @@ describe("getMimeType", () => {
     expect(getMimeType("/doc.pdf")).toBe("application/pdf");
   });
 
+  it("should return correct MIME types for image extensions", () => {
+    expect(getMimeType("/a.png")).toBe("image/png");
+    expect(getMimeType("/a.jpg")).toBe("image/jpeg");
+    expect(getMimeType("/a.jpeg")).toBe("image/jpeg");
+    expect(getMimeType("/a.gif")).toBe("image/gif");
+    expect(getMimeType("/a.webp")).toBe("image/webp");
+    expect(getMimeType("/a.svg")).toBe("image/svg+xml");
+    expect(getMimeType("/a.heic")).toBe("image/heic");
+    expect(getMimeType("/a.heif")).toBe("image/heif");
+  });
+
+  it("should return correct MIME types for audio extensions", () => {
+    expect(getMimeType("/a.mp3")).toBe("audio/mpeg");
+    expect(getMimeType("/a.wav")).toBe("audio/wav");
+    expect(getMimeType("/a.aiff")).toBe("audio/aiff");
+    expect(getMimeType("/a.aac")).toBe("audio/aac");
+    expect(getMimeType("/a.ogg")).toBe("audio/ogg");
+    expect(getMimeType("/a.flac")).toBe("audio/flac");
+  });
+
+  it("should return correct MIME types for video extensions", () => {
+    expect(getMimeType("/a.mp4")).toBe("video/mp4");
+    expect(getMimeType("/a.webm")).toBe("video/webm");
+    expect(getMimeType("/a.mpeg")).toBe("video/mpeg");
+    expect(getMimeType("/a.mov")).toBe("video/quicktime");
+    expect(getMimeType("/a.avi")).toBe("video/x-msvideo");
+    expect(getMimeType("/a.flv")).toBe("video/x-flv");
+    expect(getMimeType("/a.mpg")).toBe("video/mpeg");
+    expect(getMimeType("/a.wmv")).toBe("video/x-ms-wmv");
+    expect(getMimeType("/a.3gpp")).toBe("video/3gpp");
+  });
+
+  it("should return correct MIME types for document extensions", () => {
+    expect(getMimeType("/a.pdf")).toBe("application/pdf");
+    expect(getMimeType("/a.ppt")).toBe("application/vnd.ms-powerpoint");
+    expect(getMimeType("/a.pptx")).toBe(
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    );
+  });
+
+  it("should be case-insensitive", () => {
+    expect(getMimeType("/image.PNG")).toBe("image/png");
+    expect(getMimeType("/video.MOV")).toBe("video/quicktime");
+    expect(getMimeType("/audio.FLAC")).toBe("audio/flac");
+  });
+
   it("should return text/plain for unknown extensions", () => {
     expect(getMimeType("/file.txt")).toBe("text/plain");
     expect(getMimeType("/code.ts")).toBe("text/plain");
@@ -415,6 +461,11 @@ describe("isTextMimeType", () => {
     expect(isTextMimeType("image/png")).toBe(false);
     expect(isTextMimeType("application/pdf")).toBe(false);
     expect(isTextMimeType("audio/mpeg")).toBe(false);
+    expect(isTextMimeType("video/mp4")).toBe(false);
+    expect(isTextMimeType("image/heic")).toBe(false);
+    expect(isTextMimeType("audio/flac")).toBe(false);
+    expect(isTextMimeType("video/quicktime")).toBe(false);
+    expect(isTextMimeType("application/vnd.ms-powerpoint")).toBe(false);
   });
 });
 
