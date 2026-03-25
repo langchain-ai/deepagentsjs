@@ -157,13 +157,13 @@ describe("read_file character-based truncation", () => {
    */
   function setupStateWithFiles(files: Record<string, FileData>): {
     state: any;
-    stateAndStore: any;
+    runtime: any;
   } {
     const state = { messages: [], files };
     vi.mocked(getCurrentTaskInput).mockReturnValue(state);
     return {
       state,
-      stateAndStore: { state, store: undefined },
+      runtime: { state, store: undefined },
     };
   }
 
@@ -184,11 +184,11 @@ describe("read_file character-based truncation", () => {
     const fileContent = [longLine, longLine, longLine].join("\n"); // 3 lines, ~90K chars
 
     const files = { "/large.txt": createFileData(fileContent) };
-    const { stateAndStore } = setupStateWithFiles(files);
+    const { runtime } = setupStateWithFiles(files);
 
     // Create middleware with a low token limit to trigger truncation
     const middleware = createFilesystemMiddleware({
-      backend: () => new StateBackend(stateAndStore),
+      backend: () => new StateBackend(runtime),
       toolTokenLimitBeforeEvict: 1000, // 1000 tokens * 4 chars = 4000 chars limit
     });
 
@@ -214,10 +214,10 @@ describe("read_file character-based truncation", () => {
   it("should not truncate read_file output when under character limit", async () => {
     const shortContent = "line1\nline2\nline3";
     const files = { "/small.txt": createFileData(shortContent) };
-    const { stateAndStore } = setupStateWithFiles(files);
+    const { runtime } = setupStateWithFiles(files);
 
     const middleware = createFilesystemMiddleware({
-      backend: () => new StateBackend(stateAndStore),
+      backend: () => new StateBackend(runtime),
       toolTokenLimitBeforeEvict: 20000, // High limit
     });
 
@@ -243,10 +243,10 @@ describe("read_file character-based truncation", () => {
     const lines = Array.from({ length: 200 }, (_, i) => `line${i + 1}`);
     const fileContent = lines.join("\n");
     const files = { "/many_lines.txt": createFileData(fileContent) };
-    const { stateAndStore } = setupStateWithFiles(files);
+    const { runtime } = setupStateWithFiles(files);
 
     const middleware = createFilesystemMiddleware({
-      backend: () => new StateBackend(stateAndStore),
+      backend: () => new StateBackend(runtime),
       toolTokenLimitBeforeEvict: 20000,
     });
 
@@ -271,10 +271,10 @@ describe("read_file character-based truncation", () => {
   it("should not truncate when toolTokenLimitBeforeEvict is null", async () => {
     const longLine = "x".repeat(100000);
     const files = { "/huge.txt": createFileData(longLine) };
-    const { stateAndStore } = setupStateWithFiles(files);
+    const { runtime } = setupStateWithFiles(files);
 
     const middleware = createFilesystemMiddleware({
-      backend: () => new StateBackend(stateAndStore),
+      backend: () => new StateBackend(runtime),
       toolTokenLimitBeforeEvict: null, // Disabled
     });
 

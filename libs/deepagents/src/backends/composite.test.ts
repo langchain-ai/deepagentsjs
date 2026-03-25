@@ -12,6 +12,7 @@ import { StateBackend } from "./state.js";
 import { StoreBackend } from "./store.js";
 import { FilesystemBackend } from "./filesystem.js";
 import type {
+  BackendRuntime,
   ExecuteResponse,
   FileDownloadResponse,
   FileUploadResponse,
@@ -111,7 +112,7 @@ function makeConfig() {
 
   vi.mocked(getCurrentTaskInput).mockReturnValue(state);
 
-  const stateAndStore = {
+  const runtime = {
     state,
     store,
   };
@@ -121,7 +122,7 @@ function makeConfig() {
     configurable: {},
   };
 
-  return { state, store, stateAndStore, config };
+  return { state, store, runtime, config };
 }
 
 describe("CompositeBackend", () => {
@@ -130,10 +131,10 @@ describe("CompositeBackend", () => {
   });
 
   it("should route operations between StateBackend and StoreBackend", async () => {
-    const { state, stateAndStore } = makeConfig();
+    const { state, runtime } = makeConfig();
 
-    const composite = new CompositeBackend(new StateBackend(stateAndStore), {
-      "/memories/": new StoreBackend(stateAndStore),
+    const composite = new CompositeBackend(new StateBackend(runtime), {
+      "/memories/": new StoreBackend(runtime),
     });
 
     const stateRes = await composite.write("/file.txt", "alpha");
@@ -167,12 +168,12 @@ describe("CompositeBackend", () => {
   });
 
   it("should handle multiple routes", async () => {
-    const { state, stateAndStore } = makeConfig();
+    const { state, runtime } = makeConfig();
 
-    const composite = new CompositeBackend(new StateBackend(stateAndStore), {
-      "/memories/": new StoreBackend(stateAndStore),
-      "/archive/": new StoreBackend(stateAndStore),
-      "/cache/": new StoreBackend(stateAndStore),
+    const composite = new CompositeBackend(new StateBackend(runtime), {
+      "/memories/": new StoreBackend(runtime),
+      "/archive/": new StoreBackend(runtime),
+      "/cache/": new StoreBackend(runtime),
     });
 
     const resState = await composite.write("/temp.txt", "ephemeral data");
@@ -243,11 +244,11 @@ describe("CompositeBackend", () => {
   });
 
   it("should handle nested directories correctly", async () => {
-    const { state, stateAndStore } = makeConfig();
+    const { state, runtime } = makeConfig();
 
-    const composite = new CompositeBackend(new StateBackend(stateAndStore), {
-      "/memories/": new StoreBackend(stateAndStore),
-      "/archive/": new StoreBackend(stateAndStore),
+    const composite = new CompositeBackend(new StateBackend(runtime), {
+      "/memories/": new StoreBackend(runtime),
+      "/archive/": new StoreBackend(runtime),
     });
 
     const stateFiles: Record<string, string> = {
@@ -310,10 +311,10 @@ describe("CompositeBackend", () => {
   });
 
   it("should handle trailing slashes in ls", async () => {
-    const { state, stateAndStore } = makeConfig();
+    const { state, runtime } = makeConfig();
 
-    const composite = new CompositeBackend(new StateBackend(stateAndStore), {
-      "/store/": new StoreBackend(stateAndStore),
+    const composite = new CompositeBackend(new StateBackend(runtime), {
+      "/store/": new StoreBackend(runtime),
     });
 
     const res = await composite.write("/file.txt", "content");
@@ -345,9 +346,9 @@ describe("CompositeBackend", () => {
     const { Command } = await import("@langchain/langgraph");
 
     const middleware = createFilesystemMiddleware({
-      backend: (stateAndStore) =>
-        new CompositeBackend(new StateBackend(stateAndStore), {
-          "/memories/": new StoreBackend(stateAndStore),
+      backend: (runtime: BackendRuntime) =>
+        new CompositeBackend(new StateBackend(runtime), {
+          "/memories/": new StoreBackend(runtime),
         }),
       toolTokenLimitBeforeEvict: 1000,
     });
@@ -391,9 +392,9 @@ describe("CompositeBackend", () => {
     const { ToolMessage } = await import("@langchain/core/messages");
 
     const middleware = createFilesystemMiddleware({
-      backend: (stateAndStore) =>
-        new CompositeBackend(new StateBackend(stateAndStore), {
-          "/large_tool_results/": new StoreBackend(stateAndStore),
+      backend: (runtime: BackendRuntime) =>
+        new CompositeBackend(new StateBackend(runtime), {
+          "/large_tool_results/": new StoreBackend(runtime),
         }),
       toolTokenLimitBeforeEvict: 1000,
     });
@@ -429,13 +430,13 @@ describe("CompositeBackend", () => {
   it("should work with FilesystemBackend as default and StoreBackend route", async () => {
     const tmpDir = createTempDir();
     try {
-      const { stateAndStore } = makeConfig();
+      const { runtime } = makeConfig();
 
       const fsBackend = new FilesystemBackend({
         rootDir: tmpDir,
         virtualMode: true,
       });
-      const storeBackend = new StoreBackend(stateAndStore);
+      const storeBackend = new StoreBackend(runtime);
       const composite = new CompositeBackend(fsBackend, {
         "/memories/": storeBackend,
       });
@@ -475,10 +476,10 @@ describe("CompositeBackend", () => {
   });
 
   it("should work with StoreBackend as default and another StoreBackend route", async () => {
-    const { stateAndStore } = makeConfig();
+    const { runtime } = makeConfig();
 
-    const defaultStore = new StoreBackend(stateAndStore);
-    const memoriesStore = new StoreBackend(stateAndStore);
+    const defaultStore = new StoreBackend(runtime);
+    const memoriesStore = new StoreBackend(runtime);
 
     const composite = new CompositeBackend(defaultStore, {
       "/memories/": memoriesStore,
@@ -524,7 +525,7 @@ describe("CompositeBackend", () => {
   it("should handle nested directories with FilesystemBackend and StoreBackend", async () => {
     const tmpDir = createTempDir();
     try {
-      const { stateAndStore } = makeConfig();
+      const { runtime } = makeConfig();
 
       const files: Record<string, string> = {
         [path.join(tmpDir, "local.txt")]: "local file",
@@ -540,7 +541,7 @@ describe("CompositeBackend", () => {
         rootDir: tmpDir,
         virtualMode: true,
       });
-      const storeBackend = new StoreBackend(stateAndStore);
+      const storeBackend = new StoreBackend(runtime);
       const composite = new CompositeBackend(fsBackend, {
         "/memories/": storeBackend,
       });
@@ -582,10 +583,10 @@ describe("CompositeBackend", () => {
   describe("execute", () => {
     it("should delegate execute to default sandbox backend", async () => {
       const mockSandbox = new MockSandboxBackend();
-      const { stateAndStore } = makeConfig();
+      const { runtime } = makeConfig();
 
       const composite = new CompositeBackend(mockSandbox, {
-        "/store/": new StoreBackend(stateAndStore),
+        "/store/": new StoreBackend(runtime),
       });
 
       const result = await composite.execute("echo hello");
@@ -595,10 +596,10 @@ describe("CompositeBackend", () => {
     });
 
     it("should throw error when default backend is not sandbox", () => {
-      const { stateAndStore } = makeConfig();
+      const { runtime } = makeConfig();
 
-      const composite = new CompositeBackend(new StateBackend(stateAndStore), {
-        "/store/": new StoreBackend(stateAndStore),
+      const composite = new CompositeBackend(new StateBackend(runtime), {
+        "/store/": new StoreBackend(runtime),
       });
 
       expect(() => composite.execute("echo hello")).toThrow(
@@ -608,10 +609,10 @@ describe("CompositeBackend", () => {
 
     it("should pass isSandboxBackend check when default backend supports execution", () => {
       const mockSandbox = new MockSandboxBackend();
-      const { stateAndStore } = makeConfig();
+      const { runtime } = makeConfig();
 
       const composite = new CompositeBackend(mockSandbox, {
-        "/store/": new StoreBackend(stateAndStore),
+        "/store/": new StoreBackend(runtime),
       });
 
       expect(isSandboxBackend(composite)).toBe(true);
@@ -619,20 +620,20 @@ describe("CompositeBackend", () => {
 
     it("should delegate id to default sandbox backend", () => {
       const mockSandbox = new MockSandboxBackend();
-      const { stateAndStore } = makeConfig();
+      const { runtime } = makeConfig();
 
       const composite = new CompositeBackend(mockSandbox, {
-        "/store/": new StoreBackend(stateAndStore),
+        "/store/": new StoreBackend(runtime),
       });
 
       expect(composite.id).toBe("mock-sandbox");
     });
 
     it("should return empty string id when default backend is not sandbox", () => {
-      const { stateAndStore } = makeConfig();
+      const { runtime } = makeConfig();
 
-      const composite = new CompositeBackend(new StateBackend(stateAndStore), {
-        "/store/": new StoreBackend(stateAndStore),
+      const composite = new CompositeBackend(new StateBackend(runtime), {
+        "/store/": new StoreBackend(runtime),
       });
 
       expect(composite.id).toBe("");
@@ -641,10 +642,10 @@ describe("CompositeBackend", () => {
 
   describe("uploadFiles", () => {
     it("should route uploads to correct backend based on path", async () => {
-      const { stateAndStore } = makeConfig();
+      const { runtime } = makeConfig();
 
-      const composite = new CompositeBackend(new StateBackend(stateAndStore), {
-        "/store/": new StoreBackend(stateAndStore),
+      const composite = new CompositeBackend(new StateBackend(runtime), {
+        "/store/": new StoreBackend(runtime),
       });
 
       const files: Array<[string, Uint8Array]> = [
@@ -661,10 +662,10 @@ describe("CompositeBackend", () => {
     });
 
     it("should batch uploads by backend", async () => {
-      const { stateAndStore } = makeConfig();
+      const { runtime } = makeConfig();
 
-      const composite = new CompositeBackend(new StateBackend(stateAndStore), {
-        "/store/": new StoreBackend(stateAndStore),
+      const composite = new CompositeBackend(new StateBackend(runtime), {
+        "/store/": new StoreBackend(runtime),
       });
 
       const files: Array<[string, Uint8Array]> = [
@@ -692,10 +693,10 @@ describe("CompositeBackend", () => {
 
   describe("downloadFiles", () => {
     it("should route downloads to correct backend based on path", async () => {
-      const { state, stateAndStore } = makeConfig();
+      const { state, runtime } = makeConfig();
 
-      const composite = new CompositeBackend(new StateBackend(stateAndStore), {
-        "/store/": new StoreBackend(stateAndStore),
+      const composite = new CompositeBackend(new StateBackend(runtime), {
+        "/store/": new StoreBackend(runtime),
       });
 
       // Write to both backends
@@ -725,10 +726,10 @@ describe("CompositeBackend", () => {
     });
 
     it("should handle mixed results across backends", async () => {
-      const { state, stateAndStore } = makeConfig();
+      const { state, runtime } = makeConfig();
 
-      const composite = new CompositeBackend(new StateBackend(stateAndStore), {
-        "/store/": new StoreBackend(stateAndStore),
+      const composite = new CompositeBackend(new StateBackend(runtime), {
+        "/store/": new StoreBackend(runtime),
       });
 
       // Only write to state backend

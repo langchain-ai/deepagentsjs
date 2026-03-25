@@ -148,8 +148,8 @@ describe("BaseSandbox", () => {
       const { isSandboxBackend } = await import("./protocol.js");
       const { StateBackend } = await import("./state.js");
 
-      const stateAndStore = { state: { files: {} }, store: undefined };
-      const stateBackend = new StateBackend(stateAndStore);
+      const runtime = { state: { files: {} }, store: undefined };
+      const stateBackend = new StateBackend(runtime);
       expect(isSandboxBackend(stateBackend)).toBe(false);
     });
   });

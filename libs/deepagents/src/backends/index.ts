@@ -8,6 +8,7 @@
 export type {
   BackendProtocol,
   BackendFactory,
+  BackendRuntime,
   FileData,
   FileInfo,
   GrepMatch,
@@ -32,7 +33,7 @@ export type {
 } from "./protocol.js";
 
 // Export type guard and error class
-export { isSandboxBackend, SandboxError } from "./protocol.js";
+export { isSandboxBackend, SandboxError, resolveBackend } from "./protocol.js";
 
 export { StateBackend } from "./state.js";
 export { StoreBackend, type StoreBackendOptions } from "./store.js";

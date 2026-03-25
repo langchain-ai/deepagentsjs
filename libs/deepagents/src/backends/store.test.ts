@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { StoreBackend } from "./store.js";
+import type { BackendRuntime } from "./protocol.js";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 
 /**
@@ -7,7 +8,7 @@ import { InMemoryStore } from "@langchain/langgraph-checkpoint";
  */
 function makeConfig() {
   const store = new InMemoryStore();
-  const stateAndStore = {
+  const runtime = {
     state: { files: {}, messages: [] },
     store,
   };
@@ -16,13 +17,13 @@ function makeConfig() {
     configurable: {},
   };
 
-  return { store, stateAndStore, config };
+  return { store, runtime, config };
 }
 
 describe("StoreBackend", () => {
   it("should handle CRUD and search operations", async () => {
-    const { stateAndStore } = makeConfig();
-    const backend = new StoreBackend(stateAndStore);
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
 
     const writeResult = await backend.write("/docs/readme.md", "hello store");
     expect(writeResult).toBeDefined();
@@ -60,8 +61,8 @@ describe("StoreBackend", () => {
   });
 
   it("should list nested directories correctly", async () => {
-    const { stateAndStore } = makeConfig();
-    const backend = new StoreBackend(stateAndStore);
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
 
     const files: Record<string, string> = {
       "/src/main.py": "main code",
@@ -104,8 +105,8 @@ describe("StoreBackend", () => {
   });
 
   it("should handle trailing slashes in ls", async () => {
-    const { stateAndStore } = makeConfig();
-    const backend = new StoreBackend(stateAndStore);
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
 
     const files: Record<string, string> = {
       "/file.txt": "content",
@@ -129,8 +130,8 @@ describe("StoreBackend", () => {
   });
 
   it("should handle errors correctly", async () => {
-    const { stateAndStore } = makeConfig();
-    const backend = new StoreBackend(stateAndStore);
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
 
     const editErr = await backend.edit("/missing.txt", "a", "b");
     expect(editErr.error).toBeDefined();
@@ -145,8 +146,8 @@ describe("StoreBackend", () => {
   });
 
   it("should handle read with offset and limit", async () => {
-    const { stateAndStore } = makeConfig();
-    const backend = new StoreBackend(stateAndStore);
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
 
     const content = "line1\nline2\nline3\nline4\nline5";
     await backend.write("/multiline.txt", content);
@@ -159,8 +160,8 @@ describe("StoreBackend", () => {
   });
 
   it("should handle edit with replace_all", async () => {
-    const { stateAndStore } = makeConfig();
-    const backend = new StoreBackend(stateAndStore);
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
 
     await backend.write("/repeat.txt", "foo bar foo baz foo");
 
@@ -178,8 +179,8 @@ describe("StoreBackend", () => {
   });
 
   it("should handle grep with glob filter", async () => {
-    const { stateAndStore } = makeConfig();
-    const backend = new StoreBackend(stateAndStore);
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
 
     const files: Record<string, string> = {
       "/test.py": "import os",
@@ -200,8 +201,8 @@ describe("StoreBackend", () => {
   });
 
   it("should return empty content warning for empty files", async () => {
-    const { stateAndStore } = makeConfig();
-    const backend = new StoreBackend(stateAndStore);
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
 
     await backend.write("/empty.txt", "");
 
@@ -213,13 +214,13 @@ describe("StoreBackend", () => {
 
   it("should use assistantId-based namespace when no custom namespace provided", async () => {
     const { store } = makeConfig();
-    const stateAndStoreWithAssistant = {
+    const runtimeWithAssistant = {
       state: { files: {}, messages: [] },
       store,
       assistantId: "test-assistant",
     };
 
-    const backend = new StoreBackend(stateAndStoreWithAssistant);
+    const backend = new StoreBackend(runtimeWithAssistant);
 
     await backend.write("/test.txt", "content");
 
@@ -232,8 +233,8 @@ describe("StoreBackend", () => {
 
   describe("uploadFiles", () => {
     it("should upload files to store", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
+      const { runtime } = makeConfig();
+      const backend = new StoreBackend(runtime);
 
       const files: Array<[string, Uint8Array]> = [
         ["/file1.txt", new TextEncoder().encode("content1")],
@@ -255,8 +256,8 @@ describe("StoreBackend", () => {
     });
 
     it("should handle binary content", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
+      const { runtime } = makeConfig();
+      const backend = new StoreBackend(runtime);
 
       const binaryContent = new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f]); // "Hello"
       const files: Array<[string, Uint8Array]> = [
@@ -273,8 +274,8 @@ describe("StoreBackend", () => {
 
   describe("downloadFiles", () => {
     it("should download existing files as Uint8Array", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
+      const { runtime } = makeConfig();
+      const backend = new StoreBackend(runtime);
 
       await backend.write("/test.txt", "test content");
 
@@ -289,8 +290,8 @@ describe("StoreBackend", () => {
     });
 
     it("should return file_not_found for missing files", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
+      const { runtime } = makeConfig();
+      const backend = new StoreBackend(runtime);
 
       const result = await backend.downloadFiles(["/nonexistent.txt"]);
       expect(result).toHaveLength(1);
@@ -300,8 +301,8 @@ describe("StoreBackend", () => {
     });
 
     it("should handle multiple files with mixed results", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
+      const { runtime } = makeConfig();
+      const backend = new StoreBackend(runtime);
 
       await backend.write("/exists.txt", "I exist");
 
@@ -321,12 +322,12 @@ describe("StoreBackend", () => {
 
   it("should use custom namespace", async () => {
     const { store } = makeConfig();
-    const stateAndStore = {
+    const runtime = {
       state: { files: {}, messages: [] },
       store,
     };
 
-    const backend = new StoreBackend(stateAndStore, {
+    const backend = new StoreBackend(runtime, {
       namespace: ["org-123", "user-456", "filesystem"],
     });
 
@@ -341,16 +342,16 @@ describe("StoreBackend", () => {
 
   it("should isolate data between different namespaces", async () => {
     const { store } = makeConfig();
-    const stateAndStore = {
+    const runtime = {
       state: { files: {}, messages: [] },
       store,
     };
 
-    const userABackend = new StoreBackend(stateAndStore, {
+    const userABackend = new StoreBackend(runtime, {
       namespace: ["org-1", "user-a", "filesystem"],
     });
 
-    const userBBackend = new StoreBackend(stateAndStore, {
+    const userBBackend = new StoreBackend(runtime, {
       namespace: ["org-1", "user-b", "filesystem"],
     });
 
@@ -371,21 +372,21 @@ describe("StoreBackend", () => {
 
   it("should validate namespace components", async () => {
     const { store } = makeConfig();
-    const stateAndStore = {
+    const runtime = {
       state: { files: {}, messages: [] },
       store,
     };
 
     expect(
       () =>
-        new StoreBackend(stateAndStore, {
+        new StoreBackend(runtime, {
           namespace: ["filesystem", "*"],
         }),
     ).toThrow("disallowed characters");
 
     expect(
       () =>
-        new StoreBackend(stateAndStore, {
+        new StoreBackend(runtime, {
           namespace: [],
         }),
     ).toThrow("must not be empty");
@@ -395,16 +396,16 @@ describe("StoreBackend", () => {
     const { store } = makeConfig();
     const userId = "ctx-user-789";
 
-    const backendFactory = (stateAndStore: any) =>
-      new StoreBackend(stateAndStore, {
+    const backendFactory = (runtime: any) =>
+      new StoreBackend(runtime, {
         namespace: ["filesystem", userId],
       });
 
-    const stateAndStore = {
+    const runtime = {
       state: { files: {}, messages: [] },
       store,
     };
-    const backend = backendFactory(stateAndStore);
+    const backend = backendFactory(runtime);
 
     await backend.write("/test.txt", "context-derived namespace");
 
@@ -418,7 +419,7 @@ describe("StoreBackend", () => {
     const { ToolMessage } = await import("@langchain/core/messages");
 
     const middleware = createFilesystemMiddleware({
-      backend: (stateAndStore) => new StoreBackend(stateAndStore),
+      backend: (runtime: BackendRuntime) => new StoreBackend(runtime),
       toolTokenLimitBeforeEvict: 1000,
     });
 

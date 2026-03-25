@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import type { BackendRuntime } from "deepagents";
 import { DenoSandboxError } from "./types.js";
 
 // ============================================================================
@@ -749,8 +750,10 @@ describe("DenoSandbox", () => {
   });
 
   describe("createDenoSandboxFactoryFromSandbox", () => {
-    // Mock StateAndStore for testing
-    const mockStateAndStore = { state: { files: {} }, store: undefined };
+    const mockRuntime = {
+      state: { files: {} },
+      store: undefined,
+    } as BackendRuntime;
 
     it("should return a BackendFactory function", async () => {
       const sandbox = await DenoSandbox.create();
@@ -763,8 +766,8 @@ describe("DenoSandbox", () => {
       const sandbox = await DenoSandbox.create();
       const factory = createDenoSandboxFactoryFromSandbox(sandbox);
 
-      const result1 = factory(mockStateAndStore);
-      const result2 = factory(mockStateAndStore);
+      const result1 = await Promise.resolve(factory(mockRuntime));
+      const result2 = await Promise.resolve(factory(mockRuntime));
 
       expect(result1).toBe(sandbox);
       expect(result2).toBe(sandbox);
@@ -775,8 +778,8 @@ describe("DenoSandbox", () => {
       const initialCalls = mockState.createCalls.length;
 
       const factory = createDenoSandboxFactoryFromSandbox(sandbox);
-      factory(mockStateAndStore);
-      factory(mockStateAndStore);
+      await Promise.resolve(factory(mockRuntime));
+      await Promise.resolve(factory(mockRuntime));
 
       expect(mockState.createCalls.length).toBe(initialCalls);
     });

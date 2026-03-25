@@ -94,6 +94,8 @@ export {
   SandboxError,
   type BackendProtocol,
   type BackendFactory,
+  type BackendRuntime,
+  resolveBackend,
   type FileInfo,
   type GrepMatch,
   type WriteResult,
