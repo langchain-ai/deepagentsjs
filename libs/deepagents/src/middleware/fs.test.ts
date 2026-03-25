@@ -358,7 +358,7 @@ describe("createFilesystemMiddleware", () => {
   }
 
   describe("wrapModelCall", () => {
-    it("should add filesystem system prompt to model call", () => {
+    it("should add filesystem system prompt to model call", async () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
       });
@@ -371,7 +371,7 @@ describe("createFilesystemMiddleware", () => {
         tools: middleware.tools || [],
       };
 
-      middleware.wrapModelCall!(request as any, mockHandler);
+      await middleware.wrapModelCall!(request as any, mockHandler);
 
       expect(mockHandler).toHaveBeenCalled();
       const modifiedRequest = mockHandler.mock.calls[0][0];
@@ -379,7 +379,7 @@ describe("createFilesystemMiddleware", () => {
       expect(modifiedRequest.systemMessage.text).toContain("Base prompt");
     });
 
-    it("should include execute tool and execution prompt when backend supports execution", () => {
+    it("should include execute tool and execution prompt when backend supports execution", async () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockSandboxBackend(),
       });
@@ -392,7 +392,7 @@ describe("createFilesystemMiddleware", () => {
         tools: middleware.tools || [],
       };
 
-      middleware.wrapModelCall!(request as any, mockHandler);
+      await middleware.wrapModelCall!(request as any, mockHandler);
 
       expect(mockHandler).toHaveBeenCalled();
       const modifiedRequest = mockHandler.mock.calls[0][0];
@@ -406,7 +406,7 @@ describe("createFilesystemMiddleware", () => {
       expect(toolNames).toContain("execute");
     });
 
-    it("should exclude execute tool when backend doesn't support execution", () => {
+    it("should exclude execute tool when backend doesn't support execution", async () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
       });
@@ -419,7 +419,7 @@ describe("createFilesystemMiddleware", () => {
         tools: middleware.tools || [],
       };
 
-      middleware.wrapModelCall!(request as any, mockHandler);
+      await middleware.wrapModelCall!(request as any, mockHandler);
 
       expect(mockHandler).toHaveBeenCalled();
       const modifiedRequest = mockHandler.mock.calls[0][0];
@@ -432,7 +432,7 @@ describe("createFilesystemMiddleware", () => {
       expect(toolNames).not.toContain("execute");
     });
 
-    it("should use custom system prompt when provided", () => {
+    it("should use custom system prompt when provided", async () => {
       const customPrompt = "Custom filesystem instructions";
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
@@ -447,7 +447,7 @@ describe("createFilesystemMiddleware", () => {
         tools: middleware.tools || [],
       };
 
-      middleware.wrapModelCall!(request as any, mockHandler);
+      await middleware.wrapModelCall!(request as any, mockHandler);
 
       expect(mockHandler).toHaveBeenCalled();
       const modifiedRequest = mockHandler.mock.calls[0][0];

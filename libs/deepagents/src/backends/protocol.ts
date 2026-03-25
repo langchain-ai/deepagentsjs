@@ -6,6 +6,8 @@
  * database, etc.) and provide a uniform interface for file operations.
  */
 
+import type { Runtime } from "langchain";
+import type { ToolRuntime } from "@langchain/core/tools";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 
 export type MaybePromise<T> = T | Promise<T>;
@@ -479,6 +481,8 @@ export class SandboxError extends Error {
  * Different contexts build this differently:
  * - Tools: Extract state via getCurrentTaskInput(config)
  * - Middleware: Use request.state directly
+ *
+ * @deprecated Use {@link BackendRuntime} instead.
  */
 export interface StateAndStore {
   /** Current agent state with files, messages, etc. */
@@ -490,17 +494,48 @@ export interface StateAndStore {
 }
 
 /**
+ * Agent {@link Runtime} with `assistantId`, `state`, and `store`
+ */
+export interface BackendRuntime<StateT = unknown> extends Runtime {
+  /** Current agent state with files, messages, etc. */
+  state: StateT;
+  /** Optional assistant ID for per-assistant isolation in store */
+  assistantId?: string;
+  /** Optional BaseStore for persistent cross-conversation storage */
+  store?: BaseStore;
+}
+
+/**
  * Factory function type for creating backend instances.
  *
- * Backends receive StateAndStore which contains the current state
- * and optional store, extracted from the execution context.
+ * Backends receive {@link BackendRuntime} which contains the current state
+ * and runtime information, extracted from the execution context.
  *
  * @example
  * ```typescript
  * // Using in middleware
  * const middleware = createFilesystemMiddleware({
- *   backend: (stateAndStore) => new StateBackend(stateAndStore)
+ *   backend: (runtime) => new StateBackend(runtime)
  * });
  * ```
  */
-export type BackendFactory = (stateAndStore: StateAndStore) => BackendProtocol;
+export type BackendFactory = (
+  runtime: BackendRuntime,
+) => MaybePromise<BackendProtocol>;
+
+/**
+ * Resolve a backend instance or await a {@link BackendFactory}.
+ *
+ * Accepts {@link BackendRuntime} or {@link ToolRuntime} — store typing differs
+ * between LangGraph checkpoint stores and core `ToolRuntime`; factories receive
+ * a value that is structurally compatible at runtime.
+ */
+export async function resolveBackend(
+  backend: BackendProtocol | BackendFactory,
+  runtime: BackendRuntime | ToolRuntime,
+): Promise<BackendProtocol> {
+  if (typeof backend === "function") {
+    return await backend(runtime as BackendRuntime);
+  }
+  return backend;
+}

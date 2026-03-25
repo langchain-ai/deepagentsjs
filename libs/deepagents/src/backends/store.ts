@@ -11,8 +11,8 @@ import type {
   FileInfo,
   FileUploadResponse,
   GrepMatch,
-  StateAndStore,
   WriteResult,
+  BackendRuntime,
 } from "./protocol.js";
 import {
   createFileData,
@@ -70,17 +70,17 @@ export interface StoreBackendOptions {
    * Determines where files are stored in the LangGraph store, enabling
    * user-scoped, org-scoped, or any custom isolation pattern.
    *
-   * If not provided, falls back to legacy behavior using assistantId from StateAndStore.
+   * If not provided, falls back to legacy behavior using assistantId from {@link BackendRuntime}.
    *
    * @example
    * ```typescript
    * // User-scoped storage
-   * new StoreBackend(stateAndStore, {
+   * new StoreBackend(runtime, {
    *   namespace: ["memories", orgId, userId, "filesystem"],
    * });
    *
    * // Org-scoped storage
-   * new StoreBackend(stateAndStore, {
+   * new StoreBackend(runtime, {
    *   namespace: ["memories", orgId, "filesystem"],
    * });
    * ```
@@ -99,11 +99,11 @@ export interface StoreBackendOptions {
  * to legacy assistant_id-based isolation.
  */
 export class StoreBackend implements BackendProtocol {
-  private stateAndStore: StateAndStore;
+  private runtime: BackendRuntime;
   private _namespace: string[] | undefined;
 
-  constructor(stateAndStore: StateAndStore, options?: StoreBackendOptions) {
-    this.stateAndStore = stateAndStore;
+  constructor(runtime: BackendRuntime, options?: StoreBackendOptions) {
+    this.runtime = runtime;
     if (options?.namespace) {
       this._namespace = validateNamespace(options.namespace);
     }
@@ -116,9 +116,9 @@ export class StoreBackend implements BackendProtocol {
    * @throws Error if no store is available
    */
   private getStore() {
-    const store = this.stateAndStore.store;
+    const store = this.runtime.store;
     if (!store) {
-      throw new Error("Store is required but not available in StateAndStore");
+      throw new Error("Store is required but not available in BackendRuntime");
     }
     return store;
   }
@@ -136,7 +136,7 @@ export class StoreBackend implements BackendProtocol {
     if (this._namespace) {
       return this._namespace;
     }
-    const assistantId = this.stateAndStore.assistantId;
+    const assistantId = this.runtime.assistantId;
     if (assistantId) {
       return [assistantId, "filesystem"];
     }

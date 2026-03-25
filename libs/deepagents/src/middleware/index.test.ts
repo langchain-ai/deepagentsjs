@@ -214,8 +214,8 @@ describe("isSandboxBackend type guard", () => {
     const { isSandboxBackend } = await import("../backends/protocol.js");
     const { StateBackend } = await import("../backends/state.js");
 
-    const stateAndStore = { state: { files: {} }, store: undefined };
-    const stateBackend = new StateBackend(stateAndStore);
+    const runtime = { state: { files: {} }, store: undefined };
+    const stateBackend = new StateBackend(runtime);
 
     expect(isSandboxBackend(stateBackend)).toBe(false);
   });
