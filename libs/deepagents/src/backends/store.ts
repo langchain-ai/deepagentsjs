@@ -12,7 +12,7 @@ import type {
   FileUploadResponse,
   GrepMatch,
   WriteResult,
-  BackendRuntime,
+  StateAndStore,
 } from "./protocol.js";
 import {
   createFileData,
@@ -99,11 +99,11 @@ export interface StoreBackendOptions {
  * to legacy assistant_id-based isolation.
  */
 export class StoreBackend implements BackendProtocol {
-  private runtime: BackendRuntime;
+  private stateAndStore: StateAndStore;
   private _namespace: string[] | undefined;
 
-  constructor(runtime: BackendRuntime, options?: StoreBackendOptions) {
-    this.runtime = runtime;
+  constructor(stateAndStore: StateAndStore, options?: StoreBackendOptions) {
+    this.stateAndStore = stateAndStore;
     if (options?.namespace) {
       this._namespace = validateNamespace(options.namespace);
     }
@@ -116,9 +116,9 @@ export class StoreBackend implements BackendProtocol {
    * @throws Error if no store is available
    */
   private getStore() {
-    const store = this.runtime.store;
+    const store = this.stateAndStore.store;
     if (!store) {
-      throw new Error("Store is required but not available in BackendRuntime");
+      throw new Error("Store is required but not available in StateAndStore");
     }
     return store;
   }
@@ -136,7 +136,7 @@ export class StoreBackend implements BackendProtocol {
     if (this._namespace) {
       return this._namespace;
     }
-    const assistantId = this.runtime.assistantId;
+    const assistantId = this.stateAndStore.assistantId;
     if (assistantId) {
       return [assistantId, "filesystem"];
     }

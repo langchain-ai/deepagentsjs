@@ -494,15 +494,11 @@ export interface StateAndStore {
 }
 
 /**
- * Agent {@link Runtime} with `assistantId`, `state`, and `store`
+ * Agent {@link Runtime} with `state`
  */
 export interface BackendRuntime<StateT = unknown> extends Runtime {
   /** Current agent state with files, messages, etc. */
   state: StateT;
-  /** Optional assistant ID for per-assistant isolation in store */
-  assistantId?: string;
-  /** Optional BaseStore for persistent cross-conversation storage */
-  store?: BaseStore;
 }
 
 /**
