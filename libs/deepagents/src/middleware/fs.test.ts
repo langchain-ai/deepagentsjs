@@ -1372,9 +1372,7 @@ describe("createFilesystemMiddleware", () => {
 
       // First message (tagged) should be truncated
       expect(modelMessages[0].content).toContain("/conversation_history/");
-      expect(modelMessages[0].content.length).toBeLessThan(
-        largeContent.length,
-      );
+      expect(modelMessages[0].content.length).toBeLessThan(largeContent.length);
 
       // AI message should be unchanged
       expect(modelMessages[1].content).toBe("response");

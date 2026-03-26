@@ -952,8 +952,7 @@ export function createFilesystemMiddleware(
       }
 
       const contentStr = extractTextFromMessage(last);
-      const threshold =
-        NUM_CHARS_PER_TOKEN * humanMessageTokenLimitBeforeEvict;
+      const threshold = NUM_CHARS_PER_TOKEN * humanMessageTokenLimitBeforeEvict;
       if (contentStr.length <= threshold) {
         return undefined;
       }
