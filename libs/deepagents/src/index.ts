@@ -60,9 +60,9 @@ export {
   DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
   DEFAULT_SUBAGENT_PROMPT,
   TASK_SYSTEM_PROMPT,
-  // Completion notifier middleware for async subagents
-  createCompletionNotifierMiddleware,
-  type CompletionNotifierOptions,
+  // Completion callback middleware for async subagents
+  createCompletionCallbackMiddleware,
+  type CompletionCallbackOptions,
   // Other middleware types
   type FilesystemMiddlewareOptions,
   type SubAgentMiddlewareOptions,

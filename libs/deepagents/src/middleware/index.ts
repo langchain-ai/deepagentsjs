@@ -41,11 +41,11 @@ export {
 // Middleware utilities
 export { appendToSystemMessage, prependToSystemMessage } from "./utils.js";
 
-// Completion notifier middleware for async subagents
+// Completion callback middleware for async subagents
 export {
-  createCompletionNotifierMiddleware,
-  type CompletionNotifierOptions,
-} from "./completion_notifier.js";
+  createCompletionCallbackMiddleware,
+  type CompletionCallbackOptions,
+} from "./completion_callback.js";
 
 // Summarization middleware
 export {

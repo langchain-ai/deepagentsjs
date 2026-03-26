@@ -12,6 +12,7 @@ import {
   buildCancelTool,
   buildListTool,
   createAsyncSubAgentMiddleware,
+  extractCallbackContext,
   ClientCache,
   ASYNC_TASK_SYSTEM_PROMPT,
   TERMINAL_STATUSES,
@@ -299,6 +300,54 @@ describe("ClientCache", () => {
   });
 });
 
+describe("extractCallbackContext", () => {
+  it("should return callbackThreadId when runtime has thread_id in config", () => {
+    const runtime = {
+      config: { configurable: { thread_id: "parent-thread-123" } },
+      state: {},
+    } as unknown as ToolRuntime<AsyncToolInvokeState>;
+
+    expect(extractCallbackContext(runtime)).toEqual({
+      callbackThreadId: "parent-thread-123",
+    });
+  });
+
+  it("should return empty object when runtime has no config", () => {
+    const runtime = {
+      state: {},
+    } as unknown as ToolRuntime<AsyncToolInvokeState>;
+
+    expect(extractCallbackContext(runtime)).toEqual({});
+  });
+
+  it("should return empty object when configurable has no thread_id", () => {
+    const runtime = {
+      config: { configurable: {} },
+      state: {},
+    } as unknown as ToolRuntime<AsyncToolInvokeState>;
+
+    expect(extractCallbackContext(runtime)).toEqual({});
+  });
+
+  it("should return empty object when thread_id is empty string", () => {
+    const runtime = {
+      config: { configurable: { thread_id: "" } },
+      state: {},
+    } as unknown as ToolRuntime<AsyncToolInvokeState>;
+
+    expect(extractCallbackContext(runtime)).toEqual({});
+  });
+
+  it("should return empty object when thread_id is not a string", () => {
+    const runtime = {
+      config: { configurable: { thread_id: 42 } },
+      state: {},
+    } as unknown as ToolRuntime<AsyncToolInvokeState>;
+
+    expect(extractCallbackContext(runtime)).toEqual({});
+  });
+});
+
 // ─── buildStartTool ───
 
 /**
@@ -412,6 +461,52 @@ describe("buildStartTool", () => {
         },
       }),
     );
+  });
+
+  it("should include callbackThreadId in input when runtime has thread_id", async () => {
+    const { cache, threadsCreate, runsCreate } =
+      createMockClientCache(agentMap);
+
+    threadsCreate.mockResolvedValue({ thread_id: "t-cb" });
+    runsCreate.mockResolvedValue({ run_id: "r-cb", status: "running" });
+
+    const launchTool = buildStartTool(agentMap, cache, "Launch a SubAgent");
+    const configWithThreadId = {
+      ...config,
+      config: { configurable: { thread_id: "parent-thread-abc" } },
+    };
+    await launchTool.invoke(
+      { description: "do work", agentName: "researcher" },
+      configWithThreadId,
+    );
+
+    expect(runsCreate).toHaveBeenCalledWith(
+      "t-cb",
+      "research_graph",
+      expect.objectContaining({
+        input: {
+          messages: [{ role: "user", content: "do work" }],
+          callbackThreadId: "parent-thread-abc",
+        },
+      }),
+    );
+  });
+
+  it("should not include callbackThreadId when runtime has no thread_id", async () => {
+    const { cache, threadsCreate, runsCreate } =
+      createMockClientCache(agentMap);
+
+    threadsCreate.mockResolvedValue({ thread_id: "t-nocb" });
+    runsCreate.mockResolvedValue({ run_id: "r-nocb", status: "running" });
+
+    const launchTool = buildStartTool(agentMap, cache, "Launch a SubAgent");
+    await launchTool.invoke(
+      { description: "do work", agentName: "researcher" },
+      config,
+    );
+
+    const callArg = runsCreate.mock.calls[0][2];
+    expect(callArg.input).not.toHaveProperty("callbackThreadId");
   });
 
   it("should return an error when the SDK throws", async () => {
