@@ -59,7 +59,7 @@ function makeAgent(overrides: Partial<AsyncSubAgent> = {}): AsyncSubAgent {
     name: "researcher",
     description: "Research agent",
     graphId: "research_graph",
-    url: "https://example.langsmith.dev",
+    url: "https://researcher.example.com",
     ...overrides,
   };
 }
@@ -226,10 +226,10 @@ describe("ClientCache", () => {
 
   it("should create separate Clients for agents with different urls", () => {
     const agents = {
-      researcher: makeAgent({ url: "https://server-a.langsmith.dev" }),
+      researcher: makeAgent({ url: "https://server-a.example.com" }),
       analyst: makeAgent({
         name: "analyst",
-        url: "https://server-b.langsmith.dev",
+        url: "https://server-b.example.com",
       }),
     };
     const cache = new ClientCache(agents);
@@ -252,9 +252,10 @@ describe("ClientCache", () => {
     expect(client1).not.toBe(client2);
   });
 
-  it("should add x-auth-scheme: langsmith header by default", () => {
-    // Verified indirectly: agents with and without x-auth-scheme explicitly
-    // set should produce the same resolved headers → same cache key → same Client.
+  it("should not inject any default auth headers", () => {
+    // No x-auth-scheme header is added by default.
+    // An agent with the header explicitly set and one without should produce
+    // different cache keys and therefore different Client instances.
     const agents = {
       withHeader: makeAgent({
         name: "withHeader",
@@ -268,25 +269,25 @@ describe("ClientCache", () => {
     const cache = new ClientCache(agents);
     const client1 = cache.getClient("withHeader");
     const client2 = cache.getClient("withoutHeader");
-    // Same resolved headers → same cache key → same Client
-    expect(client1).toBe(client2);
+    // Different headers → different cache key → different Clients
+    expect(client1).not.toBe(client2);
   });
 
-  it("should not overwrite a custom x-auth-scheme header", () => {
+  it("should pass user-supplied headers through unchanged", () => {
     const agents = {
       custom: makeAgent({
         name: "custom",
         headers: { "x-auth-scheme": "custom-auth" },
       }),
-      default: makeAgent({
-        name: "default",
-        headers: {},
+      other: makeAgent({
+        name: "other",
+        headers: { "x-auth-scheme": "other-auth" },
       }),
     };
     const cache = new ClientCache(agents);
     const client1 = cache.getClient("custom");
-    const client2 = cache.getClient("default");
-    // Different x-auth-scheme → different cache key → different Clients
+    const client2 = cache.getClient("other");
+    // Different custom headers → different cache key → different Clients
     expect(client1).not.toBe(client2);
   });
 
