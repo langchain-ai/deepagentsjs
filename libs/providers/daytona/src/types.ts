@@ -109,6 +109,20 @@ export interface DaytonaSandboxOptions {
   autoStopInterval?: number;
 
   /**
+   * Auto-archive interval in minutes.
+   *
+   * The sandbox will automatically archive after being stopped for this duration.
+   */
+  autoArchiveInterval?: number;
+
+  /**
+   * Auto-delete interval in minutes.
+   *
+   * The sandbox will automatically delete after being stopped for this duration.
+   */
+  autoDeleteInterval?: number;
+
+  /**
    * Default timeout for command execution in seconds.
    *
    * @default 300 (5 minutes)
