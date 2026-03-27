@@ -1,0 +1,7 @@
+{
+  "app": "npx tsx bin/app.ts",
+  "context": {
+    "@aws-cdk/aws-apigateway:usagePlanKeyOrderInsensitiveId": true,
+    "@aws-cdk/core:stackRelativeExports": true
+  }
+}
