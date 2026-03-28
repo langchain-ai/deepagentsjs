@@ -7,7 +7,7 @@ import {
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
 import { Command } from "@langchain/langgraph";
-import { z } from "zod/v4";
+import { z } from "zod";
 
 /**
  * required for type inference

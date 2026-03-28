@@ -16,7 +16,7 @@ import {
   InferAgentMiddleware,
   SystemMessage,
 } from "langchain";
-import { z } from "zod/v4";
+import { z } from "zod";
 import { createDeepAgent } from "./agent.js";
 import type {
   MergedDeepAgentState,

@@ -7,7 +7,7 @@
  * This wraps langchain's todoListMiddleware and replaces its stateSchema
  * with one that uses ReducedValue for proper concurrent merging.
  */
-import { z } from "zod/v4";
+import { z } from "zod";
 import { randomUUID } from "crypto";
 import { Command, StateSchema, ReducedValue } from "@langchain/langgraph";
 import { tool } from "@langchain/core/tools";
