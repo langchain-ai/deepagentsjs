@@ -56,5 +56,10 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.52.0"
   },
-  "packageManager": "pnpm@10.27.0"
+  "packageManager": "pnpm@10.27.0",
+  "pnpm": {
+    "overrides": {
+      "zod": "3.25.76"
+    }
+  }
 }
