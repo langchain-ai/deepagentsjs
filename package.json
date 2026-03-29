@@ -39,7 +39,7 @@
   },
   "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "devDependencies": {
-    "@changesets/changelog-github": "^0.5.2",
+    "@changesets/changelog-github": "^0.6.0",
     "@changesets/cli": "^2.29.8",
     "@eslint/eslintrc": "^3.3.3",
     "@eslint/js": "^10.0.1",

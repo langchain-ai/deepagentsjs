@@ -12,6 +12,7 @@ import {
   StateBackend,
   StoreBackend,
   CompositeBackend,
+  type BackendRuntime,
 } from "../backends/index.js";
 
 import {
@@ -33,9 +34,9 @@ describe("Filesystem Middleware Integration Tests", () => {
       const store = useComposite ? new InMemoryStore() : undefined;
 
       const backend = useComposite
-        ? (stateAndStore: any) =>
-            new CompositeBackend(new StateBackend(stateAndStore), {
-              "/memories/": new StoreBackend(stateAndStore),
+        ? (runtime: BackendRuntime) =>
+            new CompositeBackend(new StateBackend(runtime), {
+              "/memories/": new StoreBackend(runtime),
             })
         : undefined; // Use default StateBackend
 
@@ -80,9 +81,9 @@ describe("Filesystem Middleware Integration Tests", () => {
       const store = useComposite ? new InMemoryStore() : undefined;
 
       const backend = useComposite
-        ? (stateAndStore: any) =>
-            new CompositeBackend(new StateBackend(stateAndStore), {
-              "/memories/": new StoreBackend(stateAndStore),
+        ? (runtime: BackendRuntime) =>
+            new CompositeBackend(new StateBackend(runtime), {
+              "/memories/": new StoreBackend(runtime),
             })
         : undefined;
 
@@ -144,9 +145,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ] as const,
@@ -209,9 +210,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ] as const,
@@ -263,9 +264,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ] as const,
@@ -317,9 +318,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -362,9 +363,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -405,9 +406,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -457,9 +458,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -504,9 +505,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -547,9 +548,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         tools: [getNbaStandings],
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -586,9 +587,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         tools: [getNbaStandings],
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
             toolTokenLimitBeforeEvict: 10000, // Low limit to trigger eviction
           }),
@@ -681,9 +682,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -793,9 +794,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -849,9 +850,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -974,9 +975,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -1032,9 +1033,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -1136,9 +1137,9 @@ describe("Filesystem Middleware Integration Tests", () => {
       });
 
       const agent = createDeepAgent({
-        backend: (stateAndStore: any) =>
-          new CompositeBackend(new StateBackend(stateAndStore), {
-            "/memories/": new StoreBackend(stateAndStore),
+        backend: (runtime: BackendRuntime) =>
+          new CompositeBackend(new StateBackend(runtime), {
+            "/memories/": new StoreBackend(runtime),
           }),
         checkpointer,
         store,
@@ -1211,7 +1212,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       const store = new InMemoryStore();
 
       const agent = createDeepAgent({
-        backend: (stateAndStore: any) => new StateBackend(stateAndStore),
+        backend: (runtime: BackendRuntime) => new StateBackend(runtime),
         checkpointer,
         store,
       });
@@ -1325,9 +1326,9 @@ describe("Filesystem Middleware Integration Tests", () => {
       });
 
       const agent = createDeepAgent({
-        backend: (stateAndStore: any) =>
-          new CompositeBackend(new StateBackend(stateAndStore), {
-            "/memories/": new StoreBackend(stateAndStore),
+        backend: (runtime: BackendRuntime) =>
+          new CompositeBackend(new StateBackend(runtime), {
+            "/memories/": new StoreBackend(runtime),
           }),
         checkpointer,
       });

@@ -10,7 +10,7 @@ import type {
   FileInfo,
   FileUploadResponse,
   GrepMatch,
-  StateAndStore,
+  BackendRuntime,
   WriteResult,
 } from "./protocol.js";
 import {
@@ -35,20 +35,18 @@ import {
  * for the middleware to apply via Command.
  */
 export class StateBackend implements BackendProtocol {
-  private stateAndStore: StateAndStore;
+  private runtime: BackendRuntime;
 
-  constructor(stateAndStore: StateAndStore) {
-    this.stateAndStore = stateAndStore;
+  constructor(runtime: BackendRuntime) {
+    this.runtime = runtime;
   }
 
   /**
    * Get files from current state.
    */
   private getFiles(): Record<string, FileData> {
-    return (
-      ((this.stateAndStore.state as any).files as Record<string, FileData>) ||
-      {}
-    );
+    const state = this.runtime.state as { files: Record<string, FileData> };
+    return state.files || {};
   }
 
   /**

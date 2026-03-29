@@ -19,6 +19,7 @@
 
 import {
   type Sandbox,
+  type CreateSandboxOptions,
   LangSmithResourceNotFoundError,
   LangSmithSandboxError,
   SandboxClient,
@@ -43,7 +44,10 @@ export interface LangSmithSandboxOptions {
 }
 
 /** Options for the `LangSmithSandbox.create()` static factory. */
-export interface LangSmithSandboxCreateOptions {
+export interface LangSmithSandboxCreateOptions extends Omit<
+  CreateSandboxOptions,
+  "name" | "timeout" | "waitForReady"
+> {
   /**
    * Name of the LangSmith sandbox template to use.
    * @default "deepagents"
@@ -210,10 +214,14 @@ export class LangSmithSandbox extends BaseSandbox {
       templateName = "deepagents",
       apiKey = process.env.LANGSMITH_API_KEY,
       defaultTimeout,
+      ...createSandboxOptions
     } = options;
 
     const client = new SandboxClient({ apiKey });
-    const sandbox = await client.createSandbox(templateName);
+    const sandbox = await client.createSandbox(
+      templateName,
+      createSandboxOptions,
+    );
     return new LangSmithSandbox({ sandbox, defaultTimeout });
   }
 }

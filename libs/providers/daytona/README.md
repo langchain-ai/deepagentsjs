@@ -131,6 +131,18 @@ interface DaytonaSandboxOptions {
   autoStopInterval?: number;
 
   /**
+   * Auto-archive interval in minutes.
+   * The sandbox archives after being stopped for this duration.
+   */
+  autoArchiveInterval?: number;
+
+  /**
+   * Auto-delete interval in minutes.
+   * The sandbox deletes after being stopped for this duration.
+   */
+  autoDeleteInterval?: number;
+
+  /**
    * Default timeout for command execution in seconds.
    * @default 300
    */
@@ -267,6 +279,26 @@ await sandbox.stop();
 const reconnected = await DaytonaSandbox.connect(sandboxId);
 await reconnected.start(); // Restart the sandbox
 const result = await reconnected.execute("ls -la");
+```
+
+## Auto-Archive and Auto-Delete
+
+Configure post-stop lifecycle behavior directly at creation time:
+
+```typescript
+const sandbox = await DaytonaSandbox.create({
+  snapshot: "my-snapshot-name",
+  // Auto-archive after a sandbox has been stopped for 1 hour
+  autoArchiveInterval: 60,
+});
+```
+
+```typescript
+const sandbox = await DaytonaSandbox.create({
+  snapshot: "my-snapshot-name",
+  // Auto-delete after a sandbox has been stopped for 1 hour
+  autoDeleteInterval: 60,
+});
 ```
 
 ## Sandbox Lifecycle

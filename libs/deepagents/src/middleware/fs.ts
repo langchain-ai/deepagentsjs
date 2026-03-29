@@ -12,11 +12,11 @@ import {
   HumanMessage,
   ToolMessage,
   type AgentMiddleware as _AgentMiddleware,
+  type ToolRuntime,
 } from "langchain";
 import {
   Command,
   isCommand,
-  getCurrentTaskInput,
   StateSchema,
   ReducedValue,
 } from "@langchain/langgraph";
@@ -24,10 +24,10 @@ import { z } from "zod/v4";
 import type {
   BackendProtocol,
   BackendFactory,
+  BackendRuntime,
   FileData,
-  StateAndStore,
 } from "../backends/protocol.js";
-import { isSandboxBackend } from "../backends/protocol.js";
+import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
 import {
   sanitizeToolCallId,
@@ -327,22 +327,6 @@ const FilesystemStateSchema = new StateSchema({
   ),
 });
 
-/**
- * Resolve backend from factory or instance.
- *
- * @param backend - Backend instance or factory function
- * @param stateAndStore - State and store container for backend initialization
- */
-function getBackend(
-  backend: BackendProtocol | BackendFactory,
-  stateAndStore: StateAndStore,
-): BackendProtocol {
-  if (typeof backend === "function") {
-    return backend(stateAndStore);
-  }
-  return backend;
-}
-
 // System prompts
 const FILESYSTEM_SYSTEM_PROMPT = `## Filesystem Tools \`ls\`, \`read_file\`, \`write_file\`, \`edit_file\`, \`glob\`, \`grep\`
 
@@ -475,12 +459,8 @@ function createLsTool(
 ) {
   const { customDescription } = options;
   return tool(
-    async (input, config) => {
-      const stateAndStore: StateAndStore = {
-        state: getCurrentTaskInput(config),
-        store: (config as any).store,
-      };
-      const resolvedBackend = getBackend(backend, stateAndStore);
+    async (input, runtime: ToolRuntime) => {
+      const resolvedBackend = await resolveBackend(backend, runtime);
       const path = input.path || "/";
       const infos = await resolvedBackend.lsInfo(path);
 
@@ -532,12 +512,8 @@ function createReadFileTool(
 ) {
   const { customDescription, toolTokenLimitBeforeEvict } = options;
   return tool(
-    async (input, config) => {
-      const stateAndStore: StateAndStore = {
-        state: getCurrentTaskInput(config),
-        store: (config as any).store,
-      };
-      const resolvedBackend = getBackend(backend, stateAndStore);
+    async (input, runtime: ToolRuntime) => {
+      const resolvedBackend = await resolveBackend(backend, runtime);
       const {
         file_path,
         offset = DEFAULT_READ_LINE_OFFSET,
@@ -598,12 +574,8 @@ function createWriteFileTool(
 ) {
   const { customDescription } = options;
   return tool(
-    async (input, config) => {
-      const stateAndStore: StateAndStore = {
-        state: getCurrentTaskInput(config),
-        store: (config as any).store,
-      };
-      const resolvedBackend = getBackend(backend, stateAndStore);
+    async (input, runtime: ToolRuntime) => {
+      const resolvedBackend = await resolveBackend(backend, runtime);
       const { file_path, content } = input;
       const result = await resolvedBackend.write(file_path, content);
 
@@ -614,7 +586,7 @@ function createWriteFileTool(
       // If filesUpdate is present, return Command to update state
       const message = new ToolMessage({
         content: `Successfully wrote to '${file_path}'`,
-        tool_call_id: config.toolCall?.id as string,
+        tool_call_id: runtime.toolCall?.id as string,
         name: "write_file",
         metadata: result.metadata,
       });
@@ -650,12 +622,8 @@ function createEditFileTool(
 ) {
   const { customDescription } = options;
   return tool(
-    async (input, config) => {
-      const stateAndStore: StateAndStore = {
-        state: getCurrentTaskInput(config),
-        store: (config as any).store,
-      };
-      const resolvedBackend = getBackend(backend, stateAndStore);
+    async (input, runtime: ToolRuntime) => {
+      const resolvedBackend = await resolveBackend(backend, runtime);
       const { file_path, old_string, new_string, replace_all = false } = input;
       const result = await resolvedBackend.edit(
         file_path,
@@ -670,7 +638,7 @@ function createEditFileTool(
 
       const message = new ToolMessage({
         content: `Successfully replaced ${result.occurrences} occurrence(s) in '${file_path}'`,
-        tool_call_id: config.toolCall?.id as string,
+        tool_call_id: runtime.toolCall?.id as string,
         name: "edit_file",
         metadata: result.metadata,
       });
@@ -713,12 +681,8 @@ function createGlobTool(
 ) {
   const { customDescription } = options;
   return tool(
-    async (input, config) => {
-      const stateAndStore: StateAndStore = {
-        state: getCurrentTaskInput(config),
-        store: (config as any).store,
-      };
-      const resolvedBackend = getBackend(backend, stateAndStore);
+    async (input, runtime: ToolRuntime) => {
+      const resolvedBackend = await resolveBackend(backend, runtime);
       const { pattern, path = "/" } = input;
       const infos = await resolvedBackend.globInfo(pattern, path);
 
@@ -758,12 +722,8 @@ function createGrepTool(
 ) {
   const { customDescription } = options;
   return tool(
-    async (input, config) => {
-      const stateAndStore: StateAndStore = {
-        state: getCurrentTaskInput(config),
-        store: (config as any).store,
-      };
-      const resolvedBackend = getBackend(backend, stateAndStore);
+    async (input, runtime: ToolRuntime) => {
+      const resolvedBackend = await resolveBackend(backend, runtime);
       const { pattern, path = "/", glob = null } = input;
       const result = await resolvedBackend.grepRaw(pattern, path, glob);
 
@@ -823,12 +783,8 @@ function createExecuteTool(
 ) {
   const { customDescription } = options;
   return tool(
-    async (input, config) => {
-      const stateAndStore: StateAndStore = {
-        state: getCurrentTaskInput(config),
-        store: (config as any).store,
-      };
-      const resolvedBackend = getBackend(backend, stateAndStore);
+    async (input, runtime: ToolRuntime) => {
+      const resolvedBackend = await resolveBackend(backend, runtime);
 
       // Runtime check - fail gracefully if not supported
       if (!isSandboxBackend(resolvedBackend)) {
@@ -888,7 +844,7 @@ export function createFilesystemMiddleware(
   options: FilesystemMiddlewareOptions = {},
 ) {
   const {
-    backend = (stateAndStore: StateAndStore) => new StateBackend(stateAndStore),
+    backend = (runtime: BackendRuntime) => new StateBackend(runtime),
     systemPrompt: customSystemPrompt = null,
     customToolDescriptions = null,
     toolTokenLimitBeforeEvict = 20000,
@@ -990,11 +946,10 @@ export function createFilesystemMiddleware(
     },
     wrapModelCall: async (request, handler) => {
       // Check if backend supports execution
-      const stateAndStore: StateAndStore = {
-        state: request.state || {},
-        store: request.runtime?.store,
-      };
-      const resolvedBackend = getBackend(backend, stateAndStore);
+      const resolvedBackend = await resolveBackend(backend, {
+        ...request.runtime,
+        state: request.state,
+      });
       const supportsExecution = isSandboxBackend(resolvedBackend);
 
       // Filter tools based on backend capabilities
@@ -1069,12 +1024,10 @@ export function createFilesystemMiddleware(
           typeof msg.content === "string" &&
           msg.content.length > toolTokenLimitBeforeEvict * NUM_CHARS_PER_TOKEN
         ) {
-          // Build StateAndStore from request
-          const stateAndStore: StateAndStore = {
-            state: request.state || {},
-            store: request.runtime?.store,
-          };
-          const resolvedBackend = getBackend(backend, stateAndStore);
+          const resolvedBackend = await resolveBackend(backend, {
+            ...request.runtime,
+            state: request.state,
+          });
           const sanitizedId = sanitizeToolCallId(
             request.toolCall?.id || msg.tool_call_id,
           );

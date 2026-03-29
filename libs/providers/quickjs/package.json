@@ -1,6 +1,6 @@
 {
   "name": "@langchain/quickjs",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Sandboxed JavaScript REPL for deepagents using QuickJS (WASM)",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -61,7 +61,7 @@
     "@vitest/coverage-v8": "^4.0.18",
     "deepagents": "workspace:*",
     "dotenv": "^17.2.3",
-    "langchain": "1.2.36",
+    "langchain": "1.2.37",
     "tsdown": "^0.21.4",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",

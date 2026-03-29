@@ -12,7 +12,6 @@ import type {
   StructuredTool,
 } from "@langchain/core/tools";
 import { Runnable } from "@langchain/core/runnables";
-import type { BaseStore } from "@langchain/langgraph-checkpoint";
 
 import {
   createFilesystemMiddleware,
@@ -28,6 +27,7 @@ import { StateBackend } from "./backends/index.js";
 import { ConfigurationError } from "./errors.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { CompiledSubAgent } from "./middleware/subagents.js";
+import type { BackendRuntime } from "./backends/index.js";
 import type {
   CreateDeepAgentParams,
   DeepAgent,
@@ -176,8 +176,7 @@ export function createDeepAgent<
    */
   const filesystemBackend = backend
     ? backend
-    : (config: { state: unknown; store?: BaseStore }) =>
-        new StateBackend(config);
+    : (runtime: BackendRuntime) => new StateBackend(runtime);
 
   /**
    * Skills middleware (created conditionally for runtime use)

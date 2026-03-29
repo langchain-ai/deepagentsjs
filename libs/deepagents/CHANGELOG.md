@@ -1,5 +1,13 @@
 # deepagents
 
+## 1.8.6
+
+### Patch Changes
+
+- [#362](https://github.com/langchain-ai/deepagentsjs/pull/362) [`028f2f8`](https://github.com/langchain-ai/deepagentsjs/commit/028f2f818f9c4f95e71308fbdc80d035f0709224) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): extend BackendFactory and make it async
+
+- [#381](https://github.com/langchain-ai/deepagentsjs/pull/381) [`8e6a283`](https://github.com/langchain-ai/deepagentsjs/commit/8e6a28316b8a1cf620192312917a9fd43aa8693c) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): support ttl for LS sandbox
+
 ## 1.8.5
 
 ### Patch Changes

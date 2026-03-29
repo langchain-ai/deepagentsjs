@@ -11,8 +11,8 @@ import type {
   FileInfo,
   FileUploadResponse,
   GrepMatch,
-  StateAndStore,
   WriteResult,
+  StateAndStore,
 } from "./protocol.js";
 import {
   createFileData,
@@ -70,17 +70,17 @@ export interface StoreBackendOptions {
    * Determines where files are stored in the LangGraph store, enabling
    * user-scoped, org-scoped, or any custom isolation pattern.
    *
-   * If not provided, falls back to legacy behavior using assistantId from StateAndStore.
+   * If not provided, falls back to legacy behavior using assistantId from {@link BackendRuntime}.
    *
    * @example
    * ```typescript
    * // User-scoped storage
-   * new StoreBackend(stateAndStore, {
+   * new StoreBackend(runtime, {
    *   namespace: ["memories", orgId, userId, "filesystem"],
    * });
    *
    * // Org-scoped storage
-   * new StoreBackend(stateAndStore, {
+   * new StoreBackend(runtime, {
    *   namespace: ["memories", orgId, "filesystem"],
    * });
    * ```

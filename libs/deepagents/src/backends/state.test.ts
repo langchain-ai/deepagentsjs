@@ -23,7 +23,7 @@ function makeConfig(files: Record<string, FileData> = {}) {
   vi.mocked(getCurrentTaskInput).mockReturnValue(state);
   return {
     state,
-    stateAndStore: { state, store: undefined },
+    runtime: { state, store: undefined },
     config: {},
   };
 }
@@ -34,8 +34,8 @@ describe("StateBackend", () => {
   });
 
   it("should write, read, edit, ls, grep, and glob", () => {
-    const { state, stateAndStore } = makeConfig();
-    const backend = new StateBackend(stateAndStore);
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime);
 
     const writeRes = backend.write("/notes.txt", "hello world");
     expect(writeRes).toBeDefined();
@@ -74,8 +74,8 @@ describe("StateBackend", () => {
   });
 
   it("should handle errors correctly", () => {
-    const { state, stateAndStore } = makeConfig();
-    const backend = new StateBackend(stateAndStore);
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime);
 
     const editErr = backend.edit("/missing.txt", "a", "b");
     expect(editErr.error).toBeDefined();
@@ -91,8 +91,8 @@ describe("StateBackend", () => {
   });
 
   it("should list nested directories correctly", () => {
-    const { state, stateAndStore } = makeConfig();
-    const backend = new StateBackend(stateAndStore);
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime);
 
     const files: Record<string, string> = {
       "/src/main.py": "main code",
@@ -134,8 +134,8 @@ describe("StateBackend", () => {
   });
 
   it("should handle trailing slashes in ls", () => {
-    const { state, stateAndStore } = makeConfig();
-    const backend = new StateBackend(stateAndStore);
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime);
 
     const files: Record<string, string> = {
       "/file.txt": "content",
@@ -160,8 +160,8 @@ describe("StateBackend", () => {
   });
 
   it("should handle read with offset and limit", () => {
-    const { state, stateAndStore } = makeConfig();
-    const backend = new StateBackend(stateAndStore);
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime);
 
     const content = "line1\nline2\nline3\nline4\nline5";
     const writeRes = backend.write("/multiline.txt", content);
@@ -175,8 +175,8 @@ describe("StateBackend", () => {
   });
 
   it("should handle edit with replace_all", () => {
-    const { state, stateAndStore } = makeConfig();
-    const backend = new StateBackend(stateAndStore);
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime);
 
     const writeRes = backend.write("/repeat.txt", "foo bar foo baz foo");
     Object.assign(state.files, writeRes.filesUpdate!);
@@ -196,8 +196,8 @@ describe("StateBackend", () => {
   });
 
   it("should handle grep with glob filter", () => {
-    const { state, stateAndStore } = makeConfig();
-    const backend = new StateBackend(stateAndStore);
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime);
 
     const files: Record<string, string> = {
       "/test.py": "import os",
@@ -219,8 +219,8 @@ describe("StateBackend", () => {
   });
 
   it("should return empty content warning for empty files", () => {
-    const { state, stateAndStore } = makeConfig();
-    const backend = new StateBackend(stateAndStore);
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime);
 
     const writeRes = backend.write("/empty.txt", "");
     Object.assign(state.files, writeRes.filesUpdate!);
@@ -233,8 +233,8 @@ describe("StateBackend", () => {
 
   describe("uploadFiles", () => {
     it("should upload files and return filesUpdate", () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore);
+      const { runtime } = makeConfig();
+      const backend = new StateBackend(runtime);
 
       const files: Array<[string, Uint8Array]> = [
         ["/file1.txt", new TextEncoder().encode("content1")],
@@ -255,8 +255,8 @@ describe("StateBackend", () => {
     });
 
     it("should handle binary content", () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore);
+      const { runtime } = makeConfig();
+      const backend = new StateBackend(runtime);
 
       const binaryContent = new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f]); // "Hello"
       const files: Array<[string, Uint8Array]> = [
@@ -273,8 +273,8 @@ describe("StateBackend", () => {
 
   describe("downloadFiles", () => {
     it("should download existing files as Uint8Array", () => {
-      const { state, stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore);
+      const { state, runtime } = makeConfig();
+      const backend = new StateBackend(runtime);
 
       const writeRes = backend.write("/test.txt", "test content");
       Object.assign(state.files, writeRes.filesUpdate);
@@ -290,8 +290,8 @@ describe("StateBackend", () => {
     });
 
     it("should return file_not_found for missing files", () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore);
+      const { runtime } = makeConfig();
+      const backend = new StateBackend(runtime);
 
       const result = backend.downloadFiles(["/nonexistent.txt"]);
       expect(result).toHaveLength(1);
@@ -301,8 +301,8 @@ describe("StateBackend", () => {
     });
 
     it("should handle multiple files with mixed results", () => {
-      const { state, stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore);
+      const { state, runtime } = makeConfig();
+      const backend = new StateBackend(runtime);
 
       const writeRes = backend.write("/exists.txt", "I exist");
       Object.assign(state.files, writeRes.filesUpdate);
