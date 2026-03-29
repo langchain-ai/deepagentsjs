@@ -8,7 +8,11 @@ import {
   TOOLS_EXCLUDED_FROM_EVICTION,
 } from "./fs.js";
 import type { FileData, BackendProtocol } from "../backends/protocol.js";
-import { SystemMessage } from "@langchain/core/messages";
+import {
+  SystemMessage,
+  HumanMessage,
+  AIMessage,
+} from "@langchain/core/messages";
 import { ToolMessage } from "langchain";
 import { Command, isCommand, getCurrentTaskInput } from "@langchain/langgraph";
 
@@ -978,6 +982,474 @@ describe("createFilesystemMiddleware", () => {
       expect(result).not.toContain("truncated");
       expect(result).toContain("/src/file1.ts");
       expect(result).toContain("const pattern = 'test'");
+    });
+  });
+
+  describe("beforeAgent - large HumanMessage eviction", () => {
+    it("should return undefined when eviction is disabled", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        humanMessageTokenLimitBeforeEvict: null,
+      });
+
+      const state = {
+        messages: [new HumanMessage({ content: "x".repeat(1_000_000) })],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+      expect(result).toBeUndefined();
+    });
+
+    it("should return undefined when messages is empty", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        humanMessageTokenLimitBeforeEvict: 100,
+      });
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({ messages: [] });
+      expect(result).toBeUndefined();
+    });
+
+    it("should return undefined when last message is not a HumanMessage", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        humanMessageTokenLimitBeforeEvict: 100,
+      });
+
+      const state = {
+        messages: [
+          new AIMessage({
+            content: "x".repeat(100 * NUM_CHARS_PER_TOKEN + 1),
+          }),
+        ],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+      expect(result).toBeUndefined();
+    });
+
+    it("should return undefined when HumanMessage is below threshold", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        humanMessageTokenLimitBeforeEvict: 1000,
+      });
+
+      const state = {
+        messages: [new HumanMessage({ content: "small message" })],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+      expect(result).toBeUndefined();
+    });
+
+    it("should tag a large HumanMessage with lc_evicted_to and preserve original content", async () => {
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: undefined,
+        filesUpdate: null,
+      });
+      mockBackend.write = mockWrite;
+
+      const threshold = 100;
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        humanMessageTokenLimitBeforeEvict: threshold,
+      });
+
+      const largeContent = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
+      const state = {
+        messages: [new HumanMessage({ content: largeContent, id: "human-1" })],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+
+      expect(result).toBeDefined();
+      expect(result!.messages).toHaveLength(1);
+      const tagged = result!.messages[0];
+      expect(HumanMessage.isInstance(tagged)).toBe(true);
+      expect(tagged.id).toBe("human-1");
+
+      // Original content is preserved in state
+      expect(tagged.content).toBe(largeContent);
+
+      // Message is tagged with the file path
+      const evictedTo = tagged.additional_kwargs?.lc_evicted_to;
+      expect(evictedTo).toBeDefined();
+      expect(evictedTo).toMatch(/^\/conversation_history\/[a-f0-9]{12}$/);
+
+      // Content was written to backend
+      expect(mockWrite).toHaveBeenCalledTimes(1);
+      const writePath = mockWrite.mock.calls[0][0] as string;
+      expect(writePath).toBe(evictedTo);
+      expect(mockWrite.mock.calls[0][1]).toBe(largeContent);
+    });
+
+    it("should skip already-tagged messages", async () => {
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: undefined,
+        filesUpdate: null,
+      });
+      mockBackend.write = mockWrite;
+
+      const threshold = 100;
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        humanMessageTokenLimitBeforeEvict: threshold,
+      });
+
+      const largeContent = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
+      const state = {
+        messages: [
+          new HumanMessage({
+            content: largeContent,
+            additional_kwargs: { lc_evicted_to: "/conversation_history/abc" },
+          }),
+        ],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+      expect(result).toBeUndefined();
+      expect(mockWrite).not.toHaveBeenCalled();
+    });
+
+    it("should return undefined when backend write fails", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.write = vi.fn().mockResolvedValue({
+        error: "Failed to write file",
+        filesUpdate: null,
+      });
+
+      const threshold = 100;
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        humanMessageTokenLimitBeforeEvict: threshold,
+      });
+
+      const largeContent = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
+      const state = {
+        messages: [new HumanMessage({ content: largeContent })],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+      expect(result).toBeUndefined();
+    });
+
+    it("should include filesUpdate when backend provides one", async () => {
+      const fileData: FileData = {
+        content: ["large content"],
+        created_at: "2024-01-01T00:00:00Z",
+        modified_at: "2024-01-01T00:00:00Z",
+      };
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: null,
+        filesUpdate: { "/conversation_history/abc123": fileData },
+      });
+      mockBackend.write = mockWrite;
+
+      const threshold = 100;
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        humanMessageTokenLimitBeforeEvict: threshold,
+      });
+
+      const largeContent = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
+      const state = {
+        messages: [new HumanMessage({ content: largeContent })],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+
+      expect(result).toBeDefined();
+      expect(result!.files).toBeDefined();
+    });
+
+    it("should preserve additional_kwargs and response_metadata", async () => {
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: null,
+        filesUpdate: null,
+      });
+      mockBackend.write = mockWrite;
+
+      const threshold = 100;
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        humanMessageTokenLimitBeforeEvict: threshold,
+      });
+
+      const largeContent = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
+      const state = {
+        messages: [
+          new HumanMessage({
+            content: largeContent,
+            id: "msg-42",
+            additional_kwargs: { trace: "xyz" },
+            response_metadata: { provider: "test" },
+          }),
+        ],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+
+      expect(result).toBeDefined();
+      const tagged = result!.messages[0];
+      expect(tagged.id).toBe("msg-42");
+      expect(tagged.additional_kwargs).toEqual({
+        trace: "xyz",
+        lc_evicted_to: expect.stringMatching(
+          /^\/conversation_history\/[a-f0-9]{12}$/,
+        ),
+      });
+      expect(tagged.response_metadata).toEqual({ provider: "test" });
+    });
+
+    it("should only check the last message", async () => {
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: null,
+        filesUpdate: null,
+      });
+      mockBackend.write = mockWrite;
+
+      const threshold = 100;
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        humanMessageTokenLimitBeforeEvict: threshold,
+      });
+
+      const largeContent = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
+      const state = {
+        messages: [
+          new HumanMessage({ content: largeContent }),
+          new AIMessage({ content: "response" }),
+        ],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+
+      // Last message is AIMessage, not HumanMessage - no eviction
+      expect(result).toBeUndefined();
+      expect(mockWrite).not.toHaveBeenCalled();
+    });
+
+    it("should work with backend factory", async () => {
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: null,
+        filesUpdate: null,
+      });
+      mockBackend.write = mockWrite;
+      const backendFactory = vi.fn().mockReturnValue(mockBackend);
+
+      const threshold = 100;
+      const middleware = createFilesystemMiddleware({
+        backend: backendFactory,
+        humanMessageTokenLimitBeforeEvict: threshold,
+      });
+
+      const largeContent = "x".repeat(threshold * NUM_CHARS_PER_TOKEN + 1);
+      const state = {
+        messages: [new HumanMessage({ content: largeContent })],
+      };
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.(state);
+
+      expect(result).toBeDefined();
+      expect(backendFactory).toHaveBeenCalled();
+      expect(mockWrite).toHaveBeenCalled();
+    });
+  });
+
+  describe("wrapModelCall - HumanMessage truncation", () => {
+    it("should truncate tagged HumanMessages in model request", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        humanMessageTokenLimitBeforeEvict: 100,
+      });
+
+      const largeContent = "x".repeat(100 * NUM_CHARS_PER_TOKEN + 1);
+      const taggedMessage = new HumanMessage({
+        content: largeContent,
+        id: "tagged-1",
+        additional_kwargs: {
+          lc_evicted_to: "/conversation_history/abc123",
+        },
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: middleware.tools || [],
+        messages: [taggedMessage],
+      };
+
+      await middleware.wrapModelCall!(request as any, mockHandler);
+
+      expect(mockHandler).toHaveBeenCalled();
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      const modelMessages = modifiedRequest.messages;
+      expect(modelMessages).toHaveLength(1);
+
+      const truncated = modelMessages[0];
+      expect(HumanMessage.isInstance(truncated)).toBe(true);
+      expect(truncated.content).not.toBe(largeContent);
+      expect(truncated.content).toContain("/conversation_history/abc123");
+      expect(truncated.content).toContain("read_file");
+    });
+
+    it("should not modify untagged messages", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        humanMessageTokenLimitBeforeEvict: 100,
+      });
+
+      const normalMessage = new HumanMessage({
+        content: "normal message",
+        id: "normal-1",
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: middleware.tools || [],
+        messages: [normalMessage],
+      };
+
+      await middleware.wrapModelCall!(request as any, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      const modelMessages = modifiedRequest.messages;
+      expect(modelMessages[0].content).toBe("normal message");
+    });
+
+    it("should truncate tagged messages and pass through untagged ones", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        humanMessageTokenLimitBeforeEvict: 20_000,
+      });
+
+      const largeContent = "x".repeat(20_000 * NUM_CHARS_PER_TOKEN + 1);
+      const taggedMessage = new HumanMessage({
+        content: largeContent,
+        additional_kwargs: {
+          lc_evicted_to: "/conversation_history/abc123",
+        },
+      });
+      const normalMessage = new HumanMessage({ content: "normal" });
+      const aiMessage = new AIMessage({ content: "response" });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: middleware.tools || [],
+        messages: [taggedMessage, aiMessage, normalMessage],
+      };
+
+      await middleware.wrapModelCall!(request as any, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      const modelMessages = modifiedRequest.messages;
+      expect(modelMessages).toHaveLength(3);
+
+      // First message (tagged) should be truncated
+      expect(modelMessages[0].content).toContain("/conversation_history/");
+      expect(modelMessages[0].content.length).toBeLessThan(largeContent.length);
+
+      // AI message should be unchanged
+      expect(modelMessages[1].content).toBe("response");
+
+      // Normal HumanMessage should be unchanged
+      expect(modelMessages[2].content).toBe("normal");
+    });
+
+    it("should preserve non-text blocks when truncating tagged list content", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        humanMessageTokenLimitBeforeEvict: 100,
+      });
+
+      const largeText = "x".repeat(100 * NUM_CHARS_PER_TOKEN + 1);
+      const imageBlock = {
+        type: "image_url",
+        image_url: { url: "data:image/png;base64,abc" },
+      };
+      const taggedMessage = new HumanMessage({
+        content: [{ type: "text", text: largeText }, imageBlock],
+        additional_kwargs: {
+          lc_evicted_to: "/conversation_history/abc123",
+        },
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: middleware.tools || [],
+        messages: [taggedMessage],
+      };
+
+      await middleware.wrapModelCall!(request as any, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      const truncated = modifiedRequest.messages[0];
+      expect(Array.isArray(truncated.content)).toBe(true);
+
+      const content = truncated.content as Array<Record<string, unknown>>;
+      const textBlock = content.find((b: any) => b.type === "text");
+      expect(textBlock).toBeDefined();
+      expect((textBlock as any).text).toContain("/conversation_history/");
+
+      const preservedImage = content.find((b: any) => b.type === "image_url");
+      expect(preservedImage).toBeDefined();
+    });
+
+    it("should not truncate when humanMessageTokenLimitBeforeEvict is null", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        humanMessageTokenLimitBeforeEvict: null,
+      });
+
+      const taggedMessage = new HumanMessage({
+        content: "large content here",
+        additional_kwargs: {
+          lc_evicted_to: "/conversation_history/abc123",
+        },
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: middleware.tools || [],
+        messages: [taggedMessage],
+      };
+
+      await middleware.wrapModelCall!(request as any, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      // When disabled, tagged messages pass through unmodified
+      expect(modifiedRequest.messages[0].content).toBe("large content here");
     });
   });
 });

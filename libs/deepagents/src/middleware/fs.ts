@@ -9,6 +9,7 @@
 import {
   createMiddleware,
   tool,
+  HumanMessage,
   ToolMessage,
   type AgentMiddleware as _AgentMiddleware,
   type ToolRuntime,
@@ -115,6 +116,93 @@ Here is a preview showing the head and tail of the result (lines of the form
 indicate omitted lines in the middle of the content):
 
 {content_sample}`;
+
+/**
+ * Message template for evicted HumanMessages.
+ */
+const TOO_LARGE_HUMAN_MSG = `Message content too large and was saved to the filesystem at: {file_path}
+
+You can read the full content using the read_file tool with pagination (offset and limit parameters).
+
+Here is a preview showing the head and tail of the content:
+
+{content_sample}`;
+
+/**
+ * Extract text content from a message.
+ *
+ * For string content, returns it directly. For array content (mixed block types
+ * like text + image), joins all text blocks. Returns empty string if no text found.
+ */
+function extractTextFromMessage(message: {
+  content: string | Array<Record<string, unknown>>;
+}): string {
+  if (typeof message.content === "string") {
+    return message.content;
+  }
+  if (Array.isArray(message.content)) {
+    return message.content
+      .filter(
+        (block) => block.type === "text" && typeof block.text === "string",
+      )
+      .map((block) => block.text as string)
+      .join("\n");
+  }
+  return String(message.content);
+}
+
+/**
+ * Build replacement content for an evicted HumanMessage, preserving non-text blocks.
+ *
+ * For plain string content, returns the replacement text directly. For list content
+ * with mixed block types (e.g., text + image), replaces all text blocks with a single
+ * text block containing the replacement text while keeping non-text blocks intact.
+ */
+function buildEvictedHumanContent(
+  message: HumanMessage,
+  replacementText: string,
+): string | Array<Record<string, unknown>> {
+  if (typeof message.content === "string") {
+    return replacementText;
+  }
+  if (Array.isArray(message.content)) {
+    const mediaBlocks = message.content.filter(
+      (block) =>
+        typeof block === "object" && block !== null && block.type !== "text",
+    );
+    if (mediaBlocks.length === 0) {
+      return replacementText;
+    }
+    return [{ type: "text", text: replacementText }, ...mediaBlocks];
+  }
+  return replacementText;
+}
+
+/**
+ * Build a truncated HumanMessage for the model request.
+ *
+ * Computes a preview from the full content still in state and returns a
+ * lightweight replacement the model will see. Pure string computation — no
+ * backend I/O.
+ */
+function buildTruncatedHumanMessage(
+  message: HumanMessage,
+  filePath: string,
+): HumanMessage {
+  const contentStr = extractTextFromMessage(message);
+  const contentSample = createContentPreview(contentStr);
+  const replacementText = TOO_LARGE_HUMAN_MSG.replace(
+    "{file_path}",
+    filePath,
+  ).replace("{content_sample}", contentSample);
+  const evictedContent = buildEvictedHumanContent(message, replacementText);
+  return new HumanMessage({
+    content: evictedContent as any,
+    id: message.id,
+    additional_kwargs: { ...message.additional_kwargs },
+    response_metadata: { ...message.response_metadata },
+  });
+}
 
 /**
  * Create a preview of content showing head and tail with truncation marker.
@@ -745,6 +833,8 @@ export interface FilesystemMiddlewareOptions {
   customToolDescriptions?: Record<string, string> | null;
   /** Optional token limit before evicting a tool result to the filesystem (default: 20000 tokens, ~80KB) */
   toolTokenLimitBeforeEvict?: number | null;
+  /** Optional token limit before evicting a HumanMessage to the filesystem (default: 50000 tokens, ~200KB) */
+  humanMessageTokenLimitBeforeEvict?: number | null;
 }
 
 /**
@@ -758,6 +848,7 @@ export function createFilesystemMiddleware(
     systemPrompt: customSystemPrompt = null,
     customToolDescriptions = null,
     toolTokenLimitBeforeEvict = 20000,
+    humanMessageTokenLimitBeforeEvict = 50000,
   } = options;
 
   const baseSystemPrompt = customSystemPrompt || FILESYSTEM_SYSTEM_PROMPT;
@@ -797,6 +888,61 @@ export function createFilesystemMiddleware(
     name: "FilesystemMiddleware",
     stateSchema: FilesystemStateSchema,
     tools: allTools,
+    async beforeAgent(state) {
+      if (!humanMessageTokenLimitBeforeEvict) {
+        return undefined;
+      }
+
+      const messages = state.messages;
+      if (!messages || messages.length === 0) {
+        return undefined;
+      }
+
+      const last = messages[messages.length - 1];
+      if (!HumanMessage.isInstance(last)) {
+        return undefined;
+      }
+
+      if (last.additional_kwargs?.lc_evicted_to) {
+        return undefined;
+      }
+
+      const contentStr = extractTextFromMessage(last);
+      const threshold = NUM_CHARS_PER_TOKEN * humanMessageTokenLimitBeforeEvict;
+      if (contentStr.length <= threshold) {
+        return undefined;
+      }
+
+      const resolvedBackend = await resolveBackend(backend, {
+        state: state || {},
+      } as BackendRuntime);
+
+      const fileId = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+      const filePath = `/conversation_history/${fileId}`;
+      const writeResult = await resolvedBackend.write(filePath, contentStr);
+
+      if (writeResult.error) {
+        return undefined;
+      }
+
+      const taggedMessage = new HumanMessage({
+        content: last.content as any,
+        id: last.id,
+        additional_kwargs: {
+          ...last.additional_kwargs,
+          lc_evicted_to: filePath,
+        },
+        response_metadata: { ...last.response_metadata },
+      });
+
+      const result: Record<string, unknown> = {
+        messages: [taggedMessage],
+      };
+      if (writeResult.filesUpdate) {
+        result.files = writeResult.filesUpdate;
+      }
+      return result;
+    },
     wrapModelCall: async (request, handler) => {
       // Check if backend supports execution
       const resolvedBackend = await resolveBackend(backend, {
@@ -820,7 +966,35 @@ export function createFilesystemMiddleware(
       // Combine with existing system message
       const newSystemMessage = request.systemMessage.concat(filesystemPrompt);
 
-      return handler({ ...request, tools, systemMessage: newSystemMessage });
+      let messages = request.messages;
+      if (humanMessageTokenLimitBeforeEvict && messages) {
+        const hasTagged = messages.some(
+          (msg: any) =>
+            HumanMessage.isInstance(msg) &&
+            msg.additional_kwargs?.lc_evicted_to,
+        );
+        if (hasTagged) {
+          messages = messages.map((msg: any) => {
+            if (
+              HumanMessage.isInstance(msg) &&
+              msg.additional_kwargs?.lc_evicted_to
+            ) {
+              return buildTruncatedHumanMessage(
+                msg,
+                msg.additional_kwargs.lc_evicted_to as string,
+              );
+            }
+            return msg;
+          });
+        }
+      }
+
+      return handler({
+        ...request,
+        tools,
+        messages,
+        systemMessage: newSystemMessage,
+      });
     },
     wrapToolCall: async (request, handler) => {
       // Return early if eviction is disabled
