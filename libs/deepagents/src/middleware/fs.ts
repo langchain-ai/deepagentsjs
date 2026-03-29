@@ -913,10 +913,9 @@ export function createFilesystemMiddleware(
         return undefined;
       }
 
-      const stateAndStore: StateAndStore = {
+      const resolvedBackend = await resolveBackend(backend, {
         state: state || {},
-      };
-      const resolvedBackend = getBackend(backend, stateAndStore);
+      } as BackendRuntime);
 
       const fileId = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
       const filePath = `/conversation_history/${fileId}`;
