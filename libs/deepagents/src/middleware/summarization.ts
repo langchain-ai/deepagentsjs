@@ -518,7 +518,7 @@ export function createSummarizationMiddleware(
       if (AIMessage.isInstance(msg) && msg.tool_calls) {
         const aiToolCallIds = new Set(
           msg.tool_calls
-            .map((tc) => tc.id)
+            .map(tc => tc.id)
             .filter((id): id is string => id != null),
         );
         for (const id of toolCallIds) {
@@ -707,7 +707,7 @@ export function createSummarizationMiddleware(
       return { messages, modified: false };
     }
 
-    const nonToolMessages = messages.filter((m) => !ToolMessage.isInstance(m));
+    const nonToolMessages = messages.filter(m => !ToolMessage.isInstance(m));
     const overheadTokens = countTotalTokens(
       nonToolMessages,
       systemMessage,
@@ -773,7 +773,7 @@ export function createSummarizationMiddleware(
       const msg = messages[i];
 
       if (i < cutoffIndex && AIMessage.isInstance(msg) && msg.tool_calls) {
-        const truncatedToolCalls = msg.tool_calls.map((toolCall) => {
+        const truncatedToolCalls = msg.tool_calls.map(toolCall => {
           const args = toolCall.args || {};
           const truncatedArgs: Record<string, unknown> = {};
           let toolModified = false;
@@ -820,7 +820,7 @@ export function createSummarizationMiddleware(
    * Filter out previous summary messages.
    */
   function filterSummaryMessages(messages: BaseMessage[]): BaseMessage[] {
-    return messages.filter((msg) => !isSummaryMessage(msg));
+    return messages.filter(msg => !isSummaryMessage(msg));
   }
 
   /**

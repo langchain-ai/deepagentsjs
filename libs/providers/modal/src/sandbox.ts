@@ -318,9 +318,9 @@ export class ModalSandbox extends BaseSandbox {
     const results = await this.uploadFiles(filesToUpload);
 
     // Check for errors
-    const errors = results.filter((r) => r.error !== null);
+    const errors = results.filter(r => r.error !== null);
     if (errors.length > 0) {
-      const errorPaths = errors.map((e) => e.path).join(", ");
+      const errorPaths = errors.map(e => e.path).join(", ");
       throw new ModalSandboxError(
         `Failed to upload initial files: ${errorPaths}`,
         "FILE_OPERATION_FAILED",
@@ -421,7 +421,7 @@ export class ModalSandbox extends BaseSandbox {
               stdout: "pipe",
               stderr: "pipe",
             })
-            .then((p) => p.wait());
+            .then(p => p.wait());
         }
 
         // Write the file content using Modal's file API

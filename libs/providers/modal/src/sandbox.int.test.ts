@@ -35,7 +35,7 @@ sandboxStandardTests({
   skip: !hasCredentials,
   timeout: TEST_TIMEOUT,
   sequential: true,
-  createSandbox: async (options) =>
+  createSandbox: async options =>
     ModalSandbox.create({
       imageName: "alpine:3.21",
       timeoutMs: 900_000,
@@ -43,8 +43,8 @@ sandboxStandardTests({
     }),
   createUninitializedSandbox: () =>
     new ModalSandbox({ imageName: "alpine:3.21" }),
-  closeSandbox: (sandbox) => sandbox.close(),
-  resolvePath: (name) => `/tmp/${name}`,
+  closeSandbox: sandbox => sandbox.close(),
+  resolvePath: name => `/tmp/${name}`,
 });
 
 describe.skipIf(!hasCredentials)("ModalSandbox Provider-Specific Tests", () => {

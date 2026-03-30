@@ -4,7 +4,7 @@ import {
   type ViteUserConfigExport,
 } from "vitest/config";
 
-export default defineConfig((env) => {
+export default defineConfig(env => {
   const common: ViteUserConfigExport = {
     test: {
       environment: "node",

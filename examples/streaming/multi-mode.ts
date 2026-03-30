@@ -21,9 +21,9 @@ import { z } from "zod";
 const analyzeData = tool(
   async ({ topic }: { topic: string }, config: ToolRuntime) => {
     config.writer?.({ status: "starting", topic, progress: 0 });
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 300));
     config.writer?.({ status: "analyzing", progress: 50 });
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 300));
     config.writer?.({ status: "complete", progress: 100 });
     return `Analysis of "${topic}": Strong positive trend identified.`;
   },

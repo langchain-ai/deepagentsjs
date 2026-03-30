@@ -469,7 +469,7 @@ export function validateFilePath(
   // Check allowed prefixes if provided
   if (
     allowedPrefixes &&
-    !allowedPrefixes.some((prefix) => normalized.startsWith(prefix))
+    !allowedPrefixes.some(prefix => normalized.startsWith(prefix))
   ) {
     throw new Error(
       `Path must start with one of ${JSON.stringify(allowedPrefixes)}: ${path}`,
@@ -846,10 +846,10 @@ export function adaptBackendProtocol(
     edit: (filePath, oldString, newString, replaceAll) =>
       backend.edit(filePath, oldString, newString, replaceAll),
     uploadFiles: backend.uploadFiles
-      ? (files) => backend.uploadFiles!(files)
+      ? files => backend.uploadFiles!(files)
       : undefined,
     downloadFiles: backend.downloadFiles
-      ? (paths) => backend.downloadFiles!(paths)
+      ? paths => backend.downloadFiles!(paths)
       : undefined,
     async read(filePath, offset, limit): Promise<ReadResult> {
       const result = await backend.read(filePath, offset, limit);

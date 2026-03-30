@@ -40,9 +40,9 @@ sandboxStandardTests({
   // Setting this to undefined skips the two-step initialization lifecycle test.
   createUninitializedSandbox: undefined,
 
-  closeSandbox: async (sandbox) => {
+  closeSandbox: async sandbox => {
     await sandbox.close();
   },
 
-  resolvePath: (name) => `/tmp/${name}`,
+  resolvePath: name => `/tmp/${name}`,
 });

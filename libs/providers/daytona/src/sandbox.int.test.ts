@@ -36,15 +36,15 @@ beforeAll(async () => {
 sandboxStandardTests({
   name: "DaytonaSandbox",
   timeout: TEST_TIMEOUT,
-  createSandbox: async (options) =>
+  createSandbox: async options =>
     DaytonaSandbox.create({
       language: "typescript",
       autoStopInterval: 5,
       labels: CI_LABELS,
       ...options,
     }),
-  closeSandbox: (sandbox) => sandbox.close(),
-  resolvePath: (name) => name,
+  closeSandbox: sandbox => sandbox.close(),
+  resolvePath: name => name,
 });
 
 describe("DaytonaSandbox Provider-Specific Tests", () => {

@@ -54,7 +54,7 @@ export function registerIntegrationTests<T extends AnySandboxInstance>(
         const lsResult = await shared.ls(baseDir);
         expect(lsResult.error).toBeUndefined();
         const result = lsResult.files || [];
-        const lsPaths = result.map((info) => info.path.replace(/\/$/, ""));
+        const lsPaths = result.map(info => info.path.replace(/\/$/, ""));
         expect(lsPaths).toContain(`${baseDir}/root.txt`);
         expect(lsPaths).toContain(`${baseDir}/subdir1`);
         expect(lsPaths).toContain(`${baseDir}/subdir2`);

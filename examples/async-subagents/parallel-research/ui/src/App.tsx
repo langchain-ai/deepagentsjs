@@ -7,13 +7,11 @@ import {
 } from "react";
 import { Client } from "@langchain/langgraph-sdk";
 import { useStream } from "@langchain/langgraph-sdk/react";
+import { Search, ArrowUp, AlertCircle, GitFork } from "lucide-react";
 import {
-  Search,
-  ArrowUp,
-  AlertCircle,
-  GitFork,
-} from "lucide-react";
-import { ResearcherCard, type ResearcherConfig } from "./components/ResearcherCard";
+  ResearcherCard,
+  type ResearcherConfig,
+} from "./components/ResearcherCard";
 import type { AsyncTask } from "./types";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -92,8 +90,8 @@ function getMessageText(msg: StreamMessage): string {
   if (typeof msg.content === "string") return msg.content;
   if (Array.isArray(msg.content)) {
     return msg.content
-      .filter((b) => b.type === "text" && b.text)
-      .map((b) => b.text!)
+      .filter(b => b.type === "text" && b.text)
+      .map(b => b.text!)
       .join("");
   }
   return "";
@@ -140,16 +138,24 @@ function StreamingIndicator() {
       <div className="text-xs font-medium text-neutral-500 mb-2">Assistant</div>
       <div className="flex items-center gap-1.5 text-neutral-500 animate-pulse">
         <div className="w-2 h-2 rounded-full bg-current" />
-        <div className="w-2 h-2 rounded-full bg-current" style={{ animationDelay: "150ms" }} />
-        <div className="w-2 h-2 rounded-full bg-current" style={{ animationDelay: "300ms" }} />
+        <div
+          className="w-2 h-2 rounded-full bg-current"
+          style={{ animationDelay: "150ms" }}
+        />
+        <div
+          className="w-2 h-2 rounded-full bg-current"
+          style={{ animationDelay: "300ms" }}
+        />
       </div>
     </div>
   );
 }
 
-
-
-function EmptyState({ onSuggestionClick }: { onSuggestionClick: (s: string) => void }) {
+function EmptyState({
+  onSuggestionClick,
+}: {
+  onSuggestionClick: (s: string) => void;
+}) {
   return (
     <div className="flex flex-col items-center justify-center text-center px-4 py-24">
       <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-brand-accent/20 to-brand-dark/30 border border-brand-accent/30 flex items-center justify-center mb-6">
@@ -163,7 +169,7 @@ function EmptyState({ onSuggestionClick }: { onSuggestionClick: (s: string) => v
         parallel as async subagents and report back.
       </p>
       <div className="flex flex-wrap gap-2 justify-center">
-        {SUGGESTIONS.map((s) => (
+        {SUGGESTIONS.map(s => (
           <button
             key={s}
             onClick={() => onSuggestionClick(s)}
@@ -188,8 +194,8 @@ export function App() {
     apiUrl: LANGGRAPH_URL,
     assistantId: "supervisor",
     // eslint-disable-next-line no-console
-    onError: (err) => console.error("[stream error]", err),
-    onUpdateEvent: (data) => {
+    onError: err => console.error("[stream error]", err),
+    onUpdateEvent: data => {
       if (data && typeof data === "object") {
         for (const nodeUpdate of Object.values(
           data as Record<string, Record<string, unknown>>,
@@ -198,7 +204,7 @@ export function App() {
             | Record<string, AsyncTask>
             | undefined;
           if (taskMap && typeof taskMap === "object") {
-            setAsyncTasks((prev) => {
+            setAsyncTasks(prev => {
               const next = { ...prev };
               for (const task of Object.values(taskMap)) {
                 next[task.taskId] = { ...prev[task.taskId], ...task };
@@ -217,7 +223,7 @@ export function App() {
   // Poll running tasks for status updates
   const pollTasks = useCallback(async () => {
     const running = Object.values(asyncTasks).filter(
-      (t) => !TERMINAL_STATUSES.has(t.status),
+      t => !TERMINAL_STATUSES.has(t.status),
     );
     if (running.length === 0) return;
 
@@ -226,7 +232,7 @@ export function App() {
       try {
         const run = await client.runs.get(task.threadId, task.runId);
         if (TERMINAL_STATUSES.has(run.status)) {
-          setAsyncTasks((prev) => ({
+          setAsyncTasks(prev => ({
             ...prev,
             [task.taskId]: { ...prev[task.taskId], status: run.status },
           }));
@@ -281,8 +287,7 @@ export function App() {
 
   const hasMessages = visibleMessages.length > 0;
 
-
-  const handleSubmit: SubmitEventHandler<HTMLFormElement> = (e) => {
+  const handleSubmit: SubmitEventHandler<HTMLFormElement> = e => {
     e.preventDefault();
     const text = input.trim();
     if (!text || thread.isLoading) return;
@@ -323,14 +328,11 @@ export function App() {
         <div className="flex gap-3 px-6 py-4 border-b border-neutral-800 flex-shrink-0 overflow-x-auto">
           {taskList.map((task, i) => {
             const palette = CARD_PALETTES[i % CARD_PALETTES.length];
-            const label = task.agentName.charAt(0).toUpperCase() + task.agentName.slice(1);
+            const label =
+              task.agentName.charAt(0).toUpperCase() + task.agentName.slice(1);
             const config: ResearcherConfig = { ...palette, label };
             return (
-              <ResearcherCard
-                key={task.taskId}
-                config={config}
-                task={task}
-              />
+              <ResearcherCard key={task.taskId} config={config} task={task} />
             );
           })}
         </div>
@@ -346,7 +348,11 @@ export function App() {
                 const key = msg.id ?? `msg-${i}`;
                 const text = getMessageText(msg);
                 if (msg.type === "human") {
-                  if (text.startsWith("[Async subagent") || text.startsWith("[task_id=") || text.includes("task_id:")) {
+                  if (
+                    text.startsWith("[Async subagent") ||
+                    text.startsWith("[task_id=") ||
+                    text.includes("task_id:")
+                  ) {
                     return <NotificationBubble key={key} content={text} />;
                   }
                   return <HumanBubble key={key} content={text} />;
@@ -356,9 +362,10 @@ export function App() {
                 }
                 return null;
               })}
-              {thread.isLoading && visibleMessages[visibleMessages.length - 1]?.type !== "ai" && <StreamingIndicator />}
-
-
+              {thread.isLoading &&
+                visibleMessages[visibleMessages.length - 1]?.type !== "ai" && (
+                  <StreamingIndicator />
+                )}
             </div>
           )}
         </div>
@@ -385,7 +392,7 @@ export function App() {
               <input
                 type="text"
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={e => setInput(e.target.value)}
                 placeholder="Ask a research question..."
                 disabled={thread.isLoading}
                 autoFocus

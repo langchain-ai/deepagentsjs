@@ -452,7 +452,7 @@ export function parseSkillMetadataFromContent(
   let allowedTools: string[];
   if (rawTools) {
     if (Array.isArray(rawTools)) {
-      allowedTools = rawTools.map((t) => String(t).trim()).filter(Boolean);
+      allowedTools = rawTools.map(t => String(t).trim()).filter(Boolean);
     } else {
       // Split on whitespace (handles multiple consecutive spaces)
       allowedTools = String(rawTools).split(/\s+/).filter(Boolean);
@@ -523,7 +523,7 @@ async function listSkillsFromBackend(
 
   // Convert FileInfo[] to entries format
   // Handle both forward slashes (Unix) and backslashes (Windows) in paths
-  const entries = fileInfos.map((info) => ({
+  const entries = fileInfos.map(info => ({
     name:
       info.path
         .replace(/[/\\]$/, "") // Remove trailing slash or backslash
@@ -600,7 +600,7 @@ function formatSkillsLocations(sources: string[]): string {
         .split(/[/\\]/)
         .filter(Boolean)
         .pop()
-        ?.replace(/^./, (c) => c.toUpperCase()) || "Skills";
+        ?.replace(/^./, c => c.toUpperCase()) || "Skills";
     const suffix = i === sources.length - 1 ? " (higher priority)" : "";
     lines.push(`**${name} Skills**: \`${sourcePath}\`${suffix}`);
   }
@@ -616,7 +616,7 @@ export function formatSkillsList(
   sources: string[],
 ): string {
   if (skills.length === 0) {
-    const paths = sources.map((s) => `\`${s}\``).join(" or ");
+    const paths = sources.map(s => `\`${s}\``).join(" or ");
     return `(No skills available yet. You can create skills in ${paths})`;
   }
 

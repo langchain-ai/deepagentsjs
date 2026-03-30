@@ -42,20 +42,17 @@ describe("DeepAgents Integration Tests", () => {
     expect(toolNames).toContain("sample_tool");
   });
 
-  it.concurrent(
-    "should create deep agent with middleware with tool and state",
-    () => {
-      const agent = createDeepAgent({
-        middleware: [SampleMiddlewareWithToolsAndState],
-      });
-      assertAllDeepAgentQualities(agent);
+  it.concurrent("should create deep agent with middleware with tool and state", () => {
+    const agent = createDeepAgent({
+      middleware: [SampleMiddlewareWithToolsAndState],
+    });
+    assertAllDeepAgentQualities(agent);
 
-      const toolNames = Object.keys(extractToolsFromAgent(agent));
-      expect(toolNames).toContain("sample_tool");
+    const toolNames = Object.keys(extractToolsFromAgent(agent));
+    expect(toolNames).toContain("sample_tool");
 
-      expect(agent.graph.streamChannels).toContain("sample_input");
-    },
-  );
+    expect(agent.graph.streamChannels).toContain("sample_input");
+  });
 
   it.concurrent(
     "should create deep agent with subagents",
@@ -78,11 +75,11 @@ describe("DeepAgents Integration Tests", () => {
       });
 
       const agentMessages = result.messages.filter(AIMessage.isInstance);
-      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
+      const toolCalls = agentMessages.flatMap(msg => msg.tool_calls || []);
 
       expect(
         toolCalls.some(
-          (tc) =>
+          tc =>
             tc.name === "task" && tc.args?.subagent_type === "weather_agent",
         ),
       ).toBe(true);
@@ -114,11 +111,11 @@ describe("DeepAgents Integration Tests", () => {
       });
 
       const agentMessages = result.messages.filter(AIMessage.isInstance);
-      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
+      const toolCalls = agentMessages.flatMap(msg => msg.tool_calls || []);
 
       expect(
         toolCalls.some(
-          (tc) =>
+          tc =>
             tc.name === "task" && tc.args?.subagent_type === "general-purpose",
         ),
       ).toBe(true);
@@ -147,11 +144,11 @@ describe("DeepAgents Integration Tests", () => {
       });
 
       const agentMessages = result.messages.filter(AIMessage.isInstance);
-      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
+      const toolCalls = agentMessages.flatMap(msg => msg.tool_calls || []);
 
       expect(
         toolCalls.some(
-          (tc) =>
+          tc =>
             tc.name === "task" && tc.args?.subagent_type === "weather_agent",
         ),
       ).toBe(true);
@@ -192,18 +189,17 @@ describe("DeepAgents Integration Tests", () => {
       });
 
       const agentMessages = result.messages.filter(AIMessage.isInstance);
-      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
+      const toolCalls = agentMessages.flatMap(msg => msg.tool_calls || []);
 
       expect(
         toolCalls.some(
-          (tc) =>
+          tc =>
             tc.name === "task" && tc.args?.subagent_type === "weather_agent",
         ),
       ).toBe(true);
       expect(
         toolCalls.some(
-          (tc) =>
-            tc.name === "task" && tc.args?.subagent_type === "soccer_agent",
+          tc => tc.name === "task" && tc.args?.subagent_type === "soccer_agent",
         ),
       ).toBe(true);
     },
@@ -240,11 +236,11 @@ describe("DeepAgents Integration Tests", () => {
       );
 
       const agentMessages = result.messages.filter(AIMessage.isInstance);
-      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
+      const toolCalls = agentMessages.flatMap(msg => msg.tool_calls || []);
 
       expect(
         toolCalls.some(
-          (tc) =>
+          tc =>
             tc.name === "task" &&
             tc.args?.subagent_type === "basketball_info_agent",
         ),
@@ -280,11 +276,11 @@ describe("DeepAgents Integration Tests", () => {
       );
 
       const agentMessages = result.messages.filter(AIMessage.isInstance);
-      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
+      const toolCalls = agentMessages.flatMap(msg => msg.tool_calls || []);
 
       expect(
         toolCalls.some(
-          (tc) =>
+          tc =>
             tc.name === "task" &&
             tc.args?.subagent_type === "basketball_info_agent",
         ),
@@ -334,11 +330,11 @@ describe("DeepAgents Integration Tests", () => {
       );
 
       const agentMessages = result.messages.filter(AIMessage.isInstance);
-      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
+      const toolCalls = agentMessages.flatMap(msg => msg.tool_calls || []);
 
       expect(
         toolCalls.some(
-          (tc) =>
+          tc =>
             tc.name === "task" &&
             tc.args?.subagent_type === "weather-specialist",
         ),
@@ -397,12 +393,11 @@ describe("DeepAgents Integration Tests", () => {
       );
 
       const agentMessages = result.messages.filter(AIMessage.isInstance);
-      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
+      const toolCalls = agentMessages.flatMap(msg => msg.tool_calls || []);
 
       expect(
         toolCalls.some(
-          (tc) =>
-            tc.name === "task" && tc.args?.subagent_type === "sports-info",
+          tc => tc.name === "task" && tc.args?.subagent_type === "sports-info",
         ),
       ).toBe(true);
     },
@@ -484,8 +479,8 @@ describe("DeepAgents Integration Tests", () => {
 
         // Verify the weather tool was actually called
         const agentMessages = result.messages.filter(AIMessage.isInstance);
-        const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
-        expect(toolCalls.some((tc) => tc.name === "get_weather")).toBe(true);
+        const toolCalls = agentMessages.flatMap(msg => msg.tool_calls || []);
+        expect(toolCalls.some(tc => tc.name === "get_weather")).toBe(true);
 
         // Verify structured response
         expect(result.structuredResponse).toBeDefined();
@@ -585,10 +580,10 @@ describe("DeepAgents Integration Tests", () => {
 
         // Verify the subagent was invoked
         const agentMessages = result.messages.filter(AIMessage.isInstance);
-        const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
+        const toolCalls = agentMessages.flatMap(msg => msg.tool_calls || []);
         expect(
           toolCalls.some(
-            (tc) =>
+            tc =>
               tc.name === "task" && tc.args?.subagent_type === "weather_agent",
           ),
         ).toBe(true);

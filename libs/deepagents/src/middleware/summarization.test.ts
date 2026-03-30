@@ -778,9 +778,9 @@ describe("createSummarizationMiddleware", () => {
           // Find the corresponding AIMessage with matching tool_call
           const toolCallId = msg.tool_call_id;
           const hasMatchingAI = preservedMessages.some(
-            (m) =>
+            m =>
               AIMessage.isInstance(m) &&
-              m.tool_calls?.some((tc) => tc.id === toolCallId),
+              m.tool_calls?.some(tc => tc.id === toolCallId),
           );
           expect(hasMatchingAI).toBe(true);
         }
@@ -839,9 +839,9 @@ describe("createSummarizationMiddleware", () => {
         if (ToolMessage.isInstance(msg)) {
           const toolCallId = msg.tool_call_id;
           const hasMatchingAI = preservedMessages.some(
-            (m) =>
+            m =>
               AIMessage.isInstance(m) &&
-              m.tool_calls?.some((tc) => tc.id === toolCallId),
+              m.tool_calls?.some(tc => tc.id === toolCallId),
           );
           expect(hasMatchingAI).toBe(true);
         }
@@ -1117,9 +1117,9 @@ describe("createSummarizationMiddleware", () => {
         if (ToolMessage.isInstance(msg)) {
           expect(msg.tool_call_id).toBeDefined();
           const matchingAI = capturedRequest!.messages.find(
-            (m) =>
+            m =>
               AIMessage.isInstance(m) &&
-              m.tool_calls?.some((tc) => tc.id === msg.tool_call_id),
+              m.tool_calls?.some(tc => tc.id === msg.tool_call_id),
           );
           expect(matchingAI).toBeDefined();
         }
@@ -1204,7 +1204,7 @@ describe("createSummarizationMiddleware", () => {
         new HumanMessage({ content: "Read all files" }),
         new AIMessage({ content: "", tool_calls: toolCalls }),
         ...toolCalls.map(
-          (tc) =>
+          tc =>
             new ToolMessage({
               content: largeContent,
               tool_call_id: tc.id,

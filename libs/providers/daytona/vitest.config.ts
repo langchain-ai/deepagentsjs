@@ -9,7 +9,7 @@ import {
 import dotenv from "dotenv";
 dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
-export default defineConfig((env) => {
+export default defineConfig(env => {
   const common: ViteUserConfigExport = {
     test: {
       environment: "node",

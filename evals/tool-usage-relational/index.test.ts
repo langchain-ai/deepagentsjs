@@ -178,7 +178,7 @@ function similaritySearch(
   function score(x: string): number {
     const setX = new Set(x);
     const setQ = new Set(query);
-    const intersection = new Set([...setX].filter((c) => setQ.has(c)));
+    const intersection = new Set([...setX].filter(c => setQ.has(c)));
     const union = new Set([...setX, ...setQ]);
     return union.size === 0 ? 0 : intersection.size / union.size;
   }
@@ -186,23 +186,23 @@ function similaritySearch(
   const ranked = [...data].sort(
     (a, b) => score(b[key] as string) - score(a[key] as string),
   );
-  return ranked.map((d) => ({ id: d.id as number, [key]: d[key] }));
+  return ranked.map(d => ({ id: d.id as number, [key]: d[key] }));
 }
 
 function getUser(userId: number): User {
-  const user = USER_DATA.find((u) => u.id === userId);
+  const user = USER_DATA.find(u => u.id === userId);
   if (!user) throw new Error(`User ID ${userId} cannot be resolved`);
   return user;
 }
 
 function getLocation(locationId: number): Location {
-  const loc = LOCATION_DATA.find((l) => l.id === locationId);
+  const loc = LOCATION_DATA.find(l => l.id === locationId);
   if (!loc) throw new Error(`Location ID ${locationId} cannot be resolved`);
   return loc;
 }
 
 function getFood(foodId: number): Food {
-  const food = FOOD_DATA.find((f) => f.id === foodId);
+  const food = FOOD_DATA.find(f => f.id === foodId);
   if (!food) throw new Error(`Food ID ${foodId} cannot be resolved`);
   return food;
 }
@@ -231,7 +231,7 @@ const { tool: getUserName, spy: getUserNameSpy } = spiedTool(
 );
 
 const { tool: listUserIds, spy: listUserIdsSpy } = spiedTool(
-  () => USER_DATA.map((u) => u.id),
+  () => USER_DATA.map(u => u.id),
   {
     name: "list_user_ids",
     description: "List all the user IDs.",
@@ -253,7 +253,7 @@ const { tool: findUsersByName, spy: findUsersByNameSpy } = spiedTool(
   },
 );
 
-const { tool: findLocationsByName, spy: findLocationsByNameSpy } = spiedTool(
+const { tool: findLocationsByName, spy: _findLocationsByNameSpy } = spiedTool(
   ({ city }) =>
     similaritySearch(
       LOCATION_DATA as unknown as Record<string, unknown>[],
@@ -269,7 +269,7 @@ const { tool: findLocationsByName, spy: findLocationsByNameSpy } = spiedTool(
   },
 );
 
-const { tool: findFoodsByName, spy: findFoodsByNameSpy } = spiedTool(
+const { tool: findFoodsByName, spy: _findFoodsByNameSpy } = spiedTool(
   ({ food }) =>
     similaritySearch(
       FOOD_DATA as unknown as Record<string, unknown>[],
@@ -303,7 +303,7 @@ const { tool: getUserLocation, spy: getUserLocationSpy } = spiedTool(
   },
 );
 
-const { tool: getUserFavoriteColor, spy: getUserFavoriteColorSpy } = spiedTool(
+const { tool: getUserFavoriteColor, spy: _getUserFavoriteColorSpy } = spiedTool(
   ({ user_id }) => getUser(user_id).favorite_color,
   {
     name: "get_user_favorite_color",

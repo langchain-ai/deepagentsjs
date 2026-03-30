@@ -282,7 +282,7 @@ description: Test skill
       const skills = listSkills({ projectSkillsDir: examplesDir });
 
       // Should find the example skills we created
-      const skillNames = skills.map((s) => s.name);
+      const skillNames = skills.map(s => s.name);
 
       if (skillNames.length > 0) {
         // Check that example skills are valid

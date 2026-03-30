@@ -193,11 +193,11 @@ allowed-tools: read_file write_file
       const result = listSkills({ userSkillsDir });
 
       expect(result).toHaveLength(2);
-      expect(result.map((s) => s.name).sort()).toEqual([
+      expect(result.map(s => s.name).sort()).toEqual([
         "skill-one",
         "skill-two",
       ]);
-      expect(result.every((s) => s.source === "user")).toBe(true);
+      expect(result.every(s => s.source === "user")).toBe(true);
     });
 
     it("should list skills from project directory", () => {
@@ -226,8 +226,8 @@ allowed-tools: read_file write_file
       const result = listSkills({ userSkillsDir, projectSkillsDir });
 
       expect(result).toHaveLength(2);
-      expect(result.find((s) => s.name === "user-skill")?.source).toBe("user");
-      expect(result.find((s) => s.name === "project-skill")?.source).toBe(
+      expect(result.find(s => s.name === "user-skill")?.source).toBe("user");
+      expect(result.find(s => s.name === "project-skill")?.source).toBe(
         "project",
       );
     });
@@ -324,7 +324,7 @@ allowed-tools: read_file write_file
       const result = listSkills({ userSkillsDir });
 
       expect(result).toHaveLength(2);
-      expect(result.map((s) => s.name).sort()).toEqual([
+      expect(result.map(s => s.name).sort()).toEqual([
         "valid-one",
         "valid-two",
       ]);

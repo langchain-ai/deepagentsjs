@@ -115,7 +115,7 @@ describe("Subagent skills isolation", () => {
     const systemPrompts = getAllSystemPromptsFromSpy(invokeSpy);
 
     // Main agent should have skills
-    const mainAgentPrompts = systemPrompts.filter((p) =>
+    const mainAgentPrompts = systemPrompts.filter(p =>
       p.includes("`task` (subagent spawner)"),
     );
     expect(mainAgentPrompts.length).toBeGreaterThan(0);
@@ -123,7 +123,7 @@ describe("Subagent skills isolation", () => {
     expect(mainAgentPrompts[0]).toContain("test-skill");
 
     // Custom subagent should have been invoked
-    const customSubagentPrompts = systemPrompts.filter((p) =>
+    const customSubagentPrompts = systemPrompts.filter(p =>
       p.includes("You are a custom worker. This is your unique prompt."),
     );
     expect(customSubagentPrompts.length).toBeGreaterThan(0);
@@ -191,16 +191,14 @@ describe("Subagent skills isolation", () => {
 
     // Main agent should have skills
     const mainAgentPrompts = systemPrompts.filter(
-      (p) =>
-        p.includes("test-skill") && p.includes("`task` (subagent spawner)"),
+      p => p.includes("test-skill") && p.includes("`task` (subagent spawner)"),
     );
     expect(mainAgentPrompts.length).toBeGreaterThan(0);
     expect(mainAgentPrompts[0]).toContain("Skills System");
 
     // GP subagent should also have skills (no `task` tool in prompt)
     const gpSubagentPrompts = systemPrompts.filter(
-      (p) =>
-        p.includes("test-skill") && !p.includes("`task` (subagent spawner)"),
+      p => p.includes("test-skill") && !p.includes("`task` (subagent spawner)"),
     );
     expect(gpSubagentPrompts.length).toBeGreaterThan(0);
     expect(gpSubagentPrompts[0]).toContain("Skills System");
@@ -354,7 +352,7 @@ describe("Subagent content block filtering", () => {
     for (const msg of toolMessages) {
       if (Array.isArray(msg.content)) {
         const invalidBlocks = (msg.content as Array<{ type: string }>).filter(
-          (block) => block.type === "tool_use",
+          block => block.type === "tool_use",
         );
         expect(invalidBlocks).toHaveLength(0);
       }
@@ -440,7 +438,7 @@ describe("Subagent content block filtering", () => {
       const invalidBlocks = (
         taskToolMessage.content as Array<{ type: string }>
       ).filter(
-        (block) =>
+        block =>
           block.type === "thinking" || block.type === "redacted_thinking",
       );
       expect(invalidBlocks).toHaveLength(0);

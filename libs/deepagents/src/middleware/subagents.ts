@@ -422,7 +422,7 @@ function returnCommandWithStateUpdate(
     content = lastMessage?.content || "Task completed";
     if (Array.isArray(content)) {
       content = content.filter(
-        (block) => !INVALID_TOOL_MESSAGE_BLOCK_TYPES.includes(block.type),
+        block => !INVALID_TOOL_MESSAGE_BLOCK_TYPES.includes(block.type),
       );
       if (content.length === 0) {
         content = "Task completed";
@@ -583,7 +583,7 @@ function createTaskTool(options: {
       // Validate subagent type
       if (!(subagent_type in subagentGraphs)) {
         const allowedTypes = Object.keys(subagentGraphs)
-          .map((k) => `\`${k}\``)
+          .map(k => `\`${k}\``)
           .join(", ");
         throw new Error(
           `Error: invoked agent of type ${subagent_type}, the only allowed types are ${allowedTypes}`,
@@ -613,13 +613,13 @@ function createTaskTool(options: {
           lastMessage?.content || "Task completed";
         if (Array.isArray(content)) {
           content = content.filter(
-            (block) => !INVALID_TOOL_MESSAGE_BLOCK_TYPES.includes(block.type),
+            block => !INVALID_TOOL_MESSAGE_BLOCK_TYPES.includes(block.type),
           );
           if (content.length === 0) {
             return "Task completed";
           }
           return content
-            .map((block) =>
+            .map(block =>
               "text" in block ? block.text : JSON.stringify(block),
             )
             .join("\n");

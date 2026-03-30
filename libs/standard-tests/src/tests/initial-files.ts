@@ -190,7 +190,7 @@ export function registerInitialFilesTests<T extends AnySandboxInstance>(
           const lsResult = await adaptSandboxInstance(tmp).ls(dirPath);
           expect(lsResult.error).toBeUndefined();
           const entries = lsResult.files || [];
-          const paths = entries.map((e) => e.path.replace(/\/$/, ""));
+          const paths = entries.map(e => e.path.replace(/\/$/, ""));
           expect(paths).toContain(filePath);
         } finally {
           await config.closeSandbox?.(tmp);

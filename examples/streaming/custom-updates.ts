@@ -21,10 +21,10 @@ const analyzeData = tool(
     const writer = config.writer;
 
     writer?.({ status: "starting", topic, progress: 0 });
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 500));
 
     writer?.({ status: "analyzing", progress: 50 });
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, 500));
 
     writer?.({ status: "complete", progress: 100 });
     return `Analysis of "${topic}": Customer sentiment is 85% positive, driven by product quality and support response times.`;

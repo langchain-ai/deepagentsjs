@@ -45,7 +45,7 @@ export function registerLsInfoTests<T extends AnySandboxInstance>(
         const result = lsResult.files || [];
 
         expect(result.length).toBe(3);
-        const paths = result.map((info) => info.path.replace(/\/$/, ""));
+        const paths = result.map(info => info.path.replace(/\/$/, ""));
         expect(paths).toContain(`${baseDir}/file1.txt`);
         expect(paths).toContain(`${baseDir}/file2.txt`);
         expect(paths).toContain(`${baseDir}/subdir`);
@@ -103,7 +103,7 @@ export function registerLsInfoTests<T extends AnySandboxInstance>(
         expect(lsResult.error).toBeUndefined();
         const result = lsResult.files || [];
 
-        const paths = result.map((info) => info.path);
+        const paths = result.map(info => info.path);
         expect(paths).toContain(`${baseDir}/.hidden`);
         expect(paths).toContain(`${baseDir}/visible.txt`);
       },
@@ -122,7 +122,7 @@ export function registerLsInfoTests<T extends AnySandboxInstance>(
         expect(lsResult.error).toBeUndefined();
         const result = lsResult.files || [];
 
-        const paths = result.map((info) => info.path.replace(/\/$/, ""));
+        const paths = result.map(info => info.path.replace(/\/$/, ""));
         expect(paths).toContain(`${baseDir}/file with spaces.txt`);
         expect(paths).toContain(`${baseDir}/dir with spaces`);
       },
@@ -169,7 +169,7 @@ export function registerLsInfoTests<T extends AnySandboxInstance>(
         const result = lsResult.files || [];
 
         expect(result.length).toBe(50);
-        const paths = result.map((info) => info.path);
+        const paths = result.map(info => info.path);
         expect(paths).toContain(`${baseDir}/file_000.txt`);
         expect(paths).toContain(`${baseDir}/file_049.txt`);
       },
@@ -206,7 +206,7 @@ export function registerLsInfoTests<T extends AnySandboxInstance>(
         expect(lsResult.error).toBeUndefined();
         const result = lsResult.files || [];
 
-        const paths = result.map((info) => info.path);
+        const paths = result.map(info => info.path);
         expect(paths).toContain(`${baseDir}/file(1).txt`);
         expect(paths).toContain(`${baseDir}/file-3.txt`);
       },

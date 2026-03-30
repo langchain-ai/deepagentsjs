@@ -117,7 +117,7 @@ async function fetchAndCache(): Promise<void> {
     );
   }
 
-  const jsonl = allRows.map((r) => JSON.stringify(r)).join("\n") + "\n";
+  const jsonl = allRows.map(r => JSON.stringify(r)).join("\n") + "\n";
   writeFileSync(CACHE_PATH, jsonl, "utf-8");
 
   // eslint-disable-next-line no-console
@@ -178,8 +178,8 @@ export async function loadOolongTasks(
   const raw = readFileSync(CACHE_PATH, "utf-8");
   const rows: HfRow[] = raw
     .split("\n")
-    .filter((line) => line.trim())
-    .map((line) => JSON.parse(line) as HfRow);
+    .filter(line => line.trim())
+    .map(line => JSON.parse(line) as HfRow);
 
   // Resolve options with env var overrides
   const envMax = process.env.OOLONG_MAX_PER_DATASET;
@@ -192,7 +192,7 @@ export async function loadOolongTasks(
   // Filter by context_len if specified
   let filtered = rows;
   if (contextLen != null) {
-    filtered = filtered.filter((r) => r.context_len === contextLen);
+    filtered = filtered.filter(r => r.context_len === contextLen);
   }
 
   // Group by source dataset and take up to maxPerDataset from each

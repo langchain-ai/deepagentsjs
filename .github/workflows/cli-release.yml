@@ -18,17 +18,17 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to build (leave empty for latest from PyPI)'
+        description: "Version to build (leave empty for latest from PyPI)"
         required: false
         type: string
       dry_run:
-        description: 'Dry run (skip publishing)'
+        description: "Dry run (skip publishing)"
         required: false
         type: boolean
         default: false
   schedule:
     # Check for new PyPI releases daily at 6:00 AM UTC
-    - cron: '0 6 * * *'
+    - cron: "0 6 * * *"
 
 permissions:
   contents: read
@@ -48,7 +48,7 @@ jobs:
     outputs:
       should_build: ${{ steps.check.outputs.should_build }}
       version: ${{ steps.check.outputs.version }}
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -57,17 +57,17 @@ jobs:
         id: check
         run: |
           set -e
-          
+
           # Get latest PyPI version
           echo "Fetching latest version from PyPI..."
           PYPI_VERSION=$(curl -s https://pypi.org/pypi/deepagents-cli/json | jq -r '.info.version')
           echo "PyPI version: $PYPI_VERSION"
-          
+
           # Get current npm version (may not exist yet)
           echo "Checking npm version..."
           NPM_VERSION=$(npm view deepagents-cli version 2>/dev/null || echo "0.0.0")
           echo "npm version: $NPM_VERSION"
-          
+
           # Manual override takes precedence
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
@@ -100,7 +100,7 @@ jobs:
     name: Build (${{ matrix.platform }})
     needs: check-version
     if: needs.check-version.outputs.should_build == 'true'
-    
+
     strategy:
       fail-fast: false
       matrix:
@@ -120,10 +120,10 @@ jobs:
           - platform: win32-x64
             os: windows-latest
             python-version: "3.11"
-    
+
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -181,7 +181,7 @@ jobs:
     needs: [check-version, build]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -221,11 +221,11 @@ jobs:
         run: |
           VERSION="${{ needs.check-version.outputs.version }}"
           echo "Setting version to $VERSION"
-          
+
           # Update main package version
           cd libs/cli
           npm version "$VERSION" --no-git-tag-version --allow-same-version
-          
+
           # Update platform package versions
           for platform in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
             if [ -d "dist/platforms/$platform" ]; then
@@ -296,7 +296,7 @@ jobs:
     needs: [check-version, publish]
     if: ${{ github.event.inputs.dry_run != 'true' }}
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -308,25 +308,25 @@ jobs:
           name: deepagents-cli v${{ needs.check-version.outputs.version }}
           body: |
             ## deepagents-cli v${{ needs.check-version.outputs.version }}
-            
+
             This release wraps [deepagents-cli ${{ needs.check-version.outputs.version }}](https://pypi.org/project/deepagents-cli/${{ needs.check-version.outputs.version }}/) from PyPI.
-            
+
             ### Installation
-            
+
             ```bash
             npm install -g deepagents-cli
             ```
-            
+
             ### Supported Platforms
-            
+
             - Linux x64
             - Linux ARM64
             - macOS Intel (x64)
             - macOS Apple Silicon (ARM64)
             - Windows x64
-            
+
             ### Links
-            
+
             - [npm package](https://www.npmjs.com/package/deepagents-cli)
             - [PyPI package](https://pypi.org/project/deepagents-cli/)
             - [Documentation](https://github.com/langchain-ai/deepagentsjs/tree/main/libs/cli)

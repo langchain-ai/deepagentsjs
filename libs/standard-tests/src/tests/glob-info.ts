@@ -28,10 +28,10 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
         const result = globResult.files || [];
 
         expect(result.length).toBe(2);
-        const paths = result.map((info) => info.path);
+        const paths = result.map(info => info.path);
         expect(paths).toContain("file1.txt");
         expect(paths).toContain("file2.txt");
-        expect(paths.every((p) => !p.endsWith(".py"))).toBe(true);
+        expect(paths.every(p => !p.endsWith(".py"))).toBe(true);
       },
       timeout,
     );
@@ -50,9 +50,9 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
         const result = globResult.files || [];
 
         expect(result.length).toBeGreaterThanOrEqual(2);
-        const paths = result.map((info) => info.path);
-        expect(paths.some((p) => p.includes("nested1.txt"))).toBe(true);
-        expect(paths.some((p) => p.includes("nested2.txt"))).toBe(true);
+        const paths = result.map(info => info.path);
+        expect(paths.some(p => p.includes("nested1.txt"))).toBe(true);
+        expect(paths.some(p => p.includes("nested2.txt"))).toBe(true);
       },
       timeout,
     );
@@ -86,8 +86,8 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
 
         expect(result.length).toBe(3);
 
-        const dirCount = result.filter((info) => info.is_dir).length;
-        const fileCount = result.filter((info) => !info.is_dir).length;
+        const dirCount = result.filter(info => info.is_dir).length;
+        const fileCount = result.filter(info => !info.is_dir).length;
         expect(dirCount).toBe(2);
         expect(fileCount).toBe(1);
       },
@@ -126,12 +126,12 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
         expect(globResult.error).toBeUndefined();
         const result = globResult.files || [];
 
-        const paths = result.map((info) => info.path);
+        const paths = result.map(info => info.path);
         expect(
-          paths.some((p) => p.includes(".hidden1") || p.includes(".hidden2")),
+          paths.some(p => p.includes(".hidden1") || p.includes(".hidden2")),
         ).toBe(true);
         // Should not match visible.txt
-        expect(paths.every((p) => !p.includes("visible"))).toBe(true);
+        expect(paths.every(p => !p.includes("visible"))).toBe(true);
       },
       timeout,
     );
@@ -151,7 +151,7 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
         const result = globResult.files || [];
 
         expect(result.length).toBe(2);
-        const paths = result.map((info) => info.path);
+        const paths = result.map(info => info.path);
         expect(paths).toContain("file1.txt");
         expect(paths).toContain("file2.txt");
         expect(paths).not.toContain("file3.txt");
@@ -175,7 +175,7 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
 
         // Should match file1.txt and file2.txt, but not file10.txt
         expect(result.length).toBe(2);
-        const paths = result.map((info) => info.path);
+        const paths = result.map(info => info.path);
         expect(paths).not.toContain("file10.txt");
       },
       timeout,
@@ -217,9 +217,7 @@ export function registerGlobInfoTests<T extends AnySandboxInstance>(
         const result = globResult.files || [];
 
         expect(result.length).toBeGreaterThanOrEqual(1);
-        expect(result.some((info) => info.path.includes("deep.txt"))).toBe(
-          true,
-        );
+        expect(result.some(info => info.path.includes("deep.txt"))).toBe(true);
       },
       timeout,
     );

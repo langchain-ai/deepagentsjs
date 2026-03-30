@@ -347,7 +347,7 @@ describe("LangSmithSandbox", () => {
   describe("BaseSandbox inherited methods", () => {
     it.each(["read", "write", "edit", "ls", "grep", "glob"] as const)(
       "%s() is available on the sandbox",
-      (method) => {
+      method => {
         const sandbox = makeSandbox();
         expect(typeof sandbox[method]).toBe("function");
       },

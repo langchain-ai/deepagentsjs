@@ -19,9 +19,9 @@ sandboxStandardTests({
   name: "VfsSandbox",
   skip: isWindows,
   timeout: 30_000,
-  createSandbox: async (options) => VfsSandbox.create(options),
-  closeSandbox: (sandbox) => sandbox.stop(),
-  resolvePath: (name) => name,
+  createSandbox: async options => VfsSandbox.create(options),
+  closeSandbox: sandbox => sandbox.stop(),
+  resolvePath: name => name,
 });
 
 describe.skipIf(isWindows)("VfsSandbox Provider-Specific Tests", () => {
@@ -478,7 +478,7 @@ try {
       const result = await sandbox.ls("/src");
       expect(result.error).toBeUndefined();
       const entries = result.files || [];
-      const paths = entries.map((e) => e.path.replace(/\/$/, ""));
+      const paths = entries.map(e => e.path.replace(/\/$/, ""));
       expect(paths).toContain("src/index.js");
       expect(paths).toContain("src/utils.js");
     });
@@ -532,7 +532,7 @@ try {
 
       const sandbox1 = await factory();
       // Small delay to ensure different timestamps for IDs
-      await new Promise((resolve) => setTimeout(resolve, 5));
+      await new Promise(resolve => setTimeout(resolve, 5));
       const sandbox2 = await factory();
 
       try {

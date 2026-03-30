@@ -145,9 +145,7 @@ describe("DeepAgentsServer Integration", () => {
       const mockConn = { sessionUpdate: vi.fn().mockResolvedValue(undefined) };
       const result = await serverAny.handleNewSession({}, mockConn);
 
-      const agentMode = result.modes.availableModes.find(
-        (m) => m.id === "agent",
-      );
+      const agentMode = result.modes.availableModes.find(m => m.id === "agent");
       expect(agentMode).toBeDefined();
       expect(agentMode?.name).toBe("Agent Mode");
     });
@@ -169,7 +167,7 @@ describe("DeepAgentsServer Integration", () => {
       const mockConn = { sessionUpdate: vi.fn().mockResolvedValue(undefined) };
       const result = await serverAny.handleNewSession({}, mockConn);
 
-      const planMode = result.modes.availableModes.find((m) => m.id === "plan");
+      const planMode = result.modes.availableModes.find(m => m.id === "plan");
       expect(planMode).toBeDefined();
     });
 

@@ -7,7 +7,7 @@ import { getDefaultRunner } from "@deepagents/evals";
 const runner = getDefaultRunner();
 
 const getWeatherFake = tool(
-  async (_input) => {
+  async _input => {
     return "It's sunny at 89 degrees F";
   },
   {

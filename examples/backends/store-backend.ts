@@ -59,7 +59,7 @@ export const agent = createDeepAgent({
   systemPrompt,
   checkpointer: new MemorySaver(),
   store: new InMemoryStore(),
-  backend: (config) => new StoreBackend(config),
+  backend: config => new StoreBackend(config),
 });
 
 async function main() {

@@ -86,7 +86,7 @@ export async function withRetry<T>(
       lastError = error;
 
       if (attempt < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        await new Promise(resolve => setTimeout(resolve, delayMs));
       }
     }
   }

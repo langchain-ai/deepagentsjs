@@ -103,7 +103,7 @@ export class Logger {
       this.fileStream.write(startupMessage);
 
       // Handle stream errors
-      this.fileStream.on("error", (err) => {
+      this.fileStream.on("error", err => {
         console.error(`${this.prefix} Log file error:`, err);
         this.fileStream = null;
       });
@@ -124,7 +124,7 @@ export class Logger {
     const timestamp = includeTimestamp ? `[${new Date().toISOString()}] ` : "";
     const levelTag = `[${level.toUpperCase()}]`;
     const message = args
-      .map((arg) => {
+      .map(arg => {
         // eslint-disable-next-line no-instanceof/no-instanceof
         if (arg instanceof Error) {
           return `${arg.message}\n${arg.stack}`;
@@ -242,7 +242,7 @@ export class Logger {
    * Close the logger and flush any pending writes
    */
   close(): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       if (this.fileStream) {
         const shutdownMessage = `${this.prefix} Shutting down at ${new Date().toISOString()}\n${"=".repeat(60)}\n`;
         this.fileStream.write(shutdownMessage, () => {
@@ -261,7 +261,7 @@ export class Logger {
    * Flush pending writes to file
    */
   flush(): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       if (this.fileStream) {
         // Use drain event if write buffer is full
         if (!this.fileStream.write("")) {

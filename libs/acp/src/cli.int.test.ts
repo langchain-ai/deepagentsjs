@@ -81,7 +81,7 @@ class CLITestHelper {
         // Check for startup message
         if (
           lines.some(
-            (l) =>
+            l =>
               l.includes("Server started") ||
               l.includes("waiting for connections"),
           )
@@ -98,7 +98,7 @@ class CLITestHelper {
           crlfDelay: Infinity,
         });
 
-        this.rl.on("line", (line) => {
+        this.rl.on("line", line => {
           if (!line.trim()) return;
 
           try {
@@ -119,12 +119,12 @@ class CLITestHelper {
         });
       }
 
-      this.process.on("error", (err) => {
+      this.process.on("error", err => {
         clearTimeout(timeout);
         reject(err);
       });
 
-      this.process.on("exit", (code) => {
+      this.process.on("exit", code => {
         if (code !== 0 && code !== null) {
           clearTimeout(timeout);
           reject(new Error(`CLI exited with code ${code}`));
@@ -165,11 +165,11 @@ class CLITestHelper {
       }, 30000);
 
       this.responseQueue.set(id, {
-        resolve: (response) => {
+        resolve: response => {
           clearTimeout(timeout);
           resolve(response);
         },
-        reject: (error) => {
+        reject: error => {
           clearTimeout(timeout);
           reject(error);
         },
@@ -233,7 +233,7 @@ class CLITestHelper {
       this.process.stdin?.end();
 
       // Wait for process to exit
-      await new Promise<void>((resolve) => {
+      await new Promise<void>(resolve => {
         const timeout = setTimeout(() => {
           this.process?.kill("SIGKILL");
           resolve();
@@ -300,7 +300,7 @@ describe("CLI Integration Tests", () => {
       expect(helper.isRunning()).toBe(true);
 
       const stderr = helper.getStderr();
-      expect(stderr.some((line) => line.includes("test-agent"))).toBe(true);
+      expect(stderr.some(line => line.includes("test-agent"))).toBe(true);
     });
 
     it("should write logs to file when --log-file is specified", async () => {
@@ -308,7 +308,7 @@ describe("CLI Integration Tests", () => {
       await helper.start();
 
       // Give time for log to be written
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 500));
 
       expect(fs.existsSync(logFile)).toBe(true);
       const logContent = fs.readFileSync(logFile, "utf8");
@@ -406,7 +406,7 @@ describe("CLI Integration Tests", () => {
       expect(response.result).toBeDefined();
       expect(response.result?.sessionId).toBeDefined();
       expect(typeof response.result?.sessionId).toBe("string");
-      expect((response.result?.sessionId as string).startsWith("sess_")).toBe(
+      expect((response.result!.sessionId as string).startsWith("sess_")).toBe(
         true,
       );
     });
@@ -426,7 +426,7 @@ describe("CLI Integration Tests", () => {
       expect(modesState.availableModes).toBeDefined();
       expect(modesState.availableModes!.length).toBeGreaterThan(0);
 
-      const modeIds = modesState.availableModes!.map((m) => m.id);
+      const modeIds = modesState.availableModes!.map(m => m.id);
       expect(modeIds).toContain("agent");
       expect(modeIds).toContain("plan");
       expect(modeIds).toContain("ask");
@@ -514,7 +514,7 @@ describe("CLI Integration Tests", () => {
       helper.sendNotification("session/cancel", { sessionId });
 
       // Should not crash - wait a bit
-      await new Promise((r) => setTimeout(r, 100));
+      await new Promise(r => setTimeout(r, 100));
       expect(helper.isRunning()).toBe(true);
     });
   });
@@ -530,9 +530,7 @@ describe("CLI Integration Tests", () => {
       });
 
       const stderr = helper.getStderr();
-      expect(stderr.some((line) => line.includes("[deepagents-acp]"))).toBe(
-        true,
-      );
+      expect(stderr.some(line => line.includes("[deepagents-acp]"))).toBe(true);
     });
 
     it("should log client connection info in debug mode", async () => {
@@ -547,7 +545,7 @@ describe("CLI Integration Tests", () => {
       const stderr = helper.getStderr();
       expect(
         stderr.some(
-          (line) =>
+          line =>
             line.includes("Client connected") ||
             line.includes("my-test-client"),
         ),
@@ -593,18 +591,18 @@ describe("CLI Help and Version", () => {
       stdout: string;
       stderr: string;
       code: number;
-    }>((resolve) => {
+    }>(resolve => {
       const proc = spawn("node", [cliPath, "--help"]);
       let stdout = "";
       let stderr = "";
 
-      proc.stdout?.on("data", (data) => {
+      proc.stdout?.on("data", data => {
         stdout += data.toString();
       });
-      proc.stderr?.on("data", (data) => {
+      proc.stderr?.on("data", data => {
         stderr += data.toString();
       });
-      proc.on("exit", (code) => {
+      proc.on("exit", code => {
         resolve({ stdout, stderr, code: code ?? 0 });
       });
     });
@@ -620,14 +618,14 @@ describe("CLI Help and Version", () => {
     const cliPath = path.resolve(__dirname, "..", "dist", "cli.js");
 
     const result = await new Promise<{ stdout: string; code: number }>(
-      (resolve) => {
+      resolve => {
         const proc = spawn("node", [cliPath, "--version"]);
         let stdout = "";
 
-        proc.stdout?.on("data", (data) => {
+        proc.stdout?.on("data", data => {
           stdout += data.toString();
         });
-        proc.on("exit", (code) => {
+        proc.on("exit", code => {
           resolve({ stdout, code: code ?? 0 });
         });
       },

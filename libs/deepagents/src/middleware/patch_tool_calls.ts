@@ -76,7 +76,7 @@ export function patchDanglingToolCalls(messages: BaseMessage[]): {
         const correspondingToolMsg = messages
           .slice(i + 1)
           .find(
-            (m) => ToolMessage.isInstance(m) && m.tool_call_id === toolCall.id,
+            m => ToolMessage.isInstance(m) && m.tool_call_id === toolCall.id,
           );
 
         if (!correspondingToolMsg) {
@@ -134,7 +134,7 @@ export function patchDanglingToolCalls(messages: BaseMessage[]): {
 export function createPatchToolCallsMiddleware() {
   return createMiddleware({
     name: "patchToolCallsMiddleware",
-    beforeAgent: async (state) => {
+    beforeAgent: async state => {
       const messages = state.messages;
 
       if (!messages || messages.length === 0) {

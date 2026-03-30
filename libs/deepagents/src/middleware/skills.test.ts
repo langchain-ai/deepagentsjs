@@ -1041,7 +1041,7 @@ describe("skillsMetadataReducer", () => {
       const result = skillsMetadataReducer(current, update);
 
       expect(result).toHaveLength(2);
-      expect(result.map((s) => s.name).sort()).toEqual(["skill-a", "skill-b"]);
+      expect(result.map(s => s.name).sort()).toEqual(["skill-a", "skill-b"]);
     });
 
     it("should override current skill with update when names match", () => {
@@ -1070,9 +1070,9 @@ describe("skillsMetadataReducer", () => {
 
       expect(result).toHaveLength(3);
 
-      const skillA = result.find((s) => s.name === "skill-a");
-      const skillB = result.find((s) => s.name === "skill-b");
-      const skillC = result.find((s) => s.name === "skill-c");
+      const skillA = result.find(s => s.name === "skill-a");
+      const skillB = result.find(s => s.name === "skill-b");
+      const skillC = result.find(s => s.name === "skill-c");
 
       expect(skillA?.description).toBe("Updated A");
       expect(skillB?.description).toBe("Current B"); // Not updated
@@ -1085,7 +1085,7 @@ describe("skillsMetadataReducer", () => {
 
       const result = skillsMetadataReducer(current, update);
 
-      expect(result.map((s) => s.name)).toEqual([
+      expect(result.map(s => s.name)).toEqual([
         "skill-a",
         "skill-b",
         "skill-c",
@@ -1126,10 +1126,10 @@ describe("skillsMetadataReducer", () => {
 
       expect(afterSubagent2).toHaveLength(4);
 
-      const sharedSkill = afterSubagent2.find((s) => s.name === "shared-skill");
+      const sharedSkill = afterSubagent2.find(s => s.name === "shared-skill");
       expect(sharedSkill?.description).toBe("Subagent 2 version"); // Last update wins
 
-      expect(afterSubagent2.map((s) => s.name).sort()).toEqual([
+      expect(afterSubagent2.map(s => s.name).sort()).toEqual([
         "main-only",
         "shared-skill",
         "subagent1-skill",

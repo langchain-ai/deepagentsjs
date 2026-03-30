@@ -529,7 +529,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
     baseFull: string,
     includeGlob: string | null,
   ): Promise<Record<string, Array<[number, string]>> | null> {
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       // -F enables fixed-string (literal) mode
       const args = ["--json", "-F"];
       if (includeGlob) {
@@ -541,11 +541,11 @@ export class FilesystemBackend implements BackendProtocolV2 {
       const results: Record<string, Array<[number, string]>> = {};
       let output = "";
 
-      proc.stdout.on("data", (data) => {
+      proc.stdout.on("data", data => {
         output += data.toString();
       });
 
-      proc.on("close", (code) => {
+      proc.on("close", code => {
         if (code !== 0 && code !== 1) {
           // Error (code 1 means no matches, which is ok)
           resolve(null);

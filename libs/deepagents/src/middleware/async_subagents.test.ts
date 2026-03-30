@@ -1268,7 +1268,7 @@ describe("buildListTool", () => {
 
   it.each(["success", "cancelled", "error", "timeout", "interrupted"] as const)(
     "should skip SDK call for terminal status '%s'",
-    async (status) => {
+    async status => {
       const job = makeTask({
         taskId: `t-${status}`,
         threadId: `t-${status}`,
@@ -1477,7 +1477,7 @@ describe("createAsyncSubAgentMiddleware", () => {
     const middleware = createAsyncSubAgentMiddleware({
       asyncSubAgents: [makeAgent()],
     });
-    const toolNames = (middleware.tools ?? []).map((t) => t.name);
+    const toolNames = (middleware.tools ?? []).map(t => t.name);
     expect(toolNames).toContain("start_async_task");
     expect(toolNames).toContain("check_async_task");
     expect(toolNames).toContain("update_async_task");
@@ -1494,7 +1494,7 @@ describe("createAsyncSubAgentMiddleware", () => {
       asyncSubAgents: [agent],
     });
     const launchTool = (middleware.tools ?? []).find(
-      (t) => t.name === "start_async_task",
+      t => t.name === "start_async_task",
     );
     expect(launchTool?.description).toContain("my-worker");
     expect(launchTool?.description).toContain("Does hard work");
@@ -1509,7 +1509,7 @@ describe("createAsyncSubAgentMiddleware", () => {
       ],
     });
     const launchTool = (middleware.tools ?? []).find(
-      (t) => t.name === "start_async_task",
+      t => t.name === "start_async_task",
     );
     expect(launchTool?.description).toContain("researcher");
     expect(launchTool?.description).toContain("analyst");
@@ -1543,10 +1543,10 @@ describe("createAsyncSubAgentMiddleware", () => {
       asyncSubAgents: [makeAgent({ name: "agent-b" })],
     });
     const launchDesc1 = (m1.tools ?? []).find(
-      (t) => t.name === "start_async_task",
+      t => t.name === "start_async_task",
     )?.description;
     const launchDesc2 = (m2.tools ?? []).find(
-      (t) => t.name === "start_async_task",
+      t => t.name === "start_async_task",
     )?.description;
     expect(launchDesc1).toContain("agent-a");
     expect(launchDesc1).not.toContain("agent-b");

@@ -142,7 +142,7 @@ export function registerFileOperationTests<T extends AnySandboxInstance>(
         ]);
 
         expect(results.length).toBe(3);
-        expect(results.every((r) => r.error === null)).toBe(true);
+        expect(results.every(r => r.error === null)).toBe(true);
 
         // Verify all files exist
         const checkResult = await shared.execute(

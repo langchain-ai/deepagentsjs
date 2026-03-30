@@ -352,7 +352,7 @@ function filterTasks(
   if (!statusFilter || statusFilter === "all") {
     return Object.values(tasks);
   }
-  return Object.values(tasks).filter((task) => task.status === statusFilter);
+  return Object.values(tasks).filter(task => task.status === statusFilter);
 }
 
 /**
@@ -484,7 +484,7 @@ export function buildStartTool(
     ): Promise<Command | string> => {
       if (!(input.agentName in agentMap)) {
         const allowed = Object.keys(agentMap)
-          .map((k) => `\`${k}\``)
+          .map(k => `\`${k}\``)
           .join(", ");
         return `Unknown async subagent type \`${input.agentName}\`. Available types: ${allowed}`;
       }
@@ -778,7 +778,7 @@ export function buildListTool(clients: ClientCache) {
       }
 
       const statuses = await Promise.all(
-        filtered.map((task) => fetchLiveTaskStatus(clients, task)),
+        filtered.map(task => fetchLiveTaskStatus(clients, task)),
       );
 
       const updatedTasks: Record<string, AsyncTask> = {};
@@ -888,7 +888,7 @@ export function createAsyncSubAgentMiddleware(
     throw new Error("At least one async subagent must be specified");
   }
 
-  const names = asyncSubAgents.map((a) => a.name);
+  const names = asyncSubAgents.map(a => a.name);
   const duplicates = names.filter((n, i) => names.indexOf(n) !== i);
   if (duplicates.length > 0) {
     throw new Error(
@@ -896,11 +896,11 @@ export function createAsyncSubAgentMiddleware(
     );
   }
 
-  const agentMap = Object.fromEntries(asyncSubAgents.map((a) => [a.name, a]));
+  const agentMap = Object.fromEntries(asyncSubAgents.map(a => [a.name, a]));
   const clients = new ClientCache(agentMap);
 
   const agentsDescription = asyncSubAgents
-    .map((a) => `- ${a.name}: ${a.description}`)
+    .map(a => `- ${a.name}: ${a.description}`)
     .join("\n");
   const launchDescription = ASYNC_TASK_TOOL_DESCRIPTION.replace(
     "{available_agents}",

@@ -83,7 +83,7 @@ export function canonicalPrediction(value: string): string {
 
   // If multi-line, take the last non-empty line (agent often puts answer last)
   if (text.includes("\n")) {
-    const lines = text.split("\n").filter((l) => l.trim());
+    const lines = text.split("\n").filter(l => l.trim());
     if (lines.length > 0) {
       text = lines[lines.length - 1]!.trim();
     }

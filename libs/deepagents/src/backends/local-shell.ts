@@ -157,7 +157,7 @@ export class LocalShellBackend
     this.#maxOutputBytes = maxOutputBytes;
     const bytes = new Uint8Array(4);
     crypto.getRandomValues(bytes);
-    this.#sandboxId = `local-${[...bytes].map((b) => b.toString(16).padStart(2, "0")).join("")}`;
+    this.#sandboxId = `local-${[...bytes].map(b => b.toString(16).padStart(2, "0")).join("")}`;
 
     if (inheritEnv) {
       this.#env = { ...process.env } as Record<string, string>;
@@ -261,7 +261,7 @@ export class LocalShellBackend
     const cwdPrefix = this.cwd.endsWith(path.sep)
       ? this.cwd
       : this.cwd + path.sep;
-    const files = (result.files || []).map((info) => ({
+    const files = (result.files || []).map(info => ({
       ...info,
       path: info.path.startsWith(cwdPrefix)
         ? info.path.slice(cwdPrefix.length)
@@ -372,7 +372,7 @@ export class LocalShellBackend
       };
     }
 
-    return new Promise<ExecuteResponse>((resolve) => {
+    return new Promise<ExecuteResponse>(resolve => {
       let stdout = "";
       let stderr = "";
       let timedOut = false;
@@ -396,7 +396,7 @@ export class LocalShellBackend
         stderr += data.toString();
       });
 
-      child.on("error", (err) => {
+      child.on("error", err => {
         clearTimeout(timer);
         resolve({
           output: `Error executing command: ${err.message}`,

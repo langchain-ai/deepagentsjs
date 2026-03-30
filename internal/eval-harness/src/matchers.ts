@@ -332,11 +332,11 @@ expect.extend({
     const step = received.steps[stepNum - 1];
     const toolCalls = step.action.tool_calls ?? [];
 
-    let matches = toolCalls.filter((tc) => tc.name === match.name);
+    let matches = toolCalls.filter(tc => tc.name === match.name);
 
     if (match.argsContains != null) {
       matches = matches.filter(
-        (tc) =>
+        tc =>
           typeof tc.args === "object" &&
           tc.args != null &&
           Object.entries(match.argsContains!).every(
@@ -347,7 +347,7 @@ expect.extend({
 
     if (match.argsEquals != null) {
       matches = matches.filter(
-        (tc) => JSON.stringify(tc.args) === JSON.stringify(match.argsEquals),
+        tc => JSON.stringify(tc.args) === JSON.stringify(match.argsEquals),
       );
     }
 

@@ -685,7 +685,7 @@ describe("createPatchToolCallsMiddleware", () => {
 
       // Verify synthetic ToolMessage was added
       const syntheticMsg = result.patchedMessages.find(
-        (m) => ToolMessage.isInstance(m) && m.tool_call_id === "call_1",
+        m => ToolMessage.isInstance(m) && m.tool_call_id === "call_1",
       );
       expect(syntheticMsg).toBeDefined();
     });
@@ -749,13 +749,13 @@ describe("createPatchToolCallsMiddleware", () => {
 
       // No orphaned messages
       const orphaned = result.patchedMessages.find(
-        (m) => ToolMessage.isInstance(m) && m.tool_call_id === "no_match",
+        m => ToolMessage.isInstance(m) && m.tool_call_id === "no_match",
       );
       expect(orphaned).toBeUndefined();
 
       // Synthetic ToolMessage injected
       const synthetic = result.patchedMessages.find(
-        (m) => ToolMessage.isInstance(m) && m.tool_call_id === "call_1",
+        m => ToolMessage.isInstance(m) && m.tool_call_id === "call_1",
       );
       expect(synthetic).toBeDefined();
     });
