@@ -11,14 +11,16 @@ import { z } from "zod/v4";
 import type { AnySubAgent } from "../types.js";
 
 /**
- * Specification for an async subagent running on a remote LangGraph server.
+ * Specification for an async subagent running on a remote Agent Protocol server.
  *
- * Async subagents connect to LangGraph deployments via the LangGraph SDK.
- * They run as background tasks that the main agent can monitor and update.
+ * Async subagents connect to any Agent Protocol-compliant server via the
+ * LangGraph SDK. They run as background tasks that the main agent can
+ * monitor and update.
  *
- * Authentication is handled via environment variables (`LANGGRAPH_API_KEY`,
- * `LANGSMITH_API_KEY`, or `LANGCHAIN_API_KEY`), which the LangGraph SDK
- * reads automatically.
+ * Compatible with LangGraph Platform (managed) and self-hosted servers.
+ * Authentication for LangGraph Platform is handled automatically by the SDK
+ * via environment variables (`LANGGRAPH_API_KEY`, `LANGSMITH_API_KEY`, or
+ * `LANGCHAIN_API_KEY`). For self-hosted servers, pass custom auth via `headers`.
  */
 export interface AsyncSubAgent {
   /** Unique identifier for the async subagent. */
@@ -27,13 +29,13 @@ export interface AsyncSubAgent {
   /** What this subagent does. The main agent uses this to decide when to delegate. */
   description: string;
 
-  /** The graph name or assistant ID on the remote server. */
+  /** The graph name or assistant ID on the Agent Protocol server. */
   graphId: string;
 
-  /** URL of the LangGraph server. Omit for local ASGI transport. */
+  /** URL of the Agent Protocol server. Defaults to the LangGraph SDK's default endpoint. */
   url?: string;
 
-  /** Additional headers to include in requests to the remote server. */
+  /** Additional headers to include in requests to the server (e.g. for custom auth). */
   headers?: Record<string, string>;
 }
 
@@ -41,9 +43,10 @@ export interface AsyncSubAgent {
  * Possible statuses for an async subagent task.
  *
  * Statuses set by the middleware tools: `"running"`, `"success"`, `"error"`, `"cancelled"`.
- * Statuses that may be returned by the LangGraph Platform: `"timeout"`, `"interrupted"`.
+ * Statuses that may be returned by the remote server: `"pending"`, `"timeout"`, `"interrupted"`.
  */
 export type AsyncTaskStatus =
+  | "pending"
   | "running"
   | "success"
   | "error"
@@ -54,7 +57,7 @@ export type AsyncTaskStatus =
 /**
  * A tracked async subagent task persisted in agent state.
  *
- * Each task maps to a single thread + run on a remote LangGraph server.
+ * Each task maps to a single thread + run on a remote Agent Protocol server.
  * The `taskId` is the same as `threadId`, so it can be used to look up
  * the thread directly via the SDK.
  */
@@ -65,10 +68,10 @@ export interface AsyncTask {
   /** Name of the async subagent type that is running. */
   agentName: string;
 
-  /** LangGraph thread ID for the remote run. */
+  /** Thread ID on the remote server. */
   threadId: string;
 
-  /** LangGraph run ID for the current execution on the thread. */
+  /** Run ID for the current execution on the thread. */
   runId: string;
 
   /** Current task status. */
@@ -183,7 +186,7 @@ export function asyncTasksReducer(
  * The `{available_agents}` placeholder is replaced at middleware creation
  * time with a formatted list of configured async subagent names and descriptions.
  */
-const ASYNC_TASK_TOOL_DESCRIPTION = `Launch an async subagent on a remote LangGraph server. The subagent runs in the background and returns a task ID immediately.
+const ASYNC_TASK_TOOL_DESCRIPTION = `Launch an async subagent on a remote Agent Protocol server. The subagent runs in the background and returns a task ID immediately.
 
 Available async agent types:
 {available_agents}
@@ -193,7 +196,7 @@ Available async agent types:
 2. Use \`check_async_task\` only when the user asks for a status update or result.
 3. Use \`update_async_task\` to send new instructions to a running task.
 4. Multiple async subagents can run concurrently — launch several and let them run in the background.
-5. The subagent runs on a remote LangGraph server, so it has its own tools and capabilities.`;
+5. The subagent runs on a remote server, so it has its own tools and capabilities.`;
 
 /**
  * Default system prompt appended to the main agent's system message when
@@ -204,9 +207,9 @@ Available async agent types:
  * critical rules about polling behavior, and guidance on when to use async
  * subagents vs. synchronous delegation.
  */
-export const ASYNC_TASK_SYSTEM_PROMPT = `## Async subagents (remote LangGraph servers)
+export const ASYNC_TASK_SYSTEM_PROMPT = `## Async subagents (remote Agent Protocol servers)
 
-You have access to async subagent tools that launch background tasks on remote LangGraph servers.
+You have access to async subagent tools that launch background tasks on remote Agent Protocol servers.
 
 ### Tools:
 - \`start_async_task\`: Start a new background task. Returns a task ID immediately.
@@ -247,6 +250,20 @@ You have access to async subagent tools that launch background tasks on remote L
  * When listing tasks, live-status fetches are skipped for tasks whose
  * cached status is in this set, since they are guaranteed to be final.
  */
+/**
+ * Names of the tools added by the async subagent middleware.
+ *
+ * Exported so `agent.ts` can include them in `BUILTIN_TOOL_NAMES` and
+ * surface a `ConfigurationError` if a user-provided tool collides.
+ */
+export const ASYNC_TASK_TOOL_NAMES = [
+  "start_async_task",
+  "check_async_task",
+  "update_async_task",
+  "cancel_async_task",
+  "list_async_tasks",
+] as const;
+
 export const TERMINAL_STATUSES = new Set<AsyncTaskStatus>([
   "cancelled",
   "success",
@@ -382,8 +399,11 @@ export class ClientCache {
   }
 
   /**
-   * Build headers for a remote LangGraph server, adding the default
-   * `x-auth-scheme: langsmith` header if not already present.
+   * Build headers for a remote Agent Protocol server.
+   *
+   * Adds `x-auth-scheme: langsmith` by default unless already provided.
+   * For self-hosted servers that don't require this header, it is typically
+   * ignored. Override via the `headers` field on the AsyncSubAgent config.
    */
   private resolveHeaders(spec: AsyncSubAgent): Record<string, string> {
     const headers = { ...(spec.headers || {}) };
@@ -820,9 +840,12 @@ export interface AsyncSubAgentMiddlewareOptions {
  * Create middleware that adds async subagent tools to an agent.
  *
  * Provides five tools for launching, checking, updating, cancelling, and
- * listing background tasks on remote LangGraph deployments. Task state is
+ * listing background tasks on remote Agent Protocol servers. Task state is
  * persisted in the `asyncTasks` state channel so it survives
  * context compaction.
+ *
+ * Works with any Agent Protocol-compliant server — LangGraph Platform (managed)
+ * or self-hosted (e.g. a Hono/Express server implementing the Agent Protocol spec).
  *
  * @throws {Error} If no async subagents are provided or names are duplicated.
  *
@@ -832,7 +855,7 @@ export interface AsyncSubAgentMiddlewareOptions {
  *   asyncSubAgents: [{
  *     name: "researcher",
  *     description: "Research agent for deep analysis",
- *     url: "https://my-deployment.langsmith.dev",
+ *     url: "https://my-agent-protocol-server.example.com",
  *     graphId: "research_agent",
  *   }],
  * });

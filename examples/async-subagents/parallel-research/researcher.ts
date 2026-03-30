@@ -12,7 +12,7 @@ import { tool } from "langchain";
 import { z } from "zod";
 import {
   createDeepAgent,
-  createCompletionNotifierMiddleware,
+  createCompletionCallbackMiddleware,
 } from "deepagents";
 
 const LANGGRAPH_URL = process.env.LANGGRAPH_URL ?? "http://localhost:2024";
@@ -68,10 +68,10 @@ const webSearch = tool(
   },
 );
 
-// ─── Completion notifier ──────────────────────────────────────────────────────
+// ─── Completion callback ──────────────────────────────────────────────────────
 
-const notifier = createCompletionNotifierMiddleware({
-  parentGraphId: "supervisor",
+const notifier = createCompletionCallbackMiddleware({
+  callbackGraphId: "supervisor",
   url: LANGGRAPH_URL,
 });
 

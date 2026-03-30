@@ -22,6 +22,7 @@ import {
   createMemoryMiddleware,
   createSkillsMiddleware,
   FILESYSTEM_TOOL_NAMES,
+  ASYNC_TASK_TOOL_NAMES,
   type SubAgent,
   createAsyncSubAgentMiddleware,
   isAsyncSubAgent,
@@ -53,6 +54,7 @@ const BASE_PROMPT = `In order to complete the objective that the user asks of yo
 
 const BUILTIN_TOOL_NAMES: ReadonlySet<string> = new Set([
   ...FILESYSTEM_TOOL_NAMES,
+  ...ASYNC_TASK_TOOL_NAMES,
   "task",
   "write_todos",
 ]);
