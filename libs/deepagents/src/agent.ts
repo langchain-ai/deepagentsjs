@@ -202,7 +202,6 @@ export function createDeepAgent<
     : [];
 
   const normalizeSubagentSpec = (input: SubAgent): SubAgent => {
-    const effectiveInterruptOn = input.interruptOn ?? interruptOn;
     const subagentMiddleware = [
       todoListMiddleware(),
       createFilesystemMiddleware({ backend }),
@@ -213,9 +212,6 @@ export function createDeepAgent<
         : []),
       ...(input.middleware ?? []),
       ...cacheMiddleware,
-      ...(effectiveInterruptOn
-        ? [humanInTheLoopMiddleware({ interruptOn: effectiveInterruptOn })]
-        : []),
     ];
     return {
       ...input,
