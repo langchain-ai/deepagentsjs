@@ -343,7 +343,7 @@ describe("REPL Engine", () => {
 
   describe("PTC (programmatic tool calling)", () => {
     it("should call tools with await", async () => {
-      const addTool = tool(async input => String(input.a + input.b), {
+      const addTool = tool(async (input) => String(input.a + input.b), {
         name: "add",
         description: "Add two numbers",
         schema: z.object({ a: z.number(), b: z.number() }),
@@ -363,7 +363,7 @@ describe("REPL Engine", () => {
     });
 
     it("should auto-resolve promises without explicit await", async () => {
-      const addTool = tool(async input => String(input.a + input.b), {
+      const addTool = tool(async (input) => String(input.a + input.b), {
         name: "add",
         description: "Add two numbers",
         schema: z.object({ a: z.number(), b: z.number() }),
@@ -380,12 +380,12 @@ describe("REPL Engine", () => {
     });
 
     it("should inject multiple tools", async () => {
-      const upperTool = tool(async input => input.text.toUpperCase(), {
+      const upperTool = tool(async (input) => input.text.toUpperCase(), {
         name: "upper",
         description: "Uppercase a string",
         schema: z.object({ text: z.string() }),
       });
-      const lowerTool = tool(async input => input.text.toLowerCase(), {
+      const lowerTool = tool(async (input) => input.text.toLowerCase(), {
         name: "lower",
         description: "Lowercase a string",
         schema: z.object({ text: z.string() }),
@@ -410,11 +410,14 @@ describe("REPL Engine", () => {
     });
 
     it("should camelCase snake_case tool names", async () => {
-      const webSearchTool = tool(async input => `results for ${input.query}`, {
-        name: "web_search",
-        description: "Search the web",
-        schema: z.object({ query: z.string() }),
-      });
+      const webSearchTool = tool(
+        async (input) => `results for ${input.query}`,
+        {
+          name: "web_search",
+          description: "Search the web",
+          schema: z.object({ query: z.string() }),
+        },
+      );
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
         backend: createMockBackend(),
@@ -430,7 +433,7 @@ describe("REPL Engine", () => {
     });
 
     it("should support Promise.all for concurrent tool calls", async () => {
-      const echoTool = tool(async input => `echo-${input.id}`, {
+      const echoTool = tool(async (input) => `echo-${input.id}`, {
         name: "echo",
         description: "Echo back an id",
         schema: z.object({ id: z.number() }),

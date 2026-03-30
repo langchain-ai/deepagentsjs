@@ -7,20 +7,23 @@ import { MemorySaver, Command } from "@langchain/langgraph";
 import { createDeepAgent } from "deepagents";
 import { z } from "zod/v4";
 
-const sampleTool = tool(input => input.sample_input, {
+const sampleTool = tool((input) => input.sample_input, {
   name: "sample_tool",
   description: "Sample tool",
   schema: z.object({ sample_input: z.string() }),
 });
 
-const getWeather = tool(input => `The weather in ${input.location} is sunny.`, {
-  name: "get_weather",
-  description: "Use this tool to get the weather",
-  schema: z.object({ location: z.string() }),
-});
+const getWeather = tool(
+  (input) => `The weather in ${input.location} is sunny.`,
+  {
+    name: "get_weather",
+    description: "Use this tool to get the weather",
+    schema: z.object({ location: z.string() }),
+  },
+);
 
 const getSoccerScores = tool(
-  input => `The latest soccer scores for ${input.team} are 2-1.`,
+  (input) => `The latest soccer scores for ${input.team} are 2-1.`,
   {
     name: "get_soccer_scores",
     description: "Use this tool to get the latest soccer scores",
@@ -66,11 +69,11 @@ ls.describe(
         ls.logOutputs({ result });
 
         const agentMessages = result.messages.filter(AIMessage.isInstance);
-        const toolCalls = agentMessages.flatMap(msg => msg.tool_calls || []);
+        const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
 
-        expect(toolCalls.some(tc => tc.name === "sample_tool")).toBe(true);
-        expect(toolCalls.some(tc => tc.name === "get_weather")).toBe(true);
-        expect(toolCalls.some(tc => tc.name === "get_soccer_scores")).toBe(
+        expect(toolCalls.some((tc) => tc.name === "sample_tool")).toBe(true);
+        expect(toolCalls.some((tc) => tc.name === "get_weather")).toBe(true);
+        expect(toolCalls.some((tc) => tc.name === "get_soccer_scores")).toBe(
           true,
         );
 
@@ -81,15 +84,17 @@ ls.describe(
         const actionRequests = interrupts.actionRequests;
 
         expect(actionRequests).toHaveLength(2);
-        expect(actionRequests.some(ar => ar.name === "sample_tool")).toBe(true);
-        expect(actionRequests.some(ar => ar.name === "get_soccer_scores")).toBe(
+        expect(actionRequests.some((ar) => ar.name === "sample_tool")).toBe(
           true,
         );
+        expect(
+          actionRequests.some((ar) => ar.name === "get_soccer_scores"),
+        ).toBe(true);
 
         const reviewConfigs = interrupts.reviewConfigs;
         expect(
           reviewConfigs.some(
-            rc =>
+            (rc) =>
               rc.actionName === "sample_tool" &&
               rc.allowedDecisions.includes("approve") &&
               rc.allowedDecisions.includes("edit") &&
@@ -98,7 +103,7 @@ ls.describe(
         ).toBe(true);
         expect(
           reviewConfigs.some(
-            rc =>
+            (rc) =>
               rc.actionName === "get_soccer_scores" &&
               rc.allowedDecisions.includes("approve") &&
               rc.allowedDecisions.includes("reject"),
@@ -117,9 +122,9 @@ ls.describe(
         ls.logOutputs({ result2 });
 
         const toolResults = result2.messages.filter(ToolMessage.isInstance);
-        expect(toolResults.some(tr => tr.name === "sample_tool")).toBe(true);
-        expect(toolResults.some(tr => tr.name === "get_weather")).toBe(true);
-        expect(toolResults.some(tr => tr.name === "get_soccer_scores")).toBe(
+        expect(toolResults.some((tr) => tr.name === "sample_tool")).toBe(true);
+        expect(toolResults.some((tr) => tr.name === "get_weather")).toBe(true);
+        expect(toolResults.some((tr) => tr.name === "get_soccer_scores")).toBe(
           true,
         );
       },
@@ -159,15 +164,17 @@ ls.describe(
         const actionRequests = interrupts.actionRequests;
 
         expect(actionRequests).toHaveLength(2);
-        expect(actionRequests.some(ar => ar.name === "sample_tool")).toBe(true);
-        expect(actionRequests.some(ar => ar.name === "get_soccer_scores")).toBe(
+        expect(actionRequests.some((ar) => ar.name === "sample_tool")).toBe(
           true,
         );
+        expect(
+          actionRequests.some((ar) => ar.name === "get_soccer_scores"),
+        ).toBe(true);
 
         const reviewConfigs = interrupts.reviewConfigs;
         expect(
           reviewConfigs.some(
-            rc =>
+            (rc) =>
               rc.actionName === "sample_tool" &&
               rc.allowedDecisions.includes("approve") &&
               rc.allowedDecisions.includes("edit") &&
@@ -176,7 +183,7 @@ ls.describe(
         ).toBe(true);
         expect(
           reviewConfigs.some(
-            rc =>
+            (rc) =>
               rc.actionName === "get_soccer_scores" &&
               rc.allowedDecisions.includes("approve") &&
               rc.allowedDecisions.includes("reject"),
@@ -248,11 +255,13 @@ ls.describe(
         const actionRequests = interrupts.actionRequests;
 
         expect(actionRequests).toHaveLength(2);
-        expect(actionRequests.some(ar => ar.name === "get_weather")).toBe(true);
-        expect(actionRequests.some(ar => ar.name === "get_soccer_scores")).toBe(
+        expect(actionRequests.some((ar) => ar.name === "get_weather")).toBe(
           true,
         );
-        expect(actionRequests.some(ar => ar.name === "sample_tool")).toBe(
+        expect(
+          actionRequests.some((ar) => ar.name === "get_soccer_scores"),
+        ).toBe(true);
+        expect(actionRequests.some((ar) => ar.name === "sample_tool")).toBe(
           false,
         );
 

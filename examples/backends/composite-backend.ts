@@ -76,7 +76,7 @@ export const agent = createDeepAgent({
   systemPrompt,
   checkpointer: new MemorySaver(),
   store: new InMemoryStore(),
-  backend: config =>
+  backend: (config) =>
     new CompositeBackend(new StateBackend(config), {
       "/memories/": new StoreBackend(config),
     }),

@@ -58,7 +58,7 @@ async function queryArxiv(query: string, maxPapers = 10): Promise<string> {
     }
 
     return entries
-      .map(paper => `Title: ${paper.title}\nSummary: ${paper.summary}`)
+      .map((paper) => `Title: ${paper.title}\nSummary: ${paper.summary}`)
       .join("\n\n");
   } catch (error) {
     return `Error querying arXiv: ${error}`;
@@ -95,7 +95,7 @@ Examples:
     }
   }
 
-  queryArxiv(query, maxPapers).then(result => {
+  queryArxiv(query, maxPapers).then((result) => {
     console.log(result);
   });
 }

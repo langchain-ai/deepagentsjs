@@ -152,7 +152,7 @@ export const getNflStandings = tool(
 );
 
 export const getWeather = tool(
-  input => `The weather in ${input.location} is sunny.`,
+  (input) => `The weather in ${input.location} is sunny.`,
   {
     name: "get_weather",
     description: "Use this tool to get the weather",
@@ -161,7 +161,7 @@ export const getWeather = tool(
 );
 
 export const getSoccerScores = tool(
-  input => `The latest soccer scores for ${input.team} are 2-1.`,
+  (input) => `The latest soccer scores for ${input.team} are 2-1.`,
   {
     name: "get_soccer_scores",
     description: "Use this tool to get the latest soccer scores",
@@ -171,7 +171,7 @@ export const getSoccerScores = tool(
   },
 );
 
-export const sampleTool = tool(input => input.sample_input, {
+export const sampleTool = tool((input) => input.sample_input, {
   name: "sample_tool",
   description: "Sample tool",
   schema: z.object({
@@ -273,6 +273,6 @@ export function extractToolsFromAgent(agent: {
   };
 
   return Object.fromEntries(
-    (toolsNode.tools ?? []).map(tool => [tool.name, tool]),
+    (toolsNode.tools ?? []).map((tool) => [tool.name, tool]),
   );
 }

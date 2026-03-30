@@ -292,7 +292,7 @@ describe("LocalShellBackend", () => {
       expect(files.error).toBeUndefined();
 
       expect(files.files!.length).toBe(2);
-      const paths = files.files!.map(f => f.path);
+      const paths = files.files!.map((f) => f.path);
       expect(paths).toContain("/file1.txt");
       expect(paths).toContain("/file2.txt");
     });
@@ -354,7 +354,7 @@ describe("LocalShellBackend", () => {
       expect(txtFiles.error).toBeUndefined();
 
       expect(txtFiles.files!.length).toBe(2);
-      const paths = txtFiles.files!.map(f => f.path);
+      const paths = txtFiles.files!.map((f) => f.path);
       expect(paths).toContain("/file1.txt");
       expect(paths).toContain("/file3.txt");
       expect(paths).not.toContain("/file2.py");

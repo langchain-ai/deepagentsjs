@@ -90,8 +90,8 @@ function getMessageText(msg: StreamMessage): string {
   if (typeof msg.content === "string") return msg.content;
   if (Array.isArray(msg.content)) {
     return msg.content
-      .filter(b => b.type === "text" && b.text)
-      .map(b => b.text!)
+      .filter((b) => b.type === "text" && b.text)
+      .map((b) => b.text!)
       .join("");
   }
   return "";
@@ -169,7 +169,7 @@ function EmptyState({
         parallel as async subagents and report back.
       </p>
       <div className="flex flex-wrap gap-2 justify-center">
-        {SUGGESTIONS.map(s => (
+        {SUGGESTIONS.map((s) => (
           <button
             key={s}
             onClick={() => onSuggestionClick(s)}
@@ -194,8 +194,8 @@ export function App() {
     apiUrl: LANGGRAPH_URL,
     assistantId: "supervisor",
     // eslint-disable-next-line no-console
-    onError: err => console.error("[stream error]", err),
-    onUpdateEvent: data => {
+    onError: (err) => console.error("[stream error]", err),
+    onUpdateEvent: (data) => {
       if (data && typeof data === "object") {
         for (const nodeUpdate of Object.values(
           data as Record<string, Record<string, unknown>>,
@@ -204,7 +204,7 @@ export function App() {
             | Record<string, AsyncTask>
             | undefined;
           if (taskMap && typeof taskMap === "object") {
-            setAsyncTasks(prev => {
+            setAsyncTasks((prev) => {
               const next = { ...prev };
               for (const task of Object.values(taskMap)) {
                 next[task.taskId] = { ...prev[task.taskId], ...task };
@@ -223,7 +223,7 @@ export function App() {
   // Poll running tasks for status updates
   const pollTasks = useCallback(async () => {
     const running = Object.values(asyncTasks).filter(
-      t => !TERMINAL_STATUSES.has(t.status),
+      (t) => !TERMINAL_STATUSES.has(t.status),
     );
     if (running.length === 0) return;
 
@@ -232,7 +232,7 @@ export function App() {
       try {
         const run = await client.runs.get(task.threadId, task.runId);
         if (TERMINAL_STATUSES.has(run.status)) {
-          setAsyncTasks(prev => ({
+          setAsyncTasks((prev) => ({
             ...prev,
             [task.taskId]: { ...prev[task.taskId], status: run.status },
           }));
@@ -287,7 +287,7 @@ export function App() {
 
   const hasMessages = visibleMessages.length > 0;
 
-  const handleSubmit: SubmitEventHandler<HTMLFormElement> = e => {
+  const handleSubmit: SubmitEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
     const text = input.trim();
     if (!text || thread.isLoading) return;
@@ -392,7 +392,7 @@ export function App() {
               <input
                 type="text"
                 value={input}
-                onChange={e => setInput(e.target.value)}
+                onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask a research question..."
                 disabled={thread.isLoading}
                 autoFocus

@@ -12,7 +12,7 @@ import {
 import { StateBackend } from "../backends/state.js";
 import type { FileData } from "../backends/protocol.js";
 
-vi.mock("@langchain/langgraph", async importOriginal => {
+vi.mock("@langchain/langgraph", async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...(actual as any),

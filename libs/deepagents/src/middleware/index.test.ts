@@ -91,18 +91,18 @@ describe("FilesystemMiddleware", () => {
     expect(middleware.name).toBe("FilesystemMiddleware");
     const tools = middleware.tools || [];
     expect(tools.length).toBeGreaterThanOrEqual(6); // ls, read, write, edit, glob, grep
-    expect(tools.map(t => t.name)).toContain("ls");
-    expect(tools.map(t => t.name)).toContain("read_file");
-    expect(tools.map(t => t.name)).toContain("write_file");
-    expect(tools.map(t => t.name)).toContain("edit_file");
-    expect(tools.map(t => t.name)).toContain("glob");
-    expect(tools.map(t => t.name)).toContain("grep");
+    expect(tools.map((t) => t.name)).toContain("ls");
+    expect(tools.map((t) => t.name)).toContain("read_file");
+    expect(tools.map((t) => t.name)).toContain("write_file");
+    expect(tools.map((t) => t.name)).toContain("edit_file");
+    expect(tools.map((t) => t.name)).toContain("glob");
+    expect(tools.map((t) => t.name)).toContain("grep");
   });
 
   it("should include execute tool in tools list", () => {
     const middleware = createFilesystemMiddleware();
     const tools = middleware.tools || [];
-    expect(tools.map(t => t.name)).toContain("execute");
+    expect(tools.map((t) => t.name)).toContain("execute");
   });
 
   it("should initialize with custom backend", () => {

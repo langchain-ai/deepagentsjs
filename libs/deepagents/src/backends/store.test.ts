@@ -46,12 +46,14 @@ describe("StoreBackend", () => {
 
     const infos = await backend.ls("/docs/");
     expect(infos.error).toBeUndefined();
-    expect(infos.files!.some(i => i.path === "/docs/readme.md")).toBe(true);
+    expect(infos.files!.some((i) => i.path === "/docs/readme.md")).toBe(true);
 
     const grepRes = await backend.grep("hi", "/");
     expect(grepRes.error).toBeUndefined();
     expect(grepRes.matches).toBeDefined();
-    expect(grepRes.matches!.some(m => m.path === "/docs/readme.md")).toBe(true);
+    expect(grepRes.matches!.some((m) => m.path === "/docs/readme.md")).toBe(
+      true,
+    );
 
     const glob1 = await backend.glob("*.md", "/");
     expect(glob1.error).toBeUndefined();
@@ -59,7 +61,7 @@ describe("StoreBackend", () => {
 
     const glob2 = await backend.glob("**/*.md", "/");
     expect(glob2.error).toBeUndefined();
-    expect(glob2.files!.some(i => i.path === "/docs/readme.md")).toBe(true);
+    expect(glob2.files!.some((i) => i.path === "/docs/readme.md")).toBe(true);
   });
 
   it("should list nested directories correctly", async () => {
@@ -82,7 +84,7 @@ describe("StoreBackend", () => {
 
     const rootListing = await backend.ls("/");
     expect(rootListing.error).toBeUndefined();
-    const rootPaths = rootListing.files!.map(fi => fi.path);
+    const rootPaths = rootListing.files!.map((fi) => fi.path);
     expect(rootPaths).toContain("/config.json");
     expect(rootPaths).toContain("/src/");
     expect(rootPaths).toContain("/docs/");
@@ -93,14 +95,14 @@ describe("StoreBackend", () => {
 
     const srcListing = await backend.ls("/src/");
     expect(srcListing.error).toBeUndefined();
-    const srcPaths = srcListing.files!.map(fi => fi.path);
+    const srcPaths = srcListing.files!.map((fi) => fi.path);
     expect(srcPaths).toContain("/src/main.py");
     expect(srcPaths).toContain("/src/utils/");
     expect(srcPaths).not.toContain("/src/utils/helper.py");
 
     const utilsListing = await backend.ls("/src/utils/");
     expect(utilsListing.error).toBeUndefined();
-    const utilsPaths = utilsListing.files!.map(fi => fi.path);
+    const utilsPaths = utilsListing.files!.map((fi) => fi.path);
     expect(utilsPaths).toContain("/src/utils/helper.py");
     expect(utilsPaths).toContain("/src/utils/common.py");
     expect(utilsPaths).toHaveLength(2);
@@ -133,8 +135,8 @@ describe("StoreBackend", () => {
     const listing2 = await backend.ls("/dir");
     expect(listing2.error).toBeUndefined();
     expect(listing1.files!.length).toBe(listing2.files!.length);
-    expect(listing1.files!.map(fi => fi.path)).toEqual(
-      listing2.files!.map(fi => fi.path),
+    expect(listing1.files!.map((fi) => fi.path)).toEqual(
+      listing2.files!.map((fi) => fi.path),
     );
   });
 
@@ -231,10 +233,10 @@ describe("StoreBackend", () => {
     await backend.write("/test.txt", "content");
 
     const items = await store.search(["test-assistant", "filesystem"]);
-    expect(items.some(item => item.key === "/test.txt")).toBe(true);
+    expect(items.some((item) => item.key === "/test.txt")).toBe(true);
 
     const defaultItems = await store.search(["filesystem"]);
-    expect(defaultItems.some(item => item.key === "/test.txt")).toBe(false);
+    expect(defaultItems.some((item) => item.key === "/test.txt")).toBe(false);
   });
 
   describe("uploadFiles", () => {
@@ -437,10 +439,10 @@ describe("StoreBackend", () => {
     await backend.write("/test.txt", "namespaced content");
 
     const items = await store.search(["org-123", "user-456", "filesystem"]);
-    expect(items.some(item => item.key === "/test.txt")).toBe(true);
+    expect(items.some((item) => item.key === "/test.txt")).toBe(true);
 
     const defaultItems = await store.search(["filesystem"]);
-    expect(defaultItems.some(item => item.key === "/test.txt")).toBe(false);
+    expect(defaultItems.some((item) => item.key === "/test.txt")).toBe(false);
   });
 
   it("should isolate data between different namespaces", async () => {
@@ -513,7 +515,7 @@ describe("StoreBackend", () => {
     await backend.write("/test.txt", "context-derived namespace");
 
     const items = await store.search(["filesystem", "ctx-user-789"]);
-    expect(items.some(item => item.key === "/test.txt")).toBe(true);
+    expect(items.some((item) => item.key === "/test.txt")).toBe(true);
   });
 
   it("should handle large tool result interception via middleware", async () => {
@@ -522,7 +524,7 @@ describe("StoreBackend", () => {
     const { ToolMessage } = await import("@langchain/core/messages");
 
     const middleware = createFilesystemMiddleware({
-      backend: stateAndStore => new StoreBackend(stateAndStore),
+      backend: (stateAndStore) => new StoreBackend(stateAndStore),
       toolTokenLimitBeforeEvict: 1000,
     });
 
@@ -661,7 +663,7 @@ describe("StoreBackend", () => {
 
       const grepRes = await backend.grep("import", "/");
       expect(grepRes.matches).toHaveLength(2);
-      const paths = grepRes.matches!.map(m => m.path).sort();
+      const paths = grepRes.matches!.map((m) => m.path).sort();
       expect(paths).toEqual(["/legacy.py", "/modern.py"]);
     });
 

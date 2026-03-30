@@ -89,7 +89,7 @@ Always be helpful, concise, and focused on the user's coding tasks.`,
 console.error("[deepagents] Starting ACP server...");
 console.error(`[deepagents] Workspace: ${workspaceRoot}`);
 
-server.start().catch(error => {
+server.start().catch((error) => {
   console.error("[deepagents] Server error:", error);
   process.exit(1);
 });

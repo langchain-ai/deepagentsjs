@@ -30,8 +30,8 @@ function extractAllToolCalls(response: {
 }): Array<{ name: string; args: Record<string, unknown>; model?: string }> {
   const messages = response.messages || [];
   const aiMessages = messages.filter(AIMessage.isInstance);
-  return aiMessages.flatMap(msg =>
-    (msg.tool_calls || []).map(toolCall => ({
+  return aiMessages.flatMap((msg) =>
+    (msg.tool_calls || []).map((toolCall) => ({
       name: toolCall.name,
       args: toolCall.args,
       model: msg.response_metadata?.model_name || undefined,
@@ -72,7 +72,7 @@ async function assertExpectedSubgraphActions(
     if (!lastAiMessage) continue;
 
     actualToolCalls.push(
-      ...(lastAiMessage.tool_calls ?? []).map(toolCall => ({
+      ...(lastAiMessage.tool_calls ?? []).map((toolCall) => ({
         name: toolCall.name,
         args: toolCall.args,
         model: lastAiMessage.response_metadata?.model_name || undefined,
@@ -109,7 +109,7 @@ describe("Subagent Middleware Integration Tests", () => {
       });
 
       const toolCalls = extractAllToolCalls(response);
-      const taskCall = toolCalls.find(tc => tc.name === "task");
+      const taskCall = toolCalls.find((tc) => tc.name === "task");
 
       expect(taskCall).toBeDefined();
       expect(taskCall!.args.subagent_type).toBe("general-purpose");
@@ -149,7 +149,7 @@ describe("Subagent Middleware Integration Tests", () => {
       });
 
       const toolCalls = extractAllToolCalls(response);
-      const taskCall = toolCalls.find(tc => tc.name === "task");
+      const taskCall = toolCalls.find((tc) => tc.name === "task");
 
       expect(taskCall).toBeDefined();
       expect(taskCall!.args.subagent_type).toBe("weather");
@@ -338,7 +338,7 @@ describe("Subagent Middleware Integration Tests", () => {
       });
 
       const toolCalls1 = extractAllToolCalls(response1);
-      const taskCall1 = toolCalls1.find(tc => tc.name === "task");
+      const taskCall1 = toolCalls1.find((tc) => tc.name === "task");
       expect(taskCall1?.args.subagent_type).toBe("weather");
 
       const response2 = await agent.invoke({
@@ -348,7 +348,7 @@ describe("Subagent Middleware Integration Tests", () => {
       });
 
       const toolCalls2 = extractAllToolCalls(response2);
-      const taskCall2 = toolCalls2.find(tc => tc.name === "task");
+      const taskCall2 = toolCalls2.find((tc) => tc.name === "task");
       expect(taskCall2?.args.subagent_type).toBe("soccer");
     },
   );
@@ -404,7 +404,7 @@ describe("Subagent Middleware Integration Tests", () => {
       });
 
       const toolCalls = extractAllToolCalls(response);
-      const taskCall = toolCalls.find(tc => tc.name === "task");
+      const taskCall = toolCalls.find((tc) => tc.name === "task");
 
       expect(taskCall).toBeDefined();
       expect(taskCall!.args.subagent_type).toBe("general-purpose");
@@ -440,7 +440,7 @@ describe("Subagent Middleware Integration Tests", () => {
       });
 
       const toolCalls = extractAllToolCalls(response);
-      const taskCall = toolCalls.find(tc => tc.name === "task");
+      const taskCall = toolCalls.find((tc) => tc.name === "task");
       expect(taskCall).toBeDefined();
       expect(taskCall!.args.subagent_type).toBe("general-purpose");
       expect(response.messages.length).toBeGreaterThan(0);
@@ -510,13 +510,15 @@ Each subagent should write ONE file. Do NOT write files sequentially - spawn all
 
       // Extract all tool calls to verify subagents were invoked
       const toolCalls = extractAllToolCalls(response);
-      const taskCalls = toolCalls.filter(tc => tc.name === "task");
+      const taskCalls = toolCalls.filter((tc) => tc.name === "task");
 
       // Verify multiple subagents were invoked (at least 2 for parallel execution)
       expect(taskCalls.length).toBeGreaterThanOrEqual(2);
 
       // Verify different subagents were used
-      const subagentTypes = new Set(taskCalls.map(tc => tc.args.subagent_type));
+      const subagentTypes = new Set(
+        taskCalls.map((tc) => tc.args.subagent_type),
+      );
       expect(subagentTypes.size).toBeGreaterThanOrEqual(2);
 
       // Verify the files state was properly merged (no LastValue error occurred)
@@ -693,12 +695,12 @@ describe("Hierarchical Deep Agent Integration Tests", () => {
 
       const allToolCalls = response.messages
         .filter(AIMessage.isInstance)
-        .flatMap(msg => msg.tool_calls || []);
+        .flatMap((msg) => msg.tool_calls || []);
 
       // The outer agent should have delegated to weather-agent
       expect(
         allToolCalls.some(
-          tc =>
+          (tc) =>
             tc.name === "task" && tc.args?.subagent_type === "weather-agent",
         ),
       ).toBe(true);
@@ -807,7 +809,7 @@ Use the write_file tool to save your code.`,
 
       // Verify the task tool was called with the coder subagent
       const toolCalls = extractAllToolCalls(response);
-      const taskCall = toolCalls.find(tc => tc.name === "task");
+      const taskCall = toolCalls.find((tc) => tc.name === "task");
       expect(taskCall).toBeDefined();
       expect(taskCall!.args.subagent_type).toBe("coder");
 
@@ -895,7 +897,7 @@ Use the write_file tool to save your code.`,
 
       // Verify the task tool was called with the weather-agent subagent
       const toolCalls = extractAllToolCalls(response);
-      const taskCall = toolCalls.find(tc => tc.name === "task");
+      const taskCall = toolCalls.find((tc) => tc.name === "task");
       expect(taskCall).toBeDefined();
       expect(taskCall!.args.subagent_type).toBe("weather-agent");
 

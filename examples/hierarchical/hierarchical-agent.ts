@@ -37,7 +37,7 @@ import {
 
 // ─── Tools ──────────────────────────────────────────────────────────────────
 const getWeather = tool(
-  input => `The weather in ${input.location} is sunny and 72°F.`,
+  (input) => `The weather in ${input.location} is sunny and 72°F.`,
   {
     name: "get_weather",
     description: "Get the current weather for a location",
@@ -48,7 +48,7 @@ const getWeather = tool(
 );
 
 const getNews = tool(
-  input =>
+  (input) =>
     `Latest news for "${input.topic}":\n` +
     `1. Major breakthrough in ${input.topic} announced today\n` +
     `2. Experts weigh in on the future of ${input.topic}\n` +
@@ -63,7 +63,7 @@ const getNews = tool(
 );
 
 const analyzeData = tool(
-  input =>
+  (input) =>
     `Analysis of "${input.data}":\n` +
     `The data shows a positive trend with key insights:\n` +
     `- Primary finding: significant growth in the area\n` +
@@ -79,7 +79,7 @@ const analyzeData = tool(
 );
 
 const verifyClaim = tool(
-  input =>
+  (input) =>
     `Verification of "${input.claim}":\n` +
     `Status: ${input.claim.length > 20 ? "Partially verified" : "Verified"}\n` +
     `Confidence: High\n` +

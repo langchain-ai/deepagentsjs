@@ -27,7 +27,7 @@ class MockSandbox extends BaseSandbox {
       const files = Array.from(this.files.keys());
       const now = Math.floor(Date.now() / 1000);
       const output = files
-        .map(f => `${this.files.get(f)!.length}\t${now}\tregular file\t${f}`)
+        .map((f) => `${this.files.get(f)!.length}\t${now}\tregular file\t${f}`)
         .join("\n");
       return { output, exitCode: 0, truncated: false };
     }
@@ -37,7 +37,7 @@ class MockSandbox extends BaseSandbox {
       const files = Array.from(this.files.keys());
       const now = Math.floor(Date.now() / 1000);
       const output = files
-        .map(f => `${this.files.get(f)!.length}\t${now}\tregular file\t${f}`)
+        .map((f) => `${this.files.get(f)!.length}\t${now}\tregular file\t${f}`)
         .join("\n");
       return { output, exitCode: 0, truncated: false };
     }
@@ -668,9 +668,9 @@ describe("BaseSandbox", () => {
       expect(result.error).toBeUndefined();
       // Only .py files should match, readme.md should be filtered out
       expect(result.files!.length).toBe(2);
-      expect(result.files!.some(f => f.path === "test.py")).toBe(true);
-      expect(result.files!.some(f => f.path === "main.py")).toBe(true);
-      expect(result.files!.some(f => f.path === "readme.md")).toBe(false);
+      expect(result.files!.some((f) => f.path === "test.py")).toBe(true);
+      expect(result.files!.some((f) => f.path === "main.py")).toBe(true);
+      expect(result.files!.some((f) => f.path === "readme.md")).toBe(false);
     });
 
     it("should support recursive ** glob patterns", async () => {
@@ -690,8 +690,8 @@ describe("BaseSandbox", () => {
       const result = await sandbox.glob("**/*.ts", "/workspace");
       expect(result.error).toBeUndefined();
       expect(result.files!.length).toBe(2);
-      expect(result.files!.some(f => f.path === "src/main.ts")).toBe(true);
-      expect(result.files!.some(f => f.path === "src/utils/helper.ts")).toBe(
+      expect(result.files!.some((f) => f.path === "src/main.ts")).toBe(true);
+      expect(result.files!.some((f) => f.path === "src/utils/helper.ts")).toBe(
         true,
       );
     });

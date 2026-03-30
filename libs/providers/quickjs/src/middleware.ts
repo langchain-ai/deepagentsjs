@@ -123,7 +123,7 @@ export async function generatePtcPrompt(
   if (tools.length === 0) return "";
 
   const signatures = await Promise.all(
-    tools.map(t => {
+    tools.map((t) => {
       const jsonSchema = t.schema ? safeToJsonSchema(t.schema) : undefined;
       return toolToTypeSignature(
         toCamelCase(t.name),
@@ -201,26 +201,26 @@ export function createQuickJSMiddleware(
   ): StructuredToolInterface[] {
     if (ptc === false) return [];
 
-    const candidates = allTools.filter(t => t.name !== "js_eval");
+    const candidates = allTools.filter((t) => t.name !== "js_eval");
 
     if (ptc === true) {
       const excluded = new Set<string>(DEFAULT_PTC_EXCLUDED_TOOLS);
-      return candidates.filter(t => !excluded.has(t.name));
+      return candidates.filter((t) => !excluded.has(t.name));
     }
 
     if (Array.isArray(ptc)) {
       const included = new Set(ptc);
-      return candidates.filter(t => included.has(t.name));
+      return candidates.filter((t) => included.has(t.name));
     }
 
     if ("include" in ptc) {
       const included = new Set(ptc.include);
-      return candidates.filter(t => included.has(t.name));
+      return candidates.filter((t) => included.has(t.name));
     }
 
     if ("exclude" in ptc) {
       const excluded = new Set([...DEFAULT_PTC_EXCLUDED_TOOLS, ...ptc.exclude]);
-      return candidates.filter(t => !excluded.has(t.name));
+      return candidates.filter((t) => !excluded.has(t.name));
     }
 
     return [];

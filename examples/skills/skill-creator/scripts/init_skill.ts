@@ -39,7 +39,7 @@ function validateSkillName(name: string): { valid: boolean; error?: string } {
 function createSkillTemplate(skillName: string): string {
   const titleName = skillName
     .split("-")
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 
   return `---

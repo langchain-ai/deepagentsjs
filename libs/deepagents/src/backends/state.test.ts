@@ -4,7 +4,7 @@ import type { FileData, FileDataV1 } from "./protocol.js";
 import { getCurrentTaskInput, Command } from "@langchain/langgraph";
 import { ToolMessage } from "@langchain/core/messages";
 
-vi.mock("@langchain/langgraph", async importOriginal => {
+vi.mock("@langchain/langgraph", async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...(actual as any),
@@ -60,12 +60,12 @@ describe("StateBackend", () => {
 
     const listing = backend.ls("/");
     expect(listing.error).toBeUndefined();
-    expect(listing.files!.some(fi => fi.path === "/notes.txt")).toBe(true);
+    expect(listing.files!.some((fi) => fi.path === "/notes.txt")).toBe(true);
 
     const grepRes = backend.grep("hi", "/");
     expect(grepRes.error).toBeUndefined();
     expect(grepRes.matches).toBeDefined();
-    expect(grepRes.matches!.some(m => m.path === "/notes.txt")).toBe(true);
+    expect(grepRes.matches!.some((m) => m.path === "/notes.txt")).toBe(true);
 
     // Special characters like "[" are treated literally (not regex)
     const literalResult = backend.grep("[", "/");
@@ -74,7 +74,7 @@ describe("StateBackend", () => {
 
     const infos = backend.glob("*.txt", "/");
     expect(infos.error).toBeUndefined();
-    expect(infos.files!.some(i => i.path === "/notes.txt")).toBe(true);
+    expect(infos.files!.some((i) => i.path === "/notes.txt")).toBe(true);
   });
 
   it("should handle errors correctly", () => {
@@ -115,7 +115,7 @@ describe("StateBackend", () => {
 
     const rootListing = backend.ls("/");
     expect(rootListing.error).toBeUndefined();
-    const rootPaths = rootListing.files!.map(fi => fi.path);
+    const rootPaths = rootListing.files!.map((fi) => fi.path);
     expect(rootPaths).toContain("/config.json");
     expect(rootPaths).toContain("/src/");
     expect(rootPaths).toContain("/docs/");
@@ -124,14 +124,14 @@ describe("StateBackend", () => {
 
     const srcListing = backend.ls("/src/");
     expect(srcListing.error).toBeUndefined();
-    const srcPaths = srcListing.files!.map(fi => fi.path);
+    const srcPaths = srcListing.files!.map((fi) => fi.path);
     expect(srcPaths).toContain("/src/main.py");
     expect(srcPaths).toContain("/src/utils/");
     expect(srcPaths).not.toContain("/src/utils/helper.py");
 
     const utilsListing = backend.ls("/src/utils/");
     expect(utilsListing.error).toBeUndefined();
-    const utilsPaths = utilsListing.files!.map(fi => fi.path);
+    const utilsPaths = utilsListing.files!.map((fi) => fi.path);
     expect(utilsPaths).toContain("/src/utils/helper.py");
     expect(utilsPaths).toContain("/src/utils/common.py");
     expect(utilsPaths).toHaveLength(2);
@@ -159,7 +159,7 @@ describe("StateBackend", () => {
     const listingWithSlash = backend.ls("/");
     expect(listingWithSlash.error).toBeUndefined();
     expect(listingWithSlash.files).toHaveLength(2);
-    const rootPaths = listingWithSlash.files!.map(fi => fi.path);
+    const rootPaths = listingWithSlash.files!.map((fi) => fi.path);
     expect(rootPaths).toContain("/file.txt");
     expect(rootPaths).toContain("/dir/");
 
@@ -652,7 +652,7 @@ describe("StateBackend", () => {
 
       const grepRes = backend.grep("import", "/");
       expect(grepRes.matches).toHaveLength(2);
-      const paths = grepRes.matches!.map(m => m.path).sort();
+      const paths = grepRes.matches!.map((m) => m.path).sort();
       expect(paths).toEqual(["/legacy.py", "/modern.py"]);
     });
 

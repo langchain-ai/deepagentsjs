@@ -20,7 +20,7 @@ sandboxStandardTests({
   name: "LocalShellBackend",
   sequential: true,
   timeout: TEST_TIMEOUT,
-  createSandbox: async options => {
+  createSandbox: async (options) => {
     const tmpDir = fs.mkdtempSync(
       path.join(os.tmpdir(), "deepagents-int-test-"),
     );
@@ -40,5 +40,5 @@ sandboxStandardTests({
     });
   },
   closeSandbox: (sandbox: LocalShellBackend) => sandbox.close(),
-  resolvePath: name => name,
+  resolvePath: (name) => name,
 });

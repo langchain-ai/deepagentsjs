@@ -70,7 +70,7 @@ export class LocalShellSandbox extends BaseSandbox {
    * Captures both stdout and stderr, respects timeout.
    */
   async execute(command: string): Promise<ExecuteResponse> {
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       const chunks: string[] = [];
       let truncated = false;
       const maxOutputBytes = 1024 * 1024; // 1MB output limit
@@ -105,7 +105,7 @@ export class LocalShellSandbox extends BaseSandbox {
         });
       }, this.timeout);
 
-      child.on("close", exitCode => {
+      child.on("close", (exitCode) => {
         clearTimeout(timer);
         resolve({
           output: chunks.join(""),
@@ -114,7 +114,7 @@ export class LocalShellSandbox extends BaseSandbox {
         });
       });
 
-      child.on("error", err => {
+      child.on("error", (err) => {
         clearTimeout(timer);
         resolve({
           output: `Error spawning process: ${err.message}`,

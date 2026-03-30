@@ -230,9 +230,9 @@ export class DenoSandbox extends BaseSandbox {
     const results = await this.uploadFiles(fileEntries);
 
     // Check for any errors during upload
-    const errors = results.filter(r => r.error !== null);
+    const errors = results.filter((r) => r.error !== null);
     if (errors.length > 0) {
-      const errorPaths = errors.map(e => `${e.path}: ${e.error}`).join(", ");
+      const errorPaths = errors.map((e) => `${e.path}: ${e.error}`).join(", ");
       throw new DenoSandboxError(
         `Failed to upload initial files: ${errorPaths}`,
         "FILE_OPERATION_FAILED",

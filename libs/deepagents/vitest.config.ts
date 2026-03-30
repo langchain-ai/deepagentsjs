@@ -9,7 +9,7 @@ import dotenv from "dotenv";
 // Load .env from workspace root (two levels up from libs/deepagents)
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
-export default defineConfig(env => {
+export default defineConfig((env) => {
   const common: ViteUserConfigExport = {
     test: {
       environment: "node",

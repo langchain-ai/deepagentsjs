@@ -50,7 +50,7 @@ export const agent = createDeepAgent({
   }),
   tools: [internetSearch],
   systemPrompt,
-  backend: config => new StateBackend(config),
+  backend: (config) => new StateBackend(config),
 });
 
 async function main() {

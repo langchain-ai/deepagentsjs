@@ -230,7 +230,7 @@ export class ReplSession {
         result.value.dispose();
         return { ok: false, error, logs: [...this.logs] };
       }
-      await new Promise(r => setTimeout(r, 1));
+      await new Promise((r) => setTimeout(r, 1));
     }
 
     result.value.dispose();

@@ -337,7 +337,7 @@ export class VfsSandbox extends BaseSandbox {
     // Rewrite absolute VFS paths in the command to temp dir paths
     const rewrittenCommand = this.#rewriteVfsPaths(command, execDir);
 
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       const chunks: string[] = [];
       let truncated = false;
       const maxOutputBytes = 1024 * 1024; // 1MB output limit
@@ -375,7 +375,7 @@ export class VfsSandbox extends BaseSandbox {
         });
       }, this.#options.timeout);
 
-      child.on("close", exitCode => {
+      child.on("close", (exitCode) => {
         clearTimeout(timer);
         // Sync files back from temp directory to VFS
         this.#syncFromTempDir().then(() => {
@@ -387,7 +387,7 @@ export class VfsSandbox extends BaseSandbox {
         });
       });
 
-      child.on("error", err => {
+      child.on("error", (err) => {
         clearTimeout(timer);
         resolve({
           output: `Error spawning process: ${err.message}`,

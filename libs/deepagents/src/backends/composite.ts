@@ -195,7 +195,7 @@ export class CompositeBackend implements BackendProtocolV2 {
         }
 
         // Add route prefix back
-        const matches = (raw.matches || []).map(m => ({
+        const matches = (raw.matches || []).map((m) => ({
           ...m,
           path: routePrefix.slice(0, -1) + m.path,
         }));
@@ -222,7 +222,7 @@ export class CompositeBackend implements BackendProtocolV2 {
       }
 
       // Add route prefix back
-      const matches = (raw.matches || []).map(m => ({
+      const matches = (raw.matches || []).map((m) => ({
         ...m,
         path: routePrefix.slice(0, -1) + m.path,
       }));
@@ -249,7 +249,7 @@ export class CompositeBackend implements BackendProtocolV2 {
         }
 
         // Add route prefix back
-        const files = (result.files || []).map(fi => ({
+        const files = (result.files || []).map((fi) => ({
           ...fi,
           path: routePrefix.slice(0, -1) + fi.path,
         }));
@@ -269,7 +269,7 @@ export class CompositeBackend implements BackendProtocolV2 {
       if (result.error) {
         continue; // Skip backends that error
       }
-      const files = (result.files || []).map(fi => ({
+      const files = (result.files || []).map((fi) => ({
         ...fi,
         path: routePrefix.slice(0, -1) + fi.path,
       }));
@@ -364,7 +364,7 @@ export class CompositeBackend implements BackendProtocolV2 {
       }
 
       const batchFiles = batch.map(
-        b => [b.path, b.content] as [string, Uint8Array],
+        (b) => [b.path, b.content] as [string, Uint8Array],
       );
       const batchResponses = await backend.uploadFiles(batchFiles);
 
@@ -411,7 +411,7 @@ export class CompositeBackend implements BackendProtocolV2 {
         throw new Error("Backend does not support downloadFiles");
       }
 
-      const batchPaths = batch.map(b => b.path);
+      const batchPaths = batch.map((b) => b.path);
       const batchResponses = await backend.downloadFiles(batchPaths);
 
       for (let i = 0; i < batch.length; i++) {

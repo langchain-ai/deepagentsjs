@@ -34,9 +34,9 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
         const matches = result.matches!;
         expect(matches.length).toBe(2);
 
-        const paths = matches.map(m => m.path);
-        expect(paths.some(p => p.includes("file1.txt"))).toBe(true);
-        expect(paths.some(p => p.includes("file2.txt"))).toBe(true);
+        const paths = matches.map((m) => m.path);
+        expect(paths.some((p) => p.includes("file1.txt"))).toBe(true);
+        expect(paths.some((p) => p.includes("file2.txt"))).toBe(true);
 
         for (const match of matches) {
           expect(match.line).toBe(1);
@@ -96,7 +96,7 @@ export function registerGrepRawTests<T extends AnySandboxInstance>(
         const matches = result.matches!;
         expect(matches.length).toBe(3);
 
-        const lineNumbers = matches.map(m => m.line);
+        const lineNumbers = matches.map((m) => m.line);
         expect(lineNumbers).toEqual([1, 3, 5]);
       },
       timeout,

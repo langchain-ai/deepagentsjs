@@ -205,7 +205,7 @@ describe("VfsSandbox", () => {
       const results = await sandbox.uploadFiles(files);
 
       expect(results).toHaveLength(3);
-      expect(results.every(r => r.error === null)).toBe(true);
+      expect(results.every((r) => r.error === null)).toBe(true);
     });
 
     it("should create parent directories", async () => {

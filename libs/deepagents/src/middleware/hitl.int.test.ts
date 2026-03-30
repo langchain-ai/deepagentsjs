@@ -54,11 +54,13 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
 
       // Check tool calls were made
       const agentMessages = result.messages.filter(AIMessage.isInstance);
-      const toolCalls = agentMessages.flatMap(msg => msg.tool_calls || []);
+      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
 
-      expect(toolCalls.some(tc => tc.name === "sample_tool")).toBe(true);
-      expect(toolCalls.some(tc => tc.name === "get_weather")).toBe(true);
-      expect(toolCalls.some(tc => tc.name === "get_soccer_scores")).toBe(true);
+      expect(toolCalls.some((tc) => tc.name === "sample_tool")).toBe(true);
+      expect(toolCalls.some((tc) => tc.name === "get_weather")).toBe(true);
+      expect(toolCalls.some((tc) => tc.name === "get_soccer_scores")).toBe(
+        true,
+      );
 
       // Check interrupts
       expect(result.__interrupt__).toBeDefined();
@@ -68,8 +70,8 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
       const actionRequests = interrupts.actionRequests;
 
       expect(actionRequests).toHaveLength(2);
-      expect(actionRequests.some(ar => ar.name === "sample_tool")).toBe(true);
-      expect(actionRequests.some(ar => ar.name === "get_soccer_scores")).toBe(
+      expect(actionRequests.some((ar) => ar.name === "sample_tool")).toBe(true);
+      expect(actionRequests.some((ar) => ar.name === "get_soccer_scores")).toBe(
         true,
       );
 
@@ -77,7 +79,7 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
       const reviewConfigs = interrupts.reviewConfigs;
       expect(
         reviewConfigs.some(
-          rc =>
+          (rc) =>
             rc.actionName === "sample_tool" &&
             rc.allowedDecisions.includes("approve") &&
             rc.allowedDecisions.includes("edit") &&
@@ -86,7 +88,7 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
       ).toBe(true);
       expect(
         reviewConfigs.some(
-          rc =>
+          (rc) =>
             rc.actionName === "get_soccer_scores" &&
             rc.allowedDecisions.includes("approve") &&
             rc.allowedDecisions.includes("reject"),
@@ -105,9 +107,9 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
 
       // Check tool results are present
       const toolResults = result2.messages.filter(ToolMessage.isInstance);
-      expect(toolResults.some(tr => tr.name === "sample_tool")).toBe(true);
-      expect(toolResults.some(tr => tr.name === "get_weather")).toBe(true);
-      expect(toolResults.some(tr => tr.name === "get_soccer_scores")).toBe(
+      expect(toolResults.some((tr) => tr.name === "sample_tool")).toBe(true);
+      expect(toolResults.some((tr) => tr.name === "get_weather")).toBe(true);
+      expect(toolResults.some((tr) => tr.name === "get_soccer_scores")).toBe(
         true,
       );
 
@@ -146,8 +148,8 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
 
       // Check that task tool was called
       const agentMessages = result.messages.filter(AIMessage.isInstance);
-      const toolCalls = agentMessages.flatMap(msg => msg.tool_calls || []);
-      expect(toolCalls.some(tc => tc.name === "task")).toBe(true);
+      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
+      expect(toolCalls.some((tc) => tc.name === "task")).toBe(true);
 
       // Subagent should have interrupts too
       expect(result.__interrupt__).toBeDefined();
@@ -169,7 +171,7 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
         if (!("tools" in update)) continue;
 
         const tools = update.tools as { messages: ToolMessage[] };
-        toolResultNames.push(...tools.messages.map(msg => msg.name!));
+        toolResultNames.push(...tools.messages.map((msg) => msg.name!));
       }
 
       expect(toolResultNames).toContain("sample_tool");
@@ -215,7 +217,7 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
       expect(
         result.messages
           .filter(AIMessage.isInstance)
-          .flatMap(msg => msg.tool_calls || []),
+          .flatMap((msg) => msg.tool_calls || []),
       ).toMatchObject([
         { name: "task", args: { subagent_type: "custom_weather_agent" } },
       ]);
@@ -269,8 +271,8 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
 
       // Verify the agent called the task tool
       const aiMessages = result.messages.filter(AIMessage.isInstance);
-      const toolCalls = aiMessages.flatMap(msg => msg.tool_calls || []);
-      expect(toolCalls.some(tc => tc.name === "task")).toBe(true);
+      const toolCalls = aiMessages.flatMap((msg) => msg.tool_calls || []);
+      expect(toolCalls.some((tc) => tc.name === "task")).toBe(true);
 
       // Verify interrupt was properly propagated from the subagent
       expect(result.__interrupt__).toBeDefined();
@@ -349,11 +351,13 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
 
       // Check tool calls were made
       const agentMessages = result.messages.filter(AIMessage.isInstance);
-      const toolCalls = agentMessages.flatMap(msg => msg.tool_calls || []);
+      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
 
-      expect(toolCalls.some(tc => tc.name === "sample_tool")).toBe(true);
-      expect(toolCalls.some(tc => tc.name === "get_weather")).toBe(true);
-      expect(toolCalls.some(tc => tc.name === "get_soccer_scores")).toBe(true);
+      expect(toolCalls.some((tc) => tc.name === "sample_tool")).toBe(true);
+      expect(toolCalls.some((tc) => tc.name === "get_weather")).toBe(true);
+      expect(toolCalls.some((tc) => tc.name === "get_soccer_scores")).toBe(
+        true,
+      );
 
       // Check interrupts exist for the tools that require approval
       expect(result.__interrupt__).toBeDefined();

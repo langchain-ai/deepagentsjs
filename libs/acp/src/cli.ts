@@ -126,14 +126,14 @@ function parseArgs(args: string[]): CLIOptions {
       case "--skills":
       case "-s":
         if (nextArg) {
-          options.skills = nextArg.split(",").map(p => p.trim());
+          options.skills = nextArg.split(",").map((p) => p.trim());
           i++;
         }
         break;
 
       case "--memory":
         if (nextArg) {
-          options.memory = nextArg.split(",").map(p => p.trim());
+          options.memory = nextArg.split(",").map((p) => p.trim());
           i++;
         }
         break;
@@ -277,12 +277,12 @@ async function main(): Promise<void> {
 
   const skills =
     options.skills.length > 0
-      ? options.skills.map(p => path.resolve(workspaceRoot, p))
+      ? options.skills.map((p) => path.resolve(workspaceRoot, p))
       : defaultSkillPaths;
 
   const memory =
     options.memory.length > 0
-      ? options.memory.map(p => path.resolve(workspaceRoot, p))
+      ? options.memory.map((p) => path.resolve(workspaceRoot, p))
       : defaultMemoryPaths;
 
   // Log startup info to stderr (stdout is reserved for ACP protocol)
@@ -326,7 +326,7 @@ async function main(): Promise<void> {
 }
 
 // Handle top-level errors
-main().catch(err => {
+main().catch((err) => {
   console.error("[deepagents-acp] Unhandled error:", err);
   process.exit(1);
 });

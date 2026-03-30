@@ -12,7 +12,7 @@ import { SystemMessage } from "@langchain/core/messages";
 import { ToolMessage } from "langchain";
 import { Command, isCommand, getCurrentTaskInput } from "@langchain/langgraph";
 
-vi.mock("@langchain/langgraph", async importOriginal => {
+vi.mock("@langchain/langgraph", async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...(actual as any),
@@ -843,7 +843,7 @@ describe("createFilesystemMiddleware", () => {
       expect(typeof result).toBe("string");
       expect(result).toContain("truncated");
       const originalLength = manyFiles
-        .map(f => `${f.path} (${f.size} bytes)`)
+        .map((f) => `${f.path} (${f.size} bytes)`)
         .join("\n").length;
       expect(result.length).toBeLessThan(originalLength);
     });
@@ -871,7 +871,7 @@ describe("createFilesystemMiddleware", () => {
 
       expect(typeof result).toBe("string");
       expect(result).toContain("truncated");
-      const originalLength = manyPaths.map(p => p.path).join("\n").length;
+      const originalLength = manyPaths.map((p) => p.path).join("\n").length;
       expect(result.length).toBeLessThan(originalLength);
     });
 

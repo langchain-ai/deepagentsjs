@@ -33,14 +33,14 @@ sandboxStandardTests({
   skip: !DENO_TOKEN,
   sequential: true,
   timeout: TEST_TIMEOUT,
-  createSandbox: async options =>
+  createSandbox: async (options) =>
     DenoSandbox.create({
       memoryMb: 768,
       ...options,
     }),
   createUninitializedSandbox: () => new DenoSandbox({ memoryMb: 768 }),
-  closeSandbox: sandbox => sandbox.close(),
-  resolvePath: name => `/home/app/${name}`,
+  closeSandbox: (sandbox) => sandbox.close(),
+  resolvePath: (name) => `/home/app/${name}`,
 });
 
 describe

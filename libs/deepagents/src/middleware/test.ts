@@ -29,7 +29,7 @@ export function createMockBackend(
   const writtenFiles: Record<string, string> = { ...files };
   return {
     async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
-      return paths.map(path => {
+      return paths.map((path) => {
         const content = files[path];
         if (content === null || content === undefined) {
           return { path, error: "file_not_found", content: null };
@@ -48,7 +48,7 @@ export function createMockBackend(
       }
       // Convert test format to FileInfo format
       return {
-        files: entries.map(entry => ({
+        files: entries.map((entry) => ({
           path: entry.name + (entry.type === "directory" ? "/" : ""),
           is_dir: entry.type === "directory",
         })),

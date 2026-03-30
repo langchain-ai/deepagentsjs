@@ -56,7 +56,7 @@ describe("FilesystemBackend", () => {
 
     const lsResult = await backend.ls(root);
     expect(lsResult.error).toBeUndefined();
-    const paths = new Set(lsResult.files!.map(i => i.path));
+    const paths = new Set(lsResult.files!.map((i) => i.path));
     expect(paths.has(f1)).toBe(true);
     expect(paths.has(f2)).toBe(false);
     expect(paths.has(path.join(root, "dir") + path.sep)).toBe(true);
@@ -79,11 +79,11 @@ describe("FilesystemBackend", () => {
 
     const matches = await backend.grep("hello", root);
     expect(matches.matches).toBeDefined();
-    expect(matches.matches!.some(m => m.path.endsWith("a.txt"))).toBe(true);
+    expect(matches.matches!.some((m) => m.path.endsWith("a.txt"))).toBe(true);
 
     const globResults = await backend.glob("**/*.py", root);
     expect(globResults.error).toBeUndefined();
-    expect(globResults.files!.some(i => i.path === f2)).toBe(true);
+    expect(globResults.files!.some((i) => i.path === f2)).toBe(true);
   });
 
   it("should work in virtual mode with sandboxed paths", async () => {
@@ -100,7 +100,7 @@ describe("FilesystemBackend", () => {
 
     const lsResult = await backend.ls("/");
     expect(lsResult.error).toBeUndefined();
-    const paths = new Set(lsResult.files!.map(i => i.path));
+    const paths = new Set(lsResult.files!.map((i) => i.path));
     expect(paths.has("/a.txt")).toBe(true);
     expect(paths.has("/dir/b.md")).toBe(false);
     expect(paths.has("/dir/")).toBe(true);
@@ -120,11 +120,11 @@ describe("FilesystemBackend", () => {
 
     const matches = await backend.grep("virt", "/");
     expect(matches.matches).toBeDefined();
-    expect(matches.matches!.some(m => m.path === "/a.txt")).toBe(true);
+    expect(matches.matches!.some((m) => m.path === "/a.txt")).toBe(true);
 
     const globResults = await backend.glob("**/*.md", "/");
     expect(globResults.error).toBeUndefined();
-    expect(globResults.files!.some(i => i.path === "/dir/b.md")).toBe(true);
+    expect(globResults.files!.some((i) => i.path === "/dir/b.md")).toBe(true);
 
     // Special characters like "[" are treated literally (not regex), returns empty list or matches
     const literalResult = await backend.grep("[", "/");
@@ -158,7 +158,7 @@ describe("FilesystemBackend", () => {
 
     const rootListing = await backend.ls("/");
     expect(rootListing.error).toBeUndefined();
-    const rootPaths = rootListing.files!.map(fi => fi.path);
+    const rootPaths = rootListing.files!.map((fi) => fi.path);
     expect(rootPaths).toContain("/config.json");
     expect(rootPaths).toContain("/src/");
     expect(rootPaths).toContain("/docs/");
@@ -167,14 +167,14 @@ describe("FilesystemBackend", () => {
 
     const srcListing = await backend.ls("/src/");
     expect(srcListing.error).toBeUndefined();
-    const srcPaths = srcListing.files!.map(fi => fi.path);
+    const srcPaths = srcListing.files!.map((fi) => fi.path);
     expect(srcPaths).toContain("/src/main.py");
     expect(srcPaths).toContain("/src/utils/");
     expect(srcPaths).not.toContain("/src/utils/helper.py");
 
     const utilsListing = await backend.ls("/src/utils/");
     expect(utilsListing.error).toBeUndefined();
-    const utilsPaths = utilsListing.files!.map(fi => fi.path);
+    const utilsPaths = utilsListing.files!.map((fi) => fi.path);
     expect(utilsPaths).toContain("/src/utils/helper.py");
     expect(utilsPaths).toContain("/src/utils/common.py");
     expect(utilsPaths.length).toBe(2);
@@ -204,14 +204,14 @@ describe("FilesystemBackend", () => {
 
     const rootListing = await backend.ls(root);
     expect(rootListing.error).toBeUndefined();
-    const rootPaths = rootListing.files!.map(fi => fi.path);
+    const rootPaths = rootListing.files!.map((fi) => fi.path);
     expect(rootPaths).toContain(path.join(root, "file1.txt"));
     expect(rootPaths).toContain(path.join(root, "subdir") + path.sep);
     expect(rootPaths).not.toContain(path.join(root, "subdir", "file2.txt"));
 
     const subdirListing = await backend.ls(path.join(root, "subdir"));
     expect(subdirListing.error).toBeUndefined();
-    const subdirPaths = subdirListing.files!.map(fi => fi.path);
+    const subdirPaths = subdirListing.files!.map((fi) => fi.path);
     expect(subdirPaths).toContain(path.join(root, "subdir", "file2.txt"));
     expect(subdirPaths).toContain(
       path.join(root, "subdir", "nested") + path.sep,
@@ -244,7 +244,7 @@ describe("FilesystemBackend", () => {
 
     const listing = await backend.ls("/");
     expect(listing.error).toBeUndefined();
-    const paths = listing.files!.map(fi => fi.path);
+    const paths = listing.files!.map((fi) => fi.path);
     expect(paths).toEqual([...paths].sort());
 
     const listing1 = await backend.ls("/dir/");
@@ -252,8 +252,8 @@ describe("FilesystemBackend", () => {
     const listing2 = await backend.ls("/dir");
     expect(listing2.error).toBeUndefined();
     expect(listing1.files!.length).toBe(listing2.files!.length);
-    expect(listing1.files!.map(fi => fi.path)).toEqual(
-      listing2.files!.map(fi => fi.path),
+    expect(listing1.files!.map((fi) => fi.path)).toEqual(
+      listing2.files!.map((fi) => fi.path),
     );
 
     const empty = await backend.ls("/nonexistent/");

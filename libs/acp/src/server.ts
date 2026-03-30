@@ -204,12 +204,12 @@ export class DeepAgentsServer {
     process.on("SIGTERM", () => handleSignal("SIGTERM"));
 
     // Handle uncaught errors
-    process.on("uncaughtException", err => {
+    process.on("uncaughtException", (err) => {
       this.log("Uncaught exception:", err);
       process.exit(1);
     });
 
-    process.on("unhandledRejection", reason => {
+    process.on("unhandledRejection", (reason) => {
       this.log("Unhandled rejection:", reason);
       // Don't exit - try to keep running
     });
@@ -220,7 +220,7 @@ export class DeepAgentsServer {
       // output = where we write responses (stdout)
       // input = where we read requests from (stdin)
       const input = new ReadableStream<Uint8Array>({
-        start: controller => {
+        start: (controller) => {
           // Keep stdin open in raw mode for continuous reading
           if (process.stdin.isTTY) {
             process.stdin.setRawMode(true);
@@ -244,7 +244,7 @@ export class DeepAgentsServer {
             }
           });
 
-          process.stdin.on("error", err => {
+          process.stdin.on("error", (err) => {
             this.log("stdin error:", err);
             try {
               controller.error(err);
@@ -260,14 +260,14 @@ export class DeepAgentsServer {
       });
 
       const output = new WritableStream<Uint8Array>({
-        write: chunk => {
+        write: (chunk) => {
           return new Promise((resolve, reject) => {
             if (!process.stdout.writable) {
               this.log("stdout not writable, dropping message");
               resolve();
               return;
             }
-            process.stdout.write(chunk, err => {
+            process.stdout.write(chunk, (err) => {
               if (err) {
                 this.log("stdout write error:", err);
                 reject(err);
@@ -280,7 +280,7 @@ export class DeepAgentsServer {
         close: () => {
           this.log("output stream closed");
         },
-        abort: reason => {
+        abort: (reason) => {
           this.log("output stream aborted:", reason);
         },
       });
@@ -290,7 +290,7 @@ export class DeepAgentsServer {
 
       // Create the agent-side connection with our Agent implementation
       this.connection = new AgentSideConnection(
-        conn => this.createAgentHandler(conn),
+        (conn) => this.createAgentHandler(conn),
         stream,
       );
 
@@ -331,16 +331,17 @@ export class DeepAgentsServer {
    */
   private createAgentHandler(conn: AgentSideConnection): Agent {
     return {
-      initialize: params => this.handleInitialize(params as InitializeRequest),
-      authenticate: params =>
+      initialize: (params) =>
+        this.handleInitialize(params as InitializeRequest),
+      authenticate: (params) =>
         this.handleAuthenticate(params as AuthenticateRequest),
-      newSession: params =>
+      newSession: (params) =>
         this.handleNewSession(params as NewSessionRequest, conn),
-      loadSession: params =>
+      loadSession: (params) =>
         this.handleLoadSession(params as LoadSessionRequest, conn),
-      prompt: params => this.handlePrompt(params as PromptRequest, conn),
-      cancel: params => this.handleCancel(params as CancelNotification),
-      setSessionMode: params =>
+      prompt: (params) => this.handlePrompt(params as PromptRequest, conn),
+      cancel: (params) => this.handleCancel(params as CancelNotification),
+      setSessionMode: (params) =>
         this.handleSetSessionMode(params as SetSessionModeRequest),
     };
   }
@@ -491,7 +492,7 @@ export class DeepAgentsServer {
           availableCommands: allCommands,
         },
       } as SessionNotification)
-      .catch(err => {
+      .catch((err) => {
         this.log("Failed to send commands update:", err);
       });
 
@@ -538,7 +539,7 @@ export class DeepAgentsServer {
           availableCommands: allCommands,
         },
       } as SessionNotification)
-      .catch(err => {
+      .catch((err) => {
         this.log("Failed to send commands update:", err);
       });
 
@@ -629,7 +630,7 @@ export class DeepAgentsServer {
    * Get a preview of the prompt for logging (truncated)
    */
   private getPromptPreview(prompt: ContentBlock[]): string {
-    const textBlocks = prompt.filter(b => b.type === "text");
+    const textBlocks = prompt.filter((b) => b.type === "text");
     if (textBlocks.length === 0) {
       return `[${prompt.length} non-text blocks]`;
     }
@@ -1020,7 +1021,7 @@ export class DeepAgentsServer {
     prompt: ContentBlock[],
     conn: AgentSideConnection,
   ): Promise<PromptResponse | null> {
-    const textBlocks = prompt.filter(b => b.type === "text");
+    const textBlocks = prompt.filter((b) => b.type === "text");
     if (textBlocks.length === 0) return null;
 
     const text = (textBlocks[0] as { text: string }).text.trim();

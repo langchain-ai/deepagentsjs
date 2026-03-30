@@ -96,8 +96,8 @@ describe("QuickJS REPL integration", () => {
 
       // Verify the second js_eval call does not re-embed the array literal
       const aiMessages = result.messages.filter(AIMessage.isInstance);
-      const jsEvalCalls = aiMessages.flatMap(msg =>
-        (msg.tool_calls || []).filter(tc => tc.name === "js_eval"),
+      const jsEvalCalls = aiMessages.flatMap((msg) =>
+        (msg.tool_calls || []).filter((tc) => tc.name === "js_eval"),
       );
       expect(jsEvalCalls.length).toBeGreaterThanOrEqual(2);
 

@@ -144,7 +144,7 @@ export function createDeepAgent<
   } = params;
 
   const collidingTools = (tools as readonly { name?: string }[])
-    .map(t => t.name)
+    .map((t) => t.name)
     .filter(
       (n): n is string => typeof n === "string" && BUILTIN_TOOL_NAMES.has(n),
     );
@@ -229,7 +229,7 @@ export function createDeepAgent<
    * Only the general-purpose subagent inherits the main agent's skills (via defaultMiddleware).
    * If a custom subagent needs skills, it must specify its own `skills` array.
    */
-  const processedSubagents = syncSubAgents.map(subagent => {
+  const processedSubagents = syncSubAgents.map((subagent) => {
     /**
      * CompiledSubAgent - use as-is (already has its own middleware baked in)
      */

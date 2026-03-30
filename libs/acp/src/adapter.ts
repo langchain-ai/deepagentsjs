@@ -20,7 +20,7 @@ export function acpContentToLangChain(
     return content[0].text;
   }
 
-  return content.map(block => {
+  return content.map((block) => {
     // Cast to any for flexible type handling across ACP SDK versions
     const b = block as Record<string, unknown>;
     switch (block.type) {
@@ -81,7 +81,7 @@ export function langChainContentToACP(
     return [{ type: "text", text: content }];
   }
 
-  return content.map(block => {
+  return content.map((block) => {
     if (block.type === "text" && block.text) {
       return { type: "text", text: block.text };
     }
@@ -105,7 +105,7 @@ export function langChainMessageToACP(message: BaseMessage): ContentBlock[] {
 export function extractToolCalls(message: AIMessage): ToolCallInfo[] {
   const toolCalls = message.tool_calls ?? [];
 
-  return toolCalls.map(tc => ({
+  return toolCalls.map((tc) => ({
     id: tc.id ?? crypto.randomUUID(),
     name: tc.name,
     args: tc.args as Record<string, unknown>,
@@ -124,7 +124,7 @@ export function todosToPlanEntries(
     priority?: string;
   }>,
 ): PlanEntry[] {
-  return todos.map(todo => ({
+  return todos.map((todo) => ({
     content: todo.content,
     priority: (todo.priority as "high" | "medium" | "low") ?? "medium",
     status:

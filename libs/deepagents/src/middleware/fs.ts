@@ -145,13 +145,13 @@ export function createContentPreview(
 
   if (lines.length <= headLines + tailLines) {
     // If file is small enough, show all lines
-    const previewLines = lines.map(line => line.substring(0, 1000));
+    const previewLines = lines.map((line) => line.substring(0, 1000));
     return formatContentWithLineNumbers(previewLines, 1);
   }
 
   // Show head and tail with truncation marker
-  const head = lines.slice(0, headLines).map(line => line.substring(0, 1000));
-  const tail = lines.slice(-tailLines).map(line => line.substring(0, 1000));
+  const head = lines.slice(0, headLines).map((line) => line.substring(0, 1000));
+  const tail = lines.slice(-tailLines).map((line) => line.substring(0, 1000));
 
   const headSample = formatContentWithLineNumbers(head, 1);
   const truncationNotice = `\n... [${lines.length - headLines - tailLines} lines truncated] ...\n`;
@@ -737,7 +737,7 @@ function createGlobTool(
         return `No files found matching pattern '${pattern}'`;
       }
 
-      const paths = infos.map(info => info.path);
+      const paths = infos.map((info) => info.path);
       const result = truncateIfTooLong(paths);
 
       if (Array.isArray(result)) {
