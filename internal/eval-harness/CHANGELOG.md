@@ -1,5 +1,12 @@
 # @deepagents/evals
 
+## 0.0.5
+
+### Patch Changes
+
+- Updated dependencies [[`2de4302`](https://github.com/langchain-ai/deepagentsjs/commit/2de43020032722d5951a22b2411aa38ea6e5bd1c), [`9301a9e`](https://github.com/langchain-ai/deepagentsjs/commit/9301a9efcc86abb7a5225d153770e293ebaa54e8)]:
+  - deepagents@1.8.7
+
 ## 0.0.4
 
 ### Patch Changes

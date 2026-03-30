@@ -1,5 +1,11 @@
 # @langchain/quickjs
 
+## 0.2.3
+
+### Patch Changes
+
+- [#390](https://github.com/langchain-ai/deepagentsjs/pull/390) [`9301a9e`](https://github.com/langchain-ai/deepagentsjs/commit/9301a9efcc86abb7a5225d153770e293ebaa54e8) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): update langchain packages
+
 ## 0.2.2
 
 ### Patch Changes
