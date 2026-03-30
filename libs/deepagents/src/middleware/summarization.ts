@@ -890,7 +890,7 @@ export function createSummarizationMiddleware(
       }
 
       if (result.error) {
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.warn(
           `Failed to offload conversation history to ${filePath}: ${result.error}`,
         );
@@ -899,7 +899,7 @@ export function createSummarizationMiddleware(
 
       return filePath;
     } catch (e) {
-      // eslint-disable-next-line no-console
+      // oxlint-disable-next-line no-console
       console.warn(
         `Exception offloading conversation history to ${filePath}:`,
         e,
@@ -1021,7 +1021,7 @@ ${summary}
     );
 
     if (filePath === null) {
-      // eslint-disable-next-line no-console
+      // oxlint-disable-next-line no-console
       console.warn(
         `[SummarizationMiddleware] Backend offload failed during summarization. Proceeding with summary generation.`,
       );

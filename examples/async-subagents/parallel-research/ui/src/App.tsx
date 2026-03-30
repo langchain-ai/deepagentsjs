@@ -193,7 +193,6 @@ export function App() {
   const thread = useStream({
     apiUrl: LANGGRAPH_URL,
     assistantId: "supervisor",
-    // eslint-disable-next-line no-console
     onError: (err) => console.error("[stream error]", err),
     onUpdateEvent: (data) => {
       if (data && typeof data === "object") {
@@ -376,7 +375,7 @@ export function App() {
           <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-red-400 text-sm flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>
-              {/* eslint-disable-next-line no-instanceof/no-instanceof */}
+              {/* oxlint-disable-next-line no-instanceof/no-instanceof */}
               {thread.error instanceof Error
                 ? thread.error.message
                 : "An error occurred"}

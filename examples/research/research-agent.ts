@@ -33,7 +33,7 @@ const internetSearch = tool(
       includeRawContent,
       topic,
     });
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // oxlint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore - Type instantiation is excessively deep and possibly infinite.
     const tavilyResponse = await tavilySearch._call({ query });
 

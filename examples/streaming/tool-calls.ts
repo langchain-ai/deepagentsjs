@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Streaming Example: Tool Calls
  *

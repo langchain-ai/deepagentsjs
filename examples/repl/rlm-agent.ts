@@ -99,7 +99,6 @@ const result = await agent.invoke({
 });
 
 const last = result.messages[result.messages.length - 1];
-// eslint-disable-next-line no-console
 console.log(
   typeof last.content === "string" ? last.content.slice(0, 500) : last.content,
 );

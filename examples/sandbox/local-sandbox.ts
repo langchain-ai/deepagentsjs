@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Local Shell Sandbox Example
  *

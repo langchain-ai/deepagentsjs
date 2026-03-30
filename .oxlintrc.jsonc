@@ -132,9 +132,26 @@
       },
     },
     {
+      "files": ["examples/**/*.{ts,tsx,js,jsx,mjs,cjs}"],
+      "rules": {
+        "no-console": "off",
+      },
+    },
+    {
+      "files": [
+        "libs/acp/src/cli.ts",
+        "libs/acp/src/logger.ts",
+        "libs/deepagents/src/middleware/skills.ts"
+      ],
+      "rules": {
+        "no-console": "off",
+      },
+    },
+    {
       "files": ["**/evals/**/*.{ts,tsx}"],
       "rules": {
         "@typescript-eslint/no-empty-object-type": "off",
+        "no-console": "off",
       },
     },
   ],

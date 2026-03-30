@@ -88,7 +88,7 @@ async function fetchAndCache(): Promise<void> {
   const allRows: HfRow[] = [];
   let offset = 0;
 
-  // eslint-disable-next-line no-console
+  // oxlint-disable-next-line no-console
   console.log("Fetching Oolong validation split from HuggingFace...");
 
   while (true) {
@@ -120,7 +120,7 @@ async function fetchAndCache(): Promise<void> {
   const jsonl = allRows.map((r) => JSON.stringify(r)).join("\n") + "\n";
   writeFileSync(CACHE_PATH, jsonl, "utf-8");
 
-  // eslint-disable-next-line no-console
+  // oxlint-disable-next-line no-console
   console.log(`Cached ${allRows.length} Oolong tasks -> ${CACHE_PATH}`);
 }
 

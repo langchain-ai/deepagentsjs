@@ -212,7 +212,7 @@ function getFood(foodId: number): Food {
 // can assert which tools were called and with what arguments.
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 function spiedTool(
   fn: (...args: any[]) => any,
   config: { name: string; description: string; schema: any },

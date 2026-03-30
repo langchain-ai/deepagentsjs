@@ -1,5 +1,4 @@
 #!/usr/bin/env npx tsx
-/* eslint-disable no-console */
 /**
  * Validate a skill directory structure and SKILL.md content.
  *

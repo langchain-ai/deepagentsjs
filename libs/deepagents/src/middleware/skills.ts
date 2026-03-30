@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Backend-agnostic skills middleware for loading agent skills from any backend.
  *
