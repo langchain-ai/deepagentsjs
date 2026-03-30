@@ -52,7 +52,7 @@
     "deepagents": ">=1.6.0"
   },
   "devDependencies": {
-    "@langchain/core": "^1.1.33",
+    "@langchain/core": "^1.1.37",
     "@langchain/langgraph": "^1.1.4",
     "@tsconfig/recommended": "^1.0.13",
     "@types/dedent": "^0.7.2",
@@ -61,7 +61,7 @@
     "@vitest/coverage-v8": "^4.0.18",
     "deepagents": "workspace:*",
     "dotenv": "^17.2.3",
-    "langchain": "1.2.37",
+    "langchain": "1.2.38",
     "tsdown": "^0.21.4",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
