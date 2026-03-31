@@ -1071,7 +1071,8 @@ describe("buildCancelTool", () => {
     );
   });
 
-  it("should preserve all timestamps from the existing job unchanged", async () => {
+  it("should preserve createdAt and checkedAt, and set updatedAt to reflect the cancellation", async () => {
+    const before = new Date();
     const jobWithTimestamps = makeTask({
       createdAt: "2024-06-01T10:00:00.000Z",
       updatedAt: "2024-06-01T11:00:00.000Z",
@@ -1087,15 +1088,16 @@ describe("buildCancelTool", () => {
         asyncTasks: { [jobWithTimestamps.taskId]: jobWithTimestamps },
       }),
     );
+    const after = new Date();
 
     const jobs = ((result as Command).update as Record<string, unknown>)
       .asyncTasks as Record<string, AsyncTask>;
     expect(jobs[jobWithTimestamps.taskId].createdAt).toBe(
       "2024-06-01T10:00:00.000Z",
     );
-    expect(jobs[jobWithTimestamps.taskId].updatedAt).toBe(
-      "2024-06-01T11:00:00.000Z",
-    );
+    const updatedAt = new Date(jobs[jobWithTimestamps.taskId].updatedAt!);
+    expect(updatedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(updatedAt.getTime()).toBeLessThanOrEqual(after.getTime());
     expect(jobs[jobWithTimestamps.taskId].checkedAt).toBe(
       "2024-06-01T11:30:00.000Z",
     );
