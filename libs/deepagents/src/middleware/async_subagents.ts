@@ -11,7 +11,8 @@ import { z } from "zod/v4";
 import type { AnySubAgent } from "../types.js";
 
 /**
- * Specification for an async subagent running on a remote Agent Protocol server.
+ * Specification for an async subagent running on a remote [Agent Protocol](https://github.com/langchain-ai/agent-protocol)
+ * server.
  *
  * Async subagents connect to any Agent Protocol-compliant server via the
  * LangGraph SDK. They run as background tasks that the main agent can
