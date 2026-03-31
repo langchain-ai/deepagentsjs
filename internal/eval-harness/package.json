@@ -35,9 +35,9 @@
     "dist/**/*"
   ],
   "dependencies": {
-    "@langchain/anthropic": "^1.3.23",
-    "@langchain/core": "^1.1.37",
-    "@langchain/openai": "^1.2.13",
+    "@langchain/anthropic": "^1.3.26",
+    "@langchain/core": "^1.1.38",
+    "@langchain/openai": "^1.4.1",
     "deepagents": "workspace:*",
     "langsmith": "^0.5.10",
     "uuid": "^13.0.0"
