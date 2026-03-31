@@ -14,7 +14,14 @@ The example includes both sides of the pattern:
 
 ## Quickstart
 
-**1. Set up your environment:**
+**1. Install and build (from the repo root):**
+
+```bash
+pnpm install
+pnpm --filter deepagents build
+```
+
+**2. Set up your environment:**
 
 ```bash
 cd examples/async-subagent-server
@@ -22,13 +29,13 @@ cp .env.example .env
 # fill in ANTHROPIC_API_KEY (and optionally TAVILY_API_KEY)
 ```
 
-**2. Start the server and Postgres:**
+**3. Start the server and Postgres:**
 
 ```bash
 docker compose up
 ```
 
-**3. In another terminal, start the supervisor:**
+**4. In another terminal, start the supervisor:**
 
 ```bash
 cd examples
