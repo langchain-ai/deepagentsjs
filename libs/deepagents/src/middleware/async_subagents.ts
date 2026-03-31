@@ -186,7 +186,7 @@ export function asyncTasksReducer(
  * The `{available_agents}` placeholder is replaced at middleware creation
  * time with a formatted list of configured async subagent names and descriptions.
  */
-const ASYNC_TASK_TOOL_DESCRIPTION = `Launch an async subagent on a remote Agent Protocol server. The subagent runs in the background and returns a task ID immediately.
+const ASYNC_TASK_TOOL_DESCRIPTION = `Launch an async subagent on a remote server. The subagent runs in the background and returns a task ID immediately.
 
 Available async agent types:
 {available_agents}
