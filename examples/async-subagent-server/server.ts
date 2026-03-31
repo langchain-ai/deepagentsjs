@@ -40,7 +40,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import pkg from "pg";
 import { createDeepAgent } from "deepagents";
-import { HumanMessage } from "@langchain/core/messages";
+import { HumanMessage } from "langchain";
 
 const { Pool } = pkg;
 
