@@ -207,7 +207,7 @@ Available async agent types:
  * critical rules about polling behavior, and guidance on when to use async
  * subagents vs. synchronous delegation.
  */
-export const ASYNC_TASK_SYSTEM_PROMPT = `## Async subagents (remote Agent Protocol servers)
+export const ASYNC_TASK_SYSTEM_PROMPT = `## Async subagents (remote servers)
 
 You have access to async subagent tools that launch background tasks on remote servers.
 
