@@ -86,6 +86,7 @@ async function chat(userInput: string): Promise<void> {
 
   const last = result.messages[result.messages.length - 1];
   const content = last?.content;
+  // eslint-disable-next-line no-console
   console.log(
     "\n" +
       (typeof content === "string"
@@ -96,7 +97,9 @@ async function chat(userInput: string): Promise<void> {
 }
 
 async function main() {
+  // eslint-disable-next-line no-console
   console.log(`Supervisor connected to researcher at ${RESEARCHER_URL}`);
+  // eslint-disable-next-line no-console
   console.log(`Type a message and press Enter. Ctrl+C to exit.\n`);
 
   const rl = readline.createInterface({
@@ -116,12 +119,14 @@ async function main() {
     try {
       await chat(input);
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.error("Error:", e);
     }
     rl.prompt();
   });
 
   rl.on("close", () => {
+    // eslint-disable-next-line no-console
     console.log("\nGoodbye.");
     process.exit(0);
   });

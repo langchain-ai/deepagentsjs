@@ -216,6 +216,7 @@ async function executeRun(
       "UPDATE runs SET status = 'error', error = $1 WHERE run_id = $2",
       [String(e), runId],
     );
+    // eslint-disable-next-line no-console
     console.error(`[run ${runId}] error:`, e);
   }
 }
@@ -344,9 +345,12 @@ const PORT = Number(process.env.PORT ?? 2024);
 await initDb();
 
 serve({ fetch: app.fetch, port: PORT }, () => {
+  // eslint-disable-next-line no-console
   console.log(`Agent Protocol server listening on http://localhost:${PORT}`);
+  // eslint-disable-next-line no-console
   console.log(`Agents: researcher`);
   if (!process.env.TAVILY_API_KEY) {
+    // eslint-disable-next-line no-console
     console.log(
       `[warn] TAVILY_API_KEY not set — using stub search. Set it for real web search.`,
     );
