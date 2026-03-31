@@ -69,4 +69,5 @@ export {
   type AsyncTask,
   type AsyncTaskStatus,
   ASYNC_TASK_SYSTEM_PROMPT,
+  ASYNC_TASK_TOOL_NAMES,
 } from "./async_subagents.js";
