@@ -209,7 +209,7 @@ Available async agent types:
  */
 export const ASYNC_TASK_SYSTEM_PROMPT = `## Async subagents (remote Agent Protocol servers)
 
-You have access to async subagent tools that launch background tasks on remote Agent Protocol servers.
+You have access to async subagent tools that launch background tasks on remote servers.
 
 ### Tools:
 - \`start_async_task\`: Start a new background task. Returns a task ID immediately.
