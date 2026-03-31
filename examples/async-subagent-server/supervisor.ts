@@ -88,7 +88,9 @@ async function chat(userInput: string): Promise<void> {
   const content = last?.content;
   console.log(
     "\n" +
-      (typeof content === "string" ? content : JSON.stringify(content, null, 2)) +
+      (typeof content === "string"
+        ? content
+        : JSON.stringify(content, null, 2)) +
       "\n",
   );
 }

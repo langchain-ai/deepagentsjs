@@ -81,14 +81,14 @@ docker run -p 2024:2024 \
 
 These are the Agent Protocol endpoints the DeepAgents async subagent middleware calls:
 
-| Endpoint | Purpose |
-|---|---|
-| `POST /threads` | Create a thread for a new task |
-| `POST /threads/:threadId/runs` | Start or interrupt+restart a run |
-| `GET /threads/:threadId/runs/:runId` | Poll run status |
-| `GET /threads/:threadId/state` | Fetch final output |
-| `POST /threads/:threadId/runs/:runId/cancel` | Cancel a run |
-| `GET /ok` | Health check |
+| Endpoint                                     | Purpose                          |
+| -------------------------------------------- | -------------------------------- |
+| `POST /threads`                              | Create a thread for a new task   |
+| `POST /threads/:threadId/runs`               | Start or interrupt+restart a run |
+| `GET /threads/:threadId/runs/:runId`         | Poll run status                  |
+| `GET /threads/:threadId/state`               | Fetch final output               |
+| `POST /threads/:threadId/runs/:runId/cancel` | Cancel a run                     |
+| `GET /ok`                                    | Health check                     |
 
 ## Swap in your own agent
 

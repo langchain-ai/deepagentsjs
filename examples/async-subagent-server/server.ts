@@ -48,7 +48,8 @@ const { Pool } = pkg;
 
 const pool = new Pool({
   connectionString:
-    process.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/agentdb",
+    process.env.DATABASE_URL ??
+    "postgres://postgres:postgres@localhost:5432/agentdb",
 });
 
 /**
@@ -177,8 +178,14 @@ const agent = createDeepAgent({
 
 // ── Run executor ──────────────────────────────────────────────────────────────
 
-async function executeRun(runId: string, threadId: string, input: string): Promise<void> {
-  await pool.query("UPDATE runs SET status = 'running' WHERE run_id = $1", [runId]);
+async function executeRun(
+  runId: string,
+  threadId: string,
+  input: string,
+): Promise<void> {
+  await pool.query("UPDATE runs SET status = 'running' WHERE run_id = $1", [
+    runId,
+  ]);
   try {
     const result = await agent.invoke({
       messages: [new HumanMessage(input)],
@@ -195,9 +202,15 @@ async function executeRun(runId: string, threadId: string, input: string): Promi
           SET output   = $1,
               messages = messages || $2::jsonb
         WHERE thread_id = $3`,
-      [output, JSON.stringify([{ role: "assistant", content: output }]), threadId],
+      [
+        output,
+        JSON.stringify([{ role: "assistant", content: output }]),
+        threadId,
+      ],
     );
-    await pool.query("UPDATE runs SET status = 'success' WHERE run_id = $1", [runId]);
+    await pool.query("UPDATE runs SET status = 'success' WHERE run_id = $1", [
+      runId,
+    ]);
   } catch (e) {
     await pool.query(
       "UPDATE runs SET status = 'error', error = $1 WHERE run_id = $2",
@@ -251,10 +264,9 @@ app.post("/threads/:threadId/runs", async (c) => {
         WHERE thread_id = $1 AND status = 'running'`,
       [thread.thread_id],
     );
-    await pool.query(
-      "UPDATE threads SET output = NULL WHERE thread_id = $1",
-      [thread.thread_id],
-    );
+    await pool.query("UPDATE threads SET output = NULL WHERE thread_id = $1", [
+      thread.thread_id,
+    ]);
   }
 
   const userMessage =
@@ -264,7 +276,10 @@ app.post("/threads/:threadId/runs", async (c) => {
     `UPDATE threads
         SET messages = messages || $1::jsonb
       WHERE thread_id = $2`,
-    [JSON.stringify([{ role: "user", content: userMessage }]), thread.thread_id],
+    [
+      JSON.stringify([{ role: "user", content: userMessage }]),
+      thread.thread_id,
+    ],
   );
 
   const runId = uuidv4();
