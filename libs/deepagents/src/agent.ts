@@ -27,6 +27,7 @@ import { StateBackend } from "./backends/index.js";
 import { ConfigurationError } from "./errors.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { CompiledSubAgent } from "./middleware/subagents.js";
+import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
 import type { BackendRuntime } from "./backends/index.js";
 import type {
   CreateDeepAgentParams,
@@ -41,9 +42,8 @@ import type {
  * required for type inference
  */
 import type * as _messages from "@langchain/core/messages";
-import type * as _Command from "@langchain/langgraph";
+import type * as _langgraph from "@langchain/langgraph";
 import type { BaseLanguageModel } from "@langchain/core/language_models/base";
-import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
 
 const BASE_PROMPT = `In order to complete the objective that the user asks of you, you have access to a number of standard tools.`;
 

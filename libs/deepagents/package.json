@@ -39,7 +39,7 @@
   "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "dependencies": {
     "@langchain/core": "^1.1.38",
-    "@langchain/langgraph": "^1.1.4",
+    "@langchain/langgraph": "^1.2.6",
     "fast-glob": "^3.3.3",
     "langchain": "^1.2.39",
     "micromatch": "^4.0.8",

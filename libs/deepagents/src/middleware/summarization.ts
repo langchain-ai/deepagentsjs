@@ -68,6 +68,11 @@ import type { BaseStore } from "@langchain/langgraph-checkpoint";
 export { summarizationMiddleware } from "langchain";
 
 /**
+ * import @langchain/core/messages for type inference
+ */
+import type * as _core from "@langchain/core/messages";
+
+/**
  * Context size specification for summarization triggers and retention policies.
  */
 export interface ContextSize {

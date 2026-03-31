@@ -36,6 +36,11 @@ import {
 } from "../backends/utils.js";
 
 /**
+ * Import langchain for type inference
+ */
+import type * as _langchain from "langchain";
+
+/**
  * Tools that should be excluded from the large result eviction logic.
  *
  * This array contains tools that should NOT have their results evicted to the filesystem

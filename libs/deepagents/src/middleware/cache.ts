@@ -1,6 +1,11 @@
 import { createMiddleware, SystemMessage } from "langchain";
 
 /**
+ * Import langchain for type inference
+ */
+import type * as _langchain from "langchain";
+
+/**
  * Creates a middleware that places a cache breakpoint at the end of the static
  * system prompt content.
  *
