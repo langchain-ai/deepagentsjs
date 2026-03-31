@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.8.8
+
+### Patch Changes
+
+- [#395](https://github.com/langchain-ai/deepagentsjs/pull/395) [`92b2657`](https://github.com/langchain-ai/deepagentsjs/commit/92b26577b81979636222eb77e938650e2e4d752c) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): bump langchain deps
+
 ## 1.8.7
 
 ### Patch Changes
