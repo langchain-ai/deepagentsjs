@@ -80,7 +80,7 @@ export interface AsyncTask {
   /** The prompt/description passed to the subagent when the task was launched. */
   description?: string;
 
-  /** ISO timestamp of the most recent follow-up message sent to the subagent via the update tool. */
+  /** ISO timestamp of the most recent task update — set when the task status changes or a follow-up message is sent via the update tool. */
   updatedAt?: string;
 
   /** ISO timestamp of the most recent status poll via the check tool. */
@@ -566,7 +566,10 @@ export function buildCheckTool(clients: ClientCache) {
         runId: task.runId,
         status: result.status,
         createdAt: task.createdAt,
-        updatedAt: task.updatedAt,
+        updatedAt:
+          result.status !== task.status
+            ? new Date().toISOString()
+            : task.updatedAt,
         checkedAt: new Date().toISOString(),
       };
 
@@ -703,7 +706,7 @@ export function buildCancelTool(clients: ClientCache) {
         runId: tracked.runId,
         status: "cancelled",
         createdAt: tracked.createdAt,
-        updatedAt: tracked.updatedAt,
+        updatedAt: new Date().toISOString(),
         checkedAt: tracked.checkedAt,
       };
 
@@ -773,7 +776,8 @@ export function buildListTool(clients: ClientCache) {
           runId: task.runId,
           status,
           createdAt: task.createdAt,
-          updatedAt: task.updatedAt,
+          updatedAt:
+            status !== task.status ? new Date().toISOString() : task.updatedAt,
           checkedAt: task.checkedAt,
         };
       }
