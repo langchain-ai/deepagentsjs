@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: agentdb
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ../..
+      dockerfile: examples/async-subagent-server/Dockerfile
+    ports:
+      - "2024:2024"
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/agentdb
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      PORT: 2024
+    depends_on:
+      db:
+        condition: service_healthy

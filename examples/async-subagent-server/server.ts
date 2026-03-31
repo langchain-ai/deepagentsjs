@@ -13,33 +13,81 @@
  *   POST   /threads/:threadId/runs/:runId/cancel → cancel a run
  *   GET    /ok                                   → health check
  *
- * State is kept in-memory (two Maps). For production, swap these for a
- * database — the Agent Protocol surface stays the same.
+ * Persistence is backed by Postgres. Set DATABASE_URL in your environment:
+ *
+ *   DATABASE_URL=postgres://user:pass@localhost:5432/agentdb
+ *
+ * Schema is created automatically on startup (CREATE TABLE IF NOT EXISTS).
+ * For production, swap this for a migration tool (e.g. Flyway, golang-migrate).
  *
  * Run:
- *   ANTHROPIC_API_KEY=... tsx examples/async-subagent-server/server.ts
+ *   ANTHROPIC_API_KEY=... DATABASE_URL=... tsx examples/async-subagent-server/server.ts
  *
  * Then point a DeepAgents supervisor at:
  *   RESEARCHER_URL=http://localhost:2024
  */
-import "dotenv/config";
+import { config } from "dotenv";
+import { fileURLToPath } from "url";
+import { dirname, resolve } from "path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+config({ path: resolve(__dirname, ".env") });
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { v4 as uuidv4 } from "uuid";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
+import pkg from "pg";
 import { createDeepAgent } from "deepagents";
 import { HumanMessage } from "@langchain/core/messages";
+
+const { Pool } = pkg;
+
+// ── Database ──────────────────────────────────────────────────────────────────
+
+const pool = new Pool({
+  connectionString:
+    process.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/agentdb",
+});
+
+/**
+ * Create the threads and runs tables if they don't already exist.
+ * Called once at startup before the server begins accepting requests.
+ *
+ * threads — one row per conversation thread
+ *   messages  JSONB array of { role, content } objects
+ *   output    the final assistant response (NULL until a run succeeds)
+ *
+ * runs — one row per run attempt on a thread
+ *   status  one of: pending | running | success | error | cancelled
+ */
+async function initDb(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS threads (
+      thread_id  TEXT        PRIMARY KEY,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      messages   JSONB       NOT NULL DEFAULT '[]',
+      output     TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS runs (
+      run_id       TEXT        PRIMARY KEY,
+      thread_id    TEXT        NOT NULL REFERENCES threads(thread_id),
+      assistant_id TEXT        NOT NULL,
+      status       TEXT        NOT NULL DEFAULT 'pending',
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      error        TEXT
+    );
+  `);
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Thread {
   thread_id: string;
   created_at: string;
-  /** Accumulated conversation turns. */
   messages: { role: string; content: string }[];
-  /** Final output written by a successful run. */
   output: string | null;
 }
 
@@ -52,13 +100,23 @@ interface Run {
   error?: string;
 }
 
-// ── In-memory store ───────────────────────────────────────────────────────────
-//
-// For production, replace these Maps with a persistent store (e.g. Postgres).
-// The HTTP surface of this server does not change.
+// ── DB helpers ────────────────────────────────────────────────────────────────
 
-const threads = new Map<string, Thread>();
-const runs = new Map<string, Run>();
+async function getThread(threadId: string): Promise<Thread | null> {
+  const { rows } = await pool.query<Thread>(
+    "SELECT thread_id, created_at, messages, output FROM threads WHERE thread_id = $1",
+    [threadId],
+  );
+  return rows[0] ?? null;
+}
+
+async function getRun(runId: string): Promise<Run | null> {
+  const { rows } = await pool.query<Run>(
+    "SELECT run_id, thread_id, assistant_id, status, created_at, error FROM runs WHERE run_id = $1",
+    [runId],
+  );
+  return rows[0] ?? null;
+}
 
 // ── Agent ─────────────────────────────────────────────────────────────────────
 //
@@ -119,12 +177,8 @@ const agent = createDeepAgent({
 
 // ── Run executor ──────────────────────────────────────────────────────────────
 
-async function executeRun(
-  run: Run,
-  thread: Thread,
-  input: string,
-): Promise<void> {
-  run.status = "running";
+async function executeRun(runId: string, threadId: string, input: string): Promise<void> {
+  await pool.query("UPDATE runs SET status = 'running' WHERE run_id = $1", [runId]);
   try {
     const result = await agent.invoke({
       messages: [new HumanMessage(input)],
@@ -136,13 +190,20 @@ async function executeRun(
         ? lastMessage.content
         : JSON.stringify(lastMessage.content);
 
-    thread.output = output;
-    thread.messages.push({ role: "assistant", content: output });
-    run.status = "success";
+    await pool.query(
+      `UPDATE threads
+          SET output   = $1,
+              messages = messages || $2::jsonb
+        WHERE thread_id = $3`,
+      [output, JSON.stringify([{ role: "assistant", content: output }]), threadId],
+    );
+    await pool.query("UPDATE runs SET status = 'success' WHERE run_id = $1", [runId]);
   } catch (e) {
-    run.status = "error";
-    run.error = String(e);
-    console.error(`[run ${run.run_id}] error:`, e);
+    await pool.query(
+      "UPDATE runs SET status = 'error', error = $1 WHERE run_id = $2",
+      [String(e), runId],
+    );
+    console.error(`[run ${runId}] error:`, e);
   }
 }
 
@@ -157,15 +218,14 @@ app.get("/ok", (c) => c.json({ ok: true }));
 
 // Create a thread.
 // Called by start_async_task before creating a run.
-app.post("/threads", (c) => {
-  const thread: Thread = {
-    thread_id: uuidv4(),
-    created_at: new Date().toISOString(),
-    messages: [],
-    output: null,
-  };
-  threads.set(thread.thread_id, thread);
-  return c.json(thread);
+app.post("/threads", async (c) => {
+  const threadId = uuidv4();
+  const { rows } = await pool.query<Thread>(
+    `INSERT INTO threads (thread_id) VALUES ($1)
+     RETURNING thread_id, created_at, messages, output`,
+    [threadId],
+  );
+  return c.json(rows[0]);
 });
 
 // Create a run on an existing thread.
@@ -175,7 +235,7 @@ app.post("/threads", (c) => {
 // any currently-running runs on the thread are cancelled and the thread
 // output is cleared before the new run starts.
 app.post("/threads/:threadId/runs", async (c) => {
-  const thread = threads.get(c.req.param("threadId"));
+  const thread = await getThread(c.req.param("threadId"));
   if (!thread) return c.json({ error: "Thread not found" }, 404);
 
   const body = await c.req.json<{
@@ -186,37 +246,46 @@ app.post("/threads/:threadId/runs", async (c) => {
 
   // interrupt strategy: cancel running runs, reset output for the new task.
   if (body.multitask_strategy === "interrupt") {
-    for (const run of runs.values()) {
-      if (run.thread_id === thread.thread_id && run.status === "running") {
-        run.status = "cancelled";
-      }
-    }
-    thread.output = null;
+    await pool.query(
+      `UPDATE runs SET status = 'cancelled'
+        WHERE thread_id = $1 AND status = 'running'`,
+      [thread.thread_id],
+    );
+    await pool.query(
+      "UPDATE threads SET output = NULL WHERE thread_id = $1",
+      [thread.thread_id],
+    );
   }
 
   const userMessage =
     body.input?.messages?.find((m) => m.role === "user")?.content ?? "";
-  thread.messages.push({ role: "user", content: userMessage });
 
-  const run: Run = {
-    run_id: uuidv4(),
-    thread_id: thread.thread_id,
-    assistant_id: body.assistant_id ?? "researcher",
-    status: "pending",
-    created_at: new Date().toISOString(),
-  };
-  runs.set(run.run_id, run);
+  await pool.query(
+    `UPDATE threads
+        SET messages = messages || $1::jsonb
+      WHERE thread_id = $2`,
+    [JSON.stringify([{ role: "user", content: userMessage }]), thread.thread_id],
+  );
+
+  const runId = uuidv4();
+  const { rows } = await pool.query<Run>(
+    `INSERT INTO runs (run_id, thread_id, assistant_id)
+     VALUES ($1, $2, $3)
+     RETURNING run_id, thread_id, assistant_id, status, created_at, error`,
+    [runId, thread.thread_id, body.assistant_id ?? "researcher"],
+  );
+  const run = rows[0];
 
   // Fire and forget — client polls GET /threads/:threadId/runs/:runId for status.
-  executeRun(run, thread, userMessage);
+  executeRun(run.run_id, run.thread_id, userMessage);
 
   return c.json(run);
 });
 
 // Get run status.
 // Called by check_async_task to poll whether a task has finished.
-app.get("/threads/:threadId/runs/:runId", (c) => {
-  const run = runs.get(c.req.param("runId"));
+app.get("/threads/:threadId/runs/:runId", async (c) => {
+  const run = await getRun(c.req.param("runId"));
   if (!run || run.thread_id !== c.req.param("threadId")) {
     return c.json({ error: "Run not found" }, 404);
   }
@@ -226,8 +295,8 @@ app.get("/threads/:threadId/runs/:runId", (c) => {
 // Get thread state (final output).
 // Called by check_async_task after a run reaches "success" status.
 // The middleware reads values.messages[last].content as the task result.
-app.get("/threads/:threadId/state", (c) => {
-  const thread = threads.get(c.req.param("threadId"));
+app.get("/threads/:threadId/state", async (c) => {
+  const thread = await getThread(c.req.param("threadId"));
   if (!thread) return c.json({ error: "Thread not found" }, 404);
   return c.json({
     values: {
@@ -239,21 +308,25 @@ app.get("/threads/:threadId/state", (c) => {
 });
 
 // Cancel a run.
-// Called by cancel_async_task. In-memory cancellation only — the agent
-// invocation is not interrupted mid-flight. For true cancellation, wire
-// in an AbortController or use a job queue.
-app.post("/threads/:threadId/runs/:runId/cancel", (c) => {
-  const run = runs.get(c.req.param("runId"));
+// Called by cancel_async_task. Marks the run cancelled in the database.
+// Note: the agent invocation is not interrupted mid-flight. For true
+// cancellation, wire in an AbortController or use a job queue.
+app.post("/threads/:threadId/runs/:runId/cancel", async (c) => {
+  const run = await getRun(c.req.param("runId"));
   if (!run || run.thread_id !== c.req.param("threadId")) {
     return c.json({ error: "Run not found" }, 404);
   }
-  run.status = "cancelled";
-  return c.json(run);
+  await pool.query("UPDATE runs SET status = 'cancelled' WHERE run_id = $1", [
+    run.run_id,
+  ]);
+  return c.json({ ...run, status: "cancelled" });
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 const PORT = Number(process.env.PORT ?? 2024);
+
+await initDb();
 
 serve({ fetch: app.fetch, port: PORT }, () => {
   console.log(`Agent Protocol server listening on http://localhost:${PORT}`);

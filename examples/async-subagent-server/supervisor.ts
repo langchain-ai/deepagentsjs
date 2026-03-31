@@ -18,12 +18,19 @@
  *   > cancel <task-id>
  *   > list all tasks
  */
-import "dotenv/config";
+import { config } from "dotenv";
+import { fileURLToPath } from "url";
+import { dirname, resolve } from "path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+config({ path: resolve(__dirname, ".env") });
 import * as readline from "readline";
 import { createDeepAgent, type AsyncSubAgent } from "deepagents";
-import { HumanMessage, BaseMessage } from "@langchain/core/messages";
+import { HumanMessage } from "@langchain/core/messages";
+import { MemorySaver } from "@langchain/langgraph";
+import { v4 as uuidv4 } from "uuid";
 
-const RESEARCHER_URL = process.env.RESEARCHER_URL ?? "http://localhost:2024";
+const RESEARCHER_URL = process.env.RESEARCHER_URL || "http://localhost:2024";
 
 // ── Agent setup ───────────────────────────────────────────────────────────────
 
@@ -38,7 +45,11 @@ const asyncSubAgents: AsyncSubAgent[] = [
   },
 ];
 
+const checkpointer = new MemorySaver();
+const threadId = uuidv4();
+
 const supervisor = createDeepAgent({
+  checkpointer,
   systemPrompt:
     "You are a research supervisor coordinating a background researcher agent.\n\n" +
     "For general questions, answer directly — do NOT launch a researcher.\n\n" +
@@ -66,22 +77,14 @@ const supervisor = createDeepAgent({
 });
 
 // ── REPL ──────────────────────────────────────────────────────────────────────
-//
-// Keeps a running message history so the supervisor remembers task IDs
-// across turns without a persistent checkpointer.
-
-const history: BaseMessage[] = [];
 
 async function chat(userInput: string): Promise<void> {
-  history.push(new HumanMessage(userInput));
+  const result = await supervisor.invoke(
+    { messages: [new HumanMessage(userInput)] },
+    { configurable: { thread_id: threadId } },
+  );
 
-  const result = await supervisor.invoke({ messages: history });
-
-  // Sync history with the full updated message list from the agent.
-  history.length = 0;
-  history.push(...(result.messages as BaseMessage[]));
-
-  const last = history[history.length - 1];
+  const last = result.messages[result.messages.length - 1];
   const content = last?.content;
   console.log(
     "\n" +

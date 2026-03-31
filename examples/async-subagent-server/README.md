@@ -1,6 +1,6 @@
 # Async Subagent Server
 
-A minimal self-hosted [Agent Protocol](https://github.com/langchain-ai/agent-protocol) server that exposes a DeepAgents researcher as an async subagent. Use this as a starting point for hosting your own agent on any infrastructure and connecting it to a DeepAgents supervisor.
+A self-hosted [Agent Protocol](https://github.com/langchain-ai/agent-protocol) server that exposes a DeepAgents researcher as an async subagent. Use this as a starting point for hosting your own agent on any infrastructure and connecting it to a DeepAgents supervisor.
 
 The example includes both sides of the pattern:
 
@@ -12,27 +12,30 @@ The example includes both sides of the pattern:
 - `ANTHROPIC_API_KEY` — required
 - `TAVILY_API_KEY` — optional; stub search is used if not set
 
-## Run locally
+## Quickstart
 
-**Terminal 1 — start the server:**
+**1. Set up your environment:**
 
 ```bash
-cp examples/async-subagent-server/.env.example examples/async-subagent-server/.env
-# fill in your API keys
-
-cd examples
-tsx async-subagent-server/server.ts
-# Server listening on http://localhost:2024
+cd examples/async-subagent-server
+cp .env.example .env
+# fill in ANTHROPIC_API_KEY (and optionally TAVILY_API_KEY)
 ```
 
-**Terminal 2 — start the supervisor:**
+**2. Start the server and Postgres:**
+
+```bash
+docker compose up
+```
+
+**3. In another terminal, start the supervisor:**
 
 ```bash
 cd examples
 tsx async-subagent-server/supervisor.ts
 ```
 
-Try these prompts in the supervisor:
+Try these prompts:
 
 ```
 > research the latest developments in quantum computing
@@ -42,7 +45,25 @@ Try these prompts in the supervisor:
 > list all tasks
 ```
 
-## Run with Docker
+## Run locally (bring your own Postgres)
+
+If you already have Postgres running, skip Docker Compose and point the server at your database:
+
+```bash
+cd examples
+DATABASE_URL=postgres://user:pass@localhost:5432/agentdb tsx async-subagent-server/server.ts
+```
+
+The server creates the `threads` and `runs` tables automatically on startup.
+
+Then start the supervisor in another terminal:
+
+```bash
+cd examples
+tsx async-subagent-server/supervisor.ts
+```
+
+## Run with Docker (server only)
 
 Build from the repo root (required because `deepagents` is a workspace dependency):
 
@@ -52,13 +73,8 @@ docker build -f examples/async-subagent-server/Dockerfile -t async-subagent-serv
 docker run -p 2024:2024 \
   -e ANTHROPIC_API_KEY=your-key \
   -e TAVILY_API_KEY=your-key \
+  -e DATABASE_URL=postgres://user:pass@your-db-host:5432/agentdb \
   async-subagent-server
-```
-
-Then run the supervisor locally pointing at the container:
-
-```bash
-RESEARCHER_URL=http://localhost:2024 tsx examples/async-subagent-server/supervisor.ts
 ```
 
 ## Implemented endpoints
@@ -76,7 +92,7 @@ These are the Agent Protocol endpoints the DeepAgents async subagent middleware 
 
 ## Swap in your own agent
 
-Find the `createDeepAgent` call in `server.ts` and replace it with your own agent definition. The Agent Protocol layer — threads, runs, status polling — stays the same regardless of what the agent does.
+Replace the `createDeepAgent` call in `server.ts` with your own agent. The Agent Protocol layer stays the same regardless of what the agent does.
 
 ```ts
 const agent = createDeepAgent({
@@ -84,5 +100,3 @@ const agent = createDeepAgent({
   tools: [yourTool],
 });
 ```
-
-For production, replace the in-memory `threads` and `runs` Maps with a persistent store. The HTTP surface of the server does not change.
