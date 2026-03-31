@@ -66,6 +66,11 @@ import { filesValue } from "../values.js";
 import { StateSchema } from "@langchain/langgraph";
 
 /**
+ * Import @langchain/langgraph for type inference
+ */
+import type * as _langgraph from "@langchain/langgraph";
+
+/**
  * Options for the memory middleware.
  */
 export interface MemoryMiddlewareOptions {
