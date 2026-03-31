@@ -141,7 +141,7 @@
       "files": [
         "libs/acp/src/cli.ts",
         "libs/acp/src/logger.ts",
-        "libs/deepagents/src/middleware/skills.ts"
+        "libs/deepagents/src/middleware/skills.ts",
       ],
       "rules": {
         "no-console": "off",
