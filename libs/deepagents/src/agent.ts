@@ -51,7 +51,6 @@ import type * as _messages from "@langchain/core/messages";
 import type * as _Command from "@langchain/langgraph";
 import type { BaseLanguageModel } from "@langchain/core/language_models/base";
 import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
-import { iife } from "./utils.js";
 
 const BASE_AGENT_PROMPT = context`
   You are a Deep Agent, an AI assistant that helps users accomplish tasks using tools. You respond with text and tool calls. The user can see your responses and tool outputs in real time.
@@ -201,16 +200,35 @@ export function createDeepAgent<
       ]
     : [];
 
+  /**
+   * Process subagents to add SkillsMiddleware for those with their own skills.
+   *
+   * Custom subagents do NOT inherit skills from the main agent by default.
+   * Only the general-purpose subagent inherits the main agent's skills.
+   * If a custom subagent needs skills, it must specify its own `skills` array.
+   */
   const normalizeSubagentSpec = (input: SubAgent): SubAgent => {
+    // Middleware for custom subagents (does NOT include skills from main agent).
+    // Uses createSummarizationMiddleware (deepagents version) with backend support
+    // and auto-computed defaults from model profile.
     const subagentMiddleware = [
+      // Provides todo list management capabilities for tracking tasks.
       todoListMiddleware(),
+      // Enables filesystem operations and optional long-term memory storage.
       createFilesystemMiddleware({ backend }),
+      // Automatically summarizes conversation history when token limits are approached.
+      // Uses createSummarizationMiddleware (deepagents version) with backend support
+      // and auto-computed defaults from model profile.
       createSummarizationMiddleware({ backend, model }),
+      // Patches tool calls to ensure compatibility across different model providers.
       createPatchToolCallsMiddleware(),
+      // Loads subagent-specific skills when configured.
       ...(input.skills != null && input.skills.length > 0
         ? [createSkillsMiddleware({ backend, sources: input.skills })]
         : []),
+      // Appends custom middleware from the subagent spec.
       ...(input.middleware ?? []),
+      // Adds Anthropic cache controls when supported by the model.
       ...cacheMiddleware,
     ];
     return {
@@ -222,10 +240,15 @@ export function createDeepAgent<
 
   const allSubagents = subagents as readonly AnySubAgent[];
 
+  // Split the unified subagents array into sync and async subagents.
+  // AsyncSubAgents are identified by the presence of a `graphId` field.
   const asyncSubAgents = allSubagents.filter((item): item is AsyncSubAgent =>
     isAsyncSubAgent(item),
   );
 
+  // Process sync subagents:
+  // - CompiledSubAgent: use as-is (already has its own middleware baked in)
+  // - SubAgent: apply the default deep-agent subagent middleware stack
   const inlineSubagents = allSubagents
     .filter(
       (item): item is SubAgent | CompiledSubAgent => !isAsyncSubAgent(item),
@@ -251,9 +274,15 @@ export function createDeepAgent<
       ? [createSkillsMiddleware({ backend, sources: skills })]
       : [];
 
+  // Built-in middleware array - core middleware with known types.
+  // This tuple is typed without conditional spreads to preserve tuple inference.
+  // Optional middleware (skills, memory, HITL, async) are appended at runtime.
   const builtInMiddleware = [
+    // Provides todo list management capabilities for tracking tasks.
     todoListMiddleware(),
+    // Enables filesystem operations and optional long-term memory storage.
     createFilesystemMiddleware({ backend }),
+    // Enables delegation to specialized subagents for complex tasks.
     createSubAgentMiddleware({
       defaultModel: model,
       defaultTools: tools as StructuredTool[],
@@ -261,7 +290,11 @@ export function createDeepAgent<
       subagents: inlineSubagents,
       generalPurposeAgent: false,
     }),
+    // Automatically summarizes conversation history when token limits are approached.
+    // Uses createSummarizationMiddleware (deepagents version) with backend support
+    // for conversation history offloading and auto-computed defaults from model profile.
     createSummarizationMiddleware({ model, backend }),
+    // Patches tool calls to ensure compatibility across different model providers.
     createPatchToolCallsMiddleware(),
   ] as const;
 
@@ -273,18 +306,26 @@ export function createDeepAgent<
     patchToolCallsMiddleware,
   ] = builtInMiddleware;
 
+  // Runtime middleware array: combine built-in + optional middleware.
+  // Note: The full type is handled separately via AllMiddleware.
   const middleware = [
+    // Built-in middleware with deterministic ordering.
     todoMiddleware,
+    // Optional root-level skills.
     ...skillsMiddleware,
     fsMiddleware,
     subagentMiddleware,
     summarizationMiddleware,
     patchToolCallsMiddleware,
+    // Optional async subagent bridge.
     ...(asyncSubAgents.length > 0
       ? [createAsyncSubAgentMiddleware({ asyncSubAgents })]
       : []),
+    // User-provided middleware.
     ...customMiddleware,
+    // Optional Anthropic cache controls.
     ...cacheMiddleware,
+    // Optional memory support.
     ...(memory && memory.length > 0
       ? [
           createMemoryMiddleware({
@@ -294,31 +335,29 @@ export function createDeepAgent<
           }),
         ]
       : []),
+    // Optional human-in-the-loop tool interrupts.
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
   ];
 
   // Combine system prompt parameter with BASE_AGENT_PROMPT
-  const finalSystemPrompt = iife(() => {
-    if (typeof systemPrompt === "string") {
-      return new SystemMessage({
-        contentBlocks: [
-          { type: "text", text: systemPrompt },
-          { type: "text", text: BASE_AGENT_PROMPT },
-        ],
-      });
-    }
-    if (SystemMessage.isInstance(systemPrompt)) {
-      return new SystemMessage({
-        contentBlocks: [
-          ...systemPrompt.contentBlocks,
-          { type: "text", text: BASE_AGENT_PROMPT },
-        ],
-      });
-    }
-    return new SystemMessage({
-      contentBlocks: [{ type: "text", text: BASE_AGENT_PROMPT }],
-    });
-  });
+  const finalSystemPrompt =
+    typeof systemPrompt === "string"
+      ? new SystemMessage({
+          contentBlocks: [
+            { type: "text", text: systemPrompt },
+            { type: "text", text: BASE_AGENT_PROMPT },
+          ],
+        })
+      : SystemMessage.isInstance(systemPrompt)
+        ? new SystemMessage({
+            contentBlocks: [
+              ...systemPrompt.contentBlocks,
+              { type: "text", text: BASE_AGENT_PROMPT },
+            ],
+          })
+        : new SystemMessage({
+            contentBlocks: [{ type: "text", text: BASE_AGENT_PROMPT }],
+          });
 
   const agent = createAgent({
     model,
