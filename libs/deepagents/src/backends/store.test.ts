@@ -281,8 +281,8 @@ describe("StoreBackend", () => {
     });
 
     it("should upload binary (image) files as Uint8Array", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
+      const { runtime } = makeConfig();
+      const backend = new StoreBackend(runtime);
 
       const pngBytes = new Uint8Array([
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -345,8 +345,8 @@ describe("StoreBackend", () => {
     });
 
     it("should download binary files as raw bytes", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
+      const { runtime } = makeConfig();
+      const backend = new StoreBackend(runtime);
 
       const pngBytes = new Uint8Array([
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -364,8 +364,8 @@ describe("StoreBackend", () => {
 
   describe("binary file round-trip", () => {
     it("should upload and download binary files with identical bytes", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
+      const { runtime } = makeConfig();
+      const backend = new StoreBackend(runtime);
 
       const originalBytes = new Uint8Array(256);
       for (let i = 0; i < 256; i++) originalBytes[i] = i;
@@ -381,8 +381,8 @@ describe("StoreBackend", () => {
     });
 
     it("should read binary files as Uint8Array content", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
+      const { runtime } = makeConfig();
+      const backend = new StoreBackend(runtime);
 
       const pngBytes = new Uint8Array([
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -397,8 +397,8 @@ describe("StoreBackend", () => {
     });
 
     it("should skip binary files in grep", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
+      const { runtime } = makeConfig();
+      const backend = new StoreBackend(runtime);
 
       const pngBytes = new Uint8Array([
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -412,8 +412,8 @@ describe("StoreBackend", () => {
     });
 
     it("should ignore offset/limit for binary reads", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore);
+      const { runtime } = makeConfig();
+      const backend = new StoreBackend(runtime);
 
       const pngBytes = new Uint8Array([
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -562,8 +562,8 @@ describe("StoreBackend", () => {
 
   describe("fileFormat: v1", () => {
     it("should write v1 format (content as line array)", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore, { fileFormat: "v1" });
+      const { runtime } = makeConfig();
+      const backend = new StoreBackend(runtime, { fileFormat: "v1" });
 
       await backend.write("/notes.txt", "line1\nline2");
 
@@ -574,8 +574,8 @@ describe("StoreBackend", () => {
     });
 
     it("should read v1 data correctly", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore, { fileFormat: "v1" });
+      const { runtime } = makeConfig();
+      const backend = new StoreBackend(runtime, { fileFormat: "v1" });
 
       await backend.write("/notes.txt", "hello world");
 
@@ -585,8 +585,8 @@ describe("StoreBackend", () => {
     });
 
     it("should edit v1 data correctly", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore, { fileFormat: "v1" });
+      const { runtime } = makeConfig();
+      const backend = new StoreBackend(runtime, { fileFormat: "v1" });
 
       await backend.write("/notes.txt", "hello world");
       const editRes = await backend.edit("/notes.txt", "hello", "hi");
@@ -597,8 +597,8 @@ describe("StoreBackend", () => {
     });
 
     it("should upload files as v1 format", async () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StoreBackend(stateAndStore, { fileFormat: "v1" });
+      const { runtime } = makeConfig();
+      const backend = new StoreBackend(runtime, { fileFormat: "v1" });
 
       const files: Array<[string, Uint8Array]> = [
         ["/hello.txt", new TextEncoder().encode("Hello")],
@@ -616,7 +616,7 @@ describe("StoreBackend", () => {
 
   describe("backwards compatibility: v2 backend reading v1 data", () => {
     it("should read pre-existing v1 data from store", async () => {
-      const { store, stateAndStore } = makeConfig();
+      const { store, runtime } = makeConfig();
 
       // Simulate legacy v1 data already in store
       await store.put(["filesystem"], "/legacy.txt", {
@@ -625,7 +625,7 @@ describe("StoreBackend", () => {
         modified_at: "2024-01-01T00:00:00.000Z",
       });
 
-      const backend = new StoreBackend(stateAndStore); // default v2
+      const backend = new StoreBackend(runtime); // default v2
 
       const readRes = await backend.read("/legacy.txt");
       expect(readRes.error).toBeUndefined();
@@ -633,7 +633,7 @@ describe("StoreBackend", () => {
     });
 
     it("should read v1 data with offset/limit", async () => {
-      const { store, stateAndStore } = makeConfig();
+      const { store, runtime } = makeConfig();
 
       await store.put(["filesystem"], "/legacy.txt", {
         content: ["a", "b", "c", "d", "e"],
@@ -641,14 +641,14 @@ describe("StoreBackend", () => {
         modified_at: "2024-01-01T00:00:00.000Z",
       });
 
-      const backend = new StoreBackend(stateAndStore);
+      const backend = new StoreBackend(runtime);
 
       const readRes = await backend.read("/legacy.txt", 1, 2);
       expect(readRes.content).toBe("b\nc");
     });
 
     it("should grep across mixed v1 and v2 data in store", async () => {
-      const { store, stateAndStore } = makeConfig();
+      const { store, runtime } = makeConfig();
 
       // Legacy v1 data
       await store.put(["filesystem"], "/legacy.py", {
@@ -657,7 +657,7 @@ describe("StoreBackend", () => {
         modified_at: "2024-01-01T00:00:00.000Z",
       });
 
-      const backend = new StoreBackend(stateAndStore); // default v2
+      const backend = new StoreBackend(runtime); // default v2
 
       // Write a v2 file
       await backend.write("/modern.py", "import sys\nprint('v2')");
@@ -669,7 +669,7 @@ describe("StoreBackend", () => {
     });
 
     it("should list mixed v1 and v2 files with correct sizes", async () => {
-      const { store, stateAndStore } = makeConfig();
+      const { store, runtime } = makeConfig();
 
       await store.put(["filesystem"], "/legacy.txt", {
         content: ["hello"],
@@ -677,7 +677,7 @@ describe("StoreBackend", () => {
         modified_at: "2024-01-01T00:00:00.000Z",
       });
 
-      const backend = new StoreBackend(stateAndStore);
+      const backend = new StoreBackend(runtime);
       await backend.write("/modern.txt", "world");
 
       const listing = await backend.ls("/");

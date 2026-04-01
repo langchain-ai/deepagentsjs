@@ -333,10 +333,10 @@ describe("CompositeBackend", () => {
   });
 
   it("should return ReadRawResult from readRaw across backends", async () => {
-    const { state, stateAndStore } = makeConfig();
+    const { state, runtime } = makeConfig();
 
-    const composite = new CompositeBackend(new StateBackend(stateAndStore), {
-      "/store/": new StoreBackend(stateAndStore),
+    const composite = new CompositeBackend(new StateBackend(runtime), {
+      "/store/": new StoreBackend(runtime),
     });
 
     // Write to both backends

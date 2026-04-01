@@ -228,8 +228,8 @@ describe("StateBackend", () => {
   });
 
   it("should return ReadRawResult with v2 shape from readRaw", () => {
-    const { state, stateAndStore } = makeConfig();
-    const backend = new StateBackend(stateAndStore);
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime);
 
     const writeRes = backend.write("/data.txt", "hello world");
     Object.assign(state.files, writeRes.filesUpdate!);
@@ -245,8 +245,8 @@ describe("StateBackend", () => {
   });
 
   it("should return ReadRawResult with error for missing file", () => {
-    const { stateAndStore } = makeConfig();
-    const backend = new StateBackend(stateAndStore);
+    const { runtime } = makeConfig();
+    const backend = new StateBackend(runtime);
 
     const raw = backend.readRaw("/nonexistent.txt");
     expect(raw.error).toBeDefined();
@@ -254,8 +254,8 @@ describe("StateBackend", () => {
   });
 
   it("should return ReadRawResult for binary files with Uint8Array content", () => {
-    const { state, stateAndStore } = makeConfig();
-    const backend = new StateBackend(stateAndStore);
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime);
 
     const pngBytes = new Uint8Array([
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -277,8 +277,8 @@ describe("StateBackend", () => {
       created_at: "2024-01-01T00:00:00.000Z",
       modified_at: "2024-01-01T00:00:00.000Z",
     };
-    const { stateAndStore } = makeConfig({ "/legacy.txt": v1FileData });
-    const backend = new StateBackend(stateAndStore);
+    const { runtime } = makeConfig({ "/legacy.txt": v1FileData });
+    const backend = new StateBackend(runtime);
 
     const raw = backend.readRaw("/legacy.txt");
     expect(raw.error).toBeUndefined();
@@ -336,8 +336,8 @@ describe("StateBackend", () => {
     });
 
     it("should upload binary (image) files as Uint8Array", () => {
-      const { state, stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore);
+      const { state, runtime } = makeConfig();
+      const backend = new StateBackend(runtime);
 
       const pngBytes = new Uint8Array([
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -399,8 +399,8 @@ describe("StateBackend", () => {
     });
 
     it("should download binary files as raw bytes", () => {
-      const { state, stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore);
+      const { state, runtime } = makeConfig();
+      const backend = new StateBackend(runtime);
 
       const pngBytes = new Uint8Array([
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -419,8 +419,8 @@ describe("StateBackend", () => {
 
   describe("binary file round-trip", () => {
     it("should upload and download binary files with identical bytes", () => {
-      const { state, stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore);
+      const { state, runtime } = makeConfig();
+      const backend = new StateBackend(runtime);
 
       const originalBytes = new Uint8Array(256);
       for (let i = 0; i < 256; i++) originalBytes[i] = i;
@@ -435,8 +435,8 @@ describe("StateBackend", () => {
     });
 
     it("should read binary files as Uint8Array content", () => {
-      const { state, stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore);
+      const { state, runtime } = makeConfig();
+      const backend = new StateBackend(runtime);
 
       const pngBytes = new Uint8Array([
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -452,8 +452,8 @@ describe("StateBackend", () => {
     });
 
     it("should skip binary files in grep", () => {
-      const { state, stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore);
+      const { state, runtime } = makeConfig();
+      const backend = new StateBackend(runtime);
 
       const pngBytes = new Uint8Array([
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -470,8 +470,8 @@ describe("StateBackend", () => {
     });
 
     it("should ignore offset/limit for binary reads", () => {
-      const { state, stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore);
+      const { state, runtime } = makeConfig();
+      const backend = new StateBackend(runtime);
 
       const pngBytes = new Uint8Array([
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -531,8 +531,8 @@ describe("StateBackend", () => {
 
   describe("fileFormat: v1", () => {
     it("should write v1 format (content as line array)", () => {
-      const { state, stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore, { fileFormat: "v1" });
+      const { state, runtime } = makeConfig();
+      const backend = new StateBackend(runtime, { fileFormat: "v1" });
 
       const writeRes = backend.write("/notes.txt", "line1\nline2");
       expect(writeRes.error).toBeUndefined();
@@ -544,8 +544,8 @@ describe("StateBackend", () => {
     });
 
     it("should read v1 data correctly", () => {
-      const { state, stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore, { fileFormat: "v1" });
+      const { state, runtime } = makeConfig();
+      const backend = new StateBackend(runtime, { fileFormat: "v1" });
 
       const writeRes = backend.write("/notes.txt", "hello world");
       Object.assign(state.files, writeRes.filesUpdate!);
@@ -556,8 +556,8 @@ describe("StateBackend", () => {
     });
 
     it("should edit v1 data and produce v1 output", () => {
-      const { state, stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore, { fileFormat: "v1" });
+      const { state, runtime } = makeConfig();
+      const backend = new StateBackend(runtime, { fileFormat: "v1" });
 
       const writeRes = backend.write("/notes.txt", "hello world");
       Object.assign(state.files, writeRes.filesUpdate!);
@@ -572,8 +572,8 @@ describe("StateBackend", () => {
     });
 
     it("should upload files as v1 format", () => {
-      const { stateAndStore } = makeConfig();
-      const backend = new StateBackend(stateAndStore, { fileFormat: "v1" });
+      const { runtime } = makeConfig();
+      const backend = new StateBackend(runtime, { fileFormat: "v1" });
 
       const files: Array<[string, Uint8Array]> = [
         ["/hello.txt", new TextEncoder().encode("Hello")],
@@ -594,8 +594,8 @@ describe("StateBackend", () => {
         created_at: "2024-01-01T00:00:00.000Z",
         modified_at: "2024-01-01T00:00:00.000Z",
       };
-      const { stateAndStore } = makeConfig({ "/legacy.txt": v1FileData });
-      const backend = new StateBackend(stateAndStore); // default v2
+      const { runtime } = makeConfig({ "/legacy.txt": v1FileData });
+      const backend = new StateBackend(runtime); // default v2
 
       const readRes = backend.read("/legacy.txt");
       expect(readRes.error).toBeUndefined();
@@ -608,8 +608,8 @@ describe("StateBackend", () => {
         created_at: "2024-01-01T00:00:00.000Z",
         modified_at: "2024-01-01T00:00:00.000Z",
       };
-      const { stateAndStore } = makeConfig({ "/legacy.txt": v1FileData });
-      const backend = new StateBackend(stateAndStore);
+      const { runtime } = makeConfig({ "/legacy.txt": v1FileData });
+      const backend = new StateBackend(runtime);
 
       const readRes = backend.read("/legacy.txt", 1, 2);
       expect(readRes.content).toBe("b\nc");
@@ -621,10 +621,10 @@ describe("StateBackend", () => {
         created_at: "2024-01-01T00:00:00.000Z",
         modified_at: "2024-01-01T00:00:00.000Z",
       };
-      const { state, stateAndStore } = makeConfig({
+      const { state, runtime } = makeConfig({
         "/legacy.txt": v1FileData,
       });
-      const backend = new StateBackend(stateAndStore); // default v2
+      const backend = new StateBackend(runtime); // default v2
 
       const editRes = backend.edit("/legacy.txt", "hello", "hi");
       expect(editRes.error).toBeUndefined();
@@ -641,10 +641,10 @@ describe("StateBackend", () => {
         created_at: "2024-01-01T00:00:00.000Z",
         modified_at: "2024-01-01T00:00:00.000Z",
       };
-      const { state, stateAndStore } = makeConfig({
+      const { state, runtime } = makeConfig({
         "/legacy.py": v1FileData,
       });
-      const backend = new StateBackend(stateAndStore); // default v2
+      const backend = new StateBackend(runtime); // default v2
 
       // Write a v2 file
       const writeRes = backend.write("/modern.py", "import sys\nprint('v2')");
@@ -662,10 +662,10 @@ describe("StateBackend", () => {
         created_at: "2024-01-01T00:00:00.000Z",
         modified_at: "2024-01-01T00:00:00.000Z",
       };
-      const { state, stateAndStore } = makeConfig({
+      const { state, runtime } = makeConfig({
         "/legacy.txt": v1FileData,
       });
-      const backend = new StateBackend(stateAndStore);
+      const backend = new StateBackend(runtime);
 
       const writeRes = backend.write("/modern.txt", "world");
       Object.assign(state.files, writeRes.filesUpdate!);

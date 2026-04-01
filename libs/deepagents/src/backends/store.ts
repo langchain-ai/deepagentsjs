@@ -18,6 +18,7 @@ import type {
   ReadResult,
   WriteResult,
   BackendRuntime,
+  StateAndStore,
 } from "./protocol.js";
 import {
   createFileData,
@@ -108,12 +109,12 @@ export interface StoreBackendOptions extends BackendOptions {
  * to legacy assistant_id-based isolation.
  */
 export class StoreBackend implements BackendProtocolV2 {
-  private runtime: BackendRuntime;
+  private stateAndStore: StateAndStore;
   private _namespace: string[] | undefined;
   private fileFormat: "v1" | "v2";
 
-  constructor(runtime: BackendRuntime, options?: StoreBackendOptions) {
-    this.runtime = runtime;
+  constructor(stateAndStore: StateAndStore, options?: StoreBackendOptions) {
+    this.stateAndStore = stateAndStore;
     if (options?.namespace) {
       this._namespace = validateNamespace(options.namespace);
     }
@@ -127,7 +128,7 @@ export class StoreBackend implements BackendProtocolV2 {
    * @throws Error if no store is available
    */
   private getStore() {
-    const store = this.runtime.store;
+    const store = this.stateAndStore.store;
     if (!store) {
       throw new Error("Store is required but not available in runtime");
     }
@@ -147,7 +148,7 @@ export class StoreBackend implements BackendProtocolV2 {
     if (this._namespace) {
       return this._namespace;
     }
-    const assistantId = this.runtime.assistantId;
+    const assistantId = this.stateAndStore.assistantId;
     if (assistantId) {
       return [assistantId, "filesystem"];
     }
