@@ -302,7 +302,7 @@ export function createMemoryMiddleware(options: MemoryMiddlewareOptions) {
           }
         } catch (error) {
           // Log but continue - memory is optional
-          // eslint-disable-next-line no-console
+          // oxlint-disable-next-line no-console
           console.debug(`Failed to load memory from ${path}:`, error);
         }
       }

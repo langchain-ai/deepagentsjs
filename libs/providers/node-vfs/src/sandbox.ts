@@ -1,4 +1,4 @@
-/* eslint-disable no-instanceof/no-instanceof */
+/* oxlint-disable no-instanceof/no-instanceof */
 /**
  * Node.js VFS Sandbox implementation of the SandboxBackendProtocol.
  *

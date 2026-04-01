@@ -1,4 +1,4 @@
-/* eslint-disable no-instanceof/no-instanceof */
+/* oxlint-disable no-instanceof/no-instanceof */
 /**
  * Modal Sandbox implementation of the SandboxBackendProtocol.
  *

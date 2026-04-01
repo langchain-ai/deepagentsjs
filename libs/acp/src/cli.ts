@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * DeepAgents ACP Server CLI
  *

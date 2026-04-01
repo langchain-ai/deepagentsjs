@@ -42,20 +42,17 @@ describe("DeepAgents Integration Tests", () => {
     expect(toolNames).toContain("sample_tool");
   });
 
-  it.concurrent(
-    "should create deep agent with middleware with tool and state",
-    () => {
-      const agent = createDeepAgent({
-        middleware: [SampleMiddlewareWithToolsAndState],
-      });
-      assertAllDeepAgentQualities(agent);
+  it.concurrent("should create deep agent with middleware with tool and state", () => {
+    const agent = createDeepAgent({
+      middleware: [SampleMiddlewareWithToolsAndState],
+    });
+    assertAllDeepAgentQualities(agent);
 
-      const toolNames = Object.keys(extractToolsFromAgent(agent));
-      expect(toolNames).toContain("sample_tool");
+    const toolNames = Object.keys(extractToolsFromAgent(agent));
+    expect(toolNames).toContain("sample_tool");
 
-      expect(agent.graph.streamChannels).toContain("sample_input");
-    },
-  );
+    expect(agent.graph.streamChannels).toContain("sample_input");
+  });
 
   it.concurrent(
     "should create deep agent with subagents",
