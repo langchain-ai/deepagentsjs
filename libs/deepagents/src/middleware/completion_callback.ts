@@ -179,7 +179,7 @@ export async function notifyParent(
   } catch (e) {
     // Swallow errors — the notification is best-effort.
     // Log a warning so operators can debug connectivity issues.
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.warn(
       `[CompletionCallbackMiddleware] Failed to notify callback thread ${callbackThreadId}:`,
       e,

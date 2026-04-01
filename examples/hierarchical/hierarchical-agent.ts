@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Hierarchical Deep Agent Example
  *

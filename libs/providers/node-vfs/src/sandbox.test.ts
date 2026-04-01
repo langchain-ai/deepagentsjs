@@ -1,4 +1,4 @@
-/* eslint-disable no-instanceof/no-instanceof */
+/* oxlint-disable no-instanceof/no-instanceof */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
 import { VfsSandbox } from "./sandbox.js";
