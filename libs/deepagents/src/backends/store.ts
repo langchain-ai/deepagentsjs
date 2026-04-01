@@ -2,11 +2,7 @@
  * StoreBackend: Adapter for LangGraph's BaseStore (persistent, cross-thread).
  */
 
-import {
-  Item,
-  getConfig,
-  getStore as getLangGraphStore,
-} from "@langchain/langgraph";
+import { Item, getStore as getLangGraphStore } from "@langchain/langgraph";
 import type {
   BackendOptions,
   BackendProtocolV2,
