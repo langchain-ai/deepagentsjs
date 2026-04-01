@@ -510,6 +510,7 @@ describe("StateBackend", () => {
     const { createFilesystemMiddleware } = await import("../middleware/fs.js");
 
     const middleware = createFilesystemMiddleware({
+      backend: (stateAndStore) => new StateBackend(stateAndStore),
       toolTokenLimitBeforeEvict: 1000,
     });
 
