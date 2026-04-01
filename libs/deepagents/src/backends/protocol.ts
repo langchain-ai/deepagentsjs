@@ -558,10 +558,10 @@ export async function resolveBackend(
   runtime: BackendRuntime | ToolRuntime,
 ): Promise<BackendProtocolV2> {
   if (typeof backend === "function") {
-    const b = await backend(runtime as BackendRuntime);
-    return isSandboxProtocol(b)
-      ? adaptSandboxProtocol(b)
-      : adaptBackendProtocol(b);
+    const resolved = await backend(runtime as BackendRuntime);
+    return isSandboxProtocol(resolved)
+      ? adaptSandboxProtocol(resolved)
+      : adaptBackendProtocol(resolved);
   }
   return isSandboxProtocol(backend)
     ? adaptSandboxProtocol(backend)
