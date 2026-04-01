@@ -17,7 +17,7 @@ import type {
   BackendProtocolV2,
   SandboxBackendProtocolV2,
 } from "./v2/protocol.js";
-import { adaptBackendProtocol, adaptSandboxProtocol } from "./utils.js";
+import { adaptBackendProtocol } from "./utils.js";
 
 export type {
   BackendProtocolV1,
@@ -559,11 +559,7 @@ export async function resolveBackend(
 ): Promise<BackendProtocolV2> {
   if (typeof backend === "function") {
     const b = await backend(runtime as BackendRuntime);
-    return isSandboxProtocol(b)
-      ? adaptSandboxProtocol(b)
-      : adaptBackendProtocol(b);
+    return adaptBackendProtocol(b);
   }
-  return isSandboxProtocol(backend)
-    ? adaptSandboxProtocol(backend)
-    : adaptBackendProtocol(backend);
+  return adaptBackendProtocol(backend);
 }
