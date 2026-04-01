@@ -25,6 +25,7 @@ import { z } from "zod/v4";
 import type {
   AnyBackendProtocol,
   BackendFactory,
+  BackendRuntime,
   FileData,
 } from "../backends/protocol.js";
 import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";

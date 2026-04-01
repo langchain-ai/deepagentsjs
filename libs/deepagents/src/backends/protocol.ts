@@ -7,7 +7,7 @@
  * - v2 (current): {@link ./v2/protocol.js}
  */
 
-import type { Runtime } from "langchain";
+import type { Runtime, ToolRuntime } from "langchain";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import type {
   BackendProtocolV1,
@@ -548,14 +548,18 @@ export type BackendFactory = (runtime: BackendRuntime) => AnyBackendProtocol;
 
 /**
  * Resolve a backend instance or await a {@link BackendFactory}.
+ *
+ * Accepts {@link BackendRuntime} or {@link ToolRuntime} — store typing differs
+ * between LangGraph checkpoint stores and core `ToolRuntime`; factories receive
+ * a value that is structurally compatible at runtime.
  */
 export async function resolveBackend(
   backend: AnyBackendProtocol | BackendFactory,
-  runtime: BackendRuntime,
-): Promise<AnyBackendProtocol> {
-  const actualBackend =
-    typeof backend === "function" ? backend(runtime) : backend;
-  return isSandboxBackend(actualBackend)
-    ? adaptSandboxProtocol(actualBackend)
-    : adaptBackendProtocol(actualBackend);
+  runtime: BackendRuntime | ToolRuntime,
+): Promise<BackendProtocolV2> {
+  if (typeof backend === "function") {
+    const b = await backend(runtime as BackendRuntime);
+    return adaptBackendProtocol(b);
+  }
+  return adaptBackendProtocol(backend);
 }
