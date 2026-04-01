@@ -899,7 +899,7 @@ export function createFilesystemMiddleware(
   options: FilesystemMiddlewareOptions = {},
 ) {
   const {
-    backend = (stateAndStore: StateAndStore) => new StateBackend(stateAndStore),
+    backend = new StateBackend(),
     systemPrompt: customSystemPrompt = null,
     customToolDescriptions = null,
     toolTokenLimitBeforeEvict = 20000,

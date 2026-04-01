@@ -12,7 +12,6 @@ import type {
   StructuredTool,
 } from "@langchain/core/tools";
 import { Runnable } from "@langchain/core/runnables";
-import type { BaseStore } from "@langchain/langgraph-checkpoint";
 
 import {
   createFilesystemMiddleware,
@@ -176,13 +175,11 @@ export function createDeepAgent<
   const finalSystemPrompt = new SystemMessage({ content: systemPromptBlocks });
 
   /**
-   * Create backend configuration for filesystem middleware
-   * If no backend is provided, use a factory that creates a StateBackend
+   * Create backend configuration for filesystem middleware.
+   * If no backend is provided, use a zero-arg StateBackend that reads
+   * state from LangGraph's execution context automatically.
    */
-  const filesystemBackend = backend
-    ? backend
-    : (config: { state: unknown; store?: BaseStore }) =>
-        new StateBackend(config);
+  const filesystemBackend = backend ?? new StateBackend();
 
   /**
    * Skills middleware (created conditionally for runtime use)
