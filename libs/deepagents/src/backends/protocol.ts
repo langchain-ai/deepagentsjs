@@ -544,7 +544,9 @@ export interface BackendRuntime<StateT = unknown> extends Runtime {
  * });
  * ```
  */
-export type BackendFactory = (runtime: BackendRuntime) => AnyBackendProtocol;
+export type BackendFactory = (
+  runtime: BackendRuntime,
+) => MaybePromise<AnyBackendProtocol>;
 
 /**
  * Resolve a backend instance or await a {@link BackendFactory}.
