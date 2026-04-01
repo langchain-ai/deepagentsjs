@@ -7,13 +7,11 @@ import {
 } from "react";
 import { Client } from "@langchain/langgraph-sdk";
 import { useStream } from "@langchain/langgraph-sdk/react";
+import { Search, ArrowUp, AlertCircle, GitFork } from "lucide-react";
 import {
-  Search,
-  ArrowUp,
-  AlertCircle,
-  GitFork,
-} from "lucide-react";
-import { ResearcherCard, type ResearcherConfig } from "./components/ResearcherCard";
+  ResearcherCard,
+  type ResearcherConfig,
+} from "./components/ResearcherCard";
 import type { AsyncTask } from "./types";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -140,16 +138,24 @@ function StreamingIndicator() {
       <div className="text-xs font-medium text-neutral-500 mb-2">Assistant</div>
       <div className="flex items-center gap-1.5 text-neutral-500 animate-pulse">
         <div className="w-2 h-2 rounded-full bg-current" />
-        <div className="w-2 h-2 rounded-full bg-current" style={{ animationDelay: "150ms" }} />
-        <div className="w-2 h-2 rounded-full bg-current" style={{ animationDelay: "300ms" }} />
+        <div
+          className="w-2 h-2 rounded-full bg-current"
+          style={{ animationDelay: "150ms" }}
+        />
+        <div
+          className="w-2 h-2 rounded-full bg-current"
+          style={{ animationDelay: "300ms" }}
+        />
       </div>
     </div>
   );
 }
 
-
-
-function EmptyState({ onSuggestionClick }: { onSuggestionClick: (s: string) => void }) {
+function EmptyState({
+  onSuggestionClick,
+}: {
+  onSuggestionClick: (s: string) => void;
+}) {
   return (
     <div className="flex flex-col items-center justify-center text-center px-4 py-24">
       <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-brand-accent/20 to-brand-dark/30 border border-brand-accent/30 flex items-center justify-center mb-6">
@@ -187,7 +193,6 @@ export function App() {
   const thread = useStream({
     apiUrl: LANGGRAPH_URL,
     assistantId: "supervisor",
-    // eslint-disable-next-line no-console
     onError: (err) => console.error("[stream error]", err),
     onUpdateEvent: (data) => {
       if (data && typeof data === "object") {
@@ -281,7 +286,6 @@ export function App() {
 
   const hasMessages = visibleMessages.length > 0;
 
-
   const handleSubmit: SubmitEventHandler<HTMLFormElement> = (e) => {
     e.preventDefault();
     const text = input.trim();
@@ -323,14 +327,11 @@ export function App() {
         <div className="flex gap-3 px-6 py-4 border-b border-neutral-800 flex-shrink-0 overflow-x-auto">
           {taskList.map((task, i) => {
             const palette = CARD_PALETTES[i % CARD_PALETTES.length];
-            const label = task.agentName.charAt(0).toUpperCase() + task.agentName.slice(1);
+            const label =
+              task.agentName.charAt(0).toUpperCase() + task.agentName.slice(1);
             const config: ResearcherConfig = { ...palette, label };
             return (
-              <ResearcherCard
-                key={task.taskId}
-                config={config}
-                task={task}
-              />
+              <ResearcherCard key={task.taskId} config={config} task={task} />
             );
           })}
         </div>
@@ -346,7 +347,11 @@ export function App() {
                 const key = msg.id ?? `msg-${i}`;
                 const text = getMessageText(msg);
                 if (msg.type === "human") {
-                  if (text.startsWith("[Async subagent") || text.startsWith("[task_id=") || text.includes("task_id:")) {
+                  if (
+                    text.startsWith("[Async subagent") ||
+                    text.startsWith("[task_id=") ||
+                    text.includes("task_id:")
+                  ) {
                     return <NotificationBubble key={key} content={text} />;
                   }
                   return <HumanBubble key={key} content={text} />;
@@ -356,9 +361,10 @@ export function App() {
                 }
                 return null;
               })}
-              {thread.isLoading && visibleMessages[visibleMessages.length - 1]?.type !== "ai" && <StreamingIndicator />}
-
-
+              {thread.isLoading &&
+                visibleMessages[visibleMessages.length - 1]?.type !== "ai" && (
+                  <StreamingIndicator />
+                )}
             </div>
           )}
         </div>
@@ -369,7 +375,7 @@ export function App() {
           <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-red-400 text-sm flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>
-              {/* eslint-disable-next-line no-instanceof/no-instanceof */}
+              {/* oxlint-disable-next-line no-instanceof/no-instanceof */}
               {thread.error instanceof Error
                 ? thread.error.message
                 : "An error occurred"}

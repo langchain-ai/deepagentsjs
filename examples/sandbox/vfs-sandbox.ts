@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Node.js VFS Sandbox Example
  *

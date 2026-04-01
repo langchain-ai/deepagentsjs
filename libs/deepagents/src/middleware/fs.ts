@@ -7,6 +7,7 @@
  */
 
 import {
+  context,
   createMiddleware,
   tool,
   ToolMessage,
@@ -37,7 +38,10 @@ import {
   isTextMimeType,
   adaptBackendProtocol,
   adaptSandboxProtocol,
+  MAX_LINE_LENGTH,
 } from "../backends/utils.js";
+
+const INT_FORMATTER = new Intl.NumberFormat("en-US");
 
 /**
  * Tools that should be excluded from the large result eviction logic.
@@ -117,16 +121,18 @@ const READ_FILE_TRUNCATION_MSG = `
 /**
  * Message template for evicted tool results.
  */
-const TOO_LARGE_TOOL_MSG = `Tool result too large, the result of this tool call {tool_call_id} was saved in the filesystem at this path: {file_path}
-You can read the result from the filesystem by using the read_file tool, but make sure to only read part of the result at a time.
-You can do this by specifying an offset and limit in the read_file tool call.
-For example, to read the first 100 lines, you can use the read_file tool with offset=0 and limit=100.
+const TOO_LARGE_TOOL_MSG = context`
+  Tool result too large, the result of this tool call {tool_call_id} was saved in the filesystem at this path: {file_path}
+  You can read the result from the filesystem by using the read_file tool, but make sure to only read part of the result at a time.
+  You can do this by specifying an offset and limit in the read_file tool call.
+  For example, to read the first 100 lines, you can use the read_file tool with offset=0 and limit=100.
 
-Here is a preview showing the head and tail of the result (lines of the form
-... [N lines truncated] ...
-indicate omitted lines in the middle of the content):
+  Here is a preview showing the head and tail of the result (lines of the form
+  ... [N lines truncated] ...
+  indicate omitted lines in the middle of the content):
 
-{content_sample}`;
+  {content_sample}
+`;
 
 /**
  * Create a preview of content showing head and tail with truncation marker.
@@ -286,127 +292,150 @@ function getBackend(
 }
 
 // System prompts
-const FILESYSTEM_SYSTEM_PROMPT = `## Filesystem Tools \`ls\`, \`read_file\`, \`write_file\`, \`edit_file\`, \`glob\`, \`grep\`
+const FILESYSTEM_SYSTEM_PROMPT = context`
+  ## Following Conventions
 
-You have access to a filesystem which you can interact with using these tools.
-All file paths must start with a /.
+  - Read files before editing — understand existing content before making changes
+  - Mimic existing style, naming conventions, and patterns
 
-- ls: list files in a directory (requires absolute path)
-- read_file: read a file from the filesystem
-- write_file: write to a file in the filesystem
-- edit_file: edit a file in the filesystem
-- glob: find files matching a pattern (e.g., "**/*.py")
-- grep: search for text within files`;
+  ## Filesystem Tools \`ls\`, \`read_file\`, \`write_file\`, \`edit_file\`, \`glob\`, \`grep\`
 
-// Tool descriptions - ported from Python for comprehensive LLM guidance
-export const LS_TOOL_DESCRIPTION = `Lists all files in a directory.
+  You have access to a filesystem which you can interact with using these tools.
+  All file paths must start with a /.
 
-This is useful for exploring the filesystem and finding the right file to read or edit.
-You should almost ALWAYS use this tool before using the read_file or edit_file tools.`;
+  - ls: list files in a directory (requires absolute path)
+  - read_file: read a file from the filesystem
+  - write_file: write to a file in the filesystem
+  - edit_file: edit a file in the filesystem
+  - glob: find files matching a pattern (e.g., "**/*.py")
+  - grep: search for text within files
+`;
 
-export const READ_FILE_TOOL_DESCRIPTION = `Reads a file from the filesystem.
+export const LS_TOOL_DESCRIPTION = context`
+  Lists all files in a directory.
 
-Assume this tool is able to read all files. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
+  This is useful for exploring the filesystem and finding the right file to read or edit.
+  You should almost ALWAYS use this tool before using the read_file or edit_file tools.
+`;
 
-Usage:
-- By default, it reads up to 100 lines starting from the beginning of the file
-- **IMPORTANT for large files and codebase exploration**: Use pagination with offset and limit parameters to avoid context overflow
-  - First scan: read_file(path, limit=100) to see file structure
-  - Read more sections: read_file(path, offset=100, limit=200) for next 200 lines
-  - Only omit limit (read full file) when necessary for editing
-- Specify offset and limit: read_file(path, offset=0, limit=100) reads first 100 lines
-- Results are returned using cat -n format, with line numbers starting at 1
-- Lines longer than 10,000 characters will be split into multiple lines with continuation markers (e.g., 5.1, 5.2, etc.). When you specify a limit, these continuation lines count towards the limit.
-- You have the capability to call multiple tools in a single response. It is always better to speculatively read multiple files as a batch that are potentially useful.
-- If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents.
-- You should ALWAYS make sure a file has been read before editing it.`;
+export const READ_FILE_TOOL_DESCRIPTION = context`
+  Reads a file from the filesystem.
 
-export const WRITE_FILE_TOOL_DESCRIPTION = `Writes to a new file in the filesystem.
+  Assume this tool is able to read all files. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
 
-Usage:
-- The write_file tool will create a new file.
-- Prefer to edit existing files (with the edit_file tool) over creating new ones when possible.`;
+  Usage:
+  - By default, it reads up to 100 lines starting from the beginning of the file
+  - **IMPORTANT for large files and codebase exploration**: Use pagination with offset and limit parameters to avoid context overflow
+    - First scan: read_file(path, limit=100) to see file structure
+    - Read more sections: read_file(path, offset=100, limit=200) for next 200 lines
+    - Only omit limit (read full file) when necessary for editing
+  - Specify offset and limit: read_file(path, offset=0, limit=100) reads first 100 lines
+  - Results are returned using cat -n format, with line numbers starting at 1
+- Lines longer than ${INT_FORMATTER.format(MAX_LINE_LENGTH)} characters will be split into multiple lines with continuation markers (e.g., 5.1, 5.2, etc.). When you specify a limit, these continuation lines count towards the limit.
+  - You have the capability to call multiple tools in a single response. It is always better to speculatively read multiple files as a batch that are potentially useful.
+  - If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents.
+  - You should ALWAYS make sure a file has been read before editing it.
+`;
 
-export const EDIT_FILE_TOOL_DESCRIPTION = `Performs exact string replacements in files.
+export const WRITE_FILE_TOOL_DESCRIPTION = context`
+  Writes to a new file in the filesystem.
 
-Usage:
-- You must read the file before editing. This tool will error if you attempt an edit without reading the file first.
-- When editing, preserve the exact indentation (tabs/spaces) from the read output. Never include line number prefixes in old_string or new_string.
-- ALWAYS prefer editing existing files over creating new ones.
-- Only use emojis if the user explicitly requests it.`;
+  Usage:
+  - The write_file tool will create a new file.
+  - Prefer to edit existing files (with the edit_file tool) over creating new ones when possible.
+`;
 
-export const GLOB_TOOL_DESCRIPTION = `Find files matching a glob pattern.
+export const EDIT_FILE_TOOL_DESCRIPTION = context`
+  Performs exact string replacements in files.
 
-Supports standard glob patterns: \`*\` (any characters), \`**\` (any directories), \`?\` (single character).
-Returns a list of absolute file paths that match the pattern.
+  Usage:
+  - You must read the file before editing. This tool will error if you attempt an edit without reading the file first.
+  - When editing, preserve the exact indentation (tabs/spaces) from the read output. Never include line number prefixes in old_string or new_string.
+  - ALWAYS prefer editing existing files over creating new ones.
+  - Only use emojis if the user explicitly requests it.
+`;
 
-Examples:
-- \`**/*.py\` - Find all Python files
-- \`*.txt\` - Find all text files in root
-- \`/subdir/**/*.md\` - Find all markdown files under /subdir`;
+export const GLOB_TOOL_DESCRIPTION = context`
+  Find files matching a glob pattern.
 
-export const GREP_TOOL_DESCRIPTION = `Search for a text pattern across files.
+  Supports standard glob patterns: \`*\` (any characters), \`**\` (any directories), \`?\` (single character).
+  Returns a list of absolute file paths that match the pattern.
 
-Searches for literal text (not regex) and returns matching files or content based on output_mode.
-Special characters like parentheses, brackets, pipes, etc. are treated as literal characters, not regex operators.
+  Examples:
+  - \`**/*.py\` - Find all Python files
+  - \`*.txt\` - Find all text files in root
+  - \`/subdir/**/*.md\` - Find all markdown files under /subdir
+`;
 
-Examples:
-- Search all files: \`grep(pattern="TODO")\`
-- Search Python files only: \`grep(pattern="import", glob="*.py")\`
-- Show matching lines: \`grep(pattern="error", output_mode="content")\`
-- Search for code with special chars: \`grep(pattern="def __init__(self):")\``;
-export const EXECUTE_TOOL_DESCRIPTION = `Executes a shell command in an isolated sandbox environment.
+export const GREP_TOOL_DESCRIPTION = context`
+  Search for a text pattern across files.
 
-Usage:
-Executes a given command in the sandbox environment with proper handling and security measures.
-Before executing the command, please follow these steps:
+  Searches for literal text (not regex) and returns matching files or content based on output_mode.
+  Special characters like parentheses, brackets, pipes, etc. are treated as literal characters, not regex operators.
 
-1. Directory Verification:
-   - If the command will create new directories or files, first use the ls tool to verify the parent directory exists and is the correct location
-   - For example, before running "mkdir foo/bar", first use ls to check that "foo" exists and is the intended parent directory
+  Examples:
+  - Search all files: \`grep(pattern="TODO")\`
+  - Search Python files only: \`grep(pattern="import", glob="*.py")\`
+  - Show matching lines: \`grep(pattern="error", output_mode="content")\`
+  - Search for code with special chars: \`grep(pattern="def __init__(self):")\`
+`;
 
-2. Command Execution:
-   - Always quote file paths that contain spaces with double quotes (e.g., cd "path with spaces/file.txt")
-   - Examples of proper quoting:
-     - cd "/Users/name/My Documents" (correct)
-     - cd /Users/name/My Documents (incorrect - will fail)
-     - python "/path/with spaces/script.py" (correct)
-     - python /path/with spaces/script.py (incorrect - will fail)
-   - After ensuring proper quoting, execute the command
-   - Capture the output of the command
+export const EXECUTE_TOOL_DESCRIPTION = context`
+  Executes a shell command in an isolated sandbox environment.
 
-Usage notes:
-  - Commands run in an isolated sandbox environment
-  - Returns combined stdout/stderr output with exit code
-  - If the output is very large, it may be truncated
-  - VERY IMPORTANT: You MUST avoid using search commands like find and grep. Instead use the grep, glob tools to search. You MUST avoid read tools like cat, head, tail, and use read_file to read files.
-  - When issuing multiple commands, use the ';' or '&&' operator to separate them. DO NOT use newlines (newlines are ok in quoted strings)
-    - Use '&&' when commands depend on each other (e.g., "mkdir dir && cd dir")
-    - Use ';' only when you need to run commands sequentially but don't care if earlier commands fail
-  - Try to maintain your current working directory throughout the session by using absolute paths and avoiding usage of cd
+  Usage:
+  Executes a given command in the sandbox environment with proper handling and security measures.
+  Before executing the command, please follow these steps:
 
-Examples:
-  Good examples:
-    - execute(command="pytest /foo/bar/tests")
-    - execute(command="python /path/to/script.py")
-    - execute(command="npm install && npm test")
+  1. Directory Verification:
+    - If the command will create new directories or files, first use the ls tool to verify the parent directory exists and is the correct location
+    - For example, before running "mkdir foo/bar", first use ls to check that "foo" exists and is the intended parent directory
 
-  Bad examples (avoid these):
-    - execute(command="cd /foo/bar && pytest tests")  # Use absolute path instead
-    - execute(command="cat file.txt")  # Use read_file tool instead
-    - execute(command="find . -name '*.py'")  # Use glob tool instead
-    - execute(command="grep -r 'pattern' .")  # Use grep tool instead
+  2. Command Execution:
+    - Always quote file paths that contain spaces with double quotes (e.g., cd "path with spaces/file.txt")
+    - Examples of proper quoting:
+      - cd "/Users/name/My Documents" (correct)
+      - cd /Users/name/My Documents (incorrect - will fail)
+      - python "/path/with spaces/script.py" (correct)
+      - python /path/with spaces/script.py (incorrect - will fail)
+    - After ensuring proper quoting, execute the command
+    - Capture the output of the command
 
-Note: This tool is only available if the backend supports execution (SandboxBackendProtocol).
-If execution is not supported, the tool will return an error message.`;
+  Usage notes:
+    - Commands run in an isolated sandbox environment
+    - Returns combined stdout/stderr output with exit code
+    - If the output is very large, it may be truncated
+    - VERY IMPORTANT: You MUST avoid using search commands like find and grep. Instead use the grep, glob tools to search. You MUST avoid read tools like cat, head, tail, and use read_file to read files.
+    - When issuing multiple commands, use the ';' or '&&' operator to separate them. DO NOT use newlines (newlines are ok in quoted strings)
+      - Use '&&' when commands depend on each other (e.g., "mkdir dir && cd dir")
+      - Use ';' only when you need to run commands sequentially but don't care if earlier commands fail
+    - Try to maintain your current working directory throughout the session by using absolute paths and avoiding usage of cd
+
+  Examples:
+    Good examples:
+      - execute(command="pytest /foo/bar/tests")
+      - execute(command="python /path/to/script.py")
+      - execute(command="npm install && npm test")
+
+    Bad examples (avoid these):
+      - execute(command="cd /foo/bar && pytest tests")  # Use absolute path instead
+      - execute(command="cat file.txt")  # Use read_file tool instead
+      - execute(command="find . -name '*.py'")  # Use glob tool instead
+      - execute(command="grep -r 'pattern' .")  # Use grep tool instead
+
+  Note: This tool is only available if the backend supports execution (SandboxBackendProtocol).
+  If execution is not supported, the tool will return an error message.
+`;
 
 // System prompt for execution capability
-export const EXECUTION_SYSTEM_PROMPT = `## Execute Tool \`execute\`
+export const EXECUTION_SYSTEM_PROMPT = context`
+  ## Execute Tool \`execute\`
 
-You have access to an \`execute\` tool for running shell commands in a sandboxed environment.
-Use this tool to run commands, scripts, tests, builds, and other shell operations.
+  You have access to an \`execute\` tool for running shell commands in a sandboxed environment.
+  Use this tool to run commands, scripts, tests, builds, and other shell operations.
 
-- execute: run a shell command in the sandbox (returns output and exit code)`;
+  - execute: run a shell command in the sandbox (returns output and exit code)
+`;
 
 /**
  * Create ls tool using backend.

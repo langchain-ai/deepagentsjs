@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Backend-agnostic skills middleware for loading agent skills from any backend.
  *
@@ -241,7 +240,7 @@ Skills follow a **progressive disclosure** pattern - you know they exist (name +
 1. **Recognize when a skill applies**: Check if the user's task matches any skill's description
 2. **Read the skill's full instructions**: The skill list above shows the exact path to use with read_file
 3. **Follow the skill's instructions**: SKILL.md contains step-by-step workflows, best practices, and examples
-4. **Access supporting files**: Skills may include Python scripts, configs, or reference docs - use absolute paths
+4. **Access supporting files**: Skills may include scripts, configs, or reference docs - use absolute paths
 
 **When to Use Skills:**
 - When the user's request matches a skill's domain (e.g., "research X" → web-research skill)
@@ -253,7 +252,7 @@ Skills follow a **progressive disclosure** pattern - you know they exist (name +
 - The skill list above shows the full path for each skill's SKILL.md file
 
 **Executing Skill Scripts:**
-Skills may contain Python scripts or other executable files. Always use absolute paths from the skill list.
+Skills may contain scripts or other executable files. Always use absolute paths from the skill list.
 
 **Example Workflow:**
 

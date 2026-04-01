@@ -1,5 +1,12 @@
 import { useState, type ReactNode } from "react";
-import { Loader2, CheckCircle2, AlertCircle, Clock, Copy, Check } from "lucide-react";
+import {
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  Copy,
+  Check,
+} from "lucide-react";
 import type { AsyncTask } from "../types";
 
 export interface ResearcherConfig {
@@ -12,7 +19,13 @@ export interface ResearcherConfig {
   accentColor: string;
 }
 
-function StatusIcon({ status, accentColor }: { status: string; accentColor: string }) {
+function StatusIcon({
+  status,
+  accentColor,
+}: {
+  status: string;
+  accentColor: string;
+}) {
   switch (status) {
     case "running":
       return <Loader2 className={`w-4 h-4 animate-spin ${accentColor}`} />;
@@ -53,7 +66,10 @@ export function ResearcherCard({
             ? `${config.borderColor} ${config.bgColor}`
             : status === "success"
               ? "border-emerald-500/40 bg-emerald-950/20"
-              : status === "error" || status === "timeout" || status === "interrupted" || status === "cancelled"
+              : status === "error" ||
+                  status === "timeout" ||
+                  status === "interrupted" ||
+                  status === "cancelled"
                 ? "border-red-500/40 bg-red-950/20"
                 : "border-neutral-800 bg-neutral-900/40"
         }

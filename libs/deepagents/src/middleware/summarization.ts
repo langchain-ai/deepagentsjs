@@ -50,6 +50,7 @@ import {
   SystemMessage,
   BaseMessage,
   type AgentMiddleware as _AgentMiddleware,
+  context,
 } from "langchain";
 import { getBufferString } from "@langchain/core/messages";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -890,7 +891,7 @@ export function createSummarizationMiddleware(
       }
 
       if (result.error) {
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.warn(
           `Failed to offload conversation history to ${filePath}: ${result.error}`,
         );
@@ -899,7 +900,7 @@ export function createSummarizationMiddleware(
 
       return filePath;
     } catch (e) {
-      // eslint-disable-next-line no-console
+      // oxlint-disable-next-line no-console
       console.warn(
         `Exception offloading conversation history to ${filePath}:`,
         e,
@@ -954,15 +955,17 @@ export function createSummarizationMiddleware(
   ): HumanMessage {
     let content: string;
     if (filePath) {
-      content = `You are in the middle of a conversation that has been summarized.
+      content = context`
+        You are in the middle of a conversation that has been summarized.
 
-The full conversation history has been saved to ${filePath} should you need to refer back to it for details.
+        The full conversation history has been saved to ${filePath} should you need to refer back to it for details.
 
-A condensed summary follows:
+        A condensed summary follows:
 
-<summary>
-${summary}
-</summary>`;
+        <summary>
+        ${summary}
+        </summary>
+      `;
     } else {
       content = `Here is a summary of the conversation to date:\n\n${summary}`;
     }
@@ -1021,7 +1024,7 @@ ${summary}
     );
 
     if (filePath === null) {
-      // eslint-disable-next-line no-console
+      // oxlint-disable-next-line no-console
       console.warn(
         `[SummarizationMiddleware] Backend offload failed during summarization. Proceeding with summary generation.`,
       );
