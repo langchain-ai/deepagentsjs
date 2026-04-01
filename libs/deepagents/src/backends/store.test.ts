@@ -1,6 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { StoreBackend } from "./store.js";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
+import { getStore as getLangGraphStore } from "@langchain/langgraph";
+
+vi.mock("@langchain/langgraph", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...(actual as any),
+    getStore: vi.fn(),
+  };
+});
 
 /**
  * Helper to create a mock config with InMemoryStore
@@ -685,6 +694,94 @@ describe("StoreBackend", () => {
       for (const info of listing.files!) {
         expect(info.size).toBe(5);
       }
+    });
+  });
+
+  describe("new zero-arg constructor", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    function makeNewConfig() {
+      const store = new InMemoryStore();
+      vi.mocked(getLangGraphStore).mockReturnValue(store);
+      return { store };
+    }
+
+    it("should perform CRUD operations using store from LangGraph context", async () => {
+      const { store } = makeNewConfig();
+      const backend = new StoreBackend();
+
+      const writeRes = await backend.write("/docs/readme.md", "hello store");
+      expect(writeRes.error).toBeUndefined();
+      expect(writeRes.path).toBe("/docs/readme.md");
+      expect(writeRes.filesUpdate).toBeNull();
+
+      const readRes = await backend.read("/docs/readme.md");
+      expect(readRes.content).toContain("hello store");
+
+      const editRes = await backend.edit("/docs/readme.md", "hello", "hi");
+      expect(editRes.error).toBeUndefined();
+      expect(editRes.occurrences).toBe(1);
+
+      const readRes2 = await backend.read("/docs/readme.md");
+      expect(readRes2.content).toContain("hi store");
+
+      const listing = await backend.ls("/docs/");
+      expect(listing.files!.some((i) => i.path === "/docs/readme.md")).toBe(true);
+
+      const grepRes = await backend.grep("hi", "/");
+      expect(grepRes.matches!.some((m) => m.path === "/docs/readme.md")).toBe(true);
+
+      // Verify data landed in the store
+      const items = await store.search(["filesystem"]);
+      expect(items.some((item) => item.key === "/docs/readme.md")).toBe(true);
+    });
+
+    it("should use default namespace (filesystem) without legacy stateAndStore", async () => {
+      const { store } = makeNewConfig();
+      const backend = new StoreBackend();
+
+      await backend.write("/test.txt", "content");
+
+      const items = await store.search(["filesystem"]);
+      expect(items.some((item) => item.key === "/test.txt")).toBe(true);
+    });
+
+    it("should accept namespace option via zero-arg constructor", async () => {
+      const { store } = makeNewConfig();
+      const backend = new StoreBackend({
+        namespace: ["org-123", "user-456", "filesystem"],
+      });
+
+      await backend.write("/test.txt", "namespaced content");
+
+      const items = await store.search(["org-123", "user-456", "filesystem"]);
+      expect(items.some((item) => item.key === "/test.txt")).toBe(true);
+
+      const defaultItems = await store.search(["filesystem"]);
+      expect(defaultItems.some((item) => item.key === "/test.txt")).toBe(false);
+    });
+
+    it("should throw if no store available in LangGraph context", () => {
+      vi.mocked(getLangGraphStore).mockReturnValue(undefined as any);
+      const backend = new StoreBackend();
+
+      expect(() => (backend as any).getStore()).toThrow(
+        "Store is required but not available in LangGraph execution context",
+      );
+    });
+
+    it("should accept fileFormat option via zero-arg constructor", async () => {
+      makeNewConfig();
+      const backend = new StoreBackend({ fileFormat: "v1" });
+
+      await backend.write("/notes.txt", "line1\nline2");
+
+      const raw = await backend.readRaw("/notes.txt");
+      expect(raw.error).toBeUndefined();
+      expect(Array.isArray(raw.data!.content)).toBe(true);
+      expect(raw.data!.content).toEqual(["line1", "line2"]);
     });
   });
 });

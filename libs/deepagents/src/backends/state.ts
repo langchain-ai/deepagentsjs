@@ -2,6 +2,7 @@
  * StateBackend: Store files in LangGraph agent state (ephemeral).
  */
 
+import { getConfig, getCurrentTaskInput } from "@langchain/langgraph";
 import type {
   BackendOptions,
   BackendProtocolV2,
@@ -32,6 +33,8 @@ import {
   updateFileData,
 } from "./utils.js";
 
+const PREGEL_SEND_KEY = "__pregel_send";
+
 /**
  * Backend that stores files in agent state (ephemeral).
  *
@@ -44,22 +47,68 @@ import {
  * for the middleware to apply via Command.
  */
 export class StateBackend implements BackendProtocolV2 {
-  private stateAndStore: StateAndStore;
+  private legacyStateAndStore: StateAndStore | undefined;
   private fileFormat: "v1" | "v2";
 
-  constructor(stateAndStore: StateAndStore, options?: BackendOptions) {
-    this.stateAndStore = stateAndStore;
-    this.fileFormat = options?.fileFormat ?? "v2";
+  constructor(options?: BackendOptions);
+  /**
+   * @deprecated Pass no `stateAndStore` argument
+   */
+  constructor(StateAndStore: StateAndStore, options?: BackendOptions);
+  constructor(
+    stateAndStoreOrOptions?: StateAndStore | BackendOptions,
+    options?: BackendOptions,
+  ) {
+    if (
+      stateAndStoreOrOptions != null &&
+      typeof stateAndStoreOrOptions === "object" &&
+      "state" in stateAndStoreOrOptions
+    ) {
+      // Legacy path: StateAndStore was passed
+      this.legacyStateAndStore = stateAndStoreOrOptions;
+      this.fileFormat = options?.fileFormat ?? "v2";
+    } else {
+      this.legacyStateAndStore = undefined;
+      this.fileFormat =
+        (stateAndStoreOrOptions as BackendOptions | undefined)?.fileFormat ??
+        "v2";
+    }
+  }
+
+  private get isLegacy(): boolean {
+    return this.legacyStateAndStore !== undefined;
+  }
+
+  private readFiles(): Record<string, FileData> {
+    if (this.legacyStateAndStore) {
+      const state = this.legacyStateAndStore.state as {
+        files?: Record<string, FileData>;
+      };
+      return state.files || {};
+    }
+
+    const state = getCurrentTaskInput<{ files?: Record<string, FileData> }>();
+    return state?.files || {};
+  }
+
+  private sendFilesUpdate(update: Record<string, FileData>): void {
+    if (this.isLegacy) {
+      return; // caller will use filesupdate from the result
+    }
+
+    const config = getConfig();
+
+    const send = config.configurable?.[PREGEL_SEND_KEY];
+    if (typeof send === "function") {
+      send([["files", update]]);
+    }
   }
 
   /**
    * Get files from current state.
    */
   private getFiles(): Record<string, FileData> {
-    return (
-      ((this.stateAndStore.state as any).files as Record<string, FileData>) ||
-      {}
-    );
+    return this.readFiles();
   }
 
   /**
@@ -195,9 +244,16 @@ export class StateBackend implements BackendProtocolV2 {
       this.fileFormat,
       mimeType,
     );
+    const update = { [filePath]: newFileData };
+
+    if (!this.isLegacy) {
+      this.sendFilesUpdate(update);
+      return { path: filePath };
+    }
+
     return {
       path: filePath,
-      filesUpdate: { [filePath]: newFileData },
+      filesUpdate: update,
     };
   }
 
@@ -232,10 +288,17 @@ export class StateBackend implements BackendProtocolV2 {
 
     const [newContent, occurrences] = result;
     const newFileData = updateFileData(fileData, newContent);
+    const update = { [filePath]: newFileData };
+
+    if (!this.isLegacy) {
+      this.sendFilesUpdate(update);
+      return { path: filePath, occurrences };
+    }
+
     return {
       path: filePath,
-      filesUpdate: { [filePath]: newFileData },
-      occurrences: occurrences,
+      filesUpdate: update,
+      occurrences,
     };
   }
 
@@ -320,6 +383,16 @@ export class StateBackend implements BackendProtocolV2 {
       } catch {
         responses.push({ path, error: "invalid_path" });
       }
+    }
+
+    if (!this.isLegacy) {
+      if (Object.keys(updates).length > 0) {
+        this.sendFilesUpdate(updates);
+      }
+
+      return responses as FileUploadResponse[] & {
+        filesUpdate?: Record<string, FileData>;
+      };
     }
 
     // Attach filesUpdate for the caller to apply via Command

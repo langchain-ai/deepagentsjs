@@ -178,6 +178,11 @@ export interface WriteResult {
    * State update dict for checkpoint backends, null for external storage.
    * Checkpoint backends populate this with {file_path: file_data} for LangGraph state.
    * External backends set null (already persisted to disk/S3/database/etc).
+   *
+   * @deprecated StateBackend now sends file updates internally via LangGraph's state
+   * channels. When using the new zero-arg `new StateBackend()` constructor, this field
+   * will be `undefined`. Callers should check for `filesUpdate` before wrapping in
+   * `Command`. This field will be removed in a future release.
    */
   filesUpdate?: Record<string, FileData> | null;
   /** Metadata for the write operation, attached to the ToolMessage */
@@ -199,6 +204,11 @@ export interface EditResult {
    * State update dict for checkpoint backends, null for external storage.
    * Checkpoint backends populate this with {file_path: file_data} for LangGraph state.
    * External backends set null (already persisted to disk/S3/database/etc).
+   *
+   * @deprecated StateBackend now sends file updates internally via LangGraph's state
+   * channels. When using the new zero-arg `new StateBackend()` constructor, this field
+   * will be `undefined`. Callers should check for `filesUpdate` before wrapping in
+   * `Command`. This field will be removed in a future release.
    */
   filesUpdate?: Record<string, FileData> | null;
   /** Number of replacements made, undefined on failure */
@@ -500,6 +510,11 @@ export class SandboxError extends Error {
  * Different contexts build this differently:
  * - Tools: Extract state via getCurrentTaskInput(config)
  * - Middleware: Use request.state directly
+ *
+ * @deprecated Backends now read state and store from LangGraph's execution
+ * context automatically (via `getCurrentTaskInput()`, `getStore()`, and
+ * `getConfig()`). Pass backends as instances (`new StateBackend()`) instead
+ * of factories. This interface will be removed in a future release.
  */
 export interface StateAndStore {
   /** Current agent state with files, messages, etc. */
@@ -523,6 +538,11 @@ export type AnyBackendProtocol = BackendProtocolV1 | BackendProtocolV2;
  *
  * Backends receive StateAndStore which contains the current state
  * and optional store, extracted from the execution context.
+ *
+ * @depreacted Pass backend instances directly instead of factories. Backends
+ * now read state and store from LangGraph's execution context automatically.
+ * Use `new StateBackend()` or `new StoreBackend()` directly. This type will
+ * be removed in a future release.
  *
  * @example
  * ```typescript

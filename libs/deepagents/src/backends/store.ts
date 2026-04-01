@@ -2,7 +2,11 @@
  * StoreBackend: Adapter for LangGraph's BaseStore (persistent, cross-thread).
  */
 
-import type { Item } from "@langchain/langgraph";
+import {
+  Item,
+  getConfig,
+  getStore as getLangGraphStore,
+} from "@langchain/langgraph";
 import type {
   BackendOptions,
   BackendProtocolV2,
@@ -108,16 +112,37 @@ export interface StoreBackendOptions extends BackendOptions {
  * to legacy assistant_id-based isolation.
  */
 export class StoreBackend implements BackendProtocolV2 {
-  private stateAndStore: StateAndStore;
+  private legacyStateAndStore: StateAndStore | undefined;
   private _namespace: string[] | undefined;
   private fileFormat: "v1" | "v2";
 
-  constructor(stateAndStore: StateAndStore, options?: StoreBackendOptions) {
-    this.stateAndStore = stateAndStore;
-    if (options?.namespace) {
-      this._namespace = validateNamespace(options.namespace);
+  constructor(options?: StoreBackendOptions);
+  /**
+   * @deprecated Pass no `stateAndStore` argument
+   */
+  constructor(stateAndStore: StateAndStore, options?: StoreBackendOptions);
+  constructor(
+    stateAndStoreOrOptions?: StateAndStore | StoreBackendOptions,
+    options?: StoreBackendOptions,
+  ) {
+    let opts: StoreBackendOptions | undefined;
+    if (
+      stateAndStoreOrOptions != null &&
+      typeof stateAndStoreOrOptions === "object" &&
+      "state" in stateAndStoreOrOptions
+    ) {
+      // Legacy path
+      this.legacyStateAndStore = stateAndStoreOrOptions;
+      opts = options;
+    } else {
+      this.legacyStateAndStore = undefined;
+      opts = stateAndStoreOrOptions as StoreBackendOptions | undefined;
     }
-    this.fileFormat = options?.fileFormat ?? "v2";
+
+    if (opts?.namespace) {
+      this._namespace = validateNamespace(opts.namespace);
+    }
+    this.fileFormat = opts?.fileFormat ?? "v2";
   }
 
   /**
@@ -127,10 +152,21 @@ export class StoreBackend implements BackendProtocolV2 {
    * @throws Error if no store is available
    */
   private getStore() {
-    const store = this.stateAndStore.store;
-    if (!store) {
-      throw new Error("Store is required but not available in StateAndStore");
+    if (this.legacyStateAndStore) {
+      const store = this.legacyStateAndStore.store;
+      if (!store) {
+        throw new Error("Store is required but not available in stateAndStore");
+      }
+      return store;
     }
+
+    const store = getLangGraphStore();
+    if (!store) {
+      throw new Error(
+        "Store is required but not available in LangGraph execution context. Ensure the graph was configured with a store.",
+      );
+    }
+
     return store;
   }
 
@@ -147,10 +183,14 @@ export class StoreBackend implements BackendProtocolV2 {
     if (this._namespace) {
       return this._namespace;
     }
-    const assistantId = this.stateAndStore.assistantId;
-    if (assistantId) {
-      return [assistantId, "filesystem"];
+
+    if (this.legacyStateAndStore) {
+      const assistantId = this.legacyStateAndStore.assistantId;
+      if (assistantId) {
+        return [assistantId, "filesystem"];
+      }
     }
+
     return ["filesystem"];
   }
 

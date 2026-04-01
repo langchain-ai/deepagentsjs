@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { StateBackend } from "./state.js";
 import type { FileData, FileDataV1 } from "./protocol.js";
-import { getCurrentTaskInput, Command } from "@langchain/langgraph";
+import { getCurrentTaskInput, getConfig, Command } from "@langchain/langgraph";
 import { ToolMessage } from "@langchain/core/messages";
 
 vi.mock("@langchain/langgraph", async (importOriginal) => {
@@ -9,11 +9,12 @@ vi.mock("@langchain/langgraph", async (importOriginal) => {
   return {
     ...(actual as any),
     getCurrentTaskInput: vi.fn(),
+    getConfig: vi.fn(),
   };
 });
 
 /**
- * Helper to create a mock config with state
+ * Helper to create a mock config with state (legacy constructor path)
  */
 function makeConfig(files: Record<string, FileData> = {}) {
   const state = {
@@ -26,6 +27,25 @@ function makeConfig(files: Record<string, FileData> = {}) {
     stateAndStore: { state, store: undefined },
     config: {},
   };
+}
+
+/**
+ * Helper to create a mock config for the new zero-arg constructor path.
+ * Mocks getCurrentTaskInput + getConfig with a __pregel_send spy.
+ */
+function makeNewConfig(files: Record<string, FileData> = {}) {
+  const state = {
+    messages: [],
+    files,
+  };
+  const sendSpy = vi.fn();
+  vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+  vi.mocked(getConfig).mockReturnValue({
+    configurable: {
+      __pregel_send: sendSpy,
+    },
+  } as any);
+  return { state, sendSpy };
 }
 
 describe("StateBackend", () => {
@@ -676,6 +696,118 @@ describe("StateBackend", () => {
       for (const info of listing.files!) {
         expect(info.size).toBe(5);
       }
+    });
+  });
+
+  describe("new zero-arg constructor", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it("write sends update via __pregel_send (no filesUpdate on result)", () => {
+      const { state, sendSpy } = makeNewConfig();
+      const backend = new StateBackend();
+
+      const writeRes = backend.write("/notes.txt", "hello world");
+      expect(writeRes.error).toBeUndefined();
+      expect(writeRes.path).toBe("/notes.txt");
+      expect(writeRes.filesUpdate).toBeUndefined();
+
+      expect(sendSpy).toHaveBeenCalledTimes(1);
+      const sentUpdate = sendSpy.mock.calls[0][0];
+      expect(sentUpdate).toHaveLength(1);
+      expect(sentUpdate[0][0]).toBe("files");
+      expect(sentUpdate[0][1]["/notes.txt"]).toBeDefined();
+
+      // Apply update to state for subsequent reads
+      Object.assign(state.files, sentUpdate[0][1]);
+    });
+
+    it("edit sends update via __pregel_send", () => {
+      const { state, sendSpy } = makeNewConfig();
+      const backend = new StateBackend();
+
+      // Write first
+      backend.write("/notes.txt", "hello world");
+      Object.assign(state.files, sendSpy.mock.calls[0][0][0][1]);
+      sendSpy.mockClear();
+
+      const editRes = backend.edit("/notes.txt", "hello", "hi");
+      expect(editRes.error).toBeUndefined();
+      expect(editRes.path).toBe("/notes.txt");
+      expect(editRes.filesUpdate).toBeUndefined();
+      expect(editRes.occurrences).toBe(1);
+
+      expect(sendSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("uploadFiles sends updates via __pregel_send", () => {
+      const { sendSpy } = makeNewConfig();
+      const backend = new StateBackend();
+
+      const files: Array<[string, Uint8Array]> = [
+        ["/file1.txt", new TextEncoder().encode("content1")],
+        ["/file2.txt", new TextEncoder().encode("content2")],
+      ];
+
+      const result = backend.uploadFiles(files);
+      expect(result).toHaveLength(2);
+      expect(result[0].error).toBeNull();
+      expect(result[1].error).toBeNull();
+      expect((result as any).filesUpdate).toBeUndefined();
+
+      expect(sendSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("full CRUD cycle works (write -> read -> edit -> read -> ls -> grep -> glob)", () => {
+      const { state, sendSpy } = makeNewConfig();
+      const backend = new StateBackend();
+
+      // Write
+      backend.write("/notes.txt", "hello world");
+      Object.assign(state.files, sendSpy.mock.calls[0][0][0][1]);
+      sendSpy.mockClear();
+
+      // Read
+      const readRes = backend.read("/notes.txt");
+      expect(readRes.content).toContain("hello world");
+
+      // Edit
+      backend.edit("/notes.txt", "hello", "hi");
+      Object.assign(state.files, sendSpy.mock.calls[0][0][0][1]);
+      sendSpy.mockClear();
+
+      // Read after edit
+      const readRes2 = backend.read("/notes.txt");
+      expect(readRes2.content).toContain("hi world");
+
+      // Ls
+      const listing = backend.ls("/");
+      expect(listing.files!.some((fi) => fi.path === "/notes.txt")).toBe(true);
+
+      // Grep
+      const grepRes = backend.grep("hi", "/");
+      expect(grepRes.matches!.some((m) => m.path === "/notes.txt")).toBe(true);
+
+      // Glob
+      const globRes = backend.glob("*.txt", "/");
+      expect(globRes.files!.some((i) => i.path === "/notes.txt")).toBe(true);
+    });
+
+    it("should pass fileFormat option via zero-arg constructor", () => {
+      const { state, sendSpy } = makeNewConfig();
+      const backend = new StateBackend({ fileFormat: "v1" });
+
+      const writeRes = backend.write("/notes.txt", "line1\nline2");
+      expect(writeRes.error).toBeUndefined();
+
+      // Apply the sent update
+      const sentUpdate = sendSpy.mock.calls[0][0][0][1];
+      Object.assign(state.files, sentUpdate);
+
+      const fileData = state.files["/notes.txt"];
+      expect(Array.isArray(fileData.content)).toBe(true);
+      expect(fileData.content).toEqual(["line1", "line2"]);
     });
   });
 });
