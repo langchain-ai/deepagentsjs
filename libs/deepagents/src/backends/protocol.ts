@@ -17,7 +17,7 @@ import type {
   BackendProtocolV2,
   SandboxBackendProtocolV2,
 } from "./v2/protocol.js";
-import { adaptBackendProtocol, adaptSandboxProtocol } from "./utils.js";
+import { adaptBackendProtocol } from "./utils.js";
 
 export type {
   BackendProtocolV1,
