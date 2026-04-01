@@ -65,6 +65,7 @@ export class StateBackend implements BackendProtocolV2 {
       "state" in stateAndStoreOrOptions
     ) {
       // Legacy path: StateAndStore was passed
+      // eslint-disable-next-line no-console
       console.warn(
         "Passing `stateAndStore` to StateBackend is deprecated and will be " +
           "removed in a future version. StateBackend now reads and writes state via " +

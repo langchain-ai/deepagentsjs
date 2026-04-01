@@ -128,6 +128,7 @@ export class StoreBackend implements BackendProtocolV2 {
       "state" in stateAndStoreOrOptions
     ) {
       // Legacy path
+      // eslint-disable-next-line no-console
       console.warn(
         "Passing `stateAndStore` to StoreBackend is deprecated and will be " +
           "removed in a future version. StoreBackend now reads the store via " +
@@ -193,6 +194,7 @@ export class StoreBackend implements BackendProtocolV2 {
     }
 
     if (!this.legacyStateAndStore) {
+      // eslint-disable-next-line no-console
       console.warn(
         "StoreBackend without explicit `namespace` is deprecated and will be " +
           "removed in a future version. Pass `namespace` to StoreBackend, e.g. " +
