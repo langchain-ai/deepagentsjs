@@ -728,10 +728,14 @@ describe("StoreBackend", () => {
       expect(readRes2.content).toContain("hi store");
 
       const listing = await backend.ls("/docs/");
-      expect(listing.files!.some((i) => i.path === "/docs/readme.md")).toBe(true);
+      expect(listing.files!.some((i) => i.path === "/docs/readme.md")).toBe(
+        true,
+      );
 
       const grepRes = await backend.grep("hi", "/");
-      expect(grepRes.matches!.some((m) => m.path === "/docs/readme.md")).toBe(true);
+      expect(grepRes.matches!.some((m) => m.path === "/docs/readme.md")).toBe(
+        true,
+      );
 
       // Verify data landed in the store
       const items = await store.search(["filesystem"]);
