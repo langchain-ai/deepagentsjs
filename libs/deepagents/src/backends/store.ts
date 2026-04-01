@@ -17,7 +17,6 @@ import type {
   ReadRawResult,
   ReadResult,
   WriteResult,
-  StateAndStore,
   BackendRuntime,
 } from "./protocol.js";
 import {
