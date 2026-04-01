@@ -539,7 +539,7 @@ export type AnyBackendProtocol = BackendProtocolV1 | BackendProtocolV2;
  * Backends receive StateAndStore which contains the current state
  * and optional store, extracted from the execution context.
  *
- * @depreacted Pass backend instances directly instead of factories. Backends
+ * @deprecated Pass backend instances directly instead of factories. Backends
  * now read state and store from LangGraph's execution context automatically.
  * Use `new StateBackend()` or `new StoreBackend()` directly. This type will
  * be removed in a future release.
