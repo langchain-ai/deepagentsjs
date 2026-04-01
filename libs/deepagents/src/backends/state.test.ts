@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { StateBackend } from "./state.js";
 import type { FileData, FileDataV1 } from "./protocol.js";
 import { getCurrentTaskInput, getConfig, Command } from "@langchain/langgraph";
@@ -49,8 +49,17 @@ function makeNewConfig(files: Record<string, FileData> = {}) {
 }
 
 describe("StateBackend", () => {
+  let outerWarnSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    outerWarnSpy = vi
+      .spyOn(process, "emitWarning")
+      .mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    outerWarnSpy.mockRestore();
   });
 
   it("should write, read, edit, ls, grep, and glob", () => {
@@ -697,6 +706,35 @@ describe("StateBackend", () => {
       for (const info of listing.files!) {
         expect(info.size).toBe(5);
       }
+    });
+  });
+
+  describe("deprecation warnings", () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    it("emits warning for legacy constructor", () => {
+      const { stateAndStore } = makeConfig();
+      new StateBackend(stateAndStore);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "Passing `stateAndStore` to StateBackend is deprecated",
+        ),
+      );
+    });
+
+    it("does NOT emit warning for zero-arg constructor", () => {
+      new StateBackend();
+
+      expect(warnSpy).not.toHaveBeenCalled();
     });
   });
 

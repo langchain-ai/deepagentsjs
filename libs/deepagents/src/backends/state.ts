@@ -65,6 +65,11 @@ export class StateBackend implements BackendProtocolV2 {
       "state" in stateAndStoreOrOptions
     ) {
       // Legacy path: StateAndStore was passed
+      console.warn(
+        "Passing `stateAndStore` to StateBackend is deprecated and will be " +
+          "removed in a future version. StateBackend now reads and writes state via " +
+          "getCurrentTaskInput() and getConfig(). Use `new StateBackend()` instead.",
+      );
       this.legacyStateAndStore = stateAndStoreOrOptions;
       this.fileFormat = options?.fileFormat ?? "v2";
     } else {

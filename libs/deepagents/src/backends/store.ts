@@ -128,6 +128,11 @@ export class StoreBackend implements BackendProtocolV2 {
       "state" in stateAndStoreOrOptions
     ) {
       // Legacy path
+      console.warn(
+        "Passing `stateAndStore` to StoreBackend is deprecated and will be " +
+          "removed in a future version. StoreBackend now reads the store via " +
+          "getStore(). Use `new StoreBackend()` instead.",
+      );
       this.legacyStateAndStore = stateAndStoreOrOptions;
       opts = options;
     } else {
@@ -185,6 +190,14 @@ export class StoreBackend implements BackendProtocolV2 {
       if (assistantId) {
         return [assistantId, "filesystem"];
       }
+    }
+
+    if (!this.legacyStateAndStore) {
+      console.warn(
+        "StoreBackend without explicit `namespace` is deprecated and will be " +
+          "removed in a future version. Pass `namespace` to StoreBackend, e.g. " +
+          '`new StoreBackend({ namespace: ["memories", userId, "filesystem"] })`.',
+      );
     }
 
     return ["filesystem"];

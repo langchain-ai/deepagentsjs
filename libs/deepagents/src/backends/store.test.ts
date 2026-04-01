@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { StoreBackend } from "./store.js";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 import { getStore as getLangGraphStore } from "@langchain/langgraph";
@@ -29,6 +29,18 @@ function makeConfig() {
 }
 
 describe("StoreBackend", () => {
+  let outerWarnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    outerWarnSpy = vi
+      .spyOn(process, "emitWarning")
+      .mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    outerWarnSpy.mockRestore();
+  });
+
   it("should handle CRUD and search operations", async () => {
     const { stateAndStore } = makeConfig();
     const backend = new StoreBackend(stateAndStore);
@@ -694,6 +706,66 @@ describe("StoreBackend", () => {
       for (const info of listing.files!) {
         expect(info.size).toBe(5);
       }
+    });
+  });
+
+  describe("deprecation warnings", () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    it("emits warning for legacy constructor", () => {
+      const { stateAndStore } = makeConfig();
+      new StoreBackend(stateAndStore);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "Passing `stateAndStore` to StoreBackend is deprecated",
+        ),
+      );
+    });
+
+    it("does NOT emit warning for zero-arg constructor", () => {
+      new StoreBackend();
+
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it("emits namespace warning for zero-arg without namespace", async () => {
+      const store = new InMemoryStore();
+      vi.mocked(getLangGraphStore).mockReturnValue(store);
+      const backend = new StoreBackend();
+
+      await backend.write("/test.txt", "content");
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "StoreBackend without explicit `namespace` is deprecated",
+        ),
+      );
+    });
+
+    it("does NOT emit namespace warning when namespace provided", async () => {
+      const store = new InMemoryStore();
+      vi.mocked(getLangGraphStore).mockReturnValue(store);
+      const backend = new StoreBackend({
+        namespace: ["test", "filesystem"],
+      });
+
+      await backend.write("/test.txt", "content");
+
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining(
+          "StoreBackend without explicit `namespace` is deprecated",
+        ),
+        expect.anything(),
+      );
     });
   });
 

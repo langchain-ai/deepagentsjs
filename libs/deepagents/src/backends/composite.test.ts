@@ -3,9 +3,13 @@ import * as fsSync from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
-import { getCurrentTaskInput } from "@langchain/langgraph";
+import {
+  getCurrentTaskInput,
+  getConfig,
+  getStore as getLangGraphStore,
+} from "@langchain/langgraph";
 
 import { CompositeBackend } from "./composite.js";
 import { StateBackend } from "./state.js";
@@ -83,6 +87,8 @@ vi.mock("@langchain/langgraph", async (importOriginal) => {
   return {
     ...(actual as any),
     getCurrentTaskInput: vi.fn(),
+    getConfig: vi.fn(),
+    getStore: vi.fn(),
   };
 });
 
@@ -138,8 +144,15 @@ function makeConfig() {
 }
 
 describe("CompositeBackend", () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
   });
 
   it("should route operations between StateBackend and StoreBackend", async () => {
@@ -816,6 +829,203 @@ describe("CompositeBackend", () => {
       expect(result[0].error).toBeNull();
       expect(result[1].error).toBe("file_not_found");
       expect(result[2].error).toBe("file_not_found");
+    });
+  });
+
+  describe("new zero-arg constructor", () => {
+    let warnSpy: ReturnType<typeof vi.spyOn>;
+
+    /**
+     * Helper that mocks getCurrentTaskInput, getConfig (with __pregel_send),
+     * and getStore for zero-arg StateBackend + StoreBackend usage.
+     */
+    function makeNewCompositeConfig() {
+      const state = { messages: [], files: {} as Record<string, any> };
+      const sendSpy = vi.fn();
+      const store = new InMemoryStore();
+
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+      vi.mocked(getConfig).mockReturnValue({
+        configurable: { __pregel_send: sendSpy },
+      } as any);
+      vi.mocked(getLangGraphStore).mockReturnValue(store);
+
+      return { state, sendSpy, store };
+    }
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    it("should route operations between zero-arg StateBackend and StoreBackend", async () => {
+      const { state, sendSpy } = makeNewCompositeConfig();
+
+      const composite = new CompositeBackend(new StateBackend(), {
+        "/memories/": new StoreBackend({
+          namespace: ["test", "filesystem"],
+        }),
+      });
+
+      // Write to state route — filesUpdate undefined, sendSpy called
+      const stateRes = await composite.write("/file.txt", "alpha");
+      expect(stateRes.error).toBeUndefined();
+      expect(stateRes.filesUpdate).toBeUndefined();
+      expect(sendSpy).toHaveBeenCalledTimes(1);
+
+      // Apply state update for reads
+      Object.assign(state.files, sendSpy.mock.calls[0][0][0][1]);
+      sendSpy.mockClear();
+
+      // Write to store route — filesUpdate null, sendSpy not called
+      const storeRes = await composite.write("/memories/readme.md", "beta");
+      expect(storeRes.error).toBeUndefined();
+      expect(storeRes.filesUpdate).toBeNull();
+      expect(sendSpy).not.toHaveBeenCalled();
+
+      // Read back from both
+      const readState = await composite.read("/file.txt");
+      expect(readState.content).toContain("alpha");
+
+      const readStore = await composite.read("/memories/readme.md");
+      expect(readStore.content).toContain("beta");
+    });
+
+    it("should aggregate ls across zero-arg backends", async () => {
+      const { state, sendSpy } = makeNewCompositeConfig();
+
+      const composite = new CompositeBackend(new StateBackend(), {
+        "/memories/": new StoreBackend({
+          namespace: ["test", "filesystem"],
+        }),
+      });
+
+      // Write to state
+      await composite.write("/file.txt", "state content");
+      Object.assign(state.files, sendSpy.mock.calls[0][0][0][1]);
+      sendSpy.mockClear();
+
+      // Write to store
+      await composite.write("/memories/note.md", "store content");
+
+      const lsResult = await composite.ls("/");
+      expect(lsResult.error).toBeUndefined();
+      const paths = lsResult.files!.map((i) => i.path);
+      expect(paths).toContain("/file.txt");
+      expect(paths).toContain("/memories/");
+    });
+
+    it("should grep and glob across zero-arg backends", async () => {
+      const { state, sendSpy } = makeNewCompositeConfig();
+
+      const composite = new CompositeBackend(new StateBackend(), {
+        "/memories/": new StoreBackend({
+          namespace: ["test", "filesystem"],
+        }),
+      });
+
+      await composite.write("/code.py", "import os");
+      Object.assign(state.files, sendSpy.mock.calls[0][0][0][1]);
+      sendSpy.mockClear();
+
+      await composite.write("/memories/note.py", "import sys");
+
+      const grepRes = await composite.grep("import", "/");
+      expect(grepRes.error).toBeUndefined();
+      const grepPaths = grepRes.matches!.map((m) => m.path);
+      expect(grepPaths).toContain("/code.py");
+      expect(grepPaths).toContain("/memories/note.py");
+
+      const globRes = await composite.glob("**/*.py", "/");
+      expect(globRes.error).toBeUndefined();
+      const globPaths = globRes.files!.map((i) => i.path);
+      expect(globPaths).toContain("/code.py");
+      expect(globPaths).toContain("/memories/note.py");
+    });
+
+    it("should edit with correct filesUpdate semantics", async () => {
+      const { state, sendSpy } = makeNewCompositeConfig();
+
+      const composite = new CompositeBackend(new StateBackend(), {
+        "/memories/": new StoreBackend({
+          namespace: ["test", "filesystem"],
+        }),
+      });
+
+      // Write to both
+      await composite.write("/file.txt", "hello world");
+      Object.assign(state.files, sendSpy.mock.calls[0][0][0][1]);
+      sendSpy.mockClear();
+
+      await composite.write("/memories/note.md", "hello store");
+
+      // Edit state file — filesUpdate undefined, sendSpy called
+      const editState = await composite.edit("/file.txt", "hello", "hi");
+      expect(editState.error).toBeUndefined();
+      expect(editState.filesUpdate).toBeUndefined();
+      expect(sendSpy).toHaveBeenCalledTimes(1);
+      Object.assign(state.files, sendSpy.mock.calls[0][0][0][1]);
+      sendSpy.mockClear();
+
+      // Edit store file — filesUpdate null, sendSpy not called
+      const editStore = await composite.edit(
+        "/memories/note.md",
+        "hello",
+        "hi",
+      );
+      expect(editStore.error).toBeUndefined();
+      expect(editStore.filesUpdate).toBeNull();
+      expect(sendSpy).not.toHaveBeenCalled();
+
+      // Verify content
+      const readState = await composite.read("/file.txt");
+      expect(readState.content).toContain("hi world");
+
+      const readStore = await composite.read("/memories/note.md");
+      expect(readStore.content).toContain("hi store");
+    });
+
+    it("should uploadFiles/downloadFiles across zero-arg backends", async () => {
+      const { state, sendSpy } = makeNewCompositeConfig();
+
+      const composite = new CompositeBackend(new StateBackend(), {
+        "/memories/": new StoreBackend({
+          namespace: ["test", "filesystem"],
+        }),
+      });
+
+      const files: Array<[string, Uint8Array]> = [
+        ["/local.txt", new TextEncoder().encode("local content")],
+        ["/memories/remote.txt", new TextEncoder().encode("remote content")],
+      ];
+
+      const uploadRes = await composite.uploadFiles(files);
+      expect(uploadRes).toHaveLength(2);
+      expect(uploadRes[0].error).toBeNull();
+      expect(uploadRes[1].error).toBeNull();
+
+      // Apply state updates from upload
+      if (sendSpy.mock.calls.length > 0) {
+        Object.assign(state.files, sendSpy.mock.calls[0][0][0][1]);
+      }
+
+      const downloadRes = await composite.downloadFiles([
+        "/local.txt",
+        "/memories/remote.txt",
+      ]);
+      expect(downloadRes).toHaveLength(2);
+      expect(downloadRes[0].error).toBeNull();
+      expect(new TextDecoder().decode(downloadRes[0].content!)).toBe(
+        "local content",
+      );
+      expect(downloadRes[1].error).toBeNull();
+      expect(new TextDecoder().decode(downloadRes[1].content!)).toBe(
+        "remote content",
+      );
     });
   });
 });
