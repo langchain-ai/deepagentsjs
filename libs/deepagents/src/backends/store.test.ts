@@ -1,7 +1,16 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { StoreBackend } from "./store.js";
 import type { BackendRuntime } from "./protocol.js";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
+import { getStore as getLangGraphStore } from "@langchain/langgraph";
+
+vi.mock("@langchain/langgraph", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...(actual as any),
+    getStore: vi.fn(),
+  };
+});
 
 /**
  * Helper to create a mock config with InMemoryStore
@@ -21,6 +30,10 @@ function makeConfig() {
 }
 
 describe("StoreBackend", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("should handle CRUD and search operations", async () => {
     const { runtime } = makeConfig();
     const backend = new StoreBackend(runtime);
@@ -686,6 +699,124 @@ describe("StoreBackend", () => {
       for (const info of listing.files!) {
         expect(info.size).toBe(5);
       }
+    });
+  });
+
+  describe("zero-arg constructor", () => {
+    /**
+     * Helper to set up a zero-arg StoreBackend with a mocked getStore.
+     */
+    function makeZeroArgConfig() {
+      const store = new InMemoryStore();
+      vi.mocked(getLangGraphStore).mockReturnValue(store);
+      return { store };
+    }
+
+    it("CRUD via getStore() from execution context", async () => {
+      const { store } = makeZeroArgConfig();
+      const backend = new StoreBackend({
+        namespace: ["test", "filesystem"],
+      });
+
+      // Write
+      const writeRes = await backend.write("/readme.md", "hello store");
+      expect(writeRes.error).toBeUndefined();
+      expect(writeRes.path).toBe("/readme.md");
+      expect(writeRes.filesUpdate).toBeNull();
+
+      // Read
+      const readRes = await backend.read("/readme.md");
+      expect(readRes.error).toBeUndefined();
+      expect(readRes.content).toContain("hello store");
+
+      // Edit
+      const editRes = await backend.edit("/readme.md", "hello", "hi");
+      expect(editRes.error).toBeUndefined();
+      expect(editRes.occurrences).toBe(1);
+
+      const readRes2 = await backend.read("/readme.md");
+      expect(readRes2.content).toContain("hi store");
+
+      // Ls
+      const listing = await backend.ls("/");
+      expect(listing.files!.some((fi) => fi.path === "/readme.md")).toBe(true);
+
+      // Grep
+      const grepRes = await backend.grep("hi", "/");
+      expect(grepRes.matches!.some((m) => m.path === "/readme.md")).toBe(true);
+
+      // Glob
+      const globRes = await backend.glob("**/*.md", "/");
+      expect(globRes.files!.some((i) => i.path === "/readme.md")).toBe(true);
+
+      // Verify data is in the store at the correct namespace
+      const items = await store.search(["test", "filesystem"]);
+      expect(items.some((item) => item.key === "/readme.md")).toBe(true);
+    });
+
+    it("uses custom namespace", async () => {
+      const { store } = makeZeroArgConfig();
+      const backend = new StoreBackend({
+        namespace: ["org-1", "user-a", "filesystem"],
+      });
+
+      await backend.write("/test.txt", "namespaced content");
+
+      const items = await store.search(["org-1", "user-a", "filesystem"]);
+      expect(items.some((item) => item.key === "/test.txt")).toBe(true);
+
+      const defaultItems = await store.search(["filesystem"]);
+      expect(defaultItems.some((item) => item.key === "/test.txt")).toBe(false);
+    });
+
+    it("falls back to ['filesystem'] namespace without explicit namespace", async () => {
+      makeZeroArgConfig();
+      const backend = new StoreBackend();
+
+      await backend.write("/test.txt", "default ns");
+
+      const readRes = await backend.read("/test.txt");
+      expect(readRes.content).toContain("default ns");
+    });
+
+    it("throws when no store is available in execution context", () => {
+      vi.mocked(getLangGraphStore).mockReturnValue(undefined as any);
+      const backend = new StoreBackend({
+        namespace: ["test", "filesystem"],
+      });
+
+      expect(() => backend["getStore"]()).toThrow(
+        "Store is required but not available in LangGraph execution context",
+      );
+    });
+
+    it("upload and download files", async () => {
+      makeZeroArgConfig();
+      const backend = new StoreBackend({
+        namespace: ["test", "filesystem"],
+      });
+
+      const files: Array<[string, Uint8Array]> = [
+        ["/file1.txt", new TextEncoder().encode("content1")],
+        ["/file2.txt", new TextEncoder().encode("content2")],
+      ];
+
+      const uploadRes = await backend.uploadFiles(files);
+      expect(uploadRes).toHaveLength(2);
+      expect(uploadRes[0].error).toBeNull();
+      expect(uploadRes[1].error).toBeNull();
+
+      const downloadRes = await backend.downloadFiles([
+        "/file1.txt",
+        "/file2.txt",
+      ]);
+      expect(downloadRes).toHaveLength(2);
+      expect(new TextDecoder().decode(downloadRes[0].content!)).toBe(
+        "content1",
+      );
+      expect(new TextDecoder().decode(downloadRes[1].content!)).toBe(
+        "content2",
+      );
     });
   });
 });

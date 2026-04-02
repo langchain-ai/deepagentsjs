@@ -31,6 +31,9 @@ import {
   performStringReplacement,
   updateFileData,
 } from "./utils.js";
+import { getConfig, getCurrentTaskInput } from "@langchain/langgraph";
+
+const PREGEL_SEND_KEY = "__pregel_send";
 
 /**
  * Backend that stores files in agent state (ephemeral).
@@ -44,20 +47,82 @@ import {
  * for the middleware to apply via Command.
  */
 export class StateBackend implements BackendProtocolV2 {
-  private runtime: BackendRuntime;
+  private runtime: BackendRuntime | undefined;
   private fileFormat: "v1" | "v2";
 
-  constructor(runtime: BackendRuntime, options?: BackendOptions) {
-    this.runtime = runtime;
-    this.fileFormat = options?.fileFormat ?? "v2";
+  constructor(options?: BackendOptions);
+  /**
+   * @deprecated Pass no `runtime` argument
+   */
+  constructor(runtime: BackendRuntime, options?: BackendOptions);
+  constructor(
+    runtimeOrOptions?: BackendRuntime | BackendOptions,
+    options?: BackendOptions,
+  ) {
+    if (
+      runtimeOrOptions != null &&
+      typeof runtimeOrOptions === "object" &&
+      "state" in runtimeOrOptions
+    ) {
+      // Legacy path: BackendRuntime was passed
+      this.runtime = runtimeOrOptions;
+      this.fileFormat = options?.fileFormat ?? "v2";
+    } else {
+      // New path: zero-arg or options-only
+      this.runtime = undefined;
+      this.fileFormat = runtimeOrOptions?.fileFormat ?? "v2";
+    }
+  }
+
+  /**
+   * Whether this instance was constructed with the legacy factory pattern.
+   *
+   * When true, state is read from the injected `runtime` and `filesUpdate`
+   * is returned to the caller. When false, state is read from LangGraph's
+   * execution context and updates are sent via `__pregel_send`.
+   */
+  private get isLegacy(): boolean {
+    return this.runtime !== undefined;
   }
 
   /**
    * Get files from current state.
+   *
+   * In legacy mode, reads from the injected {@link BackendRuntime}.
+   * In zero-arg mode, reads from the LangGraph execution context via
+   * {@link getCurrentTaskInput}.
    */
   private getFiles(): Record<string, FileData> {
-    const state = this.runtime.state as { files: Record<string, FileData> };
-    return state.files || {};
+    if (this.runtime) {
+      const state = this.runtime.state as { files?: Record<string, FileData> };
+      return state.files || {};
+    }
+
+    const state = getCurrentTaskInput<{ files?: Record<string, FileData> }>();
+    return state?.files || {};
+  }
+
+  /**
+   * Push a files state update through LangGraph's internal send channel.
+   *
+   * In zero-arg mode, sends the update via the `__pregel_send` function
+   * from {@link getConfig}, mirroring Python's `CONFIG_KEY_SEND`.
+   * In legacy mode, this is a no-op — the caller uses `filesUpdate`
+   * from the return value instead.
+   *
+   * @param update - Map of file paths to their updated {@link FileData}
+   */
+  private sendFilesUpdate(update: Record<string, FileData>): void {
+    if (this.isLegacy) {
+      return;
+    }
+
+    const config = getConfig();
+    const send = config.configurable?.[PREGEL_SEND_KEY];
+
+    if (typeof send === "function") {
+      send([["files", update]]);
+    }
   }
 
   /**
@@ -193,6 +258,13 @@ export class StateBackend implements BackendProtocolV2 {
       this.fileFormat,
       mimeType,
     );
+    const update = { [filePath]: newFileData };
+
+    if (!this.isLegacy) {
+      this.sendFilesUpdate(update);
+      return { path: filePath };
+    }
+
     return {
       path: filePath,
       filesUpdate: { [filePath]: newFileData },
@@ -230,6 +302,13 @@ export class StateBackend implements BackendProtocolV2 {
 
     const [newContent, occurrences] = result;
     const newFileData = updateFileData(fileData, newContent);
+    const update = { [filePath]: newFileData };
+
+    if (!this.isLegacy) {
+      this.sendFilesUpdate(update);
+      return { path: filePath, occurrences };
+    }
+
     return {
       path: filePath,
       filesUpdate: { [filePath]: newFileData },
@@ -318,6 +397,16 @@ export class StateBackend implements BackendProtocolV2 {
       } catch {
         responses.push({ path, error: "invalid_path" });
       }
+    }
+
+    if (!this.isLegacy) {
+      if (Object.keys(updates).length > 0) {
+        this.sendFilesUpdate(updates);
+      }
+
+      return responses as FileUploadResponse[] & {
+        filesUpdate?: Record<string, FileData>;
+      };
     }
 
     // Attach filesUpdate for the caller to apply via Command

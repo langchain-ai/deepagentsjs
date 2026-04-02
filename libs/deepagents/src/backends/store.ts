@@ -2,7 +2,7 @@
  * StoreBackend: Adapter for LangGraph's BaseStore (persistent, cross-thread).
  */
 
-import type { Item } from "@langchain/langgraph";
+import { Item, getStore as getLangGraphStore } from "@langchain/langgraph";
 import type {
   BackendOptions,
   BackendProtocolV2,
@@ -108,49 +108,91 @@ export interface StoreBackendOptions extends BackendOptions {
  * to legacy assistant_id-based isolation.
  */
 export class StoreBackend implements BackendProtocolV2 {
-  private stateAndStore: StateAndStore;
+  private stateAndStore: StateAndStore | undefined;
   private _namespace: string[] | undefined;
   private fileFormat: "v1" | "v2";
 
-  constructor(stateAndStore: StateAndStore, options?: StoreBackendOptions) {
-    this.stateAndStore = stateAndStore;
-    if (options?.namespace) {
-      this._namespace = validateNamespace(options.namespace);
+  constructor(options?: StoreBackendOptions);
+  /**
+   * @deprecated Pass no `stateAndStore` argument
+   */
+  constructor(stateAndStore: StateAndStore, options?: StoreBackendOptions);
+  constructor(
+    stateAndStoreOrOptions?: StateAndStore | StoreBackendOptions,
+    options?: StoreBackendOptions,
+  ) {
+    let opts: StoreBackendOptions | undefined;
+    if (
+      stateAndStoreOrOptions != null &&
+      typeof stateAndStoreOrOptions === "object" &&
+      "state" in stateAndStoreOrOptions
+    ) {
+      // Legacy path
+      this.stateAndStore = stateAndStoreOrOptions;
+      opts = options;
+    } else {
+      this.stateAndStore = undefined;
+      opts = stateAndStoreOrOptions;
     }
-    this.fileFormat = options?.fileFormat ?? "v2";
+
+    if (opts?.namespace) {
+      this._namespace = validateNamespace(opts.namespace);
+    }
+    this.fileFormat = opts?.fileFormat ?? "v2";
   }
 
   /**
-   * Get the store instance.
+   * Get the BaseStore instance for persistent storage operations.
+   *
+   * In legacy mode, reads from the injected {@link StateAndStore}.
+   * In zero-arg mode, retrieves the store from the LangGraph execution
+   * context via {@link getLangGraphStore}.
    *
    * @returns BaseStore instance
-   * @throws Error if no store is available
+   * @throws Error if no store is available in either mode
    */
   private getStore() {
-    const store = this.stateAndStore.store;
-    if (!store) {
-      throw new Error("Store is required but not available in runtime");
+    if (this.stateAndStore) {
+      const store = this.stateAndStore.store;
+      if (!store) {
+        throw new Error("Store is required but not available in runtime");
+      }
+      return store;
     }
+
+    const store = getLangGraphStore();
+    if (!store) {
+      throw new Error(
+        "Store is required but not available in LangGraph execution context. " +
+          "Ensure the graph was configured with a store.",
+      );
+    }
+
     return store;
   }
 
   /**
    * Get the namespace for store operations.
    *
-   * If a custom namespace was provided, returns it directly.
-   *
-   * Otherwise, falls back to legacy behavior:
-   * - If assistantId is set: [assistantId, "filesystem"]
-   * - Otherwise: ["filesystem"]
+   * Resolution order:
+   * 1. Explicit namespace from constructor options (both modes)
+   * 2. Legacy mode: `[assistantId, "filesystem"]` fallback from {@link StateAndStore}
+   * 3. Zero-arg mode without namespace: `["filesystem"]` with a deprecation warning
+   *    nudging callers to pass an explicit namespace
+   * 4. Legacy mode without assistantId: `["filesystem"]`
    */
   protected getNamespace(): string[] {
     if (this._namespace) {
       return this._namespace;
     }
-    const assistantId = this.stateAndStore.assistantId;
-    if (assistantId) {
-      return [assistantId, "filesystem"];
+
+    if (this.stateAndStore) {
+      const assistantId = this.stateAndStore.assistantId;
+      if (assistantId) {
+        return [assistantId, "filesystem"];
+      }
     }
+
     return ["filesystem"];
   }
 
