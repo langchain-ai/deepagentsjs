@@ -773,15 +773,10 @@ describe("StoreBackend", () => {
       makeZeroArgConfig();
       const backend = new StoreBackend();
 
-      // Suppress the deprecation warning for this test
-      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
       await backend.write("/test.txt", "default ns");
 
       const readRes = await backend.read("/test.txt");
       expect(readRes.content).toContain("default ns");
-
-      warnSpy.mockRestore();
     });
 
     it("throws when no store is available in execution context", () => {
