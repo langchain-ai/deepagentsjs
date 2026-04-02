@@ -53,7 +53,7 @@
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,mjs,cjs}": "pnpm run lint",
-    "*": "pnpm run fmt --no-error-on-unmatched-pattern"
+    "*": "pnpm run format --no-error-on-unmatched-pattern"
   },
   "packageManager": "pnpm@10.29.2",
   "pnpm": {
