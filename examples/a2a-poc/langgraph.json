@@ -1,0 +1,7 @@
+{
+  "dependencies": ["./package.json"],
+  "graphs": {
+    "supervisor": "./supervisor.ts:graph"
+  },
+  "env": ".env"
+}

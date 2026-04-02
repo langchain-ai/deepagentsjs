@@ -1,5 +1,6 @@
 import { Command, ReducedValue, StateSchema } from "@langchain/langgraph";
 import { Client, type DefaultValues, type Run } from "@langchain/langgraph-sdk";
+import { randomUUID } from "node:crypto";
 import {
   createMiddleware,
   tool,
@@ -38,6 +39,12 @@ export interface AsyncSubAgent {
 
   /** Additional headers to include in requests to the server (e.g. for custom auth). */
   headers?: Record<string, string>;
+
+  /**
+   * The backend protocol to use for communicating with the remote server.
+   * Defaults to `"langsmith"` (LangGraph SDK).
+   */
+  backend?: "langsmith" | "a2a";
 }
 
 /**
@@ -293,49 +300,6 @@ function resolveTrackedTask(
 }
 
 /**
- * Build a check result from a run's current status and thread state values.
- *
- * For successful runs, extracts the last message's content from the remote
- * thread's state values. For errored runs, includes a generic error message.
- *
- * @param run - The run object from the SDK.
- * @param threadId - The thread ID for the run.
- * @param threadValues - The `values` from `ThreadState` (the remote subagent's state).
- */
-function buildCheckResult(
-  run: Run,
-  threadId: string,
-  threadValues: DefaultValues,
-): CheckResult {
-  const checkResult: CheckResult = {
-    status: run.status as AsyncTaskStatus,
-    threadId,
-  };
-
-  if (run.status === "success") {
-    const values = Array.isArray(threadValues) ? {} : threadValues;
-    const messages = (values?.messages ?? []) as unknown[];
-    if (messages.length > 0) {
-      const last = messages[messages.length - 1];
-      const rawContent =
-        typeof last === "object" && last !== null && "content" in last
-          ? (last as Record<string, unknown>).content
-          : last;
-      checkResult.result =
-        typeof rawContent === "string"
-          ? rawContent
-          : JSON.stringify(rawContent);
-    } else {
-      checkResult.result = "Completed with no output messages.";
-    }
-  } else if (run.status === "error") {
-    checkResult.error = "The async subagent encountered an error.";
-  }
-
-  return checkResult;
-}
-
-/**
  * Filter tasks by cached status from agent state.
  *
  * Filtering uses the cached status, not live server status. Live statuses
@@ -362,7 +326,7 @@ function filterTasks(
  * unnecessary API calls). Falls back to the cached status on SDK errors.
  */
 async function fetchLiveTaskStatus(
-  clients: ClientCache,
+  registry: BackendRegistry,
   task: AsyncTask,
 ): Promise<AsyncTaskStatus> {
   if (TERMINAL_STATUSES.has(task.status)) {
@@ -370,9 +334,8 @@ async function fetchLiveTaskStatus(
   }
 
   try {
-    const client = clients.getClient(task.agentName);
-    const run = await client.runs.get(task.threadId, task.runId);
-    return run.status as AsyncTaskStatus;
+    const backend = registry.getBackend(task.agentName);
+    return await backend.getLiveStatus(task);
   } catch {
     return task.status;
   }
@@ -444,6 +407,309 @@ export class ClientCache {
   }
 }
 
+// ─── Backend abstraction ─────────────────────────────────────────────────────
+
+interface StartTaskResult {
+  taskId: string;
+  threadId: string;
+  runId: string;
+}
+
+interface GetTaskResult {
+  status: AsyncTaskStatus;
+  result?: string;
+  error?: string;
+}
+
+export interface AsyncSubAgentBackend {
+  startTask(
+    description: string,
+    callbackContext: Record<string, string>,
+  ): Promise<StartTaskResult>;
+  getTask(task: AsyncTask): Promise<GetTaskResult>;
+  cancelTask(task: AsyncTask): Promise<void>;
+  updateTask(task: AsyncTask, message: string): Promise<string>; // returns new runId
+  getLiveStatus(task: AsyncTask): Promise<AsyncTaskStatus>;
+}
+
+export class LangSmithBackend implements AsyncSubAgentBackend {
+  constructor(
+    private spec: AsyncSubAgent,
+    private client: Client,
+  ) {}
+
+  async startTask(
+    description: string,
+    callbackContext: Record<string, string>,
+  ): Promise<StartTaskResult> {
+    const thread = await this.client.threads.create();
+    const run = await this.client.runs.create(
+      thread.thread_id,
+      this.spec.graphId,
+      {
+        input: {
+          messages: [{ role: "user", content: description }],
+          ...callbackContext,
+        },
+      },
+    );
+    return {
+      taskId: thread.thread_id,
+      threadId: thread.thread_id,
+      runId: run.run_id,
+    };
+  }
+
+  async getTask(task: AsyncTask): Promise<GetTaskResult> {
+    const run = await this.client.runs.get(task.threadId, task.runId);
+
+    if (run.status === "success") {
+      let result = "Completed with no output messages.";
+      try {
+        const threadState = await this.client.threads.getState(task.threadId);
+        const values = (threadState.values as DefaultValues) ?? {};
+        const messages = (
+          Array.isArray(values) ? [] : ((values as Record<string, unknown>).messages ?? [])
+        ) as unknown[];
+        if (messages.length > 0) {
+          const last = messages[messages.length - 1];
+          const rawContent =
+            typeof last === "object" && last !== null && "content" in last
+              ? (last as Record<string, unknown>).content
+              : last;
+          result =
+            typeof rawContent === "string"
+              ? rawContent
+              : JSON.stringify(rawContent);
+        }
+      } catch {
+        // Thread state fetch failed — still report success without output
+      }
+      return { status: "success", result };
+    }
+
+    if (run.status === "error") {
+      return { status: "error", error: "The async subagent encountered an error." };
+    }
+
+    return { status: run.status as AsyncTaskStatus };
+  }
+
+  async cancelTask(task: AsyncTask): Promise<void> {
+    await this.client.runs.cancel(task.threadId, task.runId);
+  }
+
+  async updateTask(task: AsyncTask, message: string): Promise<string> {
+    const run = await this.client.runs.create(task.threadId, this.spec.graphId, {
+      input: { messages: [{ role: "user", content: message }] },
+      multitaskStrategy: "interrupt",
+    });
+    return run.run_id;
+  }
+
+  async getLiveStatus(task: AsyncTask): Promise<AsyncTaskStatus> {
+    const run = await this.client.runs.get(task.threadId, task.runId);
+    return run.status as AsyncTaskStatus;
+  }
+}
+
+interface A2ATask {
+  id: string;
+  contextId: string;
+  status: {
+    state: string;
+    message?: { parts?: Array<{ kind: string; text?: string }> };
+  };
+  artifacts?: Array<{ parts?: Array<{ kind: string; text?: string }> }>;
+}
+
+function mapA2AState(state: string): AsyncTaskStatus {
+  switch (state) {
+    case "completed":
+      return "success";
+    case "failed":
+    case "rejected":
+      return "error";
+    case "canceled":
+      return "cancelled";
+    case "input-required":
+    case "auth-required":
+      return "interrupted";
+    default:
+      return "running";
+  }
+}
+
+function extractA2AResult(task: A2ATask): string | undefined {
+  const msgParts = task.status.message?.parts ?? [];
+  const fromMsg = msgParts
+    .filter((p) => p.kind === "text" && p.text)
+    .map((p) => p.text!)
+    .join("\n");
+  if (fromMsg) return fromMsg;
+
+  const artifactParts = task.artifacts?.[0]?.parts ?? [];
+  const fromArtifact = artifactParts
+    .filter((p) => p.kind === "text" && p.text)
+    .map((p) => p.text!)
+    .join("\n");
+  return fromArtifact || undefined;
+}
+
+class A2ABackend implements AsyncSubAgentBackend {
+  constructor(private spec: AsyncSubAgent) {}
+
+  private async rpc<T>(method: string, params: unknown): Promise<T> {
+    const url = (this.spec.url ?? "http://localhost:10000").replace(/\/$/, "");
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(this.spec.headers ?? {}),
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: randomUUID(),
+        method,
+        params,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`A2A HTTP error: ${response.status} ${response.statusText}`);
+    }
+    const data = (await response.json()) as {
+      result?: T;
+      error?: { code: number; message: string };
+    };
+    if (data.error) {
+      throw new Error(`A2A error ${data.error.code}: ${data.error.message}`);
+    }
+    return data.result as T;
+  }
+
+  async startTask(
+    description: string,
+    _callbackContext: Record<string, string>,
+  ): Promise<StartTaskResult> {
+    const contextId = randomUUID();
+    const task = await this.rpc<A2ATask>("message/send", {
+      message: {
+        kind: "message",
+        messageId: randomUUID(),
+        contextId,
+        role: "user",
+        parts: [{ kind: "text", text: description }],
+      },
+      // `blocking: false` = fire-and-forget (a2a-sdk uses this, not `returnImmediately`)
+      configuration: { blocking: false },
+    });
+    // taskId = contextId (stable across updates), runId = A2A task ID (changes per run)
+    return { taskId: contextId, threadId: contextId, runId: task.id };
+  }
+
+  async getTask(task: AsyncTask): Promise<GetTaskResult> {
+    const a2aTask = await this.rpc<A2ATask>("tasks/get", { id: task.runId });
+    const status = mapA2AState(a2aTask.status.state);
+
+    if (status === "success") {
+      const result = extractA2AResult(a2aTask) ?? "Completed with no output.";
+      return { status, result };
+    }
+
+    if (status === "error") {
+      return { status, error: "The async subagent encountered an error." };
+    }
+
+    return { status };
+  }
+
+  async cancelTask(task: AsyncTask): Promise<void> {
+    await this.rpc("tasks/cancel", { id: task.runId });
+  }
+
+  async updateTask(task: AsyncTask, message: string): Promise<string> {
+    // Cancel the current run, then start a new task in the same context.
+    // The Python server maps contextId → LangGraph thread_id, so MemorySaver
+    // preserves conversation history across update cycles.
+    try {
+      await this.rpc("tasks/cancel", { id: task.runId });
+    } catch {
+      // Ignore cancel errors — task may have already completed
+    }
+
+    const newTask = await this.rpc<A2ATask>("message/send", {
+      message: {
+        kind: "message",
+        messageId: randomUUID(),
+        contextId: task.taskId,
+        role: "user",
+        parts: [{ kind: "text", text: message }],
+      },
+      configuration: { blocking: false },
+    });
+    return newTask.id;
+  }
+
+  async getLiveStatus(task: AsyncTask): Promise<AsyncTaskStatus> {
+    const a2aTask = await this.rpc<A2ATask>("tasks/get", { id: task.runId });
+    return mapA2AState(a2aTask.status.state);
+  }
+}
+
+/**
+ * Routes each agent to the right backend based on its `backend` field.
+ * Caches backend instances — LangSmith clients are shared across agents
+ * with the same URL and headers.
+ */
+export class BackendRegistry {
+  private registry = new Map<string, AsyncSubAgentBackend>();
+
+  constructor(agents: Record<string, AsyncSubAgent>) {
+    const langsmithClients = new Map<string, Client>();
+
+    for (const [name, spec] of Object.entries(agents)) {
+      if (spec.backend === "a2a") {
+        this.registry.set(name, new A2ABackend(spec));
+      } else {
+        const key = langsmithCacheKey(spec);
+        if (!langsmithClients.has(key)) {
+          langsmithClients.set(key, createLangSmithClient(spec));
+        }
+        this.registry.set(name, new LangSmithBackend(spec, langsmithClients.get(key)!));
+      }
+    }
+  }
+
+  hasAgent(name: string): boolean {
+    return this.registry.has(name);
+  }
+
+  getAgentNames(): string[] {
+    return [...this.registry.keys()];
+  }
+
+  getBackend(agentName: string): AsyncSubAgentBackend {
+    const backend = this.registry.get(agentName);
+    if (!backend) throw new Error(`No backend registered for agent: ${agentName}`);
+    return backend;
+  }
+}
+
+function langsmithCacheKey(spec: AsyncSubAgent): string {
+  const headers = { ...(spec.headers ?? {}) };
+  if (!("x-auth-scheme" in headers)) headers["x-auth-scheme"] = "langsmith";
+  const headerStr = Object.entries(headers).sort().flat().join(":");
+  return `${spec.url ?? ""}|${headerStr}`;
+}
+
+function createLangSmithClient(spec: AsyncSubAgent): Client {
+  const headers = { ...(spec.headers ?? {}) };
+  if (!("x-auth-scheme" in headers)) headers["x-auth-scheme"] = "langsmith";
+  return new Client({ apiUrl: spec.url, defaultHeaders: headers });
+}
+
+// ─── End backend abstraction ──────────────────────────────────────────────────
+
 /**
  * Extract the callback thread ID from the tool runtime.
  *
@@ -473,8 +739,7 @@ export function extractCallbackContext(
  * `Command` that persists the new task in state.
  */
 export function buildStartTool(
-  agentMap: Record<string, AsyncSubAgent>,
-  clients: ClientCache,
+  registry: BackendRegistry,
   toolDescription: string,
 ) {
   return tool(
@@ -482,31 +747,24 @@ export function buildStartTool(
       input,
       runtime: ToolRuntime<AsyncTaskState>,
     ): Promise<Command | string> => {
-      if (!(input.agentName in agentMap)) {
-        const allowed = Object.keys(agentMap)
-          .map((k) => `\`${k}\``)
-          .join(", ");
+      if (!registry.hasAgent(input.agentName)) {
+        const allowed = registry.getAgentNames().map((k) => `\`${k}\``).join(", ");
         return `Unknown async subagent type \`${input.agentName}\`. Available types: ${allowed}`;
       }
 
-      const spec = agentMap[input.agentName];
       const callbackContext = extractCallbackContext(runtime);
       try {
-        const client = clients.getClient(input.agentName);
-        const thread = await client.threads.create();
-        const run = await client.runs.create(thread.thread_id, spec.graphId, {
-          input: {
-            messages: [{ role: "user", content: input.description }],
-            ...callbackContext,
-          },
-        });
+        const backend = registry.getBackend(input.agentName);
+        const { taskId, threadId, runId } = await backend.startTask(
+          input.description,
+          callbackContext,
+        );
 
-        const taskId = thread.thread_id;
         const task: AsyncTask = {
           taskId,
           agentName: input.agentName,
-          threadId: taskId,
-          runId: run.run_id,
+          threadId,
+          runId,
           status: "running",
           createdAt: new Date().toISOString(),
           description: input.description,
@@ -552,7 +810,7 @@ export function buildStartTool(
  * Fetches the current run status from the remote server and, if the run
  * succeeded, retrieves the thread state to extract the result.
  */
-export function buildCheckTool(clients: ClientCache) {
+export function buildCheckTool(registry: BackendRegistry) {
   return tool(
     async (
       input,
@@ -561,25 +819,17 @@ export function buildCheckTool(clients: ClientCache) {
       const task = resolveTrackedTask(input.taskId, runtime.state);
       if (typeof task === "string") return task;
 
-      const client = clients.getClient(task.agentName);
-      let run: Run;
+      const backend = registry.getBackend(task.agentName);
+      let taskResult: GetTaskResult;
       try {
-        run = await client.runs.get(task.threadId, task.runId);
+        taskResult = await backend.getTask(task);
       } catch (e) {
-        return `Failed to get run status: ${e}`;
+        return `Failed to get task status: ${e}`;
       }
 
-      let threadValues: DefaultValues = {};
-      if (run.status === "success") {
-        try {
-          const threadState = await client.threads.getState(task.threadId);
-          threadValues = (threadState.values as DefaultValues) || {};
-        } catch {
-          // Thread state fetch failed — still report success, just without the output
-        }
-      }
-
-      const result = buildCheckResult(run, task.threadId, threadValues);
+      const result: CheckResult = { status: taskResult.status, threadId: task.threadId };
+      if (taskResult.result) result.result = taskResult.result;
+      if (taskResult.error) result.error = taskResult.error;
       const updatedTask: AsyncTask = {
         taskId: task.taskId,
         agentName: task.agentName,
@@ -629,10 +879,7 @@ export function buildCheckTool(clients: ClientCache) {
  * sees the full conversation history plus the new message. The `taskId`
  * remains the same; only the internal `runId` is updated.
  */
-export function buildUpdateTool(
-  agentMap: Record<string, AsyncSubAgent>,
-  clients: ClientCache,
-) {
+export function buildUpdateTool(registry: BackendRegistry) {
   return tool(
     async (
       input,
@@ -641,21 +888,15 @@ export function buildUpdateTool(
       const tracked = resolveTrackedTask(input.taskId, runtime.state);
       if (typeof tracked === "string") return tracked;
 
-      const spec = agentMap[tracked.agentName];
       try {
-        const client = clients.getClient(tracked.agentName);
-        const run = await client.runs.create(tracked.threadId, spec.graphId, {
-          input: {
-            messages: [{ role: "user", content: input.message }],
-          },
-          multitaskStrategy: "interrupt",
-        });
+        const backend = registry.getBackend(tracked.agentName);
+        const newRunId = await backend.updateTask(tracked, input.message);
 
         const task: AsyncTask = {
           taskId: tracked.taskId,
           agentName: tracked.agentName,
           threadId: tracked.threadId,
-          runId: run.run_id,
+          runId: newRunId,
           status: "running",
           createdAt: tracked.createdAt,
           description: input.message,
@@ -704,7 +945,7 @@ export function buildUpdateTool(
  * Cancels the current run on the remote server and updates the task's
  * cached status to `"cancelled"`.
  */
-export function buildCancelTool(clients: ClientCache) {
+export function buildCancelTool(registry: BackendRegistry) {
   return tool(
     async (
       input,
@@ -713,11 +954,11 @@ export function buildCancelTool(clients: ClientCache) {
       const tracked = resolveTrackedTask(input.taskId, runtime.state);
       if (typeof tracked === "string") return tracked;
 
-      const client = clients.getClient(tracked.agentName);
       try {
-        await client.runs.cancel(tracked.threadId, tracked.runId);
+        const backend = registry.getBackend(tracked.agentName);
+        await backend.cancelTask(tracked);
       } catch (e) {
-        return `Failed to cancel run: ${e}`;
+        return `Failed to cancel task: ${e}`;
       }
 
       const updated: AsyncTask = {
@@ -764,7 +1005,7 @@ export function buildCancelTool(clients: ClientCache) {
  * Lists all tracked tasks with their live statuses fetched in parallel.
  * Supports optional filtering by cached status.
  */
-export function buildListTool(clients: ClientCache) {
+export function buildListTool(registry: BackendRegistry) {
   return tool(
     async (
       input,
@@ -778,7 +1019,7 @@ export function buildListTool(clients: ClientCache) {
       }
 
       const statuses = await Promise.all(
-        filtered.map((task) => fetchLiveTaskStatus(clients, task)),
+        filtered.map((task) => fetchLiveTaskStatus(registry, task)),
       );
 
       const updatedTasks: Record<string, AsyncTask> = {};
@@ -897,7 +1138,7 @@ export function createAsyncSubAgentMiddleware(
   }
 
   const agentMap = Object.fromEntries(asyncSubAgents.map((a) => [a.name, a]));
-  const clients = new ClientCache(agentMap);
+  const registry = new BackendRegistry(agentMap);
 
   const agentsDescription = asyncSubAgents
     .map((a) => `- ${a.name}: ${a.description}`)
@@ -908,11 +1149,11 @@ export function createAsyncSubAgentMiddleware(
   );
 
   const tools = [
-    buildStartTool(agentMap, clients, launchDescription),
-    buildCheckTool(clients),
-    buildUpdateTool(agentMap, clients),
-    buildCancelTool(clients),
-    buildListTool(clients),
+    buildStartTool(registry, launchDescription),
+    buildCheckTool(registry),
+    buildUpdateTool(registry),
+    buildCancelTool(registry),
+    buildListTool(registry),
   ];
 
   const fullSystemPrompt = systemPrompt
