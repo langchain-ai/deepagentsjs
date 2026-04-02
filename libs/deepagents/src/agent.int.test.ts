@@ -599,7 +599,6 @@ describe("DeepAgents Integration Tests", () => {
         expect(typeof result.structuredResponse.summary).toBe("string");
       },
     );
-
   });
 
   it.concurrent(
