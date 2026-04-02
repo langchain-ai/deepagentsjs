@@ -245,7 +245,7 @@ importers:
         version: link:../libs/acp
       dotenv:
         specifier: ^17.2.4
-        version: 17.3.1
+        version: 17.4.0
       hono:
         specifier: ^4.0.0
         version: 4.12.9
@@ -300,7 +300,7 @@ importers:
         version: link:../../../libs/deepagents
       dotenv:
         specifier: ^17.2.4
-        version: 17.3.1
+        version: 17.4.0
       langchain:
         specifier: ^1.2.34
         version: 1.2.36(@langchain/core@1.1.33(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0))(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(ws@8.19.0)
@@ -490,7 +490,7 @@ importers:
         version: 4.0.18(vitest@4.0.18)
       dotenv:
         specifier: ^17.2.4
-        version: 17.3.1
+        version: 17.4.0
       tsdown:
         specifier: ^0.21.4
         version: 0.21.4(synckit@0.11.12)(typescript@5.9.3)
@@ -527,7 +527,7 @@ importers:
         version: link:../../deepagents
       dotenv:
         specifier: ^17.2.3
-        version: 17.3.1
+        version: 17.4.0
       tsdown:
         specifier: ^0.21.4
         version: 0.21.4(synckit@0.11.12)(typescript@5.9.3)
@@ -564,7 +564,7 @@ importers:
         version: link:../../deepagents
       dotenv:
         specifier: ^17.2.3
-        version: 17.3.1
+        version: 17.4.0
       tsdown:
         specifier: ^0.21.4
         version: 0.21.4(synckit@0.11.12)(typescript@5.9.3)
@@ -601,7 +601,7 @@ importers:
         version: link:../../deepagents
       dotenv:
         specifier: ^17.2.3
-        version: 17.3.1
+        version: 17.4.0
       tsdown:
         specifier: ^0.21.4
         version: 0.21.4(synckit@0.11.12)(typescript@5.9.3)
@@ -705,7 +705,7 @@ importers:
         version: link:../../deepagents
       dotenv:
         specifier: ^17.2.3
-        version: 17.3.1
+        version: 17.4.0
       langchain:
         specifier: ^1.2.39
         version: 1.2.39(@langchain/core@1.1.38(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0))(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(ws@8.19.0)
@@ -3081,8 +3081,8 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  dotenv@17.3.1:
-    resolution: {integrity: sha512-IO8C/dzEb6O3F9/twg6ZLXz164a2fhTnEWb95H23Dm4OuN+92NmEAlTrupP9VW6Jm3sO26tQlqyvyi4CsnY9GA==}
+  dotenv@17.4.0:
+    resolution: {integrity: sha512-kCKF62fwtzwYm0IGBNjRUjtJgMfGapII+FslMHIjMR5KTnwEmBmWLDRSnc3XSNP8bNy34tekgQyDT0hr7pERRQ==}
     engines: {node: '>=12'}
 
   dotenv@8.6.0:
@@ -5283,7 +5283,7 @@ snapshots:
       '@opentelemetry/semantic-conventions': 1.40.0
       axios: 1.13.6
       busboy: 1.6.0
-      dotenv: 17.3.1
+      dotenv: 17.4.0
       expand-tilde: 2.0.2
       fast-glob: 3.3.3
       form-data: 4.0.5
@@ -7070,7 +7070,7 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  dotenv@17.3.1: {}
+  dotenv@17.4.0: {}
 
   dotenv@8.6.0: {}
 
