@@ -358,8 +358,8 @@ export class StoreBackend implements BackendProtocolV2 {
       const lines = fileDataV2.content.split("\n");
       const selected = lines.slice(offset, offset + limit);
       return { content: selected.join("\n"), mimeType: fileDataV2.mimeType };
-    } catch (e: any) {
-      return { error: e.message };
+    } catch (e: unknown) {
+      return { error: e instanceof Error ? e.message : String(e) };
     }
   }
 
@@ -449,8 +449,9 @@ export class StoreBackend implements BackendProtocolV2 {
       const storeValue = this.convertFileDataToStoreValue(newFileData);
       await store.put(namespace, filePath, storeValue);
       return { path: filePath, filesUpdate: null, occurrences: occurrences };
-    } catch (e: any) {
-      return { error: `Error: ${e.message}` };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { error: `Error: ${msg}` };
     }
   }
 
