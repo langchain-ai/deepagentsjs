@@ -66,9 +66,9 @@ export class StateBackend implements BackendProtocolV2 {
     ) {
       // Legacy path: BackendRuntime was passed
       console.warn(
-        "Passing `runtime` to StateBackend is deprecated and will be " +
-          "removed in a future version. StateBackend now reads and writes " +
-          "state via getCurrentTaskInput() and getConfig(). " +
+        "Passing `runtime` to StateBackend is deprecated. " +
+          "StateBackend now reads and writes state via " +
+          "getCurrentTaskInput() and getConfig(). " +
           "Use `new StateBackend()` instead.",
       );
       this.runtime = runtimeOrOptions;
