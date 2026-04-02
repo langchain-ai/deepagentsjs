@@ -686,4 +686,114 @@ describe("StateBackend", () => {
       }
     });
   });
+
+  describe("zero-arg constructor", () => {
+    /**
+     * Helper to apply a __pregel_send update to the mocked state.
+     * Extracts the files update from the sendSpy call and merges it.
+     */
+    function applySendUpdate(
+      state: { files: Record<string, FileData> },
+      sendSpy: ReturnType<typeof vi.fn>,
+      callIndex = 0,
+    ) {
+      const sent = sendSpy.mock.calls[callIndex][0];
+      Object.assign(state.files, sent[0][1]);
+    }
+
+    it("write sends update via __pregel_send and returns no filesUpdate", () => {
+      const { state, sendSpy } = makeConfig();
+      const backend = new StateBackend();
+
+      const result = backend.write("/notes.txt", "hello world");
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe("/notes.txt");
+      expect(result.filesUpdate).toBeUndefined();
+
+      expect(sendSpy).toHaveBeenCalledTimes(1);
+      const sent = sendSpy.mock.calls[0][0];
+      expect(sent).toHaveLength(1);
+      expect(sent[0][0]).toBe("files");
+      expect(sent[0][1]["/notes.txt"]).toBeDefined();
+    });
+
+    it("edit sends update via __pregel_send and returns no filesUpdate", () => {
+      const { state, sendSpy } = makeConfig();
+      const backend = new StateBackend();
+
+      backend.write("/notes.txt", "hello world");
+      applySendUpdate(state, sendSpy);
+      sendSpy.mockClear();
+
+      const result = backend.edit("/notes.txt", "hello", "hi");
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe("/notes.txt");
+      expect(result.filesUpdate).toBeUndefined();
+      expect(result.occurrences).toBe(1);
+
+      expect(sendSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("uploadFiles sends updates via __pregel_send and returns no filesUpdate", () => {
+      const { sendSpy } = makeConfig();
+      const backend = new StateBackend();
+
+      const files: Array<[string, Uint8Array]> = [
+        ["/file1.txt", new TextEncoder().encode("content1")],
+        ["/file2.txt", new TextEncoder().encode("content2")],
+      ];
+
+      const result = backend.uploadFiles(files);
+      expect(result).toHaveLength(2);
+      expect(result[0].error).toBeNull();
+      expect(result[1].error).toBeNull();
+      expect((result as any).filesUpdate).toBeUndefined();
+
+      expect(sendSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("full CRUD cycle: write, read, edit, read, ls, grep, glob", () => {
+      const { state, sendSpy } = makeConfig();
+      const backend = new StateBackend();
+
+      // Write
+      backend.write("/notes.txt", "hello world");
+      applySendUpdate(state, sendSpy);
+      sendSpy.mockClear();
+
+      // Read
+      const readRes = backend.read("/notes.txt");
+      expect(readRes.content).toContain("hello world");
+
+      // Edit
+      backend.edit("/notes.txt", "hello", "hi");
+      applySendUpdate(state, sendSpy);
+      sendSpy.mockClear();
+
+      // Read after edit
+      const readRes2 = backend.read("/notes.txt");
+      expect(readRes2.content).toContain("hi world");
+
+      // Ls
+      const listing = backend.ls("/");
+      expect(listing.files!.some((fi) => fi.path === "/notes.txt")).toBe(true);
+
+      // Grep
+      const grepRes = backend.grep("hi", "/");
+      expect(grepRes.matches!.some((m) => m.path === "/notes.txt")).toBe(true);
+
+      // Glob
+      const globRes = backend.glob("*.txt", "/");
+      expect(globRes.files!.some((i) => i.path === "/notes.txt")).toBe(true);
+    });
+
+    it("accepts options without runtime", () => {
+      makeConfig();
+      const backend = new StateBackend({ fileFormat: "v1" });
+
+      const result = backend.write("/test.txt", "line1\nline2");
+      expect(result.error).toBeUndefined();
+      expect(result.filesUpdate).toBeUndefined();
+    });
+  });
 });
