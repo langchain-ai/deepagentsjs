@@ -41,6 +41,12 @@ export {
 // Middleware utilities
 export { appendToSystemMessage, prependToSystemMessage } from "./utils.js";
 
+// Completion callback middleware for async subagents
+export {
+  createCompletionCallbackMiddleware,
+  type CompletionCallbackOptions,
+} from "./completion_callback.js";
+
 // Summarization middleware
 export {
   // Backend-aware summarization middleware with history offloading
@@ -53,3 +59,15 @@ export {
   // Re-export base summarization middleware from langchain for users who don't need backend offloading
   summarizationMiddleware,
 } from "./summarization.js";
+
+// Async SubAgent middleware
+export {
+  createAsyncSubAgentMiddleware,
+  isAsyncSubAgent,
+  type AsyncSubAgentMiddlewareOptions,
+  type AsyncSubAgent,
+  type AsyncTask,
+  type AsyncTaskStatus,
+  ASYNC_TASK_SYSTEM_PROMPT,
+  ASYNC_TASK_TOOL_NAMES,
+} from "./async_subagents.js";

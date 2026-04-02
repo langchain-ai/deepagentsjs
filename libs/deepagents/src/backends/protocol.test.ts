@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   isSandboxBackend,
   type BackendProtocol,
+  type BackendProtocolV2,
   type SandboxBackendProtocol,
+  type SandboxBackendProtocolV2,
   type ExecuteResponse,
   type FileOperationError,
   type FileDownloadResponse,
@@ -101,10 +103,10 @@ describe("isSandboxBackend", () => {
     const sandboxBackend = {
       id: "test-sandbox",
       execute: async () => ({ output: "", exitCode: 0, truncated: false }),
-      lsInfo: async () => [],
+      ls: async () => [],
       read: async () => "",
-      grepRaw: async () => [],
-      globInfo: async () => [],
+      grep: async () => [],
+      glob: async () => [],
       write: async () => ({ path: "" }),
       edit: async () => ({ path: "" }),
       uploadFiles: async () => [],
@@ -114,12 +116,35 @@ describe("isSandboxBackend", () => {
     expect(isSandboxBackend(sandboxBackend)).toBe(true);
   });
 
+  it("should return true for V2 sandbox backends", () => {
+    const sandboxBackend: SandboxBackendProtocolV2 = {
+      id: "test-sandbox-v2",
+      execute: async () => ({ output: "", exitCode: 0, truncated: false }),
+      ls: async () => ({ files: [] }),
+      read: async () => ({ content: "hello" }),
+      readRaw: async () => ({
+        data: {
+          content: "hello",
+          mimeType: "text/plain",
+          created_at: "2024-01-01T00:00:00.000Z",
+          modified_at: "2024-01-01T00:00:00.000Z",
+        },
+      }),
+      grep: async () => ({ matches: [] }),
+      glob: async () => ({ files: [] }),
+      write: async () => ({ path: "" }),
+      edit: async () => ({ path: "" }),
+    };
+
+    expect(isSandboxBackend(sandboxBackend)).toBe(true);
+  });
+
   it("should return false for backends without execute", () => {
     const nonSandboxBackend = {
-      lsInfo: async () => [],
+      ls: async () => [],
       read: async () => "",
-      grepRaw: async () => [],
-      globInfo: async () => [],
+      grep: async () => [],
+      glob: async () => [],
       write: async () => ({ path: "" }),
       edit: async () => ({ path: "" }),
       uploadFiles: async () => [],
@@ -129,14 +154,35 @@ describe("isSandboxBackend", () => {
     expect(isSandboxBackend(nonSandboxBackend)).toBe(false);
   });
 
+  it("should return false for V2 backends without execute", () => {
+    const nonSandboxBackend: BackendProtocolV2 = {
+      ls: async () => ({ files: [] }),
+      read: async () => ({ content: "hello" }),
+      readRaw: async () => ({
+        data: {
+          content: "hello",
+          mimeType: "text/plain",
+          created_at: "2024-01-01T00:00:00.000Z",
+          modified_at: "2024-01-01T00:00:00.000Z",
+        },
+      }),
+      grep: async () => ({ matches: [] }),
+      glob: async () => ({ files: [] }),
+      write: async () => ({ path: "" }),
+      edit: async () => ({ path: "" }),
+    };
+
+    expect(isSandboxBackend(nonSandboxBackend)).toBe(false);
+  });
+
   it("should return false for backends with execute but no id", () => {
     const backendWithExecute = {
       execute: async () => ({ output: "", exitCode: 0, truncated: false }),
       // Missing id
-      lsInfo: async () => [],
+      ls: async () => [],
       read: async () => "",
-      grepRaw: async () => [],
-      globInfo: async () => [],
+      grep: async () => [],
+      glob: async () => [],
       write: async () => ({ path: "" }),
       edit: async () => ({ path: "" }),
       uploadFiles: async () => [],
@@ -150,10 +196,10 @@ describe("isSandboxBackend", () => {
     const backendWithId = {
       id: "test-backend",
       // Missing execute
-      lsInfo: async () => [],
+      ls: async () => [],
       read: async () => "",
-      grepRaw: async () => [],
-      globInfo: async () => [],
+      grep: async () => [],
+      glob: async () => [],
       write: async () => ({ path: "" }),
       edit: async () => ({ path: "" }),
       uploadFiles: async () => [],
@@ -167,10 +213,10 @@ describe("isSandboxBackend", () => {
     const backendWithBadExecute = {
       id: "test-backend",
       execute: "not a function",
-      lsInfo: async () => [],
+      ls: async () => [],
       read: async () => "",
-      grepRaw: async () => [],
-      globInfo: async () => [],
+      grep: async () => [],
+      glob: async () => [],
       write: async () => ({ path: "" }),
       edit: async () => ({ path: "" }),
       uploadFiles: async () => [],
@@ -184,10 +230,10 @@ describe("isSandboxBackend", () => {
     const backendWithBadId = {
       id: 123,
       execute: async () => ({ output: "", exitCode: 0, truncated: false }),
-      lsInfo: async () => [],
+      ls: async () => [],
       read: async () => "",
-      grepRaw: async () => [],
-      globInfo: async () => [],
+      grep: async () => [],
+      glob: async () => [],
       write: async () => ({ path: "" }),
       edit: async () => ({ path: "" }),
       uploadFiles: async () => [],

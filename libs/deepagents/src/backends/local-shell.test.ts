@@ -243,16 +243,18 @@ describe("LocalShellBackend", () => {
       expect(writeResult.path).toBe("/test.txt");
 
       const content = await backend.read("/test.txt");
-      expect(content).toContain("Hello");
-      expect(content).toContain("World");
+      expect(content.error).toBeUndefined();
+      expect(content.content).toContain("Hello");
+      expect(content.content).toContain("World");
 
       const editResult = await backend.edit("/test.txt", "World", "Universe");
       expect(editResult.error).toBeUndefined();
       expect(editResult.occurrences).toBe(1);
 
       const updated = await backend.read("/test.txt");
-      expect(updated).toContain("Universe");
-      expect(updated).not.toContain("World");
+      expect(updated.error).toBeUndefined();
+      expect(updated.content).toContain("Universe");
+      expect(updated.content).not.toContain("World");
     });
 
     it("should allow shell and filesystem operations together", async () => {
@@ -273,7 +275,8 @@ describe("LocalShellBackend", () => {
       await backend.execute("echo 'Shell created' > shell_file.txt");
 
       const content = await backend.read("/shell_file.txt");
-      expect(content).toContain("Shell created");
+      expect(content.error).toBeUndefined();
+      expect(content.content).toContain("Shell created");
     });
 
     it("should list directory contents", async () => {
@@ -285,10 +288,11 @@ describe("LocalShellBackend", () => {
       await backend.write("/file1.txt", "content1");
       await backend.write("/file2.txt", "content2");
 
-      const files = await backend.lsInfo("/");
+      const files = await backend.ls("/");
+      expect(files.error).toBeUndefined();
 
-      expect(files.length).toBe(2);
-      const paths = files.map((f) => f.path);
+      expect(files.files!.length).toBe(2);
+      const paths = files.files!.map((f) => f.path);
       expect(paths).toContain("/file1.txt");
       expect(paths).toContain("/file2.txt");
     });
@@ -302,13 +306,38 @@ describe("LocalShellBackend", () => {
       await backend.write("/file1.txt", "TODO: implement this");
       await backend.write("/file2.txt", "DONE: completed");
 
-      const matches = await backend.grepRaw("TODO");
+      const result = await backend.grep("TODO");
 
-      expect(Array.isArray(matches)).toBe(true);
-      expect((matches as Array<{ text: string }>).length).toBe(1);
-      expect((matches as Array<{ text: string }>)[0].text).toBe(
-        "TODO: implement this",
-      );
+      expect(result.error).toBeUndefined();
+      expect(result.matches!.length).toBe(1);
+      expect(result.matches![0].text).toBe("TODO: implement this");
+    });
+
+    it("should return ReadRawResult from readRaw", async () => {
+      const backend = new LocalShellBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      await backend.write("/test.txt", "hello\nworld");
+
+      const raw = await backend.readRaw("/test.txt");
+      expect(raw.error).toBeUndefined();
+      expect(raw.data).toBeDefined();
+      expect(typeof raw.data!.content).toBe("string");
+      expect(raw.data!.content).toContain("hello");
+      expect((raw.data as any).mimeType).toBe("text/plain");
+      expect(raw.data!.created_at).toBeDefined();
+      expect(raw.data!.modified_at).toBeDefined();
+    });
+
+    it("should return ReadRawResult error for missing file", async () => {
+      const backend = new LocalShellBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      await expect(backend.readRaw("/nonexistent.txt")).rejects.toThrow();
     });
 
     it("should support glob", async () => {
@@ -321,10 +350,11 @@ describe("LocalShellBackend", () => {
       await backend.write("/file2.py", "content");
       await backend.write("/file3.txt", "content");
 
-      const txtFiles = await backend.globInfo("*.txt");
+      const txtFiles = await backend.glob("*.txt");
+      expect(txtFiles.error).toBeUndefined();
 
-      expect(txtFiles.length).toBe(2);
-      const paths = txtFiles.map((f) => f.path);
+      expect(txtFiles.files!.length).toBe(2);
+      const paths = txtFiles.files!.map((f) => f.path);
       expect(paths).toContain("/file1.txt");
       expect(paths).toContain("/file3.txt");
       expect(paths).not.toContain("/file2.py");
@@ -339,7 +369,7 @@ describe("LocalShellBackend", () => {
       });
 
       const content = await backend.read("/../etc/passwd");
-      expect(content).toContain("Error");
+      expect(content.error).toContain("not allowed");
 
       const result = await backend.execute("cat /etc/passwd");
       expect(result).toBeDefined();

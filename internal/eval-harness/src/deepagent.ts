@@ -1,5 +1,4 @@
 import { v4 as uuidv4 } from "uuid";
-import * as ls from "langsmith/vitest";
 import {
   registerRunner,
   parseTrajectory,

@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Deno Sandbox Example
  *

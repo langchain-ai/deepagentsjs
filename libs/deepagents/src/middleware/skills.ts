@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Backend-agnostic skills middleware for loading agent skills from any backend.
  *
@@ -51,11 +50,15 @@ import {
 } from "langchain";
 import { StateSchema, ReducedValue } from "@langchain/langgraph";
 
-import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
+import type {
+  AnyBackendProtocol,
+  BackendFactory,
+} from "../backends/protocol.js";
 import { resolveBackend } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import { filesValue } from "../values.js";
+import { adaptBackendProtocol } from "../backends/utils.js";
 
 // Security: Maximum size for SKILL.md files to prevent DoS attacks (10MB)
 export const MAX_SKILL_FILE_SIZE = 10 * 1024 * 1024;
@@ -140,7 +143,7 @@ export interface SkillsMiddlewareOptions {
    * Use a factory for StateBackend since it requires runtime state.
    */
   backend:
-    | BackendProtocol
+    | AnyBackendProtocol
     | BackendFactory
     | ((config: { state: unknown; store?: BaseStore }) => StateBackend);
 
@@ -237,7 +240,7 @@ Skills follow a **progressive disclosure** pattern - you know they exist (name +
 1. **Recognize when a skill applies**: Check if the user's task matches any skill's description
 2. **Read the skill's full instructions**: The skill list above shows the exact path to use with read_file
 3. **Follow the skill's instructions**: SKILL.md contains step-by-step workflows, best practices, and examples
-4. **Access supporting files**: Skills may include Python scripts, configs, or reference docs - use absolute paths
+4. **Access supporting files**: Skills may include scripts, configs, or reference docs - use absolute paths
 
 **When to Use Skills:**
 - When the user's request matches a skill's domain (e.g., "research X" → web-research skill)
@@ -249,7 +252,7 @@ Skills follow a **progressive disclosure** pattern - you know they exist (name +
 - The skill list above shows the full path for each skill's SKILL.md file
 
 **Executing Skill Scripts:**
-Skills may contain Python scripts or other executable files. Always use absolute paths from the skill list.
+Skills may contain scripts or other executable files. Always use absolute paths from the skill list.
 
 **Example Workflow:**
 
@@ -488,9 +491,10 @@ export function parseSkillMetadataFromContent(
  * List all skills from a backend source.
  */
 async function listSkillsFromBackend(
-  backend: BackendProtocol,
+  backend: AnyBackendProtocol,
   sourcePath: string,
 ): Promise<SkillMetadata[]> {
+  const adaptedBackend = adaptBackendProtocol(backend);
   const skills: SkillMetadata[] = [];
 
   // Detect path separator (Windows uses \, Unix uses /)
@@ -502,10 +506,15 @@ async function listSkillsFromBackend(
       ? sourcePath
       : `${sourcePath}${pathSep}`;
 
-  // List directories in the source path using lsInfo
+  // List directories in the source path using ls
   let fileInfos: { path: string; is_dir?: boolean }[];
   try {
-    fileInfos = await backend.lsInfo(normalizedPath);
+    const lsResult = await adaptedBackend.ls(normalizedPath);
+    if (lsResult.error || !lsResult.files) {
+      // Source path doesn't exist or can't be listed
+      return [];
+    }
+    fileInfos = lsResult.files;
   } catch {
     // Source path doesn't exist or can't be listed
     return [];
@@ -532,8 +541,8 @@ async function listSkillsFromBackend(
 
     // Try to download the SKILL.md file
     let content: string;
-    if (backend.downloadFiles) {
-      const results = await backend.downloadFiles([skillMdPath]);
+    if (adaptedBackend.downloadFiles) {
+      const results = await adaptedBackend.downloadFiles([skillMdPath]);
       if (results.length !== 1) {
         continue;
       }
@@ -547,11 +556,14 @@ async function listSkillsFromBackend(
       content = new TextDecoder().decode(response.content);
     } else {
       // Fall back to read if downloadFiles is not available
-      const readResult = await backend.read(skillMdPath);
-      if (readResult.startsWith("Error:")) {
+      const readResult = await adaptedBackend.read(skillMdPath);
+      if (readResult.error) {
         continue;
       }
-      content = readResult;
+      if (typeof readResult.content !== "string") {
+        continue;
+      }
+      content = readResult.content;
     }
     const metadata = parseSkillMetadataFromContent(
       content,

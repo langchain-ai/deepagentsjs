@@ -8,10 +8,10 @@
     "build": "pnpm --filter \"./libs/*\" --filter \"./libs/providers/*\" build",
     "clean": "pnpm --filter \"./libs/*\" clean",
     "typecheck": "pnpm --filter \"./libs/*\" typecheck",
-    "lint": "eslint libs examples",
-    "lint:fix": "eslint libs examples --fix",
-    "format": "prettier --write \"libs/**/*.{ts,js,json,md}\" \"examples/**/*.{ts,js,json,md}\"",
-    "format:check": "prettier --check \"libs/**/*.{ts,js,json,md}\" \"examples/**/*.{ts,js,json,md}\"",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
     "test": "pnpm format:check && pnpm lint && pnpm --filter \"./libs/*\" test",
     "test:unit": "pnpm --filter \"./libs/*\" test:unit",
     "test:int": "pnpm --filter \"./libs/*\" --filter \"./libs/providers/*\" test:int",
@@ -20,6 +20,7 @@
     "changeset:version": "changeset version",
     "release": "pnpm build && changeset publish"
   },
+  "homepage": "https://docs.langchain.com/oss/javascript/deepagents",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/langchain-ai/deepagentsjs.git"
@@ -37,24 +38,22 @@
   "bugs": {
     "url": "https://github.com/langchain-ai/deepagentsjs/issues"
   },
-  "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "devDependencies": {
     "@changesets/changelog-github": "^0.6.0",
     "@changesets/cli": "^2.29.8",
-    "@eslint/eslintrc": "^3.3.3",
-    "@eslint/js": "^10.0.1",
     "@tsconfig/recommended": "^1.0.13",
-    "eslint": "^10.0.0",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-no-instanceof": "^1.0.1",
-    "eslint-plugin-prettier": "^5.5.5",
     "globals": "^17.3.0",
     "jiti": "^2.6.1",
-    "prettier": "^3.8.1",
+    "lint-staged": "^16.4.0",
+    "oxfmt": "^0.42.0",
+    "oxlint": "^1.57.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.55.0"
+    "typescript": "^5.9.3"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,mjs,cjs}": "pnpm run lint",
+    "*": "pnpm run fmt --no-error-on-unmatched-pattern"
   },
   "packageManager": "pnpm@10.29.2",
   "pnpm": {

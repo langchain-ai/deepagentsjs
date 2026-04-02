@@ -1,4 +1,4 @@
-/* eslint-disable no-instanceof/no-instanceof */
+/* oxlint-disable no-instanceof/no-instanceof */
 /**
  * Node.js VFS Sandbox implementation of the SandboxBackendProtocol.
  *
@@ -21,10 +21,12 @@ import {
   BaseSandbox,
   type ExecuteResponse,
   type FileDownloadResponse,
-  type FileInfo,
   type FileOperationError,
   type FileUploadResponse,
-  type GrepMatch,
+  type GlobResult,
+  type GrepResult,
+  type LsResult,
+  type ReadResult,
   type BackendFactory,
 } from "deepagents";
 
@@ -527,45 +529,42 @@ export class VfsSandbox extends BaseSandbox {
     filePath: string,
     offset: number = 0,
     limit: number = 500,
-  ): Promise<string> {
+  ): Promise<ReadResult> {
     return super.read(this.#normalizeExecPath(filePath), offset, limit);
   }
 
   /**
    * List files and directories in the specified directory.
    *
-   * Overrides BaseSandbox.lsInfo() to normalize paths with a leading `/`
+   * Overrides BaseSandbox.ls() to normalize paths with a leading `/`
    * so they resolve correctly in the temp execution directory.
    */
-  async lsInfo(dirPath: string): Promise<FileInfo[]> {
-    return super.lsInfo(this.#normalizeExecPath(dirPath));
+  async ls(dirPath: string): Promise<LsResult> {
+    return super.ls(this.#normalizeExecPath(dirPath));
   }
 
   /**
    * Search for a literal text pattern in files.
    *
-   * Overrides BaseSandbox.grepRaw() to normalize paths with a leading `/`
+   * Overrides BaseSandbox.grep() to normalize paths with a leading `/`
    * so they resolve correctly in the temp execution directory.
    */
-  async grepRaw(
+  async grep(
     pattern: string,
     searchPath: string = "/",
     glob: string | null = null,
-  ): Promise<GrepMatch[] | string> {
-    return super.grepRaw(pattern, this.#normalizeExecPath(searchPath), glob);
+  ): Promise<GrepResult> {
+    return super.grep(pattern, this.#normalizeExecPath(searchPath), glob);
   }
 
   /**
    * Structured glob matching returning FileInfo objects.
    *
-   * Overrides BaseSandbox.globInfo() to normalize paths with a leading `/`
+   * Overrides BaseSandbox.glob() to normalize paths with a leading `/`
    * so they resolve correctly in the temp execution directory.
    */
-  async globInfo(
-    pattern: string,
-    searchPath: string = "/",
-  ): Promise<FileInfo[]> {
-    return super.globInfo(pattern, this.#normalizeExecPath(searchPath));
+  async glob(pattern: string, searchPath: string = "/"): Promise<GlobResult> {
+    return super.glob(pattern, this.#normalizeExecPath(searchPath));
   }
 
   /**

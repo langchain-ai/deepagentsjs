@@ -827,7 +827,9 @@ Use the write_file tool to save your code.`,
 
       // Get the file content
       const [, fileData] = jsFiles[0];
-      const fileContent = fileData?.content?.join("\n") || "";
+      const fileContent = Array.isArray(fileData?.content)
+        ? fileData.content.join("\n")
+        : fileData?.content || "";
 
       // Verify the file contains valid JavaScript that outputs something
       expect(fileContent).toMatch(/Hello.*World|hello.*world/i);

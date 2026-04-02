@@ -16,15 +16,20 @@
 import type {
   EditResult,
   ExecuteResponse,
-  FileData,
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
+  GlobResult,
   GrepMatch,
+  GrepResult,
+  LsResult,
   MaybePromise,
-  SandboxBackendProtocol,
+  ReadRawResult,
+  ReadResult,
+  SandboxBackendProtocolV2,
   WriteResult,
 } from "./protocol.js";
+import { getMimeType, isTextMimeType } from "./utils.js";
 
 /**
  * Shell-quote a string using single quotes (POSIX).
@@ -269,7 +274,7 @@ function buildGrepCommand(
  * available on any Linux including Alpine/busybox. No Python, Node.js, or
  * other runtime is required on the sandbox host.
  */
-export abstract class BaseSandbox implements SandboxBackendProtocol {
+export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
   /** Unique identifier for the sandbox backend */
   abstract readonly id: string;
 
@@ -300,9 +305,9 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
    * including Alpine. No Python or Node.js needed.
    *
    * @param path - Absolute path to directory
-   * @returns List of FileInfo objects for files and directories directly in the directory.
+   * @returns LsResult with list of FileInfo objects on success or error on failure.
    */
-  async lsInfo(path: string): Promise<FileInfo[]> {
+  async ls(path: string): Promise<LsResult> {
     const command = buildLsCommand(path);
     const result = await this.execute(command);
 
@@ -321,7 +326,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
       });
     }
 
-    return infos;
+    return { files: infos };
   }
 
   /**
@@ -340,18 +345,30 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     filePath: string,
     offset: number = 0,
     limit: number = 500,
-  ): Promise<string> {
+  ): Promise<ReadResult> {
+    const mimeType = getMimeType(filePath);
+
+    // for binary, download full file and return as Uint8Array
+    if (!isTextMimeType(mimeType)) {
+      const results = await this.downloadFiles([filePath]);
+      if (results[0].error || !results[0].content) {
+        return { error: `File '${filePath}' not found` };
+      }
+
+      return { content: results[0].content, mimeType };
+    }
+
     // limit=0 means return nothing
-    if (limit === 0) return "";
+    if (limit === 0) return { content: "", mimeType };
 
     const command = buildReadCommand(filePath, offset, limit);
     const result = await this.execute(command);
 
     if (result.exitCode !== 0) {
-      return `Error: File '${filePath}' not found`;
+      return { error: `File '${filePath}' not found` };
     }
 
-    return result.output;
+    return { content: result.output, mimeType };
   }
 
   /**
@@ -360,22 +377,37 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
    * Uses downloadFiles() directly — no runtime needed on the sandbox host.
    *
    * @param filePath - Absolute file path
-   * @returns Raw file content as FileData
+   * @returns ReadRawResult with raw file data on success or error on failure
    */
-  async readRaw(filePath: string): Promise<FileData> {
+  async readRaw(filePath: string): Promise<ReadRawResult> {
     const results = await this.downloadFiles([filePath]);
     if (results[0].error || !results[0].content) {
-      throw new Error(`File '${filePath}' not found`);
+      return { error: `File '${filePath}' not found` };
     }
 
-    const content = new TextDecoder().decode(results[0].content);
-    const lines = content.split("\n");
-
     const now = new Date().toISOString();
+    const mimeType = getMimeType(filePath);
+
+    // Binary: store as Uint8Array
+    if (!isTextMimeType(mimeType)) {
+      return {
+        data: {
+          content: results[0].content,
+          mimeType,
+          created_at: now,
+          modified_at: now,
+        },
+      };
+    }
+
+    // Text: store as string (v2 format)
     return {
-      content: lines,
-      created_at: now,
-      modified_at: now,
+      data: {
+        content: new TextDecoder().decode(results[0].content),
+        mimeType,
+        created_at: now,
+        modified_at: now,
+      },
     };
   }
 
@@ -387,17 +419,17 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
    * @param glob - Optional glob pattern to filter which files to search.
    * @returns List of GrepMatch dicts containing path, line number, and matched text.
    */
-  async grepRaw(
+  async grep(
     pattern: string,
     path: string = "/",
     glob: string | null = null,
-  ): Promise<GrepMatch[] | string> {
+  ): Promise<GrepResult> {
     const command = buildGrepCommand(pattern, path, glob);
     const result = await this.execute(command);
 
     const output = result.output.trim();
     if (!output) {
-      return [];
+      return { matches: [] };
     }
 
     // Parse grep output format: path:line_number:text
@@ -405,10 +437,18 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     for (const line of output.split("\n")) {
       const parts = line.split(":");
       if (parts.length >= 3) {
+        const filePath = parts[0];
+
+        // Skip binary files
+        const mimeType = getMimeType(filePath);
+        if (!isTextMimeType(mimeType)) {
+          continue;
+        }
+
         const lineNum = parseInt(parts[1], 10);
         if (!isNaN(lineNum)) {
           matches.push({
-            path: parts[0],
+            path: filePath,
             line: lineNum,
             text: parts.slice(2).join(":"),
           });
@@ -416,7 +456,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
       }
     }
 
-    return matches;
+    return { matches };
   }
 
   /**
@@ -432,7 +472,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
    * - `?`  matches a single character except `/`
    * - `[...]` character classes
    */
-  async globInfo(pattern: string, path: string = "/"): Promise<FileInfo[]> {
+  async glob(pattern: string, path: string = "/"): Promise<GlobResult> {
     const command = buildFindCommand(path);
     const result = await this.execute(command);
 
@@ -462,7 +502,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
       }
     }
 
-    return infos;
+    return { files: infos };
   }
 
   /**
@@ -484,10 +524,16 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
       // File doesn't exist, which is what we want for write
     }
 
-    const encoder = new TextEncoder();
-    const results = await this.uploadFiles([
-      [filePath, encoder.encode(content)],
-    ]);
+    const mimeType = getMimeType(filePath);
+    let fileContent: Uint8Array;
+
+    if (isTextMimeType(mimeType)) {
+      fileContent = new TextEncoder().encode(content);
+    } else {
+      fileContent = Buffer.from(content, "base64");
+    }
+
+    const results = await this.uploadFiles([[filePath, fileContent]]);
 
     if (results[0].error) {
       return {

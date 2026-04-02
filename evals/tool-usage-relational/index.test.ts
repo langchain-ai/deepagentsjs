@@ -212,7 +212,7 @@ function getFood(foodId: number): Food {
 // can assert which tools were called and with what arguments.
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 function spiedTool(
   fn: (...args: any[]) => any,
   config: { name: string; description: string; schema: any },
@@ -253,7 +253,7 @@ const { tool: findUsersByName, spy: findUsersByNameSpy } = spiedTool(
   },
 );
 
-const { tool: findLocationsByName, spy: findLocationsByNameSpy } = spiedTool(
+const { tool: findLocationsByName } = spiedTool(
   ({ city }) =>
     similaritySearch(
       LOCATION_DATA as unknown as Record<string, unknown>[],
@@ -269,7 +269,7 @@ const { tool: findLocationsByName, spy: findLocationsByNameSpy } = spiedTool(
   },
 );
 
-const { tool: findFoodsByName, spy: findFoodsByNameSpy } = spiedTool(
+const { tool: findFoodsByName } = spiedTool(
   ({ food }) =>
     similaritySearch(
       FOOD_DATA as unknown as Record<string, unknown>[],
@@ -303,7 +303,7 @@ const { tool: getUserLocation, spy: getUserLocationSpy } = spiedTool(
   },
 );
 
-const { tool: getUserFavoriteColor, spy: getUserFavoriteColorSpy } = spiedTool(
+const { tool: getUserFavoriteColor } = spiedTool(
   ({ user_id }) => getUser(user_id).favorite_color,
   {
     name: "get_user_favorite_color",

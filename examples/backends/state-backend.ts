@@ -13,7 +13,7 @@ const internetSearch = tool(
       maxResults,
       tavilyApiKey: process.env.TAVILY_API_KEY,
     });
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // oxlint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     const tavilyResponse = await tavilySearch._call({ query });
     return tavilyResponse;

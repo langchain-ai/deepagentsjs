@@ -4,3 +4,4 @@ packages:
   - "internal/*"
   - "evals/*"
   - "examples"
+  - "examples/**/*"

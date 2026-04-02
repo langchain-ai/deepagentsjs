@@ -406,7 +406,7 @@ describe("CLI Integration Tests", () => {
       expect(response.result).toBeDefined();
       expect(response.result?.sessionId).toBeDefined();
       expect(typeof response.result?.sessionId).toBe("string");
-      expect((response.result?.sessionId as string).startsWith("sess_")).toBe(
+      expect((response.result!.sessionId as string).startsWith("sess_")).toBe(
         true,
       );
     });
