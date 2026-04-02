@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { toolStrategy, providerStrategy } from "langchain";
+import { ChatAnthropic } from "@langchain/anthropic";
 import { z } from "zod/v4";
 import { createDeepAgent } from "./index.js";
 import type { CompiledSubAgent } from "./index.js";
@@ -599,4 +600,62 @@ describe("DeepAgents Integration Tests", () => {
       },
     );
   });
+
+  it.concurrent(
+    "should serialize subagent responseFormat as ToolMessage JSON",
+    { timeout: 120 * 1000 },
+    async () => {
+      const agent = createDeepAgent({
+        model: new ChatAnthropic({ model: "claude-haiku-4-5" }),
+        systemPrompt:
+          "You are an orchestrator. Always delegate tasks to the appropriate subagent via the task tool.",
+        subagents: [
+          {
+            name: "foo",
+            description: "Call this when the user says 'foo'",
+            systemPrompt: "You are a foo agent",
+            responseFormat: toolStrategy(
+              z.object({
+                findings: z.string(),
+                confidence: z.number(),
+                summary: z.string(),
+              }),
+            ),
+          },
+        ],
+      });
+
+      const result = await agent.invoke(
+        {
+          messages: [
+            new HumanMessage(
+              "foo - tell me how confident you are that pineapple belongs on pizza",
+            ),
+          ],
+        },
+        { recursionLimit: 100 },
+      );
+
+      const agentMessages = result.messages.filter(AIMessage.isInstance);
+      const toolCalls = agentMessages.flatMap((msg) => msg.tool_calls || []);
+      expect(
+        toolCalls.some(
+          (tc) => tc.name === "task" && tc.args?.subagent_type === "foo",
+        ),
+      ).toBe(true);
+
+      const taskToolMessage = result.messages.find(
+        (msg) => ToolMessage.isInstance(msg) && msg.name === "task",
+      ) as InstanceType<typeof ToolMessage>;
+      expect(taskToolMessage).toBeDefined();
+
+      const parsed = JSON.parse(taskToolMessage.content as string);
+      expect(parsed).toHaveProperty("findings");
+      expect(parsed).toHaveProperty("confidence");
+      expect(parsed).toHaveProperty("summary");
+      expect(typeof parsed.findings).toBe("string");
+      expect(typeof parsed.confidence).toBe("number");
+      expect(typeof parsed.summary).toBe("string");
+    },
+  );
 });
