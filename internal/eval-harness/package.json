@@ -47,7 +47,7 @@
     "@types/node": "^25.2.3",
     "@types/uuid": "^11.0.0",
     "tsdown": "^0.21.4",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.2",
     "vitest": "^4.0.18"
   }
 }
