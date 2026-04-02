@@ -65,6 +65,7 @@ export class StateBackend implements BackendProtocolV2 {
       "state" in runtimeOrOptions
     ) {
       // Legacy path: BackendRuntime was passed
+      // oxlint-disable-next-line no-console
       console.warn(
         "Passing `runtime` to StateBackend is deprecated. " +
           "StateBackend now reads and writes state via " +

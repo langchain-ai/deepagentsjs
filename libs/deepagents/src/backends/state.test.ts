@@ -702,7 +702,7 @@ describe("StateBackend", () => {
     }
 
     it("write sends update via __pregel_send and returns no filesUpdate", () => {
-      const { state, sendSpy } = makeConfig();
+      const { sendSpy } = makeConfig();
       const backend = new StateBackend();
 
       const result = backend.write("/notes.txt", "hello world");
