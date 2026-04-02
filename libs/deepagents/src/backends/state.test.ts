@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { StateBackend } from "./state.js";
 import type { FileData, FileDataV1 } from "./protocol.js";
-import { getCurrentTaskInput, Command } from "@langchain/langgraph";
+import { getCurrentTaskInput, getConfig, Command } from "@langchain/langgraph";
 import { ToolMessage } from "@langchain/core/messages";
 
 vi.mock("@langchain/langgraph", async (importOriginal) => {
@@ -9,6 +9,7 @@ vi.mock("@langchain/langgraph", async (importOriginal) => {
   return {
     ...(actual as any),
     getCurrentTaskInput: vi.fn(),
+    getConfig: vi.fn(),
   };
 });
 
@@ -20,11 +21,18 @@ function makeConfig(files: Record<string, FileData> = {}) {
     messages: [],
     files,
   };
+  const sendSpy = vi.fn();
   vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+  vi.mocked(getConfig).mockReturnValue({
+    configurable: {
+      __pregel_send: sendSpy,
+    },
+  } as any);
   return {
     state,
     runtime: { state, store: undefined },
     config: {},
+    sendSpy,
   };
 }
 

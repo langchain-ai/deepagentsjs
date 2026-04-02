@@ -180,6 +180,9 @@ export interface WriteResult {
    * State update dict for checkpoint backends, null for external storage.
    * Checkpoint backends populate this with {file_path: file_data} for LangGraph state.
    * External backends set null (already persisted to disk/S3/database/etc).
+   *
+   * @deprecated Zero-arg backends send state updates internally via
+   * `__pregel_send`. Check `if (result.filesUpdate)` before using.
    */
   filesUpdate?: Record<string, FileData> | null;
   /** Metadata for the write operation, attached to the ToolMessage */
@@ -201,6 +204,9 @@ export interface EditResult {
    * State update dict for checkpoint backends, null for external storage.
    * Checkpoint backends populate this with {file_path: file_data} for LangGraph state.
    * External backends set null (already persisted to disk/S3/database/etc).
+   *
+   * @deprecated Zero-arg backends send state updates internally via
+   * `__pregel_send`. Check `if (result.filesUpdate)` before using.
    */
   filesUpdate?: Record<string, FileData> | null;
   /** Number of replacements made, undefined on failure */
@@ -524,6 +530,9 @@ export type AnyBackendProtocol = BackendProtocolV1 | BackendProtocolV2;
 
 /**
  * Agent {@link Runtime} with `state`
+ *
+ * @deprecated Backends now read state from the LangGraph execution context
+ * via `getCurrentTaskInput()`, `getConfig()`, and `getStore()`.
  */
 export interface BackendRuntime<StateT = unknown> extends Runtime {
   /** Current agent state with files, messages, etc. */
@@ -535,6 +544,9 @@ export interface BackendRuntime<StateT = unknown> extends Runtime {
  *
  * Backends receive {@link BackendRuntime} which contains the current state
  * and runtime information, extracted from the execution context.
+ *
+ * @deprecated Pass a pre-constructed backend instance instead of a factory.
+ * E.g., `backend: new StateBackend()` instead of `backend: (runtime) => new StateBackend(runtime)`.
  *
  * @example
  * ```typescript
