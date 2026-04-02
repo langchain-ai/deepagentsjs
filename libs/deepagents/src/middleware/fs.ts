@@ -897,6 +897,7 @@ function createGrepTool(
           .string()
           .optional()
           .nullable()
+          .default(null)
           .describe("Optional glob pattern to filter files (e.g., '*.py')"),
       }),
     },

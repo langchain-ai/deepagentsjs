@@ -817,6 +817,25 @@ describe("createFilesystemMiddleware", () => {
       expect(parsed.file_path).toBe("/app/test.c");
       expect(parsed.content).toBe("");
     });
+
+    it("all tool schema properties should be included in the required array", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: () => createMockBackend(),
+      });
+
+      for (const t of middleware.tools!) {
+        const jsonSchema = (t as any).schema.toJSONSchema();
+        const properties = Object.keys(jsonSchema.properties ?? {});
+        const required = jsonSchema.required ?? [];
+
+        for (const prop of properties) {
+          expect(
+            required,
+            `tool "${(t as any).name}" is missing "${prop}" in required`,
+          ).toContain(prop);
+        }
+      }
+    });
   });
 
   describe("tool result truncation integration", () => {
