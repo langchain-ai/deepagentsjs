@@ -45,8 +45,8 @@ importers:
         specifier: ^4.21.0
         version: 4.21.0
       typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
+        specifier: ^6.0.2
+        version: 6.0.2
 
   evals/basic:
     dependencies:
@@ -281,8 +281,8 @@ importers:
         specifier: ^11.0.0
         version: 11.0.0
       typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
+        specifier: ^6.0.2
+        version: 6.0.2
 
   examples/async-subagents/parallel-research:
     dependencies:
@@ -339,8 +339,8 @@ importers:
         specifier: ^4.1.8
         version: 4.2.2
       typescript:
-        specifier: ^5.4.5
-        version: 5.9.3
+        specifier: ^6.0.2
+        version: 6.0.2
       vite:
         specifier: ^6.3.5
         version: 6.4.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.2)
@@ -377,10 +377,10 @@ importers:
         version: 11.0.0
       tsdown:
         specifier: ^0.21.4
-        version: 0.21.4(synckit@0.11.12)(typescript@5.9.3)
+        version: 0.21.4(synckit@0.11.12)(typescript@6.0.2)
       typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
+        specifier: ^6.0.2
+        version: 6.0.2
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(@vitest/ui@4.0.18)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.2)
@@ -417,13 +417,13 @@ importers:
         version: 4.0.18(vitest@4.0.18)
       tsdown:
         specifier: ^0.21.4
-        version: 0.21.4(synckit@0.11.12)(typescript@5.9.3)
+        version: 0.21.4(synckit@0.11.12)(typescript@6.0.2)
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
       typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
+        specifier: ^6.0.2
+        version: 6.0.2
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(@vitest/ui@4.0.18)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.2)
@@ -493,13 +493,13 @@ importers:
         version: 17.3.1
       tsdown:
         specifier: ^0.21.4
-        version: 0.21.4(synckit@0.11.12)(typescript@5.9.3)
+        version: 0.21.4(synckit@0.11.12)(typescript@6.0.2)
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
       typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
+        specifier: ^6.0.2
+        version: 6.0.2
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(@vitest/ui@4.0.18)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.2)
@@ -530,13 +530,13 @@ importers:
         version: 17.3.1
       tsdown:
         specifier: ^0.21.4
-        version: 0.21.4(synckit@0.11.12)(typescript@5.9.3)
+        version: 0.21.4(synckit@0.11.12)(typescript@6.0.2)
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
       typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
+        specifier: ^6.0.2
+        version: 6.0.2
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(@vitest/ui@4.0.18)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.2)
@@ -567,13 +567,13 @@ importers:
         version: 17.3.1
       tsdown:
         specifier: ^0.21.4
-        version: 0.21.4(synckit@0.11.12)(typescript@5.9.3)
+        version: 0.21.4(synckit@0.11.12)(typescript@6.0.2)
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
       typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
+        specifier: ^6.0.2
+        version: 6.0.2
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(@vitest/ui@4.0.18)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.2)
@@ -604,13 +604,13 @@ importers:
         version: 17.3.1
       tsdown:
         specifier: ^0.21.4
-        version: 0.21.4(synckit@0.11.12)(typescript@5.9.3)
+        version: 0.21.4(synckit@0.11.12)(typescript@6.0.2)
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
       typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
+        specifier: ^6.0.2
+        version: 6.0.2
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(@vitest/ui@4.0.18)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.2)
@@ -638,13 +638,13 @@ importers:
         version: link:../../deepagents
       tsdown:
         specifier: ^0.21.4
-        version: 0.21.4(synckit@0.11.12)(typescript@5.9.3)
+        version: 0.21.4(synckit@0.11.12)(typescript@6.0.2)
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
       typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
+        specifier: ^6.0.2
+        version: 6.0.2
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(@vitest/ui@4.0.18)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.2)
@@ -711,13 +711,13 @@ importers:
         version: 1.2.39(@langchain/core@1.1.38(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0))(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(ws@8.19.0)
       tsdown:
         specifier: ^0.21.4
-        version: 0.21.4(synckit@0.11.12)(typescript@5.9.3)
+        version: 0.21.4(synckit@0.11.12)(typescript@6.0.2)
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
       typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
+        specifier: ^6.0.2
+        version: 6.0.2
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(@vitest/ui@4.0.18)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.2)
@@ -738,10 +738,10 @@ importers:
         version: link:../deepagents
       tsdown:
         specifier: ^0.21.4
-        version: 0.21.4(synckit@0.11.12)(typescript@5.9.3)
+        version: 0.21.4(synckit@0.11.12)(typescript@6.0.2)
       typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
+        specifier: ^6.0.2
+        version: 6.0.2
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@25.3.3)(@vitest/ui@4.0.18)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.2)
@@ -4240,8 +4240,8 @@ packages:
     engines: {node: '>=18.0.0'}
     hasBin: true
 
-  typescript@5.9.3:
-    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+  typescript@6.0.2:
+    resolution: {integrity: sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ==}
     engines: {node: '>=14.17'}
     hasBin: true
 
@@ -7955,7 +7955,7 @@ snapshots:
 
   rfdc@1.4.1: {}
 
-  rolldown-plugin-dts@0.22.5(rolldown@1.0.0-rc.9)(typescript@5.9.3):
+  rolldown-plugin-dts@0.22.5(rolldown@1.0.0-rc.9)(typescript@6.0.2):
     dependencies:
       '@babel/generator': 8.0.0-rc.2
       '@babel/helper-validator-identifier': 8.0.0-rc.2
@@ -7968,7 +7968,7 @@ snapshots:
       obug: 2.1.1
       rolldown: 1.0.0-rc.9
     optionalDependencies:
-      typescript: 5.9.3
+      typescript: 6.0.2
     transitivePeerDependencies:
       - oxc-resolver
 
@@ -8181,7 +8181,7 @@ snapshots:
 
   ts-error@1.0.6: {}
 
-  tsdown@0.21.4(synckit@0.11.12)(typescript@5.9.3):
+  tsdown@0.21.4(synckit@0.11.12)(typescript@6.0.2):
     dependencies:
       ansis: 4.2.0
       cac: 7.0.0
@@ -8192,7 +8192,7 @@ snapshots:
       obug: 2.1.1
       picomatch: 4.0.3
       rolldown: 1.0.0-rc.9
-      rolldown-plugin-dts: 0.22.5(rolldown@1.0.0-rc.9)(typescript@5.9.3)
+      rolldown-plugin-dts: 0.22.5(rolldown@1.0.0-rc.9)(typescript@6.0.2)
       semver: 7.7.4
       tinyexec: 1.0.4
       tinyglobby: 0.2.15
@@ -8200,7 +8200,7 @@ snapshots:
       unconfig-core: 7.5.0
       unrun: 0.2.32(synckit@0.11.12)
     optionalDependencies:
-      typescript: 5.9.3
+      typescript: 6.0.2
     transitivePeerDependencies:
       - '@ts-macro/tsc'
       - '@typescript/native-preview'
@@ -8217,7 +8217,7 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
 
-  typescript@5.9.3: {}
+  typescript@6.0.2: {}
 
   unconfig-core@7.5.0:
     dependencies:
