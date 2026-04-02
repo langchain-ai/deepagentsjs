@@ -554,6 +554,8 @@ export type BackendFactory = (
  * Accepts {@link BackendRuntime} or {@link ToolRuntime} — store typing differs
  * between LangGraph checkpoint stores and core `ToolRuntime`; factories receive
  * a value that is structurally compatible at runtime.
+ * 
+ * @internal
  */
 export async function resolveBackend(
   backend: AnyBackendProtocol | BackendFactory,
