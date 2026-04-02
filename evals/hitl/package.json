@@ -11,7 +11,7 @@
     "langchain": "^1.2.39",
     "@langchain/langgraph": "^1.1.4",
     "langsmith": "^0.5.4",
-    "uuid": "^11.1.0",
+    "uuid": "^13.0.0",
     "vitest": "^4.0.18",
     "zod": "^4.3.6"
   }
