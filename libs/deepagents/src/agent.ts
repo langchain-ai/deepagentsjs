@@ -173,6 +173,7 @@ export function createDeepAgent<
     checkpointer,
     store,
     backend = (config) => new StateBackend(config),
+    filesystemOptions,
     interruptOn,
     name,
     memory,
@@ -217,7 +218,7 @@ export function createDeepAgent<
       // Provides todo list management capabilities for tracking tasks.
       todoListMiddleware(),
       // Enables filesystem operations and optional long-term memory storage.
-      createFilesystemMiddleware({ backend }),
+      createFilesystemMiddleware({ backend, ...filesystemOptions }),
       // Automatically summarizes conversation history when token limits are approached.
       // Uses createSummarizationMiddleware (deepagents version) with backend support
       // and auto-computed defaults from model profile.
@@ -283,7 +284,7 @@ export function createDeepAgent<
     // Provides todo list management capabilities for tracking tasks.
     todoListMiddleware(),
     // Enables filesystem operations and optional long-term memory storage.
-    createFilesystemMiddleware({ backend }),
+    createFilesystemMiddleware({ backend, ...filesystemOptions }),
     // Enables delegation to specialized subagents for complex tasks.
     createSubAgentMiddleware({
       defaultModel: model,
