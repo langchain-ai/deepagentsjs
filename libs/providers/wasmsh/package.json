@@ -38,7 +38,7 @@
   },
   "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "dependencies": {
-    "@mayflowergmbh/wasmsh-pyodide": "^0.5.0"
+    "@mayflowergmbh/wasmsh-pyodide": "^0.5.1"
   },
   "peerDependencies": {
     "deepagents": ">=1.9.0-alpha.0"

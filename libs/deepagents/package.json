@@ -64,8 +64,13 @@
     "typescript": "^6.0.2",
     "vitest": "^4.0.18"
   },
+  "sideEffects": false,
   "exports": {
     ".": {
+      "browser": {
+        "types": "./dist/index.browser.d.ts",
+        "default": "./dist/index.browser.js"
+      },
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"

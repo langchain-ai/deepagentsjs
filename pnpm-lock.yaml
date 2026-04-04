@@ -732,7 +732,7 @@ importers:
   libs/providers/wasmsh:
     dependencies:
       '@mayflowergmbh/wasmsh-pyodide':
-        specifier: ^0.5.0
+        specifier: ^0.5.1
         version: 0.5.9
     devDependencies:
       '@anthropic-ai/sdk':
