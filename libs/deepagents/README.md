@@ -602,6 +602,25 @@ When using a sandbox backend, the agent gains access to an `execute` tool that c
 
 See [examples/sandbox/local-sandbox.ts](examples/sandbox/local-sandbox.ts) for a complete implementation.
 
+#### Pre-built Sandbox Providers
+
+| Package | Environment | Description |
+|---------|------------|-------------|
+| `@langchain/wasmsh` | Node / Browser Worker | In-process Pyodide/WASM sandbox with bash + Python — no container required |
+| `@langchain/deno` | Deno Deploy | Remote Deno sandbox |
+| `@langchain/modal` | Modal | Remote Modal sandbox |
+| `@langchain/daytona` | Daytona | Remote Daytona devbox |
+
+```typescript
+import { WasmshSandbox } from "@langchain/wasmsh";
+
+const sandbox = await WasmshSandbox.createNode();
+const agent = createDeepAgent({ backend: sandbox, systemPrompt: "..." });
+// sandbox supports both bash and python3 in /workspace
+```
+
+See [examples/sandbox/](examples/sandbox/) for provider-specific examples.
+
 ## Deep Agents Middleware
 
 Deep Agents are built with a modular middleware architecture. As a reminder, Deep Agents have access to:
