@@ -13,6 +13,7 @@ import {
   type InterruptOnConfig,
   type ReactAgent,
   type CreateAgentParams,
+  type ToolRuntime,
   StructuredTool,
   context,
 } from "langchain";
@@ -56,6 +57,18 @@ const EXCLUDED_STATE_KEYS = [
  */
 export const DEFAULT_GENERAL_PURPOSE_DESCRIPTION =
   "General-purpose agent for researching complex questions, searching for files and content, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you. This agent has access to all tools as the main agent.";
+
+type SubAgentToolState = Record<string, unknown>;
+
+function getSubagentParentState(
+  runtime: ToolRuntime<SubAgentToolState>,
+): SubAgentToolState {
+  if (runtime.state && typeof runtime.state === "object") {
+    return runtime.state;
+  }
+
+  return getCurrentTaskInput<SubAgentToolState>();
+}
 
 // Comprehensive task tool description from Python
 function getTaskToolDescription(subagentDescriptions: string[]): string {
@@ -580,7 +593,7 @@ function createTaskTool(options: {
   return tool(
     async (
       input: { description: string; subagent_type: string },
-      config,
+      runtime: ToolRuntime<SubAgentToolState>,
     ): Promise<Command | string> => {
       const { description, subagent_type } = input;
 
@@ -597,17 +610,17 @@ function createTaskTool(options: {
       const subagent = subagentGraphs[subagent_type];
 
       // Get current state and filter it for subagent
-      const currentState = getCurrentTaskInput<Record<string, unknown>>();
+      const currentState = getSubagentParentState(runtime);
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
 
       // Invoke the subagent
-      const result = (await subagent.invoke(subagentState, config)) as Record<
-        string,
-        unknown
-      >;
+      const result = (await subagent.invoke(
+        subagentState,
+        runtime.config,
+      )) as Record<string, unknown>;
 
-      if (!config.toolCall?.id) {
+      if (!runtime.toolCall?.id) {
         if (result.structuredResponse != null) {
           return JSON.stringify(result.structuredResponse);
         }
@@ -631,7 +644,7 @@ function createTaskTool(options: {
         return content;
       }
 
-      return returnCommandWithStateUpdate(result, config.toolCall.id);
+      return returnCommandWithStateUpdate(result, runtime.toolCall.id);
     },
     {
       name: "task",
