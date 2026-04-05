@@ -643,6 +643,39 @@ describe("createSummarizationMiddleware", () => {
       expect(cmd.update._summarizationSessionId).toBeDefined();
       expect(typeof cmd.update._summarizationSessionId).toBe("string");
     });
+
+    it("should hydrate a serialized summary message from state before follow-up model calls", async () => {
+      const mockBackend = createMockBackend();
+      const middleware = createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: mockBackend,
+        trigger: { type: "messages", value: 99 },
+        keep: { type: "messages", value: 1 },
+      });
+
+      const messages = [
+        new HumanMessage({ content: "old request", id: "human-1" }),
+        new HumanMessage({ content: "new request", id: "human-2" }),
+      ];
+
+      const { capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+        _summarizationEvent: {
+          cutoffIndex: 1,
+          summaryMessage: {
+            content: "serialized summary",
+            additional_kwargs: { lc_source: "summarization" },
+            type: "human",
+          },
+          filePath: "/conversation_history/session_test.md",
+        },
+      });
+
+      expect(capturedRequest).not.toBeNull();
+      expect(capturedRequest!.messages[0]).toBeInstanceOf(HumanMessage);
+      expect(capturedRequest!.messages[0].content).toBe("serialized summary");
+      expect(capturedRequest!.messages[1].content).toBe("new request");
+    });
   });
 
   describe("chained summarization", () => {
@@ -722,6 +755,36 @@ describe("createSummarizationMiddleware", () => {
   });
 
   describe("safe cutoff for tool call/result pairs", () => {
+    it("should preserve the latest user turn when summarization is triggered", async () => {
+      const mockBackend = createMockBackend();
+      const middleware = createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: mockBackend,
+        trigger: { type: "messages", value: 2 },
+        keep: { type: "messages", value: 0 },
+      });
+
+      const messages: BaseMessage[] = [
+        new HumanMessage({ content: "older context", id: "human-1" }),
+        new HumanMessage({
+          content: "Reply with exactly: received-1",
+          id: "human-2",
+        }),
+      ];
+
+      const { result, capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
+
+      expect(isCommand(result)).toBe(true);
+      expect(capturedRequest).not.toBeNull();
+      expect(capturedRequest!.messages).toHaveLength(2);
+      expect(capturedRequest!.messages[0].content).toContain("summary");
+      expect(capturedRequest!.messages[1].content).toBe(
+        "Reply with exactly: received-1",
+      );
+    });
+
     it("should not split AI tool_call from its ToolMessage responses", async () => {
       const mockBackend = createMockBackend();
       const middleware = createSummarizationMiddleware({

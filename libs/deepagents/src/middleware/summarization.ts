@@ -236,6 +236,16 @@ Conversation to summarize:
 
 Summary:`;
 
+const SerializedSummaryMessageSchema = z
+  .object({
+    content: z.unknown(),
+    additional_kwargs: z.record(z.string(), z.unknown()).optional(),
+    response_metadata: z.record(z.string(), z.unknown()).optional(),
+    id: z.string().optional(),
+    type: z.string().optional(),
+  })
+  .passthrough();
+
 /**
  * Zod schema for a summarization event that tracks what was summarized and
  * where the cutoff is.
@@ -250,7 +260,10 @@ const SummarizationEventSchema = z.object({
    * Messages before this index have been summarized. */
   cutoffIndex: z.number(),
   /** The HumanMessage containing the summary. */
-  summaryMessage: z.instanceof(HumanMessage),
+  summaryMessage: z.union([
+    SerializedSummaryMessageSchema,
+    z.custom<HumanMessage>((value) => HumanMessage.isInstance(value)),
+  ]),
   /** Path where the conversation history was offloaded, or null if offload failed. */
   filePath: z.string().nullable(),
 });
@@ -279,6 +292,24 @@ function isSummaryMessage(msg: BaseMessage): boolean {
     return false;
   }
   return msg.additional_kwargs?.lc_source === "summarization";
+}
+
+function hydrateSummaryMessage(
+  message: SummarizationEvent["summaryMessage"],
+): HumanMessage {
+  if (HumanMessage.isInstance(message)) {
+    return message;
+  }
+
+  return new HumanMessage({
+    content:
+      typeof message.content === "string"
+        ? message.content
+        : JSON.stringify(message.content),
+    additional_kwargs: message.additional_kwargs,
+    response_metadata: message.response_metadata,
+    ...(message.id ? { id: message.id } : {}),
+  });
 }
 
 /**
@@ -583,6 +614,25 @@ export function createSummarizationMiddleware(
     }
 
     return findSafeCutoffPoint(messages, rawCutoff);
+  }
+
+  /**
+   * Preserve the newest user request so the current instruction is never
+   * summarized away before the model has a chance to answer it.
+   */
+  function getLatestUserMessageIndexToPreserve(
+    messages: BaseMessage[],
+  ): number {
+    if (messages.length === 0) {
+      return 0;
+    }
+
+    const lastIndex = messages.length - 1;
+    if (HumanMessage.isInstance(messages[lastIndex])) {
+      return lastIndex;
+    }
+
+    return messages.length;
   }
 
   /**
@@ -989,7 +1039,7 @@ export function createSummarizationMiddleware(
     }
 
     // Build effective messages: summary message, then messages from cutoff onward
-    const result: BaseMessage[] = [event.summaryMessage];
+    const result: BaseMessage[] = [hydrateSummaryMessage(event.summaryMessage)];
     result.push(...messages.slice(event.cutoffIndex));
 
     return result;
@@ -1070,7 +1120,10 @@ export function createSummarizationMiddleware(
     resolvedModel: BaseChatModel,
     maxInputTokens: number | undefined,
   ): Promise<any> {
-    const cutoffIndex = determineCutoffIndex(truncatedMessages, maxInputTokens);
+    const cutoffIndex = Math.min(
+      determineCutoffIndex(truncatedMessages, maxInputTokens),
+      getLatestUserMessageIndexToPreserve(truncatedMessages),
+    );
     if (cutoffIndex <= 0) {
       return handler({ ...request, messages: truncatedMessages });
     }
