@@ -1,5 +1,28 @@
 # deepagents
 
+## 1.8.9-alpha.0
+
+### Patch Changes
+
+- [#419](https://github.com/langchain-ai/deepagentsjs/pull/419) [`815bc0f`](https://github.com/langchain-ai/deepagentsjs/commit/815bc0fac4b4d0d9b3e7fb97dd64ed8e2bbfb317) Thanks [@colifran](https://github.com/colifran)! - fix: deprecate backend factories and support zero-arg constructors for StateBackend and StoreBackend
+
+- [#422](https://github.com/langchain-ai/deepagentsjs/pull/422) [`dc030a5`](https://github.com/langchain-ai/deepagentsjs/commit/dc030a5238534b8f63bc9d28b1608ded45e2fffc) Thanks [@JadenKim-dev](https://github.com/JadenKim-dev)! - fix: add default value to grep tool glob schema for strict mode compatibility
+
+- [#404](https://github.com/langchain-ai/deepagentsjs/pull/404) [`ca5cc0a`](https://github.com/langchain-ai/deepagentsjs/commit/ca5cc0acfbbeec08efd4f3aa651bdbefd2008518) Thanks [@hntrl](https://github.com/hntrl)! - rename completion notifier to completion callback and align names
+
+- [#404](https://github.com/langchain-ai/deepagentsjs/pull/404) [`ca5cc0a`](https://github.com/langchain-ai/deepagentsjs/commit/ca5cc0acfbbeec08efd4f3aa651bdbefd2008518) Thanks [@hntrl](https://github.com/hntrl)! - extend supported file types
+
+- [#404](https://github.com/langchain-ai/deepagentsjs/pull/404) [`ca5cc0a`](https://github.com/langchain-ai/deepagentsjs/commit/ca5cc0acfbbeec08efd4f3aa651bdbefd2008518) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): align prompt templates with runtime behavior
+  - Align `read_file` long-line guidance with runtime behavior by rendering `MAX_LINE_LENGTH` in the prompt.
+  - Normalize middleware prompt/template text for filesystem, memory, subagents, and summarization to match current behavior and improve consistency.
+  - Remove Python-specific phrasing from skills guidance to keep descriptions language-agnostic.
+
+- [#404](https://github.com/langchain-ai/deepagentsjs/pull/404) [`ca5cc0a`](https://github.com/langchain-ai/deepagentsjs/commit/ca5cc0acfbbeec08efd4f3aa651bdbefd2008518) Thanks [@hntrl](https://github.com/hntrl)! - clean up factory method middleware wiring
+
+- [#404](https://github.com/langchain-ai/deepagentsjs/pull/404) [`ca5cc0a`](https://github.com/langchain-ai/deepagentsjs/commit/ca5cc0acfbbeec08efd4f3aa651bdbefd2008518) Thanks [@hntrl](https://github.com/hntrl)! - chore(sdk): update async subagent middleware for agent protocol
+
+- [#404](https://github.com/langchain-ai/deepagentsjs/pull/404) [`ca5cc0a`](https://github.com/langchain-ai/deepagentsjs/commit/ca5cc0acfbbeec08efd4f3aa651bdbefd2008518) Thanks [@hntrl](https://github.com/hntrl)! - fix(sdk): AsyncTask updatedAt field doesn't update on task status changes
+
 ## 1.8.8
 
 ### Patch Changes
