@@ -1,6 +1,6 @@
 # deepagents
 
-## 1.8.9-alpha.0
+## 1.9.0-alpha.1
 
 ### Patch Changes
 
