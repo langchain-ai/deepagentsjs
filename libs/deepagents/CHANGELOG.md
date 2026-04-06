@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.9.0-alpha.1
+
+### Patch Changes
+
+- [#363](https://github.com/langchain-ai/deepagentsjs/pull/363) [`68f453e`](https://github.com/langchain-ai/deepagentsjs/commit/68f453e162bf294cfdb2d9d52d326aae91533e05) Thanks [@colifran](https://github.com/colifran)! - extend supported file types
+
 ## 1.9.0-alpha.0
 
 ### Minor Changes
