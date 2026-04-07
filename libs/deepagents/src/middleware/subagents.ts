@@ -385,7 +385,7 @@ export const GENERAL_PURPOSE_SUBAGENT: Pick<
 /**
  * Filter state to exclude certain keys when passing to subagents
  */
-function filterStateForSubagent(
+export function filterStateForSubagent(
   state: Record<string, unknown>,
 ): Record<string, unknown> {
   const filtered: Record<string, unknown> = {};

@@ -5,7 +5,10 @@ import type { SwarmTaskResult } from "./types.js";
 describe("parseTasksJsonl", () => {
   describe("valid input", () => {
     it("should parse a single valid task", () => {
-      const content = JSON.stringify({ id: "task-1", description: "Do something" });
+      const content = JSON.stringify({
+        id: "task-1",
+        description: "Do something",
+      });
       const result = parseTasksJsonl(content);
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({ id: "task-1", description: "Do something" });
@@ -35,7 +38,10 @@ describe("parseTasksJsonl", () => {
     });
 
     it("should not include subagentType when absent", () => {
-      const content = JSON.stringify({ id: "task-1", description: "Do something" });
+      const content = JSON.stringify({
+        id: "task-1",
+        description: "Do something",
+      });
       const result = parseTasksJsonl(content);
       expect(result[0]).not.toHaveProperty("subagentType");
     });
@@ -88,7 +94,10 @@ describe("parseTasksJsonl", () => {
     });
 
     it("should collect an error when id is an empty string", () => {
-      const content = JSON.stringify({ id: "", description: "Some description" });
+      const content = JSON.stringify({
+        id: "",
+        description: "Some description",
+      });
       expect(() => parseTasksJsonl(content)).toThrow(
         "tasks.jsonl validation failed:",
       );
@@ -126,8 +135,8 @@ describe("parseTasksJsonl", () => {
       let errorMessage = "";
       try {
         parseTasksJsonl(lines);
-      } catch (e) {
-        errorMessage = (e as Error).message;
+      } catch (e: any) {
+        errorMessage = e.message;
       }
 
       expect(errorMessage).toContain("tasks.jsonl validation failed:");
@@ -141,7 +150,12 @@ describe("parseTasksJsonl", () => {
 describe("serializeResultsJsonl", () => {
   it("should serialize results to JSONL with one object per line and a trailing newline", () => {
     const results: SwarmTaskResult[] = [
-      { id: "task-1", description: "First", status: "completed", result: "Done" },
+      {
+        id: "task-1",
+        description: "First",
+        status: "completed",
+        result: "Done",
+      },
       { id: "task-2", description: "Second", status: "failed", error: "Oops" },
     ];
     const output = serializeResultsJsonl(results);
