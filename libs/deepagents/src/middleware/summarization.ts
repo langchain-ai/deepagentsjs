@@ -41,7 +41,6 @@
  */
 
 import { z } from "zod";
-import { v4 as uuidv4 } from "uuid";
 import {
   createMiddleware,
   countTokensApproximately,
@@ -51,6 +50,7 @@ import {
   SystemMessage,
   BaseMessage,
   type AgentMiddleware as _AgentMiddleware,
+  context,
 } from "langchain";
 import { getBufferString } from "@langchain/core/messages";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -60,12 +60,22 @@ import { ContextOverflowError } from "@langchain/core/errors";
 import { initChatModel } from "langchain/chat_models/universal";
 import { Command } from "@langchain/langgraph";
 
-import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
+import type {
+  AnyBackendProtocol,
+  BackendFactory,
+  BackendProtocolV2,
+} from "../backends/protocol.js";
+import { resolveBackend } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 
 // Re-export the base summarization middleware from langchain for users who don't need backend offloading
 export { summarizationMiddleware } from "langchain";
+
+/**
+ * import @langchain/core/messages for type inference
+ */
+import type * as _core from "@langchain/core/messages";
 
 /**
  * Context size specification for summarization triggers and retention policies.
@@ -120,7 +130,7 @@ export interface SummarizationMiddlewareOptions {
    * Backend instance or factory for persisting conversation history.
    */
   backend:
-    | BackendProtocol
+    | AnyBackendProtocol
     | BackendFactory
     | ((config: { state: unknown; store?: BaseStore }) => StateBackend);
 
@@ -356,16 +366,6 @@ export function createSummarizationMiddleware(
   let tokenEstimationMultiplier = 1.0;
 
   /**
-   * Resolve backend from instance or factory.
-   */
-  function getBackend(state: unknown): BackendProtocol {
-    if (typeof backend === "function") {
-      return backend({ state }) as BackendProtocol;
-    }
-    return backend;
-  }
-
-  /**
    * Get or create session ID for history file naming.
    */
   function getSessionId(state: Record<string, unknown>): string {
@@ -373,7 +373,7 @@ export function createSummarizationMiddleware(
       return state._summarizationSessionId as string;
     }
     if (!sessionId) {
-      sessionId = `session_${uuidv4().substring(0, 8)}`;
+      sessionId = `session_${crypto.randomUUID().substring(0, 8)}`;
     }
     return sessionId;
   }
@@ -829,7 +829,7 @@ export function createSummarizationMiddleware(
    * download → edit(oldContent, newContent) approach.
    */
   async function offloadToBackend(
-    resolvedBackend: BackendProtocol,
+    resolvedBackend: BackendProtocolV2,
     messages: BaseMessage[],
     state: Record<string, unknown>,
   ): Promise<string | null> {
@@ -886,7 +886,7 @@ export function createSummarizationMiddleware(
       }
 
       if (result.error) {
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.warn(
           `Failed to offload conversation history to ${filePath}: ${result.error}`,
         );
@@ -895,7 +895,7 @@ export function createSummarizationMiddleware(
 
       return filePath;
     } catch (e) {
-      // eslint-disable-next-line no-console
+      // oxlint-disable-next-line no-console
       console.warn(
         `Exception offloading conversation history to ${filePath}:`,
         e,
@@ -950,15 +950,17 @@ export function createSummarizationMiddleware(
   ): HumanMessage {
     let content: string;
     if (filePath) {
-      content = `You are in the middle of a conversation that has been summarized.
+      content = context`
+        You are in the middle of a conversation that has been summarized.
 
-The full conversation history has been saved to ${filePath} should you need to refer back to it for details.
+        The full conversation history has been saved to ${filePath} should you need to refer back to it for details.
 
-A condensed summary follows:
+        A condensed summary follows:
 
-<summary>
-${summary}
-</summary>`;
+        <summary>
+        ${summary}
+        </summary>
+      `;
     } else {
       content = `Here is a summary of the conversation to date:\n\n${summary}`;
     }
@@ -1009,7 +1011,7 @@ ${summary}
     filePath: string | null;
     stateCutoffIndex: number;
   }> {
-    const resolvedBackend = getBackend(state);
+    const resolvedBackend = await resolveBackend(backend, { state });
     const filePath = await offloadToBackend(
       resolvedBackend,
       messagesToSummarize,
@@ -1017,7 +1019,7 @@ ${summary}
     );
 
     if (filePath === null) {
-      // eslint-disable-next-line no-console
+      // oxlint-disable-next-line no-console
       console.warn(
         `[SummarizationMiddleware] Backend offload failed during summarization. Proceeding with summary generation.`,
       );

@@ -2,24 +2,33 @@
  * StoreBackend: Adapter for LangGraph's BaseStore (persistent, cross-thread).
  */
 
-import type { Item } from "@langchain/langgraph";
+import { Item, getStore as getLangGraphStore } from "@langchain/langgraph";
 import type {
-  BackendProtocol,
+  BackendOptions,
+  BackendProtocolV2,
   EditResult,
   FileData,
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
-  GrepMatch,
-  StateAndStore,
+  GlobResult,
+  GrepResult,
+  LsResult,
+  ReadRawResult,
+  ReadResult,
   WriteResult,
+  StateAndStore,
 } from "./protocol.js";
 import {
   createFileData,
   fileDataToString,
-  formatReadResponse,
+  getMimeType,
   globSearchFiles,
   grepMatchesFromFiles,
+  isFileDataBinary,
+  isFileDataV1,
+  isTextMimeType,
+  migrateToFileDataV2,
   performStringReplacement,
   updateFileData,
 } from "./utils.js";
@@ -63,24 +72,24 @@ function validateNamespace(namespace: string[]): string[] {
 /**
  * Options for StoreBackend constructor.
  */
-export interface StoreBackendOptions {
+export interface StoreBackendOptions extends BackendOptions {
   /**
    * Custom namespace for store operations.
    *
    * Determines where files are stored in the LangGraph store, enabling
    * user-scoped, org-scoped, or any custom isolation pattern.
    *
-   * If not provided, falls back to legacy behavior using assistantId from StateAndStore.
+   * If not provided, falls back to legacy behavior using assistantId from {@link BackendRuntime}.
    *
    * @example
    * ```typescript
    * // User-scoped storage
-   * new StoreBackend(stateAndStore, {
+   * new StoreBackend(runtime, {
    *   namespace: ["memories", orgId, userId, "filesystem"],
    * });
    *
    * // Org-scoped storage
-   * new StoreBackend(stateAndStore, {
+   * new StoreBackend(runtime, {
    *   namespace: ["memories", orgId, "filesystem"],
    * });
    * ```
@@ -98,48 +107,92 @@ export interface StoreBackendOptions {
  * isolation patterns (user-scoped, org-scoped, etc.), or falls back
  * to legacy assistant_id-based isolation.
  */
-export class StoreBackend implements BackendProtocol {
-  private stateAndStore: StateAndStore;
+export class StoreBackend implements BackendProtocolV2 {
+  private stateAndStore: StateAndStore | undefined;
   private _namespace: string[] | undefined;
+  private fileFormat: "v1" | "v2";
 
-  constructor(stateAndStore: StateAndStore, options?: StoreBackendOptions) {
-    this.stateAndStore = stateAndStore;
-    if (options?.namespace) {
-      this._namespace = validateNamespace(options.namespace);
+  constructor(options?: StoreBackendOptions);
+  /**
+   * @deprecated Pass no `stateAndStore` argument
+   */
+  constructor(stateAndStore: StateAndStore, options?: StoreBackendOptions);
+  constructor(
+    stateAndStoreOrOptions?: StateAndStore | StoreBackendOptions,
+    options?: StoreBackendOptions,
+  ) {
+    let opts: StoreBackendOptions | undefined;
+    if (
+      stateAndStoreOrOptions != null &&
+      typeof stateAndStoreOrOptions === "object" &&
+      "state" in stateAndStoreOrOptions
+    ) {
+      // Legacy path
+      this.stateAndStore = stateAndStoreOrOptions;
+      opts = options;
+    } else {
+      this.stateAndStore = undefined;
+      opts = stateAndStoreOrOptions;
     }
+
+    if (opts?.namespace) {
+      this._namespace = validateNamespace(opts.namespace);
+    }
+    this.fileFormat = opts?.fileFormat ?? "v2";
   }
 
   /**
-   * Get the store instance.
+   * Get the BaseStore instance for persistent storage operations.
+   *
+   * In legacy mode, reads from the injected {@link StateAndStore}.
+   * In zero-arg mode, retrieves the store from the LangGraph execution
+   * context via {@link getLangGraphStore}.
    *
    * @returns BaseStore instance
-   * @throws Error if no store is available
+   * @throws Error if no store is available in either mode
    */
   private getStore() {
-    const store = this.stateAndStore.store;
-    if (!store) {
-      throw new Error("Store is required but not available in StateAndStore");
+    if (this.stateAndStore) {
+      const store = this.stateAndStore.store;
+      if (!store) {
+        throw new Error("Store is required but not available in runtime");
+      }
+      return store;
     }
+
+    const store = getLangGraphStore();
+    if (!store) {
+      throw new Error(
+        "Store is required but not available in LangGraph execution context. " +
+          "Ensure the graph was configured with a store.",
+      );
+    }
+
     return store;
   }
 
   /**
    * Get the namespace for store operations.
    *
-   * If a custom namespace was provided, returns it directly.
-   *
-   * Otherwise, falls back to legacy behavior:
-   * - If assistantId is set: [assistantId, "filesystem"]
-   * - Otherwise: ["filesystem"]
+   * Resolution order:
+   * 1. Explicit namespace from constructor options (both modes)
+   * 2. Legacy mode: `[assistantId, "filesystem"]` fallback from {@link StateAndStore}
+   * 3. Zero-arg mode without namespace: `["filesystem"]` with a deprecation warning
+   *    nudging callers to pass an explicit namespace
+   * 4. Legacy mode without assistantId: `["filesystem"]`
    */
   protected getNamespace(): string[] {
     if (this._namespace) {
       return this._namespace;
     }
-    const assistantId = this.stateAndStore.assistantId;
-    if (assistantId) {
-      return [assistantId, "filesystem"];
+
+    if (this.stateAndStore) {
+      const assistantId = this.stateAndStore.assistantId;
+      if (assistantId) {
+        return [assistantId, "filesystem"];
+      }
     }
+
     return ["filesystem"];
   }
 
@@ -153,9 +206,14 @@ export class StoreBackend implements BackendProtocol {
   private convertStoreItemToFileData(storeItem: Item): FileData {
     const value = storeItem.value as any;
 
+    const hasValidContent =
+      value.content !== undefined &&
+      (Array.isArray(value.content) ||
+        typeof value.content === "string" ||
+        ArrayBuffer.isView(value.content));
+
     if (
-      !value.content ||
-      !Array.isArray(value.content) ||
+      !hasValidContent ||
       typeof value.created_at !== "string" ||
       typeof value.modified_at !== "string"
     ) {
@@ -166,6 +224,7 @@ export class StoreBackend implements BackendProtocol {
 
     return {
       content: value.content,
+      ...(value.mimeType ? { mimeType: value.mimeType } : {}),
       created_at: value.created_at,
       modified_at: value.modified_at,
     };
@@ -175,11 +234,12 @@ export class StoreBackend implements BackendProtocol {
    * Convert FileData to a value suitable for store.put().
    *
    * @param fileData - The FileData to convert
-   * @returns Object with content, created_at, and modified_at fields
+   * @returns Object with content, mimeType, created_at, and modified_at fields
    */
   private convertFileDataToStoreValue(fileData: FileData): Record<string, any> {
     return {
       content: fileData.content,
+      ...("mimeType" in fileData ? { mimeType: fileData.mimeType } : {}),
       created_at: fileData.created_at,
       modified_at: fileData.modified_at,
     };
@@ -234,10 +294,10 @@ export class StoreBackend implements BackendProtocol {
    * List files and directories in the specified directory (non-recursive).
    *
    * @param path - Absolute path to directory
-   * @returns List of FileInfo objects for files and directories directly in the directory.
+   * @returns LsResult with list of FileInfo objects on success or error on failure.
    *          Directories have a trailing / in their path and is_dir=true.
    */
-  async lsInfo(path: string): Promise<FileInfo[]> {
+  async ls(path: string): Promise<LsResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
 
@@ -272,7 +332,11 @@ export class StoreBackend implements BackendProtocol {
       // This is a file directly in the current directory
       try {
         const fd = this.convertStoreItemToFileData(item);
-        const size = fd.content.join("\n").length;
+        const size = isFileDataV1(fd)
+          ? fd.content.join("\n").length
+          : isFileDataBinary(fd)
+            ? fd.content.byteLength
+            : fd.content.length;
         infos.push({
           path: itemKey,
           is_dir: false,
@@ -296,27 +360,48 @@ export class StoreBackend implements BackendProtocol {
     }
 
     infos.sort((a, b) => a.path.localeCompare(b.path));
-    return infos;
+    return { files: infos };
   }
 
   /**
-   * Read file content with line numbers.
+   * Read file content.
+   *
+   * Text files are paginated by line offset/limit.
+   * Binary files return full Uint8Array content (offset/limit ignored).
    *
    * @param filePath - Absolute file path
    * @param offset - Line offset to start reading from (0-indexed)
    * @param limit - Maximum number of lines to read
-   * @returns Formatted file content with line numbers, or error message
+   * @returns ReadResult with content on success or error on failure
    */
   async read(
     filePath: string,
     offset: number = 0,
     limit: number = 500,
-  ): Promise<string> {
+  ): Promise<ReadResult> {
     try {
-      const fileData = await this.readRaw(filePath);
-      return formatReadResponse(fileData, offset, limit);
+      const readRawResult = await this.readRaw(filePath);
+      if (readRawResult.error || !readRawResult.data) {
+        return { error: readRawResult.error || "File data not found" };
+      }
+
+      const fileDataV2 = migrateToFileDataV2(readRawResult.data, filePath);
+
+      // ignore pagination and return full content
+      if (!isTextMimeType(fileDataV2.mimeType)) {
+        return { content: fileDataV2.content, mimeType: fileDataV2.mimeType };
+      }
+
+      if (typeof fileDataV2.content !== "string") {
+        return {
+          error: `File '${filePath}' has binary content but text MIME type`,
+        };
+      }
+      const lines = fileDataV2.content.split("\n");
+      const selected = lines.slice(offset, offset + limit);
+      return { content: selected.join("\n"), mimeType: fileDataV2.mimeType };
     } catch (e: any) {
-      return `Error: ${e.message}`;
+      return { error: e.message };
     }
   }
 
@@ -324,15 +409,17 @@ export class StoreBackend implements BackendProtocol {
    * Read file content as raw FileData.
    *
    * @param filePath - Absolute file path
-   * @returns Raw file content as FileData
+   * @returns ReadRawResult with raw file data on success or error on failure
    */
-  async readRaw(filePath: string): Promise<FileData> {
+  async readRaw(filePath: string): Promise<ReadRawResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
     const item = await store.get(namespace, filePath);
 
-    if (!item) throw new Error(`File '${filePath}' not found`);
-    return this.convertStoreItemToFileData(item);
+    if (!item) {
+      return { error: `File '${filePath}' not found` };
+    }
+    return { data: this.convertStoreItemToFileData(item) };
   }
 
   /**
@@ -352,7 +439,13 @@ export class StoreBackend implements BackendProtocol {
     }
 
     // Create new file
-    const fileData = createFileData(content);
+    const mimeType = getMimeType(filePath);
+    const fileData = createFileData(
+      content,
+      undefined,
+      this.fileFormat,
+      mimeType,
+    );
     const storeValue = this.convertFileDataToStoreValue(fileData);
     await store.put(namespace, filePath, storeValue);
     return { path: filePath, filesUpdate: null };
@@ -404,13 +497,14 @@ export class StoreBackend implements BackendProtocol {
   }
 
   /**
-   * Structured search results or error string for invalid input.
+   * Search file contents for a literal text pattern.
+   * Binary files are skipped.
    */
-  async grepRaw(
+  async grep(
     pattern: string,
     path: string = "/",
     glob: string | null = null,
-  ): Promise<GrepMatch[] | string> {
+  ): Promise<GrepResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
     const items = await this.searchStorePaginated(store, namespace);
@@ -425,13 +519,14 @@ export class StoreBackend implements BackendProtocol {
       }
     }
 
-    return grepMatchesFromFiles(files, pattern, path, glob);
+    const matches = grepMatchesFromFiles(files, pattern, path, glob);
+    return { matches };
   }
 
   /**
    * Structured glob matching returning FileInfo objects.
    */
-  async globInfo(pattern: string, path: string = "/"): Promise<FileInfo[]> {
+  async glob(pattern: string, path: string = "/"): Promise<GlobResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
     const items = await this.searchStorePaginated(store, namespace);
@@ -448,14 +543,20 @@ export class StoreBackend implements BackendProtocol {
 
     const result = globSearchFiles(files, pattern, path);
     if (result === "No files found") {
-      return [];
+      return { files: [] };
     }
 
     const paths = result.split("\n");
     const infos: FileInfo[] = [];
     for (const p of paths) {
       const fd = files[p];
-      const size = fd ? fd.content.join("\n").length : 0;
+      const size = fd
+        ? isFileDataV1(fd)
+          ? fd.content.join("\n").length
+          : isFileDataBinary(fd)
+            ? fd.content.byteLength
+            : fd.content.length
+        : 0;
       infos.push({
         path: p,
         is_dir: false,
@@ -463,7 +564,7 @@ export class StoreBackend implements BackendProtocol {
         modified_at: fd?.modified_at || "",
       });
     }
-    return infos;
+    return { files: infos };
   }
 
   /**
@@ -481,8 +582,22 @@ export class StoreBackend implements BackendProtocol {
 
     for (const [path, content] of files) {
       try {
-        const contentStr = new TextDecoder().decode(content);
-        const fileData = createFileData(contentStr);
+        const mimeType = getMimeType(path);
+        const isBinary = this.fileFormat === "v2" && !isTextMimeType(mimeType);
+
+        let fileData: FileData;
+        if (isBinary) {
+          fileData = createFileData(content, undefined, "v2", mimeType);
+        } else {
+          const contentStr = new TextDecoder().decode(content);
+          fileData = createFileData(
+            contentStr,
+            undefined,
+            this.fileFormat,
+            mimeType,
+          );
+        }
+
         const storeValue = this.convertFileDataToStoreValue(fileData);
         await store.put(namespace, path, storeValue);
         responses.push({ path, error: null });
@@ -514,9 +629,14 @@ export class StoreBackend implements BackendProtocol {
         }
 
         const fileData = this.convertStoreItemToFileData(item);
-        const contentStr = fileDataToString(fileData);
-        const content = new TextEncoder().encode(contentStr);
-        responses.push({ path, content, error: null });
+        const fileDataV2 = migrateToFileDataV2(fileData, path);
+
+        if (typeof fileDataV2.content === "string") {
+          const content = new TextEncoder().encode(fileDataV2.content);
+          responses.push({ path, content, error: null });
+        } else {
+          responses.push({ path, content: fileDataV2.content, error: null });
+        }
       } catch {
         responses.push({ path, content: null, error: "file_not_found" });
       }

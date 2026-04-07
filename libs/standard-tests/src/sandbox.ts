@@ -20,9 +20,9 @@
  * - write() (new file, parent dirs, existing file, special chars, unicode, long content)
  * - read() (basic, nonexistent, offset, limit, offset+limit, unicode, chunked)
  * - edit() (single/multi occurrence, replaceAll, not found, special chars, multiline, unicode)
- * - lsInfo() (basic listing, empty dir, hidden files, large dir, absolute paths)
- * - grepRaw() (basic search, glob filter, case sensitivity, nested dirs, unicode)
- * - globInfo() (wildcard, recursive, extension filter, character classes, deeply nested)
+ * - ls() (basic listing, empty dir, hidden files, large dir, absolute paths)
+ * - grep() (basic search, glob filter, case sensitivity, nested dirs, unicode)
+ * - glob() (wildcard, recursive, extension filter, character classes, deeply nested)
  * - Initial files support (basic, nested, empty)
  * - Integration workflows (write-read-edit, complex directory operations)
  * - Error handling (file not found, non-existent command)
@@ -39,7 +39,11 @@ import { registerGrepRawTests } from "./tests/grep-raw.js";
 import { registerGlobInfoTests } from "./tests/glob-info.js";
 import { registerInitialFilesTests } from "./tests/initial-files.js";
 import { registerIntegrationTests } from "./tests/integration.js";
-import type { SandboxInstance, StandardTestsConfig, SuiteFn } from "./types.js";
+import type {
+  AnySandboxInstance,
+  StandardTestsConfig,
+  SuiteFn,
+} from "./types.js";
 /**
  * Default number of retry attempts for sandbox creation.
  */
@@ -117,7 +121,7 @@ export async function withRetry<T>(
  * });
  * ```
  */
-export function sandboxStandardTests<T extends SandboxInstance>(
+export function sandboxStandardTests<T extends AnySandboxInstance>(
   config: StandardTestsConfig<T>,
 ): void {
   const { describe, beforeAll, afterAll } = config.runner;

@@ -18,17 +18,17 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to build (leave empty for latest from PyPI)'
+        description: "Version to build (leave empty for latest from PyPI)"
         required: false
         type: string
       dry_run:
-        description: 'Dry run (skip publishing)'
+        description: "Dry run (skip publishing)"
         required: false
         type: boolean
         default: false
   schedule:
     # Check for new PyPI releases daily at 6:00 AM UTC
-    - cron: '0 6 * * *'
+    - cron: "0 6 * * *"
 
 permissions:
   contents: read
@@ -48,26 +48,26 @@ jobs:
     outputs:
       should_build: ${{ steps.check.outputs.should_build }}
       version: ${{ steps.check.outputs.version }}
-    
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Check for new version
         id: check
         run: |
           set -e
-          
+
           # Get latest PyPI version
           echo "Fetching latest version from PyPI..."
           PYPI_VERSION=$(curl -s https://pypi.org/pypi/deepagents-cli/json | jq -r '.info.version')
           echo "PyPI version: $PYPI_VERSION"
-          
+
           # Get current npm version (may not exist yet)
           echo "Checking npm version..."
           NPM_VERSION=$(npm view deepagents-cli version 2>/dev/null || echo "0.0.0")
           echo "npm version: $NPM_VERSION"
-          
+
           # Manual override takes precedence
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
@@ -100,7 +100,7 @@ jobs:
     name: Build (${{ matrix.platform }})
     needs: check-version
     if: needs.check-version.outputs.should_build == 'true'
-    
+
     strategy:
       fail-fast: false
       matrix:
@@ -120,26 +120,26 @@ jobs:
           - platform: win32-x64
             os: windows-latest
             python-version: "3.11"
-    
+
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: "22"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b307475762933b98ed359c036b0e51f26b63b74b # v5.0.0
         with:
           version: 9
 
@@ -166,7 +166,7 @@ jobs:
         shell: bash
 
       - name: Upload platform package
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: cli-${{ matrix.platform }}
           path: libs/cli/dist/platforms/${{ matrix.platform }}/
@@ -181,24 +181,24 @@ jobs:
     needs: [check-version, build]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b307475762933b98ed359c036b0e51f26b63b74b # v5.0.0
         with:
           version: 9
 
       - name: Download all platform packages
-        uses: actions/download-artifact@v8.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: libs/cli/dist/platforms/
           pattern: cli-*
@@ -221,11 +221,11 @@ jobs:
         run: |
           VERSION="${{ needs.check-version.outputs.version }}"
           echo "Setting version to $VERSION"
-          
+
           # Update main package version
           cd libs/cli
           npm version "$VERSION" --no-git-tag-version --allow-same-version
-          
+
           # Update platform package versions
           for platform in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64; do
             if [ -d "dist/platforms/$platform" ]; then
@@ -296,37 +296,37 @@ jobs:
     needs: [check-version, publish]
     if: ${{ github.event.inputs.dry_run != 'true' }}
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
         with:
           tag_name: cli-v${{ needs.check-version.outputs.version }}
           name: deepagents-cli v${{ needs.check-version.outputs.version }}
           body: |
             ## deepagents-cli v${{ needs.check-version.outputs.version }}
-            
+
             This release wraps [deepagents-cli ${{ needs.check-version.outputs.version }}](https://pypi.org/project/deepagents-cli/${{ needs.check-version.outputs.version }}/) from PyPI.
-            
+
             ### Installation
-            
+
             ```bash
             npm install -g deepagents-cli
             ```
-            
+
             ### Supported Platforms
-            
+
             - Linux x64
             - Linux ARM64
             - macOS Intel (x64)
             - macOS Apple Silicon (ARM64)
             - Windows x64
-            
+
             ### Links
-            
+
             - [npm package](https://www.npmjs.com/package/deepagents-cli)
             - [PyPI package](https://pypi.org/project/deepagents-cli/)
             - [Documentation](https://github.com/langchain-ai/deepagentsjs/tree/main/libs/cli)

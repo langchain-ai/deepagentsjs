@@ -1,6 +1,6 @@
 {
   "name": "@langchain/daytona",
-  "version": "0.1.2",
+  "version": "0.2.0-alpha.0",
   "description": "Daytona Sandbox backend for deepagents",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -37,10 +37,10 @@
   },
   "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "dependencies": {
-    "@daytonaio/sdk": "^0.148.0"
+    "@daytonaio/sdk": "^0.155.0"
   },
   "peerDependencies": {
-    "deepagents": ">=1.6.0"
+    "deepagents": ">=1.9.0-alpha.0"
   },
   "devDependencies": {
     "deepagents": "workspace:*",
@@ -49,9 +49,9 @@
     "@types/node": "^25.1.0",
     "@vitest/coverage-v8": "^4.0.18",
     "dotenv": "^17.2.3",
-    "tsdown": "^0.20.1",
+    "tsdown": "^0.21.4",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.2",
     "vitest": "^4.0.18"
   },
   "exports": {

@@ -306,7 +306,7 @@ description: A skill with very large content
         },
         directories: {
           "/skills/good/": [{ name: "web-research", type: "directory" }],
-          // /skills/bad/ not in directories, so lsInfo will fail
+          // /skills/bad/ not in directories, so ls will fail
         },
       });
 
@@ -325,22 +325,24 @@ description: A skill with very large content
 
     it("should use backend.read() fallback when downloadFiles is not available", async () => {
       const mockBackend = {
-        async lsInfo(dirPath: string) {
+        async ls(dirPath: string) {
           if (dirPath === "/skills/user/") {
-            return [
-              {
-                path: "web-research/",
-                is_dir: true,
-              },
-            ];
+            return {
+              files: [
+                {
+                  path: "web-research/",
+                  is_dir: true,
+                },
+              ],
+            };
           }
-          return [];
+          return { files: [] };
         },
         async read(path: string) {
           if (path === "/skills/user/web-research/SKILL.md") {
-            return VALID_SKILL_CONTENT;
+            return { content: VALID_SKILL_CONTENT };
           }
-          return "Error: file not found";
+          return { error: "Error: file not found" };
         },
         // downloadFiles is NOT defined
         readFiles: vi.fn(),
@@ -363,19 +365,21 @@ description: A skill with very large content
 
     it("should skip skill when backend.read() returns error", async () => {
       const mockBackend = {
-        async lsInfo(dirPath: string) {
+        async ls(dirPath: string) {
           if (dirPath === "/skills/user/") {
-            return [
-              {
-                path: "broken-skill/",
-                is_dir: true,
-              },
-            ];
+            return {
+              files: [
+                {
+                  path: "broken-skill/",
+                  is_dir: true,
+                },
+              ],
+            };
           }
-          return [];
+          return { files: [] };
         },
         async read(_path: string) {
-          return "Error: permission denied";
+          return { error: "Error: permission denied" };
         },
         readFiles: vi.fn(),
         write: vi.fn(),

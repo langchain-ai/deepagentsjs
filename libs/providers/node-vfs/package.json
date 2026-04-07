@@ -1,6 +1,6 @@
 {
   "name": "@langchain/node-vfs",
-  "version": "0.1.2",
+  "version": "0.1.4-alpha.0",
   "description": "Virtual File System sandbox backend for deepagents",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
@@ -41,7 +41,7 @@
     "node-vfs-polyfill": "github:vercel-labs/node-vfs-polyfill"
   },
   "peerDependencies": {
-    "deepagents": ">=1.6.0"
+    "deepagents": ">=1.9.0-alpha.0"
   },
   "devDependencies": {
     "deepagents": "workspace:*",
@@ -49,9 +49,9 @@
     "@tsconfig/recommended": "^1.0.13",
     "@types/node": "^25.1.0",
     "@vitest/coverage-v8": "^4.0.18",
-    "tsdown": "^0.20.1",
+    "tsdown": "^0.21.4",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.2",
     "vitest": "^4.0.18"
   },
   "exports": {

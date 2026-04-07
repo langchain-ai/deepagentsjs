@@ -193,7 +193,7 @@ export function parseSkillMetadata(
     // Security: Check file size to prevent DoS attacks
     const stats = fs.statSync(skillMdPath);
     if (stats.size > MAX_SKILL_FILE_SIZE) {
-      // eslint-disable-next-line no-console
+      // oxlint-disable-next-line no-console
       console.warn(
         `Skipping ${skillMdPath}: file too large (${stats.size} bytes)`,
       );
@@ -204,7 +204,7 @@ export function parseSkillMetadata(
     const frontmatter = parseFrontmatter(content);
 
     if (!frontmatter) {
-      // eslint-disable-next-line no-console
+      // oxlint-disable-next-line no-console
       console.warn(`Skipping ${skillMdPath}: no valid YAML frontmatter found`);
       return null;
     }
@@ -214,7 +214,7 @@ export function parseSkillMetadata(
     const description = frontmatter.description;
 
     if (!name || !description) {
-      // eslint-disable-next-line no-console
+      // oxlint-disable-next-line no-console
       console.warn(
         `Skipping ${skillMdPath}: missing required 'name' or 'description'`,
       );
@@ -225,7 +225,7 @@ export function parseSkillMetadata(
     const directoryName = path.basename(path.dirname(skillMdPath));
     const validation = validateSkillName(String(name), directoryName);
     if (!validation.valid) {
-      // eslint-disable-next-line no-console
+      // oxlint-disable-next-line no-console
       console.warn(
         `Skill '${name}' in ${skillMdPath} does not follow Agent Skills spec: ${validation.error}. ` +
           "Consider renaming to be spec-compliant.",
@@ -235,7 +235,7 @@ export function parseSkillMetadata(
     // Truncate description if too long (spec: max 1024 chars)
     let descriptionStr = String(description);
     if (descriptionStr.length > MAX_SKILL_DESCRIPTION_LENGTH) {
-      // eslint-disable-next-line no-console
+      // oxlint-disable-next-line no-console
       console.warn(
         `Description exceeds ${MAX_SKILL_DESCRIPTION_LENGTH} chars in ${skillMdPath}, truncating`,
       );
@@ -260,7 +260,7 @@ export function parseSkillMetadata(
         : undefined,
     };
   } catch (error) {
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.warn(`Error reading ${skillMdPath}: ${error}`);
     return null;
   }

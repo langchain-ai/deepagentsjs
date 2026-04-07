@@ -27,7 +27,7 @@ import type {
   InferCompiledSubagents,
   InferRegularSubagents,
 } from "./types.js";
-import type { FilesRecordUpdate } from "./middleware/fs.js";
+import type { FilesRecord } from "./middleware/fs.js";
 
 // Test middleware with research state
 const ResearchStateSchema = z.object({
@@ -136,7 +136,7 @@ describe("createDeepAgent types", () => {
       expectTypeOf(result.counter).toEqualTypeOf<number>();
       // should have built-in state
       expectTypeOf(result).toHaveProperty("files");
-      expectTypeOf(result.files).toEqualTypeOf<FilesRecordUpdate | undefined>();
+      expectTypeOf(result.files).toEqualTypeOf<FilesRecord | undefined>();
       expectTypeOf(result).toHaveProperty("todos");
       expectTypeOf(result.todos).toEqualTypeOf<
         {

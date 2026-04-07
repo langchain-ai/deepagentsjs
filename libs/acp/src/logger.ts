@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Logger utility for DeepAgents ACP Server
  *
@@ -125,7 +124,7 @@ export class Logger {
     const levelTag = `[${level.toUpperCase()}]`;
     const message = args
       .map((arg) => {
-        // eslint-disable-next-line no-instanceof/no-instanceof
+        // oxlint-disable-next-line no-instanceof/no-instanceof
         if (arg instanceof Error) {
           return `${arg.message}\n${arg.stack}`;
         }

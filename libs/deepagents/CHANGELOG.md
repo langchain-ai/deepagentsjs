@@ -1,5 +1,87 @@
 # deepagents
 
+## 1.9.0-alpha.1
+
+### Patch Changes
+
+- [#419](https://github.com/langchain-ai/deepagentsjs/pull/419) [`815bc0f`](https://github.com/langchain-ai/deepagentsjs/commit/815bc0fac4b4d0d9b3e7fb97dd64ed8e2bbfb317) Thanks [@colifran](https://github.com/colifran)! - fix: deprecate backend factories and support zero-arg constructors for StateBackend and StoreBackend
+
+- [#422](https://github.com/langchain-ai/deepagentsjs/pull/422) [`dc030a5`](https://github.com/langchain-ai/deepagentsjs/commit/dc030a5238534b8f63bc9d28b1608ded45e2fffc) Thanks [@JadenKim-dev](https://github.com/JadenKim-dev)! - fix: add default value to grep tool glob schema for strict mode compatibility
+
+- [#404](https://github.com/langchain-ai/deepagentsjs/pull/404) [`ca5cc0a`](https://github.com/langchain-ai/deepagentsjs/commit/ca5cc0acfbbeec08efd4f3aa651bdbefd2008518) Thanks [@hntrl](https://github.com/hntrl)! - rename completion notifier to completion callback and align names
+
+- [#404](https://github.com/langchain-ai/deepagentsjs/pull/404) [`ca5cc0a`](https://github.com/langchain-ai/deepagentsjs/commit/ca5cc0acfbbeec08efd4f3aa651bdbefd2008518) Thanks [@hntrl](https://github.com/hntrl)! - extend supported file types
+
+- [#404](https://github.com/langchain-ai/deepagentsjs/pull/404) [`ca5cc0a`](https://github.com/langchain-ai/deepagentsjs/commit/ca5cc0acfbbeec08efd4f3aa651bdbefd2008518) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): align prompt templates with runtime behavior
+  - Align `read_file` long-line guidance with runtime behavior by rendering `MAX_LINE_LENGTH` in the prompt.
+  - Normalize middleware prompt/template text for filesystem, memory, subagents, and summarization to match current behavior and improve consistency.
+  - Remove Python-specific phrasing from skills guidance to keep descriptions language-agnostic.
+
+- [#404](https://github.com/langchain-ai/deepagentsjs/pull/404) [`ca5cc0a`](https://github.com/langchain-ai/deepagentsjs/commit/ca5cc0acfbbeec08efd4f3aa651bdbefd2008518) Thanks [@hntrl](https://github.com/hntrl)! - clean up factory method middleware wiring
+
+- [#404](https://github.com/langchain-ai/deepagentsjs/pull/404) [`ca5cc0a`](https://github.com/langchain-ai/deepagentsjs/commit/ca5cc0acfbbeec08efd4f3aa651bdbefd2008518) Thanks [@hntrl](https://github.com/hntrl)! - chore(sdk): update async subagent middleware for agent protocol
+
+- [#404](https://github.com/langchain-ai/deepagentsjs/pull/404) [`ca5cc0a`](https://github.com/langchain-ai/deepagentsjs/commit/ca5cc0acfbbeec08efd4f3aa651bdbefd2008518) Thanks [@hntrl](https://github.com/hntrl)! - fix(sdk): AsyncTask updatedAt field doesn't update on task status changes
+
+## 1.8.8
+
+### Patch Changes
+
+- [#395](https://github.com/langchain-ai/deepagentsjs/pull/395) [`92b2657`](https://github.com/langchain-ai/deepagentsjs/commit/92b26577b81979636222eb77e938650e2e4d752c) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): bump langchain deps
+
+## 1.8.7
+
+### Patch Changes
+
+- [#357](https://github.com/langchain-ai/deepagentsjs/pull/357) [`2de4302`](https://github.com/langchain-ai/deepagentsjs/commit/2de43020032722d5951a22b2411aa38ea6e5bd1c) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): evict large HumanMessages to filesystem
+
+- [#390](https://github.com/langchain-ai/deepagentsjs/pull/390) [`9301a9e`](https://github.com/langchain-ai/deepagentsjs/commit/9301a9efcc86abb7a5225d153770e293ebaa54e8) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): update langchain packages
+
+## 1.8.6
+
+### Patch Changes
+
+- [#362](https://github.com/langchain-ai/deepagentsjs/pull/362) [`028f2f8`](https://github.com/langchain-ai/deepagentsjs/commit/028f2f818f9c4f95e71308fbdc80d035f0709224) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): extend BackendFactory and make it async
+
+- [#381](https://github.com/langchain-ai/deepagentsjs/pull/381) [`8e6a283`](https://github.com/langchain-ai/deepagentsjs/commit/8e6a28316b8a1cf620192312917a9fd43aa8693c) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): support ttl for LS sandbox
+
+## 1.8.5
+
+### Patch Changes
+
+- [#330](https://github.com/langchain-ai/deepagentsjs/pull/330) [`140e9ef`](https://github.com/langchain-ai/deepagentsjs/commit/140e9ef5176776261ddc0775d1858eb1374a20cb) Thanks [@maahir30](https://github.com/maahir30)! - fix(deepagents): throw on built-in tool collision
+  - `createDeepAgent` now throws at construction time if any user-supplied tool name collides with a built-in tool (`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `execute`, `task`, `write_todos`). Previously, colliding tools silently shadowed the built-in, causing cryptic schema-validation errors at runtime.
+
+- [#335](https://github.com/langchain-ai/deepagentsjs/pull/335) [`3254f71`](https://github.com/langchain-ai/deepagentsjs/commit/3254f71708de076fb1e17f5065b45318394d0c9e) Thanks [@pawel-twardziak](https://github.com/pawel-twardziak)! - fix(deepagents): remove orphaned ToolMessages for Gemini compatibility
+
+- [#336](https://github.com/langchain-ai/deepagentsjs/pull/336) [`2b76272`](https://github.com/langchain-ai/deepagentsjs/commit/2b76272e9c435b5e23bede7cd79ab4ba8efae2c8) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): use `crypto.randomUUID()` instead of uuid
+
+- [#331](https://github.com/langchain-ai/deepagentsjs/pull/331) [`759fe19`](https://github.com/langchain-ai/deepagentsjs/commit/759fe19a776eb0befb55d83b1030824c28704a32) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): reorder middleware so prompt caching and memory run last
+
+  Move `anthropicPromptCachingMiddleware` and `memoryMiddleware` after all static and user-supplied middleware. This ensures that updates to memory contents do not invalidate Anthropic prompt caches.
+
+- [#332](https://github.com/langchain-ai/deepagentsjs/pull/332) [`3ff382e`](https://github.com/langchain-ai/deepagentsjs/commit/3ff382e2ba0aa3ffa1f7431eec5bdf908075fa74) Thanks [@maahir30](https://github.com/maahir30)! - improve condition for checking sandbox backends
+
+- [#324](https://github.com/langchain-ai/deepagentsjs/pull/324) [`cb352a0`](https://github.com/langchain-ai/deepagentsjs/commit/cb352a0412f2cf66109f7fbe63c65b7d14b0df88) Thanks [@christian-bromann](https://github.com/christian-bromann)! - feat(deepagent): add LangSmithSandbox
+
+## 1.8.4
+
+### Patch Changes
+
+- [#290](https://github.com/langchain-ai/deepagentsjs/pull/290) [`ab4a515`](https://github.com/langchain-ai/deepagentsjs/commit/ab4a515f37cc166cb5015afa3617f625b343bcbb) Thanks [@maahir30](https://github.com/maahir30)! - Add static structured output to subagent response
+
+- [#289](https://github.com/langchain-ai/deepagentsjs/pull/289) [`5a4df6c`](https://github.com/langchain-ai/deepagentsjs/commit/5a4df6c050284e6024229ece108d58bcff3fdc66) Thanks [@alvedder](https://github.com/alvedder)! - fix(deepagents): move uuid from devDependencies to dependencies
+
+- [#317](https://github.com/langchain-ai/deepagentsjs/pull/317) [`01da088`](https://github.com/langchain-ai/deepagentsjs/commit/01da08863acd74da303b78950050f3df850216fe) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents, quickjs): read store from runtime/config.store instead of config.configurable
+
+  The filesystem middleware was reading the store from `request.config.store` (with a `@ts-expect-error`) and the QuickJS middleware from `config.configurable.__pregel_store`. Both now use the properly typed paths: `request.runtime.store` and `config.store` respectively.
+
+## 1.8.3
+
+### Patch Changes
+
+- [#305](https://github.com/langchain-ai/deepagentsjs/pull/305) [`7ffb0b6`](https://github.com/langchain-ai/deepagentsjs/commit/7ffb0b637524ec5469adde419f2ef309d2d78356) Thanks [@tanushree-sharma](https://github.com/tanushree-sharma)! - Add LangSmith integration metadata to deepagentsjs
+
 ## 1.8.2
 
 ### Patch Changes

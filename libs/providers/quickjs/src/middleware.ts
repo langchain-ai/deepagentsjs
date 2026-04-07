@@ -15,12 +15,7 @@ import {
 } from "langchain";
 import { z } from "zod/v4";
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import {
-  StateBackend,
-  type BackendProtocol,
-  type BackendFactory,
-  type StateAndStore,
-} from "deepagents";
+import { StateBackend, type BackendRuntime, resolveBackend } from "deepagents";
 
 import dedent from "dedent";
 import type { QuickJSMiddlewareOptions } from "./types.js";
@@ -47,7 +42,10 @@ import {
 import type * as _zodTypes from "@langchain/core/utils/types";
 import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
-import { getCurrentTaskInput } from "@langchain/langgraph";
+import {
+  getCurrentTaskInput,
+  LangGraphRunnableConfig,
+} from "@langchain/langgraph";
 
 /**
  * Backend-provided tools excluded from PTC by default.
@@ -159,26 +157,13 @@ export async function generatePtcPrompt(
 }
 
 /**
- * Resolve backend from factory or instance.
- */
-function getBackend(
-  backend: BackendProtocol | BackendFactory,
-  stateAndStore: StateAndStore,
-): BackendProtocol {
-  if (typeof backend === "function") {
-    return backend(stateAndStore);
-  }
-  return backend;
-}
-
-/**
  * Create the QuickJS REPL middleware.
  */
 export function createQuickJSMiddleware(
   options: QuickJSMiddlewareOptions = {},
 ) {
   const {
-    backend = (stateAndStore: StateAndStore) => new StateBackend(stateAndStore),
+    backend = (runtime: BackendRuntime) => new StateBackend(runtime),
     ptc = false,
     memoryLimitBytes = DEFAULT_MEMORY_LIMIT,
     maxStackSizeBytes = DEFAULT_MAX_STACK_SIZE,
@@ -224,14 +209,14 @@ export function createQuickJSMiddleware(
   }
 
   const jsEvalTool = tool(
-    async (input, config) => {
+    async (input, config: LangGraphRunnableConfig) => {
       const threadId = config.configurable?.thread_id || DEFAULT_SESSION_ID;
 
-      const stateAndStore: StateAndStore = {
+      const runtime: BackendRuntime = {
+        ...config,
         state: getCurrentTaskInput(config) || {},
-        store: config.configurable?.__pregel_store,
-      };
-      const resolvedBackend = getBackend(backend, stateAndStore);
+      } as BackendRuntime;
+      const resolvedBackend = await resolveBackend(backend, runtime);
 
       const session = ReplSession.getOrCreate(threadId, {
         memoryLimitBytes,

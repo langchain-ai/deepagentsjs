@@ -1,0 +1,8 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "supervisor": "./supervisor.ts:graph",
+    "researcher": "./researcher.ts:graph"
+  },
+  "env": ".env"
+}
