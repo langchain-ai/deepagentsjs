@@ -51,7 +51,11 @@ export {
 } from "./protocol.js";
 
 export { StateBackend } from "./state.js";
-export { StoreBackend, type StoreBackendOptions } from "./store.js";
+export {
+  StoreBackend,
+  type StoreBackendOptions,
+  type NamespaceFactory,
+} from "./store.js";
 export { FilesystemBackend } from "./filesystem.js";
 export { CompositeBackend } from "./composite.js";
 export {

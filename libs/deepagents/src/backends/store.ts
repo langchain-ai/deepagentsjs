@@ -2,7 +2,13 @@
  * StoreBackend: Adapter for LangGraph's BaseStore (persistent, cross-thread).
  */
 
-import { Item, getStore as getLangGraphStore } from "@langchain/langgraph";
+import {
+  Item,
+  getStore as getLangGraphStore,
+  getConfig,
+  getWriter,
+} from "@langchain/langgraph";
+import type { Runtime } from "@langchain/langgraph";
 import type {
   BackendOptions,
   BackendProtocolV2,
@@ -70,31 +76,68 @@ function validateNamespace(namespace: string[]): string[] {
 }
 
 /**
+ * Factory function that computes a store namespace from the LangGraph
+ * {@link Runtime} at invocation time.
+ *
+ * Called on every backend operation so the namespace can vary per-user,
+ * per-thread, per-assistant, etc.  Must return a non-empty `string[]`
+ * whose components contain only safe characters (alphanumeric, `-`, `_`,
+ * `.`, `@`, `+`, `:`, `~`).
+ *
+ * @example
+ * ```typescript
+ * import { StoreBackend } from "deepagents";
+ *
+ * // Per-user
+ * new StoreBackend({
+ *   namespace: (runtime) => [runtime.serverInfo!.user!.identity],
+ * });
+ *
+ * // Per-assistant
+ * new StoreBackend({
+ *   namespace: (runtime) => [runtime.serverInfo!.assistantId],
+ * });
+ *
+ * // Per-thread
+ * new StoreBackend({
+ *   namespace: (runtime) => [runtime.executionInfo!.threadId!],
+ * });
+ * ```
+ */
+export type NamespaceFactory = (runtime: Partial<Runtime>) => string[];
+
+/**
  * Options for StoreBackend constructor.
  */
 export interface StoreBackendOptions extends BackendOptions {
   /**
-   * Custom namespace for store operations.
+   * Namespace for store operations — either a static `string[]` or a
+   * {@link NamespaceFactory} that derives the namespace from the LangGraph
+   * {@link Runtime} at invocation time.
    *
    * Determines where files are stored in the LangGraph store, enabling
-   * user-scoped, org-scoped, or any custom isolation pattern.
+   * user-scoped, per-thread, per-assistant, or any custom isolation pattern.
    *
-   * If not provided, falls back to legacy behavior using assistantId from {@link BackendRuntime}.
+   * If not provided, falls back to legacy `assistantId`-based isolation or
+   * `["filesystem"]` as a last resort.
    *
    * @example
    * ```typescript
-   * // User-scoped storage
-   * new StoreBackend(runtime, {
-   *   namespace: ["memories", orgId, userId, "filesystem"],
+   * // Static namespace
+   * new StoreBackend({ namespace: ["org-123", "user-456", "filesystem"] });
+   *
+   * // Per-user (dynamic)
+   * new StoreBackend({
+   *   namespace: (runtime) => [runtime.serverInfo!.user!.identity],
    * });
    *
-   * // Org-scoped storage
-   * new StoreBackend(runtime, {
-   *   namespace: ["memories", orgId, "filesystem"],
+   * // Per-thread (dynamic)
+   * new StoreBackend({
+   *   namespace: (runtime) => [runtime.executionInfo!.threadId!],
    * });
    * ```
    */
-  namespace?: string[];
+  namespace?: string[] | NamespaceFactory;
 }
 
 /**
@@ -109,7 +152,7 @@ export interface StoreBackendOptions extends BackendOptions {
  */
 export class StoreBackend implements BackendProtocolV2 {
   private stateAndStore: StateAndStore | undefined;
-  private _namespace: string[] | undefined;
+  private _namespace: string[] | NamespaceFactory | undefined;
   private fileFormat: "v1" | "v2";
 
   constructor(options?: StoreBackendOptions);
@@ -136,7 +179,11 @@ export class StoreBackend implements BackendProtocolV2 {
     }
 
     if (opts?.namespace) {
-      this._namespace = validateNamespace(opts.namespace);
+      if (typeof opts.namespace === "function") {
+        this._namespace = opts.namespace;
+      } else {
+        this._namespace = validateNamespace(opts.namespace);
+      }
     }
     this.fileFormat = opts?.fileFormat ?? "v2";
   }
@@ -172,16 +219,40 @@ export class StoreBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Assemble a {@link Runtime} from the LangGraph execution-context accessors
+   * ({@link getConfig}, {@link getLangGraphStore}, {@link getWriter}).
+   *
+   * Returns `Partial<Runtime>` because `interrupt` and `signal` have no
+   * standalone accessors.  Falls back to `{}` outside an execution context.
+   */
+  private static getRuntime(): Partial<Runtime> {
+    try {
+      const config = getConfig();
+      return {
+        ...config,
+        store: getLangGraphStore() ?? config.store,
+        writer: getWriter() ?? config.writer,
+      };
+    } catch {
+      return {};
+    }
+  }
+
+  /**
    * Get the namespace for store operations.
    *
    * Resolution order:
-   * 1. Explicit namespace from constructor options (both modes)
-   * 2. Legacy mode: `[assistantId, "filesystem"]` fallback from {@link StateAndStore}
-   * 3. Zero-arg mode without namespace: `["filesystem"]` with a deprecation warning
-   *    nudging callers to pass an explicit namespace
-   * 4. Legacy mode without assistantId: `["filesystem"]`
+   * 1. Namespace factory — called with a {@link Runtime} assembled from the
+   *    current LangGraph execution context. Result is validated.
+   * 2. Explicit static namespace from constructor options
+   * 3. Legacy mode: `[assistantId, "filesystem"]` fallback from {@link StateAndStore}
+   * 4. Default: `["filesystem"]`
    */
   protected getNamespace(): string[] {
+    if (typeof this._namespace === "function") {
+      return validateNamespace(this._namespace(StoreBackend.getRuntime()));
+    }
+
     if (this._namespace) {
       return this._namespace;
     }

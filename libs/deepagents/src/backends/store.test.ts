@@ -1,14 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { StoreBackend } from "./store.js";
+import { StoreBackend, type NamespaceFactory } from "./store.js";
 import type { BackendRuntime } from "./protocol.js";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
-import { getStore as getLangGraphStore } from "@langchain/langgraph";
+import { getStore as getLangGraphStore, getConfig } from "@langchain/langgraph";
+import type { Runtime } from "@langchain/langgraph";
 
 vi.mock("@langchain/langgraph", async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...(actual as any),
     getStore: vi.fn(),
+    getConfig: vi.fn(),
+    getWriter: vi.fn(),
   };
 });
 
@@ -817,6 +820,227 @@ describe("StoreBackend", () => {
       expect(new TextDecoder().decode(downloadRes[1].content!)).toBe(
         "content2",
       );
+    });
+  });
+
+  describe("namespace factory", () => {
+    /**
+     * Set up mocks for a zero-arg StoreBackend with namespace factory.
+     * Mocks getStore and getConfig to simulate a LangGraph execution context.
+     */
+    function setupFactory(runtimeOverrides: Partial<Runtime> = {}) {
+      const store = new InMemoryStore();
+      vi.mocked(getLangGraphStore).mockReturnValue(store);
+      vi.mocked(getConfig).mockReturnValue(runtimeOverrides as any);
+      return { store };
+    }
+
+    it("should resolve namespace from serverInfo.assistantId", async () => {
+      const { store } = setupFactory({
+        serverInfo: { assistantId: "asst-abc", graphId: "graph-1" },
+      });
+
+      const backend = new StoreBackend({
+        namespace: (runtime) => [runtime.serverInfo!.assistantId, "filesystem"],
+      });
+
+      await backend.write("/test.txt", "assistant-scoped");
+
+      const items = await store.search(["asst-abc", "filesystem"]);
+      expect(items.some((item) => item.key === "/test.txt")).toBe(true);
+
+      const defaultItems = await store.search(["filesystem"]);
+      expect(defaultItems.some((item) => item.key === "/test.txt")).toBe(false);
+    });
+
+    it("should resolve namespace from serverInfo.user.identity", async () => {
+      const { store } = setupFactory({
+        serverInfo: {
+          assistantId: "asst-abc",
+          graphId: "graph-1",
+          user: { identity: "user-42" },
+        },
+      });
+
+      const backend = new StoreBackend({
+        namespace: (runtime) => [runtime.serverInfo!.user!.identity],
+      });
+
+      await backend.write("/notes.md", "user-scoped");
+
+      const items = await store.search(["user-42"]);
+      expect(items.some((item) => item.key === "/notes.md")).toBe(true);
+    });
+
+    it("should resolve namespace from executionInfo.threadId", async () => {
+      const { store } = setupFactory({
+        executionInfo: {
+          threadId: "thread-xyz",
+          checkpointId: "cp-1",
+          checkpointNs: "",
+          taskId: "task-1",
+          nodeAttempt: 1,
+        },
+      });
+
+      const backend = new StoreBackend({
+        namespace: (runtime) => [
+          runtime.executionInfo!.threadId!,
+          "filesystem",
+        ],
+      });
+
+      await backend.write("/test.txt", "thread-scoped");
+
+      const items = await store.search(["thread-xyz", "filesystem"]);
+      expect(items.some((item) => item.key === "/test.txt")).toBe(true);
+    });
+
+    it("should support composite namespace (assistantId + userId)", async () => {
+      const { store } = setupFactory({
+        serverInfo: {
+          assistantId: "asst-abc",
+          graphId: "graph-1",
+          user: { identity: "user-42" },
+        },
+      });
+
+      const backend = new StoreBackend({
+        namespace: (runtime) => [
+          runtime.serverInfo!.assistantId,
+          runtime.serverInfo!.user!.identity,
+        ],
+      });
+
+      await backend.write("/mem.md", "user-within-assistant");
+
+      const items = await store.search(["asst-abc", "user-42"]);
+      expect(items.some((item) => item.key === "/mem.md")).toBe(true);
+    });
+
+    it("should call factory on every operation", async () => {
+      setupFactory({
+        serverInfo: { assistantId: "asst-1", graphId: "graph-1" },
+      });
+
+      const factory: NamespaceFactory = vi.fn((runtime) => [
+        runtime.serverInfo!.assistantId,
+        "fs",
+      ]);
+
+      const backend = new StoreBackend({ namespace: factory });
+
+      await backend.write("/a.txt", "first");
+      expect(factory).toHaveBeenCalledTimes(1);
+
+      await backend.read("/a.txt");
+      expect(factory).toHaveBeenCalledTimes(2);
+
+      await backend.ls("/");
+      expect(factory).toHaveBeenCalledTimes(3);
+    });
+
+    it("should validate factory-produced namespace", () => {
+      setupFactory();
+
+      const backend = new StoreBackend({
+        namespace: () => ["filesystem", "*"],
+      });
+      expect(() => backend["getNamespace"]()).toThrow("disallowed characters");
+    });
+
+    it("should throw if factory returns empty namespace", () => {
+      setupFactory();
+
+      const backend = new StoreBackend({ namespace: () => [] });
+      expect(() => backend["getNamespace"]()).toThrow("must not be empty");
+    });
+
+    it("should isolate data between users via factory", async () => {
+      const store = new InMemoryStore();
+      vi.mocked(getLangGraphStore).mockReturnValue(store);
+
+      const backend = new StoreBackend({
+        namespace: (runtime) => [
+          runtime.serverInfo!.user!.identity,
+          "filesystem",
+        ],
+      });
+
+      // Simulate user A
+      vi.mocked(getConfig).mockReturnValue({
+        serverInfo: {
+          assistantId: "asst-1",
+          graphId: "g-1",
+          user: { identity: "alice" },
+        },
+      } as any);
+      await backend.write("/notes.txt", "Alice's notes");
+
+      // Simulate user B
+      vi.mocked(getConfig).mockReturnValue({
+        serverInfo: {
+          assistantId: "asst-1",
+          graphId: "g-1",
+          user: { identity: "bob" },
+        },
+      } as any);
+      await backend.write("/notes.txt", "Bob's notes");
+
+      const aliceItems = await store.search(["alice", "filesystem"]);
+      expect(aliceItems).toHaveLength(1);
+      expect((aliceItems[0].value as any).content).toBe("Alice's notes");
+
+      const bobItems = await store.search(["bob", "filesystem"]);
+      expect(bobItems).toHaveLength(1);
+      expect((bobItems[0].value as any).content).toBe("Bob's notes");
+    });
+
+    it("should gracefully degrade outside execution context", async () => {
+      const store = new InMemoryStore();
+      vi.mocked(getLangGraphStore).mockReturnValue(store);
+      vi.mocked(getConfig).mockImplementation(() => {
+        throw new Error("No execution context");
+      });
+
+      const backend = new StoreBackend({
+        namespace: () => ["fallback", "filesystem"],
+      });
+
+      await backend.write("/test.txt", "works outside context");
+
+      const items = await store.search(["fallback", "filesystem"]);
+      expect(items.some((item) => item.key === "/test.txt")).toBe(true);
+    });
+
+    it("should receive the runtime from getConfig()", async () => {
+      const mockRuntime = {
+        serverInfo: { assistantId: "asst-1", graphId: "g-1" },
+        executionInfo: {
+          threadId: "t-1",
+          checkpointId: "cp-1",
+          checkpointNs: "",
+          taskId: "task-1",
+          nodeAttempt: 1,
+        },
+        context: { userId: "u-1" },
+      };
+      setupFactory(mockRuntime);
+
+      let captured: Partial<Runtime> | undefined;
+      const backend = new StoreBackend({
+        namespace: (runtime) => {
+          captured = runtime;
+          return ["test"];
+        },
+      });
+
+      await backend.write("/x.txt", "test");
+
+      expect(captured).toBeDefined();
+      expect(captured!.serverInfo!.assistantId).toBe("asst-1");
+      expect(captured!.executionInfo!.threadId).toBe("t-1");
+      expect(captured!.context).toEqual({ userId: "u-1" });
     });
   });
 });
