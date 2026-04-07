@@ -2,6 +2,8 @@
 
 ## 0.2.0
 
+## 0.2.0
+
 ### Minor Changes
 
 - [#382](https://github.com/langchain-ai/deepagentsjs/pull/382) [`ba5aafd`](https://github.com/langchain-ai/deepagentsjs/commit/ba5aafd76168736de28df5f0d810456ebf7dd4a5) Thanks [@Ehesp](https://github.com/Ehesp)! - Add support for autoArchiveInterval and autoDeleteInterval in Daytona sandbox creation options.
