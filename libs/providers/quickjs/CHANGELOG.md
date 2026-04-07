@@ -1,5 +1,15 @@
 # @langchain/quickjs
 
+## 0.2.5
+
+### Patch Changes
+
+- [#434](https://github.com/langchain-ai/deepagentsjs/pull/434) [`89ee206`](https://github.com/langchain-ai/deepagentsjs/commit/89ee206ba6dd07f895c662755a2058b08fcb5315) Thanks [@hntrl](https://github.com/hntrl)! - bump langgraph + langchain versions
+
+- [#404](https://github.com/langchain-ai/deepagentsjs/pull/404) [`ca5cc0a`](https://github.com/langchain-ai/deepagentsjs/commit/ca5cc0acfbbeec08efd4f3aa651bdbefd2008518) Thanks [@hntrl](https://github.com/hntrl)! - feat(deepagents): support multimodal files for backends
+
+- [#404](https://github.com/langchain-ai/deepagentsjs/pull/404) [`ca5cc0a`](https://github.com/langchain-ai/deepagentsjs/commit/ca5cc0acfbbeec08efd4f3aa651bdbefd2008518) Thanks [@hntrl](https://github.com/hntrl)! - chore(deepagents): refactor backend method names - lsInfo -> ls, grepRaw -> grep, globInfo -> glob
+
 ## 0.2.4
 
 ### Patch Changes

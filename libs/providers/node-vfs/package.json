@@ -1,6 +1,6 @@
 {
   "name": "@langchain/node-vfs",
-  "version": "0.1.4-alpha.0",
+  "version": "0.1.4",
   "description": "Virtual File System sandbox backend for deepagents",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
