@@ -40,9 +40,7 @@ import {
 
 const NAMESPACE_COMPONENT_RE = /^[A-Za-z0-9\-_.@+:~]+$/;
 
-function getObjectRecord(
-  value: unknown,
-): Record<string, unknown> | undefined {
+function getObjectRecord(value: unknown): Record<string, unknown> | undefined {
   return value != null && typeof value === "object"
     ? (value as Record<string, unknown>)
     : undefined;

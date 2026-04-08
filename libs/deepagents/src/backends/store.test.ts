@@ -581,11 +581,7 @@ describe("StoreBackend", () => {
 
     await backend.write("/test.txt", "context-derived namespace");
 
-    const items = await store.search([
-      "memories",
-      "legacy-user",
-      "filesystem",
-    ]);
+    const items = await store.search(["memories", "legacy-user", "filesystem"]);
     expect(items.some((item) => item.key === "/test.txt")).toBe(true);
   });
 
