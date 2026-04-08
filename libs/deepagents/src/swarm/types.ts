@@ -89,4 +89,22 @@ export interface SwarmExecutionSummary {
    * Number of tasks that failed after all retry attempts.
    */
   failed: number;
+
+  /**
+   * Path to the results directory for this run.
+   *
+   * Contains a single `results.jsonl` file with one JSON object per line,
+   * each including the original task fields plus `status`, `result`, and/or `error`.
+   */
+  resultsDir: string;
+
+  /**
+   * Present only when the results file could not be written.
+   */
+  writeError?: string;
+
+  /**
+   * Inline results fallback when resultsDir write fails.
+   */
+  results?: SwarmTaskResult[];
 }

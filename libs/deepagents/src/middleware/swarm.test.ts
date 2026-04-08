@@ -55,15 +55,18 @@ describe("createSwarmTool", () => {
     expect(tool.description).toContain("researcher");
   });
 
-  it("throws when the tasks file is not found", async () => {
+  it("returns error message when the tasks file is not found", async () => {
     const backend = createMockBackend({ files: {} });
     const tool = createSwarmTool({
       subagentGraphs: { "general-purpose": makeSubagent() },
       backend,
     });
-    await expect(
-      tool.invoke({ tasksPath: "/tmp/swarm/tasks.jsonl" }),
-    ).rejects.toThrow('Failed to read tasks file at "/tmp/swarm/tasks.jsonl"');
+    const result = await tool.invoke({
+      tasksPath: "/tmp/swarm/tasks.jsonl",
+    });
+    expect(result).toContain(
+      'Failed to read tasks file at "/tmp/swarm/tasks.jsonl"',
+    );
   });
 
   it("throws when tasks.jsonl fails validation", async () => {
@@ -96,6 +99,7 @@ describe("createSwarmTool", () => {
     expect(summary.total).toBe(1);
     expect(summary.completed).toBe(1);
     expect(summary.failed).toBe(0);
+    expect(summary.resultsDir).toMatch(/^swarm_runs\/[a-f0-9-]+$/);
   });
 
   it("passes concurrency and maxRetries through to the executor", async () => {

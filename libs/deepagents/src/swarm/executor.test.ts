@@ -50,7 +50,6 @@ function makeOptions(
   return {
     subagentGraphs: { "general-purpose": makeSubagent() },
     backend: makeBackend(backendOpts),
-    tasksPath: "/tasks.jsonl",
     parentState: {},
     maxRetries: 1,
     ...overrides,
@@ -241,26 +240,16 @@ describe("executeSwarm — unknown subagentType", () => {
 // ---------------------------------------------------------------------------
 
 describe("executeSwarm — backend write", () => {
-  it("should call backend.write with the tasksPath when uploadFiles is absent", async () => {
+  it("should write results to a unique run directory", async () => {
     const backend = makeBackend();
-    const options = makeOptions({ backend, tasksPath: "/my/tasks.jsonl" });
+    const options = makeOptions({ backend });
 
-    await executeSwarm([makeTask("t1")], options);
+    const summary = await executeSwarm([makeTask("t1")], options);
 
     expect(backend.write).toHaveBeenCalledOnce();
-    expect(backend.write.mock.calls[0][0]).toBe("/my/tasks.jsonl");
-  });
-
-  it("should call backend.uploadFiles with the tasksPath when available", async () => {
-    const backend = makeBackend({ uploadFiles: true });
-    const options = makeOptions({ backend, tasksPath: "/my/tasks.jsonl" });
-
-    await executeSwarm([makeTask("t1")], options);
-
-    expect(backend.uploadFiles).toHaveBeenCalledOnce();
-    const [[path]] = backend.uploadFiles.mock.calls[0][0];
-    expect(path).toBe("/my/tasks.jsonl");
-    expect(backend.write).not.toHaveBeenCalled();
+    const writtenPath: string = backend.write.mock.calls[0][0];
+    expect(writtenPath).toMatch(/^swarm_runs\/[a-f0-9-]+\/results\.jsonl$/);
+    expect(summary.resultsDir).toBe(writtenPath.replace("/results.jsonl", ""));
   });
 
   it("should write valid JSONL content containing the task result", async () => {
@@ -615,6 +604,26 @@ describe("executeSwarm — result ordering", () => {
     expect(results[0].id).toBe("t1");
     expect(results[1].id).toBe("t2");
     expect(results[2].id).toBe("t3");
+  });
+
+  it("should return summary with inline results when write fails", async () => {
+    const backend = makeBackend();
+    backend.write = vi.fn().mockRejectedValue(new Error("disk full"));
+    const subagent = makeSubagent({ messages: [{ content: "the answer" }] });
+    const options = makeOptions({
+      subagentGraphs: { "general-purpose": subagent },
+      backend,
+    });
+
+    const summary = await executeSwarm([makeTask("t1")], options);
+
+    expect(summary.total).toBe(1);
+    expect(summary.completed).toBe(1);
+    expect(summary.failed).toBe(0);
+    expect(summary.resultsDir).toBe("");
+    expect(summary.writeError).toContain("disk full");
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results![0].status).toBe("completed");
   });
 
   it("should include tasks that were never executed as failed in results", async () => {

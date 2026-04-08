@@ -28,6 +28,27 @@ export function createMockBackend(
   const directories = config.directories ?? {};
   const writtenFiles: Record<string, string> = { ...files };
   return {
+    async read(filePath: string) {
+      const content = files[filePath];
+      if (content === null || content === undefined) {
+        return { error: "file_not_found" };
+      }
+      return { content };
+    },
+    async readRaw(filePath: string) {
+      const content = files[filePath];
+      if (content === null || content === undefined) {
+        return { error: "file_not_found" };
+      }
+      return {
+        data: {
+          content,
+          mimeType: "text/plain",
+          created_at: "",
+          modified_at: "",
+        },
+      };
+    },
     async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
       return paths.map((path) => {
         const content = files[path];

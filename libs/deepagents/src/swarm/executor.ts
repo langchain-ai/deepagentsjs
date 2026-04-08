@@ -12,6 +12,7 @@ import { Runnable, type RunnableConfig } from "@langchain/core/runnables";
 import { BackendProtocolV2 } from "../backends/protocol.js";
 import { filterStateForSubagent } from "../middleware/subagents.js";
 import { serializeResultsJsonl } from "./parse.js";
+import { randomUUID } from "node:crypto";
 
 // Content block types that carry no useful text for the orchestrator.
 const NON_TEXT_BLOCK_TYPES = new Set([
@@ -30,14 +31,9 @@ export interface SwarmExecutionOptions {
   subagentGraphs: Record<string, ReactAgent<any> | Runnable>;
 
   /**
-   * Backend for reading/writing the tasks.jsonl file.
+   * Backend for writing result files.
    */
   backend: BackendProtocolV2;
-
-  /**
-   * Path to the tasks.jsonl file within the backend filesystem.
-   */
-  tasksPath: string;
 
   /**
    * Current parent agent state (filtered before passing to subagents).
@@ -57,7 +53,7 @@ export interface SwarmExecutionOptions {
   concurrency?: number;
 
   /**
-   * Max attemtps per task.
+   * Max attempts per task.
    *
    * @default 3
    */
@@ -82,19 +78,20 @@ interface Semaphore {
 }
 
 /**
- * Write the enriched results file back to the backend.
+ * Write the results file to a unique run directory.
+ *
+ * @returns The results directory path (e.g., `/swarm_runs/<uuid>`)
  */
 async function writeResults(
   backend: BackendProtocolV2,
-  tasksPath: string,
   results: SwarmTaskResult[],
-): Promise<void> {
+): Promise<string> {
+  const runId = randomUUID();
+  const resultsDir = `swarm_runs/${runId}`;
+  const resultsPath = `${resultsDir}/results.jsonl`;
   const content = serializeResultsJsonl(results);
-  if (backend.uploadFiles) {
-    await backend.uploadFiles([[tasksPath, new TextEncoder().encode(content)]]);
-  } else {
-    await backend.write(tasksPath, content);
-  }
+  await backend.write(resultsPath, content);
+  return resultsDir;
 }
 
 /**
@@ -218,8 +215,8 @@ async function runSingleTask(
  * 3. After each pass, collect results. Failed tasks are re-queued for
  *    the next pass.
  * 4. Repeat until all tasks succeed or the retry limit is exhausted.
- * 5. Write the enriched tasks.jsonl back via the backend.
- * 6. Return a structured summary.
+ * 5. Write results.jsonl to a unique run directory via the backend.
+ * 6. Return a structured summary including the results directory path.
  *
  * @param tasks - Validated task specs to execute
  * @param options - Executor configuration
@@ -232,7 +229,6 @@ export async function executeSwarm(
   const {
     subagentGraphs,
     backend,
-    tasksPath,
     parentState,
     config,
     concurrency = DEFAULT_CONCURRENCY,
@@ -305,11 +301,20 @@ export async function executeSwarm(
         error: "not executed",
       },
   );
-  await writeResults(backend, tasksPath, results);
+
+  let resultsDir: string | undefined;
+  let writeError: string | undefined;
+  try {
+    resultsDir = await writeResults(backend, results);
+  } catch (err: any) {
+    writeError = `Failed to write results: ${err.message}`;
+  }
 
   return {
     total: results.length,
     completed: results.filter((r) => r.status === "completed").length,
     failed: results.filter((r) => r.status === "failed").length,
+    resultsDir: resultsDir ?? "",
+    ...(writeError != null && { writeError, results }),
   };
 }

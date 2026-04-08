@@ -129,30 +129,19 @@ export function createSwarmTool(options: CreateSwarmToolOptions) {
 
       const resolvedBackend = await resolveBackend(backend, runtime);
 
-      let content: string;
-
-      if (resolvedBackend.downloadFiles) {
-        const [response] = await resolvedBackend.downloadFiles([tasksPath]);
-        if (response.error || !response.content) {
-          throw new Error(
-            `Failed to read tasks file at "${tasksPath}": ${response.error ?? "file not found"}. ` +
-              `Ensure the task generation script wrote the file to this path.`,
-          );
-        }
-        content = new TextDecoder().decode(response.content);
-      } else {
-        const result = await resolvedBackend.read(tasksPath);
-        if (result.error || result.content === undefined) {
-          throw new Error(
-            `Failed to read tasks file at "${tasksPath}": ${result.error ?? "file not found"}. ` +
-              `Ensure the task generation script wrote the file to this path.`,
-          );
-        }
-        content =
-          typeof result.content === "string"
-            ? result.content
-            : new TextDecoder().decode(result.content);
+      const result = await resolvedBackend.readRaw(tasksPath);
+      if (result.error || result.data === undefined) {
+        return (
+          `Failed to read tasks file at "${tasksPath}": ${result.error ?? "file not found"}. ` +
+          `Use write_file to create the tasks.jsonl file before calling swarm.`
+        );
       }
+      // FileData can be v1 (content: string[]) or v2 (content: string | Uint8Array)
+      const content = Array.isArray(result.data.content)
+        ? result.data.content.join("\n")
+        : typeof result.data.content === "string"
+          ? result.data.content
+          : new TextDecoder().decode(result.data.content);
 
       const tasks = parseTasksJsonl(content);
       const parentState = getCurrentTaskInput<Record<string, unknown>>();
@@ -160,7 +149,6 @@ export function createSwarmTool(options: CreateSwarmToolOptions) {
       const summary = await executeSwarm(tasks, {
         subagentGraphs,
         backend: resolvedBackend,
-        tasksPath,
         parentState,
         config: runtime,
         concurrency,
@@ -175,13 +163,16 @@ export function createSwarmTool(options: CreateSwarmToolOptions) {
 
 ## Workflow
 
-1. Write a Python script (via \`execute\`) that reads your data, chunks it, and writes a tasks.jsonl file — one JSON object per line:
+1. Create a tasks.jsonl file with one JSON object per line:
    \`\`\`json
-   {"id": "chunk_0", "description": "Classify lines 1-500 of /tmp/data.txt. Return JSON counts.", "subagentType": "general-purpose"}
-   {"id": "chunk_1", "description": "Classify lines 501-1000 of /tmp/data.txt. Return JSON counts.", "subagentType": "general-purpose"}
+   {"id": "chunk_0", "description": "Classify lines 1-500 of data.txt. Return JSON counts.", "subagentType": "general-purpose"}
+   {"id": "chunk_1", "description": "Classify lines 501-1000 of data.txt. Return JSON counts.", "subagentType": "general-purpose"}
    \`\`\`
-2. Call \`swarm\` with the path to the generated tasks.jsonl.
-3. Write a second script (via \`execute\`) that reads the enriched tasks.jsonl (which now has "status" and "result" fields added to each line) and aggregates the results.
+   Use \`write_file\` to create the file, or generate it with a script via \`execute\` if available.
+2. Call \`swarm\` with the path to the tasks.jsonl file.
+3. The tool returns a JSON summary with \`total\`, \`completed\`, \`failed\`, and \`resultsDir\`.
+   Results are written to \`<resultsDir>/results.jsonl\` — each line is the original task enriched with \`status\`, \`result\`, and/or \`error\` fields.
+4. Read \`<resultsDir>/results.jsonl\` (using \`read_file\`) to aggregate the results.
 
 ## tasks.jsonl fields
 
@@ -191,14 +182,17 @@ export function createSwarmTool(options: CreateSwarmToolOptions) {
 
 ## After execution
 
-The tool returns a summary with total/completed/failed counts. The enriched tasks.jsonl is written back to the same path for the aggregation script to read.
+The tool returns:
+\`\`\`json
+{"total": 20, "completed": 19, "failed": 1, "resultsDir": "swarm_runs/<uuid>"}
+\`\`\`
 
 Available subagent types: ${Object.keys(subagentGraphs).join(", ")}`,
       schema: z.object({
         tasksPath: z
           .string()
           .describe(
-            "Path to the tasks.jsonl file produced by the generation script.",
+            "Path to the tasks.jsonl file (created via write_file or a generation script).",
           ),
         concurrency: z
           .number()
