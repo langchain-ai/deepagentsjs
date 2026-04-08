@@ -2,7 +2,11 @@
  * StoreBackend: Adapter for LangGraph's BaseStore (persistent, cross-thread).
  */
 
-import { Item, getStore as getLangGraphStore } from "@langchain/langgraph";
+import {
+  Item,
+  getConfig,
+  getStore as getLangGraphStore,
+} from "@langchain/langgraph";
 import type {
   BackendOptions,
   BackendProtocolV2,
@@ -14,11 +18,13 @@ import type {
   GlobResult,
   GrepResult,
   LsResult,
+  NamespaceFactory,
   ReadRawResult,
   ReadResult,
   WriteResult,
   StateAndStore,
 } from "./protocol.js";
+import { BackendContext } from "./protocol.js";
 import {
   createFileData,
   fileDataToString,
@@ -74,27 +80,24 @@ function validateNamespace(namespace: string[]): string[] {
  */
 export interface StoreBackendOptions extends BackendOptions {
   /**
-   * Custom namespace for store operations.
+   * Namespace for store operations — static array or factory.
    *
-   * Determines where files are stored in the LangGraph store, enabling
+   * A static `string[]` is used as-is. A {@link NamespaceFactory} receives the
+   * current LangGraph `Runtime` and returns the namespace dynamically, enabling
    * user-scoped, org-scoped, or any custom isolation pattern.
    *
-   * If not provided, falls back to legacy behavior using assistantId from {@link BackendRuntime}.
+   * If not provided, falls back to legacy behavior using assistantId.
    *
    * @example
    * ```typescript
-   * // User-scoped storage
-   * new StoreBackend(runtime, {
-   *   namespace: ["memories", orgId, userId, "filesystem"],
-   * });
+   * // Static namespace
+   * new StoreBackend({ namespace: ["memories", orgId, "filesystem"] });
    *
-   * // Org-scoped storage
-   * new StoreBackend(runtime, {
-   *   namespace: ["memories", orgId, "filesystem"],
-   * });
+   * // Dynamic namespace via factory (receives Runtime)
+   * new StoreBackend({ namespace: (rt) => [rt.serverInfo!.user!.identity] });
    * ```
    */
-  namespace?: string[];
+  namespace?: string[] | NamespaceFactory;
 }
 
 /**
@@ -110,6 +113,7 @@ export interface StoreBackendOptions extends BackendOptions {
 export class StoreBackend implements BackendProtocolV2 {
   private stateAndStore: StateAndStore | undefined;
   private _namespace: string[] | undefined;
+  private _namespaceFactory: NamespaceFactory | undefined;
   private fileFormat: "v1" | "v2";
 
   constructor(options?: StoreBackendOptions);
@@ -127,7 +131,6 @@ export class StoreBackend implements BackendProtocolV2 {
       typeof stateAndStoreOrOptions === "object" &&
       "state" in stateAndStoreOrOptions
     ) {
-      // Legacy path
       this.stateAndStore = stateAndStoreOrOptions;
       opts = options;
     } else {
@@ -136,7 +139,11 @@ export class StoreBackend implements BackendProtocolV2 {
     }
 
     if (opts?.namespace) {
-      this._namespace = validateNamespace(opts.namespace);
+      if (typeof opts.namespace === "function") {
+        this._namespaceFactory = opts.namespace;
+      } else {
+        this._namespace = validateNamespace(opts.namespace);
+      }
     }
     this.fileFormat = opts?.fileFormat ?? "v2";
   }
@@ -175,15 +182,23 @@ export class StoreBackend implements BackendProtocolV2 {
    * Get the namespace for store operations.
    *
    * Resolution order:
-   * 1. Explicit namespace from constructor options (both modes)
-   * 2. Legacy mode: `[assistantId, "filesystem"]` fallback from {@link StateAndStore}
-   * 3. Zero-arg mode without namespace: `["filesystem"]` with a deprecation warning
-   *    nudging callers to pass an explicit namespace
-   * 4. Legacy mode without assistantId: `["filesystem"]`
+   * 1. Static namespace from constructor options
+   * 2. Namespace factory — called with the current LangGraph Runtime.
+   *    Supports both new `(rt) => [...]` and legacy `(ctx) => [ctx.runtime...]`
+   *    signatures via {@link BackendContext} backwards-compat wrapper.
+   * 3. Legacy mode: `[assistantId, "filesystem"]` fallback from {@link StateAndStore}
+   * 4. Fallback: `["filesystem"]`
    */
   protected getNamespace(): string[] {
     if (this._namespace) {
       return this._namespace;
+    }
+
+    if (this._namespaceFactory) {
+      const config = getConfig();
+      const ctx = new BackendContext(config as any);
+      const result = this._namespaceFactory(ctx as any);
+      return validateNamespace(result);
     }
 
     if (this.stateAndStore) {

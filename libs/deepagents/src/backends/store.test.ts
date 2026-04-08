@@ -1,14 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { StoreBackend } from "./store.js";
-import type { BackendRuntime } from "./protocol.js";
+import { BackendContext } from "./protocol.js";
+import type { BackendRuntime, NamespaceFactory } from "./protocol.js";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
-import { getStore as getLangGraphStore } from "@langchain/langgraph";
+import { getConfig, getStore as getLangGraphStore } from "@langchain/langgraph";
 
 vi.mock("@langchain/langgraph", async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...(actual as any),
     getStore: vi.fn(),
+    getConfig: vi.fn(),
   };
 });
 
@@ -817,6 +819,206 @@ describe("StoreBackend", () => {
       expect(new TextDecoder().decode(downloadRes[1].content!)).toBe(
         "content2",
       );
+    });
+  });
+
+  describe("namespace factory", () => {
+    function makeZeroArgFactoryConfig(store: InMemoryStore, serverInfo?: any) {
+      vi.mocked(getLangGraphStore).mockReturnValue(store);
+      vi.mocked(getConfig).mockReturnValue({
+        store,
+        configurable: {},
+        serverInfo,
+        executionInfo: {
+          checkpointId: "cp-1",
+          checkpointNs: "",
+          taskId: "task-1",
+          threadId: "thread-1",
+          nodeAttempt: 1,
+        },
+      } as any);
+    }
+
+    it("resolves namespace from a factory function using Runtime", async () => {
+      const store = new InMemoryStore();
+      makeZeroArgFactoryConfig(store, {
+        assistantId: "asst-1",
+        graphId: "graph-1",
+        user: { identity: "user-alice" },
+      });
+
+      const factory: NamespaceFactory = (rt) => [rt.serverInfo!.user!.identity];
+      const backend = new StoreBackend({ namespace: factory });
+
+      await backend.write("/test.txt", "factory namespace content");
+
+      const items = await store.search(["user-alice"]);
+      expect(items.some((item) => item.key === "/test.txt")).toBe(true);
+
+      const defaultItems = await store.search(["filesystem"]);
+      expect(defaultItems.some((item) => item.key === "/test.txt")).toBe(false);
+    });
+
+    it("isolates data between users via namespace factory", async () => {
+      const store = new InMemoryStore();
+
+      makeZeroArgFactoryConfig(store, {
+        assistantId: "asst-1",
+        graphId: "graph-1",
+        user: { identity: "user-alice" },
+      });
+
+      const factory: NamespaceFactory = (rt) => [rt.serverInfo!.user!.identity];
+      const backend = new StoreBackend({ namespace: factory });
+
+      await backend.write("/notes.txt", "alice notes");
+
+      makeZeroArgFactoryConfig(store, {
+        assistantId: "asst-1",
+        graphId: "graph-1",
+        user: { identity: "user-bob" },
+      });
+
+      await backend.write("/notes.txt", "bob notes");
+
+      makeZeroArgFactoryConfig(store, {
+        assistantId: "asst-1",
+        graphId: "graph-1",
+        user: { identity: "user-alice" },
+      });
+      const readAlice = await backend.read("/notes.txt");
+      expect(readAlice.content).toContain("alice notes");
+
+      makeZeroArgFactoryConfig(store, {
+        assistantId: "asst-1",
+        graphId: "graph-1",
+        user: { identity: "user-bob" },
+      });
+      const readBob = await backend.read("/notes.txt");
+      expect(readBob.content).toContain("bob notes");
+    });
+
+    it("supports multi-segment namespace factories", async () => {
+      const store = new InMemoryStore();
+      makeZeroArgFactoryConfig(store, {
+        assistantId: "asst-1",
+        graphId: "graph-1",
+        user: { identity: "user-alice" },
+      });
+
+      const factory: NamespaceFactory = (rt) => [
+        rt.serverInfo!.assistantId,
+        rt.serverInfo!.user!.identity,
+      ];
+      const backend = new StoreBackend({ namespace: factory });
+
+      await backend.write("/test.txt", "multi-segment");
+
+      const items = await store.search(["asst-1", "user-alice"]);
+      expect(items.some((item) => item.key === "/test.txt")).toBe(true);
+    });
+
+    it("validates namespace returned by factory", async () => {
+      const store = new InMemoryStore();
+      makeZeroArgFactoryConfig(store, {
+        assistantId: "asst-1",
+        graphId: "graph-1",
+      });
+
+      const factory: NamespaceFactory = () => [];
+      const backend = new StoreBackend({ namespace: factory });
+
+      await expect(backend.write("/test.txt", "content")).rejects.toThrow(
+        "must not be empty",
+      );
+    });
+
+    it("supports legacy BackendContext-style factories via backwards compat", async () => {
+      const store = new InMemoryStore();
+      makeZeroArgFactoryConfig(store, {
+        assistantId: "asst-1",
+        graphId: "graph-1",
+        user: { identity: "user-legacy" },
+      });
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const legacyFactory = (ctx: any) => [
+        ctx.runtime.serverInfo.user.identity,
+      ];
+      const backend = new StoreBackend({
+        namespace: legacyFactory as NamespaceFactory,
+      });
+
+      await backend.write("/test.txt", "legacy compat content");
+
+      const items = await store.search(["user-legacy"]);
+      expect(items.some((item) => item.key === "/test.txt")).toBe(true);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("BackendContext.runtime is deprecated"),
+      );
+
+      warnSpy.mockRestore();
+    });
+  });
+
+  describe("BackendContext", () => {
+    it("proxies runtime properties directly", () => {
+      const mockRuntime = {
+        serverInfo: {
+          assistantId: "asst-1",
+          graphId: "g-1",
+          user: { identity: "u1" },
+        },
+        executionInfo: {
+          checkpointId: "cp-1",
+          checkpointNs: "",
+          taskId: "t-1",
+          nodeAttempt: 1,
+        },
+        context: { userId: "u1" },
+        store: undefined,
+        configurable: { thread_id: "t-1" },
+      } as any;
+
+      const ctx = new BackendContext(mockRuntime);
+      expect(ctx.serverInfo).toBe(mockRuntime.serverInfo);
+      expect(ctx.executionInfo).toBe(mockRuntime.executionInfo);
+      expect(ctx.context).toBe(mockRuntime.context);
+      expect(ctx.configurable).toBe(mockRuntime.configurable);
+    });
+
+    it("emits deprecation warning on .runtime access", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const mockRuntime = {
+        serverInfo: { assistantId: "asst-1", graphId: "g-1" },
+      } as any;
+
+      const ctx = new BackendContext(mockRuntime);
+      const rt = ctx.runtime;
+      expect(rt).toBe(mockRuntime);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("BackendContext.runtime is deprecated"),
+      );
+
+      void ctx.runtime;
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+
+      warnSpy.mockRestore();
+    });
+
+    it("emits deprecation warning on .state access and returns undefined", () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const mockRuntime = {} as any;
+
+      const ctx = new BackendContext(mockRuntime);
+      expect(ctx.state).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("BackendContext.state is deprecated"),
+      );
+
+      warnSpy.mockRestore();
     });
   });
 });

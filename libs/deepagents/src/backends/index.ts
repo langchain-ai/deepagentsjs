@@ -12,6 +12,7 @@ export type {
   BackendProtocolV2,
   BackendFactory,
   BackendRuntime,
+  NamespaceFactory,
   FileData,
   FileInfo,
   GrepMatch,
@@ -42,11 +43,11 @@ export type {
   SandboxErrorCode,
 } from "./protocol.js";
 
-// Export type guard and error class
 export {
   isSandboxBackend,
   isSandboxProtocol,
   SandboxError,
+  BackendContext,
   resolveBackend,
 } from "./protocol.js";
 

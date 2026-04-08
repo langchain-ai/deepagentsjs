@@ -8,6 +8,7 @@
  */
 
 import type { Runtime, ToolRuntime } from "langchain";
+import type { Runtime as LangGraphRuntime } from "@langchain/langgraph";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import type {
   BackendProtocolV1,
@@ -559,6 +560,83 @@ export interface BackendRuntime<StateT = unknown> extends Runtime {
 export type BackendFactory = (
   runtime: BackendRuntime,
 ) => MaybePromise<AnyBackendProtocol>;
+
+/**
+ * Factory that derives a store namespace from the current LangGraph {@link LangGraphRuntime}.
+ *
+ * Namespace factories receive the runtime directly (not a wrapper) and return
+ * the namespace tuple used by {@link StoreBackend}.
+ *
+ * @example
+ * ```typescript
+ * const factory: NamespaceFactory = (rt) => [rt.serverInfo!.user!.identity];
+ * ```
+ */
+export type NamespaceFactory = (runtime: LangGraphRuntime) => string[];
+
+/**
+ * Backwards-compatible wrapper that adapts a {@link LangGraphRuntime} to the
+ * legacy `BackendContext` shape (`ctx.runtime.*`, `ctx.state`).
+ *
+ * Namespace factories written for deepagents <1.9.1 used
+ * `(ctx) => [ctx.runtime.serverInfo.user.identity]`. This class lets those
+ * factories keep working while emitting a deprecation warning.
+ *
+ * @deprecated Use {@link LangGraphRuntime} directly in namespace factories.
+ */
+export class BackendContext {
+  private _runtime: LangGraphRuntime;
+  private _warned = false;
+
+  constructor(runtime: LangGraphRuntime) {
+    this._runtime = runtime;
+  }
+
+  private _warn(accessor: string): void {
+    if (!this._warned) {
+      this._warned = true;
+      // oxlint-disable-next-line no-console
+      console.warn(
+        `[deepagents] BackendContext.${accessor} is deprecated. ` +
+          `Namespace factories now receive a Runtime directly — ` +
+          `replace \`ctx.${accessor}.*\` with \`rt.*\`. ` +
+          `BackendContext will be removed in deepagents v3.`,
+      );
+    }
+  }
+
+  /** @deprecated Access runtime properties directly on the Runtime argument. */
+  get runtime(): LangGraphRuntime {
+    this._warn("runtime");
+    return this._runtime;
+  }
+
+  /** @deprecated Reading agent state in namespace factories is no longer supported. */
+  get state(): undefined {
+    this._warn("state");
+    return undefined;
+  }
+
+  get serverInfo() {
+    return this._runtime.serverInfo;
+  }
+
+  get executionInfo() {
+    return this._runtime.executionInfo;
+  }
+
+  get context() {
+    return this._runtime.context;
+  }
+
+  get store() {
+    return this._runtime.store;
+  }
+
+  get configurable() {
+    return this._runtime.configurable;
+  }
+}
 
 /**
  * Resolve a backend instance or await a {@link BackendFactory}.
