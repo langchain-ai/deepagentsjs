@@ -63,7 +63,7 @@ export function parseTasksJsonl(content: string): SwarmTaskSpec[] {
   }
 
   if (errors.length > 0) {
-    throw new Error(`tasks.jsonl validation failed:\n${errors.join("]\n")}`);
+    throw new Error(`tasks.jsonl validation failed:\n${errors.join("\n")}`);
   }
 
   return tasks;

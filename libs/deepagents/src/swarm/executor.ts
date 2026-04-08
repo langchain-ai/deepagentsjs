@@ -68,7 +68,7 @@ export interface SwarmExecutionOptions {
  * Controls concurrent access to a shared resource by limiting the number
  * of async operations that can run simultaneously.
  */
-interface Sempahore {
+interface Semaphore {
   /**
    * Acquire a slot. Resolves immediately if a slot is available,
    * otherwise waits until one is released.
@@ -102,7 +102,7 @@ async function writeResults(
  *
  * @param limit - Maximum number of concurrent operations
  */
-function createSemaphore(limit: number): Sempahore {
+function createSemaphore(limit: number): Semaphore {
   let active = 0;
   const queue: Array<() => void> = [];
 
@@ -176,18 +176,19 @@ async function runSingleTask(
   };
 
   const timeoutMs = TASK_TIMEOUT_SECONDS * 1000;
+  let timer: ReturnType<typeof setTimeout> | undefined;
 
   try {
     const result = await Promise.race([
       subagent.invoke(subagentState, config) as Promise<
         Record<string, unknown>
       >,
-      new Promise<never>((_, reject) =>
-        setTimeout(
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
           () => reject(new Error(`timed out after ${TASK_TIMEOUT_SECONDS}s`)),
           timeoutMs,
-        ),
-      ),
+        );
+      }),
     ]);
 
     return {
@@ -201,6 +202,8 @@ async function runSingleTask(
       status: "failed",
       error: err.message ?? `Task "${task.id}" failed`,
     };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

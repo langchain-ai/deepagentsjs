@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { executeSwarm } from "./executor.js";
-import type { SwarmExecutorOptions } from "./executor.js";
+import type { SwarmExecutionOptions } from "./executor.js";
 import type { SwarmTaskSpec } from "./types.js";
 import { TASK_TIMEOUT_SECONDS } from "./types.js";
 
@@ -44,9 +44,9 @@ function makeTask(
 }
 
 function makeOptions(
-  overrides: Partial<SwarmExecutorOptions> = {},
+  overrides: Partial<SwarmExecutionOptions> = {},
   backendOpts: { uploadFiles?: boolean } = {},
-): SwarmExecutorOptions {
+): SwarmExecutionOptions {
   return {
     subagentGraphs: { "general-purpose": makeSubagent() },
     backend: makeBackend(backendOpts),
