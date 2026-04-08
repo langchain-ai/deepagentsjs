@@ -451,7 +451,7 @@ function returnCommandWithStateUpdate(
 /**
  * Create subagent instances from specifications
  */
-function getSubagents(options: {
+export function getSubagents(options: {
   defaultModel: LanguageModelLike | string;
   defaultTools: StructuredTool[];
   defaultMiddleware: AgentMiddleware[] | null;
@@ -550,6 +550,10 @@ function createTaskTool(options: {
   subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
   taskDescription: string | null;
+  preBuiltGraphs?: {
+    agents: Record<string, ReactAgent<any> | Runnable>;
+    descriptions: string[];
+  };
 }) {
   const {
     defaultModel,
@@ -560,9 +564,11 @@ function createTaskTool(options: {
     subagents,
     generalPurposeAgent,
     taskDescription,
+    preBuiltGraphs,
   } = options;
 
   const { agents: subagentGraphs, descriptions: subagentDescriptions } =
+    preBuiltGraphs ??
     getSubagents({
       defaultModel,
       defaultTools,
@@ -675,6 +681,14 @@ export interface SubAgentMiddlewareOptions {
   generalPurposeAgent?: boolean;
   /** Custom description for the task tool */
   taskDescription?: string | null;
+  /**
+   * Pre-built subagent graphs to reuse instead of compiling new ones.
+   * When provided, skips `getSubagents()` and uses these graphs directly.
+   */
+  preBuiltGraphs?: {
+    agents: Record<string, ReactAgent<any> | Runnable>;
+    descriptions: string[];
+  };
 }
 
 /**
@@ -691,6 +705,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     systemPrompt = TASK_SYSTEM_PROMPT,
     generalPurposeAgent = true,
     taskDescription = null,
+    preBuiltGraphs,
   } = options;
 
   const taskTool = createTaskTool({
@@ -702,6 +717,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     subagents,
     generalPurposeAgent,
     taskDescription,
+    preBuiltGraphs,
   });
 
   return createMiddleware({

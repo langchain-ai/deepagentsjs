@@ -7,8 +7,13 @@ import {
   ReactAgent,
   SystemMessage,
   tool,
+  type ToolRuntime,
 } from "langchain";
-import { BackendProtocolV2 } from "../backends/protocol.js";
+import {
+  type AnyBackendProtocol,
+  type BackendFactory,
+  resolveBackend,
+} from "../backends/protocol.js";
 import {
   DEFAULT_CONCURRENCY,
   DEFAULT_MAX_RETRIES,
@@ -78,7 +83,7 @@ export interface CreateSwarmToolOptions {
   /**
    * Backend for file I/O (reading task config, writing results).
    */
-  backend: BackendProtocolV2;
+  backend: AnyBackendProtocol | BackendFactory;
 }
 
 /**
@@ -96,7 +101,7 @@ export interface SwarmMiddlewareOptions {
   /**
    * Backend for file I/O (reading task config, writing results).
    */
-  backend: BackendProtocolV2;
+  backend: AnyBackendProtocol | BackendFactory;
 }
 
 /**
@@ -115,17 +120,19 @@ export function createSwarmTool(options: CreateSwarmToolOptions) {
   const { subagentGraphs, backend } = options;
 
   return tool(
-    async (input, config) => {
+    async (input, runtime: ToolRuntime) => {
       const {
         tasksPath,
         concurrency = DEFAULT_CONCURRENCY,
         maxRetries = DEFAULT_MAX_RETRIES,
       } = input;
 
+      const resolvedBackend = await resolveBackend(backend, runtime);
+
       let content: string;
 
-      if (backend.downloadFiles) {
-        const [response] = await backend.downloadFiles([tasksPath]);
+      if (resolvedBackend.downloadFiles) {
+        const [response] = await resolvedBackend.downloadFiles([tasksPath]);
         if (response.error || !response.content) {
           throw new Error(
             `Failed to read tasks file at "${tasksPath}": ${response.error ?? "file not found"}. ` +
@@ -134,7 +141,7 @@ export function createSwarmTool(options: CreateSwarmToolOptions) {
         }
         content = new TextDecoder().decode(response.content);
       } else {
-        const result = await backend.read(tasksPath);
+        const result = await resolvedBackend.read(tasksPath);
         if (result.error || result.content === undefined) {
           throw new Error(
             `Failed to read tasks file at "${tasksPath}": ${result.error ?? "file not found"}. ` +
@@ -152,10 +159,10 @@ export function createSwarmTool(options: CreateSwarmToolOptions) {
 
       const summary = await executeSwarm(tasks, {
         subagentGraphs,
-        backend,
+        backend: resolvedBackend,
         tasksPath,
         parentState,
-        config,
+        config: runtime,
         concurrency,
         maxRetries,
       });

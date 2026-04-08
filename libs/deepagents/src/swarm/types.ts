@@ -90,34 +90,3 @@ export interface SwarmExecutionSummary {
    */
   failed: number;
 }
-
-/**
- * Configuration for a swarm execution run.
- *
- * These are the parameters the orchestrator passes when calling
- * the swarm tool.
- */
-export interface SwarmConfig {
-  /**
-   * Path to the tasks.jsonl file (within the backend filesystem). The executor reads
-   * this file via the backend to get the task list.
-   */
-  tasksPath: string;
-
-  /**
-   * Maximum number of subagents running simultaneously.
-   *
-   * @default 10
-   * @minimum 1
-   * @maximum 50
-   */
-  concurrency?: number;
-
-  /**
-   * Maximum number of attempts per task (including the initial attempt).
-   *
-   * @default 3
-   * @minimum 1
-   */
-  maxRetries?: number;
-}

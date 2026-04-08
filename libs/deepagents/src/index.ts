@@ -63,6 +63,13 @@ export {
   // Completion callback middleware for async subagents
   createCompletionCallbackMiddleware,
   type CompletionCallbackOptions,
+  // Swarm middleware for parallel subagent execution
+  createSwarmMiddleware,
+  createSwarmTool,
+  SWARM_SYSTEM_PROMPT,
+  getSubagents,
+  type SwarmMiddlewareOptions,
+  type CreateSwarmToolOptions,
   // Other middleware types
   type FilesystemMiddlewareOptions,
   type SubAgentMiddlewareOptions,

@@ -2,7 +2,6 @@ export type {
   SwarmTaskSpec,
   SwarmTaskResult,
   SwarmExecutionSummary,
-  SwarmConfig,
 } from "./types.js";
 
 export {
