@@ -8,7 +8,7 @@ import {
   SwarmTaskSpec,
   TASK_TIMEOUT_SECONDS,
 } from "./types.js";
-import { Runnable } from "@langchain/core/runnables";
+import { Runnable, type RunnableConfig } from "@langchain/core/runnables";
 import { BackendProtocolV2 } from "../backends/protocol.js";
 import { filterStateForSubagent } from "../middleware/subagents.js";
 import { serializeResultsJsonl } from "./parse.js";
@@ -35,6 +35,11 @@ export interface SwarmExecutionOptions {
   backend: BackendProtocolV2;
 
   /**
+   * Path to the tasks.jsonl file within the backend filesystem.
+   */
+  tasksPath: string;
+
+  /**
    * Current parent agent state (filtered before passing to subagents).
    */
   parentState: Record<string, unknown>;
@@ -42,7 +47,7 @@ export interface SwarmExecutionOptions {
   /**
    * LangGraph RunnableConfig to forward to subagent invocations.
    */
-  config?: Record<string, unknown>;
+  config?: RunnableConfig;
 
   /**
    * Maximum concurrent subagents.
@@ -163,7 +168,7 @@ async function runSingleTask(
   task: SwarmTaskSpec,
   subagent: ReactAgent<any> | Runnable,
   parentState: Record<string, unknown>,
-  config?: Record<string, unknown>,
+  config?: RunnableConfig,
 ): Promise<SwarmTaskResult> {
   const subagentState = {
     ...filterStateForSubagent(parentState),
@@ -219,12 +224,12 @@ async function runSingleTask(
  */
 export async function executeSwarm(
   tasks: SwarmTaskSpec[],
-  tasksPath: string,
   options: SwarmExecutionOptions,
 ): Promise<SwarmExecutionSummary> {
   const {
     subagentGraphs,
     backend,
+    tasksPath,
     parentState,
     config,
     concurrency = DEFAULT_CONCURRENCY,
