@@ -827,6 +827,21 @@ describe("StoreBackend", () => {
       expect(defaultItems.some((item) => item.key === "/test.txt")).toBe(false);
     });
 
+    it("uses an explicit store passed in constructor options", async () => {
+      const store = new InMemoryStore();
+      vi.mocked(getLangGraphStore).mockReturnValue(undefined as any);
+
+      const backend = new StoreBackend({
+        store,
+        namespace: ["test", "filesystem"],
+      });
+
+      await backend.write("/test.txt", "explicit store");
+
+      const items = await store.search(["test", "filesystem"]);
+      expect(items.some((item) => item.key === "/test.txt")).toBe(true);
+    });
+
     it("falls back to ['filesystem'] namespace without explicit namespace", async () => {
       makeZeroArgConfig();
       const backend = new StoreBackend();
