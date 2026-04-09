@@ -8,6 +8,7 @@ import {
   getCurrentTaskInput,
   getStore as getLangGraphStore,
 } from "@langchain/langgraph";
+import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import type {
   BackendOptions,
   BackendProtocolV2,
@@ -126,6 +127,16 @@ export type StoreBackendNamespaceFactory<StateT = unknown> = (
  */
 export interface StoreBackendOptions<StateT = unknown> extends BackendOptions {
   /**
+   * Explicit store instance to use for persistence.
+   *
+   * This mirrors the Python API and allows constructing a backend directly with
+   * a store instance, e.g. `new StoreBackend({ store })`.
+   *
+   * When omitted, the backend uses the legacy injected runtime store or the
+   * LangGraph execution-context store.
+   */
+  store?: BaseStore;
+  /**
    * Custom namespace for store operations.
    *
    * Accepts either a static namespace array or a factory that derives the
@@ -167,6 +178,7 @@ export interface StoreBackendOptions<StateT = unknown> extends BackendOptions {
  */
 export class StoreBackend implements BackendProtocolV2 {
   private stateAndStore: StateAndStore | undefined;
+  private storeOverride: BaseStore | undefined;
   private _namespace: string[] | StoreBackendNamespaceFactory | undefined;
   private fileFormat: "v1" | "v2";
 
@@ -198,6 +210,7 @@ export class StoreBackend implements BackendProtocolV2 {
     } else if (opts?.namespace) {
       this._namespace = opts.namespace;
     }
+    this.storeOverride = opts?.store;
     this.fileFormat = opts?.fileFormat ?? "v2";
   }
 
@@ -218,6 +231,10 @@ export class StoreBackend implements BackendProtocolV2 {
         throw new Error("Store is required but not available in runtime");
       }
       return store;
+    }
+
+    if (this.storeOverride) {
+      return this.storeOverride;
     }
 
     const store = getLangGraphStore();
