@@ -96,6 +96,8 @@ export {
 export {
   StateBackend,
   StoreBackend,
+  type StoreBackendContext,
+  type StoreBackendNamespaceFactory,
   type StoreBackendOptions,
   FilesystemBackend,
   CompositeBackend,
