@@ -436,4 +436,17 @@ export interface CreateDeepAgentParams<
    * ```
    */
   skills?: string[];
+  /**
+   * List of `FilesystemPermission` rules for the main agent and its subagents.
+   *
+   * Rules are evaluated in declaration order; the first match wins.
+   * If no rule matches, the call is allowed.
+   *
+   * Subagents inherit these rules unless they specify their own
+   * `permissions` field, which replaces the parent's rules entirely.
+   *
+   * The permission middleware is appended last in the stack so it sees
+   * all tools (including those injected by other middleware).
+   */
+  permissions?: import("./middleware/permissions.js").FilesystemPermission[];
 }
