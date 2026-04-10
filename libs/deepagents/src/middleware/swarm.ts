@@ -38,7 +38,7 @@ export const SWARM_SYSTEM_PROMPT = context`
 
   ### When to use swarm
 
-  **Trigger condition**: When asked to analyze a file, first run \`wc -c\` to check its size. If it exceeds **150,000 bytes**, you **must** use swarm — do not attempt to process the file directly with grep, read_file, or any other tool.
+  **Trigger condition**: Use swarm when the input contains too much data to process in a single pass. Indicators: the file or dataset exceeds a few hundred kilobytes, or it contains hundreds of items that each need individual analysis. When in doubt, check the size and prefer swarm over attempting to process a large input inline.
 
   Also use \`swarm\` when:
   - A task requires applying intelligence to each item in a large collection
@@ -51,21 +51,25 @@ export const SWARM_SYSTEM_PROMPT = context`
 
   ### How to use swarm
 
-  Before calling swarm, understand what you're working with. Explore the file to learn its structure, format, and content — use whatever tools make sense (\`read_file\`, \`execute\`, \`grep\`, etc.). The goal is to write task descriptions detailed enough that each subagent can execute mechanically without needing to figure anything out on its own.
+  Before calling swarm, understand what you're working with. Explore the data to learn its structure, format, and content using whatever tools are available. The goal is to write task descriptions detailed enough that each subagent can execute without needing to figure anything out on its own.
 
   Once you understand the data:
 
-  1. **Write tasks.** Create \`tasks.jsonl\` in the current working directory using \`write_file\` or a generation script via \`execute\`. Do not use subdirectories — write directly to \`tasks.jsonl\`. Aim for **40–50 lines per chunk** when splitting a file.
+  1. **Generate tasks.** Write a generation script via \`execute\` that produces a \`tasks.jsonl\` file — one JSON object per line, each with \`id\`, \`description\`, and optional \`subagentType\`. Each task should be a self-contained unit of work. When splitting a file into chunks, aim for **50–200 lines** per chunk — fewer items when each requires careful judgment, more when the work is mechanical.
   2. **Call swarm.** Pass the path to your \`tasks.jsonl\` file.
-  3. **Aggregate results.** Read \`<resultsDir>/results.jsonl\` and combine the subagent outputs.
+  3. **Aggregate results.** Write an aggregation script via \`execute\` that reads \`<resultsDir>/results.jsonl\` and combines the subagent outputs into a final answer.
 
   ### Task description quality
 
   Each subagent receives **only its task description** — no other context. The quality of your descriptions determines the quality of swarm results. Invest time upfront to get them right.
 
-  Good task descriptions are **prescriptive**: they tell the subagent the data format, the classification rules or processing logic, the exact line range to read, and the output schema. The subagent should not need to explore or interpret — just execute.
+  Good task descriptions are **prescriptive**: they tell the subagent the data format, the processing logic, the exact range of data to work on, and the expected output format. The subagent should not need to explore or interpret — just execute.
 
-  Every description should end with: **"IMPORTANT: Your entire response must be a single JSON object — no tables, no explanations, no reasoning, no text before or after. Only the JSON."**
+  When subagent results need to be aggregated (counting, classification, extraction), instruct each subagent to respond with **structured JSON only** — no explanations, no tables, just the JSON object. Include the exact output schema in the task description.
+
+  ### Important: one swarm call per question
+
+  **Never re-run swarm to verify or cross-check results.** Swarm is expensive — treat the first run's per-task outputs as authoritative. If you need to validate, do it in the aggregation script (e.g., check that each chunk returned the expected number of items). Do not generate a second tasks.jsonl or call swarm again for the same question.
 
   ### Decomposition patterns
 
@@ -137,45 +141,40 @@ export function createSwarmTool(options: CreateSwarmToolOptions) {
 
       const resolvedBackend = await resolveBackend(backend, runtime);
 
-      // TODO: This is very hacky but works for now - not a good prod solution though
+      // Read tasks file: try backend first, then direct filesystem read.
+      // The generation script typically writes via execute (real filesystem),
+      // but write_file stores in backend state — so we check both.
       let content: string;
-      let result: Awaited<ReturnType<typeof resolvedBackend.readRaw>> | undefined;
+      let backendResult:
+        | Awaited<ReturnType<typeof resolvedBackend.readRaw>>
+        | undefined;
       try {
-        result = await resolvedBackend.readRaw(tasksPath);
+        backendResult = await resolvedBackend.readRaw(tasksPath);
       } catch {
         // backend may throw on missing paths instead of returning an error
       }
-      if (!result || result.error || result.data === undefined) {
-        // The orchestrator may have written via execute to a path the backend
-        // can't resolve. Try direct filesystem reads as a fallback.
-        let found = false;
-        const candidates = [
-          tasksPath,
-          tasksPath.startsWith("/") ? tasksPath : `/${tasksPath}`,
-          `/tmp/${tasksPath.split("/").pop()}`,
-        ];
-        for (const candidate of candidates) {
-          try {
-            content = readFileSync(candidate, "utf-8");
-            found = true;
-            break;
-          } catch {
-            // try next candidate
-          }
-        }
-        if (!found) {
+
+      if (
+        backendResult &&
+        !backendResult.error &&
+        backendResult.data !== undefined
+      ) {
+        // File found in backend state (written via write_file)
+        content = Array.isArray(backendResult.data.content)
+          ? backendResult.data.content.join("\n")
+          : typeof backendResult.data.content === "string"
+            ? backendResult.data.content
+            : new TextDecoder().decode(backendResult.data.content);
+      } else {
+        // File written via execute — read from filesystem directly
+        try {
+          content = readFileSync(tasksPath, "utf-8");
+        } catch {
           return (
-            `Failed to read tasks file at "${tasksPath}": ${result.error ?? "file not found"}. ` +
-            `Write the tasks file to "tasks.jsonl" (no subdirectories) and try again.`
+            `Failed to read tasks file at "${tasksPath}". ` +
+            `Ensure the generation script writes the file to this exact path and try again.`
           );
         }
-      } else {
-        // FileData can be v1 (content: string[]) or v2 (content: string | Uint8Array)
-        content = Array.isArray(result.data.content)
-          ? result.data.content.join("\n")
-          : typeof result.data.content === "string"
-            ? result.data.content
-            : new TextDecoder().decode(result.data.content);
       }
 
       const tasks = parseTasksJsonl(content);
@@ -198,16 +197,15 @@ export function createSwarmTool(options: CreateSwarmToolOptions) {
 
 ## Workflow
 
-1. Create a tasks.jsonl file with one JSON object per line:
+1. Write a generation script via \`execute\` that produces a tasks.jsonl file with one JSON object per line:
    \`\`\`json
-   {"id": "chunk_0", "description": "Classify lines 1-500 of data.txt. Return JSON counts.", "subagentType": "general-purpose"}
-   {"id": "chunk_1", "description": "Classify lines 501-1000 of data.txt. Return JSON counts.", "subagentType": "general-purpose"}
+   {"id": "chunk_0", "description": "Read lines 1-100 of data.txt. Process each item. Return JSON results.", "subagentType": "general-purpose"}
+   {"id": "chunk_1", "description": "Read lines 101-200 of data.txt. Process each item. Return JSON results.", "subagentType": "general-purpose"}
    \`\`\`
-   Use \`write_file\` to create the file, or generate it with a script via \`execute\` if available.
 2. Call \`swarm\` with the path to the tasks.jsonl file.
 3. The tool returns a JSON summary with \`total\`, \`completed\`, \`failed\`, and \`resultsDir\`.
    Results are written to \`<resultsDir>/results.jsonl\` — each line is the original task enriched with \`status\`, \`result\`, and/or \`error\` fields.
-4. Read \`<resultsDir>/results.jsonl\` (using \`read_file\`) to aggregate the results.
+4. Write an aggregation script via \`execute\` that reads \`<resultsDir>/results.jsonl\` and combines the outputs.
 
 ## tasks.jsonl fields
 
@@ -227,7 +225,7 @@ Available subagent types: ${Object.keys(subagentGraphs).join(", ")}`,
         tasksPath: z
           .string()
           .describe(
-            "Path to the tasks.jsonl file (created via write_file or a generation script).",
+            "Path to the tasks.jsonl file produced by the generation script.",
           ),
         concurrency: z
           .number()
