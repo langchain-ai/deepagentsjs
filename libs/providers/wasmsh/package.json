@@ -1,7 +1,7 @@
 {
-  "name": "deepagents",
-  "version": "1.9.0",
-  "description": "Deep Agents - a library for building controllable AI agents with LangGraph",
+  "name": "@langchain/wasmsh",
+  "version": "0.0.1",
+  "description": "Wasmsh sandbox backend for deepagents",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,10 +14,7 @@
     "prepublishOnly": "pnpm build",
     "test": "vitest run",
     "test:unit": "vitest run",
-    "test:int": "vitest run --mode int",
-    "test:watch": "vitest",
-    "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage"
+    "test:int": "vitest run --mode int"
   },
   "repository": {
     "type": "git",
@@ -29,7 +26,10 @@
     "langgraph",
     "langchain",
     "typescript",
-    "llm"
+    "llm",
+    "sandbox",
+    "wasmsh",
+    "pyodide"
   ],
   "author": "LangChain",
   "license": "MIT",
@@ -38,39 +38,31 @@
   },
   "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "dependencies": {
-    "@langchain/core": "^1.1.38",
-    "@langchain/langgraph": "^1.2.8",
-    "@langchain/langgraph-sdk": "^1.8.0",
-    "fast-glob": "^3.3.3",
-    "langchain": "^1.3.1",
-    "micromatch": "^4.0.8",
-    "yaml": "^2.8.2",
-    "zod": "^4.3.6"
+    "@mayflowergmbh/wasmsh-pyodide": "^0.5.1"
+  },
+  "peerDependencies": {
+    "deepagents": ">=1.9.0-alpha.0"
   },
   "devDependencies": {
-    "@langchain/anthropic": "^1.3.26",
-    "@langchain/langgraph-checkpoint": "^1.0.1",
-    "@langchain/openai": "^1.4.1",
+    "@anthropic-ai/sdk": "^0.80.0",
+    "@langchain/anthropic": "^1.3.25",
+    "@langchain/core": "^1.1.33",
     "@langchain/sandbox-standard-tests": "workspace:*",
-    "@langchain/tavily": "^1.2.0",
+    "@playwright/test": "^1.58.2",
     "@tsconfig/recommended": "^1.0.13",
-    "@types/micromatch": "^4.0.10",
-    "@types/node": "^25.2.3",
+    "@types/node": "^25.1.0",
     "@vitest/coverage-v8": "^4.0.18",
-    "@vitest/ui": "^4.0.18",
-    "dotenv": "^17.2.4",
+    "deepagents": "workspace:*",
+    "path-browserify": "^1.0.1",
+    "sirv": "^3.0.2",
     "tsdown": "^0.21.4",
     "tsx": "^4.21.0",
-    "typescript": "^6.0.2",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.3",
     "vitest": "^4.0.18"
   },
-  "sideEffects": false,
   "exports": {
     ".": {
-      "browser": {
-        "types": "./dist/index.browser.d.ts",
-        "default": "./dist/index.browser.js"
-      },
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -81,9 +73,6 @@
       }
     },
     "./package.json": "./package.json"
-  },
-  "peerDependencies": {
-    "langsmith": ">=0.5.15 <1.0.0"
   },
   "files": [
     "dist/**/*"
