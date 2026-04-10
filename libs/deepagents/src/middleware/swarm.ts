@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { readFileSync } from "node:fs";
 import { Runnable } from "@langchain/core/runnables";
 import {
   AgentMiddleware,
@@ -33,31 +34,38 @@ import { executeSwarm } from "../swarm/executor.js";
 export const SWARM_SYSTEM_PROMPT = context`
   ## \`swarm\` (parallel subagent execution)
 
-  You have access to a \`swarm\` tool for executing many independent tasks in parallel across multiple subagents.
+  Use \`swarm\` to fan out many independent tasks across multiple subagents and aggregate their results.
 
   ### When to use swarm
 
-  - A single subagent can handle large files for summarization. But when precise analysis is needed over a large file — counting, extraction, searching, or anything where accuracy matters — check the file size first and use \`swarm\` to split the work for any file over 500 lines. Do NOT send large files to a single \`task\` subagent for precise analysis.
-  - CRITICAL: When a task requires looping over items and applying intelligence to each one (classifying, labeling, categorizing, identifying, tagging), you MUST use \`swarm\` — regardless of file size. Do NOT classify items inline, do NOT delegate to a single \`task\` subagent, and do NOT write heuristic scripts. The only acceptable approach is \`swarm\`.
+  **Trigger condition**: When asked to analyze a file, first run \`wc -c\` to check its size. If it exceeds **150,000 bytes**, you **must** use swarm — do not attempt to process the file directly with grep, read_file, or any other tool.
 
-  ### When to use \`task\` instead
+  Also use \`swarm\` when:
+  - A task requires applying intelligence to each item in a large collection
+  - Work can be decomposed into many independent, parallel subtasks
 
-  - You have a small number of independent subtasks (use parallel \`task\` tool calls)
-  - The next subtask depends on results from a previous one
-  - You need exploratory or adaptive work (e.g., grep first, then investigate)
+  Use \`task\` instead when:
+  - You have a small number of independent subtasks
+  - Each subtask depends on the result of a previous one
+  - The work is exploratory or adaptive
 
-  ### Before distributing work
+  ### How to use swarm
 
-  Figure out exactly how you would do the task yourself first — only after you have that clarity should you distribute to subagents. Write out the exact instructions you will give to each worker. Be specific and leave no room for interpretation — workers will interpret ambiguity differently, and inconsistent results cannot be aggregated reliably.
+  Before calling swarm, understand what you're working with. Explore the file to learn its structure, format, and content — use whatever tools make sense (\`read_file\`, \`execute\`, \`grep\`, etc.). The goal is to write task descriptions detailed enough that each subagent can execute mechanically without needing to figure anything out on its own.
 
-  ### Task description requirements
+  Once you understand the data:
 
-  Each task description must be **completely self-contained**. The subagent:
-  - Receives ONLY the description text as its prompt
-  - Has no context about other tasks, the broader objective, or prior conversation
-  - Cannot ask clarifying questions
+  1. **Write tasks.** Create \`tasks.jsonl\` in the current working directory using \`write_file\` or a generation script via \`execute\`. Do not use subdirectories — write directly to \`tasks.jsonl\`. Aim for **40–50 lines per chunk** when splitting a file.
+  2. **Call swarm.** Pass the path to your \`tasks.jsonl\` file.
+  3. **Aggregate results.** Read \`<resultsDir>/results.jsonl\` and combine the subagent outputs.
 
-  Be explicit about the expected output format in every task description.
+  ### Task description quality
+
+  Each subagent receives **only its task description** — no other context. The quality of your descriptions determines the quality of swarm results. Invest time upfront to get them right.
+
+  Good task descriptions are **prescriptive**: they tell the subagent the data format, the classification rules or processing logic, the exact line range to read, and the output schema. The subagent should not need to explore or interpret — just execute.
+
+  Every description should end with: **"IMPORTANT: Your entire response must be a single JSON object — no tables, no explanations, no reasoning, no text before or after. Only the JSON."**
 
   ### Decomposition patterns
 
@@ -129,19 +137,46 @@ export function createSwarmTool(options: CreateSwarmToolOptions) {
 
       const resolvedBackend = await resolveBackend(backend, runtime);
 
-      const result = await resolvedBackend.readRaw(tasksPath);
-      if (result.error || result.data === undefined) {
-        return (
-          `Failed to read tasks file at "${tasksPath}": ${result.error ?? "file not found"}. ` +
-          `Use write_file to create the tasks.jsonl file before calling swarm.`
-        );
+      // TODO: This is very hacky but works for now - not a good prod solution though
+      let content: string;
+      let result: Awaited<ReturnType<typeof resolvedBackend.readRaw>> | undefined;
+      try {
+        result = await resolvedBackend.readRaw(tasksPath);
+      } catch {
+        // backend may throw on missing paths instead of returning an error
       }
-      // FileData can be v1 (content: string[]) or v2 (content: string | Uint8Array)
-      const content = Array.isArray(result.data.content)
-        ? result.data.content.join("\n")
-        : typeof result.data.content === "string"
-          ? result.data.content
-          : new TextDecoder().decode(result.data.content);
+      if (!result || result.error || result.data === undefined) {
+        // The orchestrator may have written via execute to a path the backend
+        // can't resolve. Try direct filesystem reads as a fallback.
+        let found = false;
+        const candidates = [
+          tasksPath,
+          tasksPath.startsWith("/") ? tasksPath : `/${tasksPath}`,
+          `/tmp/${tasksPath.split("/").pop()}`,
+        ];
+        for (const candidate of candidates) {
+          try {
+            content = readFileSync(candidate, "utf-8");
+            found = true;
+            break;
+          } catch {
+            // try next candidate
+          }
+        }
+        if (!found) {
+          return (
+            `Failed to read tasks file at "${tasksPath}": ${result.error ?? "file not found"}. ` +
+            `Write the tasks file to "tasks.jsonl" (no subdirectories) and try again.`
+          );
+        }
+      } else {
+        // FileData can be v1 (content: string[]) or v2 (content: string | Uint8Array)
+        content = Array.isArray(result.data.content)
+          ? result.data.content.join("\n")
+          : typeof result.data.content === "string"
+            ? result.data.content
+            : new TextDecoder().decode(result.data.content);
+      }
 
       const tasks = parseTasksJsonl(content);
       const parentState = getCurrentTaskInput<Record<string, unknown>>();
