@@ -55,7 +55,7 @@ export const SWARM_SYSTEM_PROMPT = context`
 
   Once you understand the data:
 
-  1. **Generate tasks.** Write a generation script via \`execute\` that produces a \`tasks.jsonl\` file — one JSON object per line, each with \`id\`, \`description\`, and optional \`subagentType\`. Each task should be a self-contained unit of work. When splitting a file into chunks, aim for **50–200 lines** per chunk — fewer items when each requires careful judgment, more when the work is mechanical.
+  1. **Generate tasks.** Write a generation script via \`execute\` that produces a \`tasks.jsonl\` file — one JSON object per line, each with \`id\`, \`description\`, and optional \`subagentType\`. Each task should be a self-contained unit of work. **Prefer many small tasks over few large ones** — all tasks run in parallel, so 50 small tasks finish in roughly the same wall-clock time as 5 large ones. When splitting a file, aim for **30–60 lines** per chunk.
   2. **Call swarm.** Pass the path to your \`tasks.jsonl\` file.
   3. **Aggregate results.** Write an aggregation script via \`execute\` that reads \`<resultsDir>/results.jsonl\` and combines the subagent outputs into a final answer.
 
