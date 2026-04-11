@@ -423,7 +423,51 @@ describe("swarm_get_results", () => {
 // ---------------------------------------------------------------------------
 
 describe("createSwarmMiddleware", () => {
-  it("registers all four swarm tools", () => {
+  /**
+   * Helper: invoke the middleware's wrapModelCall with a synthetic request
+   * and return the request that the inner handler actually saw. This is the
+   * surface that mediates what the model sees — both for tool gating and for
+   * system-prompt selection.
+   */
+  async function captureModelCall(args: {
+    backend: any;
+    initialTools?: Array<{ name: string }>;
+    systemMessage?: SystemMessage[];
+  }) {
+    const middleware = createSwarmMiddleware({
+      backend: args.backend,
+      subagentGraphs: { "general-purpose": makeSubagent() },
+    });
+    const captured: any[] = [];
+    const handler = vi.fn(async (req: any) => {
+      captured.push(req);
+      return { content: "" } as any;
+    }) as any;
+    await middleware.wrapModelCall?.(
+      {
+        systemMessage: args.systemMessage ?? [],
+        runtime: {},
+        state: {},
+        tools: args.initialTools ?? [],
+      } as any,
+      handler,
+    );
+    return captured[0];
+  }
+
+  function fakeToolList() {
+    // The middleware's tool gating only inspects `t.name`, so a minimal stub
+    // shape is enough to exercise the filter.
+    return [
+      { name: "swarm" },
+      { name: "swarm_init" },
+      { name: "swarm_add_tasks" },
+      { name: "swarm_get_results" },
+      { name: "execute" },
+    ];
+  }
+
+  it("registers all four swarm tools at the middleware level", () => {
     const backend = createInMemoryBackend();
     const middleware = createSwarmMiddleware({
       backend,
@@ -434,21 +478,10 @@ describe("createSwarmMiddleware", () => {
   });
 
   it("injects the without-execute prompt for non-sandbox backends", async () => {
-    const backend = createInMemoryBackend();
-    const middleware = createSwarmMiddleware({
-      backend,
-      subagentGraphs: { "general-purpose": makeSubagent() },
+    const captured = await captureModelCall({
+      backend: createInMemoryBackend(),
     });
-    const captured: any[] = [];
-    const handler = vi.fn(async (req: any) => {
-      captured.push(req);
-      return { content: "" } as any;
-    }) as any;
-    await middleware.wrapModelCall?.(
-      { systemMessage: [], runtime: {}, state: {} } as any,
-      handler,
-    );
-    const messages: SystemMessage[] = captured[0].systemMessage;
+    const messages: SystemMessage[] = captured.systemMessage;
     const text = messages
       .map((m) => (typeof m.content === "string" ? m.content : ""))
       .join("\n");
@@ -458,21 +491,10 @@ describe("createSwarmMiddleware", () => {
   });
 
   it("injects the with-execute prompt for sandbox backends", async () => {
-    const sandbox = makeSandboxBackend(createInMemoryBackend());
-    const middleware = createSwarmMiddleware({
-      backend: sandbox,
-      subagentGraphs: { "general-purpose": makeSubagent() },
+    const captured = await captureModelCall({
+      backend: makeSandboxBackend(createInMemoryBackend()),
     });
-    const captured: any[] = [];
-    const handler = vi.fn(async (req: any) => {
-      captured.push(req);
-      return { content: "" } as any;
-    }) as any;
-    await middleware.wrapModelCall?.(
-      { systemMessage: [], runtime: {}, state: {} } as any,
-      handler,
-    );
-    const messages: SystemMessage[] = captured[0].systemMessage;
+    const messages: SystemMessage[] = captured.systemMessage;
     const text = messages
       .map((m) => (typeof m.content === "string" ? m.content : ""))
       .join("\n");
@@ -481,23 +503,38 @@ describe("createSwarmMiddleware", () => {
     expect(text).not.toContain(SWARM_WITHOUT_EXECUTE_PROMPT);
   });
 
-  it("preserves existing system messages when injecting", async () => {
-    const backend = createInMemoryBackend();
-    const middleware = createSwarmMiddleware({
-      backend,
-      subagentGraphs: { "general-purpose": makeSubagent() },
+  it("hides helper tools from the model on sandbox backends", async () => {
+    const captured = await captureModelCall({
+      backend: makeSandboxBackend(createInMemoryBackend()),
+      initialTools: fakeToolList(),
     });
+    const names = captured.tools.map((t: { name: string }) => t.name);
+    expect(names).toContain("swarm");
+    expect(names).toContain("execute"); // unrelated tools are passed through
+    expect(names).not.toContain("swarm_init");
+    expect(names).not.toContain("swarm_add_tasks");
+    expect(names).not.toContain("swarm_get_results");
+  });
+
+  it("exposes all four helper tools to the model on non-sandbox backends", async () => {
+    const captured = await captureModelCall({
+      backend: createInMemoryBackend(),
+      initialTools: fakeToolList(),
+    });
+    const names = captured.tools.map((t: { name: string }) => t.name);
+    expect(names).toContain("swarm");
+    expect(names).toContain("swarm_init");
+    expect(names).toContain("swarm_add_tasks");
+    expect(names).toContain("swarm_get_results");
+  });
+
+  it("preserves existing system messages when injecting", async () => {
     const existing = new SystemMessage("existing prompt");
-    const captured: any[] = [];
-    const handler = vi.fn(async (req: any) => {
-      captured.push(req);
-      return { content: "" } as any;
-    }) as any;
-    await middleware.wrapModelCall?.(
-      { systemMessage: [existing], runtime: {}, state: {} } as any,
-      handler,
-    );
-    const messages: SystemMessage[] = captured[0].systemMessage;
+    const captured = await captureModelCall({
+      backend: createInMemoryBackend(),
+      systemMessage: [existing],
+    });
+    const messages: SystemMessage[] = captured.systemMessage;
     expect(messages).toHaveLength(2);
     expect(messages[0]).toBe(existing);
   });

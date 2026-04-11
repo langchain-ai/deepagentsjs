@@ -123,8 +123,8 @@ export const SWARM_BASE_PROMPT = context`
   Calling \`swarm\` again on the same \`runDir\` is safe and idempotent:
   completed tasks are skipped, missing tasks are dispatched, and failed tasks
   are left alone. To explicitly retry failures pass \`retryFailed: true\`. To
-  start fresh, create a new run directory via \`swarm_init\` — never reuse a
-  directory across logically distinct runs.
+  start fresh, use a brand-new run directory — never reuse one across
+  logically distinct runs.
 
   Do not call \`swarm\` repeatedly to verify or cross-check results. Treat the
   first run's outputs as authoritative.
@@ -140,64 +140,123 @@ export const SWARM_BASE_PROMPT = context`
 `;
 
 /**
- * Extra guidance shown when the backend supports `execute`.
+ * Guidance shown when the backend supports `execute`.
  *
- * Tells the orchestrator it has two ways to build a run directory:
- *
- *   1. Use the helper tools (`swarm_init` + `swarm_add_tasks`) — recommended
- *      when each task description is composed by the orchestrator itself.
- *   2. Use a generation script via `execute` to populate the run directory
- *      directly — required for source-embedded content (chunks of an existing
- *      file) and large fan-outs (more than ~100 tasks).
+ * On execute-capable backends the orchestrator builds run directories
+ * **only** via scripts. The helper tools (`swarm_init`, `swarm_add_tasks`,
+ * `swarm_get_results`) are intentionally not bound in this mode. Routing
+ * task content and result content through tool calls would force every byte
+ * through the LLM token stream — both as output during generation and as
+ * input on every subsequent turn. A script keeps the data on disk where it
+ * belongs.
  */
 export const SWARM_WITH_EXECUTE_PROMPT = context`
   ### Setting up a run
 
-  You have two equally valid ways to build a run directory.
+  Build the run directory with a script via \`execute\`. The file layout
+  under \`swarm_runs/<name>/\` is the contract — populate it directly and
+  then call \`swarm\` with the directory path.
 
-  **Helper tools (recommended for LLM-composed tasks)**:
+  **Do not** put task content into tool-call arguments. Every byte you put
+  in a tool call becomes output tokens, then input tokens, then sits in
+  conversation history forever. A 50-task fan-out with 2 KB per task is
+  ~100 KB through the model in each direction if you do it the wrong way,
+  versus ~1 KB if you do it through the filesystem. Use the filesystem.
 
-  1. \`swarm_init\` → returns the new \`runDir\`.
-  2. \`swarm_add_tasks({ runDir, tasks: [...] })\` → writes \`tasks/<id>.txt\`
-     and appends manifest rows. Batch up to ${MAX_ADD_TASKS_BATCH} tasks per
-     call.
-  3. \`swarm({ runDir })\` → dispatches and runs.
-  4. \`swarm_get_results({ runDir })\` → read all results back.
+  ### Generation script template
 
-  Use this path when you are composing each task's prompt yourself and there
-  are at most a few dozen tasks.
+  \`\`\`python
+  import json
+  from pathlib import Path
 
-  **Generation script via \`execute\` (use for source-embedded or large runs)**:
+  run_dir = Path("swarm_runs/classify-logs")
+  (run_dir / "tasks").mkdir(parents=True, exist_ok=True)
 
-  When the task content is drawn from existing data (log chunks, file slices,
-  document excerpts) you should write a script via \`execute\` that creates
-  the run directory layout directly. This avoids two things: (a) re-encoding
-  large content through the LLM token stream, where small drift can corrupt
-  the data, and (b) the per-tool-call overhead of doing many add_tasks calls.
+  # Read your source data and chunk it however makes sense.
+  lines = Path("/data/access.log").read_text().splitlines()
+  chunks = [lines[i:i+50] for i in range(0, len(lines), 50)]
 
-  Script outline:
+  # Write one task file + one manifest row per chunk.
+  # The task file is the *entire* prompt the subagent will receive — it must
+  # contain the instructions, the output schema, and the data to process.
+  manifest = []
+  for i, chunk in enumerate(chunks, start=1):
+      task_id = f"{i:04d}"
+      prompt = (
+          "Classify each log line as one of: high, medium, low.\\n\\n"
+          'Respond with JSON only: {"results":[{"line":<number>,"severity":"<class>"}]}\\n\\n'
+          "Lines:\\n" + "\\n".join(chunk)
+      )
+      (run_dir / "tasks" / f"{task_id}.txt").write_text(prompt)
+      manifest.append({"id": task_id, "descriptionPath": f"tasks/{task_id}.txt"})
 
-  \`\`\`bash
-  RUN=swarm_runs/my-run
-  mkdir -p "$RUN/tasks"
-  : > "$RUN/manifest.jsonl"
-  for i in 0001 0002 0003 ...; do
-    write the chunk text into "$RUN/tasks/$i.txt"
-    append {"id":"$i","descriptionPath":"tasks/$i.txt"} to "$RUN/manifest.jsonl"
-  done
+  (run_dir / "manifest.jsonl").write_text(
+      "\\n".join(json.dumps(m) for m in manifest) + "\\n"
+  )
+  print(f"wrote {len(manifest)} tasks to {run_dir}")
   \`\`\`
 
-  Then call \`swarm({ runDir: "swarm_runs/my-run" })\`. The executor reads the
-  manifest, validates it, dispatches the tasks, and writes \`results/<id>.json\`
-  for each one. The file layout is part of the contract — your script can
-  rely on it.
+  Bash works too if the templating is simple enough. The only requirement is
+  that you end up with a valid run directory: a \`tasks/\` directory of plain
+  text files and a \`manifest.jsonl\` whose rows match
+  \`{"id":"...","descriptionPath":"tasks/<id>.txt","subagentType":"..."}\`
+  (subagentType is optional). Available subagent types are listed in the
+  \`swarm\` tool description.
+
+  ### Running the swarm
+
+  Once the run directory is populated, call \`swarm\` with the directory
+  path. The executor reads the manifest, dispatches every pending task in
+  parallel, retries failures, and writes \`results/<id>.json\` for each one.
+  It also writes a \`summary.json\` with the run-level counts.
+
+  \`\`\`
+  swarm({ runDir: "swarm_runs/classify-logs" })
+  \`\`\`
+
+  Re-running on the same \`runDir\` resumes: completed tasks are skipped,
+  missing tasks are dispatched, failed tasks are left alone unless you pass
+  \`retryFailed: true\`. To start fresh, use a brand-new run directory.
 
   ### Aggregation
 
-  For small result sets (up to a few hundred), call \`swarm_get_results\`
-  directly. For very large result sets, use \`execute\` to read the
-  \`results/*.json\` files and aggregate via your scripting language of
-  choice. Both work; pick whichever fits the size of the data.
+  Aggregate results via another \`execute\` script. Read the result files
+  from \`<runDir>/results/*.json\` and compute whatever summary you need.
+  The result content stays on disk; only the final summary enters your
+  context.
+
+  \`\`\`python
+  import json
+  from collections import Counter
+  from pathlib import Path
+
+  results_dir = Path("swarm_runs/classify-logs/results")
+  counts = Counter()
+  failures = 0
+  for f in sorted(results_dir.glob("*.json")):
+      data = json.loads(f.read_text())
+      if data["status"] != "completed":
+          failures += 1
+          continue
+      parsed = json.loads(data["result"])
+      for item in parsed["results"]:
+          counts[item["severity"]] += 1
+  print(json.dumps({"counts": dict(counts), "failures": failures}))
+  \`\`\`
+
+  Spot-checking a single result is fine via \`read_file\` on
+  \`<runDir>/results/<id>.json\` — but for anything beyond a few entries,
+  use \`execute\`.
+
+  ### What not to do
+
+  - **Do not** generate the manifest or task files in your own response and
+    pass them to a tool. Write them via \`execute\`.
+  - **Do not** read result files into your context one by one. Aggregate via
+    \`execute\`.
+  - **Do not** try to "preview" task content by echoing it through a tool
+    call. The LLM regenerates content rather than copying it; the only way
+    to preserve verbatim source data is to keep it on disk.
 `;
 
 /**
@@ -640,8 +699,28 @@ function truncateLargeResults(
 // ---------------------------------------------------------------------------
 
 /**
- * Create the swarm middleware. Binds the four tools and injects the
- * appropriate system prompt based on whether the backend supports `execute`.
+ * Tool names that are only useful when the backend has no `execute` tool.
+ *
+ * On execute-capable backends these are filtered out of the model's tool
+ * list before each model call. They remain bound by the middleware so that
+ * direct invocation (e.g., from tests or programmatic flows) still works,
+ * but the orchestrator never sees them and is therefore forced to build run
+ * directories via scripts. See `SWARM_WITH_EXECUTE_PROMPT` for the rationale.
+ */
+const EXECUTE_GATED_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "swarm_init",
+  "swarm_add_tasks",
+  "swarm_get_results",
+]);
+
+/**
+ * Create the swarm middleware.
+ *
+ * The middleware binds all four swarm tools (`swarm`, `swarm_init`,
+ * `swarm_add_tasks`, `swarm_get_results`) but conditionally hides the three
+ * helper tools from the model when the backend supports `execute`. The
+ * system prompt is rendered to match: execute-capable backends get the
+ * script-only workflow, non-execute backends get the helper-tool workflow.
  */
 export function createSwarmMiddleware(
   options: SwarmMiddlewareOptions,
@@ -662,12 +741,23 @@ export function createSwarmMiddleware(
         state: request.state,
       });
       const supportsExecution = isSandboxBackend(resolvedBackend);
+
+      // Hide helper tools on execute-capable backends so the model can't
+      // accidentally route task content through tool-call arguments.
+      let tools = request.tools;
+      if (supportsExecution) {
+        tools = tools.filter(
+          (t: { name: string }) => !EXECUTE_GATED_TOOL_NAMES.has(t.name),
+        );
+      }
+
       const swarmPrompt = supportsExecution
         ? `${SWARM_BASE_PROMPT}\n\n${SWARM_WITH_EXECUTE_PROMPT}`
         : `${SWARM_BASE_PROMPT}\n\n${SWARM_WITHOUT_EXECUTE_PROMPT}`;
 
       return handler({
         ...request,
+        tools,
         systemMessage: request.systemMessage.concat(
           new SystemMessage({ content: swarmPrompt }),
         ),
