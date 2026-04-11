@@ -20,11 +20,16 @@ export {
   TASK_SYSTEM_PROMPT,
 } from "./subagents.js";
 export {
+  createSwarmAddTasksTool,
+  createSwarmGetResultsTool,
+  createSwarmInitTool,
   createSwarmMiddleware,
   createSwarmTool,
-  SWARM_SYSTEM_PROMPT,
+  SWARM_BASE_PROMPT,
+  SWARM_TOOL_NAMES,
+  SWARM_WITH_EXECUTE_PROMPT,
+  SWARM_WITHOUT_EXECUTE_PROMPT,
   type SwarmMiddlewareOptions,
-  type CreateSwarmToolOptions,
 } from "./swarm.js";
 export {
   createPatchToolCallsMiddleware,

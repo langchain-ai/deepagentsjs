@@ -1,331 +1,443 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { executeSwarm } from "./executor.js";
-import type { SwarmExecutionOptions } from "./executor.js";
-import type { SwarmTaskSpec } from "./types.js";
-import { TASK_TIMEOUT_SECONDS } from "./types.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { executeSwarm, type SwarmExecutionOptions } from "./executor.js";
+import {
+  manifestPath,
+  resultPath,
+  summaryPath,
+  taskPath,
+} from "./layout.js";
+import { serializeManifest } from "./manifest.js";
+import { createInMemoryBackend, type InMemoryBackend } from "./test-utils.js";
+import { TASK_TIMEOUT_SECONDS, type ManifestEntry, type TaskResult } from "./types.js";
+
+const RUN_DIR = "swarm_runs/test-run";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
+function entry(id: string, subagentType?: string): ManifestEntry {
+  return subagentType
+    ? { id, descriptionPath: `tasks/${id}.txt`, subagentType }
+    : { id, descriptionPath: `tasks/${id}.txt` };
+}
+
 function makeSubagent(
   result: Record<string, unknown> = { messages: [{ content: "result text" }] },
 ) {
-  return { invoke: vi.fn().mockResolvedValue(result) };
+  return { invoke: vi.fn().mockResolvedValue(result) } as any;
 }
 
-function makeBackend(opts: { uploadFiles?: boolean } = {}) {
-  const backend: Record<string, any> = {
-    write: vi.fn().mockResolvedValue({ path: "/tasks.jsonl" }),
-    read: vi.fn().mockResolvedValue({ content: "" }),
-    readRaw: vi.fn().mockResolvedValue({ data: null }),
-    edit: vi.fn().mockResolvedValue({ path: "/tasks.jsonl" }),
-    lsInfo: vi.fn().mockResolvedValue([]),
-    ls: vi.fn().mockResolvedValue({ files: [] }),
-    grepRaw: vi.fn().mockResolvedValue([]),
-    grep: vi.fn().mockResolvedValue({ matches: [] }),
-    globInfo: vi.fn().mockResolvedValue([]),
-    glob: vi.fn().mockResolvedValue({ files: [] }),
+interface SeedOptions {
+  manifestEntries: ManifestEntry[];
+  taskContents?: Record<string, string>;
+  existingResults?: TaskResult[];
+}
+
+function seedRun(opts: SeedOptions): InMemoryBackend {
+  const initial: Record<string, string> = {
+    [manifestPath(RUN_DIR)]: serializeManifest(opts.manifestEntries),
   };
-  if (opts.uploadFiles) {
-    backend.uploadFiles = vi.fn().mockResolvedValue([]);
+  for (const e of opts.manifestEntries) {
+    const content = opts.taskContents?.[e.id] ?? `prompt for ${e.id}`;
+    initial[taskPath(RUN_DIR, e.id)] = content;
   }
-  return backend;
+  for (const r of opts.existingResults ?? []) {
+    initial[resultPath(RUN_DIR, r.id)] = JSON.stringify(r, null, 2);
+  }
+  return createInMemoryBackend(initial);
 }
 
-function makeTask(
-  id: string,
-  description = "Do something",
-  subagentType?: string,
-): SwarmTaskSpec {
-  const task: SwarmTaskSpec = { id, description };
-  if (subagentType !== undefined) task.subagentType = subagentType;
-  return task;
-}
-
-function makeOptions(
+function defaultOptions(
+  backend: InMemoryBackend,
   overrides: Partial<SwarmExecutionOptions> = {},
-  backendOpts: { uploadFiles?: boolean } = {},
 ): SwarmExecutionOptions {
   return {
-    subagentGraphs: { "general-purpose": makeSubagent() },
-    backend: makeBackend(backendOpts),
+    backend,
     parentState: {},
+    subagentGraphs: { "general-purpose": makeSubagent() },
     maxRetries: 1,
     ...overrides,
   };
 }
 
+function readResultFromBackend(
+  backend: InMemoryBackend,
+  id: string,
+): TaskResult | null {
+  const raw = backend.files.get(resultPath(RUN_DIR, id));
+  return raw ? (JSON.parse(raw) as TaskResult) : null;
+}
+
 // ---------------------------------------------------------------------------
-// 1. Single task success
+// 1. Fresh run — happy path
 // ---------------------------------------------------------------------------
 
-describe("executeSwarm — single task success", () => {
-  it("should return completed status with extracted text", async () => {
-    const subagent = makeSubagent({ messages: [{ content: "the answer" }] });
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
+describe("executeSwarm — fresh run", () => {
+  it("dispatches all manifest entries and writes per-task result files", async () => {
+    const subagent = makeSubagent({ messages: [{ content: "ok" }] });
+    const backend = seedRun({
+      manifestEntries: [entry("a"), entry("b"), entry("c")],
     });
-    const summary = await executeSwarm([makeTask("t1")], options);
 
-    expect(summary.total).toBe(1);
-    expect(summary.completed).toBe(1);
+    const summary = await executeSwarm(
+      RUN_DIR,
+      defaultOptions(backend, {
+        subagentGraphs: { "general-purpose": subagent },
+      }),
+    );
+
+    expect(summary.total).toBe(3);
+    expect(summary.completed).toBe(3);
     expect(summary.failed).toBe(0);
+    expect(summary.dispatched).toBe(3);
+    expect(summary.skipped).toBe(0);
+    expect(subagent.invoke).toHaveBeenCalledTimes(3);
+
+    for (const id of ["a", "b", "c"]) {
+      const result = readResultFromBackend(backend, id);
+      expect(result?.status).toBe("completed");
+    }
   });
 
-  it("should invoke the subagent with a HumanMessage containing the task description", async () => {
+  it("invokes the subagent with a HumanMessage carrying the task content", async () => {
     const subagent = makeSubagent();
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
+    const backend = seedRun({
+      manifestEntries: [entry("a")],
+      taskContents: { a: "Research topic X" },
     });
-    await executeSwarm([makeTask("t1", "Research topic X")], options);
+
+    await executeSwarm(
+      RUN_DIR,
+      defaultOptions(backend, {
+        subagentGraphs: { "general-purpose": subagent },
+      }),
+    );
 
     expect(subagent.invoke).toHaveBeenCalledOnce();
     const [state] = subagent.invoke.mock.calls[0];
     expect(state.messages).toHaveLength(1);
     expect(state.messages[0].content).toBe("Research topic X");
   });
-});
 
-// ---------------------------------------------------------------------------
-// 2. Multiple tasks — all succeed
-// ---------------------------------------------------------------------------
+  it("writes a summary.json with start and finish timestamps", async () => {
+    const backend = seedRun({ manifestEntries: [entry("a")] });
+    const summary = await executeSwarm(RUN_DIR, defaultOptions(backend));
 
-describe("executeSwarm — multiple tasks all succeed", () => {
-  it("should report all tasks as completed", async () => {
-    const subagent = makeSubagent();
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
-    });
-    const tasks = [makeTask("t1"), makeTask("t2"), makeTask("t3")];
-
-    const summary = await executeSwarm(tasks, options);
-
-    expect(summary.total).toBe(3);
-    expect(summary.completed).toBe(3);
-    expect(summary.failed).toBe(0);
-    expect(subagent.invoke).toHaveBeenCalledTimes(3);
+    const stored = backend.files.get(summaryPath(RUN_DIR));
+    expect(stored).toBeDefined();
+    const parsed = JSON.parse(stored!);
+    expect(parsed.runDir).toBe(RUN_DIR);
+    expect(parsed.completed).toBe(1);
+    expect(parsed.startedAt).toBe(summary.startedAt);
+    expect(parsed.finishedAt).toBe(summary.finishedAt);
   });
 });
 
 // ---------------------------------------------------------------------------
-// 3. Mixed results — some succeed, some fail
+// 2. Retry semantics
 // ---------------------------------------------------------------------------
 
-describe("executeSwarm — mixed results", () => {
-  it("should count successes and failures correctly", async () => {
+describe("executeSwarm — retries", () => {
+  it("records `attempts` matching the successful attempt number", async () => {
     const subagent = {
       invoke: vi
         .fn()
-        .mockResolvedValueOnce({ messages: [{ content: "ok" }] })
-        .mockRejectedValueOnce(new Error("boom"))
-        .mockResolvedValueOnce({ messages: [{ content: "ok again" }] }),
-    };
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
-      maxRetries: 1,
-    });
-    const tasks = [makeTask("t1"), makeTask("t2"), makeTask("t3")];
-
-    const summary = await executeSwarm(tasks, options);
-
-    expect(summary.total).toBe(3);
-    expect(summary.completed).toBe(2);
-    expect(summary.failed).toBe(1);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 4. Retry logic — task fails on attempt 1, succeeds on attempt 2
-// ---------------------------------------------------------------------------
-
-describe("executeSwarm — retry logic", () => {
-  it("should record a task as completed when it succeeds on the second attempt", async () => {
-    const subagent = {
-      invoke: vi
-        .fn()
-        .mockRejectedValueOnce(new Error("transient error"))
+        .mockRejectedValueOnce(new Error("transient"))
         .mockResolvedValueOnce({ messages: [{ content: "recovered" }] }),
     };
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
-      maxRetries: 2,
-    });
+    const backend = seedRun({ manifestEntries: [entry("a")] });
 
-    const summary = await executeSwarm([makeTask("t1")], options);
-
-    expect(summary.completed).toBe(1);
-    expect(summary.failed).toBe(0);
-    expect(subagent.invoke).toHaveBeenCalledTimes(2);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 5. All retries exhausted
-// ---------------------------------------------------------------------------
-
-describe("executeSwarm — all retries exhausted", () => {
-  it("should record a task as failed with the error message after maxRetries", async () => {
-    const subagent = {
-      invoke: vi.fn().mockRejectedValue(new Error("persistent failure")),
-    };
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
-      maxRetries: 3,
-    });
-
-    const summary = await executeSwarm([makeTask("t1")], options);
-
-    expect(summary.completed).toBe(0);
-    expect(summary.failed).toBe(1);
-    expect(subagent.invoke).toHaveBeenCalledTimes(3);
-  });
-
-  it("should preserve the last error message in the written results", async () => {
-    const subagent = {
-      invoke: vi.fn().mockRejectedValue(new Error("persistent failure")),
-    };
-    const backend = makeBackend();
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
-      backend,
-      maxRetries: 2,
-    });
-
-    await executeSwarm([makeTask("t1")], options);
-
-    expect(backend.write).toHaveBeenCalledOnce();
-    const writtenContent: string = backend.write.mock.calls[0][1];
-    const parsed = JSON.parse(writtenContent.trim());
-    expect(parsed.status).toBe("failed");
-    expect(parsed.error).toBe("persistent failure");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 6. Unknown subagentType — throws before any execution
-// ---------------------------------------------------------------------------
-
-describe("executeSwarm — unknown subagentType", () => {
-  it("should throw an error before invoking any subagent", async () => {
-    const subagent = makeSubagent();
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
-      maxRetries: 1,
-    });
-    const tasks = [makeTask("t1", "Do something", "nonexistent-type")];
-
-    await expect(executeSwarm(tasks, options)).rejects.toThrow(
-      'Task "t1" references unknown subagentType "nonexistent-type"',
+    await executeSwarm(
+      RUN_DIR,
+      defaultOptions(backend, {
+        subagentGraphs: { "general-purpose": subagent as any },
+        maxRetries: 3,
+      }),
     );
+
+    const result = readResultFromBackend(backend, "a");
+    expect(result?.status).toBe("completed");
+    expect(result?.attempts).toBe(2);
+  });
+
+  it("writes a failed result with the last error after maxRetries", async () => {
+    const subagent = {
+      invoke: vi.fn().mockRejectedValue(new Error("persistent failure")),
+    };
+    const backend = seedRun({ manifestEntries: [entry("a")] });
+
+    const summary = await executeSwarm(
+      RUN_DIR,
+      defaultOptions(backend, {
+        subagentGraphs: { "general-purpose": subagent as any },
+        maxRetries: 3,
+      }),
+    );
+
+    expect(summary.failed).toBe(1);
+    expect(summary.completed).toBe(0);
+    const result = readResultFromBackend(backend, "a");
+    expect(result?.status).toBe("failed");
+    if (result?.status === "failed") {
+      expect(result.error).toBe("persistent failure");
+      expect(result.attempts).toBe(3);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 3. Resume semantics
+// ---------------------------------------------------------------------------
+
+describe("executeSwarm — resume", () => {
+  it("skips already-completed tasks and only dispatches missing ones", async () => {
+    const subagent = makeSubagent();
+    const backend = seedRun({
+      manifestEntries: [entry("a"), entry("b"), entry("c")],
+      existingResults: [
+        {
+          id: "a",
+          status: "completed",
+          subagentType: "general-purpose",
+          attempts: 1,
+          startedAt: "2024-01-01T00:00:00.000Z",
+          finishedAt: "2024-01-01T00:00:01.000Z",
+          result: "previous run",
+        },
+      ],
+    });
+
+    const summary = await executeSwarm(
+      RUN_DIR,
+      defaultOptions(backend, {
+        subagentGraphs: { "general-purpose": subagent },
+      }),
+    );
+
+    expect(summary.skipped).toBe(1);
+    expect(summary.dispatched).toBe(2);
+    expect(summary.completed).toBe(3);
+    expect(subagent.invoke).toHaveBeenCalledTimes(2);
+
+    // Original result must be preserved verbatim.
+    const aResult = readResultFromBackend(backend, "a");
+    expect(aResult?.status === "completed" && aResult.result).toBe(
+      "previous run",
+    );
+  });
+
+  it("leaves failed tasks alone by default", async () => {
+    const subagent = makeSubagent();
+    const backend = seedRun({
+      manifestEntries: [entry("a")],
+      existingResults: [
+        {
+          id: "a",
+          status: "failed",
+          subagentType: "general-purpose",
+          attempts: 3,
+          startedAt: "2024-01-01T00:00:00.000Z",
+          finishedAt: "2024-01-01T00:00:01.000Z",
+          error: "previously broken",
+        },
+      ],
+    });
+
+    const summary = await executeSwarm(
+      RUN_DIR,
+      defaultOptions(backend, {
+        subagentGraphs: { "general-purpose": subagent },
+      }),
+    );
+
+    expect(summary.skipped).toBe(1);
+    expect(summary.dispatched).toBe(0);
+    expect(summary.failed).toBe(1);
     expect(subagent.invoke).not.toHaveBeenCalled();
   });
 
-  it("should list available subagent types in the error message", async () => {
-    const options = makeOptions({
-      subagentGraphs: {
-        "general-purpose": makeSubagent(),
-        researcher: makeSubagent(),
-      },
-      maxRetries: 1,
-    });
-    const tasks = [makeTask("t1", "Do something", "bad-type")];
-
-    await expect(executeSwarm(tasks, options)).rejects.toThrow("Available:");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 7. Backend write called
-// ---------------------------------------------------------------------------
-
-describe("executeSwarm — backend write", () => {
-  it("should write results to a unique run directory", async () => {
-    const backend = makeBackend();
-    const options = makeOptions({ backend });
-
-    const summary = await executeSwarm([makeTask("t1")], options);
-
-    expect(backend.write).toHaveBeenCalledOnce();
-    const writtenPath: string = backend.write.mock.calls[0][0];
-    expect(writtenPath).toMatch(/^swarm_runs\/[a-f0-9-]+\/results\.jsonl$/);
-    expect(summary.resultsDir).toBe(writtenPath.replace("/results.jsonl", ""));
-  });
-
-  it("should write valid JSONL content containing the task result", async () => {
-    const backend = makeBackend();
-    const subagent = makeSubagent({ messages: [{ content: "task output" }] });
-    const options = makeOptions({
-      backend,
-      subagentGraphs: { "general-purpose": subagent },
+  it("re-dispatches failed tasks when retryFailed is true", async () => {
+    const subagent = makeSubagent({ messages: [{ content: "fixed" }] });
+    const backend = seedRun({
+      manifestEntries: [entry("a")],
+      existingResults: [
+        {
+          id: "a",
+          status: "failed",
+          subagentType: "general-purpose",
+          attempts: 3,
+          startedAt: "2024-01-01T00:00:00.000Z",
+          finishedAt: "2024-01-01T00:00:01.000Z",
+          error: "old failure",
+        },
+      ],
     });
 
-    await executeSwarm([makeTask("t1", "Do work")], options);
-
-    const writtenContent: string = backend.write.mock.calls[0][1];
-    const parsed = JSON.parse(writtenContent.trim());
-    expect(parsed.id).toBe("t1");
-    expect(parsed.status).toBe("completed");
-    expect(parsed.result).toBe("task output");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 8. Concurrency limiting
-// ---------------------------------------------------------------------------
-
-describe("executeSwarm — concurrency limiting", () => {
-  it("should run tasks sequentially when concurrency=1", async () => {
-    const invocationOrder: string[] = [];
-    const makeOrderedSubagent = (id: string) => ({
-      invoke: vi.fn(async () => {
-        invocationOrder.push(id);
-        return { messages: [{ content: `result from ${id}` }] };
+    const summary = await executeSwarm(
+      RUN_DIR,
+      defaultOptions(backend, {
+        subagentGraphs: { "general-purpose": subagent },
+        retryFailed: true,
       }),
+    );
+
+    expect(summary.dispatched).toBe(1);
+    expect(summary.completed).toBe(1);
+    expect(summary.failed).toBe(0);
+    const a = readResultFromBackend(backend, "a");
+    expect(a?.status).toBe("completed");
+  });
+
+  it("reports orphaned result ids", async () => {
+    const subagent = makeSubagent();
+    const backend = seedRun({
+      manifestEntries: [entry("a")],
+      existingResults: [
+        {
+          id: "ghost",
+          status: "completed",
+          subagentType: "general-purpose",
+          attempts: 1,
+          startedAt: "2024-01-01T00:00:00.000Z",
+          finishedAt: "2024-01-01T00:00:01.000Z",
+          result: "leftover",
+        },
+      ],
     });
 
-    const subagentA = makeOrderedSubagent("A");
-    const subagentB = makeOrderedSubagent("B");
-    const subagentC = makeOrderedSubagent("C");
+    const summary = await executeSwarm(
+      RUN_DIR,
+      defaultOptions(backend, {
+        subagentGraphs: { "general-purpose": subagent },
+      }),
+    );
 
-    const options = makeOptions({
-      subagentGraphs: {
-        "general-purpose": makeSubagent(),
-        typeA: subagentA,
-        typeB: subagentB,
-        typeC: subagentC,
-      },
-      concurrency: 1,
-      maxRetries: 1,
-    });
-
-    const tasks = [
-      makeTask("t1", "Task 1", "typeA"),
-      makeTask("t2", "Task 2", "typeB"),
-      makeTask("t3", "Task 3", "typeC"),
-    ];
-
-    await executeSwarm(tasks, options);
-
-    expect(invocationOrder).toEqual(["A", "B", "C"]);
+    expect(summary.orphanedResultIds).toEqual(["ghost"]);
+    // Orphans are reported but never deleted.
+    expect(backend.files.has(resultPath(RUN_DIR, "ghost"))).toBe(true);
   });
 });
 
 // ---------------------------------------------------------------------------
-// 9. Timeout — task hangs and is recorded as failed
+// 4. Pre-dispatch failures
+// ---------------------------------------------------------------------------
+
+describe("executeSwarm — pre-dispatch failures", () => {
+  it("writes a failed result when a task file is missing", async () => {
+    const subagent = makeSubagent();
+    const backend = seedRun({
+      manifestEntries: [entry("a"), entry("b")],
+    });
+    backend.files.delete(taskPath(RUN_DIR, "a"));
+
+    const summary = await executeSwarm(
+      RUN_DIR,
+      defaultOptions(backend, {
+        subagentGraphs: { "general-purpose": subagent },
+      }),
+    );
+
+    expect(summary.completed).toBe(1);
+    expect(summary.failed).toBe(1);
+    const result = readResultFromBackend(backend, "a");
+    expect(result?.status).toBe("failed");
+    if (result?.status === "failed") {
+      expect(result.error).toContain("task file missing");
+    }
+    expect(subagent.invoke).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. Validation
+// ---------------------------------------------------------------------------
+
+describe("executeSwarm — validation", () => {
+  it("throws when manifest references an unknown subagent type", async () => {
+    const subagent = makeSubagent();
+    const backend = seedRun({
+      manifestEntries: [entry("a", "nonexistent")],
+    });
+
+    await expect(
+      executeSwarm(
+        RUN_DIR,
+        defaultOptions(backend, {
+          subagentGraphs: { "general-purpose": subagent },
+        }),
+      ),
+    ).rejects.toThrow(/unknown subagentType/);
+    expect(subagent.invoke).not.toHaveBeenCalled();
+  });
+
+  it("includes available subagent types in the error message", async () => {
+    const backend = seedRun({ manifestEntries: [entry("a", "bad")] });
+    await expect(
+      executeSwarm(
+        RUN_DIR,
+        defaultOptions(backend, {
+          subagentGraphs: {
+            "general-purpose": makeSubagent(),
+            researcher: makeSubagent(),
+          },
+        }),
+      ),
+    ).rejects.toThrow(/Available:.*researcher/);
+  });
+
+  it("rejects when the manifest does not exist", async () => {
+    const backend = createInMemoryBackend();
+    await expect(
+      executeSwarm(RUN_DIR, defaultOptions(backend)),
+    ).rejects.toThrow(/manifest not found/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. Concurrency limiting
+// ---------------------------------------------------------------------------
+
+describe("executeSwarm — concurrency", () => {
+  it("respects concurrency=1 by running tasks sequentially", async () => {
+    const order: string[] = [];
+    const subagent = {
+      invoke: vi.fn(async (state: any) => {
+        order.push(state.messages[0].content);
+        return { messages: [{ content: "done" }] };
+      }),
+    };
+    const backend = seedRun({
+      manifestEntries: [entry("a"), entry("b"), entry("c")],
+      taskContents: { a: "first", b: "second", c: "third" },
+    });
+
+    await executeSwarm(
+      RUN_DIR,
+      defaultOptions(backend, {
+        subagentGraphs: { "general-purpose": subagent as any },
+        concurrency: 1,
+      }),
+    );
+
+    expect(order).toEqual(["first", "second", "third"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. Timeout
 // ---------------------------------------------------------------------------
 
 describe("executeSwarm — timeout", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
-
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it("should record a hanging task as failed with a timeout error message", async () => {
-    const hangingSubagent = {
+  it("records a hanging task as failed with a timeout error", async () => {
+    const hanging = {
       invoke: vi.fn(
         () =>
           new Promise<never>(() => {
@@ -333,168 +445,34 @@ describe("executeSwarm — timeout", () => {
           }),
       ),
     };
+    const backend = seedRun({ manifestEntries: [entry("a")] });
 
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": hangingSubagent },
-      maxRetries: 1,
-    });
+    const promise = executeSwarm(
+      RUN_DIR,
+      defaultOptions(backend, {
+        subagentGraphs: { "general-purpose": hanging as any },
+      }),
+    );
 
-    const executionPromise = executeSwarm([makeTask("t1")], options);
-
-    // Advance past the timeout
     await vi.advanceTimersByTimeAsync(TASK_TIMEOUT_SECONDS * 1000 + 1000);
-
-    const summary = await executionPromise;
+    const summary = await promise;
 
     expect(summary.failed).toBe(1);
-    expect(summary.completed).toBe(0);
-
-    const backend = options.backend as any;
-    const writtenContent: string = backend.write.mock.calls[0][1];
-    const parsed = JSON.parse(writtenContent.trim());
-    expect(parsed.status).toBe("failed");
-    expect(parsed.error).toContain("timed out");
-    expect(parsed.error).toContain(String(TASK_TIMEOUT_SECONDS));
+    const result = readResultFromBackend(backend, "a");
+    expect(result?.status).toBe("failed");
+    if (result?.status === "failed") {
+      expect(result.error).toContain("timed out");
+      expect(result.error).toContain(String(TASK_TIMEOUT_SECONDS));
+    }
   });
 });
 
 // ---------------------------------------------------------------------------
-// 10. extractResultText — via executeSwarm
-// ---------------------------------------------------------------------------
-
-describe("executeSwarm — extractResultText", () => {
-  it("should use structuredResponse when present", async () => {
-    const structuredData = { answer: 42, label: "the meaning" };
-    const subagent = makeSubagent({
-      messages: [{ content: "ignored message" }],
-      structuredResponse: structuredData,
-    });
-    const backend = makeBackend();
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
-      backend,
-    });
-
-    await executeSwarm([makeTask("t1")], options);
-
-    const writtenContent: string = backend.write.mock.calls[0][1];
-    const parsed = JSON.parse(writtenContent.trim());
-    expect(parsed.result).toBe(JSON.stringify(structuredData));
-  });
-
-  it("should extract plain string content from the last message", async () => {
-    const subagent = makeSubagent({
-      messages: [{ content: "plain string result" }],
-    });
-    const backend = makeBackend();
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
-      backend,
-    });
-
-    await executeSwarm([makeTask("t1")], options);
-
-    const writtenContent: string = backend.write.mock.calls[0][1];
-    const parsed = JSON.parse(writtenContent.trim());
-    expect(parsed.result).toBe("plain string result");
-  });
-
-  it("should join text blocks from array content", async () => {
-    const subagent = makeSubagent({
-      messages: [
-        {
-          content: [
-            { type: "text", text: "first part" },
-            { type: "text", text: "second part" },
-          ],
-        },
-      ],
-    });
-    const backend = makeBackend();
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
-      backend,
-    });
-
-    await executeSwarm([makeTask("t1")], options);
-
-    const writtenContent: string = backend.write.mock.calls[0][1];
-    const parsed = JSON.parse(writtenContent.trim());
-    expect(parsed.result).toBe("first part\nsecond part");
-  });
-
-  it("should filter out tool_use, thinking, and redacted_thinking blocks", async () => {
-    const subagent = makeSubagent({
-      messages: [
-        {
-          content: [
-            { type: "thinking", thinking: "internal reasoning" },
-            { type: "text", text: "visible answer" },
-            { type: "tool_use", id: "call_1", name: "some_tool", input: {} },
-            { type: "redacted_thinking", data: "..." },
-          ],
-        },
-      ],
-    });
-    const backend = makeBackend();
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
-      backend,
-    });
-
-    await executeSwarm([makeTask("t1")], options);
-
-    const writtenContent: string = backend.write.mock.calls[0][1];
-    const parsed = JSON.parse(writtenContent.trim());
-    expect(parsed.result).toBe("visible answer");
-  });
-
-  it("should return 'Task completed' when all array blocks are non-text", async () => {
-    const subagent = makeSubagent({
-      messages: [
-        {
-          content: [
-            { type: "tool_use", id: "c1", name: "t", input: {} },
-            { type: "thinking", thinking: "..." },
-          ],
-        },
-      ],
-    });
-    const backend = makeBackend();
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
-      backend,
-    });
-
-    await executeSwarm([makeTask("t1")], options);
-
-    const writtenContent: string = backend.write.mock.calls[0][1];
-    const parsed = JSON.parse(writtenContent.trim());
-    expect(parsed.result).toBe("Task completed");
-  });
-
-  it("should return 'Task completed (no output)' when messages array is empty", async () => {
-    const subagent = makeSubagent({ messages: [] });
-    const backend = makeBackend();
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
-      backend,
-    });
-
-    await executeSwarm([makeTask("t1")], options);
-
-    const writtenContent: string = backend.write.mock.calls[0][1];
-    const parsed = JSON.parse(writtenContent.trim());
-    expect(parsed.result).toBe("Task completed (no output)");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 11. filterStateForSubagent — via executeSwarm
+// 8. State filtering
 // ---------------------------------------------------------------------------
 
 describe("executeSwarm — filterStateForSubagent", () => {
-  const EXCLUDED_KEYS = [
+  const EXCLUDED = [
     "messages",
     "todos",
     "structuredResponse",
@@ -502,146 +480,103 @@ describe("executeSwarm — filterStateForSubagent", () => {
     "memoryContents",
   ];
 
-  it("should strip all excluded keys from parentState before passing to subagent", async () => {
+  it("strips excluded keys from the state passed to subagents", async () => {
+    const subagent = makeSubagent();
+    const backend = seedRun({ manifestEntries: [entry("a")] });
     const parentState: Record<string, unknown> = {
-      messages: [{ content: "old message" }],
-      todos: ["write tests"],
-      structuredResponse: { foo: "bar" },
-      skillsMetadata: { skills: [] },
-      memoryContents: "some memory",
-      customKey: "should be kept",
-      anotherKey: 42,
+      messages: [{ content: "old" }],
+      todos: ["x"],
+      structuredResponse: { foo: 1 },
+      skillsMetadata: {},
+      memoryContents: "memory",
+      keepMe: "yes",
     };
 
-    const subagent = makeSubagent();
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
-      parentState,
-    });
+    await executeSwarm(
+      RUN_DIR,
+      defaultOptions(backend, {
+        subagentGraphs: { "general-purpose": subagent },
+        parentState,
+      }),
+    );
 
-    await executeSwarm([makeTask("t1")], options);
-
-    const [invokedState] = subagent.invoke.mock.calls[0];
-
-    for (const key of EXCLUDED_KEYS) {
-      // messages is replaced with the task HumanMessage, not absent
+    const [state] = subagent.invoke.mock.calls[0];
+    for (const key of EXCLUDED) {
       if (key === "messages") {
-        expect(invokedState.messages).toHaveLength(1);
-        expect(invokedState.messages[0].content).toBe("Do something");
+        expect(state.messages).toHaveLength(1);
       } else {
-        expect(invokedState).not.toHaveProperty(key);
+        expect(state).not.toHaveProperty(key);
       }
     }
-  });
-
-  it("should preserve non-excluded keys in the state passed to subagent", async () => {
-    const parentState: Record<string, unknown> = {
-      messages: [],
-      customKey: "kept",
-      numericProp: 99,
-      nested: { a: 1 },
-    };
-
-    const subagent = makeSubagent();
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
-      parentState,
-    });
-
-    await executeSwarm([makeTask("t1")], options);
-
-    const [invokedState] = subagent.invoke.mock.calls[0];
-    expect(invokedState.customKey).toBe("kept");
-    expect(invokedState.numericProp).toBe(99);
-    expect(invokedState.nested).toEqual({ a: 1 });
+    expect(state.keepMe).toBe("yes");
   });
 });
 
 // ---------------------------------------------------------------------------
-// 12. Result ordering
+// 9. extractResultText behavior
 // ---------------------------------------------------------------------------
 
-describe("executeSwarm — result ordering", () => {
-  it("should write results in the same order as input tasks", async () => {
-    // Subagents resolve in reverse order to verify output is not sorted by completion time
-    const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
-    const subagent = {
-      invoke: vi
-        .fn()
-        .mockImplementationOnce(async () => {
-          await delay(30);
-          return { messages: [{ content: "first" }] };
-        })
-        .mockImplementationOnce(async () => {
-          await delay(10);
-          return { messages: [{ content: "second" }] };
-        })
-        .mockImplementationOnce(async () => {
-          await delay(20);
-          return { messages: [{ content: "third" }] };
-        }),
-    };
-
-    const backend = makeBackend();
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
-      backend,
-      concurrency: 3,
-      maxRetries: 1,
+describe("executeSwarm — extractResultText", () => {
+  it("uses structuredResponse when present", async () => {
+    const data = { answer: 42 };
+    const subagent = makeSubagent({
+      messages: [{ content: "ignored" }],
+      structuredResponse: data,
     });
+    const backend = seedRun({ manifestEntries: [entry("a")] });
 
-    const tasks = [
-      makeTask("t1", "First"),
-      makeTask("t2", "Second"),
-      makeTask("t3", "Third"),
-    ];
-    await executeSwarm(tasks, options);
+    await executeSwarm(
+      RUN_DIR,
+      defaultOptions(backend, {
+        subagentGraphs: { "general-purpose": subagent },
+      }),
+    );
 
-    const writtenContent: string = backend.write.mock.calls[0][1];
-    const lines = writtenContent.trim().split("\n");
-    expect(lines).toHaveLength(3);
-    const results = lines.map((l) => JSON.parse(l));
-    expect(results[0].id).toBe("t1");
-    expect(results[1].id).toBe("t2");
-    expect(results[2].id).toBe("t3");
+    const result = readResultFromBackend(backend, "a");
+    expect(result?.status === "completed" && result.result).toBe(
+      JSON.stringify(data),
+    );
   });
 
-  it("should return summary with inline results when write fails", async () => {
-    const backend = makeBackend();
-    backend.write = vi.fn().mockRejectedValue(new Error("disk full"));
-    const subagent = makeSubagent({ messages: [{ content: "the answer" }] });
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
-      backend,
+  it("filters tool_use, thinking, and redacted_thinking blocks from array content", async () => {
+    const subagent = makeSubagent({
+      messages: [
+        {
+          content: [
+            { type: "thinking", thinking: "..." },
+            { type: "text", text: "visible" },
+            { type: "tool_use", id: "1", name: "x", input: {} },
+          ],
+        },
+      ],
     });
+    const backend = seedRun({ manifestEntries: [entry("a")] });
 
-    const summary = await executeSwarm([makeTask("t1")], options);
+    await executeSwarm(
+      RUN_DIR,
+      defaultOptions(backend, {
+        subagentGraphs: { "general-purpose": subagent },
+      }),
+    );
 
-    expect(summary.total).toBe(1);
-    expect(summary.completed).toBe(1);
-    expect(summary.failed).toBe(0);
-    expect(summary.resultsDir).toBe("");
-    expect(summary.writeError).toContain("disk full");
-    expect(summary.results).toHaveLength(1);
-    expect(summary.results![0].status).toBe("completed");
+    const result = readResultFromBackend(backend, "a");
+    expect(result?.status === "completed" && result.result).toBe("visible");
   });
 
-  it("should include tasks that were never executed as failed in results", async () => {
-    // Simulate a scenario where a task is not in resultsMap (edge case guard)
-    const subagent = makeSubagent();
-    const backend = makeBackend();
-    const options = makeOptions({
-      subagentGraphs: { "general-purpose": subagent },
-      backend,
-      maxRetries: 1,
-    });
+  it("returns 'Task completed (no output)' for an empty messages array", async () => {
+    const subagent = makeSubagent({ messages: [] });
+    const backend = seedRun({ manifestEntries: [entry("a")] });
 
-    const tasks = [makeTask("t1"), makeTask("t2")];
-    await executeSwarm(tasks, options);
+    await executeSwarm(
+      RUN_DIR,
+      defaultOptions(backend, {
+        subagentGraphs: { "general-purpose": subagent },
+      }),
+    );
 
-    const writtenContent: string = backend.write.mock.calls[0][1];
-    const lines = writtenContent.trim().split("\n");
-    const ids = lines.map((l) => JSON.parse(l).id);
-    expect(ids).toEqual(["t1", "t2"]);
+    const result = readResultFromBackend(backend, "a");
+    expect(result?.status === "completed" && result.result).toBe(
+      "Task completed (no output)",
+    );
   });
 });

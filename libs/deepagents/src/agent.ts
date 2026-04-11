@@ -28,7 +28,10 @@ import {
   isAsyncSubAgent,
 } from "./middleware/index.js";
 import { getSubagents } from "./middleware/subagents.js";
-import { createSwarmMiddleware } from "./middleware/swarm.js";
+import {
+  createSwarmMiddleware,
+  SWARM_TOOL_NAMES,
+} from "./middleware/swarm.js";
 import { StateBackend } from "./backends/index.js";
 import { ConfigurationError } from "./errors.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
@@ -94,8 +97,8 @@ const BASE_AGENT_PROMPT = context`
 const BUILTIN_TOOL_NAMES: ReadonlySet<string> = new Set([
   ...FILESYSTEM_TOOL_NAMES,
   ...ASYNC_TASK_TOOL_NAMES,
+  ...SWARM_TOOL_NAMES,
   "task",
-  "swarm",
   "write_todos",
 ]);
 
