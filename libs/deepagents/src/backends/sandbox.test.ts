@@ -179,6 +179,14 @@ describe("BaseSandbox", () => {
       expect(sandbox.executedCommands[0]).toContain("-maxdepth 1");
     });
 
+    it("should include -L flag to follow symlinks", async () => {
+      const sandbox = new MockSandbox();
+      sandbox.addFile("/test.txt", "content");
+
+      await sandbox.ls("/");
+      expect(sandbox.executedCommands[0]).toMatch(/find\s+-L\s+/);
+    });
+
     it("should return empty array for non-existent directory", async () => {
       const sandbox = new MockSandbox();
       // Mock execute to return error
@@ -634,6 +642,14 @@ describe("BaseSandbox", () => {
       expect(result.matches!.length).toBe(0);
     });
 
+    it("should include -L flag to follow symlinks when glob pattern is provided", async () => {
+      const sandbox = new MockSandbox();
+      sandbox.addFile("/test.txt", "hello world");
+
+      await sandbox.grep("hello", "/", "*.txt");
+      expect(sandbox.executedCommands[0]).toMatch(/find\s+-L\s+/);
+    });
+
     it("should skip binary files in grep results", async () => {
       const sandbox = new MockSandbox();
       // Mock grep returning matches from both text and binary files
@@ -694,6 +710,14 @@ describe("BaseSandbox", () => {
       expect(result.files!.some((f) => f.path === "src/utils/helper.ts")).toBe(
         true,
       );
+    });
+
+    it("should include -L flag to follow symlinks", async () => {
+      const sandbox = new MockSandbox();
+      sandbox.addFile("/test.py", "print('hello')");
+
+      await sandbox.glob("*.py", "/");
+      expect(sandbox.executedCommands[0]).toMatch(/find\s+-L\s+/);
     });
 
     it("should return empty array for no matches", async () => {
