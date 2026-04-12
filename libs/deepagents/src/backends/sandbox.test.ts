@@ -179,8 +179,6 @@ describe("BaseSandbox", () => {
       expect(sandbox.executedCommands[0]).toContain("-maxdepth 1");
     });
 
-    // Symlinked volumes (e.g. Modal) are invisible without -L.
-    // See: https://github.com/langchain-ai/deepagentsjs/issues/447
     it("should include -L flag to follow symlinks", async () => {
       const sandbox = new MockSandbox();
       sandbox.addFile("/test.txt", "content");
@@ -644,8 +642,6 @@ describe("BaseSandbox", () => {
       expect(result.matches!.length).toBe(0);
     });
 
-    // Symlinked volumes (e.g. Modal) are invisible without -L.
-    // See: https://github.com/langchain-ai/deepagentsjs/issues/447
     it("should include -L flag to follow symlinks when glob pattern is provided", async () => {
       const sandbox = new MockSandbox();
       sandbox.addFile("/test.txt", "hello world");
@@ -716,8 +712,6 @@ describe("BaseSandbox", () => {
       );
     });
 
-    // Symlinked volumes (e.g. Modal) are invisible without -L.
-    // See: https://github.com/langchain-ai/deepagentsjs/issues/447
     it("should include -L flag to follow symlinks", async () => {
       const sandbox = new MockSandbox();
       sandbox.addFile("/test.py", "print('hello')");
