@@ -15,6 +15,8 @@
  *   await sandbox.close();
  * }
  * ```
+ *
+ * @module
  */
 
 import {
@@ -72,6 +74,8 @@ export interface LangSmithSandboxCreateOptions extends Omit<
  *
  * Use the static `LangSmithSandbox.create()` factory for the simplest setup,
  * or construct directly with an existing `Sandbox` instance.
+ *
+ * @experimental This feature is experimental, and breaking changes are expected.
  */
 export class LangSmithSandbox extends BaseSandbox {
   #sandbox: Sandbox;

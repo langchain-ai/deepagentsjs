@@ -2,7 +2,13 @@
  * StoreBackend: Adapter for LangGraph's BaseStore (persistent, cross-thread).
  */
 
-import { Item, getStore as getLangGraphStore } from "@langchain/langgraph";
+import {
+  Item,
+  getConfig,
+  getCurrentTaskInput,
+  getStore as getLangGraphStore,
+} from "@langchain/langgraph";
+import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import type {
   BackendOptions,
   BackendProtocolV2,
@@ -34,6 +40,21 @@ import {
 } from "./utils.js";
 
 const NAMESPACE_COMPONENT_RE = /^[A-Za-z0-9\-_.@+:~]+$/;
+
+function getObjectRecord(value: unknown): Record<string, unknown> | undefined {
+  return value != null && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function getAssistantIdFromRecord(
+  value: Record<string, unknown> | undefined,
+): string | undefined {
+  const assistantId = value?.assistant_id ?? value?.assistantId;
+  return typeof assistantId === "string" && assistantId.length > 0
+    ? assistantId
+    : undefined;
+}
 
 /**
  * Validate a namespace array.
@@ -70,31 +91,79 @@ function validateNamespace(namespace: string[]): string[] {
 }
 
 /**
+ * Context provided to dynamic namespace factory functions.
+ */
+export interface StoreBackendContext<StateT = unknown> {
+  /**
+   * Current graph state, when available.
+   *
+   * In legacy factory mode this is the injected runtime state. In zero-arg mode
+   * this is read from the current LangGraph execution context.
+   */
+  state: StateT;
+  /**
+   * Runnable config, when available.
+   *
+   * This mirrors the Python implementation's access to config metadata for
+   * namespace resolution.
+   */
+  config?: {
+    metadata?: Record<string, unknown>;
+    configurable?: Record<string, unknown>;
+  };
+  /**
+   * Legacy assistant identifier, resolved from config metadata first and then
+   * from the injected runtime for backwards compatibility.
+   */
+  assistantId?: string;
+}
+
+export type StoreBackendNamespaceFactory<StateT = unknown> = (
+  context: StoreBackendContext<StateT>,
+) => string[];
+
+/**
  * Options for StoreBackend constructor.
  */
-export interface StoreBackendOptions extends BackendOptions {
+export interface StoreBackendOptions<StateT = unknown> extends BackendOptions {
+  /**
+   * Explicit store instance to use for persistence.
+   *
+   * This mirrors the Python API and allows constructing a backend directly with
+   * a store instance, e.g. `new StoreBackend({ store })`.
+   *
+   * When omitted, the backend uses the legacy injected runtime store or the
+   * LangGraph execution-context store.
+   */
+  store?: BaseStore;
   /**
    * Custom namespace for store operations.
    *
-   * Determines where files are stored in the LangGraph store, enabling
-   * user-scoped, org-scoped, or any custom isolation pattern.
+   * Accepts either a static namespace array or a factory that derives the
+   * namespace from the current backend context.
    *
-   * If not provided, falls back to legacy behavior using assistantId from {@link BackendRuntime}.
+   * If not provided, falls back to legacy assistant-id detection from config
+   * metadata, then the injected runtime's `assistantId`, and finally
+   * `["filesystem"]`.
    *
    * @example
    * ```typescript
-   * // User-scoped storage
-   * new StoreBackend(runtime, {
+   * // Static namespace
+   * new StoreBackend({
    *   namespace: ["memories", orgId, userId, "filesystem"],
    * });
    *
-   * // Org-scoped storage
-   * new StoreBackend(runtime, {
-   *   namespace: ["memories", orgId, "filesystem"],
+   * // Dynamic namespace
+   * new StoreBackend({
+   *   namespace: ({ state }) => [
+   *     "memories",
+   *     (state as { userId: string }).userId,
+   *     "filesystem",
+   *   ],
    * });
    * ```
    */
-  namespace?: string[];
+  namespace?: string[] | StoreBackendNamespaceFactory<StateT>;
 }
 
 /**
@@ -109,7 +178,8 @@ export interface StoreBackendOptions extends BackendOptions {
  */
 export class StoreBackend implements BackendProtocolV2 {
   private stateAndStore: StateAndStore | undefined;
-  private _namespace: string[] | undefined;
+  private storeOverride: BaseStore | undefined;
+  private _namespace: string[] | StoreBackendNamespaceFactory | undefined;
   private fileFormat: "v1" | "v2";
 
   constructor(options?: StoreBackendOptions);
@@ -135,9 +205,12 @@ export class StoreBackend implements BackendProtocolV2 {
       opts = stateAndStoreOrOptions;
     }
 
-    if (opts?.namespace) {
+    if (Array.isArray(opts?.namespace)) {
       this._namespace = validateNamespace(opts.namespace);
+    } else if (opts?.namespace) {
+      this._namespace = opts.namespace;
     }
+    this.storeOverride = opts?.store;
     this.fileFormat = opts?.fileFormat ?? "v2";
   }
 
@@ -160,6 +233,10 @@ export class StoreBackend implements BackendProtocolV2 {
       return store;
     }
 
+    if (this.storeOverride) {
+      return this.storeOverride;
+    }
+
     const store = getLangGraphStore();
     if (!store) {
       throw new Error(
@@ -172,25 +249,101 @@ export class StoreBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Get the current graph state when available.
+   */
+  private getState(): unknown {
+    if (this.stateAndStore) {
+      return this.stateAndStore.state;
+    }
+
+    try {
+      return getCurrentTaskInput();
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Get the most relevant runnable config for namespace resolution.
+   */
+  private getNamespaceConfig():
+    | {
+        metadata?: Record<string, unknown>;
+        configurable?: Record<string, unknown>;
+      }
+    | undefined {
+    const injectedConfig = getObjectRecord(
+      (this.stateAndStore as { config?: unknown } | undefined)?.config,
+    );
+    if (injectedConfig) {
+      return {
+        metadata: getObjectRecord(injectedConfig.metadata),
+        configurable: getObjectRecord(injectedConfig.configurable),
+      };
+    }
+
+    try {
+      const config = getConfig();
+      const configRecord = getObjectRecord(config);
+      if (!configRecord) {
+        return undefined;
+      }
+      return {
+        metadata: getObjectRecord(configRecord.metadata),
+        configurable: getObjectRecord(configRecord.configurable),
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Legacy assistant-id detection compatible with both Python and the
+   * historical TypeScript `assistantId` runtime property.
+   */
+  private getLegacyAssistantId(): string | undefined {
+    const config = this.getNamespaceConfig();
+    const assistantIdFromConfig =
+      getAssistantIdFromRecord(config?.metadata) ??
+      getAssistantIdFromRecord(config?.configurable);
+    if (assistantIdFromConfig) {
+      return assistantIdFromConfig;
+    }
+
+    const assistantId = this.stateAndStore?.assistantId;
+    return typeof assistantId === "string" && assistantId.length > 0
+      ? assistantId
+      : undefined;
+  }
+
+  /**
    * Get the namespace for store operations.
    *
    * Resolution order:
-   * 1. Explicit namespace from constructor options (both modes)
-   * 2. Legacy mode: `[assistantId, "filesystem"]` fallback from {@link StateAndStore}
-   * 3. Zero-arg mode without namespace: `["filesystem"]` with a deprecation warning
-   *    nudging callers to pass an explicit namespace
-   * 4. Legacy mode without assistantId: `["filesystem"]`
+   * 1. Explicit namespace from constructor options
+   * 2. Namespace factory resolved from the current backend context
+   * 3. Assistant ID from runtime config / LangGraph config metadata
+   * 4. Legacy `assistantId` from the injected runtime
+   * 5. `["filesystem"]`
    */
   protected getNamespace(): string[] {
-    if (this._namespace) {
+    if (Array.isArray(this._namespace)) {
       return this._namespace;
     }
 
-    if (this.stateAndStore) {
-      const assistantId = this.stateAndStore.assistantId;
-      if (assistantId) {
-        return [assistantId, "filesystem"];
-      }
+    if (this._namespace) {
+      return validateNamespace(
+        this._namespace({
+          state: this.getState(),
+          config: this.getNamespaceConfig(),
+          assistantId: this.getLegacyAssistantId(),
+        }),
+      );
+    }
+
+    const assistantId = this.getLegacyAssistantId();
+    if (assistantId) {
+      return [assistantId, "filesystem"];
     }
 
     return ["filesystem"];
