@@ -60,6 +60,12 @@ export {
   DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
   DEFAULT_SUBAGENT_PROMPT,
   TASK_SYSTEM_PROMPT,
+  // Swarm middleware for parallel subagent execution
+  createSwarmMiddleware,
+  createSwarmTool,
+  SWARM_SYSTEM_PROMPT,
+  type SwarmMiddlewareOptions,
+  type CreateSwarmToolOptions,
   // Completion callback middleware for async subagents
   createCompletionCallbackMiddleware,
   type CompletionCallbackOptions,
