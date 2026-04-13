@@ -4,6 +4,7 @@
 
 import type {
   EditResult,
+  ExecuteResponse,
   FileData,
   FileDownloadResponse,
   FileInfo,
@@ -11,12 +12,14 @@ import type {
   GlobResult,
   GrepResult,
   LsResult,
+  MaybePromise,
   ReadRawResult,
   ReadResult,
   BackendRuntime,
   WriteResult,
   BackendProtocolV2,
   BackendOptions,
+  CustomExecuteFn,
 } from "./protocol.js";
 import {
   createFileData,
@@ -49,6 +52,10 @@ const PREGEL_SEND_KEY = "__pregel_send";
 export class StateBackend implements BackendProtocolV2 {
   private runtime: BackendRuntime | undefined;
   private fileFormat: "v1" | "v2";
+  private executeFn: CustomExecuteFn | undefined;
+
+  /** Non-empty when a custom execute function is provided. */
+  readonly id: string;
 
   constructor(options?: BackendOptions);
   /**
@@ -67,11 +74,29 @@ export class StateBackend implements BackendProtocolV2 {
       // Legacy path: BackendRuntime was passed
       this.runtime = runtimeOrOptions;
       this.fileFormat = options?.fileFormat ?? "v2";
+      this.executeFn = options?.execute;
     } else {
       // New path: zero-arg or options-only
       this.runtime = undefined;
       this.fileFormat = runtimeOrOptions?.fileFormat ?? "v2";
+      this.executeFn = runtimeOrOptions?.execute;
     }
+    this.id = this.executeFn ? "state-backend-custom-execute" : "";
+  }
+
+  /**
+   * Execute a command using the user-provided execution function.
+   * Only available when `execute` was passed in the constructor options.
+   */
+  execute(command: string): MaybePromise<ExecuteResponse> {
+    if (!this.executeFn) {
+      return {
+        output: "Error: No execute function configured on this StateBackend.",
+        exitCode: 1,
+        truncated: false,
+      };
+    }
+    return this.executeFn(command);
   }
 
   /**

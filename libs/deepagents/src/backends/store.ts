@@ -12,7 +12,9 @@ import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import type {
   BackendOptions,
   BackendProtocolV2,
+  CustomExecuteFn,
   EditResult,
+  ExecuteResponse,
   FileData,
   FileDownloadResponse,
   FileInfo,
@@ -20,6 +22,7 @@ import type {
   GlobResult,
   GrepResult,
   LsResult,
+  MaybePromise,
   ReadRawResult,
   ReadResult,
   WriteResult,
@@ -181,6 +184,10 @@ export class StoreBackend implements BackendProtocolV2 {
   private storeOverride: BaseStore | undefined;
   private _namespace: string[] | StoreBackendNamespaceFactory | undefined;
   private fileFormat: "v1" | "v2";
+  private executeFn: CustomExecuteFn | undefined;
+
+  /** Non-empty when a custom execute function is provided. */
+  readonly id: string;
 
   constructor(options?: StoreBackendOptions);
   /**
@@ -212,6 +219,23 @@ export class StoreBackend implements BackendProtocolV2 {
     }
     this.storeOverride = opts?.store;
     this.fileFormat = opts?.fileFormat ?? "v2";
+    this.executeFn = opts?.execute;
+    this.id = this.executeFn ? "store-backend-custom-execute" : "";
+  }
+
+  /**
+   * Execute a command using the user-provided execution function.
+   * Only available when `execute` was passed in the constructor options.
+   */
+  execute(command: string): MaybePromise<ExecuteResponse> {
+    if (!this.executeFn) {
+      return {
+        output: "Error: No execute function configured on this StoreBackend.",
+        exitCode: 1,
+        truncated: false,
+      };
+    }
+    return this.executeFn(command);
   }
 
   /**

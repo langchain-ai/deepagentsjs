@@ -260,11 +260,44 @@ export interface FileUploadResponse {
 }
 
 /**
+ * User-provided execution function for backends that don't natively
+ * support code execution. When provided, the backend satisfies
+ * {@link isSandboxBackend} and the agent gains an `execute` tool.
+ */
+export type CustomExecuteFn = (
+  command: string,
+) => MaybePromise<ExecuteResponse>;
+
+/**
  * Common options shared across backend constructors.
  */
 export interface BackendOptions {
   /** File data format to use for new writes. Defaults to "v2". */
   fileFormat?: "v1" | "v2";
+
+  /**
+   * Optional execution function that gives the backend code-execution
+   * capability. When provided, the backend reports as a sandbox backend
+   * and the agent can use the `execute` tool.
+   *
+   * @example
+   * ```ts
+   * new StateBackend({
+   *   execute: async (command) => {
+   *     const vm = await import("node:vm");
+   *     const output: string[] = [];
+   *     const ctx = vm.createContext({ console: { log: (...a) => output.push(a.join(" ")) } });
+   *     try {
+   *       vm.runInContext(command, ctx, { timeout: 30000 });
+   *       return { output: output.join("\\n"), exitCode: 0, truncated: false };
+   *     } catch (err) {
+   *       return { output: err.message, exitCode: 1, truncated: false };
+   *     }
+   *   },
+   * });
+   * ```
+   */
+  execute?: CustomExecuteFn;
 }
 
 /**
