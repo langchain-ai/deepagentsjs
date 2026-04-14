@@ -1,16 +1,7 @@
 import * as ls from "langsmith/vitest";
 import { expect } from "vitest";
-import {
-  createDeepAgent,
-  createSummarizationMiddleware,
-  StateBackend,
-} from "deepagents";
-import { MemorySaver } from "@langchain/langgraph";
-import {
-  getDefaultRunner,
-  parseTrajectory,
-  getFinalText,
-} from "@deepagents/evals";
+import { createSummarizationMiddleware, StateBackend } from "deepagents";
+import { getDefaultRunner, getFinalText } from "@deepagents/evals";
 
 const runner = getDefaultRunner();
 
@@ -24,39 +15,6 @@ function resolveModelFromEvalRunner(): string {
   if (name === "gpt-4.1-mini") return "gpt-4.1-mini";
   if (name === "o3-mini") return "o3-mini";
   return "claude-sonnet-4-6";
-}
-
-async function invoke(
-  agent: ReturnType<typeof createDeepAgent>,
-  threadId: string,
-  query: string,
-  initialFiles?: Record<string, string>,
-) {
-  const now = new Date().toISOString();
-  const files: Record<
-    string,
-    { content: string[]; created_at: string; modified_at: string }
-  > = {};
-  for (const [path, content] of Object.entries(initialFiles ?? {})) {
-    files[path] = {
-      content: content.split("\n"),
-      created_at: now,
-      modified_at: now,
-    };
-  }
-
-  const result = await agent.invoke(
-    {
-      messages: [{ role: "user", content: query }],
-      ...(Object.keys(files).length > 0 ? { files } : {}),
-    },
-    { configurable: { thread_id: threadId } },
-  );
-
-  return parseTrajectory(
-    result.messages as unknown[],
-    result.files as Record<string, unknown>,
-  );
 }
 
 function makeLargePythonFile(): string {
@@ -81,11 +39,9 @@ function getHistoryFiles(files: Record<string, string>): string[] {
   );
 }
 
-function createAgent() {
+function createSummarizationRunner() {
   const model = resolveModelFromEvalRunner();
-  return createDeepAgent({
-    model,
-    checkpointer: new MemorySaver(),
+  return runner.extend({
     backend: (config) => new StateBackend(config),
     middleware: [
       createSummarizationMiddleware({
@@ -108,21 +64,16 @@ ls.describe(
       {
         inputs: {
           query:
-            "Read /summarization.py and return only the value of MAGIC_END_MARKER. You may need to paginate.",
+            "Read /summarization.py in small chunks (at most 100 lines per read), and return only the value of MAGIC_END_MARKER.",
         },
       },
       async ({ inputs }) => {
-        const agent = createAgent();
-        const threadId = crypto.randomUUID();
-
-        await invoke(agent, threadId, "Acknowledge this message briefly.", {
-          "/summarization.py": makeLargePythonFile(),
+        const run = await createSummarizationRunner().run({
+          query: inputs.query,
+          initialFiles: {
+            "/summarization.py": makeLargePythonFile(),
+          },
         });
-        for (let i = 0; i < 12; i += 1) {
-          await invoke(agent, threadId, `Context warmup message ${i}.`);
-        }
-
-        const run = await invoke(agent, threadId, inputs.query);
 
         expect(getFinalText(run).toLowerCase()).toContain("opal-fox-91");
         const historyFiles = getHistoryFiles(run.files);
@@ -135,25 +86,16 @@ ls.describe(
       {
         inputs: {
           query:
-            "Summarize the key imports in /summarization.py in one sentence.",
+            "Read /summarization.py in small chunks, then summarize the key imports in one sentence.",
         },
       },
       async ({ inputs }) => {
-        const agent = createAgent();
-        const threadId = crypto.randomUUID();
-
-        await invoke(agent, threadId, "Start a long technical discussion.", {
-          "/summarization.py": makeLargePythonFile(),
+        const run = await createSummarizationRunner().run({
+          query: inputs.query,
+          initialFiles: {
+            "/summarization.py": makeLargePythonFile(),
+          },
         });
-        for (let i = 0; i < 14; i += 1) {
-          await invoke(
-            agent,
-            threadId,
-            `Extra context segment ${i}: ${"token ".repeat(60)}`,
-          );
-        }
-
-        const run = await invoke(agent, threadId, inputs.query);
 
         const historyFiles = getHistoryFiles(run.files);
         expect(historyFiles.length).toBeGreaterThan(0);
@@ -167,31 +109,17 @@ ls.describe(
       {
         inputs: {
           query:
-            "What is the first standard library import after __future__ in /summarization.py? Return only the module name.",
+            "Read /summarization.py in small chunks and then answer: what is the first standard library import after __future__? Return only the module name.",
         },
       },
       async ({ inputs }) => {
-        const agent = createAgent();
-        const threadId = crypto.randomUUID();
-
-        await invoke(
-          agent,
-          threadId,
-          "Read /summarization.py and confirm when done.",
-          {
+        const run = await createSummarizationRunner().run({
+          query: inputs.query,
+          initialFiles: {
             "/summarization.py": makeLargePythonFile(),
           },
-        );
-        for (let i = 0; i < 16; i += 1) {
-          await invoke(
-            agent,
-            threadId,
-            `Conversation filler ${i}: ${"details ".repeat(40)}`,
-          );
-        }
-
-        const followup = await invoke(agent, threadId, inputs.query);
-        expect(getFinalText(followup).toLowerCase()).toContain("logging");
+        });
+        expect(getFinalText(run).toLowerCase()).toContain("logging");
       },
     );
   },
