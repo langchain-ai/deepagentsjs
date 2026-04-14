@@ -7,7 +7,6 @@ import {
   type AgentMiddleware,
   context,
 } from "langchain";
-import { ChatAnthropic } from "@langchain/anthropic";
 import type {
   ClientTool,
   ServerTool,
@@ -163,7 +162,7 @@ export function createDeepAgent<
   >,
 ) {
   const {
-    model = new ChatAnthropic("claude-sonnet-4-6"),
+    model = "anthropic:claude-sonnet-4-6",
     tools = [],
     systemPrompt,
     middleware: customMiddleware = [],
