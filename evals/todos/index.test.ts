@@ -18,7 +18,7 @@ function countWriteTodosCalls(
 }
 
 ls.describe(
-  "deepagents-js-todos",
+  process.env.LANGSMITH_EVAL_DATASET ?? "deepagents-js-todos",
   () => {
     ls.test(
       "write todos sequential updates returns text",
@@ -70,5 +70,5 @@ ls.describe(
       },
     );
   },
-  { projectName: runner.name, upsert: true },
+  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? runner.name, upsert: true },
 );

@@ -5,7 +5,7 @@ import { getDefaultRunner } from "@deepagents/evals";
 const runner = getDefaultRunner();
 
 ls.describe(
-  "deepagents-js-files",
+  process.env.LANGSMITH_EVAL_DATASET ?? "deepagents-js-files",
   () => {
     ls.test(
       "read file seeded state backend file",
@@ -450,5 +450,5 @@ ls.describe(
       },
     );
   },
-  { projectName: runner.name, upsert: true },
+  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? runner.name, upsert: true },
 );

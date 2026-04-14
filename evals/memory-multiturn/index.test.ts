@@ -8,7 +8,7 @@ const MEMORY_PATH = "/project/AGENTS.md";
 const MEMORY_SEED = "# Project Memory\n\nUser preferences and project facts.\n";
 
 ls.describe(
-  "deepagents-js-memory-multiturn",
+  process.env.LANGSMITH_EVAL_DATASET ?? "deepagents-js-memory-multiturn",
   () => {
     ls.test(
       "implicit preference remembered",
@@ -107,5 +107,5 @@ ls.describe(
       },
     );
   },
-  { projectName: runner.name, upsert: true },
+  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? runner.name, upsert: true },
 );

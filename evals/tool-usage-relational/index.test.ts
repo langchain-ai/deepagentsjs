@@ -423,7 +423,7 @@ const RELATIONAL_TOOLS = [
 ];
 
 ls.describe(
-  "deepagents-js-tool-usage-relational",
+  process.env.LANGSMITH_EVAL_DATASET ?? "deepagents-js-tool-usage-relational",
   () => {
     beforeEach(() => {
       vi.clearAllMocks();
@@ -1206,5 +1206,5 @@ ls.describe(
       },
     );
   },
-  { projectName: runner.name, upsert: true },
+  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? runner.name, upsert: true },
 );

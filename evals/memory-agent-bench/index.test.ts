@@ -5,7 +5,7 @@ import { getDefaultRunner, getFinalText } from "@deepagents/evals";
 const runner = getDefaultRunner();
 
 ls.describe(
-  "deepagents-js-memory-agent-bench",
+  process.env.LANGSMITH_EVAL_DATASET ?? "deepagents-js-memory-agent-bench",
   () => {
     ls.test(
       "long context memorization",
@@ -79,5 +79,5 @@ ls.describe(
       },
     );
   },
-  { projectName: runner.name, upsert: true },
+  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? runner.name, upsert: true },
 );

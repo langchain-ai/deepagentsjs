@@ -9,7 +9,7 @@ function skillContent(name: string, description: string, body: string): string {
 }
 
 ls.describe(
-  "deepagents-js-skills",
+  process.env.LANGSMITH_EVAL_DATASET ?? "deepagents-js-skills",
   () => {
     ls.test(
       "read skill full content",
@@ -214,5 +214,5 @@ ls.describe(
       },
     );
   },
-  { projectName: runner.name, upsert: true },
+  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? runner.name, upsert: true },
 );

@@ -7,9 +7,9 @@ const runner = getDefaultRunner();
 const tasks = (await loadOolongTasksByDataset()).get("formality") ?? [];
 
 ls.describe(
-  runner.name,
+  process.env.LANGSMITH_EVAL_DATASET ?? runner.name,
   () => {
     makeOolongTests(tasks);
   },
-  { projectName: "deepagents-js-oolong-formality", upsert: true },
+  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? "deepagents-js-oolong-formality", upsert: true },
 );

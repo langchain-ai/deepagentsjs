@@ -47,6 +47,10 @@ EVAL_RUNNER=sonnet-4-5 pnpm --filter @deepagents/eval-basic test:eval
 # Run every suite in one execution (single reporter session)
 EVAL_RUNNER=sonnet-4-5 pnpm --filter @deepagents/eval-all test:eval
 
+# Optional overrides respected by all eval suites:
+#   LANGSMITH_EVAL_PROJECT -> override LangSmith projectName
+#   LANGSMITH_EVAL_DATASET -> override LangSmith dataset/describe name
+
 # Run with a different model
 EVAL_RUNNER=gpt-4.1 pnpm --filter @deepagents/eval-files test:eval
 ```

@@ -27,7 +27,7 @@ function getHistoryFiles(files: Record<string, string>): string[] {
 }
 
 ls.describe(
-  "deepagents-js-summarization",
+  process.env.LANGSMITH_EVAL_DATASET ?? "deepagents-js-summarization",
   () => {
     ls.test(
       "summarize continues task",
@@ -96,5 +96,5 @@ ls.describe(
       },
     );
   },
-  { projectName: runner.name, upsert: true },
+  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? runner.name, upsert: true },
 );

@@ -91,7 +91,7 @@ const CASES: FollowupCase[] = [
 ];
 
 ls.describe(
-  "deepagents-js-followup-quality",
+  process.env.LANGSMITH_EVAL_DATASET ?? "deepagents-js-followup-quality",
   () => {
     for (const testCase of CASES) {
       ls.test(
@@ -127,5 +127,5 @@ ls.describe(
       );
     }
   },
-  { projectName: runner.name, upsert: true },
+  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? runner.name, upsert: true },
 );

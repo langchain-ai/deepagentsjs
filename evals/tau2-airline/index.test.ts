@@ -233,7 +233,7 @@ function requiredToolCalled(name: string): boolean {
 }
 
 ls.describe(
-  "deepagents-js-tau2-airline",
+  process.env.LANGSMITH_EVAL_DATASET ?? "deepagents-js-tau2-airline",
   () => {
     for (const task of TASKS) {
       ls.test(
@@ -264,5 +264,5 @@ ls.describe(
       );
     }
   },
-  { projectName: runner.name, upsert: true },
+  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? runner.name, upsert: true },
 );

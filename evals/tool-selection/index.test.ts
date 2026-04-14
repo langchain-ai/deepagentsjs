@@ -119,7 +119,7 @@ beforeEach(() => {
 });
 
 ls.describe(
-  "deepagents-js-tool-selection",
+  process.env.LANGSMITH_EVAL_DATASET ?? "deepagents-js-tool-selection",
   () => {
     ls.test(
       "direct request slack dm",
@@ -270,5 +270,5 @@ ls.describe(
       },
     );
   },
-  { projectName: runner.name, upsert: true },
+  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? runner.name, upsert: true },
 );

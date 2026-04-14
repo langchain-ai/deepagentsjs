@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:eval": "vitest run"
+    "test:eval": "LANGSMITH_EVAL_PROJECT=deepagents-js-all LANGSMITH_EVAL_DATASET=deepagents-js-all vitest run"
   },
   "dependencies": {
     "@deepagents/evals": "workspace:*",

@@ -38,7 +38,7 @@ const SAMPLE_TOOL_CONFIG: Record<string, boolean | InterruptOnConfig> = {
 };
 
 ls.describe(
-  "deepagents-js-hitl",
+  process.env.LANGSMITH_EVAL_DATASET ?? "deepagents-js-hitl",
   () => {
     ls.test(
       "test_hitl_agent",
@@ -283,5 +283,5 @@ ls.describe(
       },
     );
   },
-  { projectName: runner.name, upsert: true },
+  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? runner.name, upsert: true },
 );
