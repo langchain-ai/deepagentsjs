@@ -737,6 +737,42 @@ description: [invalid yaml syntax: unclosed bracket
         "C:\\skills\\user\\web-research\\SKILL.md",
       );
     });
+    it("should discover skill.md when source is an explicit skill directory (bug #387)", async () => {
+      // Reproduces: skillsMiddleware skips skill.md discovery for explicitly
+      // scoped skill directories. When `sources` points directly at a skill
+      // directory (e.g. "skills/domainA/") rather than a parent directory
+      // (e.g. "skills/"), listSkillsFromBackend calls ls("skills/domainA/")
+      // and gets back the *contents* of that directory (files like SKILL.md).
+      // Because those entries are files, not subdirectories, the loop skips
+      // them and no skill metadata is ever extracted.
+      const mockBackend = createMockBackend({
+        files: {
+          "/skills/domainA/SKILL.md": VALID_SKILL_CONTENT,
+        },
+        directories: {
+          // ls("/skills/domainA/") returns the contents of the directory,
+          // not the directory itself — this is the exact shape that triggers
+          // the bug.
+          "/skills/domainA/": [{ name: "SKILL.md", type: "file" }],
+        },
+      });
+
+      const middleware = createSkillsMiddleware({
+        backend: mockBackend,
+        sources: ["/skills/domainA/"],
+      });
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({});
+
+      // Should have found the skill whose SKILL.md lives directly inside the
+      // explicitly scoped source directory.
+      expect(result?.skillsMetadata).toHaveLength(1);
+      expect(result?.skillsMetadata[0].name).toBe("web-research");
+      expect(result?.skillsMetadata[0].path).toBe(
+        "/skills/domainA/SKILL.md",
+      );
+    });
   });
 
   describe("wrapModelCall", () => {
