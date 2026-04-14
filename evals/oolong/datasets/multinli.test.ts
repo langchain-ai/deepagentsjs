@@ -1,15 +1,13 @@
 import * as ls from "langsmith/vitest";
 import { getDefaultRunner } from "@deepagents/evals";
-import { loadOolongTasksByDataset } from "../load-oolong.js";
-import { makeOolongTests } from "../make-tests.js";
+import { defineOolongMultinliSuite, getOolongMultinliDatasetName, getOolongMultinliDescribeOptions } from "./multinli.suite.js";
 
 const runner = getDefaultRunner();
-const tasks = (await loadOolongTasksByDataset()).get("multinli") ?? [];
 
 ls.describe(
-  process.env.LANGSMITH_EVAL_DATASET ?? runner.name,
+  getOolongMultinliDatasetName(runner),
   () => {
-    makeOolongTests(tasks);
+    defineOolongMultinliSuite(runner);
   },
-  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? "deepagents-js-oolong-multinli", upsert: true },
+  getOolongMultinliDescribeOptions(runner),
 );

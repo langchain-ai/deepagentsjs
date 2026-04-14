@@ -1,15 +1,13 @@
 import * as ls from "langsmith/vitest";
 import { getDefaultRunner } from "@deepagents/evals";
-import { loadOolongTasksByDataset } from "../load-oolong.js";
-import { makeOolongTests } from "../make-tests.js";
+import { defineOolongAppReviewsSuite, getOolongAppReviewsDatasetName, getOolongAppReviewsDescribeOptions } from "./app_reviews.suite.js";
 
 const runner = getDefaultRunner();
-const tasks = (await loadOolongTasksByDataset()).get("app_reviews") ?? [];
 
 ls.describe(
-  process.env.LANGSMITH_EVAL_DATASET ?? runner.name,
+  getOolongAppReviewsDatasetName(runner),
   () => {
-    makeOolongTests(tasks);
+    defineOolongAppReviewsSuite(runner);
   },
-  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? "deepagents-js-oolong-app-reviews", upsert: true },
+  getOolongAppReviewsDescribeOptions(runner),
 );

@@ -1,15 +1,13 @@
 import * as ls from "langsmith/vitest";
 import { getDefaultRunner } from "@deepagents/evals";
-import { loadOolongTasksByDataset } from "../load-oolong.js";
-import { makeOolongTests } from "../make-tests.js";
+import { defineOolongFormalitySuite, getOolongFormalityDatasetName, getOolongFormalityDescribeOptions } from "./formality.suite.js";
 
 const runner = getDefaultRunner();
-const tasks = (await loadOolongTasksByDataset()).get("formality") ?? [];
 
 ls.describe(
-  process.env.LANGSMITH_EVAL_DATASET ?? runner.name,
+  getOolongFormalityDatasetName(runner),
   () => {
-    makeOolongTests(tasks);
+    defineOolongFormalitySuite(runner);
   },
-  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? "deepagents-js-oolong-formality", upsert: true },
+  getOolongFormalityDescribeOptions(runner),
 );

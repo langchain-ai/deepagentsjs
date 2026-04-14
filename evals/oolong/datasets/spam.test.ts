@@ -1,15 +1,13 @@
 import * as ls from "langsmith/vitest";
 import { getDefaultRunner } from "@deepagents/evals";
-import { loadOolongTasksByDataset } from "../load-oolong.js";
-import { makeOolongTests } from "../make-tests.js";
+import { defineOolongSpamSuite, getOolongSpamDatasetName, getOolongSpamDescribeOptions } from "./spam.suite.js";
 
 const runner = getDefaultRunner();
-const tasks = (await loadOolongTasksByDataset()).get("spam") ?? [];
 
 ls.describe(
-  process.env.LANGSMITH_EVAL_DATASET ?? runner.name,
+  getOolongSpamDatasetName(runner),
   () => {
-    makeOolongTests(tasks);
+    defineOolongSpamSuite(runner);
   },
-  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? "deepagents-js-oolong-spam", upsert: true },
+  getOolongSpamDescribeOptions(runner),
 );

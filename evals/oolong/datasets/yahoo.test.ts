@@ -1,15 +1,13 @@
 import * as ls from "langsmith/vitest";
 import { getDefaultRunner } from "@deepagents/evals";
-import { loadOolongTasksByDataset } from "../load-oolong.js";
-import { makeOolongTests } from "../make-tests.js";
+import { defineOolongYahooSuite, getOolongYahooDatasetName, getOolongYahooDescribeOptions } from "./yahoo.suite.js";
 
 const runner = getDefaultRunner();
-const tasks = (await loadOolongTasksByDataset()).get("yahoo") ?? [];
 
 ls.describe(
-  process.env.LANGSMITH_EVAL_DATASET ?? runner.name,
+  getOolongYahooDatasetName(runner),
   () => {
-    makeOolongTests(tasks);
+    defineOolongYahooSuite(runner);
   },
-  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? "deepagents-js-oolong-yahoo", upsert: true },
+  getOolongYahooDescribeOptions(runner),
 );

@@ -1,15 +1,13 @@
 import * as ls from "langsmith/vitest";
 import { getDefaultRunner } from "@deepagents/evals";
-import { loadOolongTasksByDataset } from "../load-oolong.js";
-import { makeOolongTests } from "../make-tests.js";
+import { defineOolongNegationSuite, getOolongNegationDatasetName, getOolongNegationDescribeOptions } from "./negation.suite.js";
 
 const runner = getDefaultRunner();
-const tasks = (await loadOolongTasksByDataset()).get("negation") ?? [];
 
 ls.describe(
-  process.env.LANGSMITH_EVAL_DATASET ?? runner.name,
+  getOolongNegationDatasetName(runner),
   () => {
-    makeOolongTests(tasks);
+    defineOolongNegationSuite(runner);
   },
-  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? "deepagents-js-oolong-negation", upsert: true },
+  getOolongNegationDescribeOptions(runner),
 );

@@ -1,15 +1,13 @@
 import * as ls from "langsmith/vitest";
 import { getDefaultRunner } from "@deepagents/evals";
-import { loadOolongTasksByDataset } from "../load-oolong.js";
-import { makeOolongTests } from "../make-tests.js";
+import { defineOolongAgnewsSuite, getOolongAgnewsDatasetName, getOolongAgnewsDescribeOptions } from "./agnews.suite.js";
 
 const runner = getDefaultRunner();
-const tasks = (await loadOolongTasksByDataset()).get("agnews") ?? [];
 
 ls.describe(
-  process.env.LANGSMITH_EVAL_DATASET ?? runner.name,
+  getOolongAgnewsDatasetName(runner),
   () => {
-    makeOolongTests(tasks);
+    defineOolongAgnewsSuite(runner);
   },
-  { projectName: process.env.LANGSMITH_EVAL_PROJECT ?? "deepagents-js-oolong-agnews", upsert: true },
+  getOolongAgnewsDescribeOptions(runner),
 );
