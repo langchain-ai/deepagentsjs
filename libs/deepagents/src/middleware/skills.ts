@@ -238,7 +238,8 @@ You have access to a skills library that provides specialized capabilities and d
 Skills follow a **progressive disclosure** pattern - you know they exist (name + description above), but you only read the full instructions when needed:
 
 1. **Recognize when a skill applies**: Check if the user's task matches any skill's description
-2. **Read the skill's full instructions**: The skill list above shows the exact path to use with read_file
+2. **Read the skill's full instructions**: Use \`read_file\` on the path shown in the skill list above.
+   Pass \`limit=1000\` since the default of 100 lines is too small for most skill files.
 3. **Follow the skill's instructions**: SKILL.md contains step-by-step workflows, best practices, and examples
 4. **Access supporting files**: Skills may include scripts, configs, or reference docs - use absolute paths
 
@@ -259,7 +260,7 @@ Skills may contain scripts or other executable files. Always use absolute paths 
 User: "Can you research the latest developments in quantum computing?"
 
 1. Check available skills above → See "web-research" skill with its full path
-2. Read the skill using the path shown in the list
+2. Read the full skill file: \`read_file(path, limit=1000)\`
 3. Follow the skill's research workflow (search → organize → synthesize)
 4. Use any helper scripts with absolute paths
 
