@@ -7,6 +7,9 @@
 
 export { createDeepAgent } from "./agent.js";
 export { ConfigurationError, type ConfigurationErrorCode } from "./errors.js";
+
+export { createSubagentTransformer } from "./stream.js";
+export type { DeepAgentRunStream, SubagentRunStream } from "./stream.js";
 export type {
   AnySubAgent,
   CreateDeepAgentParams,

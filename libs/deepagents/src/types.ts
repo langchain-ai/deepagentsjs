@@ -27,6 +27,39 @@ import type { AsyncSubAgent, SubAgent } from "./middleware/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type { AnnotationRoot } from "@langchain/langgraph";
 import type { CompiledSubAgent } from "./middleware/subagents.js";
+import type {
+  FILESYSTEM_TOOL_NAMES,
+  ASYNC_TASK_TOOL_NAMES,
+} from "./middleware/index.js";
+import type { DeepAgentRunStream } from "./stream.js";
+
+/**
+ * Literal union of all built-in deep agent tool names.
+ * These are always present on the agent regardless of user-provided tools.
+ */
+type DeepAgentBuiltinToolName =
+  | (typeof FILESYSTEM_TOOL_NAMES)[number]
+  | (typeof ASYNC_TASK_TOOL_NAMES)[number]
+  | "task"
+  | "write_todos";
+
+/**
+ * A placeholder StructuredTool type with a literal `name` for each
+ * built-in tool. Used to thread built-in tool names into the
+ * `ToolCallStreamUnion` so they appear in `run.toolCalls` alongside
+ * user-provided tools.
+ */
+type BuiltinToolPlaceholder<N extends string> = {
+  name: N;
+} & StructuredTool;
+
+/**
+ * Tuple of placeholder tool types for all built-in deep agent tools.
+ * Combined with `TTypes["Tools"]` in the `DeepAgentRunStream` return type.
+ */
+type DeepAgentBuiltinToolsTuple = {
+  [K in DeepAgentBuiltinToolName]: BuiltinToolPlaceholder<K>;
+}[DeepAgentBuiltinToolName][];
 
 // LangChain uses AnyAnnotationRoot internally but doesn't export it
 // We use AnnotationRoot<any> as a compatible equivalent
@@ -203,10 +236,27 @@ export interface DefaultDeepAgentTypeConfig extends DeepAgentTypeConfig {
  */
 export type DeepAgent<
   TTypes extends DeepAgentTypeConfig = DeepAgentTypeConfig,
-> = ReactAgent<TTypes> & {
+> = {
   /** Type brand for DeepAgent type inference */
   readonly "~deepAgentTypes": TTypes;
-};
+
+  /**
+   * Stream the agent with the new v2 streaming primitives.
+   *
+   * Returns a {@link DeepAgentRunStream} with native `.subagents`,
+   * `.toolCalls`, `.middleware`, and `.messages` getters.
+   */
+  stream_experimental(
+    state: Parameters<ReactAgent<TTypes>["stream_experimental"]>[0],
+    config?: Parameters<ReactAgent<TTypes>["stream_experimental"]>[1],
+  ): Promise<
+    DeepAgentRunStream<
+      Awaited<ReturnType<ReactAgent<TTypes>["invoke"]>>,
+      readonly [...TTypes["Tools"], ...DeepAgentBuiltinToolsTuple],
+      TTypes["Subagents"]
+    >
+  >;
+} & ReactAgent<TTypes>;
 
 /**
  * Helper type to resolve a DeepAgentTypeConfig from either:
