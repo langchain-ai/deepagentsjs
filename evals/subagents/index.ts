@@ -4,8 +4,6 @@ import { tool } from "langchain";
 import { z } from "zod/v4";
 import type { EvalRunner } from "@deepagents/evals";
 
-
-
 const getWeatherFake = tool(
   async (_input) => {
     return "It's sunny at 89 degrees F";
@@ -20,55 +18,54 @@ const getWeatherFake = tool(
 );
 
 export function subagentsSuite(runner: EvalRunner): void {
-      ls.test(
-        "task calls weather subagent",
-        {
-          inputs: {
-            query: "Use the weather_agent subagent to get the weather in Tokyo.",
-          },
-          referenceOutputs: { expectedText: "89" },
-        },
-        async ({ inputs }) => {
-          const result = await runner
-            .extend({
-              subagents: [
-                {
-                  name: "weather_agent",
-                  description: "Use this agent to get the weather",
-                  systemPrompt: "You are a weather agent.",
-                  tools: [getWeatherFake],
-                },
-              ],
-            })
-            .run({ query: inputs.query });
-  
-          expect(result).toHaveFinalTextContaining("89");
-          ls.logFeedback({
-            key: "agent_steps",
-            score: result.steps.length,
-          });
-        },
-      );
-  
-      ls.test(
-        "task calls general-purpose subagent",
-        {
-          inputs: {
-            query:
-              "Use the general purpose subagent to get the weather in Tokyo.",
-          },
-          referenceOutputs: { expectedText: "89" },
-        },
-        async ({ inputs }) => {
-          const result = await runner
-            .extend({ tools: [getWeatherFake] })
-            .run({ query: inputs.query });
-  
-          expect(result).toHaveFinalTextContaining("89");
-          ls.logFeedback({
-            key: "agent_steps",
-            score: result.steps.length,
-          });
-        },
-      );
+  ls.test(
+    "task calls weather subagent",
+    {
+      inputs: {
+        query: "Use the weather_agent subagent to get the weather in Tokyo.",
+      },
+      referenceOutputs: { expectedText: "89" },
+    },
+    async ({ inputs }) => {
+      const result = await runner
+        .extend({
+          subagents: [
+            {
+              name: "weather_agent",
+              description: "Use this agent to get the weather",
+              systemPrompt: "You are a weather agent.",
+              tools: [getWeatherFake],
+            },
+          ],
+        })
+        .run({ query: inputs.query });
+
+      expect(result).toHaveFinalTextContaining("89");
+      ls.logFeedback({
+        key: "agent_steps",
+        score: result.steps.length,
+      });
+    },
+  );
+
+  ls.test(
+    "task calls general-purpose subagent",
+    {
+      inputs: {
+        query: "Use the general purpose subagent to get the weather in Tokyo.",
+      },
+      referenceOutputs: { expectedText: "89" },
+    },
+    async ({ inputs }) => {
+      const result = await runner
+        .extend({ tools: [getWeatherFake] })
+        .run({ query: inputs.query });
+
+      expect(result).toHaveFinalTextContaining("89");
+      ls.logFeedback({
+        key: "agent_steps",
+        score: result.steps.length,
+      });
+    },
+  );
 }

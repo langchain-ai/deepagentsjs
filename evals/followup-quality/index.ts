@@ -1,9 +1,7 @@
 import type { EvalRunner } from "@deepagents/evals";
 import * as ls from "langsmith/vitest";
 import { expect } from "vitest";
-import { getDefaultRunner, getFinalText } from "@deepagents/evals";
-
-
+import { getFinalText } from "@deepagents/evals";
 
 type FollowupCase = {
   name: string;
@@ -92,37 +90,33 @@ const CASES: FollowupCase[] = [
 ];
 
 export function followupQualitySuite(runner: EvalRunner): void {
-      for (const testCase of CASES) {
-        ls.test(
-          testCase.name,
-          { inputs: { query: testCase.query } },
-          async () => {
-            const result = await runner.run({ query: testCase.query });
-            const answer = getFinalText(result).toLowerCase();
-  
-            // Follow-up quality baseline: ask at least one clarification question.
-            expect(answer.includes("?")).toBe(true);
-  
-            const hasRelevantSignal = testCase.mustContainOneOf.some((needle) =>
-              answer.includes(needle.toLowerCase()),
-            );
-            expect(hasRelevantSignal).toBe(true);
-  
-            for (const forbidden of testCase.mustNotContain ?? []) {
-              expect(answer).not.toContain(forbidden.toLowerCase());
-            }
-  
-            ls.logFeedback({ key: "agent_steps", score: result.steps.length });
-            ls.logFeedback({
-              key: "followup_has_question_mark",
-              score: answer.includes("?") ? 1 : 0,
-            });
-            ls.logFeedback({
-              key: "followup_relevant_signal",
-              score: hasRelevantSignal ? 1 : 0,
-            });
-            ls.logFeedback({ key: "case_name", value: testCase.name });
-          },
-        );
+  for (const testCase of CASES) {
+    ls.test(testCase.name, { inputs: { query: testCase.query } }, async () => {
+      const result = await runner.run({ query: testCase.query });
+      const answer = getFinalText(result).toLowerCase();
+
+      // Follow-up quality baseline: ask at least one clarification question.
+      expect(answer.includes("?")).toBe(true);
+
+      const hasRelevantSignal = testCase.mustContainOneOf.some((needle) =>
+        answer.includes(needle.toLowerCase()),
+      );
+      expect(hasRelevantSignal).toBe(true);
+
+      for (const forbidden of testCase.mustNotContain ?? []) {
+        expect(answer).not.toContain(forbidden.toLowerCase());
       }
+
+      ls.logFeedback({ key: "agent_steps", score: result.steps.length });
+      ls.logFeedback({
+        key: "followup_has_question_mark",
+        score: answer.includes("?") ? 1 : 0,
+      });
+      ls.logFeedback({
+        key: "followup_relevant_signal",
+        score: hasRelevantSignal ? 1 : 0,
+      });
+      ls.logFeedback({ key: "case_name", value: testCase.name });
+    });
+  }
 }

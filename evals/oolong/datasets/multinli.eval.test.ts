@@ -1,4 +1,3 @@
-import * as ls from "langsmith/vitest";
 import { getDefaultRunner } from "@deepagents/evals";
 import { oolongMultinliSuite } from "./multinli.js";
 

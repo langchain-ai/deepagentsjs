@@ -83,12 +83,10 @@ export function hitlSuite(_runner: EvalRunner): void {
       const actionRequests = interrupts.actionRequests;
 
       expect(actionRequests).toHaveLength(2);
-      expect(actionRequests.some((ar) => ar.name === "sample_tool")).toBe(
+      expect(actionRequests.some((ar) => ar.name === "sample_tool")).toBe(true);
+      expect(actionRequests.some((ar) => ar.name === "get_soccer_scores")).toBe(
         true,
       );
-      expect(
-        actionRequests.some((ar) => ar.name === "get_soccer_scores"),
-      ).toBe(true);
 
       const reviewConfigs = interrupts.reviewConfigs;
       expect(
@@ -163,12 +161,10 @@ export function hitlSuite(_runner: EvalRunner): void {
       const actionRequests = interrupts.actionRequests;
 
       expect(actionRequests).toHaveLength(2);
-      expect(actionRequests.some((ar) => ar.name === "sample_tool")).toBe(
+      expect(actionRequests.some((ar) => ar.name === "sample_tool")).toBe(true);
+      expect(actionRequests.some((ar) => ar.name === "get_soccer_scores")).toBe(
         true,
       );
-      expect(
-        actionRequests.some((ar) => ar.name === "get_soccer_scores"),
-      ).toBe(true);
 
       const reviewConfigs = interrupts.reviewConfigs;
       expect(
@@ -201,7 +197,8 @@ export function hitlSuite(_runner: EvalRunner): void {
       ls.logOutputs({ result2 });
 
       expect(
-        result2.__interrupt__ === undefined || result2.__interrupt__.length === 0,
+        result2.__interrupt__ === undefined ||
+          result2.__interrupt__.length === 0,
       ).toBe(true);
     },
   );
@@ -254,9 +251,9 @@ export function hitlSuite(_runner: EvalRunner): void {
 
       expect(actionRequests).toHaveLength(2);
       expect(actionRequests.some((ar) => ar.name === "get_weather")).toBe(true);
-      expect(
-        actionRequests.some((ar) => ar.name === "get_soccer_scores"),
-      ).toBe(true);
+      expect(actionRequests.some((ar) => ar.name === "get_soccer_scores")).toBe(
+        true,
+      );
       expect(actionRequests.some((ar) => ar.name === "sample_tool")).toBe(
         false,
       );
@@ -273,7 +270,8 @@ export function hitlSuite(_runner: EvalRunner): void {
       ls.logOutputs({ result2 });
 
       expect(
-        result2.__interrupt__ === undefined || result2.__interrupt__.length === 0,
+        result2.__interrupt__ === undefined ||
+          result2.__interrupt__.length === 0,
       ).toBe(true);
     },
   );

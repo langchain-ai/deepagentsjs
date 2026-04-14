@@ -4,8 +4,6 @@ import { tool } from "langchain";
 import { z } from "zod/v4";
 import type { EvalRunner } from "@deepagents/evals";
 
-
-
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 function spiedTool(
   fn: (...args: any[]) => any,
@@ -233,32 +231,32 @@ function requiredToolCalled(name: string): boolean {
 }
 
 export function tau2AirlineSuite(runner: EvalRunner): void {
-      for (const task of TASKS) {
-        ls.test(
-          `task_${task.taskId}`,
-          {
-            inputs: {
-              taskId: task.taskId,
-              query: task.query,
-            },
-          },
-          async () => {
-            const result = await runner
-              .extend({
-                tools: [...ALL_TOOLS],
-                systemPrompt: POLICY_PROMPT,
-              })
-              .run({ query: task.query });
-  
-            expect(lookupReservationSpy).toHaveBeenCalled();
-            expect(verifyIdentitySpy).toHaveBeenCalled();
-            expect(requiredToolCalled(task.requiredTool)).toBe(true);
-            expect(sendConfirmationSpy).toHaveBeenCalled();
-            expect(result).toHaveFinalTextContaining(task.expectedText, true);
-  
-            ls.logFeedback({ key: "agent_steps", score: result.steps.length });
-            ls.logFeedback({ key: "task_id", value: task.taskId });
-          },
-        );
-      }
+  for (const task of TASKS) {
+    ls.test(
+      `task_${task.taskId}`,
+      {
+        inputs: {
+          taskId: task.taskId,
+          query: task.query,
+        },
+      },
+      async () => {
+        const result = await runner
+          .extend({
+            tools: [...ALL_TOOLS],
+            systemPrompt: POLICY_PROMPT,
+          })
+          .run({ query: task.query });
+
+        expect(lookupReservationSpy).toHaveBeenCalled();
+        expect(verifyIdentitySpy).toHaveBeenCalled();
+        expect(requiredToolCalled(task.requiredTool)).toBe(true);
+        expect(sendConfirmationSpy).toHaveBeenCalled();
+        expect(result).toHaveFinalTextContaining(task.expectedText, true);
+
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
+        ls.logFeedback({ key: "task_id", value: task.taskId });
+      },
+    );
+  }
 }

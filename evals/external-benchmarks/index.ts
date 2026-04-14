@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect } from "vitest";
-import { getDefaultRunner, getFinalText } from "@deepagents/evals";
+import { getFinalText } from "@deepagents/evals";
 
 type Case = {
   benchmark: "frames" | "nexus" | "bfcl_v3";
@@ -14,7 +14,6 @@ type Case = {
   answer_snippets: string[];
   difficulty: string;
 };
-
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CASES = JSON.parse(
@@ -29,37 +28,37 @@ function normalize(text: string): string {
 }
 
 export function externalBenchmarksSuite(runner: EvalRunner): void {
-      for (const testCase of CASES) {
-        ls.test(
-          `${testCase.benchmark}:${testCase.id}`,
-          {
-            inputs: {
-              benchmark: testCase.benchmark,
-              id: testCase.id,
-              query: testCase.prompt,
-            },
-          },
-          async () => {
-            const result = await runner.run({
-              query: testCase.prompt,
-              initialFiles: testCase.files,
-            });
-  
-            const answer = normalize(getFinalText(result));
-            const snippets = testCase.answer_snippets;
-  
-            if (snippets.length > 0) {
-              for (const snippet of snippets) {
-                expect(answer).toContain(normalize(snippet));
-              }
-            } else {
-              expect(answer.length).toBeGreaterThan(0);
-            }
-  
-            ls.logFeedback({ key: "benchmark", value: testCase.benchmark });
-            ls.logFeedback({ key: "difficulty", value: testCase.difficulty });
-            ls.logFeedback({ key: "agent_steps", score: result.steps.length });
-          },
-        );
-      }
+  for (const testCase of CASES) {
+    ls.test(
+      `${testCase.benchmark}:${testCase.id}`,
+      {
+        inputs: {
+          benchmark: testCase.benchmark,
+          id: testCase.id,
+          query: testCase.prompt,
+        },
+      },
+      async () => {
+        const result = await runner.run({
+          query: testCase.prompt,
+          initialFiles: testCase.files,
+        });
+
+        const answer = normalize(getFinalText(result));
+        const snippets = testCase.answer_snippets;
+
+        if (snippets.length > 0) {
+          for (const snippet of snippets) {
+            expect(answer).toContain(normalize(snippet));
+          }
+        } else {
+          expect(answer.length).toBeGreaterThan(0);
+        }
+
+        ls.logFeedback({ key: "benchmark", value: testCase.benchmark });
+        ls.logFeedback({ key: "difficulty", value: testCase.difficulty });
+        ls.logFeedback({ key: "agent_steps", score: result.steps.length });
+      },
+    );
+  }
 }
