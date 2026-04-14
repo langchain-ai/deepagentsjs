@@ -73,6 +73,11 @@ export {
   type AsyncSubAgent,
   type AsyncTask,
   type AsyncTaskStatus,
+  // Permissions middleware
+  createPermissionMiddleware,
+  createFilesystemPermission,
+  type FilesystemPermission,
+  type FilesystemOperation,
 } from "./middleware/index.js";
 
 // Export shared state values (similar to LangGraph's messagesValue pattern)

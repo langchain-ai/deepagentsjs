@@ -65,6 +65,14 @@ export class CompositeBackend implements BackendProtocolV2 {
     return isSandboxBackend(this.default) ? this.default.id : "";
   }
 
+  getRoutePrefixes(): string[] {
+    return Object.keys(this.routes);
+  }
+
+  getDefaultBackend(): BackendProtocolV2 {
+    return this.default;
+  }
+
   /**
    * Determine which backend handles this key and strip prefix.
    *

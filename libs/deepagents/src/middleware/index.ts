@@ -38,6 +38,14 @@ export {
   MAX_SKILL_DESCRIPTION_LENGTH,
 } from "./skills.js";
 
+// Permissions middleware
+export {
+  createPermissionMiddleware,
+  createFilesystemPermission,
+  type FilesystemPermission,
+  type FilesystemOperation,
+} from "./permissions.js";
+
 // Middleware utilities
 export { appendToSystemMessage, prependToSystemMessage } from "./utils.js";
 

@@ -20,6 +20,7 @@ import {
   createSummarizationMiddleware,
   createMemoryMiddleware,
   createSkillsMiddleware,
+  createPermissionMiddleware,
   FILESYSTEM_TOOL_NAMES,
   ASYNC_TASK_TOOL_NAMES,
   type SubAgent,
@@ -176,6 +177,7 @@ export function createDeepAgent<
     name,
     memory,
     skills,
+    permissions,
   } = params;
 
   const collidingTools = tools
@@ -209,28 +211,26 @@ export function createDeepAgent<
    * If a custom subagent needs skills, it must specify its own `skills` array.
    */
   const normalizeSubagentSpec = (input: SubAgent): SubAgent => {
-    // Middleware for custom subagents (does NOT include skills from main agent).
-    // Uses createSummarizationMiddleware (deepagents version) with backend support
-    // and auto-computed defaults from model profile.
+    const subagentPermissions = (input as any).permissions ?? permissions;
+
     const subagentMiddleware = [
-      // Provides todo list management capabilities for tracking tasks.
       todoListMiddleware(),
-      // Enables filesystem operations and optional long-term memory storage.
       createFilesystemMiddleware({ backend }),
-      // Automatically summarizes conversation history when token limits are approached.
-      // Uses createSummarizationMiddleware (deepagents version) with backend support
-      // and auto-computed defaults from model profile.
       createSummarizationMiddleware({ backend, model }),
-      // Patches tool calls to ensure compatibility across different model providers.
       createPatchToolCallsMiddleware(),
-      // Loads subagent-specific skills when configured.
       ...(input.skills != null && input.skills.length > 0
         ? [createSkillsMiddleware({ backend, sources: input.skills })]
         : []),
-      // Appends custom middleware from the subagent spec.
       ...(input.middleware ?? []),
-      // Adds Anthropic cache controls when supported by the model.
       ...cacheMiddleware,
+      ...(subagentPermissions && subagentPermissions.length > 0
+        ? [
+            createPermissionMiddleware({
+              rules: subagentPermissions,
+              backend,
+            }),
+          ]
+        : []),
     ];
     return {
       ...input,
@@ -338,6 +338,10 @@ export function createDeepAgent<
       : []),
     // Optional human-in-the-loop tool interrupts.
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
+    // Permission middleware must be last so it sees all tools from prior middleware.
+    ...(permissions && permissions.length > 0
+      ? [createPermissionMiddleware({ rules: permissions, backend })]
+      : []),
   ];
 
   // Combine system prompt parameter with BASE_AGENT_PROMPT
