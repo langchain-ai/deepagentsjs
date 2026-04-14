@@ -1,0 +1,16 @@
+{
+  "name": "@deepagents/eval-tool-selection",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:eval": "vitest run"
+  },
+  "dependencies": {
+    "@deepagents/evals": "workspace:*",
+    "deepagents": "workspace:*",
+    "langchain": "^1.3.1",
+    "langsmith": "^0.5.4",
+    "vitest": "^4.0.18",
+    "zod": "^4.3.6"
+  }
+}

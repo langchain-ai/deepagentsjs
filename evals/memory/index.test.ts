@@ -168,6 +168,114 @@ ls.describe(
         });
       },
     );
+
+    ls.test(
+      "memory does not persist transient info",
+      {
+        inputs: {
+          query: "I'm at a coffee shop right now. What's 2 + 2?",
+        },
+      },
+      async ({ inputs }) => {
+        const result = await runner
+          .extend({ memory: ["/project/AGENTS.md"] })
+          .run({
+            query: inputs.query,
+            initialFiles: {
+              "/project/AGENTS.md":
+                "# Project Memory\n\nStable preferences and project facts live here.\n",
+            },
+          });
+
+        expect(result).toHaveFinalTextContaining("4");
+        const memoryText = result.files["/project/AGENTS.md"] ?? "";
+        expect(memoryText.toLowerCase()).not.toContain("coffee shop");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
+      },
+    );
+
+    ls.test(
+      "memory updates user formatting preference",
+      {
+        inputs: {
+          query:
+            "For future responses, I prefer bullet points over paragraphs.",
+        },
+      },
+      async ({ inputs }) => {
+        const result = await runner
+          .extend({ memory: ["/project/AGENTS.md"] })
+          .run({
+            query: inputs.query,
+            initialFiles: {
+              "/project/AGENTS.md":
+                "# Project Memory\n\nCurrent preferences:\n- Use clear technical writing.\n",
+            },
+          });
+
+        expect(result.files["/project/AGENTS.md"]).toContain("bullet");
+        expect(result).toHaveFinalTextContaining("bullet", true);
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
+      },
+    );
+
+    ls.test(
+      "memory missing file graceful without claiming context",
+      {
+        inputs: {
+          query:
+            "What coding preferences are saved in memory? If none are available, say so briefly.",
+        },
+      },
+      async ({ inputs }) => {
+        const result = await runner
+          .extend({ memory: ["/missing/AGENTS.md"] })
+          .run({ query: inputs.query });
+
+        const answer =
+          result.steps[result.steps.length - 1]?.action?.content ?? "";
+        const lower = answer.toLowerCase();
+        expect(lower).not.toContain("snake_case");
+        expect(lower).not.toContain("pytest");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
+      },
+    );
+
+    ls.test(
+      "memory middleware composite backend routing",
+      {
+        inputs: {
+          query: "What is your name?",
+        },
+      },
+      async ({ inputs }) => {
+        const result = await runner
+          .extend({
+            memory: ["/memories/AGENTS.md"],
+          })
+          .run({
+            query: inputs.query,
+            initialFiles: {
+              "/memories/AGENTS.md": "Your name is Jackson",
+            },
+          });
+
+        expect(result).toHaveFinalTextContaining("Jackson");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
+      },
+    );
   },
   { projectName: runner.name, upsert: true },
 );

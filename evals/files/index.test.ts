@@ -400,6 +400,55 @@ ls.describe(
         });
       },
     );
+
+    ls.test(
+      "read file truncation recovery with pagination",
+      {
+        inputs: {
+          query:
+            "Read /big.txt and tell me the exact contents of the last non-empty line. Reply with that line only.",
+        },
+        referenceOutputs: { expectedText: "opal-fox-91" },
+      },
+      async ({ inputs }) => {
+        const result = await runner.run({
+          query: inputs.query,
+          initialFiles: {
+            "/big.txt": `${"x\n".repeat(300)}opal-fox-91\n`,
+          },
+        });
+
+        expect(result).toHaveFinalTextContaining("opal-fox-91");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
+      },
+    );
+
+    ls.test(
+      "read file empty file reports empty",
+      {
+        inputs: {
+          query:
+            "Read /empty.txt. If it is empty, reply with exactly: EMPTY. Do not fabricate any content.",
+        },
+      },
+      async ({ inputs }) => {
+        const result = await runner.run({
+          query: inputs.query,
+          initialFiles: {
+            "/empty.txt": "",
+          },
+        });
+
+        expect(result).toHaveFinalTextContaining("EMPTY");
+        ls.logFeedback({
+          key: "agent_steps",
+          score: result.steps.length,
+        });
+      },
+    );
   },
   { projectName: runner.name, upsert: true },
 );

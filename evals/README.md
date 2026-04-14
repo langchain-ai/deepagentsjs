@@ -13,10 +13,18 @@ so you can compare runs across models and track regressions over time.
 | ---------------------------------------------------- | -------------------------------------------------------------------------------- |
 | [`basic/`](./basic/)                                 | System prompt adherence, simple reasoning, avoiding unnecessary tool calls       |
 | [`files/`](./files/)                                 | File operations — read, write, edit, ls, grep, glob, parallel I/O, deep nesting  |
+| [`followup-quality/`](./followup-quality/)           | Clarifying question quality for underspecified user requests                        |
 | [`hitl/`](./hitl/)                                   | Human-in-the-loop interrupt behavior, review configs, resume after approval      |
+| [`external-benchmarks/`](./external-benchmarks/)     | Curated hard-set from FRAMES, Nexus, and BFCL v3 benchmark samples               |
 | [`memory/`](./memory/)                               | AGENTS.md memory injection — recall, guided behavior, multiple sources, graceful fallback |
+| [`memory-agent-bench/`](./memory-agent-bench/)       | MemoryAgentBench-style long-context memorization and retrieval scenarios          |
+| [`memory-multiturn/`](./memory-multiturn/)           | Multi-turn memory persistence: implicit preferences, explicit instructions, transient filtering |
 | [`skills/`](./skills/)                               | Skill file discovery, reading, selection, combination, and editing via skill source paths |
 | [`subagents/`](./subagents/)                         | Subagent delegation — `task` tool routing to named and general-purpose subagents |
+| [`summarization/`](./summarization/)                 | Summarization middleware behavior and conversation-history offloading             |
+| [`tau2-airline/`](./tau2-airline/)                   | Tau2-airline inspired policy-grounded airline support tasks                       |
+| [`todos/`](./todos/)                                 | Sequential `write_todos` state updates and completion behavior                     |
+| [`tool-selection/`](./tool-selection/)               | Direct/indirect tool routing and multi-step chaining across mock integrations      |
 | [`tool-usage-relational/`](./tool-usage-relational/) | Multi-step tool chaining with relational data lookups (users, locations, foods)  |
 
 ## Running evals
