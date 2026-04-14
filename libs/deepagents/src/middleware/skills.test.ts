@@ -769,9 +769,7 @@ description: [invalid yaml syntax: unclosed bracket
       // explicitly scoped source directory.
       expect(result?.skillsMetadata).toHaveLength(1);
       expect(result?.skillsMetadata[0].name).toBe("web-research");
-      expect(result?.skillsMetadata[0].path).toBe(
-        "/skills/domainA/SKILL.md",
-      );
+      expect(result?.skillsMetadata[0].path).toBe("/skills/domainA/SKILL.md");
     });
   });
 

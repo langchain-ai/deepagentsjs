@@ -541,7 +541,10 @@ async function listSkillsFromBackend(
   if (hasDirectSkillMd) {
     const directSkillMdPath = `${normalizedPath}SKILL.md`;
     const dirName =
-      normalizedPath.replace(/[/\\]$/, "").split(/[/\\]/).pop() || "";
+      normalizedPath
+        .replace(/[/\\]$/, "")
+        .split(/[/\\]/)
+        .pop() || "";
     let content: string | null = null;
 
     if (adaptedBackend.downloadFiles) {
