@@ -12,6 +12,7 @@ so you can compare runs across models and track regressions over time.
 | Suite                                                | Description                                                                      |
 | ---------------------------------------------------- | -------------------------------------------------------------------------------- |
 | [`basic/`](./basic/)                                 | System prompt adherence, simple reasoning, avoiding unnecessary tool calls       |
+| [`all/`](./all/)                                     | Aggregated run that executes all eval suites in a single Vitest + LangSmith session |
 | [`files/`](./files/)                                 | File operations — read, write, edit, ls, grep, glob, parallel I/O, deep nesting  |
 | [`followup-quality/`](./followup-quality/)           | Clarifying question quality for underspecified user requests                        |
 | [`hitl/`](./hitl/)                                   | Human-in-the-loop interrupt behavior, review configs, resume after approval      |
@@ -42,6 +43,9 @@ EVAL_RUNNER=sonnet-4-5 pnpm test:eval
 
 # Run a single suite
 EVAL_RUNNER=sonnet-4-5 pnpm --filter @deepagents/eval-basic test:eval
+
+# Run every suite in one execution (single reporter session)
+EVAL_RUNNER=sonnet-4-5 pnpm --filter @deepagents/eval-all test:eval
 
 # Run with a different model
 EVAL_RUNNER=gpt-4.1 pnpm --filter @deepagents/eval-files test:eval
