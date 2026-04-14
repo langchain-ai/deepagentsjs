@@ -9,7 +9,7 @@
  * Options:
  *   --name <name>         Agent name (default: "deepagents")
  *   --description <desc>  Agent description
- *   --model <model>       LLM model (default: DEFAULT_MODEL, overridable via DEEPAGENTS_DEFAULT_MODEL env var)
+ *   --model <model>       LLM model (required in a future release; currently defaults to claude-sonnet-4-6)
  *   --workspace <path>    Workspace root directory (default: cwd)
  *   --skills <paths>      Comma-separated skill paths
  *   --memory <paths>      Comma-separated memory/AGENTS.md paths
@@ -20,14 +20,14 @@
  */
 
 import { DeepAgentsServer } from "./server.js";
-import { FilesystemBackend, DEFAULT_MODEL } from "deepagents";
+import { FilesystemBackend, getDefaultModel } from "deepagents";
 import path from "node:path";
 import fs from "node:fs";
 
 interface CLIOptions {
   name: string;
   description: string;
-  model: string;
+  model: string | null;
   workspace: string;
   skills: string[];
   memory: string[];
@@ -72,7 +72,7 @@ function parseArgs(args: string[]): CLIOptions {
   const options: CLIOptions = {
     name: "deepagents",
     description: "AI coding assistant powered by DeepAgents",
-    model: DEFAULT_MODEL,
+    model: null,
     workspace: process.cwd(),
     skills: [],
     memory: [],
@@ -177,7 +177,7 @@ USAGE:
 OPTIONS:
   -n, --name <name>         Agent name (default: "deepagents")
   -d, --description <desc>  Agent description
-  -m, --model <model>       LLM model (default: "${DEFAULT_MODEL}")
+  -m, --model <model>       LLM model (recommended; defaults to claude-sonnet-4-6)
   -w, --workspace <path>    Workspace root directory (default: current directory)
   -s, --skills <paths>      Comma-separated skill paths (SKILL.md locations)
       --memory <paths>      Comma-separated memory paths (AGENTS.md locations)
@@ -189,7 +189,6 @@ OPTIONS:
 ENVIRONMENT VARIABLES:
   ANTHROPIC_API_KEY         API key for Anthropic models (required for Claude)
   OPENAI_API_KEY            API key for OpenAI models
-  DEEPAGENTS_DEFAULT_MODEL  Override the default model for all DeepAgents
   DEBUG                     Set to "true" to enable debug logging
   DEEPAGENTS_LOG_FILE       Path to log file (alternative to --log-file)
   WORKSPACE_ROOT            Alternative to --workspace flag
@@ -294,7 +293,7 @@ async function main(): Promise<void> {
 
   log("Starting...");
   log("Agent:", options.name);
-  log("Model:", options.model);
+  log("Model:", options.model ?? "(default)");
   log("Workspace:", workspaceRoot);
   log("Skills:", skills.join(", "));
   log("Memory:", memory.join(", "));
@@ -307,7 +306,7 @@ async function main(): Promise<void> {
       agents: {
         name: options.name,
         description: options.description,
-        model: options.model,
+        model: options.model ?? getDefaultModel(),
         backend: new FilesystemBackend({ rootDir: workspaceRoot }),
         skills,
         memory,

@@ -44,7 +44,7 @@ import type {
   InferStructuredResponse,
   SupportedResponseFormat,
 } from "./types.js";
-import { DEFAULT_MODEL } from "./defaults.js";
+import { getDefaultModel } from "./defaults.js";
 
 /**
  * required for type inference
@@ -163,7 +163,7 @@ export function createDeepAgent<
   >,
 ) {
   const {
-    model = DEFAULT_MODEL,
+    model: _modelParam,
     tools = [],
     systemPrompt,
     middleware: customMiddleware = [],
@@ -178,6 +178,8 @@ export function createDeepAgent<
     memory,
     skills,
   } = params;
+
+  const model = _modelParam ?? getDefaultModel();
 
   const collidingTools = tools
     .map((t) => t.name)
