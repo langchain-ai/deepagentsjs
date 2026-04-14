@@ -28,7 +28,7 @@ function normalize(text: string): string {
     .replace(/["'`]/g, "");
 }
 
-export function defineExternalBenchmarksSuite(runner: EvalRunner): void {
+export function externalBenchmarksSuite(runner: EvalRunner): void {
       for (const testCase of CASES) {
         ls.test(
           `${testCase.benchmark}:${testCase.id}`,

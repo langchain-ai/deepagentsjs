@@ -1,13 +1,13 @@
 import * as ls from "langsmith/vitest";
 import { getDefaultRunner } from "@deepagents/evals";
-import { defineFilesSuite } from "./index.js";
+import { filesSuite } from "./index.js";
 
 const runner = getDefaultRunner();
 
 ls.describe(
   "deepagents-js-files",
   () => {
-    defineFilesSuite(runner);
+    filesSuite(runner);
   },
   { projectName: runner.name, upsert: true },
 );

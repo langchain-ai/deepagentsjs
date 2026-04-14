@@ -6,6 +6,6 @@ import { makeOolongTests } from "../make-tests.js";
 
 const tasks = (await loadOolongTasksByDataset()).get("app_reviews") ?? [];
 
-export function defineOolongAppReviewsSuite(runner: EvalRunner): void {
+export function oolongAppReviewsSuite(runner: EvalRunner): void {
       makeOolongTests(tasks);
 }

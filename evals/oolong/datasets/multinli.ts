@@ -6,6 +6,6 @@ import { makeOolongTests } from "../make-tests.js";
 
 const tasks = (await loadOolongTasksByDataset()).get("multinli") ?? [];
 
-export function defineOolongMultinliSuite(runner: EvalRunner): void {
+export function oolongMultinliSuite(runner: EvalRunner): void {
       makeOolongTests(tasks);
 }

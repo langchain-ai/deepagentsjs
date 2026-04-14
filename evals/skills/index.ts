@@ -9,7 +9,7 @@ function skillContent(name: string, description: string, body: string): string {
   return `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}`;
 }
 
-export function defineSkillsSuite(runner: EvalRunner): void {
+export function skillsSuite(runner: EvalRunner): void {
       ls.test(
         "read skill full content",
         {

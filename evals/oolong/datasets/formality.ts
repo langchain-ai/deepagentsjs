@@ -6,6 +6,6 @@ import { makeOolongTests } from "../make-tests.js";
 
 const tasks = (await loadOolongTasksByDataset()).get("formality") ?? [];
 
-export function defineOolongFormalitySuite(runner: EvalRunner): void {
+export function oolongFormalitySuite(runner: EvalRunner): void {
       makeOolongTests(tasks);
 }

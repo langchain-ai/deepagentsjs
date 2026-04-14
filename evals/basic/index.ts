@@ -2,7 +2,7 @@ import * as ls from "langsmith/vitest";
 import { expect } from "vitest";
 import type { EvalRunner } from "@deepagents/evals";
 
-export function defineBasicSuite(runner: EvalRunner): void {
+export function basicSuite(runner: EvalRunner): void {
       ls.test(
         "system prompt: custom system prompt",
         {

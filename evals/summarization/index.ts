@@ -27,7 +27,7 @@ function getHistoryFiles(files: Record<string, string>): string[] {
   );
 }
 
-export function defineSummarizationSuite(runner: EvalRunner): void {
+export function summarizationSuite(runner: EvalRunner): void {
       ls.test(
         "summarize continues task",
         {

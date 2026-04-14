@@ -8,7 +8,7 @@ import { getDefaultRunner, getFinalText } from "@deepagents/evals";
 const MEMORY_PATH = "/project/AGENTS.md";
 const MEMORY_SEED = "# Project Memory\n\nUser preferences and project facts.\n";
 
-export function defineMemoryMultiturnSuite(runner: EvalRunner): void {
+export function memoryMultiturnSuite(runner: EvalRunner): void {
       ls.test(
         "implicit preference remembered",
         {

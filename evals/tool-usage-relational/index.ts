@@ -422,7 +422,7 @@ const RELATIONAL_TOOLS = [
   getCurrentUserId,
 ];
 
-export function defineToolUsageRelationalSuite(runner: EvalRunner): void {
+export function toolUsageRelationalSuite(runner: EvalRunner): void {
       beforeEach(() => {
         vi.clearAllMocks();
       });

@@ -17,7 +17,7 @@ function countWriteTodosCalls(
   );
 }
 
-export function defineTodosSuite(runner: EvalRunner): void {
+export function todosSuite(runner: EvalRunner): void {
       ls.test(
         "write todos sequential updates returns text",
         {

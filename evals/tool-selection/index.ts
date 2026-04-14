@@ -118,7 +118,7 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-export function defineToolSelectionSuite(runner: EvalRunner): void {
+export function toolSelectionSuite(runner: EvalRunner): void {
       ls.test(
         "direct request slack dm",
         {

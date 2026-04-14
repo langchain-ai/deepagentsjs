@@ -232,7 +232,7 @@ function requiredToolCalled(name: string): boolean {
   }
 }
 
-export function defineTau2AirlineSuite(runner: EvalRunner): void {
+export function tau2AirlineSuite(runner: EvalRunner): void {
       for (const task of TASKS) {
         ls.test(
           `task_${task.taskId}`,

@@ -19,7 +19,7 @@ const getWeatherFake = tool(
   },
 );
 
-export function defineSubagentsSuite(runner: EvalRunner): void {
+export function subagentsSuite(runner: EvalRunner): void {
       ls.test(
         "task calls weather subagent",
         {

@@ -6,6 +6,6 @@ import { makeOolongTests } from "../make-tests.js";
 
 const tasks = (await loadOolongTasksByDataset()).get("trec_coarse") ?? [];
 
-export function defineOolongTrecCoarseSuite(runner: EvalRunner): void {
+export function oolongTrecCoarseSuite(runner: EvalRunner): void {
       makeOolongTests(tasks);
 }

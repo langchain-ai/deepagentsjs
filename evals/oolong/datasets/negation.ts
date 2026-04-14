@@ -6,6 +6,6 @@ import { makeOolongTests } from "../make-tests.js";
 
 const tasks = (await loadOolongTasksByDataset()).get("negation") ?? [];
 
-export function defineOolongNegationSuite(runner: EvalRunner): void {
+export function oolongNegationSuite(runner: EvalRunner): void {
       makeOolongTests(tasks);
 }

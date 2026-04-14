@@ -6,6 +6,6 @@ import { makeOolongTests } from "../make-tests.js";
 
 const tasks = (await loadOolongTasksByDataset()).get("yahoo") ?? [];
 
-export function defineOolongYahooSuite(runner: EvalRunner): void {
+export function oolongYahooSuite(runner: EvalRunner): void {
       makeOolongTests(tasks);
 }

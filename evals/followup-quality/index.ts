@@ -91,7 +91,7 @@ const CASES: FollowupCase[] = [
   },
 ];
 
-export function defineFollowupQualitySuite(runner: EvalRunner): void {
+export function followupQualitySuite(runner: EvalRunner): void {
       for (const testCase of CASES) {
         ls.test(
           testCase.name,

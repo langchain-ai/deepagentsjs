@@ -6,6 +6,6 @@ import { makeOolongTests } from "../make-tests.js";
 
 const tasks = (await loadOolongTasksByDataset()).get("imdb") ?? [];
 
-export function defineOolongImdbSuite(runner: EvalRunner): void {
+export function oolongImdbSuite(runner: EvalRunner): void {
       makeOolongTests(tasks);
 }

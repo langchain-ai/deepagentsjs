@@ -38,7 +38,7 @@ const SAMPLE_TOOL_CONFIG: Record<string, boolean | InterruptOnConfig> = {
   get_soccer_scores: { allowedDecisions: ["approve", "reject"] },
 };
 
-export function defineHitlSuite(_runner: EvalRunner): void {
+export function hitlSuite(_runner: EvalRunner): void {
   ls.test(
     "test_hitl_agent",
     {

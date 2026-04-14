@@ -3,7 +3,7 @@ import * as ls from "langsmith/vitest";
 import { expect } from "vitest";
 import { getDefaultRunner, getFinalText } from "@deepagents/evals";
 
-export function defineMemoryAgentBenchSuite(runner: EvalRunner): void {
+export function memoryAgentBenchSuite(runner: EvalRunner): void {
       ls.test(
         "long context memorization",
         {

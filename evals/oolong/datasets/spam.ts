@@ -6,6 +6,6 @@ import { makeOolongTests } from "../make-tests.js";
 
 const tasks = (await loadOolongTasksByDataset()).get("spam") ?? [];
 
-export function defineOolongSpamSuite(runner: EvalRunner): void {
+export function oolongSpamSuite(runner: EvalRunner): void {
       makeOolongTests(tasks);
 }

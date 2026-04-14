@@ -2,7 +2,7 @@ import * as ls from "langsmith/vitest";
 import { expect } from "vitest";
 import type { EvalRunner } from "@deepagents/evals";
 
-export function defineMemorySuite(runner: EvalRunner): void {
+export function memorySuite(runner: EvalRunner): void {
       ls.test(
         "memory basic recall",
         {

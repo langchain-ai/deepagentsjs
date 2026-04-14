@@ -2,7 +2,7 @@ import * as ls from "langsmith/vitest";
 import { expect } from "vitest";
 import type { EvalRunner } from "@deepagents/evals";
 
-export function defineFilesSuite(runner: EvalRunner): void {
+export function filesSuite(runner: EvalRunner): void {
       ls.test(
         "read file seeded state backend file",
         {

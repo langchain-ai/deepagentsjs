@@ -1,13 +1,13 @@
 import * as ls from "langsmith/vitest";
 import { getDefaultRunner } from "@deepagents/evals";
-import { defineOolongMetaphorsSuite } from "./metaphors.js";
+import { oolongMetaphorsSuite } from "./metaphors.js";
 
 const runner = getDefaultRunner();
 
 ls.describe(
   runner.name,
   () => {
-    defineOolongMetaphorsSuite(runner);
+    oolongMetaphorsSuite(runner);
   },
   { projectName: "deepagents-js-oolong-metaphors", upsert: true },
 );

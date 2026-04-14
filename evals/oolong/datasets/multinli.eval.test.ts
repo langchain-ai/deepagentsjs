@@ -1,13 +1,13 @@
 import * as ls from "langsmith/vitest";
 import { getDefaultRunner } from "@deepagents/evals";
-import { defineOolongMultinliSuite } from "./multinli.js";
+import { oolongMultinliSuite } from "./multinli.js";
 
 const runner = getDefaultRunner();
 
 ls.describe(
   runner.name,
   () => {
-    defineOolongMultinliSuite(runner);
+    oolongMultinliSuite(runner);
   },
   { projectName: "deepagents-js-oolong-multinli", upsert: true },
 );

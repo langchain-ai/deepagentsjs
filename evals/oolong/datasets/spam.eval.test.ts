@@ -1,13 +1,13 @@
 import * as ls from "langsmith/vitest";
 import { getDefaultRunner } from "@deepagents/evals";
-import { defineOolongSpamSuite } from "./spam.js";
+import { oolongSpamSuite } from "./spam.js";
 
 const runner = getDefaultRunner();
 
 ls.describe(
   runner.name,
   () => {
-    defineOolongSpamSuite(runner);
+    oolongSpamSuite(runner);
   },
   { projectName: "deepagents-js-oolong-spam", upsert: true },
 );

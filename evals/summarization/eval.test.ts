@@ -1,13 +1,13 @@
 import * as ls from "langsmith/vitest";
 import { getDefaultRunner } from "@deepagents/evals";
-import { defineSummarizationSuite } from "./index.js";
+import { summarizationSuite } from "./index.js";
 
 const runner = getDefaultRunner();
 
 ls.describe(
   "deepagents-js-summarization",
   () => {
-    defineSummarizationSuite(runner);
+    summarizationSuite(runner);
   },
   { projectName: runner.name, upsert: true },
 );
