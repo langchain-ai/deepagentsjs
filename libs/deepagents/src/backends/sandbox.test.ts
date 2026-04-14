@@ -175,6 +175,7 @@ describe("BaseSandbox", () => {
       await sandbox.ls("/");
       expect(sandbox.executedCommands.length).toBeGreaterThan(0);
       expect(sandbox.executedCommands[0]).toContain("find");
+      expect(sandbox.executedCommands[0]).toContain("find -L");
       expect(sandbox.executedCommands[0]).toContain("stat");
       expect(sandbox.executedCommands[0]).toContain("-maxdepth 1");
     });
@@ -620,6 +621,16 @@ describe("BaseSandbox", () => {
       expect(sandbox.executedCommands[0]).toContain("grep");
     });
 
+    it("should follow symlinks for grep when glob is provided", async () => {
+      const sandbox = new MockSandbox();
+      sandbox.addFile("/test.txt", "hello");
+
+      await sandbox.grep("hello", "/", "*.txt");
+      expect(sandbox.executedCommands.length).toBe(1);
+      expect(sandbox.executedCommands[0]).toContain("find -L");
+      expect(sandbox.executedCommands[0]).toContain("-name '*.txt'");
+    });
+
     it("should return empty matches array for no matches", async () => {
       const sandbox = new MockSandbox();
       sandbox.execute = vi.fn().mockResolvedValue({
@@ -654,7 +665,7 @@ describe("BaseSandbox", () => {
     it("should find matching files via execute with find + stat", async () => {
       const sandbox = new MockSandbox();
       const now = Math.floor(Date.now() / 1000);
-      sandbox.execute = vi.fn().mockResolvedValue({
+      const executeMock = vi.fn().mockResolvedValue({
         output: [
           `100\t${now}\tregular file\t/test.py`,
           `200\t${now}\tregular file\t/main.py`,
@@ -663,6 +674,7 @@ describe("BaseSandbox", () => {
         exitCode: 0,
         truncated: false,
       });
+      sandbox.execute = executeMock;
 
       const result = await sandbox.glob("*.py", "/");
       expect(result.error).toBeUndefined();
@@ -671,6 +683,7 @@ describe("BaseSandbox", () => {
       expect(result.files!.some((f) => f.path === "test.py")).toBe(true);
       expect(result.files!.some((f) => f.path === "main.py")).toBe(true);
       expect(result.files!.some((f) => f.path === "readme.md")).toBe(false);
+      expect(executeMock.mock.calls[0][0]).toContain("find -L");
     });
 
     it("should support recursive ** glob patterns", async () => {
