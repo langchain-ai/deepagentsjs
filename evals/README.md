@@ -93,7 +93,7 @@ EVAL_RUNNER=gpt-4.1 pnpm --filter @deepagents/eval-files test:eval
    });
    ```
 
-4. Write your test in `index.test.ts`:
+4. Write your test in `eval.test.ts`:
 
    ```ts
    import * as ls from "langsmith/vitest";
@@ -101,9 +101,10 @@ EVAL_RUNNER=gpt-4.1 pnpm --filter @deepagents/eval-files test:eval
    import { getDefaultRunner } from "@deepagents/evals";
 
    const runner = getDefaultRunner();
+   const evalName = "deepagents-js-my-eval";
 
    ls.describe(
-     runner.name,
+     evalName,
      () => {
        ls.test(
          "my test case",
@@ -114,7 +115,7 @@ EVAL_RUNNER=gpt-4.1 pnpm --filter @deepagents/eval-files test:eval
          },
        );
      },
-     { projectName: "deepagents-js-my-eval", upsert: true },
+     { projectName: runner.name, upsert: true },
    );
    ```
 

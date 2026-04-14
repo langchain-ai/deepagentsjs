@@ -7,7 +7,7 @@ export default defineConfig({
     testTimeout: 120_000,
     hookTimeout: 60_000,
     teardownTimeout: 60_000,
-    include: ["index.test.ts"],
+    include: ["eval.test.ts"],
     setupFiles: ["@deepagents/evals/setup"],
     reporters: ["langsmith/vitest/reporter"],
   },
