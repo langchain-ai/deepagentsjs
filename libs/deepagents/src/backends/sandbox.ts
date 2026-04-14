@@ -175,7 +175,7 @@ const STAT_C_SCRIPT =
  */
 function buildLsCommand(dirPath: string): string {
   const quotedPath = shellQuote(dirPath);
-  const findBase = `find ${quotedPath} -maxdepth 1 -not -path ${quotedPath}`;
+  const findBase = `find -L ${quotedPath} -maxdepth 1 -not -path ${quotedPath}`;
   return (
     `if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then ` +
     `${findBase} -printf '%s\\t%T@\\t%y\\t%p\\n' 2>/dev/null; ` +
@@ -195,7 +195,7 @@ function buildLsCommand(dirPath: string): string {
  */
 function buildFindCommand(searchPath: string): string {
   const quotedPath = shellQuote(searchPath);
-  const findBase = `find ${quotedPath} -not -path ${quotedPath}`;
+  const findBase = `find -L ${quotedPath} -not -path ${quotedPath}`;
   return (
     `if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then ` +
     `${findBase} -printf '%s\\t%T@\\t%y\\t%p\\n' 2>/dev/null; ` +
@@ -257,7 +257,7 @@ function buildGrepCommand(
   if (globPattern) {
     // Use find + grep for BusyBox compatibility (BusyBox grep lacks --include)
     const globEscaped = shellQuote(globPattern);
-    return `find ${searchPathQuoted} -type f -name ${globEscaped} -exec grep -HnF -e ${patternEscaped} {} + 2>/dev/null || true`;
+    return `find -L ${searchPathQuoted} -type f -name ${globEscaped} -exec grep -HnF -e ${patternEscaped} {} + 2>/dev/null || true`;
   }
 
   return `grep -rHnF -e ${patternEscaped} ${searchPathQuoted} 2>/dev/null || true`;
