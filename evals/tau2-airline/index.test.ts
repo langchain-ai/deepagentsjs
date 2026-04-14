@@ -233,7 +233,7 @@ function requiredToolCalled(name: string): boolean {
 }
 
 ls.describe(
-  runner.name,
+  "deepagents-js-tau2-airline",
   () => {
     for (const task of TASKS) {
       ls.test(
@@ -264,5 +264,5 @@ ls.describe(
       );
     }
   },
-  { projectName: "deepagents-js-tau2-airline", upsert: true },
+  { projectName: runner.name, upsert: true },
 );

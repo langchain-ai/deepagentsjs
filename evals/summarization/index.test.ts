@@ -101,7 +101,7 @@ function createAgent() {
 }
 
 ls.describe(
-  runner.name,
+  "deepagents-js-summarization",
   () => {
     ls.test(
       "summarize continues task",
@@ -195,5 +195,5 @@ ls.describe(
       },
     );
   },
-  { projectName: "deepagents-js-summarization", upsert: true },
+  { projectName: runner.name, upsert: true },
 );

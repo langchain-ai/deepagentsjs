@@ -56,7 +56,7 @@ async function invoke(
 }
 
 ls.describe(
-  runner.name,
+  "deepagents-js-memory-agent-bench",
   () => {
     ls.test(
       "long context memorization",
@@ -163,5 +163,5 @@ ls.describe(
       },
     );
   },
-  { projectName: "deepagents-js-memory-agent-bench", upsert: true },
+  { projectName: runner.name, upsert: true },
 );

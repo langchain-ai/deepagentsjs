@@ -119,7 +119,7 @@ beforeEach(() => {
 });
 
 ls.describe(
-  runner.name,
+  "deepagents-js-tool-selection",
   () => {
     ls.test(
       "direct request slack dm",
@@ -270,5 +270,5 @@ ls.describe(
       },
     );
   },
-  { projectName: "deepagents-js-tool-selection", upsert: true },
+  { projectName: runner.name, upsert: true },
 );

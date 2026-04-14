@@ -70,7 +70,7 @@ async function invoke(
 }
 
 ls.describe(
-  runner.name,
+  "deepagents-js-memory-multiturn",
   () => {
     ls.test(
       "implicit preference remembered",
@@ -200,5 +200,5 @@ ls.describe(
       },
     );
   },
-  { projectName: "deepagents-js-memory-multiturn", upsert: true },
+  { projectName: runner.name, upsert: true },
 );

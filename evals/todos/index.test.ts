@@ -18,7 +18,7 @@ function countWriteTodosCalls(
 }
 
 ls.describe(
-  runner.name,
+  "deepagents-js-todos",
   () => {
     ls.test(
       "write todos sequential updates returns text",
@@ -70,5 +70,5 @@ ls.describe(
       },
     );
   },
-  { projectName: "deepagents-js-todos", upsert: true },
+  { projectName: runner.name, upsert: true },
 );

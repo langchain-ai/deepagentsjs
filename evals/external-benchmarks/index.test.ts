@@ -28,7 +28,7 @@ function normalize(text: string): string {
 }
 
 ls.describe(
-  runner.name,
+  "deepagents-js-external-benchmarks",
   () => {
     for (const testCase of CASES) {
       ls.test(
@@ -64,5 +64,5 @@ ls.describe(
       );
     }
   },
-  { projectName: "deepagents-js-external-benchmarks", upsert: true },
+  { projectName: runner.name, upsert: true },
 );
