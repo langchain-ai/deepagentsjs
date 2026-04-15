@@ -128,7 +128,7 @@ const TOO_LARGE_TOOL_MSG = context`
   Tool result too large, the result of this tool call {tool_call_id} was saved in the filesystem at this path: {file_path}
   You can read the result from the filesystem by using the read_file tool, but make sure to only read part of the result at a time.
   You can do this by specifying an offset and limit in the read_file tool call.
-  For example, to read the first 100 lines, you can use the read_file tool with offset=0 and limit=100.
+  For example, to read the first ${DEFAULT_READ_LINE_LIMIT} lines, you can use the read_file tool with offset=0 and limit=${DEFAULT_READ_LINE_LIMIT}.
 
   Here is a preview showing the head and tail of the result (lines of the form
   ... [N lines truncated] ...
@@ -395,12 +395,12 @@ export const READ_FILE_TOOL_DESCRIPTION = context`
   Assume this tool is able to read all files. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
 
   Usage:
-  - By default, it reads up to 100 lines starting from the beginning of the file
+  - By default, it reads up to ${DEFAULT_READ_LINE_LIMIT} lines starting from the beginning of the file
   - **IMPORTANT for large files and codebase exploration**: Use pagination with offset and limit parameters to avoid context overflow
-    - First scan: read_file(path, limit=100) to see file structure
-    - Read more sections: read_file(path, offset=100, limit=200) for next 200 lines
+    - First scan: read_file(path, limit=${DEFAULT_READ_LINE_LIMIT}) to see file structure
+    - Read more sections: read_file(path, offset=${DEFAULT_READ_LINE_LIMIT}, limit=200) for next 200 lines
     - Only omit limit (read full file) when necessary for editing
-  - Specify offset and limit: read_file(path, offset=0, limit=100) reads first 100 lines
+  - Specify offset and limit: read_file(path, offset=0, limit=${DEFAULT_READ_LINE_LIMIT}) reads first ${DEFAULT_READ_LINE_LIMIT} lines
   - Results are returned using cat -n format, with line numbers starting at 1
 - Lines longer than ${INT_FORMATTER.format(MAX_LINE_LENGTH)} characters will be split into multiple lines with continuation markers (e.g., 5.1, 5.2, etc.). When you specify a limit, these continuation lines count towards the limit.
   - You have the capability to call multiple tools in a single response. It is always better to speculatively read multiple files as a batch that are potentially useful.
