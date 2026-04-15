@@ -123,8 +123,9 @@ export interface SummarizationMiddlewareOptions {
   /**
    * The language model to use for generating summaries.
    * Can be a model string (e.g., "gpt-4o-mini") or a language model instance.
+   * If omitted, middleware will use the active request model.
    */
-  model: string | BaseChatModel | BaseLanguageModel;
+  model?: string | BaseChatModel | BaseLanguageModel;
 
   /**
    * Backend instance or factory for persisting conversation history.
@@ -399,6 +400,12 @@ export function createSummarizationMiddleware(
   async function getChatModel(): Promise<BaseChatModel> {
     if (cachedModel) {
       return cachedModel;
+    }
+
+    if (!model) {
+      throw new Error(
+        "Summarization middleware could not resolve a model. Provide `options.model` or ensure `request.model` is present.",
+      );
     }
 
     if (typeof model === "string") {
@@ -1189,10 +1196,12 @@ export function createSummarizationMiddleware(
         return handler(request);
       }
 
+      const requestModel = request.model as BaseChatModel | undefined;
+
       /**
        * Resolve the chat model and get max input tokens from its profile.
        */
-      const resolvedModel = await getChatModel();
+      const resolvedModel = requestModel ?? (await getChatModel());
       const maxInputTokens = getMaxInputTokens(resolvedModel);
       applyModelDefaults(resolvedModel);
 

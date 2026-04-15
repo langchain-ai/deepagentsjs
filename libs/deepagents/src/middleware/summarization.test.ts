@@ -67,7 +67,7 @@ async function callWrapModelCall(
   const request: any = {
     messages,
     state,
-    model: {},
+    model: undefined,
     systemPrompt: "",
     systemMessage: {},
     tools: [],
@@ -1231,6 +1231,58 @@ describe("createSummarizationMiddleware", () => {
           expect(msg.content).toContain("...(result truncated)");
         }
       }
+    });
+  });
+
+  describe("runtime model/provider routing", () => {
+    it("should use request.model when creating summaries", async () => {
+      const mockBackend = createMockBackend();
+
+      const invoke = vi.fn(async (_messages: any) => {
+        return { content: "Summary from runtime-selected provider." };
+      });
+
+      const requestModel = {
+        profile: { maxInputTokens: 128000 },
+        invoke,
+      };
+
+      const middleware = createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: mockBackend,
+        trigger: { type: "messages", value: 3 },
+        keep: { type: "messages", value: 1 },
+      });
+
+      const messages = Array.from(
+        { length: 5 },
+        (_, i) => new HumanMessage({ content: `Message ${i}` }),
+      );
+
+      let capturedRequest: {
+        messages: BaseMessage[];
+        [key: string]: any;
+      } | null = null;
+
+      const request: any = {
+        messages,
+        state: { messages },
+        model: requestModel,
+        systemPrompt: "",
+        systemMessage: {},
+        tools: [],
+        runtime: {},
+      };
+
+      const result = await middleware.wrapModelCall!(request, (req: any) => {
+        capturedRequest = req;
+        return new AIMessage({ content: "Mock response" });
+      });
+
+      expect(isCommand(result)).toBe(true);
+      expect(capturedRequest).not.toBeNull();
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(invoke).toHaveBeenCalledWith(expect.any(Array));
     });
   });
 });
