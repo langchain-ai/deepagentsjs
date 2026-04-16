@@ -23,7 +23,12 @@ import type {
 } from "@langchain/langgraph-checkpoint";
 
 import type { AnyBackendProtocol } from "./backends/index.js";
-import type { AsyncSubAgent, SubAgent } from "./middleware/index.js";
+import type {
+  AsyncSubAgent,
+  ContextSize,
+  SubAgent,
+  TruncateArgsSettings,
+} from "./middleware/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type { AnnotationRoot } from "@langchain/langgraph";
 import type { CompiledSubAgent } from "./middleware/subagents.js";
@@ -342,6 +347,32 @@ export type InferSubagentReactAgentType<
     : never;
 
 /**
+ * Summarization options exposed by `createDeepAgent`.
+ */
+export interface DeepAgentSummarizationOptions {
+  /**
+   * Thresholds that trigger summarization.
+   */
+  trigger?: ContextSize | ContextSize[];
+  /**
+   * Retention policy after summarization.
+   */
+  keep?: ContextSize;
+  /**
+   * Custom prompt used to generate summaries.
+   */
+  summaryPrompt?: string;
+  /**
+   * Maximum number of tokens included when generating a summary.
+   */
+  trimTokensToSummarize?: number;
+  /**
+   * Settings for truncating tool arguments in older messages.
+   */
+  truncateArgsSettings?: TruncateArgsSettings;
+}
+
+/**
  * Configuration parameters for creating a Deep Agent
  * Matches Python's create_deep_agent parameters
  *
@@ -436,4 +467,10 @@ export interface CreateDeepAgentParams<
    * ```
    */
   skills?: string[];
+  /**
+   * Configuration for the built-in summarization middleware.
+   *
+   * When omitted, the middleware keeps its existing default behavior.
+   */
+  summarization?: DeepAgentSummarizationOptions;
 }
