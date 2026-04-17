@@ -1,6 +1,7 @@
 import { HumanMessage } from "@langchain/core/messages";
 import type { BaseMessage, ContentBlock } from "@langchain/core/messages";
 import type { Runnable } from "@langchain/core/runnables";
+import type { ReactAgent } from "langchain";
 import type { BackendProtocolV2 } from "../backends/v2/protocol.js";
 import type {
   SwarmTaskSpec,
@@ -26,7 +27,7 @@ export interface SwarmExecutionOptions {
   /**
    * Map of subagent type name → compiled runnable.
    */
-  subagentGraphs: Record<string, Runnable>;
+  subagentGraphs: Record<string, ReactAgent<any> | Runnable>;
 
   /**
    * Backend for writing results.
@@ -142,7 +143,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
  */
 async function dispatchTask(
   task: SwarmTaskSpec,
-  subagent: Runnable,
+  subagent: ReactAgent<any> | Runnable,
   filteredState: Record<string, unknown>,
   config?: Record<string, unknown>,
 ): Promise<SwarmTaskResult> {

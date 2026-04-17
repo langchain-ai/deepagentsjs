@@ -52,14 +52,6 @@ export interface QuickJSMiddlewareOptions {
    * @default null (uses built-in prompt)
    */
   systemPrompt?: string | null;
-
-  /**
-   * Map of subagent type name → compiled runnable. When provided,
-   * a global `swarm(input)` function is injected into the REPL,
-   * enabling parallel fan-out from within script code.
-   * @default undefined
-   */
-  subagentGraphs?: Record<string, ReactAgent<any> | Runnable>;
 }
 
 /**

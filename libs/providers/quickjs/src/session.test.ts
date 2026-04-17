@@ -1,8 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { tool } from "langchain";
 import { z } from "zod/v4";
 import type { BackendProtocolV2, ReadRawResult, WriteResult } from "deepagents";
+import { executeSwarm, resolveVirtualTableTasks } from "deepagents";
 import { ReplSession } from "./session.js";
+
+vi.mock("deepagents", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...(actual as object),
+    executeSwarm: vi.fn(),
+    resolveVirtualTableTasks: vi.fn(),
+  };
+});
 
 const TIMEOUT = 5000;
 let nextId = 0;
@@ -50,6 +60,7 @@ describe("REPL Engine", () => {
   let session: ReplSession;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     ReplSession.clearCache();
   });
 
@@ -541,6 +552,300 @@ describe("REPL Engine", () => {
       const restored = ReplSession.fromJSON(JSON.parse(serialized));
       const result = await restored.eval("msg", TIMEOUT);
       expect(result.value).toBe("hello");
+    });
+  });
+
+  describe("swarm global", () => {
+    const mockExecuteSwarm = executeSwarm as ReturnType<typeof vi.fn>;
+    const mockResolveVirtualTableTasks =
+      resolveVirtualTableTasks as ReturnType<typeof vi.fn>;
+
+    const mockSubagentGraphs = {
+      "general-purpose": { invoke: vi.fn() } as any,
+    };
+
+    it("should register swarm global when subagentGraphs is provided", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend(),
+        subagentGraphs: mockSubagentGraphs,
+      });
+
+      const result = await session.eval("typeof swarm", TIMEOUT);
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("function");
+    });
+
+    it("should not register swarm when subagentGraphs is empty", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        subagentGraphs: {},
+      });
+
+      const result = await session.eval("typeof swarm", TIMEOUT);
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("undefined");
+    });
+
+    it("should not register swarm when subagentGraphs is not provided", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+
+      const result = await session.eval("typeof swarm", TIMEOUT);
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("undefined");
+    });
+
+    it("should call executeSwarm with pre-built tasks and return JSON summary", async () => {
+      const subagentGraphs = {
+        "general-purpose": { invoke: vi.fn() } as any,
+      };
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend(),
+        subagentGraphs,
+        currentState: { customKey: "value" },
+      });
+
+      const summary = {
+        total: 2,
+        completed: 2,
+        failed: 0,
+        resultsDir: "/swarm_runs/abc",
+        failedTasks: [],
+      };
+      mockExecuteSwarm.mockResolvedValueOnce(summary);
+
+      const code = `
+        const result = await swarm({
+          tasks: [
+            { id: "t1", description: "task one" },
+            { id: "t2", description: "task two" },
+          ],
+        });
+        result
+      `;
+
+      const result = await session.eval(code, TIMEOUT);
+      expect(result.ok).toBe(true);
+      expect(JSON.parse(result.value as string)).toEqual(summary);
+
+      expect(mockExecuteSwarm).toHaveBeenCalledOnce();
+      const callArgs = mockExecuteSwarm.mock.calls[0][0];
+      expect(callArgs.tasks).toEqual([
+        { id: "t1", description: "task one" },
+        { id: "t2", description: "task two" },
+      ]);
+      expect(callArgs.subagentGraphs).toBe(subagentGraphs);
+      expect(callArgs.currentState).toEqual({ customKey: "value" });
+    });
+
+    it("should not call resolveVirtualTableTasks for pre-built tasks", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend(),
+        subagentGraphs: mockSubagentGraphs,
+      });
+
+      mockExecuteSwarm.mockResolvedValueOnce({
+        total: 1,
+        completed: 1,
+        failed: 0,
+        resultsDir: "/swarm_runs/x",
+        failedTasks: [],
+      });
+
+      await session.eval(
+        'await swarm({ tasks: [{ id: "t1", description: "task" }] })',
+        TIMEOUT,
+      );
+
+      expect(mockResolveVirtualTableTasks).not.toHaveBeenCalled();
+      expect(mockExecuteSwarm).toHaveBeenCalledOnce();
+    });
+
+    it("should call resolveVirtualTableTasks for virtual-table form", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend(),
+        subagentGraphs: mockSubagentGraphs,
+      });
+
+      const resolvedTasks = [
+        { id: "file.txt", description: "Classify\n\nFile: /data/file.txt" },
+      ];
+      mockResolveVirtualTableTasks.mockResolvedValueOnce({
+        tasks: resolvedTasks,
+        tasksJsonl: "",
+      });
+      mockExecuteSwarm.mockResolvedValueOnce({
+        total: 1,
+        completed: 1,
+        failed: 0,
+        resultsDir: "/swarm_runs/y",
+        failedTasks: [],
+      });
+
+      const code = `
+        await swarm({
+          glob: "*.txt",
+          instruction: "Classify this file",
+          subagentType: "classifier",
+        })
+      `;
+
+      const result = await session.eval(code, TIMEOUT);
+      expect(result.ok).toBe(true);
+
+      expect(mockResolveVirtualTableTasks).toHaveBeenCalledOnce();
+      const resolveArgs = mockResolveVirtualTableTasks.mock.calls[0][0];
+      expect(resolveArgs.glob).toBe("*.txt");
+      expect(resolveArgs.instruction).toBe("Classify this file");
+      expect(resolveArgs.subagentType).toBe("classifier");
+
+      expect(mockExecuteSwarm).toHaveBeenCalledOnce();
+      expect(mockExecuteSwarm.mock.calls[0][0].tasks).toEqual(resolvedTasks);
+    });
+
+    it("should pass concurrency option to executeSwarm", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend(),
+        subagentGraphs: mockSubagentGraphs,
+      });
+
+      mockExecuteSwarm.mockResolvedValueOnce({
+        total: 1,
+        completed: 1,
+        failed: 0,
+        resultsDir: "/swarm_runs/z",
+        failedTasks: [],
+      });
+
+      await session.eval(
+        'await swarm({ tasks: [{ id: "t1", description: "task" }], concurrency: 3 })',
+        TIMEOUT,
+      );
+
+      expect(mockExecuteSwarm.mock.calls[0][0].concurrency).toBe(3);
+    });
+
+    it("should reject when backend is not available", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        subagentGraphs: mockSubagentGraphs,
+      });
+
+      const code = `
+        var errMsg;
+        try {
+          await swarm({ tasks: [{ id: "t1", description: "task" }] });
+        } catch (e) {
+          errMsg = e.message;
+        }
+        errMsg
+      `;
+
+      const result = await session.eval(code, TIMEOUT);
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("Backend not available");
+    });
+
+    it("should reject when resolveVirtualTableTasks returns error", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend(),
+        subagentGraphs: mockSubagentGraphs,
+      });
+
+      mockResolveVirtualTableTasks.mockResolvedValueOnce({
+        error: 'No files matched glob pattern(s): "*.missing"',
+      });
+
+      const code = `
+        var errMsg;
+        try {
+          await swarm({ glob: "*.missing", instruction: "process" });
+        } catch (e) {
+          errMsg = e.message;
+        }
+        errMsg
+      `;
+
+      const result = await session.eval(code, TIMEOUT);
+      expect(result.ok).toBe(true);
+      expect(result.value).toContain("No files matched");
+    });
+
+    it("should reject when executeSwarm throws", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend(),
+        subagentGraphs: mockSubagentGraphs,
+      });
+
+      mockExecuteSwarm.mockRejectedValueOnce(
+        new Error("Unknown subagent type(s): bad"),
+      );
+
+      const code = `
+        var errMsg;
+        try {
+          await swarm({ tasks: [{ id: "t1", description: "task" }] });
+        } catch (e) {
+          errMsg = e.message;
+        }
+        errMsg
+      `;
+
+      const result = await session.eval(code, TIMEOUT);
+      expect(result.ok).toBe(true);
+      expect(result.value).toContain("Unknown subagent type");
+    });
+
+    it("should use latest subagentGraphs and currentState from options", async () => {
+      const id = uniqueThreadId();
+      const initialGraphs = { "general-purpose": { invoke: vi.fn() } as any };
+      session = ReplSession.getOrCreate(id, {
+        backend: createMockBackend(),
+        subagentGraphs: initialGraphs,
+        currentState: { version: 1 },
+      });
+
+      // First eval to initialize the runtime
+      mockExecuteSwarm.mockResolvedValueOnce({
+        total: 1,
+        completed: 1,
+        failed: 0,
+        resultsDir: "/swarm_runs/v1",
+        failedTasks: [],
+      });
+      await session.eval(
+        'await swarm({ tasks: [{ id: "t1", description: "task" }] })',
+        TIMEOUT,
+      );
+      expect(mockExecuteSwarm.mock.calls[0][0].currentState).toEqual({
+        version: 1,
+      });
+
+      // Update state via getOrCreate (simulates middleware re-injection)
+      const updatedGraphs = {
+        "general-purpose": { invoke: vi.fn() } as any,
+        analyst: { invoke: vi.fn() } as any,
+      };
+      ReplSession.getOrCreate(id, {
+        subagentGraphs: updatedGraphs,
+        currentState: { version: 2 },
+      });
+
+      mockExecuteSwarm.mockResolvedValueOnce({
+        total: 1,
+        completed: 1,
+        failed: 0,
+        resultsDir: "/swarm_runs/v2",
+        failedTasks: [],
+      });
+      await session.eval(
+        'await swarm({ tasks: [{ id: "t1", description: "task" }] })',
+        TIMEOUT,
+      );
+
+      expect(mockExecuteSwarm.mock.calls[1][0].subagentGraphs).toBe(
+        updatedGraphs,
+      );
+      expect(mockExecuteSwarm.mock.calls[1][0].currentState).toEqual({
+        version: 2,
+      });
     });
   });
 });

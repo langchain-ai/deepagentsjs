@@ -128,10 +128,13 @@ export class ReplSession {
     if (backend) {
       this._backend = adaptBackendProtocol(backend);
     }
+
     this.injectVfs();
+
     if (subagentGraphs && Object.keys(subagentGraphs).length > 0) {
       this.injectSwarm();
     }
+
     if (tools && tools.length > 0) {
       this.injectTools(tools);
     }
@@ -153,12 +156,15 @@ export class ReplSession {
       if (options.backend) {
         existing._backend = adaptBackendProtocol(options.backend);
       }
+
       if (options.subagentGraphs !== undefined) {
         existing._options.subagentGraphs = options.subagentGraphs;
       }
+
       if (options.currentState !== undefined) {
         existing._options.currentState = options.currentState;
       }
+
       return existing;
     }
 
@@ -406,68 +412,6 @@ export class ReplSession {
     writeFileHandle.dispose();
   }
 
-  private injectSwarm(): void {
-    const context = this.context!;
-    const getBackend = () => this._backend;
-    const getOptions = () => this._options;
-
-    const swarmHandle = context.newFunction(
-      "swarm",
-      (inputHandle: QuickJSHandle) => {
-        const input = context.dump(inputHandle) as Record<string, unknown>;
-        const promise = context.newPromise();
-        (async () => {
-          try {
-            const backend = getBackend();
-            if (!backend) throw new Error("Backend not available");
-            const { subagentGraphs = {}, currentState = {} } = getOptions();
-
-            let tasks: SwarmTaskSpec[];
-            if (input.tasks) {
-              tasks = input.tasks as SwarmTaskSpec[];
-            } else {
-              const resolved = await resolveVirtualTableTasks(
-                {
-                  filePaths: input.filePaths as string[] | undefined,
-                  glob: input.glob as string | string[] | undefined,
-                  instruction: input.instruction as string,
-                  subagentType: input.subagentType as string | undefined,
-                },
-                backend,
-              );
-              if ("error" in resolved) throw new Error(resolved.error);
-              tasks = resolved.tasks;
-            }
-
-            const summary = await executeSwarm({
-              tasks,
-              subagentGraphs,
-              backend,
-              concurrency:
-                typeof input.concurrency === "number"
-                  ? input.concurrency
-                  : undefined,
-              currentState: currentState as Record<string, unknown>,
-            });
-
-            const val = context.newString(JSON.stringify(summary));
-            promise.resolve(val);
-            val.dispose();
-          } catch (e: unknown) {
-            const msg = e instanceof Error ? e.message : String(e);
-            const err = context.newError(msg);
-            promise.reject(err);
-            err.dispose();
-          }
-          promise.settled.then(context.runtime.executePendingJobs);
-        })();
-        return promise.handle;
-      },
-    );
-    context.setProp(context.global, "swarm", swarmHandle);
-    swarmHandle.dispose();
-  }
-
   private injectTools(tools: StructuredToolInterface[]): void {
     const context = this.context!;
     const toolsNs = context.newObject();
@@ -509,5 +453,88 @@ export class ReplSession {
 
     context.setProp(context.global, "tools", toolsNs);
     toolsNs.dispose();
+  }
+
+  /**
+   * Register the `swarm()` global inside the QuickJS context.
+   *
+   * Bridges to `executeSwarm()` on the host side. Supports two input forms:
+   * - Virtual-table: `{ glob, filePaths, instruction, subagentType?, concurrency? }`
+   * - Pre-built tasks: `{ tasks: SwarmTaskSpec[] }`
+   *
+   * Returns a JSON string (the SwarmExecutionSummary).
+   * Uses closures over `this._options` so that `subagentGraphs` and
+   * `currentState` reflect the latest values (they update between evals).
+   */
+  private injectSwarm(): void {
+    const context = this.context!;
+    const getBackend = () => this._backend;
+    const getOptions = () => this._options;
+
+    const swarmHandle = context.newFunction(
+      "swarm",
+      (inputHandle: QuickJSHandle) => {
+        const input = context.dump(inputHandle) as Record<string, unknown>;
+        const promise = context.newPromise();
+
+        (async () => {
+          try {
+            const backend = getBackend();
+            if (!backend) {
+              throw new Error("Backend not available");
+            }
+
+            const { subagentGraphs = {}, currentState = {} } = getOptions();
+
+            let tasks: SwarmTaskSpec[];
+            if (input.tasks) {
+              tasks = input.tasks as SwarmTaskSpec[];
+            } else {
+              const resolved = await resolveVirtualTableTasks(
+                {
+                  filePaths: input.filePaths as string[] | undefined,
+                  glob: input.glob as string | string[] | undefined,
+                  instruction: input.instruction as string,
+                  subagentType: input.subagentType as string | undefined,
+                },
+                backend,
+              );
+
+              if ("error" in resolved) {
+                throw new Error(resolved.error);
+              }
+
+              tasks = resolved.tasks;
+            }
+
+            const summary = await executeSwarm({
+              tasks,
+              subagentGraphs,
+              backend,
+              concurrency: typeof input.concurrency === "number"
+                ? input.concurrency
+                : undefined,
+              currentState: currentState as Record<string, unknown>,
+            });
+
+            const val = context.newString(JSON.stringify(summary));
+            promise.resolve(val);
+            val.dispose();
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            const error = context.newError(message);
+            promise.reject(error);
+            error.dispose();
+          }
+
+          promise.settled.then(context.runtime.executePendingJobs);
+        })();
+
+        return promise.handle;
+      },
+    );
+
+    context.setProp(context.global, "swarm", swarmHandle);
+    swarmHandle.dispose();
   }
 }
