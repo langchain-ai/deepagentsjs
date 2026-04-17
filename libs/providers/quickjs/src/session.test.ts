@@ -557,8 +557,9 @@ describe("REPL Engine", () => {
 
   describe("swarm global", () => {
     const mockExecuteSwarm = executeSwarm as ReturnType<typeof vi.fn>;
-    const mockResolveVirtualTableTasks =
-      resolveVirtualTableTasks as ReturnType<typeof vi.fn>;
+    const mockResolveVirtualTableTasks = resolveVirtualTableTasks as ReturnType<
+      typeof vi.fn
+    >;
 
     const mockSubagentGraphs = {
       "general-purpose": { invoke: vi.fn() } as any,

@@ -15,7 +15,12 @@ import {
 } from "langchain";
 import { z } from "zod/v4";
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import { StateBackend, type BackendRuntime, resolveBackend, DEFAULT_CONCURRENCY } from "deepagents";
+import {
+  StateBackend,
+  type BackendRuntime,
+  resolveBackend,
+  DEFAULT_CONCURRENCY,
+} from "deepagents";
 
 import dedent from "dedent";
 import type { QuickJSMiddlewareOptions, ReplSessionOptions } from "./types.js";
@@ -109,6 +114,36 @@ const REPL_SYSTEM_PROMPT = dedent`
   - Execution timeout per call (default 30 s).
 `;
 
+const SWARM_REPL_PROMPT = dedent`
+  ### API Reference — \`swarm()\` global
+
+  Fan out tasks to subagents and collect all results. Returns a JSON string — use \`JSON.parse()\` on the result.
+
+  \`\`\`typescript
+  // Virtual-table form — one task per file resolved from the VFS
+  const summary = JSON.parse(await swarm({
+    glob: "feedback/*.txt",         // glob pattern(s), or filePaths: ["/a.txt", "/b.txt"]
+    instruction: "Classify as bug, feature, or praise. Return JSON: {category, confidence}.",
+    subagentType: "default",        // optional
+    concurrency: 5,                 // optional, default ${DEFAULT_CONCURRENCY}
+  }));
+
+  // Pre-built tasks form — explicit task list
+  const summary = JSON.parse(await swarm({
+    tasks: [
+      { id: "q1", description: "Summarize /reports/q1.txt in one sentence." },
+      { id: "q2", description: "Summarize /reports/q2.txt in one sentence." },
+    ],
+  }));
+
+  // summary shape: { total, completed, failed, resultsDir, failedTasks }
+  // Read individual results from resultsDir/results.jsonl
+  \`\`\`
+
+  Use \`swarm()\` for large batches; it handles concurrency limits, timeouts, and result persistence.
+  Read \`<resultsDir>/results.jsonl\` after the call to access per-task outputs.
+`;
+
 /**
  * Generate the PTC API Reference section for the system prompt.
  */
@@ -157,7 +192,24 @@ export async function generatePtcPrompt(
 }
 
 /**
+ * Symbol used by `createDeepAgent` to inject the compiled subagent graphs
+ * into any QuickJS middleware in the agent's middleware array.
+ *
+ * This is the only way to provide subagent graphs — it is not a user-facing
+ * option. `createDeepAgent` calls this automatically.
+ *
+ * @internal
+ */
+export const QUICKJS_SWARM_INJECTOR = Symbol.for(
+  "deepagents.quickjs.injectSwarmGraphs",
+);
+
+/**
  * Create the QuickJS REPL middleware.
+ *
+ * The REPL exposes `readFile`, `writeFile`, and `swarm` as built-in globals.
+ * `swarm` is always available; subagent graphs are injected automatically
+ * by `createDeepAgent` — no configuration needed.
  */
 export function createQuickJSMiddleware(
   options: QuickJSMiddlewareOptions = {},
@@ -171,11 +223,11 @@ export function createQuickJSMiddleware(
     systemPrompt: customSystemPrompt = null,
   } = options;
 
+  // Populated by createDeepAgent via QUICKJS_SWARM_INJECTOR before first eval.
+  let subagentGraphs: ReplSessionOptions["subagentGraphs"];
+
   const usePtc = ptc !== false;
-  const baseSystemPrompt = customSystemPrompt || REPL_SYSTEM_PROMPT;
-
   let cachedPtcPrompt: string | null = null;
-
   let ptcTools: StructuredToolInterface[] = [];
 
   function filterToolsForPtc(
@@ -217,12 +269,18 @@ export function createQuickJSMiddleware(
         state: getCurrentTaskInput(config) || {},
       } as BackendRuntime;
       const resolvedBackend = await resolveBackend(backend, runtime);
+      const currentState = (getCurrentTaskInput(config) || {}) as Record<
+        string,
+        unknown
+      >;
 
       const session = ReplSession.getOrCreate(threadId, {
         memoryLimitBytes,
         maxStackSizeBytes,
         backend: resolvedBackend,
         tools: ptcTools,
+        subagentGraphs,
+        currentState,
       });
 
       const result = await session.eval(input.code, executionTimeoutMs);
@@ -235,6 +293,7 @@ export function createQuickJSMiddleware(
       description: dedent`
         Evaluate TypeScript/JavaScript code in a sandboxed REPL. State persists across calls.
         Use readFile(path) and writeFile(path, content) for file access.
+        Use swarm(input) to fan out tasks to subagents in parallel.
         Use console.log() for output. Returns the result of the last expression.
       `,
       schema: z.object({
@@ -247,21 +306,33 @@ export function createQuickJSMiddleware(
     },
   );
 
-  return createMiddleware({
+  const middleware = createMiddleware({
     name: "QuickJSMiddleware",
     tools: [jsEvalTool],
     wrapModelCall: async (request, handler) => {
       const agentTools = (request.tools || []) as StructuredToolInterface[];
-      ptcTools = usePtc ? filterToolsForPtc(agentTools) : [];
 
+      ptcTools = usePtc ? filterToolsForPtc(agentTools) : [];
       if (ptcTools.length > 0 && !cachedPtcPrompt) {
         cachedPtcPrompt = await generatePtcPrompt(ptcTools);
       }
 
+      const replPrompt = customSystemPrompt || REPL_SYSTEM_PROMPT;
+      const swarmPrompt = subagentGraphs ? SWARM_REPL_PROMPT : "";
       const systemMessage = request.systemMessage
-        .concat(baseSystemPrompt)
+        .concat(replPrompt)
+        .concat(swarmPrompt)
         .concat(cachedPtcPrompt || "");
+
       return handler({ ...request, systemMessage });
     },
   });
+
+  (middleware as any)[QUICKJS_SWARM_INJECTOR] = (
+    graphs: ReplSessionOptions["subagentGraphs"],
+  ) => {
+    subagentGraphs = graphs;
+  };
+
+  return middleware;
 }

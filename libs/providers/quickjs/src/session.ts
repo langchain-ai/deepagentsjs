@@ -511,9 +511,10 @@ export class ReplSession {
               tasks,
               subagentGraphs,
               backend,
-              concurrency: typeof input.concurrency === "number"
-                ? input.concurrency
-                : undefined,
+              concurrency:
+                typeof input.concurrency === "number"
+                  ? input.concurrency
+                  : undefined,
               currentState: currentState as Record<string, unknown>,
             });
 

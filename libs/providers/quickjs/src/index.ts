@@ -19,6 +19,7 @@
 export {
   createQuickJSMiddleware,
   DEFAULT_PTC_EXCLUDED_TOOLS,
+  QUICKJS_SWARM_INJECTOR,
 } from "./middleware.js";
 
 export type {
