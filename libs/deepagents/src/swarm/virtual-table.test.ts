@@ -154,6 +154,26 @@ describe("resolveVirtualTableTasks", () => {
       }
     });
 
+    it("strips leading slash from glob pattern", async () => {
+      const backend = createMockBackend({
+        "batch_*.txt": [
+          { path: "batch_1.txt" },
+          { path: "batch_2.txt" },
+        ],
+      });
+
+      const result = await resolveVirtualTableTasks(
+        { glob: "/batch_*.txt", instruction: "Classify" },
+        backend,
+      );
+
+      expect(backend.glob).toHaveBeenCalledWith("batch_*.txt");
+      expect("tasks" in result).toBe(true);
+      if ("tasks" in result) {
+        expect(result.tasks).toHaveLength(2);
+      }
+    });
+
     it("returns error when glob matches nothing", async () => {
       const backend = createMockBackend();
       const result = await resolveVirtualTableTasks(

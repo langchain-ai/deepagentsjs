@@ -88,7 +88,9 @@ export async function resolveVirtualTableTasks(
 
   if (glob) {
     const patterns = Array.isArray(glob) ? glob : [glob];
-    for (const pattern of patterns) {
+    for (const raw of patterns) {
+      // Strip leading slash — glob patterns are matched against relative paths
+      const pattern = raw.replace(/^\/+/, "");
       const globResult = await backend.glob(pattern);
       if (globResult.error) {
         return {

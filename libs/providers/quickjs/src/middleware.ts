@@ -68,12 +68,19 @@ export const DEFAULT_PTC_EXCLUDED_TOOLS = [
   "execute",
 ] as const;
 
-const REPL_SYSTEM_PROMPT = dedent`
+function buildReplSystemPrompt(hasSwarm: boolean): string {
+  const largeFileDirective = hasSwarm
+    ? `**Large file processing**: Before doing anything else, check the size of your input files. If any input file exceeds ~50KB, you must decompose the work — use \`js_eval\` with \`swarm()\` to split the data and dispatch parallel tasks. Do not attempt to process large files inline. See "Parallel fan-out" below.`
+    : `**Large file processing**: Before doing anything else, check the size of your input files. If any input file exceeds ~50KB, you must decompose the work — use \`js_eval\` to explore the data, split it into chunks, and dispatch parallel tasks. Do not attempt to process large files inline.`;
+
+  return dedent`
   ## TypeScript/JavaScript REPL (\`js_eval\`)
 
   You have access to a sandboxed TypeScript/JavaScript REPL running in an isolated interpreter.
   TypeScript syntax (type annotations, interfaces, generics, \`as\` casts) is supported and stripped at evaluation time.
   Variables, functions, and closures persist across calls within the same session.
+
+  ${largeFileDirective}
 
   ### Hard rules
 
@@ -114,35 +121,143 @@ const REPL_SYSTEM_PROMPT = dedent`
   - Output is truncated beyond a fixed character limit — be selective about what you log.
   - Execution timeout per call (default 30 s).
 `;
+}
 
-const SWARM_REPL_PROMPT = dedent`
-  ### API Reference — \`swarm()\` global
+const SWARM_FANOUT_PROMPT = dedent`
+  ## Parallel fan-out (\`swarm()\` in js_eval)
 
-  Fan out tasks to subagents and collect all results. Returns a JSON string — use \`JSON.parse()\` on the result.
+  Use \`js_eval\` with \`swarm()\` to fan out many independent tasks across multiple subagents and aggregate their results.
+
+  ### When to use swarm
+
+  **Trigger condition**: Before doing anything else, check the size of your input files. If any input file exceeds ~50KB, **you must use swarm** — do not attempt to process it inline. Reading a large file directly and summarizing it yourself is always wrong when swarm is available. Default to swarm; only skip it when the input is demonstrably small.
+
+  Also use swarm when:
+  - A task requires applying intelligence to each item in a large collection
+  - Work can be decomposed into many independent, parallel subtasks
+
+  ### How to use swarm
+
+  Before calling swarm, understand what you're working with. Explore the data to learn its structure, format, and content using whatever tools are available. The goal is to write task descriptions detailed enough that each subagent can execute without needing to figure anything out on its own.
+
+  Once you understand the data, use \`js_eval\` to read the input, split it into chunks, call \`swarm()\` to dispatch tasks in parallel, then read \`results.jsonl\` to aggregate:
 
   \`\`\`typescript
-  // Virtual-table form — one task per file resolved from the VFS
-  const summary = JSON.parse(await swarm({
-    glob: "feedback/*.txt",         // glob pattern(s), or filePaths: ["/a.txt", "/b.txt"]
-    instruction: "Classify as bug, feature, or praise. Return JSON: {category, confidence}.",
-    subagentType: "default",        // optional
-    concurrency: 5,                 // optional, default ${DEFAULT_CONCURRENCY}
-  }));
+  const raw = await readFile("/data.txt");
+  const lines = raw.split("\\n").filter(Boolean);
+  const chunkSize = 50;
 
-  // Pre-built tasks form — explicit task list
-  const summary = JSON.parse(await swarm({
-    tasks: [
-      { id: "q1", description: "Summarize /reports/q1.txt in one sentence." },
-      { id: "q2", description: "Summarize /reports/q2.txt in one sentence." },
-    ],
-  }));
+  const tasks = [];
+  for (let i = 0; i < lines.length; i += chunkSize) {
+    const chunk = lines.slice(i, i + chunkSize).join("\\n");
+    tasks.push({
+      id: \`chunk_\${i}\`,
+      description: \`Process each line.\\n\\nData:\\n\${chunk}\\n\\nRespond with ONLY a raw JSON object — no markdown fences, no explanation, no other text.\\nOutput schema: { "label": count }\`
+    });
+  }
 
-  // summary shape: { total, completed, failed, resultsDir, failedTasks }
-  // Read individual results from resultsDir/results.jsonl
+  const summary = JSON.parse(await swarm({ tasks }));
+  console.log("Completed:", summary.completed, "Failed:", summary.failed);
+
+  // Read per-task results from resultsDir
+  const resultsRaw = await readFile(summary.resultsDir + "/results.jsonl");
+  const results = resultsRaw.trim().split("\\n").map(line => JSON.parse(line));
+
+  // Robust parsing helper — strips markdown fences if present
+  function parseResult(raw) {
+    const cleaned = raw.replace(/^\\\`\\\`\\\`(?:json)?\\n?/m, "").replace(/\\n?\\\`\\\`\\\`$/m, "").trim();
+    return JSON.parse(cleaned);
+  }
+
+  // Aggregate results in-script (skip failures, don't retry)
+  const merged = {};
+  for (const r of results) {
+    if (r.status === "completed") {
+      try {
+        Object.assign(merged, parseResult(r.result));
+      } catch (e) { /* skip unparseable results */ }
+    }
+  }
+  console.log(JSON.stringify(merged));
   \`\`\`
 
-  Use \`swarm()\` for large batches; it handles concurrency limits, timeouts, and result persistence.
-  Read \`<resultsDir>/results.jsonl\` after the call to access per-task outputs.
+  **Prefer many small tasks over few large ones** — all tasks run in parallel, so 50 small tasks finish in roughly the same wall-clock time as 5 large ones. When splitting a file, aim for **30–60 lines** per chunk.
+
+  ### API Reference — \`swarm()\`
+
+  \`\`\`typescript
+  /**
+   * Dispatch tasks to subagents in parallel. Returns a JSON string — use JSON.parse() on the result.
+   */
+  async function swarm(input: {
+    // Pre-built tasks form
+    tasks?: Array<{
+      id: string;           // unique task identifier
+      description: string;  // complete, self-contained prompt for the subagent
+      subagentType?: string; // which subagent to use (default: "general-purpose")
+    }>;
+    // Virtual-table form (alternative to tasks)
+    glob?: string | string[];       // glob pattern(s) to match files
+    filePaths?: string[];           // explicit file paths
+    instruction?: string;           // shared instruction for each file
+    subagentType?: string;          // subagent type for all tasks
+    concurrency?: number;           // max concurrent subagents (default: ${DEFAULT_CONCURRENCY})
+  }): Promise<string>  // JSON string of SwarmExecutionSummary
+
+  // Parsed summary shape:
+  // {
+  //   total: number;
+  //   completed: number;
+  //   failed: number;
+  //   resultsDir: string;       // VFS path — read resultsDir + "/results.jsonl" for per-task outputs
+  //   failedTasks: Array<{ id: string; error: string }>;
+  // }
+  //
+  // Each line in results.jsonl:
+  // { id: string; subagentType: string; status: "completed" | "failed"; result?: string; error?: string }
+  \`\`\`
+
+  ### Task description quality
+
+  Each subagent receives **only its task description** — no other context. The quality of your descriptions determines the quality of results. Invest time upfront to get them right.
+
+  Good task descriptions are **prescriptive**: they tell the subagent the data format, the processing logic, the exact range of data to work on, and the expected output format. The subagent should not need to explore or interpret — just execute.
+
+  When subagent results need to be aggregated, **every task description must end with**:
+
+  \`\`\`
+  Respond with ONLY a raw JSON object — no markdown fences, no explanation, no other text.
+  Output schema: { ... }
+  \`\`\`
+
+  This prevents subagents from wrapping results in \\\`\\\`\\\`json\\\`\\\`\\\` fences or adding commentary, which breaks mechanical aggregation.
+
+  ### Aggregation
+
+  There are two ways to aggregate results:
+
+  1. **In-script aggregation**: Read \`resultsDir + "/results.jsonl"\` in the same \`js_eval\` call, parse each line, and combine them programmatically. Best for mechanical aggregation (counting, merging, deduplication).
+
+  2. **LLM-based aggregation**: After \`js_eval\` completes, use \`read_file\` to read \`<resultsDir>/results.jsonl\` and synthesize the outputs using your own judgment. Best for summarization or qualitative analysis.
+
+  ### Error handling
+
+  If some tasks fail, use discretion:
+  - **Many failures** (e.g., 30/50): call \`swarm()\` again targeting just the failures.
+  - **Few failures** (e.g., 3/50): handle them individually outside the REPL — swarm is overkill for a handful of tasks.
+
+  **Completed results are authoritative.** Never verify, cross-check, re-classify, or re-dispatch completed tasks. Do not compare result counts against expected counts. Aggregate what you have and move on.
+
+  ### Decomposition patterns
+
+  **Flat fan-out**: Split a dataset into equal chunks. All tasks are identical in structure.
+  Good for: large files, classification, extraction.
+
+  **One-per-item**: One task per discrete unit (file, document, URL).
+  Good for: summarizing collections, processing independent documents.
+
+  **Dimensional**: Multiple tasks examine the same input from different angles.
+  Good for: code review, multi-criteria evaluation.
 `;
 
 /**
@@ -305,8 +420,9 @@ export function createQuickJSMiddleware(
         cachedPtcPrompt = await generatePtcPrompt(ptcTools);
       }
 
-      const replPrompt = customSystemPrompt || REPL_SYSTEM_PROMPT;
-      const swarmPrompt = subagentGraphs ? SWARM_REPL_PROMPT : "";
+      const hasSwarm = !!subagentGraphs;
+      const replPrompt = customSystemPrompt || buildReplSystemPrompt(hasSwarm);
+      const swarmPrompt = hasSwarm ? SWARM_FANOUT_PROMPT : "";
       const systemMessage = request.systemMessage
         .concat(replPrompt)
         .concat(swarmPrompt)
