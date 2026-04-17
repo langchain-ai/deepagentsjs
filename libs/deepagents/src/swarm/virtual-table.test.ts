@@ -156,10 +156,7 @@ describe("resolveVirtualTableTasks", () => {
 
     it("strips leading slash from glob pattern", async () => {
       const backend = createMockBackend({
-        "batch_*.txt": [
-          { path: "batch_1.txt" },
-          { path: "batch_2.txt" },
-        ],
+        "batch_*.txt": [{ path: "batch_1.txt" }, { path: "batch_2.txt" }],
       });
 
       const result = await resolveVirtualTableTasks(

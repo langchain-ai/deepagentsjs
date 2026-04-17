@@ -89,6 +89,7 @@ export class ReplSession {
   private _options: ReplSessionOptions;
 
   private _backend: BackendProtocolV2 | null = null;
+  private _evalAbortController: AbortController | null = null;
 
   constructor(id: string, options: ReplSessionOptions = {}) {
     this.id = id;
@@ -195,6 +196,7 @@ export class ReplSession {
     const context = this.context!;
 
     this.logs.length = 0;
+    this._evalAbortController = new AbortController();
 
     if (timeoutMs >= 0) {
       runtime.setInterruptHandler(
@@ -254,6 +256,7 @@ export class ReplSession {
       await new Promise((r) => setTimeout(r, 1));
     }
 
+    this._evalAbortController?.abort();
     result.value.dispose();
     return {
       ok: false,
@@ -470,6 +473,7 @@ export class ReplSession {
     const context = this.context!;
     const getBackend = () => this._backend;
     const getOptions = () => this._options;
+    const getAbortSignal = () => this._evalAbortController?.signal;
 
     const swarmHandle = context.newFunction(
       "swarm",
@@ -516,6 +520,7 @@ export class ReplSession {
                   ? input.concurrency
                   : undefined,
               currentState: currentState as Record<string, unknown>,
+              signal: getAbortSignal(),
             });
 
             const val = context.newString(JSON.stringify(summary));

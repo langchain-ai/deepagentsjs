@@ -48,6 +48,12 @@ export interface SwarmExecutionOptions {
    * Current agent state to filter and pass to subagents.
    */
   currentState: Record<string, unknown>;
+
+  /**
+   * Abort signal. When aborted, pending task dispatches are skipped
+   * and in-flight subagent invocations are cancelled.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -145,7 +151,7 @@ async function dispatchTask(
   task: SwarmTaskSpec,
   subagent: ReactAgent<any> | Runnable,
   filteredState: Record<string, unknown>,
-  config?: Record<string, unknown>,
+  config?: { signal?: AbortSignal },
 ): Promise<SwarmTaskResult> {
   const subagentType = task.subagentType ?? "general-purpose";
   const subagentState = {
@@ -155,9 +161,9 @@ async function dispatchTask(
 
   try {
     const result = await withTimeout(
-      subagent.invoke(subagentState, config) as Promise<
-        Record<string, unknown>
-      >,
+      subagent.invoke(subagentState, {
+        signal: config?.signal,
+      }) as Promise<Record<string, unknown>>,
       TASK_TIMEOUT_MS,
     );
 
@@ -227,6 +233,7 @@ export async function executeSwarm(
     concurrency = DEFAULT_CONCURRENCY,
     synthesizedTasksJsonl,
     currentState,
+    signal,
   } = options;
 
   // Generate run directory
@@ -257,8 +264,18 @@ export async function executeSwarm(
     tasks,
     effectiveConcurrency,
     (task) => {
+      if (signal?.aborted) {
+        return Promise.resolve({
+          id: task.id,
+          subagentType: task.subagentType ?? "general-purpose",
+          status: "failed" as const,
+          error: "Aborted",
+        });
+      }
       const subagentType = task.subagentType ?? "general-purpose";
-      return dispatchTask(task, subagentGraphs[subagentType], filteredState);
+      return dispatchTask(task, subagentGraphs[subagentType], filteredState, {
+        signal,
+      });
     },
   );
 
