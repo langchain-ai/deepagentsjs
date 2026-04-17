@@ -29,7 +29,86 @@ import { getCurrentTaskInput } from "@langchain/langgraph";
  * Appended to the orchestrator's system message when swarm middleware
  * is enabled.
  */
-export const SWARM_SYSTEM_PROMPT = context``;
+export const SWARM_SYSTEM_PROMPT = context`
+  ## \`swarm\` (parallel subagent execution)
+
+  Use \`swarm\` to fan out many independent tasks across multiple subagents and aggregate their results.
+
+  ### When to use swarm
+
+  **Trigger condition**: Use swarm when the input contains too much data to process in a single pass. Indicators: the file or dataset exceeds a few hundred kilobytes, or it contains hundreds of items that each need individual analysis. When in doubt, check the size and prefer swarm over attempting to process a large input inline.
+
+  Also use \`swarm\` when:
+  - A task requires applying intelligence to each item in a large collection
+  - Work can be decomposed into many independent, parallel subtasks
+
+  Use \`task\` instead when:
+  - You have a small number of independent subtasks
+  - Each subtask depends on the result of a previous one
+  - The work is exploratory or adaptive
+
+  ### Two ways to invoke swarm
+
+  Swarm accepts either of two input forms. Pick the one that matches the shape of your work.
+
+  **Virtual-table form** (\`filePaths\`/\`glob\` + \`instruction\`): swarm generates one task per file automatically. Use this when you have a set of files and the same instruction applies to each. No generation script needed — works on all backends.
+
+  Example: \`swarm({ glob: "feedback/*.txt", instruction: "Classify as bug|feature|praise. Return JSON: {category, confidence}." })\`
+
+  **Script form** (\`tasksPath\`): you provide a pre-generated \`tasks.jsonl\` file with one task per line. Use this when:
+  - Splitting a single large file into chunks (virtual-table form can't do this — one task covers one file, not a range within a file)
+  - Task descriptions vary in ways a shared instruction can't capture
+  - Dimensional fan-out (same input, multiple different analyses)
+
+  Script form requires \`execute\` (to write tasks.jsonl via a generation script).
+
+  ### How to use swarm
+
+  Before calling swarm, understand what you're working with. Explore the data to learn its structure, format, and content using whatever tools are available. The goal is to write task descriptions detailed enough that each subagent can execute without needing to figure anything out on its own.
+
+  Once you understand the data:
+
+  **Virtual-table form:**
+  1. Call \`swarm({ filePaths: [...], instruction: "..." })\` or \`swarm({ glob: "...", instruction: "..." })\`.
+  2. Read \`<resultsDir>/results.jsonl\` and combine the subagent outputs into a final answer.
+
+  **Script form:**
+  1. **Generate tasks.** Write a generation script via \`execute\` that produces a \`tasks.jsonl\` file — one JSON object per line, each with \`id\`, \`description\`, and optional \`subagentType\`. Each task should be a self-contained unit of work. **Prefer many small tasks over few large ones** — all tasks run in parallel, so 50 small tasks finish in roughly the same wall-clock time as 5 large ones. When splitting a file, aim for **30–60 lines** per chunk.
+  2. **Call swarm.** Pass the path to your \`tasks.jsonl\` file.
+  3. **Aggregate results.** Write an aggregation script via \`execute\` that reads \`<resultsDir>/results.jsonl\` and combines the subagent outputs into a final answer.
+
+  ### Task description quality
+
+  Each subagent receives **only its task description** — no other context. The quality of your descriptions determines the quality of swarm results. Invest time upfront to get them right.
+
+  Good task descriptions are **prescriptive**: they tell the subagent the data format, the processing logic, the exact range of data to work on, and the expected output format. The subagent should not need to explore or interpret — just execute.
+
+  For the virtual-table form, each subagent receives the file contents plus the shared \`instruction\`. The instruction plays the role of the task description — make it equally prescriptive (data format, processing rules, output schema).
+
+  When subagent results need to be aggregated (counting, classification, extraction), instruct each subagent to respond with **structured JSON only** — no explanations, no tables, just the JSON object. Include the exact output schema in the task description.
+
+  ### Error handling
+
+  Each task runs exactly once — there are no automatic retries. If some tasks fail, the swarm summary includes a \`failedTasks\` array with each failed task's ID and error message. Use this to decide:
+  - **Retry via swarm**: generate a new tasks.jsonl (or new file set) targeting just the failures and call swarm again.
+  - **Retry individually**: use \`task\` for a small number of failures.
+  - **Proceed with partial results**: aggregate what completed and skip the rest.
+
+  ### Important: one swarm call per question
+
+  **Never re-run swarm to verify or cross-check results.** Swarm is expensive — treat the first run's per-task outputs as authoritative. If you need to validate, do it in the aggregation step (e.g., check that each chunk returned the expected number of items). Do not call swarm again for the same question.
+
+  ### Decomposition patterns
+
+  **Flat fan-out**: Split a dataset into equal chunks. All tasks are identical in structure.
+  Good for: large files, classification, extraction. Use script form for chunks within one file, virtual-table form for one file per chunk.
+
+  **One-per-item**: One task per discrete unit (file, document, URL).
+  Good for: summarizing collections, processing independent documents. Virtual-table form is the natural fit.
+
+  **Dimensional**: Multiple tasks examine the same input from different angles.
+  Good for: code review, multi-criteria evaluation. Use script form (each task has a distinct description).
+`;
 
 /**
  * Options for creating the swarm tool.
@@ -257,19 +336,44 @@ export function createSwarmTool(options: CreateSwarmToolOptions) {
 
 ## Two input forms
 
-### Script form (tasksPath)
-1. Write a generation script via \`execute\` that produces a tasks.jsonl file.
-2. Call \`swarm({ tasksPath: "path/to/tasks.jsonl" })\`.
-3. Write an aggregation script that reads \`<resultsDir>/results.jsonl\`.
-
 ### Virtual-table form (filePaths/glob + instruction)
-1. Call \`swarm({ glob: "feedback/*.txt", instruction: "Classify as bug|feature|praise." })\`.
-2. Read \`<resultsDir>/results.jsonl\` and reason over the results.
+Pass a set of files and a shared instruction. Swarm synthesizes one task per file automatically — no generation script needed.
 
-## tasks.jsonl fields
+Examples:
+- \`swarm({ glob: "feedback/*.txt", instruction: "Classify as bug|feature|praise. Return JSON: {category, confidence}." })\`
+- \`swarm({ filePaths: ["a.txt", "b.txt"], instruction: "Summarize in 50 words. Return JSON: {summary}." })\`
+
+Works on all backends. Use this when the same instruction applies cleanly to every file.
+
+### Script form (tasksPath)
+Write a tasks.jsonl file with one task per line, then pass its path.
+
+1. Write a generation script via \`execute\` that produces a tasks.jsonl file with one JSON object per line:
+   \`\`\`json
+   {"id": "chunk_0", "description": "Read lines 1-100 of data.txt. Process each item. Return JSON results.", "subagentType": "general-purpose"}
+   {"id": "chunk_1", "description": "Read lines 101-200 of data.txt. Process each item. Return JSON results.", "subagentType": "general-purpose"}
+   \`\`\`
+2. Call \`swarm({ tasksPath: "path/to/tasks.jsonl" })\`.
+3. Write an aggregation script via \`execute\` that reads \`<resultsDir>/results.jsonl\` and combines the outputs.
+
+Requires \`execute\`. Use this for chunking a single file, varying descriptions, or dimensional fan-out.
+
+## tasks.jsonl fields (script form)
+
 - "id" (string, required): unique task identifier
-- "description" (string, required): complete, self-contained prompt
+- "description" (string, required): complete, self-contained prompt — the subagent receives NOTHING else
 - "subagentType" (string, optional): which subagent to use (default: "general-purpose")
+
+## After execution
+
+The tool returns a JSON summary:
+\`\`\`json
+{"total": 20, "completed": 19, "failed": 1, "resultsDir": "swarm_runs/<uuid>", "failedTasks": [{"id": "chunk_5", "error": "timed out after 300s"}]}
+\`\`\`
+
+Results are written to \`<resultsDir>/results.jsonl\` — each line has \`id\`, \`subagentType\`, \`status\`, and \`result\` or \`error\`.
+
+Each task runs exactly once — there are no automatic retries. Use the \`failedTasks\` array to decide how to handle failures.
 
 Available subagent types: ${Object.keys(subagentGraphs).join(", ")}`,
       schema: z.object({
