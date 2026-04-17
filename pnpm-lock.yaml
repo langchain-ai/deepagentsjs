@@ -606,8 +606,8 @@ importers:
         specifier: ^1.1.38
         version: 1.1.38(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0)
       '@langchain/langgraph':
-        specifier: ^1.2.8
-        version: 1.2.8(@langchain/core@1.1.38(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@4.3.6)
+        specifier: ^1.2.9
+        version: 1.2.9(@langchain/core@1.1.38(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@4.3.6)
       '@langchain/langgraph-sdk':
         specifier: ^1.8.0
         version: 1.8.4(@langchain/core@1.1.38(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -1623,11 +1623,42 @@ packages:
       vue:
         optional: true
 
+  '@langchain/langgraph-sdk@1.8.9':
+    resolution: {integrity: sha512-vpz90auS4iFTNy2X/CFexOEoeFSvaK+MyI7iSmzYs9gGcfzwRjWUJ4MWsuc5ZNRecLStwho0PExVXRgGOXtcRw==}
+    peerDependencies:
+      '@langchain/core': ^1.1.16
+      react: ^18 || ^19
+      react-dom: ^18 || ^19
+      svelte: ^4.0.0 || ^5.0.0
+      vue: ^3.0.0
+    peerDependenciesMeta:
+      '@langchain/core':
+        optional: true
+      react:
+        optional: true
+      react-dom:
+        optional: true
+      svelte:
+        optional: true
+      vue:
+        optional: true
+
   '@langchain/langgraph@1.2.8':
     resolution: {integrity: sha512-kKkRpC5xFz1e6vPivE7lwRJa5oahLAMaVQvVGZdTa6uJIchIYJDIuM1n93FqGvg8aYVcgYU4FENtKKC5Eh1JYw==}
     engines: {node: '>=18'}
     peerDependencies:
       '@langchain/core': ^1.1.16
+      zod: ^3.25.32 || ^4.2.0
+      zod-to-json-schema: ^3.x
+    peerDependenciesMeta:
+      zod-to-json-schema:
+        optional: true
+
+  '@langchain/langgraph@1.2.9':
+    resolution: {integrity: sha512-3c7BtGycHC2v9p6w/Hv8L7kEl1YnZYOQTDJtmAp3knk6JOedO7d2bYP3y0SRyhv5orUEGf/KGvx8ZsB/ideP7g==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@langchain/core': ^1.1.40
       zod: ^3.25.32 || ^4.2.0
       zod-to-json-schema: ^3.x
     peerDependenciesMeta:
@@ -5331,11 +5362,36 @@ snapshots:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
 
+  '@langchain/langgraph-sdk@1.8.9(@langchain/core@1.1.38(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+    dependencies:
+      '@types/json-schema': 7.0.15
+      p-queue: 9.1.2
+      p-retry: 7.1.1
+      uuid: 13.0.0
+    optionalDependencies:
+      '@langchain/core': 1.1.38(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0)
+      react: 19.2.4
+      react-dom: 19.2.4(react@19.2.4)
+
   '@langchain/langgraph@1.2.8(@langchain/core@1.1.38(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@4.3.6)':
     dependencies:
       '@langchain/core': 1.1.38(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0)
       '@langchain/langgraph-checkpoint': 1.0.1(@langchain/core@1.1.38(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0))
       '@langchain/langgraph-sdk': 1.8.8(@langchain/core@1.1.38(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@standard-schema/spec': 1.1.0
+      uuid: 10.0.0
+      zod: 4.3.6
+    transitivePeerDependencies:
+      - react
+      - react-dom
+      - svelte
+      - vue
+
+  '@langchain/langgraph@1.2.9(@langchain/core@1.1.38(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@4.3.6)':
+    dependencies:
+      '@langchain/core': 1.1.38(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0)
+      '@langchain/langgraph-checkpoint': 1.0.1(@langchain/core@1.1.38(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0))
+      '@langchain/langgraph-sdk': 1.8.9(@langchain/core@1.1.38(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.207.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.1(@opentelemetry/api@1.9.0))(openai@6.33.0(ws@8.19.0)(zod@4.3.6))(ws@8.19.0))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@standard-schema/spec': 1.1.0
       uuid: 10.0.0
       zod: 4.3.6

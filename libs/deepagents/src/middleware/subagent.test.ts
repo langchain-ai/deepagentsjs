@@ -721,3 +721,71 @@ describe("Subagent structured response", () => {
     );
   });
 });
+
+/**
+ * Tests for ls_agent_type metadata on subagent runnables.
+ *
+ * Verifies that ls_agent_type: "subagent" is set in the configurable when a
+ * subagent runnable is invoked via the task tool. This metadata is used by
+ * LangSmith to identify subagent runs.
+ */
+describe("ls_agent_type metadata", () => {
+  it("should set ls_agent_type on the subagent runnable's invoke config", async () => {
+    const subagentInvocations: Array<Record<string, unknown> | undefined> = [];
+
+    const mockSubagent = RunnableLambda.from(
+      async (_input: unknown, config?: Record<string, unknown>) => {
+        subagentInvocations.push(
+          config?.configurable as Record<string, unknown> | undefined,
+        );
+        return {
+          messages: [new AIMessage({ content: "Subagent done" })],
+        };
+      },
+    );
+
+    const taskToolCallId = `call_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: { thread_id: `test-ls-agent-type-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    expect(subagentInvocations).toHaveLength(1);
+    expect(subagentInvocations[0]?.ls_agent_type).toBe("subagent");
+  });
+});
