@@ -41,6 +41,7 @@ export {
 export {
   createFilesystemMiddleware,
   createSubAgentMiddleware,
+  getSubagents,
   createPatchToolCallsMiddleware,
   createSummarizationMiddleware,
   computeSummarizationDefaults,
@@ -60,6 +61,12 @@ export {
   DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
   DEFAULT_SUBAGENT_PROMPT,
   TASK_SYSTEM_PROMPT,
+  // Swarm middleware
+  createSwarmMiddleware,
+  createSwarmTool,
+  type SwarmMiddlewareOptions,
+  type CreateSwarmToolOptions,
+  SWARM_SYSTEM_PROMPT,
   // Completion callback middleware for async subagents
   createCompletionCallbackMiddleware,
   type CompletionCallbackOptions,
@@ -74,6 +81,28 @@ export {
   type AsyncTask,
   type AsyncTaskStatus,
 } from "./middleware/index.js";
+
+// Export swarm module
+export type {
+  SwarmTaskSpec,
+  SwarmTaskResult,
+  SwarmExecutionSummary,
+  FailedTaskInfo,
+  SwarmExecutionOptions,
+  VirtualTableInput,
+  VirtualTableResult,
+} from "./swarm/index.js";
+
+export {
+  DEFAULT_CONCURRENCY,
+  MAX_CONCURRENCY,
+  TASK_TIMEOUT_MS,
+  parseTasksJsonl,
+  serializeTasksJsonl,
+  serializeResultsJsonl,
+  executeSwarm,
+  resolveVirtualTableTasks,
+} from "./swarm/index.js";
 
 // Export shared state values (similar to LangGraph's messagesValue pattern)
 export { filesValue } from "./values.js";

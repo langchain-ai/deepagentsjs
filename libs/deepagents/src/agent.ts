@@ -20,6 +20,7 @@ import {
   createSummarizationMiddleware,
   createMemoryMiddleware,
   createSkillsMiddleware,
+  createSwarmMiddleware,
   FILESYSTEM_TOOL_NAMES,
   ASYNC_TASK_TOOL_NAMES,
   type SubAgent,
@@ -33,6 +34,7 @@ import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
 import {
   GENERAL_PURPOSE_SUBAGENT,
   type CompiledSubAgent,
+  getSubagents,
 } from "./middleware/subagents.js";
 import type { AsyncSubAgent } from "./middleware/async_subagents.js";
 import type {
@@ -92,6 +94,7 @@ const BUILTIN_TOOL_NAMES: ReadonlySet<string> = new Set([
   ...FILESYSTEM_TOOL_NAMES,
   ...ASYNC_TASK_TOOL_NAMES,
   "task",
+  "swarm",
   "write_todos",
 ]);
 
@@ -275,6 +278,17 @@ export function createDeepAgent<
       ? [createSkillsMiddleware({ backend, sources: skills })]
       : [];
 
+  // Build subagent graphs once so both task and swarm middleware share them.
+  const subagentResult = getSubagents({
+    defaultModel: model,
+    defaultTools: tools as StructuredTool[],
+    defaultMiddleware: null,
+    generalPurposeMiddleware: null,
+    defaultInterruptOn: interruptOn ?? null,
+    subagents: inlineSubagents,
+    generalPurposeAgent: false,
+  });
+
   // Built-in middleware array - core middleware with known types.
   // This tuple is typed without conditional spreads to preserve tuple inference.
   // Optional middleware (skills, memory, HITL, async) are appended at runtime.
@@ -290,6 +304,12 @@ export function createDeepAgent<
       defaultInterruptOn: interruptOn,
       subagents: inlineSubagents,
       generalPurposeAgent: false,
+      preBuiltGraphs: subagentResult,
+    }),
+    // Enables parallel subagent execution for batch tasks.
+    createSwarmMiddleware({
+      subagentGraphs: subagentResult.agents,
+      backend,
     }),
     // Automatically summarizes conversation history when token limits are approached.
     // Uses createSummarizationMiddleware (deepagents version) with backend support
@@ -303,6 +323,7 @@ export function createDeepAgent<
     todoMiddleware,
     fsMiddleware,
     subagentMiddleware,
+    swarmMiddleware,
     summarizationMiddleware,
     patchToolCallsMiddleware,
   ] = builtInMiddleware;
@@ -316,6 +337,7 @@ export function createDeepAgent<
     ...skillsMiddleware,
     fsMiddleware,
     subagentMiddleware,
+    swarmMiddleware,
     summarizationMiddleware,
     patchToolCallsMiddleware,
     // Optional async subagent bridge.

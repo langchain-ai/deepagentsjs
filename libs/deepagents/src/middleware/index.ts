@@ -9,6 +9,7 @@ export {
 } from "./fs.js";
 export {
   createSubAgentMiddleware,
+  getSubagents,
   type SubAgentMiddlewareOptions,
   type SubAgent,
   type CompiledSubAgent,
@@ -18,6 +19,15 @@ export {
   DEFAULT_SUBAGENT_PROMPT,
   TASK_SYSTEM_PROMPT,
 } from "./subagents.js";
+
+// Swarm middleware
+export {
+  createSwarmMiddleware,
+  createSwarmTool,
+  type SwarmMiddlewareOptions,
+  type CreateSwarmToolOptions,
+  SWARM_SYSTEM_PROMPT,
+} from "./swarm.js";
 export {
   createPatchToolCallsMiddleware,
   patchDanglingToolCalls,
