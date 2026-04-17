@@ -29,7 +29,12 @@ import type {
   QuickJSAsyncRuntime,
 } from "quickjs-emscripten-core";
 import type { AnyBackendProtocol, BackendProtocolV2 } from "deepagents";
-import { adaptBackendProtocol } from "deepagents";
+import {
+  adaptBackendProtocol,
+  executeSwarm,
+  resolveVirtualTableTasks,
+  type SwarmTaskSpec,
+} from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
 import type { ReplSessionOptions, ReplResult } from "./types.js";
@@ -106,6 +111,7 @@ export class ReplSession {
       maxStackSizeBytes = DEFAULT_MAX_STACK_SIZE,
       backend,
       tools,
+      subagentGraphs,
     } = this._options;
 
     const asyncModule = await getAsyncModule();
@@ -123,6 +129,9 @@ export class ReplSession {
       this._backend = adaptBackendProtocol(backend);
     }
     this.injectVfs();
+    if (subagentGraphs && Object.keys(subagentGraphs).length > 0) {
+      this.injectSwarm();
+    }
     if (tools && tools.length > 0) {
       this.injectTools(tools);
     }
@@ -143,6 +152,12 @@ export class ReplSession {
     if (existing) {
       if (options.backend) {
         existing._backend = adaptBackendProtocol(options.backend);
+      }
+      if (options.subagentGraphs !== undefined) {
+        existing._options.subagentGraphs = options.subagentGraphs;
+      }
+      if (options.currentState !== undefined) {
+        existing._options.currentState = options.currentState;
       }
       return existing;
     }
@@ -389,6 +404,68 @@ export class ReplSession {
     );
     context.setProp(context.global, "writeFile", writeFileHandle);
     writeFileHandle.dispose();
+  }
+
+  private injectSwarm(): void {
+    const context = this.context!;
+    const getBackend = () => this._backend;
+    const getOptions = () => this._options;
+
+    const swarmHandle = context.newFunction(
+      "swarm",
+      (inputHandle: QuickJSHandle) => {
+        const input = context.dump(inputHandle) as Record<string, unknown>;
+        const promise = context.newPromise();
+        (async () => {
+          try {
+            const backend = getBackend();
+            if (!backend) throw new Error("Backend not available");
+            const { subagentGraphs = {}, currentState = {} } = getOptions();
+
+            let tasks: SwarmTaskSpec[];
+            if (input.tasks) {
+              tasks = input.tasks as SwarmTaskSpec[];
+            } else {
+              const resolved = await resolveVirtualTableTasks(
+                {
+                  filePaths: input.filePaths as string[] | undefined,
+                  glob: input.glob as string | string[] | undefined,
+                  instruction: input.instruction as string,
+                  subagentType: input.subagentType as string | undefined,
+                },
+                backend,
+              );
+              if ("error" in resolved) throw new Error(resolved.error);
+              tasks = resolved.tasks;
+            }
+
+            const summary = await executeSwarm({
+              tasks,
+              subagentGraphs,
+              backend,
+              concurrency:
+                typeof input.concurrency === "number"
+                  ? input.concurrency
+                  : undefined,
+              currentState: currentState as Record<string, unknown>,
+            });
+
+            const val = context.newString(JSON.stringify(summary));
+            promise.resolve(val);
+            val.dispose();
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            const err = context.newError(msg);
+            promise.reject(err);
+            err.dispose();
+          }
+          promise.settled.then(context.runtime.executePendingJobs);
+        })();
+        return promise.handle;
+      },
+    );
+    context.setProp(context.global, "swarm", swarmHandle);
+    swarmHandle.dispose();
   }
 
   private injectTools(tools: StructuredToolInterface[]): void {

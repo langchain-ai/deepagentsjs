@@ -150,3 +150,25 @@ export {
   adaptBackendProtocol,
   adaptSandboxProtocol,
 } from "./backends/index.js";
+
+// Export swarm module
+export type {
+  SwarmTaskSpec,
+  SwarmTaskResult,
+  SwarmExecutionSummary,
+  FailedTaskInfo,
+  SwarmExecutionOptions,
+  VirtualTableInput,
+  VirtualTableResult,
+} from "./swarm/index.js";
+
+export {
+  DEFAULT_CONCURRENCY,
+  MAX_CONCURRENCY,
+  TASK_TIMEOUT_MS,
+  parseTasksJsonl,
+  serializeTasksJsonl,
+  serializeResultsJsonl,
+  executeSwarm,
+  resolveVirtualTableTasks,
+} from "./swarm/index.js";

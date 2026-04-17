@@ -16,6 +16,7 @@ import {
 import { z } from "zod/v4";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { StateBackend, type BackendRuntime, resolveBackend } from "deepagents";
+import { DEFAULT_CONCURRENCY } from "deepagents";
 
 import dedent from "dedent";
 import type { QuickJSMiddlewareOptions } from "./types.js";
@@ -156,8 +157,42 @@ export async function generatePtcPrompt(
   `;
 }
 
+const SWARM_REPL_PROMPT = dedent`
+
+  ### API Reference — \`swarm()\` global
+
+  Fan out tasks to subagents and collect all results. Returns a JSON string — use \`JSON.parse()\` on the result.
+
+  \`\`\`typescript
+  // Virtual-table form — one task per file resolved from the VFS
+  const summary = JSON.parse(await swarm({
+    glob: "feedback/*.txt",         // glob pattern(s), or filePaths: ["/a.txt", "/b.txt"]
+    instruction: "Classify as bug, feature, or praise. Return JSON: {category, confidence}.",
+    subagentType: "default",        // optional
+    concurrency: 5,                 // optional, default ${DEFAULT_CONCURRENCY}
+  }));
+
+  // Pre-built tasks form — explicit task list
+  const summary = JSON.parse(await swarm({
+    tasks: [
+      { id: "q1", description: "Summarize /reports/q1.txt in one sentence." },
+      { id: "q2", description: "Summarize /reports/q2.txt in one sentence." },
+    ],
+  }));
+
+  // summary shape: { total, completed, failed, resultsDir, failedTasks }
+  // Read individual results from resultsDir/results.jsonl
+  \`\`\`
+
+  Use \`swarm()\` for large batches; it handles concurrency limits, timeouts, and result persistence.
+  Read \`<resultsDir>/results.jsonl\` after the call to access per-task outputs.
+`;
+
 /**
  * Create the QuickJS REPL middleware.
+ *
+ * When `subagentGraphs` is provided, a global `swarm(input)` function is
+ * injected into the REPL, enabling parallel fan-out from within script code.
  */
 export function createQuickJSMiddleware(
   options: QuickJSMiddlewareOptions = {},
@@ -169,74 +204,79 @@ export function createQuickJSMiddleware(
     maxStackSizeBytes = DEFAULT_MAX_STACK_SIZE,
     executionTimeoutMs = DEFAULT_EXECUTION_TIMEOUT,
     systemPrompt: customSystemPrompt = null,
+    subagentGraphs,
   } = options;
 
+  const hasSwarm = subagentGraphs != null && Object.keys(subagentGraphs).length > 0;
+  const baseSystemPrompt =
+    customSystemPrompt ||
+    (hasSwarm ? REPL_SYSTEM_PROMPT + SWARM_REPL_PROMPT : REPL_SYSTEM_PROMPT);
+
   const usePtc = ptc !== false;
-  const baseSystemPrompt = customSystemPrompt || REPL_SYSTEM_PROMPT;
-
   let cachedPtcPrompt: string | null = null;
-
   let ptcTools: StructuredToolInterface[] = [];
 
   function filterToolsForPtc(
     allTools: StructuredToolInterface[],
   ): StructuredToolInterface[] {
     if (ptc === false) return [];
-
     const candidates = allTools.filter((t) => t.name !== "js_eval");
-
     if (ptc === true) {
       const excluded = new Set<string>(DEFAULT_PTC_EXCLUDED_TOOLS);
       return candidates.filter((t) => !excluded.has(t.name));
     }
-
     if (Array.isArray(ptc)) {
       const included = new Set(ptc);
       return candidates.filter((t) => included.has(t.name));
     }
-
     if ("include" in ptc) {
       const included = new Set(ptc.include);
       return candidates.filter((t) => included.has(t.name));
     }
-
     if ("exclude" in ptc) {
       const excluded = new Set([...DEFAULT_PTC_EXCLUDED_TOOLS, ...ptc.exclude]);
       return candidates.filter((t) => !excluded.has(t.name));
     }
-
     return [];
   }
 
   const jsEvalTool = tool(
     async (input, config: LangGraphRunnableConfig) => {
       const threadId = config.configurable?.thread_id || DEFAULT_SESSION_ID;
-
       const runtime: BackendRuntime = {
         ...config,
         state: getCurrentTaskInput(config) || {},
       } as BackendRuntime;
       const resolvedBackend = await resolveBackend(backend, runtime);
-
+      const currentState = hasSwarm
+        ? ((getCurrentTaskInput(config) || {}) as Record<string, unknown>)
+        : undefined;
       const session = ReplSession.getOrCreate(threadId, {
         memoryLimitBytes,
         maxStackSizeBytes,
         backend: resolvedBackend,
         tools: ptcTools,
+        subagentGraphs,
+        currentState,
       });
-
       const result = await session.eval(input.code, executionTimeoutMs);
       await session.flushWrites(resolvedBackend);
-
       return formatReplResult(result);
     },
     {
       name: "js_eval",
-      description: dedent`
-        Evaluate TypeScript/JavaScript code in a sandboxed REPL. State persists across calls.
-        Use readFile(path) and writeFile(path, content) for file access.
-        Use console.log() for output. Returns the result of the last expression.
-      `,
+      description: hasSwarm
+        ? dedent`
+            Evaluate TypeScript/JavaScript code in a sandboxed REPL. State persists across calls.
+            Use readFile(path) and writeFile(path, content) for file access.
+            Use swarm(input) to fan out tasks to subagents in parallel.
+            Use console.log() for output. Returns the result of the last expression.
+          `
+        : dedent`
+            Evaluate TypeScript/JavaScript code in a sandboxed REPL. State persists across calls.
+            Use readFile(path) and writeFile(path, content) for file access.
+            Use console.log() for output. Returns the result of the last expression.
+          `,
       schema: z.object({
         code: z
           .string()
@@ -253,11 +293,9 @@ export function createQuickJSMiddleware(
     wrapModelCall: async (request, handler) => {
       const agentTools = (request.tools || []) as StructuredToolInterface[];
       ptcTools = usePtc ? filterToolsForPtc(agentTools) : [];
-
       if (ptcTools.length > 0 && !cachedPtcPrompt) {
         cachedPtcPrompt = await generatePtcPrompt(ptcTools);
       }
-
       const systemMessage = request.systemMessage
         .concat(baseSystemPrompt)
         .concat(cachedPtcPrompt || "");
