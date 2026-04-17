@@ -37,9 +37,8 @@ export function patchDanglingToolCalls(messages: BaseMessage[]): {
     return { patchedMessages: [], needsPatch: false };
   }
 
-  // Pass 1: collect all tool_call_ids from AIMessages so we can detect
-  // orphaned ToolMessages (those whose tool_call_id has no matching call).
   const allToolCallIds = new Set<string>();
+  const answeredIds = new Set<string>();
   for (const msg of messages) {
     if (AIMessage.isInstance(msg) && msg.tool_calls != null) {
       for (const tc of msg.tool_calls) {
@@ -47,47 +46,56 @@ export function patchDanglingToolCalls(messages: BaseMessage[]): {
           allToolCallIds.add(tc.id);
         }
       }
+    } else if (ToolMessage.isInstance(msg)) {
+      answeredIds.add(msg.tool_call_id);
     }
   }
 
-  // Pass 2: build patched message list.
-  //  - Skip orphaned ToolMessages
-  //  - Inject synthetic ToolMessages for dangling tool_calls
+  let needsAnyPatch = false;
+  for (const id of answeredIds) {
+    if (!allToolCallIds.has(id)) {
+      needsAnyPatch = true;
+      break;
+    }
+  }
+  if (!needsAnyPatch) {
+    outer: for (const msg of messages) {
+      if (AIMessage.isInstance(msg) && msg.tool_calls != null) {
+        for (const tc of msg.tool_calls) {
+          if (tc.id && !answeredIds.has(tc.id)) {
+            needsAnyPatch = true;
+            break outer;
+          }
+        }
+      }
+    }
+  }
+
+  if (!needsAnyPatch) {
+    return { patchedMessages: messages, needsPatch: false };
+  }
+
   const patchedMessages: BaseMessage[] = [];
   let needsPatch = false;
 
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i];
-
-    // Remove orphaned ToolMessages (no preceding AIMessage has a matching tool_call)
-    if (ToolMessage.isInstance(msg)) {
-      if (!allToolCallIds.has(msg.tool_call_id)) {
-        needsPatch = true;
-        continue; // drop the orphaned ToolMessage
-      }
+  for (const msg of messages) {
+    if (ToolMessage.isInstance(msg) && !allToolCallIds.has(msg.tool_call_id)) {
+      needsPatch = true;
+      continue;
     }
 
     patchedMessages.push(msg);
 
-    // Inject synthetic ToolMessages for dangling tool_calls
     if (AIMessage.isInstance(msg) && msg.tool_calls != null) {
       for (const toolCall of msg.tool_calls) {
-        // Look for a corresponding ToolMessage in the messages after this one
-        const correspondingToolMsg = messages
-          .slice(i + 1)
-          .find(
-            (m) => ToolMessage.isInstance(m) && m.tool_call_id === toolCall.id,
-          );
-
-        if (!correspondingToolMsg) {
-          // We have a dangling tool call which needs a ToolMessage
+        if (toolCall.id && !answeredIds.has(toolCall.id)) {
           needsPatch = true;
           const toolMsg = `Tool call ${toolCall.name} with id ${toolCall.id} was cancelled - another message came in before it could be completed.`;
           patchedMessages.push(
             new ToolMessage({
               content: toolMsg,
               name: toolCall.name,
-              tool_call_id: toolCall.id!,
+              tool_call_id: toolCall.id,
             }),
           );
         }
