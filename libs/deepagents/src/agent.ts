@@ -28,6 +28,7 @@ import {
 } from "./middleware/index.js";
 import { StateBackend } from "./backends/index.js";
 import { ConfigurationError } from "./errors.js";
+import { getSubagentGraphs, getSubagentGraphInjector } from "./symbols.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
 import {
@@ -306,6 +307,13 @@ export function createDeepAgent<
     summarizationMiddleware,
     patchToolCallsMiddleware,
   ] = builtInMiddleware;
+
+  const compiledGraphs = getSubagentGraphs(subagentMiddleware);
+  if (compiledGraphs) {
+    for (const m of customMiddleware) {
+      getSubagentGraphInjector(m)?.(compiledGraphs);
+    }
+  }
 
   // Runtime middleware array: combine built-in + optional middleware.
   // Note: The full type is handled separately via AllMiddleware.

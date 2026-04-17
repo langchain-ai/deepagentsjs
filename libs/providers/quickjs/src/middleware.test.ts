@@ -2,11 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { tool } from "langchain";
 import * as z from "zod";
 import { SystemMessage } from "@langchain/core/messages";
-import {
-  createQuickJSMiddleware,
-  generatePtcPrompt,
-  QUICKJS_SWARM_INJECTOR,
-} from "./middleware.js";
+import { getSubagentGraphInjector } from "deepagents";
+import { createQuickJSMiddleware, generatePtcPrompt } from "./middleware.js";
 import { ReplSession } from "./session.js";
 
 describe("createQuickJSMiddleware", () => {
@@ -128,11 +125,9 @@ describe("createQuickJSMiddleware", () => {
   });
 
   describe("swarm injection", () => {
-    it("should attach QUICKJS_SWARM_INJECTOR to middleware", () => {
+    it("should attach swarm injector to middleware", () => {
       const middleware = createQuickJSMiddleware();
-      expect((middleware as any)[QUICKJS_SWARM_INJECTOR]).toBeTypeOf(
-        "function",
-      );
+      expect(getSubagentGraphInjector(middleware)).toBeTypeOf("function");
     });
 
     it("should not include swarm prompt before injection", async () => {
@@ -156,8 +151,8 @@ describe("createQuickJSMiddleware", () => {
 
     it("should include swarm prompt after injection", async () => {
       const middleware = createQuickJSMiddleware();
-      const injector = (middleware as any)[QUICKJS_SWARM_INJECTOR];
-      injector({ "general-purpose": { invoke: vi.fn() } });
+      const injector = getSubagentGraphInjector(middleware)!;
+      injector({ "general-purpose": { invoke: vi.fn() } as any });
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       await middleware.wrapModelCall!(
@@ -174,14 +169,6 @@ describe("createQuickJSMiddleware", () => {
       expect(text).toContain("Fan out tasks to subagents");
       expect(text).toContain("Virtual-table form");
       expect(text).toContain("Pre-built tasks form");
-    });
-
-    it("should use global symbol registry for QUICKJS_SWARM_INJECTOR", () => {
-      const sym = Symbol.for("deepagents.quickjs.injectSwarmGraphs");
-      expect(QUICKJS_SWARM_INJECTOR).toBe(sym);
-
-      const middleware = createQuickJSMiddleware();
-      expect((middleware as any)[sym]).toBeTypeOf("function");
     });
   });
 });

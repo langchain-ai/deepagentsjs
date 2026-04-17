@@ -172,3 +172,11 @@ export {
   executeSwarm,
   resolveVirtualTableTasks,
 } from "./swarm/index.js";
+
+// Typed helpers for cross-middleware symbol-based communication
+export {
+  setSubagentGraphs,
+  getSubagentGraphs,
+  setSubagentGraphInjector,
+  getSubagentGraphInjector,
+} from "./symbols.js";

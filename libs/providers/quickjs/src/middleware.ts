@@ -20,6 +20,7 @@ import {
   type BackendRuntime,
   resolveBackend,
   DEFAULT_CONCURRENCY,
+  setSubagentGraphInjector,
 } from "deepagents";
 
 import dedent from "dedent";
@@ -192,19 +193,6 @@ export async function generatePtcPrompt(
 }
 
 /**
- * Symbol used by `createDeepAgent` to inject the compiled subagent graphs
- * into any QuickJS middleware in the agent's middleware array.
- *
- * This is the only way to provide subagent graphs — it is not a user-facing
- * option. `createDeepAgent` calls this automatically.
- *
- * @internal
- */
-export const QUICKJS_SWARM_INJECTOR = Symbol.for(
-  "deepagents.quickjs.injectSwarmGraphs",
-);
-
-/**
  * Create the QuickJS REPL middleware.
  *
  * The REPL exposes `readFile`, `writeFile`, and `swarm` as built-in globals.
@@ -328,11 +316,9 @@ export function createQuickJSMiddleware(
     },
   });
 
-  (middleware as any)[QUICKJS_SWARM_INJECTOR] = (
-    graphs: ReplSessionOptions["subagentGraphs"],
-  ) => {
+  setSubagentGraphInjector(middleware, (graphs) => {
     subagentGraphs = graphs;
-  };
+  });
 
   return middleware;
 }

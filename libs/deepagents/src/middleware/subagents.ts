@@ -21,6 +21,8 @@ import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
 
+import { setSubagentGraphs } from "../symbols.js";
+
 export type { AgentMiddleware };
 
 /**
@@ -541,37 +543,11 @@ function getSubagents(options: {
  * Create the task tool for invoking subagents
  */
 function createTaskTool(options: {
-  defaultModel: LanguageModelLike | string;
-  defaultTools: StructuredTool[];
-  defaultMiddleware: AgentMiddleware[] | null;
-  /** Middleware specifically for the general-purpose subagent (includes skills from main agent) */
-  generalPurposeMiddleware: AgentMiddleware[] | null;
-  defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
-  subagents: (SubAgent | CompiledSubAgent)[];
-  generalPurposeAgent: boolean;
+  subagentGraphs: Record<string, ReactAgent | Runnable>;
+  subagentDescriptions: string[];
   taskDescription: string | null;
 }) {
-  const {
-    defaultModel,
-    defaultTools,
-    defaultMiddleware,
-    generalPurposeMiddleware,
-    defaultInterruptOn,
-    subagents,
-    generalPurposeAgent,
-    taskDescription,
-  } = options;
-
-  const { agents: subagentGraphs, descriptions: subagentDescriptions } =
-    getSubagents({
-      defaultModel,
-      defaultTools,
-      defaultMiddleware,
-      generalPurposeMiddleware,
-      defaultInterruptOn,
-      subagents,
-      generalPurposeAgent,
-    });
+  const { subagentGraphs, subagentDescriptions, taskDescription } = options;
 
   const finalTaskDescription = taskDescription
     ? taskDescription
@@ -693,18 +669,25 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     taskDescription = null,
   } = options;
 
+  // Compile subagent graphs once — shared across task tool and external consumers.
+  const { agents: subagentGraphs, descriptions: subagentDescriptions } =
+    getSubagents({
+      defaultModel,
+      defaultTools,
+      defaultMiddleware,
+      generalPurposeMiddleware,
+      defaultInterruptOn,
+      subagents,
+      generalPurposeAgent,
+    });
+
   const taskTool = createTaskTool({
-    defaultModel,
-    defaultTools,
-    defaultMiddleware,
-    generalPurposeMiddleware,
-    defaultInterruptOn,
-    subagents,
-    generalPurposeAgent,
+    subagentGraphs,
+    subagentDescriptions,
     taskDescription,
   });
 
-  return createMiddleware({
+  const middleware = createMiddleware({
     name: "subAgentMiddleware",
     tools: [taskTool],
     wrapModelCall: async (request, handler) => {
@@ -719,4 +702,8 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
       return handler(request);
     },
   });
+
+  setSubagentGraphs(middleware, subagentGraphs);
+
+  return middleware;
 }
