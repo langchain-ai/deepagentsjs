@@ -805,6 +805,10 @@ describe("ls_agent_type tracing metadata", () => {
           runnable: mockSubagent,
         },
       ],
+    }).withConfig({
+      configurable: {
+        ls_agent_type: "root",
+      },
     });
 
     await agent.invoke(

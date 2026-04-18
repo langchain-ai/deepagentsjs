@@ -18,8 +18,10 @@ import {
 } from "langchain";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
-import type { Runnable } from "@langchain/core/runnables";
+import type { Runnable, RunnableConfig } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
+import { LangChainTracer } from "@langchain/core/tracers/tracer_langchain";
+import { CallbackManager } from "@langchain/core/callbacks/manager";
 
 export type { AgentMiddleware };
 
@@ -448,6 +450,40 @@ function returnCommandWithStateUpdate(
   });
 }
 
+function addSubagentMetadata(config: RunnableConfig) {
+  if (Array.isArray(config.callbacks)) {
+    const lsTracer = config.callbacks?.find(
+      (handler): handler is LangChainTracer => {
+        return "name" in handler && handler.name === "langchain_tracer";
+      },
+    );
+    if (lsTracer !== undefined) {
+      const newTracer = lsTracer.copyWithTracingConfig({
+        metadata: {
+          ls_agent_type: "subagent",
+        },
+      });
+      config.callbacks = config.callbacks.filter((handler) => {
+        return "name" in handler && handler.name !== "langchain_tracer";
+      });
+      config.callbacks.push(newTracer);
+    }
+  } else if (
+    config.callbacks !== undefined &&
+    config.callbacks.inheritableMetadata !== undefined
+  ) {
+    const callbackManager = config.callbacks as CallbackManager;
+    callbackManager.inheritableMetadata = {
+      ...callbackManager.inheritableMetadata,
+      ls_agent_type: "subagent",
+    };
+    callbackManager.metadata = {
+      ...callbackManager.metadata,
+      ls_agent_type: "subagent",
+    };
+  }
+}
+
 /**
  * Create subagent instances from specifications
  */
@@ -601,18 +637,12 @@ function createTaskTool(options: {
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
 
-      // Invoke the subagent with ls_agent_type metadata for LangSmith tracing
-      const subagentConfig = {
-        ...config,
-        configurable: {
-          ...config.configurable,
-          ls_agent_type: "subagent",
-        },
-      };
-      const result = (await subagent.invoke(
-        subagentState,
-        subagentConfig,
-      )) as Record<string, unknown>;
+      // Invoke the subagent
+      addSubagentMetadata(config);
+      const result = (await subagent.invoke(subagentState, config)) as Record<
+        string,
+        unknown
+      >;
 
       if (!config.toolCall?.id) {
         if (result.structuredResponse != null) {
