@@ -601,11 +601,18 @@ function createTaskTool(options: {
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
 
-      // Invoke the subagent
-      const result = (await subagent.invoke(subagentState, config)) as Record<
-        string,
-        unknown
-      >;
+      // Invoke the subagent with ls_agent_type metadata for LangSmith tracing
+      const subagentConfig = {
+        ...config,
+        configurable: {
+          ...config.configurable,
+          ls_agent_type: "subagent",
+        },
+      };
+      const result = (await subagent.invoke(
+        subagentState,
+        subagentConfig,
+      )) as Record<string, unknown>;
 
       if (!config.toolCall?.id) {
         if (result.structuredResponse != null) {
