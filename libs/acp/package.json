@@ -49,8 +49,8 @@
     "deepagents": "workspace:*"
   },
   "devDependencies": {
-    "@langchain/core": "^1.1.38",
-    "@langchain/langgraph": "^1.2.8",
+    "@langchain/core": "^1.1.40",
+    "@langchain/langgraph": "^1.2.9",
     "@langchain/langgraph-checkpoint": "^1.0.0",
     "@tsconfig/recommended": "^1.0.13",
     "@types/node": "^25.1.0",
@@ -62,8 +62,8 @@
     "vitest": "^4.0.18"
   },
   "peerDependencies": {
-    "@langchain/core": "^1.1.38",
-    "@langchain/langgraph": "^1.2.8"
+    "@langchain/core": "^1.1.40",
+    "@langchain/langgraph": "^1.2.9"
   },
   "exports": {
     ".": {
