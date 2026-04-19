@@ -9,6 +9,12 @@ import {
   ToolMessage,
 } from "@langchain/core/messages";
 import { RunnableLambda } from "@langchain/core/runnables";
+import { CallbackManager } from "@langchain/core/callbacks/manager";
+import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
+import { LangChainTracer } from "@langchain/core/tracers/tracer_langchain";
+import type { LangSmithTracingClientInterface } from "langsmith";
+import type { Serialized } from "@langchain/core/load/serializable";
+import type { ChainValues } from "@langchain/core/utils/types";
 
 import { createDeepAgent } from "../agent.js";
 import { createSkillsMiddleware } from "./skills.js";
@@ -719,5 +725,112 @@ describe("Subagent structured response", () => {
     expect(taskToolMessage.content).toBe(
       "Plain text result without structured response",
     );
+  });
+});
+
+/**
+ * Tests for ls_agent_type tracing metadata on subagent runnables.
+ *
+ * Verifies that ls_agent_type: "subagent" is sent to LangSmith (tracer metadata)
+ * for subagent runs, but is NOT leaked into the streamed callback metadata.
+ * This mirrors the behavior tested in `langchain/agents/tests/reactAgent.test.ts`.
+ */
+describe("ls_agent_type tracing metadata", () => {
+  it("should set ls_agent_type on the subagent's LangSmith run but not on streamed metadata", async () => {
+    // Capture metadata passed to regular callbacks (i.e. streamed/user-visible metadata).
+    const capturedCallbackMetadata: Array<{
+      metadata?: Record<string, unknown>;
+      tags?: string[];
+    }> = [];
+
+    class CaptureHandler extends BaseCallbackHandler {
+      name = `capture-${Date.now()}-${Math.random()}`;
+
+      async handleChainStart(
+        _chain: Serialized,
+        _inputs: ChainValues,
+        _runId: string,
+        _parentRunId?: string,
+        tags?: string[],
+        metadata?: Record<string, unknown>,
+      ) {
+        capturedCallbackMetadata.push({ tags, metadata });
+      }
+    }
+
+    // Mock the LangSmith client to capture what gets posted to the tracer.
+    const createRunMock = vi.fn().mockResolvedValue(undefined);
+    const updateRunMock = vi.fn().mockResolvedValue(undefined);
+    const mockClient = {
+      createRun: createRunMock,
+      updateRun: updateRunMock,
+    } as LangSmithTracingClientInterface;
+
+    const tracer = new LangChainTracer({ client: mockClient });
+    const capture = new CaptureHandler();
+    const callbacks = CallbackManager.configure([tracer, capture]);
+
+    const mockSubagent = RunnableLambda.from(async () => ({
+      messages: [new AIMessage({ content: "Subagent done" })],
+    })).withConfig({ runName: "subagent-runnable" });
+
+    const taskToolCallId = `call_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: { thread_id: `test-ls-agent-type-${Date.now()}` },
+        recursionLimit: 50,
+        callbacks: callbacks!,
+      },
+    );
+
+    // Allow any async callbacks/tracer calls to flush.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // ls_agent_type should NEVER appear in streamed callback metadata.
+    expect(capturedCallbackMetadata.length).toBeGreaterThan(0);
+    for (const { metadata } of capturedCallbackMetadata) {
+      expect(metadata?.ls_agent_type).toBeUndefined();
+    }
+
+    // ls_agent_type SHOULD appear on the subagent's LangSmith-posted run.
+    expect(createRunMock).toHaveBeenCalled();
+    const postedRuns = createRunMock.mock.calls.map((call) => call[0]);
+    const subagentRuns = postedRuns.filter(
+      (run) => run?.extra?.metadata?.ls_agent_type === "subagent",
+    );
+    expect(subagentRuns.length).toBeGreaterThan(0);
   });
 });
