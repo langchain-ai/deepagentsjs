@@ -302,6 +302,7 @@ export async function executeSwarm(
     completed: completedCount,
     failed: failedCount,
     resultsDir,
+    results,
     failedTasks,
   };
 }

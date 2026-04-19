@@ -107,6 +107,12 @@ export interface SwarmExecutionSummary {
   resultsDir: string;
 
   /**
+   * Per-task results including both completed and failed entries.
+   * Available for in-memory aggregation without reading results.jsonl.
+   */
+  results: SwarmTaskResult[];
+
+  /**
    * Details for every failed task. Empty array if all succeeded.
    */
   failedTasks: FailedTaskInfo[];

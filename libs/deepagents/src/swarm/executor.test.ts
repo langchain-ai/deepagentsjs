@@ -74,6 +74,20 @@ describe("executeSwarm", () => {
       expect(summary.failedTasks).toHaveLength(0);
       expect(summary.resultsDir).toMatch(/^\/swarm_runs\//);
       expect(subagent.invoke).toHaveBeenCalledTimes(2);
+
+      expect(summary.results).toHaveLength(2);
+      expect(summary.results[0]).toMatchObject({
+        id: "t1",
+        subagentType: "general-purpose",
+        status: "completed",
+        result: "result",
+      });
+      expect(summary.results[1]).toMatchObject({
+        id: "t2",
+        subagentType: "general-purpose",
+        status: "completed",
+        result: "result",
+      });
     });
 
     it("passes task description as HumanMessage to subagent", async () => {
@@ -245,6 +259,13 @@ describe("executeSwarm", () => {
       expect(summary.failedTasks).toHaveLength(1);
       expect(summary.failedTasks[0].id).toBe("t1");
       expect(summary.failedTasks[0].error).toBe("boom");
+
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0]).toMatchObject({
+        id: "t1",
+        status: "failed",
+        error: "boom",
+      });
     });
 
     it("throws on unknown subagent type", async () => {
@@ -294,6 +315,12 @@ describe("executeSwarm", () => {
       expect(summary.total).toBe(2);
       expect(summary.completed).toBe(1);
       expect(summary.failed).toBe(1);
+
+      expect(summary.results).toHaveLength(2);
+      const completed = summary.results.find((r) => r.status === "completed");
+      const failed = summary.results.find((r) => r.status === "failed");
+      expect(completed).toMatchObject({ id: "t1", result: "ok" });
+      expect(failed).toMatchObject({ id: "t2", error: "failed" });
     });
   });
 

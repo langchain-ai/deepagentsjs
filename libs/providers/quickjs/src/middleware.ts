@@ -140,7 +140,7 @@ const SWARM_FANOUT_PROMPT = dedent`
 
   Before calling swarm, understand what you're working with. Explore the data to learn its structure, format, and content using whatever tools are available. The goal is to write task descriptions detailed enough that each subagent can execute without needing to figure anything out on its own.
 
-  Once you understand the data, use \`js_eval\` to read the input, split it into chunks, call \`swarm()\` to dispatch tasks in parallel, then read \`results.jsonl\` to aggregate:
+  Once you understand the data, use \`js_eval\` to read the input, split it into chunks, call \`swarm()\` to dispatch tasks in parallel, then aggregate the results:
 
   \`\`\`typescript
   const raw = await readFile("/data.txt");
@@ -152,29 +152,19 @@ const SWARM_FANOUT_PROMPT = dedent`
     const chunk = lines.slice(i, i + chunkSize).join("\\n");
     tasks.push({
       id: \`chunk_\${i}\`,
-      description: \`Process each line.\\n\\nData:\\n\${chunk}\\n\\nRespond with ONLY a raw JSON object — no markdown fences, no explanation, no other text.\\nOutput schema: { "label": count }\`
+      description: \`Process each line. Count occurrences of each label.\\n\\nData:\\n\${chunk}\`
     });
   }
 
   const summary = JSON.parse(await swarm({ tasks }));
   console.log("Completed:", summary.completed, "Failed:", summary.failed);
 
-  // Read per-task results from resultsDir
-  const resultsRaw = await readFile(summary.resultsDir + "/results.jsonl");
-  const results = resultsRaw.trim().split("\\n").map(line => JSON.parse(line));
-
-  // Robust parsing helper — strips markdown fences if present
-  function parseResult(raw) {
-    const cleaned = raw.replace(/^\\\`\\\`\\\`(?:json)?\\n?/m, "").replace(/\\n?\\\`\\\`\\\`$/m, "").trim();
-    return JSON.parse(cleaned);
-  }
-
-  // Aggregate results in-script (skip failures, don't retry)
+  // Aggregate results — available directly in summary.results
   const merged = {};
-  for (const r of results) {
+  for (const r of summary.results) {
     if (r.status === "completed") {
       try {
-        Object.assign(merged, parseResult(r.result));
+        Object.assign(merged, JSON.parse(r.result));
       } catch (e) { /* skip unparseable results */ }
     }
   }
@@ -210,6 +200,13 @@ const SWARM_FANOUT_PROMPT = dedent`
   //   completed: number;
   //   failed: number;
   //   resultsDir: string;       // VFS path — read resultsDir + "/results.jsonl" for per-task outputs
+  //   results: Array<{
+  //     id: string;
+  //     subagentType: string;
+  //     status: "completed" | "failed";
+  //     result?: string;    // present when status is "completed"
+  //     error?: string;     // present when status is "failed"
+  //   }>;
   //   failedTasks: Array<{ id: string; error: string }>;
   // }
   //
