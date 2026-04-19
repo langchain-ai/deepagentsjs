@@ -14,7 +14,7 @@ import {
   TASK_TIMEOUT_MS,
 } from "./types.js";
 import { serializeResultsJsonl } from "./parse.js";
-import { SubagentFactory } from "../symbols.js";
+import type { SubagentFactory } from "../symbols.js";
 import { createHash } from "node:crypto";
 
 /**

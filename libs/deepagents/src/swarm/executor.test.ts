@@ -450,4 +450,208 @@ describe("executeSwarm", () => {
       expect(summary.completed).toBe(1);
     });
   });
+
+  describe("responseSchema", () => {
+    describe("validation", () => {
+      it("rejects responseSchema with non-object top-level type", async () => {
+        const options = buildOptions({
+          tasks: [
+            {
+              id: "t1",
+              description: "task",
+              responseSchema: { type: "array", items: { type: "string" } },
+            },
+          ],
+        });
+
+        await expect(executeSwarm(options)).rejects.toThrow(
+          `responseSchema must have type "object" at the top level`,
+        );
+      });
+
+      it("includes the offending task id in the error", async () => {
+        const options = buildOptions({
+          tasks: [
+            { id: "t1", description: "ok task" },
+            {
+              id: "t2",
+              description: "bad task",
+              responseSchema: { type: "string" },
+            },
+          ],
+        });
+
+        await expect(executeSwarm(options)).rejects.toThrow(
+          `"t2" has type "string"`,
+        );
+      });
+
+      it("includes all offending task ids when multiple are invalid", async () => {
+        const options = buildOptions({
+          tasks: [
+            {
+              id: "t1",
+              description: "task",
+              responseSchema: { type: "array" },
+            },
+            {
+              id: "t2",
+              description: "task",
+              responseSchema: { type: "string" },
+            },
+          ],
+        });
+
+        await expect(executeSwarm(options)).rejects.toThrow(`"t1"`);
+        await expect(executeSwarm(options)).rejects.toThrow(`"t2"`);
+      });
+
+      it("accepts responseSchema with type: object", async () => {
+        const options = buildOptions({
+          tasks: [
+            {
+              id: "t1",
+              description: "task",
+              responseSchema: {
+                type: "object",
+                properties: { label: { type: "string" } },
+              },
+            },
+          ],
+        });
+
+        await expect(executeSwarm(options)).resolves.toMatchObject({
+          completed: 1,
+        });
+      });
+    });
+
+    describe("factory dispatch", () => {
+      it("calls the factory with the responseSchema and uses the compiled variant", async () => {
+        const defaultGraph = createMockSubagent({
+          messages: [new AIMessage("default")],
+        });
+        const variantGraph = createMockSubagent({
+          messages: [new AIMessage("variant")],
+        });
+        const factory = vi.fn(() => variantGraph);
+
+        const schema = {
+          type: "object",
+          properties: { label: { type: "string" } },
+        };
+        const options = buildOptions({
+          tasks: [{ id: "t1", description: "task", responseSchema: schema }],
+          subagentGraphs: { "general-purpose": defaultGraph },
+          subagentFactories: { "general-purpose": factory },
+        });
+
+        const summary = await executeSwarm(options);
+
+        expect(factory).toHaveBeenCalledTimes(1);
+        expect(factory).toHaveBeenCalledWith(schema);
+        expect(variantGraph.invoke).toHaveBeenCalledTimes(1);
+        expect(defaultGraph.invoke).not.toHaveBeenCalled();
+        expect(summary.results[0].result).toBe("variant");
+      });
+
+      it("caches the compiled variant — factory called once for same schema across multiple tasks", async () => {
+        const variantGraph = createMockSubagent({
+          messages: [new AIMessage("ok")],
+        });
+        const factory = vi.fn(() => variantGraph);
+
+        const schema = {
+          type: "object",
+          properties: { n: { type: "number" } },
+        };
+        const options = buildOptions({
+          tasks: [
+            { id: "t1", description: "task 1", responseSchema: schema },
+            { id: "t2", description: "task 2", responseSchema: schema },
+            { id: "t3", description: "task 3", responseSchema: schema },
+          ],
+          subagentGraphs: { "general-purpose": createMockSubagent() },
+          subagentFactories: { "general-purpose": factory },
+        });
+
+        await executeSwarm(options);
+
+        expect(factory).toHaveBeenCalledTimes(1);
+        expect(variantGraph.invoke).toHaveBeenCalledTimes(3);
+      });
+
+      it("compiles separate variants for different schemas", async () => {
+        const variantA = createMockSubagent({ messages: [new AIMessage("a")] });
+        const variantB = createMockSubagent({ messages: [new AIMessage("b")] });
+        const factory = vi
+          .fn()
+          .mockReturnValueOnce(variantA)
+          .mockReturnValueOnce(variantB);
+
+        const schemaA = {
+          type: "object",
+          properties: { x: { type: "number" } },
+        };
+        const schemaB = {
+          type: "object",
+          properties: { y: { type: "string" } },
+        };
+        const options = buildOptions({
+          tasks: [
+            { id: "t1", description: "task 1", responseSchema: schemaA },
+            { id: "t2", description: "task 2", responseSchema: schemaB },
+          ],
+          subagentGraphs: { "general-purpose": createMockSubagent() },
+          subagentFactories: { "general-purpose": factory },
+        });
+
+        await executeSwarm(options);
+
+        expect(factory).toHaveBeenCalledTimes(2);
+        expect(factory).toHaveBeenNthCalledWith(1, schemaA);
+        expect(factory).toHaveBeenNthCalledWith(2, schemaB);
+        expect(variantA.invoke).toHaveBeenCalledTimes(1);
+        expect(variantB.invoke).toHaveBeenCalledTimes(1);
+      });
+
+      it("falls back to the default graph when no factory exists for the subagent type", async () => {
+        const defaultGraph = createMockSubagent({
+          messages: [new AIMessage("default")],
+        });
+        const schema = {
+          type: "object",
+          properties: { x: { type: "number" } },
+        };
+        const options = buildOptions({
+          tasks: [{ id: "t1", description: "task", responseSchema: schema }],
+          subagentGraphs: { "general-purpose": defaultGraph },
+          // No subagentFactories
+        });
+
+        const summary = await executeSwarm(options);
+
+        expect(defaultGraph.invoke).toHaveBeenCalledTimes(1);
+        expect(summary.results[0].result).toBe("default");
+      });
+
+      it("uses the default graph for tasks without responseSchema even when factories exist", async () => {
+        const defaultGraph = createMockSubagent({
+          messages: [new AIMessage("default")],
+        });
+        const factory = vi.fn(() => createMockSubagent());
+
+        const options = buildOptions({
+          tasks: [{ id: "t1", description: "task" }],
+          subagentGraphs: { "general-purpose": defaultGraph },
+          subagentFactories: { "general-purpose": factory },
+        });
+
+        await executeSwarm(options);
+
+        expect(factory).not.toHaveBeenCalled();
+        expect(defaultGraph.invoke).toHaveBeenCalledTimes(1);
+      });
+    });
+  });
 });
