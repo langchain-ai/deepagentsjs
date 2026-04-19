@@ -147,12 +147,18 @@ const SWARM_FANOUT_PROMPT = dedent`
   const lines = raw.split("\\n").filter(Boolean);
   const chunkSize = 50;
 
+  const outputSchema = {
+    type: "object",
+    additionalProperties: { type: "number" }
+  };
+
   const tasks = [];
   for (let i = 0; i < lines.length; i += chunkSize) {
     const chunk = lines.slice(i, i + chunkSize).join("\\n");
     tasks.push({
       id: \`chunk_\${i}\`,
-      description: \`Process each line. Count occurrences of each label.\\n\\nData:\\n\${chunk}\`
+      description: \`Process each line. Count occurrences of each label.\\n\\nData:\\n\${chunk}\`,
+      responseSchema: outputSchema
     });
   }
 
@@ -185,6 +191,7 @@ const SWARM_FANOUT_PROMPT = dedent`
       id: string;           // unique task identifier
       description: string;  // complete, self-contained prompt for the subagent
       subagentType?: string; // which subagent to use (default: "general-purpose")
+      responseSchema?: object; // JSON Schema for structured output (must have type: "object" at top level)
     }>;
     // Virtual-table form (alternative to tasks)
     glob?: string | string[];       // glob pattern(s) to match files
@@ -220,20 +227,38 @@ const SWARM_FANOUT_PROMPT = dedent`
 
   Good task descriptions are **prescriptive**: they tell the subagent the data format, the processing logic, the exact range of data to work on, and the expected output format. The subagent should not need to explore or interpret — just execute.
 
-  When subagent results need to be aggregated, **every task description must end with**:
+  ### Structured output with \`responseSchema\`
+
+  When subagent results need to be aggregated, use \`responseSchema\` to guarantee structured JSON output:
+
+  \`\`\`typescript
+  {
+    id: "t1",
+    description: "Classify each item...",
+    responseSchema: {
+      type: "object",
+      properties: { label: { type: "string" }, confidence: { type: "number" } },
+      required: ["label", "confidence"]
+    }
+  }
+  \`\`\`
+
+  \`responseSchema\` enforces the schema at the model API level — the subagent **must** produce valid JSON matching the schema. This is more reliable than prompt instructions alone. The subagent remains fully agentic (tools, reasoning) — only its final response is constrained.
+
+  **Constraint**: \`responseSchema\` must have \`type: "object"\` at the top level. Array schemas are not supported — wrap them in an object (e.g., \`{ type: "object", properties: { items: { type: "array", ... } } }\`).
+
+  Without \`responseSchema\`, instruct subagents explicitly in the task description:
 
   \`\`\`
   Respond with ONLY a raw JSON object — no markdown fences, no explanation, no other text.
   Output schema: { ... }
   \`\`\`
 
-  This prevents subagents from wrapping results in \\\`\\\`\\\`json\\\`\\\`\\\` fences or adding commentary, which breaks mechanical aggregation.
-
   ### Aggregation
 
   There are two ways to aggregate results:
 
-  1. **In-script aggregation**: Read \`resultsDir + "/results.jsonl"\` in the same \`js_eval\` call, parse each line, and combine them programmatically. Best for mechanical aggregation (counting, merging, deduplication).
+  1. **In-script aggregation**: Iterate \`summary.results\` directly in the same \`js_eval\` call and combine programmatically. Best for mechanical aggregation (counting, merging, deduplication).
 
   2. **LLM-based aggregation**: After \`js_eval\` completes, use \`read_file\` to read \`<resultsDir>/results.jsonl\` and synthesize the outputs using your own judgment. Best for summarization or qualitative analysis.
 
@@ -325,6 +350,7 @@ export function createQuickJSMiddleware(
 
   // Populated by createDeepAgent via QUICKJS_SWARM_INJECTOR before first eval.
   let subagentGraphs: ReplSessionOptions["subagentGraphs"];
+  let subagentFactories: ReplSessionOptions["subagentFactories"];
 
   const usePtc = ptc !== false;
   let cachedPtcPrompt: string | null = null;
@@ -380,6 +406,7 @@ export function createQuickJSMiddleware(
         backend: resolvedBackend,
         tools: ptcTools,
         subagentGraphs,
+        subagentFactories,
         currentState,
       });
 
@@ -429,8 +456,9 @@ export function createQuickJSMiddleware(
     },
   });
 
-  setSubagentGraphInjector(middleware, (graphs) => {
+  setSubagentGraphInjector(middleware, (graphs, factories) => {
     subagentGraphs = graphs;
+    subagentFactories = factories;
   });
 
   return middleware;

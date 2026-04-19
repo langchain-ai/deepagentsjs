@@ -166,6 +166,10 @@ export class ReplSession {
         existing._options.currentState = options.currentState;
       }
 
+      if (options.subagentFactories !== undefined) {
+        existing._options.subagentFactories = options.subagentFactories;
+      }
+
       return existing;
     }
 
@@ -488,7 +492,11 @@ export class ReplSession {
               throw new Error("Backend not available");
             }
 
-            const { subagentGraphs = {}, currentState = {} } = getOptions();
+            const {
+              subagentGraphs = {},
+              subagentFactories,
+              currentState = {},
+            } = getOptions();
 
             let tasks: SwarmTaskSpec[];
             if (input.tasks) {
@@ -514,6 +522,7 @@ export class ReplSession {
             const summary = await executeSwarm({
               tasks,
               subagentGraphs,
+              subagentFactories,
               backend,
               concurrency:
                 typeof input.concurrency === "number"

@@ -8,6 +8,7 @@ const taskSchema = z.object({
   id: z.string().min(1),
   description: z.string().min(1),
   subagentType: z.string().optional(),
+  responseSchema: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**

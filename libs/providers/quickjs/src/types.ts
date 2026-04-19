@@ -1,4 +1,8 @@
-import type { AnyBackendProtocol, BackendFactory } from "deepagents";
+import type {
+  AnyBackendProtocol,
+  BackendFactory,
+  SubagentFactory,
+} from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import type { ReactAgent } from "langchain";
 import type { Runnable } from "@langchain/core/runnables";
@@ -63,6 +67,7 @@ export interface ReplSessionOptions {
   backend?: AnyBackendProtocol;
   tools?: StructuredToolInterface[];
   subagentGraphs?: Record<string, ReactAgent<any> | Runnable>;
+  subagentFactories?: Record<string, SubagentFactory>;
   currentState?: Record<string, unknown>;
 }
 

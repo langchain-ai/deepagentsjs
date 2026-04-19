@@ -14,6 +14,8 @@ import {
   TASK_TIMEOUT_MS,
 } from "./types.js";
 import { serializeResultsJsonl } from "./parse.js";
+import { SubagentFactory } from "../symbols.js";
+import { createHash } from "node:crypto";
 
 /**
  * Everything the executor needs to run a swarm.
@@ -54,6 +56,13 @@ export interface SwarmExecutionOptions {
    * and in-flight subagent invocations are cancelled.
    */
   signal?: AbortSignal;
+
+  /**
+   * Factory functions for compiling subagent variants with dynamic responseFormat`.
+   * Keyed by subagent type name. When a task has `responseSchema`, the executor calls
+   * the factory to compile a variant and caches it for the duration of the swarm call.
+   */
+  subagentFactories?: Record<string, SubagentFactory>;
 }
 
 /**
@@ -92,6 +101,23 @@ function filterStateForSubagent(
   }
 
   return filtered;
+}
+
+/**
+ * Build a cache key for a (subagentType, responseSchema) pair. Default graphs
+ * are keyed by type name alone. Schema variants use "type::hash" where hash is
+ * a truncated SHA-256 of the serialized schema — the "::" separator guarantees
+ * no collision with default keys.
+ */
+function buildSchemaCacheKey(
+  subagentType: string,
+  schema: Record<string, unknown>,
+): string {
+  const hash = createHash("sha256")
+    .update(JSON.stringify(schema))
+    .digest("hex")
+    .slice(0, 12);
+  return `${subagentType}::${hash}`;
 }
 
 /**
@@ -217,6 +243,46 @@ async function withConcurrencyLimit<T>(
   return results;
 }
 
+function validateSubagentTypes(
+  tasks: SwarmTaskSpec[],
+  subagentGraphs: Record<string, ReactAgent<any> | Runnable>,
+) {
+  const unknownTypes = new Set<string>();
+  for (const task of tasks) {
+    const subagentType = task.subagentType ?? "general-purpose";
+    if (!(subagentType in subagentGraphs)) {
+      unknownTypes.add(subagentType);
+    }
+  }
+
+  if (unknownTypes.size > 0) {
+    const available = Object.keys(subagentGraphs).join(", ");
+    throw new Error(
+      `Unknown subagent type(s): ${[...unknownTypes].join(", ")}. Available: ${available}`,
+    );
+  }
+}
+
+function validateResponseSchemas(tasks: SwarmTaskSpec[]) {
+  const invalidSchemaTasks: string[] = [];
+  for (const task of tasks) {
+    if (task.responseSchema) {
+      const schemaType = task.responseSchema.type;
+      if (schemaType !== "object") {
+        invalidSchemaTasks.push(`"${task.id}" has type "${schemaType}"`);
+      }
+    }
+  }
+
+  if (invalidSchemaTasks.length > 0) {
+    throw new Error(
+      `responseSchema must have type "object" at the top level. ` +
+        `Wrap array schemas in an object (e.g., { type: "object", properties: { results: { type: "array", ... } } }). ` +
+        `Invalid tasks: ${invalidSchemaTasks.join(", ")}.`,
+    );
+  }
+}
+
 /**
  * Execute a swarm: dispatch tasks in parallel, collect results,
  * write output files, and return a summary.
@@ -234,27 +300,51 @@ export async function executeSwarm(
     synthesizedTasksJsonl,
     currentState,
     signal,
+    subagentFactories,
   } = options;
 
   // Generate run directory
   const resultsDir = `/swarm_runs/${crypto.randomUUID()}`;
   const effectiveConcurrency = Math.min(concurrency, MAX_CONCURRENCY);
 
-  // Validate subagent types
-  const unknownTypes = new Set<string>();
-  for (const task of tasks) {
-    const subagentType = task.subagentType ?? "general-purpose";
-    if (!(subagentType in subagentGraphs)) {
-      unknownTypes.add(subagentType);
-    }
+  validateSubagentTypes(tasks, subagentGraphs);
+  validateResponseSchemas(tasks);
+
+  // Unified cache for all subagent graph lookups. Pre-seeded with the
+  // default (no-schema) compiled graphs so every lookup — with or without
+  // responseSchema — goes through the same code path.
+  const variantCache = new Map<string, ReactAgent<any> | Runnable>();
+  for (const [type, graph] of Object.entries(subagentGraphs)) {
+    variantCache.set(type, graph);
   }
 
-  if (unknownTypes.size > 0) {
-    const available = Object.keys(subagentGraphs).join(", ");
-    throw new Error(
-      `Unknown subagent type(s): ${[...unknownTypes].join(", ")}. Available: ${available}`,
-    );
-  }
+  /**
+   * Resolve the subagent graph for a task. Uses a unified cache:
+   * - No responseSchema → key is the type name (pre-seeded from subagentGraphs)
+   * - Has responseSchema → key is "type::hash", compiled on first miss via factory
+   */
+  const resolveSubagent = (task: SwarmTaskSpec): ReactAgent<any> | Runnable => {
+    const subagentType = task.subagentType ?? "general-purpose";
+    const cacheKey = task.responseSchema
+      ? buildSchemaCacheKey(subagentType, task.responseSchema)
+      : subagentType;
+
+    const cached = variantCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    // Cache miss - compile via factory
+    const factory = subagentFactories?.[subagentType];
+    if (!factory) {
+      return subagentGraphs[subagentType];
+    }
+
+    const variant = factory(task.responseSchema);
+    variantCache.set(cacheKey, variant);
+
+    return variant;
+  };
 
   // Filter state once
   const filteredState = filterStateForSubagent(currentState);
@@ -272,10 +362,8 @@ export async function executeSwarm(
           error: "Aborted",
         });
       }
-      const subagentType = task.subagentType ?? "general-purpose";
-      return dispatchTask(task, subagentGraphs[subagentType], filteredState, {
-        signal,
-      });
+      const subagent = resolveSubagent(task);
+      return dispatchTask(task, subagent, filteredState, { signal });
     },
   );
 

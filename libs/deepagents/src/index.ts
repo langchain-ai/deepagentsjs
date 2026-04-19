@@ -177,6 +177,9 @@ export {
 export {
   setSubagentGraphs,
   getSubagentGraphs,
+  setSubagentFactories,
+  getSubagentFactories,
   setSubagentGraphInjector,
   getSubagentGraphInjector,
+  type SubagentFactory,
 } from "./symbols.js";

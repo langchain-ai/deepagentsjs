@@ -32,6 +32,18 @@ export interface SwarmTaskSpec {
    * Which subagent type to dispatch to. Defaults to "general-purpose".
    */
   subagentType?: string;
+
+  /**
+   * JSON Schema object for dynamic structured output. Must have
+   * `type: "object"` at the top level (array schemas are not supported —
+   * wrap them in an object).
+   *
+   * When provided, the executor compiles a subagent variant with this
+   * schema as the `responseFormat`, guaranteeing the response conforms
+   * to the schema. Requires a subagent factory for the target subagent
+   * type; falls back to the default graph if no factory exists.
+   */
+  responseSchema?: Record<string, unknown>;
 }
 
 /**

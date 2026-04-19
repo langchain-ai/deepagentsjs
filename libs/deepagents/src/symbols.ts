@@ -2,9 +2,30 @@ import type { ReactAgent } from "langchain";
 import type { Runnable } from "@langchain/core/runnables";
 
 type SubagentGraphs = Record<string, ReactAgent<any> | Runnable>;
-type SubagentGraphInjector = (graphs: SubagentGraphs) => void;
+
+/**
+ * Factory function that compiles a subagent graph, optionally with
+ * a `responseFormat` for structured output. Called with no arguments
+ * to produce the default graph; called with a schema to produce a
+ * constrained variant.
+ */
+export type SubagentFactory = (
+  responseFormat?: unknown,
+) => ReactAgent<any> | Runnable;
+
+type SubagentFactories = Record<string, SubagentFactory>;
+
+/**
+ * Injector callback signature. Receives both compiled graphs and
+ * optional factory functions for dynamic recompilation.
+ */
+type SubagentGraphInjector = (
+  graphs: SubagentGraphs,
+  factories?: SubagentFactories,
+) => void;
 
 const SUBAGENT_GRAPHS_KEY = Symbol.for("deepagents.subagent.graphs");
+const SUBAGENT_FACTORIES_KEY = Symbol.for("deepagents.subagent.factories");
 const SUBAGENT_GRAPH_INJECTOR_KEY = Symbol.for(
   "deepagents.subagent.graphInjector",
 );
@@ -30,6 +51,26 @@ export function getSubagentGraphs(
   middleware: object,
 ): SubagentGraphs | undefined {
   return (middleware as any)[SUBAGENT_GRAPHS_KEY];
+}
+
+/**
+ * Attach subagent factory functions to a middleware object.
+ * Called by `createSubAgentMiddleware` alongside `setSubagentGraphs`.
+ */
+export function setSubagentFactories(
+  middleware: object,
+  factories: SubagentFactories,
+): void {
+  (middleware as any)[SUBAGENT_FACTORIES_KEY] = factories;
+}
+
+/**
+ * Read subagent factory functions previously attached to a middleware object.
+ */
+export function getSubagentFactories(
+  middleware: object,
+): SubagentFactories | undefined {
+  return (middleware as any)[SUBAGENT_FACTORIES_KEY];
 }
 
 /**

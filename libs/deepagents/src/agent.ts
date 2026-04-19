@@ -28,7 +28,11 @@ import {
 } from "./middleware/index.js";
 import { StateBackend } from "./backends/index.js";
 import { ConfigurationError } from "./errors.js";
-import { getSubagentGraphs, getSubagentGraphInjector } from "./symbols.js";
+import {
+  getSubagentGraphs,
+  getSubagentGraphInjector,
+  getSubagentFactories,
+} from "./symbols.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
 import {
@@ -309,9 +313,10 @@ export function createDeepAgent<
   ] = builtInMiddleware;
 
   const compiledGraphs = getSubagentGraphs(subagentMiddleware);
+  const compiledFactories = getSubagentFactories(subagentMiddleware);
   if (compiledGraphs) {
     for (const m of customMiddleware) {
-      getSubagentGraphInjector(m)?.(compiledGraphs);
+      getSubagentGraphInjector(m)?.(compiledGraphs, compiledFactories);
     }
   }
 
