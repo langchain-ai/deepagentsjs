@@ -20,6 +20,8 @@ import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
+import { getCurrentRunTree, withRunTree } from "langsmith/singletons/traceable";
+import { RunTree } from "langsmith";
 
 export type { AgentMiddleware };
 
@@ -601,18 +603,29 @@ function createTaskTool(options: {
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
 
-      // Invoke the subagent with ls_agent_type metadata for LangSmith tracing
-      const subagentConfig = {
-        ...config,
-        configurable: {
-          ...config.configurable,
+      // Invoke the subagent. Setting `ls_agent_type: "subagent"` on a
+      // `withRunTree(...)`-scoped `RunTree` causes `LangChainTracer` to
+      // apply the override (via its allowlist of LangSmith-only
+      // inheritable metadata keys) to every run created or re-derived
+      // while the subagent is executing, including deeply nested
+      // langgraph node runs. Non-tracer callback handlers are unaffected.
+      let result;
+      const currentRunTree = getCurrentRunTree(true);
+      if (currentRunTree !== undefined) {
+        const newRunTree = new RunTree(currentRunTree);
+        newRunTree.metadata = {
+          ...newRunTree.metadata,
           ls_agent_type: "subagent",
-        },
-      };
-      const result = (await subagent.invoke(
-        subagentState,
-        subagentConfig,
-      )) as Record<string, unknown>;
+        };
+        result = await withRunTree(newRunTree, async () => {
+          return await subagent.invoke(subagentState, config);
+        });
+      } else {
+        result = (await subagent.invoke(subagentState, config)) as Record<
+          string,
+          unknown
+        >;
+      }
 
       if (!config.toolCall?.id) {
         if (result.structuredResponse != null) {

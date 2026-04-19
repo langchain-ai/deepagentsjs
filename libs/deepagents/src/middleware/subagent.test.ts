@@ -15,6 +15,7 @@ import { LangChainTracer } from "@langchain/core/tracers/tracer_langchain";
 import type { LangSmithTracingClientInterface } from "langsmith";
 import type { Serialized } from "@langchain/core/load/serializable";
 import type { ChainValues } from "@langchain/core/utils/types";
+import { createAgent } from "langchain";
 
 import { createDeepAgent } from "../agent.js";
 import { createSkillsMiddleware } from "./skills.js";
@@ -246,8 +247,6 @@ description: A skill for the subagent
       sources: ["/skills/user/"],
     });
 
-    // Import createAgent for the subagent
-    const { createAgent } = await import("langchain");
     const subagent = createAgent({
       model,
       middleware: [skillsMiddleware],
@@ -832,5 +831,105 @@ describe("ls_agent_type tracing metadata", () => {
       (run) => run?.extra?.metadata?.ls_agent_type === "subagent",
     );
     expect(subagentRuns.length).toBeGreaterThan(0);
+  });
+
+  it("should override ls_agent_type for nested runs inside a real langgraph subagent", async () => {
+    // This test uses a real createAgent-compiled graph (not a RunnableLambda)
+    // as the subagent. This exercises the path where langgraph's Pregel
+    // executor re-creates RunTrees from config, where the outer agent's
+    // ls_agent_type would otherwise leak into every nested node.
+    const createRunMock = vi.fn().mockResolvedValue(undefined);
+    const updateRunMock = vi.fn().mockResolvedValue(undefined);
+    const mockClient = {
+      createRun: createRunMock,
+      updateRun: updateRunMock,
+    } as LangSmithTracingClientInterface;
+
+    const tracer = new LangChainTracer({ client: mockClient });
+    const callbacks = CallbackManager.configure([tracer]);
+
+    const taskToolCallId = `call_${Date.now()}`;
+    // Inner model used by the subagent - returns a plain "Done" message.
+    const innerModel = new FakeListChatModel({
+      responses: ["Inner subagent done"],
+    });
+    const subagent = createAgent({
+      model: innerModel,
+    });
+
+    // Outer model first invokes the task tool, then returns Done.
+    const outerModel = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Outer done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model: outerModel,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: subagent,
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: { thread_id: `test-nested-ls-agent-type-${Date.now()}` },
+        recursionLimit: 50,
+        callbacks: callbacks!,
+      },
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(createRunMock).toHaveBeenCalled();
+    const postedRuns = createRunMock.mock.calls.map((call) => call[0]);
+
+    // The subagent's root run should have ls_agent_type === "subagent".
+    const subagentRuns = postedRuns.filter(
+      (run) => run?.extra?.metadata?.ls_agent_type === "subagent",
+    );
+    expect(subagentRuns.length).toBeGreaterThan(0);
+
+    // Any run that is a descendant of the `task` tool call must NOT have
+    // ls_agent_type set to anything other than "subagent". The outer agent's
+    // value must not leak into descendants.
+    const taskRun = postedRuns.find(
+      (run) => run?.run_type === "tool" && run?.name === "task",
+    );
+    if (taskRun?.dotted_order) {
+      const descendants = postedRuns.filter(
+        (run) =>
+          run !== taskRun &&
+          typeof run?.dotted_order === "string" &&
+          run.dotted_order.startsWith(taskRun.dotted_order),
+      );
+      for (const descendant of descendants) {
+        const lsAgentType = descendant?.extra?.metadata?.ls_agent_type;
+        if (lsAgentType !== undefined) {
+          expect(lsAgentType).toBe("subagent");
+        }
+      }
+      expect(descendants.length).toBeGreaterThan(0);
+    }
   });
 });
