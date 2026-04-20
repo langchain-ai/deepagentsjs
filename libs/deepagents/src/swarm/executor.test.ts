@@ -506,6 +506,41 @@ describe("executeSwarm", () => {
         await expect(executeSwarm(options)).rejects.toThrow(`"t2"`);
       });
 
+      it("rejects responseSchema with no properties", async () => {
+        const options = buildOptions({
+          tasks: [
+            {
+              id: "t1",
+              description: "task",
+              responseSchema: {
+                type: "object",
+                additionalProperties: { type: "string" },
+              },
+            },
+          ],
+        });
+
+        await expect(executeSwarm(options)).rejects.toThrow(
+          `responseSchema must define "properties" with at least one field`,
+        );
+      });
+
+      it("rejects responseSchema with empty properties", async () => {
+        const options = buildOptions({
+          tasks: [
+            {
+              id: "t1",
+              description: "task",
+              responseSchema: { type: "object", properties: {} },
+            },
+          ],
+        });
+
+        await expect(executeSwarm(options)).rejects.toThrow(
+          `responseSchema must define "properties" with at least one field`,
+        );
+      });
+
       it("accepts responseSchema with type: object", async () => {
         const options = buildOptions({
           tasks: [

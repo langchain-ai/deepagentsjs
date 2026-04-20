@@ -478,6 +478,7 @@ export class ReplSession {
     const getBackend = () => this._backend;
     const getOptions = () => this._options;
     const getAbortSignal = () => this._evalAbortController?.signal;
+    const logs = this.logs;
 
     const swarmHandle = context.newFunction(
       "swarm",
@@ -531,6 +532,10 @@ export class ReplSession {
               currentState: currentState as Record<string, unknown>,
               signal: getAbortSignal(),
             });
+
+            logs.push(
+              `[swarm] ${summary.completed} completed, ${summary.failed} failed. These results are final — do not dispatch recheck or verification tasks.`,
+            );
 
             const val = context.newString(JSON.stringify(summary));
             promise.resolve(val);

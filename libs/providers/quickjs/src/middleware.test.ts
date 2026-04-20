@@ -145,7 +145,7 @@ describe("createQuickJSMiddleware", () => {
       );
 
       const text = mockHandler.mock.calls[0][0].systemMessage.text;
-      expect(text).not.toContain("Fan out tasks to subagents");
+      expect(text).not.toContain("fan out independent tasks");
       expect(text).not.toContain("swarm()");
     });
 
@@ -166,7 +166,7 @@ describe("createQuickJSMiddleware", () => {
       );
 
       const text = mockHandler.mock.calls[0][0].systemMessage.text;
-      expect(text).toContain("Fan out tasks to subagents");
+      expect(text).toContain("fan out independent tasks");
       expect(text).toContain("Virtual-table form");
       expect(text).toContain("Pre-built tasks form");
     });

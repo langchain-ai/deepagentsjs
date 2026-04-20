@@ -69,9 +69,9 @@ export const DEFAULT_PTC_EXCLUDED_TOOLS = [
 ] as const;
 
 function buildReplSystemPrompt(hasSwarm: boolean): string {
-  const largeFileDirective = hasSwarm
-    ? `**Large file processing**: Before doing anything else, check the size of your input files. If any input file exceeds ~50KB, you must decompose the work — use \`js_eval\` with \`swarm()\` to split the data and dispatch parallel tasks. Do not attempt to process large files inline. See "Parallel fan-out" below.`
-    : `**Large file processing**: Before doing anything else, check the size of your input files. If any input file exceeds ~50KB, you must decompose the work — use \`js_eval\` to explore the data, split it into chunks, and dispatch parallel tasks. Do not attempt to process large files inline.`;
+  const largeFileRule = hasSwarm
+    ? `- **Check file size before processing** — before working with any input file, check its size using \`read_file\` (inspect \`result.length\`) or \`ls\`. If the file exceeds ~50,000 characters, you **must** use \`swarm()\` to decompose the work — do not process it inline. See "Parallel fan-out" below.`
+    : `- **Check file size before processing** — before working with any input file, check its size. If it exceeds ~50,000 characters, decompose the work into chunks and process them separately.`;
 
   return dedent`
   ## TypeScript/JavaScript REPL (\`js_eval\`)
@@ -80,11 +80,10 @@ function buildReplSystemPrompt(hasSwarm: boolean): string {
   TypeScript syntax (type annotations, interfaces, generics, \`as\` casts) is supported and stripped at evaluation time.
   Variables, functions, and closures persist across calls within the same session.
 
-  ${largeFileDirective}
-
   ### Hard rules
 
-  - **No network, no filesystem** — only the helpers below. Do not attempt \`fetch\`, \`require\`, or \`import\`.
+  ${largeFileRule}
+  - **No network, no imports** — do not attempt \`fetch\`, \`require\`, or \`import\` inside \`js_eval\`. Use your file tools (\`read_file\`, \`grep\`, \`ls\`, etc.) for exploration and \`readFile\`/\`writeFile\` for direct REPL file I/O.
   - **Cite your sources** — when reporting values from files, include the path and key/index so the user can verify.
   - **Use console.log()** for output — it is captured and returned. \`console.warn()\` and \`console.error()\` are also available.
   - **Reuse state from previous cells** — variables, functions, and results from earlier \`js_eval\` calls persist across calls. Reference them by name in follow-up cells instead of re-embedding data as inline JSON literals.
@@ -126,11 +125,11 @@ function buildReplSystemPrompt(hasSwarm: boolean): string {
 const SWARM_FANOUT_PROMPT = dedent`
   ## Parallel fan-out (\`swarm()\` in js_eval)
 
-  Use \`js_eval\` with \`swarm()\` to fan out many independent tasks across multiple subagents and aggregate their results.
+  Use \`swarm()\` inside \`js_eval\` to fan out independent tasks across multiple subagents in parallel and aggregate their results.
 
   ### When to use swarm
 
-  **Trigger condition**: Before doing anything else, check the size of your input files. If any input file exceeds ~50KB, **you must use swarm** — do not attempt to process it inline. Reading a large file directly and summarizing it yourself is always wrong when swarm is available. Default to swarm; only skip it when the input is demonstrably small.
+  **Trigger condition**: Check the size of your input files. If any input file exceeds ~50KB, **you must use swarm** — do not attempt to process it inline. Reading a large file directly and processing it yourself is always wrong when swarm is available.
 
   Also use swarm when:
   - A task requires applying intelligence to each item in a large collection
@@ -138,9 +137,9 @@ const SWARM_FANOUT_PROMPT = dedent`
 
   ### How to use swarm
 
-  Before calling swarm, understand what you're working with. Explore the data to learn its structure, format, and content using whatever tools are available. The goal is to write task descriptions detailed enough that each subagent can execute without needing to figure anything out on its own.
+  **1. Understand the data deeply before dispatching.** If the file exceeds 50,000 characters, do not attempt to process or solve the task inline — your goal is to understand the data well enough to write precise subagent instructions. Use every tool available to you: \`read_file\` to sample content and spot patterns, \`grep\` to find labels, delimiters, edge cases, and outliers, \`ls\` to orient, \`js_eval\` to parse structure or count distributions. The time you invest here directly determines subagent accuracy — a vague description produces vague results. You know enough when you can answer: What is the exact data format? What are the complete processing rules (including edge cases)? What are all possible output values?
 
-  Once you understand the data, use \`js_eval\` to read the input, split it into chunks, call \`swarm()\` to dispatch tasks in parallel, then aggregate the results:
+  **2. Dispatch via \`js_eval\`.** Read the input, split it into chunks, and call \`swarm()\`:
 
   \`\`\`typescript
   const raw = await readFile("/data.txt");
@@ -149,7 +148,20 @@ const SWARM_FANOUT_PROMPT = dedent`
 
   const outputSchema = {
     type: "object",
-    additionalProperties: { type: "number" }
+    properties: {
+      results: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            label: { type: "string", enum: ["category_a", "category_b", "category_c"] },
+          },
+          required: ["id", "label"]
+        }
+      }
+    },
+    required: ["results"]
   };
 
   const tasks = [];
@@ -157,25 +169,38 @@ const SWARM_FANOUT_PROMPT = dedent`
     const chunk = lines.slice(i, i + chunkSize).join("\\n");
     tasks.push({
       id: \`chunk_\${i}\`,
-      description: \`Process each line. Count occurrences of each label.\\n\\nData:\\n\${chunk}\`,
+      description: \`Classify each line as [category_a] or [category_b].
+
+Rules:
+- [rule 1 derived from your exploration]
+- [rule 2 derived from your exploration]
+
+Data format: one item per line, fields separated by [delimiter].
+
+Data:
+\${chunk}\`,
       responseSchema: outputSchema
     });
   }
 
   const summary = JSON.parse(await swarm({ tasks }));
   console.log("Completed:", summary.completed, "Failed:", summary.failed);
+  \`\`\`
 
-  // Aggregate results — available directly in summary.results
-  const merged = {};
+  **3. Aggregate.** Combine results in the same \`js_eval\` call or a follow-up call:
+
+  \`\`\`typescript
+  const merged = [];
   for (const r of summary.results) {
     if (r.status === "completed") {
-      try {
-        Object.assign(merged, JSON.parse(r.result));
-      } catch (e) { /* skip unparseable results */ }
+      try { merged.push(...JSON.parse(r.result).results); }
+      catch (e) { /* skip unparseable */ }
     }
   }
   console.log(JSON.stringify(merged));
   \`\`\`
+
+  For qualitative synthesis (summarization, narrative), read \`<resultsDir>/results.jsonl\` with \`read_file\` after \`js_eval\` and aggregate using your own judgment instead.
 
   **Prefer many small tasks over few large ones** — all tasks run in parallel, so 50 small tasks finish in roughly the same wall-clock time as 5 large ones. When splitting a file, aim for **30–60 lines** per chunk.
 
@@ -223,13 +248,22 @@ const SWARM_FANOUT_PROMPT = dedent`
 
   ### Task description quality
 
-  Each subagent receives **only its task description** — no other context. The quality of your descriptions determines the quality of results. Invest time upfront to get them right.
+  Each subagent receives **only its task description** — no other context, no access to the original file. The quality of your descriptions is the single biggest lever on result accuracy.
 
-  Good task descriptions are **prescriptive**: they tell the subagent the data format, the processing logic, the exact range of data to work on, and the expected output format. The subagent should not need to explore or interpret — just execute.
+  Good task descriptions are **prescriptive and complete**: they give the subagent everything it needs to work mechanically, with no judgment calls required. Include:
+  - **Data format**: how each item is structured (delimiters, fields, encoding)
+  - **All possible output values**: every valid label, category, or answer — no ambiguity
+  - **Classification rules**: the criteria you derived from exploration, including edge cases and examples from the actual data
+  - **The data itself**: the exact chunk being processed
+
+  The subagent has no access to your exploration findings. Everything you learned — patterns, exceptions, label definitions — must be written into the description.
+
+  Bad: \`"Classify these news articles by topic."\`
+  Good: \`"Classify each article into exactly one of: World, Sports, Business, Sci/Tech. Use World for international relations, diplomacy, wars between nations. Use Sports for any competitive athletic event or athlete news. Use Business for markets, companies, economic policy. Use Sci/Tech for science research, technology products, or space. When an article spans two categories, pick the dominant one. Format: one JSON object per article with fields 'id' (the number at the start of the line) and 'label'."\`
 
   ### Structured output with \`responseSchema\`
 
-  When subagent results need to be aggregated, use \`responseSchema\` to guarantee structured JSON output:
+  Use \`responseSchema\` whenever results need to be aggregated programmatically. It enforces the schema at the model API level — strictly more reliable than asking for JSON in the prompt. The subagent remains fully agentic (tools, reasoning) — only its final response is constrained.
 
   \`\`\`typescript
   {
@@ -237,15 +271,41 @@ const SWARM_FANOUT_PROMPT = dedent`
     description: "Classify each item...",
     responseSchema: {
       type: "object",
-      properties: { label: { type: "string" }, confidence: { type: "number" } },
-      required: ["label", "confidence"]
+      properties: {
+        results: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "The item identifier from the input" },
+              label: {
+                type: "string",
+                enum: ["positive", "negative", "neutral"],
+                description: "Sentiment category for this item"
+              }
+            },
+            required: ["id", "label"]
+          },
+          minItems: 1
+        }
+      },
+      required: ["results"]
     }
   }
   \`\`\`
 
-  \`responseSchema\` enforces the schema at the model API level — the subagent **must** produce valid JSON matching the schema. This is more reliable than prompt instructions alone. The subagent remains fully agentic (tools, reasoning) — only its final response is constrained.
+  **Schema tips for better accuracy:**
 
-  **Constraint**: \`responseSchema\` must have \`type: "object"\` at the top level. Array schemas are not supported — wrap them in an object (e.g., \`{ type: "object", properties: { items: { type: "array", ... } } }\`).
+  - **\`enum\`** for categorical fields — forces exact matches, prevents aggregation errors from label variations.
+  - **\`description\`** on properties — the model reads these when generating output. Use them to reinforce what each field should contain.
+  - **\`minItems\` / \`maxItems\`** on arrays — ensures the subagent returns the expected number of items.
+  - **\`minimum\` / \`maximum\`** on numbers — constrains numeric ranges (e.g., confidence scores 0–1).
+
+  **Schema rules** (enforced at dispatch time — violations throw before any subagent runs):
+
+  - Top-level \`type\` must be \`"object"\`. Wrap arrays in an object with a \`results\` field.
+  - \`properties\` must be defined with at least one explicit field. Open schemas (\`additionalProperties\` alone, no \`properties\`) are rejected by the structured-output runtime.
+  - Declare every field you expect. If you do not know the keys ahead of time, use a \`results: { type: "array", items: {...} }\` wrapper instead of an open object.
 
   Without \`responseSchema\`, instruct subagents explicitly in the task description:
 
@@ -254,21 +314,14 @@ const SWARM_FANOUT_PROMPT = dedent`
   Output schema: { ... }
   \`\`\`
 
-  ### Aggregation
-
-  There are two ways to aggregate results:
-
-  1. **In-script aggregation**: Iterate \`summary.results\` directly in the same \`js_eval\` call and combine programmatically. Best for mechanical aggregation (counting, merging, deduplication).
-
-  2. **LLM-based aggregation**: After \`js_eval\` completes, use \`read_file\` to read \`<resultsDir>/results.jsonl\` and synthesize the outputs using your own judgment. Best for summarization or qualitative analysis.
-
   ### Error handling
 
-  If some tasks fail, use discretion:
-  - **Many failures** (e.g., 30/50): call \`swarm()\` again targeting just the failures.
-  - **Few failures** (e.g., 3/50): handle them individually outside the REPL — swarm is overkill for a handful of tasks.
+  **One retry for failures, then move on.** If tasks fail due to schema or description errors, fix the root cause and call \`swarm()\` **once more** targeting just the failed ids. Do not retry a second time.
 
-  **Completed results are authoritative.** Never verify, cross-check, re-classify, or re-dispatch completed tasks. Do not compare result counts against expected counts. Aggregate what you have and move on.
+  - **Many failures** (>20%): likely a systemic issue with the schema or description — fix and retry once.
+  - **Few failures** (<20%): aggregate the completed results and move on.
+
+  **Never recheck completed results.** Do not dispatch "recheck", "verify", or "cross-check" tasks for results that already succeeded. Completed results are final — accept them as-is and aggregate. Re-dispatching the same data with different task IDs is still rechecking and is not allowed.
 
   ### Decomposition patterns
 

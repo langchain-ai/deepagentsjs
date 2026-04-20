@@ -314,6 +314,7 @@ export function createDeepAgent<
 
   const compiledGraphs = getSubagentGraphs(subagentMiddleware);
   const compiledFactories = getSubagentFactories(subagentMiddleware);
+
   if (compiledGraphs) {
     for (const m of customMiddleware) {
       getSubagentGraphInjector(m)?.(compiledGraphs, compiledFactories);

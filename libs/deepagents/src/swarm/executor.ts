@@ -264,21 +264,40 @@ function validateSubagentTypes(
 }
 
 function validateResponseSchemas(tasks: SwarmTaskSpec[]) {
-  const invalidSchemaTasks: string[] = [];
+  const invalidTypeTasks: string[] = [];
+  const missingPropertiesTasks: string[] = [];
   for (const task of tasks) {
     if (task.responseSchema) {
       const schemaType = task.responseSchema.type;
       if (schemaType !== "object") {
-        invalidSchemaTasks.push(`"${task.id}" has type "${schemaType}"`);
+        invalidTypeTasks.push(`"${task.id}" has type "${schemaType}"`);
+        continue;
+      }
+      const properties = task.responseSchema.properties;
+      if (
+        !properties ||
+        typeof properties !== "object" ||
+        Object.keys(properties as Record<string, unknown>).length === 0
+      ) {
+        missingPropertiesTasks.push(`"${task.id}"`);
       }
     }
   }
 
-  if (invalidSchemaTasks.length > 0) {
+  if (invalidTypeTasks.length > 0) {
     throw new Error(
       `responseSchema must have type "object" at the top level. ` +
         `Wrap array schemas in an object (e.g., { type: "object", properties: { results: { type: "array", ... } } }). ` +
-        `Invalid tasks: ${invalidSchemaTasks.join(", ")}.`,
+        `Invalid tasks: ${invalidTypeTasks.join(", ")}.`,
+    );
+  }
+
+  if (missingPropertiesTasks.length > 0) {
+    throw new Error(
+      `responseSchema must define "properties" with at least one field. ` +
+        `Open schemas (e.g., { type: "object", additionalProperties: {...} } alone) are not supported — ` +
+        `declare each expected field explicitly. ` +
+        `Invalid tasks: ${missingPropertiesTasks.join(", ")}.`,
     );
   }
 }
