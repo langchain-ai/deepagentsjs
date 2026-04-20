@@ -70,7 +70,7 @@ export const DEFAULT_PTC_EXCLUDED_TOOLS = [
 
 function buildReplSystemPrompt(hasSwarm: boolean): string {
   const largeFileRule = hasSwarm
-    ? `- **Check file size before processing** — before working with any input file, check its size using \`read_file\` (inspect \`result.length\`) or \`ls\`. If the file exceeds ~50,000 characters, you **must** use \`swarm()\` to decompose the work — do not process it inline. See "Parallel fan-out" below.`
+    ? `- **Check inputs before processing** — for any file, use \`ls\` or \`read_file\` with offset/limit to understand its size and shape. If the work involves many independent items, multiple entities, or data that exceeds a single context, use \`swarm()\` — see "Parallel fan-out" below.`
     : `- **Check file size before processing** — before working with any input file, check its size. If it exceeds ~50,000 characters, decompose the work into chunks and process them separately.`;
 
   return dedent`
@@ -125,84 +125,122 @@ function buildReplSystemPrompt(hasSwarm: boolean): string {
 const SWARM_FANOUT_PROMPT = dedent`
   ## Parallel fan-out (\`swarm()\` in js_eval)
 
-  Use \`swarm()\` inside \`js_eval\` to fan out independent tasks across multiple subagents in parallel and aggregate their results.
+  Use \`swarm()\` inside \`js_eval\` to dispatch many independent subagent calls in parallel and aggregate the results. Each subagent runs in an isolated context — it sees only the description you write for it.
 
   ### When to use swarm
 
-  **Trigger condition**: Check the size of your input files. If any input file exceeds ~50KB, **you must use swarm** — do not attempt to process it inline. Reading a large file directly and processing it yourself is always wrong when swarm is available.
+  Reach for swarm when any of these apply:
+  - A dataset has many items needing the same operation (classification, extraction, transformation)
+  - A collection of entities each needs its own analysis (per-document, per-PR, per-entity)
+  - The same input benefits from multiple independent perspectives
+  - The work exceeds what a single subagent's context can hold
 
-  Also use swarm when:
-  - A task requires applying intelligence to each item in a large collection
-  - Work can be decomposed into many independent, parallel subtasks
+  Don't use swarm when:
+  - Fewer than ~5 independent units — use inline tool calls or the \`task\` tool
+  - Tasks depend on each other's output
+  - One end-to-end analysis with no natural decomposition
 
-  ### How to use swarm
+  ### Flow
 
-  **1. Understand the data deeply before dispatching.** If the file exceeds 50,000 characters, do not attempt to process or solve the task inline — your goal is to understand the data well enough to write precise subagent instructions. Use every tool available to you: \`read_file\` to sample content and spot patterns, \`grep\` to find labels, delimiters, edge cases, and outliers, \`ls\` to orient, \`js_eval\` to parse structure or count distributions. The time you invest here directly determines subagent accuracy — a vague description produces vague results. You know enough when you can answer: What is the exact data format? What are the complete processing rules (including edge cases)? What are all possible output values?
+  1. **Explore.** Sample — don't read in full. Use \`read_file\` with offset/limit, \`grep\`, or \`ls\` to learn the input's shape. Finish in 2–3 tool calls.
+  2. **Dispatch.** In \`js_eval\`, chunk the data, build task descriptions, and call \`swarm()\`.
+  3. **Aggregate.** In the same or a follow-up \`js_eval\`, combine results programmatically. For qualitative output (summaries, research, narrative), read \`resultsDir + "/results.jsonl"\` with \`read_file\` and work from there — don't pull every result string back into the orchestrator's context.
 
-  **2. Dispatch via \`js_eval\`.** Read the input, split it into chunks, and call \`swarm()\`:
+  ### Hard rules
+
+  - **Never read the full input that triggers swarm.** If the data is too large for one context, it reaches subagents via chunked descriptions, not through you.
+  - **Results are final.** Do not dispatch recheck, verify, or cross-check tasks for completed results. Re-dispatching the same data with different ids is still rechecking.
+  - **One retry for failures, then move on.** Fix the root cause (schema, description) and re-dispatch only the failed ids. Don't retry twice.
+
+  ### Dispatch example
 
   \`\`\`typescript
   const raw = await readFile("/data.txt");
   const lines = raw.split("\\n").filter(Boolean);
   const chunkSize = 50;
 
-  const outputSchema = {
-    type: "object",
-    properties: {
-      results: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            id: { type: "string" },
-            label: { type: "string", enum: ["category_a", "category_b", "category_c"] },
-          },
-          required: ["id", "label"]
-        }
-      }
-    },
-    required: ["results"]
-  };
-
   const tasks = [];
   for (let i = 0; i < lines.length; i += chunkSize) {
     const chunk = lines.slice(i, i + chunkSize).join("\\n");
     tasks.push({
       id: \`chunk_\${i}\`,
-      description: \`Classify each line as [category_a] or [category_b].
-
-Rules:
-- [rule 1 derived from your exploration]
-- [rule 2 derived from your exploration]
-
-Data format: one item per line, fields separated by [delimiter].
+      description: \`[Complete, self-contained instructions derived from exploration]
 
 Data:
 \${chunk}\`,
-      responseSchema: outputSchema
     });
   }
 
-  const summary = JSON.parse(await swarm({ tasks }));
+  const summary = JSON.parse(await swarm({
+    tasks,
+    concurrency: Math.min(25, tasks.length),
+  }));
   console.log("Completed:", summary.completed, "Failed:", summary.failed);
   \`\`\`
 
-  **3. Aggregate.** Combine results in the same \`js_eval\` call or a follow-up call:
+  ### Writing task descriptions
+
+  Each subagent sees only its description. A good description lets the subagent work mechanically, with no judgment required. Include:
+
+  - What the input is and how it's structured (delimiters, format, encoding)
+  - What the subagent should produce (format, fields, allowed values)
+  - The rules — including edge cases and examples you found during exploration
+  - The actual data for this task
+
+  Anything you discovered during exploration must be written into every description that needs it. Subagents cannot see your notes.
+
+  ### Structured output (\`responseSchema\`)
+
+  Use \`responseSchema\` when results will be aggregated programmatically. It enforces the schema at the model API level — stricter than asking for JSON in prose.
 
   \`\`\`typescript
-  const merged = [];
-  for (const r of summary.results) {
-    if (r.status === "completed") {
-      try { merged.push(...JSON.parse(r.result).results); }
-      catch (e) { /* skip unparseable */ }
+  {
+    id: "t1",
+    description: "...",
+    responseSchema: {
+      type: "object",
+      properties: {
+        results: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id:    { type: "string" },
+              label: { type: "string", enum: ["a", "b", "c"] }
+            },
+            required: ["id", "label"]
+          }
+        }
+      },
+      required: ["results"]
     }
   }
-  console.log(JSON.stringify(merged));
   \`\`\`
 
-  For qualitative synthesis (summarization, narrative), read \`<resultsDir>/results.jsonl\` with \`read_file\` after \`js_eval\` and aggregate using your own judgment instead.
+  Schema tips:
+  - \`enum\` on categorical fields prevents label drift across subagents.
+  - \`description\` on properties — models read them during generation.
+  - \`minItems\` / \`maxItems\` on arrays — ensures the expected count.
+  - Top-level \`type\` must be \`"object"\`. Wrap arrays under a \`results\` field.
 
-  **Prefer many small tasks over few large ones** — all tasks run in parallel, so 50 small tasks finish in roughly the same wall-clock time as 5 large ones. When splitting a file, aim for **30–60 lines** per chunk.
+  Skip \`responseSchema\` for qualitative output (summaries, research findings, code reviews) — free-form text aggregates better when read from \`results.jsonl\`.
+
+  ### Chunk sizing and concurrency
+
+  Aim for 10–25 tasks per swarm call. Fewer, and parallelism doesn't pay for overhead. More, and a bad description or schema affects many tasks at once.
+
+  Per-task sizing depends on item size:
+  - Short items (labels, one-line entries): 30–60 per task
+  - Medium items (reviews, paragraphs): 10–20 per task
+  - Long items (documents, articles): 1–5 per task, or one-per-task
+
+  For runs with >10 tasks, set \`concurrency\` explicitly. Good rule: \`Math.min(25, tasks.length)\`.
+
+  ### Decomposition patterns
+
+  - **One-per-item** — one task per discrete unit (file, document, entity). Use when items are naturally discrete and each needs its own analysis.
+  - **Flat fan-out** — split a collection into equal chunks; all tasks have the same shape. Use when applying the same operation to many items.
+  - **Dimensional** — multiple tasks examine the same input from different angles. Use for multi-criteria evaluation (code review, red-team analysis).
 
   ### API Reference — \`swarm()\`
 
@@ -241,98 +279,7 @@ Data:
   //   }>;
   //   failedTasks: Array<{ id: string; error: string }>;
   // }
-  //
-  // Each line in results.jsonl:
-  // { id: string; subagentType: string; status: "completed" | "failed"; result?: string; error?: string }
   \`\`\`
-
-  ### Task description quality
-
-  Each subagent receives **only its task description** — no other context, no access to the original file. The quality of your descriptions is the single biggest lever on result accuracy.
-
-  Good task descriptions are **prescriptive and complete**: they give the subagent everything it needs to work mechanically, with no judgment calls required. Include:
-  - **Data format**: how each item is structured (delimiters, fields, encoding)
-  - **All possible output values**: every valid label, category, or answer — no ambiguity
-  - **Classification rules**: the criteria you derived from exploration, including edge cases and examples from the actual data
-  - **The data itself**: the exact chunk being processed
-
-  The subagent has no access to your exploration findings. Everything you learned — patterns, exceptions, label definitions — must be written into the description.
-
-  Bad: \`"Classify these news articles by topic."\`
-  Good: \`"Classify each article into exactly one of: World, Sports, Business, Sci/Tech. Use World for international relations, diplomacy, wars between nations. Use Sports for any competitive athletic event or athlete news. Use Business for markets, companies, economic policy. Use Sci/Tech for science research, technology products, or space. When an article spans two categories, pick the dominant one. Format: one JSON object per article with fields 'id' (the number at the start of the line) and 'label'."\`
-
-  ### Structured output with \`responseSchema\`
-
-  Use \`responseSchema\` whenever results need to be aggregated programmatically. It enforces the schema at the model API level — strictly more reliable than asking for JSON in the prompt. The subagent remains fully agentic (tools, reasoning) — only its final response is constrained.
-
-  \`\`\`typescript
-  {
-    id: "t1",
-    description: "Classify each item...",
-    responseSchema: {
-      type: "object",
-      properties: {
-        results: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              id: { type: "string", description: "The item identifier from the input" },
-              label: {
-                type: "string",
-                enum: ["positive", "negative", "neutral"],
-                description: "Sentiment category for this item"
-              }
-            },
-            required: ["id", "label"]
-          },
-          minItems: 1
-        }
-      },
-      required: ["results"]
-    }
-  }
-  \`\`\`
-
-  **Schema tips for better accuracy:**
-
-  - **\`enum\`** for categorical fields — forces exact matches, prevents aggregation errors from label variations.
-  - **\`description\`** on properties — the model reads these when generating output. Use them to reinforce what each field should contain.
-  - **\`minItems\` / \`maxItems\`** on arrays — ensures the subagent returns the expected number of items.
-  - **\`minimum\` / \`maximum\`** on numbers — constrains numeric ranges (e.g., confidence scores 0–1).
-
-  **Schema rules** (enforced at dispatch time — violations throw before any subagent runs):
-
-  - Top-level \`type\` must be \`"object"\`. Wrap arrays in an object with a \`results\` field.
-  - \`properties\` must be defined with at least one explicit field. Open schemas (\`additionalProperties\` alone, no \`properties\`) are rejected by the structured-output runtime.
-  - Declare every field you expect. If you do not know the keys ahead of time, use a \`results: { type: "array", items: {...} }\` wrapper instead of an open object.
-
-  Without \`responseSchema\`, instruct subagents explicitly in the task description:
-
-  \`\`\`
-  Respond with ONLY a raw JSON object — no markdown fences, no explanation, no other text.
-  Output schema: { ... }
-  \`\`\`
-
-  ### Error handling
-
-  **One retry for failures, then move on.** If tasks fail due to schema or description errors, fix the root cause and call \`swarm()\` **once more** targeting just the failed ids. Do not retry a second time.
-
-  - **Many failures** (>20%): likely a systemic issue with the schema or description — fix and retry once.
-  - **Few failures** (<20%): aggregate the completed results and move on.
-
-  **Never recheck completed results.** Do not dispatch "recheck", "verify", or "cross-check" tasks for results that already succeeded. Completed results are final — accept them as-is and aggregate. Re-dispatching the same data with different task IDs is still rechecking and is not allowed.
-
-  ### Decomposition patterns
-
-  **Flat fan-out**: Split a dataset into equal chunks. All tasks are identical in structure.
-  Good for: large files, classification, extraction.
-
-  **One-per-item**: One task per discrete unit (file, document, URL).
-  Good for: summarizing collections, processing independent documents.
-
-  **Dimensional**: Multiple tasks examine the same input from different angles.
-  Good for: code review, multi-criteria evaluation.
 `;
 
 /**
