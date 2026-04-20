@@ -6,9 +6,7 @@ import type { SwarmTaskSpec } from "./types.js";
 import type { BackendProtocolV2 } from "../backends/v2/protocol.js";
 
 function createMockSubagent(
-  response: Record<string, unknown> | Error = {
-    messages: [new AIMessage("done")],
-  },
+  response: Record<string, unknown> = { messages: [new AIMessage("done")] },
   delay = 0,
 ) {
   return {
@@ -16,10 +14,18 @@ function createMockSubagent(
       if (delay > 0) {
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
-      if (response instanceof Error) {
-        throw response;
-      }
       return response;
+    }),
+  } as unknown as Runnable & { invoke: ReturnType<typeof vi.fn> };
+}
+
+function createThrowingMockSubagent(error: Error, delay = 0) {
+  return {
+    invoke: vi.fn(async (..._args: unknown[]) => {
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+      throw error;
     }),
   } as unknown as Runnable & { invoke: ReturnType<typeof vi.fn> };
 }
@@ -248,7 +254,7 @@ describe("executeSwarm", () => {
       const options = buildOptions({
         tasks: [{ id: "t1", description: "will fail" }],
         subagentGraphs: {
-          "general-purpose": createMockSubagent(new Error("boom")),
+          "general-purpose": createThrowingMockSubagent(new Error("boom")),
         },
       });
 
@@ -297,7 +303,7 @@ describe("executeSwarm", () => {
       const successAgent = createMockSubagent({
         messages: [new AIMessage("ok")],
       });
-      const failAgent = createMockSubagent(new Error("failed"));
+      const failAgent = createThrowingMockSubagent(new Error("failed"));
 
       const options = buildOptions({
         tasks: [

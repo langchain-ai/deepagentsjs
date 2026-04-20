@@ -204,7 +204,7 @@ async function dispatchTask(
       id: task.id,
       subagentType,
       status: "failed",
-      error: err instanceof Error ? err.message : String(err),
+      error: (err as Error).message ?? String(err),
     };
   }
 }

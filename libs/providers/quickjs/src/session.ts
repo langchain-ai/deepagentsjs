@@ -541,7 +541,7 @@ export class ReplSession {
             promise.resolve(val);
             val.dispose();
           } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
+            const message = (err as Error).message ?? String(err);
             const error = context.newError(message);
             promise.reject(error);
             error.dispose();
