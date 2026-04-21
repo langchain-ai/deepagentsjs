@@ -42,7 +42,7 @@
     "@langchain/langgraph": "https://pkg.pr.new/langchain-ai/langgraphjs/@langchain/langgraph@de53eb4",
     "@langchain/langgraph-sdk": "^1.8.0",
     "fast-glob": "^3.3.3",
-    "langchain": "1.4.0-dev-1776378339387",
+    "langchain": "1.4.0-dev-1776805421926",
     "micromatch": "^4.0.8",
     "yaml": "^2.8.2",
     "zod": "^4.3.6"
