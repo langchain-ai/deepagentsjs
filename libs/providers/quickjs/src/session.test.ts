@@ -567,8 +567,8 @@ describe("REPL Engine", () => {
         TIMEOUT,
       );
       expect(result.ok).toBe(true);
-      expect(result.value.completed).toBe(1);
-      expect(result.value.total).toBe(1);
+      expect((result.value as any).completed).toBe(1);
+      expect((result.value as any).total).toBe(1);
     });
 
     it("swarm.execute returns JSON-parseable summary", async () => {
@@ -581,8 +581,8 @@ describe("REPL Engine", () => {
         TIMEOUT,
       );
       expect(result.ok).toBe(true);
-      expect(result.value.completed).toBe(1);
-      expect(result.value.results[0].result).toBe("my result");
+      expect((result.value as any).completed).toBe(1);
+      expect((result.value as any).results[0].result).toBe("my result");
     });
 
     it("swarm.execute error propagates to JS when instruction is empty", async () => {

@@ -349,7 +349,7 @@ function buildSubagentResolver(
     responseSchema?: Record<string, unknown>,
   ): ReactAgent<any> | Runnable => {
     if (!responseSchema) {
-      return cache.get(subagentType)!;
+      return cache.get(subagentType) ?? subagentGraphs[subagentType];
     }
 
     const hash = createHash("sha256")

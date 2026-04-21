@@ -276,7 +276,22 @@ export class ReplSession {
     const adapted = adaptBackendProtocol(backend);
     const writes = this.pendingWrites.splice(0);
     for (const { path, content } of writes) {
-      await adapted.write(path, content);
+      const result = await adapted.write(path, content);
+      if (result.error?.includes("already exists")) {
+        // File already exists — overwrite by reading current content and replacing
+        const raw = await adapted.readRaw(path);
+        if (!raw.error && raw.data) {
+          const data = raw.data;
+          const oldContent = Array.isArray(data.content)
+            ? data.content.join("\n")
+            : typeof data.content === "string"
+              ? data.content
+              : null;
+          if (oldContent !== null && oldContent !== content) {
+            await adapted.edit(path, oldContent, content);
+          }
+        }
+      }
     }
   }
 
@@ -583,6 +598,19 @@ export class ReplSession {
           session.logs.push(
             `[swarm.execute] ${summary.completed} completed, ${summary.failed} failed, ${summary.skipped} skipped. Results → "${file}" column "${summary.column}".`,
           );
+          if (summary.failed > 0) {
+            const sample = summary.failedTasks.slice(0, 3);
+            for (const t of sample) {
+              session.logs.push(
+                `[swarm.execute] failure id="${t.id}" error=${t.error}`,
+              );
+            }
+            if (summary.failedTasks.length > 3) {
+              session.logs.push(
+                `[swarm.execute] ... and ${summary.failedTasks.length - 3} more failures`,
+              );
+            }
+          }
           return context.newString(JSON.stringify(summary));
         });
       },
