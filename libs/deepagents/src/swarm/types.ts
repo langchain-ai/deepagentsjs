@@ -40,6 +40,12 @@ export interface SwarmTaskSpec {
    * variant via SubagentFactory with this as the `responseFormat`.
    */
   responseSchema?: Record<string, unknown>;
+
+  /**
+   * Raw row data from the source table. Used by batched dispatch to
+   * compose a compact prompt (instruction once + per-item variable values).
+   */
+  rowData?: Record<string, unknown>;
 }
 
 /**
@@ -122,16 +128,14 @@ export interface SwarmExecuteOptions {
   responseSchema?: Record<string, unknown>;
 
   /**
-   * Max concurrent subagent dispatches. @default DEFAULT_CONCURRENCY
+   * Max concurrent dispatches. @default DEFAULT_CONCURRENCY
    */
   concurrency?: number;
 
   /**
-   * Number of rows to group into a single subagent call. The table stays
-   * one-row-per-item; the executor batches N rows, sends a combined
-   * instruction, and unpacks results back to individual rows.
-   * When > 1, `responseSchema` is used for post-hoc validation only
-   * (not passed to the subagent for constrained decoding).
+   * Number of rows to group into a single subagent call. Requires
+   * `responseSchema`. Each batch dispatches one subagent with a wrapped
+   * array schema and results are matched back to rows by id.
    * @default 1
    */
   batchSize?: number;

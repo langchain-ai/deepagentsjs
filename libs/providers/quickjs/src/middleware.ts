@@ -139,7 +139,7 @@ const SWARM_FANOUT_PROMPT = dedent`
   ### Rules
 
   - **Never read the full input that triggers swarm.** Sample with \`read_file\` (offset/limit), \`grep\`, or \`ls\` — 2–3 tool calls max. Data reaches subagents via instruction templates, not through you.
-  - **Keep total subagent calls under 100.** Use \`batchSize\` for high-volume work (see Scale below).
+  - **Keep total dispatches reasonable.** Use \`batchSize\` with \`responseSchema\` to group rows into fewer subagent calls for high-volume tasks.
   - **Results are final.** Do not dispatch recheck, verify, or cross-check tasks.
   - **One retry for failures, then move on.** Fix the root cause (instruction, schema) and re-dispatch only failed rows via \`filter\`. Don't retry twice.
 
@@ -201,7 +201,7 @@ const SWARM_FANOUT_PROMPT = dedent`
     subagentType?: string,     // subagent type (default: "general-purpose")
     responseSchema?: object,   // JSON Schema for structured output
     concurrency?: number,      // max parallel dispatches (default: ${DEFAULT_CONCURRENCY})
-    batchSize?: number,        // rows per subagent call (default: 1)
+    batchSize?: number,        // rows per subagent call (requires responseSchema, default: 1)
   })
   \`\`\`
 
@@ -222,10 +222,11 @@ const SWARM_FANOUT_PROMPT = dedent`
 
   Use \`responseSchema\` when results will be aggregated programmatically. The schema must have \`type: "object"\` at the top level. Use \`enum\` to constrain string values and prevent label drift.
 
+  Each property in the schema becomes a top-level column on the row. For example, a schema with \`{ label, confidence }\` produces rows like \`{ id: "r1", text: "...", label: "positive", confidence: 0.95 }\`. Read these columns directly — no unwrapping needed.
+
   \`\`\`typescript
   await swarm.execute("/table.jsonl", {
     instruction: "Classify the sentiment of this review: {text}",
-    column: "sentiment",
     responseSchema: {
       type: "object",
       properties: {
@@ -235,6 +236,7 @@ const SWARM_FANOUT_PROMPT = dedent`
       required: ["label"],
     },
   });
+  // Row after: { id: "r1", text: "Great!", label: "positive", confidence: 0.95 }
   \`\`\`
 
   ### Filtering
@@ -269,38 +271,30 @@ const SWARM_FANOUT_PROMPT = dedent`
   });
   await swarm.execute("/docs.jsonl", {
     instruction: "Classify this document.\\nSummary: {summary}",
-    column: "category",
     responseSchema: {
       type: "object",
       properties: { category: { type: "string", enum: ["guide", "reference", "tutorial"] } },
       required: ["category"],
     },
   });
+  // Row after: { id: "...", file: "docs/guide.md", summary: "A guide to...", category: "guide" }
   \`\`\`
 
-  ### Scale and batching
+  ### Batching
 
-  | Row count | Strategy |
-  |---|---|
-  | < 10 | No swarm needed — use inline tool calls |
-  | 10–100 | \`batchSize: 1\` (default) — one subagent per row |
-  | 100–2,000 | Use \`batchSize\` (20–50) to keep subagent calls under 100 |
-  | 2,000+ | Use \`batchSize: 40–50\` with \`responseSchema\` for structured results |
-
-  \`batchSize\` groups N rows into a single subagent call. The table stays one-row-per-item — the executor batches instructions and unpacks results automatically. Use it for high-volume small items (classification, labeling, extraction). Omit it when each row needs a full subagent context (file analysis, long-form generation).
+  Use \`batchSize\` with \`responseSchema\` to group multiple rows into a single subagent call. Each batch returns an array of results matched back to rows by id. Useful for classification, labeling, and extraction over many rows:
 
   \`\`\`typescript
-  // 1,000 items → 25 subagent calls instead of 1,000
   await swarm.execute("/items.jsonl", {
     instruction: "Classify: {text}",
-    column: "label",
-    batchSize: 40,
+    batchSize: 25,
     responseSchema: {
       type: "object",
       properties: { label: { type: "string", enum: ["A", "B", "C"] } },
       required: ["label"],
     },
   });
+  // Row after: { id: "r1", text: "...", label: "A" }
   \`\`\`
 `;
 
@@ -372,7 +366,6 @@ export function createQuickJSMiddleware(
   let ptcTools: StructuredToolInterface[] = [];
   let subagentGraphs: ReplSessionOptions["subagentGraphs"];
   let subagentFactories: ReplSessionOptions["subagentFactories"];
-
   function filterToolsForPtc(
     allTools: StructuredToolInterface[],
   ): StructuredToolInterface[] {

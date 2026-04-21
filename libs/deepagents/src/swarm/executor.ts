@@ -124,13 +124,15 @@ export interface SwarmExecutionOptions {
   responseSchema?: Record<string, unknown>;
 
   /**
-   * Maximum concurrent subagent dispatches. @default DEFAULT_CONCURRENCY
+   * Maximum concurrent dispatches. @default DEFAULT_CONCURRENCY
    */
   concurrency?: number;
 
   /**
-   * Number of rows to group into a single subagent call. When > 1,
-   * `responseSchema` is used for post-hoc validation only.
+   * Number of rows to group into a single subagent call. Requires
+   * `responseSchema`. Each batch dispatches one subagent with a wrapped
+   * array schema and results are matched back to rows by id.
+   *
    * @default 1
    */
   batchSize?: number;
@@ -288,8 +290,23 @@ function tryParseJson(value: string): unknown {
 }
 
 /**
- * Chunk an array into groups of `size`. The last group may be smaller.
+ * Write a result value into a table row. Structured objects (from
+ * `responseSchema`) are flattened — each property becomes a top-level
+ * column. Plain text results are written to the named `column`.
  */
+function mergeResultIntoRow(
+  row: Record<string, unknown>,
+  column: string,
+  value: unknown,
+): Record<string, unknown> {
+  if (value != null && typeof value === "object" && !Array.isArray(value)) {
+    return { ...row, ...(value as Record<string, unknown>) };
+  }
+  return { ...row, [column]: value };
+}
+
+// ── Batched subagent dispatch ─────────────────────────────────────────────────
+
 function groupIntoBatches<T>(items: T[], size: number): T[][] {
   const batches: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
@@ -300,95 +317,71 @@ function groupIntoBatches<T>(items: T[], size: number): T[][] {
 
 const PLACEHOLDER_RE = /\{\s*([a-zA-Z_$][a-zA-Z0-9_$.]*)\s*\}/g;
 
-/**
- * Extract unique placeholder names from an instruction template.
- */
-function extractPlaceholders(template: string): string[] {
-  const seen = new Set<string>();
-  let match: RegExpExecArray | null;
-  while ((match = PLACEHOLDER_RE.exec(template)) !== null) {
-    seen.add(match[1].trim());
-  }
-  return [...seen];
-}
-
-/**
- * Format a row value for inclusion in the compact item list.
- */
-function formatValue(value: unknown): string {
-  if (value === undefined) return "<missing>";
+function formatColumnValue(value: unknown): string {
+  if (value === undefined) return "undefined";
   if (value === null) return "null";
   if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean")
-    return String(value);
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
   return JSON.stringify(value);
 }
 
-/**
- * Build a batch prompt. When the instruction has placeholders the static
- * instruction is shown once and each item lists only its per-row values.
- * Falls back to fully-interpolated blocks when there are no placeholders.
- */
 function composeBatchInstruction(
   batch: SwarmTaskSpec[],
-  instructionTemplate?: string,
-  rows?: Record<string, unknown>[],
-  rowIndexById?: Map<string, number>,
+  instructionTemplate: string,
 ): string {
-  const placeholders = instructionTemplate
-    ? extractPlaceholders(instructionTemplate)
-    : [];
+  const placeholders = [
+    ...new Set(
+      [...instructionTemplate.matchAll(PLACEHOLDER_RE)].map((m) => m[1]),
+    ),
+  ];
 
-  const canOptimize =
-    placeholders.length > 0 && rows != null && rowIndexById != null;
-
-  if (!canOptimize) {
+  if (placeholders.length === 0 || !batch[0]?.rowData) {
     const items = batch
-      .map(
-        (task, i) =>
-          `--- Item ${i + 1} (id: ${task.id}) ---\n${task.description}`,
-      )
+      .map((task) => `[${task.id}] ${task.description}`)
       .join("\n\n");
-    return `Process the following ${batch.length} items. Return a JSON array with exactly ${batch.length} elements, one result per item in the same order.\n\n${items}`;
+    return `You will process ${batch.length} items. For each item, perform the requested task and return the result tagged with the item's id.\n\nItems:\n${items}\n\nReturn a result for each item, tagged with its id.`;
   }
 
-  const itemLines = batch.map((task, i) => {
-    const rowIdx = rowIndexById.get(task.id);
-    const row = rowIdx != null ? rows[rowIdx] : undefined;
+  let prompt = `You will process ${batch.length} items. The instruction for each item is:\n\n${instructionTemplate}\n\nItems:\n`;
 
-    if (!row) {
-      return `${i + 1}. (id: ${task.id}) <row not found>`;
+  for (const task of batch) {
+    if (placeholders.length === 1) {
+      const value = readColumn(task.rowData!, placeholders[0]);
+      prompt += `[${task.id}] ${formatColumnValue(value)}\n`;
+    } else {
+      const pairs = placeholders.map(
+        (p) => `${p}: ${formatColumnValue(readColumn(task.rowData!, p))}`,
+      );
+      prompt += `[${task.id}] ${pairs.join(" | ")}\n`;
     }
+  }
 
-    const values = placeholders.map(
-      (p) => `${p}: ${formatValue(readColumn(row, p))}`,
-    );
-    return `${i + 1}. (id: ${task.id}) ${values.join(" | ")}`;
-  });
-
-  return `Apply the following instruction to each of the ${batch.length} items listed below. Each item provides values for ${placeholders.map((p) => `"${p}"`).join(", ")}. Return a JSON array with exactly ${batch.length} results, one per item in the same order.
-
-Instruction:
-${instructionTemplate}
-
-Items:
-${itemLines.join("\n")}`;
+  prompt += `\nReturn a result for each item, tagged with its id.`;
+  return prompt;
 }
 
-/**
- * Wrap a per-row `responseSchema` in an array container with exact length
- * constraints so constrained decoding enforces both item shape and count.
- */
 function wrapBatchSchema(
   itemSchema: Record<string, unknown>,
   count: number,
 ): Record<string, unknown> {
+  const userProps = (itemSchema.properties ?? {}) as Record<string, unknown>;
+  const userRequired = Array.isArray(itemSchema.required)
+    ? (itemSchema.required as string[])
+    : [];
+
   return {
     type: "object",
     properties: {
       results: {
         type: "array",
-        items: itemSchema,
+        items: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            ...userProps,
+          },
+          required: ["id", ...userRequired],
+        },
         minItems: count,
         maxItems: count,
       },
@@ -397,173 +390,56 @@ function wrapBatchSchema(
   };
 }
 
-/**
- * Strip markdown code fences (``` ```json ... ``` ```) from LLM output.
- * Used as a fallback when batch mode runs without `responseSchema`.
- */
-function stripCodeFences(text: string): string {
-  const trimmed = text.trim();
-  const match = trimmed.match(/^```(?:\w*)\n([\s\S]*?)```$/);
-  return match ? match[1].trim() : trimmed;
+interface BatchResultItem {
+  id: string;
+  [key: string]: unknown;
 }
 
-/**
- * Parse a batch subagent's response and map results back to individual rows.
- * When `structured` is true, expects `{ results: [...] }` from constrained
- * decoding. Otherwise parses raw text as a JSON array.
- */
 function unpackBatchResult(
   batch: SwarmTaskSpec[],
-  result: Record<string, unknown>,
-  subagentType: string,
-  structured: boolean,
+  rawResults: BatchResultItem[],
 ): SwarmTaskResult[] {
-  const rawText = extractResultText(result);
-
-  let items: unknown[];
-
-  if (structured) {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(rawText);
-    } catch {
-      return batch.map((task) => ({
-        id: task.id,
-        subagentType,
-        status: "failed" as const,
-        error: `Batch structured response is not valid JSON: ${rawText.slice(0, 200)}`,
-      }));
-    }
-
-    const obj = parsed as Record<string, unknown>;
-    if (!Array.isArray(obj?.results)) {
-      return batch.map((task) => ({
-        id: task.id,
-        subagentType,
-        status: "failed" as const,
-        error: `Batch structured response missing "results" array`,
-      }));
-    }
-    items = obj.results;
-  } else {
-    const text = stripCodeFences(rawText);
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      return batch.map((task) => ({
-        id: task.id,
-        subagentType,
-        status: "failed" as const,
-        error: `Batch response is not valid JSON: ${text.slice(0, 200)}`,
-      }));
-    }
-
-    if (!Array.isArray(parsed)) {
-      return batch.map((task) => ({
-        id: task.id,
-        subagentType,
-        status: "failed" as const,
-        error: `Batch response is not a JSON array (got ${typeof parsed})`,
-      }));
-    }
-    items = parsed;
-  }
-
-  // Build an ID→item map for ID-based matching.
-  const byId = new Map<string, unknown>();
-  for (const item of items) {
-    if (
-      typeof item === "object" &&
-      item !== null &&
-      typeof (item as Record<string, unknown>).id === "string"
-    ) {
-      byId.set((item as Record<string, unknown>).id as string, item);
+  const subagentType = batch[0]?.subagentType ?? "general-purpose";
+  const byId = new Map<string, BatchResultItem>();
+  for (const item of rawResults) {
+    if (typeof item.id === "string") {
+      byId.set(item.id, item);
     }
   }
 
-  const useIdMatching = byId.size > 0;
-
-  return batch.map((task, i) => {
-    let raw: unknown;
-
-    if (useIdMatching) {
-      raw = byId.get(task.id);
-      if (raw === undefined) {
-        // Fall back to position if this id wasn't found.
-        raw = i < items.length ? items[i] : undefined;
-      }
-    } else {
-      raw = i < items.length ? items[i] : undefined;
-    }
-
-    if (raw === undefined) {
+  return batch.map((task) => {
+    const match = byId.get(task.id);
+    if (!match) {
       return {
         id: task.id,
         subagentType,
         status: "failed" as const,
-        error: `Batch returned ${items.length} results but expected ${batch.length}; no result for this row`,
+        error: `No result returned for id "${task.id}"`,
       };
     }
 
-    // Extract the "result" field if present, otherwise use the whole item.
-    let resultValue: unknown = raw;
-    if (
-      typeof raw === "object" &&
-      raw !== null &&
-      "result" in (raw as Record<string, unknown>)
-    ) {
-      resultValue = (raw as Record<string, unknown>).result;
-    }
-
+    const { id: _, ...rest } = match;
     return {
       id: task.id,
       subagentType,
       status: "completed" as const,
-      result:
-        typeof resultValue === "string"
-          ? resultValue
-          : JSON.stringify(resultValue),
+      result: JSON.stringify(rest),
     };
   });
 }
 
-/**
- * Dispatch a batch of tasks to a single subagent. When `responseSchema`
- * is provided, wraps it in an array container and uses constrained
- * decoding. Otherwise the subagent returns free-form JSON.
- */
 function dispatchBatch(
   batch: SwarmTaskSpec[],
-  resolveSubagent: (
-    type: string,
-    schema?: Record<string, unknown>,
-  ) => ReactAgent<any> | Runnable,
+  subagent: ReactAgent<any> | Runnable,
   filteredState: Record<string, unknown>,
-  responseSchema: Record<string, unknown> | undefined,
+  instructionTemplate: string,
   config?: { signal?: AbortSignal },
-  batchContext?: {
-    instructionTemplate: string;
-    rows: Record<string, unknown>[];
-    rowIndexById: Map<string, number>;
-  },
 ): Promise<SwarmTaskResult[]> {
-  const subagentType = batch[0].subagentType ?? "general-purpose";
-  const combinedInstruction = composeBatchInstruction(
-    batch,
-    batchContext?.instructionTemplate,
-    batchContext?.rows,
-    batchContext?.rowIndexById,
-  );
-
-  const batchSchema = responseSchema
-    ? wrapBatchSchema(responseSchema, batch.length)
-    : undefined;
-  const subagent = resolveSubagent(subagentType, batchSchema);
-
+  const subagentType = batch[0]?.subagentType ?? "general-purpose";
+  const prompt = composeBatchInstruction(batch, instructionTemplate);
   const subagentState = {
     ...filteredState,
-    messages: [new HumanMessage({ content: combinedInstruction })],
+    messages: [new HumanMessage({ content: prompt })],
   };
 
   return withTimeout(
@@ -572,8 +448,32 @@ function dispatchBatch(
     >,
     TASK_TIMEOUT_MS,
   ).then(
-    (result) =>
-      unpackBatchResult(batch, result, subagentType, !!responseSchema),
+    (result) => {
+      if (result.structuredResponse != null) {
+        const sr = result.structuredResponse as { results?: unknown[] };
+        if (Array.isArray(sr.results)) {
+          return unpackBatchResult(batch, sr.results as BatchResultItem[]);
+        }
+      }
+      const text = extractResultText(result);
+      const parsed = tryParseJson(text);
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        Array.isArray((parsed as any).results)
+      ) {
+        return unpackBatchResult(
+          batch,
+          (parsed as any).results as BatchResultItem[],
+        );
+      }
+      return batch.map((task) => ({
+        id: task.id,
+        subagentType,
+        status: "failed" as const,
+        error: "Could not parse batch response as results array",
+      }));
+    },
     (err) =>
       batch.map((task) => ({
         id: task.id,
@@ -718,6 +618,7 @@ async function prepareSwarm(
         description,
         ...(subagentType != null && { subagentType }),
         ...(responseSchema != null && { responseSchema }),
+        rowData: row,
       });
       rowIndexById.set(id, idx);
     } catch (err) {
@@ -809,6 +710,11 @@ export async function executeSwarm(
         `batchSize must be a positive integer, got ${rawBatchSize}`,
       );
     }
+    if (!responseSchema) {
+      throw new Error(
+        "batchSize requires responseSchema",
+      );
+    }
   }
   const effectiveBatchSize = rawBatchSize ?? 1;
 
@@ -819,7 +725,7 @@ export async function executeSwarm(
       instruction,
       filter,
       subagentType,
-      effectiveBatchSize > 1 ? undefined : responseSchema,
+      responseSchema,
     );
 
   if (responseSchema) {
@@ -831,16 +737,17 @@ export async function executeSwarm(
     MAX_CONCURRENCY,
   );
 
+  const results: SwarmTaskResult[] = new Array(tasks.length);
+  const executing = new Set<Promise<void>>();
+
   const usedTypes = new Set(
     tasks.map((t) => t.subagentType ?? "general-purpose"),
   );
   validateSubagentTypes(usedTypes, subagentGraphs);
 
-  if (effectiveBatchSize <= 1) {
-    for (const task of tasks) {
-      if (task.responseSchema) {
-        validateResponseSchema(task.id, task.responseSchema);
-      }
+  for (const task of tasks) {
+    if (task.responseSchema) {
+      validateResponseSchema(task.id, task.responseSchema);
     }
   }
 
@@ -850,11 +757,61 @@ export async function executeSwarm(
   );
   const filteredState = filterStateForSubagent(currentState);
 
-  const results: SwarmTaskResult[] = new Array(tasks.length);
-  const executing = new Set<Promise<void>>();
+  if (effectiveBatchSize > 1) {
+    // ── Batched subagent dispatch ──
+    const batches = groupIntoBatches(tasks, effectiveBatchSize);
+    const batchSubagentType = subagentType ?? "general-purpose";
+    let taskOffset = 0;
 
-  if (effectiveBatchSize <= 1) {
-    // ── Single-row dispatch (existing behavior) ──
+    for (const batch of batches) {
+      if (signal?.aborted) {
+        for (let i = 0; i < batch.length; i++) {
+          results[taskOffset + i] = {
+            id: batch[i].id,
+            subagentType: batchSubagentType,
+            status: "failed",
+            error: "Aborted",
+          };
+        }
+        taskOffset += batch.length;
+        continue;
+      }
+
+      const wrappedSchema = wrapBatchSchema(responseSchema!, batch.length);
+      const subagent = resolveSubagent(batchSubagentType, wrappedSchema);
+      const currentOffset = taskOffset;
+
+      const promise = dispatchBatch(batch, subagent, filteredState, instruction, {
+        signal,
+      }).then((batchResults) => {
+        for (let i = 0; i < batchResults.length; i++) {
+          const res = batchResults[i];
+          results[currentOffset + i] = res;
+
+          const rowIdx = rowIndexById.get(res.id);
+          if (
+            res.status === "completed" &&
+            res.result != null &&
+            rowIdx != null
+          ) {
+            const value = tryParseJson(res.result);
+            rows[rowIdx] = mergeResultIntoRow(rows[rowIdx], column, value);
+          }
+        }
+        write(file, serializeTableJsonl(rows));
+      });
+
+      const tracked = promise.then(() => {
+        executing.delete(tracked);
+      });
+      executing.add(tracked);
+      if (executing.size >= effectiveConcurrency) {
+        await Promise.race(executing);
+      }
+      taskOffset += batch.length;
+    }
+  } else {
+    // ── Single-row subagent dispatch ──
     for (let idx = 0; idx < tasks.length; idx++) {
       const task = tasks[idx];
 
@@ -886,7 +843,7 @@ export async function executeSwarm(
           const value = responseSchema
             ? tryParseJson(result.result)
             : result.result;
-          rows[rowIdx] = { ...rows[rowIdx], [column]: value };
+          rows[rowIdx] = mergeResultIntoRow(rows[rowIdx], column, value);
           write(file, serializeTableJsonl(rows));
         }
       });
@@ -898,64 +855,6 @@ export async function executeSwarm(
       if (executing.size >= effectiveConcurrency) {
         await Promise.race(executing);
       }
-    }
-  } else {
-    // ── Batch dispatch ──
-    const batches = groupIntoBatches(tasks, effectiveBatchSize);
-    const batchSubagentType = subagentType ?? "general-purpose";
-
-    let taskOffset = 0;
-    for (const batch of batches) {
-      if (signal?.aborted) {
-        for (let i = 0; i < batch.length; i++) {
-          results[taskOffset + i] = {
-            id: batch[i].id,
-            subagentType: batchSubagentType,
-            status: "failed",
-            error: "Aborted",
-          };
-        }
-        taskOffset += batch.length;
-        continue;
-      }
-
-      const currentOffset = taskOffset;
-      const promise = dispatchBatch(
-        batch,
-        resolveSubagent,
-        filteredState,
-        responseSchema,
-        { signal },
-        { instructionTemplate: instruction, rows, rowIndexById },
-      ).then((batchResults) => {
-        for (let i = 0; i < batchResults.length; i++) {
-          const res = batchResults[i];
-          results[currentOffset + i] = res;
-
-          const rowIdx = rowIndexById.get(res.id);
-          if (
-            res.status === "completed" &&
-            res.result != null &&
-            rowIdx != null
-          ) {
-            const value = responseSchema
-              ? tryParseJson(res.result)
-              : res.result;
-            rows[rowIdx] = { ...rows[rowIdx], [column]: value };
-          }
-        }
-        write(file, serializeTableJsonl(rows));
-      });
-
-      const tracked = promise.then(() => {
-        executing.delete(tracked);
-      });
-      executing.add(tracked);
-      if (executing.size >= effectiveConcurrency) {
-        await Promise.race(executing);
-      }
-
-      taskOffset += batch.length;
     }
   }
 
