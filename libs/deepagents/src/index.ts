@@ -151,6 +151,10 @@ export {
   // LangSmith sandbox backend
   LangSmithSandbox,
   type LangSmithSandboxOptions,
+  type LangSmithSandboxCreateOptions,
+  type LangSmithSnapshot,
+  type LangSmithCaptureSnapshotOptions,
+  type LangSmithStartSandboxOptions,
   // Sandbox error types
   type SandboxErrorCode,
   // Local shell backend

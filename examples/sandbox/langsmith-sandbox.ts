@@ -7,20 +7,18 @@
  * in the `deepagents` package.
  *
  * It shows how to:
- * 1. Create a LangSmith Sandbox via `LangSmithSandbox.create()`
+ * 1. Create a LangSmith Sandbox from a snapshot via `LangSmithSandbox.create()`
  * 2. Use the `execute` tool to run shell commands in the cloud sandbox
  * 3. Clean up the sandbox when finished
  *
  * ## Prerequisites
  *
- * Set your LangSmith API key:
+ * Set your LangSmith API key and snapshot ID:
  *
  * ```bash
  * export LANGSMITH_API_KEY=your_api_key_here
+ * export LANGSMITH_SANDBOX_SNAPSHOT_ID=your_snapshot_id
  * ```
- *
- * You also need a sandbox template created in your LangSmith workspace.
- * The default template name used here is `"deepagents"`.
  *
  * ## Running the Example
  *
@@ -65,11 +63,17 @@ You can execute shell commands to:
 You're working in an isolated sandbox powered by LangSmith — feel free to experiment!`;
 
 async function main() {
+  const snapshotId = process.env.LANGSMITH_SANDBOX_SNAPSHOT_ID;
+  if (!snapshotId) {
+    console.error(
+      "Set LANGSMITH_SANDBOX_SNAPSHOT_ID to the snapshot you want to boot from.",
+    );
+    process.exit(1);
+  }
+
   console.log("Creating LangSmith Sandbox...\n");
 
-  const backend = await LangSmithSandbox.create({
-    templateName: "deepagents",
-  });
+  const backend = await LangSmithSandbox.create({ snapshotId });
 
   console.log(`Sandbox created with ID: ${backend.id}\n`);
 
