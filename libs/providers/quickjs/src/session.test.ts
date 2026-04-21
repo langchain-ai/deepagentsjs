@@ -457,6 +457,126 @@ describe("REPL Engine", () => {
       expect(result.value).toEqual(["echo-1", "echo-2", "echo-3"]);
     });
 
+    it("should pass a well-formed ToolCall (unique id, name, args) to each invocation", async () => {
+      const seen: Array<{
+        toolCallId?: string;
+        toolCallName?: string;
+        toolCallType?: string;
+        toolCallArgs?: unknown;
+        args: unknown;
+      }> = [];
+      const captureTool = tool(
+        async (input, config) => {
+          const cfg = config as
+            | {
+                toolCall?: {
+                  id?: string;
+                  name?: string;
+                  args?: unknown;
+                  type?: string;
+                };
+              }
+            | undefined;
+          seen.push({
+            toolCallId: cfg?.toolCall?.id,
+            toolCallName: cfg?.toolCall?.name,
+            toolCallType: cfg?.toolCall?.type,
+            toolCallArgs: cfg?.toolCall?.args,
+            args: input,
+          });
+          return `ok-${seen.length}`;
+        },
+        {
+          name: "capture",
+          description: "Captures the runtime passed to the tool",
+          schema: z.object({ n: z.number() }),
+        },
+      );
+
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend(),
+        tools: [captureTool],
+      });
+
+      const r1 = await session.eval("await tools.capture({ n: 1 })", TIMEOUT);
+      const r2 = await session.eval("await tools.capture({ n: 2 })", TIMEOUT);
+
+      expect(r1.ok).toBe(true);
+      expect(r2.ok).toBe(true);
+      expect(r1.value).toBe("ok-1");
+      expect(r2.value).toBe("ok-2");
+
+      expect(seen).toHaveLength(2);
+      expect(seen[0].args).toEqual({ n: 1 });
+      expect(seen[1].args).toEqual({ n: 2 });
+
+      for (const entry of seen) {
+        expect(entry.toolCallName).toBe("capture");
+        expect(entry.toolCallType).toBe("tool_call");
+        expect(entry.toolCallArgs).toEqual(entry.args);
+        expect(typeof entry.toolCallId).toBe("string");
+        expect(entry.toolCallId).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+        );
+      }
+      expect(seen[0].toolCallId).not.toBe(seen[1].toolCallId);
+    });
+
+    it("should unwrap ToolMessage results to the plain content string", async () => {
+      const greetTool = tool(async (input) => `hello, ${input.name}!`, {
+        name: "greet",
+        description: "Greet someone",
+        schema: z.object({ name: z.string() }),
+      });
+
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend(),
+        tools: [greetTool],
+      });
+
+      const result = await session.eval(
+        'await tools.greet({ name: "world" })',
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("hello, world!");
+    });
+
+    it("should unwrap LangGraph Command results to the last message's content", async () => {
+      const commandTool = tool(
+        async () =>
+          ({
+            lg_name: "Command",
+            lc_direct_tool_output: true,
+            update: {
+              messages: [
+                { content: "intermediate" },
+                { content: "final-answer" },
+              ],
+            },
+          }) as unknown as string,
+        {
+          name: "returns_command",
+          description: "Returns a LangGraph Command-shaped object",
+          schema: z.object({}),
+        },
+      );
+
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend(),
+        tools: [commandTool],
+      });
+
+      const result = await session.eval(
+        "await tools.returnsCommand({})",
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("final-answer");
+    });
+
     it("should handle tool errors gracefully", async () => {
       const failingTool = tool(
         async (): Promise<string> => {
