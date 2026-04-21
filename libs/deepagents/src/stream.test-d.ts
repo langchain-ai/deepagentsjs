@@ -8,7 +8,7 @@ import { z } from "zod/v4";
 import { createDeepAgent } from "./agent.js";
 import { collectWithTimeout } from "./testing/utils.js";
 
-describe("stream_experimental", () => {
+describe("stream_v2", () => {
   it("streams tool calls with typed input from a custom tool", async () => {
     const weatherTool = tool(
       async (input: { city: string }) => `Sunny in ${input.city}`,
@@ -31,7 +31,7 @@ describe("stream_experimental", () => {
       checkpointer: new MemorySaver(),
     });
 
-    const run = await agent.stream_experimental(
+    const run = await agent.stream_v2(
       { messages: [new HumanMessage("What's the weather in Paris?")] },
       {
         configurable: { thread_id: `test-tool-calls-${Date.now()}` },
@@ -125,7 +125,7 @@ describe("stream_experimental", () => {
       ],
     });
 
-    const run = await agent.stream_experimental(
+    const run = await agent.stream_v2(
       { messages: [new HumanMessage("Do both tasks")] },
       {
         configurable: { thread_id: `test-two-subagents-${Date.now()}` },

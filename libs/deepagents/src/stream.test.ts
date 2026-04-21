@@ -9,7 +9,7 @@ import type { SubagentRunStream } from "./stream.js";
 import { createDeepAgent } from "./agent.js";
 import { collectWithTimeout } from "./testing/utils.js";
 
-describe("stream_experimental", () => {
+describe("stream_v2", () => {
   it("returns a DeepAgentRunStream with native subagents getter", async () => {
     const model = fakeModel().respond(new AIMessage("Hello!"));
     const agent = createDeepAgent({
@@ -17,7 +17,7 @@ describe("stream_experimental", () => {
       checkpointer: new MemorySaver(),
     });
 
-    const run = await agent.stream_experimental(
+    const run = await agent.stream_v2(
       { messages: [new HumanMessage("Hi")] },
       { configurable: { thread_id: `test-instance-${Date.now()}` } },
     );
@@ -35,7 +35,7 @@ describe("stream_experimental", () => {
       checkpointer: new MemorySaver(),
     });
 
-    const run = await agent.stream_experimental(
+    const run = await agent.stream_v2(
       { messages: [new HumanMessage("What is the answer?")] },
       { configurable: { thread_id: `test-output-${Date.now()}` } },
     );
@@ -58,7 +58,7 @@ describe("stream_experimental", () => {
       checkpointer: new MemorySaver(),
     });
 
-    const run = await agent.stream_experimental(
+    const run = await agent.stream_v2(
       { messages: [new HumanMessage("Stream test")] },
       { configurable: { thread_id: `test-messages-${Date.now()}` } },
     );
@@ -92,7 +92,7 @@ describe("stream_experimental", () => {
       checkpointer: new MemorySaver(),
     });
 
-    const run = await agent.stream_experimental(
+    const run = await agent.stream_v2(
       { messages: [new HumanMessage("What's the weather in Paris?")] },
       {
         configurable: { thread_id: `test-tool-calls-${Date.now()}` },
@@ -126,7 +126,7 @@ describe("stream_experimental", () => {
       checkpointer: new MemorySaver(),
     });
 
-    const run = await agent.stream_experimental(
+    const run = await agent.stream_v2(
       { messages: [new HumanMessage("Simple question")] },
       { configurable: { thread_id: `test-no-subagents-${Date.now()}` } },
     );
@@ -212,7 +212,7 @@ describe("stream_experimental", () => {
       ],
     });
 
-    const run = await agent.stream_experimental(
+    const run = await agent.stream_v2(
       { messages: [new HumanMessage("Do both tasks")] },
       {
         configurable: { thread_id: `test-two-subagents-${Date.now()}` },
@@ -292,7 +292,7 @@ describe("stream_experimental", () => {
       checkpointer: new MemorySaver(),
     });
 
-    const run = await agent.stream_experimental(
+    const run = await agent.stream_v2(
       { messages: [new HumanMessage("Say hello")] },
       { configurable: { thread_id: `test-raw-events-${Date.now()}` } },
     );
@@ -314,7 +314,7 @@ describe("stream_experimental", () => {
       checkpointer: new MemorySaver(),
     });
 
-    const run = await agent.stream_experimental(
+    const run = await agent.stream_v2(
       { messages: [new HumanMessage("values test")] },
       { configurable: { thread_id: `test-values-${Date.now()}` } },
     );
@@ -331,7 +331,7 @@ describe("stream_experimental", () => {
       checkpointer: new MemorySaver(),
     });
 
-    const run = await agent.stream_experimental(
+    const run = await agent.stream_v2(
       { messages: [new HumanMessage("path test")] },
       { configurable: { thread_id: `test-path-${Date.now()}` } },
     );
@@ -347,7 +347,7 @@ describe("stream_experimental", () => {
       checkpointer: new MemorySaver(),
     });
 
-    const run = await agent.stream_experimental(
+    const run = await agent.stream_v2(
       { messages: [new HumanMessage("interrupt test")] },
       { configurable: { thread_id: `test-interrupted-${Date.now()}` } },
     );
@@ -364,7 +364,7 @@ describe("stream_experimental", () => {
       checkpointer: new MemorySaver(),
     });
 
-    const run = await agent.stream_experimental(
+    const run = await agent.stream_v2(
       { messages: [new HumanMessage("signal test")] },
       { configurable: { thread_id: `test-signal-${Date.now()}` } },
     );

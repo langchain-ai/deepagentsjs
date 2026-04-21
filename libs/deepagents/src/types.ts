@@ -246,9 +246,9 @@ export type DeepAgent<
    * Returns a {@link DeepAgentRunStream} with native `.subagents`,
    * `.toolCalls`, `.middleware`, and `.messages` getters.
    */
-  stream_experimental(
-    state: Parameters<ReactAgent<TTypes>["stream_experimental"]>[0],
-    config?: Parameters<ReactAgent<TTypes>["stream_experimental"]>[1],
+  stream_v2(
+    state: Parameters<ReactAgent<TTypes>["stream_v2"]>[0],
+    config?: Parameters<ReactAgent<TTypes>["stream_v2"]>[1],
   ): Promise<
     DeepAgentRunStream<
       Awaited<ReturnType<ReactAgent<TTypes>["invoke"]>>,
