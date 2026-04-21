@@ -1,5 +1,21 @@
 # deepagents
 
+## 1.9.1
+
+### Patch Changes
+
+- [#442](https://github.com/langchain-ai/deepagentsjs/pull/442) [`e90171a`](https://github.com/langchain-ai/deepagentsjs/commit/e90171abe4bcc76767246be470a7b17b94692f41) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): closer align store backend with Python
+
+- [#448](https://github.com/langchain-ai/deepagentsjs/pull/448) [`3657941`](https://github.com/langchain-ai/deepagentsjs/commit/3657941ea36b21b9b512c1eb68a250ae79124383) Thanks [@ItayCoCo](https://github.com/ItayCoCo)! - fix: follow symlinks in sandbox find commands by adding -L flag to find invocations in buildLsCommand, buildFindCommand, and buildGrepCommand
+
+- [#470](https://github.com/langchain-ai/deepagentsjs/pull/470) [`55f3bd8`](https://github.com/langchain-ai/deepagentsjs/commit/55f3bd8d74cac22d124fd6d1b11538dc2c2c2aec) Thanks [@jacoblee93](https://github.com/jacoblee93)! - Adds agent type metadata prop to configurable
+
+- [#451](https://github.com/langchain-ai/deepagentsjs/pull/451) [`79e20e1`](https://github.com/langchain-ai/deepagentsjs/commit/79e20e18082a19b65094b953cd857908a7525801) Thanks [@JadenKim-dev](https://github.com/JadenKim-dev)! - remove unconditional @langchain/anthropic import
+
+- [#465](https://github.com/langchain-ai/deepagentsjs/pull/465) [`2442d7d`](https://github.com/langchain-ai/deepagentsjs/commit/2442d7d080c8a1008197eda526de52400303dd72) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): route summarization through active request model
+
+- [#459](https://github.com/langchain-ai/deepagentsjs/pull/459) [`2994444`](https://github.com/langchain-ai/deepagentsjs/commit/2994444f32a6c0503defa6157652e742361abb00) Thanks [@open-swe](https://github.com/apps/open-swe)! - fix(deepagents): skill loading should default to 1000 lines
+
 ## 1.9.0
 
 ### Minor Changes
