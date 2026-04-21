@@ -288,6 +288,24 @@ function tryParseJson(value: string): unknown {
 }
 
 /**
+ * Merge a structured output result into a table row. When the parsed
+ * result is a plain object, its top-level properties are spread directly
+ * onto the row (e.g., `{"label":"location"}` → `row.label = "location"`).
+ * Non-object results fall back to writing into `column`.
+ */
+function mergeStructuredResult(
+  row: Record<string, unknown>,
+  result: string,
+  column: string,
+): Record<string, unknown> {
+  const parsed = tryParseJson(result);
+  if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+    return { ...row, ...(parsed as Record<string, unknown>) };
+  }
+  return { ...row, [column]: parsed };
+}
+
+/**
  * Chunk an array into groups of `size`. The last group may be smaller.
  */
 function groupIntoBatches<T>(items: T[], size: number): T[][] {
@@ -353,7 +371,7 @@ function composeBatchInstruction(
     return `Process the following ${batch.length} items. Return a results array with exactly ${batch.length} elements, one result per item, in the same order.\n\n${items}`;
   }
 
-  const singlePlaceholder = placeholders.length === 1;
+  const placeholderList = placeholders.map((p) => `{${p}}`).join(", ");
 
   const itemLines = batch.map((task, i) => {
     const rowIdx = rowIndexById.get(task.id);
@@ -363,18 +381,13 @@ function composeBatchInstruction(
       return `${i + 1}. (id: ${task.id}) <row not found>`;
     }
 
-    if (singlePlaceholder) {
-      const val = readColumn(row, placeholders[0]);
-      return `${i + 1}. (id: ${task.id}) ${formatValue(val)}`;
-    }
-
     const pairs = placeholders
-      .map((p) => `${p}=${formatValue(readColumn(row, p))}`)
-      .join("; ");
+      .map((p) => `${p} = ${formatValue(readColumn(row, p))}`)
+      .join(" | ");
     return `${i + 1}. (id: ${task.id}) ${pairs}`;
   });
 
-  return `Apply the following instruction to each item below.
+  return `Apply the following instruction to each item below. For each item, substitute ${placeholderList} with the item's values.
 
 Instruction:
 ${instructionTemplate}
@@ -854,10 +867,9 @@ export async function executeSwarm(
           result.result != null &&
           rowIdx != null
         ) {
-          const value = responseSchema
-            ? tryParseJson(result.result)
-            : result.result;
-          rows[rowIdx] = { ...rows[rowIdx], [column]: value };
+          rows[rowIdx] = responseSchema
+            ? mergeStructuredResult(rows[rowIdx], result.result, column)
+            : { ...rows[rowIdx], [column]: result.result };
           write(file, serializeTableJsonl(rows));
         }
       });
@@ -909,10 +921,9 @@ export async function executeSwarm(
             res.result != null &&
             rowIdx != null
           ) {
-            const value = responseSchema
-              ? tryParseJson(res.result)
-              : res.result;
-            rows[rowIdx] = { ...rows[rowIdx], [column]: value };
+            rows[rowIdx] = responseSchema
+              ? mergeStructuredResult(rows[rowIdx], res.result, column)
+              : { ...rows[rowIdx], [column]: res.result };
           }
         }
         write(file, serializeTableJsonl(rows));
