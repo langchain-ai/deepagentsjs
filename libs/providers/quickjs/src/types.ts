@@ -1,5 +1,11 @@
-import type { AnyBackendProtocol, BackendFactory } from "deepagents";
+import type {
+  AnyBackendProtocol,
+  BackendFactory,
+  SubagentFactory,
+} from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
+import type { ReactAgent } from "langchain";
+import type { Runnable } from "@langchain/core/runnables";
 
 /**
  * Configuration options for the QuickJS REPL middleware.
@@ -60,6 +66,21 @@ export interface ReplSessionOptions {
   maxStackSizeBytes?: number;
   backend?: AnyBackendProtocol;
   tools?: StructuredToolInterface[];
+
+  /**
+   * Pre-compiled subagent graphs keyed by type name. Injected by the graph injection plumbing.
+   */
+  subagentGraphs?: Record<string, ReactAgent<any> | Runnable>;
+
+  /**
+   * Factory functions for compiling subagent variants with dynamic responseFormat.
+   */
+  subagentFactories?: Record<string, SubagentFactory>;
+
+  /**
+   * Current orchestrator agent state, filtered and passed to subagents during swarm dispatch.
+   */
+  currentState?: Record<string, unknown>;
 }
 
 /**
