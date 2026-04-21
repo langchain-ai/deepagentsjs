@@ -443,6 +443,47 @@ describe("executeSwarm — batch dispatch", () => {
     );
   });
 
+  it("matches results by id when subagent returns id+result objects", async () => {
+    // Subagent returns items out of order; ID matching should still assign correctly.
+    const subagent = {
+      invoke: vi.fn(async () => ({
+        messages: [
+          {
+            content: JSON.stringify([
+              { id: "r3", result: "third" },
+              { id: "r1", result: "first" },
+              { id: "r2", result: "second" },
+            ]),
+          },
+        ],
+      })),
+    } as any;
+
+    const { read, write, store } = makeReadWrite({
+      "/t.jsonl": serializeTableJsonl([
+        { id: "r1", text: "a" },
+        { id: "r2", text: "b" },
+        { id: "r3", text: "c" },
+      ]),
+    });
+
+    const summary = await executeSwarm({
+      file: "/t.jsonl",
+      instruction: "Process {text}",
+      subagentGraphs: { "general-purpose": subagent },
+      currentState: {},
+      read,
+      write,
+      batchSize: 3,
+    });
+
+    expect(summary.completed).toBe(3);
+    const rows = parseTableJsonl(store.get("/t.jsonl") ?? "");
+    expect(rows.find((r) => r.id === "r1")?.result).toBe("first");
+    expect(rows.find((r) => r.id === "r2")?.result).toBe("second");
+    expect(rows.find((r) => r.id === "r3")?.result).toBe("third");
+  });
+
   it("uses structured output with wrapped schema in batch mode", async () => {
     const structuredSubagent = {
       invoke: vi.fn(async () => ({
@@ -548,7 +589,7 @@ describe("executeSwarm — batch dispatch", () => {
     expect(summary.completed).toBe(2);
   });
 
-  it("sends compact batch prompt with template shown once", async () => {
+  it("shows instruction once and lists per-item values", async () => {
     const subagent = makeBatchSubagent([["a", "b", "c"]]);
     const { read, write } = makeReadWrite({
       "/t.jsonl": serializeTableJsonl([
@@ -571,14 +612,16 @@ describe("executeSwarm — batch dispatch", () => {
     const invokedState = subagent.invoke.mock.calls[0][0] as any;
     const prompt: string = invokedState.messages[0].content;
 
+    // Instruction shown once (template with placeholder preserved).
     expect(prompt).toContain("Classify this: {question}");
-    expect(prompt).toContain("Pick one of: A, B, C");
+    const instructionOccurrences =
+      prompt.split("Pick one of: A, B, C").length - 1;
+    expect(instructionOccurrences).toBe(1);
+
+    // Each item's value listed.
     expect(prompt).toContain("What is X?");
     expect(prompt).toContain("What is Y?");
     expect(prompt).toContain("What is Z?");
-
-    const templateOccurrences = prompt.split("Pick one of: A, B, C").length - 1;
-    expect(templateOccurrences).toBe(1);
   });
 
   it("uses per-row schema in single-row mode, wrapped schema in batch mode", async () => {

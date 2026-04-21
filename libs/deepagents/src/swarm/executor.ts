@@ -288,24 +288,6 @@ function tryParseJson(value: string): unknown {
 }
 
 /**
- * Merge a structured output result into a table row. When the parsed
- * result is a plain object, its top-level properties are spread directly
- * onto the row (e.g., `{"label":"location"}` → `row.label = "location"`).
- * Non-object results fall back to writing into `column`.
- */
-function mergeStructuredResult(
-  row: Record<string, unknown>,
-  result: string,
-  column: string,
-): Record<string, unknown> {
-  const parsed = tryParseJson(result);
-  if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-    return { ...row, ...(parsed as Record<string, unknown>) };
-  }
-  return { ...row, [column]: parsed };
-}
-
-/**
  * Chunk an array into groups of `size`. The last group may be smaller.
  */
 function groupIntoBatches<T>(items: T[], size: number): T[][] {
@@ -343,10 +325,9 @@ function formatValue(value: unknown): string {
 }
 
 /**
- * Build a compact batch prompt. When the instruction template has
- * placeholders, the static text is shown once and each item lists
- * only its per-row values. Falls back to full-description listing
- * when the template has no placeholders.
+ * Build a batch prompt. When the instruction has placeholders the static
+ * instruction is shown once and each item lists only its per-row values.
+ * Falls back to fully-interpolated blocks when there are no placeholders.
  */
 function composeBatchInstruction(
   batch: SwarmTaskSpec[],
@@ -368,10 +349,8 @@ function composeBatchInstruction(
           `--- Item ${i + 1} (id: ${task.id}) ---\n${task.description}`,
       )
       .join("\n\n");
-    return `Process the following ${batch.length} items. Return a results array with exactly ${batch.length} elements, one result per item, in the same order.\n\n${items}`;
+    return `Process the following ${batch.length} items. Return a JSON array with exactly ${batch.length} elements, one result per item in the same order.\n\n${items}`;
   }
-
-  const placeholderList = placeholders.map((p) => `{${p}}`).join(", ");
 
   const itemLines = batch.map((task, i) => {
     const rowIdx = rowIndexById.get(task.id);
@@ -381,21 +360,19 @@ function composeBatchInstruction(
       return `${i + 1}. (id: ${task.id}) <row not found>`;
     }
 
-    const pairs = placeholders
-      .map((p) => `${p} = ${formatValue(readColumn(row, p))}`)
-      .join(" | ");
-    return `${i + 1}. (id: ${task.id}) ${pairs}`;
+    const values = placeholders.map(
+      (p) => `${p}: ${formatValue(readColumn(row, p))}`,
+    );
+    return `${i + 1}. (id: ${task.id}) ${values.join(" | ")}`;
   });
 
-  return `Apply the following instruction to each item below. For each item, substitute ${placeholderList} with the item's values.
+  return `Apply the following instruction to each of the ${batch.length} items listed below. Each item provides values for ${placeholders.map((p) => `"${p}"`).join(", ")}. Return a JSON array with exactly ${batch.length} results, one per item in the same order.
 
 Instruction:
 ${instructionTemplate}
 
-Items (${batch.length} total):
-${itemLines.join("\n")}
-
-Return a results array with exactly ${batch.length} elements, one per item in the same order.`;
+Items:
+${itemLines.join("\n")}`;
 }
 
 /**
@@ -493,8 +470,34 @@ function unpackBatchResult(
     items = parsed;
   }
 
+  // Build an ID→item map for ID-based matching.
+  const byId = new Map<string, unknown>();
+  for (const item of items) {
+    if (
+      typeof item === "object" &&
+      item !== null &&
+      typeof (item as Record<string, unknown>).id === "string"
+    ) {
+      byId.set((item as Record<string, unknown>).id as string, item);
+    }
+  }
+
+  const useIdMatching = byId.size > 0;
+
   return batch.map((task, i) => {
-    if (i >= items.length) {
+    let raw: unknown;
+
+    if (useIdMatching) {
+      raw = byId.get(task.id);
+      if (raw === undefined) {
+        // Fall back to position if this id wasn't found.
+        raw = i < items.length ? items[i] : undefined;
+      }
+    } else {
+      raw = i < items.length ? items[i] : undefined;
+    }
+
+    if (raw === undefined) {
       return {
         id: task.id,
         subagentType,
@@ -502,12 +505,25 @@ function unpackBatchResult(
         error: `Batch returned ${items.length} results but expected ${batch.length}; no result for this row`,
       };
     }
+
+    // Extract the "result" field if present, otherwise use the whole item.
+    let resultValue: unknown = raw;
+    if (
+      typeof raw === "object" &&
+      raw !== null &&
+      "result" in (raw as Record<string, unknown>)
+    ) {
+      resultValue = (raw as Record<string, unknown>).result;
+    }
+
     return {
       id: task.id,
       subagentType,
       status: "completed" as const,
       result:
-        typeof items[i] === "string" ? items[i] : JSON.stringify(items[i]),
+        typeof resultValue === "string"
+          ? resultValue
+          : JSON.stringify(resultValue),
     };
   });
 }
@@ -867,9 +883,10 @@ export async function executeSwarm(
           result.result != null &&
           rowIdx != null
         ) {
-          rows[rowIdx] = responseSchema
-            ? mergeStructuredResult(rows[rowIdx], result.result, column)
-            : { ...rows[rowIdx], [column]: result.result };
+          const value = responseSchema
+            ? tryParseJson(result.result)
+            : result.result;
+          rows[rowIdx] = { ...rows[rowIdx], [column]: value };
           write(file, serializeTableJsonl(rows));
         }
       });
@@ -921,9 +938,10 @@ export async function executeSwarm(
             res.result != null &&
             rowIdx != null
           ) {
-            rows[rowIdx] = responseSchema
-              ? mergeStructuredResult(rows[rowIdx], res.result, column)
-              : { ...rows[rowIdx], [column]: res.result };
+            const value = responseSchema
+              ? tryParseJson(res.result)
+              : res.result;
+            rows[rowIdx] = { ...rows[rowIdx], [column]: value };
           }
         }
         write(file, serializeTableJsonl(rows));
