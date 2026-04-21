@@ -505,12 +505,22 @@ export class ReplSession {
         throw new Error("Backend not available");
       }
 
-      const result = await backend.read(path);
-      if (result.error || result.content == null) {
+      const result = await backend.readRaw(path);
+      if (result.error || !result.data) {
         throw new Error(`Failed to read "${path}": ${result.error ?? "empty"}`);
       }
 
-      return result.content as string;
+      const content = Array.isArray(result.data.content)
+        ? result.data.content.join("\n")
+        : typeof result.data.content === "string"
+          ? result.data.content
+          : null;
+
+      if (content === null) {
+        throw new Error(`Cannot read binary file "${path}" as text.`);
+      }
+
+      return content;
     };
 
     const swarmNs = context.newObject();
@@ -588,6 +598,8 @@ export class ReplSession {
               typeof opts.concurrency === "number"
                 ? opts.concurrency
                 : undefined,
+            batchSize:
+              typeof opts.batchSize === "number" ? opts.batchSize : undefined,
             subagentGraphs,
             subagentFactories,
             currentState: currentState as Record<string, unknown>,

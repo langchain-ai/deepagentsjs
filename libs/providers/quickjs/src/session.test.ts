@@ -555,6 +555,55 @@ describe("REPL Engine", () => {
       expect(session.pendingWrites[0].content).toContain('"id":"r1"');
     });
 
+    it("swarm.create with >500 tasks writes all rows", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend(),
+        subagentGraphs: { "general-purpose": makeMockSubagent() },
+      });
+      const result = await session.eval(
+        `const tasks = [];
+         for (let i = 0; i < 1587; i++) {
+           tasks.push({ id: "t" + i, q: "Question " + i });
+         }
+         await swarm.create("/big.jsonl", { tasks });
+         "ok"`,
+        10_000,
+      );
+      expect(result.ok).toBe(true);
+      const written = session.pendingWrites.find(
+        (w) => w.path === "/big.jsonl",
+      );
+      expect(written).toBeDefined();
+      const lines = written!.content.split("\n").filter((l) => l.trim());
+      expect(lines).toHaveLength(1587);
+    });
+
+    it("swarm.execute across evals reads all >500 rows from backend", async () => {
+      const rowCount = 600;
+      const lines: string[] = [];
+      for (let i = 0; i < rowCount; i++) {
+        lines.push(JSON.stringify({ id: `t${i}`, q: `Q${i}` }));
+      }
+      const tableContent = lines.join("\n") + "\n";
+
+      const backend = createMockBackend({
+        "/big.jsonl": tableContent,
+      });
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend,
+        subagentGraphs: { "general-purpose": makeMockSubagent("done") },
+      });
+
+      const result = await session.eval(
+        `const raw = await swarm.execute("/big.jsonl", { instruction: "Process {q}" });
+         JSON.parse(raw)`,
+        30_000,
+      );
+      expect(result.ok).toBe(true);
+      expect((result.value as any).total).toBe(rowCount);
+      expect((result.value as any).completed).toBe(rowCount);
+    });
+
     it("swarm.execute reads table written by swarm.create in the same eval", async () => {
       session = ReplSession.getOrCreate(uniqueThreadId(), {
         backend: createMockBackend(),

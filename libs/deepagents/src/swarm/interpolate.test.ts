@@ -124,4 +124,22 @@ describe("interpolateInstruction", () => {
     const result = interpolateInstruction("{{name}}", { name: "x" });
     expect(result).toBe("{x}");
   });
+
+  it("does not interpolate JSON literals in instruction text", () => {
+    // {"n": 1, "label": "entity"} must not be treated as a column placeholder
+    const template =
+      'Classify each item. Return format: {"n": 1, "label": "entity"}. Input: {text}';
+    const row = { text: "hello" };
+    expect(interpolateInstruction(template, row)).toBe(
+      'Classify each item. Return format: {"n": 1, "label": "entity"}. Input: hello',
+    );
+  });
+
+  it("does not interpolate braces containing colons or spaces (non-identifier)", () => {
+    const template = "Options: {key: value}. See {name}.";
+    const row = { name: "Alice" };
+    expect(interpolateInstruction(template, row)).toBe(
+      "Options: {key: value}. See Alice.",
+    );
+  });
 });

@@ -32,28 +32,31 @@ export function interpolateInstruction(
 ): string {
   const missing: string[] = [];
 
-  const output = template.replace(/\{([^{}]+)\}/g, (match, path: string) => {
-    const trimmed = path.trim();
-    const value = readColumn(row, trimmed);
-    if (value === undefined) {
-      missing.push(trimmed);
-      return match;
-    }
+  const output = template.replace(
+    /\{\s*([a-zA-Z_$][a-zA-Z0-9_$.]*)\s*\}/g,
+    (match, path: string) => {
+      const trimmed = path.trim();
+      const value = readColumn(row, trimmed);
+      if (value === undefined) {
+        missing.push(trimmed);
+        return match;
+      }
 
-    if (value === null) {
-      return "null";
-    }
+      if (value === null) {
+        return "null";
+      }
 
-    if (typeof value === "string") {
-      return value;
-    }
+      if (typeof value === "string") {
+        return value;
+      }
 
-    if (typeof value === "number" || typeof value === "boolean") {
-      return String(value);
-    }
+      if (typeof value === "number" || typeof value === "boolean") {
+        return String(value);
+      }
 
-    return JSON.stringify(value);
-  });
+      return JSON.stringify(value);
+    },
+  );
 
   if (missing.length > 0) {
     throw new Error(`Missing column(s) in row: ${missing.join(", ")}`);

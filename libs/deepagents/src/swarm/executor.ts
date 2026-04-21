@@ -16,7 +16,7 @@ import {
 import { parseTableJsonl, serializeTableJsonl } from "./parse.js";
 import type { SubagentFactory } from "../symbols.js";
 import { createHash } from "node:crypto";
-import { evaluateFilter, type SwarmFilter } from "./filter.js";
+import { evaluateFilter, readColumn, type SwarmFilter } from "./filter.js";
 import { interpolateInstruction } from "./interpolate.js";
 
 /**
@@ -127,6 +127,13 @@ export interface SwarmExecutionOptions {
    * Maximum concurrent subagent dispatches. @default DEFAULT_CONCURRENCY
    */
   concurrency?: number;
+
+  /**
+   * Number of rows to group into a single subagent call. When > 1,
+   * `responseSchema` is used for post-hoc validation only.
+   * @default 1
+   */
+  batchSize?: number;
 
   /**
    * Pre-compiled subagent graphs keyed by type name.
@@ -278,6 +285,274 @@ function tryParseJson(value: string): unknown {
   } catch {
     return value;
   }
+}
+
+/**
+ * Chunk an array into groups of `size`. The last group may be smaller.
+ */
+function groupIntoBatches<T>(items: T[], size: number): T[][] {
+  const batches: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    batches.push(items.slice(i, i + size));
+  }
+  return batches;
+}
+
+const PLACEHOLDER_RE = /\{\s*([a-zA-Z_$][a-zA-Z0-9_$.]*)\s*\}/g;
+
+/**
+ * Extract unique placeholder names from an instruction template.
+ */
+function extractPlaceholders(template: string): string[] {
+  const seen = new Set<string>();
+  let match: RegExpExecArray | null;
+  while ((match = PLACEHOLDER_RE.exec(template)) !== null) {
+    seen.add(match[1].trim());
+  }
+  return [...seen];
+}
+
+/**
+ * Format a row value for inclusion in the compact item list.
+ */
+function formatValue(value: unknown): string {
+  if (value === undefined) return "<missing>";
+  if (value === null) return "null";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean")
+    return String(value);
+  return JSON.stringify(value);
+}
+
+/**
+ * Build a compact batch prompt. When the instruction template has
+ * placeholders, the static text is shown once and each item lists
+ * only its per-row values. Falls back to full-description listing
+ * when the template has no placeholders.
+ */
+function composeBatchInstruction(
+  batch: SwarmTaskSpec[],
+  instructionTemplate?: string,
+  rows?: Record<string, unknown>[],
+  rowIndexById?: Map<string, number>,
+): string {
+  const placeholders = instructionTemplate
+    ? extractPlaceholders(instructionTemplate)
+    : [];
+
+  const canOptimize =
+    placeholders.length > 0 && rows != null && rowIndexById != null;
+
+  if (!canOptimize) {
+    const items = batch
+      .map(
+        (task, i) =>
+          `--- Item ${i + 1} (id: ${task.id}) ---\n${task.description}`,
+      )
+      .join("\n\n");
+    return `Process the following ${batch.length} items. Return a results array with exactly ${batch.length} elements, one result per item, in the same order.\n\n${items}`;
+  }
+
+  const singlePlaceholder = placeholders.length === 1;
+
+  const itemLines = batch.map((task, i) => {
+    const rowIdx = rowIndexById.get(task.id);
+    const row = rowIdx != null ? rows[rowIdx] : undefined;
+
+    if (!row) {
+      return `${i + 1}. (id: ${task.id}) <row not found>`;
+    }
+
+    if (singlePlaceholder) {
+      const val = readColumn(row, placeholders[0]);
+      return `${i + 1}. (id: ${task.id}) ${formatValue(val)}`;
+    }
+
+    const pairs = placeholders
+      .map((p) => `${p}=${formatValue(readColumn(row, p))}`)
+      .join("; ");
+    return `${i + 1}. (id: ${task.id}) ${pairs}`;
+  });
+
+  return `Apply the following instruction to each item below.
+
+Instruction:
+${instructionTemplate}
+
+Items (${batch.length} total):
+${itemLines.join("\n")}
+
+Return a results array with exactly ${batch.length} elements, one per item in the same order.`;
+}
+
+/**
+ * Wrap a per-row `responseSchema` in an array container with exact length
+ * constraints so constrained decoding enforces both item shape and count.
+ */
+function wrapBatchSchema(
+  itemSchema: Record<string, unknown>,
+  count: number,
+): Record<string, unknown> {
+  return {
+    type: "object",
+    properties: {
+      results: {
+        type: "array",
+        items: itemSchema,
+        minItems: count,
+        maxItems: count,
+      },
+    },
+    required: ["results"],
+  };
+}
+
+/**
+ * Strip markdown code fences (``` ```json ... ``` ```) from LLM output.
+ * Used as a fallback when batch mode runs without `responseSchema`.
+ */
+function stripCodeFences(text: string): string {
+  const trimmed = text.trim();
+  const match = trimmed.match(/^```(?:\w*)\n([\s\S]*?)```$/);
+  return match ? match[1].trim() : trimmed;
+}
+
+/**
+ * Parse a batch subagent's response and map results back to individual rows.
+ * When `structured` is true, expects `{ results: [...] }` from constrained
+ * decoding. Otherwise parses raw text as a JSON array.
+ */
+function unpackBatchResult(
+  batch: SwarmTaskSpec[],
+  result: Record<string, unknown>,
+  subagentType: string,
+  structured: boolean,
+): SwarmTaskResult[] {
+  const rawText = extractResultText(result);
+
+  let items: unknown[];
+
+  if (structured) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      return batch.map((task) => ({
+        id: task.id,
+        subagentType,
+        status: "failed" as const,
+        error: `Batch structured response is not valid JSON: ${rawText.slice(0, 200)}`,
+      }));
+    }
+
+    const obj = parsed as Record<string, unknown>;
+    if (!Array.isArray(obj?.results)) {
+      return batch.map((task) => ({
+        id: task.id,
+        subagentType,
+        status: "failed" as const,
+        error: `Batch structured response missing "results" array`,
+      }));
+    }
+    items = obj.results;
+  } else {
+    const text = stripCodeFences(rawText);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return batch.map((task) => ({
+        id: task.id,
+        subagentType,
+        status: "failed" as const,
+        error: `Batch response is not valid JSON: ${text.slice(0, 200)}`,
+      }));
+    }
+
+    if (!Array.isArray(parsed)) {
+      return batch.map((task) => ({
+        id: task.id,
+        subagentType,
+        status: "failed" as const,
+        error: `Batch response is not a JSON array (got ${typeof parsed})`,
+      }));
+    }
+    items = parsed;
+  }
+
+  return batch.map((task, i) => {
+    if (i >= items.length) {
+      return {
+        id: task.id,
+        subagentType,
+        status: "failed" as const,
+        error: `Batch returned ${items.length} results but expected ${batch.length}; no result for this row`,
+      };
+    }
+    return {
+      id: task.id,
+      subagentType,
+      status: "completed" as const,
+      result:
+        typeof items[i] === "string" ? items[i] : JSON.stringify(items[i]),
+    };
+  });
+}
+
+/**
+ * Dispatch a batch of tasks to a single subagent. When `responseSchema`
+ * is provided, wraps it in an array container and uses constrained
+ * decoding. Otherwise the subagent returns free-form JSON.
+ */
+function dispatchBatch(
+  batch: SwarmTaskSpec[],
+  resolveSubagent: (
+    type: string,
+    schema?: Record<string, unknown>,
+  ) => ReactAgent<any> | Runnable,
+  filteredState: Record<string, unknown>,
+  responseSchema: Record<string, unknown> | undefined,
+  config?: { signal?: AbortSignal },
+  batchContext?: {
+    instructionTemplate: string;
+    rows: Record<string, unknown>[];
+    rowIndexById: Map<string, number>;
+  },
+): Promise<SwarmTaskResult[]> {
+  const subagentType = batch[0].subagentType ?? "general-purpose";
+  const combinedInstruction = composeBatchInstruction(
+    batch,
+    batchContext?.instructionTemplate,
+    batchContext?.rows,
+    batchContext?.rowIndexById,
+  );
+
+  const batchSchema = responseSchema
+    ? wrapBatchSchema(responseSchema, batch.length)
+    : undefined;
+  const subagent = resolveSubagent(subagentType, batchSchema);
+
+  const subagentState = {
+    ...filteredState,
+    messages: [new HumanMessage({ content: combinedInstruction })],
+  };
+
+  return withTimeout(
+    subagent.invoke(subagentState, { signal: config?.signal }) as Promise<
+      Record<string, unknown>
+    >,
+    TASK_TIMEOUT_MS,
+  ).then(
+    (result) =>
+      unpackBatchResult(batch, result, subagentType, !!responseSchema),
+    (err) =>
+      batch.map((task) => ({
+        id: task.id,
+        subagentType,
+        status: "failed" as const,
+        error: (err as Error).message ?? String(err),
+      })),
+  );
 }
 
 /**
@@ -490,6 +765,7 @@ export async function executeSwarm(
     subagentType,
     responseSchema,
     concurrency,
+    batchSize: rawBatchSize,
     subagentGraphs,
     subagentFactories,
     currentState,
@@ -498,6 +774,15 @@ export async function executeSwarm(
     write,
   } = options;
 
+  if (rawBatchSize != null) {
+    if (!Number.isInteger(rawBatchSize) || rawBatchSize < 1) {
+      throw new Error(
+        `batchSize must be a positive integer, got ${rawBatchSize}`,
+      );
+    }
+  }
+  const effectiveBatchSize = rawBatchSize ?? 1;
+
   const { tasks, rowIndexById, rows, skipped, interpolationErrors } =
     await prepareSwarm(
       read,
@@ -505,8 +790,12 @@ export async function executeSwarm(
       instruction,
       filter,
       subagentType,
-      responseSchema,
+      effectiveBatchSize > 1 ? undefined : responseSchema,
     );
+
+  if (responseSchema) {
+    validateResponseSchema("(global)", responseSchema);
+  }
 
   const effectiveConcurrency = Math.min(
     concurrency ?? DEFAULT_CONCURRENCY,
@@ -518,9 +807,11 @@ export async function executeSwarm(
   );
   validateSubagentTypes(usedTypes, subagentGraphs);
 
-  for (const task of tasks) {
-    if (task.responseSchema) {
-      validateResponseSchema(task.id, task.responseSchema);
+  if (effectiveBatchSize <= 1) {
+    for (const task of tasks) {
+      if (task.responseSchema) {
+        validateResponseSchema(task.id, task.responseSchema);
+      }
     }
   }
 
@@ -530,54 +821,112 @@ export async function executeSwarm(
   );
   const filteredState = filterStateForSubagent(currentState);
 
-  // Dispatch with bounded concurrency, streaming writed on completion
   const results: SwarmTaskResult[] = new Array(tasks.length);
   const executing = new Set<Promise<void>>();
 
-  for (let idx = 0; idx < tasks.length; idx++) {
-    const task = tasks[idx];
+  if (effectiveBatchSize <= 1) {
+    // ── Single-row dispatch (existing behavior) ──
+    for (let idx = 0; idx < tasks.length; idx++) {
+      const task = tasks[idx];
 
-    if (signal?.aborted) {
-      results[idx] = {
-        id: task.id,
-        subagentType: task.subagentType ?? "general-purpose",
-        status: "failed",
-        error: "Aborted",
-      };
-      continue;
-    }
-
-    const subagent = resolveSubagent(
-      task.subagentType ?? "general-purpose",
-      task.responseSchema,
-    );
-    const promise = dispatchTask(task, subagent, filteredState, {
-      signal,
-    }).then((result) => {
-      results[idx] = result;
-
-      // Merge result into the row and write the updated table. write() is synchronous (pushes to pendingWrites),
-      // so no serialization chain is needed — concurrent .then callbacks run as sequential microtasks.
-      const rowIdx = rowIndexById.get(result.id);
-      if (
-        result.status === "completed" &&
-        result.result != null &&
-        rowIdx != null
-      ) {
-        const value = responseSchema
-          ? tryParseJson(result.result)
-          : result.result;
-        rows[rowIdx] = { ...rows[rowIdx], [column]: value };
-        write(file, serializeTableJsonl(rows));
+      if (signal?.aborted) {
+        results[idx] = {
+          id: task.id,
+          subagentType: task.subagentType ?? "general-purpose",
+          status: "failed",
+          error: "Aborted",
+        };
+        continue;
       }
-    });
 
-    const tracked = promise.then(() => {
-      executing.delete(tracked);
-    });
-    executing.add(tracked);
-    if (executing.size >= effectiveConcurrency) {
-      await Promise.race(executing);
+      const subagent = resolveSubagent(
+        task.subagentType ?? "general-purpose",
+        task.responseSchema,
+      );
+      const promise = dispatchTask(task, subagent, filteredState, {
+        signal,
+      }).then((result) => {
+        results[idx] = result;
+
+        const rowIdx = rowIndexById.get(result.id);
+        if (
+          result.status === "completed" &&
+          result.result != null &&
+          rowIdx != null
+        ) {
+          const value = responseSchema
+            ? tryParseJson(result.result)
+            : result.result;
+          rows[rowIdx] = { ...rows[rowIdx], [column]: value };
+          write(file, serializeTableJsonl(rows));
+        }
+      });
+
+      const tracked = promise.then(() => {
+        executing.delete(tracked);
+      });
+      executing.add(tracked);
+      if (executing.size >= effectiveConcurrency) {
+        await Promise.race(executing);
+      }
+    }
+  } else {
+    // ── Batch dispatch ──
+    const batches = groupIntoBatches(tasks, effectiveBatchSize);
+    const batchSubagentType = subagentType ?? "general-purpose";
+
+    let taskOffset = 0;
+    for (const batch of batches) {
+      if (signal?.aborted) {
+        for (let i = 0; i < batch.length; i++) {
+          results[taskOffset + i] = {
+            id: batch[i].id,
+            subagentType: batchSubagentType,
+            status: "failed",
+            error: "Aborted",
+          };
+        }
+        taskOffset += batch.length;
+        continue;
+      }
+
+      const currentOffset = taskOffset;
+      const promise = dispatchBatch(
+        batch,
+        resolveSubagent,
+        filteredState,
+        responseSchema,
+        { signal },
+        { instructionTemplate: instruction, rows, rowIndexById },
+      ).then((batchResults) => {
+        for (let i = 0; i < batchResults.length; i++) {
+          const res = batchResults[i];
+          results[currentOffset + i] = res;
+
+          const rowIdx = rowIndexById.get(res.id);
+          if (
+            res.status === "completed" &&
+            res.result != null &&
+            rowIdx != null
+          ) {
+            const value = responseSchema
+              ? tryParseJson(res.result)
+              : res.result;
+            rows[rowIdx] = { ...rows[rowIdx], [column]: value };
+          }
+        }
+        write(file, serializeTableJsonl(rows));
+      });
+
+      const tracked = promise.then(() => {
+        executing.delete(tracked);
+      });
+      executing.add(tracked);
+      if (executing.size >= effectiveConcurrency) {
+        await Promise.race(executing);
+      }
+
+      taskOffset += batch.length;
     }
   }
 

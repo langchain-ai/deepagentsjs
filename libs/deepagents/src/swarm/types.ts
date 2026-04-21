@@ -125,6 +125,16 @@ export interface SwarmExecuteOptions {
    * Max concurrent subagent dispatches. @default DEFAULT_CONCURRENCY
    */
   concurrency?: number;
+
+  /**
+   * Number of rows to group into a single subagent call. The table stays
+   * one-row-per-item; the executor batches N rows, sends a combined
+   * instruction, and unpacks results back to individual rows.
+   * When > 1, `responseSchema` is used for post-hoc validation only
+   * (not passed to the subagent for constrained decoding).
+   * @default 1
+   */
+  batchSize?: number;
 }
 
 /**
