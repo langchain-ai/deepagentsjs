@@ -279,10 +279,10 @@ export class LangSmithSandbox extends BaseSandbox {
     }
 
     const client = new SandboxClient({ apiKey });
-    const sandbox = await client.createSandbox(
-      templateName,
-      { ...createSandboxOptions, snapshotId },
-    );
+    const sandbox = await client.createSandbox(templateName, {
+      ...createSandboxOptions,
+      snapshotId,
+    });
     return new LangSmithSandbox({ sandbox, defaultTimeout });
   }
 }
