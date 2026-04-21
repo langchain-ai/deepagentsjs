@@ -78,6 +78,44 @@ export {
 // Export shared state values (similar to LangGraph's messagesValue pattern)
 export { filesValue } from "./values.js";
 
+// Export symbols (graph injection plumbing)
+export {
+  type SubagentFactory,
+  setSubagentGraphs,
+  getSubagentGraphs,
+  setSubagentFactories,
+  getSubagentFactories,
+  setSubagentGraphInjector,
+  getSubagentGraphInjector,
+} from "./symbols.js";
+
+// Export swarm module
+export type {
+  SwarmTaskSpec,
+  SwarmTaskResult,
+  SwarmExecutionOptions,
+  ReadCallback,
+  WriteCallback,
+  SwarmFilter,
+  SwarmSummary,
+  SwarmResultEntry,
+  SwarmExecuteOptions,
+  CreateTableSource,
+} from "./swarm/index.js";
+
+export {
+  DEFAULT_CONCURRENCY,
+  MAX_CONCURRENCY,
+  TASK_TIMEOUT_MS,
+  parseTableJsonl,
+  serializeTableJsonl,
+  executeSwarm,
+  evaluateFilter,
+  readColumn,
+  interpolateInstruction,
+  createTable,
+} from "./swarm/index.js";
+
 // Export agent memory middleware
 export {
   createAgentMemoryMiddleware,

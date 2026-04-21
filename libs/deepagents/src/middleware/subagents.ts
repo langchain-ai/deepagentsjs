@@ -20,6 +20,11 @@ import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
+import {
+  setSubagentFactories,
+  setSubagentGraphs,
+  SubagentFactory,
+} from "../symbols.js";
 
 export type { AgentMiddleware };
 
@@ -462,6 +467,7 @@ function getSubagents(options: {
   generalPurposeAgent: boolean;
 }): {
   agents: Record<string, ReactAgent | Runnable>;
+  factories: Record<string, SubagentFactory>;
   descriptions: string[];
 } {
   const {
@@ -479,6 +485,7 @@ function getSubagents(options: {
   const generalPurposeMiddlewareBase =
     gpMiddleware || defaultSubagentMiddleware;
   const agents: Record<string, ReactAgent | Runnable> = {};
+  const factories: Record<string, SubagentFactory> = {};
   const subagentDescriptions: string[] = [];
 
   // Create general-purpose agent if enabled
@@ -490,15 +497,20 @@ function getSubagents(options: {
       );
     }
 
-    const generalPurposeSubagent = createAgent({
-      model: defaultModel,
-      systemPrompt: DEFAULT_SUBAGENT_PROMPT,
-      tools: defaultTools as any,
-      middleware: generalPurposeMiddleware,
-      name: "general-purpose",
-    });
+    const buildGeneralPurpose = (
+      responseFormat?: CreateAgentParams["responseFormat"],
+    ) =>
+      createAgent({
+        model: defaultModel,
+        systemPrompt: DEFAULT_SUBAGENT_PROMPT,
+        tools: defaultTools as any,
+        middleware: generalPurposeMiddleware,
+        name: "general-purpose",
+        ...(responseFormat != null && { responseFormat }),
+      });
 
-    agents["general-purpose"] = generalPurposeSubagent;
+    agents["general-purpose"] = buildGeneralPurpose();
+    factories["general-purpose"] = buildGeneralPurpose as SubagentFactory;
     subagentDescriptions.push(
       `- general-purpose: ${DEFAULT_GENERAL_PURPOSE_DESCRIPTION}`,
     );
@@ -521,57 +533,35 @@ function getSubagents(options: {
       if (interruptOn)
         middleware.push(humanInTheLoopMiddleware({ interruptOn }));
 
-      agents[agentParams.name] = createAgent({
-        model: agentParams.model ?? defaultModel,
-        systemPrompt: agentParams.systemPrompt,
-        tools: agentParams.tools ?? defaultTools,
-        middleware,
-        name: agentParams.name,
-        ...(agentParams.responseFormat != null && {
-          responseFormat: agentParams.responseFormat,
-        }),
-      });
+      const buildAgent = (
+        responseFormat?: CreateAgentParams["responseFormat"],
+      ) =>
+        createAgent({
+          model: agentParams.model ?? defaultModel,
+          systemPrompt: agentParams.systemPrompt,
+          tools: agentParams.tools ?? defaultTools,
+          middleware,
+          name: agentParams.name,
+          ...(responseFormat != null && { responseFormat }),
+        });
+
+      agents[agentParams.name] = buildAgent(agentParams.responseFormat);
+      factories[agentParams.name] = buildAgent as SubagentFactory;
     }
   }
 
-  return { agents, descriptions: subagentDescriptions };
+  return { agents, factories, descriptions: subagentDescriptions };
 }
 
 /**
  * Create the task tool for invoking subagents
  */
 function createTaskTool(options: {
-  defaultModel: LanguageModelLike | string;
-  defaultTools: StructuredTool[];
-  defaultMiddleware: AgentMiddleware[] | null;
-  /** Middleware specifically for the general-purpose subagent (includes skills from main agent) */
-  generalPurposeMiddleware: AgentMiddleware[] | null;
-  defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
-  subagents: (SubAgent | CompiledSubAgent)[];
-  generalPurposeAgent: boolean;
+  subagentGraphs: Record<string, ReactAgent | Runnable>;
+  subagentDescriptions: string[];
   taskDescription: string | null;
 }) {
-  const {
-    defaultModel,
-    defaultTools,
-    defaultMiddleware,
-    generalPurposeMiddleware,
-    defaultInterruptOn,
-    subagents,
-    generalPurposeAgent,
-    taskDescription,
-  } = options;
-
-  const { agents: subagentGraphs, descriptions: subagentDescriptions } =
-    getSubagents({
-      defaultModel,
-      defaultTools,
-      defaultMiddleware,
-      generalPurposeMiddleware,
-      defaultInterruptOn,
-      subagents,
-      generalPurposeAgent,
-    });
+  const { subagentGraphs, subagentDescriptions, taskDescription } = options;
 
   const finalTaskDescription = taskDescription
     ? taskDescription
@@ -693,7 +683,11 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     taskDescription = null,
   } = options;
 
-  const taskTool = createTaskTool({
+  const {
+    agents: subagentGraphs,
+    factories,
+    descriptions: subagentDescriptions,
+  } = getSubagents({
     defaultModel,
     defaultTools,
     defaultMiddleware,
@@ -701,10 +695,15 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     defaultInterruptOn,
     subagents,
     generalPurposeAgent,
+  });
+
+  const taskTool = createTaskTool({
+    subagentGraphs,
+    subagentDescriptions,
     taskDescription,
   });
 
-  return createMiddleware({
+  const middleware = createMiddleware({
     name: "subAgentMiddleware",
     tools: [taskTool],
     wrapModelCall: async (request, handler) => {
@@ -719,4 +718,9 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
       return handler(request);
     },
   });
+
+  setSubagentGraphs(middleware, subagentGraphs);
+  setSubagentFactories(middleware, factories);
+
+  return middleware;
 }
