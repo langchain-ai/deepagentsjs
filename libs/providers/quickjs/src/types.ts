@@ -81,7 +81,6 @@ export interface ReplSessionOptions {
    * Current orchestrator agent state, filtered and passed to subagents during swarm dispatch.
    */
   currentState?: Record<string, unknown>;
-
 }
 
 /**

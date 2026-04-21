@@ -321,7 +321,8 @@ function formatColumnValue(value: unknown): string {
   if (value === undefined) return "undefined";
   if (value === null) return "null";
   if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "number" || typeof value === "boolean")
+    return String(value);
   return JSON.stringify(value);
 }
 
@@ -342,7 +343,7 @@ function composeBatchInstruction(
     return `You will process ${batch.length} items. For each item, perform the requested task and return the result tagged with the item's id.\n\nItems:\n${items}\n\nReturn a result for each item, tagged with its id.`;
   }
 
-  let prompt = `You will process ${batch.length} items. The instruction for each item is:\n\n${instructionTemplate}\n\nItems:\n`;
+  let prompt = `You will process ${batch.length} items.\n\nTask (apply to each item):\n${instructionTemplate}\n\nEach item below provides a value for ${placeholders.map((p) => `{${p}}`).join(", ")}. Apply the task above to each item.\n\nItems:\n`;
 
   for (const task of batch) {
     if (placeholders.length === 1) {
@@ -711,9 +712,7 @@ export async function executeSwarm(
       );
     }
     if (!responseSchema) {
-      throw new Error(
-        "batchSize requires responseSchema",
-      );
+      throw new Error("batchSize requires responseSchema");
     }
   }
   const effectiveBatchSize = rawBatchSize ?? 1;
@@ -781,9 +780,15 @@ export async function executeSwarm(
       const subagent = resolveSubagent(batchSubagentType, wrappedSchema);
       const currentOffset = taskOffset;
 
-      const promise = dispatchBatch(batch, subagent, filteredState, instruction, {
-        signal,
-      }).then((batchResults) => {
+      const promise = dispatchBatch(
+        batch,
+        subagent,
+        filteredState,
+        instruction,
+        {
+          signal,
+        },
+      ).then((batchResults) => {
         for (let i = 0; i < batchResults.length; i++) {
           const res = batchResults[i];
           results[currentOffset + i] = res;

@@ -504,7 +504,11 @@ describe("executeSwarm — batched subagent dispatch", () => {
 
     const summary = await executeSwarm(
       makeOptions(
-        [{ id: "r1", text: "a" }, { id: "r2", text: "b" }, { id: "r3", text: "c" }],
+        [
+          { id: "r1", text: "a" },
+          { id: "r2", text: "b" },
+          { id: "r3", text: "c" },
+        ],
         {
           batchSize: 3,
           responseSchema: BATCH_SCHEMA,
@@ -533,7 +537,10 @@ describe("executeSwarm — batched subagent dispatch", () => {
 
     const summary = await executeSwarm(
       makeOptions(
-        [{ id: "r1", text: "a" }, { id: "r2", text: "b" }],
+        [
+          { id: "r1", text: "a" },
+          { id: "r2", text: "b" },
+        ],
         {
           batchSize: 2,
           responseSchema: BATCH_SCHEMA,
@@ -601,7 +608,8 @@ describe("executeSwarm — batched subagent dispatch", () => {
 
     await executeSwarm({
       file: "/t.jsonl",
-      instruction: "Classify the answer type for: {question}\nRespond with the label.",
+      instruction:
+        "Classify the answer type for: {question}\nRespond with the label.",
       batchSize: 2,
       responseSchema: BATCH_SCHEMA,
       subagentGraphs: { "general-purpose": makeSubagent() },
@@ -614,17 +622,17 @@ describe("executeSwarm — batched subagent dispatch", () => {
     const invokedState = batchSubagent.invoke.mock.calls[0][0];
     const prompt = invokedState.messages[0].content;
     expect(prompt).toContain("Classify the answer type for: {question}");
+    expect(prompt).toContain("Each item below provides a value for {question}");
     expect(prompt).toContain("[r1] What is 1+1?");
     expect(prompt).toContain("[r2] What color is the sky?");
-    const instructionCount = (prompt.match(/Respond with the label/g) || []).length;
+    const instructionCount = (prompt.match(/Respond with the label/g) || [])
+      .length;
     expect(instructionCount).toBe(1);
   });
 
   it("requires responseSchema", async () => {
     await expect(
-      executeSwarm(
-        makeOptions([{ id: "r1" }], { batchSize: 5 }),
-      ),
+      executeSwarm(makeOptions([{ id: "r1" }], { batchSize: 5 })),
     ).rejects.toThrow("batchSize requires responseSchema");
   });
 });

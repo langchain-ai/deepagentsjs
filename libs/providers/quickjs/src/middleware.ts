@@ -70,7 +70,8 @@ export const DEFAULT_PTC_EXCLUDED_TOOLS = [
 
 function buildReplSystemPrompt(hasSwarm: boolean): string {
   const largeFileRule = hasSwarm
-    ? `- **Check inputs before processing** — for any file, use \`ls\` or \`read_file\` with offset/limit to understand its size and shape. If the work involves many independent items, multiple entities, or data that exceeds a single context, use \`swarm.create\`/\`swarm.execute\` — see "Parallel fan-out" below.`
+    ? `- **Check inputs before processing** — for any file, use \`ls\` or \`read_file\` with offset/limit to understand its size and shape. If the work involves many independent items, multiple entities, or data
+      that exceeds a single context, use \`swarm.create\` + \`swarm.execute\` — see "Parallel fan-out" below.`
     : `- **Check file size before processing** — before working with any input file, check its size. If it exceeds ~50,000 characters, decompose the work into chunks and process them separately.`;
 
   return dedent`
@@ -83,10 +84,12 @@ function buildReplSystemPrompt(hasSwarm: boolean): string {
   ### Hard rules
 
   ${largeFileRule}
-  - **No network, no imports** — do not attempt \`fetch\`, \`require\`, or \`import\` inside \`js_eval\`. Use your file tools (\`read_file\`, \`grep\`, \`ls\`, etc.) for exploration and \`readFile\`/\`writeFile\` for direct REPL file I/O.
+  - **No network, no imports** — do not attempt \`fetch\`, \`require\`, or \`import\` inside \`js_eval\`. Use your file tools (\`read_file\`, \`grep\`, \`ls\`, etc.) for exploration and \`readFile\`/\`writeFile\`
+    for direct REPL file I/O.
   - **Cite your sources** — when reporting values from files, include the path and key/index so the user can verify.
   - **Use console.log()** for output — it is captured and returned. \`console.warn()\` and \`console.error()\` are also available.
-  - **Reuse state from previous cells** — variables, functions, and results from earlier \`js_eval\` calls persist across calls. Reference them by name in follow-up cells instead of re-embedding data as inline JSON literals.
+  - **Reuse state from previous cells** — variables, functions, and results from earlier \`js_eval\` calls persist across calls. Reference them by name in follow-up cells instead of re-embedding data as inline
+    JSON literals.
 
   ### First-time usage
 
@@ -125,118 +128,122 @@ function buildReplSystemPrompt(hasSwarm: boolean): string {
 const SWARM_FANOUT_PROMPT = dedent`
   ## Parallel fan-out (\`swarm.create\` + \`swarm.execute\`)
 
-  Dispatch independent subagent calls in parallel against a JSONL table. Each subagent runs in isolation — it sees only the instruction you write for it.
+  Use \`swarm\` inside \`js_eval\` to process many independent units of work in parallel against a JSONL table. Each row in the table is one unit of work; results are written back as new columns on the same row. Each subagent runs in an isolated context — it sees only the per-row interpolated instruction.
 
-  ### When to use
+  ### When to use swarm
 
-  Use swarm when work can be decomposed into **independent units** that don't depend on each other's output:
-  - **10+ items** needing the same operation (classify, extract, summarize, transform)
-  - **Multiple files/entities** each needing separate analysis
-  - Input too large for a single context — split into rows, process in parallel
+  You MUST use swarm when any of these apply:
+  - A collection of files, documents, or entities each needs its own analysis
+  - A dataset has many items needing the same operation (classification, extraction, transformation, summarization)
+  - The input is too large for a single context — split into rows and dispatch in parallel
+  - The same input benefits from multiple independent perspectives (multi-criteria review, dimensional analysis)
 
-  Don't use swarm for fewer than ~5 items (use inline tool calls), sequential pipelines where step N depends on step N-1, or a single end-to-end analysis with no natural decomposition.
-
-  ### Rules
-
-  - **Never read the full input that triggers swarm.** Sample with \`read_file\` (offset/limit), \`grep\`, or \`ls\` — 2–3 tool calls max. Data reaches subagents via instruction templates, not through you.
-  - **Keep total dispatches reasonable.** Use \`batchSize\` with \`responseSchema\` to group rows into fewer subagent calls for high-volume tasks.
-  - **Results are final.** Do not dispatch recheck, verify, or cross-check tasks.
-  - **One retry for failures, then move on.** Fix the root cause (instruction, schema) and re-dispatch only failed rows via \`filter\`. Don't retry twice.
-
-  ### Decomposing work
-
-  Each table row is one unit of work. Choose the right granularity:
-
-  | Input shape | Row granularity | Example |
-  |---|---|---|
-  | Collection of files | One row per file | \`{ glob: "src/**/*.ts" }\` |
-  | Large file with records | One row per record | Parse file → \`tasks: records.map(...)\` |
-  | Large document | One row per section/chunk | Split by heading or fixed size |
-  | List of entities | One row per entity | \`tasks: entities.map(...)\` |
-
-  Keep each row's data self-contained — the subagent sees only what's in the instruction after interpolation.
+  Do NOT use swarm when:
+  - Items depend on each other's output — use sequential calls
+  - The work is one end-to-end analysis with no natural decomposition
+  - A single tool call already does the job
 
   ### Flow
 
-  1. **Explore** — sample the input to understand its shape and size.
-  2. **Create table** — call \`swarm.create\` to materialize rows from a glob, file paths, or inline tasks.
-  3. **Execute** — call \`swarm.execute\` with an instruction template. Results are written as a column on each row.
-  4. **Aggregate** — read the table in \`js_eval\` and combine results programmatically.
+  1. **Explore.** Sample the input — don't read it in full. Use \`ls\`, \`read_file\` with offset/limit, or \`grep\`. Finish in 2–3 tool calls.
+  2. **Create the table.** Call \`swarm.create\` to materialize one row per unit of work — from a glob, explicit file paths, or inline records.
+  3. **Execute.** Call \`swarm.execute\` with an instruction template that references row columns. Results land as new columns on each row.
+  4. **Aggregate.** \`swarm.execute\` returns a summary with inline per-row results — aggregate directly from \`summary.results\` in the same \`js_eval\` block. For large tables where you only need a subset, read the table back with \`readFile\` instead.
 
-  ### API
+  ### Hard rules
 
-  #### \`swarm.create(file, source)\`
+  - **Never read the full input that triggers swarm.** Sample only. Data reaches subagents through the table, not through you.
+  - **Anything you learned during exploration must be written into the instruction template.** Subagents cannot see your notes — only their interpolated instruction.
+  - **Results are final.** Do not dispatch recheck, verify, or cross-check tasks for completed rows. If results look wrong, fix the instruction or schema and re-dispatch the affected rows via \`filter\`.
+  - **One retry for failures, then move on.** Re-dispatch only failed rows with \`filter: { column: "<your column>", exists: false }\`. Don't retry twice.
 
-  Materializes a JSONL table. Overwrites if the file exists.
-
-  \`\`\`typescript
-  await swarm.create("/table.jsonl", { glob: "src/**/*.ts" });
-  await swarm.create("/table.jsonl", { filePaths: ["/a.ts", "/b.ts"] });
-  await swarm.create("/table.jsonl", {
-    tasks: items.map((item, i) => ({ id: \`row-\${i}\`, text: item.text }))
-  });
-  \`\`\`
-
-  Glob/filePaths sources produce rows with \`{ id, file }\`. Inline tasks can have any shape but each must have \`id: string\`.
-
-  #### \`swarm.execute(file, options)\`
-
-  Dispatches subagents against the table. Returns a JSON-stringified summary.
+  ### Dispatch example
 
   \`\`\`typescript
-  const summary = JSON.parse(await swarm.execute("/table.jsonl", {
-    instruction: "Review {file} for security issues.",
+  // One row per file
+  await swarm.create("/reviews.jsonl", { glob: "src/**/*.ts" });
+
+  // Each row gets its own subagent; {file} is interpolated from the row
+  const summary = JSON.parse(await swarm.execute("/reviews.jsonl", {
+    instruction: "Review {file} for security issues. List findings or write 'no issues'.",
     column: "review",
   }));
-  console.log(\`\${summary.completed} completed, \${summary.failed} failed\`);
+  console.log("Completed:", summary.completed, "Failed:", summary.failed);
+
+  // Aggregate directly from the summary
+  const flagged = summary.results.filter(r => r.status === "completed" && r.result && !r.result.includes("no issues"));
   \`\`\`
 
-  **Full options:**
+  ### Writing instruction templates
+
+  Templates use \`{column}\` placeholders interpolated from each row. Dotted paths like \`{meta.author}\` traverse nested objects. String values are inserted bare; objects/arrays are JSON-serialized.
+
+  A good template lets the subagent work mechanically, with no judgment required. Include:
+  - What the input is and how it's structured (delimiters, format, conventions)
+  - What to produce (format, fields, allowed values, edge-case handling)
+  - The rules — including anything you discovered during exploration
+  - The placeholders that carry the actual data for this row
 
   \`\`\`typescript
-  await swarm.execute(file, {
-    instruction: string,       // template with {column} placeholders (required)
-    column?: string,           // column to write results into (default: "result")
-    filter?: SwarmFilter,      // only dispatch matching rows
-    subagentType?: string,     // subagent type (default: "general-purpose")
-    responseSchema?: object,   // JSON Schema for structured output
-    concurrency?: number,      // max parallel dispatches (default: ${DEFAULT_CONCURRENCY})
-    batchSize?: number,        // rows per subagent call (requires responseSchema, default: 1)
-  })
-  \`\`\`
+  await swarm.execute("/items.jsonl", {
+    instruction: \`Extract named entities from the text below.
+  Return a list of {name, type} where type is one of: person, place, organization.
+  Skip pronouns and generic references. Skip duplicates.
 
-  ### Instruction templates
-
-  Use \`{column}\` placeholders — they are interpolated per-row from the table. Dotted paths like \`{meta.author}\` traverse nested objects.
-
-  \`\`\`typescript
-  // Row: { id: "utils.ts", file: "src/utils.ts" }
-  // "Analyze {file}" → "Analyze src/utils.ts"
-  await swarm.execute("/table.jsonl", {
-    instruction: "Analyze {file} for code complexity.",
-    column: "complexity",
+  Text:
+  {text}\`,
+    column: "entities",
   });
   \`\`\`
 
   ### Structured output
 
-  Use \`responseSchema\` when results will be aggregated programmatically. The schema must have \`type: "object"\` at the top level. Use \`enum\` to constrain string values and prevent label drift.
+  Use \`responseSchema\` when results will be aggregated programmatically. The schema is enforced at the model API level — stricter than asking for JSON in prose.
 
-  Each property in the schema becomes a top-level column on the row. For example, a schema with \`{ label, confidence }\` produces rows like \`{ id: "r1", text: "...", label: "positive", confidence: 0.95 }\`. Read these columns directly — no unwrapping needed.
+  Each property in the schema becomes a top-level column on the row. A schema with \`{label, confidence}\` produces rows like \`{id: "r1", text: "...", label: "positive", confidence: 0.95}\`. Read the columns directly — no unwrapping needed.
 
   \`\`\`typescript
-  await swarm.execute("/table.jsonl", {
-    instruction: "Classify the sentiment of this review: {text}",
+  await swarm.execute("/items.jsonl", {
+    instruction: "Classify the sentiment: {text}",
     responseSchema: {
       type: "object",
       properties: {
-        label: { type: "string", enum: ["positive", "negative", "neutral"] },
+        label:      { type: "string", enum: ["positive", "negative", "neutral"] },
         confidence: { type: "number" },
       },
       required: ["label"],
     },
   });
-  // Row after: { id: "r1", text: "Great!", label: "positive", confidence: 0.95 }
+  \`\`\`
+
+  Schema tips:
+  - \`enum\` on categorical fields prevents drift across subagents.
+  - \`description\` on properties — models read them during generation.
+  - Top-level \`type\` must be \`"object"\`. Wrap arrays under a named field if needed.
+  - Skip \`responseSchema\` for qualitative output (summaries, code reviews, narrative analysis) — free-form text aggregates better when read from the table.
+
+  ### Multi-pass enrichment
+
+  Run multiple \`swarm.execute\` calls against the same table, each writing a different column. Later passes can reference earlier columns through the template.
+
+  \`\`\`typescript
+  await swarm.create("/docs.jsonl", { glob: "docs/**/*.md" });
+
+  // Pass 1: summarize
+  await swarm.execute("/docs.jsonl", {
+    instruction: "Summarize the document at {file}.",
+    column: "summary",
+  });
+
+  // Pass 2: classify using the summary from pass 1
+  await swarm.execute("/docs.jsonl", {
+    instruction: "Classify this document based on its summary: {summary}",
+    responseSchema: {
+      type: "object",
+      properties: { category: { type: "string", enum: ["guide", "reference", "tutorial"] } },
+      required: ["category"],
+    },
+  });
   \`\`\`
 
   ### Filtering
@@ -244,11 +251,8 @@ const SWARM_FANOUT_PROMPT = dedent`
   Use \`filter\` to dispatch only matching rows. Unmatched rows pass through unchanged.
 
   \`\`\`typescript
-  // Only rows missing a result
-  filter: { column: "review", exists: false }
-
-  // Retry failed rows
-  filter: { column: "review", equals: null }
+  // Re-dispatch only rows that haven't been processed yet
+  filter: { column: "summary", exists: false }
 
   // Combine conditions
   filter: { and: [
@@ -259,42 +263,77 @@ const SWARM_FANOUT_PROMPT = dedent`
 
   Operators: \`equals\`, \`notEquals\`, \`in\`, \`exists\` (boolean), \`and\`, \`or\`.
 
-  ### Multi-pass enrichment
+  ### Batching for high-volume same-shape work
 
-  Run multiple \`swarm.execute\` calls against the same table, each writing a different column. Later passes can reference columns from earlier passes.
-
-  \`\`\`typescript
-  await swarm.create("/docs.jsonl", { glob: "docs/**/*.md" });
-  await swarm.execute("/docs.jsonl", {
-    instruction: "Summarize this document.\\nFile: {file}",
-    column: "summary",
-  });
-  await swarm.execute("/docs.jsonl", {
-    instruction: "Classify this document.\\nSummary: {summary}",
-    responseSchema: {
-      type: "object",
-      properties: { category: { type: "string", enum: ["guide", "reference", "tutorial"] } },
-      required: ["category"],
-    },
-  });
-  // Row after: { id: "...", file: "docs/guide.md", summary: "A guide to...", category: "guide" }
-  \`\`\`
-
-  ### Batching
-
-  Use \`batchSize\` with \`responseSchema\` to group multiple rows into a single subagent call. Each batch returns an array of results matched back to rows by id. Useful for classification, labeling, and extraction over many rows:
+  For classification, labeling, or extraction across many rows of similar shape, set \`batchSize\` together with \`responseSchema\`. The executor groups N rows into a single subagent call and unpacks results back to individual rows by id.
 
   \`\`\`typescript
   await swarm.execute("/items.jsonl", {
     instruction: "Classify: {text}",
-    batchSize: 25,
+    batchSize: 20,
     responseSchema: {
       type: "object",
       properties: { label: { type: "string", enum: ["A", "B", "C"] } },
       required: ["label"],
     },
   });
-  // Row after: { id: "r1", text: "...", label: "A" }
+  \`\`\`
+
+  Choose \`batchSize\` based on item complexity:
+  - Short items (one-line text, labels): 20–50 per batch
+  - Medium items (paragraphs, reviews): 10–20 per batch
+  - Complex items (multi-step reasoning, tool use): leave as default (\`batchSize: 1\`)
+
+  If accuracy drops with batching, lower \`batchSize\`. Single-row dispatch is the right choice for any task that needs full subagent reasoning, tool use, or per-item judgment.
+
+  ### Decomposition patterns
+
+  - **One row per item** — files, documents, entities. Use when each unit is naturally discrete and needs its own analysis.
+  - **Chunked rows** — split a large input into equal pieces, one row per chunk. Use when the input is too large for one context and items are interchangeable.
+  - **Dimensional** — same input, multiple rows examining different angles (different criteria, different reviewers). Use for multi-criteria evaluation.
+
+  ### Concurrency
+
+  Default is \`${DEFAULT_CONCURRENCY}\`. Raise it for I/O-bound work over many rows; lower it if you're hitting rate limits. Concurrency bounds parallel subagent calls (or batches, when batching).
+
+  ### API Reference
+
+  \`\`\`typescript
+  const swarm: {
+    /**
+     * Materialize a JSONL table at \`file\`. Overwrites if it exists.
+     */
+    create(file: string, source: {
+      glob?: string | string[];                 // glob pattern(s) → one row per file with { id, file }
+      filePaths?: string[];                     // explicit paths   → one row per file with { id, file }
+      tasks?: Array<Record<string, unknown>>;   // pre-built rows; each must have id: string
+    }): Promise<void>;
+
+    /**
+     * Dispatch subagents against the table. Returns a JSON-stringified summary.
+     */
+    execute(file: string, options: {
+      instruction: string;       // template with {column} placeholders (required)
+      column?: string;           // column to write results into (default: "result")
+      filter?: SwarmFilter;      // only dispatch matching rows
+      subagentType?: string;     // subagent type (default: "general-purpose")
+      responseSchema?: object;   // JSON Schema for structured output (must have type: "object")
+      concurrency?: number;      // max parallel dispatches (default: ${DEFAULT_CONCURRENCY})
+      batchSize?: number;        // rows per subagent call; requires responseSchema (default: 1)
+    }): Promise<string>;         // JSON string of SwarmSummary
+  };
+
+  // Parsed summary shape:
+  // {
+  //   total: number;        // rows dispatched after filtering
+  //   completed: number;
+  //   failed: number;
+  //   skipped: number;      // rows excluded by filter
+  //   file: string;
+  //   column: string;
+  //   results: Array<{ id, subagentType, status, result?, error? }>;
+  //   failedTasks: Array<{ id, error }>;
+  // }
   \`\`\`
 `;
 
