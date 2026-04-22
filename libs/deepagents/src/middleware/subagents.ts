@@ -601,12 +601,48 @@ function createTaskTool(options: {
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
 
+      // Scope the subagent's checkpoint namespace to this task's
+      // tool-call id so its events stream under a stable, public
+      // `tools:<tool_call_id>` segment. LangGraph's `ToolNode` already
+      // creates an internal `tools:<uuid>` segment for the task tool
+      // itself, but dispatchers that bypass `ToolNode` — notably
+      // `@langchain/quickjs` fanning out via `Promise.all(tools.task(...))`
+      // inside `js_eval` — invoke the tool directly and only surface
+      // a numeric Pregel branch index for each parallel subagent
+      // (`["tools:<js_eval>", "1"]`, `["tools:<js_eval>", "2"]`, …),
+      // making per-subagent subscriptions impossible to address from
+      // a client. Replacing the trailing `tools:*` segment (or
+      // appending one when absent) normalizes the subagent's path to
+      // `tools:<toolCallId>` in both flows so downstream consumers
+      // can filter by it regardless of dispatcher.
+      const toolCallId = config.toolCall?.id;
+      const parentCheckpointNs =
+        (config.configurable?.checkpoint_ns as string | undefined) ?? "";
+      let scopedCheckpointNs = parentCheckpointNs;
+      if (toolCallId != null) {
+        const parts = parentCheckpointNs ? parentCheckpointNs.split("|") : [];
+        let lastToolsIdx = -1;
+        for (let i = parts.length - 1; i >= 0; i -= 1) {
+          if (parts[i].startsWith("tools:")) {
+            lastToolsIdx = i;
+            break;
+          }
+        }
+        if (lastToolsIdx >= 0) {
+          parts[lastToolsIdx] = `tools:${toolCallId}`;
+        } else {
+          parts.push(`tools:${toolCallId}`);
+        }
+        scopedCheckpointNs = parts.join("|");
+      }
+
       // Invoke the subagent with ls_agent_type metadata for LangSmith tracing
       const subagentConfig = {
         ...config,
         configurable: {
           ...config.configurable,
           ls_agent_type: "subagent",
+          checkpoint_ns: scopedCheckpointNs,
         },
       };
       const result = (await subagent.invoke(

@@ -729,6 +729,162 @@ describe("Subagent structured response", () => {
 });
 
 /**
+ * Tests for scoping the subagent's `checkpoint_ns` to the task tool call id.
+ *
+ * The task tool rewrites (or appends) the trailing `tools:*` segment of the
+ * parent's `checkpoint_ns` to `tools:<toolCallId>` before invoking the
+ * subagent, so downstream consumers can subscribe to per-subagent events via
+ * a stable, public identifier regardless of the dispatcher in use.
+ */
+describe("Subagent checkpoint namespace scoping", () => {
+  it("should rewrite the trailing tools:* segment with the task tool call id", async () => {
+    const capturedConfigs: Array<Record<string, unknown> | undefined> = [];
+
+    const mockSubagent = RunnableLambda.from(
+      async (_input: unknown, config?: Record<string, unknown>) => {
+        capturedConfigs.push(config);
+        return { messages: [new AIMessage({ content: "Subagent done" })] };
+      },
+    );
+
+    const taskToolCallId = `call_scope_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: { thread_id: `test-ns-scope-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    // The subagent should have been invoked at least once.
+    expect(capturedConfigs.length).toBeGreaterThan(0);
+
+    // Every invocation of the subagent should carry a `checkpoint_ns`
+    // whose final segment is `tools:<taskToolCallId>`.
+    for (const config of capturedConfigs) {
+      const configurable = (
+        config as { configurable?: Record<string, unknown> } | undefined
+      )?.configurable;
+      expect(configurable).toBeDefined();
+      const checkpointNs = configurable?.checkpoint_ns as string | undefined;
+      expect(checkpointNs).toBeDefined();
+      const segments = (checkpointNs as string).split("|");
+      expect(segments[segments.length - 1]).toBe(`tools:${taskToolCallId}`);
+    }
+  });
+
+  it("should use distinct tools:<toolCallId> segments for parallel subagent calls", async () => {
+    const capturedConfigs: Array<Record<string, unknown> | undefined> = [];
+
+    const mockSubagent = RunnableLambda.from(
+      async (_input: unknown, config?: Record<string, unknown>) => {
+        capturedConfigs.push(config);
+        return { messages: [new AIMessage({ content: "Subagent done" })] };
+      },
+    );
+
+    const toolCallIdA = `call_A_${Date.now()}`;
+    const toolCallIdB = `call_B_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: toolCallIdA,
+              name: "task",
+              args: {
+                description: "Work A",
+                subagent_type: "worker",
+              },
+            },
+            {
+              id: toolCallIdB,
+              name: "task",
+              args: {
+                description: "Work B",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: [new HumanMessage("Test parallel")] },
+      {
+        configurable: { thread_id: `test-ns-parallel-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    // Expect both subagent invocations to have distinct `tools:<toolCallId>`
+    // trailing segments matching their respective task tool_call ids.
+    const trailingSegments = capturedConfigs.map((config) => {
+      const configurable = (
+        config as { configurable?: Record<string, unknown> } | undefined
+      )?.configurable;
+      const ns = configurable?.checkpoint_ns as string | undefined;
+      if (!ns) return undefined;
+      const parts = ns.split("|");
+      return parts[parts.length - 1];
+    });
+
+    expect(trailingSegments).toContain(`tools:${toolCallIdA}`);
+    expect(trailingSegments).toContain(`tools:${toolCallIdB}`);
+  });
+});
+
+/**
  * Tests for ls_agent_type tracing metadata on subagent runnables.
  *
  * Verifies that ls_agent_type: "subagent" is sent to LangSmith (tracer metadata)
