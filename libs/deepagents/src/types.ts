@@ -23,7 +23,11 @@ import type {
 } from "@langchain/langgraph-checkpoint";
 
 import type { AnyBackendProtocol } from "./backends/index.js";
-import type { AsyncSubAgent, SubAgent } from "./middleware/index.js";
+import type {
+  AsyncSubAgent,
+  SubAgent,
+  SummarizationMiddlewareOptions,
+} from "./middleware/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type { AnnotationRoot } from "@langchain/langgraph";
 import type { CompiledSubAgent } from "./middleware/subagents.js";
@@ -34,6 +38,16 @@ type AnyAnnotationRoot = AnnotationRoot<any>;
 
 /** Any subagent specification — sync, compiled, or async. */
 export type AnySubAgent = SubAgent | CompiledSubAgent | AsyncSubAgent;
+
+/**
+ * Summarization settings for {@link createDeepAgent}.
+ * Same options as {@link SummarizationMiddlewareOptions} except `backend`,
+ * which always comes from the agent's `backend` parameter.
+ */
+export type DeepAgentSummarizationOptions = Omit<
+  SummarizationMiddlewareOptions,
+  "backend"
+>;
 
 // TODO: import TypedToolStrategy from "langchain" once exported from the top-level entry point
 // (currently only available via "langchain/dist/agents/responses.js")
@@ -394,6 +408,11 @@ export interface CreateDeepAgentParams<
   backend?:
     | AnyBackendProtocol
     | ((config: { state: unknown; store?: BaseStore }) => AnyBackendProtocol);
+  /**
+   * Options for the built-in summarization middleware (thresholds, summary model, prompt, etc.).
+   * The agent `backend` is always used for conversation history offloading.
+   */
+  summarization?: DeepAgentSummarizationOptions;
   /** Optional interrupt configuration mapping tool names to interrupt configs */
   interruptOn?: Record<string, boolean | InterruptOnConfig>;
   /** The name of the agent */

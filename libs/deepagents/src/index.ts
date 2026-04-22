@@ -10,6 +10,7 @@ export { ConfigurationError, type ConfigurationErrorCode } from "./errors.js";
 export type {
   AnySubAgent,
   CreateDeepAgentParams,
+  DeepAgentSummarizationOptions,
   MergedDeepAgentState,
   // DeepAgent type bag and helper types
   DeepAgent,
