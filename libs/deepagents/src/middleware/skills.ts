@@ -495,7 +495,7 @@ export function parseSkillMetadataFromContent(
 /**
  * List all skills from a backend source.
  */
-async function listSkillsFromBackend(
+export async function listSkillsFromBackend(
   backend: AnyBackendProtocol,
   sourcePath: string,
 ): Promise<SkillMetadata[]> {
