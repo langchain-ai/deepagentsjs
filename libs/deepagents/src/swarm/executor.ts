@@ -16,7 +16,7 @@ import {
 import { parseTableJsonl, serializeTableJsonl } from "./parse.js";
 import type { SubagentFactory } from "../symbols.js";
 import { createHash } from "node:crypto";
-import { evaluateFilter, readColumn, type SwarmFilter } from "./filter.js";
+import { evaluateFilter, type SwarmFilter } from "./filter.js";
 import { interpolateInstruction } from "./interpolate.js";
 
 /**
@@ -138,6 +138,15 @@ export interface SwarmExecutionOptions {
   batchSize?: number;
 
   /**
+   * Free-form prose prepended to every subagent prompt produced by this
+   * swarm call. Intended for dataset context, rules, edge cases, and
+   * examples that the orchestrator discovered but cannot express as a
+   * `{column}` placeholder. Optional. When omitted, prompt composition
+   * is unchanged from prior behavior.
+   */
+  context?: string;
+
+  /**
    * Pre-compiled subagent graphs keyed by type name.
    */
   subagentGraphs: Record<string, ReactAgent<any> | Runnable>;
@@ -247,12 +256,14 @@ function dispatchTask(
   task: SwarmTaskSpec,
   subagent: ReactAgent<any> | Runnable,
   filteredState: Record<string, unknown>,
+  context: string | undefined,
   config?: { signal?: AbortSignal },
 ): Promise<SwarmTaskResult> {
   const subagentType = task.subagentType ?? "general-purpose";
+  const prompt = prependContext(task.description, context);
   const subagentState = {
     ...filteredState,
-    messages: [new HumanMessage({ content: task.description })],
+    messages: [new HumanMessage({ content: prompt })],
   };
 
   return withTimeout(
@@ -305,6 +316,36 @@ function mergeResultIntoRow(
   return { ...row, [column]: value };
 }
 
+/**
+ * Prepend orchestrator-supplied context to a composed subagent prompt.
+ * Returns the prompt unchanged when no context is supplied or it is
+ * whitespace-only.
+ */
+function prependContext(prompt: string, context: string | undefined): string {
+  if (context === undefined) {
+    return prompt;
+  }
+
+  const trimmed = context.trim();
+  if (trimmed.length === 0) {
+    return prompt;
+  }
+
+  return `${trimmed}\n\n---\n\n${prompt}`;
+}
+
+/**
+ * Narrow an `unknown` value to a plain object shape, or return
+ * `undefined` if it isn't one. Avoids repeated truthy/type guards
+ * at each use site.
+ */
+function asObject(value: unknown): Record<string, unknown> | undefined {
+  if (value === null || typeof value !== "object") {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
 // ── Batched subagent dispatch ─────────────────────────────────────────────────
 
 function groupIntoBatches<T>(items: T[], size: number): T[][] {
@@ -315,56 +356,103 @@ function groupIntoBatches<T>(items: T[], size: number): T[][] {
   return batches;
 }
 
-const PLACEHOLDER_RE = /\{\s*([a-zA-Z_$][a-zA-Z0-9_$.]*)\s*\}/g;
-
-function formatColumnValue(value: unknown): string {
-  if (value === undefined) return "undefined";
-  if (value === null) return "null";
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean")
-    return String(value);
-  return JSON.stringify(value);
-}
-
 function composeBatchInstruction(
   batch: SwarmTaskSpec[],
-  instructionTemplate: string,
+  context: string | undefined,
 ): string {
-  const placeholders = [
-    ...new Set(
-      [...instructionTemplate.matchAll(PLACEHOLDER_RE)].map((m) => m[1]),
-    ),
-  ];
+  const items = batch
+    .map((task) => `[${task.id}] ${task.description}`)
+    .join("\n");
 
-  if (placeholders.length === 0 || !batch[0]?.rowData) {
-    const items = batch
-      .map((task) => `[${task.id}] ${task.description}`)
-      .join("\n\n");
-    return `You will process ${batch.length} items. For each item, perform the requested task and return the result tagged with the item's id.\n\nItems:\n${items}\n\nReturn a result for each item, tagged with its id.`;
+  const body =
+    `Process ${batch.length} items. Return a JSON "results" array ` +
+    `with exactly ${batch.length} entries. Each entry must include ` +
+    `the item's id exactly as shown.\n\n` +
+    `Items:\n${items}`;
+
+  return prependContext(body, context);
+}
+
+/**
+ * Detect a user-authored wrapped batch schema shaped like
+ * `{type:"object", properties:{results:{type:"array", items:{type:"object",
+ * properties:{id, ...}}}}}`. When detected, the executor preserves the
+ * user's descriptions and only enforces the per-batch `minItems` /
+ * `maxItems`.
+ */
+function isPreWrappedBatchSchema(schema: Record<string, unknown>): boolean {
+  const props = asObject(schema.properties);
+  if (props === undefined) {
+    return false;
   }
 
-  let prompt = `You will process ${batch.length} items.\n\nTask (apply to each item):\n${instructionTemplate}\n\nEach item below provides a value for ${placeholders.map((p) => `{${p}}`).join(", ")}. Apply the task above to each item.\n\nItems:\n`;
-
-  for (const task of batch) {
-    if (placeholders.length === 1) {
-      const value = readColumn(task.rowData!, placeholders[0]);
-      prompt += `[${task.id}] ${formatColumnValue(value)}\n`;
-    } else {
-      const pairs = placeholders.map(
-        (p) => `${p}: ${formatColumnValue(readColumn(task.rowData!, p))}`,
-      );
-      prompt += `[${task.id}] ${pairs.join(" | ")}\n`;
-    }
+  const results = asObject(props.results);
+  if (results === undefined) {
+    return false;
   }
 
-  prompt += `\nReturn a result for each item, tagged with its id.`;
-  return prompt;
+  if (results.type !== "array") {
+    return false;
+  }
+
+  const items = asObject(results.items);
+  if (items === undefined) {
+    return false;
+  }
+
+  if (items.type !== "object") {
+    return false;
+  }
+
+  const itemProps = asObject(items.properties);
+  if (itemProps === undefined) {
+    return false;
+  }
+
+  return "id" in itemProps;
+}
+
+/**
+ * Shallow-clone a pre-wrapped schema and stamp `minItems` / `maxItems`
+ * on `results`. Every other orchestrator-authored field — including
+ * `description` prose on `results`, `id`, and item property fields —
+ * is preserved.
+ */
+function enforceBatchCount(
+  schema: Record<string, unknown>,
+  count: number,
+): Record<string, unknown> {
+  const props = asObject(schema.properties);
+  if (props === undefined) {
+    return schema;
+  }
+
+  const results = asObject(props.results);
+  if (results === undefined) {
+    return schema;
+  }
+
+  return {
+    ...schema,
+    properties: {
+      ...props,
+      results: {
+        ...results,
+        minItems: count,
+        maxItems: count,
+      },
+    },
+  };
 }
 
 function wrapBatchSchema(
   itemSchema: Record<string, unknown>,
   count: number,
 ): Record<string, unknown> {
+  if (isPreWrappedBatchSchema(itemSchema) === true) {
+    return enforceBatchCount(itemSchema, count);
+  }
+
   const userProps = (itemSchema.properties ?? {}) as Record<string, unknown>;
   const userRequired = Array.isArray(itemSchema.required)
     ? (itemSchema.required as string[])
@@ -433,11 +521,11 @@ function dispatchBatch(
   batch: SwarmTaskSpec[],
   subagent: ReactAgent<any> | Runnable,
   filteredState: Record<string, unknown>,
-  instructionTemplate: string,
+  context: string | undefined,
   config?: { signal?: AbortSignal },
 ): Promise<SwarmTaskResult[]> {
   const subagentType = batch[0]?.subagentType ?? "general-purpose";
-  const prompt = composeBatchInstruction(batch, instructionTemplate);
+  const prompt = composeBatchInstruction(batch, context);
   const subagentState = {
     ...filteredState,
     messages: [new HumanMessage({ content: prompt })],
@@ -456,8 +544,10 @@ function dispatchBatch(
           return unpackBatchResult(batch, sr.results as BatchResultItem[]);
         }
       }
+
       const text = extractResultText(result);
       const parsed = tryParseJson(text);
+
       if (
         parsed &&
         typeof parsed === "object" &&
@@ -697,6 +787,7 @@ export async function executeSwarm(
     responseSchema,
     concurrency,
     batchSize: rawBatchSize,
+    context,
     subagentGraphs,
     subagentFactories,
     currentState,
@@ -711,10 +802,12 @@ export async function executeSwarm(
         `batchSize must be a positive integer, got ${rawBatchSize}`,
       );
     }
+
     if (!responseSchema) {
       throw new Error("batchSize requires responseSchema");
     }
   }
+
   const effectiveBatchSize = rawBatchSize ?? 1;
 
   const { tasks, rowIndexById, rows, skipped, interpolationErrors } =
@@ -757,7 +850,6 @@ export async function executeSwarm(
   const filteredState = filterStateForSubagent(currentState);
 
   if (effectiveBatchSize > 1) {
-    // ── Batched subagent dispatch ──
     const batches = groupIntoBatches(tasks, effectiveBatchSize);
     const batchSubagentType = subagentType ?? "general-purpose";
     let taskOffset = 0;
@@ -780,15 +872,9 @@ export async function executeSwarm(
       const subagent = resolveSubagent(batchSubagentType, wrappedSchema);
       const currentOffset = taskOffset;
 
-      const promise = dispatchBatch(
-        batch,
-        subagent,
-        filteredState,
-        instruction,
-        {
-          signal,
-        },
-      ).then((batchResults) => {
+      const promise = dispatchBatch(batch, subagent, filteredState, context, {
+        signal,
+      }).then((batchResults) => {
         for (let i = 0; i < batchResults.length; i++) {
           const res = batchResults[i];
           results[currentOffset + i] = res;
@@ -816,7 +902,6 @@ export async function executeSwarm(
       taskOffset += batch.length;
     }
   } else {
-    // ── Single-row subagent dispatch ──
     for (let idx = 0; idx < tasks.length; idx++) {
       const task = tasks[idx];
 
@@ -834,7 +919,7 @@ export async function executeSwarm(
         task.subagentType ?? "general-purpose",
         task.responseSchema,
       );
-      const promise = dispatchTask(task, subagent, filteredState, {
+      const promise = dispatchTask(task, subagent, filteredState, context, {
         signal,
       }).then((result) => {
         results[idx] = result;

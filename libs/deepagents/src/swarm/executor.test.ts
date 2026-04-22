@@ -590,7 +590,7 @@ describe("executeSwarm — batched subagent dispatch", () => {
     expect(written[1].id).toBe("r2");
   });
 
-  it("composes compact batch prompt — instruction once, items listed by variable values", async () => {
+  it("composes batch prompt with fully interpolated items", async () => {
     const batchSubagent = makeBatchSubagent([
       [
         { id: "r1", label: "A" },
@@ -621,13 +621,12 @@ describe("executeSwarm — batched subagent dispatch", () => {
 
     const invokedState = batchSubagent.invoke.mock.calls[0][0];
     const prompt = invokedState.messages[0].content;
-    expect(prompt).toContain("Classify the answer type for: {question}");
-    expect(prompt).toContain("Each item below provides a value for {question}");
-    expect(prompt).toContain("[r1] What is 1+1?");
-    expect(prompt).toContain("[r2] What color is the sky?");
-    const instructionCount = (prompt.match(/Respond with the label/g) || [])
-      .length;
-    expect(instructionCount).toBe(1);
+    expect(prompt).toContain("[r1] Classify the answer type for: What is 1+1?");
+    expect(prompt).toContain(
+      "[r2] Classify the answer type for: What color is the sky?",
+    );
+    expect(prompt).toContain("Process 2 items");
+    expect(prompt).not.toContain("{question}");
   });
 
   it("requires responseSchema", async () => {

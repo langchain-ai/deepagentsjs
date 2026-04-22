@@ -600,6 +600,8 @@ export class ReplSession {
                 : undefined,
             batchSize:
               typeof opts.batchSize === "number" ? opts.batchSize : undefined,
+            context:
+              typeof opts.context === "string" ? opts.context : undefined,
             subagentGraphs,
             subagentFactories,
             currentState: currentState as Record<string, unknown>,
@@ -609,6 +611,9 @@ export class ReplSession {
           });
           session.logs.push(
             `[swarm.execute] ${summary.completed} completed, ${summary.failed} failed, ${summary.skipped} skipped. Results → "${file}" column "${summary.column}".`,
+          );
+          session.logs.push(
+            `[swarm.execute] Results are authoritative — do not re-dispatch to verify. Aggregate from summary.results or read the table directly.`,
           );
           if (summary.failed > 0) {
             const sample = summary.failedTasks.slice(0, 3);
