@@ -115,7 +115,8 @@ export function isAnthropicModel(model: BaseLanguageModel | string): boolean {
  *
  * This is the main entry point for building a production-style agent with
  * deepagents. It gives you a strong default runtime (filesystem, tasks,
- * subagents, summarization) and lets you opt into skills, memory,
+ * subagents, summarization) and lets you configure summarization via `summarization`,
+ * plus opt into skills, memory,
  * human-in-the-loop interrupts, async subagents, and custom middleware.
  *
  * The runtime is intentionally opinionated: defaults work out of the box, and
@@ -172,6 +173,7 @@ export function createDeepAgent<
     checkpointer,
     store,
     backend = (config) => new StateBackend(config),
+    summarization,
     interruptOn,
     name,
     memory,
@@ -220,7 +222,7 @@ export function createDeepAgent<
       // Automatically summarizes conversation history when token limits are approached.
       // Uses createSummarizationMiddleware (deepagents version) with backend support
       // and auto-computed defaults from model profile.
-      createSummarizationMiddleware({ backend }),
+      createSummarizationMiddleware({ backend, ...summarization }),
       // Patches tool calls to ensure compatibility across different model providers.
       createPatchToolCallsMiddleware(),
       // Loads subagent-specific skills when configured.
@@ -294,7 +296,7 @@ export function createDeepAgent<
     // Automatically summarizes conversation history when token limits are approached.
     // Uses createSummarizationMiddleware (deepagents version) with backend support
     // for conversation history offloading and auto-computed defaults from model profile.
-    createSummarizationMiddleware({ backend }),
+    createSummarizationMiddleware({ backend, ...summarization }),
     // Patches tool calls to ensure compatibility across different model providers.
     createPatchToolCallsMiddleware(),
   ] as const;
