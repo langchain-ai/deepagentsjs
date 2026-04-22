@@ -272,6 +272,10 @@ export class ReplSession {
     };
   }
 
+  /**
+   * Flush buffered file writes to the backend. Handles "already exists"
+   * errors by falling back to an edit (overwrite) operation.
+   */
   async flushWrites(backend: AnyBackendProtocol): Promise<void> {
     const adapted = adaptBackendProtocol(backend);
     const writes = this.pendingWrites.splice(0);
@@ -475,66 +479,81 @@ export class ReplSession {
    */
   private injectSwarm(): void {
     const context = this.context!;
-    const session = this;
-
-    /**
-     * Write to pendingWrites, replacing any existing entry for the same
-     * path so only the latest version is flushed after eval completes.
-     */
-    const write = (path: string, content: string): void => {
-      const idx = session.pendingWrites.findIndex((w) => w.path === path);
-      if (idx !== -1) {
-        session.pendingWrites.splice(idx, 1);
-      }
-      session.pendingWrites.push({ path, content });
-    };
-
-    /**
-     * Read a file, checking pendingWrites first so that files written
-     * by swarm.create (or a prior swarm.execute) in the same eval are
-     * visible before they're flushed to the backend.
-     */
-    const read = async (path: string): Promise<string> => {
-      const pending = session.pendingWrites.find((w) => w.path === path);
-      if (pending) {
-        return pending.content;
-      }
-
-      const backend = session._backend;
-      if (!backend) {
-        throw new Error("Backend not available");
-      }
-
-      const result = await backend.readRaw(path);
-      if (result.error || !result.data) {
-        throw new Error(`Failed to read "${path}": ${result.error ?? "empty"}`);
-      }
-
-      const content = Array.isArray(result.data.content)
-        ? result.data.content.join("\n")
-        : typeof result.data.content === "string"
-          ? result.data.content
-          : null;
-
-      if (content === null) {
-        throw new Error(`Cannot read binary file "${path}" as text.`);
-      }
-
-      return content;
-    };
-
     const swarmNs = context.newObject();
 
-    // swarm.create
-    const createHandle = context.newFunction(
+    const createHandle = this.buildSwarmCreate();
+    context.setProp(swarmNs, "create", createHandle);
+    createHandle.dispose();
+
+    const executeHandle = this.buildSwarmExecute();
+    context.setProp(swarmNs, "execute", executeHandle);
+    executeHandle.dispose();
+
+    context.setProp(context.global, "swarm", swarmNs);
+    swarmNs.dispose();
+  }
+
+  /**
+   * Write to pendingWrites, replacing any existing entry for the same
+   * path so only the latest version is flushed after eval completes.
+   */
+  private swarmWrite(path: string, content: string): void {
+    const idx = this.pendingWrites.findIndex((w) => w.path === path);
+    if (idx !== -1) {
+      this.pendingWrites.splice(idx, 1);
+    }
+    this.pendingWrites.push({ path, content });
+  }
+
+  /**
+   * Read a file, checking pendingWrites first so that files written
+   * by swarm.create (or a prior swarm.execute) in the same eval are
+   * visible before they're flushed to the backend.
+   */
+  private async swarmRead(path: string): Promise<string> {
+    const pending = this.pendingWrites.find((w) => w.path === path);
+    if (pending) {
+      return pending.content;
+    }
+
+    const backend = this._backend;
+    if (!backend) {
+      throw new Error("Backend not available");
+    }
+
+    const result = await backend.readRaw(path);
+    if (result.error || !result.data) {
+      throw new Error(`Failed to read "${path}": ${result.error ?? "empty"}`);
+    }
+
+    const content = Array.isArray(result.data.content)
+      ? result.data.content.join("\n")
+      : typeof result.data.content === "string"
+        ? result.data.content
+        : null;
+
+    if (content === null) {
+      throw new Error(`Cannot read binary file "${path}" as text.`);
+    }
+
+    return content;
+  }
+
+  /**
+   * Build the `swarm.create` QuickJS function handle.
+   */
+  private buildSwarmCreate(): QuickJSHandle {
+    const context = this.context!;
+    const session = this;
+
+    return context.newFunction(
       "create",
       (fileHandle: QuickJSHandle, sourceHandle: QuickJSHandle) => {
         const file = context.getString(fileHandle);
         const source = context.dump(sourceHandle) as Record<string, unknown>;
 
         return session.wrapAsync(async () => {
-          const backend = session._backend;
-          if (!backend) {
+          if (!session._backend) {
             throw new Error("Backend not available");
           }
 
@@ -545,8 +564,8 @@ export class ReplSession {
               filePaths: source.filePaths as string[] | undefined,
               tasks: source.tasks as Array<Record<string, unknown>> | undefined,
             },
-            backend,
-            write,
+            session._backend,
+            (path, content) => session.swarmWrite(path, content),
           );
           session.logs.push(`[swarm.create] Table written to ${file}.`);
 
@@ -554,11 +573,16 @@ export class ReplSession {
         });
       },
     );
-    context.setProp(swarmNs, "create", createHandle);
-    createHandle.dispose();
+  }
 
-    // swarm.execute
-    const executeHandle = context.newFunction(
+  /**
+   * Build the `swarm.execute` QuickJS function handle.
+   */
+  private buildSwarmExecute(): QuickJSHandle {
+    const context = this.context!;
+    const session = this;
+
+    return context.newFunction(
       "execute",
       (fileHandle: QuickJSHandle, optionsHandle: QuickJSHandle) => {
         const file = context.getString(fileHandle);
@@ -569,18 +593,18 @@ export class ReplSession {
             throw new Error("Backend not available");
           }
 
-          const {
-            subagentGraphs = {},
-            subagentFactories,
-            currentState = {},
-          } = session._options;
-
           if (
             typeof opts.instruction !== "string" ||
             opts.instruction.length === 0
           ) {
             throw new Error("swarm.execute: `instruction` is required.");
           }
+
+          const {
+            subagentGraphs = {},
+            subagentFactories,
+            currentState = {},
+          } = session._options;
 
           const summary = await executeSwarm({
             file,
@@ -606,37 +630,52 @@ export class ReplSession {
             subagentFactories,
             currentState: currentState as Record<string, unknown>,
             signal: session._evalAbortController?.signal,
-            read,
-            write,
+            read: (path) => session.swarmRead(path),
+            write: (path, content) => session.swarmWrite(path, content),
           });
-          session.logs.push(
-            `[swarm.execute] ${summary.completed} completed, ${summary.failed} failed, ${summary.skipped} skipped. Results → "${file}" column "${summary.column}".`,
-          );
-          session.logs.push(
-            `[swarm.execute] Results are authoritative — do not re-dispatch to verify. Aggregate from summary.results or read the table directly.`,
-          );
-          if (summary.failed > 0) {
-            const sample = summary.failedTasks.slice(0, 3);
-            for (const t of sample) {
-              session.logs.push(
-                `[swarm.execute] failure id="${t.id}" error=${t.error}`,
-              );
-            }
-            if (summary.failedTasks.length > 3) {
-              session.logs.push(
-                `[swarm.execute] ... and ${summary.failedTasks.length - 3} more failures`,
-              );
-            }
-          }
-          return context.newString(JSON.stringify(summary));
+
+          session.logSwarmSummary(file, summary);
+
+          const { results: _results, ...summaryWithoutResults } = summary;
+          return context.newString(JSON.stringify(summaryWithoutResults));
         });
       },
     );
-    context.setProp(swarmNs, "execute", executeHandle);
-    executeHandle.dispose();
+  }
 
-    context.setProp(context.global, "swarm", swarmNs);
-    swarmNs.dispose();
+  /**
+   * Log the swarm execution summary and any failures.
+   */
+  private logSwarmSummary(
+    file: string,
+    summary: {
+      completed: number;
+      failed: number;
+      skipped: number;
+      column: string;
+      failedTasks: Array<{ id: string; error: string }>;
+    },
+  ): void {
+    this.logs.push(
+      `[swarm.execute] ${summary.completed} completed, ${summary.failed} failed, ${summary.skipped} skipped. Results → "${file}" column "${summary.column}".`,
+    );
+
+    this.logs.push(
+      `[swarm.execute] Results are authoritative — do not re-dispatch to verify. Read the table directly to aggregate.`,
+    );
+
+    if (summary.failed > 0) {
+      const sample = summary.failedTasks.slice(0, 3);
+      for (const t of sample) {
+        this.logs.push(`[swarm.execute] failure id="${t.id}" error=${t.error}`);
+      }
+
+      if (summary.failedTasks.length > 3) {
+        this.logs.push(
+          `[swarm.execute] ... and ${summary.failedTasks.length - 3} more failures`,
+        );
+      }
+    }
   }
 
   private injectTools(tools: StructuredToolInterface[]): void {

@@ -235,7 +235,7 @@ const SWARM_FANOUT_PROMPT = dedent`
       batchSize?: number;        // rows per subagent call; requires responseSchema
     }): Promise<string>;         // JSON string of SwarmSummary
   };
-  // SwarmSummary: { total, completed, failed, skipped, file, column, results: [{id, status, result?, error?}], failedTasks: [{id, error}] }
+  // SwarmSummary: { total, completed, failed, skipped, file, column, failedTasks: [{id, error}] }
   \`\`\`
 `;
 
