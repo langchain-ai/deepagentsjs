@@ -406,9 +406,34 @@ export class ReplSession {
             try {
               const rawInput =
                 typeof input === "object" && input !== null ? input : {};
-              const result = await t.invoke(rawInput);
+              // Wrap as a proper `ToolCall` so downstream machinery
+              // (LangChain Core callback manager, LangGraph's
+              // StreamToolsHandler, deepagents' `task` tool, and
+              // subagent discovery in `@langchain/langgraph-sdk`) sees a
+              // stable, unique `tool_call_id` for every programmatic
+              // invocation. Without this, `StructuredTool.invoke()` leaves
+              // `toolCallId` undefined, so `tool-started` and
+              // `tool-finished` stream events can't be correlated on the
+              // client and subagent UI cards never flip to "complete".
+              const toolCall = {
+                id: crypto.randomUUID(),
+                name: t.name,
+                args: rawInput,
+                type: "tool_call" as const,
+              };
+              const result = await t.invoke(toolCall);
+              // Tools invoked with a `tool_call_id` return either a
+              // `ToolMessage` (the common case, wrapping the tool's
+              // string output) or a LangGraph `Command` (e.g. deepagents'
+              // `task` tool via `returnCommandWithStateUpdate`). Unwrap
+              // both so the REPL guest sees the same human-readable
+              // string it saw when we were invoking without a ToolCall
+              // wrapper.
+              const unwrapped = unwrapToolInvokeResult(result);
               const val = context.newString(
-                typeof result === "string" ? result : JSON.stringify(result),
+                typeof unwrapped === "string"
+                  ? unwrapped
+                  : JSON.stringify(unwrapped),
               );
               promise.resolve(val);
               val.dispose();
@@ -433,4 +458,52 @@ export class ReplSession {
     context.setProp(context.global, "tools", toolsNs);
     toolsNs.dispose();
   }
+}
+
+/**
+ * Extracts the human-readable content from the value returned by
+ * `StructuredTool.invoke(toolCall)`. Handles two shapes:
+ *
+ *   1. `ToolMessage` — the default wrapper for string/array tool outputs
+ *      when `toolCall.id` is set. We return its `content`.
+ *   2. LangGraph `Command` — returned by tools that go through
+ *      `returnCommandWithStateUpdate` (e.g. deepagents' `task` tool).
+ *      We return the `content` of the last message in the state update.
+ *
+ * Any other shape is returned unchanged so scalar/plain-object tool
+ * outputs still flow through untouched.
+ *
+ * Duck-typed (on `type === "tool"` / `lg_name === "Command"`) to avoid
+ * pulling `@langchain/core` or `@langchain/langgraph` into the runtime
+ * dependency graph of this provider.
+ */
+function unwrapToolInvokeResult(result: unknown): unknown {
+  if (result == null || typeof result !== "object") return result;
+
+  const asTool = result as {
+    type?: unknown;
+    content?: unknown;
+    tool_call_id?: unknown;
+  };
+  if (
+    asTool.type === "tool" &&
+    typeof asTool.tool_call_id === "string" &&
+    "content" in asTool
+  ) {
+    return asTool.content;
+  }
+
+  if ((result as { lg_name?: unknown }).lg_name === "Command") {
+    const update = (result as { update?: unknown }).update;
+    if (update == null || typeof update !== "object") return result;
+    const messages = (update as { messages?: unknown }).messages;
+    if (!Array.isArray(messages) || messages.length === 0) return result;
+    const last = messages[messages.length - 1];
+    if (last == null || typeof last !== "object" || !("content" in last)) {
+      return result;
+    }
+    return (last as { content: unknown }).content;
+  }
+
+  return result;
 }

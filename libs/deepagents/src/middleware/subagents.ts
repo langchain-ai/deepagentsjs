@@ -601,12 +601,63 @@ function createTaskTool(options: {
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
 
+      // Scope the subagent's checkpoint namespace to this task's
+      // tool-call id so its events stream under a stable, public
+      // `tools:<tool_call_id>` segment, and reset the inherited Pregel
+      // scratchpad so parallel dispatchers don't bucket the subagent
+      // under a numeric branch index.
+      //
+      // LangGraph's `ToolNode` already creates an internal
+      // `tools:<uuid>` segment for the task tool itself, but
+      // dispatchers that bypass `ToolNode` — notably `@langchain/quickjs`
+      // fanning out via `Promise.all(tools.task(...))` inside `js_eval`
+      // — invoke the tool directly and (a) only surface a numeric
+      // Pregel branch index for each parallel subagent
+      // (`["tools:<js_eval>", "1"]`, …), and (b) share the parent
+      // task's scratchpad across concurrent invocations, which makes
+      // `pregel/loop.ts` append `scratchpad.subgraphCounter` to the
+      // checkpoint namespace on every call after the first. Both
+      // leak into the event stream and make per-subagent scoped
+      // subscriptions impossible to address from a client.
+      //
+      // Replacing the trailing `tools:*` segment (or appending one
+      // when absent) normalizes the path to `tools:<tool_call_id>`,
+      // and dropping the inherited `__pregel_scratchpad` entry lets
+      // the subagent's own Pregel loop start with a fresh scratchpad
+      // — no counter segment, no cross-talk between siblings
+      // dispatched from the same parent task.
+      const toolCallId = config.toolCall?.id;
+      const parentCheckpointNs =
+        (config.configurable?.checkpoint_ns as string | undefined) ?? "";
+      let scopedCheckpointNs = parentCheckpointNs;
+      if (toolCallId != null) {
+        const parts = parentCheckpointNs ? parentCheckpointNs.split("|") : [];
+        let lastToolsIdx = -1;
+        for (let i = parts.length - 1; i >= 0; i -= 1) {
+          if (parts[i].startsWith("tools:")) {
+            lastToolsIdx = i;
+            break;
+          }
+        }
+        if (lastToolsIdx >= 0) {
+          parts[lastToolsIdx] = `tools:${toolCallId}`;
+        } else {
+          parts.push(`tools:${toolCallId}`);
+        }
+        scopedCheckpointNs = parts.join("|");
+      }
+
       // Invoke the subagent with ls_agent_type metadata for LangSmith tracing
+      const {
+        __pregel_scratchpad: _inheritedScratchpad,
+        ...configurableWithoutScratchpad
+      } = (config.configurable ?? {}) as Record<string, unknown>;
       const subagentConfig = {
         ...config,
         configurable: {
-          ...config.configurable,
+          ...configurableWithoutScratchpad,
           ls_agent_type: "subagent",
+          checkpoint_ns: scopedCheckpointNs,
         },
       };
       const result = (await subagent.invoke(

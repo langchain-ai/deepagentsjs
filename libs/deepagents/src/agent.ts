@@ -44,6 +44,7 @@ import type {
   InferStructuredResponse,
   SupportedResponseFormat,
 } from "./types.js";
+import { createSubagentTransformer } from "./stream.js";
 
 /**
  * required for type inference
@@ -370,6 +371,7 @@ export function createDeepAgent<
     checkpointer,
     store,
     name,
+    streamTransformers: [createSubagentTransformer([])],
   }).withConfig({
     recursionLimit: 10_000,
     metadata: {
@@ -388,23 +390,14 @@ export function createDeepAgent<
     ...FlattenSubAgentMiddleware<TSubagents>,
   ];
 
-  /**
-   * Return as DeepAgent with proper DeepAgentTypeConfig
-   * - Response: InferStructuredResponse<TResponse> (unwraps ToolStrategy<T>/ProviderStrategy<T> → T)
-   * - State: undefined (state comes from middleware)
-   * - Context: ContextSchema
-   * - Middleware: AllMiddleware (built-in + custom + subagent middleware for state inference)
-   * - Tools: TTools
-   * - Subagents: TSubagents (for type-safe streaming)
-   */
-  return agent as unknown as DeepAgent<
-    DeepAgentTypeConfig<
-      InferStructuredResponse<TResponse>,
-      undefined,
-      ContextSchema,
-      AllMiddleware,
-      TTools,
-      TSubagents
-    >
+  type TypeConfig = DeepAgentTypeConfig<
+    InferStructuredResponse<TResponse>,
+    undefined,
+    ContextSchema,
+    AllMiddleware,
+    TTools,
+    TSubagents
   >;
+
+  return agent as unknown as DeepAgent<TypeConfig>;
 }
