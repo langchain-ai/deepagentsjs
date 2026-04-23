@@ -2,7 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { tool } from "langchain";
 import * as z from "zod";
 import { SystemMessage } from "@langchain/core/messages";
-import { createQuickJSMiddleware, generatePtcPrompt } from "./middleware.js";
+import {
+  createQuickJSMiddleware,
+  generatePtcPrompt,
+  isToolInstance,
+  resolveToolList,
+} from "./middleware.js";
 import { ReplSession } from "./session.js";
 
 describe("createQuickJSMiddleware", () => {
@@ -44,12 +49,10 @@ describe("createQuickJSMiddleware", () => {
       expect(text).toContain("Base");
       expect(text).toContain("js_eval");
       expect(text).toContain("### Hard rules");
-      expect(text).toContain("### First-time usage");
-      expect(text).toContain("### API Reference");
-      expect(text).toContain("async readFile(path: string): Promise<string>");
-      expect(text).toContain(
-        "async writeFile(path: string, content: string): Promise<void>",
-      );
+      expect(text).toContain("### Limitations");
+      expect(text).not.toContain("async readFile");
+      expect(text).not.toContain("async writeFile");
+      expect(text).not.toContain("### First-time usage");
     });
 
     it("should use custom system prompt when provided", async () => {
@@ -71,6 +74,154 @@ describe("createQuickJSMiddleware", () => {
       const req = mockHandler.mock.calls[0][0];
       expect(req.systemMessage.text).toContain("Custom REPL prompt");
       expect(req.systemMessage.text).not.toContain("Hard rules");
+    });
+  });
+
+  describe("isToolInstance", () => {
+    it("should return true for a tool object with invoke", () => {
+      const t = tool(async () => "", {
+        name: "my_tool",
+        description: "A tool",
+        schema: z.object({}),
+      });
+      expect(isToolInstance(t)).toBe(true);
+    });
+
+    it("should return false for a string", () => {
+      expect(isToolInstance("my_tool")).toBe(false);
+    });
+  });
+
+  describe("resolveToolList", () => {
+    const agentSearch = tool(async () => "results", {
+      name: "search",
+      description: "Search",
+      schema: z.object({ query: z.string() }),
+    });
+    const agentGrep = tool(async () => "matches", {
+      name: "grep",
+      description: "Grep",
+      schema: z.object({ pattern: z.string() }),
+    });
+    const extraTool = tool(async () => "extra", {
+      name: "extra_tool",
+      description: "Not on agent",
+      schema: z.object({}),
+    });
+
+    it("should resolve string entries from agentTools", () => {
+      const result = resolveToolList(["search"], [agentSearch, agentGrep]);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBe(agentSearch);
+    });
+
+    it("should include tool instances directly without agent lookup", () => {
+      const result = resolveToolList([extraTool], [agentSearch]);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBe(extraTool);
+    });
+
+    it("should handle a mixed list of strings and instances", () => {
+      const result = resolveToolList(
+        ["search", extraTool],
+        [agentSearch, agentGrep],
+      );
+      expect(result).toHaveLength(2);
+      expect(result[0]).toBe(agentSearch);
+      expect(result[1]).toBe(extraTool);
+    });
+
+    it("should silently omit strings that don't match any agent tool", () => {
+      const result = resolveToolList(["nonexistent"], [agentSearch]);
+      expect(result).toHaveLength(0);
+    });
+
+    it("should include instance even if its name matches an agent tool", () => {
+      const customSearch = tool(async () => "custom", {
+        name: "search",
+        description: "Custom search",
+        schema: z.object({}),
+      });
+      const result = resolveToolList([customSearch], [agentSearch]);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBe(customSearch);
+      expect(result[0]).not.toBe(agentSearch);
+    });
+
+    it("should return empty array for empty items list", () => {
+      expect(resolveToolList([], [agentSearch])).toHaveLength(0);
+    });
+  });
+
+  describe("ptc with tool instances via wrapModelCall", () => {
+    const agentTool = tool(async () => "agent result", {
+      name: "agent_tool",
+      description: "Agent tool",
+      schema: z.object({ q: z.string() }),
+    });
+    const extraTool = tool(async () => "extra result", {
+      name: "extra_tool",
+      description: "Not on agent",
+      schema: z.object({}),
+    });
+
+    it("should include directly injected instances in PTC prompt", async () => {
+      const middleware = createQuickJSMiddleware({ ptc: [extraTool] });
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: { configurable: { thread_id: "ptc-inst-1" } },
+          tools: [],
+        } as any,
+        mockHandler,
+      );
+
+      const req = mockHandler.mock.calls[0][0];
+      expect(req.systemMessage.text).toContain("tools.extraTool");
+    });
+
+    it("should include both named agent tools and injected instances in mixed ptc array", async () => {
+      const middleware = createQuickJSMiddleware({
+        ptc: ["agent_tool", extraTool],
+      });
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: { configurable: { thread_id: "ptc-mixed-1" } },
+          tools: [agentTool],
+        } as any,
+        mockHandler,
+      );
+
+      const req = mockHandler.mock.calls[0][0];
+      expect(req.systemMessage.text).toContain("tools.agentTool");
+      expect(req.systemMessage.text).toContain("tools.extraTool");
+    });
+
+    it("should include injected instances via include form", async () => {
+      const middleware = createQuickJSMiddleware({
+        ptc: { include: [extraTool] },
+      });
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: { configurable: { thread_id: "ptc-include-inst-1" } },
+          tools: [],
+        } as any,
+        mockHandler,
+      );
+
+      const req = mockHandler.mock.calls[0][0];
+      expect(req.systemMessage.text).toContain("tools.extraTool");
     });
   });
 

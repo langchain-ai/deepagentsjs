@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { tool } from "langchain";
 import { z } from "zod/v4";
-import type { BackendProtocolV2, ReadRawResult, WriteResult } from "deepagents";
 import { ReplSession } from "./session.js";
 
 const TIMEOUT = 5000;
@@ -11,39 +10,34 @@ function uniqueThreadId() {
   return `test-${++nextId}-${Date.now()}`;
 }
 
-function createMockBackend(
-  files: Record<string, string> = {},
-): BackendProtocolV2 & { written: Record<string, string> } {
-  const store = { ...files };
-  const written: Record<string, string> = {};
-
-  return {
-    written,
-    ls: async () => ({ files: [] }),
-    read: async (filePath: string) => ({ content: store[filePath] ?? "" }),
-    readRaw: async (filePath: string): Promise<ReadRawResult> => {
-      if (!(filePath in store)) {
-        return { error: `ENOENT: ${filePath}` };
+function createInMemoryFileTools() {
+  const store = new Map<string, string>();
+  const readTool = tool(
+    async (input: { path: string }) => {
+      const content = store.get(input.path);
+      if (content === undefined) {
+        throw new Error(`ENOENT: no such file or directory '${input.path}'`);
       }
-      const now = new Date().toISOString();
-      return {
-        data: {
-          content: store[filePath],
-          mimeType: "text/plain",
-          created_at: now,
-          modified_at: now,
-        },
-      };
+      return content;
     },
-    grep: async () => ({ matches: [] }),
-    glob: async () => ({ files: [] }),
-    write: async (filePath: string, content: string): Promise<WriteResult> => {
-      store[filePath] = content;
-      written[filePath] = content;
-      return { path: filePath };
+    {
+      name: "read_file",
+      description: "Read a file",
+      schema: z.object({ path: z.string() }),
     },
-    edit: async () => ({ error: "not implemented" }),
-  };
+  );
+  const writeTool = tool(
+    async (input: { path: string; content: string }) => {
+      store.set(input.path, input.content);
+      return "ok";
+    },
+    {
+      name: "write_file",
+      description: "Write a file",
+      schema: z.object({ path: z.string(), content: z.string() }),
+    },
+  );
+  return { readTool, writeTool, store };
 }
 
 describe("REPL Engine", () => {
@@ -292,52 +286,83 @@ describe("REPL Engine", () => {
     });
   });
 
-  describe("backend VFS", () => {
-    it("should read files from the backend", async () => {
+  describe("sandbox globals", () => {
+    it("should not expose readFile as a global", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result = await session.eval("typeof readFile", TIMEOUT);
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("undefined");
+    });
+
+    it("should not expose writeFile as a global", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result = await session.eval("typeof writeFile", TIMEOUT);
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("undefined");
+    });
+  });
+
+  describe("PTC file tools", () => {
+    it("should read files via PTC tool", async () => {
+      const { readTool, writeTool, store } = createInMemoryFileTools();
+      store.set("/data.json", '{"n":42}');
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend({ "/data.json": '{"n": 42}' }),
+        tools: [readTool, writeTool],
       });
 
       const result = await session.eval(
-        'const raw = await readFile("/data.json"); JSON.parse(raw).n',
+        'const raw = await tools.readFile({ path: "/data.json" }); JSON.parse(raw).n',
         TIMEOUT,
       );
+      expect(result.ok).toBe(true);
       expect(result.value).toBe(42);
     });
 
-    it("should error on missing files", async () => {
+    it("should error on missing files via PTC tool", async () => {
+      const { readTool, writeTool } = createInMemoryFileTools();
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
+        tools: [readTool, writeTool],
       });
 
       const result = await session.eval(
-        'var msg; try { await readFile("/missing") } catch(e) { msg = e.message }\nmsg',
+        'var msg; try { await tools.readFile({ path: "/missing" }) } catch(e) { msg = e.message }\nmsg',
         TIMEOUT,
       );
       expect(result.ok).toBe(true);
       expect(result.value).toContain("ENOENT");
     });
 
-    it("should buffer writes and flush to the backend", async () => {
-      const backend = createMockBackend();
-      session = ReplSession.getOrCreate(uniqueThreadId(), { backend });
+    it("should write and read back in the same eval", async () => {
+      const { readTool, writeTool } = createInMemoryFileTools();
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [readTool, writeTool],
+      });
 
-      await session.eval('await writeFile("/out.txt", "hello")', TIMEOUT);
-      expect(backend.written["/out.txt"]).toBeUndefined();
-      expect(session.pendingWrites).toHaveLength(1);
-      await session.flushWrites(backend);
-      expect(backend.written["/out.txt"]).toBe("hello");
-      expect(session.pendingWrites).toHaveLength(0);
+      const result = await session.eval(
+        `await tools.writeFile({ path: "/f.txt", content: "hello" });
+         await tools.readFile({ path: "/f.txt" })`,
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("hello");
     });
 
-    it("should read back written files after flush", async () => {
-      const backend = createMockBackend();
-      session = ReplSession.getOrCreate(uniqueThreadId(), { backend });
+    it("should write in one eval and read in the next", async () => {
+      const { readTool, writeTool } = createInMemoryFileTools();
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [readTool, writeTool],
+      });
 
-      await session.eval('await writeFile("/f.txt", "content")', TIMEOUT);
-      await session.flushWrites(backend);
-      const result = await session.eval('await readFile("/f.txt")', TIMEOUT);
-      expect(result.value).toBe("content");
+      await session.eval(
+        'await tools.writeFile({ path: "/out.txt", content: "persisted" })',
+        TIMEOUT,
+      );
+      const result = await session.eval(
+        'await tools.readFile({ path: "/out.txt" })',
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("persisted");
     });
   });
 
@@ -350,7 +375,6 @@ describe("REPL Engine", () => {
       });
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [addTool],
       });
 
@@ -370,7 +394,6 @@ describe("REPL Engine", () => {
       });
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [addTool],
       });
 
@@ -392,7 +415,6 @@ describe("REPL Engine", () => {
       });
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [upperTool, lowerTool],
       });
 
@@ -420,7 +442,6 @@ describe("REPL Engine", () => {
       );
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [webSearchTool],
       });
 
@@ -440,7 +461,6 @@ describe("REPL Engine", () => {
       });
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [echoTool],
       });
 
@@ -470,7 +490,6 @@ describe("REPL Engine", () => {
       );
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [failingTool],
       });
 

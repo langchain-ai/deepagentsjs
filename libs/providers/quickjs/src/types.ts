@@ -1,4 +1,3 @@
-import type { AnyBackendProtocol, BackendFactory } from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
 /**
@@ -6,25 +5,23 @@ import type { StructuredToolInterface } from "@langchain/core/tools";
  */
 export interface QuickJSMiddlewareOptions {
   /**
-   * Backend for file I/O (readFile/writeFile) inside the REPL.
-   * Accepts a AnyBackendProtocol instance or a BackendFactory function.
-   * Defaults to StateBackend (reads/writes LangGraph checkpoint state).
-   * @default StateBackend
-   */
-  backend?: AnyBackendProtocol | BackendFactory;
-
-  /**
    * Enable programmatic tool calling from within the REPL.
    *
    * - `false` — disabled (default)
    * - `true` — expose all agent tools except standard vfs tools
-   * - `string[]` — expose only these tools (alias for `{ include }`)
-   * - `{ include: string[] }` — expose only these tools
+   * - `(string | StructuredToolInterface)[]` — expose these tools; strings are
+   *   resolved from agent tools, instances are injected directly without needing
+   *   to be registered on the agent
+   * - `{ include: (string | StructuredToolInterface)[] }` — expose only these tools
    * - `{ exclude: string[] }` — expose all agent tools except these
    *
    * @default false
    */
-  ptc?: boolean | string[] | { include: string[] } | { exclude: string[] };
+  ptc?:
+    | boolean
+    | (string | StructuredToolInterface)[]
+    | { include: (string | StructuredToolInterface)[] }
+    | { exclude: string[] };
 
   /**
    * Memory limit in bytes.
@@ -58,7 +55,6 @@ export interface QuickJSMiddlewareOptions {
 export interface ReplSessionOptions {
   memoryLimitBytes?: number;
   maxStackSizeBytes?: number;
-  backend?: AnyBackendProtocol;
   tools?: StructuredToolInterface[];
 }
 
