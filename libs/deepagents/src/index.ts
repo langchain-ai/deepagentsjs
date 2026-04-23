@@ -94,8 +94,6 @@ export type {
   SwarmTaskSpec,
   SwarmTaskResult,
   SwarmExecutionOptions,
-  ReadCallback,
-  WriteCallback,
   SwarmFilter,
   SwarmSummary,
   SwarmResultEntry,

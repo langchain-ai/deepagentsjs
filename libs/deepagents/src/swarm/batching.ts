@@ -11,11 +11,11 @@
  */
 
 import { HumanMessage } from "@langchain/core/messages";
+import { readColumn } from "./filter.js";
 import type { Runnable } from "@langchain/core/runnables";
 import type { ReactAgent } from "langchain";
 import type { SwarmTaskSpec, SwarmTaskResult } from "./types.js";
 import { TASK_TIMEOUT_MS } from "./types.js";
-import { serializeTableJsonl } from "./parse.js";
 import {
   type DispatchContext,
   withTimeout,
@@ -36,7 +36,8 @@ interface BatchResultItem {
   id: string;
 
   /**
-   *
+   * Structured output fields returned by the subagent for this item. These are unpacked
+   * by `unpackBatchResult` and written as columns on the corresponding table row.
    */
   [key: string]: unknown;
 }
@@ -172,18 +173,70 @@ function groupIntoBatches<T>(items: T[], size: number): T[][] {
 }
 
 /**
- * Build a single combined prompt for a batch of tasks. Each task's already-interpolated description is listed
- * with its id so the subagent can map results back.
+ * Extract every `{placeholder}` name from an instruction template.
+ */
+function extractTemplatePlaceholders(template: string): string[] {
+  const seen = new Set<string>();
+  for (const [, name] of template.matchAll(
+    /\{\s*([a-zA-Z_$][a-zA-Z0-9_$.]*)\s*\}/g,
+  )) {
+    seen.add(name.trim());
+  }
+  return [...seen];
+}
+
+/**
+ * Build the per-item line for a batch prompt. When the instruction template has
+ * `{placeholder}` fields and `task.rowData` is available, only the substituted
+ * values are shown (single-placeholder: bare value; multi: `key: value` pairs).
+ * Falls back to the full interpolated description when row data is unavailable.
+ */
+function formatItemRow(task: SwarmTaskSpec, placeholders: string[]): string {
+  if (placeholders.length === 0 || !task.rowData) {
+    return task.description;
+  }
+
+  if (placeholders.length === 1) {
+    const value = readColumn(task.rowData, placeholders[0]);
+    if (value != null) {
+      return typeof value === "object" ? JSON.stringify(value) : String(value);
+    }
+  }
+
+  const parts = placeholders
+    .map((p) => {
+      const value = readColumn(task.rowData!, p);
+      if (value == null) return null;
+      const str =
+        typeof value === "object" ? JSON.stringify(value) : String(value);
+      return `${p}: ${str}`;
+    })
+    .filter((p): p is string => p !== null);
+
+  return parts.length > 0 ? parts.join(", ") : task.description;
+}
+
+/**
+ * Build a single combined prompt for a batch of tasks.
+ *
+ * The instruction template is rendered once as a shared preamble so its static
+ * text is not repeated for every item. Each item entry then shows only the
+ * row-specific variable values extracted from the template's `{placeholder}`
+ * fields, keeping the prompt compact regardless of batch size.
  */
 function composeBatchInstruction(
   batch: SwarmTaskSpec[],
   context: string | undefined,
+  instruction: string,
 ): string {
+  const placeholders = extractTemplatePlaceholders(instruction);
+
   const items = batch
-    .map((task) => `[${task.id}] ${task.description}`)
+    .map((task) => `[${task.id}] ${formatItemRow(task, placeholders)}`)
     .join("\n");
 
   const body =
+    `${instruction}\n\n---\n\n` +
     `Process ${batch.length} items. Return a JSON "results" array ` +
     `with exactly ${batch.length} entries. Each entry must include ` +
     `the item's id exactly as shown.\n\n` +
@@ -239,10 +292,11 @@ function dispatchBatch(
   subagent: ReactAgent<any> | Runnable,
   filteredState: Record<string, unknown>,
   context: string | undefined,
+  instruction: string,
   config?: { signal?: AbortSignal },
 ): Promise<SwarmTaskResult[]> {
   const subagentType = batch[0]?.subagentType ?? "general-purpose";
-  const prompt = composeBatchInstruction(batch, context);
+  const prompt = composeBatchInstruction(batch, context, instruction);
   const subagentState = {
     ...filteredState,
     messages: [new HumanMessage({ content: prompt })],
@@ -331,6 +385,7 @@ export async function dispatchBatched(
       subagent,
       ctx.filteredState,
       ctx.context,
+      ctx.instruction,
       { signal: ctx.signal },
     ).then((batchResults) => {
       for (let i = 0; i < batchResults.length; i++) {
@@ -351,7 +406,6 @@ export async function dispatchBatched(
           );
         }
       }
-      ctx.write(ctx.file, serializeTableJsonl(ctx.rows));
     });
 
     await enqueue(promise, ctx.executing, ctx.effectiveConcurrency);

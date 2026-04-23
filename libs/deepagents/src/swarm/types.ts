@@ -172,37 +172,30 @@ export interface SwarmResultEntry {
 }
 
 /**
- * In-memory summary returned by `swarm.execute`.
- *
- * This object lives in QuickJS memory and is JSON-stringified back to the
- * caller. Results are also written as columns on the source table rows, so
- * the summary is a convenience view — not the canonical store.
+ * Summary returned by `executeSwarm`. Contains aggregate stats, per-row outcomes,
+ * and the enriched rows themselves (so the session bridge can return them to QuickJS
+ * without a second round-trip).
  */
 export interface SwarmSummary {
   /**
-   * Number of rows dispatched (after filtering).
+   * Total rows dispatched (after filtering).
    */
   total: number;
 
   /**
-   * Number of rows that completed successfully.
+   * Rows that completed successfully.
    */
   completed: number;
 
   /**
-   * Number of rows that failed (dispatch errors + interpolation errors).
+   * Rows that failed (dispatch errors + interpolation errors).
    */
   failed: number;
 
   /**
-   * Number of rows excluded by the filter clause.
+   * Rows excluded by the filter clause.
    */
   skipped: number;
-
-  /**
-   * Path to the JSONL table file that was executed against.
-   */
-  file: string;
 
   /**
    * Column name where results were written.
@@ -210,7 +203,14 @@ export interface SwarmSummary {
   column: string;
 
   /**
-   * Per-row outcomes, in dispatch order.
+   * The full rows array after enrichment. Each dispatched row has the result
+   * merged in as a new column. Filtered/skipped rows are included unchanged.
+   * This is the canonical output — returned to the caller as the updated table.
+   */
+  rows: Record<string, unknown>[];
+
+  /**
+   * Per-row outcomes in dispatch order.
    */
   results: SwarmResultEntry[];
 

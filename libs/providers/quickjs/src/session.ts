@@ -28,6 +28,7 @@ import type {
   QuickJSAsyncContext,
   QuickJSAsyncRuntime,
 } from "quickjs-emscripten-core";
+import { isFail } from "quickjs-emscripten-core";
 import type { AnyBackendProtocol, BackendProtocolV2 } from "deepagents";
 import {
   adaptBackendProtocol,
@@ -494,89 +495,69 @@ export class ReplSession {
   }
 
   /**
-   * Write to pendingWrites, replacing any existing entry for the same
-   * path so only the latest version is flushed after eval completes.
-   */
-  private swarmWrite(path: string, content: string): void {
-    const idx = this.pendingWrites.findIndex((w) => w.path === path);
-    if (idx !== -1) {
-      this.pendingWrites.splice(idx, 1);
-    }
-    this.pendingWrites.push({ path, content });
-  }
-
-  /**
-   * Read a file, checking pendingWrites first so that files written
-   * by swarm.create (or a prior swarm.execute) in the same eval are
-   * visible before they're flushed to the backend.
-   */
-  private async swarmRead(path: string): Promise<string> {
-    const pending = this.pendingWrites.find((w) => w.path === path);
-    if (pending) {
-      return pending.content;
-    }
-
-    const backend = this._backend;
-    if (!backend) {
-      throw new Error("Backend not available");
-    }
-
-    const result = await backend.readRaw(path);
-    if (result.error || !result.data) {
-      throw new Error(`Failed to read "${path}": ${result.error ?? "empty"}`);
-    }
-
-    const content = Array.isArray(result.data.content)
-      ? result.data.content.join("\n")
-      : typeof result.data.content === "string"
-        ? result.data.content
-        : null;
-
-    if (content === null) {
-      throw new Error(`Cannot read binary file "${path}" as text.`);
-    }
-
-    return content;
-  }
-
-  /**
    * Build the `swarm.create` QuickJS function handle.
+   *
+   * Takes a source spec (glob, filePaths, or tasks) and returns an in-memory
+   * table object `{ rows: Row[] }` to the QuickJS caller. No file is written.
+   *
+   * The rows are serialized to JSON and parsed inside QuickJS via `evalCode`
+   * so the returned handle is a proper QuickJS array — safe to read, iterate,
+   * and pass back into `swarm.execute`.
    */
   private buildSwarmCreate(): QuickJSHandle {
     const context = this.context!;
     const session = this;
 
-    return context.newFunction(
-      "create",
-      (fileHandle: QuickJSHandle, sourceHandle: QuickJSHandle) => {
-        const file = context.getString(fileHandle);
-        const source = context.dump(sourceHandle) as Record<string, unknown>;
+    return context.newFunction("create", (sourceHandle: QuickJSHandle) => {
+      // Dump synchronously — handle is only valid during this call.
+      const source = context.dump(sourceHandle) as Record<string, unknown>;
 
-        return session.wrapAsync(async () => {
-          if (!session._backend) {
-            throw new Error("Backend not available");
-          }
+      return session.wrapAsync(async () => {
+        if (!session._backend) {
+          throw new Error("Backend not available");
+        }
 
-          await createTable(
-            file,
-            {
-              glob: source.glob as string | string[] | undefined,
-              filePaths: source.filePaths as string[] | undefined,
-              tasks: source.tasks as Array<Record<string, unknown>> | undefined,
-            },
-            session._backend,
-            (path, content) => session.swarmWrite(path, content),
-          );
-          session.logs.push(`[swarm.create] Table written to ${file}.`);
+        const rows = await createTable(
+          {
+            glob: source.glob as string | string[] | undefined,
+            filePaths: source.filePaths as string[] | undefined,
+            tasks: source.tasks as Array<Record<string, unknown>> | undefined,
+          },
+          session._backend,
+        );
 
-          return context.undefined;
-        });
-      },
-    );
+        session.logs.push(
+          `[swarm.create] Created table with ${rows.length} rows.`,
+        );
+
+        // Serialize rows to JSON and parse inside QuickJS to produce a proper
+        // QuickJS value. wrapAsync disposes the returned handle after resolving.
+        const tableJson = JSON.stringify({ rows });
+        const parsed = context.evalCode(`(${tableJson})`);
+        if (isFail(parsed)) {
+          parsed.error.dispose();
+          throw new Error("Failed to serialize table rows into QuickJS");
+        }
+        return parsed.value;
+      });
+    });
   }
 
   /**
    * Build the `swarm.execute` QuickJS function handle.
+   *
+   * Takes a table handle `{ rows: Row[] }` and an options object. Extracts the rows
+   * synchronously (before the async boundary), runs the swarm, then returns a new
+   * QuickJS table object containing the enriched rows.
+   *
+   * Returning a new object (rather than mutating the input handle) is necessary
+   * because QuickJS argument handles are only valid during the synchronous call —
+   * we cannot safely write back to the original handle after an await.
+   *
+   * Usage in js_eval:
+   *   let table = await swarm.create({ glob: "src/**\/*.ts" });
+   *   table = await swarm.execute(table, { instruction: "...", column: "review" });
+   *   console.log(table.rows);
    */
   private buildSwarmExecute(): QuickJSHandle {
     const context = this.context!;
@@ -584,15 +565,15 @@ export class ReplSession {
 
     return context.newFunction(
       "execute",
-      (fileHandle: QuickJSHandle, optionsHandle: QuickJSHandle) => {
-        const file = context.getString(fileHandle);
+      (tableHandle: QuickJSHandle, optionsHandle: QuickJSHandle) => {
+        // Dump both arguments synchronously before entering wrapAsync.
+        // QuickJS argument handles are only valid for the duration of this call.
+        const tableData = context.dump(tableHandle) as {
+          rows?: Record<string, unknown>[];
+        };
         const opts = context.dump(optionsHandle) as Record<string, unknown>;
 
         return session.wrapAsync(async () => {
-          if (!session._backend) {
-            throw new Error("Backend not available");
-          }
-
           if (
             typeof opts.instruction !== "string" ||
             opts.instruction.length === 0
@@ -607,7 +588,7 @@ export class ReplSession {
           } = session._options;
 
           const summary = await executeSwarm({
-            file,
+            rows: tableData.rows ?? [],
             instruction: opts.instruction,
             column: typeof opts.column === "string" ? opts.column : undefined,
             filter: opts.filter as SwarmFilter | undefined,
@@ -630,38 +611,42 @@ export class ReplSession {
             subagentFactories,
             currentState: currentState as Record<string, unknown>,
             signal: session._evalAbortController?.signal,
-            read: (path) => session.swarmRead(path),
-            write: (path, content) => session.swarmWrite(path, content),
           });
 
-          session.logSwarmSummary(file, summary);
+          session.logSwarmSummary(summary);
 
-          const { results: _results, ...summaryWithoutResults } = summary;
-          return context.newString(JSON.stringify(summaryWithoutResults));
+          // Return an updated table object with enriched rows.
+          // wrapAsync disposes the returned handle after resolving.
+          const tableJson = JSON.stringify({ rows: summary.rows });
+          const parsed = context.evalCode(`(${tableJson})`);
+          if (isFail(parsed)) {
+            parsed.error.dispose();
+            throw new Error("Failed to serialize enriched table into QuickJS");
+          }
+          return parsed.value;
         });
       },
     );
   }
 
   /**
-   * Log the swarm execution summary and any failures.
+   * Log the swarm execution summary and any individual failures to the session
+   * log buffer. These appear in the js_eval tool output so the agent can see
+   * completion counts without needing to inspect rows directly.
    */
-  private logSwarmSummary(
-    file: string,
-    summary: {
-      completed: number;
-      failed: number;
-      skipped: number;
-      column: string;
-      failedTasks: Array<{ id: string; error: string }>;
-    },
-  ): void {
+  private logSwarmSummary(summary: {
+    completed: number;
+    failed: number;
+    skipped: number;
+    column: string;
+    failedTasks: Array<{ id: string; error: string }>;
+  }): void {
     this.logs.push(
-      `[swarm.execute] ${summary.completed} completed, ${summary.failed} failed, ${summary.skipped} skipped. Results → "${file}" column "${summary.column}".`,
+      `[swarm.execute] ${summary.completed} completed, ${summary.failed} failed, ${summary.skipped} skipped → column "${summary.column}".`,
     );
 
     this.logs.push(
-      `[swarm.execute] Results are authoritative — do not re-dispatch to verify. Read the table directly to aggregate.`,
+      `[swarm.execute] Results are authoritative — do not re-dispatch to verify. Inspect table.rows directly to aggregate.`,
     );
 
     if (summary.failed > 0) {

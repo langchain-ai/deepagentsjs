@@ -16,12 +16,7 @@ export {
 export type { SwarmFilter } from "./filter.js";
 
 export { parseTableJsonl, serializeTableJsonl } from "./parse.js";
-export {
-  executeSwarm,
-  type SwarmExecutionOptions,
-  type ReadCallback,
-  type WriteCallback,
-} from "./executor.js";
+export { executeSwarm, type SwarmExecutionOptions } from "./executor.js";
 export { evaluateFilter, readColumn } from "./filter.js";
 export { interpolateInstruction } from "./interpolate.js";
 export { createTable } from "./table.js";

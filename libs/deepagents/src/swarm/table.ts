@@ -1,14 +1,13 @@
 import { basename, dirname } from "node:path";
 import type { BackendProtocolV2 } from "../backends/v2/protocol.js";
-import { serializeTableJsonl } from "./parse.js";
 import type { CreateTableSource } from "./types.js";
 
 /**
  * Build unique task IDs from file paths, disambiguating basename collisions
  * by prepending the parent directory name.
  *
- * @param paths - Sorted array of absolute file paths
- * @returns Map from file path to unique ID
+ * Example: two files named `index.ts` in different directories become
+ * `"routes-index.ts"` and `"handlers-index.ts"` rather than both being `"index.ts"`.
  */
 function buildTaskIds(paths: string[]): Map<string, string> {
   const basenameCounts = new Map<string, number>();
@@ -33,11 +32,9 @@ function buildTaskIds(paths: string[]): Map<string, string> {
 
 /**
  * Resolve file paths from glob patterns and/or explicit paths via the backend.
+ * Results are deduplicated and sorted for deterministic row ordering.
  *
- * @param source - Source containing `glob` and/or `filePaths`
- * @param backend - Backend for glob resolution
- * @returns Deduplicated, sorted array of file paths
- * @throws Error if no files are matched
+ * @throws Error if no files are matched by the provided source.
  */
 async function resolveFilePaths(
   source: CreateTableSource,
@@ -81,28 +78,21 @@ async function resolveFilePaths(
 }
 
 /**
- * Write callback type. Abstracts over direct backend writes vs. session
- * pendingWrites so the same logic works in both contexts.
- */
-export type WriteCallback = (path: string, content: string) => void;
-
-/**
- * Create a JSONL table file from a {@link CreateTableSource}.
+ * Build a rows array from a CreateTableSource.
  *
- * For `glob`/`filePaths` sources, resolves paths via the backend and
- * produces rows with `{ id, file }`. For inline `tasks`, validates that
- * each row has an `id` field. The resulting JSONL is written through
- * the `write` callback (routed to `pendingWrites` for read-after-write
- * visibility). Overwrites the file if it already exists.
+ * For `glob`/`filePaths` sources, resolves paths via the backend and produces
+ * rows with `{ id, file }`. For inline `tasks`, validates that each row has an
+ * `id` field and returns them as-is.
+ *
+ * Returns plain row objects — no file is written. The caller (session bridge)
+ * wraps this in a QuickJS table handle.
  *
  * @throws Error if the source is empty, no files match, or tasks are missing ids.
  */
 export async function createTable(
-  file: string,
   source: CreateTableSource,
   backend: BackendProtocolV2,
-  write: WriteCallback,
-) {
+): Promise<Record<string, unknown>[]> {
   const hasGlob = source.glob != null;
   const hasFilePaths = source.filePaths != null && source.filePaths.length > 0;
   const hasTasks = source.tasks != null && source.tasks.length > 0;
@@ -112,8 +102,6 @@ export async function createTable(
       "swarm.create: source must provide at least one of `glob`, `filePaths`, or `tasks`.",
     );
   }
-
-  let rows: Record<string, unknown>[];
 
   if (hasTasks) {
     const tasks = source.tasks ?? [];
@@ -130,12 +118,10 @@ export async function createTable(
       );
     }
 
-    rows = tasks;
-  } else {
-    const paths = await resolveFilePaths(source, backend);
-    const taskIds = buildTaskIds(paths);
-    rows = paths.map((p) => ({ id: taskIds.get(p) ?? p, file: p }));
+    return tasks;
   }
 
-  write(file, serializeTableJsonl(rows));
+  const paths = await resolveFilePaths(source, backend);
+  const taskIds = buildTaskIds(paths);
+  return paths.map((p) => ({ id: taskIds.get(p) ?? p, file: p }));
 }

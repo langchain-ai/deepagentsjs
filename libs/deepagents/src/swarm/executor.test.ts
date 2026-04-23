@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
 import { executeSwarm, type SwarmExecutionOptions } from "./executor.js";
-import { serializeTableJsonl, parseTableJsonl } from "./parse.js";
 import type { SubagentFactory } from "../symbols.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -11,29 +10,15 @@ function makeSubagent(resultText = "done") {
   } as any;
 }
 
-function makeReadWrite(initial: Record<string, string> = {}) {
-  const store = new Map(Object.entries(initial));
-  const read = async (path: string) => store.get(path) ?? "";
-  const write = vi.fn((path: string, content: string) =>
-    store.set(path, content),
-  );
-  return { read, write, store };
-}
-
 function makeOptions(
   rows: Record<string, unknown>[],
   overrides: Partial<SwarmExecutionOptions> = {},
 ): SwarmExecutionOptions {
-  const { read, write } = makeReadWrite({
-    "/t.jsonl": serializeTableJsonl(rows),
-  });
   return {
-    file: "/t.jsonl",
+    rows,
     instruction: "Process {id}",
     subagentGraphs: { "general-purpose": makeSubagent() },
     currentState: {},
-    read,
-    write,
     ...overrides,
   };
 }
@@ -64,56 +49,33 @@ describe("executeSwarm — basic dispatch", () => {
     expect(summary.results[0].result).toBe("answer");
   });
 
-  it("writes result column back to the table on completion", async () => {
-    const { read, write, store } = makeReadWrite({
-      "/t.jsonl": serializeTableJsonl([{ id: "r1", text: "hello" }]),
-    });
-    await executeSwarm({
-      file: "/t.jsonl",
-      instruction: "Process {text}",
-      subagentGraphs: { "general-purpose": makeSubagent("done") },
-      currentState: {},
-      read,
-      write,
-      column: "result",
-    });
-
-    const written = parseTableJsonl(store.get("/t.jsonl") ?? "");
-    expect(written[0].result).toBe("done");
+  it("merges result column into the returned rows", async () => {
+    const summary = await executeSwarm(
+      makeOptions([{ id: "r1", text: "hello" }], {
+        instruction: "Process {text}",
+        subagentGraphs: { "general-purpose": makeSubagent("done") },
+        column: "result",
+      }),
+    );
+    expect(summary.rows[0].result).toBe("done");
   });
 
   it("uses 'result' as the default column name", async () => {
-    const { read, write, store } = makeReadWrite({
-      "/t.jsonl": serializeTableJsonl([{ id: "r1" }]),
-    });
-    await executeSwarm({
-      file: "/t.jsonl",
-      instruction: "Process {id}",
-      subagentGraphs: { "general-purpose": makeSubagent("out") },
-      currentState: {},
-      read,
-      write,
-    });
-
-    const written = parseTableJsonl(store.get("/t.jsonl") ?? "");
-    expect(written[0].result).toBe("out");
+    const summary = await executeSwarm(
+      makeOptions([{ id: "r1" }], {
+        subagentGraphs: { "general-purpose": makeSubagent("out") },
+      }),
+    );
+    expect(summary.rows[0].result).toBe("out");
   });
 
-  it("writes results for every row (rowIndexById is populated)", async () => {
-    const { read, write, store } = makeReadWrite({
-      "/t.jsonl": serializeTableJsonl([{ id: "a" }, { id: "b" }, { id: "c" }]),
-    });
-    await executeSwarm({
-      file: "/t.jsonl",
-      instruction: "Process {id}",
-      subagentGraphs: { "general-purpose": makeSubagent("ok") },
-      currentState: {},
-      read,
-      write,
-    });
-
-    const rows = parseTableJsonl(store.get("/t.jsonl") ?? "");
-    expect(rows.every((r) => r.result === "ok")).toBe(true);
+  it("returns enriched rows for every dispatched row", async () => {
+    const summary = await executeSwarm(
+      makeOptions([{ id: "a" }, { id: "b" }, { id: "c" }], {
+        subagentGraphs: { "general-purpose": makeSubagent("ok") },
+      }),
+    );
+    expect(summary.rows.every((r) => r.result === "ok")).toBe(true);
   });
 
   it("records column name in summary", async () => {
@@ -121,7 +83,12 @@ describe("executeSwarm — basic dispatch", () => {
       makeOptions([{ id: "r1" }], { column: "output" }),
     );
     expect(summary.column).toBe("output");
-    expect(summary.file).toBe("/t.jsonl");
+  });
+
+  it("does not mutate the caller's input rows array", async () => {
+    const inputRows = [{ id: "r1" }];
+    await executeSwarm(makeOptions(inputRows));
+    expect(Object.keys(inputRows[0])).toEqual(["id"]);
   });
 
   it("invokes subagent with orchestrator state minus excluded keys", async () => {
@@ -163,27 +130,22 @@ describe("executeSwarm — filter", () => {
     expect(summary.skipped).toBe(1);
   });
 
-  it("does not modify skipped rows in the table", async () => {
-    const { read, write, store } = makeReadWrite({
-      "/t.jsonl": serializeTableJsonl([
-        { id: "r1", status: "done" },
-        { id: "r2", status: "pending" },
-      ]),
-    });
-    await executeSwarm({
-      file: "/t.jsonl",
-      instruction: "Process {id}",
-      filter: { column: "status", equals: "pending" },
-      subagentGraphs: { "general-purpose": makeSubagent("ok") },
-      currentState: {},
-      read,
-      write,
-    });
-
-    const rows = parseTableJsonl(store.get("/t.jsonl") ?? "");
-    const skipped = rows.find((r) => r.id === "r1");
+  it("does not add result column to skipped rows", async () => {
+    const summary = await executeSwarm(
+      makeOptions(
+        [
+          { id: "r1", status: "done" },
+          { id: "r2", status: "pending" },
+        ],
+        {
+          filter: { column: "status", equals: "pending" },
+          subagentGraphs: { "general-purpose": makeSubagent("ok") },
+        },
+      ),
+    );
+    const skipped = summary.rows.find((r) => r.id === "r1");
     expect(skipped?.result).toBeUndefined();
-    const dispatched = rows.find((r) => r.id === "r2");
+    const dispatched = summary.rows.find((r) => r.id === "r2");
     expect(dispatched?.result).toBe("ok");
   });
 });
@@ -257,51 +219,35 @@ describe("executeSwarm — structured output flattening", () => {
     } as any;
     const factory = vi.fn(() => subagent) as unknown as SubagentFactory;
 
-    const { read, write, store } = makeReadWrite({
-      "/t.jsonl": serializeTableJsonl([{ id: "r1", text: "great" }]),
-    });
-
-    await executeSwarm({
-      file: "/t.jsonl",
-      instruction: "Classify: {text}",
-      responseSchema: {
-        type: "object",
-        properties: {
-          label: { type: "string" },
-          confidence: { type: "number" },
+    const summary = await executeSwarm(
+      makeOptions([{ id: "r1", text: "great" }], {
+        instruction: "Classify: {text}",
+        responseSchema: {
+          type: "object",
+          properties: {
+            label: { type: "string" },
+            confidence: { type: "number" },
+          },
+          required: ["label"],
         },
-        required: ["label"],
-      },
-      subagentGraphs: { "general-purpose": makeSubagent() },
-      subagentFactories: { "general-purpose": factory },
-      currentState: {},
-      read,
-      write,
-    });
+        subagentGraphs: { "general-purpose": makeSubagent() },
+        subagentFactories: { "general-purpose": factory },
+      }),
+    );
 
-    const rows = parseTableJsonl(store.get("/t.jsonl") ?? "");
-    expect(rows[0].label).toBe("positive");
-    expect(rows[0].confidence).toBe(0.95);
-    expect(rows[0].result).toBeUndefined();
+    expect(summary.rows[0].label).toBe("positive");
+    expect(summary.rows[0].confidence).toBe(0.95);
+    expect(summary.rows[0].result).toBeUndefined();
   });
 
   it("does not flatten plain text results", async () => {
-    const { read, write, store } = makeReadWrite({
-      "/t.jsonl": serializeTableJsonl([{ id: "r1" }]),
-    });
-
-    await executeSwarm({
-      file: "/t.jsonl",
-      instruction: "Process {id}",
-      subagentGraphs: { "general-purpose": makeSubagent("plain text") },
-      currentState: {},
-      read,
-      write,
-    });
-
-    const rows = parseTableJsonl(store.get("/t.jsonl") ?? "");
-    expect(rows[0].result).toBe("plain text");
-    expect(Object.keys(rows[0])).toEqual(["id", "result"]);
+    const summary = await executeSwarm(
+      makeOptions([{ id: "r1" }], {
+        subagentGraphs: { "general-purpose": makeSubagent("plain text") },
+      }),
+    );
+    expect(summary.rows[0].result).toBe("plain text");
+    expect(Object.keys(summary.rows[0])).toEqual(["id", "result"]);
   });
 });
 
@@ -425,30 +371,23 @@ describe("executeSwarm — batched subagent dispatch", () => {
       id: `r${i + 1}`,
       text: `item ${i + 1}`,
     }));
-    const { read, write, store } = makeReadWrite({
-      "/t.jsonl": serializeTableJsonl(rows),
-    });
 
     const summary = await executeSwarm({
-      file: "/t.jsonl",
+      rows,
       instruction: "Classify: {text}",
       batchSize: 5,
       responseSchema: BATCH_SCHEMA,
       subagentGraphs: { "general-purpose": makeSubagent() },
       subagentFactories: { "general-purpose": factory },
       currentState: {},
-      read,
-      write,
     });
 
     expect(batchSubagent.invoke).toHaveBeenCalledTimes(2);
     expect(summary.total).toBe(10);
     expect(summary.completed).toBe(10);
     expect(summary.failed).toBe(0);
-
-    const written = parseTableJsonl(store.get("/t.jsonl") ?? "");
-    expect(written[0].label).toBe("A");
-    expect(written[9].label).toBe("J");
+    expect(summary.rows[0].label).toBe("A");
+    expect(summary.rows[9].label).toBe("J");
   });
 
   it("matches results by ID even when subagent returns shuffled order", async () => {
@@ -467,29 +406,23 @@ describe("executeSwarm — batched subagent dispatch", () => {
       id: `r${i + 1}`,
       text: `item ${i + 1}`,
     }));
-    const { read, write, store } = makeReadWrite({
-      "/t.jsonl": serializeTableJsonl(rows),
-    });
 
     const summary = await executeSwarm({
-      file: "/t.jsonl",
+      rows,
       instruction: "Classify: {text}",
       batchSize: 5,
       responseSchema: BATCH_SCHEMA,
       subagentGraphs: { "general-purpose": makeSubagent() },
       subagentFactories: { "general-purpose": factory },
       currentState: {},
-      read,
-      write,
     });
 
     expect(summary.completed).toBe(5);
-    const written = parseTableJsonl(store.get("/t.jsonl") ?? "");
-    expect(written[0].label).toBe("A");
-    expect(written[1].label).toBe("B");
-    expect(written[2].label).toBe("C");
-    expect(written[3].label).toBe("D");
-    expect(written[4].label).toBe("E");
+    expect(summary.rows[0].label).toBe("A");
+    expect(summary.rows[1].label).toBe("B");
+    expect(summary.rows[2].label).toBe("C");
+    expect(summary.rows[3].label).toBe("D");
+    expect(summary.rows[4].label).toBe("E");
   });
 
   it("marks only missing IDs as failed, not the rest of the batch", async () => {
@@ -510,6 +443,7 @@ describe("executeSwarm — batched subagent dispatch", () => {
           { id: "r3", text: "c" },
         ],
         {
+          instruction: "Classify: {text}",
           batchSize: 3,
           responseSchema: BATCH_SCHEMA,
           subagentFactories: { "general-purpose": factory },
@@ -542,6 +476,7 @@ describe("executeSwarm — batched subagent dispatch", () => {
           { id: "r2", text: "b" },
         ],
         {
+          instruction: "Classify: {text}",
           batchSize: 2,
           responseSchema: BATCH_SCHEMA,
           subagentFactories: { "general-purpose": factory },
@@ -554,7 +489,7 @@ describe("executeSwarm — batched subagent dispatch", () => {
     expect(summary.results[0].error).toBe("API rate limit");
   });
 
-  it("strips injected id field from results before writing to row", async () => {
+  it("strips injected id from batch result and does not leak it as a new column", async () => {
     const batchSubagent = makeBatchSubagent([
       [
         { id: "r1", label: "good" },
@@ -563,31 +498,23 @@ describe("executeSwarm — batched subagent dispatch", () => {
     ]);
     const factory = vi.fn(() => batchSubagent) as unknown as SubagentFactory;
 
-    const { read, write, store } = makeReadWrite({
-      "/t.jsonl": serializeTableJsonl([
+    const summary = await executeSwarm({
+      rows: [
         { id: "r1", text: "hello" },
         { id: "r2", text: "world" },
-      ]),
-    });
-
-    await executeSwarm({
-      file: "/t.jsonl",
+      ],
       instruction: "Classify: {text}",
       batchSize: 2,
       responseSchema: BATCH_SCHEMA,
       subagentGraphs: { "general-purpose": makeSubagent() },
       subagentFactories: { "general-purpose": factory },
       currentState: {},
-      read,
-      write,
     });
 
-    const written = parseTableJsonl(store.get("/t.jsonl") ?? "");
-    expect(written[0].label).toBe("good");
-    expect(written[1].label).toBe("great");
-    // id from the batch result should not leak onto the row
-    expect(written[0].id).toBe("r1");
-    expect(written[1].id).toBe("r2");
+    expect(summary.rows[0].label).toBe("good");
+    expect(summary.rows[1].label).toBe("great");
+    expect(summary.rows[0].id).toBe("r1");
+    expect(summary.rows[1].id).toBe("r2");
   });
 
   it("composes batch prompt with fully interpolated items", async () => {
@@ -599,15 +526,11 @@ describe("executeSwarm — batched subagent dispatch", () => {
     ]);
     const factory = vi.fn(() => batchSubagent) as unknown as SubagentFactory;
 
-    const { read, write } = makeReadWrite({
-      "/t.jsonl": serializeTableJsonl([
+    await executeSwarm({
+      rows: [
         { id: "r1", question: "What is 1+1?" },
         { id: "r2", question: "What color is the sky?" },
-      ]),
-    });
-
-    await executeSwarm({
-      file: "/t.jsonl",
+      ],
       instruction:
         "Classify the answer type for: {question}\nRespond with the label.",
       batchSize: 2,
@@ -615,8 +538,6 @@ describe("executeSwarm — batched subagent dispatch", () => {
       subagentGraphs: { "general-purpose": makeSubagent() },
       subagentFactories: { "general-purpose": factory },
       currentState: {},
-      read,
-      write,
     });
 
     const invokedState = batchSubagent.invoke.mock.calls[0][0];
@@ -629,7 +550,7 @@ describe("executeSwarm — batched subagent dispatch", () => {
     expect(prompt).not.toContain("{question}");
   });
 
-  it("requires responseSchema", async () => {
+  it("requires responseSchema when batchSize is set", async () => {
     await expect(
       executeSwarm(makeOptions([{ id: "r1" }], { batchSize: 5 })),
     ).rejects.toThrow("batchSize requires responseSchema");

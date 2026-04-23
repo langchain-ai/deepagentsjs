@@ -13,7 +13,6 @@ import {
   MAX_CONCURRENCY,
   TASK_TIMEOUT_MS,
 } from "./types.js";
-import { parseTableJsonl, serializeTableJsonl } from "./parse.js";
 import type { SubagentFactory } from "../symbols.js";
 import { createHash } from "node:crypto";
 import { evaluateFilter, type SwarmFilter } from "./filter.js";
@@ -43,20 +42,6 @@ const INVALID_CONTENT_BLOCK_TYPES = [
 ];
 
 /**
- * Synchronous callback for writing a file to the session's pending-writes
- * buffer. Each call replaces any previous pending write to the same path.
- */
-export type WriteCallback = (path: string, content: string) => void;
-
-/**
- * Synchronous callback for reading a file, checking `pendingWrites` first
- * and falling back to the backend. This ensures `swarm.execute` can read
- * a table that `swarm.create` wrote in the same eval (before
- * `pendingWrites` are flushed to the backend).
- */
-export type ReadCallback = (path: string) => Promise<string>;
-
-/**
  * Intermediate result from {@link prepareSwarm}. Contains everything the
  * dispatch loop needs: the task specs, a mapping back to table row indices,
  * the mutable rows array for streaming writes, and any interpolation errors.
@@ -71,11 +56,6 @@ interface PreparedSwarm {
    * Map from task id to its index in the `rows` array, for writing results back.
    */
   rowIndexById: Map<string, number>;
-
-  /**
-   * The full table rows array (mutable — results are merged in-place during dispatch).
-   */
-  rows: Record<string, unknown>[];
 
   /**
    * Number of rows excluded by the filter clause.
@@ -94,9 +74,11 @@ interface PreparedSwarm {
  */
 export interface SwarmExecutionOptions {
   /**
-   * Path to the JSONL table file to execute against.
+   * The rows to dispatch. Typically the `.rows` array from a table handle created
+   * by `swarm.create`. A shallow copy is made before dispatch so the caller's
+   * original array is not mutated.
    */
-  file: string;
+  rows: Record<string, unknown>[];
 
   /**
    * Prompt template with `{column}` placeholders, interpolated per row.
@@ -162,39 +144,76 @@ export interface SwarmExecutionOptions {
    * Abort signal. When aborted, pending dispatches are skipped and in-flight calls cancelled.
    */
   signal?: AbortSignal;
-
-  /**
-   * Read callback that checks `pendingWrites` before falling back to the backend. Required so
-   * `swarm.execute` can read tables written by `swarm.create` in the same eval.
-   */
-  read: ReadCallback;
-
-  /**
-   * Write callback for streaming results back to the table as they complete.
-   */
-  write: WriteCallback;
 }
 
 /**
  * Shared context passed to both dispatch strategies.
  */
 export interface DispatchContext {
+  /**
+   * Task specs to dispatch, one per matched and successfully interpolated row.
+   */
   tasks: SwarmTaskSpec[];
+
+  /**
+   * Pre-allocated results array, indexed in the same order as `tasks`. Each slot is filled when its task settles.
+   */
   results: SwarmTaskResult[];
+
+  /**
+   * Set of in-flight dispatch promises. Used by `enqueue` to enforce `effectiveConcurrency`.
+   */
   executing: Set<Promise<void>>;
+
+  /**
+   * Clamped concurrency limit. Never exceeds MAX_CONCURRENCY.
+   */
   effectiveConcurrency: number;
+
+  /**
+   * Resolves a subagent type name (and optional response schema) to a compiled graph. Handles schema-variant caching.
+   */
   resolveSubagent: (
     type: string,
     schema?: Record<string, unknown>,
   ) => ReactAgent<any> | Runnable;
+
+  /**
+   * Orchestrator state with internal keys (messages, todos, etc.) stripped so subagents start clean.
+   */
   filteredState: Record<string, unknown>;
+
+  /**
+   * Optional prose prepended to every subagent prompt. Carries dataset-wide context across all dispatches.
+   */
   context: string | undefined;
+
+  /**
+   * When aborted, pending tasks are marked failed and in-flight calls are cancelled.
+   */
   signal?: AbortSignal;
+
+  /**
+   * Maps task id → index in `rows`. Used to merge each result back into the correct row after dispatch.
+   */
   rowIndexById: Map<string, number>;
+
+  /**
+   * Mutable rows array. Results are merged in place as tasks complete.
+   */
   rows: Record<string, unknown>[];
+
+  /**
+   * Column name written to each row when a task completes.
+   */
   column: string;
-  file: string;
-  write: WriteCallback;
+
+  /**
+   * Raw instruction template before per-row interpolation. In batch mode,
+   * this is rendered once as a shared preamble so the static template text
+   * is not repeated for every item in the batch.
+   */
+  instruction: string;
 }
 
 /**
@@ -451,32 +470,24 @@ function buildSubagentResolver(
 }
 
 /**
- * Read a JSONL table, partition rows by filter, and interpolate the
- * instruction template against each matched row to produce task specs.
+ * Partition rows by filter and interpolate the instruction template against each
+ * matched row to produce task specs.
  *
- * Rows that fail interpolation (e.g., missing a referenced column) are
- * recorded in `interpolationErrors` rather than throwing, so partial
- * results are still dispatched.
- *
- * @throws Error if the table file cannot be read or parsed.
+ * Rows that fail interpolation (e.g., referencing a missing column) are recorded
+ * in `interpolationErrors` rather than throwing, so partial results are still dispatched.
  */
-async function prepareSwarm(
-  read: ReadCallback,
-  file: string,
+function prepareSwarm(
+  rows: Record<string, unknown>[],
   instruction: string,
   filter: SwarmFilter | undefined,
   subagentType: string | undefined,
   responseSchema: Record<string, unknown> | undefined,
-): Promise<PreparedSwarm> {
-  const content = await read(file);
-  const rows = parseTableJsonl(content);
-
+): PreparedSwarm {
   const tasks: SwarmTaskSpec[] = [];
   const rowIndexById = new Map<string, number>();
   const interpolationErrors: Array<{ id: string; error: string }> = [];
 
   let skipped = 0;
-
   for (let idx = 0; idx < rows.length; idx++) {
     const row = rows[idx];
     if (filter && !evaluateFilter(filter, row)) {
@@ -503,18 +514,18 @@ async function prepareSwarm(
     }
   }
 
-  return { tasks, rowIndexById, rows, skipped, interpolationErrors };
+  return { tasks, rowIndexById, skipped, interpolationErrors };
 }
 
 /**
- * Assemble a {@link SwarmSummary} from dispatch results and any
- * interpolation errors. Failed tasks include both dispatch failures
- * and rows that could not be interpolated.
+ * Assemble a SwarmSummary from dispatch results, interpolation errors, and the
+ * final state of the rows array. The enriched rows are included so the session
+ * bridge can return them to QuickJS without needing a separate read.
  */
 function buildSummary(
   results: SwarmTaskResult[],
   interpolationErrors: Array<{ id: string; error: string }>,
-  file: string,
+  rows: Record<string, unknown>[],
   column: string,
   skipped: number,
 ): SwarmSummary {
@@ -544,7 +555,7 @@ function buildSummary(
     completed,
     failed: failed + interpolationErrors.length,
     skipped,
-    file,
+    rows,
     column,
     results: entries,
     failedTasks,
@@ -570,8 +581,9 @@ export async function enqueue(
 }
 
 /**
- * Dispatch tasks one per subagent call. Each completed result is
- * immediately merged into its table row and written back.
+ * Dispatch tasks one per subagent call. Each completed result is immediately
+ * merged into its table row. Results accumulate in the shared `rows` array and
+ * are available in `SwarmSummary.rows` once all tasks settle.
  */
 async function dispatchSingle(
   ctx: DispatchContext & { responseSchema?: Record<string, unknown> },
@@ -616,7 +628,6 @@ async function dispatchSingle(
           ctx.column,
           value,
         );
-        ctx.write(ctx.file, serializeTableJsonl(ctx.rows));
       }
     });
 
@@ -625,17 +636,18 @@ async function dispatchSingle(
 }
 
 /**
- * Execute a swarm against a JSONL table file.
+ * Execute a swarm against an array of rows.
  *
- * Reads the table, partitions rows by filter, interpolates instructions,
- * dispatches with bounded concurrency, and streams each result back as a
- * column on the original row via the write callback.
+ * Makes a shallow copy of the input rows, partitions by filter, interpolates
+ * instructions, dispatches with bounded concurrency, and merges each result
+ * back into the correct row in memory. Returns a SwarmSummary that includes
+ * the enriched rows so the caller can return an updated table handle.
  */
 export async function executeSwarm(
   options: SwarmExecutionOptions,
 ): Promise<SwarmSummary> {
   const {
-    file,
+    rows: inputRows,
     instruction,
     column = "result",
     filter,
@@ -648,8 +660,6 @@ export async function executeSwarm(
     subagentFactories,
     currentState,
     signal,
-    read,
-    write,
   } = options;
 
   if (rawBatchSize != null) {
@@ -666,15 +676,16 @@ export async function executeSwarm(
 
   const effectiveBatchSize = rawBatchSize ?? 1;
 
-  const { tasks, rowIndexById, rows, skipped, interpolationErrors } =
-    await prepareSwarm(
-      read,
-      file,
-      instruction,
-      filter,
-      subagentType,
-      responseSchema,
-    );
+  // Shallow-copy so mutations during dispatch do not affect the caller's input array.
+  const rows = inputRows.map((row) => ({ ...row }));
+
+  const { tasks, rowIndexById, skipped, interpolationErrors } = prepareSwarm(
+    rows,
+    instruction,
+    filter,
+    subagentType,
+    responseSchema,
+  );
 
   if (responseSchema) {
     validateResponseSchema("(global)", responseSchema);
@@ -721,8 +732,7 @@ export async function executeSwarm(
         rowIndexById,
         rows,
         column,
-        file,
-        write,
+        instruction,
       })
     : await dispatchSingle({
         tasks,
@@ -737,11 +747,10 @@ export async function executeSwarm(
         rowIndexById,
         rows,
         column,
-        file,
-        write,
+        instruction,
       });
 
   await Promise.all(executing);
 
-  return buildSummary(results, interpolationErrors, file, column, skipped);
+  return buildSummary(results, interpolationErrors, rows, column, skipped);
 }

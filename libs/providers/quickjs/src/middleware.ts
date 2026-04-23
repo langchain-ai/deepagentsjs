@@ -128,18 +128,39 @@ function buildReplSystemPrompt(hasSwarm: boolean): string {
 const SWARM_FANOUT_PROMPT = dedent`
   ## Parallel fan-out (\`swarm.create\` + \`swarm.execute\`)
 
-  Process many independent items in parallel via a JSONL table. One row = one unit of work. Results are written as columns on the same row.
+  Process many independent items in parallel. \`swarm.create\` builds an in-memory table handle;
+  \`swarm.execute\` fans work out across rows and returns an enriched table. One row = one unit of work.
 
   ### When to use
 
-  Use swarm when: many items need the same operation, input is too large for one context, or items each need independent analysis. Don't use when items depend on each other's output.
+  Use swarm when: many items need the same operation, input is too large for one context, or items
+  each need independent analysis. Don't use when items depend on each other's output.
 
   ### Flow
 
-  1. **Explore.** Sample the input using any tool — \`read_file\` with offset/limit, \`grep\`, \`ls\`, or \`js_eval\`. Learn shape, conventions, edge cases. This informs the \`context\` and \`instruction\` you write.
-  2. **Create.** \`swarm.create\` to build one row per item from a glob, file paths, or inline records. Skip this if you already have a JSONL table — \`swarm.execute\` works on any JSONL file with \`id\` fields.
-  3. **Execute.** \`swarm.execute\` with an \`instruction\` template and optional \`context\`. Results land as new columns.
-  4. **Aggregate.** Read the table back or chain another pass. Structured results are columns — no unwrapping needed.
+  1. **Explore.** Sample the input using any tool — \`read_file\` with offset/limit, \`grep\`, \`ls\`, or \`js_eval\`.
+     Learn shape, conventions, edge cases. This informs the \`context\` and \`instruction\` you write.
+  2. **Create.** \`swarm.create\` builds a table from a source spec. Returns a table handle.
+  3. **Execute.** \`swarm.execute\` with an \`instruction\` template and optional \`context\`. Returns the updated table.
+  4. **Aggregate.** Inspect \`table.rows\` or chain another \`swarm.execute\` pass.
+
+  ### Choosing a swarm.create source
+
+  **\`glob\` / \`filePaths\`** — one file = one row. Use when each file is an independent unit of work
+  (e.g. code review across a repo, summarising a folder of documents). Each row gets \`{ id, file }\`;
+  the subagent reads the file itself via the \`{file}\` placeholder.
+
+  **\`tasks\`** — pass pre-built records directly. Use when the data to process lives inside a file
+  (e.g. a JSONL dataset, a CSV, a JSON array). Read and parse the file first, then pass the records:
+
+  \`\`\`typescript
+  const lines = readFile("/data.jsonl").trim().split("\\n");
+  const rows = lines.map(l => JSON.parse(l));
+  let table = await swarm.create({ tasks: rows });
+  \`\`\`
+
+  Passing \`filePaths: ["/data.jsonl"]\` would produce a table with **one row** pointing at the file —
+  not one row per record inside it.
 
   ### Rules
 
@@ -151,19 +172,19 @@ const SWARM_FANOUT_PROMPT = dedent`
 
   ### Instruction + context
 
-  \`instruction\` is a per-item template with \`{column}\` placeholders (interpolated from each row). Keep it focused on what to do with this item.
+  \`instruction\` is a per-item template with \`{column}\` placeholders (interpolated from each row).
 
-  \`context\` is free-form prose prepended to every subagent prompt. Put dataset-wide information here: what the data is, domain terms, classification rules, edge cases, examples. Write it once for the whole dataset.
-
-  Use \`context\` when the task involves judgment (classification, scoring, review, extraction with rules). Skip it for mechanical transforms.
+  \`context\` is free-form prose prepended to every subagent prompt. Put dataset-wide information here:
+  what the data is, domain terms, classification rules, edge cases, examples.
 
   \`\`\`typescript
-  await swarm.create("/reviews.jsonl", { glob: "src/**/*.ts" });
-  const summary = JSON.parse(await swarm.execute("/reviews.jsonl", {
+  let table = await swarm.create({ glob: "src/**/*.ts" });
+  table = await swarm.execute(table, {
     instruction: "Review {file} for security issues. List findings or write 'no issues'.",
-    context: "This is a TypeScript backend project using Express. Focus on injection, auth bypass, and path traversal.",
+    context: "This is a TypeScript backend using Express. Focus on injection, auth bypass, path traversal.",
     column: "review",
-  }));
+  });
+  console.log(table.rows);
   \`\`\`
 
   ### Structured output
@@ -171,7 +192,7 @@ const SWARM_FANOUT_PROMPT = dedent`
   Use \`responseSchema\` for programmatic aggregation. Schema properties become top-level columns on each row.
 
   \`\`\`typescript
-  await swarm.execute("/items.jsonl", {
+  table = await swarm.execute(table, {
     instruction: "Classify: {text}",
     responseSchema: {
       type: "object",
@@ -184,16 +205,13 @@ const SWARM_FANOUT_PROMPT = dedent`
   // Row after: { id: "r1", text: "...", label: "positive" }
   \`\`\`
 
-  Tips: use \`enum\` to prevent drift; add \`description\` on properties (models read them during generation); top-level \`type\` must be \`"object"\`.
-
   ### Batching
 
-  Set \`batchSize\` with \`responseSchema\` to group N rows per subagent call. The executor batches automatically and unpacks results by id.
+  Set \`batchSize\` with \`responseSchema\` to group N rows per subagent call.
 
   \`\`\`typescript
-  await swarm.execute("/items.jsonl", {
+  table = await swarm.execute(table, {
     instruction: "Classify: {text}",
-    context: "Each item is a customer review. Classify sentiment based on overall tone, not individual phrases.",
     batchSize: 50,
     responseSchema: {
       type: "object",
@@ -203,11 +221,21 @@ const SWARM_FANOUT_PROMPT = dedent`
   });
   \`\`\`
 
-  Sizing: short items 40–80, medium items 20–40, complex items leave at 1. If accuracy drops, enrich \`context\` first, then reduce \`batchSize\`.
+  Sizing: short items 40–80, medium items 20–40, complex items leave at 1.
 
   ### Chaining passes
 
-  Results are columns, so a second \`swarm.execute\` can reference them: \`"Given {summary}, classify ..."\`. Use \`filter\` to target rows missing a column. One operation per pass.
+  \`swarm.execute\` returns the updated table — reassign to accumulate columns across passes.
+
+  \`\`\`typescript
+  let table = await swarm.create({ tasks: interviews });
+  table = await swarm.execute(table, { instruction: "Classify sentiment of {file}", column: "sentiment" });
+  table = await swarm.execute(table, {
+    filter: { column: "sentiment", equals: "negative" },
+    instruction: "Summarize why {file} had negative sentiment.",
+    column: "summary",
+  });
+  \`\`\`
 
   ### Filtering
 
@@ -218,13 +246,22 @@ const SWARM_FANOUT_PROMPT = dedent`
 
   \`\`\`typescript
   const swarm: {
-    create(file: string, source: {
-      glob?: string | string[];
-      filePaths?: string[];
-      tasks?: Array<Record<string, unknown>>;  // each must have id: string
-    }): Promise<void>;
+    /**
+     * Build an in-memory table from a source spec. Returns a table handle { rows: Row[] }.
+     * No file is written.
+     */
+    create(source: {
+      glob?: string | string[];       // one row per matched file: { id, file }
+      filePaths?: string[];           // one row per path: { id, file }
+      tasks?: Array<Record<string, unknown>>;  // pre-built rows; each must have id: string
+    }): Promise<{ rows: Row[] }>;
 
-    execute(file: string, options: {
+    /**
+     * Fan work out across table rows. Returns a new table handle with results
+     * merged in as new columns. Reassign to accumulate columns across passes:
+     *   table = await swarm.execute(table, options)
+     */
+    execute(table: { rows: Row[] }, options: {
       instruction: string;       // template with {column} placeholders
       context?: string;          // prose prepended to every subagent prompt
       column?: string;           // result column name (default: "result")
@@ -233,9 +270,8 @@ const SWARM_FANOUT_PROMPT = dedent`
       responseSchema?: object;   // JSON Schema (type: "object"); properties become columns
       concurrency?: number;      // default: ${DEFAULT_CONCURRENCY}
       batchSize?: number;        // rows per subagent call; requires responseSchema
-    }): Promise<string>;         // JSON string of SwarmSummary
+    }): Promise<{ rows: Row[] }>;
   };
-  // SwarmSummary: { total, completed, failed, skipped, file, column, failedTasks: [{id, error}] }
   \`\`\`
 `;
 
@@ -371,7 +407,7 @@ export function createQuickJSMiddleware(
       description: dedent`
         Evaluate TypeScript/JavaScript code in a sandboxed REPL. State persists across calls.
         Use readFile(path) and writeFile(path, content) for file access.
-        Use swarm.create(file, source) and swarm.execute(file, options) for parallel fan-out.
+        Use swarm.create(source) and swarm.execute(table, options) for parallel fan-out.
         Use console.log() for output. Returns the result of the last expression.
       `,
       schema: z.object({
