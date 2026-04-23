@@ -981,6 +981,17 @@ export function createFilesystemMiddleware(
     humanMessageTokenLimitBeforeEvict = 50000,
   } = options;
 
+  const artifactsRoot =
+    backend != null &&
+    typeof backend === "object" &&
+    "artifactsRoot" in backend &&
+    typeof backend.artifactsRoot === "string"
+      ? backend.artifactsRoot
+      : "/";
+  const root = artifactsRoot.replace(/\/+$/, "");
+  const largeToolResultsPrefix = `${root}/large_tool_results`;
+  const conversationHistoryPrefix = `${root}/conversation_history`;
+
   const baseSystemPrompt = customSystemPrompt || FILESYSTEM_SYSTEM_PROMPT;
 
   /**
@@ -1048,7 +1059,7 @@ export function createFilesystemMiddleware(
       } as BackendRuntime);
 
       const fileId = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
-      const filePath = `/conversation_history/${fileId}`;
+      const filePath = `${conversationHistoryPrefix}/${fileId}`;
       const writeResult = await resolvedBackend.write(filePath, contentStr);
 
       if (writeResult.error) {
@@ -1160,7 +1171,7 @@ export function createFilesystemMiddleware(
           const sanitizedId = sanitizeToolCallId(
             request.toolCall?.id || msg.tool_call_id,
           );
-          const evictPath = `/large_tool_results/${sanitizedId}`;
+          const evictPath = `${largeToolResultsPrefix}/${sanitizedId}`;
 
           const writeResult = await resolvedBackend.write(
             evictPath,

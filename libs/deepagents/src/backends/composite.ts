@@ -35,9 +35,13 @@ export class CompositeBackend implements BackendProtocolV2 {
   private routes: Record<string, BackendProtocolV2>;
   private sortedRoutes: Array<[string, BackendProtocolV2]>;
 
+  /** Root path for artifacts, such as messages offloaded by middleware. Defaults to `"/"`. */
+  readonly artifactsRoot: string;
+
   constructor(
     defaultBackend: AnyBackendProtocol,
     routes: Record<string, AnyBackendProtocol>,
+    options?: { artifactsRoot?: string },
   ) {
     // Check if default backend is a sandbox and adapt accordingly
     this.default = isSandboxProtocol(defaultBackend)
@@ -58,6 +62,8 @@ export class CompositeBackend implements BackendProtocolV2 {
     this.sortedRoutes = Object.entries(this.routes).sort(
       (a, b) => b[0].length - a[0].length,
     );
+
+    this.artifactsRoot = options?.artifactsRoot ?? "/";
   }
 
   /** Delegates to default backend's id if it is a sandbox, otherwise empty string. */

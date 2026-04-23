@@ -302,8 +302,18 @@ export function createSummarizationMiddleware(
     backend,
     summaryPrompt = DEFAULT_SUMMARY_PROMPT,
     trimTokensToSummarize = DEFAULT_TRIM_TOKEN_LIMIT,
-    historyPathPrefix = "/conversation_history",
   } = options;
+
+  const artifactsRoot =
+    backend != null &&
+    typeof backend === "object" &&
+    "artifactsRoot" in backend &&
+    typeof backend.artifactsRoot === "string"
+      ? backend.artifactsRoot
+      : "/";
+  const root = artifactsRoot.replace(/\/+$/, "");
+  const historyPathPrefix =
+    options.historyPathPrefix ?? `${root}/conversation_history`;
 
   // Mutable config that may be lazily computed from model profile.
   // When trigger/keep/truncateArgsSettings are not provided, they will be
