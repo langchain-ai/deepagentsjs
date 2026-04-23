@@ -339,6 +339,22 @@ describe("REPL Engine", () => {
       const result = await session.eval('await readFile("/f.txt")', TIMEOUT);
       expect(result.value).toBe("content");
     });
+
+    it("should read pending writes within the same eval call", async () => {
+      const backend = createMockBackend({ "/f.txt": "stale" });
+      session = ReplSession.getOrCreate(uniqueThreadId(), { backend });
+
+      const result = await session.eval(
+        'await writeFile("/f.txt", "fresh"); await readFile("/f.txt")',
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("fresh");
+      expect(backend.written["/f.txt"]).toBeUndefined();
+
+      await session.flushWrites(backend);
+      expect(backend.written["/f.txt"]).toBe("fresh");
+    });
   });
 
   describe("PTC (programmatic tool calling)", () => {

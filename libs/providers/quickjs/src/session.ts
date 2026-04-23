@@ -322,19 +322,28 @@ export class ReplSession {
     const readFileHandle = context.newFunction(
       "readFile",
       (pathHandle: QuickJSHandle) => {
-        const backend = getBackend();
-        if (!backend) {
-          const promise = context.newPromise();
-          const err = context.newError("Backend not available");
-          promise.reject(err);
-          err.dispose();
-          promise.settled.then(context.runtime.executePendingJobs);
-          return promise.handle;
-        }
         const path = context.getString(pathHandle);
         const promise = context.newPromise();
         (async () => {
           try {
+            for (let i = pendingWrites.length - 1; i >= 0; i -= 1) {
+              const pending = pendingWrites[i];
+              if (pending.path === path) {
+                const val = context.newString(pending.content);
+                promise.resolve(val);
+                val.dispose();
+                return;
+              }
+            }
+
+            const backend = getBackend();
+            if (!backend) {
+              const err = context.newError("Backend not available");
+              promise.reject(err);
+              err.dispose();
+              return;
+            }
+
             const result = await backend.readRaw(path);
             if (result.error || !result.data) {
               const err = context.newError(
