@@ -44,6 +44,7 @@ import type {
   InferStructuredResponse,
   SupportedResponseFormat,
 } from "./types.js";
+import { getDefaultModel } from "./defaults.js";
 
 /**
  * required for type inference
@@ -162,7 +163,7 @@ export function createDeepAgent<
   >,
 ) {
   const {
-    model = "anthropic:claude-sonnet-4-6",
+    model: _modelParam,
     tools = [],
     systemPrompt,
     middleware: customMiddleware = [],
@@ -177,6 +178,8 @@ export function createDeepAgent<
     memory,
     skills,
   } = params;
+
+  const model = _modelParam ?? getDefaultModel();
 
   const collidingTools = tools
     .map((t) => t.name)

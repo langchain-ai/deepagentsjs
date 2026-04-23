@@ -6,6 +6,7 @@
  */
 
 export { createDeepAgent } from "./agent.js";
+export { getDefaultModel } from "./defaults.js";
 export { ConfigurationError, type ConfigurationErrorCode } from "./errors.js";
 export type {
   AnySubAgent,

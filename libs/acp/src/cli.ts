@@ -9,7 +9,7 @@
  * Options:
  *   --name <name>         Agent name (default: "deepagents")
  *   --description <desc>  Agent description
- *   --model <model>       LLM model (default: "claude-sonnet-4-5-20250929")
+ *   --model <model>       LLM model (required in a future release; currently defaults to claude-sonnet-4-6)
  *   --workspace <path>    Workspace root directory (default: cwd)
  *   --skills <paths>      Comma-separated skill paths
  *   --memory <paths>      Comma-separated memory/AGENTS.md paths
@@ -20,14 +20,14 @@
  */
 
 import { DeepAgentsServer } from "./server.js";
-import { FilesystemBackend } from "deepagents";
+import { FilesystemBackend, getDefaultModel } from "deepagents";
 import path from "node:path";
 import fs from "node:fs";
 
 interface CLIOptions {
   name: string;
   description: string;
-  model: string;
+  model: string | null;
   workspace: string;
   skills: string[];
   memory: string[];
@@ -72,7 +72,7 @@ function parseArgs(args: string[]): CLIOptions {
   const options: CLIOptions = {
     name: "deepagents",
     description: "AI coding assistant powered by DeepAgents",
-    model: "claude-sonnet-4-5-20250929",
+    model: null,
     workspace: process.cwd(),
     skills: [],
     memory: [],
@@ -177,7 +177,7 @@ USAGE:
 OPTIONS:
   -n, --name <name>         Agent name (default: "deepagents")
   -d, --description <desc>  Agent description
-  -m, --model <model>       LLM model (default: "claude-sonnet-4-5-20250929")
+  -m, --model <model>       LLM model (recommended; defaults to claude-sonnet-4-6)
   -w, --workspace <path>    Workspace root directory (default: current directory)
   -s, --skills <paths>      Comma-separated skill paths (SKILL.md locations)
       --memory <paths>      Comma-separated memory paths (AGENTS.md locations)
@@ -293,7 +293,7 @@ async function main(): Promise<void> {
 
   log("Starting...");
   log("Agent:", options.name);
-  log("Model:", options.model);
+  log("Model:", options.model ?? "(default)");
   log("Workspace:", workspaceRoot);
   log("Skills:", skills.join(", "));
   log("Memory:", memory.join(", "));
@@ -306,7 +306,7 @@ async function main(): Promise<void> {
       agents: {
         name: options.name,
         description: options.description,
-        model: options.model,
+        model: options.model ?? getDefaultModel(),
         backend: new FilesystemBackend({ rootDir: workspaceRoot }),
         skills,
         memory,

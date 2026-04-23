@@ -362,7 +362,7 @@ export interface CreateDeepAgentParams<
     | ServerTool
   )[],
 > {
-  /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
+  /** The model to use (model name string or LanguageModelLike instance). Omitting this is deprecated; pass a model explicitly. */
   model?: BaseLanguageModel | string;
   /** Tools the agent should have access to */
   tools?: TTools | StructuredTool[];
