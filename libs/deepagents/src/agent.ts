@@ -39,6 +39,7 @@ import type {
   AnySubAgent,
   CreateDeepAgentParams,
   DeepAgent,
+  DeepAgentSummarizationOptions,
   DeepAgentTypeConfig,
   FlattenSubAgentMiddleware,
   InferStructuredResponse,
@@ -176,6 +177,7 @@ export function createDeepAgent<
     name,
     memory,
     skills,
+    summarization,
   } = params;
 
   const collidingTools = tools
@@ -188,6 +190,27 @@ export function createDeepAgent<
         `Rename your custom tools to avoid this.`,
       "TOOL_NAME_COLLISION",
     );
+  }
+
+  /**
+   * Build the options passed to the built-in summarization middleware.
+   */
+  function createBuiltInSummarizationOptions(): {
+    backend: typeof backend;
+    trigger?: DeepAgentSummarizationOptions["trigger"];
+    keep?: DeepAgentSummarizationOptions["keep"];
+    summaryPrompt?: DeepAgentSummarizationOptions["summaryPrompt"];
+    trimTokensToSummarize?: DeepAgentSummarizationOptions["trimTokensToSummarize"];
+    truncateArgsSettings?: DeepAgentSummarizationOptions["truncateArgsSettings"];
+  } {
+    return {
+      backend,
+      trigger: summarization?.trigger,
+      keep: summarization?.keep,
+      summaryPrompt: summarization?.summaryPrompt,
+      trimTokensToSummarize: summarization?.trimTokensToSummarize,
+      truncateArgsSettings: summarization?.truncateArgsSettings,
+    };
   }
 
   const anthropicModel = isAnthropicModel(model);
@@ -220,7 +243,7 @@ export function createDeepAgent<
       // Automatically summarizes conversation history when token limits are approached.
       // Uses createSummarizationMiddleware (deepagents version) with backend support
       // and auto-computed defaults from model profile.
-      createSummarizationMiddleware({ backend }),
+      createSummarizationMiddleware(createBuiltInSummarizationOptions()),
       // Patches tool calls to ensure compatibility across different model providers.
       createPatchToolCallsMiddleware(),
       // Loads subagent-specific skills when configured.
@@ -294,7 +317,7 @@ export function createDeepAgent<
     // Automatically summarizes conversation history when token limits are approached.
     // Uses createSummarizationMiddleware (deepagents version) with backend support
     // for conversation history offloading and auto-computed defaults from model profile.
-    createSummarizationMiddleware({ backend }),
+    createSummarizationMiddleware(createBuiltInSummarizationOptions()),
     // Patches tool calls to ensure compatibility across different model providers.
     createPatchToolCallsMiddleware(),
   ] as const;

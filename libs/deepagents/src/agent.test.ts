@@ -9,6 +9,7 @@ import {
 import { MemorySaver } from "@langchain/langgraph";
 import { createFileData } from "./backends/utils.js";
 import { ConfigurationError } from "./errors.js";
+import * as middlewareModule from "./middleware/index.js";
 
 describe("isAnthropicModel", () => {
   it("should detect claude model strings", () => {
@@ -166,5 +167,62 @@ describe("Built-in tool name collision detection", () => {
     expect(() =>
       createDeepAgent({ model, tools: [makeTool("my_custom_tool")] }),
     ).not.toThrow();
+  });
+});
+
+describe("Deep agent summarization config", () => {
+  it("should pass supported summarization options to built-in middleware", () => {
+    const model = new FakeListChatModel({ responses: ["Done"] });
+    const summarizationSpy = vi.spyOn(
+      middlewareModule,
+      "createSummarizationMiddleware",
+    );
+
+    createDeepAgent({
+      model,
+      subagents: [
+        {
+          name: "custom-subagent",
+          description: "Handles delegated work.",
+          systemPrompt: "Help with delegated tasks.",
+          tools: [],
+        },
+      ],
+      summarization: {
+        trigger: { type: "tokens", value: 4000 },
+        keep: { type: "messages", value: 20 },
+        summaryPrompt: "Summarize the conversation.",
+        trimTokensToSummarize: 3000,
+        truncateArgsSettings: {
+          trigger: { type: "messages", value: 10 },
+          keep: { type: "messages", value: 5 },
+          maxLength: 1000,
+          truncationText: "...(trimmed)",
+        },
+      },
+    });
+
+    const summarizationCalls = summarizationSpy.mock.calls.map(
+      ([options]) => options,
+    );
+
+    expect(summarizationCalls.length).toBeGreaterThanOrEqual(3);
+    for (const options of summarizationCalls) {
+      expect(options).toMatchObject({
+        trigger: { type: "tokens", value: 4000 },
+        keep: { type: "messages", value: 20 },
+        summaryPrompt: "Summarize the conversation.",
+        trimTokensToSummarize: 3000,
+        truncateArgsSettings: {
+          trigger: { type: "messages", value: 10 },
+          keep: { type: "messages", value: 5 },
+          maxLength: 1000,
+          truncationText: "...(trimmed)",
+        },
+      });
+      expect(options.backend).toBeDefined();
+    }
+
+    summarizationSpy.mockRestore();
   });
 });
