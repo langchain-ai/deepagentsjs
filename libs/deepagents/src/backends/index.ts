@@ -74,5 +74,12 @@ export {
   type LangSmithSandboxCreateOptions,
 } from "./langsmith.js";
 
+// Re-export upstream sandbox types used by LangSmithSandbox public API
+export type {
+  Snapshot as LangSmithSnapshot,
+  CaptureSnapshotOptions as LangSmithCaptureSnapshotOptions,
+  StartSandboxOptions as LangSmithStartSandboxOptions,
+} from "langsmith/experimental/sandbox";
+
 // Re-export utils for convenience
 export * from "./utils.js";

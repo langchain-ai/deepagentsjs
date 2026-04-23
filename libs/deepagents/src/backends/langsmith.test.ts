@@ -5,6 +5,9 @@ let mockRun: ReturnType<typeof vi.fn>;
 let mockRead: ReturnType<typeof vi.fn>;
 let mockWrite: ReturnType<typeof vi.fn>;
 let mockDelete: ReturnType<typeof vi.fn>;
+let mockStart: ReturnType<typeof vi.fn>;
+let mockStop: ReturnType<typeof vi.fn>;
+let mockCaptureSnapshot: ReturnType<typeof vi.fn>;
 let MockLangSmithResourceNotFoundError: new (message?: string) => Error;
 let MockLangSmithSandboxError: new (message?: string) => Error;
 
@@ -43,6 +46,14 @@ function makeMockSandbox(name: string = "test-sandbox") {
   mockRead = vi.fn();
   mockWrite = vi.fn();
   mockDelete = vi.fn().mockResolvedValue(undefined);
+  mockStart = vi.fn().mockResolvedValue(undefined);
+  mockStop = vi.fn().mockResolvedValue(undefined);
+  mockCaptureSnapshot = vi.fn().mockResolvedValue({
+    id: "snap-123",
+    name: "my-snapshot",
+    status: "ready",
+    fs_capacity_bytes: 1073741824,
+  });
   MockLangSmithResourceNotFoundError = LangSmithResourceNotFoundError;
   MockLangSmithSandboxError = LangSmithSandboxError;
 
@@ -53,6 +64,9 @@ function makeMockSandbox(name: string = "test-sandbox") {
     read: mockRead,
     write: mockWrite,
     delete: mockDelete,
+    start: mockStart,
+    stop: mockStop,
+    captureSnapshot: mockCaptureSnapshot,
   };
 }
 
@@ -95,6 +109,69 @@ describe("LangSmithSandbox", () => {
       const sandbox = makeSandbox();
       await sandbox.close();
       expect(mockDelete).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe("start()", () => {
+    it("calls sandbox.start() and sets isRunning to true", async () => {
+      const sandbox = makeSandbox();
+      // First stop it
+      await sandbox.stop();
+      expect(sandbox.isRunning).toBe(false);
+
+      await sandbox.start();
+
+      expect(mockStart).toHaveBeenCalledOnce();
+      expect(mockStart).toHaveBeenCalledWith({});
+      expect(sandbox.isRunning).toBe(true);
+    });
+
+    it("passes options through to sandbox.start()", async () => {
+      const sandbox = makeSandbox();
+      await sandbox.stop();
+
+      await sandbox.start({ timeout: 60 });
+
+      expect(mockStart).toHaveBeenCalledWith({ timeout: 60 });
+    });
+  });
+
+  describe("stop()", () => {
+    it("calls sandbox.stop() and sets isRunning to false", async () => {
+      const sandbox = makeSandbox();
+      expect(sandbox.isRunning).toBe(true);
+
+      await sandbox.stop();
+
+      expect(mockStop).toHaveBeenCalledOnce();
+      expect(sandbox.isRunning).toBe(false);
+    });
+  });
+
+  describe("captureSnapshot()", () => {
+    it("delegates to sandbox.captureSnapshot() and returns result", async () => {
+      const sandbox = makeSandbox();
+
+      const snapshot = await sandbox.captureSnapshot("my-snapshot");
+
+      expect(mockCaptureSnapshot).toHaveBeenCalledOnce();
+      expect(mockCaptureSnapshot).toHaveBeenCalledWith("my-snapshot", {});
+      expect(snapshot).toEqual({
+        id: "snap-123",
+        name: "my-snapshot",
+        status: "ready",
+        fs_capacity_bytes: 1073741824,
+      });
+    });
+
+    it("passes options through to sandbox.captureSnapshot()", async () => {
+      const sandbox = makeSandbox();
+
+      await sandbox.captureSnapshot("my-snapshot", { timeout: 120 });
+
+      expect(mockCaptureSnapshot).toHaveBeenCalledWith("my-snapshot", {
+        timeout: 120,
+      });
     });
   });
 
