@@ -15,10 +15,6 @@
  * It holds an `id` that keys into a static session map. The heavy QuickJS
  * runtime is lazily started on the first `.eval()` call, making the session
  * safe across graph interrupts and checkpointing.
- *
- * File writes inside the REPL are buffered (`pendingWrites`) and only
- * flushed to the backend after a script finishes executing. Call
- * `session.flushWrites(backend)` after eval to persist them.
  */
 
 import { shouldInterruptAfterDeadline } from "quickjs-emscripten";
@@ -28,9 +24,8 @@ import type {
   QuickJSAsyncContext,
   QuickJSAsyncRuntime,
 } from "quickjs-emscripten-core";
-import type { AnyBackendProtocol, BackendProtocolV2 } from "deepagents";
-import { adaptBackendProtocol } from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
+import type { RunnableConfig } from "@langchain/core/runnables";
 
 import type { ReplSessionOptions, ReplResult } from "./types.js";
 import { toCamelCase } from "./utils.js";
@@ -56,11 +51,6 @@ async function getAsyncModule() {
   return asyncModulePromise;
 }
 
-export interface PendingWrite {
-  path: string;
-  content: string;
-}
-
 /**
  * Sandboxed JavaScript REPL session backed by QuickJS WASM.
  *
@@ -68,34 +58,25 @@ export interface PendingWrite {
  * The QuickJS runtime is lazily started on the first `.eval()` call
  * and reconnected if a session with the same id already exists.
  * This makes it safe to store in LangGraph state across interrupts.
- *
- * File writes are buffered during execution and flushed via
- * `flushWrites(backend)` after eval completes.
  */
 export class ReplSession {
   private static sessions = new Map<string, ReplSession>();
 
   readonly id: string;
-  readonly pendingWrites: PendingWrite[] = [];
 
   private runtime: QuickJSAsyncRuntime | null = null;
   private context: QuickJSAsyncContext | null = null;
   private logs: string[] = [];
   private _options: ReplSessionOptions;
+  private _evalConfig: RunnableConfig | null = null;
 
-  private _backend: BackendProtocolV2 | null = null;
+  set evalConfig(config: RunnableConfig | null) {
+    this._evalConfig = config;
+  }
 
   constructor(id: string, options: ReplSessionOptions = {}) {
     this.id = id;
     this._options = options;
-  }
-
-  get backend(): BackendProtocolV2 | null {
-    return this._backend;
-  }
-
-  set backend(b: AnyBackendProtocol | null) {
-    this._backend = b ? adaptBackendProtocol(b) : null;
   }
 
   private async ensureStarted(): Promise<void> {
@@ -104,7 +85,6 @@ export class ReplSession {
     const {
       memoryLimitBytes = DEFAULT_MEMORY_LIMIT,
       maxStackSizeBytes = DEFAULT_MAX_STACK_SIZE,
-      backend,
       tools,
     } = this._options;
 
@@ -119,10 +99,6 @@ export class ReplSession {
 
     this.setupConsole();
 
-    if (backend) {
-      this._backend = adaptBackendProtocol(backend);
-    }
-    this.injectVfs();
     if (tools && tools.length > 0) {
       this.injectTools(tools);
     }
@@ -141,9 +117,6 @@ export class ReplSession {
   ): ReplSession {
     const existing = ReplSession.sessions.get(id);
     if (existing) {
-      if (options.backend) {
-        existing._backend = adaptBackendProtocol(options.backend);
-      }
       return existing;
     }
 
@@ -241,14 +214,6 @@ export class ReplSession {
     };
   }
 
-  async flushWrites(backend: AnyBackendProtocol): Promise<void> {
-    const adapted = adaptBackendProtocol(backend);
-    const writes = this.pendingWrites.splice(0);
-    for (const { path, content } of writes) {
-      await adapted.write(path, content);
-    }
-  }
-
   dispose(): void {
     try {
       this.context?.dispose();
@@ -314,83 +279,6 @@ export class ReplSession {
     consoleHandle.dispose();
   }
 
-  private injectVfs(): void {
-    const context = this.context!;
-    const getBackend = () => this._backend;
-    const { pendingWrites } = this;
-
-    const readFileHandle = context.newFunction(
-      "readFile",
-      (pathHandle: QuickJSHandle) => {
-        const backend = getBackend();
-        if (!backend) {
-          const promise = context.newPromise();
-          const err = context.newError("Backend not available");
-          promise.reject(err);
-          err.dispose();
-          promise.settled.then(context.runtime.executePendingJobs);
-          return promise.handle;
-        }
-        const path = context.getString(pathHandle);
-        const promise = context.newPromise();
-        (async () => {
-          try {
-            const result = await backend.readRaw(path);
-            if (result.error || !result.data) {
-              const err = context.newError(
-                `ENOENT: no such file or directory '${path}'.`,
-              );
-              promise.reject(err);
-              err.dispose();
-            } else {
-              const content = Array.isArray(result.data.content)
-                ? result.data.content.join("\n")
-                : typeof result.data.content === "string"
-                  ? result.data.content
-                  : null;
-              if (content === null) {
-                const err = context.newError(
-                  `Cannot read binary file '${path}' as text.`,
-                );
-                promise.reject(err);
-                err.dispose();
-                return;
-              }
-              const val = context.newString(content);
-              promise.resolve(val);
-              val.dispose();
-            }
-          } catch {
-            const err = context.newError(
-              `ENOENT: no such file or directory '${path}'.`,
-            );
-            promise.reject(err);
-            err.dispose();
-          }
-          promise.settled.then(context.runtime.executePendingJobs);
-        })();
-        return promise.handle;
-      },
-    );
-    context.setProp(context.global, "readFile", readFileHandle);
-    readFileHandle.dispose();
-
-    const writeFileHandle = context.newFunction(
-      "writeFile",
-      (pathHandle: QuickJSHandle, contentHandle: QuickJSHandle) => {
-        const path = context.getString(pathHandle);
-        const content = context.getString(contentHandle);
-        const promise = context.newPromise();
-        pendingWrites.push({ path, content });
-        promise.resolve(context.undefined);
-        promise.settled.then(context.runtime.executePendingJobs);
-        return promise.handle;
-      },
-    );
-    context.setProp(context.global, "writeFile", writeFileHandle);
-    writeFileHandle.dispose();
-  }
-
   private injectTools(tools: StructuredToolInterface[]): void {
     const context = this.context!;
     const toolsNs = context.newObject();
@@ -406,7 +294,10 @@ export class ReplSession {
             try {
               const rawInput =
                 typeof input === "object" && input !== null ? input : {};
-              const result = await t.invoke(rawInput);
+              const result = await t.invoke(
+                rawInput,
+                this._evalConfig ?? undefined,
+              );
               const val = context.newString(
                 typeof result === "string" ? result : JSON.stringify(result),
               );
