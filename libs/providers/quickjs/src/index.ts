@@ -16,10 +16,7 @@
  * @packageDocumentation
  */
 
-export {
-  createQuickJSMiddleware,
-  DEFAULT_PTC_EXCLUDED_TOOLS,
-} from "./middleware.js";
+export { createQuickJSMiddleware } from "./middleware.js";
 
 export type {
   QuickJSMiddlewareOptions,
@@ -33,8 +30,6 @@ export {
   DEFAULT_MAX_STACK_SIZE,
   DEFAULT_EXECUTION_TIMEOUT,
 } from "./session.js";
-
-export type { PendingWrite } from "./session.js";
 
 export { formatReplResult, toCamelCase } from "./utils.js";
 
