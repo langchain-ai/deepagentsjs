@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { createAgent } from "langchain";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
-import { createFilesystemMiddleware } from "deepagents";
 import { createQuickJSMiddleware } from "./middleware.js";
 import { ReplSession } from "./session.js";
 
