@@ -42,13 +42,7 @@ import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
 import { LangGraphRunnableConfig } from "@langchain/langgraph";
 
-/**
- * Tools excluded from PTC when `ptc: true`. These are host-environment tools
- * (filesystem, shell) that operate outside the REPL sandbox and are unlikely
- * to be useful inside it. Callers can override this by using the explicit
- * include/array forms of `ptc`.
- */
-export const DEFAULT_PTC_EXCLUDED_TOOLS = [
+const DEFAULT_PTC_EXCLUDED_TOOLS = [
   "ls",
   "read_file",
   "write_file",
@@ -161,14 +155,13 @@ export function createQuickJSMiddleware(
   options: QuickJSMiddlewareOptions = {},
 ) {
   const {
-    ptc = false,
+    ptc,
     memoryLimitBytes = DEFAULT_MEMORY_LIMIT,
     maxStackSizeBytes = DEFAULT_MAX_STACK_SIZE,
     executionTimeoutMs = DEFAULT_EXECUTION_TIMEOUT,
     systemPrompt: customSystemPrompt = null,
   } = options;
 
-  const usePtc = ptc !== false;
   const baseSystemPrompt = customSystemPrompt || REPL_SYSTEM_PROMPT;
 
   let cachedPtcPrompt: string | null = null;
@@ -178,14 +171,9 @@ export function createQuickJSMiddleware(
   function filterToolsForPtc(
     allTools: StructuredToolInterface[],
   ): StructuredToolInterface[] {
-    if (ptc === false) return [];
+    if (!ptc) return [];
 
     const candidates = allTools.filter((t) => t.name !== "js_eval");
-
-    if (ptc === true) {
-      const excluded = new Set<string>(DEFAULT_PTC_EXCLUDED_TOOLS);
-      return candidates.filter((t) => !excluded.has(t.name));
-    }
 
     if (Array.isArray(ptc)) {
       return resolveToolList(ptc, candidates);
@@ -239,7 +227,7 @@ export function createQuickJSMiddleware(
     tools: [jsEvalTool],
     wrapModelCall: async (request, handler) => {
       const agentTools = (request.tools || []) as StructuredToolInterface[];
-      ptcTools = usePtc ? filterToolsForPtc(agentTools) : [];
+      ptcTools = filterToolsForPtc(agentTools);
 
       if (ptcTools.length > 0 && !cachedPtcPrompt) {
         cachedPtcPrompt = await generatePtcPrompt(ptcTools);

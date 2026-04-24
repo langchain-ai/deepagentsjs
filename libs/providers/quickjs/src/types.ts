@@ -7,18 +7,15 @@ export interface QuickJSMiddlewareOptions {
   /**
    * Enable programmatic tool calling from within the REPL.
    *
-   * - `false` — disabled (default)
-   * - `true` — expose all agent tools except standard vfs tools
    * - `(string | StructuredToolInterface)[]` — expose these tools; strings are
    *   resolved from agent tools, instances are injected directly without needing
    *   to be registered on the agent
    * - `{ include: (string | StructuredToolInterface)[] }` — expose only these tools
    * - `{ exclude: string[] }` — expose all agent tools except these
    *
-   * @default false
+   * Omit to disable PTC entirely (default).
    */
   ptc?:
-    | boolean
     | (string | StructuredToolInterface)[]
     | { include: (string | StructuredToolInterface)[] }
     | { exclude: string[] };
