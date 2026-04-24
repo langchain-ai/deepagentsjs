@@ -16,10 +16,7 @@
  * @packageDocumentation
  */
 
-export {
-  createQuickJSMiddleware,
-  DEFAULT_PTC_EXCLUDED_TOOLS,
-} from "./middleware.js";
+export { createQuickJSMiddleware } from "./middleware.js";
 
 export type {
   QuickJSMiddlewareOptions,
