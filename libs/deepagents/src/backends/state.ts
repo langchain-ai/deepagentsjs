@@ -49,6 +49,8 @@ const PREGEL_SEND_KEY = "__pregel_send";
 export class StateBackend implements BackendProtocolV2 {
   private runtime: BackendRuntime | undefined;
   private fileFormat: "v1" | "v2";
+  private pendingWrites = new Map<string, FileData>();
+  private lastStateRef: unknown;
 
   constructor(options?: BackendOptions);
   /**
@@ -95,11 +97,49 @@ export class StateBackend implements BackendProtocolV2 {
   private getFiles(): Record<string, FileData> {
     if (this.runtime) {
       const state = this.runtime.state as { files?: Record<string, FileData> };
+      this.invalidateOnNewSnapshot(state);
       return state.files || {};
     }
 
     const state = getCurrentTaskInput<{ files?: Record<string, FileData> }>();
+    this.invalidateOnNewSnapshot(state);
     return state?.files || {};
+  }
+
+  /**
+   * Get files merged with pending writes from the current superstep.
+   *
+   * Provides read-your-writes semantics: operations within a single
+   * superstep (e.g., PTC tool calls inside a js_eval) can see writes
+   * that haven't been committed to state yet.
+   */
+  private get filesWithPending(): Record<string, FileData> {
+    const files = this.getFiles();
+    if (this.pendingWrites.size === 0) {
+      return files;
+    }
+
+    const merged = { ...files };
+    for (const [path, data] of this.pendingWrites) {
+      merged[path] = data;
+    }
+
+    return merged;
+  }
+
+  /**
+   * Clear pending writes when the underlying state snapshot changes.
+   *
+   * Within a single LangGraph superstep, {@link getCurrentTaskInput}
+   * returns the same object reference. When a new superstep begins,
+   * the reference changes — pending writes have been committed by the
+   * reducer and can be discarded.
+   */
+  private invalidateOnNewSnapshot(stateRef: unknown): void {
+    if (this.lastStateRef !== undefined && stateRef !== this.lastStateRef) {
+      this.pendingWrites.clear();
+    }
+    this.lastStateRef = stateRef;
   }
 
   /**
@@ -133,7 +173,7 @@ export class StateBackend implements BackendProtocolV2 {
    *          Directories have a trailing / in their path and is_dir=true.
    */
   ls(path: string): LsResult {
-    const files = this.getFiles();
+    const files = this.filesWithPending;
     const infos: FileInfo[] = [];
     const subdirs = new Set<string>();
 
@@ -197,7 +237,7 @@ export class StateBackend implements BackendProtocolV2 {
    * @returns ReadResult with content on success or error on failure
    */
   read(filePath: string, offset: number = 0, limit: number = 500): ReadResult {
-    const files = this.getFiles();
+    const files = this.filesWithPending;
     const fileData = files[filePath];
 
     if (!fileData) {
@@ -229,7 +269,7 @@ export class StateBackend implements BackendProtocolV2 {
    * @returns ReadRawResult with raw file data on success or error on failure
    */
   readRaw(filePath: string): ReadRawResult {
-    const files = this.getFiles();
+    const files = this.filesWithPending;
     const fileData = files[filePath];
 
     if (!fileData) {
@@ -243,7 +283,7 @@ export class StateBackend implements BackendProtocolV2 {
    * Returns WriteResult with filesUpdate to update LangGraph state.
    */
   write(filePath: string, content: string): WriteResult {
-    const files = this.getFiles();
+    const files = this.filesWithPending;
 
     if (filePath in files) {
       return {
@@ -258,6 +298,9 @@ export class StateBackend implements BackendProtocolV2 {
       this.fileFormat,
       mimeType,
     );
+
+    this.pendingWrites.set(filePath, newFileData);
+
     const update = { [filePath]: newFileData };
 
     if (!this.isLegacy) {
@@ -281,7 +324,7 @@ export class StateBackend implements BackendProtocolV2 {
     newString: string,
     replaceAll: boolean = false,
   ): EditResult {
-    const files = this.getFiles();
+    const files = this.filesWithPending;
     const fileData = files[filePath];
 
     if (!fileData) {
@@ -304,6 +347,8 @@ export class StateBackend implements BackendProtocolV2 {
     const newFileData = updateFileData(fileData, newContent);
     const update = { [filePath]: newFileData };
 
+    this.pendingWrites.set(filePath, newFileData);
+
     if (!this.isLegacy) {
       this.sendFilesUpdate(update);
       return { path: filePath, occurrences };
@@ -325,7 +370,7 @@ export class StateBackend implements BackendProtocolV2 {
     path: string = "/",
     glob: string | null = null,
   ): GrepResult {
-    const files = this.getFiles();
+    const files = this.filesWithPending;
     const result = grepMatchesFromFiles(files, pattern, path, glob);
     return { matches: result };
   }
@@ -334,7 +379,7 @@ export class StateBackend implements BackendProtocolV2 {
    * Structured glob matching returning FileInfo objects.
    */
   glob(pattern: string, path: string = "/"): GlobResult {
-    const files = this.getFiles();
+    const files = this.filesWithPending;
     const result = globSearchFiles(files, pattern, path);
 
     if (result === "No files found") {
@@ -399,6 +444,10 @@ export class StateBackend implements BackendProtocolV2 {
       }
     }
 
+    for (const [path, data] of Object.entries(updates)) {
+      this.pendingWrites.set(path, data);
+    }
+
     if (!this.isLegacy) {
       if (Object.keys(updates).length > 0) {
         this.sendFilesUpdate(updates);
@@ -424,7 +473,7 @@ export class StateBackend implements BackendProtocolV2 {
    * @returns List of FileDownloadResponse objects, one per input path
    */
   downloadFiles(paths: string[]): FileDownloadResponse[] {
-    const files = this.getFiles();
+    const files = this.filesWithPending;
     const responses: FileDownloadResponse[] = [];
 
     for (const path of paths) {

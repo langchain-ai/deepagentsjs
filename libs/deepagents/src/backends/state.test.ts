@@ -796,4 +796,175 @@ describe("StateBackend", () => {
       expect(result.filesUpdate).toBeUndefined();
     });
   });
+
+  describe("pending writes (read-your-writes)", () => {
+    it("write-then-read within same superstep without committing to state", () => {
+      makeConfig();
+      const backend = new StateBackend();
+
+      // Write without applying the send to state — simulates PTC within one js_eval
+      backend.write("/pending.txt", "buffered content");
+
+      const result = backend.read("/pending.txt");
+      expect(result.error).toBeUndefined();
+      expect(result.content).toBe("buffered content");
+    });
+
+    it("write-then-edit-then-read within same superstep", () => {
+      makeConfig();
+      const backend = new StateBackend();
+
+      backend.write("/doc.txt", "hello world");
+
+      const editResult = backend.edit("/doc.txt", "hello", "goodbye");
+      expect(editResult.error).toBeUndefined();
+      expect(editResult.occurrences).toBe(1);
+
+      const readResult = backend.read("/doc.txt");
+      expect(readResult.error).toBeUndefined();
+      expect(readResult.content).toBe("goodbye world");
+    });
+
+    it("chained edits on pending write within same superstep", () => {
+      makeConfig();
+      const backend = new StateBackend();
+
+      backend.write("/chain.txt", "foo bar baz");
+      backend.edit("/chain.txt", "foo", "qux");
+      backend.edit("/chain.txt", "bar", "quux");
+
+      const result = backend.read("/chain.txt");
+      expect(result.error).toBeUndefined();
+      expect(result.content).toBe("qux quux baz");
+    });
+
+    it("write-then-ls within same superstep", () => {
+      makeConfig();
+      const backend = new StateBackend();
+
+      backend.write("/src/main.ts", "export {}");
+
+      const result = backend.ls("/src/");
+      expect(result.error).toBeUndefined();
+      expect(result.files?.some((f) => f.path === "/src/main.ts")).toBe(true);
+    });
+
+    it("write-then-grep within same superstep", () => {
+      makeConfig();
+      const backend = new StateBackend();
+
+      backend.write("/notes.txt", "find me in the buffer");
+
+      const result = backend.grep("find me", "/");
+      expect(result.error).toBeUndefined();
+      expect(result.matches?.some((m) => m.path === "/notes.txt")).toBe(true);
+    });
+
+    it("write-then-glob within same superstep", () => {
+      makeConfig();
+      const backend = new StateBackend();
+
+      backend.write("/data/report.json", "{}");
+
+      const result = backend.glob("*.json", "/data/");
+      expect(result.error).toBeUndefined();
+      expect(result.files?.some((f) => f.path === "/data/report.json")).toBe(
+        true,
+      );
+    });
+
+    it("write-then-readRaw within same superstep", () => {
+      makeConfig();
+      const backend = new StateBackend();
+
+      backend.write("/raw.txt", "raw content");
+
+      const result = backend.readRaw("/raw.txt");
+      expect(result.error).toBeUndefined();
+      expect(result.data).toBeDefined();
+    });
+
+    it("upload-then-download within same superstep", () => {
+      makeConfig();
+      const backend = new StateBackend();
+
+      const bytes = new TextEncoder().encode("uploaded bytes");
+      backend.uploadFiles([["/uploaded.txt", bytes]]);
+
+      const result = backend.downloadFiles(["/uploaded.txt"]);
+      expect(result[0].error).toBeNull();
+      expect(result[0].content).not.toBeNull();
+      expect(new TextDecoder().decode(result[0].content!)).toBe(
+        "uploaded bytes",
+      );
+    });
+
+    it("duplicate write returns error when first write is still pending", () => {
+      makeConfig();
+      const backend = new StateBackend();
+
+      backend.write("/unique.txt", "first");
+
+      const dupResult = backend.write("/unique.txt", "second");
+      expect(dupResult.error).toBeDefined();
+      expect(dupResult.error).toContain("already exists");
+    });
+
+    it("edit on non-existent pending file returns not-found error", () => {
+      makeConfig();
+      const backend = new StateBackend();
+
+      const result = backend.edit("/ghost.txt", "old", "new");
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain("not found");
+    });
+
+    it("clears pending writes when state snapshot changes", () => {
+      makeConfig();
+      const backend = new StateBackend();
+
+      // Write without committing — buffer has the file
+      backend.write("/ephemeral.txt", "only in buffer");
+      expect(backend.read("/ephemeral.txt").error).toBeUndefined();
+
+      // Simulate a superstep boundary: getCurrentTaskInput returns a new object
+      const newState = {
+        messages: [],
+        files: {} as Record<string, FileData>,
+      };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(newState);
+
+      // Buffer is cleared, file not in new state either
+      const result = backend.read("/ephemeral.txt");
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain("not found");
+    });
+
+    it("starts a fresh buffer after snapshot change", () => {
+      const { sendSpy } = makeConfig();
+      const backend = new StateBackend();
+
+      // Write in superstep N
+      backend.write("/old.txt", "from superstep N");
+
+      // Simulate superstep N+1: new state snapshot that includes the committed write
+      const newFiles: Record<string, FileData> = {};
+      Object.assign(newFiles, sendSpy.mock.calls[0][0][0][1]);
+      const newState = { messages: [], files: newFiles };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(newState);
+      sendSpy.mockClear();
+
+      // Old file is readable from new state (not from buffer)
+      expect(backend.read("/old.txt").error).toBeUndefined();
+
+      // Write a new file in superstep N+1
+      backend.write("/new.txt", "from superstep N+1");
+
+      // Both files are accessible
+      expect(backend.read("/new.txt").error).toBeUndefined();
+      const paths = backend.ls("/").files?.map((f) => f.path);
+      expect(paths).toContain("/old.txt");
+      expect(paths).toContain("/new.txt");
+    });
+  });
 });

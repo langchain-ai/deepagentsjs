@@ -34,8 +34,6 @@ export {
   DEFAULT_EXECUTION_TIMEOUT,
 } from "./session.js";
 
-export type { PendingWrite } from "./session.js";
-
 export { formatReplResult, toCamelCase } from "./utils.js";
 
 export { transformForEval } from "./transform.js";
