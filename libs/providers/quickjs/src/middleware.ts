@@ -15,10 +15,16 @@ import {
 } from "langchain";
 import { z } from "zod/v4";
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import { StateBackend, type BackendRuntime, resolveBackend } from "deepagents";
+import {
+  StateBackend,
+  type BackendRuntime,
+  resolveBackend,
+  DEFAULT_CONCURRENCY,
+  setSubagentGraphInjector,
+} from "deepagents";
 
 import dedent from "dedent";
-import type { QuickJSMiddlewareOptions } from "./types.js";
+import type { QuickJSMiddlewareOptions, ReplSessionOptions } from "./types.js";
 import {
   ReplSession,
   DEFAULT_EXECUTION_TIMEOUT,
@@ -62,7 +68,13 @@ export const DEFAULT_PTC_EXCLUDED_TOOLS = [
   "execute",
 ] as const;
 
-const REPL_SYSTEM_PROMPT = dedent`
+function buildReplSystemPrompt(hasSwarm: boolean): string {
+  const largeFileRule = hasSwarm
+    ? `- **Check inputs before processing** — for any file, use \`ls\` or \`read_file\` with offset/limit to understand its size and shape. If the work involves many independent items, multiple entities, or data
+      that exceeds a single context, use \`swarm.create\` + \`swarm.execute\` — see "Parallel fan-out" below.`
+    : `- **Check file size before processing** — before working with any input file, check its size. If it exceeds ~50,000 characters, decompose the work into chunks and process them separately.`;
+
+  return dedent`
   ## TypeScript/JavaScript REPL (\`js_eval\`)
 
   You have access to a sandboxed TypeScript/JavaScript REPL running in an isolated interpreter.
@@ -71,10 +83,13 @@ const REPL_SYSTEM_PROMPT = dedent`
 
   ### Hard rules
 
-  - **No network, no filesystem** — only the helpers below. Do not attempt \`fetch\`, \`require\`, or \`import\`.
+  ${largeFileRule}
+  - **No network, no imports** — do not attempt \`fetch\`, \`require\`, or \`import\` inside \`js_eval\`. Use your file tools (\`read_file\`, \`grep\`, \`ls\`, etc.) for exploration and \`readFile\`/\`writeFile\`
+    for direct REPL file I/O.
   - **Cite your sources** — when reporting values from files, include the path and key/index so the user can verify.
   - **Use console.log()** for output — it is captured and returned. \`console.warn()\` and \`console.error()\` are also available.
-  - **Reuse state from previous cells** — variables, functions, and results from earlier \`js_eval\` calls persist across calls. Reference them by name in follow-up cells instead of re-embedding data as inline JSON literals.
+  - **Reuse state from previous cells** — variables, functions, and results from earlier \`js_eval\` calls persist across calls. Reference them by name in follow-up cells instead of re-embedding data as inline
+    JSON literals.
 
   ### First-time usage
 
@@ -107,6 +122,157 @@ const REPL_SYSTEM_PROMPT = dedent`
   - ES2023+ syntax with TypeScript support. No Node.js APIs, no \`require\`, no \`import\`.
   - Output is truncated beyond a fixed character limit — be selective about what you log.
   - Execution timeout per call (default 30 s).
+`;
+}
+
+const SWARM_FANOUT_PROMPT = dedent`
+  ## Parallel fan-out (\`swarm.create\` + \`swarm.execute\`)
+
+  Process many independent items in parallel. \`swarm.create\` builds an in-memory table handle;
+  \`swarm.execute\` fans work out across rows and returns an enriched table. One row = one unit of work.
+
+  ### When to use
+
+  Use swarm when: many items need the same operation, input is too large for one context, or items
+  each need independent analysis. Don't use when items depend on each other's output.
+
+  ### Flow
+
+  1. **Explore.** Sample the input using any tool — \`read_file\` with offset/limit, \`grep\`, \`ls\`, or \`js_eval\`.
+     Learn shape, conventions, edge cases. This informs the \`context\` and \`instruction\` you write.
+  2. **Create.** \`swarm.create\` builds a table from a source spec. Returns a table handle.
+  3. **Execute.** \`swarm.execute\` with an \`instruction\` template and optional \`context\`. Returns the updated table.
+  4. **Aggregate.** Inspect \`table.rows\` or chain another \`swarm.execute\` pass.
+
+  ### Choosing a swarm.create source
+
+  **\`glob\` / \`filePaths\`** — one file = one row. Use when each file is an independent unit of work
+  (e.g. code review across a repo, summarising a folder of documents). Each row gets \`{ id, file }\`;
+  the subagent reads the file itself via the \`{file}\` placeholder.
+
+  **\`tasks\`** — pass pre-built records directly. Use when the data to process lives inside a file
+  (e.g. a JSONL dataset, a CSV, a JSON array). Read and parse the file first, then pass the records:
+
+  \`\`\`typescript
+  const lines = readFile("/data.jsonl").trim().split("\\n");
+  const rows = lines.map(l => JSON.parse(l));
+  let table = await swarm.create({ tasks: rows });
+  \`\`\`
+
+  Passing \`filePaths: ["/data.jsonl"]\` would produce a table with **one row** pointing at the file —
+  not one row per record inside it.
+
+  ### Rules
+
+  - **Get it right in one pass.** Explore thoroughly before dispatching. A wasted swarm pass is expensive.
+  - **Never read the full input.** Sample only. Data reaches subagents via the table.
+  - **Everything the subagent needs must be in \`instruction\` + \`context\`.** Subagents can't see your notes.
+  - **Results are final.** Don't dispatch recheck/verify tasks. Fix the instruction and re-dispatch failed rows via \`filter\`.
+  - **One retry for failures, then move on.**
+
+  ### Instruction + context
+
+  \`instruction\` is a per-item template with \`{column}\` placeholders (interpolated from each row).
+
+  \`context\` is free-form prose prepended to every subagent prompt. Put dataset-wide information here:
+  what the data is, domain terms, classification rules, edge cases, examples.
+
+  \`\`\`typescript
+  let table = await swarm.create({ glob: "src/**/*.ts" });
+  table = await swarm.execute(table, {
+    instruction: "Review {file} for security issues. List findings or write 'no issues'.",
+    context: "This is a TypeScript backend using Express. Focus on injection, auth bypass, path traversal.",
+    column: "review",
+  });
+  console.log(table.rows);
+  \`\`\`
+
+  ### Structured output
+
+  Use \`responseSchema\` for programmatic aggregation. Schema properties become top-level columns on each row.
+
+  \`\`\`typescript
+  table = await swarm.execute(table, {
+    instruction: "Classify: {text}",
+    responseSchema: {
+      type: "object",
+      properties: {
+        label: { type: "string", enum: ["positive", "negative", "neutral"] },
+      },
+      required: ["label"],
+    },
+  });
+  // Row after: { id: "r1", text: "...", label: "positive" }
+  \`\`\`
+
+  ### Batching
+
+  Set \`batchSize\` with \`responseSchema\` to group N rows per subagent call.
+
+  \`\`\`typescript
+  table = await swarm.execute(table, {
+    instruction: "Classify: {text}",
+    batchSize: 50,
+    responseSchema: {
+      type: "object",
+      properties: { label: { type: "string", enum: ["positive", "negative", "neutral"] } },
+      required: ["label"],
+    },
+  });
+  \`\`\`
+
+  Sizing: short items 40–80, medium items 20–40, complex items leave at 1.
+
+  ### Chaining passes
+
+  \`swarm.execute\` returns the updated table — reassign to accumulate columns across passes.
+
+  \`\`\`typescript
+  let table = await swarm.create({ tasks: interviews });
+  table = await swarm.execute(table, { instruction: "Classify sentiment of {file}", column: "sentiment" });
+  table = await swarm.execute(table, {
+    filter: { column: "sentiment", equals: "negative" },
+    instruction: "Summarize why {file} had negative sentiment.",
+    column: "summary",
+  });
+  \`\`\`
+
+  ### Filtering
+
+  \`filter: { column: "result", exists: false }\` — re-dispatch unprocessed rows.
+  Operators: \`equals\`, \`notEquals\`, \`in\`, \`exists\`, \`and\`, \`or\`.
+
+  ### API Reference
+
+  \`\`\`typescript
+  const swarm: {
+    /**
+     * Build an in-memory table from a source spec. Returns a table handle { rows: Row[] }.
+     * No file is written.
+     */
+    create(source: {
+      glob?: string | string[];       // one row per matched file: { id, file }
+      filePaths?: string[];           // one row per path: { id, file }
+      tasks?: Array<Record<string, unknown>>;  // pre-built rows; each must have id: string
+    }): Promise<{ rows: Row[] }>;
+
+    /**
+     * Fan work out across table rows. Returns a new table handle with results
+     * merged in as new columns. Reassign to accumulate columns across passes:
+     *   table = await swarm.execute(table, options)
+     */
+    execute(table: { rows: Row[] }, options: {
+      instruction: string;       // template with {column} placeholders
+      context?: string;          // prose prepended to every subagent prompt
+      column?: string;           // result column name (default: "result")
+      filter?: SwarmFilter;      // only dispatch matching rows
+      subagentType?: string;     // default: "general-purpose"
+      responseSchema?: object;   // JSON Schema (type: "object"); properties become columns
+      concurrency?: number;      // default: ${DEFAULT_CONCURRENCY}
+      batchSize?: number;        // rows per subagent call; requires responseSchema
+    }): Promise<{ rows: Row[] }>;
+  };
+  \`\`\`
 `;
 
 /**
@@ -172,12 +338,11 @@ export function createQuickJSMiddleware(
   } = options;
 
   const usePtc = ptc !== false;
-  const baseSystemPrompt = customSystemPrompt || REPL_SYSTEM_PROMPT;
 
   let cachedPtcPrompt: string | null = null;
-
   let ptcTools: StructuredToolInterface[] = [];
-
+  let subagentGraphs: ReplSessionOptions["subagentGraphs"];
+  let subagentFactories: ReplSessionOptions["subagentFactories"];
   function filterToolsForPtc(
     allTools: StructuredToolInterface[],
   ): StructuredToolInterface[] {
@@ -218,11 +383,18 @@ export function createQuickJSMiddleware(
       } as BackendRuntime;
       const resolvedBackend = await resolveBackend(backend, runtime);
 
+      const currentState = (getCurrentTaskInput(config) || {}) as Record<
+        string,
+        unknown
+      >;
       const session = ReplSession.getOrCreate(threadId, {
         memoryLimitBytes,
         maxStackSizeBytes,
         backend: resolvedBackend,
         tools: ptcTools,
+        subagentGraphs,
+        subagentFactories,
+        currentState,
       });
 
       const result = await session.eval(input.code, executionTimeoutMs);
@@ -235,6 +407,7 @@ export function createQuickJSMiddleware(
       description: dedent`
         Evaluate TypeScript/JavaScript code in a sandboxed REPL. State persists across calls.
         Use readFile(path) and writeFile(path, content) for file access.
+        Use swarm.create(source) and swarm.execute(table, options) for parallel fan-out.
         Use console.log() for output. Returns the result of the last expression.
       `,
       schema: z.object({
@@ -247,7 +420,7 @@ export function createQuickJSMiddleware(
     },
   );
 
-  return createMiddleware({
+  const middleware = createMiddleware({
     name: "QuickJSMiddleware",
     tools: [jsEvalTool],
     wrapModelCall: async (request, handler) => {
@@ -258,10 +431,21 @@ export function createQuickJSMiddleware(
         cachedPtcPrompt = await generatePtcPrompt(ptcTools);
       }
 
+      const hasSwarm = !!subagentGraphs;
+      const replPrompt = customSystemPrompt || buildReplSystemPrompt(hasSwarm);
+      const swarmPrompt = hasSwarm ? SWARM_FANOUT_PROMPT : "";
       const systemMessage = request.systemMessage
-        .concat(baseSystemPrompt)
+        .concat(replPrompt)
+        .concat(swarmPrompt)
         .concat(cachedPtcPrompt || "");
       return handler({ ...request, systemMessage });
     },
   });
+
+  setSubagentGraphInjector(middleware, (graphs, factories) => {
+    subagentGraphs = graphs;
+    subagentFactories = factories;
+  });
+
+  return middleware;
 }

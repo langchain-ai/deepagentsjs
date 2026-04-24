@@ -28,8 +28,14 @@ import type {
   QuickJSAsyncContext,
   QuickJSAsyncRuntime,
 } from "quickjs-emscripten-core";
+import { isFail } from "quickjs-emscripten-core";
 import type { AnyBackendProtocol, BackendProtocolV2 } from "deepagents";
-import { adaptBackendProtocol } from "deepagents";
+import {
+  adaptBackendProtocol,
+  createTable,
+  executeSwarm,
+  type SwarmFilter,
+} from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
 import type { ReplSessionOptions, ReplResult } from "./types.js";
@@ -85,6 +91,11 @@ export class ReplSession {
 
   private _backend: BackendProtocolV2 | null = null;
 
+  /**
+   * Abort controller scoped to the current `eval()` call. Aborted on timeout so in-flight swarm dispatches are cancelled.
+   */
+  private _evalAbortController: AbortController | null = null;
+
   constructor(id: string, options: ReplSessionOptions = {}) {
     this.id = id;
     this._options = options;
@@ -106,6 +117,7 @@ export class ReplSession {
       maxStackSizeBytes = DEFAULT_MAX_STACK_SIZE,
       backend,
       tools,
+      subagentGraphs,
     } = this._options;
 
     const asyncModule = await getAsyncModule();
@@ -122,9 +134,14 @@ export class ReplSession {
     if (backend) {
       this._backend = adaptBackendProtocol(backend);
     }
+
     this.injectVfs();
     if (tools && tools.length > 0) {
       this.injectTools(tools);
+    }
+
+    if (subagentGraphs && Object.keys(subagentGraphs).length > 0) {
+      this.injectSwarm();
     }
   }
 
@@ -144,6 +161,19 @@ export class ReplSession {
       if (options.backend) {
         existing._backend = adaptBackendProtocol(options.backend);
       }
+
+      if (options.subagentGraphs !== undefined) {
+        existing._options.subagentGraphs = options.subagentGraphs;
+      }
+
+      if (options.currentState !== undefined) {
+        existing._options.currentState = options.currentState;
+      }
+
+      if (options.subagentFactories !== undefined) {
+        existing._options.subagentFactories = options.subagentFactories;
+      }
+
       return existing;
     }
 
@@ -174,6 +204,7 @@ export class ReplSession {
     const context = this.context!;
 
     this.logs.length = 0;
+    this._evalAbortController = new AbortController();
 
     if (timeoutMs >= 0) {
       runtime.setInterruptHandler(
@@ -234,6 +265,7 @@ export class ReplSession {
     }
 
     result.value.dispose();
+    this._evalAbortController?.abort();
     return {
       ok: false,
       error: { message: "Promise timed out — execution interrupted" },
@@ -241,11 +273,30 @@ export class ReplSession {
     };
   }
 
+  /**
+   * Flush buffered file writes to the backend. Handles "already exists"
+   * errors by falling back to an edit (overwrite) operation.
+   */
   async flushWrites(backend: AnyBackendProtocol): Promise<void> {
     const adapted = adaptBackendProtocol(backend);
     const writes = this.pendingWrites.splice(0);
     for (const { path, content } of writes) {
-      await adapted.write(path, content);
+      const result = await adapted.write(path, content);
+      if (result.error?.includes("already exists")) {
+        // File already exists — overwrite by reading current content and replacing
+        const raw = await adapted.readRaw(path);
+        if (!raw.error && raw.data) {
+          const data = raw.data;
+          const oldContent = Array.isArray(data.content)
+            ? data.content.join("\n")
+            : typeof data.content === "string"
+              ? data.content
+              : null;
+          if (oldContent !== null && oldContent !== content) {
+            await adapted.edit(path, oldContent, content);
+          }
+        }
+      }
     }
   }
 
@@ -389,6 +440,227 @@ export class ReplSession {
     );
     context.setProp(context.global, "writeFile", writeFileHandle);
     writeFileHandle.dispose();
+  }
+
+  /**
+   * Bridge a native async function into a QuickJS promise handle.
+   *
+   * Executes `fn`, resolves/rejects the QuickJS promise accordingly,
+   * disposes returned handles, and flushes pending QuickJS microtasks.
+   * All QuickJS-to-native async bridges in this class should use this
+   * helper to avoid duplicating the error-handling and flush logic.
+   */
+  private wrapAsync(fn: () => Promise<QuickJSHandle>): QuickJSHandle {
+    const context = this.context!;
+    const promise = context.newPromise();
+    (async () => {
+      try {
+        const value = await fn();
+        promise.resolve(value);
+        if (value !== context.undefined) {
+          value.dispose();
+        }
+      } catch (err) {
+        const error = context.newError((err as Error).message ?? String(err));
+        promise.reject(error);
+        error.dispose();
+      }
+      promise.settled.then(context.runtime.executePendingJobs);
+    })();
+    return promise.handle;
+  }
+
+  /**
+   * Register the `swarm` namespace object on the QuickJS global scope,
+   * exposing `swarm.create(file, source)` and `swarm.execute(file, options)`
+   * as async functions callable from `js_eval`.
+   *
+   * Writes are routed through the session's `pendingWrites` buffer so
+   * they are visible to subsequent `readFile` calls within the same eval.
+   */
+  private injectSwarm(): void {
+    const context = this.context!;
+    const swarmNs = context.newObject();
+
+    const createHandle = this.buildSwarmCreate();
+    context.setProp(swarmNs, "create", createHandle);
+    createHandle.dispose();
+
+    const executeHandle = this.buildSwarmExecute();
+    context.setProp(swarmNs, "execute", executeHandle);
+    executeHandle.dispose();
+
+    context.setProp(context.global, "swarm", swarmNs);
+    swarmNs.dispose();
+  }
+
+  /**
+   * Build the `swarm.create` QuickJS function handle.
+   *
+   * Takes a source spec (glob, filePaths, or tasks) and returns an in-memory
+   * table object `{ rows: Row[] }` to the QuickJS caller. No file is written.
+   *
+   * The rows are serialized to JSON and parsed inside QuickJS via `evalCode`
+   * so the returned handle is a proper QuickJS array — safe to read, iterate,
+   * and pass back into `swarm.execute`.
+   */
+  private buildSwarmCreate(): QuickJSHandle {
+    const context = this.context!;
+    const session = this;
+
+    return context.newFunction("create", (sourceHandle: QuickJSHandle) => {
+      // Dump synchronously — handle is only valid during this call.
+      const source = context.dump(sourceHandle) as Record<string, unknown>;
+
+      return session.wrapAsync(async () => {
+        if (!session._backend) {
+          throw new Error("Backend not available");
+        }
+
+        const rows = await createTable(
+          {
+            glob: source.glob as string | string[] | undefined,
+            filePaths: source.filePaths as string[] | undefined,
+            tasks: source.tasks as Array<Record<string, unknown>> | undefined,
+          },
+          session._backend,
+        );
+
+        session.logs.push(
+          `[swarm.create] Created table with ${rows.length} rows.`,
+        );
+
+        // Serialize rows to JSON and parse inside QuickJS to produce a proper
+        // QuickJS value. wrapAsync disposes the returned handle after resolving.
+        const tableJson = JSON.stringify({ rows });
+        const parsed = context.evalCode(`(${tableJson})`);
+        if (isFail(parsed)) {
+          parsed.error.dispose();
+          throw new Error("Failed to serialize table rows into QuickJS");
+        }
+        return parsed.value;
+      });
+    });
+  }
+
+  /**
+   * Build the `swarm.execute` QuickJS function handle.
+   *
+   * Takes a table handle `{ rows: Row[] }` and an options object. Extracts the rows
+   * synchronously (before the async boundary), runs the swarm, then returns a new
+   * QuickJS table object containing the enriched rows.
+   *
+   * Returning a new object (rather than mutating the input handle) is necessary
+   * because QuickJS argument handles are only valid during the synchronous call —
+   * we cannot safely write back to the original handle after an await.
+   *
+   * Usage in js_eval:
+   *   let table = await swarm.create({ glob: "src/**\/*.ts" });
+   *   table = await swarm.execute(table, { instruction: "...", column: "review" });
+   *   console.log(table.rows);
+   */
+  private buildSwarmExecute(): QuickJSHandle {
+    const context = this.context!;
+    const session = this;
+
+    return context.newFunction(
+      "execute",
+      (tableHandle: QuickJSHandle, optionsHandle: QuickJSHandle) => {
+        // Dump both arguments synchronously before entering wrapAsync.
+        // QuickJS argument handles are only valid for the duration of this call.
+        const tableData = context.dump(tableHandle) as {
+          rows?: Record<string, unknown>[];
+        };
+        const opts = context.dump(optionsHandle) as Record<string, unknown>;
+
+        return session.wrapAsync(async () => {
+          if (
+            typeof opts.instruction !== "string" ||
+            opts.instruction.length === 0
+          ) {
+            throw new Error("swarm.execute: `instruction` is required.");
+          }
+
+          const {
+            subagentGraphs = {},
+            subagentFactories,
+            currentState = {},
+          } = session._options;
+
+          const summary = await executeSwarm({
+            rows: tableData.rows ?? [],
+            instruction: opts.instruction,
+            column: typeof opts.column === "string" ? opts.column : undefined,
+            filter: opts.filter as SwarmFilter | undefined,
+            subagentType:
+              typeof opts.subagentType === "string"
+                ? opts.subagentType
+                : undefined,
+            responseSchema: opts.responseSchema as
+              | Record<string, unknown>
+              | undefined,
+            concurrency:
+              typeof opts.concurrency === "number"
+                ? opts.concurrency
+                : undefined,
+            batchSize:
+              typeof opts.batchSize === "number" ? opts.batchSize : undefined,
+            context:
+              typeof opts.context === "string" ? opts.context : undefined,
+            subagentGraphs,
+            subagentFactories,
+            currentState: currentState as Record<string, unknown>,
+            signal: session._evalAbortController?.signal,
+          });
+
+          session.logSwarmSummary(summary);
+
+          // Return an updated table object with enriched rows.
+          // wrapAsync disposes the returned handle after resolving.
+          const tableJson = JSON.stringify({ rows: summary.rows });
+          const parsed = context.evalCode(`(${tableJson})`);
+          if (isFail(parsed)) {
+            parsed.error.dispose();
+            throw new Error("Failed to serialize enriched table into QuickJS");
+          }
+          return parsed.value;
+        });
+      },
+    );
+  }
+
+  /**
+   * Log the swarm execution summary and any individual failures to the session
+   * log buffer. These appear in the js_eval tool output so the agent can see
+   * completion counts without needing to inspect rows directly.
+   */
+  private logSwarmSummary(summary: {
+    completed: number;
+    failed: number;
+    skipped: number;
+    column: string;
+    failedTasks: Array<{ id: string; error: string }>;
+  }): void {
+    this.logs.push(
+      `[swarm.execute] ${summary.completed} completed, ${summary.failed} failed, ${summary.skipped} skipped → column "${summary.column}".`,
+    );
+
+    this.logs.push(
+      `[swarm.execute] Results are authoritative — do not re-dispatch to verify. Inspect table.rows directly to aggregate.`,
+    );
+
+    if (summary.failed > 0) {
+      const sample = summary.failedTasks.slice(0, 3);
+      for (const t of sample) {
+        this.logs.push(`[swarm.execute] failure id="${t.id}" error=${t.error}`);
+      }
+
+      if (summary.failedTasks.length > 3) {
+        this.logs.push(
+          `[swarm.execute] ... and ${summary.failedTasks.length - 3} more failures`,
+        );
+      }
+    }
   }
 
   private injectTools(tools: StructuredToolInterface[]): void {

@@ -44,6 +44,11 @@ import type {
   InferStructuredResponse,
   SupportedResponseFormat,
 } from "./types.js";
+import {
+  getSubagentGraphs,
+  getSubagentGraphInjector,
+  getSubagentFactories,
+} from "./symbols.js";
 
 /**
  * required for type inference
@@ -306,6 +311,15 @@ export function createDeepAgent<
     summarizationMiddleware,
     patchToolCallsMiddleware,
   ] = builtInMiddleware;
+
+  const compiledGraphs = getSubagentGraphs(subagentMiddleware);
+  const compiledFactories = getSubagentFactories(subagentMiddleware);
+
+  if (compiledGraphs) {
+    for (const m of customMiddleware) {
+      getSubagentGraphInjector(m)?.(compiledGraphs, compiledFactories);
+    }
+  }
 
   // Runtime middleware array: combine built-in + optional middleware.
   // Note: The full type is handled separately via AllMiddleware.

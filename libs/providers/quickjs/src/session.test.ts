@@ -1,8 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { tool } from "langchain";
 import { z } from "zod/v4";
 import type { BackendProtocolV2, ReadRawResult, WriteResult } from "deepagents";
 import { ReplSession } from "./session.js";
+
+function makeMockSubagent(resultText = "done") {
+  return {
+    invoke: vi.fn(async () => ({ messages: [{ content: resultText }] })),
+  } as any;
+}
 
 const TIMEOUT = 5000;
 let nextId = 0;
@@ -514,6 +520,187 @@ describe("REPL Engine", () => {
       expect(result.value).toBe("undefined");
       s1.dispose();
       session = s2;
+    });
+  });
+
+  describe("swarm namespace", () => {
+    it("is injected when subagentGraphs are provided", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend(),
+        subagentGraphs: { "general-purpose": makeMockSubagent() },
+      });
+      const result = await session.eval("typeof swarm", TIMEOUT);
+      expect(result.value).toBe("object");
+    });
+
+    it("is not injected without subagentGraphs", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend(),
+      });
+      const result = await session.eval("typeof swarm", TIMEOUT);
+      expect(result.value).toBe("undefined");
+    });
+
+    it("swarm.create with tasks writes table to pendingWrites", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend(),
+        subagentGraphs: { "general-purpose": makeMockSubagent() },
+      });
+      await session.eval(
+        `await swarm.create("/t.jsonl", { tasks: [{ id: "r1", text: "hello" }] })`,
+        TIMEOUT,
+      );
+      expect(session.pendingWrites).toHaveLength(1);
+      expect(session.pendingWrites[0].path).toBe("/t.jsonl");
+      expect(session.pendingWrites[0].content).toContain('"id":"r1"');
+    });
+
+    it("swarm.create with >500 tasks writes all rows", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend(),
+        subagentGraphs: { "general-purpose": makeMockSubagent() },
+      });
+      const result = await session.eval(
+        `const tasks = [];
+         for (let i = 0; i < 1587; i++) {
+           tasks.push({ id: "t" + i, q: "Question " + i });
+         }
+         await swarm.create("/big.jsonl", { tasks });
+         "ok"`,
+        10_000,
+      );
+      expect(result.ok).toBe(true);
+      const written = session.pendingWrites.find(
+        (w) => w.path === "/big.jsonl",
+      );
+      expect(written).toBeDefined();
+      const lines = written!.content.split("\n").filter((l) => l.trim());
+      expect(lines).toHaveLength(1587);
+    });
+
+    it("swarm.execute across evals reads all >500 rows from backend", async () => {
+      const rowCount = 600;
+      const lines: string[] = [];
+      for (let i = 0; i < rowCount; i++) {
+        lines.push(JSON.stringify({ id: `t${i}`, q: `Q${i}` }));
+      }
+      const tableContent = lines.join("\n") + "\n";
+
+      const backend = createMockBackend({
+        "/big.jsonl": tableContent,
+      });
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend,
+        subagentGraphs: { "general-purpose": makeMockSubagent("done") },
+      });
+
+      const result = await session.eval(
+        `const raw = await swarm.execute("/big.jsonl", { instruction: "Process {q}" });
+         JSON.parse(raw)`,
+        30_000,
+      );
+      expect(result.ok).toBe(true);
+      expect((result.value as any).total).toBe(rowCount);
+      expect((result.value as any).completed).toBe(rowCount);
+    });
+
+    it("swarm.execute reads table written by swarm.create in the same eval", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend(),
+        subagentGraphs: { "general-purpose": makeMockSubagent("ok") },
+      });
+      const result = await session.eval(
+        `await swarm.create("/t.jsonl", { tasks: [{ id: "r1", text: "hi" }] });
+         const raw = await swarm.execute("/t.jsonl", { instruction: "Process {text}" });
+         JSON.parse(raw)`,
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect((result.value as any).completed).toBe(1);
+      expect((result.value as any).total).toBe(1);
+    });
+
+    it("swarm.execute returns JSON-parseable summary", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend({ "/t.jsonl": '{"id":"r1","text":"hi"}\n' }),
+        subagentGraphs: { "general-purpose": makeMockSubagent("my result") },
+      });
+      const result = await session.eval(
+        `JSON.parse(await swarm.execute("/t.jsonl", { instruction: "Process {text}" }))`,
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect((result.value as any).completed).toBe(1);
+      expect((result.value as any).results[0].result).toBe("my result");
+    });
+
+    it("swarm.execute error propagates to JS when instruction is empty", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend({ "/t.jsonl": '{"id":"r1"}\n' }),
+        subagentGraphs: { "general-purpose": makeMockSubagent() },
+      });
+      const result = await session.eval(
+        `var msg;
+         try { await swarm.execute("/t.jsonl", { instruction: "" }) } catch(e) { msg = e.message }
+         msg`,
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toContain("instruction");
+    });
+
+    it("write callback deduplicates — same path written twice keeps only latest", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        backend: createMockBackend(),
+        subagentGraphs: { "general-purpose": makeMockSubagent() },
+      });
+      await session.eval(
+        `await swarm.create("/t.jsonl", { tasks: [{ id: "r1" }] });
+         await swarm.create("/t.jsonl", { tasks: [{ id: "r2" }, { id: "r3" }] });`,
+        TIMEOUT,
+      );
+      const writes = session.pendingWrites.filter((w) => w.path === "/t.jsonl");
+      expect(writes).toHaveLength(1);
+      expect(writes[0].content).toContain('"id":"r2"');
+      expect(writes[0].content).not.toContain('"id":"r1"');
+    });
+  });
+
+  describe("getOrCreate option forwarding", () => {
+    it("forwards subagentGraphs to an existing session", () => {
+      const id = uniqueThreadId();
+      const s = ReplSession.getOrCreate(id, {});
+      const graphs = { "general-purpose": makeMockSubagent() };
+      ReplSession.getOrCreate(id, { subagentGraphs: graphs });
+      expect((s as any)._options.subagentGraphs).toBe(graphs);
+      s.dispose();
+    });
+
+    it("forwards currentState to an existing session", () => {
+      const id = uniqueThreadId();
+      const s = ReplSession.getOrCreate(id, {});
+      const state = { customKey: "value" };
+      ReplSession.getOrCreate(id, { currentState: state });
+      expect((s as any)._options.currentState).toBe(state);
+      s.dispose();
+    });
+
+    it("forwards subagentFactories to an existing session", () => {
+      const id = uniqueThreadId();
+      const s = ReplSession.getOrCreate(id, {});
+      const factories = { "general-purpose": vi.fn() as any };
+      ReplSession.getOrCreate(id, { subagentFactories: factories });
+      expect((s as any)._options.subagentFactories).toBe(factories);
+      s.dispose();
+    });
+
+    it("does not overwrite subagentGraphs when not provided in update", () => {
+      const id = uniqueThreadId();
+      const graphs = { "general-purpose": makeMockSubagent() };
+      const s = ReplSession.getOrCreate(id, { subagentGraphs: graphs });
+      ReplSession.getOrCreate(id, { backend: createMockBackend() });
+      expect((s as any)._options.subagentGraphs).toBe(graphs);
+      s.dispose();
     });
   });
 
