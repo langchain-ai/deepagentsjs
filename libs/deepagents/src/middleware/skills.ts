@@ -536,6 +536,52 @@ async function listSkillsFromBackend(
     type: (info.is_dir ? "directory" : "file") as "file" | "directory",
   }));
 
+  // Check if the source path itself is a skill directory (has SKILL.md directly inside it).
+  // This handles the case where `sources` contains an explicitly scoped skill directory
+  // like "skills/domainA/" rather than a parent directory like "skills/".
+  const hasDirectSkillMd = entries.some(
+    (e) => e.type === "file" && e.name === "SKILL.md",
+  );
+
+  if (hasDirectSkillMd) {
+    const directSkillMdPath = `${normalizedPath}SKILL.md`;
+    const dirName =
+      normalizedPath
+        .replace(/[/\\]$/, "")
+        .split(/[/\\]/)
+        .pop() || "";
+    let content: string | null = null;
+
+    if (adaptedBackend.downloadFiles) {
+      const results = await adaptedBackend.downloadFiles([directSkillMdPath]);
+      if (
+        results.length === 1 &&
+        results[0].error == null &&
+        results[0].content != null
+      ) {
+        content = new TextDecoder().decode(results[0].content);
+      }
+    } else {
+      const readResult = await adaptedBackend.read(directSkillMdPath);
+      if (!readResult.error && typeof readResult.content === "string") {
+        content = readResult.content;
+      }
+    }
+
+    if (content !== null) {
+      const metadata = parseSkillMetadataFromContent(
+        content,
+        directSkillMdPath,
+        dirName,
+      );
+      if (metadata) {
+        skills.push(metadata);
+      }
+    }
+
+    return skills;
+  }
+
   // Look for subdirectories containing SKILL.md
   for (const entry of entries) {
     if (entry.type !== "directory") {
