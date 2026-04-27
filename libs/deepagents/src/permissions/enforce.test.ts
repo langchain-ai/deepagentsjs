@@ -74,44 +74,73 @@ describe("decidePathAccess", () => {
 
   it("returns allow when no rule matches", () => {
     const rules = [
-      new FilesystemPermission({ operations: ["read"], paths: ["/other/**"], mode: "deny" }),
+      new FilesystemPermission({
+        operations: ["read"],
+        paths: ["/other/**"],
+        mode: "deny",
+      }),
     ];
     expect(decidePathAccess(rules, "read", "/foo/bar")).toBe("allow");
   });
 
   it("returns allow for a matching allow rule", () => {
     const rules = [
-      new FilesystemPermission({ operations: ["read"], paths: ["/workspace/**"] }),
+      new FilesystemPermission({
+        operations: ["read"],
+        paths: ["/workspace/**"],
+      }),
     ];
     expect(decidePathAccess(rules, "read", "/workspace/file.ts")).toBe("allow");
   });
 
   it("returns deny for a matching deny rule", () => {
     const rules = [
-      new FilesystemPermission({ operations: ["read"], paths: ["/secrets/**"], mode: "deny" }),
+      new FilesystemPermission({
+        operations: ["read"],
+        paths: ["/secrets/**"],
+        mode: "deny",
+      }),
     ];
     expect(decidePathAccess(rules, "read", "/secrets/key.txt")).toBe("deny");
   });
 
   it("first-match-wins: allow before deny", () => {
     const rules = [
-      new FilesystemPermission({ operations: ["read"], paths: ["/workspace/**"] }),
-      new FilesystemPermission({ operations: ["read"], paths: ["/**"], mode: "deny" }),
+      new FilesystemPermission({
+        operations: ["read"],
+        paths: ["/workspace/**"],
+      }),
+      new FilesystemPermission({
+        operations: ["read"],
+        paths: ["/**"],
+        mode: "deny",
+      }),
     ];
     expect(decidePathAccess(rules, "read", "/workspace/file.ts")).toBe("allow");
   });
 
   it("first-match-wins: deny before allow", () => {
     const rules = [
-      new FilesystemPermission({ operations: ["read"], paths: ["/workspace/**"], mode: "deny" }),
-      new FilesystemPermission({ operations: ["read"], paths: ["/workspace/**"] }),
+      new FilesystemPermission({
+        operations: ["read"],
+        paths: ["/workspace/**"],
+        mode: "deny",
+      }),
+      new FilesystemPermission({
+        operations: ["read"],
+        paths: ["/workspace/**"],
+      }),
     ];
     expect(decidePathAccess(rules, "read", "/workspace/file.ts")).toBe("deny");
   });
 
   it("skips rules for a different operation", () => {
     const rules = [
-      new FilesystemPermission({ operations: ["write"], paths: ["/secrets/**"], mode: "deny" }),
+      new FilesystemPermission({
+        operations: ["write"],
+        paths: ["/secrets/**"],
+        mode: "deny",
+      }),
     ];
     expect(decidePathAccess(rules, "read", "/secrets/key.txt")).toBe("allow");
   });

@@ -1,5 +1,9 @@
 import micromatch from "micromatch";
-import type { FilesystemOperation, FilesystemPermission, PermissionMode } from "./types.js";
+import type {
+  FilesystemOperation,
+  FilesystemPermission,
+  PermissionMode,
+} from "./types.js";
 
 /**
  * Canonicalize and validate an absolute path before permission checking.
@@ -30,7 +34,7 @@ export function validatePath(raw: string): string {
   if (segments.includes("~")) {
     throw new Error(`path must not contain "~": ${JSON.stringify(raw)}`);
   }
-  
+
   return `/${segments.join("/")}`;
 }
 
