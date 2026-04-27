@@ -575,10 +575,12 @@ export const EXECUTION_SYSTEM_PROMPT = context`
  */
 function createLsTool(
   backend: AnyBackendProtocol | BackendFactory,
-  options: { customDescription: string | undefined },
-  permissions: FilesystemPermission[],
+  options: {
+    customDescription: string | undefined;
+    permissions: FilesystemPermission[];
+  },
 ) {
-  const { customDescription } = options;
+  const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
       enforcePermission(permissions, "read", input.path ?? "/");
@@ -642,10 +644,10 @@ function createReadFileTool(
   options: {
     customDescription: string | undefined;
     toolTokenLimitBeforeEvict: number | null;
+    permissions: FilesystemPermission[];
   },
-  permissions: FilesystemPermission[],
 ) {
-  const { customDescription, toolTokenLimitBeforeEvict } = options;
+  const { customDescription, toolTokenLimitBeforeEvict, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
       enforcePermission(permissions, "read", input.file_path);
@@ -766,10 +768,12 @@ function createReadFileTool(
  */
 function createWriteFileTool(
   backend: AnyBackendProtocol | BackendFactory,
-  options: { customDescription: string | undefined },
-  permissions: FilesystemPermission[],
+  options: {
+    customDescription: string | undefined;
+    permissions: FilesystemPermission[];
+  },
 ) {
-  const { customDescription } = options;
+  const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
       enforcePermission(permissions, "write", input.file_path);
@@ -817,10 +821,12 @@ function createWriteFileTool(
  */
 function createEditFileTool(
   backend: AnyBackendProtocol | BackendFactory,
-  options: { customDescription: string | undefined },
-  permissions: FilesystemPermission[],
+  options: {
+    customDescription: string | undefined;
+    permissions: FilesystemPermission[];
+  },
 ) {
-  const { customDescription } = options;
+  const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
       enforcePermission(permissions, "write", input.file_path);
@@ -879,10 +885,12 @@ function createEditFileTool(
  */
 function createGlobTool(
   backend: AnyBackendProtocol | BackendFactory,
-  options: { customDescription: string | undefined },
-  permissions: FilesystemPermission[],
+  options: {
+    customDescription: string | undefined;
+    permissions: FilesystemPermission[];
+  },
 ) {
-  const { customDescription } = options;
+  const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
       enforcePermission(permissions, "read", input.path ?? "/");
@@ -934,10 +942,12 @@ function createGlobTool(
  */
 function createGrepTool(
   backend: AnyBackendProtocol | BackendFactory,
-  options: { customDescription: string | undefined },
-  permissions: FilesystemPermission[],
+  options: {
+    customDescription: string | undefined;
+    permissions: FilesystemPermission[];
+  },
 ) {
-  const { customDescription } = options;
+  const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
       enforcePermission(permissions, "read", input.path ?? "/");
@@ -1142,49 +1152,31 @@ export function createFilesystemMiddleware(
    */
   type FilesystemToolName = (typeof FILESYSTEM_TOOL_NAMES)[number];
   const allToolsByName = {
-    ls: createLsTool(
-      backend,
-      {
-        customDescription: customToolDescriptions?.ls,
-      },
+    ls: createLsTool(backend, {
+      customDescription: customToolDescriptions?.ls,
       permissions,
-    ),
-    read_file: createReadFileTool(
-      backend,
-      {
-        customDescription: customToolDescriptions?.read_file,
-        toolTokenLimitBeforeEvict,
-      },
+    }),
+    read_file: createReadFileTool(backend, {
+      customDescription: customToolDescriptions?.read_file,
+      toolTokenLimitBeforeEvict,
       permissions,
-    ),
-    write_file: createWriteFileTool(
-      backend,
-      {
-        customDescription: customToolDescriptions?.write_file,
-      },
+    }),
+    write_file: createWriteFileTool(backend, {
+      customDescription: customToolDescriptions?.write_file,
       permissions,
-    ),
-    edit_file: createEditFileTool(
-      backend,
-      {
-        customDescription: customToolDescriptions?.edit_file,
-      },
+    }),
+    edit_file: createEditFileTool(backend, {
+      customDescription: customToolDescriptions?.edit_file,
       permissions,
-    ),
-    glob: createGlobTool(
-      backend,
-      {
-        customDescription: customToolDescriptions?.glob,
-      },
+    }),
+    glob: createGlobTool(backend, {
+      customDescription: customToolDescriptions?.glob,
       permissions,
-    ),
-    grep: createGrepTool(
-      backend,
-      {
-        customDescription: customToolDescriptions?.grep,
-      },
+    }),
+    grep: createGrepTool(backend, {
+      customDescription: customToolDescriptions?.grep,
       permissions,
-    ),
+    }),
     execute: createExecuteTool(backend, {
       customDescription: customToolDescriptions?.execute,
     }),
