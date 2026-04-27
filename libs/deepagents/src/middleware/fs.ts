@@ -265,6 +265,11 @@ export function createContentPreview(
 import type * as _zodTypes from "@langchain/core/utils/types";
 import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
+import {
+  FilesystemOperation,
+  FilesystemPermission,
+} from "../permissions/types.js";
+import { decidePathAccess, validatePath } from "../permissions/enforce.js";
 
 /**
  * Zod schema for legacy FileDataV1 (content as line array).
@@ -361,6 +366,67 @@ const FilesystemStateSchema = new StateSchema({
     },
   ),
 });
+
+/**
+ * Throw a permission-denied error if `path` is denied under `rules`.
+ *
+ * No-op when `rules` is empty (permissive default). Paths that fail
+ * `validatePath` are silently skipped — the tool's own input validation
+ * will surface a better error.
+ *
+ * @internal
+ */
+function enforcePermission(
+  rules: FilesystemPermission[],
+  operation: FilesystemOperation,
+  path: string,
+): void {
+  if (rules.length === 0) {
+    return;
+  }
+
+  let canonical: string;
+  try {
+    canonical = validatePath(path);
+  } catch {
+    return;
+  }
+
+  if (decidePathAccess(rules, operation, canonical) === "deny") {
+    throw new Error(
+      `Error: permission denied for ${operation} on ${canonical}`,
+    );
+  }
+}
+
+/**
+ * Filter a list of filesystem entries to those the rules permit.
+ *
+ * `getPath` extracts the absolute path from each entry. Entries with
+ * unparseable paths are included (not silently dropped). Returns the
+ * original array unchanged when `rules` is empty.
+ *
+ * @internal
+ */
+function filterByPermissions<T>(
+  entries: T[],
+  rules: readonly FilesystemPermission[],
+  operation: FilesystemOperation,
+  getPath: (entry: T) => string,
+): T[] {
+  if (rules.length === 0) {
+    return entries;
+  }
+
+  return entries.filter((entry) => {
+    try {
+      const canonical = validatePath(getPath(entry));
+      return decidePathAccess(rules, operation, canonical) !== "deny";
+    } catch {
+      return true;
+    }
+  });
+}
 
 // System prompts
 const FILESYSTEM_SYSTEM_PROMPT = context`
@@ -514,10 +580,13 @@ export const EXECUTION_SYSTEM_PROMPT = context`
 function createLsTool(
   backend: AnyBackendProtocol | BackendFactory,
   options: { customDescription: string | undefined },
+  permissions: FilesystemPermission[],
 ) {
   const { customDescription } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
+      enforcePermission(permissions, "read", input.path ?? "/");
+
       const resolvedBackend = await resolveBackend(backend, runtime);
       const path = input.path || "/";
       const lsResult = await resolvedBackend.ls(path);
@@ -526,7 +595,13 @@ function createLsTool(
         return `Error listing files: ${lsResult.error}`;
       }
 
-      const infos = lsResult.files || [];
+      const infos = filterByPermissions(
+        lsResult.files ?? [],
+        permissions,
+        "read",
+        (info) => info.path,
+      );
+
       if (infos.length === 0) {
         return `No files found in ${path}`;
       }
@@ -572,10 +647,13 @@ function createReadFileTool(
     customDescription: string | undefined;
     toolTokenLimitBeforeEvict: number | null;
   },
+  permissions: FilesystemPermission[],
 ) {
   const { customDescription, toolTokenLimitBeforeEvict } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
+      enforcePermission(permissions, "read", input.file_path);
+
       const resolvedBackend = await resolveBackend(backend, runtime);
       const {
         file_path,
@@ -693,10 +771,13 @@ function createReadFileTool(
 function createWriteFileTool(
   backend: AnyBackendProtocol | BackendFactory,
   options: { customDescription: string | undefined },
+  permissions: FilesystemPermission[],
 ) {
   const { customDescription } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
+      enforcePermission(permissions, "write", input.file_path);
+
       const resolvedBackend = await resolveBackend(backend, runtime);
       const { file_path, content } = input;
       const result = await resolvedBackend.write(file_path, content);
@@ -741,10 +822,13 @@ function createWriteFileTool(
 function createEditFileTool(
   backend: AnyBackendProtocol | BackendFactory,
   options: { customDescription: string | undefined },
+  permissions: FilesystemPermission[],
 ) {
   const { customDescription } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
+      enforcePermission(permissions, "write", input.file_path);
+
       const resolvedBackend = await resolveBackend(backend, runtime);
       const { file_path, old_string, new_string, replace_all = false } = input;
       const result = await resolvedBackend.edit(
@@ -800,10 +884,13 @@ function createEditFileTool(
 function createGlobTool(
   backend: AnyBackendProtocol | BackendFactory,
   options: { customDescription: string | undefined },
+  permissions: FilesystemPermission[],
 ) {
   const { customDescription } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
+      enforcePermission(permissions, "read", input.path ?? "/");
+
       const resolvedBackend = await resolveBackend(backend, runtime);
       const { pattern, path = "/" } = input;
       const globResult = await resolvedBackend.glob(pattern, path);
@@ -812,7 +899,13 @@ function createGlobTool(
         return `Error finding files: ${globResult.error}`;
       }
 
-      const infos = globResult.files || [];
+      const infos = filterByPermissions(
+        globResult.files ?? [],
+        permissions,
+        "read",
+        (info) => info.path,
+      );
+
       if (infos.length === 0) {
         return `No files found matching pattern '${pattern}'`;
       }
@@ -846,10 +939,13 @@ function createGlobTool(
 function createGrepTool(
   backend: AnyBackendProtocol | BackendFactory,
   options: { customDescription: string | undefined },
+  permissions: FilesystemPermission[],
 ) {
   const { customDescription } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
+      enforcePermission(permissions, "read", input.path ?? "/");
+
       const resolvedBackend = await resolveBackend(backend, runtime);
       const { pattern, path = "/", glob = null } = input;
       const result = await resolvedBackend.grep(pattern, path, glob);
@@ -859,7 +955,12 @@ function createGrepTool(
         return result.error;
       }
 
-      const matches = result.matches ?? [];
+      const matches = filterByPermissions(
+        result.matches ?? [],
+        permissions,
+        "read",
+        (m) => m.path,
+      );
 
       if (matches.length === 0) {
         return `No matches found for pattern '${pattern}'`;
@@ -965,6 +1066,17 @@ export interface FilesystemMiddlewareOptions {
   toolTokenLimitBeforeEvict?: number | null;
   /** Optional token limit before evicting a HumanMessage to the filesystem (default: 50000 tokens, ~200KB) */
   humanMessageTokenLimitBeforeEvict?: number | null;
+  /**
+   * Filesystem permission rules enforced on every tool call.
+   *
+   * Rules are evaluated in declaration order; first match wins; permissive
+   * default. Applies to `ls`, `read_file`, `write_file`, `edit_file`,
+   * `glob`, and `grep`. The `execute` tool is intentionally excluded —
+   * `execute` is intentionally excluded.
+   *
+   * When omitted or empty, all filesystem operations are permitted.
+   */
+  permissions?: FilesystemPermission[];
 }
 
 /**
@@ -979,6 +1091,7 @@ export function createFilesystemMiddleware(
     customToolDescriptions = null,
     toolTokenLimitBeforeEvict = 20000,
     humanMessageTokenLimitBeforeEvict = 50000,
+    permissions = [],
   } = options;
 
   const baseSystemPrompt = customSystemPrompt || FILESYSTEM_SYSTEM_PROMPT;
@@ -989,25 +1102,49 @@ export function createFilesystemMiddleware(
    */
   type FilesystemToolName = (typeof FILESYSTEM_TOOL_NAMES)[number];
   const allToolsByName = {
-    ls: createLsTool(backend, {
-      customDescription: customToolDescriptions?.ls,
-    }),
-    read_file: createReadFileTool(backend, {
-      customDescription: customToolDescriptions?.read_file,
-      toolTokenLimitBeforeEvict,
-    }),
-    write_file: createWriteFileTool(backend, {
-      customDescription: customToolDescriptions?.write_file,
-    }),
-    edit_file: createEditFileTool(backend, {
-      customDescription: customToolDescriptions?.edit_file,
-    }),
-    glob: createGlobTool(backend, {
-      customDescription: customToolDescriptions?.glob,
-    }),
-    grep: createGrepTool(backend, {
-      customDescription: customToolDescriptions?.grep,
-    }),
+    ls: createLsTool(
+      backend,
+      {
+        customDescription: customToolDescriptions?.ls,
+      },
+      permissions,
+    ),
+    read_file: createReadFileTool(
+      backend,
+      {
+        customDescription: customToolDescriptions?.read_file,
+        toolTokenLimitBeforeEvict,
+      },
+      permissions,
+    ),
+    write_file: createWriteFileTool(
+      backend,
+      {
+        customDescription: customToolDescriptions?.write_file,
+      },
+      permissions,
+    ),
+    edit_file: createEditFileTool(
+      backend,
+      {
+        customDescription: customToolDescriptions?.edit_file,
+      },
+      permissions,
+    ),
+    glob: createGlobTool(
+      backend,
+      {
+        customDescription: customToolDescriptions?.glob,
+      },
+      permissions,
+    ),
+    grep: createGrepTool(
+      backend,
+      {
+        customDescription: customToolDescriptions?.grep,
+      },
+      permissions,
+    ),
     execute: createExecuteTool(backend, {
       customDescription: customToolDescriptions?.execute,
     }),
