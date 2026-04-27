@@ -21,6 +21,7 @@ import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
 import type { FilesystemPermission } from "../permissions/types.js";
+import { FS_PERMISSIONS_RUNTIME_KEY } from "../permissions/runtime.js";
 
 export type { AgentMiddleware };
 
@@ -532,7 +533,7 @@ function getSubagents(options: {
       if (interruptOn)
         middleware.push(humanInTheLoopMiddleware({ interruptOn }));
 
-      agents[agentParams.name] = createAgent({
+      const compiled = createAgent({
         model: agentParams.model ?? defaultModel,
         systemPrompt: agentParams.systemPrompt,
         tools: agentParams.tools ?? defaultTools,
@@ -542,6 +543,34 @@ function getSubagents(options: {
           responseFormat: agentParams.responseFormat,
         }),
       });
+
+      if (agentParams.permissions && agentParams.permissions.length > 0) {
+        const rules = [...agentParams.permissions];
+        const patchConfig = (cfg: any) => ({
+          ...cfg,
+          configurable: {
+            ...cfg?.configurable,
+            [FS_PERMISSIONS_RUNTIME_KEY]: rules,
+          },
+        });
+        // Proxy so subagent rules land after parent's spread, overriding them.
+        // All other Runnable methods delegate transparently to compiled.
+        agents[agentParams.name] = new Proxy(compiled, {
+          get(target, prop) {
+            if (prop === "invoke") {
+              return (input: any, cfg?: any) =>
+                target.invoke(input, patchConfig(cfg));
+            }
+            if (prop === "stream") {
+              return (input: any, cfg?: any) =>
+                target.stream(input, patchConfig(cfg));
+            }
+            return (target as any)[prop];
+          },
+        }) as ReactAgent;
+      } else {
+        agents[agentParams.name] = compiled;
+      }
     }
   }
 

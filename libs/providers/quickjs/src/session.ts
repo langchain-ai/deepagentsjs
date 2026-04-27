@@ -31,6 +31,7 @@ import type {
 import type { AnyBackendProtocol, BackendProtocolV2 } from "deepagents";
 import { adaptBackendProtocol } from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
+import type { RunnableConfig } from "@langchain/core/runnables";
 
 import type { ReplSessionOptions, ReplResult } from "./types.js";
 import { toCamelCase } from "./utils.js";
@@ -82,6 +83,7 @@ export class ReplSession {
   private context: QuickJSAsyncContext | null = null;
   private logs: string[] = [];
   private _options: ReplSessionOptions;
+  private _evalConfig: RunnableConfig | undefined = undefined;
 
   private _backend: BackendProtocolV2 | null = null;
 
@@ -168,7 +170,12 @@ export class ReplSession {
    * persistence, auto-returns the last expression, and wraps in an
    * async IIFE.
    */
-  async eval(code: string, timeoutMs: number): Promise<ReplResult> {
+  async eval(
+    code: string,
+    timeoutMs: number,
+    config?: RunnableConfig,
+  ): Promise<ReplResult> {
+    this._evalConfig = config;
     await this.ensureStarted();
     const runtime = this.runtime!;
     const context = this.context!;
@@ -406,7 +413,7 @@ export class ReplSession {
             try {
               const rawInput =
                 typeof input === "object" && input !== null ? input : {};
-              const result = await t.invoke(rawInput);
+              const result = await t.invoke(rawInput, this._evalConfig);
               const val = context.newString(
                 typeof result === "string" ? result : JSON.stringify(result),
               );

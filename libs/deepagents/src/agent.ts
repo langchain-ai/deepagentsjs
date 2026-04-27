@@ -30,7 +30,7 @@ import { StateBackend } from "./backends/index.js";
 import { ConfigurationError } from "./errors.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
-import { createFilesystemPermissionsMiddleware } from "./middleware/fs_permissions.js";
+import { FS_PERMISSIONS_RUNTIME_KEY } from "./permissions/runtime.js";
 import {
   GENERAL_PURPOSE_SUBAGENT,
   type CompiledSubAgent,
@@ -233,19 +233,6 @@ export function createDeepAgent<
       ...(input.middleware ?? []),
       // Adds Anthropic cache controls when supported by the model.
       ...cacheMiddleware,
-      // Threads filesystem permission rules into runtime config.
-      // Subagent's own permissions replace parent's; parent's are inherited when not set.
-      ...(() => {
-        const effectivePermissions = input.permissions ?? permissions;
-        return effectivePermissions !== undefined &&
-          effectivePermissions.length > 0
-          ? [
-              createFilesystemPermissionsMiddleware({
-                rules: [...effectivePermissions],
-              }),
-            ]
-          : [];
-      })(),
     ];
     return {
       ...input,
@@ -353,10 +340,6 @@ export function createDeepAgent<
       : []),
     // Optional human-in-the-loop tool interrupts.
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
-    // Threads filesystem permission rules into runtime config when configured.
-    ...(permissions !== undefined && permissions.length > 0
-      ? [createFilesystemPermissionsMiddleware({ rules: [...permissions] })]
-      : []),
   ];
 
   // Combine system prompt parameter with BASE_AGENT_PROMPT
@@ -395,6 +378,11 @@ export function createDeepAgent<
       ls_integration: "deepagents",
       lc_agent_name: name,
     },
+    // Thread permission rules into configurable so they reach every tool invocation,
+    // including PTC calls inside js_eval, without requiring changes to session.ts.
+    ...(permissions !== undefined && permissions.length > 0
+      ? { configurable: { [FS_PERMISSIONS_RUNTIME_KEY]: [...permissions] } }
+      : {}),
   });
 
   /**
