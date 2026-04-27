@@ -174,6 +174,8 @@ export function createQuickJSMiddleware(
   const usePtc = ptc !== false;
   const baseSystemPrompt = customSystemPrompt || REPL_SYSTEM_PROMPT;
 
+  const middlewareId = crypto.randomUUID();
+
   let cachedPtcPrompt: string | null = null;
 
   let ptcTools: StructuredToolInterface[] = [];
@@ -211,6 +213,7 @@ export function createQuickJSMiddleware(
   const jsEvalTool = tool(
     async (input, config: LangGraphRunnableConfig) => {
       const threadId = config.configurable?.thread_id || DEFAULT_SESSION_ID;
+      const sessionKey = `${threadId}:${middlewareId}`;
 
       const runtime: BackendRuntime = {
         ...config,
@@ -218,7 +221,7 @@ export function createQuickJSMiddleware(
       } as BackendRuntime;
       const resolvedBackend = await resolveBackend(backend, runtime);
 
-      const session = ReplSession.getOrCreate(threadId, {
+      const session = ReplSession.getOrCreate(sessionKey, {
         memoryLimitBytes,
         maxStackSizeBytes,
         backend: resolvedBackend,
