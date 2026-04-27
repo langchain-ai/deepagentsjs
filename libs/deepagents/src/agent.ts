@@ -176,6 +176,7 @@ export function createDeepAgent<
     name,
     memory,
     skills,
+    permissions = [],
   } = params;
 
   const collidingTools = tools
@@ -216,7 +217,7 @@ export function createDeepAgent<
       // Provides todo list management capabilities for tracking tasks.
       todoListMiddleware(),
       // Enables filesystem operations and optional long-term memory storage.
-      createFilesystemMiddleware({ backend }),
+      createFilesystemMiddleware({ backend, permissions }),
       // Automatically summarizes conversation history when token limits are approached.
       // Uses createSummarizationMiddleware (deepagents version) with backend support
       // and auto-computed defaults from model profile.
@@ -282,7 +283,7 @@ export function createDeepAgent<
     // Provides todo list management capabilities for tracking tasks.
     todoListMiddleware(),
     // Enables filesystem operations and optional long-term memory storage.
-    createFilesystemMiddleware({ backend }),
+    createFilesystemMiddleware({ backend, permissions }),
     // Enables delegation to specialized subagents for complex tasks.
     createSubAgentMiddleware({
       defaultModel: model,

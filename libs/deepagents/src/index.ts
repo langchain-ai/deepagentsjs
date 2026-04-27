@@ -37,6 +37,14 @@ export {
   type SettingsOptions,
 } from "./config.js";
 
+// Export permissions
+export {
+  FilesystemPermission,
+  type FilesystemPermissionOptions,
+  type FilesystemOperation,
+  type PermissionMode,
+} from "./permissions/index.js";
+
 // Export middleware (matches Python's interface)
 export {
   createFilesystemMiddleware,
