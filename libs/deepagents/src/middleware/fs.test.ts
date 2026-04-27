@@ -818,6 +818,66 @@ describe("createFilesystemMiddleware", () => {
       expect(parsed.content).toBe("");
     });
 
+    it("filesystem tool schemas should expose precise argument descriptions", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+      });
+
+      const descriptionsByTool = Object.fromEntries(
+        middleware.tools!.map((t: any) => {
+          const properties = t.schema.toJSONSchema().properties ?? {};
+          const descriptions = Object.fromEntries(
+            Object.entries(properties).map(([argName, argSchema]) => [
+              argName,
+              (argSchema as any).description,
+            ]),
+          );
+          return [t.name, descriptions];
+        }),
+      ) as Record<string, Record<string, string>>;
+
+      expect(descriptionsByTool.ls.path).toBe(
+        "Absolute path to the directory to list. Must be absolute, not relative.",
+      );
+      expect(descriptionsByTool.read_file).toMatchObject({
+        file_path:
+          "Absolute path to the file to read. Must be absolute, not relative.",
+        offset:
+          "Line number to start reading from (0-indexed). Use for pagination of large files.",
+        limit:
+          "Maximum number of lines to read. Use for pagination of large files.",
+      });
+      expect(descriptionsByTool.write_file).toMatchObject({
+        file_path:
+          "Absolute path where the file should be created. Must be absolute, not relative.",
+        content:
+          "The text content to write to the file. This parameter is required.",
+      });
+      expect(descriptionsByTool.edit_file).toMatchObject({
+        file_path:
+          "Absolute path to the file to edit. Must be absolute, not relative.",
+        old_string:
+          "The exact text to find and replace. Must be unique in the file unless replace_all is true.",
+        new_string:
+          "The text to replace old_string with. Must be different from old_string.",
+        replace_all:
+          "If true, replace all occurrences of old_string. If false (default), old_string must be unique.",
+      });
+      expect(descriptionsByTool.glob).toMatchObject({
+        pattern:
+          "Glob pattern to match files (e.g., '**/*.py', '*.txt', '/subdir/**/*.md').",
+        path: "Base directory to search from. Defaults to root '/'.",
+      });
+      expect(descriptionsByTool.grep).toMatchObject({
+        pattern: "Text pattern to search for (literal string, not regex).",
+        path: "Base directory to search from. Defaults to root '/'.",
+        glob: "Glob pattern to filter which files to search (e.g., '*.py').",
+      });
+      expect(descriptionsByTool.grep.pattern).not.toBe(
+        "Regex pattern to search for",
+      );
+    });
+
     it("all tool schema properties should be included in the required array", () => {
       const middleware = createFilesystemMiddleware({
         backend: () => createMockBackend(),
