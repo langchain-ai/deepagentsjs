@@ -270,6 +270,7 @@ import {
   FilesystemPermission,
 } from "../permissions/types.js";
 import { decidePathAccess, validatePath } from "../permissions/enforce.js";
+import { CompositeBackend } from "../backends/composite.js";
 
 /**
  * Zod schema for legacy FileDataV1 (content as line array).
@@ -1071,12 +1072,41 @@ export interface FilesystemMiddlewareOptions {
    *
    * Rules are evaluated in declaration order; first match wins; permissive
    * default. Applies to `ls`, `read_file`, `write_file`, `edit_file`,
-   * `glob`, and `grep`. The `execute` tool is intentionally excluded —
-   * `execute` is intentionally excluded.
+   * `glob`, and `grep`.
+   *
+   * **Note on `execute`**: permissions are not enforced on `execute` because
+   * shell commands can access any path regardless of path-based rules. Using
+   * permissions with an execution-capable backend (one where `isSandboxBackend`
+   * returns `true`) throws a `ConfigurationError` unless the backend is a
+   * `CompositeBackend` and every permission path is scoped to a route prefix.
    *
    * When omitted or empty, all filesystem operations are permitted.
    */
   permissions?: FilesystemPermission[];
+}
+
+/**
+ * Returns true only when backend exposes route prefixes (CompositeBackend) and
+ * every permission path is scoped under one of them.
+ */
+function allPathsScopedToRoutes(
+  permissions: FilesystemPermission[],
+  backend: AnyBackendProtocol,
+): boolean {
+  if (!CompositeBackend.isCompositeBackend(backend)) {
+    return false;
+  }
+
+  const prefixes = backend.routePrefixes;
+  if (prefixes.length === 0) {
+    return false;
+  }
+
+  return permissions.every((rule) =>
+    rule.paths.every((path) =>
+      prefixes.some((prefix) => path.startsWith(prefix)),
+    ),
+  );
 }
 
 /**
@@ -1093,6 +1123,21 @@ export function createFilesystemMiddleware(
     humanMessageTokenLimitBeforeEvict = 50000,
     permissions = [],
   } = options;
+
+  if (
+    permissions.length > 0 &&
+    typeof backend !== "function" &&
+    isSandboxBackend(backend) &&
+    !allPathsScopedToRoutes(permissions, backend)
+  ) {
+    throw new Error(
+      "Filesystem permissions cannot be used with a backend that supports command " +
+        "execution. Shell commands can access any path, making path-based rules " +
+        "ineffective. Either remove permissions, use a backend without execution " +
+        "support, or use a CompositeBackend with all permission paths scoped to a " +
+        "route prefix.",
+    );
+  }
 
   const baseSystemPrompt = customSystemPrompt || FILESYSTEM_SYSTEM_PROMPT;
 

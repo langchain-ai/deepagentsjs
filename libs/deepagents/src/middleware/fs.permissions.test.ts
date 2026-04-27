@@ -310,24 +310,80 @@ describe("fs tool permissions", () => {
     });
   });
 
-  describe("execute", () => {
-    it("is not affected by permissions", async () => {
-      const backend = {
+  describe("sandbox backend guard", () => {
+    function createSandboxBackend(): BackendProtocolV2 {
+      return {
         ...createMockBackend(),
-        id: "sandbox",
+        id: "sandbox-1",
         execute: vi
           .fn()
           .mockResolvedValue({ output: "ok", exitCode: 0, truncated: false }),
       } as unknown as BackendProtocolV2;
-      const middleware = createFilesystemMiddleware({
-        backend,
-        permissions: [deny(["/**"])],
-      });
+    }
 
-      const result = await getTool(middleware, "execute").invoke({
-        command: "echo hi",
-      });
-      expect(result).toContain("ok");
+    it("throws when permissions are used with a sandbox backend", () => {
+      expect(() =>
+        createFilesystemMiddleware({
+          backend: createSandboxBackend(),
+          permissions: [deny(["/secrets/**"])],
+        }),
+      ).toThrow(
+        /permissions cannot be used with a backend that supports command execution/i,
+      );
+    });
+
+    it("does not throw when permissions is empty with a sandbox backend", () => {
+      expect(() =>
+        createFilesystemMiddleware({ backend: createSandboxBackend() }),
+      ).not.toThrow();
+    });
+
+    it("does not throw when permissions are used with a non-sandbox backend", () => {
+      expect(() =>
+        createFilesystemMiddleware({
+          backend: createMockBackend(),
+          permissions: [deny(["/secrets/**"])],
+        }),
+      ).not.toThrow();
+    });
+
+    it("does not throw when backend is a factory function", () => {
+      expect(() =>
+        createFilesystemMiddleware({
+          backend: () => createSandboxBackend() as any,
+          permissions: [deny(["/secrets/**"])],
+        }),
+      ).not.toThrow();
+    });
+
+    it("does not throw when all permission paths are scoped to CompositeBackend routes", () => {
+      const compositeWithSandbox = {
+        ...createSandboxBackend(),
+        routePrefixes: ["/workspace/"],
+      } as unknown as BackendProtocolV2;
+
+      expect(() =>
+        createFilesystemMiddleware({
+          backend: compositeWithSandbox,
+          permissions: [deny(["/workspace/**"])],
+        }),
+      ).not.toThrow();
+    });
+
+    it("throws when some permission paths are not scoped to CompositeBackend routes", () => {
+      const compositeWithSandbox = {
+        ...createSandboxBackend(),
+        routePrefixes: ["/workspace/"],
+      } as unknown as BackendProtocolV2;
+
+      expect(() =>
+        createFilesystemMiddleware({
+          backend: compositeWithSandbox,
+          permissions: [deny(["/**"])],
+        }),
+      ).toThrow(
+        /permissions cannot be used with a backend that supports command execution/i,
+      );
     });
   });
 });

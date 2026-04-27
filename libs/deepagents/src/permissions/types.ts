@@ -63,11 +63,9 @@ export class FilesystemPermission {
   readonly paths: string[];
   readonly mode: PermissionMode;
 
-  constructor({
-    operations,
-    paths,
-    mode = "allow",
-  }: FilesystemPermissionOptions) {
+  constructor(options: FilesystemPermissionOptions) {
+    const { operations, paths, mode = "allow" } = options;
+
     this.operations = operations;
     this.paths = paths;
     this.mode = mode;
