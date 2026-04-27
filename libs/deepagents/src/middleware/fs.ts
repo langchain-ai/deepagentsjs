@@ -403,7 +403,7 @@ function enforcePermission(
  * Filter a list of filesystem entries to those the rules permit.
  *
  * `getPath` extracts the absolute path from each entry. Entries with
- * unparseable paths are included (not silently dropped). Returns the
+ * unparsable paths are included (not silently dropped). Returns the
  * original array unchanged when `rules` is empty.
  *
  * @internal
