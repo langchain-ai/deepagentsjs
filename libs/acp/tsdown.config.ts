@@ -1,7 +1,8 @@
 import { defineConfig } from "tsdown";
 
-// Mark all node_modules as external since this is a library
-const external = [/^[^./]/];
+// Mark only npm packages as external, excluding relative and absolute (Windows/Unix) paths
+const external = (id: string) =>
+  !id.startsWith(".") && !id.startsWith("/") && !/^[A-Za-z]:[\\/]/.test(id);
 
 export default defineConfig([
   // Library builds (ESM + CJS)

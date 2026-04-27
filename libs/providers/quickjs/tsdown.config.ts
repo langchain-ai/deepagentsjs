@@ -1,6 +1,8 @@
 import { defineConfig } from "tsdown";
 
-const external = [/^[^./]/];
+// Mark only npm packages as external, excluding relative and absolute (Windows/Unix) paths
+const external = (id: string) =>
+  !id.startsWith(".") && !id.startsWith("/") && !/^[A-Za-z]:[\\/]/.test(id);
 
 export default defineConfig([
   {
