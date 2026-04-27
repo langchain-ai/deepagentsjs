@@ -56,6 +56,23 @@ describe("fs tool permissions", () => {
     });
   });
 
+  describe("relative path bypass prevention", () => {
+    it("rejects a relative path instead of bypassing permissions", async () => {
+      const backend = createMockBackend();
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [denyRead(["/secrets/**"])],
+      });
+
+      await expect(
+        getTool(middleware, "read_file").invoke({
+          file_path: "secrets/key.txt",
+        }),
+      ).rejects.toThrow(/path must be absolute/i);
+      expect(backend.read).not.toHaveBeenCalled();
+    });
+  });
+
   describe("read_file", () => {
     it("throws on a denied path", async () => {
       const middleware = createFilesystemMiddleware({

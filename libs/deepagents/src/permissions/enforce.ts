@@ -13,9 +13,6 @@ import type {
  * - Non-absolute paths (must start with `/`)
  * - Paths containing `..`
  * - Paths containing `~`
- *
- * Callers should catch and skip the permission check on failure —
- * the tool's own input validation will surface a better error.
  */
 export function validatePath(raw: string): string {
   if (typeof raw !== "string" || raw.length === 0) {

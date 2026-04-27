@@ -386,12 +386,7 @@ function enforcePermission(
     return;
   }
 
-  let canonical: string;
-  try {
-    canonical = validatePath(path);
-  } catch {
-    return;
-  }
+  const canonical = validatePath(path);
 
   if (decidePathAccess(rules, operation, canonical) === "deny") {
     throw new Error(
