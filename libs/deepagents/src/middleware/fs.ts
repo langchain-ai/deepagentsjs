@@ -38,6 +38,7 @@ import {
   isTextMimeType,
   MAX_LINE_LENGTH,
 } from "../backends/utils.js";
+import { FilesystemPolicy } from "../permissions/filesystem_policy.js";
 
 const INT_FORMATTER = new Intl.NumberFormat("en-US");
 
@@ -112,6 +113,41 @@ export const DEFAULT_READ_LINE_LIMIT = 100;
  * This keeps inline multimodal payloads within all major provider limits.
  */
 export const MAX_BINARY_READ_SIZE_BYTES = 10 * 1024 * 1024;
+
+// ---------------------------------------------------------------------------
+// Filesystem policies — attached to each tool so permissions are enforced
+// regardless of whether the call originates from the agent or PTC.
+// ---------------------------------------------------------------------------
+
+const lsPolicy = new FilesystemPolicy<{ path?: string }, unknown>({
+  operation: "read",
+  paths: (a) => (a.path === undefined ? [] : [a.path]),
+});
+
+const readFilePolicy = new FilesystemPolicy<{ file_path: string }, unknown>({
+  operation: "read",
+  paths: (a) => [a.file_path],
+});
+
+const writeFilePolicy = new FilesystemPolicy<{ file_path: string }, unknown>({
+  operation: "write",
+  paths: (a) => [a.file_path],
+});
+
+const editFilePolicy = new FilesystemPolicy<{ file_path: string }, unknown>({
+  operation: "write",
+  paths: (a) => [a.file_path],
+});
+
+const globPolicy = new FilesystemPolicy<{ path?: string }, unknown>({
+  operation: "read",
+  paths: (a) => (a.path === undefined ? [] : [a.path]),
+});
+
+const grepPolicy = new FilesystemPolicy<{ path?: string }, unknown>({
+  operation: "read",
+  paths: (a) => (a.path === undefined ? [] : [a.path]),
+});
 
 /**
  * Template for truncation message in read_file.
@@ -559,6 +595,7 @@ function createLsTool(
           .default("/")
           .describe("Directory path to list (default: /)"),
       }),
+      policies: [lsPolicy],
     },
   );
 }
@@ -683,6 +720,7 @@ function createReadFileTool(
           .default(DEFAULT_READ_LINE_LIMIT)
           .describe("Maximum number of lines to read"),
       }),
+      policies: [readFilePolicy],
     },
   );
 }
@@ -731,6 +769,7 @@ function createWriteFileTool(
           .default("")
           .describe("Content to write to the file"),
       }),
+      policies: [writeFilePolicy],
     },
   );
 }
@@ -790,6 +829,7 @@ function createEditFileTool(
           .default(false)
           .describe("Whether to replace all occurrences"),
       }),
+      policies: [editFilePolicy],
     },
   );
 }
@@ -836,6 +876,7 @@ function createGlobTool(
           .default("/")
           .describe("Base path to search from (default: /)"),
       }),
+      policies: [globPolicy],
     },
   );
 }
@@ -900,6 +941,7 @@ function createGrepTool(
           .default(null)
           .describe("Optional glob pattern to filter files (e.g., '*.py')"),
       }),
+      policies: [grepPolicy],
     },
   );
 }

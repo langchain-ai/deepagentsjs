@@ -27,6 +27,7 @@ import type { AsyncSubAgent, SubAgent } from "./middleware/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type { AnnotationRoot } from "@langchain/langgraph";
 import type { CompiledSubAgent } from "./middleware/subagents.js";
+import type { FilesystemPermission } from "./permissions/types.js";
 
 // LangChain uses AnyAnnotationRoot internally but doesn't export it
 // We use AnnotationRoot<any> as a compatible equivalent
@@ -436,4 +437,22 @@ export interface CreateDeepAgentParams<
    * ```
    */
   skills?: string[];
+  /**
+   * Filesystem permission rules applied to all built-in fs tools and PTC tool calls.
+   *
+   * Rules are evaluated in declaration order; the first rule whose operation and path
+   * glob match determines the outcome. If no rule matches, access is allowed
+   * (permissive default). Subagents inherit these rules unless they specify their own
+   * `permissions`, which replace (not merge with) the parent's.
+   *
+   * @example
+   * ```ts
+   * const agent = createDeepAgent({
+   *   permissions: [
+   *     new FilesystemPermission({ operations: ["write"], paths: ["/secrets/**"], mode: "deny" }),
+   *   ],
+   * });
+   * ```
+   */
+  permissions?: FilesystemPermission[];
 }

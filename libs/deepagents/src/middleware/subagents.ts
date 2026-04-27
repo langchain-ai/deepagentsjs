@@ -20,6 +20,7 @@ import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
+import type { FilesystemPermission } from "../permissions/types.js";
 
 export type { AgentMiddleware };
 
@@ -307,6 +308,16 @@ export interface SubAgent {
    * ```
    */
   skills?: string[];
+
+  /**
+   * Filesystem permission rules for this subagent.
+   *
+   * When specified, these rules **replace** (not merge with) the parent agent's
+   * `permissions`. When omitted, the subagent inherits the parent's permissions.
+   *
+   * Rules are evaluated in declaration order; first match wins; permissive default.
+   */
+  permissions?: FilesystemPermission[];
 
   /**
    * Structured output response format for the subagent.

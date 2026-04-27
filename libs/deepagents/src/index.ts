@@ -6,6 +6,12 @@
  */
 
 export { createDeepAgent } from "./agent.js";
+export {
+  FilesystemPermission,
+  type FilesystemPermissionOptions,
+  type FilesystemOperation,
+  type PermissionMode,
+} from "./permissions/types.js";
 export { ConfigurationError, type ConfigurationErrorCode } from "./errors.js";
 export type {
   AnySubAgent,
