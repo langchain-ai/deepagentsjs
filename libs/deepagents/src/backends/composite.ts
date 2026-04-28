@@ -76,7 +76,8 @@ export class CompositeBackend implements BackendProtocolV2 {
    * Uses duck-typing on `routePrefixes` so it works across module boundaries
    * where `instanceof` may fail.
    */
-  static isCompositeBackend(backend: unknown): backend is CompositeBackend {
+  static isInstance(backend: unknown): backend is CompositeBackend {
+    return typeof backend === "object" && object !== null && Array.isArray(backend.routePrefixes)
     return Array.isArray(
       (backend as unknown as CompositeBackend).routePrefixes,
     );
