@@ -21,11 +21,11 @@ const GraphState = Annotation.Root({
 });
 
 function makeGraph(node: () => Promise<{ result: string }>) {
-  const builder = new StateGraph(GraphState);
-  builder.addNode("test", node);
-  builder.addEdge(START, "test");
-  builder.addEdge("test", END);
-  return builder.compile({ checkpointer: new MemorySaver() });
+  return new StateGraph(GraphState)
+    .addNode("test", node)
+    .addEdge(START, "test")
+    .addEdge("test", END)
+    .compile({ checkpointer: new MemorySaver() });
 }
 
 describe("StateBackend integration (real LangGraph graph)", () => {
@@ -61,25 +61,21 @@ describe("StateBackend integration (real LangGraph graph)", () => {
   });
 
   it("write in node N is visible in node N+1 via committed state", async () => {
-    const builder = new StateGraph(GraphState);
-
-    builder.addNode("write", async () => {
-      const backend = new StateBackend();
-      backend.write("/cross.txt", "persisted");
-      return {};
-    });
-
-    builder.addNode("read", async () => {
-      const backend = new StateBackend();
-      const read = backend.read("/cross.txt");
-      return { result: read.error ?? String(read.content) };
-    });
-
-    builder.addEdge(START, "write");
-    builder.addEdge("write", "read");
-    builder.addEdge("read", END);
-
-    const graph = builder.compile({ checkpointer: new MemorySaver() });
+    const graph = new StateGraph(GraphState)
+      .addNode("write", async () => {
+        const backend = new StateBackend();
+        backend.write("/cross.txt", "persisted");
+        return {};
+      })
+      .addNode("read", async () => {
+        const backend = new StateBackend();
+        const read = backend.read("/cross.txt");
+        return { result: read.error ?? String(read.content) };
+      })
+      .addEdge(START, "write")
+      .addEdge("write", "read")
+      .addEdge("read", END)
+      .compile({ checkpointer: new MemorySaver() });
     const result = await graph.invoke(
       {},
       { configurable: { thread_id: crypto.randomUUID() } },
