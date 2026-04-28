@@ -470,5 +470,22 @@ describe("fs tool permissions", () => {
         /permissions cannot be used with a backend that supports command execution/i,
       );
     });
+
+    it("throws when a permission path shares a prefix with but is outside a route (no trailing slash confusion)", () => {
+      const compositeWithSandbox = {
+        ...createSandboxBackend(),
+        routePrefixes: ["/workspace"],
+      } as unknown as BackendProtocolV2;
+
+      // "/workspace2/**" starts with "/workspace" but is not inside the route
+      expect(() =>
+        createFilesystemMiddleware({
+          backend: compositeWithSandbox,
+          permissions: [deny(["/workspace2/**"])],
+        }),
+      ).toThrow(
+        /permissions cannot be used with a backend that supports command execution/i,
+      );
+    });
   });
 });

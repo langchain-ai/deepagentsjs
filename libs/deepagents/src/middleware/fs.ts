@@ -1130,7 +1130,9 @@ function allPathsScopedToRoutes(
 
   return permissions.every((rule) =>
     rule.paths.every((path) =>
-      prefixes.some((prefix) => path.startsWith(prefix)),
+      prefixes.some((prefix) =>
+        path.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`),
+      ),
     ),
   );
 }
