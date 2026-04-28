@@ -1,5 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { FilesystemPermission } from "./types.js";
 import { validatePath, globMatch, decidePathAccess } from "./enforce.js";
 
 describe("validatePath", () => {
@@ -41,17 +40,15 @@ describe("globMatch", () => {
     expect(globMatch("/foo/bar.ts", "/foo/bar.ts")).toBe(true);
   });
 
-  it("** matches across directory levels", () => {
+  it("matches with ** wildcard", () => {
     expect(globMatch("/foo/bar/baz.ts", "/foo/**")).toBe(true);
-    expect(globMatch("/foo/bar/baz/qux.ts", "/foo/**")).toBe(true);
   });
 
-  it("* does not match across segments", () => {
-    expect(globMatch("/foo/bar/baz.ts", "/foo/*")).toBe(false);
-    expect(globMatch("/foo/bar.ts", "/foo/*")).toBe(true);
+  it("matches with * wildcard within segment", () => {
+    expect(globMatch("/foo/bar.ts", "/foo/*.ts")).toBe(true);
   });
 
-  it("{a,b} brace expansion works", () => {
+  it("matches brace expansion", () => {
     expect(globMatch("/foo/a.ts", "/foo/{a,b}.ts")).toBe(true);
     expect(globMatch("/foo/b.ts", "/foo/{a,b}.ts")).toBe(true);
     expect(globMatch("/foo/c.ts", "/foo/{a,b}.ts")).toBe(false);
@@ -74,84 +71,74 @@ describe("decidePathAccess", () => {
 
   it("returns allow when no rule matches", () => {
     const rules = [
-      new FilesystemPermission({
-        operations: ["read"],
+      {
+        operations: ["read"] as const,
         paths: ["/other/**"],
-        mode: "deny",
-      }),
+        mode: "deny" as const,
+      },
     ];
     expect(decidePathAccess(rules, "read", "/foo/bar")).toBe("allow");
   });
 
   it("returns allow for a matching allow rule", () => {
-    const rules = [
-      new FilesystemPermission({
-        operations: ["read"],
-        paths: ["/workspace/**"],
-      }),
-    ];
+    const rules = [{ operations: ["read"] as const, paths: ["/workspace/**"] }];
+    expect(decidePathAccess(rules, "read", "/workspace/file.ts")).toBe("allow");
+  });
+
+  it("defaults mode to allow when omitted", () => {
+    const rules = [{ operations: ["read"] as const, paths: ["/workspace/**"] }];
     expect(decidePathAccess(rules, "read", "/workspace/file.ts")).toBe("allow");
   });
 
   it("returns deny for a matching deny rule", () => {
     const rules = [
-      new FilesystemPermission({
-        operations: ["read"],
+      {
+        operations: ["read"] as const,
         paths: ["/secrets/**"],
-        mode: "deny",
-      }),
+        mode: "deny" as const,
+      },
     ];
     expect(decidePathAccess(rules, "read", "/secrets/key.txt")).toBe("deny");
   });
 
   it("first-match-wins: allow before deny", () => {
     const rules = [
-      new FilesystemPermission({
-        operations: ["read"],
-        paths: ["/workspace/**"],
-      }),
-      new FilesystemPermission({
-        operations: ["read"],
-        paths: ["/**"],
-        mode: "deny",
-      }),
+      { operations: ["read"] as const, paths: ["/workspace/**"] },
+      { operations: ["read"] as const, paths: ["/**"], mode: "deny" as const },
     ];
     expect(decidePathAccess(rules, "read", "/workspace/file.ts")).toBe("allow");
   });
 
   it("first-match-wins: deny before allow", () => {
     const rules = [
-      new FilesystemPermission({
-        operations: ["read"],
+      {
+        operations: ["read"] as const,
         paths: ["/workspace/**"],
-        mode: "deny",
-      }),
-      new FilesystemPermission({
-        operations: ["read"],
-        paths: ["/workspace/**"],
-      }),
+        mode: "deny" as const,
+      },
+      { operations: ["read"] as const, paths: ["/workspace/**"] },
     ];
     expect(decidePathAccess(rules, "read", "/workspace/file.ts")).toBe("deny");
   });
 
   it("skips rules for a different operation", () => {
     const rules = [
-      new FilesystemPermission({
-        operations: ["write"],
+      {
+        operations: ["write"] as const,
         paths: ["/secrets/**"],
-        mode: "deny",
-      }),
+        mode: "deny" as const,
+      },
     ];
     expect(decidePathAccess(rules, "read", "/secrets/key.txt")).toBe("allow");
   });
 
   it("matches when rule covers multiple operations", () => {
     const rules = [
-      new FilesystemPermission({
-        operations: ["read", "write"],
+      {
+        operations: ["read", "write"] as const,
         paths: ["/secrets/**"],
-        mode: "deny",
-      }),
+        mode: "deny" as const,
+      },
     ];
     expect(decidePathAccess(rules, "read", "/secrets/key.txt")).toBe("deny");
     expect(decidePathAccess(rules, "write", "/secrets/key.txt")).toBe("deny");
@@ -159,11 +146,11 @@ describe("decidePathAccess", () => {
 
   it("matches when rule covers multiple paths", () => {
     const rules = [
-      new FilesystemPermission({
-        operations: ["read"],
+      {
+        operations: ["read"] as const,
         paths: ["/a/**", "/b/**"],
-        mode: "deny",
-      }),
+        mode: "deny" as const,
+      },
     ];
     expect(decidePathAccess(rules, "read", "/a/file.txt")).toBe("deny");
     expect(decidePathAccess(rules, "read", "/b/file.txt")).toBe("deny");

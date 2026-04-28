@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
 import { createFilesystemMiddleware } from "./fs.js";
-import { FilesystemPermission } from "../permissions/types.js";
 import type { BackendProtocolV2 } from "../backends/protocol.js";
 
 function createMockBackend(): BackendProtocolV2 {
@@ -27,18 +26,23 @@ function getTool(
   return tool;
 }
 
-const deny = (paths: string[]) =>
-  new FilesystemPermission({
-    operations: ["read", "write"],
-    paths,
-    mode: "deny",
-  });
+const deny = (paths: string[]) => ({
+  operations: ["read", "write"] as const,
+  paths,
+  mode: "deny" as const,
+});
 
-const denyRead = (paths: string[]) =>
-  new FilesystemPermission({ operations: ["read"], paths, mode: "deny" });
+const denyRead = (paths: string[]) => ({
+  operations: ["read"] as const,
+  paths,
+  mode: "deny" as const,
+});
 
-const denyWrite = (paths: string[]) =>
-  new FilesystemPermission({ operations: ["write"], paths, mode: "deny" });
+const denyWrite = (paths: string[]) => ({
+  operations: ["write"] as const,
+  paths,
+  mode: "deny" as const,
+});
 
 describe("fs tool permissions", () => {
   describe("no permissions configured", () => {
@@ -53,6 +57,55 @@ describe("fs tool permissions", () => {
       await expect(
         getTool(middleware, "read_file").invoke({ file_path: "/any/path.txt" }),
       ).resolves.toBeDefined();
+    });
+  });
+
+  describe("invalid permission paths", () => {
+    it("throws at construction when a permission path is not absolute", () => {
+      expect(() =>
+        createFilesystemMiddleware({
+          backend: createMockBackend(),
+          permissions: [
+            { operations: ["read"] as const, paths: ["relative/path"] },
+          ],
+        }),
+      ).toThrow(/absolute/i);
+    });
+
+    it("throws at construction when a permission path contains ..", () => {
+      expect(() =>
+        createFilesystemMiddleware({
+          backend: createMockBackend(),
+          permissions: [
+            { operations: ["read"] as const, paths: ["/workspace/../secrets"] },
+          ],
+        }),
+      ).toThrow(/\.\./);
+    });
+
+    it("throws at construction when a permission path contains ~", () => {
+      expect(() =>
+        createFilesystemMiddleware({
+          backend: createMockBackend(),
+          permissions: [
+            { operations: ["read"] as const, paths: ["/~/secrets"] },
+          ],
+        }),
+      ).toThrow(/~/);
+    });
+
+    it("accepts valid glob patterns", () => {
+      expect(() =>
+        createFilesystemMiddleware({
+          backend: createMockBackend(),
+          permissions: [
+            {
+              operations: ["read"] as const,
+              paths: ["/foo/**", "/foo/*.ts", "/foo/{a,b}"],
+            },
+          ],
+        }),
+      ).not.toThrow();
     });
   });
 

@@ -12,7 +12,6 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { createFilesystemMiddleware } from "../middleware/fs.js";
-import { FilesystemPermission } from "./types.js";
 import type { CreateDeepAgentParams } from "../types.js";
 import type { BackendProtocolV2 } from "../backends/protocol.js";
 
@@ -44,11 +43,11 @@ function getTool(
 
 describe("CreateDeepAgentParams permissions field", () => {
   it("accepts a permissions array", () => {
-    const perm = new FilesystemPermission({
-      operations: ["read"],
+    const perm = {
+      operations: ["read"] as const,
       paths: ["/secrets/**"],
-      mode: "deny",
-    });
+      mode: "deny" as const,
+    };
     const params: Partial<CreateDeepAgentParams> = {
       permissions: [perm],
     };
@@ -77,11 +76,11 @@ describe("permissions wired to filesystem middleware", () => {
     const middleware = createFilesystemMiddleware({
       backend: createMockBackend(),
       permissions: [
-        new FilesystemPermission({
-          operations: ["read"],
+        {
+          operations: ["read"] as const,
           paths: ["/secrets/**"],
-          mode: "deny",
-        }),
+          mode: "deny" as const,
+        },
       ],
     });
 
@@ -120,11 +119,11 @@ describe("permissions wired to filesystem middleware", () => {
     const middleware = createFilesystemMiddleware({
       backend,
       permissions: [
-        new FilesystemPermission({
-          operations: ["write"],
+        {
+          operations: ["write"] as const,
           paths: ["/readonly/**"],
-          mode: "deny",
-        }),
+          mode: "deny" as const,
+        },
       ],
     });
 

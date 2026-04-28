@@ -1,37 +1,12 @@
 /**
- * The filesystem operation being performed.
+ * The filesystem operations a permission rule can govern.
  */
 export type FilesystemOperation = "read" | "write";
 
 /**
- * Whether a permission rule allows or denies matching paths.
+ * Whether a matched rule permits or blocks the operation.
  */
 export type PermissionMode = "allow" | "deny";
-
-/**
- * Constructor options for {@link FilesystemPermission}.
- */
-export interface FilesystemPermissionOptions {
-  /**
-   * The operations this rule governs.
-   */
-  operations: FilesystemOperation[];
-
-  /**
-   * Glob patterns for paths this rule applies to. All patterns must be
-   * absolute (start with `/`) and must not contain `..` or `~`.
-   *
-   * Supports `**` (any depth), `*` (within one segment), and `{a,b}`
-   * brace expansion.
-   */
-  paths: string[];
-
-  /**
-   * Whether this rule allows or denies access for matching paths.
-   * Defaults to `"allow"`.
-   */
-  mode?: PermissionMode;
-}
 
 /**
  * A single filesystem permission rule.
@@ -41,51 +16,25 @@ export interface FilesystemPermissionOptions {
  * glob-matches the target path determines the outcome. If no rule
  * matches, access is **allowed** (permissive default).
  *
- * @example
- * ```ts
- * // Allow reads under /workspace, deny reads everywhere else.
- * const permissions = [
- *   new FilesystemPermission({
- *     operations: ["read"],
- *     paths: ["/workspace/**"],
- *     mode: "allow",
- *   }),
- *   new FilesystemPermission({
- *     operations: ["read"],
- *     paths: ["/**"],
- *     mode: "deny",
- *   }),
- * ];
- * ```
+ * All `paths` must be absolute glob patterns (start with `/`, no `..` or `~`).
+ * Supports `**` (any depth), `*` (within one segment), and `{a,b}` brace expansion.
+ * Paths are validated when passed to {@link createFilesystemMiddleware}.
  */
-export class FilesystemPermission {
-  readonly operations: FilesystemOperation[];
-  readonly paths: string[];
-  readonly mode: PermissionMode;
+export interface FilesystemPermission {
+  /**
+   * The operations this rule applies to.
+   */
+  operations: readonly FilesystemOperation[];
 
-  constructor(options: FilesystemPermissionOptions) {
-    const { operations, paths, mode = "allow" } = options;
+  /**
+   * Absolute glob patterns for paths this rule matches.
+   * Must start with `/`; must not contain `..` or `~`.
+   * Supports `**` (any depth), `*` (within one segment), and `{a,b}` brace expansion.
+   */
+  paths: string[];
 
-    this.operations = operations;
-    this.paths = paths;
-    this.mode = mode;
-
-    for (const path of paths) {
-      if (!path.startsWith("/")) {
-        throw new Error(
-          `Permission path must be absolute (start with "/"): ${JSON.stringify(path)}`,
-        );
-      }
-      if (path.split("/").includes("..")) {
-        throw new Error(
-          `Permission path must not contain "..": ${JSON.stringify(path)}`,
-        );
-      }
-      if (path.split("/").includes("~")) {
-        throw new Error(
-          `Permission path must not contain "~": ${JSON.stringify(path)}`,
-        );
-      }
-    }
-  }
+  /**
+   * Whether matching paths are permitted or blocked. Defaults to `"allow"`.
+   */
+  mode?: PermissionMode;
 }

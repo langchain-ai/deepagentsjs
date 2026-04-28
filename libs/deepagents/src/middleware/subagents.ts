@@ -351,7 +351,7 @@ export interface SubAgent {
    * const reader: SubAgent = {
    *   name: "reader",
    *   permissions: [
-   *     new FilesystemPermission({ operations: ["read"], paths: ["/restricted/**"] }),
+   *     { operations: ["read"], paths: ["/restricted/**"] },
    *   ],
    * };
    * ```

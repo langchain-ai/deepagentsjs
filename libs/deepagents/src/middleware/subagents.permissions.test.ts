@@ -16,7 +16,7 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { createFilesystemMiddleware } from "./fs.js";
-import { FilesystemPermission } from "../permissions/types.js";
+import type { FilesystemPermission } from "../permissions/types.js";
 import type { SubAgent } from "./subagents.js";
 import type { BackendProtocolV2 } from "../backends/protocol.js";
 
@@ -58,11 +58,11 @@ function resolvePermissions(
 
 describe("SubAgent interface", () => {
   it("accepts a permissions field", () => {
-    const perm = new FilesystemPermission({
+    const perm: FilesystemPermission = {
       operations: ["read"],
       paths: ["/secrets/**"],
       mode: "deny",
-    });
+    };
     const subagent: SubAgent = {
       name: "reader",
       description: "reads things",
@@ -86,12 +86,8 @@ describe("SubAgent interface", () => {
 // ─── resolvePermissions (mirrors normalizeSubagentSpec logic) ─────────────────
 
 describe("effective permissions resolution", () => {
-  const parentDeny = [
-    new FilesystemPermission({
-      operations: ["read"],
-      paths: ["/secrets/**"],
-      mode: "deny",
-    }),
+  const parentDeny: FilesystemPermission[] = [
+    { operations: ["read"], paths: ["/secrets/**"], mode: "deny" },
   ];
 
   it("inherits parent permissions when subagent.permissions is undefined", () => {
@@ -106,12 +102,8 @@ describe("effective permissions resolution", () => {
   });
 
   it("overrides with subagent's own rules when subagent.permissions is non-empty", () => {
-    const subagentDeny = [
-      new FilesystemPermission({
-        operations: ["write"],
-        paths: ["/readonly/**"],
-        mode: "deny",
-      }),
+    const subagentDeny: FilesystemPermission[] = [
+      { operations: ["write"], paths: ["/readonly/**"], mode: "deny" },
     ];
     const effective = resolvePermissions(subagentDeny, parentDeny);
     expect(effective).toBe(subagentDeny);
@@ -126,12 +118,8 @@ describe("effective permissions resolution", () => {
 // ─── createFilesystemMiddleware enforces effective permissions ────────────────
 
 describe("createFilesystemMiddleware with effective permissions", () => {
-  const parentDeny = [
-    new FilesystemPermission({
-      operations: ["read"],
-      paths: ["/secrets/**"],
-      mode: "deny",
-    }),
+  const parentDeny: FilesystemPermission[] = [
+    { operations: ["read"], paths: ["/secrets/**"], mode: "deny" },
   ];
 
   it("inherited deny rule blocks read on subagent fs tools", async () => {
@@ -172,12 +160,8 @@ describe("createFilesystemMiddleware with effective permissions", () => {
 
   it("subagent-specific deny rule blocks paths the parent allows", async () => {
     // Parent allows everything; subagent restricts /restricted/**
-    const subagentDeny = [
-      new FilesystemPermission({
-        operations: ["read"],
-        paths: ["/restricted/**"],
-        mode: "deny",
-      }),
+    const subagentDeny: FilesystemPermission[] = [
+      { operations: ["read"], paths: ["/restricted/**"], mode: "deny" },
     ];
     const effective = resolvePermissions(subagentDeny, []); // parent: no rules
     const middleware = createFilesystemMiddleware({
@@ -198,12 +182,8 @@ describe("createFilesystemMiddleware with effective permissions", () => {
       .fn()
       .mockResolvedValue({ content: "public", mimeType: "text/plain" });
 
-    const subagentDeny = [
-      new FilesystemPermission({
-        operations: ["read"],
-        paths: ["/restricted/**"],
-        mode: "deny",
-      }),
+    const subagentDeny: FilesystemPermission[] = [
+      { operations: ["read"], paths: ["/restricted/**"], mode: "deny" },
     ];
     const effective = resolvePermissions(subagentDeny, []);
     const middleware = createFilesystemMiddleware({

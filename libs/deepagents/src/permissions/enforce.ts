@@ -6,6 +6,20 @@ import type {
 } from "./types.js";
 
 /**
+ * Validate permission rule paths at setup time. Throws if any path is
+ * relative, contains `..`, or contains `~`.
+ */
+export function validatePermissionPaths(
+  permissions: FilesystemPermission[],
+): void {
+  for (const permission of permissions) {
+    for (const path of permission.paths) {
+      validatePath(path);
+    }
+  }
+}
+
+/**
  * Canonicalize and validate an absolute path before permission checking.
  *
  * Throws for:
@@ -68,7 +82,7 @@ export function decidePathAccess(
     }
 
     if (rule.paths.some((pattern) => globMatch(path, pattern))) {
-      return rule.mode;
+      return rule.mode ?? "allow";
     }
   }
 

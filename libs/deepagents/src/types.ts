@@ -449,8 +449,8 @@ export interface CreateDeepAgentParams<
    * ```ts
    * createDeepAgent({
    *   permissions: [
-   *     new FilesystemPermission({ operations: ["read"], paths: ["/workspace/**"] }),
-   *     new FilesystemPermission({ operations: ["read"], paths: ["/**"], mode: "deny" }),
+   *     { operations: ["read"], paths: ["/workspace/**"] },
+   *     { operations: ["read"], paths: ["/**"], mode: "deny" },
    *   ],
    * });
    * ```

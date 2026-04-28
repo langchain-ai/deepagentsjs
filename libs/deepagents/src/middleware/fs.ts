@@ -269,7 +269,11 @@ import {
   FilesystemOperation,
   FilesystemPermission,
 } from "../permissions/types.js";
-import { decidePathAccess, validatePath } from "../permissions/enforce.js";
+import {
+  decidePathAccess,
+  validatePath,
+  validatePermissionPaths,
+} from "../permissions/enforce.js";
 import { CompositeBackend } from "../backends/composite.js";
 
 /**
@@ -1128,6 +1132,10 @@ export function createFilesystemMiddleware(
     humanMessageTokenLimitBeforeEvict = 50000,
     permissions = [],
   } = options;
+
+  if (permissions.length > 0) {
+    validatePermissionPaths(permissions);
+  }
 
   if (
     permissions.length > 0 &&

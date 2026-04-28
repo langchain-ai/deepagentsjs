@@ -39,8 +39,7 @@ export {
 
 // Export permissions
 export {
-  FilesystemPermission,
-  type FilesystemPermissionOptions,
+  type FilesystemPermission,
   type FilesystemOperation,
   type PermissionMode,
 } from "./permissions/index.js";
