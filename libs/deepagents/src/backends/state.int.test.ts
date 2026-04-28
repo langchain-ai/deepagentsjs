@@ -10,12 +10,9 @@ import { StateBackend } from "./state.js";
 import type { FileData } from "./protocol.js";
 
 const GraphState = new StateSchema({
-  files: new ReducedValue(
-    z.record<string, FileData>,
-    {
-      reducer: (a, b) => ({ ...a, ...b }),
-    }
-  ),
+  files: new ReducedValue(z.record<string, FileData>, {
+    reducer: (a, b) => ({ ...a, ...b }),
+  }),
   result: z.string(),
 });
 
