@@ -292,7 +292,10 @@ export class ReplSession {
     consoleHandle.dispose();
   }
 
-  private injectTools(tools: StructuredToolInterface[], config?: RunnableConfig): void {
+  private injectTools(
+    tools: StructuredToolInterface[],
+    config?: RunnableConfig,
+  ): void {
     const context = this.context!;
     const toolsNs = context.newObject();
 
