@@ -203,26 +203,6 @@ describe("createQuickJSMiddleware", () => {
       expect(req.systemMessage.text).toContain("tools.agentTool");
       expect(req.systemMessage.text).toContain("tools.extraTool");
     });
-
-    it("should include injected instances via include form", async () => {
-      const middleware = createQuickJSMiddleware({
-        ptc: { include: [extraTool] },
-      });
-      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
-
-      await middleware.wrapModelCall!(
-        {
-          systemMessage: new SystemMessage("Base"),
-          state: {},
-          runtime: { configurable: { thread_id: "ptc-include-inst-1" } },
-          tools: [],
-        } as any,
-        mockHandler,
-      );
-
-      const req = mockHandler.mock.calls[0][0];
-      expect(req.systemMessage.text).toContain("tools.extraTool");
-    });
   });
 
   describe("generatePtcPrompt", () => {

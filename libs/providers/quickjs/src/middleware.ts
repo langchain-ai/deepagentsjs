@@ -42,16 +42,6 @@ import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
 import { LangGraphRunnableConfig } from "@langchain/langgraph";
 
-const DEFAULT_PTC_EXCLUDED_TOOLS = [
-  "ls",
-  "read_file",
-  "write_file",
-  "edit_file",
-  "glob",
-  "grep",
-  "execute",
-] as const;
-
 const REPL_SYSTEM_PROMPT = dedent`
   ## TypeScript/JavaScript REPL (\`js_eval\`)
 
@@ -177,20 +167,7 @@ export function createQuickJSMiddleware(
 
     const candidates = allTools.filter((t) => t.name !== "js_eval");
 
-    if (Array.isArray(ptc)) {
-      return resolveToolList(ptc, candidates);
-    }
-
-    if ("include" in ptc) {
-      return resolveToolList(ptc.include, candidates);
-    }
-
-    if ("exclude" in ptc) {
-      const excluded = new Set([...DEFAULT_PTC_EXCLUDED_TOOLS, ...ptc.exclude]);
-      return candidates.filter((t) => !excluded.has(t.name));
-    }
-
-    return [];
+    return resolveToolList(ptc, candidates);
   }
 
   const jsEvalTool = tool(
