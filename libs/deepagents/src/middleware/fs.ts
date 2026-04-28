@@ -1020,9 +1020,12 @@ function createGrepTool(
  */
 function createExecuteTool(
   backend: AnyBackendProtocol | BackendFactory,
-  options: { customDescription: string | undefined },
+  options: {
+    customDescription: string | undefined;
+    permissions: FilesystemPermission[];
+  },
 ) {
-  const { customDescription } = options;
+  const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
       const resolvedBackend = await resolveBackend(backend, runtime);
@@ -1033,6 +1036,20 @@ function createExecuteTool(
           "Error: Execution not available. This agent's backend " +
           "does not support command execution (SandboxBackendProtocol). " +
           "To use the execute tool, provide a backend that implements SandboxBackendProtocol."
+        );
+      }
+
+      // Guard against factory-backed sandbox backends used with permissions.
+      // The startup check skips factory backends since they can't be resolved
+      // at configuration time — this catches that case at invocation.
+      if (
+        permissions.length > 0 &&
+        !allPathsScopedToRoutes(permissions, resolvedBackend)
+      ) {
+        return (
+          "Error: Execution not available. Filesystem permissions cannot be " +
+          "used with a backend that supports command execution because shell " +
+          "commands can access any path, making path-based rules ineffective."
         );
       }
 
@@ -1187,6 +1204,7 @@ export function createFilesystemMiddleware(
     }),
     execute: createExecuteTool(backend, {
       customDescription: customToolDescriptions?.execute,
+      permissions,
     }),
   } satisfies Record<FilesystemToolName, unknown>;
   const allTools = Object.values(allToolsByName);

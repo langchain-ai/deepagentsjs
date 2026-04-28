@@ -426,6 +426,21 @@ describe("fs tool permissions", () => {
       ).not.toThrow();
     });
 
+    it("execute tool returns error at runtime when factory resolves to a sandbox backend with permissions", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: () => createSandboxBackend() as any,
+        permissions: [deny(["/secrets/**"])],
+      });
+
+      const result = await getTool(middleware, "execute").invoke({
+        command: "echo hello",
+      });
+
+      expect(result).toMatch(
+        /permissions cannot be used with a backend that supports command execution/i,
+      );
+    });
+
     it("does not throw when all permission paths are scoped to CompositeBackend routes", () => {
       const compositeWithSandbox = {
         ...createSandboxBackend(),
