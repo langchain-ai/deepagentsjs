@@ -9,15 +9,14 @@ import {
 import { StateBackend } from "./state.js";
 import type { FileData } from "./protocol.js";
 
-const GraphState = Annotation.Root({
-  files: Annotation<Record<string, FileData>>({
-    reducer: (a, b) => ({ ...a, ...b }),
-    default: () => ({}),
-  }),
-  result: Annotation<string>({
-    reducer: (_, b) => b,
-    default: () => "",
-  }),
+const GraphState = new StateSchema({
+  files: new ReducedValue(
+    z.record<string, FileData>,
+    {
+      reducer: (a, b) => ({ ...a, ...b }),
+    }
+  ),
+  result: z.string(),
 });
 
 function makeGraph(node: () => Promise<{ result: string }>) {
