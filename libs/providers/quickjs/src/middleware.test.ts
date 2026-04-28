@@ -237,4 +237,63 @@ describe("createQuickJSMiddleware", () => {
       expect(await generatePtcPrompt([])).toBe("");
     });
   });
+
+  describe("afterAgent call", () => {
+    it("should dispose of the session for the current thread", async () => {
+      const middleware = createQuickJSMiddleware();
+
+      // Trigger session creation via js_eval
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "js_eval",
+      ) as any;
+      await jsTool.invoke(
+        { code: "1 + 1" },
+        { configurable: { thread_id: "cleanup-test" } },
+      );
+
+      expect(ReplSession.hasAnyForThread("cleanup-test")).toBe(true);
+
+      // Fire afterAgent
+      await (middleware as any).afterAgent(
+        {},
+        { configurable: { thread_id: "cleanup-test" } },
+      );
+
+      expect(ReplSession.hasAnyForThread("cleanup-test")).toBe(false);
+    });
+
+    it("should no-op for afterAgent on a thread with no session", async () => {
+      const middleware = createQuickJSMiddleware();
+      await expect(
+        (middleware as any).afterAgent(
+          {},
+          { configurable: { thread_id: "no-session-thread" } },
+        ),
+      ).resolves.not.toThrow();
+    });
+
+    it("shoudl only remove the session for the finished thread, not others", async () => {
+      const middleware = createQuickJSMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "js_eval",
+      ) as any;
+
+      await jsTool.invoke(
+        { code: "1" },
+        { configurable: { thread_id: "thread-a" } },
+      );
+      await jsTool.invoke(
+        { code: "1" },
+        { configurable: { thread_id: "thread-b" } },
+      );
+
+      await (middleware as any).afterAgent(
+        {},
+        { configurable: { thread_id: "thread-a" } },
+      );
+
+      expect(ReplSession.hasAnyForThread("thread-a")).toBe(false);
+      expect(ReplSession.hasAnyForThread("thread-b")).toBe(true);
+    });
+  });
 });

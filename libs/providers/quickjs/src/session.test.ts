@@ -562,4 +562,17 @@ describe("REPL Engine", () => {
       expect(result.value).toBe("hello");
     });
   });
+
+  describe("session deletion", () => {
+    it("should dispose and remove an existing session", () => {
+      const session = ReplSession.getOrCreate("test-key");
+      expect(ReplSession.get("test-key")).toBe(session);
+      ReplSession.deleteSession("test-key");
+      expect(ReplSession.get("test-key")).toBeNull();
+    });
+
+    it("should no-op for a key that does not exist", () => {
+      expect(() => ReplSession.deleteSession("nonexistent")).not.toThrow();
+    });
+  });
 });

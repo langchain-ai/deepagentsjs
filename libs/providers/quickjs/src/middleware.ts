@@ -209,5 +209,10 @@ export function createQuickJSMiddleware(
         .concat(cachedPtcPrompt || "");
       return handler({ ...request, systemMessage });
     },
+    afterAgent: async (_state, runtime) => {
+      const threadId = runtime.configurable?.thread_id ?? DEFAULT_SESSION_ID;
+      const sessionKey = `${threadId}:${middlewareId}`;
+      ReplSession.deleteSession(sessionKey);
+    },
   });
 }

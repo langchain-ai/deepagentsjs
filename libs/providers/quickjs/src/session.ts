@@ -141,6 +141,16 @@ export class ReplSession {
   }
 
   /**
+   * Dispose and remove the session with the given key, if it exists.
+   */
+  static deleteSession(key: string): void {
+    const session = ReplSession.sessions.get(key);
+    if (session) {
+      session.dispose();
+    }
+  }
+
+  /**
    * Evaluate code in this session.
    *
    * Lazily starts the QuickJS runtime on the first call. Code is
