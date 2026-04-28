@@ -436,4 +436,9 @@ export interface CreateDeepAgentParams<
    * ```
    */
   skills?: string[];
+  /**
+   * When true, catches exceptions thrown inside tool functions and returns them
+   * as a ToolMessage with status "error" instead of crashing the graph superstep.
+   */
+  handleToolErrors?: boolean;
 }

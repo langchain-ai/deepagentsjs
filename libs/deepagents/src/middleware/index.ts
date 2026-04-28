@@ -71,3 +71,6 @@ export {
   ASYNC_TASK_SYSTEM_PROMPT,
   ASYNC_TASK_TOOL_NAMES,
 } from "./async_subagents.js";
+
+// Tool error handler middleware
+export { createToolErrorHandlerMiddleware } from "./tool-error-handler.js";

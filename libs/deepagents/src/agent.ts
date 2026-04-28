@@ -20,6 +20,7 @@ import {
   createSummarizationMiddleware,
   createMemoryMiddleware,
   createSkillsMiddleware,
+  createToolErrorHandlerMiddleware,
   FILESYSTEM_TOOL_NAMES,
   ASYNC_TASK_TOOL_NAMES,
   type SubAgent,
@@ -176,6 +177,7 @@ export function createDeepAgent<
     name,
     memory,
     skills,
+    handleToolErrors = false,
   } = params;
 
   const collidingTools = tools
@@ -275,6 +277,10 @@ export function createDeepAgent<
       ? [createSkillsMiddleware({ backend, sources: skills })]
       : [];
 
+  const toolErrorHandlerMiddleware = handleToolErrors
+    ? [createToolErrorHandlerMiddleware()]
+    : [];
+
   // Built-in middleware array - core middleware with known types.
   // This tuple is typed without conditional spreads to preserve tuple inference.
   // Optional middleware (skills, memory, HITL, async) are appended at runtime.
@@ -310,6 +316,8 @@ export function createDeepAgent<
   // Runtime middleware array: combine built-in + optional middleware.
   // Note: The full type is handled separately via AllMiddleware.
   const middleware = [
+    // Optional tool error handler — outermost layer so it catches all tool errors.
+    ...toolErrorHandlerMiddleware,
     // Built-in middleware with deterministic ordering.
     todoMiddleware,
     // Optional root-level skills.

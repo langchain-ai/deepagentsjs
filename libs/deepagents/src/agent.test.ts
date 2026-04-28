@@ -1,12 +1,19 @@
 import { describe, it, expect, vi } from "vitest";
 import { createDeepAgent, isAnthropicModel } from "./agent.js";
-import { FakeListChatModel } from "@langchain/core/utils/testing";
 import {
+  FakeListChatModel,
+  FakeStreamingChatModel,
+} from "@langchain/core/utils/testing";
+import {
+  AIMessage,
   HumanMessage,
   SystemMessage,
+  ToolMessage,
   type BaseMessage,
 } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
+import { tool } from "langchain";
+import { z } from "zod";
 import { createFileData } from "./backends/utils.js";
 import { ConfigurationError } from "./errors.js";
 
@@ -166,5 +173,104 @@ describe("Built-in tool name collision detection", () => {
     expect(() =>
       createDeepAgent({ model, tools: [makeTool("my_custom_tool")] }),
     ).not.toThrow();
+  });
+});
+
+describe("createDeepAgent handleToolErrors", () => {
+  const throwingTool = tool(
+    async () => {
+      throw new Error("connection refused");
+    },
+    {
+      name: "failing_tool",
+      description: "always fails",
+      schema: z.object({}),
+    },
+  );
+
+  it("propagates tool errors by default (handleToolErrors not set)", async () => {
+    // given
+    let callCount = 0;
+    const generateSpy = vi
+      .spyOn(FakeStreamingChatModel.prototype as any, "_generate")
+      .mockImplementation(async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          return {
+            generations: [
+              {
+                text: "",
+                message: new AIMessage({
+                  content: "",
+                  tool_calls: [
+                    { id: "call_test_1", name: "failing_tool", args: {} },
+                  ],
+                }),
+              },
+            ],
+          };
+        }
+        return {
+          generations: [{ text: "done", message: new AIMessage("done") }],
+        };
+      });
+    const fakeModel = new FakeStreamingChatModel({ responses: [] });
+    const agent = createDeepAgent({ model: fakeModel, tools: [throwingTool] });
+
+    // when, then
+    await expect(
+      agent.invoke(
+        { messages: [new HumanMessage("call failing_tool")] },
+        { configurable: { thread_id: "test-handle-errors-default" } },
+      ),
+    ).rejects.toThrow();
+    generateSpy.mockRestore();
+  });
+
+  it("converts tool error to ToolMessage when handleToolErrors is true", async () => {
+    // given
+    let callCount = 0;
+    const generateSpy = vi
+      .spyOn(FakeStreamingChatModel.prototype as any, "_generate")
+      .mockImplementation(async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          return {
+            generations: [
+              {
+                text: "",
+                message: new AIMessage({
+                  content: "",
+                  tool_calls: [
+                    { id: "call_test_1", name: "failing_tool", args: {} },
+                  ],
+                }),
+              },
+            ],
+          };
+        }
+        return {
+          generations: [{ text: "done", message: new AIMessage("done") }],
+        };
+      });
+    const fakeModel = new FakeStreamingChatModel({ responses: [] });
+    const agent = createDeepAgent({
+      model: fakeModel,
+      tools: [throwingTool],
+      handleToolErrors: true,
+    });
+
+    // when
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("call failing_tool")] },
+      { configurable: { thread_id: "test-handle-errors-enabled" } },
+    );
+    generateSpy.mockRestore();
+
+    // then
+    const toolMessages = result.messages.filter(ToolMessage.isInstance);
+    const errorMessage = toolMessages.find((m) => m.status === "error");
+    expect(errorMessage).toBeDefined();
+    expect(errorMessage!.content).toContain("Error: connection refused");
   });
 });
