@@ -68,12 +68,6 @@ export class ReplSession {
   private context: QuickJSAsyncContext | null = null;
   private logs: string[] = [];
   private _options: ReplSessionOptions;
-  private _evalConfig: RunnableConfig | null = null;
-
-  set evalConfig(config: RunnableConfig | null) {
-    this._evalConfig = config;
-  }
-
   constructor(id: string, options: ReplSessionOptions = {}) {
     this.id = id;
     this._options = options;
@@ -85,7 +79,6 @@ export class ReplSession {
     const {
       memoryLimitBytes = DEFAULT_MEMORY_LIMIT,
       maxStackSizeBytes = DEFAULT_MAX_STACK_SIZE,
-      tools,
     } = this._options;
 
     const asyncModule = await getAsyncModule();
@@ -98,10 +91,6 @@ export class ReplSession {
     this.context = context;
 
     this.setupConsole();
-
-    if (tools && tools.length > 0) {
-      this.injectTools(tools);
-    }
   }
 
   /**
@@ -156,10 +145,19 @@ export class ReplSession {
    * persistence, auto-returns the last expression, and wraps in an
    * async IIFE.
    */
-  async eval(code: string, timeoutMs: number): Promise<ReplResult> {
+  async eval(
+    code: string,
+    timeoutMs: number,
+    config?: RunnableConfig,
+  ): Promise<ReplResult> {
     await this.ensureStarted();
     const runtime = this.runtime!;
     const context = this.context!;
+
+    const { tools } = this._options;
+    if (tools && tools.length > 0) {
+      this.injectTools(tools, config);
+    }
 
     this.logs.length = 0;
 
@@ -294,7 +292,7 @@ export class ReplSession {
     consoleHandle.dispose();
   }
 
-  private injectTools(tools: StructuredToolInterface[]): void {
+  private injectTools(tools: StructuredToolInterface[], config?: RunnableConfig): void {
     const context = this.context!;
     const toolsNs = context.newObject();
 
@@ -309,10 +307,7 @@ export class ReplSession {
             try {
               const rawInput =
                 typeof input === "object" && input !== null ? input : {};
-              const result = await t.invoke(
-                rawInput,
-                this._evalConfig ?? undefined,
-              );
+              const result = await t.invoke(rawInput, config);
               const val = context.newString(
                 typeof result === "string" ? result : JSON.stringify(result),
               );

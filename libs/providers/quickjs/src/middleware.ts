@@ -181,8 +181,7 @@ export function createQuickJSMiddleware(
         tools: ptcTools,
       });
 
-      session.evalConfig = config;
-      const result = await session.eval(input.code, executionTimeoutMs);
+      const result = await session.eval(input.code, executionTimeoutMs, config);
       return formatReplResult(result);
     },
     {
