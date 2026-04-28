@@ -272,7 +272,7 @@ describe("createQuickJSMiddleware", () => {
       ).resolves.not.toThrow();
     });
 
-    it("shoudl only remove the session for the finished thread, not others", async () => {
+    it("should only remove the session for the finished thread, not others", async () => {
       const middleware = createQuickJSMiddleware();
       const jsTool = middleware.tools!.find(
         (t: any) => t.name === "js_eval",
