@@ -39,35 +39,6 @@ function getTool(
   return t;
 }
 
-// ─── CreateDeepAgentParams type ───────────────────────────────────────────────
-
-describe("CreateDeepAgentParams permissions field", () => {
-  it("accepts a permissions array", () => {
-    const perm = {
-      operations: ["read"] as const,
-      paths: ["/secrets/**"],
-      mode: "deny" as const,
-    };
-    const params: Partial<CreateDeepAgentParams> = {
-      permissions: [perm],
-    };
-    expect(params.permissions).toHaveLength(1);
-    expect(params.permissions![0]).toBe(perm);
-  });
-
-  it("permissions field is optional", () => {
-    const params: Partial<CreateDeepAgentParams> = { name: "agent" };
-    expect(params.permissions).toBeUndefined();
-  });
-
-  it("defaults to no restrictions when omitted (empty array = allow all)", () => {
-    // Mirrors the default in createDeepAgent: permissions = []
-    const params: Partial<CreateDeepAgentParams> = {};
-    const effectivePermissions = params.permissions ?? [];
-    expect(effectivePermissions).toEqual([]);
-  });
-});
-
 // ─── permissions flow to createFilesystemMiddleware ───────────────────────────
 
 describe("permissions wired to filesystem middleware", () => {

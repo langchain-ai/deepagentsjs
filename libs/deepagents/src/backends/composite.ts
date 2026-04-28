@@ -77,9 +77,10 @@ export class CompositeBackend implements BackendProtocolV2 {
    * where `instanceof` may fail.
    */
   static isInstance(backend: unknown): backend is CompositeBackend {
-    return typeof backend === "object" && object !== null && Array.isArray(backend.routePrefixes)
-    return Array.isArray(
-      (backend as unknown as CompositeBackend).routePrefixes,
+    return (
+      typeof backend === "object" &&
+      backend !== null &&
+      Array.isArray((backend as Record<string, unknown>).routePrefixes)
     );
   }
 
