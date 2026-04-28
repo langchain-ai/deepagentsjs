@@ -160,6 +160,21 @@ export class ReplSession {
   }
 
   /**
+   * Returns true if any session exists whose key equals `threadId` or starts
+   * with `threadId:`. Useful for tests that need to confirm a session was
+   * created without knowing the full `threadId:middlewareId` key.
+   */
+  static hasAnyForThread(threadId: string): boolean {
+    const prefix = `${threadId}:`;
+    for (const key of ReplSession.sessions.keys()) {
+      if (key === threadId || key.startsWith(prefix)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Evaluate code in this session.
    *
    * Lazily starts the QuickJS runtime on the first call. Code is
