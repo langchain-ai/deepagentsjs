@@ -1119,7 +1119,7 @@ function allPathsScopedToRoutes(
   permissions: FilesystemPermission[],
   backend: AnyBackendProtocol,
 ): boolean {
-  if (!CompositeBackend.isCompositeBackend(backend)) {
+  if (!CompositeBackend.isInstance(backend)) {
     return false;
   }
 
