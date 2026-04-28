@@ -1,18 +1,17 @@
 import { describe, it, expect } from "vitest";
+import { z } from "zod";
 import {
-  Annotation,
   StateGraph,
+  StateSchema,
   MemorySaver,
   START,
   END,
 } from "@langchain/langgraph";
 import { StateBackend } from "./state.js";
-import type { FileData } from "./protocol.js";
+import { filesValue } from "../values.js";
 
 const GraphState = new StateSchema({
-  files: new ReducedValue(z.record<string, FileData>, {
-    reducer: (a, b) => ({ ...a, ...b }),
-  }),
+  files: filesValue,
   result: z.string(),
 });
 

@@ -123,7 +123,7 @@ export function resolveToolList(
   const agentByName = new Map(agentTools.map((t) => [t.name, t]));
   return items.flatMap((item) => {
     if (typeof item === "string") {
-      const found = agentByName.get(item as string);
+      const found = agentByName.get(item);
       return found ? [found] : [];
     }
     return [item];
