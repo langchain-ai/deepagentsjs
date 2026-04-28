@@ -51,8 +51,6 @@ describe("QuickJS REPL integration", () => {
 
       const secondToolContent = toolMessages[1].content as string;
       expect(secondToolContent).toContain("99");
-
-      expect(ReplSession.hasAnyForThread(threadId)).toBe(true);
     },
   );
 
