@@ -1,18 +1,11 @@
 /**
- * Unit tests for the `permissions` field in CreateDeepAgentParams (Phase 3).
- *
- * The wiring under test is in agent.ts:
- *   createFilesystemMiddleware({ backend, permissions })
- *
- * Enforcement details are covered by fs.permissions.test.ts.
- * These tests verify: (1) the type accepts the field, (2) the default is
- * no-op (empty array), and (3) permissions passed to the agent flow correctly
- * to the filesystem middleware tools.
+ * Tests that permissions passed to createDeepAgent flow correctly to the
+ * filesystem middleware tools. Enforcement details are covered by
+ * fs.permissions.test.ts.
  */
 
 import { describe, it, expect, vi } from "vitest";
 import { createFilesystemMiddleware } from "../middleware/fs.js";
-import type { CreateDeepAgentParams } from "../types.js";
 import type { BackendProtocolV2 } from "../backends/protocol.js";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
