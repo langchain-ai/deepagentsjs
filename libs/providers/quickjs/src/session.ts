@@ -25,7 +25,6 @@ import type {
   QuickJSAsyncRuntime,
 } from "quickjs-emscripten-core";
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import type { RunnableConfig } from "@langchain/core/runnables";
 
 import type { ReplSessionOptions, ReplResult } from "./types.js";
 import { toCamelCase } from "./utils.js";
@@ -79,6 +78,7 @@ export class ReplSession {
     const {
       memoryLimitBytes = DEFAULT_MEMORY_LIMIT,
       maxStackSizeBytes = DEFAULT_MAX_STACK_SIZE,
+      tools,
     } = this._options;
 
     const asyncModule = await getAsyncModule();
@@ -91,6 +91,10 @@ export class ReplSession {
     this.context = context;
 
     this.setupConsole();
+
+    if (tools && tools.length > 0) {
+      this.injectTools(tools);
+    }
   }
 
   /**
@@ -145,19 +149,10 @@ export class ReplSession {
    * persistence, auto-returns the last expression, and wraps in an
    * async IIFE.
    */
-  async eval(
-    code: string,
-    timeoutMs: number,
-    config?: RunnableConfig,
-  ): Promise<ReplResult> {
+  async eval(code: string, timeoutMs: number): Promise<ReplResult> {
     await this.ensureStarted();
     const runtime = this.runtime!;
     const context = this.context!;
-
-    const { tools } = this._options;
-    if (tools && tools.length > 0) {
-      this.injectTools(tools, config);
-    }
 
     this.logs.length = 0;
 
@@ -292,10 +287,7 @@ export class ReplSession {
     consoleHandle.dispose();
   }
 
-  private injectTools(
-    tools: StructuredToolInterface[],
-    config?: RunnableConfig,
-  ): void {
+  private injectTools(tools: StructuredToolInterface[]): void {
     const context = this.context!;
     const toolsNs = context.newObject();
 
@@ -310,7 +302,7 @@ export class ReplSession {
             try {
               const rawInput =
                 typeof input === "object" && input !== null ? input : {};
-              const result = await t.invoke(rawInput, config);
+              const result = await t.invoke(rawInput);
               const val = context.newString(
                 typeof result === "string" ? result : JSON.stringify(result),
               );
