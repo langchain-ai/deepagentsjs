@@ -5,7 +5,6 @@ import { SystemMessage } from "@langchain/core/messages";
 import {
   createQuickJSMiddleware,
   generatePtcPrompt,
-  isToolInstance,
   resolveToolList,
 } from "./middleware.js";
 import { ReplSession } from "./session.js";
@@ -74,21 +73,6 @@ describe("createQuickJSMiddleware", () => {
       const req = mockHandler.mock.calls[0][0];
       expect(req.systemMessage.text).toContain("Custom REPL prompt");
       expect(req.systemMessage.text).not.toContain("Hard rules");
-    });
-  });
-
-  describe("isToolInstance", () => {
-    it("should return true for a tool object with invoke", () => {
-      const t = tool(async () => "", {
-        name: "my_tool",
-        description: "A tool",
-        schema: z.object({}),
-      });
-      expect(isToolInstance(t)).toBe(true);
-    });
-
-    it("should return false for a string", () => {
-      expect(isToolInstance("my_tool")).toBe(false);
     });
   });
 

@@ -111,16 +111,6 @@ export async function generatePtcPrompt(
 }
 
 /**
- * Returns true if the item is a StructuredToolInterface instance rather than a
- * tool name string.
- */
-export function isToolInstance(
-  item: string | StructuredToolInterface,
-): item is StructuredToolInterface {
-  return typeof item === "object" && item !== null && "invoke" in item;
-}
-
-/**
  * Resolves a mixed list of tool names and tool instances into a flat list of
  * StructuredToolInterface objects. Strings are looked up by name in agentTools;
  * instances are included directly without requiring agent registration. Strings
@@ -132,9 +122,11 @@ export function resolveToolList(
 ): StructuredToolInterface[] {
   const agentByName = new Map(agentTools.map((t) => [t.name, t]));
   return items.flatMap((item) => {
-    if (isToolInstance(item)) return [item];
-    const found = agentByName.get(item);
-    return found ? [found] : [];
+    if (typeof item === "string") {
+      const found = agentByName.get(item as string);
+      return found ? [found] : [];
+    }
+    return [item];
   });
 }
 
