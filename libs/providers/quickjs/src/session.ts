@@ -474,6 +474,12 @@ export class ReplSession {
     this.runtime = null;
     this.context = null;
     ReplSession.sessions.delete(this.id);
+    // Multi-file skill imports (2+ asyncify unwind/rewind cycles in one
+    // evalCodeAsync) leave the shared WASM module's asyncify state corrupted
+    // after the owning runtime is disposed. New runtimes on the same module
+    // silently fail to invoke module loader callbacks. Reset the singleton so
+    // the next session gets a fresh WASM module (~14ms lazy cost on next eval).
+    asyncModulePromise = undefined;
   }
 
   toJSON(): { id: string } {
@@ -493,12 +499,6 @@ export class ReplSession {
       session.dispose();
     }
     ReplSession.sessions.clear();
-    // Multi-file skill imports (2+ asyncify unwind/rewind cycles in one
-    // evalCodeAsync) leave the shared WASM module's asyncify state corrupted
-    // after the runtime that performed them is disposed. New runtimes on the
-    // same module will silently fail to invoke module loader callbacks. Force
-    // a fresh WASM module so the next session starts clean.
-    asyncModulePromise = undefined;
   }
 
   private setupConsole(): void {
