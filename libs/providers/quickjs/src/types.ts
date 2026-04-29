@@ -1,6 +1,10 @@
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
-import type { AnyBackendProtocol, SkillMetadata } from "deepagents";
+import type {
+  AnyBackendProtocol,
+  BackendFactory,
+  SkillMetadata,
+} from "deepagents";
 
 /**
  * Configuration options for the QuickJS REPL middleware.
@@ -42,10 +46,10 @@ export interface QuickJSMiddlewareOptions {
   systemPrompt?: string | null;
 
   /**
-   * Enables the `@/skills/<name>` module loader on the QuickJS runtime.
-   * @default false
+   * Backend the REPL reads skill module sources from. When provided alongside
+   * `SkillsMiddleware`, skills with a `module:` key become dynamic-importable.
    */
-  skillsEnabled?: boolean;
+  skillsBackend?: AnyBackendProtocol | BackendFactory;
 }
 
 /**

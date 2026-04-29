@@ -31,7 +31,11 @@ export {
   DEFAULT_EXECUTION_TIMEOUT,
 } from "./session.js";
 
-export { formatReplResult, toCamelCase } from "./utils.js";
+export {
+  formatReplResult,
+  toCamelCase,
+  formatSkillNotAvailable,
+} from "./utils.js";
 
 export { transformForEval, stripTypeSyntax } from "./transform.js";
 

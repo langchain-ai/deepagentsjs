@@ -113,3 +113,11 @@ export async function toolToTypeSignature(
     async tools.${name}(input: ${inputType}): Promise<string>
   `;
 }
+
+/**
+ * Render a pre-eval skill-availability failure matching the Python error shape.
+ */
+export function formatSkillNotAvailable(missing: readonly string[]): string {
+  const list = [...missing].sort().join(", ");
+  return `<error type="SkillNotAvailable">${list}</error>`;
+}

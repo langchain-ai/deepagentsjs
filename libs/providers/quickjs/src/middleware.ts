@@ -16,6 +16,13 @@ import { z } from "zod/v4";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
 import dedent from "dedent";
+import { getCurrentTaskInput } from "@langchain/langgraph";
+import {
+  resolveBackend,
+  type AnyBackendProtocol,
+  type BackendFactory,
+  type SkillMetadata,
+} from "deepagents";
 import type { QuickJSMiddlewareOptions } from "./types.js";
 import {
   ReplSession,
@@ -26,10 +33,12 @@ import {
 } from "./session.js";
 import {
   formatReplResult,
+  formatSkillNotAvailable,
   toCamelCase,
   toolToTypeSignature,
   safeToJsonSchema,
 } from "./utils.js";
+import { scanSkillReferences } from "./skills.js";
 
 /**
  * These type-only imports are required for TypeScript's type inference to work
@@ -131,6 +140,39 @@ export function resolveToolList(
 }
 
 /**
+ * Pull `skillsMetadata` from the task input, resolve the backend, and push
+ * both into the session. Short-circuits with a `SkillNotAvailable` error if
+ * the source references skills the agent doesn't have.
+ */
+async function prepareSkillsForEval(
+  session: ReplSession,
+  skillsBackend: AnyBackendProtocol | BackendFactory,
+  code: string,
+): Promise<string | undefined> {
+  const taskInput = getCurrentTaskInput<{ skillsMetadata?: SkillMetadata[] }>();
+  const metadata: SkillMetadata[] = taskInput?.skillsMetadata ?? [];
+
+  const referenced = scanSkillReferences(code);
+  if (referenced.size > 0) {
+    const known = new Set(metadata.map((m) => m.name));
+    const missing: string[] = [];
+    for (const name of referenced) {
+      if (!known.has(name)) {
+        missing.push(name);
+      }
+    }
+    if (missing.length > 0) {
+      session.setSkillsContext(undefined);
+      return formatSkillNotAvailable(missing);
+    }
+  }
+
+  const resolved = await resolveBackend(skillsBackend, { state: taskInput });
+  session.setSkillsContext({ metadata, backend: resolved });
+  return undefined;
+}
+
+/**
  * Create the QuickJS REPL middleware.
  */
 export function createQuickJSMiddleware(
@@ -142,6 +184,7 @@ export function createQuickJSMiddleware(
     maxStackSizeBytes = DEFAULT_MAX_STACK_SIZE,
     executionTimeoutMs = DEFAULT_EXECUTION_TIMEOUT,
     systemPrompt: customSystemPrompt = null,
+    skillsBackend,
   } = options;
 
   const baseSystemPrompt = customSystemPrompt || REPL_SYSTEM_PROMPT;
@@ -171,7 +214,19 @@ export function createQuickJSMiddleware(
         memoryLimitBytes,
         maxStackSizeBytes,
         tools: ptcTools,
+        skillsEnabled: skillsBackend !== undefined,
       });
+
+      if (skillsBackend !== undefined) {
+        const setupError = await prepareSkillsForEval(
+          session,
+          skillsBackend,
+          input.code,
+        );
+        if (setupError !== undefined) {
+          return setupError;
+        }
+      }
 
       const result = await session.eval(input.code, executionTimeoutMs);
       return formatReplResult(result);
@@ -182,6 +237,7 @@ export function createQuickJSMiddleware(
         Evaluate TypeScript/JavaScript code in a sandboxed REPL. State persists across calls.
         Use console.log() for output. Returns the result of the last expression.
         If file or other tools are available, call them via the tools namespace: await tools.readFile({ path }).
+        If skills are configured, dynamically import them: await import("@/skills/<name>").
       `,
       schema: z.object({
         code: z

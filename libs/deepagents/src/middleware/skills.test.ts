@@ -1596,6 +1596,111 @@ describe("formatSkillsList with annotations", () => {
   });
 });
 
+describe("formatSkillsList module import hint", () => {
+  it("includes the import hint for a skill with module set", () => {
+    const skills: SkillMetadata[] = [
+      {
+        name: "pdf-extract",
+        description: "Extracts text from PDFs",
+        path: "/skills/pdf-extract/SKILL.md",
+        license: null,
+        compatibility: null,
+        metadata: {},
+        module: "index.ts",
+      },
+    ];
+
+    const result = formatSkillsList(skills, ["/skills/"]);
+    expect(result).toContain(
+      '  → Import: `await import("@/skills/pdf-extract")`',
+    );
+  });
+
+  it("omits the import hint for a skill without module", () => {
+    const skills: SkillMetadata[] = [
+      {
+        name: "prose-skill",
+        description: "Prose only",
+        path: "/skills/prose-skill/SKILL.md",
+        license: null,
+        compatibility: null,
+        metadata: {},
+      },
+    ];
+
+    const result = formatSkillsList(skills, ["/skills/"]);
+    expect(result).not.toContain("Import:");
+    expect(result).not.toContain("@/skills/");
+  });
+
+  it("import hint appears after the read line", () => {
+    const skills: SkillMetadata[] = [
+      {
+        name: "my-skill",
+        description: "Does things",
+        path: "/skills/my-skill/SKILL.md",
+        license: null,
+        compatibility: null,
+        metadata: {},
+        module: "index.ts",
+      },
+    ];
+
+    const result = formatSkillsList(skills, ["/skills/"]);
+    const readIdx = result.indexOf("→ Read");
+    const importIdx = result.indexOf("→ Import:");
+    expect(readIdx).toBeGreaterThan(-1);
+    expect(importIdx).toBeGreaterThan(readIdx);
+  });
+
+  it("import hint appears after allowed tools line when both are present", () => {
+    const skills: SkillMetadata[] = [
+      {
+        name: "rich-skill",
+        description: "Has tools and a module",
+        path: "/skills/rich-skill/SKILL.md",
+        license: null,
+        compatibility: null,
+        metadata: {},
+        allowedTools: ["read_file"],
+        module: "index.ts",
+      },
+    ];
+
+    const result = formatSkillsList(skills, ["/skills/"]);
+    const toolsIdx = result.indexOf("→ Allowed tools:");
+    const importIdx = result.indexOf("→ Import:");
+    expect(toolsIdx).toBeGreaterThan(-1);
+    expect(importIdx).toBeGreaterThan(toolsIdx);
+  });
+
+  it("only the skill with module gets the import hint when mixed", () => {
+    const skills: SkillMetadata[] = [
+      {
+        name: "with-module",
+        description: "Has a module",
+        path: "/skills/with-module/SKILL.md",
+        license: null,
+        compatibility: null,
+        metadata: {},
+        module: "index.ts",
+      },
+      {
+        name: "prose-only",
+        description: "No module",
+        path: "/skills/prose-only/SKILL.md",
+        license: null,
+        compatibility: null,
+        metadata: {},
+      },
+    ];
+
+    const result = formatSkillsList(skills, ["/skills/"]);
+    expect(result).toContain('`await import("@/skills/with-module")`');
+    expect(result).not.toContain("@/skills/prose-only");
+  });
+});
+
 describe("validateModulePath", () => {
   describe("absent / empty values", () => {
     it("returns undefined for null", () => {

@@ -658,6 +658,9 @@ export function formatSkillsList(
       lines.push(`  → Allowed tools: ${skill.allowedTools.join(", ")}`);
     }
     lines.push(`  → Read \`${skill.path}\` for full instructions`);
+    if (skill.module !== undefined) {
+      lines.push(`  → Import: \`await import("@/skills/${skill.name}")\``);
+    }
   }
 
   return lines.join("\n");
