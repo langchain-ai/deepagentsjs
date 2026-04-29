@@ -1,5 +1,7 @@
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
+import type { AnyBackendProtocol, SkillMetadata } from "deepagents";
+
 /**
  * Configuration options for the QuickJS REPL middleware.
  */
@@ -38,6 +40,12 @@ export interface QuickJSMiddlewareOptions {
    * @default null (uses built-in prompt)
    */
   systemPrompt?: string | null;
+
+  /**
+   * Enables the `@/skills/<name>` module loader on the QuickJS runtime.
+   * @default false
+   */
+  skillsEnabled?: boolean;
 }
 
 /**
@@ -47,6 +55,7 @@ export interface ReplSessionOptions {
   memoryLimitBytes?: number;
   maxStackSizeBytes?: number;
   tools?: StructuredToolInterface[];
+  skillsEnabled?: boolean;
 }
 
 /**
@@ -57,4 +66,19 @@ export interface ReplResult {
   value?: unknown;
   error?: { name?: string; message?: string; stack?: string };
   logs: string[];
+}
+
+/**
+ * Metadata + backend pair the session needs to resolve skill imports.
+ */
+export interface SkillsContext {
+  /**
+   * Per-eval snapshot of `state.skillsMetadata`.
+   */
+  metadata: SkillMetadata[];
+
+  /**
+   * Backend the session fetches skill source files from.
+   */
+  backend: AnyBackendProtocol;
 }

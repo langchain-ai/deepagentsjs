@@ -26,7 +26,8 @@ import type {
 } from "quickjs-emscripten-core";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
-import type { ReplSessionOptions, ReplResult } from "./types.js";
+import { loadSkill, type LoadedSkill } from "./skills.js";
+import type { ReplSessionOptions, ReplResult, SkillsContext } from "./types.js";
 import { toCamelCase } from "./utils.js";
 import { transformForEval } from "./transform.js";
 
@@ -50,6 +51,95 @@ async function getAsyncModule() {
   return asyncModulePromise;
 }
 
+// After a successful asyncify unwind/rewind cycle, a rejected module loader
+// Promise causes a WASM crash ("memory access out of bounds"). The rejection
+// path in quickjs-emscripten's `maybeAsyncFn` catch block calls
+// `context.throw(error)` — a WASM FFI call while the asyncify stack is still
+// unwound — which corrupts memory. To avoid this, the module loader must never
+// reject. This helper returns source code that throws at evaluation time inside
+// the VM instead.
+//
+// The thrown value is a plain object (not `new Error()`) because QuickJS stores
+// Error's `name` and `message` as non-enumerable properties (per spec), which
+// causes `context.dump()` (JSON.stringify) to return `{}`.
+function makeErrorSource(message: string): string {
+  return `throw { name: "Error", message: ${JSON.stringify(message)} };`;
+}
+
+/**
+ * Parse a canonicalized skill specifier into `{ name, rel }`.
+ * Returns `undefined` for anything that isn't a valid `@/skills/<name>` or
+ * `@/skills/<name>/<rel>` shape. `rel` is absent for the bare form.
+ */
+function parseSkillSpecifier(
+  specifier: string,
+): { name: string; rel?: string } | undefined {
+  const prefix = "@/skills/";
+  if (!specifier.startsWith(prefix)) {
+    return;
+  }
+
+  const tail = specifier.slice(prefix.length);
+  const slashIdx = tail.indexOf("/");
+  const name = slashIdx === -1 ? tail : tail.slice(0, slashIdx);
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) {
+    return;
+  }
+
+  const rel = slashIdx === -1 ? undefined : tail.slice(slashIdx + 1);
+  if (rel !== undefined && rel === "") {
+    return;
+  }
+
+  return { name, rel };
+}
+
+/**
+ * Return the `@/skills/<name>` prefix for the skill that owns `base`, or `undefined`.
+ */
+function matchSkillPrefix(base: string): string | undefined {
+  const parsed = parseSkillSpecifier(base);
+  if (parsed === undefined) {
+    return;
+  }
+  return `@/skills/${parsed.name}`;
+}
+
+/**
+ * Return the directory portion of a slash-separated specifier path.
+ */
+function posixDirname(p: string): string {
+  const idx = p.lastIndexOf("/");
+  if (idx === -1) {
+    return "";
+  }
+  return p.slice(0, idx);
+}
+
+/**
+ * POSIX join for slash-separated specifiers. Avoids `node:path/posix`
+ * since session.ts is consumed in browser bundles.
+ */
+function posixJoin(base: string, rel: string): string {
+  const out: string[] = [];
+
+  const segments = `${base}/${rel}`.split("/");
+  for (const segment of segments) {
+    if (segment === "" || segment === ".") {
+      continue;
+    }
+
+    if (segment === "..") {
+      out.pop();
+      continue;
+    }
+
+    out.push(segment);
+  }
+
+  return out.join("/");
+}
+
 /**
  * Sandboxed JavaScript REPL session backed by QuickJS WASM.
  *
@@ -66,20 +156,25 @@ export class ReplSession {
   private runtime: QuickJSAsyncRuntime | null = null;
   private context: QuickJSAsyncContext | null = null;
   private logs: string[] = [];
-  private _options: ReplSessionOptions;
+  private options: ReplSessionOptions;
+  private skillsContext: SkillsContext | undefined;
+  private skillsLoaded: Map<string, LoadedSkill> = new Map();
+  private skillsFailed: Map<string, Error> = new Map();
+
   constructor(id: string, options: ReplSessionOptions = {}) {
     this.id = id;
-    this._options = options;
+    this.options = options;
   }
 
   private async ensureStarted(): Promise<void> {
-    if (this.runtime) return;
+    if (this.runtime !== null) return;
 
     const {
       memoryLimitBytes = DEFAULT_MEMORY_LIMIT,
       maxStackSizeBytes = DEFAULT_MAX_STACK_SIZE,
       tools,
-    } = this._options;
+      skillsEnabled = false,
+    } = this.options;
 
     const asyncModule = await getAsyncModule();
     const runtime: QuickJSAsyncRuntime = asyncModule.newRuntime();
@@ -92,9 +187,133 @@ export class ReplSession {
 
     this.setupConsole();
 
-    if (tools && tools.length > 0) {
+    if (tools !== undefined && tools.length > 0) {
       this.injectTools(tools);
     }
+
+    if (skillsEnabled) {
+      this.installModuleLoader();
+    }
+  }
+
+  /**
+   * Load the skill into cache on first access and replay cached errors.
+   */
+  private async ensureSkillLoaded(name: string): Promise<LoadedSkill> {
+    const cached = this.skillsLoaded.get(name);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const cachedError = this.skillsFailed.get(name);
+    if (cachedError !== undefined) {
+      throw cachedError;
+    }
+
+    const ctx = this.skillsContext;
+    if (ctx === undefined) {
+      throw new Error(
+        `Skill '${name}' referenced but skills are not configured for this session`,
+      );
+    }
+
+    const metadata = ctx.metadata.find((m) => m.name === name);
+    if (metadata === undefined) {
+      throw new Error(
+        `Skill '${name}' referenced but not available on this agent`,
+      );
+    }
+
+    try {
+      const loaded = await loadSkill(metadata, ctx.backend);
+      this.skillsLoaded.set(name, loaded);
+      return loaded;
+    } catch (err) {
+      this.skillsFailed.set(name, err as Error);
+      throw err;
+    }
+  }
+
+  private async resolveSpecifier(specifier: string): Promise<string> {
+    const parsed = parseSkillSpecifier(specifier);
+    if (parsed === undefined) {
+      return makeErrorSource(`Module not found: ${specifier}`);
+    }
+
+    let loaded: LoadedSkill;
+    try {
+      loaded = await this.ensureSkillLoaded(parsed.name);
+    } catch (err) {
+      return makeErrorSource((err as Error).message ?? String(err));
+    }
+
+    if (parsed.rel === undefined) {
+      const source = loaded.files.get(loaded.entryRel);
+      if (source === undefined) {
+        return makeErrorSource(
+          `Skill '${parsed.name}': entrypoint '${loaded.entryRel}' missing from bundle`,
+        );
+      }
+      return source;
+    }
+
+    const source = loaded.files.get(parsed.rel);
+    if (source === undefined) {
+      return makeErrorSource(
+        `Skill '${parsed.name}': '${parsed.rel}' not found in bundle`,
+      );
+    }
+
+    return source;
+  }
+
+  /**
+   * Canonicalize an `import` specifier. Bare specifiers pass through;
+   * relative specifiers are resolved against the importing module's path.
+   * Traversal out of a skill's `@/skills/<name>/` namespace is rejected.
+   */
+  private normalizeSpecifier(base: string, requested: string): string {
+    const isRelative =
+      requested.startsWith("./") || requested.startsWith("../");
+    if (!isRelative) {
+      return requested;
+    }
+
+    // A bare skill specifier like "@/skills/my-skill" has no file component, so
+    // posixDirname would return "@/skills". Treat the bare specifier itself as
+    // the directory so that "./lib/math.js" resolves to "@/skills/my-skill/lib/math.js".
+    const parsed = parseSkillSpecifier(base);
+    const baseDir =
+      parsed !== undefined && parsed.rel === undefined
+        ? base
+        : posixDirname(base);
+    const resolved = posixJoin(baseDir, requested);
+
+    const skillPrefix = matchSkillPrefix(base);
+    if (skillPrefix === undefined) {
+      return resolved;
+    }
+
+    if (!resolved.startsWith(`${skillPrefix}/`)) {
+      return `__resolve_error__:${requested} escapes ${skillPrefix}`;
+    }
+
+    return resolved;
+  }
+
+  /**
+   * Wire the QuickJS module loader and normalizer on this session's runtime.
+   */
+  private installModuleLoader(): void {
+    if (this.runtime === null) {
+      return;
+    }
+
+    this.runtime.setModuleLoader(
+      async (specifier: string) => this.resolveSpecifier(specifier),
+      (base: string, requested: string) =>
+        this.normalizeSpecifier(base, requested),
+    );
   }
 
   /**
@@ -148,6 +367,15 @@ export class ReplSession {
     if (session) {
       session.dispose();
     }
+  }
+
+  /**
+   * Push the current skills metadata + backend into the session.
+   * Called by the middleware once per `js_eval` invocation, before eval runs.
+   * Pass `undefined` to clear the context (no skill imports will resolve).
+   */
+  setSkillsContext(ctx?: SkillsContext): void {
+    this.skillsContext = ctx;
   }
 
   /**
@@ -265,6 +493,12 @@ export class ReplSession {
       session.dispose();
     }
     ReplSession.sessions.clear();
+    // Multi-file skill imports (2+ asyncify unwind/rewind cycles in one
+    // evalCodeAsync) leave the shared WASM module's asyncify state corrupted
+    // after the runtime that performed them is disposed. New runtimes on the
+    // same module will silently fail to invoke module loader callbacks. Force
+    // a fresh WASM module so the next session starts clean.
+    asyncModulePromise = undefined;
   }
 
   private setupConsole(): void {

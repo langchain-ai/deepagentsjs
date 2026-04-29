@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { tool } from "langchain";
 import { z } from "zod/v4";
+import type {
+  AnyBackendProtocol,
+  FileDownloadResponse,
+  SkillMetadata,
+} from "deepagents";
 import { ReplSession } from "./session.js";
+import type { SkillsContext } from "./types.js";
 
 const TIMEOUT = 5000;
 let nextId = 0;
@@ -574,5 +580,190 @@ describe("REPL Engine", () => {
     it("should no-op for a key that does not exist", () => {
       expect(() => ReplSession.deleteSession("nonexistent")).not.toThrow();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Skills module loader
+// ---------------------------------------------------------------------------
+
+const enc = new TextEncoder();
+
+function makeSkillsBackend(files: Record<string, string>): AnyBackendProtocol {
+  return {
+    glob: async (pattern: string, basePath?: string) => {
+      const ext = pattern.replace("**/*", "");
+      const matches = Object.keys(files)
+        .filter((p) => p.startsWith(basePath ?? "") && p.endsWith(ext))
+        .map((p) => ({ path: p }));
+      return { files: matches };
+    },
+    downloadFiles: async (paths: string[]) => {
+      return paths.map((p): FileDownloadResponse => {
+        const content = files[p];
+        if (content === undefined) {
+          return { path: p, content: null, error: "file_not_found" };
+        }
+        return { path: p, content: enc.encode(content), error: null };
+      });
+    },
+  } as unknown as AnyBackendProtocol;
+}
+
+function makeSkillsMeta(
+  name: string,
+  module: string,
+  skillDir?: string,
+): SkillMetadata {
+  const dir = skillDir ?? `/skills/${name}`;
+  return {
+    name,
+    description: `Test skill ${name}`,
+    path: `${dir}/SKILL.md`,
+    module,
+  };
+}
+
+function makeSkillsContext(
+  metadata: SkillMetadata[],
+  files: Record<string, string>,
+): SkillsContext {
+  return { metadata, backend: makeSkillsBackend(files) };
+}
+
+describe("skills module loader", () => {
+  let session: ReplSession;
+
+  beforeEach(() => {
+    ReplSession.clearCache();
+  });
+
+  afterEach(() => {
+    if (session) session.dispose();
+  });
+
+  it("resolves a single-file skill and exposes its exports", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+    });
+    session.setSkillsContext(
+      makeSkillsContext([makeSkillsMeta("my-skill", "index.js")], {
+        "/skills/my-skill/index.js": "export const VALUE = 42;",
+      }),
+    );
+
+    const result = await session.eval(
+      `const mod = await import("@/skills/my-skill"); mod.VALUE`,
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe(42);
+  });
+
+  it("resolves relative imports inside a multi-file skill", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+    });
+    session.setSkillsContext(
+      makeSkillsContext([makeSkillsMeta("my-skill", "index.js")], {
+        "/skills/my-skill/index.js":
+          "import { add } from './lib/math.js'; export function compute() { return add(1, 2); }",
+        "/skills/my-skill/lib/math.js":
+          "export function add(a, b) { return a + b; }",
+      }),
+    );
+
+    const result = await session.eval(
+      `const { compute } = await import("@/skills/my-skill"); compute()`,
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe(3);
+  });
+
+  it("rejects import of an unknown skill with a recognizable message", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+    });
+    session.setSkillsContext(makeSkillsContext([], {}));
+
+    const result = await session.eval(
+      `await import("@/skills/unknown")`,
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error?.message).toContain("not available on this agent");
+  });
+
+  it("rejects import when skills context is cleared", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+    });
+    session.setSkillsContext(undefined);
+
+    const result = await session.eval(
+      `await import("@/skills/my-skill")`,
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error?.message).toContain("not configured");
+  });
+
+  it("rejects traversal escape from inside a skill", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+    });
+    session.setSkillsContext(
+      makeSkillsContext([makeSkillsMeta("my-skill", "index.js")], {
+        "/skills/my-skill/index.js":
+          "export { escape } from '../../other-skill/index.js';",
+      }),
+    );
+
+    const result = await session.eval(
+      `await import("@/skills/my-skill")`,
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("caches a load failure and does not re-fetch from the backend", async () => {
+    let downloadCount = 0;
+    const meta = makeSkillsMeta("my-skill", "index.js");
+    const backend = {
+      glob: async (pattern: string) => {
+        const ext = pattern.replace("**/*", "");
+        if (ext === ".js") {
+          return { files: [{ path: "/skills/my-skill/index.js" }] };
+        }
+        return { files: [] };
+      },
+      downloadFiles: async (paths: string[]) => {
+        downloadCount++;
+        return paths.map(
+          (p): FileDownloadResponse => ({
+            path: p,
+            content: null,
+            error: "file_not_found",
+          }),
+        );
+      },
+    } as unknown as AnyBackendProtocol;
+
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+    });
+    session.setSkillsContext({ metadata: [meta], backend });
+
+    await session.eval(
+      `await import("@/skills/my-skill").catch(() => null)`,
+      TIMEOUT,
+    );
+    await session.eval(
+      `await import("@/skills/my-skill").catch(() => null)`,
+      TIMEOUT,
+    );
+
+    expect(downloadCount).toBe(1);
   });
 });
