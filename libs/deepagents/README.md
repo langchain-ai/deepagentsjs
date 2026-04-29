@@ -32,7 +32,7 @@ Deep Agents is an agent harness. An opinionated, ready-to-run agent out of the b
 - **Context management** — file-based workflows to keep long tasks manageable
 
 > [!NOTE]
-> Looking for the Python package? See [langchain-ai/deepagents](https://github.com/langchain-ai/deepagents).
+> Looking for the Python package? See [langchain-ai/deepagents](https://github.com/langchain-ai/deepagents/tree/main/libs/deepagents).
 
 ## Quickstart
 
