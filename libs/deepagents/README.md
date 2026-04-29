@@ -16,7 +16,7 @@
   <a href="https://www.npmjs.com/package/deepagents"><img src="https://img.shields.io/npm/v/deepagents.svg" alt="npm version"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.0+-blue.svg" alt="TypeScript"></a>
-  <a href="https://x.com/LangChain_JS" target="_blank"><img src="https://img.shields.io/twitter/url/https/twitter.com/LangChain_JS.svg?style=social&label=Follow%20%40LangChain_JS" alt="Twitter / X"></a>
+  <a href="https://x.com/langchain_js" target="_blank"><img src="https://img.shields.io/twitter/url/https/twitter.com/langchain_js.svg?style=social&label=Follow%20%40LangChain_JS" alt="Twitter / X"></a>
 </div>
 
 <br>
