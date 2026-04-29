@@ -33,4 +33,4 @@ export {
 
 export { formatReplResult, toCamelCase } from "./utils.js";
 
-export { transformForEval } from "./transform.js";
+export { transformForEval, stripTypeSyntax } from "./transform.js";

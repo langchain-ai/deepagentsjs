@@ -293,3 +293,47 @@ function findLastNonEmptyNode(
 function isExpression(node: AcornNode): boolean {
   return node.type === "ExpressionStatement";
 }
+
+/**
+ * Strip TypeScript type syntax from an ES-module source so QuickJS can
+ * evaluate it as a standard JS module.
+ *
+ * Unlike `transformForEval`, this keeps `import`/`export` declarations,
+ * does not hoist to `globalThis`, and does not wrap in an IIFE.
+ * On parse failure the original source is returned unchanged.
+ */
+export function stripTypeSyntax(code: string): string {
+  let ast: AcornNode;
+  try {
+    ast = TSParser.parse(code, {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      locations: true,
+    }) as unknown as AcornNode;
+  } catch {
+    // Return the original source unchanged rather than throwing or returning an empty string.
+    // We don't know why the parse failed - it could be a valid plain-JS file that hit an
+    // acorn-typescript incompatibility, in which case returning it unchanged lets QuickJS
+    // evaluate it correctly. If it's genuinely broken TS, QuickJS will surface the parse error
+    // at evaluation time with a useful line/column.
+    return code;
+  }
+
+  const magicString = new MagicString(code);
+  const program = ast as unknown as { body: AcornNode[] };
+
+  for (const node of program.body) {
+    if (isTSOnlyNode(node)) {
+      magicString.remove(node.start, node.end);
+      continue;
+    }
+
+    walk(node as any, {
+      enter(n: any) {
+        stripTypeAnnotationFromNode(magicString, n);
+      },
+    });
+  }
+
+  return magicString.toString();
+}
