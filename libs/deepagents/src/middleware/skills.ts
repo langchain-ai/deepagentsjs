@@ -73,6 +73,20 @@ export const MAX_SKILL_DESCRIPTION_LENGTH = 1024;
 export const MAX_SKILL_COMPATIBILITY_LENGTH = 500;
 
 /**
+ * File extensions a skill module entrypoint may use.
+ */
+export const SKILL_MODULE_EXTENSIONS = [
+  ".js",
+  ".mjs",
+  ".cjs",
+  ".ts",
+  ".mts",
+  ".cts",
+  ".jsx",
+  ".tsx",
+];
+
+/**
  * Metadata for a skill per Agent Skills specification.
  */
 export interface SkillMetadata {
@@ -136,6 +150,12 @@ export interface SkillMetadata {
    * - Space-delimited list of tool names
    */
   allowedTools?: string[];
+
+  /**
+   * Path to a JS/TS entrypoint file for a QuickJS REPL module, relative to the skill
+   * directory.
+   */
+  module?: string;
 }
 
 /**
@@ -170,6 +190,7 @@ export const SkillMetadataEntrySchema = z.object({
   compatibility: z.string().nullable().optional(),
   metadata: z.record(z.string(), z.string()).optional(),
   allowedTools: z.array(z.string()).optional(),
+  module: z.string().optional(),
 });
 
 /**
@@ -489,6 +510,7 @@ export function parseSkillMetadataFromContent(
     license: String(frontmatterData.license ?? "").trim() || null,
     compatibility: compatibilityStr,
     allowedTools,
+    module: validateModulePath(frontmatterData.module),
   };
 }
 
@@ -639,6 +661,73 @@ export function formatSkillsList(
   }
 
   return lines.join("\n");
+}
+
+/**
+ * Returns true when `value` ends with a recognized skill module extension.
+ */
+function endsWithModuleExtension(value: string): boolean {
+  for (const ext of SKILL_MODULE_EXTENSIONS) {
+    if (value.endsWith(ext)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Validate and normalize the `module` frontmatter key from a `SKILL.md`.
+ *
+ * Returns the normalized path (e.g. `"index.ts"`, `"lib/entry.js"`) or
+ * `undefined` when the key is absent, empty, non-string, absolute, contains
+ * path traversal, or uses an unsupported extension. Invalid values silently
+ * degrade the skill to prose-only.
+ */
+export function validateModulePath(raw: unknown): string | undefined {
+  if (raw === null || raw === undefined) {
+    return;
+  }
+
+  if (typeof raw !== "string") {
+    return;
+  }
+
+  const stripped = raw.trim();
+  if (stripped === "") {
+    return;
+  }
+
+  // Normalize "./x" → "x" so the value lines up with the keys the loader
+  // uses inside the installed module scope. Leaves "lib/util.js" untouched.
+  const normalized = stripped.startsWith("./") ? stripped.slice(2) : stripped;
+
+  if (normalized.startsWith("/")) {
+    return;
+  }
+
+  if (
+    normalized === ".." ||
+    normalized.startsWith("../") ||
+    normalized.includes("/../") ||
+    normalized.endsWith("/..")
+  ) {
+    return;
+  }
+
+  // Declaration files are type-only stubs with no runtime exports.
+  if (
+    normalized.endsWith(".d.ts") ||
+    normalized.endsWith(".d.mts") ||
+    normalized.endsWith(".d.cts")
+  ) {
+    return;
+  }
+
+  if (!endsWithModuleExtension(normalized)) {
+    return;
+  }
+
+  return normalized;
 }
 
 /**

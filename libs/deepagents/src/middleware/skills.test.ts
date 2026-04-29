@@ -12,6 +12,7 @@ import {
   skillsMetadataReducer,
   MAX_SKILL_COMPATIBILITY_LENGTH,
   validateSkillName,
+  validateModulePath,
   parseSkillMetadataFromContent,
   validateMetadata,
   formatSkillAnnotations,
@@ -1592,6 +1593,221 @@ describe("formatSkillsList with annotations", () => {
     expect(result).toContain("- **plain-skill**: A plain skill\n");
     expect(result).not.toContain("License");
     expect(result).not.toContain("Compatibility");
+  });
+});
+
+describe("validateModulePath", () => {
+  describe("absent / empty values", () => {
+    it("returns undefined for null", () => {
+      expect(validateModulePath(null)).toBeUndefined();
+    });
+
+    it("returns undefined for undefined", () => {
+      expect(validateModulePath(undefined)).toBeUndefined();
+    });
+
+    it("returns undefined for empty string", () => {
+      expect(validateModulePath("")).toBeUndefined();
+    });
+
+    it("returns undefined for whitespace-only string", () => {
+      expect(validateModulePath("   ")).toBeUndefined();
+    });
+  });
+
+  describe("non-string values", () => {
+    it("returns undefined for number", () => {
+      expect(validateModulePath(42)).toBeUndefined();
+    });
+
+    it("returns undefined for boolean", () => {
+      expect(validateModulePath(true)).toBeUndefined();
+    });
+
+    it("returns undefined for object", () => {
+      expect(validateModulePath({ path: "index.ts" })).toBeUndefined();
+    });
+
+    it("returns undefined for array", () => {
+      expect(validateModulePath(["index.ts"])).toBeUndefined();
+    });
+  });
+
+  describe("valid paths", () => {
+    it("returns 'index.ts' for 'index.ts'", () => {
+      expect(validateModulePath("index.ts")).toBe("index.ts");
+    });
+
+    it("strips leading ./ from './entry.ts'", () => {
+      expect(validateModulePath("./entry.ts")).toBe("entry.ts");
+    });
+
+    it("strips leading ./ from './lib/util.js'", () => {
+      expect(validateModulePath("./lib/util.js")).toBe("lib/util.js");
+    });
+
+    it("passes through a path without ./ prefix", () => {
+      expect(validateModulePath("lib/entry.js")).toBe("lib/entry.js");
+    });
+
+    it("accepts .mjs extension", () => {
+      expect(validateModulePath("index.mjs")).toBe("index.mjs");
+    });
+
+    it("accepts .cjs extension", () => {
+      expect(validateModulePath("index.cjs")).toBe("index.cjs");
+    });
+
+    it("accepts .jsx extension", () => {
+      expect(validateModulePath("ui.jsx")).toBe("ui.jsx");
+    });
+
+    it("accepts .tsx extension", () => {
+      expect(validateModulePath("component.tsx")).toBe("component.tsx");
+    });
+
+    it("accepts .mts extension", () => {
+      expect(validateModulePath("index.mts")).toBe("index.mts");
+    });
+
+    it("accepts .cts extension", () => {
+      expect(validateModulePath("index.cts")).toBe("index.cts");
+    });
+
+    it("trims surrounding whitespace before validating", () => {
+      expect(validateModulePath("  index.ts  ")).toBe("index.ts");
+    });
+  });
+
+  describe("absolute paths", () => {
+    it("returns undefined for '/foo.ts'", () => {
+      expect(validateModulePath("/foo.ts")).toBeUndefined();
+    });
+
+    it("returns undefined for '/absolute/path/index.ts'", () => {
+      expect(validateModulePath("/absolute/path/index.ts")).toBeUndefined();
+    });
+
+    it("returns undefined for './' that normalizes to an absolute after stripping", () => {
+      expect(validateModulePath("/./index.ts")).toBeUndefined();
+    });
+  });
+
+  describe("path traversal", () => {
+    it("returns undefined for '..'", () => {
+      expect(validateModulePath("..")).toBeUndefined();
+    });
+
+    it("returns undefined for '../foo.ts'", () => {
+      expect(validateModulePath("../foo.ts")).toBeUndefined();
+    });
+
+    it("returns undefined for 'lib/../foo.ts'", () => {
+      expect(validateModulePath("lib/../foo.ts")).toBeUndefined();
+    });
+
+    it("returns undefined for 'a/b/../../foo.ts'", () => {
+      expect(validateModulePath("a/b/../../foo.ts")).toBeUndefined();
+    });
+
+    it("returns undefined for 'foo/..' (trailing traversal without extension)", () => {
+      expect(validateModulePath("foo/..")).toBeUndefined();
+    });
+
+    it("returns undefined for './../../escape.ts'", () => {
+      expect(validateModulePath("./../../escape.ts")).toBeUndefined();
+    });
+  });
+
+  describe("bad extensions", () => {
+    it("returns undefined for '.json'", () => {
+      expect(validateModulePath("data.json")).toBeUndefined();
+    });
+
+    it("returns undefined for '.md'", () => {
+      expect(validateModulePath("README.md")).toBeUndefined();
+    });
+
+    it("returns undefined for no extension", () => {
+      expect(validateModulePath("index")).toBeUndefined();
+    });
+
+    it("returns undefined for '.py'", () => {
+      expect(validateModulePath("script.py")).toBeUndefined();
+    });
+
+    it("returns undefined for '.d.ts' (type declaration only)", () => {
+      expect(validateModulePath("index.d.ts")).toBeUndefined();
+    });
+  });
+});
+
+describe("parseSkillMetadataFromContent module field", () => {
+  function makeContent(extra = ""): string {
+    return `---\nname: my-skill\ndescription: A skill\n${extra}---\n\nContent\n`;
+  }
+
+  it("sets module when a valid path is provided", () => {
+    const result = parseSkillMetadataFromContent(
+      makeContent("module: index.ts\n"),
+      "/skills/my-skill/SKILL.md",
+      "my-skill",
+    );
+    expect(result?.module).toBe("index.ts");
+  });
+
+  it("strips leading ./ from module path", () => {
+    const result = parseSkillMetadataFromContent(
+      makeContent("module: ./src/entry.ts\n"),
+      "/skills/my-skill/SKILL.md",
+      "my-skill",
+    );
+    expect(result?.module).toBe("src/entry.ts");
+  });
+
+  it("sets module to undefined when module key is absent", () => {
+    const result = parseSkillMetadataFromContent(
+      makeContent(),
+      "/skills/my-skill/SKILL.md",
+      "my-skill",
+    );
+    expect(result?.module).toBeUndefined();
+  });
+
+  it("sets module to undefined for a non-string value", () => {
+    const result = parseSkillMetadataFromContent(
+      makeContent("module: 42\n"),
+      "/skills/my-skill/SKILL.md",
+      "my-skill",
+    );
+    expect(result?.module).toBeUndefined();
+  });
+
+  it("sets module to undefined for an unsupported extension", () => {
+    const result = parseSkillMetadataFromContent(
+      makeContent("module: index.py\n"),
+      "/skills/my-skill/SKILL.md",
+      "my-skill",
+    );
+    expect(result?.module).toBeUndefined();
+  });
+
+  it("sets module to undefined for a traversal path", () => {
+    const result = parseSkillMetadataFromContent(
+      makeContent("module: ../escape.ts\n"),
+      "/skills/my-skill/SKILL.md",
+      "my-skill",
+    );
+    expect(result?.module).toBeUndefined();
+  });
+
+  it("sets module to undefined for an empty string", () => {
+    const result = parseSkillMetadataFromContent(
+      makeContent('module: ""\n'),
+      "/skills/my-skill/SKILL.md",
+      "my-skill",
+    );
+    expect(result?.module).toBeUndefined();
   });
 });
 
