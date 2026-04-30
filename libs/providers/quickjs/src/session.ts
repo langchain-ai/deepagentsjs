@@ -430,14 +430,13 @@ export class ReplSession {
    */
   async eval(code: string, timeoutMs: number): Promise<ReplResult> {
     await this.ensureStarted();
+    const runtime = this.runtime!;
+    const context = this.context!;
+
+    this.logs.length = 0;
 
     this.resetPtcBudget();
     try {
-      const runtime = this.runtime!;
-      const context = this.context!;
-
-      this.logs.length = 0;
-
       if (timeoutMs >= 0) {
         runtime.setInterruptHandler(
           shouldInterruptAfterDeadline(Date.now() + timeoutMs),
