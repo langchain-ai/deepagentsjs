@@ -372,6 +372,122 @@ describe("REPL Engine", () => {
     });
   });
 
+  describe("PTC call budget", () => {
+    const greetTool = tool(
+      async (input: { name: string }) => `hello ${input.name}`,
+      {
+        name: "greet",
+        description: "Greet someone",
+        schema: z.object({ name: z.string() }),
+      },
+    );
+
+    it("should reject on the call that exceeds the budget", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: 1,
+      });
+
+      const result = await session.eval(
+        `await tools.greet({ name: "a" });
+         await tools.greet({ name: "b" });`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("PTC call budget");
+    });
+
+    it("should succeed when calls stay within the budget", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: 2,
+      });
+
+      const result = await session.eval(
+        `const a = await tools.greet({ name: "a" });
+         const b = await tools.greet({ name: "b" });
+         a + " " + b`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("hello a hello b");
+    });
+
+    it("should reset the budget between evals", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: 1,
+      });
+
+      const first = await session.eval(
+        `await tools.greet({ name: "a" })`,
+        TIMEOUT,
+      );
+      const second = await session.eval(
+        `await tools.greet({ name: "b" })`,
+        TIMEOUT,
+      );
+
+      expect(first.ok).toBe(true);
+      expect(second.ok).toBe(true);
+    });
+
+    it("should allow unlimited calls when maxPtcCalls is null", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: null,
+      });
+
+      // Build a string that makes more calls than DEFAULT_MAX_PTC_CALLS
+      const calls = Array.from(
+        { length: 300 },
+        (_, i) => `await tools.greet({ name: "${i}" })`,
+      ).join(";\n");
+
+      const result = await session.eval(calls, TIMEOUT * 6);
+
+      expect(result.ok).toBe(true);
+    });
+
+    it("should surface budget message via JS try/catch", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: 1,
+      });
+
+      const result = await session.eval(
+        `var msg;
+         await tools.greet({ name: "a" });
+         try { await tools.greet({ name: "b" }) } catch (e) { msg = e.message }
+         msg`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toContain("PTC call budget");
+    });
+
+    it("should reject Promise.all when any call exceeds the budget", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: 1,
+      });
+
+      const result = await session.eval(
+        `await Promise.all([
+           tools.greet({ name: "a" }),
+           tools.greet({ name: "b" }),
+         ])`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("PTC call budget");
+    });
+  });
+
   describe("PTC (programmatic tool calling)", () => {
     it("should call tools with await", async () => {
       const addTool = tool(async (input) => String(input.a + input.b), {

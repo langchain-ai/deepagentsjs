@@ -585,6 +585,7 @@ export class ReplSession {
           const promise = context.newPromise();
           (async () => {
             try {
+              this.consumePtcBudget(camelName);
               const rawInput =
                 typeof input === "object" && input !== null ? input : {};
               const result = await t.invoke(rawInput);
