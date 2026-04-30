@@ -148,19 +148,38 @@ async function prepareSkillsForEval(
   session: ReplSession,
   skillsBackend: AnyBackendProtocol | BackendFactory,
   code: string,
+  ptcTools: StructuredToolInterface[],
 ): Promise<string | undefined> {
   const taskInput = getCurrentTaskInput<{ skillsMetadata?: SkillMetadata[] }>();
   const metadata: SkillMetadata[] = taskInput?.skillsMetadata ?? [];
 
   const referenced = scanSkillReferences(code);
   if (referenced.size > 0) {
-    const known = new Set(metadata.map((m) => m.name));
+    const known = new Map(metadata.map((m) => [m.name, m]));
     const missing: string[] = [];
+    const ptcToolNames = new Set(ptcTools.map((t) => t.name));
+
     for (const name of referenced) {
-      if (!known.has(name)) {
+      const skill = known.get(name);
+      if (!skill) {
         missing.push(name);
+        continue;
+      }
+
+      const missingPtc = (skill.requiredPtcTools ?? []).filter(
+        (t) => !ptcToolNames.has(t),
+      );
+      
+      if (missingPtc.length > 0) {
+        session.setSkillsContext(undefined);
+        return (
+          `Skill '${name}' requires PTC tools that are not configured: ` +
+          `${missingPtc.join(", ")}. ` +
+          `Add them to createQuickJSMiddleware({ ptc: [...] }).`
+        );
       }
     }
+
     if (missing.length > 0) {
       session.setSkillsContext(undefined);
       return formatSkillNotAvailable(missing);
@@ -239,6 +258,7 @@ export function createCodeInterpreterMiddleware(
           session,
           skillsBackend,
           input.code,
+          ptcTools,
         );
         if (setupError !== undefined) {
           return setupError;
