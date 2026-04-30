@@ -252,6 +252,51 @@ describe("REPL Engine", () => {
     });
   });
 
+  describe("console buffer", () => {
+    it("caps output at maxResultChars and reports dropped chars", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        maxResultChars: 10,
+      });
+      const result = await session.eval(
+        'console.log("hello world this is too long")',
+        TIMEOUT,
+      );
+      expect(result.logsDroppedChars).toBeGreaterThan(0);
+      expect(result.logs.join("\n").length).toBeLessThanOrEqual(10);
+    });
+
+    it("preserves early output when overflow occurs", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        maxResultChars: 5,
+      });
+      const result = await session.eval('console.log("abcdefghij")', TIMEOUT);
+      expect(result.logs.join("")).toMatch(/^abcde/);
+      expect(result.logsDroppedChars).toBeGreaterThan(0);
+    });
+
+    it("resets truncation state between evaluations", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        maxResultChars: 10,
+      });
+      await session.eval(
+        'console.log("overflow: this is way too long")',
+        TIMEOUT,
+      );
+      const result = await session.eval('console.log("hi")', TIMEOUT);
+      expect(result.logsDroppedChars).toBe(0);
+      expect(result.logs.join("")).toContain("hi");
+    });
+
+    it("drops everything with a zero-char budget", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        maxResultChars: 0,
+      });
+      const result = await session.eval('console.log("anything")', TIMEOUT);
+      expect(result.logs).toHaveLength(0);
+      expect(result.logsDroppedChars).toBeGreaterThan(0);
+    });
+  });
+
   describe("execution limits", () => {
     it("should timeout on infinite loops", async () => {
       session = ReplSession.getOrCreate(uniqueThreadId());

@@ -37,6 +37,7 @@ export const DEFAULT_MAX_STACK_SIZE = 320 * 1024;
 export const DEFAULT_EXECUTION_TIMEOUT = 30_000;
 export const DEFAULT_SESSION_ID = "__default__";
 export const DEFAULT_MAX_PTC_CALLS = 256;
+export const DEFAULT_MAX_RESULTS_CHARS = 4000;
 
 // The variant descriptor (WASM binary + glue) is safe to share across sessions;
 // only the instantiated module carries asyncify state. Import once, instantiate per session.
@@ -144,6 +145,63 @@ function posixJoin(base: string, rel: string): string {
 }
 
 /**
+ * Fixed-size character buffer for capturing console output from the QuickJS VM.
+ *
+ * Lines are accumulated up to `maxChars`. Once the cap is reached, excess
+ * characters are counted as dropped rather than silently discarded without
+ * attribution, so callers can surface a truncation notice to the user.
+ */
+class ConsoleBuffer {
+  private readonly maxChars: number;
+  private buffer: string = "";
+  private droppedChars: number = 0;
+
+  /**
+   * @param maxChars - Maximum number of characters to retain. Values below
+   *   zero are clamped to zero.
+   */
+  constructor(maxChars: number) {
+    this.maxChars = Math.max(maxChars, 0);
+  }
+
+  /**
+   * Append `line` to the buffer.
+   *
+   * If the buffer is already full the entire line is counted as dropped.
+   * If `line` partially fits, the fitting prefix is stored and the remainder
+   * is counted as dropped.
+   */
+  append(line: string): void {
+    const remaining = this.maxChars - this.buffer.length;
+    if (remaining <= 0) {
+      this.droppedChars += line.length;
+      return;
+    }
+
+    if (line.length <= remaining) {
+      this.buffer += line;
+    } else {
+      this.buffer += line.slice(0, remaining);
+      this.droppedChars += line.length - remaining;
+    }
+  }
+
+  /**
+   * Return the buffered output and dropped-character count as `[buffered,
+   * droppedChars]`, then reset both to zero.
+   */
+  drain(): [string, number] {
+    const out = this.buffer;
+    const dropped = this.droppedChars;
+
+    this.buffer = "";
+    this.droppedChars = 0;
+
+    return [out, dropped];
+  }
+}
+
+/**
  * Sandboxed JavaScript REPL session backed by QuickJS WASM.
  *
  * Serializable — holds an `id` that keys into a static session map.
@@ -158,7 +216,9 @@ export class ReplSession {
 
   private runtime: QuickJSAsyncRuntime | null = null;
   private context: QuickJSAsyncContext | null = null;
-  private logs: string[] = [];
+  private consoleBuffer: ConsoleBuffer = new ConsoleBuffer(
+    DEFAULT_MAX_RESULTS_CHARS,
+  );
   private options: ReplSessionOptions;
   private skillsContext: SkillsContext | undefined;
   private skillsLoaded: Map<string, LoadedSkill> = new Map();
@@ -183,6 +243,7 @@ export class ReplSession {
       maxStackSizeBytes = DEFAULT_MAX_STACK_SIZE,
       tools,
       skillsEnabled = false,
+      maxResultChars = DEFAULT_MAX_RESULTS_CHARS,
     } = this.options;
 
     const asyncModule = await newAsyncModule();
@@ -194,6 +255,7 @@ export class ReplSession {
     this.runtime = runtime;
     this.context = context;
 
+    this.consoleBuffer = new ConsoleBuffer(maxResultChars);
     this.setupConsole();
 
     if (tools !== undefined && tools.length > 0) {
@@ -431,7 +493,13 @@ export class ReplSession {
     const runtime = this.runtime!;
     const context = this.context!;
 
-    this.logs.length = 0;
+    const drainLogs = (): { logs: string[]; logsDroppedChars: number } => {
+      const [raw, dropped] = this.consoleBuffer.drain();
+      return {
+        logs: raw.length > 0 ? raw.split("\n").filter((l) => l.length > 0) : [],
+        logsDroppedChars: dropped,
+      };
+    };
 
     this.resetPtcBudget();
     try {
@@ -449,7 +517,7 @@ export class ReplSession {
       if (result.error) {
         const error = context.dump(result.error);
         result.error.dispose();
-        return { ok: false, error, logs: [...this.logs] };
+        return { ok: false, error, ...drainLogs() };
       }
 
       const promiseState = context.getPromiseState(result.value);
@@ -458,19 +526,19 @@ export class ReplSession {
         if (promiseState.notAPromise) {
           const value = context.dump(result.value);
           result.value.dispose();
-          return { ok: true, value, logs: [...this.logs] };
+          return { ok: true, value, ...drainLogs() };
         }
         const value = context.dump(promiseState.value);
         promiseState.value.dispose();
         result.value.dispose();
-        return { ok: true, value, logs: [...this.logs] };
+        return { ok: true, value, ...drainLogs() };
       }
 
       if (promiseState.type === "rejected") {
         const error = context.dump(promiseState.error);
         promiseState.error.dispose();
         result.value.dispose();
-        return { ok: false, error, logs: [...this.logs] };
+        return { ok: false, error, ...drainLogs() };
       }
 
       const noTimeout = timeoutMs < 0;
@@ -482,13 +550,13 @@ export class ReplSession {
           const value = context.dump(state.value);
           state.value.dispose();
           result.value.dispose();
-          return { ok: true, value, logs: [...this.logs] };
+          return { ok: true, value, ...drainLogs() };
         }
         if (state.type === "rejected") {
           const error = context.dump(state.error);
           state.error.dispose();
           result.value.dispose();
-          return { ok: false, error, logs: [...this.logs] };
+          return { ok: false, error, ...drainLogs() };
         }
         await new Promise((r) => setTimeout(r, 1));
       }
@@ -497,7 +565,7 @@ export class ReplSession {
       return {
         ok: false,
         error: { message: "Promise timed out — execution interrupted" },
-        logs: [...this.logs],
+        ...drainLogs(),
       };
     } finally {
       this.ptcCallsRemaining = null;
@@ -541,7 +609,6 @@ export class ReplSession {
 
   private setupConsole(): void {
     const context = this.context!;
-    const logs = this.logs;
     const consoleHandle = context.newObject();
     for (const method of ["log", "warn", "error", "info", "debug"] as const) {
       const fnHandle = context.newFunction(
@@ -555,11 +622,11 @@ export class ReplSession {
                 : String(a),
             )
             .join(" ");
-          logs.push(
+          const line =
             method === "log" || method === "info" || method === "debug"
               ? formatted
-              : `[${method}] ${formatted}`,
-          );
+              : `[${method}] ${formatted}`;
+          this.consoleBuffer.append(line + "\n");
         },
       );
       context.setProp(consoleHandle, method, fnHandle);

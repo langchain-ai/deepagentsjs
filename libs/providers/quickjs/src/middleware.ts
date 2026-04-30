@@ -31,6 +31,7 @@ import {
   DEFAULT_MAX_STACK_SIZE,
   DEFAULT_SESSION_ID,
   DEFAULT_MAX_PTC_CALLS,
+  DEFAULT_MAX_RESULTS_CHARS,
 } from "./session.js";
 import {
   formatReplResult,
@@ -187,6 +188,7 @@ export function createQuickJSMiddleware(
     systemPrompt: customSystemPrompt = null,
     skillsBackend,
     maxPtcCalls = DEFAULT_MAX_PTC_CALLS,
+    maxResultChars = DEFAULT_MAX_RESULTS_CHARS,
   } = options;
 
   if (maxPtcCalls !== null && maxPtcCalls !== undefined && maxPtcCalls < 1) {
@@ -222,6 +224,7 @@ export function createQuickJSMiddleware(
         maxPtcCalls,
         tools: ptcTools,
         skillsEnabled: skillsBackend !== undefined,
+        maxResultChars,
       });
 
       if (skillsBackend !== undefined) {

@@ -64,6 +64,16 @@ export interface QuickJSMiddlewareOptions {
    * @default 256
    */
   maxPtcCalls?: number | null;
+
+  /**
+   * Maximum characters to retain from console output per evaluation.
+   * Output exceeding this limit is dropped at capture time and a
+   * `[truncated N chars]` marker is appended to the tool response.
+   * The same limit also caps result and error strings in the formatted output.
+   *
+   * @default 4000
+   */
+  maxResultChars?: number;
 }
 
 /**
@@ -75,6 +85,7 @@ export interface ReplSessionOptions {
   tools?: StructuredToolInterface[];
   skillsEnabled?: boolean;
   maxPtcCalls?: number | null;
+  maxResultChars?: number;
 }
 
 /**
@@ -85,6 +96,7 @@ export interface ReplResult {
   value?: unknown;
   error?: { name?: string; message?: string; stack?: string };
   logs: string[];
+  logsDroppedChars: number;
 }
 
 /**
