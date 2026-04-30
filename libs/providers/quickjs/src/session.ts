@@ -162,10 +162,16 @@ export class ReplSession {
   private skillsContext: SkillsContext | undefined;
   private skillsLoaded: Map<string, LoadedSkill> = new Map();
   private skillsFailed: Map<string, Error> = new Map();
+  private readonly maxPtcCalls: number | null;
+  private ptcCallsRemaining: number | null = null;
 
   constructor(id: string, options: ReplSessionOptions = {}) {
     this.id = id;
     this.options = options;
+    this.maxPtcCalls =
+      options.maxPtcCalls !== undefined
+        ? options.maxPtcCalls
+        : DEFAULT_MAX_PTC_CALLS;
   }
 
   private async ensureStarted(): Promise<void> {
@@ -319,6 +325,39 @@ export class ReplSession {
   }
 
   /**
+   * Initialise the per-eval PTC counter. Called at the top of every `eval()`.
+   */
+  private resetPtcBudget(): void {
+    this.ptcCallsRemaining =
+      this.maxPtcCalls === null ? null : this.maxPtcCalls;
+  }
+
+  /**
+   * Decrement the PTC call counter and throw if the budget is exhausted.
+   * `null` budget means unlimited — returns immediately without decrementing.
+   * The thrown error has `name === "PTCCallBudgetExceeded"` so the catch
+   * branch in `injectTools` can route it to a named plain-object rejection
+   * rather than a generic tool-failure message.
+   */
+  private consumePtcBudget(functionName: string): void {
+    if (this.ptcCallsRemaining === null) {
+      return;
+    }
+
+    if (this.ptcCallsRemaining > 0) {
+      this.ptcCallsRemaining--;
+      return;
+    }
+
+    const err = new Error(
+      `PTC call budget of ${this.maxPtcCalls} exceeded — attempted call: tools.${functionName}`,
+    );
+    err.name = "PTCCallBudgetExceeded";
+
+    throw err;
+  }
+
+  /**
    * Get or create a session for the given id.
    *
    * Sessions are deduped by id — calling `getOrCreate` twice with the
@@ -391,75 +430,81 @@ export class ReplSession {
    */
   async eval(code: string, timeoutMs: number): Promise<ReplResult> {
     await this.ensureStarted();
-    const runtime = this.runtime!;
-    const context = this.context!;
 
-    this.logs.length = 0;
+    this.resetPtcBudget();
+    try {
+      const runtime = this.runtime!;
+      const context = this.context!;
 
-    if (timeoutMs >= 0) {
-      runtime.setInterruptHandler(
-        shouldInterruptAfterDeadline(Date.now() + timeoutMs),
-      );
-    } else {
-      runtime.setInterruptHandler(() => false);
-    }
+      this.logs.length = 0;
 
-    const transformed = transformForEval(code);
-    const result = await context.evalCodeAsync(transformed);
+      if (timeoutMs >= 0) {
+        runtime.setInterruptHandler(
+          shouldInterruptAfterDeadline(Date.now() + timeoutMs),
+        );
+      } else {
+        runtime.setInterruptHandler(() => false);
+      }
 
-    if (result.error) {
-      const error = context.dump(result.error);
-      result.error.dispose();
-      return { ok: false, error, logs: [...this.logs] };
-    }
+      const transformed = transformForEval(code);
+      const result = await context.evalCodeAsync(transformed);
 
-    const promiseState = context.getPromiseState(result.value);
+      if (result.error) {
+        const error = context.dump(result.error);
+        result.error.dispose();
+        return { ok: false, error, logs: [...this.logs] };
+      }
 
-    if (promiseState.type === "fulfilled") {
-      if (promiseState.notAPromise) {
-        const value = context.dump(result.value);
+      const promiseState = context.getPromiseState(result.value);
+
+      if (promiseState.type === "fulfilled") {
+        if (promiseState.notAPromise) {
+          const value = context.dump(result.value);
+          result.value.dispose();
+          return { ok: true, value, logs: [...this.logs] };
+        }
+        const value = context.dump(promiseState.value);
+        promiseState.value.dispose();
         result.value.dispose();
         return { ok: true, value, logs: [...this.logs] };
       }
-      const value = context.dump(promiseState.value);
-      promiseState.value.dispose();
-      result.value.dispose();
-      return { ok: true, value, logs: [...this.logs] };
-    }
 
-    if (promiseState.type === "rejected") {
-      const error = context.dump(promiseState.error);
-      promiseState.error.dispose();
-      result.value.dispose();
-      return { ok: false, error, logs: [...this.logs] };
-    }
-
-    const noTimeout = timeoutMs < 0;
-    const deadline = noTimeout ? Infinity : Date.now() + timeoutMs;
-    while (noTimeout || Date.now() < deadline) {
-      context.runtime.executePendingJobs();
-      const state = context.getPromiseState(result.value);
-      if (state.type === "fulfilled") {
-        const value = context.dump(state.value);
-        state.value.dispose();
-        result.value.dispose();
-        return { ok: true, value, logs: [...this.logs] };
-      }
-      if (state.type === "rejected") {
-        const error = context.dump(state.error);
-        state.error.dispose();
+      if (promiseState.type === "rejected") {
+        const error = context.dump(promiseState.error);
+        promiseState.error.dispose();
         result.value.dispose();
         return { ok: false, error, logs: [...this.logs] };
       }
-      await new Promise((r) => setTimeout(r, 1));
-    }
 
-    result.value.dispose();
-    return {
-      ok: false,
-      error: { message: "Promise timed out — execution interrupted" },
-      logs: [...this.logs],
-    };
+      const noTimeout = timeoutMs < 0;
+      const deadline = noTimeout ? Infinity : Date.now() + timeoutMs;
+      while (noTimeout || Date.now() < deadline) {
+        context.runtime.executePendingJobs();
+        const state = context.getPromiseState(result.value);
+        if (state.type === "fulfilled") {
+          const value = context.dump(state.value);
+          state.value.dispose();
+          result.value.dispose();
+          return { ok: true, value, logs: [...this.logs] };
+        }
+        if (state.type === "rejected") {
+          const error = context.dump(state.error);
+          state.error.dispose();
+          result.value.dispose();
+          return { ok: false, error, logs: [...this.logs] };
+        }
+        await new Promise((r) => setTimeout(r, 1));
+      }
+
+      result.value.dispose();
+      return {
+        ok: false,
+        error: { message: "Promise timed out — execution interrupted" },
+        logs: [...this.logs],
+      };
+    } finally {
+      this.ptcCallsRemaining = null;
+    }
   }
 
   dispose(): void {
