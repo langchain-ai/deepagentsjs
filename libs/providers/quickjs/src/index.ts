@@ -18,6 +18,8 @@
 
 export { createQuickJSMiddleware } from "./middleware.js";
 
+export { PTCCallBudgetExceededError } from "./errors.js";
+
 export type {
   QuickJSMiddlewareOptions,
   ReplSessionOptions,

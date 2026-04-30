@@ -27,6 +27,7 @@ import type {
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
 import { loadSkill, type LoadedSkill } from "./skills.js";
+import { PTCCallBudgetExceededError } from "./errors.js";
 import type { ReplSessionOptions, ReplResult, SkillsContext } from "./types.js";
 import { toCamelCase } from "./utils.js";
 import { transformForEval } from "./transform.js";
@@ -335,9 +336,6 @@ export class ReplSession {
   /**
    * Decrement the PTC call counter and throw if the budget is exhausted.
    * `null` budget means unlimited — returns immediately without decrementing.
-   * The thrown error has `name === "PTCCallBudgetExceeded"` so the catch
-   * branch in `injectTools` can route it to a named plain-object rejection
-   * rather than a generic tool-failure message.
    */
   private consumePtcBudget(functionName: string): void {
     if (this.ptcCallsRemaining === null) {
@@ -349,10 +347,12 @@ export class ReplSession {
       return;
     }
 
-    const err = new Error(
-      `PTC call budget of ${this.maxPtcCalls} exceeded — attempted call: tools.${functionName}`,
-    );
-    throw err;
+    const limit = this.maxPtcCalls ?? 0;
+    throw new PTCCallBudgetExceededError({
+      limit,
+      attempted: limit + 1,
+      functionName,
+    });
   }
 
   /**
