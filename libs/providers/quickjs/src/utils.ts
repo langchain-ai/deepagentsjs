@@ -115,9 +115,9 @@ export async function toolToTypeSignature(
 }
 
 /**
- * Render a pre-eval skill-availability failure matching the Python error shape.
+ * Render a pre-eval error when referenced skills are not available on the agent.
  */
 export function formatSkillNotAvailable(missing: readonly string[]): string {
   const list = [...missing].sort().join(", ");
-  return `<error type="SkillNotAvailable">${list}</error>`;
+  return `Skills unavailable: ${list}`;
 }
