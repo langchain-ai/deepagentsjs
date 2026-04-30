@@ -156,10 +156,6 @@ class ConsoleBuffer {
   private buffer: string = "";
   private droppedChars: number = 0;
 
-  /**
-   * @param maxChars - Maximum number of characters to retain. Values below
-   *   zero are clamped to zero.
-   */
   constructor(maxChars: number) {
     this.maxChars = Math.max(maxChars, 0);
   }
