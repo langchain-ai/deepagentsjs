@@ -20,11 +20,21 @@ describe("createQuickJSMiddleware", () => {
       expect(middleware.tools).toBeDefined();
       const names = middleware.tools!.map((t: { name: string }) => t.name);
       expect(names).toContain("js_eval");
+      const jsEval = middleware.tools!.find(
+        (t: { name: string }) => t.name === "js_eval",
+      ) as {
+        metadata?: Record<string, unknown>;
+      };
+      expect(jsEval.metadata?.ls_code_input_language).toBe("javascript");
     });
 
     it("should register exactly one tool", () => {
       const middleware = createQuickJSMiddleware();
       expect(middleware.tools!.length).toBe(1);
+      expect(
+        (middleware.tools![0] as { metadata?: Record<string, unknown> })
+          .metadata,
+      ).toMatchObject({ ls_code_input_language: "javascript" });
     });
   });
 

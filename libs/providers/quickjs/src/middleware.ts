@@ -183,6 +183,7 @@ export function createQuickJSMiddleware(
         Use console.log() for output. Returns the result of the last expression.
         If file or other tools are available, call them via the tools namespace: await tools.readFile({ path }).
       `,
+      metadata: { ls_code_input_language: "javascript" },
       schema: z.object({
         code: z
           .string()
