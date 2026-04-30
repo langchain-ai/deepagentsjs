@@ -352,8 +352,6 @@ export class ReplSession {
     const err = new Error(
       `PTC call budget of ${this.maxPtcCalls} exceeded — attempted call: tools.${functionName}`,
     );
-    err.name = "PTCCallBudgetExceeded";
-
     throw err;
   }
 
