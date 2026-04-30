@@ -7,7 +7,7 @@ import {
   generatePtcPrompt,
   resolveToolList,
 } from "./middleware.js";
-import { ReplSession } from "./session.js";
+import { ReplSession, DEFAULT_MAX_PTC_CALLS } from "./session.js";
 
 describe("createQuickJSMiddleware", () => {
   beforeEach(() => {

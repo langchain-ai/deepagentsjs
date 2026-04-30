@@ -35,6 +35,7 @@ export const DEFAULT_MEMORY_LIMIT = 50 * 1024 * 1024;
 export const DEFAULT_MAX_STACK_SIZE = 320 * 1024;
 export const DEFAULT_EXECUTION_TIMEOUT = 30_000;
 export const DEFAULT_SESSION_ID = "__default__";
+export const DEFAULT_MAX_PTC_CALLS = 256;
 
 // The variant descriptor (WASM binary + glue) is safe to share across sessions;
 // only the instantiated module carries asyncify state. Import once, instantiate per session.

@@ -29,6 +29,7 @@ export {
   DEFAULT_MEMORY_LIMIT,
   DEFAULT_MAX_STACK_SIZE,
   DEFAULT_EXECUTION_TIMEOUT,
+  DEFAULT_MAX_PTC_CALLS,
 } from "./session.js";
 
 export {

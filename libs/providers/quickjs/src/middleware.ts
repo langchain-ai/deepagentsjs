@@ -30,6 +30,7 @@ import {
   DEFAULT_MEMORY_LIMIT,
   DEFAULT_MAX_STACK_SIZE,
   DEFAULT_SESSION_ID,
+  DEFAULT_MAX_PTC_CALLS,
 } from "./session.js";
 import {
   formatReplResult,
@@ -185,7 +186,12 @@ export function createQuickJSMiddleware(
     executionTimeoutMs = DEFAULT_EXECUTION_TIMEOUT,
     systemPrompt: customSystemPrompt = null,
     skillsBackend,
+    maxPtcCalls = DEFAULT_MAX_PTC_CALLS,
   } = options;
+
+  if (maxPtcCalls !== null && maxPtcCalls !== undefined && maxPtcCalls < 1) {
+    throw new Error("`maxPtcCalls` must be >= 1 or null");
+  }
 
   const baseSystemPrompt = customSystemPrompt || REPL_SYSTEM_PROMPT;
 
@@ -213,6 +219,7 @@ export function createQuickJSMiddleware(
       const session = ReplSession.getOrCreate(sessionKey, {
         memoryLimitBytes,
         maxStackSizeBytes,
+        maxPtcCalls,
         tools: ptcTools,
         skillsEnabled: skillsBackend !== undefined,
       });

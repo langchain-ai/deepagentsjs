@@ -50,6 +50,20 @@ export interface QuickJSMiddlewareOptions {
    * `SkillsMiddleware`, skills with a `module:` key become dynamic-importable.
    */
   skillsBackend?: AnyBackendProtocol | BackendFactory;
+
+  /**
+   * Maximum number of `tools.*` bridge calls allowed per `eval()` invocation.
+   *
+   * Each call to any function in the `tools` namespace decrements the counter.
+   * Once exhausted the next call rejects with a `PTCCallBudgetExceeded` error.
+   * The budget resets to this value at the start of every new `eval()` call.
+   *
+   * Set to `null` to disable the limit entirely (unsafe — increases DoS risk).
+   * Must be >= 1 when provided as a number.
+   *
+   * @default 256
+   */
+  maxPtcCalls?: number | null;
 }
 
 /**
@@ -60,6 +74,7 @@ export interface ReplSessionOptions {
   maxStackSizeBytes?: number;
   tools?: StructuredToolInterface[];
   skillsEnabled?: boolean;
+  maxPtcCalls?: number | null;
 }
 
 /**
