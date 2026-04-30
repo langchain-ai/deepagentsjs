@@ -36,19 +36,20 @@ export const DEFAULT_MAX_STACK_SIZE = 320 * 1024;
 export const DEFAULT_EXECUTION_TIMEOUT = 30_000;
 export const DEFAULT_SESSION_ID = "__default__";
 
-let asyncModulePromise: Promise<any> | undefined;
+// The variant descriptor (WASM binary + glue) is safe to share across sessions;
+// only the instantiated module carries asyncify state. Import once, instantiate per session.
+const variantImport = import("@jitl/quickjs-ng-wasmfile-release-asyncify");
 
-async function getAsyncModule() {
-  if (!asyncModulePromise) {
-    asyncModulePromise = (async () => {
-      const variant =
-        await import("@jitl/quickjs-ng-wasmfile-release-asyncify");
-      return newQuickJSAsyncWASMModuleFromVariant(
-        (variant.default ?? variant) as any,
-      );
-    })();
-  }
-  return asyncModulePromise;
+// Each ReplSession needs its own WASM module. The asyncify WASM variant allows only one
+// concurrent async call per module instance, and multi-file skill imports (2+ unwind/rewind
+// cycles inside a single evalCodeAsync) leave the module's asyncify state corrupted after
+// the owning runtime is disposed — new runtimes on the same module silently skip module
+// loader callbacks. A fresh instantiation per session gives each session clean asyncify state.
+async function newAsyncModule() {
+  const variant = await variantImport;
+  return newQuickJSAsyncWASMModuleFromVariant(
+    (variant.default ?? variant) as any,
+  );
 }
 
 // After a successful asyncify unwind/rewind cycle, a rejected module loader
@@ -167,7 +168,7 @@ export class ReplSession {
   }
 
   private async ensureStarted(): Promise<void> {
-    if (this.runtime !== null) return;
+    if (this.runtime) return;
 
     const {
       memoryLimitBytes = DEFAULT_MEMORY_LIMIT,
@@ -176,7 +177,7 @@ export class ReplSession {
       skillsEnabled = false,
     } = this.options;
 
-    const asyncModule = await getAsyncModule();
+    const asyncModule = await newAsyncModule();
     const runtime: QuickJSAsyncRuntime = asyncModule.newRuntime();
     runtime.setMemoryLimit(memoryLimitBytes);
     runtime.setMaxStackSize(maxStackSizeBytes);
@@ -474,12 +475,6 @@ export class ReplSession {
     this.runtime = null;
     this.context = null;
     ReplSession.sessions.delete(this.id);
-    // Multi-file skill imports (2+ asyncify unwind/rewind cycles in one
-    // evalCodeAsync) leave the shared WASM module's asyncify state corrupted
-    // after the owning runtime is disposed. New runtimes on the same module
-    // silently fail to invoke module loader callbacks. Reset the singleton so
-    // the next session gets a fresh WASM module (~14ms lazy cost on next eval).
-    asyncModulePromise = undefined;
   }
 
   toJSON(): { id: string } {
