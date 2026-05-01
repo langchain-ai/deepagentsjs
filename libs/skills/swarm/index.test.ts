@@ -17,14 +17,21 @@ function setupTools() {
       const matched = [...files.keys()].filter((f) => regex.test(f));
       return JSON.stringify(matched);
     }),
-    readFile: vi.fn(async ({ path }: { path: string }) => {
-      const content = files.get(path);
-      if (content === undefined) throw new Error(`File not found: ${path}`);
+    readFile: vi.fn(async ({ file_path }: { file_path: string }) => {
+      const content = files.get(file_path);
+      if (content === undefined)
+        throw new Error(`File not found: ${file_path}`);
       return content;
     }),
     writeFile: vi.fn(
-      async ({ path, content }: { path: string; content: string }) => {
-        files.set(path, content);
+      async ({
+        file_path,
+        content,
+      }: {
+        file_path: string;
+        content: string;
+      }) => {
+        files.set(file_path, content);
         return "ok";
       },
     ),

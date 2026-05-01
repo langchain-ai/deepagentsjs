@@ -74,6 +74,8 @@ pointing at the file — not one row per record inside it.
 - **Results are final.** Don't dispatch recheck/verify tasks. Fix the
   instruction and re-dispatch failed rows via `filter`.
 - **One retry for failures, then move on.**
+- **Never write to `.swarm/` directly.** Always use `create()` to build
+  tables — it handles persistence, eviction, and sequencing.
 
 ## Instruction + context
 

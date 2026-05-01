@@ -1,4 +1,4 @@
-import { SwarmFilter } from "./types.js";
+import type { SwarmFilter } from "./types.js";
 import { readColumn } from "./utils.js";
 
 /**

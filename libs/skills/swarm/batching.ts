@@ -52,11 +52,13 @@ export function wrapSchema(
 
   return {
     type: "object",
+    additionalProperties: false,
     properties: {
       results: {
         type: "array",
         items: {
           type: "object",
+          additionalProperties: false,
           properties: itemProperties,
           required: itemRequired,
         },
