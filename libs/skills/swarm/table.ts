@@ -120,6 +120,7 @@ export function parseJsonl(content: string): Record<string, unknown>[] {
     } catch (e) {
       throw new Error(
         `JSONL parse error at line ${idx + 1}: ${(e as Error).message}`,
+        { cause: e },
       );
     }
   };
