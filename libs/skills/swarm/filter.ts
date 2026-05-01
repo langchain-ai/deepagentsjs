@@ -38,6 +38,12 @@ export function evaluateFilter(
   filter: SwarmFilter,
   row: Record<string, unknown>,
 ): boolean {
+  if (filter == null || typeof filter !== "object") {
+    throw new Error(
+      `evaluateFilter: expected a filter object, got ${JSON.stringify(filter)}`,
+    );
+  }
+
   if ("and" in filter) {
     return filter.and.every((f) => evaluateFilter(f, row));
   }
