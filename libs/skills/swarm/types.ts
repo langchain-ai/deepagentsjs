@@ -96,17 +96,9 @@ export interface RunOptions {
   responseSchema?: Record<string, unknown>;
 
   /**
-   * Maximum number of concurrent subagent dispatches.
-   * Clamped to `[1, 10]`.
-   *
-   * @default 5
-   */
-  concurrency?: number;
-
-  /**
-   * Number of rows to batch into a single subagent call.
-   * When >= 2, rows are grouped and dispatched together for cost
-   * savings. Omit or set to 1 for one subagent per row.
+   * Number of rows per subagent call. Computed automatically based on
+   * table size to keep total dispatches under `MAX_SUBAGENTS`. Override
+   * only when the default batching is unsuitable.
    */
   batchSize?: number;
 }

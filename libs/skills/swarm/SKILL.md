@@ -1,10 +1,9 @@
 ---
 name: swarm
 description: >-
-  Dispatch work across many independent items in parallel with bounded
-  concurrency. Create tables from files or data, fan out to subagents,
-  inspect results, and aggregate — all through a handle-based API that
-  keeps your context window small.
+  REQUIRED when a dataset exceeds ~50 KB or ~100 items — do not attempt to
+  process large inputs manually. Dispatches work across many independent items
+  in parallel: create a table, fan out to subagents, aggregate results.
 module: ./index.ts
 required-ptc-tools:
   - task
@@ -21,27 +20,33 @@ of work.
 
 ## When to use
 
-Use swarm when: many items need the same operation, input is too large for
-one context, or items each need independent analysis.
+**Trigger condition**: You MUST use swarm when a dataset file exceeds ~50 KB
+or contains more than ~100 independent items. At that scale, manual processing
+is unreliable and will produce wrong results — swarm is the correct tool.
+
+Also use swarm when many items each need the same independent operation,
+regardless of size.
 
 ## When NOT to use
 
-- Items depend on each other's output (use sequential tool calls instead)
 - Fewer than ~5 items (just call `tools.task()` directly)
+- Items depend on each other's output (use sequential tool calls instead)
 
 ## Flow
 
-1. **Explore.** Sample the input using any tool — `read_file` with
-   offset/limit, `grep`, `ls`, or `js_eval`. Learn shape, conventions,
-   edge cases. This informs the `context` and `instruction` you write.
-2. **Create.** `create` builds a table from a source spec. Returns a
-   handle `{ id, count, columns }`.
+1. **Explore.** Read **5 lines max** with `read_file` as an agent tool —
+   not inside `js_eval`. One read is almost always enough. Once you can
+   describe the line format and what column to extract, stop and move on.
+   Do NOT create a table yet.
+2. **Create.** In a `js_eval`, read the **complete** input and call
+   `create()` once. When the file is large, read in chunks of ~200 lines
+   and accumulate. Log only counts — never log raw content (see Rules).
 3. **Execute.** `run` with an `instruction` template and optional
    `context`. Returns `{ completed, failed, skipped, failures }`.
 4. **Aggregate.** Inspect with `rows()` or chain another `run` pass.
 
-Use multiple `js_eval` calls with reasoning between steps — do NOT
-write create + run + inspect in a single cell.
+Use separate `js_eval` calls for each step — do NOT write create + run +
+inspect in a single cell.
 
 ## Choosing a source
 
@@ -65,10 +70,18 @@ pointing at the file — not one row per record inside it.
 
 ## Rules
 
-- **Get it right in one pass.** Explore thoroughly before dispatching. A
-  wasted swarm pass is expensive.
-- **Never read the full input.** Sample only. Data reaches subagents via
-  the table.
+- **One sample read, then build.** One `read_file` at the agent level is
+  enough to understand the format. Do not do multiple exploration reads.
+  Do not use `js_eval` for exploration — use it only to build the table and
+  run swarm.
+- **Never `console.log` raw file contents in `js_eval`.** Console output is
+  capped at ~5 KB. Logging a full file will truncate, making you think data
+  is missing when it isn't. Log only counts and short samples:
+  `console.log('lines:', lines.length, 'sample:', lines[0])`.
+- **Sample at the agent level, read fully in js_eval.** Use a small-limit
+  `read_file` (agent tool) to understand the format. Then read the complete
+  input inside `js_eval` when building the table — the data stays inside
+  the sandbox, not in your context window.
 - **Everything the subagent needs must be in `instruction` + `context`.**
   Subagents can't see your notes.
 - **Results are final.** Don't dispatch recheck/verify tasks. Fix the
@@ -121,21 +134,9 @@ await run(table, {
 
 ## Batching
 
-Set `batchSize` to group N rows per subagent call for cost savings.
-
-```javascript
-await run(table, {
-  instruction: "Classify: {text}",
-  batchSize: 50,
-  responseSchema: {
-    type: "object",
-    properties: { label: { type: "string", enum: ["positive", "negative", "neutral"] } },
-    required: ["label"],
-  },
-});
-```
-
-Sizing: short items 40-80, medium items 20-40, complex items leave at 1.
+Batching is automatic — when a table has more than 50 rows, `run()` groups
+them into batches to keep total subagent dispatches bounded. You don't need
+to configure this.
 
 ## Chaining passes
 
@@ -208,8 +209,6 @@ Dispatch work across rows. Returns `{ completed, failed, skipped, failures }`.
 | `filter` | — | Only dispatch matching rows |
 | `subagentType` | `"general-purpose"` | Subagent to use |
 | `responseSchema` | — | JSON Schema for structured output |
-| `concurrency` | 5 | Parallel dispatches (max 10) |
-| `batchSize` | — | Rows per subagent call (for cost savings) |
 
 ### `rows(handle, options?)`
 

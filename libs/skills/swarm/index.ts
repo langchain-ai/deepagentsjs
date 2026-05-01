@@ -181,10 +181,26 @@ async function dispatchBatched(
  * @param options - Dispatch configuration (instruction, filter, schema, etc.).
  * @returns A summary with completion counts and deduplicated failure groups.
  */
+/**
+ * Maximum number of subagent dispatches per `run()` call.
+ *
+ * When matched rows exceed this, batching is applied automatically
+ * to keep total dispatches at or below this ceiling.
+ */
+const MAX_SUBAGENTS = 50;
+
 export async function run(
   handle: SwarmHandle | { id: string },
   options: RunOptions,
 ): Promise<RunResult> {
+  if (
+    options === undefined &&
+    "instruction" in (handle as Record<string, unknown>)
+  ) {
+    throw new Error(
+      "run() called with wrong signature. Use run(table, { instruction, ... }) not run({ table, instruction, ... })",
+    );
+  }
   const allRows = await loadTable(handle.id);
   const {
     instruction,
@@ -193,11 +209,8 @@ export async function run(
     filter,
     subagentType = "general-purpose",
     responseSchema,
-    concurrency = 5,
     batchSize,
   } = options;
-
-  const effectiveConcurrency = Math.min(Math.max(concurrency, 1), 10);
 
   // -----------------------------------------------------------------------
   // 1. Partition rows into matched (dispatched) and skipped (filtered out)
@@ -224,28 +237,53 @@ export async function run(
   }
 
   // -----------------------------------------------------------------------
-  // 2. Dispatch — single or batched
+  // 2. Resolve effective batch size and schema
+  //
+  // Auto-batch when matched rows exceed MAX_SUBAGENTS to cap total cost.
+  // If no responseSchema is provided, generate a minimal one so batch
+  // results can be unpacked per-row.
+  // -----------------------------------------------------------------------
+
+  const autoBatchSize =
+    matched.length > MAX_SUBAGENTS
+      ? Math.ceil(matched.length / MAX_SUBAGENTS)
+      : 1;
+
+  const effectiveBatchSize = batchSize ?? autoBatchSize;
+
+  const effectiveSchema: Record<string, unknown> | undefined =
+    effectiveBatchSize >= 2 && !responseSchema
+      ? {
+          type: "object",
+          additionalProperties: false,
+          properties: { [column]: { type: "string" } },
+          required: [column],
+        }
+      : responseSchema;
+
+  // -----------------------------------------------------------------------
+  // 3. Dispatch — single or batched
   // -----------------------------------------------------------------------
 
   let allResults: TaskResult[];
 
-  if (batchSize && batchSize >= 2) {
+  if (effectiveBatchSize >= 2) {
     allResults = await dispatchBatched(matched, {
       instruction,
       context,
       column,
       subagentType,
-      responseSchema,
-      concurrency: effectiveConcurrency,
-      batchSize,
+      responseSchema: effectiveSchema,
+      concurrency: MAX_SUBAGENTS,
+      batchSize: effectiveBatchSize,
     });
   } else {
     allResults = await dispatchSingle(matched, {
       instruction,
       context,
       subagentType,
-      responseSchema,
-      concurrency: effectiveConcurrency,
+      responseSchema: effectiveSchema,
+      concurrency: MAX_SUBAGENTS,
     });
   }
 
