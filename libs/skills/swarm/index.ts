@@ -187,7 +187,7 @@ async function dispatchBatched(
  * When matched rows exceed this, batching is applied automatically
  * to keep total dispatches at or below this ceiling.
  */
-const MAX_SUBAGENTS = 50;
+const MAX_SUBAGENTS = 30;
 
 export async function run(
   handle: SwarmHandle | { id: string },

@@ -101,6 +101,7 @@ export interface ReplSessionOptions {
   maxPtcCalls?: number | null;
   maxResultChars?: number;
   captureConsole?: boolean;
+  sessionId?: string;
 }
 
 /**

@@ -251,6 +251,7 @@ export function createCodeInterpreterMiddleware(
         skillsEnabled: skillsBackend !== undefined,
         maxResultChars,
         captureConsole,
+        sessionId: threadId,
       });
 
       if (skillsBackend !== undefined) {

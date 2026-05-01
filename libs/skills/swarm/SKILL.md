@@ -1,15 +1,17 @@
 ---
 name: swarm
+when-present: "Before reading any data file, ls its directory first to check the file size in bytes."
 description: >-
-  REQUIRED when a dataset exceeds ~50 KB or ~100 items — do not attempt to
-  process large inputs manually. Dispatches work across many independent items
-  in parallel: create a table, fan out to subagents, aggregate results.
+  Use when many independent items each need the same operation — especially
+  when a dataset is too large to process manually. Dispatches work in parallel:
+  create a table, fan out to subagents, aggregate results.
 module: ./index.ts
 required-ptc-tools:
   - task
   - read_file
   - write_file
   - glob
+  - ls
 ---
 
 # Swarm
@@ -20,12 +22,9 @@ of work.
 
 ## When to use
 
-**Trigger condition**: You MUST use swarm when a dataset file exceeds ~50 KB
-or contains more than ~100 independent items. At that scale, manual processing
-is unreliable and will produce wrong results — swarm is the correct tool.
-
-Also use swarm when many items each need the same independent operation,
-regardless of size.
+- A dataset file is large (check with `ls` — if it's more than ~50 KB, use swarm)
+- Many items each need the same independent operation, regardless of size
+- Processing manually would be unreliable or too slow
 
 ## When NOT to use
 
@@ -34,15 +33,14 @@ regardless of size.
 
 ## Flow
 
-1. **Explore.** Read **5 lines max** with `read_file` as an agent tool —
-   not inside `js_eval`. One read is almost always enough. Once you can
-   describe the line format and what column to extract, stop and move on.
-   Do NOT create a table yet.
-2. **Create.** In a `js_eval`, read the **complete** input and call
-   `create()` once. When the file is large, read in chunks of ~200 lines
-   and accumulate. Log only counts — never log raw content (see Rules).
-3. **Execute.** `run` with an `instruction` template and optional
-   `context`. Returns `{ completed, failed, skipped, failures }`.
+1. **Explore.** Understand the data — format, columns, what each row represents.
+   Know enough to write an `instruction` template a subagent can execute on a
+   single row without seeing the rest of the data.
+2. **Create.** In a `js_eval`, read the complete input and call `create()` once.
+   Read in chunks of ~200 lines for large files. Log only counts — never log raw
+   content (see Rules).
+3. **Execute.** `run` with an `instruction` template and optional `context`.
+   Returns `{ completed, failed, skipped, failures }`.
 4. **Aggregate.** Inspect with `rows()` or chain another `run` pass.
 
 Use separate `js_eval` calls for each step — do NOT write create + run +
@@ -60,7 +58,7 @@ lives inside a file (e.g. a JSONL dataset, a CSV, a JSON array). Read and
 parse the file first, then pass the records:
 
 ```javascript
-const raw = await readFile("/data.jsonl");
+const raw = await tools.readFile({ file_path: "/data.jsonl" });
 const records = raw.trim().split("\n").map(l => JSON.parse(l));
 const table = await create({ tasks: records });
 ```
@@ -70,25 +68,18 @@ pointing at the file — not one row per record inside it.
 
 ## Rules
 
-- **One sample read, then build.** One `read_file` at the agent level is
-  enough to understand the format. Do not do multiple exploration reads.
-  Do not use `js_eval` for exploration — use it only to build the table and
-  run swarm.
 - **Never `console.log` raw file contents in `js_eval`.** Console output is
-  capped at ~5 KB. Logging a full file will truncate, making you think data
-  is missing when it isn't. Log only counts and short samples:
+  capped at ~5 KB. Log only counts and short samples:
   `console.log('lines:', lines.length, 'sample:', lines[0])`.
-- **Sample at the agent level, read fully in js_eval.** Use a small-limit
-  `read_file` (agent tool) to understand the format. Then read the complete
-  input inside `js_eval` when building the table — the data stays inside
+- **Read fully in js_eval, not at the agent level.** When building the
+  table, read the complete input inside `js_eval` — the data stays inside
   the sandbox, not in your context window.
 - **Everything the subagent needs must be in `instruction` + `context`.**
   Subagents can't see your notes.
 - **Results are final.** Don't dispatch recheck/verify tasks. Fix the
   instruction and re-dispatch failed rows via `filter`.
 - **One retry for failures, then move on.**
-- **Never write to `.swarm/` directly.** Always use `create()` to build
-  tables — it handles persistence, eviction, and sequencing.
+- **Never write to `.swarm/` directly.** Always use `create()` to build tables.
 
 ## Instruction + context
 
@@ -144,10 +135,10 @@ to configure this.
 
 ```javascript
 const table = await create({ tasks: interviews });
-await run(table, { instruction: "Classify sentiment of {file}", column: "sentiment" });
+await run(table, { instruction: "Classify sentiment of {text}", column: "sentiment" });
 await run(table, {
   filter: { column: "sentiment", equals: "negative" },
-  instruction: "Summarize why {file} had negative sentiment.",
+  instruction: "Summarize why {text} had negative sentiment.",
   column: "summary",
 });
 ```

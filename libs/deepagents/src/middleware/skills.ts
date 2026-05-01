@@ -166,6 +166,16 @@ export interface SkillMetadata {
    * `read_file`, not `readFile`).
    */
   requiredPtcTools?: string[];
+
+  /**
+   * A rule injected into the global system prompt whenever this skill is loaded.
+   *
+   * Use for pre-conditions that must be followed regardless of whether the agent
+   * has decided to use the skill yet — e.g. "Before reading any data file, check
+   * its size with ls." Injected as a bullet in an "Active Rules" block above the
+   * skills list, so it is visible before the agent starts any task.
+   */
+  whenPresent?: string;
 }
 
 /**
@@ -264,6 +274,8 @@ const SKILLS_SYSTEM_PROMPT = context`
 
   {skills_locations}
 
+  {active_rules}
+
   **Available Skills:**
 
   {skills_list}
@@ -282,6 +294,7 @@ const SKILLS_SYSTEM_PROMPT = context`
   - When the user's request matches a skill's domain (e.g., "research X" → web-research skill)
   - When you need specialized knowledge or structured workflows
   - When a skill provides proven patterns for complex tasks
+  - **Before processing any data file**: some skills are triggered by data size or item count, not task type — check skill descriptions before you start reading files.
 
   **Skills are Self-Documenting:**
   - Each SKILL.md tells you exactly what the skill does and how to use it
@@ -529,6 +542,9 @@ export function parseSkillMetadataFromContent(
     requiredPtcTools = [];
   }
 
+  const whenPresent =
+    String(frontmatterData["when-present"] ?? "").trim() || undefined;
+
   return {
     name,
     description: descriptionStr,
@@ -539,6 +555,7 @@ export function parseSkillMetadataFromContent(
     allowedTools,
     module: validateModulePath(frontmatterData.module),
     requiredPtcTools,
+    whenPresent,
   };
 }
 
@@ -659,6 +676,23 @@ function formatSkillsLocations(sources: string[]): string {
     lines.push(`**${name} Skills**: \`${sourcePath}\`${suffix}`);
   }
   return lines.join("\n");
+}
+
+/**
+ * Collect `whenPresent` rules from all loaded skills and format as a
+ * bullet list block. Returns an empty string when no skills define rules.
+ */
+export function formatActiveRules(skills: SkillMetadata[]): string {
+  const rules = skills
+    .map((s) => s.whenPresent)
+    .filter((r): r is string => r !== undefined && r.length > 0);
+
+  if (rules.length === 0) {
+    return "";
+  }
+
+  const bullets = rules.map((r) => `- ${r}`).join("\n");
+  return `**Active Rules** (enforced while these skills are loaded):\n${bullets}`;
 }
 
 /**
@@ -850,12 +884,15 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
 
       // Format skills section
       const skillsLocations = formatSkillsLocations(sources);
+      const activeRules = formatActiveRules(skillsMetadata);
       const skillsList = formatSkillsList(skillsMetadata, sources);
 
       const skillsSection = SKILLS_SYSTEM_PROMPT.replace(
         "{skills_locations}",
         skillsLocations,
-      ).replace("{skills_list}", skillsList);
+      )
+        .replace("{active_rules}", activeRules)
+        .replace("{skills_list}", skillsList);
 
       // Combine with existing system message
       const newSystemMessage = request.systemMessage.concat(skillsSection);

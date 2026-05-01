@@ -362,6 +362,11 @@ export class ReplSession {
       this.injectTools(tools);
     }
 
+    const sessionId = this.options.sessionId ?? "default";
+    const sessionIdHandle = context.newString(sessionId);
+    context.setProp(context.global, "__sessionId__", sessionIdHandle);
+    sessionIdHandle.dispose();
+
     if (skillsEnabled) {
       this.installModuleLoader();
     }
