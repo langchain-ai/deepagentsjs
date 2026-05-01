@@ -1,17 +1,14 @@
 ---
 name: swarm
-when-present: "Before reading any data file, ls its directory first to check the file size in bytes."
 description: >-
-  Use when many independent items each need the same operation — especially
-  when a dataset is too large to process manually. Dispatches work in parallel:
-  create a table, fan out to subagents, aggregate results.
+  Dispatches many independent items in parallel: create a table, fan out to
+  subagents, aggregate results. One row = one unit of work.
 module: ./index.ts
 required-ptc-tools:
   - task
   - read_file
   - write_file
   - glob
-  - ls
 ---
 
 # Swarm
@@ -20,25 +17,15 @@ Process many independent items in parallel. `create` builds a table handle;
 `run` fans work out across rows and merges results back. One row = one unit
 of work.
 
-## When to use
-
-- A dataset file is large (check with `ls` — if it's more than ~50 KB, use swarm)
-- Many items each need the same independent operation, regardless of size
-- Processing manually would be unreliable or too slow
-
-## When NOT to use
-
-- Fewer than ~5 items (just call `tools.task()` directly)
-- Items depend on each other's output (use sequential tool calls instead)
-
 ## Flow
 
-1. **Explore.** Understand the data — format, columns, what each row represents.
-   Know enough to write an `instruction` template a subagent can execute on a
-   single row without seeing the rest of the data.
-2. **Create.** In a `js_eval`, read the complete input and call `create()` once.
-   Read in chunks of ~200 lines for large files. Log only counts — never log raw
-   content (see Rules).
+1. **Explore.** Read a small sample (1–2 reads) to understand the format —
+   columns, structure, what each row represents. Stop as soon as you can write
+   an `instruction` template. Do NOT attempt to process or classify items
+   yourself in JS — that is what the subagents are for.
+2. **Create.** In a `js_eval`, read the **complete** file and call `create()`
+   once. Do NOT log the raw content — the data moves from the file into the
+   table inside the sandbox, never entering your context window. Log only counts.
 3. **Execute.** `run` with an `instruction` template and optional `context`.
    Returns `{ completed, failed, skipped, failures }`.
 4. **Aggregate.** Inspect with `rows()` or chain another `run` pass.
@@ -74,6 +61,9 @@ pointing at the file — not one row per record inside it.
 - **Read fully in js_eval, not at the agent level.** When building the
   table, read the complete input inside `js_eval` — the data stays inside
   the sandbox, not in your context window.
+- **Don't solve the problem yourself.** If you find yourself writing loops,
+  regex, or classifiers to process items — stop. That work belongs in the
+  `instruction` sent to subagents via `run()`.
 - **Everything the subagent needs must be in `instruction` + `context`.**
   Subagents can't see your notes.
 - **Results are final.** Don't dispatch recheck/verify tasks. Fix the
@@ -125,9 +115,9 @@ await run(table, {
 
 ## Batching
 
-Batching is automatic — when a table has more than 50 rows, `run()` groups
-them into batches to keep total subagent dispatches bounded. You don't need
-to configure this.
+Batching is automatic — when a table has more than 30 rows, `run()` groups
+them into batches (at most 25 rows each) to keep total subagent dispatches
+bounded. You don't need to configure this.
 
 ## Chaining passes
 
