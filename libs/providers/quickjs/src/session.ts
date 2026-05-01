@@ -41,6 +41,10 @@ export const DEFAULT_SESSION_ID = "__default__";
 export const DEFAULT_MAX_PTC_CALLS = 256;
 export const DEFAULT_MAX_RESULTS_CHARS = 4000;
 
+const LINE_NUMBER_RE = /^\s*\d+(?:\.\d+)?\t/;
+
+// The variant descriptor (WASM binary + glue) is safe to share across sessions;
+// only the instantiated module carries asyncify state. Import once, instantiate per session.
 const variantImport = import("@jitl/quickjs-ng-wasmfile-release-asyncify");
 
 /**
@@ -164,6 +168,70 @@ function posixJoin(base: string, rel: string): string {
   }
 
   return out.join("/");
+}
+
+/**
+ * Unwrap a PTC tool result to a plain string for use inside QuickJS.
+ *
+ * Tool results may arrive as a raw string, or as an array of LangChain
+ * content blocks (`{ type: "text", text: "..." }`). Blocks are joined
+ * with newlines; non-text block types are silently skipped. Anything
+ * else (objects, nulls) is JSON-serialised as a fallback.
+ *
+ * @param result - Raw return value from `tool.invoke()`.
+ * @returns Plain string representation of the tool output.
+ */
+function extractToolText(result: unknown): string {
+  if (typeof result === "string") {
+    return result;
+  }
+
+  if (Array.isArray(result)) {
+    const texts: string[] = [];
+    for (const block of result) {
+      if (
+        typeof block === "object" &&
+        block !== null &&
+        (block as Record<string, unknown>).type === "text" &&
+        typeof (block as Record<string, unknown>).text === "string"
+      ) {
+        texts.push((block as Record<string, unknown>).text as string);
+      }
+    }
+
+    if (texts.length > 0) {
+      return texts.join("\n");
+    }
+  }
+  return JSON.stringify(result);
+}
+
+/**
+ * Remove the `cat -n` line-number prefix from every line of a string.
+ *
+ * The filesystem backend formats file content with line numbers in the
+ * form `"     N\t"` so human readers can navigate by line. That prefix
+ * is useful for the agent but noise for QuickJS code that parses the
+ * text programmatically (e.g. swarm reading `/context.txt`).
+ *
+ * The function is conservative: if any non-empty line lacks the prefix,
+ * the text is returned unchanged so nothing is silently corrupted.
+ *
+ * @param text - Raw file content, possibly line-number prefixed.
+ * @returns Content with line-number prefixes stripped, or the original
+ *          text if it doesn't match the expected format throughout.
+ */
+function stripLineNumbers(text: string): string {
+  const lines = text.split("\n");
+  if (lines.length === 0) {
+    return text;
+  }
+
+  if (!lines.every((l) => l === "" || LINE_NUMBER_RE.test(l))) {
+    return text;
+  }
+
+  return lines.map((l) => l.replace(LINE_NUMBER_RE, "")).join("\n");
 }
 
 /**
@@ -338,30 +406,6 @@ export class ReplSession {
   }
 
   /**
-   * Pre-load all skills referenced in source code into the in-memory
-   * cache. Must be called before `evalCodeAsync` so the module loader
-   * can resolve synchronously. An async loader would cause asyncify
-   * suspensions on each import, which is incompatible with the shared
-   * WASM module used by all sessions.
-   */
-  async preloadReferencedSkills(code: string): Promise<void> {
-    const refs = scanSkillReferences(code);
-    for (const name of refs) {
-      if (this.skillsLoaded.has(name) || this.skillsFailed.has(name)) {
-        continue;
-      }
-
-      try {
-        await this.ensureSkillLoaded(name);
-      } catch (err) {
-        if (!this.skillsFailed.has(name)) {
-          this.skillsFailed.set(name, err as Error);
-        }
-      }
-    }
-  }
-
-  /**
    * Resolve a module specifier to source code. Strictly synchronous —
    * only reads from the in-memory skill cache populated by
    * `preloadReferencedSkills`. Returns error source (not a thrown
@@ -410,6 +454,29 @@ export class ReplSession {
     }
 
     return source;
+  }
+
+  /**
+   * Pre-load all skills referenced in source code into the in-memory
+   * cache. Must be called before `evalCodeAsync` so the module loader
+   * can resolve synchronously — `executePendingJobs` is a sync FFI
+   * call that cannot handle asyncify suspensions.
+   */
+  async preloadReferencedSkills(code: string): Promise<void> {
+    const refs = scanSkillReferences(code);
+    for (const name of refs) {
+      if (this.skillsLoaded.has(name) || this.skillsFailed.has(name)) {
+        continue;
+      }
+      try {
+        await this.ensureSkillLoaded(name);
+      } catch (err) {
+        // Cache the error so resolveSpecifier surfaces the original message
+        if (!this.skillsFailed.has(name)) {
+          this.skillsFailed.set(name, err as Error);
+        }
+      }
+    }
   }
 
   /**
@@ -738,9 +805,11 @@ export class ReplSession {
               const rawInput =
                 typeof input === "object" && input !== null ? input : {};
               const result = await t.invoke(rawInput);
-              const val = context.newString(
-                typeof result === "string" ? result : JSON.stringify(result),
-              );
+              let text = extractToolText(result);
+              if (t.name === "read_file") {
+                text = stripLineNumbers(text);
+              }
+              const val = context.newString(text);
               promise.resolve(val);
               val.dispose();
             } catch (e: unknown) {

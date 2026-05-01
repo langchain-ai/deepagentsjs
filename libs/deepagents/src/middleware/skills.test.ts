@@ -420,10 +420,16 @@ description: A skill with very large content
       const result1 = await middleware.beforeAgent?.({});
       expect(result1?.skillsMetadata).toHaveLength(1);
 
-      // Second call - should return undefined (already loaded in closure)
+      // Second call with empty state - should re-emit skills to state
+      // (new thread scenario: closure has skills but state doesn't)
       // @ts-expect-error - typing issue in LangChain
       const result2 = await middleware.beforeAgent?.({});
-      expect(result2).toBeUndefined();
+      expect(result2?.skillsMetadata).toHaveLength(1);
+
+      // Third call with skills in state - should skip (both closure and state have skills)
+      // @ts-expect-error - typing issue in LangChain
+      const result3 = await middleware.beforeAgent?.(result2);
+      expect(result3).toBeUndefined();
     });
 
     it("should skip reload when skillsMetadata exists in checkpoint state", async () => {

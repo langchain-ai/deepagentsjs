@@ -200,6 +200,26 @@ describe("stripTypeSyntax", () => {
       expect(result.trim()).toBe("");
     });
 
+    it("removes declare const", () => {
+      const result = stripTypeSyntax(
+        "declare const tools: { glob: (args: { pattern: string }) => Promise<string> };",
+      );
+      expect(result).not.toContain("declare");
+      expect(result).not.toContain("tools");
+      expect(result.trim()).toBe("");
+    });
+
+    it("removes declare const but keeps regular const", () => {
+      const code = [
+        "declare const tools: { x: number };",
+        "const y = 42;",
+      ].join("\n");
+      const result = stripTypeSyntax(code);
+      expect(result).not.toContain("declare");
+      expect(result).not.toContain("tools");
+      expect(result).toContain("const y = 42");
+    });
+
     it("removes mixed TS-only and JS nodes, keeping JS", () => {
       const code = [
         "interface Foo { x: number }",
@@ -212,6 +232,22 @@ describe("stripTypeSyntax", () => {
   });
 
   describe("type annotations stripped from expressions", () => {
+    it("strips optional parameter marker with type", () => {
+      const result = stripTypeSyntax(
+        "export function foo(a: number, b?: string) { return a; }",
+      );
+      expect(result).toContain("function foo(a, b)");
+      expect(result).not.toContain("?");
+    });
+
+    it("strips optional parameter marker without type", () => {
+      const result = stripTypeSyntax(
+        "export function foo(a, b?) { return a; }",
+      );
+      expect(result).toContain("function foo(a, b)");
+      expect(result).not.toContain("?");
+    });
+
     it("strips parameter types", () => {
       const result = stripTypeSyntax(
         "export function add(a: number, b: number) { return a + b; }",
@@ -297,12 +333,23 @@ describe("stripTypeSyntax", () => {
       expect(result).toContain(`export { foo } from "./foo.js"`);
     });
 
-    it("strips type-only imports without leaving behind empty lines that break syntax", () => {
+    it("strips type-only imports", () => {
       const code = [
         `import type { Foo } from "./types.js";`,
         `export function bar() { return 1; }`,
       ].join("\n");
       const result = stripTypeSyntax(code);
+      expect(result).not.toContain("import type");
+      expect(result).toContain("export function bar");
+    });
+
+    it("strips type-only exports", () => {
+      const code = [
+        `export type { Foo } from "./types.js";`,
+        `export function bar() { return 1; }`,
+      ].join("\n");
+      const result = stripTypeSyntax(code);
+      expect(result).not.toContain("export type");
       expect(result).toContain("export function bar");
     });
   });

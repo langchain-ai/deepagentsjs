@@ -792,16 +792,19 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
     stateSchema: SkillsStateSchema,
 
     async beforeAgent(state) {
-      // Skip if already loaded (check both closure and state)
-      if (loadedSkills.length > 0) {
-        return undefined;
-      }
-      // Check if skills were restored from checkpoint (non-empty array in state)
-      if (
+      const stateHasSkills =
         "skillsMetadata" in state &&
         Array.isArray(state.skillsMetadata) &&
-        state.skillsMetadata.length > 0
-      ) {
+        state.skillsMetadata.length > 0;
+
+      if (loadedSkills.length > 0) {
+        // Closure has skills from a prior thread — push to state if missing
+        // so getCurrentTaskInput() sees them in the tool node.
+        return stateHasSkills ? undefined : { skillsMetadata: loadedSkills };
+      }
+
+      // Check if skills were restored from checkpoint (non-empty array in state)
+      if (stateHasSkills) {
         // Restore from state (e.g., after checkpoint restore)
         loadedSkills = state.skillsMetadata as SkillMetadata[];
         return undefined;

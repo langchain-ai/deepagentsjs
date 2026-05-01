@@ -1,4 +1,4 @@
-import { CreateSource, SwarmHandle } from "./types.js";
+import type { CreateSource, SwarmHandle } from "./types.js";
 
 /**
  * PTC tool declarations for file operations.
@@ -8,8 +8,8 @@ import { CreateSource, SwarmHandle } from "./types.js";
  */
 declare const tools: {
   glob?: (args: { pattern: string }) => Promise<string>;
-  readFile?: (args: { path: string }) => Promise<string>;
-  writeFile?: (args: { path: string; content: string }) => Promise<string>;
+  readFile?: (args: { file_path: string }) => Promise<string>;
+  writeFile?: (args: { file_path: string; content: string }) => Promise<string>;
 };
 
 /**
@@ -240,7 +240,7 @@ export async function readFile(path: string): Promise<string> {
       `Swarm requires a 'readFile' tool in the PTC configuration`,
     );
   }
-  return tools.readFile({ path });
+  return tools.readFile({ file_path: path });
 }
 
 /**
@@ -258,7 +258,7 @@ export async function writeFile(path: string, content: string): Promise<void> {
       `Swarm requires a 'writeFile' tool in the PTC configuration`,
     );
   }
-  await tools.writeFile({ path, content });
+  await tools.writeFile({ file_path: path, content });
 }
 
 /**

@@ -48,11 +48,13 @@ describe("wrapSchema", () => {
     const schema = wrapSchema();
     expect(schema).toEqual({
       type: "object",
+      additionalProperties: false,
       properties: {
         results: {
           type: "array",
           items: {
             type: "object",
+            additionalProperties: false,
             properties: {
               id: { type: "string" },
               result: { type: "string" },
