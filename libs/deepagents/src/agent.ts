@@ -396,6 +396,15 @@ export function createDeepAgent<
     ...FlattenSubAgentMiddleware<TSubagents>,
   ];
 
+  /**
+   * Return as DeepAgent with proper DeepAgentTypeConfig
+   * - Response: InferStructuredResponse<TResponse> (unwraps ToolStrategy<T>/ProviderStrategy<T> → T)
+   * - State: undefined (state comes from middleware)
+   * - Context: ContextSchema
+   * - Middleware: AllMiddleware (built-in + custom + subagent middleware for state inference)
+   * - Tools: TTools
+   * - Subagents: TSubagents (for type-safe streaming)
+   */
   type TypeConfig = DeepAgentTypeConfig<
     InferStructuredResponse<TResponse>,
     undefined,

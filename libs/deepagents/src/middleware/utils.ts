@@ -3,7 +3,7 @@
  *
  * This module provides shared helpers used across middleware implementations.
  */
-import { getMaxListeners, setMaxListeners } from "node:events";
+
 import { SystemMessage } from "@langchain/core/messages";
 
 /**
@@ -93,44 +93,4 @@ export function prependToSystemMessage(
 
   // Fallback for unknown content type
   return new SystemMessage({ content: text });
-}
-
-const SUBAGENT_ABORT_SIGNAL_MAX_LISTENERS = 100;
-const CONFIG_KEY_ABORT_SIGNALS = "__pregel_abort_signals";
-
-type PregelAbortSignals = {
-  externalAbortSignal?: AbortSignal;
-  timeoutAbortSignal?: AbortSignal;
-  composedAbortSignal?: AbortSignal;
-};
-
-/**
- * Parallel task fan-out shares cancellation signals across subagents. Each
- * nested graph invocation can attach several listeners to both the runnable
- * signal and LangGraph's inherited Pregel abort signals, so legitimate
- * parallelism can exceed Node's default EventTarget listener warning threshold.
- */
-function raiseAbortSignalListenerLimitForSignal(
-  signal: AbortSignal | undefined,
-): void {
-  if (signal == null) return;
-
-  const currentMax = getMaxListeners(signal);
-  if (currentMax !== 0 && currentMax < SUBAGENT_ABORT_SIGNAL_MAX_LISTENERS) {
-    setMaxListeners(SUBAGENT_ABORT_SIGNAL_MAX_LISTENERS, signal);
-  }
-}
-
-export function raiseAbortSignalListenerLimit(config: {
-  signal?: AbortSignal;
-  configurable?: Record<string, unknown>;
-}): void {
-  raiseAbortSignalListenerLimitForSignal(config.signal);
-
-  const inheritedSignals = config.configurable?.[CONFIG_KEY_ABORT_SIGNALS] as
-    | PregelAbortSignals
-    | undefined;
-  raiseAbortSignalListenerLimitForSignal(inheritedSignals?.externalAbortSignal);
-  raiseAbortSignalListenerLimitForSignal(inheritedSignals?.timeoutAbortSignal);
-  raiseAbortSignalListenerLimitForSignal(inheritedSignals?.composedAbortSignal);
 }
