@@ -191,6 +191,15 @@ export function pathsToRows(
 }
 
 /**
+ * Resolve a glob pattern to a list of file paths via the PTC `glob` tool.
+ *
+ * Handles both `string[]` and `{ path: string }[]` return formats
+ * from different glob tool implementations.
+ *
+ * @param pattern - Glob pattern to resolve.
+ * @returns Array of matching file paths.
+ * @throws Error if the `glob` PTC tool is not configured.
+ *
  * @internal
  */
 export async function globFiles(pattern: string): Promise<string[]> {
