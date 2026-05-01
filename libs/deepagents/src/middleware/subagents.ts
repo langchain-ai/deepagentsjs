@@ -1,3 +1,5 @@
+import { getMaxListeners, setMaxListeners } from "node:events";
+
 import { z } from "zod/v4";
 
 import {
@@ -50,6 +52,22 @@ const EXCLUDED_STATE_KEYS = [
   "skillsMetadata",
   "memoryContents",
 ] as const;
+
+const SUBAGENT_ABORT_SIGNAL_MAX_LISTENERS = 100;
+
+/**
+ * Parallel task fan-out shares the parent AbortSignal across subagents. Each
+ * subagent invocation can attach several cancellation listeners, so legitimate
+ * parallelism can exceed Node's default EventTarget listener warning threshold.
+ */
+function raiseAbortSignalListenerLimit(signal: AbortSignal | undefined): void {
+  if (signal == null) return;
+
+  const currentMax = getMaxListeners(signal);
+  if (currentMax !== 0 && currentMax < SUBAGENT_ABORT_SIGNAL_MAX_LISTENERS) {
+    setMaxListeners(SUBAGENT_ABORT_SIGNAL_MAX_LISTENERS, signal);
+  }
+}
 
 /**
  * Default description for the general-purpose subagent.
@@ -697,6 +715,11 @@ function createTaskTool(options: {
         parentScratchpad?.nullResume !== undefined
           ? new Command({ resume: parentScratchpad.nullResume })
           : subagentState;
+
+      // The shared parent signal is passed into the child invocation below; lift
+      // its listener cap before LangGraph/model/tool layers attach listeners.
+      raiseAbortSignalListenerLimit(config.signal);
+
       const result = (await subagent.invoke(
         subagentInput,
         subagentConfig,

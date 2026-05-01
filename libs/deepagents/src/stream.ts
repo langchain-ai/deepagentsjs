@@ -41,8 +41,6 @@ import type { ChatModelStreamEvent } from "@langchain/core/language_models/event
 import type { AnySubAgent } from "./types.js";
 import type { CompiledSubAgent } from "./middleware/subagents.js";
 
-// ─── SubagentRunStream ────────────────────────────────────────────────────────
-
 /**
  * Represents a single subagent invocation observed during a deep agent run.
  *
@@ -65,8 +63,6 @@ export interface SubagentRunStream<
   readonly middleware: AsyncIterable<MiddlewareEvent>;
   readonly subagents: AsyncIterable<SubagentRunStream>;
 }
-
-// ─── Type helpers for discriminated union narrowing ───────────────────────────
 
 /**
  * Extract the output state type from a subagent spec.
@@ -118,8 +114,6 @@ export type SubagentRunStreamUnion<TSubagents extends readonly AnySubAgent[]> =
     [K in keyof TSubagents]: NamedSubagentRunStream<TSubagents[K]>;
   }[number];
 
-// ─── DeepAgentRunStream ───────────────────────────────────────────────────────
-
 /**
  * An {@link AgentRunStream} with native deep-agent projections assigned
  * directly on the instance by `createGraphRunStream` (via `__native`
@@ -143,8 +137,6 @@ export type DeepAgentRunStream<
   subagents: AsyncIterable<SubagentRunStreamUnion<TSubagents>>;
 };
 
-// ─── SubagentTransformer ──────────────────────────────────────────────────────
-
 function hasPrefix(ns: Namespace, prefix: Namespace): boolean {
   if (prefix.length > ns.length) return false;
   for (let i = 0; i < prefix.length; i += 1) {
@@ -155,6 +147,14 @@ function hasPrefix(ns: Namespace, prefix: Namespace): boolean {
 
 interface SubagentProjection {
   subagents: AsyncIterable<SubagentRunStream>;
+}
+
+interface PendingSubagent {
+  name: string;
+  callId: string;
+  resolveTaskInput: (v: string) => void;
+  resolveOutput: (v: unknown) => void;
+  rejectOutput: (e: unknown) => void;
 }
 
 /**
@@ -170,16 +170,9 @@ export function createSubagentTransformer(
 ): () => NativeStreamTransformer<SubagentProjection> {
   return () => {
     const subagentsLog = StreamChannel.local<SubagentRunStream>();
-
-    const pendingByCallId = new Map<
-      string,
-      {
-        name: string;
-        resolveTaskInput: (v: string) => void;
-        resolveOutput: (v: unknown) => void;
-        rejectOutput: (e: unknown) => void;
-      }
-    >();
+    const pendingByCallId = new Map<string, PendingSubagent>();
+    const pendingByNamespaceSegment = new Map<string, PendingSubagent>();
+    const latestValuesByNamespaceSegment = new Map<string, unknown>();
 
     const subagentsByName = new Map<
       string,
@@ -214,6 +207,20 @@ export function createSubagentTransformer(
         eventsLog: StreamChannel<ChatModelStreamEvent>;
       }
     >();
+
+    function deletePendingSubagent(pending: PendingSubagent): void {
+      pendingByCallId.delete(pending.callId);
+      for (const [segment, entry] of pendingByNamespaceSegment) {
+        if (entry === pending) {
+          pendingByNamespaceSegment.delete(segment);
+          latestValuesByNamespaceSegment.delete(segment);
+        }
+      }
+    }
+
+    function subagentSegment(ns: Namespace): string | undefined {
+      return ns.length === path.length + 1 ? ns[path.length] : undefined;
+    }
 
     function getOrCreateSubagentLogs(name: string) {
       let logs = subagentsByName.get(name);
@@ -273,20 +280,28 @@ export function createSubagentTransformer(
               rejectOutput = rej;
             });
 
-            pendingByCallId.set(toolCallId, {
+            const pending: PendingSubagent = {
               name: subagentName,
+              callId: toolCallId,
               resolveTaskInput,
               resolveOutput,
               rejectOutput,
-            });
+            };
+
+            if (toolCallId) {
+              pendingByCallId.set(toolCallId, pending);
+            }
 
             resolveTaskInput(taskDescription);
 
             if (depth === 1) {
               toolsNodeToName.set(ns[path.length], subagentName);
+              pendingByNamespaceSegment.set(ns[path.length], pending);
             }
             if (toolCallId) {
-              toolsNodeToName.set(`tools:${toolCallId}`, subagentName);
+              const taskSegment = `tools:${toolCallId}`;
+              toolsNodeToName.set(taskSegment, subagentName);
+              pendingByNamespaceSegment.set(taskSegment, pending);
             }
 
             const logs = getOrCreateSubagentLogs(subagentName);
@@ -307,14 +322,37 @@ export function createSubagentTransformer(
             if (pending) {
               if (data.event === "tool-finished") {
                 pending.resolveOutput((data as Record<string, unknown>).output);
-                pendingByCallId.delete(toolCallId);
+                deletePendingSubagent(pending);
               } else if (data.event === "tool-error") {
                 const message =
                   ((data as Record<string, unknown>).message as string) ??
                   "unknown error";
                 pending.rejectOutput(new Error(message));
-                pendingByCallId.delete(toolCallId);
+                deletePendingSubagent(pending);
               }
+            }
+          }
+        }
+
+        const segment = subagentSegment(ns);
+        const pending = segment
+          ? pendingByNamespaceSegment.get(segment)
+          : undefined;
+        if (pending) {
+          if (event.method === "values") {
+            latestValuesByNamespaceSegment.set(segment!, event.params.data);
+          } else if (event.method === "lifecycle") {
+            const data = event.params.data as { event?: string };
+            if (data.event === "completed" || data.event === "interrupted") {
+              pending.resolveOutput(
+                latestValuesByNamespaceSegment.get(segment!),
+              );
+              deletePendingSubagent(pending);
+            } else if (data.event === "failed") {
+              pending.rejectOutput(
+                new Error(`Subagent ${pending.name} failed`),
+              );
+              deletePendingSubagent(pending);
             }
           }
         }

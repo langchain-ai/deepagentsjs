@@ -6,8 +6,32 @@ import { createAgent, tool } from "langchain";
 import { z } from "zod/v4";
 
 import type { SubagentRunStream } from "./stream.js";
+import { createSubagentTransformer } from "./stream.js";
 import { createDeepAgent } from "./agent.js";
 import { collectWithTimeout } from "./testing/utils.js";
+
+function makeEvent(
+  method: string,
+  namespace: string[],
+  data: unknown,
+  node?: string,
+) {
+  return {
+    type: "event" as const,
+    seq: 0,
+    method,
+    params: {
+      namespace,
+      timestamp: Date.now(),
+      ...(node != null ? { node } : {}),
+      data,
+    },
+  };
+}
+
+function makeToolEvent(namespace: string[], data: Record<string, unknown>) {
+  return makeEvent("tools", namespace, data);
+}
 
 describe("streamEvents", () => {
   it("returns a DeepAgentRunStream with native subagents getter", async () => {
@@ -297,6 +321,60 @@ describe("streamEvents", () => {
         expect(texts).toContain("pong:from-coder");
       }
     }
+  });
+
+  it("resolves subagent output from the subagent lifecycle before root task completion", async () => {
+    const transformer = createSubagentTransformer([])();
+    const projection = transformer.init();
+    const iterator = projection.subagents[Symbol.asyncIterator]();
+
+    const nextSubagent = iterator.next();
+    transformer.process(
+      makeToolEvent([], {
+        event: "tool-started",
+        tool_name: "task",
+        tool_call_id: "task-1",
+        input: {
+          description: "Write a haiku",
+          subagent_type: "haiku-drafter",
+        },
+      }),
+    );
+
+    const subagentResult = await nextSubagent;
+    expect(subagentResult.done).toBe(false);
+    const subagent = subagentResult.value;
+
+    let resolved = false;
+    void subagent.output.then(() => {
+      resolved = true;
+    });
+
+    const finalState = { messages: [new AIMessage("Mountain mist rises")] };
+    transformer.process(makeEvent("values", ["tools:task-1"], finalState));
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+
+    transformer.process(
+      makeEvent("lifecycle", ["tools:task-1"], {
+        event: "completed",
+        graph_name: "task",
+      }),
+    );
+
+    await expect(subagent.output).resolves.toBe(finalState);
+
+    transformer.process(
+      makeToolEvent([], {
+        event: "tool-finished",
+        tool_name: "task",
+        tool_call_id: "task-1",
+        output: "root task result",
+      }),
+    );
+
+    await expect(subagent.output).resolves.toBe(finalState);
+    transformer.finalize?.();
   });
 
   it("can iterate raw protocol events", async () => {
