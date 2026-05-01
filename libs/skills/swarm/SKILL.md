@@ -15,34 +15,29 @@ required-ptc-tools:
 
 Process many independent items in parallel. `create` builds a table handle;
 `run` fans work out across rows and merges results back. One row = one unit
-of work.
+of work — swarm handles batching automatically.
 
 ## Flow
 
-1. **Explore.** Read a small sample (1–2 reads) to understand the format —
-   columns, structure, what each row represents. Stop as soon as you can write
-   an `instruction` template. Do NOT attempt to process or classify items
-   yourself in JS — that is what the subagents are for.
-2. **Create.** In a `js_eval`, read the **complete** file and call `create()`
-   once. Do NOT log the raw content — the data moves from the file into the
-   table inside the sandbox, never entering your context window. Log only counts.
-3. **Execute.** `run` with an `instruction` template and optional `context`.
-   Returns `{ completed, failed, skipped, failures }`.
-4. **Aggregate.** Inspect with `rows()` or chain another `run` pass.
-
-Use separate `js_eval` calls for each step — do NOT write create + run +
-inspect in a single cell.
+1. **Create.** Build a table from a source — files, a glob pattern, or
+   pre-parsed records. One row per item. Returns a handle.
+2. **Run.** Dispatch an `instruction` template across rows. Results are merged
+   back into the table. Returns `{ completed, failed, skipped, failures }`.
+3. **Aggregate.** Use `rows()` and plain JS to count, filter, or summarize.
+   Do not spawn additional subagents for aggregation.
+4. **Retry.** Re-run with `filter: { column: "<col>", exists: false }` to
+   reprocess only failed rows.
 
 ## Choosing a source
 
 **`glob` / `filePaths`** — one file = one row. Use when each file is an
-independent unit of work (e.g. code review across a repo, summarising a
-folder of documents). Each row gets `{ id, file }`; the subagent reads
+independent unit of work. Each row gets `{ id, file }`; the subagent reads
 the file itself via the `{file}` placeholder.
 
-**`tasks`** — pass pre-built records directly. Use when the data to process
-lives inside a file (e.g. a JSONL dataset, a CSV, a JSON array). Read and
-parse the file first, then pass the records:
+**`tasks`** — pass pre-built records directly. Use when the data lives inside
+a file (JSONL, CSV, JSON array). Read and parse the file first inside
+`js_eval`, then pass the records. One record = one row — do not group
+multiple items into a single row.
 
 ```javascript
 const raw = await tools.readFile({ file_path: "/data.jsonl" });
@@ -53,32 +48,14 @@ const table = await create({ tasks: records });
 Passing `filePaths: ["/data.jsonl"]` would produce a table with **one row**
 pointing at the file — not one row per record inside it.
 
-## Rules
-
-- **Never `console.log` raw file contents in `js_eval`.** Console output is
-  capped at ~5 KB. Log only counts and short samples:
-  `console.log('lines:', lines.length, 'sample:', lines[0])`.
-- **Read fully in js_eval, not at the agent level.** When building the
-  table, read the complete input inside `js_eval` — the data stays inside
-  the sandbox, not in your context window.
-- **Don't solve the problem yourself.** If you find yourself writing loops,
-  regex, or classifiers to process items — stop. That work belongs in the
-  `instruction` sent to subagents via `run()`.
-- **Everything the subagent needs must be in `instruction` + `context`.**
-  Subagents can't see your notes.
-- **Results are final.** Don't dispatch recheck/verify tasks. Fix the
-  instruction and re-dispatch failed rows via `filter`.
-- **One retry for failures, then move on.**
-- **Never write to `.swarm/` directly.** Always use `create()` to build tables.
-
 ## Instruction + context
 
 `instruction` is a per-item template with `{column}` placeholders
-(interpolated from each row).
+(interpolated from each row). Subagents do the work — do not process items
+yourself in JS and write the results into rows.
 
-`context` is free-form prose prepended to every subagent prompt. Put
-dataset-wide information here: what the data is, domain terms,
-classification rules, edge cases, examples.
+`context` is free-form prose prepended to every subagent prompt. Use it for
+shared background: domain terms, classification rules, examples, etc.
 
 ```javascript
 const { create, run, rows } = await import("@/skills/swarm");
@@ -95,8 +72,9 @@ console.log(r);
 
 ## Structured output
 
-Use `responseSchema` for programmatic aggregation. Schema properties become
-top-level columns on each row.
+Use `responseSchema` when the output is a known set of values. Schema
+properties become top-level columns on each row and improve accuracy by
+constraining what subagents can return.
 
 ```javascript
 await run(table, {
@@ -105,19 +83,24 @@ await run(table, {
     type: "object",
     properties: {
       sentiment: { type: "string", enum: ["positive", "negative", "neutral"] },
-      confidence: { type: "number" },
     },
-    required: ["sentiment", "confidence"],
+    required: ["sentiment"],
   },
 });
-// Row after: { id: "r1", text: "...", sentiment: "positive", confidence: 0.95 }
+// Row after: { id: "r1", text: "...", sentiment: "positive" }
 ```
 
-## Batching
+## Aggregation
 
-Batching is automatic — when a table has more than 30 rows, `run()` groups
-them into batches (at most 25 rows each) to keep total subagent dispatches
-bounded. You don't need to configure this.
+After `run()`, use `rows()` and plain JS — no additional subagents needed.
+
+```javascript
+const data = await rows(table, { columns: ["sentiment"] });
+const counts = {};
+data.forEach(r => { counts[r.sentiment] = (counts[r.sentiment] || 0) + 1 });
+console.log(counts);
+// → { positive: 120, negative: 45, neutral: 35 }
+```
 
 ## Chaining passes
 
@@ -135,36 +118,24 @@ await run(table, {
 
 ## Filtering
 
-`filter: { column: "result", exists: false }` — re-dispatch unprocessed rows.
-
 ```javascript
 { column: "status", equals: "done" }
 { column: "status", notEquals: "done" }
 { column: "category", in: ["A", "B"] }
-{ column: "review", exists: false }      // null or undefined
+{ column: "result", exists: false }      // not yet processed
 { and: [filter1, filter2] }
 { or: [filter1, filter2] }
 ```
 
-## Inspecting results
+## Technical notes
 
-```javascript
-const issues = await rows(table, {
-  filter: { column: "review", notEquals: "no issues" },
-  columns: ["file", "review"],
-});
-console.log(issues);
-```
-
-Aggregation:
-
-```javascript
-const data = await rows(table, { columns: ["sentiment"] });
-const counts = {};
-data.forEach(r => { counts[r.sentiment] = (counts[r.sentiment] || 0) + 1 });
-console.log(counts);
-// → { positive: 120, negative: 45, neutral: 35 }
-```
+- **Console output is capped at ~5 KB.** Never log raw file contents —
+  log only counts and short samples.
+- **When building a table from a file, read it inside `js_eval`.** Data read
+  inside the sandbox stays there; it never enters the agent's context window.
+- **Never write to `.swarm/` directly.** Always use `create()`.
+- **Everything the subagent needs must be in `instruction` + `context`.**
+  Subagents can't see the agent's context.
 
 ## API Reference
 
@@ -190,6 +161,7 @@ Dispatch work across rows. Returns `{ completed, failed, skipped, failures }`.
 | `filter` | — | Only dispatch matching rows |
 | `subagentType` | `"general-purpose"` | Subagent to use |
 | `responseSchema` | — | JSON Schema for structured output |
+| `batchSize` | auto | Rows per subagent call |
 
 ### `rows(handle, options?)`
 
