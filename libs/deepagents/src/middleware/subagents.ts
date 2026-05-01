@@ -8,6 +8,7 @@ import {
   ToolMessage,
   humanInTheLoopMiddleware,
   SystemMessage,
+  providerStrategy,
   type ContentBlock,
   type BaseMessage,
   type InterruptOnConfig,
@@ -360,6 +361,40 @@ export interface SubAgent {
 }
 
 /**
+ * Preserved creation parameters for a subagent.
+ *
+ * Stored alongside compiled agents so that schema-constrained variants
+ * can be recompiled at runtime when `response_schema` is provided to
+ * the task tool.
+ */
+export interface AgentSpec {
+  /**
+   * Language model used by this subagent.
+   */
+  model: LanguageModelLike | string;
+
+  /**
+   * System prompt injected at the start of the subagent's conversation.
+   */
+  systemPrompt: string;
+
+  /**
+   * Tools available to the subagent during execution.
+   */
+  tools: StructuredTool[];
+
+  /**
+   * Middleware chain applied to the subagent's request/response cycle.
+   */
+  middleware: AgentMiddleware[];
+
+  /**
+   * Unique name identifying this subagent type (e.g. `"general-purpose"`).
+   */
+  name: string;
+}
+
+/**
  * Base specification for the general-purpose subagent.
  *
  * This constant provides the default configuration for the general-purpose subagent
@@ -485,6 +520,7 @@ function getSubagents(options: {
   generalPurposeAgent: boolean;
 }): {
   agents: Record<string, ReactAgent | Runnable>;
+  specs: Record<string, AgentSpec>;
   descriptions: string[];
 } {
   const {
@@ -502,6 +538,7 @@ function getSubagents(options: {
   const generalPurposeMiddlewareBase =
     gpMiddleware || defaultSubagentMiddleware;
   const agents: Record<string, ReactAgent | Runnable> = {};
+  const specs: Record<string, AgentSpec> = {};
   const subagentDescriptions: string[] = [];
 
   // Create general-purpose agent if enabled
@@ -513,15 +550,17 @@ function getSubagents(options: {
       );
     }
 
-    const generalPurposeSubagent = createAgent({
+    const generalPurposeSpec: AgentSpec = {
       model: defaultModel,
       systemPrompt: DEFAULT_SUBAGENT_PROMPT,
       tools: defaultTools as any,
       middleware: generalPurposeMiddleware,
       name: "general-purpose",
-    });
+    };
 
-    agents["general-purpose"] = generalPurposeSubagent;
+    specs["general-purpose"] = generalPurposeSpec;
+    agents["general-purpose"] = createAgent({ ...generalPurposeSpec });
+
     subagentDescriptions.push(
       `- general-purpose: ${DEFAULT_GENERAL_PURPOSE_DESCRIPTION}`,
     );
@@ -544,12 +583,16 @@ function getSubagents(options: {
       if (interruptOn)
         middleware.push(humanInTheLoopMiddleware({ interruptOn }));
 
-      agents[agentParams.name] = createAgent({
+      const customSpec: AgentSpec = {
         model: agentParams.model ?? defaultModel,
         systemPrompt: agentParams.systemPrompt,
         tools: agentParams.tools ?? defaultTools,
         middleware,
         name: agentParams.name,
+      };
+      specs[agentParams.name] = customSpec;
+      agents[agentParams.name] = createAgent({
+        ...customSpec,
         ...(agentParams.responseFormat != null && {
           responseFormat: agentParams.responseFormat,
         }),
@@ -557,7 +600,50 @@ function getSubagents(options: {
     }
   }
 
-  return { agents, descriptions: subagentDescriptions };
+  return { agents, specs, descriptions: subagentDescriptions };
+}
+
+/**
+ * Resolve or compile a schema-constrained subagent variant.
+ *
+ * On cache miss the variant is compiled via `createAgent` with
+ * `providerStrategy(responseSchema)` and stored in `variantCache` so
+ * subsequent calls with an identical schema are free.
+ *
+ * @throws If `subagentType` has no corresponding `AgentSpec` (i.e. it was
+ *   registered as a pre-compiled runnable and cannot be recompiled).
+ */
+export function resolveVariant(
+  subagentType: string,
+  responseSchema: Record<string, unknown>,
+  agentSpecs: Record<string, AgentSpec>,
+  variantCache: Map<string, ReactAgent | Runnable>,
+): ReactAgent | Runnable {
+  const cacheKey = `${subagentType}::${JSON.stringify(responseSchema)}`;
+  const cached = variantCache.get(cacheKey);
+  if (cached) return cached;
+
+  const agentSpec = agentSpecs[subagentType];
+  if (!agentSpec) {
+    throw new Error(
+      `response_schema is not supported for pre-compiled subagent '${subagentType}'`,
+    );
+  }
+
+  if (responseSchema.type !== "object") {
+    throw new Error(
+      `response_schema must have type: "object", got: ${JSON.stringify(responseSchema.type)}`,
+    );
+  }
+
+  const variant = createAgent({
+    ...agentSpec,
+    responseFormat: providerStrategy(
+      responseSchema as { type: "object"; [key: string]: unknown },
+    ),
+  });
+  variantCache.set(cacheKey, variant);
+  return variant;
 }
 
 /**
@@ -585,16 +671,21 @@ function createTaskTool(options: {
     taskDescription,
   } = options;
 
-  const { agents: subagentGraphs, descriptions: subagentDescriptions } =
-    getSubagents({
-      defaultModel,
-      defaultTools,
-      defaultMiddleware,
-      generalPurposeMiddleware,
-      defaultInterruptOn,
-      subagents,
-      generalPurposeAgent,
-    });
+  const {
+    agents: subagentGraphs,
+    specs: agentSpecs,
+    descriptions: subagentDescriptions,
+  } = getSubagents({
+    defaultModel,
+    defaultTools,
+    defaultMiddleware,
+    generalPurposeMiddleware,
+    defaultInterruptOn,
+    subagents,
+    generalPurposeAgent,
+  });
+
+  const variantCache = new Map<string, ReactAgent | Runnable>();
 
   const finalTaskDescription = taskDescription
     ? taskDescription
@@ -602,10 +693,14 @@ function createTaskTool(options: {
 
   return tool(
     async (
-      input: { description: string; subagent_type: string },
+      input: {
+        description: string;
+        subagent_type: string;
+        response_schema?: Record<string, unknown>;
+      },
       config,
     ): Promise<Command | string> => {
-      const { description, subagent_type } = input;
+      const { description, subagent_type, response_schema } = input;
 
       // Validate subagent type
       if (!(subagent_type in subagentGraphs)) {
@@ -617,7 +712,16 @@ function createTaskTool(options: {
         );
       }
 
-      const subagent = subagentGraphs[subagent_type];
+      let subagent = subagentGraphs[subagent_type];
+
+      if (response_schema) {
+        subagent = resolveVariant(
+          subagent_type,
+          response_schema,
+          agentSpecs,
+          variantCache,
+        );
+      }
 
       // Get current state and filter it for subagent
       const currentState = getCurrentTaskInput<Record<string, unknown>>();
@@ -674,6 +778,13 @@ function createTaskTool(options: {
           .string()
           .describe(
             `Name of the agent to use. Available: ${Object.keys(subagentGraphs).join(", ")}`,
+          ),
+        response_schema: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe(
+            "Optional JSON Schema (type: 'object') for structured output. " +
+              "When provided, the subagent's response is constrained to this schema.",
           ),
       }),
     },

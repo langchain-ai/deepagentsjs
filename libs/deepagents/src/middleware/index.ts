@@ -9,9 +9,11 @@ export {
 } from "./fs.js";
 export {
   createSubAgentMiddleware,
+  resolveVariant,
   type SubAgentMiddlewareOptions,
   type SubAgent,
   type CompiledSubAgent,
+  type AgentSpec,
   // Constants for building custom subagent configurations
   GENERAL_PURPOSE_SUBAGENT,
   DEFAULT_GENERAL_PURPOSE_DESCRIPTION,

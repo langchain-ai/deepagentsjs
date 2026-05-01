@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemorySaver } from "@langchain/langgraph-checkpoint";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
 import {
@@ -9,6 +9,29 @@ import {
   ToolMessage,
 } from "@langchain/core/messages";
 import { RunnableLambda } from "@langchain/core/runnables";
+import * as langchain from "langchain";
+
+// Wrap providerStrategy in a vi.fn() (call-through spy) so tests can count
+// invocations. Also stub createAgent when called with a responseFormat so the
+// schema-constrained variant is a lightweight pass-through runnable rather than
+// a real agent graph — FakeListChatModel returns plain strings, not structured
+// JSON, so a real variant agent would loop until the recursion limit.
+vi.mock("langchain", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("langchain")>();
+  const realCreateAgent = actual.createAgent;
+  return {
+    ...actual,
+    providerStrategy: vi.fn(actual.providerStrategy),
+    createAgent: vi.fn((params: Parameters<typeof actual.createAgent>[0]) => {
+      if ((params as Record<string, unknown>).responseFormat != null) {
+        return RunnableLambda.from(async () => ({
+          messages: [new AIMessage({ content: "variant completed" })],
+        }));
+      }
+      return realCreateAgent(params as any);
+    }),
+  };
+});
 import { CallbackManager } from "@langchain/core/callbacks/manager";
 import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
 import { LangChainTracer } from "@langchain/core/tracers/tracer_langchain";
@@ -17,6 +40,7 @@ import type { Serialized } from "@langchain/core/load/serializable";
 import type { ChainValues } from "@langchain/core/utils/types";
 
 import { createDeepAgent } from "../agent.js";
+import { resolveVariant, type AgentSpec } from "./subagents.js";
 import { createSkillsMiddleware } from "./skills.js";
 import { createFileData } from "../backends/utils.js";
 import { createMockBackend } from "./test.js";
@@ -832,5 +856,161 @@ describe("ls_agent_type tracing metadata", () => {
       (run) => run?.extra?.metadata?.ls_agent_type === "subagent",
     );
     expect(subagentRuns.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Tests for task tool response_schema support.
+ *
+ * The integration test ("compiles a schema-constrained variant") validates the
+ * end-to-end flow through createDeepAgent. The cache-level tests call
+ * `resolveVariant` directly to avoid FakeListChatModel + vi.mock("langchain")
+ * interaction issues in multi-invoke scenarios.
+ */
+describe("task tool response_schema", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function modelForOneTaskCall(
+    taskArgs: Record<string, unknown>,
+  ): FakeListChatModel {
+    return new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            { id: `call_${Date.now()}`, name: "task", args: taskArgs },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+  }
+
+  const analystSpec: AgentSpec = {
+    model: "fake-model",
+    systemPrompt: "You are an analyst.",
+    tools: [],
+    middleware: [],
+    name: "analyst",
+  };
+
+  it("compiles a schema-constrained variant when response_schema is provided", async () => {
+    const schema = {
+      type: "object",
+      properties: { answer: { type: "string" } },
+      required: ["answer"],
+    };
+
+    const agent = createDeepAgent({
+      model: modelForOneTaskCall({
+        description: "Classify this text",
+        subagent_type: "analyst",
+        response_schema: schema,
+      }),
+      checkpointer: new MemorySaver(),
+      subagents: [
+        {
+          name: "analyst",
+          description: "An analyst",
+          systemPrompt: "You are an analyst.",
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: [new HumanMessage("Classify")] },
+      {
+        configurable: { thread_id: `schema-variant-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    expect(langchain.providerStrategy).toHaveBeenCalledOnce();
+    expect(langchain.providerStrategy).toHaveBeenCalledWith(schema);
+  });
+
+  it("reuses the cached variant on repeated calls with the same schema", () => {
+    const schema = {
+      type: "object",
+      properties: { label: { type: "string" } },
+    };
+    const specs: Record<string, AgentSpec> = { analyst: analystSpec };
+    const cache = new Map();
+
+    resolveVariant("analyst", schema, specs, cache);
+    resolveVariant("analyst", schema, specs, cache);
+
+    expect(langchain.providerStrategy).toHaveBeenCalledOnce();
+    expect(langchain.createAgent).toHaveBeenCalledOnce();
+    expect(cache.size).toBe(1);
+  });
+
+  it("compiles separate variants for distinct schemas", () => {
+    const schemaA = { type: "object", properties: { a: { type: "string" } } };
+    const schemaB = { type: "object", properties: { b: { type: "number" } } };
+    const specs: Record<string, AgentSpec> = { analyst: analystSpec };
+    const cache = new Map();
+
+    resolveVariant("analyst", schemaA, specs, cache);
+    resolveVariant("analyst", schemaB, specs, cache);
+
+    expect(langchain.providerStrategy).toHaveBeenCalledTimes(2);
+    expect(langchain.providerStrategy).toHaveBeenNthCalledWith(1, schemaA);
+    expect(langchain.providerStrategy).toHaveBeenNthCalledWith(2, schemaB);
+    expect(cache.size).toBe(2);
+  });
+
+  it("throws a descriptive error for an unknown subagent_type", async () => {
+    const agent = createDeepAgent({
+      model: modelForOneTaskCall({
+        description: "Work",
+        subagent_type: "ghost-agent",
+      }),
+      checkpointer: new MemorySaver(),
+      subagents: [
+        {
+          name: "analyst",
+          description: "An analyst",
+          systemPrompt: "You are an analyst.",
+        },
+      ],
+    });
+
+    await expect(
+      agent.invoke(
+        { messages: [new HumanMessage("Test")] },
+        {
+          configurable: { thread_id: `unknown-type-${Date.now()}` },
+          recursionLimit: 50,
+        },
+      ),
+    ).rejects.toThrow("ghost-agent");
+  });
+
+  it("throws when response_schema targets a pre-compiled runnable", () => {
+    const schema = {
+      type: "object",
+      properties: { x: { type: "string" } },
+    };
+    const cache = new Map();
+
+    expect(() => resolveVariant("compiled", schema, {}, cache)).toThrow(
+      "pre-compiled subagent",
+    );
+  });
+
+  it("throws when response_schema type is not 'object'", () => {
+    const schema = {
+      type: "array",
+      items: { type: "string" },
+    };
+    const specs: Record<string, AgentSpec> = { analyst: analystSpec };
+    const cache = new Map();
+
+    expect(() => resolveVariant("analyst", schema, specs, cache)).toThrow(
+      'response_schema must have type: "object"',
+    );
   });
 });

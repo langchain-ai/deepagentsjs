@@ -169,7 +169,7 @@ async function prepareSkillsForEval(
       const missingPtc = (skill.requiredPtcTools ?? []).filter(
         (t) => !ptcToolNames.has(t),
       );
-      
+
       if (missingPtc.length > 0) {
         session.setSkillsContext(undefined);
         return (
