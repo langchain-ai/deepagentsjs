@@ -13,9 +13,27 @@ declare const tools: {
 };
 
 /**
- * Directory prefix for all table JSONL files.
+ * Session ID injected by the QuickJS middleware as a global.
+ * Scopes table files to the current conversation thread.
  */
-const TABLE_DIR = ".swarm";
+declare const __sessionId__: string | undefined;
+
+/**
+ * Sanitize a session ID for use as a directory name component.
+ * Replaces any character that isn't alphanumeric, hyphen, or underscore
+ * with an underscore, and caps length to prevent excessively long paths.
+ */
+function sanitizeSessionId(id: string): string {
+  return id.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
+}
+
+/**
+ * Directory prefix for all table JSONL files, scoped to the session.
+ */
+function getTableDir(): string {
+  const id = typeof __sessionId__ !== "undefined" ? __sessionId__ : "default";
+  return `.swarm/${sanitizeSessionId(id)}`;
+}
 
 /**
  * Maximum number of tables before oldest are evicted.
@@ -79,7 +97,7 @@ export function generateId(): string {
  */
 export function tablePath(sequence: number, id: string): string {
   const padded = String(sequence).padStart(3, "0");
-  return `${TABLE_DIR}/${padded}-${id}.jsonl`;
+  return `${getTableDir()}/${padded}-${id}.jsonl`;
 }
 
 /**
@@ -270,7 +288,7 @@ export async function writeFile(path: string, content: string): Promise<void> {
  */
 async function listTableFiles(): Promise<string[]> {
   try {
-    const files = await globFiles(`${TABLE_DIR}/*.jsonl`);
+    const files = await globFiles(`${getTableDir()}/*.jsonl`);
     return files.sort();
   } catch {
     return [];

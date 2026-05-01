@@ -249,6 +249,7 @@ export function createREPLMiddleware(options: REPLMiddlewareOptions = {}) {
         skillsEnabled: skillsBackend !== undefined,
         maxResultChars,
         captureConsole,
+        sessionId: threadId,
       });
 
       if (skillsBackend !== undefined) {
