@@ -23,7 +23,7 @@
     "dedent": "^1.7.1",
     "@langchain/langgraph": "^1.2.9",
     "hono": "^4.0.0",
-    "@hono/node-server": "^1.13.0",
+    "@hono/node-server": "^2.0.1",
     "pg": "^8.13.0",
     "uuid": "^13.0.0",
     "yaml": "^2.8.2",
