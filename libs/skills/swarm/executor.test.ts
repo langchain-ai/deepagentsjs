@@ -32,7 +32,7 @@ describe("callTask", () => {
     expect(result).toBe("Result for: do something");
   });
 
-  it("forwards response_schema when provided", async () => {
+  it("forwards response_schema when provided (normalized)", async () => {
     const schema = { type: "object", properties: { x: { type: "number" } } };
     await callTask({
       description: "structured",
@@ -47,7 +47,11 @@ describe("callTask", () => {
     expect(taskFn.task).toHaveBeenCalledWith({
       description: "structured",
       subagent_type: "analyst",
-      response_schema: schema,
+      response_schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: { x: { type: "number" } },
+      },
     });
   });
 
@@ -165,7 +169,10 @@ describe("dispatch", () => {
       ],
       { concurrency: 1 },
     );
-    expect(taskFn.mock.calls[1][0].response_schema).toEqual(schema);
+    expect(taskFn.mock.calls[1][0].response_schema).toEqual({
+      type: "object",
+      additionalProperties: false,
+    });
   });
 
   it("returns empty array for empty input", async () => {
