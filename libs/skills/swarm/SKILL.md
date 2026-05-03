@@ -39,9 +39,27 @@ a file (JSONL, CSV, JSON array). Read and parse the file first inside
 `js_eval`, then pass the records. One record = one row — do not group
 multiple items into a single row.
 
+For small files (under ~500 lines):
+
 ```javascript
 const raw = await tools.readFile({ file_path: "/data.jsonl" });
 const records = raw.trim().split("\n").map(l => JSON.parse(l));
+const table = await create({ tasks: records });
+```
+
+For large files, read in chunks of 500 lines to avoid truncation:
+
+```javascript
+const { create } = await import("@/skills/swarm");
+let records = [];
+let offset = 0;
+while (true) {
+  const chunk = await tools.readFile({ file_path: "/data.txt", offset, limit: 500 });
+  const lines = chunk.split("\n").filter(l => l.trim());
+  for (const l of lines) { records.push({ id: `r${records.length}`, text: l }); }
+  if (lines.length < 500) break;
+  offset += 500;
+}
 const table = await create({ tasks: records });
 ```
 
@@ -131,6 +149,9 @@ await run(table, {
 
 - **Console output is capped at ~5 KB.** Never log raw file contents —
   log only counts and short samples.
+- **`readFile` inside `js_eval` returns raw content — no line-number
+  prefixes.** Request at most 500 lines per call. For files with more
+  than 500 lines, loop with incrementing `offset`.
 - **When building a table from a file, read it inside `js_eval`.** Data read
   inside the sandbox stays there; it never enters the agent's context window.
 - **Never write to `.swarm/` directly.** Always use `create()`.
