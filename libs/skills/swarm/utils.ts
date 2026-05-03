@@ -13,14 +13,12 @@ export function normalizeSchema(
   }
 
   if (schema.type === "array") {
-    const items = schema.items;
+    const result: Record<string, unknown> = { ...schema };
+    const items = result.items;
     if (items != null && typeof items === "object" && !Array.isArray(items)) {
-      return {
-        ...schema,
-        items: normalizeSchema(items as Record<string, unknown>),
-      };
+      result.items = normalizeSchema(items as Record<string, unknown>);
     }
-    return schema;
+    return result;
   }
 
   // type === "object"

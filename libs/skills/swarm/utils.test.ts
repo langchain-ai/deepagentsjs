@@ -89,6 +89,31 @@ describe("normalizeSchema", () => {
     const schema = { type: "string" };
     expect(normalizeSchema(schema)).toEqual({ type: "string" });
   });
+
+  it("preserves minItems on array types", () => {
+    expect(
+      normalizeSchema({ type: "array", minItems: 6, items: { type: "string" } })
+        .minItems,
+    ).toBe(6);
+    expect(
+      normalizeSchema({ type: "array", minItems: 0, items: { type: "string" } })
+        .minItems,
+    ).toBe(0);
+    expect(
+      normalizeSchema({ type: "array", minItems: 1, items: { type: "string" } })
+        .minItems,
+    ).toBe(1);
+  });
+
+  it("preserves maxItems on array types", () => {
+    expect(
+      normalizeSchema({
+        type: "array",
+        maxItems: 10,
+        items: { type: "string" },
+      }).maxItems,
+    ).toBe(10);
+  });
 });
 
 describe("readColumn", () => {
