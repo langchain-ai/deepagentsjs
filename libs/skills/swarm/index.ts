@@ -111,13 +111,12 @@ async function dispatchBatched(
   },
 ): Promise<TaskResult[]> {
   const batches = createBatches(matched, opts.batchSize);
-  const wrappedSchema = wrapSchema(opts.responseSchema);
 
   const batchTasks: TaskSpec[] = batches.map((batch, i) => ({
     id: `batch_${i}`,
     prompt: buildBatchPrompt(opts.instruction, batch, opts.context),
     subagentType: opts.subagentType,
-    responseSchema: wrappedSchema,
+    responseSchema: wrapSchema(opts.responseSchema, batch.length),
   }));
 
   const batchResults = await dispatch(batchTasks, {

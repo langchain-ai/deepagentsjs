@@ -33,6 +33,7 @@ export function createBatches<T>(items: T[], batchSize: number): T[][] {
  */
 export function wrapSchema(
   itemSchema?: Record<string, unknown>,
+  count?: number,
 ): Record<string, unknown> {
   let itemProperties: Record<string, unknown>;
   let itemRequired: string[];
@@ -50,19 +51,26 @@ export function wrapSchema(
     itemRequired = ["id", "result"];
   }
 
+  const resultsArray: Record<string, unknown> = {
+    type: "array",
+    items: {
+      type: "object",
+      additionalProperties: false,
+      properties: itemProperties,
+      required: itemRequired,
+    },
+  };
+
+  if (count != null) {
+    resultsArray.minItems = count;
+    resultsArray.maxItems = count;
+  }
+
   return {
     type: "object",
     additionalProperties: false,
     properties: {
-      results: {
-        type: "array",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          properties: itemProperties,
-          required: itemRequired,
-        },
-      },
+      results: resultsArray,
     },
     required: ["results"],
   };
@@ -95,10 +103,11 @@ export function buildBatchPrompt(
   parts.push(`Instruction: ${instruction}`);
   parts.push("");
   parts.push(
-    "Apply this instruction to each item below. " +
+    `Process ${rows.length} items. Apply this instruction to each item below. ` +
       "Column references like {column} in the instruction correspond to " +
-      "fields in each item's data. Return your results as a JSON object " +
-      "with a 'results' array, each entry keyed by the item's 'id'.",
+      "fields in each item's data. Return a JSON object " +
+      `with a 'results' array containing exactly ${rows.length} entries, ` +
+      "each including the item's 'id' exactly as shown.",
   );
   parts.push("");
 
