@@ -166,7 +166,7 @@ Create a table. Returns a handle `{ id, count, columns }`.
 
 | Source | Description |
 |--------|------------|
-| `{ glob: "src/**/*.ts" }` | Match files by pattern. Columns: `id`, `file` |
+| `{ glob: "src/**/*.ts" }` or `{ glob: ["src/**/*.ts", "lib/**/*.ts"] }` | Match files by one or more patterns. Columns: `id`, `file` |
 | `{ filePaths: ["a.ts", "b.ts"] }` | Explicit file list. Columns: `id`, `file` |
 | `{ tasks: [{ id: "t1", text: "..." }] }` | Custom rows. Each must have `id` |
 
