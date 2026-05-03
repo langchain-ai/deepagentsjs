@@ -134,6 +134,27 @@ await run(table, {
 });
 ```
 
+## Action-only tasks
+
+When subagents perform actions (write a file, apply a fix) rather than return
+data, the result column serves as a completion marker. The `column` default
+(`"result"`) still tracks which rows succeeded, and `exists: false` filtering
+still works for retries.
+
+```javascript
+const table = await create({ glob: "src/**/*.ts" });
+await run(table, {
+  instruction: "Add missing JSDoc to all exported functions in {file}.",
+  column: "fixed",
+});
+// retry any that failed
+await run(table, {
+  instruction: "Add missing JSDoc to all exported functions in {file}.",
+  column: "fixed",
+  filter: { column: "fixed", exists: false },
+});
+```
+
 ## Filtering
 
 ```javascript
