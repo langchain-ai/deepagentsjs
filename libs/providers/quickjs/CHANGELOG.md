@@ -1,5 +1,25 @@
 # @langchain/quickjs
 
+## 0.2.6
+
+### Patch Changes
+
+- [#501](https://github.com/langchain-ai/deepagentsjs/pull/501) [`5b0eaea`](https://github.com/langchain-ai/deepagentsjs/commit/5b0eaea7b20461414983b71ba08d26d078b49214) Thanks [@sukhmanghotraa](https://github.com/sukhmanghotraa)! - fix: bump @langchain/core to ^1.1.42 across all workspace packages
+
+- [#496](https://github.com/langchain-ai/deepagentsjs/pull/496) [`8fd575f`](https://github.com/langchain-ai/deepagentsjs/commit/8fd575f06ca27cb0bef1a649aa34124a2c04ddd3) Thanks [@colifran](https://github.com/colifran)! - feat(deepagents): implement functional skills for quickjs middleware
+
+- [#486](https://github.com/langchain-ai/deepagentsjs/pull/486) [`998d772`](https://github.com/langchain-ai/deepagentsjs/commit/998d772a07acc76fcc0d419e65b3c74a64d9ac52) Thanks [@colifran](https://github.com/colifran)! - feat(quickjs): remove built-in VFS globals, add PTC instance injection and StateBackend read-your-writes
+
+- [#498](https://github.com/langchain-ai/deepagentsjs/pull/498) [`192bbd7`](https://github.com/langchain-ai/deepagentsjs/commit/192bbd7109817a826aa6bd982e16b54b5a5c8cb5) Thanks [@colifran](https://github.com/colifran)! - fix(quickjs): bound console buffering at capture time
+
+- [#497](https://github.com/langchain-ai/deepagentsjs/pull/497) [`79dcf9a`](https://github.com/langchain-ai/deepagentsjs/commit/79dcf9ae4567fcce71ea7e529f332baf6a3d6dcd) Thanks [@colifran](https://github.com/colifran)! - feat(quickjs): add maxPtcCallsbudget for ptc calls
+
+- [#492](https://github.com/langchain-ai/deepagentsjs/pull/492) [`43cd121`](https://github.com/langchain-ai/deepagentsjs/commit/43cd121133562abf0dee76c6db01f2bde0eb3fd3) Thanks [@colifran](https://github.com/colifran)! - implement file system permissions for fs middleware tools
+
+- [#494](https://github.com/langchain-ai/deepagentsjs/pull/494) [`e64c7e3`](https://github.com/langchain-ai/deepagentsjs/commit/e64c7e31a7e62929d5d2a9048ad7df3315a546cd) Thanks [@colifran](https://github.com/colifran)! - feat(quickjs): implement delete session in after agent hook to clean up completed repl sessions
+
+- [#499](https://github.com/langchain-ai/deepagentsjs/pull/499) [`352e487`](https://github.com/langchain-ai/deepagentsjs/commit/352e4876679fb708d9690ffeab82363ba02677dc) Thanks [@hntrl](https://github.com/hntrl)! - fix(quickjs): add ls_code_input_language metadata to js_eval tool
+
 ## 0.2.5
 
 ### Patch Changes
