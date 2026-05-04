@@ -288,9 +288,32 @@ export function createCodeInterpreterMiddleware(
     },
   );
 
+  const ptcToolNames = new Set(
+    (ptc ?? []).map((t) => (typeof t === "string" ? t : t.name)),
+  );
+
   return createMiddleware({
     name: "CodeInterpreterMiddleware",
     tools: [evalTool],
+    beforeAgent(state) {
+      if (!skillsBackend) return;
+
+      const metadata: SkillMetadata[] =
+        ((state as Record<string, unknown>)
+          .skillsMetadata as SkillMetadata[]) ?? [];
+
+      for (const skill of metadata) {
+        const missing = (skill.requiredPtcTools ?? []).filter(
+          (t) => !ptcToolNames.has(t),
+        );
+        if (missing.length > 0) {
+          throw new Error(
+            `Skill '${skill.name}' requires PTC tools that are not configured: ${missing.join(", ")}. ` +
+              `Add them to createQuickJSMiddleware({ ptc: [...] }).`,
+          );
+        }
+      }
+    },
     wrapModelCall: async (request, handler) => {
       const agentTools = (request.tools || []) as StructuredToolInterface[];
       ptcTools = filterToolsForPtc(agentTools);

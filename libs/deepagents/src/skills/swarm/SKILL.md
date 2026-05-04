@@ -4,11 +4,8 @@ description: >-
   Dispatches many independent items in parallel: create a table, fan out to
   subagents, aggregate results. One row = one unit of work.
 module: ./index.ts
-required-ptc-tools:
-  - task
-  - read_file
-  - write_file
-  - glob
+metadata:
+  required-ptc-tools: task read_file write_file glob
 ---
 
 # Swarm

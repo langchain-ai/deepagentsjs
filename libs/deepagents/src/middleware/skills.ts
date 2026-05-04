@@ -511,22 +511,12 @@ export function parseSkillMetadataFromContent(
     );
   }
 
-  // Parse required-ptc-tools: support both YAML list and space-delimited string
-  const rawRequiredPtcTools = frontmatterData["required-ptc-tools"];
-  let requiredPtcTools: string[];
-  if (rawRequiredPtcTools) {
-    if (Array.isArray(rawRequiredPtcTools)) {
-      requiredPtcTools = rawRequiredPtcTools
-        .map((t) => String(t).trim())
-        .filter(Boolean);
-    } else {
-      requiredPtcTools = String(rawRequiredPtcTools)
-        .split(/\s+/)
-        .filter(Boolean);
-    }
-  } else {
-    requiredPtcTools = [];
-  }
+  const metadataObj =
+    (frontmatterData.metadata as Record<string, unknown>) ?? {};
+  const rawRequiredPtcTools = metadataObj["required-ptc-tools"];
+  const requiredPtcTools = rawRequiredPtcTools
+    ? String(rawRequiredPtcTools).split(/\s+/).filter(Boolean)
+    : [];
 
   return {
     name,
