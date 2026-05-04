@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { createAgent } from "langchain";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
-import { createQuickJSMiddleware } from "./middleware.js";
+import { createREPLMiddleware } from "./middleware.js";
 import { ReplSession } from "./session.js";
 
 import type * as _zodTypes from "@langchain/core/utils/types";
@@ -11,22 +11,22 @@ import type * as _messages from "@langchain/core/messages";
 
 const MODEL = "claude-sonnet-4-5-20250929";
 
-describe("QuickJS REPL integration", () => {
+describe("REPL middleware integration", () => {
   beforeEach(() => {
     ReplSession.clearCache();
   });
 
   it(
-    "should persist REPL state across multiple js_eval calls within the same thread",
+    "should persist REPL state across multiple eval calls within the same thread",
     { timeout: 90_000 },
     async () => {
-      const quickjsMiddleware = createQuickJSMiddleware();
+      const replMiddleware = createREPLMiddleware();
       const checkpointer = new MemorySaver();
       const threadId = `int-repl-persist-${Date.now()}`;
 
       const agent = createAgent({
         model: MODEL,
-        middleware: [quickjsMiddleware],
+        middleware: [replMiddleware],
         checkpointer,
       });
 
@@ -39,7 +39,7 @@ describe("QuickJS REPL integration", () => {
         {
           messages: [
             new HumanMessage(
-              "Use js_eval twice: first call `var x = 99`, then in a separate second call log `x` with console.log. Report the value you see.",
+              "Use eval twice: first call `var x = 99`, then in a separate second call log `x` with console.log. Report the value you see.",
             ),
           ],
         },
@@ -58,13 +58,13 @@ describe("QuickJS REPL integration", () => {
     "should reference variables from prior cells instead of re-embedding data",
     { timeout: 90_000 },
     async () => {
-      const quickjsMiddleware = createQuickJSMiddleware();
+      const replMiddleware = createREPLMiddleware();
       const checkpointer = new MemorySaver();
       const threadId = `int-repl-reuse-${Date.now()}`;
 
       const agent = createAgent({
         model: MODEL,
-        middleware: [quickjsMiddleware],
+        middleware: [replMiddleware],
         checkpointer,
       });
 
@@ -79,9 +79,9 @@ describe("QuickJS REPL integration", () => {
         {
           messages: [
             new HumanMessage(
-              "Using js_eval, first store this data: " +
+              "Using eval, first store this data: " +
                 '[{name: "a", value: 10}, {name: "b", value: 20}, {name: "c", value: 30}]. ' +
-                "Then in a separate js_eval call, compute the sum of all the values.",
+                "Then in a separate eval call, compute the sum of all the values.",
             ),
           ],
         },
@@ -91,14 +91,14 @@ describe("QuickJS REPL integration", () => {
       const toolMessages = result.messages.filter(ToolMessage.isInstance);
       expect(toolMessages.length).toBeGreaterThanOrEqual(2);
 
-      // Verify the second js_eval call does not re-embed the array literal
+      // Verify the second eval call does not re-embed the array literal
       const aiMessages = result.messages.filter(AIMessage.isInstance);
-      const jsEvalCalls = aiMessages.flatMap((msg) =>
-        (msg.tool_calls || []).filter((tc) => tc.name === "js_eval"),
+      const evalCalls = aiMessages.flatMap((msg) =>
+        (msg.tool_calls || []).filter((tc) => tc.name === "eval"),
       );
-      expect(jsEvalCalls.length).toBeGreaterThanOrEqual(2);
+      expect(evalCalls.length).toBeGreaterThanOrEqual(2);
 
-      const secondCallCode = jsEvalCalls[1].args?.code as string;
+      const secondCallCode = evalCalls[1].args?.code as string;
       expect(secondCallCode).not.toContain('"name": "a"');
       expect(secondCallCode).not.toContain('"name": "b"');
 

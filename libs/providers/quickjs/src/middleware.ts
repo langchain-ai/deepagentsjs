@@ -1,7 +1,7 @@
 /**
- * QuickJS REPL middleware for deepagents.
+ * REPL middleware for deepagents.
  *
- * Provides a `js_eval` tool that runs JavaScript in a WASM-sandboxed QuickJS
+ * Provides an `eval` tool that runs JavaScript in a WASM-sandboxed QuickJS
  * interpreter. Supports:
  * - Persistent state across evaluations (true REPL)
  * - Programmatic tool calling (PTC) — expose agent or custom tools inside the REPL
@@ -23,7 +23,7 @@ import {
   type BackendFactory,
   type SkillMetadata,
 } from "deepagents";
-import type { QuickJSMiddlewareOptions } from "./types.js";
+import type { REPLMiddlewareOptions } from "./types.js";
 import {
   ReplSession,
   DEFAULT_EXECUTION_TIMEOUT,
@@ -52,6 +52,8 @@ import type * as _zodTypes from "@langchain/core/utils/types";
 import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
 import { LangGraphRunnableConfig } from "@langchain/langgraph";
+
+const DEFAULT_TOOL_NAME = "eval";
 
 const REPL_SYSTEM_PROMPT = dedent`
   ## TypeScript/JavaScript REPL (\`js_eval\`)
@@ -175,11 +177,9 @@ async function prepareSkillsForEval(
 }
 
 /**
- * Create the QuickJS REPL middleware.
+ * Create the REPL middleware.
  */
-export function createQuickJSMiddleware(
-  options: QuickJSMiddlewareOptions = {},
-) {
+export function createREPLMiddleware(options: REPLMiddlewareOptions = {}) {
   const {
     ptc,
     memoryLimitBytes = DEFAULT_MEMORY_LIMIT,
@@ -189,6 +189,8 @@ export function createQuickJSMiddleware(
     skillsBackend,
     maxPtcCalls = DEFAULT_MAX_PTC_CALLS,
     maxResultChars = DEFAULT_MAX_RESULTS_CHARS,
+    toolName = DEFAULT_TOOL_NAME,
+    captureConsole = true,
   } = options;
 
   if (maxPtcCalls !== null && maxPtcCalls !== undefined && maxPtcCalls < 1) {
@@ -208,12 +210,12 @@ export function createQuickJSMiddleware(
   ): StructuredToolInterface[] {
     if (!ptc) return [];
 
-    const candidates = allTools.filter((t) => t.name !== "js_eval");
+    const candidates = allTools.filter((t) => t.name !== toolName);
 
     return resolveToolList(ptc, candidates);
   }
 
-  const jsEvalTool = tool(
+  const evalTool = tool(
     async (input, config: LangGraphRunnableConfig) => {
       const threadId = config.configurable?.thread_id || DEFAULT_SESSION_ID;
       const sessionKey = `${threadId}:${middlewareId}`;
@@ -225,6 +227,7 @@ export function createQuickJSMiddleware(
         tools: ptcTools,
         skillsEnabled: skillsBackend !== undefined,
         maxResultChars,
+        captureConsole,
       });
 
       if (skillsBackend !== undefined) {
@@ -242,7 +245,7 @@ export function createQuickJSMiddleware(
       return formatReplResult(result);
     },
     {
-      name: "js_eval",
+      name: toolName,
       description: dedent`
         Evaluate TypeScript/JavaScript code in a sandboxed REPL. State persists across calls.
         Use console.log() for output. Returns the result of the last expression.
@@ -261,8 +264,8 @@ export function createQuickJSMiddleware(
   );
 
   return createMiddleware({
-    name: "QuickJSMiddleware",
-    tools: [jsEvalTool],
+    name: "REPLMiddleware",
+    tools: [evalTool],
     wrapModelCall: async (request, handler) => {
       const agentTools = (request.tools || []) as StructuredToolInterface[];
       ptcTools = filterToolsForPtc(agentTools);

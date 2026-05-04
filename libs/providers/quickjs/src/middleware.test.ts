@@ -3,25 +3,25 @@ import { tool } from "langchain";
 import * as z from "zod";
 import { SystemMessage } from "@langchain/core/messages";
 import {
-  createQuickJSMiddleware,
+  createREPLMiddleware,
   generatePtcPrompt,
   resolveToolList,
 } from "./middleware.js";
 import { ReplSession } from "./session.js";
 
-describe("createQuickJSMiddleware", () => {
+describe("createREPLMiddleware", () => {
   beforeEach(() => {
     ReplSession.clearCache();
   });
 
   describe("tool registration", () => {
-    it("should register js_eval tool", () => {
-      const middleware = createQuickJSMiddleware();
+    it("should register eval tool", () => {
+      const middleware = createREPLMiddleware();
       expect(middleware.tools).toBeDefined();
       const names = middleware.tools!.map((t: { name: string }) => t.name);
-      expect(names).toContain("js_eval");
+      expect(names).toContain("eval");
       const jsEval = middleware.tools!.find(
-        (t: { name: string }) => t.name === "js_eval",
+        (t: { name: string }) => t.name === "eval",
       ) as {
         metadata?: Record<string, unknown>;
       };
@@ -29,7 +29,7 @@ describe("createQuickJSMiddleware", () => {
     });
 
     it("should register exactly one tool", () => {
-      const middleware = createQuickJSMiddleware();
+      const middleware = createREPLMiddleware();
       expect(middleware.tools!.length).toBe(1);
       expect(
         (middleware.tools![0] as { metadata?: Record<string, unknown> })
@@ -40,7 +40,7 @@ describe("createQuickJSMiddleware", () => {
 
   describe("wrapModelCall", () => {
     it("should add REPL system prompt with API Reference structure", async () => {
-      const middleware = createQuickJSMiddleware();
+      const middleware = createREPLMiddleware();
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
 
       await middleware.wrapModelCall!(
@@ -56,7 +56,7 @@ describe("createQuickJSMiddleware", () => {
       const req = mockHandler.mock.calls[0][0];
       const text = req.systemMessage.text;
       expect(text).toContain("Base");
-      expect(text).toContain("js_eval");
+      expect(text).toContain("eval");
       expect(text).toContain("### Hard rules");
       expect(text).toContain("### Limitations");
       expect(text).not.toContain("async readFile");
@@ -65,7 +65,7 @@ describe("createQuickJSMiddleware", () => {
     });
 
     it("should use custom system prompt when provided", async () => {
-      const middleware = createQuickJSMiddleware({
+      const middleware = createREPLMiddleware({
         systemPrompt: "Custom REPL prompt",
       });
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
@@ -160,7 +160,7 @@ describe("createQuickJSMiddleware", () => {
     });
 
     it("should include directly injected instances in PTC prompt", async () => {
-      const middleware = createQuickJSMiddleware({ ptc: [extraTool] });
+      const middleware = createREPLMiddleware({ ptc: [extraTool] });
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
 
       await middleware.wrapModelCall!(
@@ -178,7 +178,7 @@ describe("createQuickJSMiddleware", () => {
     });
 
     it("should include both named agent tools and injected instances in mixed ptc array", async () => {
-      const middleware = createQuickJSMiddleware({
+      const middleware = createREPLMiddleware({
         ptc: ["agent_tool", extraTool],
       });
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
@@ -250,11 +250,11 @@ describe("createQuickJSMiddleware", () => {
 
   describe("afterAgent call", () => {
     it("should dispose of the session for the current thread", async () => {
-      const middleware = createQuickJSMiddleware();
+      const middleware = createREPLMiddleware();
 
-      // Trigger session creation via js_eval
+      // Trigger session creation via eval
       const jsTool = middleware.tools!.find(
-        (t: any) => t.name === "js_eval",
+        (t: any) => t.name === "eval",
       ) as any;
       await jsTool.invoke(
         { code: "1 + 1" },
@@ -273,7 +273,7 @@ describe("createQuickJSMiddleware", () => {
     });
 
     it("should no-op for afterAgent on a thread with no session", async () => {
-      const middleware = createQuickJSMiddleware();
+      const middleware = createREPLMiddleware();
       await expect(
         (middleware as any).afterAgent(
           {},
@@ -283,9 +283,9 @@ describe("createQuickJSMiddleware", () => {
     });
 
     it("should only remove the session for the finished thread, not others", async () => {
-      const middleware = createQuickJSMiddleware();
+      const middleware = createREPLMiddleware();
       const jsTool = middleware.tools!.find(
-        (t: any) => t.name === "js_eval",
+        (t: any) => t.name === "eval",
       ) as any;
 
       await jsTool.invoke(

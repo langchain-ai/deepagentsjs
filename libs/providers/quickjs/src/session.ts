@@ -32,9 +32,9 @@ import type { ReplSessionOptions, ReplResult, SkillsContext } from "./types.js";
 import { toCamelCase } from "./utils.js";
 import { transformForEval } from "./transform.js";
 
-export const DEFAULT_MEMORY_LIMIT = 50 * 1024 * 1024;
+export const DEFAULT_MEMORY_LIMIT = 64 * 1024 * 1024;
 export const DEFAULT_MAX_STACK_SIZE = 320 * 1024;
-export const DEFAULT_EXECUTION_TIMEOUT = 30_000;
+export const DEFAULT_EXECUTION_TIMEOUT = 5_000;
 export const DEFAULT_SESSION_ID = "__default__";
 export const DEFAULT_MAX_PTC_CALLS = 256;
 export const DEFAULT_MAX_RESULTS_CHARS = 4000;
@@ -240,6 +240,7 @@ export class ReplSession {
       tools,
       skillsEnabled = false,
       maxResultChars = DEFAULT_MAX_RESULTS_CHARS,
+      captureConsole = true,
     } = this.options;
 
     const asyncModule = await newAsyncModule();
@@ -252,7 +253,9 @@ export class ReplSession {
     this.context = context;
 
     this.consoleBuffer = new ConsoleBuffer(maxResultChars);
-    this.setupConsole();
+    if (captureConsole) {
+      this.setupConsole();
+    }
 
     if (tools !== undefined && tools.length > 0) {
       this.injectTools(tools);
@@ -468,7 +471,7 @@ export class ReplSession {
 
   /**
    * Push the current skills metadata + backend into the session.
-   * Called by the middleware once per `js_eval` invocation, before eval runs.
+   * Called by the middleware once per `eval` invocation, before eval runs.
    * Pass `undefined` to clear the context (no skill imports will resolve).
    */
   setSkillsContext(ctx?: SkillsContext): void {

@@ -12,7 +12,7 @@
  *
  * Architecture:
  * ```
- * Agent (with js_eval + PTC)
+ * Agent (with eval + PTC)
  *   └── REPL code
  *       ├── tools.task({ description: "analyze chunk 1", ... })
  *       ├── tools.task({ description: "analyze chunk 2", ... })
@@ -25,7 +25,7 @@ import "dotenv/config";
 import dedent from "dedent";
 import { HumanMessage } from "@langchain/core/messages";
 import { createDeepAgent, type SubAgent } from "deepagents";
-import { createQuickJSMiddleware } from "@langchain/quickjs";
+import { createREPLMiddleware } from "@langchain/quickjs";
 import { ChatOpenAI } from "@langchain/openai";
 
 const generalPurpose: SubAgent = {
@@ -53,7 +53,7 @@ const agent = createDeepAgent({
 
     When given a complex research task:
     1. Break it into independent sub-tasks
-    2. Write a single js_eval call that spawns ALL sub-agents in parallel
+    2. Write a single eval call that spawns ALL sub-agents in parallel
     3. Aggregate and analyze the results programmatically in the same code block
     4. Write your final synthesis to a file
 
@@ -76,12 +76,12 @@ const agent = createDeepAgent({
     \`\`\`
 
     Do all sub-agent spawning, result processing, and file writing in a
-    single js_eval call. Do not use multiple sequential js_eval calls
+    single eval call. Do not use multiple sequential eval calls
     when the work can be parallelized.
   `,
   subagents: [generalPurpose],
   middleware: [
-    createQuickJSMiddleware({
+    createREPLMiddleware({
       ptc: ["task"],
     }),
   ],

@@ -7,9 +7,9 @@ import type {
 } from "deepagents";
 
 /**
- * Configuration options for the QuickJS REPL middleware.
+ * Configuration options for the REPL middleware.
  */
-export interface QuickJSMiddlewareOptions {
+export interface REPLMiddlewareOptions {
   /**
    * Enable programmatic tool calling from within the REPL.
    *
@@ -22,7 +22,7 @@ export interface QuickJSMiddlewareOptions {
 
   /**
    * Memory limit in bytes.
-   * @default 52428800 (50MB)
+   * @default 67108864 (64MB)
    */
   memoryLimitBytes?: number;
 
@@ -35,7 +35,7 @@ export interface QuickJSMiddlewareOptions {
   /**
    * Execution timeout in milliseconds per evaluation.
    * Set to a negative value to disable the timeout entirely.
-   * @default 30000 (30s)
+   * @default 5000 (5s)
    */
   executionTimeoutMs?: number;
 
@@ -74,6 +74,20 @@ export interface QuickJSMiddlewareOptions {
    * @default 4000
    */
   maxResultChars?: number;
+
+  /**
+   * Name of the tool exposed to the model.
+   * @default "eval"
+   */
+  toolName?: string;
+
+  /**
+   * If true, install a `console` object that buffers `console.log/warn/error`
+   * calls and emits them alongside the result. If false, console output is
+   * silently discarded.
+   * @default true
+   */
+  captureConsole?: boolean;
 }
 
 /**
@@ -86,6 +100,7 @@ export interface ReplSessionOptions {
   skillsEnabled?: boolean;
   maxPtcCalls?: number | null;
   maxResultChars?: number;
+  captureConsole?: boolean;
 }
 
 /**
