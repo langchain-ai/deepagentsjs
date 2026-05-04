@@ -139,7 +139,7 @@ jobs:
           node-version: "22"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@b307475762933b98ed359c036b0e51f26b63b74b # v5.0.0
+        uses: pnpm/action-setup@e578e19d19d31b011b841ba2aca34731a5f706a5 # v5.0.0
 
       - name: Install dependencies
         run: pnpm install
@@ -191,7 +191,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@b307475762933b98ed359c036b0e51f26b63b74b # v5.0.0
+        uses: pnpm/action-setup@e578e19d19d31b011b841ba2aca34731a5f706a5 # v5.0.0
 
       - name: Download all platform packages
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
