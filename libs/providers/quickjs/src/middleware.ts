@@ -57,17 +57,17 @@ const DEFAULT_TOOL_NAME = "eval";
 
 function renderReplSystemPrompt(opts: {
   toolName: string;
-  timeoutS: number;
+  timeout: number;
   memoryLimitMb: number;
 }): string {
   return dedent`
     ### Interpreter
 
     An \`${opts.toolName}\` tool is available. It runs JavaScript in a persistent REPL.
-    - State (variables, functions) persists across tool calls within a single turn of conversation.
+    - State (variables, functions) persists across tool calls within a single turn of conversation. They DO NOT persist across multiple turns.
     - Top-level \`await\` works; Promises resolve before the call returns.
     - Sandboxed: no filesystem, no stdlib, no network, no real clock, no \`fetch\`, no \`require\`.
-    - Timeout: ${opts.timeoutS}s per call. Memory: ${opts.memoryLimitMb} MB total.
+    - Timeout: ${opts.timeout}s per call. Memory: ${opts.memoryLimitMb} MB total.
     - \`console.log\` output is captured and returned alongside the result.
   `;
 }
@@ -197,7 +197,7 @@ export function createREPLMiddleware(options: REPLMiddlewareOptions = {}) {
     customSystemPrompt ||
     renderReplSystemPrompt({
       toolName,
-      timeoutS: executionTimeoutMs / 1000,
+      timeout: executionTimeoutMs / 1000,
       memoryLimitMb: Math.floor(memoryLimitBytes / (1024 * 1024)),
     });
 
