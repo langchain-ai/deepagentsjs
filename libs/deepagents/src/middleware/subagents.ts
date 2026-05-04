@@ -606,9 +606,11 @@ function getSubagents(options: {
 /**
  * Resolve or compile a schema-constrained subagent variant.
  *
- * On cache miss the variant is compiled via `createAgent` with
- * `providerStrategy(responseSchema)` and stored in `variantCache` so
- * subsequent calls with an identical schema are free.
+ * On cache miss the schema is normalized (adds `additionalProperties: false`
+ * recursively for OpenAI strict-mode compatibility), a new agent is compiled
+ * via `createAgent` with the normalized schema as `responseFormat`, and the
+ * result is stored in `variantCache` so subsequent calls with an identical
+ * schema are free.
  *
  * @throws If `subagentType` has no corresponding `AgentSpec` (i.e. it was
  *   registered as a pre-compiled runnable and cannot be recompiled).

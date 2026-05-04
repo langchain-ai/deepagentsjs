@@ -11,17 +11,15 @@ import {
 import { RunnableLambda } from "@langchain/core/runnables";
 import * as langchain from "langchain";
 
-// Wrap providerStrategy in a vi.fn() (call-through spy) so tests can count
-// invocations. Also stub createAgent when called with a responseFormat so the
-// schema-constrained variant is a lightweight pass-through runnable rather than
-// a real agent graph — FakeListChatModel returns plain strings, not structured
-// JSON, so a real variant agent would loop until the recursion limit.
+// Stub createAgent when called with a responseFormat so the schema-constrained
+// variant is a lightweight pass-through runnable rather than a real agent graph
+// — FakeListChatModel returns plain strings, not structured JSON, so a real
+// variant agent would loop until the recursion limit.
 vi.mock("langchain", async (importOriginal) => {
   const actual = await importOriginal<typeof import("langchain")>();
   const realCreateAgent = actual.createAgent;
   return {
     ...actual,
-    providerStrategy: vi.fn(actual.providerStrategy),
     createAgent: vi.fn((params: Parameters<typeof actual.createAgent>[0]) => {
       if ((params as Record<string, unknown>).responseFormat != null) {
         return RunnableLambda.from(async () => ({
@@ -927,8 +925,16 @@ describe("task tool response_schema", () => {
       },
     );
 
-    expect(langchain.providerStrategy).toHaveBeenCalledOnce();
-    expect(langchain.providerStrategy).toHaveBeenCalledWith(schema);
+    expect(langchain.createAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        responseFormat: {
+          type: "object",
+          additionalProperties: false,
+          properties: { answer: { type: "string" } },
+          required: ["answer"],
+        },
+      }),
+    );
   });
 
   it("reuses the cached variant on repeated calls with the same schema", () => {
@@ -942,7 +948,6 @@ describe("task tool response_schema", () => {
     resolveVariant("analyst", schema, specs, cache);
     resolveVariant("analyst", schema, specs, cache);
 
-    expect(langchain.providerStrategy).toHaveBeenCalledOnce();
     expect(langchain.createAgent).toHaveBeenCalledOnce();
     expect(cache.size).toBe(1);
   });
@@ -956,9 +961,27 @@ describe("task tool response_schema", () => {
     resolveVariant("analyst", schemaA, specs, cache);
     resolveVariant("analyst", schemaB, specs, cache);
 
-    expect(langchain.providerStrategy).toHaveBeenCalledTimes(2);
-    expect(langchain.providerStrategy).toHaveBeenNthCalledWith(1, schemaA);
-    expect(langchain.providerStrategy).toHaveBeenNthCalledWith(2, schemaB);
+    expect(langchain.createAgent).toHaveBeenCalledTimes(2);
+    expect(langchain.createAgent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        responseFormat: {
+          type: "object",
+          additionalProperties: false,
+          properties: { a: { type: "string" } },
+        },
+      }),
+    );
+    expect(langchain.createAgent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        responseFormat: {
+          type: "object",
+          additionalProperties: false,
+          properties: { b: { type: "number" } },
+        },
+      }),
+    );
     expect(cache.size).toBe(2);
   });
 

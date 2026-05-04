@@ -101,6 +101,12 @@ export interface RunOptions {
    * only when the default batching is unsuitable.
    */
   batchSize?: number;
+
+  /**
+   * Maximum concurrent subagent dispatches. Clamped to [1, MAX_SUBAGENTS].
+   * Defaults to MAX_SUBAGENTS (10) when omitted.
+   */
+  concurrency?: number;
 }
 
 /**

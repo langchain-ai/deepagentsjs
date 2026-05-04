@@ -144,7 +144,7 @@ describe("dispatch", () => {
   });
 
   it("includes response_schema only when present", async () => {
-    const taskFn = vi.fn(async () => "ok");
+    const taskFn = vi.fn(async (_args: Record<string, unknown>) => "ok");
     (globalThis as Record<string, unknown>).tools = { task: taskFn };
 
     await dispatch(

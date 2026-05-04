@@ -215,7 +215,13 @@ export async function run(
     subagentType = "general-purpose",
     responseSchema,
     batchSize,
+    concurrency,
   } = options;
+
+  const effectiveConcurrency = Math.max(
+    1,
+    Math.min(concurrency ?? MAX_SUBAGENTS, MAX_SUBAGENTS),
+  );
 
   // -----------------------------------------------------------------------
   // 1. Partition rows into matched (dispatched) and skipped (filtered out)
@@ -279,7 +285,7 @@ export async function run(
       column,
       subagentType,
       responseSchema: effectiveSchema,
-      concurrency: MAX_SUBAGENTS,
+      concurrency: effectiveConcurrency,
       batchSize: effectiveBatchSize,
     });
   } else {
@@ -288,7 +294,7 @@ export async function run(
       context,
       subagentType,
       responseSchema: effectiveSchema,
-      concurrency: MAX_SUBAGENTS,
+      concurrency: effectiveConcurrency,
     });
   }
 
