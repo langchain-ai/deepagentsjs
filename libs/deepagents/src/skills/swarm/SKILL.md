@@ -201,6 +201,7 @@ Dispatch work across rows. Returns `{ completed, failed, skipped, failures }`.
 | `subagentType` | `"general-purpose"` | Subagent to use |
 | `responseSchema` | — | JSON Schema for structured output |
 | `batchSize` | auto | Rows per subagent call |
+| `concurrency` | `10` | Max concurrent subagent dispatches (clamped to 1–10) |
 
 ### `rows(handle, options?)`
 
