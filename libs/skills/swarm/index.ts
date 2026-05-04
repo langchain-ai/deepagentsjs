@@ -19,6 +19,20 @@ import type {
 } from "./types.js";
 
 /**
+ * Maximum concurrent subagent dispatches per `run()` call.
+ *
+ * When matched rows exceed this, batching is applied automatically.
+ * Auto-computed batch sizes are capped at MAX_BATCH_SIZE to keep
+ * structured-output responses reliable (large batches drop items).
+ */
+const MAX_SUBAGENTS = 10;
+
+/**
+ * Maximum rows per batch when auto-batching.
+ */
+const MAX_BATCH_SIZE = 50;
+
+/**
  * Create a table from a source specification and persist it to the backend.
  *
  * Thin wrapper around `createTable` — validates the source, builds rows,
@@ -180,24 +194,6 @@ async function dispatchBatched(
  * @param options - Dispatch configuration (instruction, filter, schema, etc.).
  * @returns A summary with completion counts and deduplicated failure groups.
  */
-/**
- * Maximum concurrent subagent dispatches per `run()` call.
- *
- * When matched rows exceed this, batching is applied automatically.
- * Auto-computed batch sizes are capped at MAX_BATCH_SIZE to keep
- * structured-output responses reliable (large batches drop items).
- */
-const MAX_SUBAGENTS = 30;
-
-/**
- * Maximum rows per batch when auto-batching.
- *
- * Caps the auto-computed batch size regardless of how many rows are
- * matched. Prevents "Missing from batch response" failures that occur
- * when the LLM is asked to produce structured output for too many items.
- */
-const MAX_BATCH_SIZE = 25;
-
 export async function run(
   handle: SwarmHandle | { id: string },
   options: RunOptions,
