@@ -1,5 +1,4 @@
 import type { FailureGroup, TaskResult, TaskSpec } from "./types.js";
-import { normalizeSchema } from "./utils.js";
 
 /**
  * PTC tool declaration for subagent dispatch.
@@ -36,11 +35,7 @@ export async function callTask(args: {
   if (typeof tools.task !== "function") {
     throw new Error("Swarm requires a 'task' tool in the PTC configuration.");
   }
-  const normalizedArgs =
-    args.response_schema != null
-      ? { ...args, response_schema: normalizeSchema(args.response_schema) }
-      : args;
-  return tools.task(normalizedArgs);
+  return tools.task(args);
 }
 
 /**

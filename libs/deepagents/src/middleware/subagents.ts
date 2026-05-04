@@ -1,4 +1,5 @@
 import { z } from "zod/v4";
+import { normalizeSchema } from "./utils.js";
 
 import {
   createMiddleware,
@@ -8,7 +9,6 @@ import {
   ToolMessage,
   humanInTheLoopMiddleware,
   SystemMessage,
-  providerStrategy,
   type ContentBlock,
   type BaseMessage,
   type InterruptOnConfig,
@@ -619,7 +619,8 @@ export function resolveVariant(
   agentSpecs: Record<string, AgentSpec>,
   variantCache: Map<string, ReactAgent | Runnable>,
 ): ReactAgent | Runnable {
-  const cacheKey = `${subagentType}::${JSON.stringify(responseSchema)}`;
+  const normalized = normalizeSchema(responseSchema);
+  const cacheKey = `${subagentType}::${JSON.stringify(normalized)}`;
   const cached = variantCache.get(cacheKey);
   if (cached) return cached;
 
@@ -630,17 +631,15 @@ export function resolveVariant(
     );
   }
 
-  if (responseSchema.type !== "object") {
+  if (normalized.type !== "object") {
     throw new Error(
-      `response_schema must have type: "object", got: ${JSON.stringify(responseSchema.type)}`,
+      `response_schema must have type: "object", got: ${JSON.stringify(normalized.type)}`,
     );
   }
 
   const variant = createAgent({
     ...agentSpec,
-    responseFormat: providerStrategy(
-      responseSchema as { type: "object"; [key: string]: unknown },
-    ),
+    responseFormat: normalized as { type: "object"; [key: string]: unknown },
   });
   variantCache.set(cacheKey, variant);
   return variant;
