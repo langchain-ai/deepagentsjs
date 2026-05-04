@@ -94,7 +94,7 @@ describe("run (single dispatch)", () => {
   });
 
   it("prepends context to each prompt", async () => {
-    const taskFn = vi.fn(async () => "ok");
+    const taskFn = vi.fn(async (_args: Record<string, unknown>) => "ok");
     (
       (globalThis as Record<string, unknown>).tools as Record<string, unknown>
     ).task = taskFn;
