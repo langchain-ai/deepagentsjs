@@ -306,4 +306,103 @@ describe("createREPLMiddleware", () => {
       expect(ReplSession.hasAnyForThread("thread-b")).toBe(true);
     });
   });
+
+  describe("beforeAgent PTC validation", () => {
+    it("throws when a skill requires PTC tools that are not configured", () => {
+      const middleware = createQuickJSMiddleware({
+        ptc: ["task"],
+        skillsBackend: {} as any,
+      });
+
+      expect(() =>
+        (middleware as any).beforeAgent({
+          skillsMetadata: [
+            {
+              name: "swarm",
+              description: "test",
+              requiredPtcTools: ["task", "read_file", "glob"],
+            },
+          ],
+        }),
+      ).toThrow("read_file, glob");
+    });
+
+    it("throws with skill name in the error message", () => {
+      const middleware = createQuickJSMiddleware({
+        ptc: [],
+        skillsBackend: {} as any,
+      });
+
+      expect(() =>
+        (middleware as any).beforeAgent({
+          skillsMetadata: [
+            {
+              name: "my-skill",
+              description: "test",
+              requiredPtcTools: ["write_file"],
+            },
+          ],
+        }),
+      ).toThrow("Skill 'my-skill'");
+    });
+
+    it("does not throw when all required PTC tools are configured", () => {
+      const middleware = createQuickJSMiddleware({
+        ptc: ["task", "read_file", "write_file", "glob"],
+        skillsBackend: {} as any,
+      });
+
+      expect(() =>
+        (middleware as any).beforeAgent({
+          skillsMetadata: [
+            {
+              name: "swarm",
+              description: "test",
+              requiredPtcTools: ["task", "read_file"],
+            },
+          ],
+        }),
+      ).not.toThrow();
+    });
+
+    it("does not throw when skill has no requiredPtcTools", () => {
+      const middleware = createQuickJSMiddleware({
+        ptc: ["task"],
+        skillsBackend: {} as any,
+      });
+
+      expect(() =>
+        (middleware as any).beforeAgent({
+          skillsMetadata: [{ name: "simple", description: "test" }],
+        }),
+      ).not.toThrow();
+    });
+
+    it("does not throw when skillsBackend is not configured", () => {
+      const middleware = createQuickJSMiddleware({ ptc: [] });
+
+      expect(() =>
+        (middleware as any).beforeAgent({
+          skillsMetadata: [
+            {
+              name: "swarm",
+              description: "test",
+              requiredPtcTools: ["task"],
+            },
+          ],
+        }),
+      ).not.toThrow();
+    });
+
+    it("does not throw when skillsMetadata is empty", () => {
+      const middleware = createQuickJSMiddleware({
+        ptc: [],
+        skillsBackend: {} as any,
+      });
+
+      expect(() =>
+        (middleware as any).beforeAgent({ skillsMetadata: [] }),
+      ).not.toThrow();
+    });
+  });
 });

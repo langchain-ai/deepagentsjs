@@ -1431,6 +1431,66 @@ Content
     expect(result).not.toBeNull();
     expect(result?.metadata).toEqual({ count: "42", active: "true" });
   });
+
+  it("should parse space-delimited required-ptc-tools from metadata", () => {
+    const content = `---
+name: test-skill
+description: A test skill
+metadata:
+  required-ptc-tools: task read_file write_file glob
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+    expect(result).not.toBeNull();
+    expect(result?.requiredPtcTools).toEqual([
+      "task",
+      "read_file",
+      "write_file",
+      "glob",
+    ]);
+  });
+
+  it("should return empty requiredPtcTools when metadata has no required-ptc-tools", () => {
+    const content = `---
+name: test-skill
+description: A test skill
+metadata:
+  version: "1.0"
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+    expect(result).not.toBeNull();
+    expect(result?.requiredPtcTools).toEqual([]);
+  });
+
+  it("should return empty requiredPtcTools when no metadata field exists", () => {
+    const content = `---
+name: test-skill
+description: A test skill
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+    expect(result).not.toBeNull();
+    expect(result?.requiredPtcTools).toEqual([]);
+  });
 });
 
 describe("validateMetadata", () => {
