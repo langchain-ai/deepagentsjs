@@ -56,12 +56,12 @@ describe("createREPLMiddleware", () => {
       const req = mockHandler.mock.calls[0][0];
       const text = req.systemMessage.text;
       expect(text).toContain("Base");
-      expect(text).toContain("eval");
-      expect(text).toContain("### Hard rules");
-      expect(text).toContain("### Limitations");
+      expect(text).toContain("### Interpreter");
+      expect(text).toContain("`eval`");
+      expect(text).toContain("5s per call");
+      expect(text).toContain("64 MB total");
       expect(text).not.toContain("async readFile");
       expect(text).not.toContain("async writeFile");
-      expect(text).not.toContain("### First-time usage");
     });
 
     it("should use custom system prompt when provided", async () => {
@@ -82,7 +82,7 @@ describe("createREPLMiddleware", () => {
 
       const req = mockHandler.mock.calls[0][0];
       expect(req.systemMessage.text).toContain("Custom REPL prompt");
-      expect(req.systemMessage.text).not.toContain("Hard rules");
+      expect(req.systemMessage.text).not.toContain("### Interpreter");
     });
   });
 

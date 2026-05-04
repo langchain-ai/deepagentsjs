@@ -55,26 +55,22 @@ import { LangGraphRunnableConfig } from "@langchain/langgraph";
 
 const DEFAULT_TOOL_NAME = "eval";
 
-const REPL_SYSTEM_PROMPT = dedent`
-  ## TypeScript/JavaScript REPL (\`js_eval\`)
+function renderReplSystemPrompt(opts: {
+  toolName: string;
+  timeoutS: number;
+  memoryLimitMb: number;
+}): string {
+  return dedent`
+    ### Interpreter
 
-  You have access to a sandboxed TypeScript/JavaScript REPL running in an isolated interpreter.
-  TypeScript syntax (type annotations, interfaces, generics, \`as\` casts) is supported and stripped at evaluation time.
-  Variables, functions, and closures persist across calls within the same session.
-
-  ### Hard rules
-
-  - **No network, no direct filesystem** — only through tools provided in the \`tools\` namespace below.
-  - **Cite your sources** — when reporting values from files, include the path and key/index so the user can verify.
-  - **Use console.log()** for output — it is captured and returned. \`console.warn()\` and \`console.error()\` are also available.
-  - **Reuse state from previous cells** — variables, functions, and results from earlier \`js_eval\` calls persist across calls. Reference them by name in follow-up cells instead of re-embedding data as inline JSON literals.
-
-  ### Limitations
-
-  - ES2023+ syntax with TypeScript support. No Node.js APIs, no \`require\`, no \`import\`.
-  - Output is truncated beyond a fixed character limit — be selective about what you log.
-  - Execution timeout per call (default 30 s).
-`;
+    An \`${opts.toolName}\` tool is available. It runs JavaScript in a persistent REPL.
+    - State (variables, functions) persists across tool calls within a single turn of conversation.
+    - Top-level \`await\` works; Promises resolve before the call returns.
+    - Sandboxed: no filesystem, no stdlib, no network, no real clock, no \`fetch\`, no \`require\`.
+    - Timeout: ${opts.timeoutS}s per call. Memory: ${opts.memoryLimitMb} MB total.
+    - \`console.log\` output is captured and returned alongside the result.
+  `;
+}
 
 /**
  * Generate the PTC API Reference section for the system prompt.
@@ -197,7 +193,13 @@ export function createREPLMiddleware(options: REPLMiddlewareOptions = {}) {
     throw new Error("`maxPtcCalls` must be >= 1 or null");
   }
 
-  const baseSystemPrompt = customSystemPrompt || REPL_SYSTEM_PROMPT;
+  const baseSystemPrompt =
+    customSystemPrompt ||
+    renderReplSystemPrompt({
+      toolName,
+      timeoutS: executionTimeoutMs / 1000,
+      memoryLimitMb: Math.floor(memoryLimitBytes / (1024 * 1024)),
+    });
 
   const middlewareId = crypto.randomUUID();
 
