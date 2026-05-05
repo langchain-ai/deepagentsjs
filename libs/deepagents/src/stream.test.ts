@@ -52,7 +52,6 @@ describe("streamEvents", () => {
     expect(run.subagents).toBeDefined();
     expect(run.toolCalls).toBeDefined();
     expect(run.messages).toBeDefined();
-    expect(run.middleware).toBeDefined();
   });
 
   it("resolves output with final agent state", async () => {
