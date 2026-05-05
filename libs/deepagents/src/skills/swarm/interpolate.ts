@@ -51,3 +51,30 @@ export function interpolate(
 
   return result;
 }
+
+/**
+ * Extract the unique column paths referenced by `{column}` placeholders
+ * in a template string.
+ *
+ * Preserves first-seen order. Dot-paths are returned as-is (e.g.
+ * `"meta.score"`). Whitespace inside braces is trimmed, matching
+ * `interpolate`'s behavior.
+ *
+ * @param template - Instruction template (e.g. `"Review {file}: {note}"`).
+ * @returns Array of unique placeholder paths in first-seen order.
+ */
+export function extractPlaceholders(template: string): string[] {
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  const re = /\{([^}]+)\}/g;
+  let m: RegExpExecArray | null = re.exec(template);
+  while (m !== null) {
+    const path = m[1].trim();
+    if (path.length > 0 && !seen.has(path)) {
+      seen.add(path);
+      ordered.push(path);
+    }
+    m = re.exec(template);
+  }
+  return ordered;
+}

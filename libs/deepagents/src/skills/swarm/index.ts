@@ -1,5 +1,6 @@
 import { createTable, loadTable, saveTable } from "./table.js";
-import { interpolate } from "./interpolate.js";
+import { interpolate, extractPlaceholders } from "./interpolate.js";
+import { readColumn } from "./utils.js";
 import { evaluateFilter } from "./filter.js";
 import { dispatch, deduplicateFailures, mergeResult } from "./executor.js";
 import {
@@ -17,6 +18,28 @@ import type {
   TaskSpec,
   TaskResult,
 } from "./types.js";
+
+/**
+ * Verify every `{column}` reference in `instruction` resolves on at
+ * least one matched row. Throws with a list of unresolved paths.
+ */
+function validatePlaceholders(
+  instruction: string,
+  rows: Record<string, unknown>[],
+): void {
+  const placeholders = extractPlaceholders(instruction);
+  if (placeholders.length === 0) {
+    return;
+  }
+  const unresolved = placeholders.filter(
+    (p) => !rows.some((r) => readColumn(r, p) !== undefined),
+  );
+  if (unresolved.length > 0) {
+    throw new Error(
+      `instruction references unknown column(s): ${unresolved.join(", ")}`,
+    );
+  }
+}
 
 /**
  * Maximum concurrent subagent dispatches per `run()` call.
@@ -246,6 +269,8 @@ export async function run(
       failures: [],
     };
   }
+
+  validatePlaceholders(instruction, matched);
 
   // -----------------------------------------------------------------------
   // 2. Resolve effective batch size and schema
