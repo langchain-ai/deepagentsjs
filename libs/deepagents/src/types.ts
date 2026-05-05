@@ -212,7 +212,16 @@ export interface DeepAgentTypeConfig<
     | ServerTool
   )[],
   TSubagents extends readonly AnySubAgent[] = readonly AnySubAgent[],
-> extends AgentTypeConfig<TResponse, TState, TContext, TMiddleware, TTools> {
+  TStreamTransformers extends ReadonlyArray<() => StreamTransformer<any>> =
+    ReadonlyArray<() => StreamTransformer<any>>,
+> extends AgentTypeConfig<
+  TResponse,
+  TState,
+  TContext,
+  TMiddleware,
+  TTools,
+  TStreamTransformers
+> {
   /** The subagents array type for type-safe streaming */
   Subagents: TSubagents;
 }
@@ -228,6 +237,7 @@ export interface DefaultDeepAgentTypeConfig extends DeepAgentTypeConfig {
   Middleware: readonly AgentMiddleware[];
   Tools: readonly (ClientTool | ServerTool)[];
   Subagents: readonly AnySubAgent[];
+  StreamTransformers: readonly [];
 }
 
 /**
@@ -335,7 +345,6 @@ export interface DeepAgent<
       Awaited<ReturnType<ReactAgent<TTypes>["invoke"]>>,
       readonly [...TTypes["Tools"], ...DeepAgentBuiltinToolsTuple],
       TTypes["Subagents"],
-      TTypes["Middleware"],
       InferDeepAgentStreamExtensions<TTypes["StreamTransformers"]>
     >
   >) &
@@ -484,6 +493,7 @@ export type InferSubagentReactAgentType<
  * @typeParam TMiddleware - The middleware array type for proper type inference
  * @typeParam TSubagents - The subagents array type for extracting subagent middleware states
  * @typeParam TTools - The tools array type
+ * @typeParam TStreamTransformers - Custom stream transformer factories
  */
 export interface CreateDeepAgentParams<
   TResponse extends SupportedResponseFormat = SupportedResponseFormat,
@@ -495,6 +505,8 @@ export interface CreateDeepAgentParams<
     | ClientTool
     | ServerTool
   )[],
+  TStreamTransformers extends ReadonlyArray<() => StreamTransformer<any>> =
+    readonly [],
 > {
   /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
   model?: BaseLanguageModel | string;
@@ -589,4 +601,12 @@ export interface CreateDeepAgentParams<
    * ```
    */
   permissions?: FilesystemPermission[];
+  /**
+   * Optional {@link StreamTransformer} factories to register with the underlying agent.
+   *
+   * Deepagents always registers its built-in subagent transformer; custom
+   * transformers are appended after it and are exposed on `run.extensions`
+   * when using `streamEvents(..., { version: "v3" })`.
+   */
+  streamTransformers?: TStreamTransformers;
 }

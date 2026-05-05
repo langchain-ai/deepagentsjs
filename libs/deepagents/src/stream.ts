@@ -27,9 +27,7 @@ import {
 } from "@langchain/langgraph";
 
 import type {
-  AgentMiddleware,
   AgentRunStream,
-  MiddlewareEvent,
   ReactAgent,
   ToolCallStreamUnion,
 } from "langchain";
@@ -60,7 +58,6 @@ export interface SubagentRunStream<
   readonly output: Promise<TOutput>;
   readonly messages: AsyncIterable<ChatModelStream>;
   readonly toolCalls: AsyncIterable<ToolCallStreamUnion<TTools>>;
-  readonly middleware: AsyncIterable<MiddlewareEvent>;
   readonly subagents: AsyncIterable<SubagentRunStream>;
 }
 
@@ -130,9 +127,8 @@ export type DeepAgentRunStream<
     | ServerTool
   )[],
   TSubagents extends readonly AnySubAgent[] = readonly AnySubAgent[],
-  TMiddleware extends readonly AgentMiddleware[] = readonly AgentMiddleware[],
   TExtensions extends Record<string, unknown> = Record<string, unknown>,
-> = AgentRunStream<TValues, TTools, TMiddleware, TExtensions> & {
+> = AgentRunStream<TValues, TTools, TExtensions> & {
   /** Subagent invocation streams from the native SubagentTransformer. */
   subagents: AsyncIterable<SubagentRunStreamUnion<TSubagents>>;
 };
@@ -181,7 +177,6 @@ export function createSubagentTransformer(
         toolCallsLog: StreamChannel<
           ToolCallStream<string, unknown, ToolMessage>
         >;
-        middlewareLog: StreamChannel<MiddlewareEvent>;
         nestedSubagentsLog: StreamChannel<SubagentRunStream>;
       }
     >();
@@ -229,7 +224,6 @@ export function createSubagentTransformer(
           messagesLog: StreamChannel.local<ChatModelStream>(),
           toolCallsLog:
             StreamChannel.local<ToolCallStream<string, unknown, ToolMessage>>(),
-          middlewareLog: StreamChannel.local<MiddlewareEvent>(),
           nestedSubagentsLog: StreamChannel.local<SubagentRunStream>(),
         };
         subagentsByName.set(name, logs);
@@ -312,7 +306,6 @@ export function createSubagentTransformer(
               output,
               messages: logs.messagesLog,
               toolCalls: logs.toolCallsLog,
-              middleware: logs.middlewareLog,
               subagents: logs.nestedSubagentsLog,
             });
           }
@@ -489,7 +482,6 @@ export function createSubagentTransformer(
         for (const logs of subagentsByName.values()) {
           logs.toolCallsLog.close();
           logs.messagesLog.close();
-          logs.middlewareLog.close();
           logs.nestedSubagentsLog.close();
         }
       },
@@ -516,7 +508,6 @@ export function createSubagentTransformer(
         for (const logs of subagentsByName.values()) {
           logs.toolCallsLog.fail(err);
           logs.messagesLog.fail(err);
-          logs.middlewareLog.fail(err);
           logs.nestedSubagentsLog.fail(err);
         }
       },

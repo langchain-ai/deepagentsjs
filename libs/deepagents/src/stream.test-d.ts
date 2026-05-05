@@ -1,7 +1,11 @@
 import { describe, it, expectTypeOf } from "vitest";
 import { fakeModel } from "@langchain/core/testing";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
-import { MemorySaver } from "@langchain/langgraph";
+import {
+  MemorySaver,
+  StreamTransformer,
+  StreamChannel,
+} from "@langchain/langgraph";
 import { createAgent, tool } from "langchain";
 import { z } from "zod/v4";
 
@@ -161,6 +165,32 @@ describe("streamEvents", () => {
           expectTypeOf(pongCall.input).toEqualTypeOf<{ value: string }>();
         }
       }
+    }
+  });
+
+  it("supports custom stream transformers", async () => {
+    const transformer: StreamTransformer<{
+      foobar: StreamChannel<number>;
+    }> = {
+      init: () => ({ foobar: StreamChannel.local<number>() }),
+      process: () => {
+        return true;
+      },
+    };
+    const agent = createDeepAgent({
+      model: "openai:gpt-4o",
+      checkpointer: new MemorySaver(),
+      streamTransformers: [() => transformer],
+    });
+
+    const run = await agent.streamEvents(
+      { messages: [new HumanMessage("What's the weather in Paris?")] },
+      {
+        version: "v3",
+      },
+    );
+    for await (const event of run.extensions.foobar) {
+      expectTypeOf(event).toEqualTypeOf<number>();
     }
   });
 });
