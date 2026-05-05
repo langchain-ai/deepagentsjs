@@ -40,7 +40,7 @@
     "@langchain/openai": "^1.4.1",
     "deepagents": "workspace:*",
     "langsmith": "^0.6.0",
-    "uuid": "^13.0.0"
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.13",
