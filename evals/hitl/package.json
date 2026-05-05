@@ -10,7 +10,7 @@
     "deepagents": "workspace:*",
     "langchain": "^1.3.1",
     "@langchain/langgraph": "^1.2.9",
-    "langsmith": "^0.5.4",
+    "langsmith": "^0.6.0",
     "uuid": "^11.1.0",
     "vitest": "^4.0.18",
     "zod": "^4.3.6"

@@ -39,7 +39,7 @@
     "@langchain/core": "^1.1.42",
     "@langchain/openai": "^1.4.1",
     "deepagents": "workspace:*",
-    "langsmith": "^0.5.19",
+    "langsmith": "^0.6.0",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
