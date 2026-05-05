@@ -405,14 +405,14 @@ export function createDeepAgent<
    * - Tools: TTools
    * - Subagents: TSubagents (for type-safe streaming)
    */
-  type TypeConfig = DeepAgentTypeConfig<
-    InferStructuredResponse<TResponse>,
-    undefined,
-    ContextSchema,
-    AllMiddleware,
-    TTools,
-    TSubagents
+  return agent as unknown as DeepAgent<
+    DeepAgentTypeConfig<
+      InferStructuredResponse<TResponse>,
+      undefined,
+      ContextSchema,
+      AllMiddleware,
+      TTools,
+      TSubagents
+    >
   >;
-
-  return agent as unknown as DeepAgent<TypeConfig>;
 }
