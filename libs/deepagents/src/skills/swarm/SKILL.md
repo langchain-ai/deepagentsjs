@@ -33,15 +33,17 @@ the file itself via the `{file}` placeholder.
 
 **`tasks`** — pass pre-built records directly. Use when the data lives inside
 a file (JSONL, CSV, JSON array). Read and parse the file first inside
-`js_eval`, then pass the records. One record = one row — do not group
+`eval`, then pass the records. One record = one row — do not group
 multiple items into a single row.
 
-For small files (under ~500 lines):
+For small files (under ~500 lines), parse and create in one block:
 
 ```javascript
+const { create } = await import("@/skills/swarm");
 const raw = await tools.readFile({ file_path: "/data.jsonl" });
 const records = raw.trim().split("\n").map(l => JSON.parse(l));
 const table = await create({ tasks: records });
+console.log(table);
 ```
 
 For large files, read in chunks of 500 lines to avoid truncation:
@@ -58,6 +60,25 @@ while (true) {
   offset += 500;
 }
 const table = await create({ tasks: records });
+console.log(table);
+```
+
+When the file is too large to parse and dispatch in one `eval` call, split
+across two blocks. Only the block that calls swarm functions needs the import:
+
+```javascript
+// eval 1: parse only — no swarm import needed
+const raw = await tools.readFile({ file_path: "/data.jsonl" });
+globalThis.records = raw.trim().split("\n").map(l => JSON.parse(l));
+console.log(`Parsed ${globalThis.records.length} records`);
+```
+
+```javascript
+// eval 2: create and dispatch
+const { create, run } = await import("@/skills/swarm");
+const table = await create({ tasks: globalThis.records });
+const result = await run(table, { instruction: "Classify {text}", column: "label" });
+console.log(result);
 ```
 
 Passing `filePaths: ["/data.jsonl"]` would produce a table with **one row**
@@ -65,15 +86,17 @@ pointing at the file — not one row per record inside it.
 
 ## Instruction + context
 
-`instruction` is a per-item template with `{column}` placeholders
-(interpolated from each row). Subagents do the work — do not process items
-yourself in JS and write the results into rows.
+`instruction` is a per-item template with `{column}` placeholders.
+Placeholders are resolved by the framework — your column names appear in
+prompts as references to the values listed alongside, never as raw
+template syntax. Subagents do the work — do not process items yourself in
+JS and write the results into rows.
 
 `context` is free-form prose prepended to every subagent prompt. Use it for
 shared background: domain terms, classification rules, examples, etc.
 
 ```javascript
-const { create, run, rows } = await import("@/skills/swarm");
+const { create, run } = await import("@/skills/swarm");
 
 const table = await create({ glob: "src/**/*.ts" });
 const r = await run(table, {
@@ -92,6 +115,7 @@ properties become top-level columns on each row and improve accuracy by
 constraining what subagents can return.
 
 ```javascript
+const { run } = await import("@/skills/swarm");
 await run(table, {
   instruction: "Classify: {text}",
   responseSchema: {
@@ -110,6 +134,7 @@ await run(table, {
 After `run()`, use `rows()` and plain JS — no additional subagents needed.
 
 ```javascript
+const { rows } = await import("@/skills/swarm");
 const data = await rows(table, { columns: ["sentiment"] });
 const counts = {};
 data.forEach(r => { counts[r.sentiment] = (counts[r.sentiment] || 0) + 1 });
@@ -122,6 +147,7 @@ console.log(counts);
 `run` updates the table in place — chain calls to accumulate columns.
 
 ```javascript
+const { create, run } = await import("@/skills/swarm");
 const table = await create({ tasks: interviews });
 await run(table, { instruction: "Classify sentiment of {text}", column: "sentiment" });
 await run(table, {
@@ -139,6 +165,7 @@ data, the result column serves as a completion marker. The `column` default
 still works for retries.
 
 ```javascript
+const { create, run } = await import("@/skills/swarm");
 const table = await create({ glob: "src/**/*.ts" });
 await run(table, {
   instruction: "Add missing JSDoc to all exported functions in {file}.",
@@ -165,16 +192,26 @@ await run(table, {
 
 ## Technical notes
 
+- **Only import `@/skills/swarm` in blocks where you call swarm functions.**
+  Data preparation (reading files, parsing, storing in `globalThis`) does not
+  need the import. Destructure only what you use: `{ create }`, `{ run }`,
+  `{ create, run }`, etc.
 - **Console output is capped at ~5 KB.** Never log raw file contents —
   log only counts and short samples.
-- **`readFile` inside `js_eval` returns raw content — no line-number
+- **`readFile` inside `eval` returns raw content — no line-number
   prefixes.** Request at most 500 lines per call. For files with more
   than 500 lines, loop with incrementing `offset`.
-- **When building a table from a file, read it inside `js_eval`.** Data read
+- **When building a table from a file, read it inside `eval`.** Data read
   inside the sandbox stays there; it never enters the agent's context window.
 - **Never write to `.swarm/` directly.** Always use `create()`.
 - **Everything the subagent needs must be in `instruction` + `context`.**
   Subagents can't see the agent's context.
+- **Row ids must be unique.** `create()` rejects sources that produce
+  duplicate ids. For `tasks`, that's a caller-side responsibility; for
+  `glob` / `filePaths`, ids are auto-disambiguated by parent directory.
+- **Unknown columns fail fast.** If `instruction` references `{foo}` and
+  no matched row provides `foo`, `run()` throws before any subagent is
+  dispatched.
 
 ## API Reference
 

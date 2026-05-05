@@ -118,16 +118,11 @@ describe("run (single dispatch)", () => {
     expect(data[0].result).toBeDefined();
   });
 
-  it("counts interpolation errors as failures", async () => {
+  it("rejects unknown column references before dispatch", async () => {
     const handle = await create({ tasks: [{ id: "r1", text: "hi" }] });
-    const result = await run(handle, {
-      instruction: "Review {nonexistent}",
-    });
-
-    expect(result.failed).toBe(1);
-    expect(result.completed).toBe(0);
-    expect(result.failures).toHaveLength(1);
-    expect(result.failures[0].error).toContain("missing columns");
+    await expect(
+      run(handle, { instruction: "Review {nonexistent}" }),
+    ).rejects.toThrow("instruction references unknown column(s): nonexistent");
   });
 
   it("counts task failures", async () => {

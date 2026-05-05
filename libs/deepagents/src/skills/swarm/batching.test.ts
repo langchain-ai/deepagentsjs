@@ -104,14 +104,39 @@ describe("wrapSchema", () => {
 // ---------------------------------------------------------------------------
 
 describe("buildBatchPrompt", () => {
-  it("includes instruction and row data", () => {
+  it("rewrites {col} to backtick-quoted name in task block", () => {
+    const prompt = buildBatchPrompt("Review {file}", [
+      { id: "r1", file: "a.ts" },
+    ]);
+    expect(prompt).toContain("# Task");
+    expect(prompt).toContain("Review `file`");
+    expect(prompt).not.toContain("{file}");
+  });
+
+  it("renders single-column items as flat [id] value", () => {
     const prompt = buildBatchPrompt("Review {file}", [
       { id: "r1", file: "a.ts" },
       { id: "r2", file: "b.ts" },
     ]);
-    expect(prompt).toContain("Instruction: Review {file}");
-    expect(prompt).toContain('[r1]: {"file":"a.ts"}');
-    expect(prompt).toContain('[r2]: {"file":"b.ts"}');
+    expect(prompt).toContain("[r1] a.ts");
+    expect(prompt).toContain("[r2] b.ts");
+    expect(prompt).toContain("Each item below is the value of `file`.");
+  });
+
+  it("renders multi-column items as labeled blocks", () => {
+    const prompt = buildBatchPrompt("Classify {text} for {cat}", [
+      { id: "r1", text: "hi", cat: "A" },
+    ]);
+    expect(prompt).toContain("[r1]");
+    expect(prompt).toContain("  text: hi");
+    expect(prompt).toContain("  cat: A");
+    expect(prompt).toContain("Each item below provides `text`, `cat`.");
+  });
+
+  it("renders id-only rows when instruction has no placeholders", () => {
+    const prompt = buildBatchPrompt("Do the task.", [{ id: "r1", text: "hi" }]);
+    expect(prompt).toContain("[r1]");
+    expect(prompt).not.toContain("Each item below");
   });
 
   it("prepends context when provided", () => {
@@ -123,18 +148,16 @@ describe("buildBatchPrompt", () => {
     expect(prompt.startsWith("TypeScript project")).toBe(true);
   });
 
-  it("omits context section when not provided", () => {
+  it("starts with # Task when no context", () => {
     const prompt = buildBatchPrompt("Review {file}", [
       { id: "r1", file: "a.ts" },
     ]);
-    expect(prompt.startsWith("Instruction:")).toBe(true);
+    expect(prompt.startsWith("# Task")).toBe(true);
   });
 
-  it("excludes id from row data JSON", () => {
-    const prompt = buildBatchPrompt("Check {file}", [
-      { id: "r1", file: "a.ts", score: 5 },
-    ]);
-    expect(prompt).toContain('[r1]: {"file":"a.ts","score":5}');
+  it("includes items count in header", () => {
+    const prompt = buildBatchPrompt("task", [{ id: "r1" }, { id: "r2" }]);
+    expect(prompt).toContain("# Items (2)");
   });
 
   it("includes batch result instructions", () => {

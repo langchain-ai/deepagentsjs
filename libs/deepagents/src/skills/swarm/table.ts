@@ -210,6 +210,26 @@ export function pathsToRows(
 }
 
 /**
+ * Find duplicate `id` values in a row array.
+ *
+ * @param rows - Row objects to scan.
+ * @returns Array of duplicate ids, in first-seen order, deduplicated.
+ */
+function findDuplicateIds(rows: Record<string, unknown>[]): string[] {
+  const seen = new Set<string>();
+  const dupes = new Set<string>();
+  for (const row of rows) {
+    const id = String(row.id);
+    if (seen.has(id)) {
+      dupes.add(id);
+    } else {
+      seen.add(id);
+    }
+  }
+  return [...dupes];
+}
+
+/**
  * Resolve a glob pattern to a list of file paths via the PTC `glob` tool.
  *
  * Handles both `string[]` and `{ path: string }[]` return formats
@@ -411,6 +431,11 @@ export async function createTable(source: CreateSource): Promise<SwarmHandle> {
     }
 
     rows = tasks;
+  }
+
+  const dupes = findDuplicateIds(rows);
+  if (dupes.length > 0) {
+    throw new Error(`create() received duplicate row ids: ${dupes.join(", ")}`);
   }
 
   await evict();
