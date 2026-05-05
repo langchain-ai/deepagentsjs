@@ -1,6 +1,6 @@
 {
   "name": "@langchain/quickjs",
-  "version": "0.2.6",
+  "version": "0.3.0",
   "description": "Sandboxed JavaScript REPL for deepagents using QuickJS (WASM)",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
