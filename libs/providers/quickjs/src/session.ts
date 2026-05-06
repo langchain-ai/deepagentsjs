@@ -80,17 +80,14 @@ function getSharedModule(): Promise<QuickJSAsyncWASMModule> {
   return sharedModulePromise;
 }
 
-// After a successful asyncify unwind/rewind cycle, a rejected module loader
-// Promise causes a WASM crash ("memory access out of bounds"). The rejection
-// path in quickjs-emscripten's `maybeAsyncFn` catch block calls
-// `context.throw(error)` — a WASM FFI call while the asyncify stack is still
-// unwound — which corrupts memory. To avoid this, the module loader must never
-// reject. This helper returns source code that throws at evaluation time inside
-// the VM instead.
+// The module loader must never reject. A rejected Promise in the loader
+// path triggers a WASM FFI call at the wrong point in the asyncify
+// lifecycle, which corrupts memory. This helper returns source code that
+// throws at evaluation time inside the VM instead.
 //
-// The thrown value is a plain object (not `new Error()`) because QuickJS stores
-// Error's `name` and `message` as non-enumerable properties (per spec), which
-// causes `context.dump()` (JSON.stringify) to return `{}`.
+// The thrown value is a plain object (not `new Error()`) because QuickJS
+// stores Error's `name` and `message` as non-enumerable properties (per
+// spec), which causes `context.dump()` (JSON.stringify) to return `{}`.
 function makeErrorSource(message: string): string {
   return `throw { name: "Error", message: ${JSON.stringify(message)} };`;
 }
@@ -451,6 +448,12 @@ export class ReplSession {
 
   /**
    * Wire the QuickJS module loader and normalizer on this session's runtime.
+   *
+   * The loader is strictly synchronous — it reads from the in-memory skill
+   * cache populated by `preloadReferencedSkills`. This is critical: an async
+   * module loader causes asyncify suspensions on each import, and disposing
+   * a runtime after multi-file imports corrupts the shared module's asyncify
+   * state, silently breaking the loader for all subsequent sessions.
    */
   private installModuleLoader(): void {
     if (this.runtime === null) {
