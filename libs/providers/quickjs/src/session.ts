@@ -26,7 +26,7 @@ import type {
 } from "quickjs-emscripten-core";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
-import { loadSkill, type LoadedSkill } from "./skills.js";
+import { loadSkill, scanSkillReferences, type LoadedSkill } from "./skills.js";
 import { PTCCallBudgetExceededError } from "./errors.js";
 import type { ReplSessionOptions, ReplResult, SkillsContext } from "./types.js";
 import { toCamelCase } from "./utils.js";
