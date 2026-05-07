@@ -1,12 +1,10 @@
-import { getDefaultRunner } from "@deepagents/evals";
+import * as ls from "langsmith/vitest";
 import { oolongImdbSuite } from "./imdb.js";
 
-const runner = getDefaultRunner();
-
 ls.describe(
-  runner.name,
+  "deepagents-js-oolong-imdb",
   () => {
-    oolongImdbSuite(runner);
+    oolongImdbSuite();
   },
-  { projectName: "deepagents-js-oolong-imdb", upsert: true },
+  { projectName: "imdb-baseline", upsert: true },
 );

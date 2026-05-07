@@ -1,12 +1,10 @@
-import { getDefaultRunner } from "@deepagents/evals";
+import * as ls from "langsmith/vitest";
 import { oolongYahooSuite } from "./yahoo.js";
 
-const runner = getDefaultRunner();
-
 ls.describe(
-  runner.name,
+  "deepagents-js-oolong-yahoo",
   () => {
-    oolongYahooSuite(runner);
+    oolongYahooSuite();
   },
-  { projectName: "deepagents-js-oolong-yahoo", upsert: true },
+  { projectName: "yahoo-baseline", upsert: true },
 );

@@ -13,8 +13,14 @@
  * via environment variables.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  createReadStream,
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
+import { createInterface } from "node:readline";
 
 export interface OolongTask {
   /** Unique row ID from the dataset. */
@@ -174,13 +180,6 @@ export async function loadOolongTasks(
     await fetchAndCache();
   }
 
-  // Read cache
-  const raw = readFileSync(CACHE_PATH, "utf-8");
-  const rows: HfRow[] = raw
-    .split("\n")
-    .filter((line) => line.trim())
-    .map((line) => JSON.parse(line) as HfRow);
-
   // Resolve options with env var overrides
   const envMax = process.env.OOLONG_MAX_PER_DATASET;
   const maxPerDataset =
@@ -189,27 +188,29 @@ export async function loadOolongTasks(
   const envCtxLen = process.env.OOLONG_CONTEXT_LEN;
   const contextLen = envCtxLen != null ? Number(envCtxLen) : options.contextLen;
 
-  // Filter by context_len if specified
-  let filtered = rows;
-  if (contextLen != null) {
-    filtered = filtered.filter((r) => r.context_len === contextLen);
-  }
-
-  // Group by source dataset and take up to maxPerDataset from each
+  // Stream JSONL line-by-line to avoid loading the entire file (can be 20GB+)
   const tasks: OolongTask[] = [];
+  const perDataset = new Map<string, number>();
+  const applyLimit = maxPerDataset > 0 && maxPerDataset < Infinity;
 
-  if (maxPerDataset > 0 && maxPerDataset < Infinity) {
-    const perDataset = new Map<string, number>();
-    for (const row of filtered) {
+  const rl = createInterface({
+    input: createReadStream(CACHE_PATH, "utf-8"),
+    crlfDelay: Infinity,
+  });
+
+  for await (const line of rl) {
+    if (!line.trim()) continue;
+    const row = JSON.parse(line) as HfRow;
+
+    if (contextLen != null && row.context_len !== contextLen) continue;
+
+    if (applyLimit) {
       const count = perDataset.get(row.dataset) ?? 0;
       if (count >= maxPerDataset) continue;
       perDataset.set(row.dataset, count + 1);
-      tasks.push(parseRow(row));
     }
-  } else {
-    for (const row of filtered) {
-      tasks.push(parseRow(row));
-    }
+
+    tasks.push(parseRow(row));
   }
 
   if (tasks.length === 0) {

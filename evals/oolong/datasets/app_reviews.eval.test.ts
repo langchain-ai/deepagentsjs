@@ -1,12 +1,10 @@
-import { getDefaultRunner } from "@deepagents/evals";
+import * as ls from "langsmith/vitest";
 import { oolongAppReviewsSuite } from "./app_reviews.js";
 
-const runner = getDefaultRunner();
-
 ls.describe(
-  runner.name,
+  "deepagents-js-oolong-app-reviews",
   () => {
-    oolongAppReviewsSuite(runner);
+    oolongAppReviewsSuite();
   },
-  { projectName: "deepagents-js-oolong-app-reviews", upsert: true },
+  { projectName: "app-reviews-baseline", upsert: true },
 );

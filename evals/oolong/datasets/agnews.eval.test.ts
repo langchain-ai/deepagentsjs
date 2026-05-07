@@ -1,12 +1,10 @@
-import { getDefaultRunner } from "@deepagents/evals";
+import * as ls from "langsmith/vitest";
 import { oolongAgnewsSuite } from "./agnews.js";
 
-const runner = getDefaultRunner();
-
 ls.describe(
-  runner.name,
+  "deepagents-js-oolong-agnews",
   () => {
-    oolongAgnewsSuite(runner);
+    oolongAgnewsSuite();
   },
-  { projectName: "deepagents-js-oolong-agnews", upsert: true },
+  { projectName: "agnews-baseline", upsert: true },
 );
