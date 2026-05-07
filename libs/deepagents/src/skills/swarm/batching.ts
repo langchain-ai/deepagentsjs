@@ -22,37 +22,28 @@ export function createBatches<T>(items: T[], batchSize: number): T[][] {
 /**
  * Wrap a per-item JSON Schema into a batch-level response schema.
  *
- * Always produces a schema of the form:
+ * Produces a schema of the form:
  * ```json
  * { "results": [{ "id": "...", ...itemProps }] }
  * ```
  *
- * When `itemSchema` is provided, its properties are merged with an
- * `id` field. When omitted (text-mode batching), a minimal
- * `{ id, result }` schema is auto-generated.
+ * The item schema's properties are merged with an `id` field so each
+ * batch entry can be matched back to its row.
  *
- * @param itemSchema - Per-item JSON Schema, or `undefined` for auto-generation.
+ * @param itemSchema - Per-item JSON Schema.
  * @returns Batch-level JSON Schema wrapping items in a `results` array.
  */
 export function wrapSchema(
-  itemSchema?: Record<string, unknown>,
+  itemSchema: Record<string, unknown>,
   count?: number,
 ): Record<string, unknown> {
-  let itemProperties: Record<string, unknown>;
-  let itemRequired: string[];
-
-  if (itemSchema) {
-    const props = (itemSchema.properties as Record<string, unknown>) ?? {};
-    const req = (itemSchema.required as string[]) ?? [];
-    itemProperties = { id: { type: "string" }, ...props };
-    itemRequired = ["id", ...req];
-  } else {
-    itemProperties = {
-      id: { type: "string" },
-      result: { type: "string" },
-    };
-    itemRequired = ["id", "result"];
-  }
+  const props = (itemSchema.properties as Record<string, unknown>) ?? {};
+  const req = (itemSchema.required as string[]) ?? [];
+  const itemProperties: Record<string, unknown> = {
+    id: { type: "string" },
+    ...props,
+  };
+  const itemRequired: string[] = ["id", ...req];
 
   const resultsArray: Record<string, unknown> = {
     type: "array",
@@ -212,12 +203,9 @@ export function buildBatchPrompt(
  * Maps each item's `id` to its remaining fields. IDs present in
  * `expectedIds` but absent from the response are returned in `missing`.
  *
- * When the `results` array contains a single `result` field (text-mode
- * batching), the value is unwrapped from the object for convenience.
- *
  * @param response - Raw JSON string from the subagent.
  * @param expectedIds - List of row IDs the batch was supposed to cover.
- * @returns Map of ID → result value, plus a list of IDs missing from
+ * @returns Map of ID → result fields, plus a list of IDs missing from
  *          the response.
  */
 export function unpackBatchResults(
@@ -234,12 +222,7 @@ export function unpackBatchResults(
     for (const item of items) {
       if (item && typeof item.id === "string") {
         const { id, ...fields } = item;
-        resultsMap.set(
-          id,
-          Object.keys(fields).length === 1 && "result" in fields
-            ? fields.result
-            : fields,
-        );
+        resultsMap.set(id, fields);
       }
     }
   } catch {
