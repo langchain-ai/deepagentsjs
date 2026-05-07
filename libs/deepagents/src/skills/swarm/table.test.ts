@@ -262,9 +262,9 @@ describe("writeFile", () => {
     >;
     toolsObj.writeFile = vi.fn(async () => "already exists");
     delete toolsObj.editFile;
-    await expect(
-      writeFile("x.txt", "data", "prev"),
-    ).rejects.toThrow("edit_file");
+    await expect(writeFile("x.txt", "data", "prev")).rejects.toThrow(
+      "edit_file",
+    );
   });
 
   it("throws when file exists but no previousContent provided", async () => {
