@@ -223,6 +223,61 @@ describe("writeFile", () => {
     (globalThis as Record<string, unknown>).tools = {};
     await expect(writeFile("out.txt", "data")).rejects.toThrow("writeFile");
   });
+
+  it("falls back to editFile when file already exists", async () => {
+    const toolsObj = (globalThis as Record<string, unknown>).tools as Record<
+      string,
+      unknown
+    >;
+    toolsObj.writeFile = vi.fn(async () => {
+      return `Cannot write to existing.txt because it already exists. Read and then make an edit, or write to a new path.`;
+    });
+    toolsObj.editFile = vi.fn(
+      async ({
+        file_path,
+        new_string,
+      }: {
+        file_path: string;
+        old_string: string;
+        new_string: string;
+      }) => {
+        files.set(file_path, new_string);
+        return "ok";
+      },
+    );
+
+    await writeFile("existing.txt", "new content", "old content");
+    expect(files.get("existing.txt")).toBe("new content");
+    expect(toolsObj.editFile).toHaveBeenCalledWith({
+      file_path: "existing.txt",
+      old_string: "old content",
+      new_string: "new content",
+    });
+  });
+
+  it("throws when file exists but editFile is not available", async () => {
+    const toolsObj = (globalThis as Record<string, unknown>).tools as Record<
+      string,
+      unknown
+    >;
+    toolsObj.writeFile = vi.fn(async () => "already exists");
+    delete toolsObj.editFile;
+    await expect(
+      writeFile("x.txt", "data", "prev"),
+    ).rejects.toThrow("edit_file");
+  });
+
+  it("throws when file exists but no previousContent provided", async () => {
+    const toolsObj = (globalThis as Record<string, unknown>).tools as Record<
+      string,
+      unknown
+    >;
+    toolsObj.writeFile = vi.fn(async () => "already exists");
+    toolsObj.editFile = vi.fn();
+    await expect(writeFile("x.txt", "data")).rejects.toThrow(
+      "no previous content",
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

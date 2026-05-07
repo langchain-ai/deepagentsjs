@@ -5,7 +5,7 @@ description: >-
   subagents, aggregate results. One row = one unit of work.
 module: ./index.ts
 metadata:
-  required-ptc-tools: task read_file write_file glob
+  required-ptc-tools: task read_file write_file edit_file glob
 ---
 
 # Swarm
