@@ -10,6 +10,11 @@ declare const tools: {
   glob?: (args: { pattern: string }) => Promise<string>;
   readFile?: (args: { file_path: string }) => Promise<string>;
   writeFile?: (args: { file_path: string; content: string }) => Promise<string>;
+  editFile?: (args: {
+    file_path: string;
+    old_string: string;
+    new_string: string;
+  }) => Promise<string>;
 };
 
 /**
@@ -54,6 +59,12 @@ interface CachedTable {
    * Backend file path (e.g. `".swarm/003-t_a1b2c3.jsonl"`).
    */
   path: string;
+
+  /**
+   * The JSONL content from the most recent successful write.
+   * Used as `old_string` when falling back to editFile for overwrites.
+   */
+  lastWritten: string;
 }
 
 /**
@@ -285,19 +296,47 @@ export async function readFile(path: string): Promise<string> {
 /**
  * Write string content to a backend file via the PTC `writeFile` tool.
  *
+ * If the file already exists, falls back to `editFile` for a full
+ * replacement — the backend's `write` rejects overwrites by design.
+ * When `previousContent` is provided it is used as the `old_string`
+ * for the edit, avoiding an unreliable round-trip through readFile.
+ *
  * @param path - Backend file path. Created if it doesn't exist.
  * @param content - String content to write.
+ * @param previousContent - The last-known content of the file, used
+ *   as `old_string` for the editFile fallback.
  * @throws Error if the `writeFile` PTC tool is not configured.
  *
  * @internal
  */
-export async function writeFile(path: string, content: string): Promise<void> {
+export async function writeFile(
+  path: string,
+  content: string,
+  previousContent?: string,
+): Promise<void> {
   if (typeof tools.writeFile !== "function") {
     throw new Error(
       `Swarm requires a 'writeFile' tool in the PTC configuration`,
     );
   }
-  await tools.writeFile({ file_path: path, content });
+  const result = await tools.writeFile({ file_path: path, content });
+  if (typeof result === "string" && result.includes("already exists")) {
+    if (typeof tools.editFile !== "function") {
+      throw new Error(
+        "Swarm requires an 'edit_file' PTC tool to update existing tables",
+      );
+    }
+    if (previousContent == null) {
+      throw new Error(
+        `Cannot overwrite ${path}: file already exists and no previous content available`,
+      );
+    }
+    await tools.editFile({
+      file_path: path,
+      old_string: previousContent,
+      new_string: content,
+    });
+  }
 }
 
 /**
@@ -331,10 +370,15 @@ async function evict(): Promise<void> {
   const toEvict = files.slice(0, files.length - MAX_TABLES + 1);
   for (const filePath of toEvict) {
     const id = extractIdFromPath(filePath);
+    const prev = id ? cache.get(id)?.lastWritten : undefined;
     if (id) {
       cache.delete(id);
     }
-    await writeFile(filePath, "");
+    try {
+      await writeFile(filePath, "", prev);
+    } catch {
+      // Best-effort eviction — non-fatal if overwrite fails
+    }
   }
 }
 
@@ -444,8 +488,9 @@ export async function createTable(source: CreateSource): Promise<SwarmHandle> {
   const seq = await nextSequence();
   const path = tablePath(seq, id);
 
-  await writeFile(path, serializeJsonl(rows));
-  cache.set(id, { rows, path });
+  const content = serializeJsonl(rows);
+  await writeFile(path, content);
+  cache.set(id, { rows, path, lastWritten: content });
 
   return {
     id,
@@ -485,7 +530,7 @@ export async function loadTable(
   }
 
   const rows = parseJsonl(content);
-  cache.set(id, { rows, path: match });
+  cache.set(id, { rows, path: match, lastWritten: serializeJsonl(rows) });
 
   return rows;
 }
@@ -510,5 +555,7 @@ export async function saveTable(
     throw new Error(`Table "${id}" is not loaded - call loadTable first`);
   }
   cached.rows = rows;
-  await writeFile(cached.path, serializeJsonl(rows));
+  const content = serializeJsonl(rows);
+  await writeFile(cached.path, content, cached.lastWritten);
+  cached.lastWritten = content;
 }
