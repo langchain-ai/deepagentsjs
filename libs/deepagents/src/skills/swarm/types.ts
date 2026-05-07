@@ -50,6 +50,18 @@ export interface CreateSource {
 }
 
 /**
+ * Per-row batch size function.
+ *
+ * Returns the desired batch size for a given row. Rows that return
+ * the same batch size are grouped together, then chunked into
+ * batches of that size.
+ */
+export type BatchFn = (
+  row: Record<string, unknown>,
+  rowCount: number,
+) => number;
+
+/**
  * Options for `run()`.
  *
  * Controls how rows are selected, how instructions are templated,
@@ -88,11 +100,17 @@ export interface RunOptions {
   responseSchema: Record<string, unknown>;
 
   /**
-   * Number of rows per subagent call. Computed automatically based on
-   * table size to keep total dispatches under `MAX_SUBAGENTS`. Override
-   * only when the default batching is unsuitable.
+   * Controls how rows are grouped into subagent calls.
+   *
+   * - **Number**: uniform batch size for all rows.
+   * - **Function**: called per-row, returns desired batch size. Rows with
+   *   the same batch size are grouped together, then chunked.
+   *
+   * Batch sizes are clamped to [1, MAX_BATCH_SIZE] after evaluation.
+   *
+   * @default auto-batch based on table size to cap total dispatches.
    */
-  batchSize?: number;
+  batchSize?: number | BatchFn;
 
   /**
    * Maximum concurrent subagent dispatches. Clamped to [1, MAX_SUBAGENTS].

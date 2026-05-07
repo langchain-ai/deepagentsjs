@@ -77,7 +77,14 @@ console.log(`Parsed ${globalThis.records.length} records`);
 // eval 2: create and dispatch
 const { create, run } = await import("@/skills/swarm");
 const table = await create({ tasks: globalThis.records });
-const result = await run(table, { instruction: "Classify {text}", column: "label" });
+const result = await run(table, {
+  instruction: "Classify {text}",
+  responseSchema: {
+    type: "object",
+    properties: { label: { type: "string" } },
+    required: ["label"],
+  },
+});
 console.log(result);
 ```
 
@@ -102,7 +109,11 @@ const table = await create({ glob: "src/**/*.ts" });
 const r = await run(table, {
   instruction: "Review {file} for security issues. List findings or write 'no issues'.",
   context: "TypeScript Express backend using Prisma ORM. Focus on injection, auth bypass, path traversal.",
-  column: "review",
+  responseSchema: {
+    type: "object",
+    properties: { review: { type: "string" } },
+    required: ["review"],
+  },
 });
 console.log(r);
 // → { completed: 45, failed: 2, skipped: 0, failures: [...] }
@@ -110,9 +121,8 @@ console.log(r);
 
 ## Structured output
 
-Use `responseSchema` when the output is a known set of values. Schema
-properties become top-level columns on each row and improve accuracy by
-constraining what subagents can return.
+`responseSchema` is required. Schema properties become top-level columns on
+each row and constrain what subagents can return.
 
 ```javascript
 const { run } = await import("@/skills/swarm");
@@ -128,6 +138,38 @@ await run(table, {
 });
 // Row after: { id: "r1", text: "...", sentiment: "positive" }
 ```
+
+## Batching
+
+By default, swarm auto-batches to keep total dispatches under 10. For small
+tables (≤10 rows) each row gets its own subagent call. For larger tables,
+rows are grouped automatically.
+
+Set `batchSize` to control grouping:
+
+- **Number** — uniform batch size for all rows. `batchSize: 1` forces per-row
+  dispatch; `batchSize: 20` groups in twenties.
+- **Function** — `(row, rowCount) => number`. Returns the desired batch size
+  for each row. Rows with the same batch size are grouped together, then
+  chunked. Allows mixed dispatch where some rows go solo and others batch.
+
+```javascript
+const { create, run } = await import("@/skills/swarm");
+const table = await create({ tasks: items });
+
+// Complex items get individual attention; simple ones batch together
+await run(table, {
+  instruction: "Analyze {text}",
+  responseSchema: {
+    type: "object",
+    properties: { analysis: { type: "string" } },
+    required: ["analysis"],
+  },
+  batchSize: (row) => (row.token_count > 1000 ? 1 : 10),
+});
+```
+
+Batch sizes are clamped to [1, 50] after evaluation.
 
 ## Aggregation
 
@@ -149,32 +191,47 @@ console.log(counts);
 ```javascript
 const { create, run } = await import("@/skills/swarm");
 const table = await create({ tasks: interviews });
-await run(table, { instruction: "Classify sentiment of {text}", column: "sentiment" });
+await run(table, {
+  instruction: "Classify sentiment of {text}",
+  responseSchema: {
+    type: "object",
+    properties: { sentiment: { type: "string", enum: ["positive", "negative", "neutral"] } },
+    required: ["sentiment"],
+  },
+});
 await run(table, {
   filter: { column: "sentiment", equals: "negative" },
   instruction: "Summarize why {text} had negative sentiment.",
-  column: "summary",
+  responseSchema: {
+    type: "object",
+    properties: { summary: { type: "string" } },
+    required: ["summary"],
+  },
 });
 ```
 
 ## Action-only tasks
 
 When subagents perform actions (write a file, apply a fix) rather than return
-data, the result column serves as a completion marker. The `column` default
-(`"result"`) still tracks which rows succeeded, and `exists: false` filtering
-still works for retries.
+data, use a simple schema with a status or marker field. The `exists: false`
+filter still works for retries.
 
 ```javascript
 const { create, run } = await import("@/skills/swarm");
+const fixedSchema = {
+  type: "object",
+  properties: { fixed: { type: "string" } },
+  required: ["fixed"],
+};
 const table = await create({ glob: "src/**/*.ts" });
 await run(table, {
   instruction: "Add missing JSDoc to all exported functions in {file}.",
-  column: "fixed",
+  responseSchema: fixedSchema,
 });
 // retry any that failed
 await run(table, {
   instruction: "Add missing JSDoc to all exported functions in {file}.",
-  column: "fixed",
+  responseSchema: fixedSchema,
   filter: { column: "fixed", exists: false },
 });
 ```
@@ -232,12 +289,11 @@ Dispatch work across rows. Returns `{ completed, failed, skipped, failures }`.
 | Option | Default | Description |
 |--------|---------|------------|
 | `instruction` | (required) | Template with `{column}` placeholders |
+| `responseSchema` | (required) | JSON Schema (`type: "object"`) — properties become row columns |
 | `context` | — | Prose prepended to every subagent prompt |
-| `column` | `"result"` | Column name for the result |
 | `filter` | — | Only dispatch matching rows |
 | `subagentType` | `"general-purpose"` | Subagent to use |
-| `responseSchema` | — | JSON Schema for structured output |
-| `batchSize` | auto | Rows per subagent call |
+| `batchSize` | auto | Number or `(row, rowCount) => number`. Auto caps dispatches at 10; `1` = per-row; function = per-row sizing |
 | `concurrency` | `10` | Max concurrent subagent dispatches (clamped to 1–10) |
 
 ### `rows(handle, options?)`

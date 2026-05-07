@@ -1,5 +1,11 @@
 import { extractPlaceholders } from "./interpolate.js";
+import { BatchFn } from "./types.js";
 import { readColumn } from "./utils.js";
+
+/**
+ * Maximum rows per batch when auto-batching.
+ */
+export const MAX_BATCH_SIZE = 50;
 
 /**
  * Group an array of items into batches of a given size.
@@ -16,6 +22,73 @@ export function createBatches<T>(items: T[], batchSize: number): T[][] {
   for (let i = 0; i < items.length; i += batchSize) {
     batches.push(items.slice(i, i + batchSize));
   }
+  return batches;
+}
+
+/**
+ * Clamp a batch size to [1, MAX_BATCH_SIZE].
+ */
+function clampBatchSize(n: number): number {
+  return Math.max(1, Math.min(Math.round(n), MAX_BATCH_SIZE));
+}
+
+/**
+ * Resolve batch sizes and group rows into dispatch-ready batches.
+ *
+ * Handles all three modes:
+ * - **Auto** (`batchSize` undefined): computes a uniform size from row
+ *   count and `maxSubagents` to stay within the concurrency budget.
+ * - **Uniform** (`batchSize` is a number): all rows use that size.
+ * - **Per-row** (`batchSize` is a function): evaluates per row, groups
+ *   rows sharing the same batch size, then chunks each group.
+ *
+ * Every batch size is clamped to [1, MAX_BATCH_SIZE].
+ *
+ * @param rows - Matched rows to dispatch.
+ * @param batchSize - Batch strategy: undefined (auto), number, or function.
+ * @param maxSubagents - Concurrency cap used for auto-batch calculation.
+ * @returns Array of row batches, each ready for dispatch as a single task.
+ */
+export function resolveBatchGroups(
+  rows: Record<string, unknown>[],
+  maxSubagents: number,
+  batchSize?: number | BatchFn,
+): Record<string, unknown>[][] {
+  if (rows.length === 0) {
+    return [];
+  }
+
+  if (batchSize === undefined) {
+    // Auto: keep total dispatches under maxSubagents
+    const auto =
+      rows.length > maxSubagents
+        ? Math.min(Math.ceil(rows.length / maxSubagents), MAX_BATCH_SIZE)
+        : 1;
+    return createBatches(rows, auto);
+  }
+
+  if (typeof batchSize === "number") {
+    return createBatches(rows, clampBatchSize(batchSize));
+  }
+
+  const groups = new Map<number, Record<string, unknown>[]>();
+  for (const row of rows) {
+    const size = clampBatchSize(batchSize(row, rows.length));
+    let group = groups.get(size);
+    if (!group) {
+      group = [];
+      groups.set(size, group);
+    }
+    group.push(row);
+  }
+
+  const batches: Record<string, unknown>[][] = [];
+  for (const [size, group] of groups) {
+    for (const batch of createBatches(group, size)) {
+      batches.push(batch);
+    }
+  }
+
   return batches;
 }
 

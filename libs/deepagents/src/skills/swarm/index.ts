@@ -4,7 +4,7 @@ import { readColumn } from "./utils.js";
 import { evaluateFilter } from "./filter.js";
 import { dispatch, deduplicateFailures, mergeResult } from "./executor.js";
 import {
-  createBatches,
+  resolveBatchGroups,
   wrapSchema,
   buildBatchPrompt,
   unpackBatchResults,
@@ -18,6 +18,186 @@ import type {
   TaskSpec,
   TaskResult,
 } from "./types.js";
+
+/**
+ * Maximum concurrent subagent dispatches per `run()` call.
+ *
+ * When matched rows exceed this and no explicit `batchSize` is set,
+ * auto-batching groups rows to stay within this concurrency budget.
+ */
+const MAX_SUBAGENTS = 10;
+
+/**
+ * A dispatch unit is a single task for the executor. It tracks
+ * whether it covers one row (single) or multiple (batch) so the
+ * merge step knows how to unpack the result.
+ */
+interface DispatchUnit {
+  /**
+   * The task to dispatch to the executor.
+   */
+  task: TaskSpec;
+
+  /**
+   * Row IDs covered by this task. Single: length 1. Batch: length > 1.
+   */
+  rowIds: string[];
+}
+
+/**
+ * Build dispatch units from pre-grouped batches.
+ *
+ * Single-row batches produce interpolated per-row prompts with the
+ * user's responseSchema. Multi-row batches produce batch prompts
+ * with a wrapped schema.
+ */
+function buildDispatchUnits(
+  batches: Record<string, unknown>[][],
+  opts: {
+    instruction: string;
+    context?: string;
+    subagentType: string;
+    responseSchema: Record<string, unknown>;
+  },
+): { units: DispatchUnit[]; errors: TaskResult[] } {
+  const units: DispatchUnit[] = [];
+  const errors: TaskResult[] = [];
+
+  let batchIndex = 0;
+  for (const batch of batches) {
+    if (batch.length === 1) {
+      // Single-row dispatch: interpolate instruction, use schema directly
+      const row = batch[0];
+      const rowId = String(row.id);
+
+      try {
+        let prompt = interpolate(opts.instruction, row);
+        if (opts.context) {
+          prompt = `${opts.context}\n\n${prompt}`;
+        }
+
+        units.push({
+          task: {
+            id: rowId,
+            prompt,
+            subagentType: opts.subagentType,
+            responseSchema: opts.responseSchema,
+          },
+          rowIds: [rowId],
+        });
+      } catch (err) {
+        errors.push({
+          id: rowId,
+          status: "failed",
+          error: (err as Error).message,
+        });
+      }
+    } else {
+      // Multi-row batch: build batch prompt, wrap schema
+      const rowIds = batch.map((r) => String(r.id));
+      units.push({
+        task: {
+          id: `batch_${batchIndex}`,
+          prompt: buildBatchPrompt(opts.instruction, batch, opts.context),
+          subagentType: opts.subagentType,
+          responseSchema: wrapSchema(opts.responseSchema, batch.length),
+        },
+        rowIds,
+      });
+      batchIndex++;
+    }
+  }
+
+  return { units, errors };
+}
+
+/**
+ * Normalize dispatch results into per-row results.
+ *
+ * Single-row units pass through directly. Batch units are unpacked
+ * into one result per row — missing rows become failures.
+ */
+function unpackDispatchResults(
+  units: DispatchUnit[],
+  results: TaskResult[],
+): TaskResult[] {
+  const rowResults: TaskResult[] = [];
+
+  for (let idx = 0; idx < units.length; idx++) {
+    const unit = units[idx];
+    const result = results[idx];
+
+    if (unit.rowIds.length === 1) {
+      rowResults.push(result);
+      continue;
+    }
+
+    if (result.status === "failed") {
+      for (const rowId of unit.rowIds) {
+        rowResults.push({ id: rowId, status: "failed", error: result.error });
+      }
+      continue;
+    }
+
+    const { results: unpacked } = unpackBatchResults(
+      result.result ?? "",
+      unit.rowIds,
+    );
+    for (const rowId of unit.rowIds) {
+      const value = unpacked.get(rowId);
+      if (value !== undefined) {
+        rowResults.push({
+          id: rowId,
+          status: "completed",
+          result: typeof value === "string" ? value : JSON.stringify(value),
+        });
+      } else {
+        rowResults.push({
+          id: rowId,
+          status: "failed",
+          error: "Missing from batch response",
+        });
+      }
+    }
+  }
+
+  return rowResults;
+}
+
+/**
+ * Parse and merge per-row results into table rows.
+ *
+ * Each completed result is JSON-parsed and spread onto the
+ * corresponding row via `mergeResult`.
+ */
+function mergeRowResults(
+  rowResults: TaskResult[],
+  rowById: Map<string, Record<string, unknown>>,
+): { completed: number; failed: number } {
+  let completed = 0;
+  let failed = 0;
+
+  for (const result of rowResults) {
+    const row = rowById.get(result.id);
+    if (!row) {
+      failed++;
+      continue;
+    }
+
+    if (result.status === "completed" && result.result != null) {
+      try {
+        mergeResult(row, JSON.parse(result.result));
+        completed++;
+      } catch {
+        failed++;
+      }
+    } else {
+      failed++;
+    }
+  }
+
+  return { completed, failed };
+}
 
 /**
  * Verify every `{column}` reference in `instruction` resolves on at
@@ -42,20 +222,6 @@ function validatePlaceholders(
 }
 
 /**
- * Maximum concurrent subagent dispatches per `run()` call.
- *
- * When matched rows exceed this, batching is applied automatically.
- * Auto-computed batch sizes are capped at MAX_BATCH_SIZE to keep
- * structured-output responses reliable (large batches drop items).
- */
-const MAX_SUBAGENTS = 10;
-
-/**
- * Maximum rows per batch when auto-batching.
- */
-const MAX_BATCH_SIZE = 50;
-
-/**
  * Create a table from a source specification and persist it to the backend.
  *
  * Thin wrapper around `createTable` — validates the source, builds rows,
@@ -66,142 +232,6 @@ const MAX_BATCH_SIZE = 50;
  */
 export async function create(source: CreateSource): Promise<SwarmHandle> {
   return createTable(source);
-}
-
-/**
- * Dispatch one subagent call per matched row.
- *
- * Interpolates the instruction template for each row, collects
- * interpolation errors as failures, and dispatches the valid tasks
- * through the executor's worker pool.
- *
- * @param matched - Rows that passed the filter.
- * @param opts - Dispatch configuration.
- * @returns Combined array of dispatch results and interpolation errors.
- */
-async function dispatchSingle(
-  matched: Record<string, unknown>[],
-  opts: {
-    instruction: string;
-    context?: string;
-    subagentType: string;
-    responseSchema: Record<string, unknown>;
-    concurrency: number;
-  },
-): Promise<TaskResult[]> {
-  const tasks: TaskSpec[] = [];
-  const interpolationErrors: TaskResult[] = [];
-
-  for (const row of matched) {
-    const rowId = String(row.id);
-    try {
-      let prompt = interpolate(opts.instruction, row);
-      if (opts.context) {
-        prompt = `${opts.context}\n\n${prompt}`;
-      }
-      tasks.push({
-        id: rowId,
-        prompt,
-        subagentType: opts.subagentType,
-        responseSchema: opts.responseSchema,
-      });
-    } catch (e) {
-      interpolationErrors.push({
-        id: rowId,
-        status: "failed",
-        error: (e as Error).message,
-      });
-    }
-  }
-
-  const dispatchResults = await dispatch(tasks, {
-    concurrency: opts.concurrency,
-  });
-
-  return [...dispatchResults, ...interpolationErrors];
-}
-
-/**
- * Dispatch rows in batches, sending multiple rows per subagent call.
- *
- * Groups matched rows into batches, builds a single prompt per batch
- * containing all rows' data, wraps the response schema for batch
- * output, dispatches each batch as one task, and unpacks the batch
- * responses back into per-row results.
- *
- * Rows missing from a batch response are marked as failed.
- *
- * @param matched - Rows that passed the filter.
- * @param opts - Dispatch configuration including `batchSize`.
- * @returns Per-row results unpacked from batch responses.
- */
-async function dispatchBatched(
-  matched: Record<string, unknown>[],
-  opts: {
-    instruction: string;
-    context?: string;
-    subagentType: string;
-    responseSchema: Record<string, unknown>;
-    concurrency: number;
-    batchSize: number;
-  },
-): Promise<TaskResult[]> {
-  const batches = createBatches(matched, opts.batchSize);
-
-  const batchTasks: TaskSpec[] = batches.map((batch, i) => ({
-    id: `batch_${i}`,
-    prompt: buildBatchPrompt(opts.instruction, batch, opts.context),
-    subagentType: opts.subagentType,
-    responseSchema: wrapSchema(opts.responseSchema, batch.length),
-  }));
-
-  const batchResults = await dispatch(batchTasks, {
-    concurrency: opts.concurrency,
-  });
-
-  const rowResults: TaskResult[] = [];
-
-  for (let i = 0; i < batches.length; i++) {
-    const batch = batches[i];
-    const batchResult = batchResults[i];
-
-    if (batchResult.status === "failed") {
-      for (const row of batch) {
-        rowResults.push({
-          id: String(row.id),
-          status: "failed",
-          error: batchResult.error,
-        });
-      }
-      continue;
-    }
-
-    const expectedIds = batch.map((r) => String(r.id));
-    const { results: unpacked } = unpackBatchResults(
-      batchResult.result ?? "",
-      expectedIds,
-    );
-
-    for (const row of batch) {
-      const rowId = String(row.id);
-      const value = unpacked.get(rowId);
-      if (value !== undefined) {
-        rowResults.push({
-          id: rowId,
-          status: "completed",
-          result: typeof value === "string" ? value : JSON.stringify(value),
-        });
-      } else {
-        rowResults.push({
-          id: rowId,
-          status: "failed",
-          error: "Missing from batch response",
-        });
-      }
-    }
-  }
-
-  return rowResults;
 }
 
 /**
@@ -271,79 +301,46 @@ export async function run(
   validatePlaceholders(instruction, matched);
 
   // -----------------------------------------------------------------------
-  // 2. Resolve effective batch size
-  //
-  // Auto-batch when matched rows exceed MAX_SUBAGENTS to cap total cost.
+  // 2. Resolve batches and build dispatch units
   // -----------------------------------------------------------------------
 
-  const autoBatchSize =
-    matched.length > MAX_SUBAGENTS
-      ? Math.min(Math.ceil(matched.length / MAX_SUBAGENTS), MAX_BATCH_SIZE)
-      : 1;
+  const batches = resolveBatchGroups(matched, effectiveConcurrency, batchSize);
 
-  const effectiveBatchSize = batchSize ?? autoBatchSize;
-
-  // -----------------------------------------------------------------------
-  // 3. Dispatch — single or batched
-  // -----------------------------------------------------------------------
-
-  let allResults: TaskResult[];
-
-  if (effectiveBatchSize >= 2) {
-    allResults = await dispatchBatched(matched, {
-      instruction,
-      context,
-      subagentType,
-      responseSchema,
-      concurrency: effectiveConcurrency,
-      batchSize: effectiveBatchSize,
-    });
-  } else {
-    allResults = await dispatchSingle(matched, {
-      instruction,
-      context,
-      subagentType,
-      responseSchema,
-      concurrency: effectiveConcurrency,
-    });
-  }
+  const { units, errors: interpolationErrors } = buildDispatchUnits(batches, {
+    instruction,
+    context,
+    subagentType,
+    responseSchema,
+  });
 
   // -----------------------------------------------------------------------
-  // 3. Merge results into rows
+  // 3. Dispatch
   // -----------------------------------------------------------------------
 
-  let completed = 0;
-  let failed = 0;
+  const dispatchResults = await dispatch(
+    units.map((u) => u.task),
+    { concurrency: effectiveConcurrency },
+  );
+
+  // -----------------------------------------------------------------------
+  // 4. Unpack and merge results into rows
+  // -----------------------------------------------------------------------
 
   const rowById = new Map<string, Record<string, unknown>>();
   for (const row of matched) {
     rowById.set(String(row.id), row);
   }
 
-  for (const result of allResults) {
-    const row = rowById.get(result.id);
-    if (!row) {
-      failed++;
-      continue;
-    }
-
-    if (result.status === "completed" && result.result != null) {
-      let value: Record<string, unknown>;
-      try {
-        value = JSON.parse(result.result);
-      } catch {
-        failed++;
-        continue;
-      }
-      mergeResult(row, value);
-      completed++;
-    } else {
-      failed++;
-    }
-  }
+  const rowResults = unpackDispatchResults(units, dispatchResults);
+  const { completed, failed: mergeFailed } = mergeRowResults(
+    rowResults,
+    rowById,
+  );
+  const failed = mergeFailed + interpolationErrors.length;
+  const allRowResults = [...interpolationErrors, ...rowResults];
 
   // -----------------------------------------------------------------------
-  // 4. Persist and return summary
+  // 5. Persist and return summary
   // -----------------------------------------------------------------------
 
   await saveTable(handle.id, allRows);
@@ -352,7 +349,7 @@ export async function run(
     completed,
     failed,
     skipped: skippedCount,
-    failures: deduplicateFailures(allResults),
+    failures: deduplicateFailures(allRowResults),
   };
 }
 
