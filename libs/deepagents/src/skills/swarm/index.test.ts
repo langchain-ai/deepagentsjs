@@ -379,6 +379,162 @@ describe("run (batched dispatch)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// run — batch function
+// ---------------------------------------------------------------------------
+
+describe("run (batch function)", () => {
+  it("dispatches mixed single and batched rows from the same run", async () => {
+    const taskFn = vi.fn(async ({ description }: { description: string }) => {
+      if (description.includes("# Items")) {
+        // batch prompt
+        return JSON.stringify({
+          results: [
+            { id: "r1", summary: "batch-1" },
+            { id: "r2", summary: "batch-2" },
+            { id: "r3", summary: "batch-3" },
+          ],
+        });
+      }
+      // single-row prompt
+      return JSON.stringify({ summary: "single" });
+    });
+    (
+      (globalThis as Record<string, unknown>).tools as Record<string, unknown>
+    ).task = taskFn;
+
+    const handle = await create({
+      tasks: [
+        { id: "r1", token_count: 100 },
+        { id: "r2", token_count: 200 },
+        { id: "r3", token_count: 300 },
+        { id: "r4", token_count: 5000 },
+      ],
+    });
+
+    const summarySchema = {
+      type: "object",
+      properties: { summary: { type: "string" } },
+      required: ["summary"],
+    };
+
+    const result = await run(handle, {
+      instruction: "Analyze row {id}",
+      responseSchema: summarySchema,
+      batchSize: (row) => ((row.token_count as number) > 1000 ? 1 : 10),
+    });
+
+    expect(result.completed).toBe(4);
+    expect(result.failed).toBe(0);
+
+    const data = await rows(handle);
+    const r4 = data.find((r) => r.id === "r4");
+    expect(r4!.summary).toBe("single");
+    const r1 = data.find((r) => r.id === "r1");
+    expect(r1!.summary).toBe("batch-1");
+  });
+
+  it("only evaluates batch function on rows that pass the filter", async () => {
+    const evaluatedIds: string[] = [];
+    (
+      (globalThis as Record<string, unknown>).tools as Record<string, unknown>
+    ).task = vi.fn(async () => JSON.stringify({ out: "ok" }));
+
+    const handle = await create({
+      tasks: [
+        { id: "r1", status: "pending" },
+        { id: "r2", status: "done" },
+        { id: "r3", status: "pending" },
+      ],
+    });
+
+    const result = await run(handle, {
+      instruction: "Process {id}",
+      responseSchema: {
+        type: "object",
+        properties: { out: { type: "string" } },
+        required: ["out"],
+      },
+      filter: { column: "status", equals: "pending" },
+      batchSize: (row) => {
+        evaluatedIds.push(row.id as string);
+        return 1;
+      },
+    });
+
+    expect(result.completed).toBe(2);
+    expect(result.skipped).toBe(1);
+    expect(evaluatedIds).toEqual(["r1", "r3"]);
+    expect(evaluatedIds).not.toContain("r2");
+  });
+
+  it("batch function reads row data to decide batch size", async () => {
+    (
+      (globalThis as Record<string, unknown>).tools as Record<string, unknown>
+    ).task = vi.fn(async ({ description }: { description: string }) => {
+      if (description.includes("# Items")) {
+        return JSON.stringify({
+          results: [
+            { id: "r2", out: "batched" },
+            { id: "r3", out: "batched" },
+          ],
+        });
+      }
+      return JSON.stringify({ out: "solo" });
+    });
+
+    const handle = await create({
+      tasks: [
+        { id: "r1", token_count: 5000 },
+        { id: "r2", token_count: 100 },
+        { id: "r3", token_count: 200 },
+      ],
+    });
+
+    const result = await run(handle, {
+      instruction: "Process {id}",
+      responseSchema: {
+        type: "object",
+        properties: { out: { type: "string" } },
+        required: ["out"],
+      },
+      batchSize: (row) => ((row.token_count as number) > 1000 ? 1 : 10),
+    });
+
+    expect(result.completed).toBe(3);
+    const data = await rows(handle);
+    expect(data.find((r) => r.id === "r1")!.out).toBe("solo");
+    expect(data.find((r) => r.id === "r2")!.out).toBe("batched");
+    expect(data.find((r) => r.id === "r3")!.out).toBe("batched");
+  });
+
+  it("counts interpolation errors in mixed dispatch", async () => {
+    (
+      (globalThis as Record<string, unknown>).tools as Record<string, unknown>
+    ).task = vi.fn(async () => JSON.stringify({ out: "ok" }));
+
+    const handle = await create({
+      tasks: [
+        { id: "r1", text: "hello" },
+        { id: "r2", text: "world" },
+      ],
+    });
+
+    const result = await run(handle, {
+      instruction: "Process {text}",
+      responseSchema: {
+        type: "object",
+        properties: { out: { type: "string" } },
+        required: ["out"],
+      },
+      batchSize: () => 1,
+    });
+
+    expect(result.completed).toBe(2);
+    expect(result.failed).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // run — concurrency clamping
 // ---------------------------------------------------------------------------
 

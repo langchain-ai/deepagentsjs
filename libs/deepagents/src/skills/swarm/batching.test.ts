@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   createBatches,
+  resolveBatchGroups,
+  MAX_BATCH_SIZE,
   wrapSchema,
   buildBatchPrompt,
   unpackBatchResults,
@@ -36,6 +38,137 @@ describe("createBatches", () => {
   it("returns one item per batch when batchSize is 1", () => {
     const batches = createBatches(["a", "b", "c"], 1);
     expect(batches).toEqual([["a"], ["b"], ["c"]]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveBatchGroups
+// ---------------------------------------------------------------------------
+
+function makeRows(n: number): Record<string, unknown>[] {
+  return Array.from({ length: n }, (_, i) => ({ id: `r${i}` }));
+}
+
+describe("resolveBatchGroups", () => {
+  it("returns empty array for empty input", () => {
+    expect(resolveBatchGroups([], 10)).toEqual([]);
+  });
+
+  it("auto-batches to size 1 when rows <= maxSubagents", () => {
+    const rows = makeRows(5);
+    const batches = resolveBatchGroups(rows, 10);
+    expect(batches).toHaveLength(5);
+    for (const batch of batches) {
+      expect(batch).toHaveLength(1);
+    }
+  });
+
+  it("auto-batches to ceil(rows/maxSubagents) when rows > maxSubagents", () => {
+    const rows = makeRows(25);
+    const batches = resolveBatchGroups(rows, 10);
+    // ceil(25/10) = 3 → batches of 3, ceil(25/3) = 9 batches
+    for (const batch of batches) {
+      expect(batch.length).toBeLessThanOrEqual(3);
+    }
+    const totalRows = batches.reduce((sum, b) => sum + b.length, 0);
+    expect(totalRows).toBe(25);
+  });
+
+  it("caps auto-batch size at MAX_BATCH_SIZE", () => {
+    const rows = makeRows(10_000);
+    const batches = resolveBatchGroups(rows, 2);
+    // ceil(10000/2) = 5000, capped at MAX_BATCH_SIZE (50)
+    for (const batch of batches) {
+      expect(batch.length).toBeLessThanOrEqual(MAX_BATCH_SIZE);
+    }
+    const totalRows = batches.reduce((sum, b) => sum + b.length, 0);
+    expect(totalRows).toBe(10_000);
+  });
+
+  it("uniform: batches all rows at given size", () => {
+    const rows = makeRows(12);
+    const batches = resolveBatchGroups(rows, 10, 5);
+    expect(batches).toHaveLength(3); // 5+5+2
+    expect(batches[0]).toHaveLength(5);
+    expect(batches[1]).toHaveLength(5);
+    expect(batches[2]).toHaveLength(2);
+  });
+
+  it("uniform: batchSize 1 produces per-row dispatch", () => {
+    const rows = makeRows(4);
+    const batches = resolveBatchGroups(rows, 10, 1);
+    expect(batches).toHaveLength(4);
+    for (const batch of batches) {
+      expect(batch).toHaveLength(1);
+    }
+  });
+
+  it("clamps batchSize 0 to 1", () => {
+    const rows = makeRows(3);
+    const batches = resolveBatchGroups(rows, 10, 0);
+    expect(batches).toHaveLength(3);
+    for (const batch of batches) {
+      expect(batch).toHaveLength(1);
+    }
+  });
+
+  it("clamps batchSize exceeding MAX_BATCH_SIZE", () => {
+    const rows = makeRows(100);
+    const batches = resolveBatchGroups(rows, 10, 999);
+    for (const batch of batches) {
+      expect(batch.length).toBeLessThanOrEqual(MAX_BATCH_SIZE);
+    }
+    const totalRows = batches.reduce((sum, b) => sum + b.length, 0);
+    expect(totalRows).toBe(100);
+  });
+
+  it("function: groups rows by returned batch size", () => {
+    const rows = [
+      { id: "r1", size: "small" },
+      { id: "r2", size: "large" },
+      { id: "r3", size: "small" },
+      { id: "r4", size: "large" },
+      { id: "r5", size: "small" },
+    ];
+    const batches = resolveBatchGroups(rows, 10, (row) =>
+      row.size === "small" ? 3 : 1,
+    );
+    // small rows (r1, r3, r5) → batch size 3 → 1 batch of 3
+    // large rows (r2, r4) → batch size 1 → 2 batches of 1
+    expect(batches).toHaveLength(3);
+    const batchOf3 = batches.find((b) => b.length === 3);
+    expect(batchOf3).toBeDefined();
+    expect(batchOf3!.map((r) => r.id)).toEqual(["r1", "r3", "r5"]);
+  });
+
+  it("function: same size for all rows is equivalent to uniform", () => {
+    const rows = makeRows(7);
+    const fnBatches = resolveBatchGroups(rows, 10, () => 3);
+    const uniformBatches = resolveBatchGroups(rows, 10, 3);
+    expect(fnBatches).toEqual(uniformBatches);
+  });
+
+  it("function: receives correct rowCount as second argument", () => {
+    const rows = makeRows(8);
+    const receivedCounts: number[] = [];
+    resolveBatchGroups(rows, 10, (_row, rowCount) => {
+      receivedCounts.push(rowCount);
+      return 1;
+    });
+    expect(receivedCounts).toHaveLength(8);
+    for (const count of receivedCounts) {
+      expect(count).toBe(8);
+    }
+  });
+
+  it("function: clamps returned values", () => {
+    const rows = makeRows(3);
+    const batches = resolveBatchGroups(rows, 10, () => 0);
+    // 0 clamped to 1
+    expect(batches).toHaveLength(3);
+    for (const batch of batches) {
+      expect(batch).toHaveLength(1);
+    }
   });
 });
 
