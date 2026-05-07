@@ -44,29 +44,6 @@ describe("createBatches", () => {
 // ---------------------------------------------------------------------------
 
 describe("wrapSchema", () => {
-  it("auto-generates id+result schema when no itemSchema provided", () => {
-    const schema = wrapSchema();
-    expect(schema).toEqual({
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        results: {
-          type: "array",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              id: { type: "string" },
-              result: { type: "string" },
-            },
-            required: ["id", "result"],
-          },
-        },
-      },
-      required: ["results"],
-    });
-  });
-
   it("merges itemSchema properties with id field", () => {
     const itemSchema = {
       type: "object",
@@ -191,16 +168,16 @@ describe("unpackBatchResults", () => {
     });
   });
 
-  it("unwraps single 'result' field in text mode", () => {
+  it("keeps single-field objects as objects", () => {
     const response = JSON.stringify({
       results: [
-        { id: "r1", result: "looks good" },
-        { id: "r2", result: "needs work" },
+        { id: "r1", summary: "looks good" },
+        { id: "r2", summary: "needs work" },
       ],
     });
     const { results } = unpackBatchResults(response, ["r1", "r2"]);
-    expect(results.get("r1")).toBe("looks good");
-    expect(results.get("r2")).toBe("needs work");
+    expect(results.get("r1")).toEqual({ summary: "looks good" });
+    expect(results.get("r2")).toEqual({ summary: "needs work" });
   });
 
   it("reports missing IDs", () => {
@@ -231,13 +208,13 @@ describe("unpackBatchResults", () => {
   it("skips items without a string id", () => {
     const response = JSON.stringify({
       results: [
-        { id: "r1", result: "ok" },
-        { result: "no id" },
-        { id: 123, result: "numeric id" },
+        { id: "r1", summary: "ok" },
+        { summary: "no id" },
+        { id: 123, summary: "numeric id" },
       ],
     });
     const { results } = unpackBatchResults(response, ["r1"]);
     expect(results.size).toBe(1);
-    expect(results.get("r1")).toBe("ok");
+    expect(results.get("r1")).toEqual({ summary: "ok" });
   });
 });

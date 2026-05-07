@@ -69,13 +69,6 @@ export interface RunOptions {
   context?: string;
 
   /**
-   * Column name where the subagent's result is stored.
-   *
-   * @default "result"
-   */
-  column?: string;
-
-  /**
    * Filter clause to select a subset of rows. Rows that don't match
    * are skipped (counted in `RunResult.skipped`).
    */
@@ -89,11 +82,10 @@ export interface RunOptions {
   subagentType?: string;
 
   /**
-   * JSON Schema (type: "object") for structured output. When set,
-   * the subagent's response is constrained to this schema and each
-   * property becomes a top-level column on the row.
+   * JSON Schema (type: "object") for structured output. Each property
+   * in the schema becomes a top-level column on the row.
    */
-  responseSchema?: Record<string, unknown>;
+  responseSchema: Record<string, unknown>;
 
   /**
    * Number of rows per subagent call. Computed automatically based on

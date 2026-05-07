@@ -240,46 +240,22 @@ describe("deduplicateFailures", () => {
 describe("mergeResult", () => {
   it("spreads object properties onto the row", () => {
     const row: Record<string, unknown> = { id: "r1", file: "a.ts" };
-    mergeResult(row, "result", { sentiment: "positive", confidence: 0.95 });
+    mergeResult(row, { sentiment: "positive", confidence: 0.95 });
     expect(row.sentiment).toBe("positive");
     expect(row.confidence).toBe(0.95);
   });
 
   it("does not overwrite reserved column 'id'", () => {
     const row: Record<string, unknown> = { id: "r1", file: "a.ts" };
-    mergeResult(row, "result", { id: "overwritten", score: 5 });
+    mergeResult(row, { id: "overwritten", score: 5 });
     expect(row.id).toBe("r1");
     expect(row.score).toBe(5);
   });
 
   it("does not overwrite reserved column 'file'", () => {
     const row: Record<string, unknown> = { id: "r1", file: "a.ts" };
-    mergeResult(row, "result", { file: "overwritten", score: 5 });
+    mergeResult(row, { file: "overwritten", score: 5 });
     expect(row.file).toBe("a.ts");
     expect(row.score).toBe(5);
-  });
-
-  it("stores a string under the column name", () => {
-    const row: Record<string, unknown> = { id: "r1" };
-    mergeResult(row, "review", "looks good");
-    expect(row.review).toBe("looks good");
-  });
-
-  it("stores a number under the column name", () => {
-    const row: Record<string, unknown> = { id: "r1" };
-    mergeResult(row, "score", 42);
-    expect(row.score).toBe(42);
-  });
-
-  it("stores an array under the column name", () => {
-    const row: Record<string, unknown> = { id: "r1" };
-    mergeResult(row, "tags", ["a", "b"]);
-    expect(row.tags).toEqual(["a", "b"]);
-  });
-
-  it("stores null under the column name", () => {
-    const row: Record<string, unknown> = { id: "r1" };
-    mergeResult(row, "result", null);
-    expect(row.result).toBeNull();
   });
 });

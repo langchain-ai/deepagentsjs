@@ -130,29 +130,20 @@ export function deduplicateFailures(results: TaskResult[]): FailureGroup[] {
 /**
  * Merge a subagent result into a table row.
  *
- * When the value is a plain object (structured output), each property
- * is spread onto the row as a top-level column — except reserved
- * columns (`id`, `file`) which are never overwritten.
- *
- * When the value is a primitive, array, or null, it is stored under
- * the specified column name.
+ * Each property of the parsed structured output is spread onto the
+ * row as a top-level column — except reserved columns (`id`, `file`)
+ * which are never overwritten.
  *
  * @param row - The table row to update (mutated in place).
- * @param column - Column name for non-object values.
- * @param value - The subagent's result (parsed JSON or raw string).
+ * @param value - The subagent's parsed structured output.
  */
 export function mergeResult(
   row: Record<string, unknown>,
-  column: string,
-  value: unknown,
+  value: Record<string, unknown>,
 ): void {
-  if (value != null && typeof value === "object" && !Array.isArray(value)) {
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (!RESERVED_COLUMNS.has(k)) {
-        row[k] = v;
-      }
+  for (const [k, v] of Object.entries(value)) {
+    if (!RESERVED_COLUMNS.has(k)) {
+      row[k] = v;
     }
-  } else {
-    row[column] = value;
   }
 }

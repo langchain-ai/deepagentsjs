@@ -8,6 +8,12 @@ import { _resetForTesting } from "./table.js";
 
 let files: Map<string, string>;
 
+const resultSchema = {
+  type: "object",
+  properties: { result: { type: "string" } },
+  required: ["result"],
+};
+
 function setupTools() {
   files = new Map();
   (globalThis as Record<string, unknown>).tools = {
@@ -35,9 +41,8 @@ function setupTools() {
         return "ok";
       },
     ),
-    task: vi.fn(
-      async ({ description }: { description: string }) =>
-        `Result for: ${description}`,
+    task: vi.fn(async ({ description }: { description: string }) =>
+      JSON.stringify({ result: `Result for: ${description}` }),
     ),
   };
 }
@@ -72,6 +77,12 @@ describe("create", () => {
 
 describe("run (single dispatch)", () => {
   it("dispatches all rows and merges results", async () => {
+    (
+      (globalThis as Record<string, unknown>).tools as Record<string, unknown>
+    ).task = vi.fn(async ({ description }: { description: string }) =>
+      JSON.stringify({ review: `Result for: ${description}` }),
+    );
+
     const handle = await create({
       tasks: [
         { id: "r1", file: "a.ts" },
@@ -81,7 +92,11 @@ describe("run (single dispatch)", () => {
 
     const result = await run(handle, {
       instruction: "Review {file}",
-      column: "review",
+      responseSchema: {
+        type: "object",
+        properties: { review: { type: "string" } },
+        required: ["review"],
+      },
     });
 
     expect(result.completed).toBe(2);
@@ -94,7 +109,9 @@ describe("run (single dispatch)", () => {
   });
 
   it("prepends context to each prompt", async () => {
-    const taskFn = vi.fn(async (_args: Record<string, unknown>) => "ok");
+    const taskFn = vi.fn(async (_args: Record<string, unknown>) =>
+      JSON.stringify({ result: "ok" }),
+    );
     (
       (globalThis as Record<string, unknown>).tools as Record<string, unknown>
     ).task = taskFn;
@@ -103,6 +120,7 @@ describe("run (single dispatch)", () => {
     await run(handle, {
       instruction: "Review {file}",
       context: "TypeScript project",
+      responseSchema: resultSchema,
     });
 
     const prompt = taskFn.mock.calls[0][0].description as string;
@@ -110,9 +128,12 @@ describe("run (single dispatch)", () => {
     expect(prompt).toContain("Review a.ts");
   });
 
-  it("uses default column name 'result'", async () => {
+  it("merges responseSchema properties onto rows", async () => {
     const handle = await create({ tasks: [{ id: "r1", text: "hi" }] });
-    await run(handle, { instruction: "Process {text}" });
+    await run(handle, {
+      instruction: "Process {text}",
+      responseSchema: resultSchema,
+    });
 
     const data = await rows(handle);
     expect(data[0].result).toBeDefined();
@@ -121,7 +142,10 @@ describe("run (single dispatch)", () => {
   it("rejects unknown column references before dispatch", async () => {
     const handle = await create({ tasks: [{ id: "r1", text: "hi" }] });
     await expect(
-      run(handle, { instruction: "Review {nonexistent}" }),
+      run(handle, {
+        instruction: "Review {nonexistent}",
+        responseSchema: resultSchema,
+      }),
     ).rejects.toThrow("instruction references unknown column(s): nonexistent");
   });
 
@@ -133,7 +157,10 @@ describe("run (single dispatch)", () => {
     });
 
     const handle = await create({ tasks: [{ id: "r1", text: "hi" }] });
-    const result = await run(handle, { instruction: "Do {text}" });
+    const result = await run(handle, {
+      instruction: "Do {text}",
+      responseSchema: resultSchema,
+    });
 
     expect(result.failed).toBe(1);
     expect(result.completed).toBe(0);
@@ -142,12 +169,15 @@ describe("run (single dispatch)", () => {
 
   it("persists updated rows to backend", async () => {
     const handle = await create({ tasks: [{ id: "r1", text: "hi" }] });
-    await run(handle, { instruction: "Do {text}", column: "out" });
+    await run(handle, {
+      instruction: "Do {text}",
+      responseSchema: resultSchema,
+    });
 
     const path = [...files.keys()].find((k) => k.includes(handle.id));
     expect(path).toBeDefined();
     const content = files.get(path as string) ?? "";
-    expect(content).toContain('"out"');
+    expect(content).toContain('"result"');
   });
 });
 
@@ -167,6 +197,7 @@ describe("run (filtering)", () => {
 
     const result = await run(handle, {
       instruction: "Process {id}",
+      responseSchema: resultSchema,
       filter: { column: "status", equals: "pending" },
     });
 
@@ -181,6 +212,7 @@ describe("run (filtering)", () => {
 
     const result = await run(handle, {
       instruction: "Process {id}",
+      responseSchema: resultSchema,
       filter: { column: "status", equals: "pending" },
     });
 
@@ -190,13 +222,19 @@ describe("run (filtering)", () => {
   });
 
   it("supports retry-with-filter pattern", async () => {
+    const outSchema = {
+      type: "object",
+      properties: { out: { type: "string" } },
+      required: ["out"],
+    };
+
     let callCount = 0;
     (
       (globalThis as Record<string, unknown>).tools as Record<string, unknown>
     ).task = vi.fn(async () => {
       callCount++;
       if (callCount <= 1) throw new Error("transient");
-      return "ok";
+      return JSON.stringify({ out: "ok" });
     });
 
     const handle = await create({
@@ -206,11 +244,11 @@ describe("run (filtering)", () => {
       ],
     });
 
-    await run(handle, { instruction: "Do {text}", column: "out" });
+    await run(handle, { instruction: "Do {text}", responseSchema: outSchema });
 
     const retryResult = await run(handle, {
       instruction: "Do {text}",
-      column: "out",
+      responseSchema: outSchema,
       filter: { column: "out", exists: false },
     });
 
@@ -280,8 +318,8 @@ describe("run (batched dispatch)", () => {
     ).task = vi.fn(async () =>
       JSON.stringify({
         results: [
-          { id: "r1", result: "done-1" },
-          { id: "r2", result: "done-2" },
+          { id: "r1", summary: "done-1" },
+          { id: "r2", summary: "done-2" },
         ],
       }),
     );
@@ -295,13 +333,18 @@ describe("run (batched dispatch)", () => {
 
     const result = await run(handle, {
       instruction: "Process {text}",
+      responseSchema: {
+        type: "object",
+        properties: { summary: { type: "string" } },
+        required: ["summary"],
+      },
       batchSize: 2,
     });
 
     expect(result.completed).toBe(2);
     const data = await rows(handle);
-    expect(data[0].result).toBe("done-1");
-    expect(data[1].result).toBe("done-2");
+    expect(data[0].summary).toBe("done-1");
+    expect(data[1].summary).toBe("done-2");
   });
 
   it("marks rows missing from batch response as failed", async () => {
@@ -309,7 +352,7 @@ describe("run (batched dispatch)", () => {
       (globalThis as Record<string, unknown>).tools as Record<string, unknown>
     ).task = vi.fn(async () =>
       JSON.stringify({
-        results: [{ id: "r1", result: "ok" }],
+        results: [{ id: "r1", summary: "ok" }],
       }),
     );
 
@@ -322,6 +365,11 @@ describe("run (batched dispatch)", () => {
 
     const result = await run(handle, {
       instruction: "Process {text}",
+      responseSchema: {
+        type: "object",
+        properties: { summary: { type: "string" } },
+        required: ["summary"],
+      },
       batchSize: 5,
     });
 
@@ -339,6 +387,7 @@ describe("run (concurrency)", () => {
     const handle = await create({ tasks: [{ id: "r1", text: "hi" }] });
     const result = await run(handle, {
       instruction: "Do {text}",
+      responseSchema: resultSchema,
       concurrency: 0,
     });
     expect(result.completed).toBe(1);
@@ -357,7 +406,7 @@ describe("run (concurrency)", () => {
       }
       await new Promise((resolve) => setTimeout(resolve, 5));
       currentConcurrent--;
-      return `done: ${description}`;
+      return JSON.stringify({ result: `done: ${description}` });
     });
 
     const tasks = Array.from({ length: 15 }, (_, i) => ({
@@ -365,7 +414,11 @@ describe("run (concurrency)", () => {
       text: `item ${i}`,
     }));
     const handle = await create({ tasks });
-    await run(handle, { instruction: "Do {text}", concurrency: 50 });
+    await run(handle, {
+      instruction: "Do {text}",
+      responseSchema: resultSchema,
+      concurrency: 50,
+    });
     expect(maxConcurrent).toBeLessThanOrEqual(10);
   });
 });

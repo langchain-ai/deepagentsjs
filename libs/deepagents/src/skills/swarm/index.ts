@@ -85,7 +85,7 @@ async function dispatchSingle(
     instruction: string;
     context?: string;
     subagentType: string;
-    responseSchema?: Record<string, unknown>;
+    responseSchema: Record<string, unknown>;
     concurrency: number;
   },
 ): Promise<TaskResult[]> {
@@ -140,9 +140,8 @@ async function dispatchBatched(
   opts: {
     instruction: string;
     context?: string;
-    column: string;
     subagentType: string;
-    responseSchema?: Record<string, unknown>;
+    responseSchema: Record<string, unknown>;
     concurrency: number;
     batchSize: number;
   },
@@ -233,7 +232,6 @@ export async function run(
   const {
     instruction,
     context,
-    column = "result",
     filter,
     subagentType = "general-purpose",
     responseSchema,
@@ -273,11 +271,9 @@ export async function run(
   validatePlaceholders(instruction, matched);
 
   // -----------------------------------------------------------------------
-  // 2. Resolve effective batch size and schema
+  // 2. Resolve effective batch size
   //
   // Auto-batch when matched rows exceed MAX_SUBAGENTS to cap total cost.
-  // If no responseSchema is provided, generate a minimal one so batch
-  // results can be unpacked per-row.
   // -----------------------------------------------------------------------
 
   const autoBatchSize =
@@ -286,16 +282,6 @@ export async function run(
       : 1;
 
   const effectiveBatchSize = batchSize ?? autoBatchSize;
-
-  const effectiveSchema: Record<string, unknown> | undefined =
-    effectiveBatchSize >= 2 && !responseSchema
-      ? {
-          type: "object",
-          additionalProperties: false,
-          properties: { [column]: { type: "string" } },
-          required: [column],
-        }
-      : responseSchema;
 
   // -----------------------------------------------------------------------
   // 3. Dispatch — single or batched
@@ -307,9 +293,8 @@ export async function run(
     allResults = await dispatchBatched(matched, {
       instruction,
       context,
-      column,
       subagentType,
-      responseSchema: effectiveSchema,
+      responseSchema,
       concurrency: effectiveConcurrency,
       batchSize: effectiveBatchSize,
     });
@@ -318,7 +303,7 @@ export async function run(
       instruction,
       context,
       subagentType,
-      responseSchema: effectiveSchema,
+      responseSchema,
       concurrency: effectiveConcurrency,
     });
   }
@@ -343,16 +328,14 @@ export async function run(
     }
 
     if (result.status === "completed" && result.result != null) {
-      let value: unknown = result.result;
-      if (responseSchema) {
-        try {
-          value = JSON.parse(result.result);
-        } catch {
-          failed++;
-          continue;
-        }
+      let value: Record<string, unknown>;
+      try {
+        value = JSON.parse(result.result);
+      } catch {
+        failed++;
+        continue;
       }
-      mergeResult(row, column, value);
+      mergeResult(row, value);
       completed++;
     } else {
       failed++;
