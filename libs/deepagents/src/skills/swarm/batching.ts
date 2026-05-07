@@ -1,5 +1,5 @@
 import { extractPlaceholders } from "./interpolate.js";
-import { BatchFn } from "./types.js";
+import type { BatchFn } from "./types.js";
 import { readColumn } from "./utils.js";
 
 /**

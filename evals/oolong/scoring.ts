@@ -81,11 +81,15 @@ function firstNumber(value: string): number | null {
 export function canonicalPrediction(value: string): string {
   let text = value.trim();
 
-  // If multi-line, take the last non-empty line (agent often puts answer last)
+  // If multi-line, prefer a line starting with "Answer:" (agent may append
+  // parenthetical explanations after the answer line), otherwise take the last.
   if (text.includes("\n")) {
     const lines = text.split("\n").filter((l) => l.trim());
     if (lines.length > 0) {
-      text = lines[lines.length - 1]!.trim();
+      const answerLine = lines.find((l) =>
+        l.trimStart().toLowerCase().startsWith("answer"),
+      );
+      text = (answerLine ?? lines[lines.length - 1]!).trim();
     }
   }
 

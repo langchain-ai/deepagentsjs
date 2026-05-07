@@ -1,12 +1,10 @@
-import { getDefaultRunner } from "@deepagents/evals";
+import * as ls from "langsmith/vitest";
 import { oolongMultinliSuite } from "./multinli.js";
 
-const runner = getDefaultRunner();
-
 ls.describe(
-  runner.name,
+  "deepagents-js-oolong-multinli",
   () => {
-    oolongMultinliSuite(runner);
+    oolongMultinliSuite();
   },
-  { projectName: "deepagents-js-oolong-multinli", upsert: true },
+  { projectName: "multinli-baseline", upsert: true },
 );

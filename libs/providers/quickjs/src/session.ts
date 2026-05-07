@@ -43,8 +43,8 @@ export const DEFAULT_MAX_RESULTS_CHARS = 4000;
 
 const LINE_NUMBER_RE = /^\s*\d+(?:\.\d+)?\t/;
 
-// The variant descriptor (WASM binary + glue) is safe to share across sessions;
-// only the instantiated module carries asyncify state. Import once, instantiate per session.
+// Singleton WASM module — all sessions share one module instance.
+// Testing whether per-session modules are still necessary.
 const variantImport = import("@jitl/quickjs-ng-wasmfile-release-asyncify");
 
 /**
