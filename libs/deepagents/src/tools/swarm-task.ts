@@ -270,8 +270,8 @@ async function invokeModel(
     }
 
     if (
-      typeof (model as Record<string, unknown>).withStructuredOutput ===
-      "function"
+      typeof (model as unknown as Record<string, unknown>)
+        .withStructuredOutput === "function"
     ) {
       const boundModel = (model as any).withStructuredOutput(normalized);
       const result = await boundModel.invoke(messages);
