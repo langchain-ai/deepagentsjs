@@ -1,5 +1,11 @@
 # @langchain/quickjs
 
+## 0.3.0
+
+### Minor Changes
+
+- [#520](https://github.com/langchain-ai/deepagentsjs/pull/520) [`2548954`](https://github.com/langchain-ai/deepagentsjs/commit/254895457fce2de7df4547ebcf825d60868bacce) Thanks [@colifran](https://github.com/colifran)! - chore(quickjs): rename to REPLMiddleware and adjust defaults
+
 ## 0.2.6
 
 ### Patch Changes

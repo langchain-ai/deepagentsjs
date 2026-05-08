@@ -23,14 +23,16 @@ import { newQuickJSAsyncWASMModuleFromVariant } from "quickjs-emscripten-core";
 import type {
   QuickJSAsyncContext,
   QuickJSAsyncRuntime,
+  QuickJSAsyncWASMModule,
 } from "quickjs-emscripten-core";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
-import { loadSkill, type LoadedSkill } from "./skills.js";
+import { loadSkill, scanSkillReferences, type LoadedSkill } from "./skills.js";
 import { PTCCallBudgetExceededError } from "./errors.js";
 import type { ReplSessionOptions, ReplResult, SkillsContext } from "./types.js";
 import { toCamelCase } from "./utils.js";
 import { transformForEval } from "./transform.js";
+import { AsyncEvalQueue } from "./eval-queue.js";
 
 export const DEFAULT_MEMORY_LIMIT = 64 * 1024 * 1024;
 export const DEFAULT_MAX_STACK_SIZE = 320 * 1024;
@@ -39,33 +41,53 @@ export const DEFAULT_SESSION_ID = "__default__";
 export const DEFAULT_MAX_PTC_CALLS = 256;
 export const DEFAULT_MAX_RESULTS_CHARS = 4000;
 
-// The variant descriptor (WASM binary + glue) is safe to share across sessions;
-// only the instantiated module carries asyncify state. Import once, instantiate per session.
 const variantImport = import("@jitl/quickjs-ng-wasmfile-release-asyncify");
 
-// Each ReplSession needs its own WASM module. The asyncify WASM variant allows only one
-// concurrent async call per module instance, and multi-file skill imports (2+ unwind/rewind
-// cycles inside a single evalCodeAsync) leave the module's asyncify state corrupted after
-// the owning runtime is disposed — new runtimes on the same module silently skip module
-// loader callbacks. A fresh instantiation per session gives each session clean asyncify state.
-async function newAsyncModule() {
-  const variant = await variantImport;
-  return newQuickJSAsyncWASMModuleFromVariant(
-    (variant.default ?? variant) as any,
-  );
+/**
+ * Process-global eval queue. Serializes all evalCodeAsync calls across
+ * sessions to enforce the asyncify one-at-a-time constraint.
+ */
+const sharedEvalQueue = new AsyncEvalQueue();
+
+/**
+ * Process-global WASM module shared by all sessions.
+ *
+ * Each session creates its own runtime and context on this module,
+ * providing full isolation for globals, heap, and stack. The module
+ * itself is stateless between runtimes — only the compiled WASM code
+ * and Emscripten infrastructure are shared.
+ *
+ * This is safe because:
+ * - The module loader is synchronous (preloaded skill cache), so
+ *   imports don't cause asyncify suspensions.
+ * - Tool injection uses the promise-based pattern (newFunction +
+ *   newPromise), not newAsyncifiedFunction, so tool calls don't
+ *   cause asyncify suspensions.
+ * - The eval queue serializes evalCodeAsync calls to satisfy the
+ *   one-concurrent-async-call-per-module constraint.
+ */
+let sharedModulePromise: Promise<QuickJSAsyncWASMModule> | undefined;
+
+function getSharedModule(): Promise<QuickJSAsyncWASMModule> {
+  if (!sharedModulePromise) {
+    sharedModulePromise = (async () => {
+      const variant = await variantImport;
+      return newQuickJSAsyncWASMModuleFromVariant(
+        (variant.default ?? variant) as any,
+      );
+    })();
+  }
+  return sharedModulePromise;
 }
 
-// After a successful asyncify unwind/rewind cycle, a rejected module loader
-// Promise causes a WASM crash ("memory access out of bounds"). The rejection
-// path in quickjs-emscripten's `maybeAsyncFn` catch block calls
-// `context.throw(error)` — a WASM FFI call while the asyncify stack is still
-// unwound — which corrupts memory. To avoid this, the module loader must never
-// reject. This helper returns source code that throws at evaluation time inside
-// the VM instead.
+// The module loader must never reject. A rejected Promise in the loader
+// path triggers a WASM FFI call at the wrong point in the asyncify
+// lifecycle, which corrupts memory. This helper returns source code that
+// throws at evaluation time inside the VM instead.
 //
-// The thrown value is a plain object (not `new Error()`) because QuickJS stores
-// Error's `name` and `message` as non-enumerable properties (per spec), which
-// causes `context.dump()` (JSON.stringify) to return `{}`.
+// The thrown value is a plain object (not `new Error()`) because QuickJS
+// stores Error's `name` and `message` as non-enumerable properties (per
+// spec), which causes `context.dump()` (JSON.stringify) to return `{}`.
 function makeErrorSource(message: string): string {
   return `throw { name: "Error", message: ${JSON.stringify(message)} };`;
 }
@@ -222,6 +244,17 @@ export class ReplSession {
   private readonly maxPtcCalls: number | null;
   private ptcCallsRemaining: number | null = null;
 
+  /**
+   * Reset the shared WASM module. Forces the next session to instantiate
+   * a fresh module. Only needed in tests where module state must be
+   * isolated between test files.
+   *
+   * @internal
+   */
+  static resetSharedModule(): void {
+    sharedModulePromise = undefined;
+  }
+
   constructor(id: string, options: ReplSessionOptions = {}) {
     this.id = id;
     this.options = options;
@@ -243,7 +276,7 @@ export class ReplSession {
       captureConsole = true,
     } = this.options;
 
-    const asyncModule = await newAsyncModule();
+    const asyncModule = await getSharedModule();
     const runtime: QuickJSAsyncRuntime = asyncModule.newRuntime();
     runtime.setMemoryLimit(memoryLimitBytes);
     runtime.setMaxStackSize(maxStackSizeBytes);
@@ -304,17 +337,55 @@ export class ReplSession {
     }
   }
 
-  private async resolveSpecifier(specifier: string): Promise<string> {
+  /**
+   * Pre-load all skills referenced in source code into the in-memory
+   * cache. Must be called before `evalCodeAsync` so the module loader
+   * can resolve synchronously. An async loader would cause asyncify
+   * suspensions on each import, which is incompatible with the shared
+   * WASM module used by all sessions.
+   */
+  async preloadReferencedSkills(code: string): Promise<void> {
+    const refs = scanSkillReferences(code);
+    for (const name of refs) {
+      if (this.skillsLoaded.has(name) || this.skillsFailed.has(name)) {
+        continue;
+      }
+
+      try {
+        await this.ensureSkillLoaded(name);
+      } catch (err) {
+        if (!this.skillsFailed.has(name)) {
+          this.skillsFailed.set(name, err as Error);
+        }
+      }
+    }
+  }
+
+  /**
+   * Resolve a module specifier to source code. Strictly synchronous —
+   * only reads from the in-memory skill cache populated by
+   * `preloadReferencedSkills`. Returns error source (not a thrown
+   * exception) for missing or failed skills so QuickJS reports the
+   * error inside the VM.
+   */
+  private resolveSpecifier(specifier: string): string {
     const parsed = parseSkillSpecifier(specifier);
     if (parsed === undefined) {
       return makeErrorSource(`Module not found: ${specifier}`);
     }
 
-    let loaded: LoadedSkill;
-    try {
-      loaded = await this.ensureSkillLoaded(parsed.name);
-    } catch (err) {
-      return makeErrorSource((err as Error).message ?? String(err));
+    const cachedError = this.skillsFailed.get(parsed.name);
+    if (cachedError !== undefined) {
+      return makeErrorSource(cachedError.message ?? String(cachedError));
+    }
+
+    const loaded = this.skillsLoaded.get(parsed.name);
+    if (loaded === undefined) {
+      return makeErrorSource(
+        `Skill '${parsed.name}' was not preloaded. ` +
+          `Ensure the import specifier is a static string literal ` +
+          `(dynamic specifiers like \`import("@/skills/" + name)\` are not supported).`,
+      );
     }
 
     if (parsed.rel === undefined) {
@@ -327,7 +398,11 @@ export class ReplSession {
       return source;
     }
 
-    const source = loaded.files.get(parsed.rel);
+    let source = loaded.files.get(parsed.rel);
+    // TS convention: source files use .ts but import specifiers use .js
+    if (source === undefined && parsed.rel.endsWith(".js")) {
+      source = loaded.files.get(parsed.rel.slice(0, -3) + ".ts");
+    }
     if (source === undefined) {
       return makeErrorSource(
         `Skill '${parsed.name}': '${parsed.rel}' not found in bundle`,
@@ -373,6 +448,12 @@ export class ReplSession {
 
   /**
    * Wire the QuickJS module loader and normalizer on this session's runtime.
+   *
+   * The loader is strictly synchronous — it reads from the in-memory skill
+   * cache populated by `preloadReferencedSkills`. This is critical: an async
+   * module loader causes asyncify suspensions on each import, and disposing
+   * a runtime after multi-file imports corrupts the shared module's asyncify
+   * state, silently breaking the loader for all subsequent sessions.
    */
   private installModuleLoader(): void {
     if (this.runtime === null) {
@@ -380,7 +461,7 @@ export class ReplSession {
     }
 
     this.runtime.setModuleLoader(
-      async (specifier: string) => this.resolveSpecifier(specifier),
+      (specifier: string) => this.resolveSpecifier(specifier),
       (base: string, requested: string) =>
         this.normalizeSpecifier(base, requested),
     );
@@ -492,6 +573,9 @@ export class ReplSession {
     const runtime = this.runtime!;
     const context = this.context!;
 
+    // Pre-load referenced skills so the module loader resolves synchronously.
+    await this.preloadReferencedSkills(code);
+
     const drainLogs = (): { logs: string[]; logsDroppedChars: number } => {
       const [raw, dropped] = this.consoleBuffer.drain();
       return {
@@ -511,7 +595,9 @@ export class ReplSession {
       }
 
       const transformed = transformForEval(code);
-      const result = await context.evalCodeAsync(transformed);
+      const result = await sharedEvalQueue.enqueue(() =>
+        context.evalCodeAsync(transformed),
+      );
 
       if (result.error) {
         const error = context.dump(result.error);

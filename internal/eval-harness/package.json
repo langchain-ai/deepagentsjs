@@ -1,6 +1,6 @@
 {
   "name": "@deepagents/evals",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "private": true,
   "description": "Eval harness — runner interface, profile registry, and trajectory matchers",
   "main": "./dist/index.cjs",

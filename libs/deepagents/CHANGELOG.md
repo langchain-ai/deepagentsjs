@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.10.0
+
+### Minor Changes
+
+- [#458](https://github.com/langchain-ai/deepagentsjs/pull/458) [`b1e1b7b`](https://github.com/langchain-ai/deepagentsjs/commit/b1e1b7bd3bcc3bd5b03dd461e72559ed69c77e22) Thanks [@christian-bromann](https://github.com/christian-bromann)! - feat(deepagents): new events streaming
+
 ## 1.9.1
 
 ### Patch Changes

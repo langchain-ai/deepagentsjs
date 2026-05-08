@@ -276,3 +276,16 @@ export function extractToolsFromAgent(agent: {
     (toolsNode.tools ?? []).map((tool) => [tool.name, tool]),
   );
 }
+
+export async function collectWithTimeout<T>(
+  iterable: AsyncIterable<T>,
+  timeoutMs = 5_000,
+): Promise<T[]> {
+  const items: T[] = [];
+  const timeout = AbortSignal.timeout(timeoutMs);
+  for await (const item of iterable) {
+    items.push(item);
+    if (timeout.aborted) break;
+  }
+  return items;
+}

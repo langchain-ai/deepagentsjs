@@ -44,6 +44,7 @@ import type {
   InferStructuredResponse,
   SupportedResponseFormat,
 } from "./types.js";
+import { createSubagentTransformer } from "./stream.js";
 
 /**
  * required for type inference
@@ -51,6 +52,7 @@ import type {
 import type * as _messages from "@langchain/core/messages";
 import type * as _langgraph from "@langchain/langgraph";
 import type { BaseLanguageModel } from "@langchain/core/language_models/base";
+import type { StreamTransformer } from "@langchain/langgraph";
 
 const BASE_AGENT_PROMPT = context`
   You are a Deep Agent, an AI assistant that helps users accomplish tasks using tools. You respond with text and tool calls. The user can see your responses and tool outputs in real time.
@@ -146,19 +148,24 @@ export function createDeepAgent<
   const TMiddleware extends readonly AgentMiddleware[] = readonly [],
   const TSubagents extends readonly AnySubAgent[] = readonly [],
   const TTools extends readonly (ClientTool | ServerTool)[] = readonly [],
+  const TStreamTransformers extends ReadonlyArray<
+    () => StreamTransformer<any>
+  > = readonly [],
 >(
   params: CreateDeepAgentParams<
     TResponse,
     ContextSchema,
     TMiddleware,
     TSubagents,
-    TTools
+    TTools,
+    TStreamTransformers
   > = {} as CreateDeepAgentParams<
     TResponse,
     ContextSchema,
     TMiddleware,
     TSubagents,
-    TTools
+    TTools,
+    TStreamTransformers
   >,
 ) {
   const {
@@ -177,6 +184,7 @@ export function createDeepAgent<
     memory,
     skills,
     permissions = [],
+    streamTransformers = [],
   } = params;
 
   const collidingTools = tools
@@ -376,6 +384,10 @@ export function createDeepAgent<
     checkpointer,
     store,
     name,
+    streamTransformers: [
+      createSubagentTransformer([]),
+      ...streamTransformers,
+    ] as const,
   }).withConfig({
     recursionLimit: 10_000,
     metadata: {
@@ -402,6 +414,7 @@ export function createDeepAgent<
    * - Middleware: AllMiddleware (built-in + custom + subagent middleware for state inference)
    * - Tools: TTools
    * - Subagents: TSubagents (for type-safe streaming)
+   * - StreamTransformers: TStreamTransformers
    */
   return agent as unknown as DeepAgent<
     DeepAgentTypeConfig<
@@ -410,7 +423,8 @@ export function createDeepAgent<
       ContextSchema,
       AllMiddleware,
       TTools,
-      TSubagents
+      TSubagents,
+      TStreamTransformers
     >
   >;
 }
