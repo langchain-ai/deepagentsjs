@@ -1,10 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { SystemMessage } from "@langchain/core/messages";
-import {
-  appendToSystemMessage,
-  normalizeSchema,
-  prependToSystemMessage,
-} from "./utils.js";
+import { appendToSystemMessage, prependToSystemMessage } from "./utils.js";
+import { normalizeSchema } from "../tools/swarm-task.js";
 
 describe("appendToSystemMessage", () => {
   it("should create a new SystemMessage when original is null", () => {
