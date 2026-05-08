@@ -25,7 +25,7 @@ import {
   normalizeSchema,
 } from "./swarm-task.js";
 
-function makeMockModel(response: string = "model response") {
+function makeMockModel(response: string = "model response"): any {
   return {
     invoke: vi.fn(async () => new AIMessage({ content: response })),
   };
@@ -401,7 +401,7 @@ describe("invoke mode", () => {
   });
 
   it("handles model responses that return a plain string", async () => {
-    const model = {
+    const model: any = {
       invoke: vi.fn(async () => "plain string response"),
     };
 
