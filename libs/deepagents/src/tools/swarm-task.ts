@@ -10,7 +10,16 @@ import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { HumanMessage } from "@langchain/core/messages";
-import { normalizeSchema } from "../middleware/utils.js";
+
+/**
+ * Default time-to-live for cached schema-constrained agent variants.
+ *
+ * Entries are evicted when they haven't been accessed for this duration.
+ * Within a `run()`, rows keep hitting the cache so entries stay warm.
+ * After the run finishes, nobody accesses the entry and it expires on
+ * the next cache access.
+ */
+const VARIANT_TTL_MS = 60_000;
 
 /**
  * Dispatch mode for swarm task invocations.
@@ -94,14 +103,34 @@ interface CompiledAgent {
 }
 
 /**
- * Default time-to-live for cached schema-constrained agent variants.
+ * Minimal agent creation parameters preserved for recompilation.
  *
- * Entries are evicted when they haven't been accessed for this duration.
- * Within a `run()`, rows keep hitting the cache so entries stay warm.
- * After the run finishes, nobody accesses the entry and it expires on
- * the next cache access.
+ * When a `response_schema` is provided at dispatch time, the tool
+ * recompiles the agent with `responseFormat` set to the normalized
+ * schema. This interface captures the fields needed for that
+ * recompilation.
  */
-const VARIANT_TTL_MS = 60_000;
+interface AgentSpec {
+  /**
+   * Language model used by this subagent.
+   */
+  model: LanguageModelLike | string;
+
+  /**
+   * System prompt injected at the start of the subagent's conversation.
+   */
+  systemPrompt: string;
+
+  /**
+   * Tools available to this subagent during execution.
+   */
+  tools: StructuredTool[];
+
+  /**
+   * Unique name identifying this subagent type.
+   */
+  name: string;
+}
 
 /**
  * TTL cache for compiled agent variants.
@@ -162,33 +191,44 @@ export class VariantCache<T> {
 }
 
 /**
- * Minimal agent creation parameters preserved for recompilation.
- *
- * When a `response_schema` is provided at dispatch time, the tool
- * recompiles the agent with `responseFormat` set to the normalized
- * schema. This interface captures the fields needed for that
- * recompilation.
+ * Recursively add `additionalProperties: false` to every object-typed node
+ * in a JSON Schema.
  */
-interface AgentSpec {
-  /**
-   * Language model used by this subagent.
-   */
-  model: LanguageModelLike | string;
+export function normalizeSchema(
+  schema: Record<string, unknown>,
+): Record<string, unknown> {
+  if (schema.type !== "object" && schema.type !== "array") {
+    return schema;
+  }
 
-  /**
-   * System prompt injected at the start of the subagent's conversation.
-   */
-  systemPrompt: string;
+  if (schema.type === "array") {
+    const result: Record<string, unknown> = { ...schema };
+    const items = result.items;
+    if (items != null && typeof items === "object" && !Array.isArray(items)) {
+      result.items = normalizeSchema(items as Record<string, unknown>);
+    }
+    return result;
+  }
 
-  /**
-   * Tools available to this subagent during execution.
-   */
-  tools: StructuredTool[];
+  const result: Record<string, unknown> = {
+    ...schema,
+    additionalProperties: false,
+  };
 
-  /**
-   * Unique name identifying this subagent type.
-   */
-  name: string;
+  const props = schema.properties;
+  if (props != null && typeof props === "object" && !Array.isArray(props)) {
+    const normalizedProps: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(props as Record<string, unknown>)) {
+      if (v != null && typeof v === "object" && !Array.isArray(v)) {
+        normalizedProps[k] = normalizeSchema(v as Record<string, unknown>);
+      } else {
+        normalizedProps[k] = v;
+      }
+    }
+    result.properties = normalizedProps;
+  }
+
+  return result;
 }
 
 /**
