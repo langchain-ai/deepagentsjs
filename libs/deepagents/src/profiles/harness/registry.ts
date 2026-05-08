@@ -185,14 +185,12 @@ export function resolveHarnessProfile(
       return profile;
     }
   }
-
   if (identifierHint && identifierHint.includes(":")) {
     const profile = getHarnessProfile(identifierHint);
     if (profile) {
       return profile;
     }
   }
-
   if (providerHint) {
     const profile = getHarnessProfile(providerHint);
     if (profile) {
