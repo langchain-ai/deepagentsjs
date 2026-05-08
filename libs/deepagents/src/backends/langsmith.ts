@@ -51,8 +51,13 @@ export interface LangSmithSandboxOptions {
 /** Options for the `LangSmithSandbox.create()` static factory. */
 export interface LangSmithSandboxCreateOptions extends Omit<
   CreateSandboxOptions,
-  "name" | "timeout" | "waitForReady"
+  "name" | "timeout" | "waitForReady" | "snapshotName"
 > {
+  /**
+   * Snapshot ID to boot from.
+   * Mutually exclusive with `templateName`.
+   */
+  snapshotId?: string;
   /**
    * Name of the LangSmith sandbox template to use.
    * Mutually exclusive with `snapshotId`.
@@ -271,6 +276,13 @@ export class LangSmithSandbox extends BaseSandbox {
       ...createSandboxOptions
     } = options;
 
+    if (snapshotId && templateName) {
+      throw new Error(
+        "snapshotId and templateName are mutually exclusive. " +
+          "Pass only one creation source.",
+      );
+    }
+
     if (!snapshotId && !templateName) {
       throw new Error(
         "Either snapshotId or templateName is required. " +
@@ -278,11 +290,16 @@ export class LangSmithSandbox extends BaseSandbox {
       );
     }
 
-    const client = new SandboxClient({ apiKey });
-    const sandbox = await client.createSandbox(templateName, {
+    const sandboxOptions: CreateSandboxOptions = {
       ...createSandboxOptions,
-      snapshotId,
-    });
+    };
+
+    if (templateName) {
+      sandboxOptions.snapshotName = templateName;
+    }
+
+    const client = new SandboxClient({ apiKey });
+    const sandbox = await client.createSandbox(snapshotId, sandboxOptions);
     return new LangSmithSandbox({ sandbox, defaultTimeout });
   }
 }

@@ -10,6 +10,10 @@ let mockStop: ReturnType<typeof vi.fn>;
 let mockCaptureSnapshot: ReturnType<typeof vi.fn>;
 let MockLangSmithResourceNotFoundError: new (message?: string) => Error;
 let MockLangSmithSandboxError: new (message?: string) => Error;
+const sandboxClientMocks = vi.hoisted(() => ({
+  createSandbox: vi.fn(),
+  configs: [] as unknown[],
+}));
 
 vi.mock("langsmith/experimental/sandbox", () => {
   class LangSmithSandboxError extends Error {
@@ -30,7 +34,15 @@ vi.mock("langsmith/experimental/sandbox", () => {
     LangSmithSandboxError,
     LangSmithResourceNotFoundError,
     Sandbox: class {},
-    SandboxClient: class {},
+    SandboxClient: class {
+      constructor(config?: unknown) {
+        sandboxClientMocks.configs.push(config);
+      }
+
+      createSandbox(...args: unknown[]) {
+        return sandboxClientMocks.createSandbox(...args);
+      }
+    },
   };
 });
 
@@ -84,6 +96,7 @@ function makeSandbox(options?: {
 describe("LangSmithSandbox", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sandboxClientMocks.configs.length = 0;
   });
 
   describe("id", () => {
@@ -171,6 +184,57 @@ describe("LangSmithSandbox", () => {
 
       expect(mockCaptureSnapshot).toHaveBeenCalledWith("my-snapshot", {
         timeout: 120,
+      });
+    });
+  });
+
+  describe("create()", () => {
+    it("throws when neither snapshotId nor templateName is provided", async () => {
+      await expect(LangSmithSandbox.create({})).rejects.toThrow(
+        "Either snapshotId or templateName is required",
+      );
+    });
+
+    it("throws when both snapshotId and templateName are provided", async () => {
+      await expect(
+        LangSmithSandbox.create({
+          snapshotId: "snap-123",
+          templateName: "deepagents",
+        }),
+      ).rejects.toThrow("snapshotId and templateName are mutually exclusive");
+    });
+
+    it("calls SandboxClient.createSandbox with snapshotId", async () => {
+      const sdkSandbox = makeMockSandbox("snapshot-sandbox");
+      sandboxClientMocks.createSandbox.mockResolvedValue(sdkSandbox);
+
+      const sandbox = await LangSmithSandbox.create({
+        snapshotId: "snap-123",
+        apiKey: "test-key",
+        defaultTimeout: 45,
+        idleTtlSeconds: 600,
+      });
+
+      expect(sandboxClientMocks.configs).toEqual([{ apiKey: "test-key" }]);
+      expect(sandboxClientMocks.createSandbox).toHaveBeenCalledWith(
+        "snap-123",
+        {
+          idleTtlSeconds: 600,
+        },
+      );
+      expect(sandbox.id).toBe("snapshot-sandbox");
+    });
+
+    it("maps templateName to snapshotName in createSandbox options", async () => {
+      const sdkSandbox = makeMockSandbox("template-sandbox");
+      sandboxClientMocks.createSandbox.mockResolvedValue(sdkSandbox);
+
+      await LangSmithSandbox.create({
+        templateName: "deepagents-template",
+      });
+
+      expect(sandboxClientMocks.createSandbox).toHaveBeenCalledWith(undefined, {
+        snapshotName: "deepagents-template",
       });
     });
   });
