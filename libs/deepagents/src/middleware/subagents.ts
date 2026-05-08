@@ -513,7 +513,7 @@ function getSubagents(options: {
       );
     }
 
-    agents["general-purpose"] = createAgent({
+    const generalPurposeSubagent = createAgent({
       model: defaultModel,
       systemPrompt: DEFAULT_SUBAGENT_PROMPT,
       tools: defaultTools as any,
@@ -521,6 +521,7 @@ function getSubagents(options: {
       name: "general-purpose",
     });
 
+    agents["general-purpose"] = generalPurposeSubagent;
     subagentDescriptions.push(
       `- general-purpose: ${DEFAULT_GENERAL_PURPOSE_DESCRIPTION}`,
     );
@@ -601,10 +602,7 @@ function createTaskTool(options: {
 
   return tool(
     async (
-      input: {
-        description: string;
-        subagent_type: string;
-      },
+      input: { description: string; subagent_type: string },
       config,
     ): Promise<Command | string> => {
       const { description, subagent_type } = input;

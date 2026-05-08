@@ -19,7 +19,11 @@ vi.mock("langchain", async (importOriginal) => {
   };
 });
 
-import { createSwarmTaskTool, VariantCache } from "./swarm-task.js";
+import {
+  createSwarmTaskTool,
+  VariantCache,
+  normalizeSchema,
+} from "./swarm-task.js";
 
 function makeMockModel(response: string = "model response") {
   return {
@@ -802,5 +806,124 @@ describe("VariantCache", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeSchema
+// ---------------------------------------------------------------------------
+
+describe("normalizeSchema", () => {
+  it("adds additionalProperties: false to a top-level object", () => {
+    const result = normalizeSchema({
+      type: "object",
+      properties: { x: { type: "string" } },
+      required: ["x"],
+    });
+    expect(result.additionalProperties).toBe(false);
+  });
+
+  it("preserves an existing additionalProperties: false", () => {
+    const result = normalizeSchema({
+      type: "object",
+      additionalProperties: false,
+      properties: {},
+    });
+    expect(result.additionalProperties).toBe(false);
+  });
+
+  it("recurses into nested object properties", () => {
+    const schema = {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        counts: {
+          type: "object",
+          properties: { a: { type: "number" } },
+          required: ["a"],
+        },
+      },
+      required: ["counts"],
+    };
+    const result = normalizeSchema(schema);
+    const counts = (result.properties as Record<string, unknown>)
+      .counts as Record<string, unknown>;
+    expect(counts.additionalProperties).toBe(false);
+  });
+
+  it("recurses into array items", () => {
+    const schema = {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    };
+    const result = normalizeSchema(schema);
+    const items = result.items as Record<string, unknown>;
+    expect(items.additionalProperties).toBe(false);
+  });
+
+  it("handles deeply nested objects", () => {
+    const schema = {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        results: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              counts: {
+                type: "object",
+                properties: { a: { type: "number" } },
+              },
+            },
+          },
+        },
+      },
+    };
+    const result = normalizeSchema(schema);
+    const items = (
+      (result.properties as Record<string, unknown>).results as Record<
+        string,
+        unknown
+      >
+    ).items as Record<string, unknown>;
+    const counts = (items.properties as Record<string, unknown>)
+      .counts as Record<string, unknown>;
+    expect(counts.additionalProperties).toBe(false);
+  });
+
+  it("passes through non-object/array types unchanged", () => {
+    const schema = { type: "string" };
+    expect(normalizeSchema(schema)).toEqual({ type: "string" });
+  });
+
+  it("preserves minItems on array types", () => {
+    expect(
+      normalizeSchema({ type: "array", minItems: 6, items: { type: "string" } })
+        .minItems,
+    ).toBe(6);
+    expect(
+      normalizeSchema({ type: "array", minItems: 0, items: { type: "string" } })
+        .minItems,
+    ).toBe(0);
+    expect(
+      normalizeSchema({ type: "array", minItems: 1, items: { type: "string" } })
+        .minItems,
+    ).toBe(1);
+  });
+
+  it("preserves maxItems on array types", () => {
+    expect(
+      normalizeSchema({
+        type: "array",
+        maxItems: 10,
+        items: { type: "string" },
+      }).maxItems,
+    ).toBe(10);
   });
 });
