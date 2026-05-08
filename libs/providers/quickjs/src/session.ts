@@ -43,8 +43,6 @@ export const DEFAULT_MAX_RESULTS_CHARS = 4000;
 
 const LINE_NUMBER_RE = /^\s*\d+(?:\.\d+)?\t/;
 
-// Singleton WASM module — all sessions share one module instance.
-// Testing whether per-session modules are still necessary.
 const variantImport = import("@jitl/quickjs-ng-wasmfile-release-asyncify");
 
 /**
@@ -411,6 +409,29 @@ export class ReplSession {
   }
 
   /**
+   * Pre-load all skills referenced in source code into the in-memory
+   * cache. Must be called before `evalCodeAsync` so the module loader
+   * can resolve synchronously — `executePendingJobs` is a sync FFI
+   * call that cannot handle asyncify suspensions.
+   */
+  async preloadReferencedSkills(code: string): Promise<void> {
+    const refs = scanSkillReferences(code);
+    for (const name of refs) {
+      if (this.skillsLoaded.has(name) || this.skillsFailed.has(name)) {
+        continue;
+      }
+      try {
+        await this.ensureSkillLoaded(name);
+      } catch (err) {
+        // Cache the error so resolveSpecifier surfaces the original message
+        if (!this.skillsFailed.has(name)) {
+          this.skillsFailed.set(name, err as Error);
+        }
+      }
+    }
+  }
+
+  /**
    * Resolve a module specifier to source code. Strictly synchronous —
    * only reads from the in-memory skill cache populated by
    * `preloadReferencedSkills`. Returns error source (not a thrown
@@ -459,29 +480,6 @@ export class ReplSession {
     }
 
     return source;
-  }
-
-  /**
-   * Pre-load all skills referenced in source code into the in-memory
-   * cache. Must be called before `evalCodeAsync` so the module loader
-   * can resolve synchronously — `executePendingJobs` is a sync FFI
-   * call that cannot handle asyncify suspensions.
-   */
-  async preloadReferencedSkills(code: string): Promise<void> {
-    const refs = scanSkillReferences(code);
-    for (const name of refs) {
-      if (this.skillsLoaded.has(name) || this.skillsFailed.has(name)) {
-        continue;
-      }
-      try {
-        await this.ensureSkillLoaded(name);
-      } catch (err) {
-        // Cache the error so resolveSpecifier surfaces the original message
-        if (!this.skillsFailed.has(name)) {
-          this.skillsFailed.set(name, err as Error);
-        }
-      }
-    }
   }
 
   /**
