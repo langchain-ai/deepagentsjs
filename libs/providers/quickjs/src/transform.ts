@@ -142,20 +142,6 @@ export function transformForEval(code: string): string {
   return s.toString();
 }
 
-/**
- * Return true if an AST node is TypeScript-only and has no runtime effect.
- *
- * Used to decide which top-level statements to drop entirely when
- * stripping TypeScript syntax before evaluation in QuickJS.
- *
- * Covers:
- * - All `TS*` node types (interfaces, type aliases, enums, ambient modules,
- *   `declare function`, and any other TypeScript-specific AST nodes emitted
- *   by acorn-typescript)
- * - `declare const/let/var` — ambient variable declarations
- * - `import type { ... }` — type-only imports (`importKind === "type"`)
- * - `export type { ... }` — type-only re-exports (`exportKind === "type"`)
- */
 function isTSOnlyNode(node: AcornNode): boolean {
   const t = node.type as string;
   if (
@@ -226,23 +212,6 @@ function extractCleanInit(s: MagicString, d: AcornVariableDeclarator): string {
   return extractCleanSource(s, d.init as AcornNode);
 }
 
-/**
- * Collect all bound variable names from a destructuring pattern.
- *
- * Recursively walks `Identifier`, `ObjectPattern`, `ArrayPattern`,
- * `RestElement`, and `AssignmentPattern` nodes so that every name
- * introduced by a declaration — however deeply nested — is returned.
- *
- * Examples:
- * - `x` → `["x"]`
- * - `{ a, b }` → `["a", "b"]`
- * - `[x, , y]` → `["x", "y"]`
- * - `{ a: { b } }` → `["b"]`
- * - `...rest` → `["rest"]`
- *
- * Used by `hoistDeclaration` to generate the corresponding
- * `globalThis.<name> = <init>` assignments.
- */
 function extractBindingNames(pattern: any): string[] {
   const names: string[] = [];
   if (pattern.type === "Identifier") {
@@ -267,14 +236,6 @@ function extractBindingNames(pattern: any): string[] {
   return names;
 }
 
-/**
- * Strip all TypeScript type annotations from an AST node and its descendants.
- *
- * Walks the full subtree of `node` and delegates each visited node to
- * `stripTypeAnnotationFromNode`. Used when an entire statement needs its
- * type syntax removed but should otherwise be kept in the output (e.g.
- * a function declaration that is not TS-only).
- */
 function stripTypeAnnotations(s: MagicString, node: AcornNode): void {
   walk(node as any, {
     enter(n: any) {
@@ -283,30 +244,6 @@ function stripTypeAnnotations(s: MagicString, node: AcornNode): void {
   });
 }
 
-/**
- * Remove TypeScript type syntax from a single AST node in-place.
- *
- * Operates on a `MagicString` so only the affected character ranges are
- * removed; surrounding source is untouched. An `offset` can be supplied
- * when the `MagicString` covers a sub-slice of the original source (used
- * by `extractCleanSource`).
- *
- * Handles:
- * - **Optional parameter with type** (`b?: string`) — removes `?: string`
- *   as a single span (the `?` is one character before the `:`)
- * - **Optional parameter without type** (`b?`) — removes just the `?`
- * - **Type annotations** (`: string`, `: number`, etc.)
- * - **Return type annotations** (`: void` on functions)
- * - **Type parameters / generics** (`<T>` on declarations and calls)
- * - **Type arguments on call expressions** (`Array.from<number>(...)`)
- * - **`as` casts** (`expr as Type` → `expr`)
- * - **Non-null assertions** (`expr!` → `expr`)
- * - **`satisfies` expressions** (`expr satisfies Type` → `expr`)
- *
- * @param s - MagicString wrapping the source (or a sub-slice of it).
- * @param n - AST node to inspect and strip.
- * @param offset - Character offset of `s` within the original source.
- */
 function stripTypeAnnotationFromNode(s: MagicString, n: any, offset = 0): void {
   // Optional parameter marker: `b?: string` → `b`
   // The `?` sits between the identifier and the type annotation and must
