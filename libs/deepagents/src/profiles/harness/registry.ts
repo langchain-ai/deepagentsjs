@@ -3,6 +3,7 @@ import type { HarnessProfile, HarnessProfileOptions } from "./types.js";
 import { isHarnessProfile } from "./types.js";
 import { createHarnessProfile, EMPTY_HARNESS_PROFILE } from "./create.js";
 import { mergeProfiles } from "./merge.js";
+import { loadBuiltinProfiles } from "./builtins/index.js";
 
 const registry = new Map<string, HarnessProfile>();
 
@@ -27,8 +28,7 @@ let builtinsLoaded = false;
 export function ensureBuiltinsLoaded(): void {
   if (builtinsLoaded) return;
   builtinsLoaded = true;
-  // Placeholder: uncomment when builtins/ is implemented in Phase 3.
-  // loadBuiltinProfiles();
+  loadBuiltinProfiles();
 }
 
 /**
