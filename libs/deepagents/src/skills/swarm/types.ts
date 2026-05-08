@@ -117,6 +117,18 @@ export interface RunOptions {
    * Defaults to MAX_SUBAGENTS (10) when omitted.
    */
   concurrency?: number;
+
+  /**
+   * Dispatch mode for all tasks in this run.
+   *
+   * - `"agent"` — Full agentic loop with tools and middleware. Use for tasks
+   *   that need file access, tool calls, or multi-step reasoning.
+   * - `"invoke"` — Direct model call with structured output. No tools, no
+   *   iteration. Use for classification, extraction, and labeling tasks.
+   *
+   * @default "agent"
+   */
+  mode?: "agent" | "invoke";
 }
 
 /**
@@ -282,6 +294,16 @@ export interface TaskSpec {
    * Optional JSON Schema to constrain the subagent's response.
    */
   responseSchema?: Record<string, unknown>;
+
+  /**
+   * Dispatch mode for this task.
+   *
+   * - `"agent"` — Full agentic loop with tools and middleware.
+   * - `"invoke"` — Direct model call, no tools or iteration.
+   *
+   * @default "agent"
+   */
+  mode?: "agent" | "invoke";
 }
 
 /**

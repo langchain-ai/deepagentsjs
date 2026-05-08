@@ -7,12 +7,12 @@ import {
 } from "./executor.js";
 
 // ---------------------------------------------------------------------------
-// globalThis.tools stub for PTC task tool
+// globalThis.tools stub for PTC swarmTask tool
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
   (globalThis as Record<string, unknown>).tools = {
-    task: vi.fn(
+    swarmTask: vi.fn(
       async ({ description }: { description: string }) =>
         `Result for: ${description}`,
     ),
@@ -24,7 +24,7 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("callTask", () => {
-  it("calls tools.task and returns the result", async () => {
+  it("calls tools.swarmTask and returns the result", async () => {
     const result = await callTask({
       description: "do something",
       subagent_type: "general-purpose",
@@ -44,18 +44,50 @@ describe("callTask", () => {
       string,
       ReturnType<typeof vi.fn>
     >;
-    expect(taskFn.task).toHaveBeenCalledWith({
+    expect(taskFn.swarmTask).toHaveBeenCalledWith({
       description: "structured",
       subagent_type: "analyst",
       response_schema: schema,
     });
   });
 
-  it("throws when task tool is not configured", async () => {
+  it("throws when swarmTask tool is not configured", async () => {
     (globalThis as Record<string, unknown>).tools = {};
     await expect(
       callTask({ description: "x", subagent_type: "general-purpose" }),
-    ).rejects.toThrow("task");
+    ).rejects.toThrow("swarm_task");
+  });
+
+  it("forwards mode when provided", async () => {
+    const taskFn = (globalThis as Record<string, unknown>).tools as Record<
+      string,
+      ReturnType<typeof vi.fn>
+    >;
+    await callTask({
+      description: "classify",
+      subagent_type: "screener",
+      mode: "invoke",
+    });
+    expect(taskFn.swarmTask).toHaveBeenCalledWith({
+      description: "classify",
+      subagent_type: "screener",
+      mode: "invoke",
+    });
+  });
+
+  it("omits mode from the call when not provided", async () => {
+    const taskFn = (globalThis as Record<string, unknown>).tools as Record<
+      string,
+      ReturnType<typeof vi.fn>
+    >;
+    await callTask({
+      description: "work",
+      subagent_type: "general-purpose",
+    });
+    expect(taskFn.swarmTask).toHaveBeenCalledWith({
+      description: "work",
+      subagent_type: "general-purpose",
+    });
   });
 });
 
@@ -90,7 +122,7 @@ describe("dispatch", () => {
 
   it("captures errors as failed results", async () => {
     (globalThis as Record<string, unknown>).tools = {
-      task: vi.fn(async () => {
+      swarmTask: vi.fn(async () => {
         throw new Error("subagent timeout");
       }),
     };
@@ -105,7 +137,7 @@ describe("dispatch", () => {
 
   it("handles non-Error throws", async () => {
     (globalThis as Record<string, unknown>).tools = {
-      task: vi.fn(async () => {
+      swarmTask: vi.fn(async () => {
         throw "string error";
       }),
     };
@@ -123,7 +155,7 @@ describe("dispatch", () => {
     let currentConcurrent = 0;
 
     (globalThis as Record<string, unknown>).tools = {
-      task: vi.fn(async ({ description }: { description: string }) => {
+      swarmTask: vi.fn(async ({ description }: { description: string }) => {
         currentConcurrent++;
         if (currentConcurrent > maxConcurrent) {
           maxConcurrent = currentConcurrent;
@@ -145,7 +177,7 @@ describe("dispatch", () => {
 
   it("includes response_schema only when present", async () => {
     const taskFn = vi.fn(async (_args: Record<string, unknown>) => "ok");
-    (globalThis as Record<string, unknown>).tools = { task: taskFn };
+    (globalThis as Record<string, unknown>).tools = { swarmTask: taskFn };
 
     await dispatch(
       [{ id: "r1", prompt: "no schema", subagentType: "general-purpose" }],
@@ -168,6 +200,41 @@ describe("dispatch", () => {
     expect(taskFn.mock.calls[1][0].response_schema).toEqual({
       type: "object",
     });
+  });
+
+  it("forwards mode through dispatch to callTask", async () => {
+    const taskFn = vi.fn(async (_args: Record<string, unknown>) => "ok");
+    (globalThis as Record<string, unknown>).tools = { swarmTask: taskFn };
+
+    await dispatch(
+      [
+        {
+          id: "r1",
+          prompt: "classify",
+          subagentType: "screener",
+          mode: "invoke" as const,
+        },
+      ],
+      { concurrency: 1 },
+    );
+
+    expect(taskFn.mock.calls[0][0]).toEqual({
+      description: "classify",
+      subagent_type: "screener",
+      mode: "invoke",
+    });
+  });
+
+  it("omits mode when not set on TaskSpec", async () => {
+    const taskFn = vi.fn(async (_args: Record<string, unknown>) => "ok");
+    (globalThis as Record<string, unknown>).tools = { swarmTask: taskFn };
+
+    await dispatch(
+      [{ id: "r1", prompt: "work", subagentType: "general-purpose" }],
+      { concurrency: 1 },
+    );
+
+    expect(taskFn.mock.calls[0][0]).not.toHaveProperty("mode");
   });
 
   it("returns empty array for empty input", async () => {

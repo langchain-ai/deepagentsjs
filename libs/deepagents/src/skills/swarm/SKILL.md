@@ -5,7 +5,7 @@ description: >-
   subagents, aggregate results. One row = one unit of work.
 module: ./index.ts
 metadata:
-  required-ptc-tools: task read_file write_file edit_file glob
+  required-ptc-tools: swarm_task read_file write_file edit_file glob
 ---
 
 # Swarm
@@ -295,6 +295,7 @@ Dispatch work across rows. Returns `{ completed, failed, skipped, failures }`.
 | `subagentType` | `"general-purpose"` | Subagent to use |
 | `batchSize` | auto | Number or `(row, rowCount) => number`. Auto caps dispatches at 10; `1` = per-row; function = per-row sizing |
 | `concurrency` | `10` | Max concurrent subagent dispatches (clamped to 1–10) |
+| `mode` | `"agent"` | `"agent"` for full agentic loop, `"invoke"` for direct model call |
 
 ### `rows(handle, options?)`
 

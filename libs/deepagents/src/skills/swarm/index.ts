@@ -58,6 +58,7 @@ function buildDispatchUnits(
     context?: string;
     subagentType: string;
     responseSchema: Record<string, unknown>;
+    mode?: "agent" | "invoke";
   },
 ): { units: DispatchUnit[]; errors: TaskResult[] } {
   const units: DispatchUnit[] = [];
@@ -82,6 +83,7 @@ function buildDispatchUnits(
             prompt,
             subagentType: opts.subagentType,
             responseSchema: opts.responseSchema,
+            mode: opts.mode,
           },
           rowIds: [rowId],
         });
@@ -101,6 +103,7 @@ function buildDispatchUnits(
           prompt: buildBatchPrompt(opts.instruction, batch, opts.context),
           subagentType: opts.subagentType,
           responseSchema: wrapSchema(opts.responseSchema, batch.length),
+          mode: opts.mode,
         },
         rowIds,
       });
@@ -239,8 +242,8 @@ export async function create(source: CreateSource): Promise<SwarmHandle> {
  *
  * Loads the table, partitions rows by filter, interpolates the
  * instruction template per-row (or builds batch prompts), dispatches
- * to subagents via `tools.task()`, merges results into rows, and
- * persists the updated table.
+ * to subagents via `tools.swarm_task()`, merges results into rows,
+ * and persists the updated table.
  *
  * @param handle - A table handle or object with an `id` field.
  * @param options - Dispatch configuration (instruction, filter, schema, etc.).
@@ -267,6 +270,7 @@ export async function run(
     responseSchema,
     batchSize,
     concurrency,
+    mode,
   } = options;
 
   const effectiveConcurrency = Math.max(
@@ -311,6 +315,7 @@ export async function run(
     context,
     subagentType,
     responseSchema,
+    mode,
   });
 
   // -----------------------------------------------------------------------

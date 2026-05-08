@@ -1,16 +1,21 @@
 import type { FailureGroup, TaskResult, TaskSpec } from "./types.js";
 
 /**
- * PTC tool declaration for subagent dispatch.
+ * PTC tool declaration for swarm subagent dispatch.
  *
  * At runtime in QuickJS, `tools` is an ambient global injected by the
- * PTC layer. For vitest, set up `globalThis.tools` in `beforeEach`.
+ * PTC layer. The swarm skill uses `swarm_task` (a PTC-only tool) rather
+ * than the general `task` tool, so that response_schema and mode support
+ * are decoupled from the main agent's task tool.
+ *
+ * For vitest, set up `globalThis.tools` in `beforeEach`.
  */
 declare const tools: {
-  task?: (args: {
+  swarmTask?: (args: {
     description: string;
     subagent_type: string;
     response_schema?: Record<string, unknown>;
+    mode?: "agent" | "invoke";
   }) => Promise<string>;
 };
 
@@ -20,22 +25,25 @@ declare const tools: {
 const RESERVED_COLUMNS = new Set(["id", "file"]);
 
 /**
- * Call the PTC `task` tool.
+ * Call the PTC `swarm_task` tool.
  *
  * @internal Exported for testing — not part of the public API.
- * @param args - Task arguments forwarded to the subagent middleware.
+ * @param args - Task arguments forwarded to the swarm task tool.
  * @returns The subagent's response as a string.
- * @throws Error if the `task` PTC tool is not configured.
+ * @throws Error if the `swarm_task` PTC tool is not configured.
  */
 export async function callTask(args: {
   description: string;
   subagent_type: string;
   response_schema?: Record<string, unknown>;
+  mode?: "agent" | "invoke";
 }): Promise<string> {
-  if (typeof tools.task !== "function") {
-    throw new Error("Swarm requires a 'task' tool in the PTC configuration.");
+  if (typeof tools.swarmTask !== "function") {
+    throw new Error(
+      "Swarm requires a 'swarm_task' tool in the PTC configuration.",
+    );
   }
-  return tools.task(args);
+  return tools.swarmTask(args);
 }
 
 /**
@@ -67,6 +75,7 @@ export async function dispatch(
           ...(spec.responseSchema != null && {
             response_schema: spec.responseSchema,
           }),
+          ...(spec.mode != null && { mode: spec.mode }),
         });
         results[i] = {
           id: spec.id,
