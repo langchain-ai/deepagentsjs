@@ -354,8 +354,13 @@ describe("invoke mode", () => {
     expect(langchain.createAgent).toHaveBeenCalledTimes(afterConstruction);
   });
 
-  it("passes normalized response_schema as response_format in invoke options", async () => {
-    const model = makeMockModel();
+  it("uses withStructuredOutput when response_schema is provided", async () => {
+    const structuredResult = { label: "positive" };
+    const boundModel = { invoke: vi.fn(async () => structuredResult) };
+    const model: any = {
+      invoke: vi.fn(),
+      withStructuredOutput: vi.fn(() => boundModel),
+    };
 
     const swarmTask = createSwarmTaskTool({
       subagents: [
@@ -364,7 +369,7 @@ describe("invoke mode", () => {
       defaultModel: makeMockModel(),
     });
 
-    await swarmTask.invoke({
+    const result = await swarmTask.invoke({
       description: "work",
       subagent_type: "worker",
       mode: "invoke",
@@ -374,12 +379,37 @@ describe("invoke mode", () => {
       },
     });
 
-    const invokeOptions = model.invoke.mock.calls[0][1];
-    expect(invokeOptions.response_format).toEqual({
+    expect(model.withStructuredOutput).toHaveBeenCalledWith({
       type: "object",
       additionalProperties: false,
       properties: { label: { type: "string" } },
     });
+    expect(boundModel.invoke).toHaveBeenCalledOnce();
+    expect(model.invoke).not.toHaveBeenCalled();
+    expect(result).toBe(JSON.stringify(structuredResult));
+  });
+
+  it("throws when model does not support withStructuredOutput", async () => {
+    const model = makeMockModel();
+
+    const swarmTask = createSwarmTaskTool({
+      subagents: [
+        { name: "worker", description: "W", systemPrompt: "W.", model },
+      ],
+      defaultModel: makeMockModel(),
+    });
+
+    await expect(
+      swarmTask.invoke({
+        description: "work",
+        subagent_type: "worker",
+        mode: "invoke",
+        response_schema: {
+          type: "object",
+          properties: { label: { type: "string" } },
+        },
+      }),
+    ).rejects.toThrow("withStructuredOutput");
   });
 
   it("returns string content from model response", async () => {
@@ -482,8 +512,8 @@ describe("invoke mode", () => {
     });
 
     expect(result).toBe("plain response");
-    const invokeOptions = model.invoke.mock.calls[0][1];
-    expect(invokeOptions).toEqual({});
+    expect(model.invoke).toHaveBeenCalledOnce();
+    expect(model.invoke.mock.calls[0]).toHaveLength(1);
   });
 });
 

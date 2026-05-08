@@ -261,8 +261,6 @@ async function invokeModel(
     );
   }
 
-  const invokeOptions: Record<string, unknown> = {};
-
   if (responseSchema) {
     const normalized = normalizeSchema(responseSchema);
     if (normalized.type !== "object") {
@@ -270,10 +268,23 @@ async function invokeModel(
         `response_schema must have type: "object", got: ${JSON.stringify(normalized.type)}`,
       );
     }
-    invokeOptions.response_format = normalized;
+
+    if (
+      typeof (model as Record<string, unknown>).withStructuredOutput ===
+      "function"
+    ) {
+      const boundModel = (model as any).withStructuredOutput(normalized);
+      const result = await boundModel.invoke(messages);
+      return JSON.stringify(result);
+    }
+
+    throw new Error(
+      `invoke mode with response_schema requires a model that supports ` +
+        `withStructuredOutput(). Subagent "${spec.name}" does not.`,
+    );
   }
 
-  const result = await model.invoke(messages, invokeOptions);
+  const result = await model.invoke(messages);
 
   if (typeof result === "string") {
     return result;
