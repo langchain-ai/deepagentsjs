@@ -329,9 +329,6 @@ describe("invoke mode", () => {
   });
 
   it("does not call createAgent in invoke mode", async () => {
-    const constructionCalls = vi.mocked(langchain.createAgent).mock.calls
-      .length;
-
     const swarmTask = createSwarmTaskTool({
       subagents: [
         {
