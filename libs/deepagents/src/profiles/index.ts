@@ -12,4 +12,9 @@ export {
   generalPurposeSubagentConfigSchema,
   EMPTY_HARNESS_PROFILE,
   REQUIRED_MIDDLEWARE_NAMES,
+  registerHarnessProfile,
+  getHarnessProfile,
+  resolveHarnessProfile,
+  mergeProfiles,
+  applyProfilePrompt,
 } from "./harness/index.js";

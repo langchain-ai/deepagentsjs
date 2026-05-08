@@ -16,3 +16,17 @@ export {
   parseHarnessProfileConfig,
   serializeProfile,
 } from "./serialization.js";
+
+export { mergeProfiles } from "./merge.js";
+
+export {
+  registerHarnessProfile,
+  getHarnessProfile,
+  resolveHarnessProfile,
+  applyProfilePrompt,
+  registerHarnessProfileImpl,
+  ensureBuiltinsLoaded,
+  snapshotBuiltinKeys,
+  hasUserRegisteredProfiles,
+  _resetRegistryForTesting,
+} from "./registry.js";
