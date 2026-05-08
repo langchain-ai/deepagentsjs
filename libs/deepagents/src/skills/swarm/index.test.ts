@@ -41,7 +41,7 @@ function setupTools() {
         return "ok";
       },
     ),
-    task: vi.fn(async ({ description }: { description: string }) =>
+    swarmTask: vi.fn(async ({ description }: { description: string }) =>
       JSON.stringify({ result: `Result for: ${description}` }),
     ),
   };
@@ -79,7 +79,7 @@ describe("run (single dispatch)", () => {
   it("dispatches all rows and merges results", async () => {
     (
       (globalThis as Record<string, unknown>).tools as Record<string, unknown>
-    ).task = vi.fn(async ({ description }: { description: string }) =>
+    ).swarmTask = vi.fn(async ({ description }: { description: string }) =>
       JSON.stringify({ review: `Result for: ${description}` }),
     );
 
@@ -114,7 +114,7 @@ describe("run (single dispatch)", () => {
     );
     (
       (globalThis as Record<string, unknown>).tools as Record<string, unknown>
-    ).task = taskFn;
+    ).swarmTask = taskFn;
 
     const handle = await create({ tasks: [{ id: "r1", file: "a.ts" }] });
     await run(handle, {
@@ -152,7 +152,7 @@ describe("run (single dispatch)", () => {
   it("counts task failures", async () => {
     (
       (globalThis as Record<string, unknown>).tools as Record<string, unknown>
-    ).task = vi.fn(async () => {
+    ).swarmTask = vi.fn(async () => {
       throw new Error("subagent timeout");
     });
 
@@ -231,7 +231,7 @@ describe("run (filtering)", () => {
     let callCount = 0;
     (
       (globalThis as Record<string, unknown>).tools as Record<string, unknown>
-    ).task = vi.fn(async () => {
+    ).swarmTask = vi.fn(async () => {
       callCount++;
       if (callCount <= 1) throw new Error("transient");
       return JSON.stringify({ out: "ok" });
@@ -265,7 +265,7 @@ describe("run (structured output)", () => {
   it("parses JSON and spreads properties onto rows", async () => {
     (
       (globalThis as Record<string, unknown>).tools as Record<string, unknown>
-    ).task = vi.fn(async () =>
+    ).swarmTask = vi.fn(async () =>
       JSON.stringify({ sentiment: "positive", confidence: 0.9 }),
     );
 
@@ -294,7 +294,7 @@ describe("run (structured output)", () => {
   it("counts JSON parse failures as failed", async () => {
     (
       (globalThis as Record<string, unknown>).tools as Record<string, unknown>
-    ).task = vi.fn(async () => "not valid json");
+    ).swarmTask = vi.fn(async () => "not valid json");
 
     const handle = await create({ tasks: [{ id: "r1", text: "hi" }] });
     const result = await run(handle, {
@@ -315,7 +315,7 @@ describe("run (batched dispatch)", () => {
   it("uses batch path when batchSize >= 2", async () => {
     (
       (globalThis as Record<string, unknown>).tools as Record<string, unknown>
-    ).task = vi.fn(async () =>
+    ).swarmTask = vi.fn(async () =>
       JSON.stringify({
         results: [
           { id: "r1", summary: "done-1" },
@@ -350,7 +350,7 @@ describe("run (batched dispatch)", () => {
   it("marks rows missing from batch response as failed", async () => {
     (
       (globalThis as Record<string, unknown>).tools as Record<string, unknown>
-    ).task = vi.fn(async () =>
+    ).swarmTask = vi.fn(async () =>
       JSON.stringify({
         results: [{ id: "r1", summary: "ok" }],
       }),
@@ -400,7 +400,7 @@ describe("run (batch function)", () => {
     });
     (
       (globalThis as Record<string, unknown>).tools as Record<string, unknown>
-    ).task = taskFn;
+    ).swarmTask = taskFn;
 
     const handle = await create({
       tasks: [
@@ -437,7 +437,7 @@ describe("run (batch function)", () => {
     const evaluatedIds: string[] = [];
     (
       (globalThis as Record<string, unknown>).tools as Record<string, unknown>
-    ).task = vi.fn(async () => JSON.stringify({ out: "ok" }));
+    ).swarmTask = vi.fn(async () => JSON.stringify({ out: "ok" }));
 
     const handle = await create({
       tasks: [
@@ -470,7 +470,7 @@ describe("run (batch function)", () => {
   it("batch function reads row data to decide batch size", async () => {
     (
       (globalThis as Record<string, unknown>).tools as Record<string, unknown>
-    ).task = vi.fn(async ({ description }: { description: string }) => {
+    ).swarmTask = vi.fn(async ({ description }: { description: string }) => {
       if (description.includes("# Items")) {
         return JSON.stringify({
           results: [
@@ -510,7 +510,7 @@ describe("run (batch function)", () => {
   it("counts interpolation errors in mixed dispatch", async () => {
     (
       (globalThis as Record<string, unknown>).tools as Record<string, unknown>
-    ).task = vi.fn(async () => JSON.stringify({ out: "ok" }));
+    ).swarmTask = vi.fn(async () => JSON.stringify({ out: "ok" }));
 
     const handle = await create({
       tasks: [
@@ -535,6 +535,56 @@ describe("run (batch function)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// run — mode passthrough
+// ---------------------------------------------------------------------------
+
+describe("run (mode)", () => {
+  it("forwards mode: 'invoke' to each dispatched task", async () => {
+    const taskFn = vi.fn(async (_args: Record<string, unknown>) =>
+      JSON.stringify({ result: "ok" }),
+    );
+    (
+      (globalThis as Record<string, unknown>).tools as Record<string, unknown>
+    ).swarmTask = taskFn;
+
+    const handle = await create({
+      tasks: [
+        { id: "r1", text: "a" },
+        { id: "r2", text: "b" },
+      ],
+    });
+
+    await run(handle, {
+      instruction: "Classify {text}",
+      responseSchema: resultSchema,
+      mode: "invoke",
+    });
+
+    for (const call of taskFn.mock.calls) {
+      expect(call[0].mode).toBe("invoke");
+    }
+  });
+
+  it("does not include mode when not specified in RunOptions", async () => {
+    const taskFn = vi.fn(async (_args: Record<string, unknown>) =>
+      JSON.stringify({ result: "ok" }),
+    );
+    (
+      (globalThis as Record<string, unknown>).tools as Record<string, unknown>
+    ).swarmTask = taskFn;
+
+    const handle = await create({ tasks: [{ id: "r1", text: "a" }] });
+
+    await run(handle, {
+      instruction: "Process {text}",
+      responseSchema: resultSchema,
+    });
+
+    expect(taskFn.mock.calls[0][0]).not.toHaveProperty("mode");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // run — concurrency clamping
 // ---------------------------------------------------------------------------
 
@@ -555,7 +605,7 @@ describe("run (concurrency)", () => {
 
     (
       (globalThis as Record<string, unknown>).tools as Record<string, unknown>
-    ).task = vi.fn(async ({ description }: { description: string }) => {
+    ).swarmTask = vi.fn(async ({ description }: { description: string }) => {
       currentConcurrent++;
       if (currentConcurrent > maxConcurrent) {
         maxConcurrent = currentConcurrent;
