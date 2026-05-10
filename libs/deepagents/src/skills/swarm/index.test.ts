@@ -90,7 +90,7 @@ describe("run (single dispatch)", () => {
       ],
     });
 
-    const result = await run(handle, {
+    const result = await run(handle.id, {
       instruction: "Review {file}",
       responseSchema: {
         type: "object",
@@ -103,7 +103,7 @@ describe("run (single dispatch)", () => {
     expect(result.failed).toBe(0);
     expect(result.skipped).toBe(0);
 
-    const data = await rows(handle);
+    const data = await rows(handle.id);
     expect(data[0].review).toBe("Result for: Review a.ts");
     expect(data[1].review).toBe("Result for: Review b.ts");
   });
@@ -117,7 +117,7 @@ describe("run (single dispatch)", () => {
     ).swarmTask = taskFn;
 
     const handle = await create({ tasks: [{ id: "r1", file: "a.ts" }] });
-    await run(handle, {
+    await run(handle.id, {
       instruction: "Review {file}",
       context: "TypeScript project",
       responseSchema: resultSchema,
@@ -130,19 +130,19 @@ describe("run (single dispatch)", () => {
 
   it("merges responseSchema properties onto rows", async () => {
     const handle = await create({ tasks: [{ id: "r1", text: "hi" }] });
-    await run(handle, {
+    await run(handle.id, {
       instruction: "Process {text}",
       responseSchema: resultSchema,
     });
 
-    const data = await rows(handle);
+    const data = await rows(handle.id);
     expect(data[0].result).toBeDefined();
   });
 
   it("rejects unknown column references before dispatch", async () => {
     const handle = await create({ tasks: [{ id: "r1", text: "hi" }] });
     await expect(
-      run(handle, {
+      run(handle.id, {
         instruction: "Review {nonexistent}",
         responseSchema: resultSchema,
       }),
@@ -157,7 +157,7 @@ describe("run (single dispatch)", () => {
     });
 
     const handle = await create({ tasks: [{ id: "r1", text: "hi" }] });
-    const result = await run(handle, {
+    const result = await run(handle.id, {
       instruction: "Do {text}",
       responseSchema: resultSchema,
     });
@@ -169,7 +169,7 @@ describe("run (single dispatch)", () => {
 
   it("persists updated rows to backend", async () => {
     const handle = await create({ tasks: [{ id: "r1", text: "hi" }] });
-    await run(handle, {
+    await run(handle.id, {
       instruction: "Do {text}",
       responseSchema: resultSchema,
     });
@@ -195,7 +195,7 @@ describe("run (filtering)", () => {
       ],
     });
 
-    const result = await run(handle, {
+    const result = await run(handle.id, {
       instruction: "Process {id}",
       responseSchema: resultSchema,
       filter: { column: "status", equals: "pending" },
@@ -210,7 +210,7 @@ describe("run (filtering)", () => {
       tasks: [{ id: "r1", status: "done" }],
     });
 
-    const result = await run(handle, {
+    const result = await run(handle.id, {
       instruction: "Process {id}",
       responseSchema: resultSchema,
       filter: { column: "status", equals: "pending" },
@@ -244,9 +244,12 @@ describe("run (filtering)", () => {
       ],
     });
 
-    await run(handle, { instruction: "Do {text}", responseSchema: outSchema });
+    await run(handle.id, {
+      instruction: "Do {text}",
+      responseSchema: outSchema,
+    });
 
-    const retryResult = await run(handle, {
+    const retryResult = await run(handle.id, {
       instruction: "Do {text}",
       responseSchema: outSchema,
       filter: { column: "out", exists: false },
@@ -273,7 +276,7 @@ describe("run (structured output)", () => {
       tasks: [{ id: "r1", text: "great product" }],
     });
 
-    const result = await run(handle, {
+    const result = await run(handle.id, {
       instruction: "Classify {text}",
       responseSchema: {
         type: "object",
@@ -286,7 +289,7 @@ describe("run (structured output)", () => {
     });
 
     expect(result.completed).toBe(1);
-    const data = await rows(handle);
+    const data = await rows(handle.id);
     expect(data[0].sentiment).toBe("positive");
     expect(data[0].confidence).toBe(0.9);
   });
@@ -297,7 +300,7 @@ describe("run (structured output)", () => {
     ).swarmTask = vi.fn(async () => "not valid json");
 
     const handle = await create({ tasks: [{ id: "r1", text: "hi" }] });
-    const result = await run(handle, {
+    const result = await run(handle.id, {
       instruction: "Classify {text}",
       responseSchema: { type: "object" },
     });
@@ -331,7 +334,7 @@ describe("run (batched dispatch)", () => {
       ],
     });
 
-    const result = await run(handle, {
+    const result = await run(handle.id, {
       instruction: "Process {text}",
       responseSchema: {
         type: "object",
@@ -342,7 +345,7 @@ describe("run (batched dispatch)", () => {
     });
 
     expect(result.completed).toBe(2);
-    const data = await rows(handle);
+    const data = await rows(handle.id);
     expect(data[0].summary).toBe("done-1");
     expect(data[1].summary).toBe("done-2");
   });
@@ -363,7 +366,7 @@ describe("run (batched dispatch)", () => {
       ],
     });
 
-    const result = await run(handle, {
+    const result = await run(handle.id, {
       instruction: "Process {text}",
       responseSchema: {
         type: "object",
@@ -417,7 +420,7 @@ describe("run (batch function)", () => {
       required: ["summary"],
     };
 
-    const result = await run(handle, {
+    const result = await run(handle.id, {
       instruction: "Analyze row {id}",
       responseSchema: summarySchema,
       batchSize: (row) => ((row.token_count as number) > 1000 ? 1 : 10),
@@ -426,7 +429,7 @@ describe("run (batch function)", () => {
     expect(result.completed).toBe(4);
     expect(result.failed).toBe(0);
 
-    const data = await rows(handle);
+    const data = await rows(handle.id);
     const r4 = data.find((r) => r.id === "r4");
     expect(r4!.summary).toBe("single");
     const r1 = data.find((r) => r.id === "r1");
@@ -447,7 +450,7 @@ describe("run (batch function)", () => {
       ],
     });
 
-    const result = await run(handle, {
+    const result = await run(handle.id, {
       instruction: "Process {id}",
       responseSchema: {
         type: "object",
@@ -490,7 +493,7 @@ describe("run (batch function)", () => {
       ],
     });
 
-    const result = await run(handle, {
+    const result = await run(handle.id, {
       instruction: "Process {id}",
       responseSchema: {
         type: "object",
@@ -501,7 +504,7 @@ describe("run (batch function)", () => {
     });
 
     expect(result.completed).toBe(3);
-    const data = await rows(handle);
+    const data = await rows(handle.id);
     expect(data.find((r) => r.id === "r1")!.out).toBe("solo");
     expect(data.find((r) => r.id === "r2")!.out).toBe("batched");
     expect(data.find((r) => r.id === "r3")!.out).toBe("batched");
@@ -519,7 +522,7 @@ describe("run (batch function)", () => {
       ],
     });
 
-    const result = await run(handle, {
+    const result = await run(handle.id, {
       instruction: "Process {text}",
       responseSchema: {
         type: "object",
@@ -535,11 +538,11 @@ describe("run (batch function)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// run — mode passthrough
+// run — mode derived from subagentType
 // ---------------------------------------------------------------------------
 
 describe("run (mode)", () => {
-  it("forwards mode: 'invoke' to each dispatched task", async () => {
+  it("uses invoke mode when subagentType is omitted", async () => {
     const taskFn = vi.fn(async (_args: Record<string, unknown>) =>
       JSON.stringify({ result: "ok" }),
     );
@@ -554,10 +557,9 @@ describe("run (mode)", () => {
       ],
     });
 
-    await run(handle, {
+    await run(handle.id, {
       instruction: "Classify {text}",
       responseSchema: resultSchema,
-      mode: "invoke",
     });
 
     for (const call of taskFn.mock.calls) {
@@ -565,7 +567,7 @@ describe("run (mode)", () => {
     }
   });
 
-  it("does not include mode when not specified in RunOptions", async () => {
+  it("uses agent mode when subagentType is specified", async () => {
     const taskFn = vi.fn(async (_args: Record<string, unknown>) =>
       JSON.stringify({ result: "ok" }),
     );
@@ -575,12 +577,14 @@ describe("run (mode)", () => {
 
     const handle = await create({ tasks: [{ id: "r1", text: "a" }] });
 
-    await run(handle, {
+    await run(handle.id, {
       instruction: "Process {text}",
       responseSchema: resultSchema,
+      subagentType: "screener",
     });
 
-    expect(taskFn.mock.calls[0][0]).not.toHaveProperty("mode");
+    expect(taskFn.mock.calls[0][0].mode).toBe("agent");
+    expect(taskFn.mock.calls[0][0].subagent_type).toBe("screener");
   });
 });
 
@@ -591,7 +595,7 @@ describe("run (mode)", () => {
 describe("run (concurrency)", () => {
   it("clamps concurrency to minimum of 1", async () => {
     const handle = await create({ tasks: [{ id: "r1", text: "hi" }] });
-    const result = await run(handle, {
+    const result = await run(handle.id, {
       instruction: "Do {text}",
       responseSchema: resultSchema,
       concurrency: 0,
@@ -620,7 +624,7 @@ describe("run (concurrency)", () => {
       text: `item ${i}`,
     }));
     const handle = await create({ tasks });
-    await run(handle, {
+    await run(handle.id, {
       instruction: "Do {text}",
       responseSchema: resultSchema,
       concurrency: 50,
@@ -641,7 +645,7 @@ describe("rows", () => {
         { id: "r2", text: "b" },
       ],
     });
-    const data = await rows(handle);
+    const data = await rows(handle.id);
     expect(data).toHaveLength(2);
   });
 
@@ -652,7 +656,7 @@ describe("rows", () => {
         { id: "r2", status: "pending" },
       ],
     });
-    const data = await rows(handle, {
+    const data = await rows(handle.id, {
       filter: { column: "status", equals: "done" },
     });
     expect(data).toHaveLength(1);
@@ -663,7 +667,7 @@ describe("rows", () => {
     const handle = await create({
       tasks: [{ id: "r1", text: "hi", score: 5 }],
     });
-    const data = await rows(handle, { columns: ["id", "score"] });
+    const data = await rows(handle.id, { columns: ["id", "score"] });
     expect(data[0]).toEqual({ id: "r1", score: 5 });
     expect(data[0]).not.toHaveProperty("text");
   });
@@ -676,7 +680,7 @@ describe("rows", () => {
         { id: "r3", text: "c" },
       ],
     });
-    const data = await rows(handle, { limit: 2 });
+    const data = await rows(handle.id, { limit: 2 });
     expect(data).toHaveLength(2);
   });
 
@@ -689,7 +693,7 @@ describe("rows", () => {
         { id: "r4", status: "done", score: 9 },
       ],
     });
-    const data = await rows(handle, {
+    const data = await rows(handle.id, {
       filter: { column: "status", equals: "done" },
       columns: ["id", "score"],
       limit: 2,

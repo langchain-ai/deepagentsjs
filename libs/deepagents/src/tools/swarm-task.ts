@@ -1,15 +1,10 @@
 import { z } from "zod/v4";
-import {
-  createAgent,
-  tool,
-  SystemMessage,
-  type ReactAgent,
-  StructuredTool,
-} from "langchain";
+import { createAgent, tool, type ReactAgent, StructuredTool } from "langchain";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { HumanMessage } from "@langchain/core/messages";
+import { initChatModel } from "langchain/chat_models/universal";
 
 /**
  * Default time-to-live for cached schema-constrained agent variants.
@@ -77,7 +72,7 @@ export interface SwarmTaskToolOptions {
    * parameter. These subagents are private to the swarm tool — they do not
    * appear in the main agent's `task` tool.
    */
-  subagents: SwarmSubAgent[];
+  subagents?: SwarmSubAgent[];
 
   /**
    * Default model used for subagents that don't specify their own,
@@ -234,32 +229,21 @@ export function normalizeSchema(
 /**
  * Direct model invocation — single LLM call with optional structured output.
  *
- * Resolves the model from the agent spec, builds a minimal message array,
- * and calls `model.invoke()` directly. No tools, no agentic loop.
+ * No tools, no agentic loop.
  *
- * @param spec - Agent spec providing the model and system prompt.
+ * @param model - Language model instance.
  * @param description - The user-facing task description.
  * @param responseSchema - Optional JSON Schema to constrain the response.
  * @returns The model's response as a string.
  */
 async function invokeModel(
-  spec: AgentSpec,
+  model: LanguageModelLike | string,
   description: string,
   responseSchema: Record<string, unknown> | undefined,
 ): Promise<string> {
-  const messages = [
-    new SystemMessage({ content: spec.systemPrompt }),
-    new HumanMessage({ content: description }),
-  ];
-
-  const model = spec.model;
-
-  if (typeof model === "string") {
-    throw new Error(
-      "invoke mode requires a model instance, not a string identifier. " +
-        `Got "${model}" for subagent "${spec.name}".`,
-    );
-  }
+  const resolved =
+    typeof model === "string" ? await initChatModel(model) : model;
+  const messages = [new HumanMessage({ content: description })];
 
   if (responseSchema) {
     const normalized = normalizeSchema(responseSchema);
@@ -270,21 +254,20 @@ async function invokeModel(
     }
 
     if (
-      typeof (model as unknown as Record<string, unknown>)
+      typeof (resolved as unknown as Record<string, unknown>)
         .withStructuredOutput === "function"
     ) {
-      const boundModel = (model as any).withStructuredOutput(normalized);
+      const boundModel = (resolved as any).withStructuredOutput(normalized);
       const result = await boundModel.invoke(messages);
       return JSON.stringify(result);
     }
 
     throw new Error(
-      `invoke mode with response_schema requires a model that supports ` +
-        `withStructuredOutput(). Subagent "${spec.name}" does not.`,
+      "invoke mode with response_schema requires a model that supports withStructuredOutput().",
     );
   }
 
-  const result = await model.invoke(messages);
+  const result = await resolved.invoke(messages);
 
   if (typeof result === "string") {
     return result;
@@ -418,7 +401,7 @@ async function invokeAgent(
 export function createSwarmTaskTool(
   options: SwarmTaskToolOptions,
 ): StructuredToolInterface {
-  const { subagents, defaultModel } = options;
+  const { subagents = [], defaultModel } = options;
 
   const compiled = new Map<string, CompiledAgent>();
 
@@ -443,7 +426,7 @@ export function createSwarmTaskTool(
     async (
       input: {
         description: string;
-        subagent_type: string;
+        subagent_type?: string;
         response_schema?: Record<string, unknown>;
         mode?: SwarmTaskMode;
       },
@@ -456,16 +439,16 @@ export function createSwarmTaskTool(
         mode = "agent",
       } = input;
 
-      const entry = compiled.get(subagent_type);
+      if (mode === "invoke") {
+        return invokeModel(defaultModel, description, response_schema);
+      }
+
+      const entry = compiled.get(subagent_type!);
       if (!entry) {
         throw new Error(
           `Unknown swarm subagent type "${subagent_type}". ` +
             `Available: ${subagentNames.join(", ")}`,
         );
-      }
-
-      if (mode === "invoke") {
-        return invokeModel(entry.spec, description, response_schema);
       }
 
       return invokeAgent(entry, description, response_schema, variantCache);
@@ -481,8 +464,9 @@ export function createSwarmTaskTool(
           .describe("The task to execute with the selected subagent."),
         subagent_type: z
           .string()
+          .optional()
           .describe(
-            `Name of the swarm subagent to use. Available: ${subagentNames.join(", ")}`,
+            `Name of the swarm subagent to use. When set, runs a full agentic loop. Available: ${subagentNames.join(", ")}`,
           ),
         response_schema: z
           .record(z.string(), z.unknown())

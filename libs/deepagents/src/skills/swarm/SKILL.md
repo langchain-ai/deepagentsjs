@@ -77,7 +77,7 @@ console.log(`Parsed ${globalThis.records.length} records`);
 // eval 2: create and dispatch
 const { create, run } = await import("@/skills/swarm");
 const table = await create({ tasks: globalThis.records });
-const result = await run(table, {
+const result = await run(table.id, {
   instruction: "Classify {text}",
   responseSchema: {
     type: "object",
@@ -90,6 +90,31 @@ console.log(result);
 
 Passing `filePaths: ["/data.jsonl"]` would produce a table with **one row**
 pointing at the file — not one row per record inside it.
+
+## When to use `subagentType`
+
+Omit `subagentType` for classification, extraction, labeling, and any task
+where a single model call with structured output is sufficient. This is the
+default and is significantly cheaper and faster — each dispatch is a direct
+model call, no tools, no iteration.
+
+Set `subagentType` when the task requires tools, file access, or multi-step
+reasoning. Each dispatch runs a full agentic loop with the named subagent.
+
+```javascript
+// Direct model call — classification, no tools needed
+await run(table.id, {
+  instruction: "Classify {text}",
+  responseSchema: { type: "object", properties: { label: { type: "string" } }, required: ["label"] },
+});
+
+// Subagent — needs to read files and reason over multiple steps
+await run(table.id, {
+  subagentType: "reviewer",
+  instruction: "Review {file} for security issues.",
+  responseSchema: { type: "object", properties: { finding: { type: "string" } }, required: ["finding"] },
+});
+```
 
 ## Instruction + context
 
@@ -106,7 +131,8 @@ shared background: domain terms, classification rules, examples, etc.
 const { create, run } = await import("@/skills/swarm");
 
 const table = await create({ glob: "src/**/*.ts" });
-const r = await run(table, {
+const r = await run(table.id, {
+  subagentType: "reviewer",
   instruction: "Review {file} for security issues. List findings or write 'no issues'.",
   context: "TypeScript Express backend using Prisma ORM. Focus on injection, auth bypass, path traversal.",
   responseSchema: {
@@ -126,7 +152,7 @@ each row and constrain what subagents can return.
 
 ```javascript
 const { run } = await import("@/skills/swarm");
-await run(table, {
+await run(table.id, {
   instruction: "Classify: {text}",
   responseSchema: {
     type: "object",
@@ -158,7 +184,7 @@ const { create, run } = await import("@/skills/swarm");
 const table = await create({ tasks: items });
 
 // Complex items get individual attention; simple ones batch together
-await run(table, {
+await run(table.id, {
   instruction: "Analyze {text}",
   responseSchema: {
     type: "object",
@@ -177,7 +203,7 @@ After `run()`, use `rows()` and plain JS — no additional subagents needed.
 
 ```javascript
 const { rows } = await import("@/skills/swarm");
-const data = await rows(table, { columns: ["sentiment"] });
+const data = await rows(table.id, { columns: ["sentiment"] });
 const counts = {};
 data.forEach(r => { counts[r.sentiment] = (counts[r.sentiment] || 0) + 1 });
 console.log(counts);
@@ -191,7 +217,7 @@ console.log(counts);
 ```javascript
 const { create, run } = await import("@/skills/swarm");
 const table = await create({ tasks: interviews });
-await run(table, {
+await run(table.id, {
   instruction: "Classify sentiment of {text}",
   responseSchema: {
     type: "object",
@@ -199,7 +225,7 @@ await run(table, {
     required: ["sentiment"],
   },
 });
-await run(table, {
+await run(table.id, {
   filter: { column: "sentiment", equals: "negative" },
   instruction: "Summarize why {text} had negative sentiment.",
   responseSchema: {
@@ -224,12 +250,14 @@ const fixedSchema = {
   required: ["fixed"],
 };
 const table = await create({ glob: "src/**/*.ts" });
-await run(table, {
+await run(table.id, {
+  subagentType: "fixer",
   instruction: "Add missing JSDoc to all exported functions in {file}.",
   responseSchema: fixedSchema,
 });
 // retry any that failed
-await run(table, {
+await run(table.id, {
+  subagentType: "fixer",
   instruction: "Add missing JSDoc to all exported functions in {file}.",
   responseSchema: fixedSchema,
   filter: { column: "fixed", exists: false },
@@ -282,7 +310,7 @@ Create a table. Returns a handle `{ id, count, columns }`.
 | `{ filePaths: ["a.ts", "b.ts"] }` | Explicit file list. Columns: `id`, `file` |
 | `{ tasks: [{ id: "t1", text: "..." }] }` | Custom rows. Each must have `id` |
 
-### `run(handle, options)`
+### `run(tableId, options)`
 
 Dispatch work across rows. Returns `{ completed, failed, skipped, failures }`.
 
@@ -292,12 +320,11 @@ Dispatch work across rows. Returns `{ completed, failed, skipped, failures }`.
 | `responseSchema` | (required) | JSON Schema (`type: "object"`) — properties become row columns |
 | `context` | — | Prose prepended to every subagent prompt |
 | `filter` | — | Only dispatch matching rows |
-| `subagentType` | `"general-purpose"` | Subagent to use |
+| `subagentType` | — | Name of subagent to dispatch to. When set, runs a full agentic loop. When omitted, runs a direct model call |
 | `batchSize` | auto | Number or `(row, rowCount) => number`. Auto caps dispatches at 10; `1` = per-row; function = per-row sizing |
 | `concurrency` | `10` | Max concurrent subagent dispatches (clamped to 1–10) |
-| `mode` | `"agent"` | `"agent"` for full agentic loop, `"invoke"` for direct model call |
 
-### `rows(handle, options?)`
+### `rows(tableId, options?)`
 
 Retrieve rows. Use for inspection and JS-based aggregation.
 
