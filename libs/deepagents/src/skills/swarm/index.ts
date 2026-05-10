@@ -56,9 +56,9 @@ function buildDispatchUnits(
   opts: {
     instruction: string;
     context?: string;
-    subagentType: string;
+    subagentType?: string;
     responseSchema: Record<string, unknown>;
-    mode?: "agent" | "invoke";
+    mode: "agent" | "invoke";
   },
 ): { units: DispatchUnit[]; errors: TaskResult[] } {
   const units: DispatchUnit[] = [];
@@ -250,28 +250,20 @@ export async function create(source: CreateSource): Promise<SwarmHandle> {
  * @returns A summary with completion counts and deduplicated failure groups.
  */
 export async function run(
-  handle: SwarmHandle | { id: string },
+  tableId: string,
   options: RunOptions,
 ): Promise<RunResult> {
-  if (
-    options === undefined &&
-    "instruction" in (handle as Record<string, unknown>)
-  ) {
-    throw new Error(
-      "run() called with wrong signature. Use run(table, { instruction, ... }) not run({ table, instruction, ... })",
-    );
-  }
-  const allRows = await loadTable(handle.id);
+  const allRows = await loadTable(tableId);
   const {
     instruction,
     context,
     filter,
-    subagentType = "general-purpose",
+    subagentType,
     responseSchema,
     batchSize,
     concurrency,
-    mode,
   } = options;
+  const mode = subagentType != null ? "agent" : "invoke";
 
   const effectiveConcurrency = Math.max(
     1,
@@ -348,7 +340,7 @@ export async function run(
   // 5. Persist and return summary
   // -----------------------------------------------------------------------
 
-  await saveTable(handle.id, allRows);
+  await saveTable(tableId, allRows);
 
   return {
     completed,
@@ -371,10 +363,10 @@ export async function run(
  * @returns Array of row objects matching the criteria.
  */
 export async function rows(
-  handle: SwarmHandle | { id: string },
+  tableId: string,
   options?: RowsOptions,
 ): Promise<Record<string, unknown>[]> {
-  let result = await loadTable(handle.id);
+  let result = await loadTable(tableId);
 
   if (options?.filter) {
     const f = options.filter;

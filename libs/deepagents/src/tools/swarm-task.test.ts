@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  AIMessage,
-  HumanMessage,
-  SystemMessage,
-} from "@langchain/core/messages";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { RunnableLambda } from "@langchain/core/runnables";
 import * as langchain from "langchain";
 
@@ -298,34 +294,24 @@ describe("agent mode", () => {
 // ---------------------------------------------------------------------------
 
 describe("invoke mode", () => {
-  it("calls model.invoke directly with system and human messages", async () => {
+  it("calls defaultModel.invoke directly with a human message", async () => {
     const model = makeMockModel("classified: positive");
 
     const swarmTask = createSwarmTaskTool({
-      subagents: [
-        {
-          name: "classifier",
-          description: "C",
-          systemPrompt: "You classify.",
-          model,
-        },
-      ],
-      defaultModel: makeMockModel(),
+      subagents: [],
+      defaultModel: model,
     });
 
     await swarmTask.invoke({
       description: "classify this",
-      subagent_type: "classifier",
       mode: "invoke",
     });
 
     expect(model.invoke).toHaveBeenCalledOnce();
     const [messages] = model.invoke.mock.calls[0];
-    expect(messages).toHaveLength(2);
-    expect(messages[0]).toBeInstanceOf(SystemMessage);
-    expect(messages[0].content).toBe("You classify.");
-    expect(messages[1]).toBeInstanceOf(HumanMessage);
-    expect(messages[1].content).toBe("classify this");
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toBeInstanceOf(HumanMessage);
+    expect(messages[0].content).toBe("classify this");
   });
 
   it("does not call createAgent in invoke mode", async () => {
@@ -346,7 +332,6 @@ describe("invoke mode", () => {
 
     await swarmTask.invoke({
       description: "work",
-      subagent_type: "worker",
       mode: "invoke",
     });
 
@@ -363,15 +348,12 @@ describe("invoke mode", () => {
     };
 
     const swarmTask = createSwarmTaskTool({
-      subagents: [
-        { name: "worker", description: "W", systemPrompt: "W.", model },
-      ],
-      defaultModel: makeMockModel(),
+      subagents: [],
+      defaultModel: model,
     });
 
     const result = await swarmTask.invoke({
       description: "work",
-      subagent_type: "worker",
       mode: "invoke",
       response_schema: {
         type: "object",
@@ -393,16 +375,13 @@ describe("invoke mode", () => {
     const model = makeMockModel();
 
     const swarmTask = createSwarmTaskTool({
-      subagents: [
-        { name: "worker", description: "W", systemPrompt: "W.", model },
-      ],
-      defaultModel: makeMockModel(),
+      subagents: [],
+      defaultModel: model,
     });
 
     await expect(
       swarmTask.invoke({
         description: "work",
-        subagent_type: "worker",
         mode: "invoke",
         response_schema: {
           type: "object",
@@ -416,15 +395,12 @@ describe("invoke mode", () => {
     const model = makeMockModel("the answer");
 
     const swarmTask = createSwarmTaskTool({
-      subagents: [
-        { name: "worker", description: "W", systemPrompt: "W.", model },
-      ],
-      defaultModel: makeMockModel(),
+      subagents: [],
+      defaultModel: model,
     });
 
     const result = await swarmTask.invoke({
       description: "work",
-      subagent_type: "worker",
       mode: "invoke",
     });
     expect(result).toBe("the answer");
@@ -436,59 +412,26 @@ describe("invoke mode", () => {
     };
 
     const swarmTask = createSwarmTaskTool({
-      subagents: [
-        { name: "worker", description: "W", systemPrompt: "W.", model },
-      ],
-      defaultModel: makeMockModel(),
+      subagents: [],
+      defaultModel: model,
     });
 
     const result = await swarmTask.invoke({
       description: "work",
-      subagent_type: "worker",
       mode: "invoke",
     });
     expect(result).toBe("plain string response");
   });
 
-  it("throws when model is a string identifier", async () => {
-    const swarmTask = createSwarmTaskTool({
-      subagents: [
-        {
-          name: "worker",
-          description: "W",
-          systemPrompt: "W.",
-          model: "some-model-string",
-        },
-      ],
-      defaultModel: makeMockModel(),
-    });
-
-    await expect(
-      swarmTask.invoke({
-        description: "work",
-        subagent_type: "worker",
-        mode: "invoke",
-      }),
-    ).rejects.toThrow("invoke mode requires a model instance");
-  });
-
   it("validates response_schema must have type 'object'", async () => {
     const swarmTask = createSwarmTaskTool({
-      subagents: [
-        {
-          name: "worker",
-          description: "W",
-          systemPrompt: "W.",
-          model: makeMockModel(),
-        },
-      ],
+      subagents: [],
       defaultModel: makeMockModel(),
     });
 
     await expect(
       swarmTask.invoke({
         description: "work",
-        subagent_type: "worker",
         mode: "invoke",
         response_schema: { type: "array", items: { type: "string" } },
       }),
@@ -499,15 +442,12 @@ describe("invoke mode", () => {
     const model = makeMockModel("plain response");
 
     const swarmTask = createSwarmTaskTool({
-      subagents: [
-        { name: "worker", description: "W", systemPrompt: "W.", model },
-      ],
-      defaultModel: makeMockModel(),
+      subagents: [],
+      defaultModel: model,
     });
 
     const result = await swarmTask.invoke({
       description: "work",
-      subagent_type: "worker",
       mode: "invoke",
     });
 

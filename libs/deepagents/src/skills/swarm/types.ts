@@ -87,9 +87,9 @@ export interface RunOptions {
   filter?: SwarmFilter;
 
   /**
-   * Name of the subagent type to dispatch to.
-   *
-   * @default "general-purpose"
+   * Name of the subagent type to dispatch to. When set, each dispatch
+   * runs a full agentic loop with tools. When omitted, each dispatch
+   * is a direct model call with structured output (no tools, no iteration).
    */
   subagentType?: string;
 
@@ -117,18 +117,6 @@ export interface RunOptions {
    * Defaults to MAX_SUBAGENTS (10) when omitted.
    */
   concurrency?: number;
-
-  /**
-   * Dispatch mode for all tasks in this run.
-   *
-   * - `"agent"` — Full agentic loop with tools and middleware. Use for tasks
-   *   that need file access, tool calls, or multi-step reasoning.
-   * - `"invoke"` — Direct model call with structured output. No tools, no
-   *   iteration. Use for classification, extraction, and labeling tasks.
-   *
-   * @default "agent"
-   */
-  mode?: "agent" | "invoke";
 }
 
 /**
@@ -286,9 +274,10 @@ export interface TaskSpec {
   prompt: string;
 
   /**
-   * Name of the subagent type to dispatch to.
+   * Name of the subagent type to dispatch to. When omitted, the
+   * dispatch is a direct model call (invoke mode).
    */
-  subagentType: string;
+  subagentType?: string;
 
   /**
    * Optional JSON Schema to constrain the subagent's response.

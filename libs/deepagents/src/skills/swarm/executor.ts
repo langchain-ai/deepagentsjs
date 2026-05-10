@@ -13,7 +13,7 @@ import type { FailureGroup, TaskResult, TaskSpec } from "./types.js";
 declare const tools: {
   swarmTask?: (args: {
     description: string;
-    subagent_type: string;
+    subagent_type?: string;
     response_schema?: Record<string, unknown>;
     mode?: "agent" | "invoke";
   }) => Promise<string>;
@@ -34,7 +34,7 @@ const RESERVED_COLUMNS = new Set(["id", "file"]);
  */
 export async function callTask(args: {
   description: string;
-  subagent_type: string;
+  subagent_type?: string;
   response_schema?: Record<string, unknown>;
   mode?: "agent" | "invoke";
 }): Promise<string> {
@@ -71,7 +71,9 @@ export async function dispatch(
       try {
         const output = await callTask({
           description: spec.prompt,
-          subagent_type: spec.subagentType,
+          ...(spec.subagentType != null && {
+            subagent_type: spec.subagentType,
+          }),
           ...(spec.responseSchema != null && {
             response_schema: spec.responseSchema,
           }),
