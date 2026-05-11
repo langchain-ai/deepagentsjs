@@ -216,13 +216,18 @@ export interface HarnessProfile {
  * Type guard: is this a fully-constructed HarnessProfile (frozen with
  * Set fields) or raw options?
  *
- * Checks for the presence of `excludedTools` as a `Set` — options
- * use arrays, profiles use Sets.
+ * Options use arrays for `excludedTools`; profiles use `Set`. We
+ * distinguish by checking whether `excludedTools` has a `.has` method
+ * (present on Set, absent on Array).
  */
 export function isHarnessProfile(
   value: HarnessProfile | HarnessProfileOptions,
 ): value is HarnessProfile {
-  return value.excludedTools instanceof Set;
+  return (
+    value.excludedTools != null &&
+    typeof (value.excludedTools as Set<string>).has === "function" &&
+    !Array.isArray(value.excludedTools)
+  );
 }
 
 /**
