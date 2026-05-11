@@ -3,20 +3,20 @@ import { tool } from "langchain";
 import * as z from "zod";
 import { SystemMessage } from "@langchain/core/messages";
 import {
-  createREPLMiddleware,
+  createCodeInterpreterMiddleware,
   generatePtcPrompt,
   resolveToolList,
 } from "./middleware.js";
 import { ReplSession } from "./session.js";
 
-describe("createREPLMiddleware", () => {
+describe("createCodeInterpreterMiddleware", () => {
   beforeEach(() => {
     ReplSession.clearCache();
   });
 
   describe("tool registration", () => {
     it("should register eval tool", () => {
-      const middleware = createREPLMiddleware();
+      const middleware = createCodeInterpreterMiddleware();
       expect(middleware.tools).toBeDefined();
       const names = middleware.tools!.map((t: { name: string }) => t.name);
       expect(names).toContain("eval");
@@ -29,7 +29,7 @@ describe("createREPLMiddleware", () => {
     });
 
     it("should register exactly one tool", () => {
-      const middleware = createREPLMiddleware();
+      const middleware = createCodeInterpreterMiddleware();
       expect(middleware.tools!.length).toBe(1);
       expect(
         (middleware.tools![0] as { metadata?: Record<string, unknown> })
@@ -40,7 +40,7 @@ describe("createREPLMiddleware", () => {
 
   describe("wrapModelCall", () => {
     it("should add REPL system prompt with API Reference structure", async () => {
-      const middleware = createREPLMiddleware();
+      const middleware = createCodeInterpreterMiddleware();
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
 
       await middleware.wrapModelCall!(
@@ -65,7 +65,7 @@ describe("createREPLMiddleware", () => {
     });
 
     it("should use custom system prompt when provided", async () => {
-      const middleware = createREPLMiddleware({
+      const middleware = createCodeInterpreterMiddleware({
         systemPrompt: "Custom REPL prompt",
       });
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
@@ -160,7 +160,7 @@ describe("createREPLMiddleware", () => {
     });
 
     it("should include directly injected instances in PTC prompt", async () => {
-      const middleware = createREPLMiddleware({ ptc: [extraTool] });
+      const middleware = createCodeInterpreterMiddleware({ ptc: [extraTool] });
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
 
       await middleware.wrapModelCall!(
@@ -178,7 +178,7 @@ describe("createREPLMiddleware", () => {
     });
 
     it("should include both named agent tools and injected instances in mixed ptc array", async () => {
-      const middleware = createREPLMiddleware({
+      const middleware = createCodeInterpreterMiddleware({
         ptc: ["agent_tool", extraTool],
       });
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
@@ -250,7 +250,7 @@ describe("createREPLMiddleware", () => {
 
   describe("afterAgent call", () => {
     it("should dispose of the session for the current thread", async () => {
-      const middleware = createREPLMiddleware();
+      const middleware = createCodeInterpreterMiddleware();
 
       // Trigger session creation via eval
       const jsTool = middleware.tools!.find(
@@ -273,7 +273,7 @@ describe("createREPLMiddleware", () => {
     });
 
     it("should no-op for afterAgent on a thread with no session", async () => {
-      const middleware = createREPLMiddleware();
+      const middleware = createCodeInterpreterMiddleware();
       await expect(
         (middleware as any).afterAgent(
           {},
@@ -283,7 +283,7 @@ describe("createREPLMiddleware", () => {
     });
 
     it("should only remove the session for the finished thread, not others", async () => {
-      const middleware = createREPLMiddleware();
+      const middleware = createCodeInterpreterMiddleware();
       const jsTool = middleware.tools!.find(
         (t: any) => t.name === "eval",
       ) as any;

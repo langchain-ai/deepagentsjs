@@ -16,12 +16,12 @@
  * @packageDocumentation
  */
 
-export { createREPLMiddleware } from "./middleware.js";
+export { createCodeInterpreterMiddleware } from "./middleware.js";
 
 export { PTCCallBudgetExceededError } from "./errors.js";
 
 export type {
-  REPLMiddlewareOptions,
+  CodeInterpreterMiddlewareOptions,
   ReplSessionOptions,
   ReplResult,
 } from "./types.js";

@@ -1,5 +1,5 @@
 /**
- * REPL middleware for deepagents.
+ * Code Interpreter middleware for deepagents.
  *
  * Provides an `eval` tool that runs JavaScript in a WASM-sandboxed QuickJS
  * interpreter. Supports:
@@ -23,7 +23,7 @@ import {
   type BackendFactory,
   type SkillMetadata,
 } from "deepagents";
-import type { REPLMiddlewareOptions } from "./types.js";
+import type { CodeInterpreterMiddlewareOptions } from "./types.js";
 import {
   ReplSession,
   DEFAULT_EXECUTION_TIMEOUT,
@@ -173,9 +173,11 @@ async function prepareSkillsForEval(
 }
 
 /**
- * Create the REPL middleware.
+ * Create the Code Interpreter middleware.
  */
-export function createREPLMiddleware(options: REPLMiddlewareOptions = {}) {
+export function createCodeInterpreterMiddleware(
+  options: CodeInterpreterMiddlewareOptions = {},
+) {
   const {
     ptc,
     memoryLimitBytes = DEFAULT_MEMORY_LIMIT,
@@ -266,7 +268,7 @@ export function createREPLMiddleware(options: REPLMiddlewareOptions = {}) {
   );
 
   return createMiddleware({
-    name: "REPLMiddleware",
+    name: "CodeInterpreterMiddleware",
     tools: [evalTool],
     wrapModelCall: async (request, handler) => {
       const agentTools = (request.tools || []) as StructuredToolInterface[];

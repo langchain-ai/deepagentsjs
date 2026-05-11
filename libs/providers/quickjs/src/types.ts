@@ -7,9 +7,9 @@ import type {
 } from "deepagents";
 
 /**
- * Configuration options for the REPL middleware.
+ * Configuration options for the Code Interpreter middleware.
  */
-export interface REPLMiddlewareOptions {
+export interface CodeInterpreterMiddlewareOptions {
   /**
    * Enable programmatic tool calling from within the REPL.
    *

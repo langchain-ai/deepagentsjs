@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { createAgent } from "langchain";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
-import { createREPLMiddleware } from "./middleware.js";
+import { createCodeInterpreterMiddleware } from "./middleware.js";
 import { ReplSession } from "./session.js";
 
 import type * as _zodTypes from "@langchain/core/utils/types";
@@ -20,13 +20,13 @@ describe("REPL middleware integration", () => {
     "should persist REPL state across multiple eval calls within the same thread",
     { timeout: 90_000 },
     async () => {
-      const replMiddleware = createREPLMiddleware();
+      const codeInterpreterMiddleware = createCodeInterpreterMiddleware();
       const checkpointer = new MemorySaver();
       const threadId = `int-repl-persist-${Date.now()}`;
 
       const agent = createAgent({
         model: MODEL,
-        middleware: [replMiddleware],
+        middleware: [codeInterpreterMiddleware],
         checkpointer,
       });
 
@@ -58,13 +58,13 @@ describe("REPL middleware integration", () => {
     "should reference variables from prior cells instead of re-embedding data",
     { timeout: 90_000 },
     async () => {
-      const replMiddleware = createREPLMiddleware();
+      const codeInterpreterMiddleware = createCodeInterpreterMiddleware();
       const checkpointer = new MemorySaver();
       const threadId = `int-repl-reuse-${Date.now()}`;
 
       const agent = createAgent({
         model: MODEL,
-        middleware: [replMiddleware],
+        middleware: [codeInterpreterMiddleware],
         checkpointer,
       });
 
