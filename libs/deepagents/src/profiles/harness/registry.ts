@@ -5,16 +5,52 @@ import { createHarnessProfile, EMPTY_HARNESS_PROFILE } from "./create.js";
 import { mergeProfiles } from "./merge.js";
 import { loadBuiltinProfiles } from "./builtins/index.js";
 
-const registry = new Map<string, HarnessProfile>();
+/**
+ * Process-global symbol key for the harness profile registry. The `.v1`
+ * suffix is a version gate — bump it when the {@link HarnessProfileRegistry}
+ * shape changes in a breaking way so that incompatible versions coexist
+ * on `globalThis` without corrupting each other.
+ */
+const PROFILE_REGISTRY_KEY = Symbol.for("deepagents.harness-profiles.v1");
 
 /**
- * Set of keys that existed after builtin bootstrap completed.
+ * Process-global registry state, keyed by a versioned symbol so that
+ * duplicate package installs (transient deps resolving to different
+ * copies of deepagents) share a single profile registry.
  *
- * Used by {@link hasUserRegisteredProfiles} to distinguish user
- * registrations from built-in ones (for logging verbosity).
+ * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/for
  */
-let builtinKeys = new Set<string>();
-let builtinsLoaded = false;
+interface HarnessProfileRegistry {
+  /**
+   * Registered profiles keyed by model spec (e.g., `"anthropic:claude-opus-4-7"`).
+   */
+  profiles: Map<string, HarnessProfile>;
+
+  /**
+   * Keys that existed after built-in bootstrap, used to detect user registrations.
+   */
+  builtinKeys: Set<string>;
+
+  /**
+   * Whether built-in profiles have been lazy-loaded into the registry.
+   */
+  builtinsLoaded: boolean;
+}
+
+/**
+ * Returns the process-global registry, creating it on first access.
+ */
+function getHarnessProfileRegistry(): HarnessProfileRegistry {
+  const global = globalThis as Record<symbol, unknown>;
+  if (global[PROFILE_REGISTRY_KEY] == null) {
+    global[PROFILE_REGISTRY_KEY] = {
+      profiles: new Map<string, HarnessProfile>(),
+      builtinKeys: new Set<string>(),
+      builtinsLoaded: false,
+    };
+  }
+  return global[PROFILE_REGISTRY_KEY] as HarnessProfileRegistry;
+}
 
 /**
  * Options for resolving a harness profile from model metadata.
@@ -46,8 +82,9 @@ export interface ResolveHarnessProfileOpts {
  * @internal
  */
 export function ensureBuiltinsLoaded(): void {
-  if (builtinsLoaded) return;
-  builtinsLoaded = true;
+  const registry = getHarnessProfileRegistry();
+  if (registry.builtinsLoaded) return;
+  registry.builtinsLoaded = true;
   loadBuiltinProfiles();
 }
 
@@ -61,7 +98,8 @@ export function ensureBuiltinsLoaded(): void {
  * @internal
  */
 export function snapshotBuiltinKeys(): void {
-  builtinKeys = new Set(registry.keys());
+  const registry = getHarnessProfileRegistry();
+  registry.builtinKeys = new Set(registry.profiles.keys());
 }
 
 /**
@@ -77,11 +115,12 @@ export function registerHarnessProfileImpl(
   profile: HarnessProfile,
 ): void {
   key = validateProfileKey(key);
-  const existing = registry.get(key);
+  const { profiles } = getHarnessProfileRegistry();
+  const existing = profiles.get(key);
   if (existing !== undefined) {
-    registry.set(key, mergeProfiles(existing, profile));
+    profiles.set(key, mergeProfiles(existing, profile));
   } else {
-    registry.set(key, profile);
+    profiles.set(key, profile);
   }
 }
 
@@ -162,8 +201,9 @@ export function getHarnessProfile(spec: string): HarnessProfile | undefined {
 
   ensureBuiltinsLoaded();
 
-  const exact = registry.get(spec);
-  const base = provider ? registry.get(provider) : undefined;
+  const { profiles } = getHarnessProfileRegistry();
+  const exact = profiles.get(spec);
+  const base = provider ? profiles.get(provider) : undefined;
 
   if (exact !== undefined && base !== undefined) {
     return mergeProfiles(base, exact);
@@ -227,8 +267,9 @@ export function resolveHarnessProfile(
  */
 export function hasUserRegisteredProfiles(): boolean {
   ensureBuiltinsLoaded();
-  for (const key of registry.keys()) {
-    if (!builtinKeys.has(key)) {
+  const registry = getHarnessProfileRegistry();
+  for (const key of registry.profiles.keys()) {
+    if (!registry.builtinKeys.has(key)) {
       return true;
     }
   }
@@ -266,12 +307,13 @@ export function applyProfilePrompt(
 }
 
 /**
- * Reset the registry to empty state. For testing only.
+ * Reset the registry to its empty state. For testing only.
  *
  * @internal
  */
 export function _resetRegistryForTesting(): void {
-  registry.clear();
-  builtinKeys = new Set();
-  builtinsLoaded = false;
+  const registry = getHarnessProfileRegistry();
+  registry.profiles.clear();
+  registry.builtinKeys = new Set();
+  registry.builtinsLoaded = false;
 }
