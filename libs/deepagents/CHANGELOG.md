@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.10.1
+
+### Patch Changes
+
+- [#479](https://github.com/langchain-ai/deepagentsjs/pull/479) [`f164f99`](https://github.com/langchain-ai/deepagentsjs/commit/f164f992e06a157573612fb2640232f44d9daa18) Thanks [@ramon-langchain](https://github.com/ramon-langchain)! - feat(deepagents): add snapshot/start/stop lifecycle to LangSmithSandbox
+
 ## 1.10.0
 
 ### Minor Changes

@@ -1,5 +1,15 @@
 # @langchain/quickjs
 
+## 0.4.0
+
+### Minor Changes
+
+- [#531](https://github.com/langchain-ai/deepagentsjs/pull/531) [`a76b7df`](https://github.com/langchain-ai/deepagentsjs/commit/a76b7df62310e7f2dd49bb1ea5f1b3ee6c8590b6) Thanks [@colifran](https://github.com/colifran)! - chore(quickjs): update `REPLMiddleware` to be named `CodeInterpreterMiddleware`
+
+### Patch Changes
+
+- [#524](https://github.com/langchain-ai/deepagentsjs/pull/524) [`2cbd524`](https://github.com/langchain-ai/deepagentsjs/commit/2cbd5245a43fb1ba97fa532c1942a8903e090cfa) Thanks [@colifran](https://github.com/colifran)! - fix(quickjs): individual repl sessions use individual wasm module causing inefficient memory usage
+
 ## 0.3.0
 
 ### Minor Changes
