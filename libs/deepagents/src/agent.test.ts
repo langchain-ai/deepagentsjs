@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { createDeepAgent, isAnthropicModel } from "./agent.js";
+import { createDeepAgent } from "./agent.js";
+import { isAnthropicModel } from "./utils.js";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
 import {
   HumanMessage,

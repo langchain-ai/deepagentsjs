@@ -1,5 +1,6 @@
 import {
   createAgent,
+  createMiddleware,
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
   todoListMiddleware,
@@ -51,8 +52,17 @@ import { createSubagentTransformer } from "./stream.js";
  */
 import type * as _messages from "@langchain/core/messages";
 import type * as _langgraph from "@langchain/langgraph";
-import type { BaseLanguageModel } from "@langchain/core/language_models/base";
 import type { StreamTransformer } from "@langchain/langgraph";
+import {
+  resolveHarnessProfile,
+  applyProfilePrompt,
+  resolveMiddleware,
+} from "./profiles/index.js";
+import {
+  isAnthropicModel,
+  getModelProvider,
+  getModelIdentifier,
+} from "./utils.js";
 
 const BASE_AGENT_PROMPT = context`
   You are a Deep Agent, an AI assistant that helps users accomplish tasks using tools. You respond with text and tool calls. The user can see your responses and tool outputs in real time.
@@ -96,21 +106,6 @@ const BUILTIN_TOOL_NAMES: ReadonlySet<string> = new Set([
   "task",
   "write_todos",
 ]);
-
-/**
- * Detect whether a model is an Anthropic model.
- * Used to gate Anthropic-specific prompt caching optimizations (cache_control breakpoints).
- */
-export function isAnthropicModel(model: BaseLanguageModel | string): boolean {
-  if (typeof model === "string") {
-    if (model.includes(":")) return model.split(":")[0] === "anthropic";
-    return model.startsWith("claude");
-  }
-  if (model.getName() === "ConfigurableModel") {
-    return (model as any)._defaultConfig?.modelProvider === "anthropic";
-  }
-  return model.getName() === "ChatAnthropic";
-}
 
 /**
  * Create a Deep Agent.
@@ -199,6 +194,26 @@ export function createDeepAgent<
     );
   }
 
+  const harnessProfile =
+    typeof model === "string"
+      ? resolveHarnessProfile({ spec: model })
+      : resolveHarnessProfile({
+          providerHint: getModelProvider(model),
+          identifierHint: getModelIdentifier(model),
+        });
+
+  const toolOverrides = harnessProfile.toolDescriptionOverrides;
+  const effectiveTools: StructuredTool[] =
+    Object.keys(toolOverrides).length > 0
+      ? (tools as StructuredTool[]).map((t) =>
+          t.name in toolOverrides
+            ? Object.assign(Object.create(Object.getPrototypeOf(t)), t, {
+                description: toolOverrides[t.name],
+              })
+            : t,
+        )
+      : (tools as StructuredTool[]);
+
   const anthropicModel = isAnthropicModel(model);
   const cacheMiddleware = anthropicModel
     ? [
@@ -270,16 +285,27 @@ export function createDeepAgent<
     )
     .map((item) => ("runnable" in item ? item : normalizeSubagentSpec(item)));
 
+  const gpConfig = harnessProfile.generalPurposeSubagent;
+  const gpDisabled = gpConfig?.enabled === false;
+
   if (
+    !gpDisabled &&
     !inlineSubagents.some(
       (item) => item.name === GENERAL_PURPOSE_SUBAGENT["name"],
     )
   ) {
+    const gpSystemPrompt =
+      gpConfig?.systemPrompt ??
+      applyProfilePrompt(harnessProfile, GENERAL_PURPOSE_SUBAGENT.systemPrompt);
+
     const generalPurposeSpec = normalizeSubagentSpec({
       ...GENERAL_PURPOSE_SUBAGENT,
+      description:
+        gpConfig?.description ?? GENERAL_PURPOSE_SUBAGENT.description,
+      systemPrompt: gpSystemPrompt,
       model,
       skills,
-      tools: tools as StructuredTool[],
+      tools: effectiveTools,
     });
     inlineSubagents.unshift(generalPurposeSpec);
   }
@@ -300,7 +326,7 @@ export function createDeepAgent<
     // Enables delegation to specialized subagents for complex tasks.
     createSubAgentMiddleware({
       defaultModel: model,
-      defaultTools: tools as StructuredTool[],
+      defaultTools: effectiveTools,
       defaultInterruptOn: interruptOn,
       subagents: inlineSubagents,
       generalPurposeAgent: false,
@@ -354,30 +380,76 @@ export function createDeepAgent<
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
   ];
 
-  // Combine system prompt parameter with BASE_AGENT_PROMPT
+  // Apply profile middleware additions. Inserted before cache middleware
+  // so profile-injected middleware participates in prompt caching.
+  const profileMiddleware = resolveMiddleware(harnessProfile.extraMiddleware);
+  if (profileMiddleware.length > 0) {
+    const cacheIdx = middleware.findIndex(
+      (m) => m.name === "AnthropicPromptCachingMiddleware",
+    );
+    if (cacheIdx !== -1) {
+      middleware.splice(cacheIdx, 0, ...profileMiddleware);
+    } else {
+      middleware.push(...profileMiddleware);
+    }
+  }
+
+  // Apply profile middleware exclusions.
+  if (harnessProfile.excludedMiddleware.size > 0) {
+    const excluded = harnessProfile.excludedMiddleware;
+    const filtered = middleware.filter((m) => !excluded.has(m.name));
+    middleware.length = 0;
+    middleware.push(...filtered);
+  }
+
+  // Apply profile tool exclusions via a filtering middleware that runs
+  // after all tool-injecting middleware.
+  if (harnessProfile.excludedTools.size > 0) {
+    const excludedTools = harnessProfile.excludedTools;
+    middleware.push(
+      createMiddleware({
+        name: "_ToolExclusionMiddleware",
+        wrapModelCall: async (request: any, handler: any) => {
+          return handler({
+            ...request,
+            tools: request.tools?.filter(
+              (t: { name: string }) => !excludedTools.has(t.name),
+            ),
+          });
+        },
+      }),
+    );
+  }
+
+  // Combine system prompt parameter with profile-aware base prompt.
+  const effectiveBasePrompt = applyProfilePrompt(
+    harnessProfile,
+    BASE_AGENT_PROMPT,
+  );
+
   const finalSystemPrompt =
     typeof systemPrompt === "string"
       ? new SystemMessage({
           contentBlocks: [
             { type: "text", text: systemPrompt },
-            { type: "text", text: BASE_AGENT_PROMPT },
+            { type: "text", text: effectiveBasePrompt },
           ],
         })
       : SystemMessage.isInstance(systemPrompt)
         ? new SystemMessage({
             contentBlocks: [
               ...systemPrompt.contentBlocks,
-              { type: "text", text: BASE_AGENT_PROMPT },
+              { type: "text", text: effectiveBasePrompt },
             ],
           })
         : new SystemMessage({
-            contentBlocks: [{ type: "text", text: BASE_AGENT_PROMPT }],
+            contentBlocks: [{ type: "text", text: effectiveBasePrompt }],
           });
 
   const agent = createAgent({
     model,
     systemPrompt: finalSystemPrompt,
-    tools: tools as StructuredTool[],
+    tools: effectiveTools,
     middleware,
     ...(responseFormat !== null && { responseFormat }),
     contextSchema,

@@ -152,23 +152,26 @@ describe("resolveHarnessProfile", () => {
     registerHarnessProfile("anthropic:claude-opus-4-7", {
       systemPromptSuffix: "Opus suffix.",
     });
-    const profile = resolveHarnessProfile("anthropic:claude-opus-4-7");
+    const profile = resolveHarnessProfile({
+      spec: "anthropic:claude-opus-4-7",
+    });
     expect(profile.systemPromptSuffix).toBe("Opus suffix.");
   });
 
   it("returns EMPTY_HARNESS_PROFILE when spec matches nothing", () => {
-    expect(resolveHarnessProfile("unknown:model")).toBe(EMPTY_HARNESS_PROFILE);
+    expect(resolveHarnessProfile({ spec: "unknown:model" })).toBe(
+      EMPTY_HARNESS_PROFILE,
+    );
   });
 
   it("resolves provider:identifier when no spec", () => {
     registerHarnessProfile("anthropic:claude-opus-4-7", {
       systemPromptSuffix: "Opus.",
     });
-    const profile = resolveHarnessProfile(
-      undefined,
-      "anthropic",
-      "claude-opus-4-7",
-    );
+    const profile = resolveHarnessProfile({
+      providerHint: "anthropic",
+      identifierHint: "claude-opus-4-7",
+    });
     expect(profile.systemPromptSuffix).toBe("Opus.");
   });
 
@@ -176,28 +179,28 @@ describe("resolveHarnessProfile", () => {
     registerHarnessProfile("anthropic:claude-opus-4-7", {
       systemPromptSuffix: "Opus.",
     });
-    const profile = resolveHarnessProfile(
-      undefined,
-      undefined,
-      "anthropic:claude-opus-4-7",
-    );
+    const profile = resolveHarnessProfile({
+      identifierHint: "anthropic:claude-opus-4-7",
+    });
     expect(profile.systemPromptSuffix).toBe("Opus.");
   });
 
   it("resolves by providerHint alone when identifier gives no match", () => {
     registerHarnessProfile("anthropic", { systemPromptSuffix: "Provider." });
-    const profile = resolveHarnessProfile(
-      undefined,
-      "anthropic",
-      "unknown-model",
-    );
+    const profile = resolveHarnessProfile({
+      providerHint: "anthropic",
+      identifierHint: "unknown-model",
+    });
     expect(profile.systemPromptSuffix).toBe("Provider.");
   });
 
   it("returns EMPTY_HARNESS_PROFILE when no hints match", () => {
-    expect(resolveHarnessProfile(undefined, "unknown", "model")).toBe(
-      EMPTY_HARNESS_PROFILE,
-    );
+    expect(
+      resolveHarnessProfile({
+        providerHint: "unknown",
+        identifierHint: "model",
+      }),
+    ).toBe(EMPTY_HARNESS_PROFILE);
   });
 
   it("returns EMPTY_HARNESS_PROFILE when called with no arguments", () => {

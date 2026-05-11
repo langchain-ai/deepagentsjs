@@ -12,6 +12,7 @@ export {
   generalPurposeSubagentConfigSchema,
   EMPTY_HARNESS_PROFILE,
   REQUIRED_MIDDLEWARE_NAMES,
+  resolveMiddleware,
   registerHarnessProfile,
   getHarnessProfile,
   resolveHarnessProfile,

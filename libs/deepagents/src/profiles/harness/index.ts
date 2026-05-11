@@ -20,6 +20,7 @@ export {
 export { mergeProfiles } from "./merge.js";
 
 export {
+  type ResolveHarnessProfileOpts,
   registerHarnessProfile,
   getHarnessProfile,
   resolveHarnessProfile,

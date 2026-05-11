@@ -17,6 +17,26 @@ let builtinKeys = new Set<string>();
 let builtinsLoaded = false;
 
 /**
+ * Options for resolving a harness profile from model metadata.
+ */
+export interface ResolveHarnessProfileOpts {
+  /**
+   * Model spec string (e.g., `"anthropic:claude-opus-4-7"`).
+   */
+  spec?: string;
+
+  /**
+   * Provider name extracted from a model instance (e.g., `"anthropic"`).
+   */
+  providerHint?: string;
+
+  /**
+   * Model identifier extracted from a model instance (e.g., `"claude-opus-4-7"`).
+   */
+  identifierHint?: string;
+}
+
+/**
  * Ensure lazy-loaded builtin profiles have been registered.
  *
  * Called by the public `registerHarnessProfile` and lookup functions.
@@ -156,25 +176,20 @@ export function getHarnessProfile(spec: string): HarnessProfile | undefined {
  * Resolve the harness profile for a model, falling back to the
  * empty default when nothing matches.
  *
- * When `spec` is a string (the original model parameter), it drives
- * the lookup directly. When `undefined` (pre-built model instance),
+ * When `spec` is set (the original model parameter), it drives the
+ * lookup directly. When absent (pre-built model instance),
  * `providerHint` and `identifierHint` are used to construct lookup
  * keys.
  *
- * @param spec - Original model spec string, or `undefined` for
- *   pre-built model instances.
- * @param providerHint - Provider name extracted from a model instance.
- * @param identifierHint - Model identifier extracted from a model
- *   instance.
+ * @param opts - Model metadata used to resolve the profile.
  * @returns The resolved profile (never `undefined`).
  *
  * @internal
  */
 export function resolveHarnessProfile(
-  spec?: string,
-  providerHint?: string,
-  identifierHint?: string,
+  opts: ResolveHarnessProfileOpts = {},
 ): HarnessProfile {
+  const { spec, providerHint, identifierHint } = opts;
   if (spec !== undefined) {
     return getHarnessProfile(spec) ?? EMPTY_HARNESS_PROFILE;
   }

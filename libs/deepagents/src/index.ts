@@ -8,6 +8,23 @@
 export { createDeepAgent } from "./agent.js";
 export { ConfigurationError, type ConfigurationErrorCode } from "./errors.js";
 
+// Export harness profiles
+export {
+  type HarnessProfile,
+  type HarnessProfileOptions,
+  type HarnessProfileConfigData,
+  type GeneralPurposeSubagentConfig,
+  createHarnessProfile,
+  serializeProfile,
+  parseHarnessProfileConfig,
+  registerHarnessProfile,
+  getHarnessProfile,
+  harnessProfileConfigSchema,
+  generalPurposeSubagentConfigSchema,
+  EMPTY_HARNESS_PROFILE,
+  REQUIRED_MIDDLEWARE_NAMES,
+} from "./profiles/index.js";
+
 export { createSubagentTransformer } from "./stream.js";
 export type { DeepAgentRunStream, SubagentRunStream } from "./stream.js";
 export type {
