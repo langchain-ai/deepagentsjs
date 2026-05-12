@@ -78,7 +78,7 @@
     "./package.json": "./package.json"
   },
   "peerDependencies": {
-    "langsmith": ">=0.5.20 <1.0.0"
+    "langsmith": ">=0.6.0 <1.0.0"
   },
   "files": [
     "dist/**/*"

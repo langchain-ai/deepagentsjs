@@ -59,6 +59,7 @@ export {
 } from "./store.js";
 export { FilesystemBackend } from "./filesystem.js";
 export { CompositeBackend } from "./composite.js";
+export { ContextHubBackend } from "./context-hub.js";
 export {
   LocalShellBackend,
   type LocalShellBackendOptions,

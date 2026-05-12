@@ -128,6 +128,7 @@ export {
   type StoreBackendOptions,
   FilesystemBackend,
   CompositeBackend,
+  ContextHubBackend,
   BaseSandbox,
   isSandboxBackend,
   isSandboxProtocol,
