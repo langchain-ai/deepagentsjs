@@ -6,6 +6,9 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "type": "module",
+  "bin": {
+    "deepagents": "./dist/cli/index.js"
+  },
   "scripts": {
     "build": "tsdown",
     "clean": "rm -rf dist/ .tsdown/",
@@ -81,6 +84,7 @@
     "langsmith": ">=0.5.20 <1.0.0"
   },
   "files": [
-    "dist/**/*"
+    "dist/**/*",
+    "src/skills/**/!(*.test).{ts,md}"
   ]
 }

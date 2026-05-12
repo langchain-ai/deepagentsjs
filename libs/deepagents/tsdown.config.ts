@@ -25,4 +25,17 @@ export default defineConfig([
     outExtensions: () => ({ js: ".cjs" }),
     external,
   },
+  {
+    entry: ["./src/cli/index.ts"],
+    format: ["esm"],
+    dts: false,
+    clean: false,
+    sourcemap: true,
+    outDir: "dist/cli",
+    outExtensions: () => ({ js: ".js" }),
+    external,
+    banner: {
+      js: "#!/usr/bin/env node",
+    },
+  },
 ]);
