@@ -1,5 +1,13 @@
 # deepagents
 
+## 1.10.2
+
+### Patch Changes
+
+- [#533](https://github.com/langchain-ai/deepagentsjs/pull/533) [`f088089`](https://github.com/langchain-ai/deepagentsjs/commit/f0880899ea6726b7320b0888d0f6a10a7749e1bf) Thanks [@vishnu-ssuresh](https://github.com/vishnu-ssuresh)! - feat(deepagents): add `ContextHubBackend` for LangSmith Hub agent repos
+
+- [#526](https://github.com/langchain-ai/deepagentsjs/pull/526) [`7c33a86`](https://github.com/langchain-ai/deepagentsjs/commit/7c33a8695f2e16217779bef5c6fca28230f18815) Thanks [@colifran](https://github.com/colifran)! - feat(deepagents): implement harness profiles
+
 ## 1.10.1
 
 ### Patch Changes
