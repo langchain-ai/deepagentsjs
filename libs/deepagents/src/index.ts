@@ -182,12 +182,3 @@ export {
   adaptBackendProtocol,
   adaptSandboxProtocol,
 } from "./backends/index.js";
-
-// Export standalone tools
-export {
-  createSwarmTaskTool,
-  VariantCache,
-  type SwarmTaskToolOptions,
-  type SwarmSubAgent,
-  type SwarmTaskMode,
-} from "./tools/swarm-task.js";

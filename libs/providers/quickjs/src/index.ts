@@ -49,3 +49,14 @@ export {
   MAX_SKILL_BUNDLE_BYTES,
   type LoadedSkill,
 } from "./skills.js";
+
+export {
+  createSwarmTaskTool,
+  VariantCache,
+  normalizeSchema,
+  type SwarmTaskToolOptions,
+  type SwarmSubAgent,
+  type SwarmTaskMode,
+} from "./tools/swarm-task.js";
+
+export { SkillModuleBackend } from "./skill-module-backend.js";
