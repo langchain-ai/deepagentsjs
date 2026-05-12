@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { addSkill } from "./commands/add-skill.js";
+import { listSkills } from "./commands/list-skills.js";
 import { fatal, info } from "./utils.js";
 
 const require = createRequire(import.meta.url);
@@ -14,6 +15,7 @@ Usage:
 Commands:
   add-skill <name>    Copy a bundled skill module into your project
                       at /skills/<name>/
+  list-skills         List available skill modules
 
 Options:
   --force             Overwrite existing skill directory without prompting
@@ -21,6 +23,7 @@ Options:
   --version, -v       Show version
 
 Examples:
+  deepagents list-skills
   deepagents add-skill swarm
   deepagents add-skill swarm --force
 `.trim();
@@ -94,6 +97,10 @@ async function main(): Promise<void> {
         fatal("Missing skill name. Usage: deepagents add-skill <name>");
       }
       await addSkill(skillName, { force: parsed.flags.force });
+      break;
+    }
+    case "list-skills": {
+      await listSkills();
       break;
     }
     default: {

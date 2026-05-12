@@ -1,5 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { resolveSkillsRoot } from "./shared.js";
 import { confirm, fatal, info, success, warn } from "../utils.js";
 
 /** File suffixes to exclude when copying skill module sources. */
@@ -7,14 +8,9 @@ const EXCLUDED_SUFFIXES = [".test.ts", ".test.js", ".spec.ts", ".spec.js"];
 
 /**
  * Resolves the path to bundled skill module sources shipped with the package.
- *
- * Skill sources are raw TypeScript files in `src/skills/<name>/` of the
- * published package. The CLI binary lives at `dist/cli/index.js`, so we
- * resolve two levels up to reach the package root, then into `src/skills/`.
  */
 export function resolveSkillSourceDir(skillName: string): string {
-  const cliDir = path.dirname(new URL(import.meta.url).pathname);
-  return path.resolve(cliDir, "..", "..", "src", "skills", skillName);
+  return path.join(resolveSkillsRoot(), skillName);
 }
 
 /**
