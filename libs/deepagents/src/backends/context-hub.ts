@@ -24,6 +24,7 @@ import { performStringReplacement } from "./utils.js";
 
 const URL_COMMIT_SUFFIX_RE = /:([0-9a-f]{8,64})$/i;
 const TEXT_MIME_TYPE = "text/plain";
+const FNMATCH_OPTIONS = { bash: true };
 
 function getErrorMessage(error: unknown): string {
   if (typeof error === "string") {
@@ -38,6 +39,46 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function splitLinesKeepEnds(content: string): string[] {
+  const lines: string[] = [];
+  let lineStart = 0;
+  for (let index = 0; index < content.length; index += 1) {
+    if (content[index] === "\n") {
+      lines.push(content.slice(lineStart, index + 1));
+      lineStart = index + 1;
+    }
+  }
+
+  if (lineStart < content.length) {
+    lines.push(content.slice(lineStart));
+  }
+
+  return lines;
+}
+
+function sliceReadContent(
+  content: string,
+  offset: number,
+  limit: number,
+): { content?: string; error?: string } {
+  if (!content || content.trim() === "") {
+    return { content };
+  }
+
+  const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines = splitLinesKeepEnds(normalized);
+  const startIndex = offset;
+  const endIndex = Math.min(startIndex + limit, lines.length);
+
+  if (startIndex >= lines.length) {
+    return {
+      error: `Line offset ${offset} exceeds file length (${lines.length} lines)`,
+    };
+  }
+
+  return { content: lines.slice(startIndex, endIndex).join("") };
 }
 
 function isLangSmithNotFoundError(error: unknown): boolean {
@@ -223,7 +264,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
   async read(
     filePath: string,
     offset: number = 0,
-    limit: number = 500,
+    limit: number = 2000,
   ): Promise<ReadResult> {
     const hubPath = ContextHubBackend.stripPrefix(filePath);
 
@@ -242,9 +283,12 @@ export class ContextHubBackend implements BackendProtocolV2 {
       return { error: `File '${filePath}' not found` };
     }
 
-    const lines = content.split("\n");
-    const selected = lines.slice(offset, offset + limit);
-    return { content: selected.join("\n"), mimeType: TEXT_MIME_TYPE };
+    const sliced = sliceReadContent(content, offset, limit);
+    if (sliced.error) {
+      return { error: sliced.error };
+    }
+
+    return { content: sliced.content ?? "", mimeType: TEXT_MIME_TYPE };
   }
 
   async readRaw(filePath: string): Promise<ReadRawResult> {
@@ -253,12 +297,13 @@ export class ContextHubBackend implements BackendProtocolV2 {
       return { error: readResult.error ?? `File '${filePath}' not found` };
     }
 
+    const now = new Date().toISOString();
     return {
       data: {
         content: readResult.content,
         mimeType: TEXT_MIME_TYPE,
-        created_at: "",
-        modified_at: "",
+        created_at: now,
+        modified_at: now,
       },
     };
   }
@@ -294,7 +339,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
       if (prefix && !filePath.startsWith(prefix)) {
         continue;
       }
-      if (glob && !micromatch.isMatch(filePath, glob)) {
+      if (glob && !micromatch.isMatch(filePath, glob, FNMATCH_OPTIONS)) {
         continue;
       }
 
@@ -310,7 +355,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
     return { matches };
   }
 
-  async glob(pattern: string, path: string = "/"): Promise<GlobResult> {
+  async glob(pattern: string, _path: string = "/"): Promise<GlobResult> {
     let cache: Record<string, string>;
     try {
       cache = await this.ensureCache();
@@ -321,16 +366,11 @@ export class ContextHubBackend implements BackendProtocolV2 {
       throw error;
     }
 
-    const prefix = ContextHubBackend.stripPrefix(path).replace(/\/+$/, "");
-
     const files: FileInfo[] = [];
     for (const filePath of Object.keys(cache)) {
-      if (prefix && filePath !== prefix && !filePath.startsWith(`${prefix}/`)) {
-        continue;
-      }
       if (
-        micromatch.isMatch(`/${filePath}`, pattern) ||
-        micromatch.isMatch(filePath, pattern)
+        micromatch.isMatch(`/${filePath}`, pattern, FNMATCH_OPTIONS) ||
+        micromatch.isMatch(filePath, pattern, FNMATCH_OPTIONS)
       ) {
         files.push({ path: `/${filePath}`, is_dir: false });
       }

@@ -75,7 +75,17 @@ describe("ContextHubBackend", () => {
 
     const result = await backend.read("/a.md", 1, 2);
     expect(result.error).toBeUndefined();
-    expect(result.content).toBe("2\n3");
+    expect(result.content).toBe("2\n3\n");
+  });
+
+  it("read offset beyond file length returns an error", async () => {
+    const { backend } = makeBackend({
+      "a.md": { type: "file", content: "1\n2" },
+    });
+
+    const result = await backend.read("/a.md", 5, 10);
+    expect(result.error).toBe("Line offset 5 exceeds file length (2 lines)");
+    expect(result.content).toBeUndefined();
   });
 
   it("pull runs once for repeated reads", async () => {
@@ -109,14 +119,12 @@ describe("ContextHubBackend", () => {
 
   it("pull non-404 LangSmith failures surface as hub errors", async () => {
     const client = {
-      pullAgent: vi
-        .fn()
-        .mockRejectedValue(
-          makeLangSmithError("hub 5xx", {
-            name: "LangSmithAPIError",
-            status: 500,
-          }),
-        ),
+      pullAgent: vi.fn().mockRejectedValue(
+        makeLangSmithError("hub 5xx", {
+          name: "LangSmithAPIError",
+          status: 500,
+        }),
+      ),
       pushAgent: vi.fn().mockResolvedValue(COMMIT_URL),
     };
     const backend = new ContextHubBackend("-/x", {
@@ -355,6 +363,30 @@ describe("ContextHubBackend", () => {
     const result = await backend.glob("*.md");
     const paths = (result.files ?? []).map((file) => file.path).sort();
     expect(paths).toEqual(["/a.md", "/c.md"]);
+  });
+
+  it("glob ignores path argument and matches nested files like Python fnmatch", async () => {
+    const { backend } = makeBackend({
+      "a.md": { type: "file", content: "a" },
+      "nested/b.md": { type: "file", content: "b" },
+      "nested/c.txt": { type: "file", content: "c" },
+    });
+
+    const result = await backend.glob("*.md", "/nested");
+    const paths = (result.files ?? []).map((file) => file.path).sort();
+    expect(paths).toEqual(["/a.md", "/nested/b.md"]);
+  });
+
+  it("grep glob follows Python fnmatch semantics for nested paths", async () => {
+    const { backend } = makeBackend({
+      "root.md": { type: "file", content: "hello" },
+      "nested/a.md": { type: "file", content: "hello" },
+      "nested/b.txt": { type: "file", content: "hello" },
+    });
+
+    const result = await backend.grep("hello", null, "*.md");
+    const paths = new Set((result.matches ?? []).map((match) => match.path));
+    expect(paths).toEqual(new Set(["/nested/a.md", "/root.md"]));
   });
 
   it("upload supports partial success and single-commit batching", async () => {
