@@ -347,10 +347,16 @@ describe("ContextHubBackend", () => {
     expect(paths).toEqual(new Set(["/memories/a.md"]));
   });
 
-  it("grep returns invalid regex errors", async () => {
-    const { backend } = makeBackend();
+  it("grep treats regex metacharacters as literal text", async () => {
+    const { backend } = makeBackend({
+      "a.md": { type: "file", content: "literal [unclosed\nother line" },
+    });
+
     const result = await backend.grep("[unclosed");
-    expect(result.error).toContain("Invalid regex");
+    expect(result.error).toBeUndefined();
+    expect(result.matches).toEqual([
+      { path: "/a.md", line: 1, text: "literal [unclosed" },
+    ]);
   });
 
   it("glob matches file patterns", async () => {

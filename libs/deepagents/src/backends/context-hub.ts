@@ -347,13 +347,6 @@ export class ContextHubBackend implements BackendProtocolV2 {
       throw error;
     }
 
-    let regex: RegExp;
-    try {
-      regex = new RegExp(pattern);
-    } catch (error) {
-      return { error: `Invalid regex pattern: ${getErrorMessage(error)}` };
-    }
-
     const prefix = path
       ? ContextHubBackend.stripPrefix(path).replace(/\/+$/, "")
       : "";
@@ -370,7 +363,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
       const lines = content.split("\n");
       for (let index = 0; index < lines.length; index++) {
         const line = lines[index];
-        if (regex.test(line)) {
+        if (line.includes(pattern)) {
           matches.push({ path: `/${filePath}`, line: index + 1, text: line });
         }
       }
