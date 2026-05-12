@@ -421,10 +421,28 @@ describe("ContextHubBackend", () => {
       ["/bad.bin", new Uint8Array([0x80])],
     ]);
 
-    expect(String(responses[0].error)).toContain("Hub unavailable");
-    expect(String(responses[1].error)).toContain("Hub unavailable");
+    expect(responses[0].error).toBe("invalid_path");
+    expect(responses[1].error).toBe("invalid_path");
     expect(responses[2].error).toBe("invalid_path");
     expect(client.pushAgent).toHaveBeenCalledTimes(1);
+  });
+
+  it("upload commit permission failures map to permission_denied", async () => {
+    const { backend, client } = makeBackend();
+    client.pushAgent.mockRejectedValue(
+      makeLangSmithError("forbidden", {
+        name: "LangSmithAuthError",
+        status: 403,
+      }),
+    );
+
+    const responses = await backend.uploadFiles([
+      ["/a.md", new TextEncoder().encode("alpha")],
+      ["/b.md", new TextEncoder().encode("beta")],
+    ]);
+
+    expect(responses[0].error).toBe("permission_denied");
+    expect(responses[1].error).toBe("permission_denied");
   });
 
   it("upload duplicate path keeps last write", async () => {
@@ -466,7 +484,26 @@ describe("ContextHubBackend", () => {
     });
 
     const responses = await backend.downloadFiles(["/a.md"]);
-    expect(String(responses[0].error)).toContain("Hub unavailable");
+    expect(responses[0].error).toBe("invalid_path");
+  });
+
+  it("download permission failures map to permission_denied", async () => {
+    const client = {
+      pullAgent: vi.fn().mockRejectedValue(
+        makeLangSmithError("forbidden", {
+          name: "LangSmithAuthError",
+          status: 403,
+        }),
+      ),
+      pushAgent: vi.fn().mockResolvedValue(COMMIT_URL),
+    };
+    const backend = new ContextHubBackend("-/x", {
+      client: client as unknown as Client,
+    });
+
+    const responses = await backend.downloadFiles(["/a.md", "/b.md"]);
+    expect(responses[0].error).toBe("permission_denied");
+    expect(responses[1].error).toBe("permission_denied");
   });
 
   it("getLinkedEntries returns linked repo handles", async () => {

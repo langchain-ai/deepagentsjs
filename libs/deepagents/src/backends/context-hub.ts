@@ -105,6 +105,30 @@ function isLangSmithError(error: unknown): boolean {
   );
 }
 
+function getLangSmithStatus(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null) {
+    return undefined;
+  }
+
+  const maybeError = error as { status?: unknown };
+  if (typeof maybeError.status === "number") {
+    return maybeError.status;
+  }
+
+  return undefined;
+}
+
+function mapHubFileOperationError(error: unknown): FileOperationError {
+  const status = getLangSmithStatus(error);
+  if (status === 401 || status === 403) {
+    return "permission_denied";
+  }
+  if (status === 404) {
+    return "file_not_found";
+  }
+  return "invalid_path";
+}
+
 /**
  * Backend that stores files in a LangSmith Hub agent repo (persistent).
  */
@@ -454,7 +478,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
       }
     }
 
-    let commitError: string | null = null;
+    let commitError: FileOperationError | null = null;
     if (Object.keys(validFiles).length > 0) {
       try {
         await this.ensureCache();
@@ -462,7 +486,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
       } catch (error) {
         if (isLangSmithError(error)) {
           this.cache = null;
-          commitError = ContextHubBackend.toHubUnavailableError(error);
+          commitError = mapHubFileOperationError(error);
         } else {
           throw error;
         }
@@ -474,11 +498,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
         return { path, error: "invalid_path" };
       }
       if (commitError !== null) {
-        // Keep Python parity: backend-specific error string for Hub failures.
-        return {
-          path,
-          error: commitError as unknown as FileOperationError,
-        };
+        return { path, error: commitError };
       }
       return { path, error: null };
     });
@@ -490,12 +510,11 @@ export class ContextHubBackend implements BackendProtocolV2 {
       cache = await this.ensureCache();
     } catch (error) {
       if (isLangSmithError(error)) {
-        const hubError = ContextHubBackend.toHubUnavailableError(error);
-        // Keep Python parity: backend-specific error string for Hub failures.
+        const mappedError = mapHubFileOperationError(error);
         return paths.map((path) => ({
           path,
           content: null,
-          error: hubError as unknown as FileOperationError,
+          error: mappedError,
         }));
       }
       throw error;
