@@ -309,7 +309,7 @@ describe("createCodeInterpreterMiddleware", () => {
 
   describe("beforeAgent PTC validation", () => {
     it("throws when a skill requires PTC tools that are not configured", () => {
-      const middleware = createQuickJSMiddleware({
+      const middleware = createREPLMiddleware({
         ptc: ["task"],
         skillsBackend: {} as any,
       });
@@ -328,7 +328,7 @@ describe("createCodeInterpreterMiddleware", () => {
     });
 
     it("throws with skill name in the error message", () => {
-      const middleware = createQuickJSMiddleware({
+      const middleware = createREPLMiddleware({
         ptc: [],
         skillsBackend: {} as any,
       });
@@ -347,7 +347,7 @@ describe("createCodeInterpreterMiddleware", () => {
     });
 
     it("does not throw when all required PTC tools are configured", () => {
-      const middleware = createQuickJSMiddleware({
+      const middleware = createREPLMiddleware({
         ptc: ["task", "read_file", "write_file", "glob"],
         skillsBackend: {} as any,
       });
@@ -366,7 +366,7 @@ describe("createCodeInterpreterMiddleware", () => {
     });
 
     it("does not throw when skill has no requiredPtcTools", () => {
-      const middleware = createQuickJSMiddleware({
+      const middleware = createREPLMiddleware({
         ptc: ["task"],
         skillsBackend: {} as any,
       });
@@ -379,7 +379,7 @@ describe("createCodeInterpreterMiddleware", () => {
     });
 
     it("does not throw when skillsBackend is not configured", () => {
-      const middleware = createQuickJSMiddleware({ ptc: [] });
+      const middleware = createREPLMiddleware({ ptc: [] });
 
       expect(() =>
         (middleware as any).beforeAgent({
@@ -395,7 +395,7 @@ describe("createCodeInterpreterMiddleware", () => {
     });
 
     it("does not throw when skillsMetadata is empty", () => {
-      const middleware = createQuickJSMiddleware({
+      const middleware = createREPLMiddleware({
         ptc: [],
         skillsBackend: {} as any,
       });
