@@ -3,4 +3,4 @@
 "deepagents": patch
 ---
 
-feat(deepagents): implement swarm as a functional skill for repl middleware
+feat(quickjs): add swarm task tool and skill module backend
