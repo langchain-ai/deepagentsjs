@@ -809,7 +809,7 @@ describe("skills module loader", () => {
     });
     session.setSkillsContext(
       makeSkillsContext([makeSkillsMeta("my-skill", "index.js")], {
-        "/skills/my-skill/index.js": "export const VALUE = 42;",
+        "/my-skill/index.js": "export const VALUE = 42;",
       }),
     );
 
@@ -827,10 +827,9 @@ describe("skills module loader", () => {
     });
     session.setSkillsContext(
       makeSkillsContext([makeSkillsMeta("my-skill", "index.js")], {
-        "/skills/my-skill/index.js":
+        "/my-skill/index.js":
           "import { add } from './lib/math.js'; export function compute() { return add(1, 2); }",
-        "/skills/my-skill/lib/math.js":
-          "export function add(a, b) { return a + b; }",
+        "/my-skill/lib/math.js": "export function add(a, b) { return a + b; }",
       }),
     );
 
