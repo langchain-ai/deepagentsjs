@@ -225,7 +225,7 @@ export async function loadSkill(
     );
   }
 
-  const skillDir = posix.dirname(metadata.path);
+  const skillDir = `/${name}`;
   const codeFiles = await enumerateCodeFiles(adapted, skillDir, name);
   if (codeFiles.length === 0) {
     throw new Error(`Skill '${name}': no JS/TS files under '${skillDir}'`);

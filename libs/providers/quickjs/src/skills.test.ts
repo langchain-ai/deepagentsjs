@@ -15,7 +15,7 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const SKILL_DIR = "/skills/my-skill";
+const SKILL_DIR = "/my-skill";
 const ENTRY_ABS = `${SKILL_DIR}/index.ts`;
 
 function makeSkillMeta(overrides?: Partial<SkillMetadata>): SkillMetadata {
@@ -262,7 +262,7 @@ describe("loadSkill", () => {
     });
 
     it("accepts a multi-segment kebab-case skill name", async () => {
-      const dir = "/skills/pdf-extract";
+      const dir = "/pdf-extract";
       const entry = `${dir}/index.ts`;
       const meta = makeSkillMeta({
         name: "pdf-extract",

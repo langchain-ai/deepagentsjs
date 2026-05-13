@@ -339,12 +339,27 @@ describe("invoke mode", () => {
     expect(langchain.createAgent).toHaveBeenCalledTimes(afterConstruction);
   });
 
-  it("uses withStructuredOutput when response_schema is provided", async () => {
+  it("uses bindTools when response_schema is provided", async () => {
     const structuredResult = { label: "positive" };
-    const boundModel = { invoke: vi.fn(async () => structuredResult) };
+    const boundModel = {
+      invoke: vi.fn(
+        async () =>
+          new AIMessage({
+            content: [],
+            tool_calls: [
+              {
+                name: "structured_output",
+                args: structuredResult,
+                id: "tc_1",
+                type: "tool_call" as const,
+              },
+            ],
+          }),
+      ),
+    };
     const model: any = {
       invoke: vi.fn(),
-      withStructuredOutput: vi.fn(() => boundModel),
+      bindTools: vi.fn(() => boundModel),
     };
 
     const swarmTask = createSwarmTaskTool({
@@ -361,17 +376,26 @@ describe("invoke mode", () => {
       },
     });
 
-    expect(model.withStructuredOutput).toHaveBeenCalledWith({
-      type: "object",
-      additionalProperties: false,
-      properties: { label: { type: "string" } },
-    });
+    expect(model.bindTools).toHaveBeenCalledWith(
+      [
+        {
+          name: "structured_output",
+          description: "Return the structured result.",
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: { label: { type: "string" } },
+          },
+        },
+      ],
+      { tool_choice: "structured_output" },
+    );
     expect(boundModel.invoke).toHaveBeenCalledOnce();
     expect(model.invoke).not.toHaveBeenCalled();
     expect(result).toBe(JSON.stringify(structuredResult));
   });
 
-  it("throws when model does not support withStructuredOutput", async () => {
+  it("throws when model does not support bindTools", async () => {
     const model = makeMockModel();
 
     const swarmTask = createSwarmTaskTool({
@@ -388,7 +412,7 @@ describe("invoke mode", () => {
           properties: { label: { type: "string" } },
         },
       }),
-    ).rejects.toThrow("withStructuredOutput");
+    ).rejects.toThrow("bindTools");
   });
 
   it("returns string content from model response", async () => {

@@ -3,27 +3,14 @@ import { createAgent, tool, type ReactAgent, StructuredTool } from "langchain";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import { HumanMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { initChatModel } from "langchain/chat_models/universal";
-
-/**
- * Default time-to-live for cached schema-constrained agent variants.
- *
- * Entries are evicted when they haven't been accessed for this duration.
- * Within a `run()`, rows keep hitting the cache so entries stay warm.
- * After the run finishes, nobody accesses the entry and it expires on
- * the next cache access.
- */
-const VARIANT_TTL_MS = 60_000;
 
 /**
  * Dispatch mode for swarm task invocations.
  *
- * - `"agent"` — Full agentic loop with tools and middleware. Use for tasks
- *   that need to read files, call APIs, or iterate on intermediate results.
+ * - `"agent"` — Full agentic loop with tools and middleware.
  * - `"invoke"` — Direct model invocation with no tools or agentic loop.
- *   Use for simple classification, extraction, or labeling tasks where a
- *   single model call with structured output is sufficient.
  */
 export type SwarmTaskMode = "agent" | "invoke";
 
@@ -102,8 +89,7 @@ interface CompiledAgent {
  *
  * When a `response_schema` is provided at dispatch time, the tool
  * recompiles the agent with `responseFormat` set to the normalized
- * schema. This interface captures the fields needed for that
- * recompilation.
+ * schema.
  */
 interface AgentSpec {
   /**
@@ -126,6 +112,45 @@ interface AgentSpec {
    */
   name: string;
 }
+
+/**
+ * JSON Schema with a validated `type: "object"` constraint.
+ */
+interface ObjectSchema {
+  /**
+   * The schema type, always `"object"` after validation.
+   */
+  type: "object";
+
+  /**
+   * Additional schema properties (e.g. `properties`, `required`).
+   */
+  [key: string]: unknown;
+}
+
+/**
+ * A model that supports the `bindTools` method for structured output.
+ */
+interface BindableModel {
+  /**
+   * Bind tool definitions to the model, returning a new runnable that
+   * will invoke the model with the given tools available.
+   */
+  bindTools(
+    tools: Array<Record<string, unknown>>,
+    kwargs?: Record<string, unknown>,
+  ): Runnable;
+}
+
+/**
+ * Default time-to-live for cached schema-constrained agent variants.
+ *
+ * Entries are evicted when they haven't been accessed for this duration.
+ * Within a `run()`, rows keep hitting the cache so entries stay warm.
+ * After the run finishes, nobody accesses the entry and it expires on
+ * the next cache access.
+ */
+const VARIANT_TTL_MS = 60_000;
 
 /**
  * TTL cache for compiled agent variants.
@@ -152,28 +177,20 @@ export class VariantCache<T> {
    *
    * Sweeps expired entries before lookup. Cache hits refresh the
    * last-accessed timestamp.
-   *
-   * @param key - Cache key (e.g. `"subagentName::normalizedSchemaJSON"`).
-   * @param factory - Called exactly once on cache miss to produce the value.
-   * @returns The cached or newly created value.
    */
   getOrCreate(key: string, factory: () => T): T {
-    const now = Date.now();
-
-    for (const [k, entry] of this.entries) {
-      if (now - entry.lastAccessed > this.ttlMs) {
-        this.entries.delete(k);
-      }
-    }
+    this.sweep();
 
     const cached = this.entries.get(key);
+
     if (cached) {
-      cached.lastAccessed = now;
+      cached.lastAccessed = Date.now();
       return cached.value;
     }
 
     const value = factory();
-    this.entries.set(key, { value, lastAccessed: now });
+    this.entries.set(key, { value, lastAccessed: Date.now() });
+
     return value;
   }
 
@@ -183,6 +200,26 @@ export class VariantCache<T> {
   get size(): number {
     return this.entries.size;
   }
+
+  /**
+   * Remove entries that haven't been accessed within the TTL window.
+   */
+  private sweep(): void {
+    const now = Date.now();
+
+    for (const [key, entry] of this.entries) {
+      if (now - entry.lastAccessed > this.ttlMs) {
+        this.entries.delete(key);
+      }
+    }
+  }
+}
+
+/**
+ * Check whether a value is a plain object suitable for JSON Schema traversal.
+ */
+function isSchemaNode(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === "object" && !Array.isArray(value);
 }
 
 /**
@@ -198,10 +235,11 @@ export function normalizeSchema(
 
   if (schema.type === "array") {
     const result: Record<string, unknown> = { ...schema };
-    const items = result.items;
-    if (items != null && typeof items === "object" && !Array.isArray(items)) {
-      result.items = normalizeSchema(items as Record<string, unknown>);
+
+    if (isSchemaNode(result.items)) {
+      result.items = normalizeSchema(result.items);
     }
+
     return result;
   }
 
@@ -211,30 +249,81 @@ export function normalizeSchema(
   };
 
   const props = schema.properties;
-  if (props != null && typeof props === "object" && !Array.isArray(props)) {
-    const normalizedProps: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(props as Record<string, unknown>)) {
-      if (v != null && typeof v === "object" && !Array.isArray(v)) {
-        normalizedProps[k] = normalizeSchema(v as Record<string, unknown>);
-      } else {
-        normalizedProps[k] = v;
-      }
+
+  if (isSchemaNode(props)) {
+    const normalized: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(props)) {
+      normalized[key] = isSchemaNode(value) ? normalizeSchema(value) : value;
     }
-    result.properties = normalizedProps;
+
+    result.properties = normalized;
   }
 
   return result;
 }
 
 /**
+ * Normalize a response schema and validate it has `type: "object"`.
+ *
+ * Combines `normalizeSchema` with the object-type check that both
+ * `invokeModel` and `invokeAgent` require.
+ */
+function normalizeResponseSchema(
+  schema: Record<string, unknown>,
+): ObjectSchema {
+  const normalized = normalizeSchema(schema);
+
+  if (normalized.type !== "object") {
+    throw new Error(
+      `response_schema must have type: "object", got: ${JSON.stringify(normalized.type)}`,
+    );
+  }
+
+  return normalized as ObjectSchema;
+}
+
+/**
+ * Check whether a model supports `bindTools` for structured output.
+ */
+function hasBindTools(model: unknown): model is BindableModel {
+  return (
+    model != null &&
+    typeof model === "object" &&
+    "bindTools" in model &&
+    typeof model.bindTools === "function"
+  );
+}
+
+/**
+ * Convert message content (string or content-block array) to a plain string.
+ *
+ * Content blocks with a `text` field are concatenated. Non-text blocks
+ * are JSON-stringified.
+ */
+function contentToString(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((block) => {
+        if (isSchemaNode(block) && "text" in block) {
+          return String(block.text);
+        }
+
+        return JSON.stringify(block);
+      })
+      .join("\n");
+  }
+
+  return JSON.stringify(content);
+}
+
+/**
  * Direct model invocation — single LLM call with optional structured output.
- *
  * No tools, no agentic loop.
- *
- * @param model - Language model instance.
- * @param description - The user-facing task description.
- * @param responseSchema - Optional JSON Schema to constrain the response.
- * @returns The model's response as a string.
  */
 async function invokeModel(
   model: LanguageModelLike | string,
@@ -243,28 +332,11 @@ async function invokeModel(
 ): Promise<string> {
   const resolved =
     typeof model === "string" ? await initChatModel(model) : model;
+
   const messages = [new HumanMessage({ content: description })];
 
   if (responseSchema) {
-    const normalized = normalizeSchema(responseSchema);
-    if (normalized.type !== "object") {
-      throw new Error(
-        `response_schema must have type: "object", got: ${JSON.stringify(normalized.type)}`,
-      );
-    }
-
-    if (
-      typeof (resolved as unknown as Record<string, unknown>)
-        .withStructuredOutput === "function"
-    ) {
-      const boundModel = (resolved as any).withStructuredOutput(normalized);
-      const result = await boundModel.invoke(messages);
-      return JSON.stringify(result);
-    }
-
-    throw new Error(
-      "invoke mode with response_schema requires a model that supports withStructuredOutput().",
-    );
+    return invokeWithStructuredOutput(resolved, messages, responseSchema);
   }
 
   const result = await resolved.invoke(messages);
@@ -274,14 +346,51 @@ async function invokeModel(
   }
 
   if (result && typeof result === "object" && "content" in result) {
-    const content = result.content;
-    if (typeof content === "string") {
-      return content;
-    }
-    return JSON.stringify(content);
+    return contentToString(result.content);
   }
 
   return JSON.stringify(result);
+}
+
+/**
+ * Bind a structured output tool to the model and extract the result
+ * from the response's `tool_calls`.
+ */
+async function invokeWithStructuredOutput(
+  model: LanguageModelLike,
+  messages: HumanMessage[],
+  responseSchema: Record<string, unknown>,
+): Promise<string> {
+  const normalized = normalizeResponseSchema(responseSchema);
+
+  if (!hasBindTools(model)) {
+    throw new Error(
+      "invoke mode with response_schema requires a model that supports bindTools().",
+    );
+  }
+
+  const toolName = "structured_output";
+
+  const bound = model.bindTools(
+    [
+      {
+        name: toolName,
+        description: "Return the structured result.",
+        schema: normalized,
+      },
+    ],
+    { tool_choice: toolName },
+  );
+
+  const response = await bound.invoke(messages);
+
+  if (!AIMessage.isInstance(response) || !response.tool_calls?.length) {
+    throw new Error(
+      "invoke mode with response_schema: model did not return structured output",
+    );
+  }
+
+  return JSON.stringify(response.tool_calls[0].args);
 }
 
 /**
@@ -290,16 +399,10 @@ async function invokeModel(
  *
  * When `response_schema` is provided, the agent is compiled with
  * `responseFormat` set to the normalized schema. Compiled variants are
- * stored in a TTL cache keyed by `subagentType::normalizedSchema`. Within
- * a `run()`, all rows hit the cache so the agent is compiled exactly
- * once. After the run completes, the entry expires after `VARIANT_TTL_MS`
- * of inactivity.
- *
- * @param entry - Compiled agent and its preserved spec.
- * @param description - The user-facing task description.
- * @param responseSchema - Optional JSON Schema to constrain the response.
- * @param variantCache - TTL cache shared across invocations of this tool.
- * @returns The agent's final response as a string.
+ * stored in a TTL cache keyed by `subagentType::normalizedSchema`.
+ * Within a `run()`, all rows hit the cache so the agent is compiled
+ * exactly once. After the run completes, the entry expires after
+ * `VARIANT_TTL_MS` of inactivity.
  */
 async function invokeAgent(
   entry: CompiledAgent,
@@ -310,21 +413,13 @@ async function invokeAgent(
   let agent = entry.agent;
 
   if (responseSchema) {
-    const normalized = normalizeSchema(responseSchema);
-    if (normalized.type !== "object") {
-      throw new Error(
-        `response_schema must have type: "object", got: ${JSON.stringify(normalized.type)}`,
-      );
-    }
-
+    const normalized = normalizeResponseSchema(responseSchema);
     const cacheKey = `${entry.spec.name}::${JSON.stringify(normalized)}`;
+
     agent = variantCache.getOrCreate(cacheKey, () =>
       createAgent({
         ...entry.spec,
-        responseFormat: normalized as {
-          type: "object";
-          [key: string]: unknown;
-        },
+        responseFormat: normalized,
       }),
     );
   }
@@ -339,28 +434,14 @@ async function invokeAgent(
     return JSON.stringify(result.structuredResponse);
   }
 
-  const messages = result.messages as Array<{ content: string | unknown[] }>;
+  const messages = result.messages as Array<{ content: unknown }>;
   const lastMessage = messages?.[messages.length - 1];
+
   if (!lastMessage) {
     return "Task completed";
   }
 
-  const content = lastMessage.content;
-  if (typeof content === "string") {
-    return content;
-  }
-
-  if (Array.isArray(content)) {
-    return content
-      .map((block) =>
-        typeof block === "object" && block !== null && "text" in block
-          ? (block as { text: string }).text
-          : JSON.stringify(block),
-      )
-      .join("\n");
-  }
-
-  return JSON.stringify(content);
+  return contentToString(lastMessage.content);
 }
 
 /**
@@ -411,6 +492,7 @@ export function createSwarmTaskTool(
       tools: sub.tools ?? [],
       name: sub.name,
     };
+
     compiled.set(sub.name, {
       agent: createAgent({ ...spec }),
       spec,
@@ -418,39 +500,43 @@ export function createSwarmTaskTool(
   }
 
   const subagentNames = subagents.map((s) => s.name);
-
   const variantCache = new VariantCache<ReactAgent | Runnable>();
 
   return tool(
-    async (
-      input: {
-        description: string;
-        subagent_type?: string;
-        response_schema?: Record<string, unknown>;
-        mode?: SwarmTaskMode;
-      },
-      _config,
-    ): Promise<string> => {
+    async (input: {
+      description: string;
+      subagent_type?: string;
+      response_schema?: Record<string, unknown>;
+      mode?: SwarmTaskMode;
+    }): Promise<string> => {
       const {
         description,
-        subagent_type,
-        response_schema,
+        subagent_type: subagentType,
+        response_schema: responseSchema,
         mode = "agent",
       } = input;
 
       if (mode === "invoke") {
-        return invokeModel(defaultModel, description, response_schema);
+        return invokeModel(defaultModel, description, responseSchema);
       }
 
-      const entry = compiled.get(subagent_type!);
-      if (!entry) {
+      if (!subagentType) {
         throw new Error(
-          `Unknown swarm subagent type "${subagent_type}". ` +
+          "agent mode requires subagent_type. " +
             `Available: ${subagentNames.join(", ")}`,
         );
       }
 
-      return invokeAgent(entry, description, response_schema, variantCache);
+      const entry = compiled.get(subagentType);
+
+      if (!entry) {
+        throw new Error(
+          `Unknown swarm subagent type "${subagentType}". ` +
+            `Available: ${subagentNames.join(", ")}`,
+        );
+      }
+
+      return invokeAgent(entry, description, responseSchema, variantCache);
     },
     {
       name: "swarm_task",
@@ -465,7 +551,7 @@ export function createSwarmTaskTool(
           .string()
           .optional()
           .describe(
-            `Name of the swarm subagent to use. When set, runs a full agentic loop. Available: ${subagentNames.join(", ")}`,
+            `Name of the swarm subagent to use. Available: ${subagentNames.join(", ")}`,
           ),
         response_schema: z
           .record(z.string(), z.unknown())

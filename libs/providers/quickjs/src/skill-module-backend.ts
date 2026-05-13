@@ -3,6 +3,7 @@ import path from "node:path";
 import type {
   BackendProtocolV2,
   EditResult,
+  FileDownloadResponse,
   FileInfo,
   GlobResult,
   GrepMatch,
@@ -13,9 +14,6 @@ import type {
   WriteResult,
 } from "deepagents";
 
-/**
- * File extensions included when loading a skill module directory.
- */
 const SKILL_FILE_EXTENSIONS = new Set([
   ".ts",
   ".js",
@@ -28,79 +26,193 @@ const SKILL_FILE_EXTENSIONS = new Set([
   ".md",
 ]);
 
-/**
- * Test file suffixes excluded when loading a skill module directory.
- */
 const TEST_SUFFIXES = [".test.", ".spec."];
 
+const READ_ONLY_ERROR = "Skill module backend is read-only";
+
 /**
- * Read-only backend that serves skill module files from a directory on disk.
+ * Check whether a filename should be included when loading a skill module.
+ */
+function isSkillFile(filename: string): boolean {
+  const ext = path.extname(filename);
+
+  if (!SKILL_FILE_EXTENSIONS.has(ext)) {
+    return false;
+  }
+
+  if (TEST_SUFFIXES.some((s) => filename.includes(s))) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Convert a glob pattern to a compiled RegExp.
  *
- * Reads all matching files at construction time and holds them in memory.
+ * Supports `*` (any non-slash characters) and `**` (any path segments).
+ */
+function globToRegExp(pattern: string): RegExp {
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*\*/g, "<<GLOBSTAR>>")
+    .replace(/\*/g, "[^/]*")
+    .replace(/<<GLOBSTAR>>/g, ".*");
+
+  return new RegExp("^" + escaped + "$");
+}
+
+/**
+ * Normalize a directory path into a prefix for startsWith matching.
+ *
+ * Empty string and `"."` are treated as root. The result always ends
+ * with exactly one `/`.
+ */
+function normalizeDirPrefix(dirPath: string): string {
+  if (dirPath === "" || dirPath === "." || dirPath === "/") {
+    return "/";
+  }
+
+  return dirPath.replace(/\/$/, "") + "/";
+}
+
+/**
+ * Strip the leading slash from a virtual path, if present.
+ */
+function stripLeadingSlash(filePath: string): string {
+  if (filePath.startsWith("/")) {
+    return filePath.slice(1);
+  }
+
+  return filePath;
+}
+
+/**
+ * Load all eligible files from a single skill subdirectory into the map.
+ */
+function loadSkillSubdirectory(
+  files: Map<string, string>,
+  subdirPath: string,
+  subdirName: string,
+): void {
+  for (const entry of fs.readdirSync(subdirPath)) {
+    if (!isSkillFile(entry)) {
+      continue;
+    }
+
+    const fullPath = path.join(subdirPath, entry);
+
+    if (!fs.statSync(fullPath).isFile()) {
+      continue;
+    }
+
+    const virtualPath = `/${subdirName}/${entry}`;
+    files.set(virtualPath, fs.readFileSync(fullPath, "utf-8"));
+  }
+}
+
+/**
+ * Scan a skills directory, loading each subdirectory as a skill module.
+ *
+ * Each immediate subdirectory is treated as one skill. Files within are
+ * filtered by extension and test-suffix rules via `isSkillFile`.
+ */
+function loadSkillsDirectory(skillsDir: string): Map<string, string> {
+  const resolved = path.resolve(skillsDir);
+  const files = new Map<string, string>();
+
+  for (const subdir of fs.readdirSync(resolved)) {
+    const subdirPath = path.join(resolved, subdir);
+
+    if (!fs.statSync(subdirPath).isDirectory()) {
+      continue;
+    }
+
+    loadSkillSubdirectory(files, subdirPath, subdir);
+  }
+
+  return files;
+}
+
+/**
+ * Read-only backend that serves skill module files from a skills directory.
+ *
+ * Each subdirectory of `skillsDir` is treated as a skill module. Files are
+ * loaded into memory at construction time and served under `/<name>/`
+ * prefixes so the skills middleware can discover them via `ls("/")`.
+ *
  * Implements the subset of BackendProtocolV2 needed for CompositeBackend
  * routing — ls, read, readRaw, grep, glob. Write operations return errors.
  */
 export class SkillModuleBackend implements BackendProtocolV2 {
   private files: Map<string, string>;
 
-  /**
-   * @param dir - Path to the skill module directory on disk.
-   */
-  constructor(dir: string) {
-    this.files = loadDirectory(dir);
+  constructor(skillsDir: string) {
+    this.files = loadSkillsDirectory(skillsDir);
   }
 
+  /**
+   * List files and subdirectories under `dirPath`.
+   *
+   * At the root (`/`), each skill module appears as a directory entry.
+   * Inside a skill directory, individual files are listed.
+   */
   ls(dirPath: string): LsResult {
-    const norm = dirPath === "" || dirPath === "." ? "/" : dirPath;
-    const prefix = norm === "/" ? "/" : norm.replace(/\/$/, "") + "/";
-
+    const prefix = normalizeDirPrefix(dirPath);
     const entries: FileInfo[] = [];
-    const dirs = new Set<string>();
+    const seenDirs = new Set<string>();
 
     for (const filePath of this.files.keys()) {
-      if (norm === "/") {
-        const rest = filePath.slice(1);
-        const slash = rest.indexOf("/");
-        if (slash === -1) {
-          entries.push({ path: filePath, is_dir: false });
-        } else {
-          const dir = "/" + rest.slice(0, slash + 1);
-          if (!dirs.has(dir)) {
-            dirs.add(dir);
-            entries.push({ path: dir, is_dir: true });
-          }
-        }
-      } else if (filePath.startsWith(prefix)) {
-        const rest = filePath.slice(prefix.length);
-        const slash = rest.indexOf("/");
-        if (slash === -1) {
-          entries.push({ path: filePath, is_dir: false });
-        } else {
-          const dir = prefix + rest.slice(0, slash + 1);
-          if (!dirs.has(dir)) {
-            dirs.add(dir);
-            entries.push({ path: dir, is_dir: true });
-          }
-        }
+      if (!filePath.startsWith(prefix)) {
+        continue;
       }
+
+      const rest = filePath.slice(prefix.length);
+      const slashIdx = rest.indexOf("/");
+
+      if (slashIdx === -1) {
+        entries.push({ path: filePath, is_dir: false });
+        continue;
+      }
+
+      const dir = prefix + rest.slice(0, slashIdx + 1);
+
+      if (seenDirs.has(dir)) {
+        continue;
+      }
+
+      seenDirs.add(dir);
+      entries.push({ path: dir, is_dir: true });
     }
+
     return { files: entries };
   }
 
+  /**
+   * Read a file's text content by virtual path.
+   */
   read(filePath: string): ReadResult {
     const content = this.resolve(filePath);
+
     if (content == null) {
       return { error: `File not found: ${filePath}` };
     }
+
     return { content, mimeType: "text/plain" };
   }
 
+  /**
+   * Read a file with metadata (timestamps, mime type).
+   */
   readRaw(filePath: string): ReadRawResult {
     const content = this.resolve(filePath);
+
     if (content == null) {
       return { error: `File not found: ${filePath}` };
     }
+
     const now = new Date().toISOString();
+
     return {
       data: {
         content,
@@ -111,81 +223,102 @@ export class SkillModuleBackend implements BackendProtocolV2 {
     };
   }
 
+  /**
+   * Search file contents for a literal string pattern.
+   */
   grep(
     pattern: string,
     searchPath?: string | null,
     globPattern?: string | null,
   ): GrepResult {
     const matches: GrepMatch[] = [];
+    const globRe = globPattern ? globToRegExp(globPattern) : null;
+
     for (const [filePath, content] of this.files) {
-      if (searchPath && !filePath.startsWith(searchPath)) continue;
-      if (globPattern && !matchGlob(filePath, globPattern)) continue;
+      if (searchPath && !filePath.startsWith(searchPath)) {
+        continue;
+      }
+
+      if (globRe && !globRe.test(filePath)) {
+        continue;
+      }
+
       const lines = content.split("\n");
+
       for (let i = 0; i < lines.length; i++) {
         if (lines[i].includes(pattern)) {
-          matches.push({ path: filePath, line: i + 1, text: lines[i] });
+          matches.push({
+            path: filePath,
+            line: i + 1,
+            text: lines[i],
+          });
         }
       }
     }
+
     return { matches };
   }
 
+  /**
+   * Find files matching a glob pattern (supports `*` and `**`).
+   */
   glob(pattern: string, basePath?: string): GlobResult {
-    const files: FileInfo[] = [];
+    const re = globToRegExp(pattern);
+    const matched: FileInfo[] = [];
+
     for (const filePath of this.files.keys()) {
-      if (basePath && !filePath.startsWith(basePath)) continue;
-      const matchPath = filePath.startsWith("/") ? filePath.slice(1) : filePath;
-      if (matchGlob(matchPath, pattern)) {
-        files.push({ path: filePath, is_dir: false });
+      if (basePath && !filePath.startsWith(basePath)) {
+        continue;
+      }
+
+      if (re.test(stripLeadingSlash(filePath))) {
+        matched.push({ path: filePath, is_dir: false });
       }
     }
-    return { files };
+
+    return { files: matched };
   }
 
+  /**
+   * Download files as binary content. Used by CompositeBackend when the
+   * skills middleware loads SKILL.md files.
+   */
+  async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
+    const encoder = new TextEncoder();
+
+    return paths.map((p) => {
+      const content = this.resolve(p);
+
+      if (content == null) {
+        return { path: p, content: null, error: "file_not_found" as const };
+      }
+
+      return {
+        path: p,
+        content: encoder.encode(content),
+        error: null,
+      };
+    });
+  }
+
+  /**
+   * Reject writes — this backend is read-only.
+   */
   write(): WriteResult {
-    return { error: "Skill module backend is read-only" };
+    return { error: READ_ONLY_ERROR };
   }
 
+  /**
+   * Reject edits — this backend is read-only.
+   */
   edit(): EditResult {
-    return { error: "Skill module backend is read-only" };
+    return { error: READ_ONLY_ERROR };
   }
 
+  /**
+   * Resolve a virtual path to file content, with or without a leading slash.
+   */
   private resolve(filePath: string): string | undefined {
     return this.files.get(filePath) ?? this.files.get("/" + filePath);
   }
-}
-
-/**
- * Read all skill files from a directory into a map keyed by virtual path.
- */
-function loadDirectory(dir: string): Map<string, string> {
-  const resolved = path.resolve(dir);
-  const files = new Map<string, string>();
-
-  for (const entry of fs.readdirSync(resolved)) {
-    const ext = path.extname(entry);
-    if (!SKILL_FILE_EXTENSIONS.has(ext)) continue;
-    if (TEST_SUFFIXES.some((s) => entry.includes(s))) continue;
-
-    const fullPath = path.join(resolved, entry);
-    const stat = fs.statSync(fullPath);
-    if (!stat.isFile()) continue;
-
-    files.set("/" + entry, fs.readFileSync(fullPath, "utf-8"));
-  }
-
-  return files;
-}
-
-/**
- * Minimal glob matching for the in-memory file set.
- * Supports `*` (any non-slash) and `**` (any path segment).
- */
-function matchGlob(filePath: string, pattern: string): boolean {
-  const re = pattern
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-    .replace(/\*\*/g, "<<GLOBSTAR>>")
-    .replace(/\*/g, "[^/]*")
-    .replace(/<<GLOBSTAR>>/g, ".*");
-  return new RegExp("^" + re + "$").test(filePath);
 }
