@@ -28,7 +28,7 @@ const SKILL_FILE_EXTENSIONS = new Set([
 
 const TEST_SUFFIXES = [".test.", ".spec."];
 
-const READ_ONLY_ERROR = "Skill module backend is read-only";
+const READ_ONLY_ERROR = "InMemoryBackend is read-only";
 
 /**
  * Check whether a filename should be included when loading a skill module.
@@ -135,20 +135,37 @@ function loadSkillsDirectory(skillsDir: string): Map<string, string> {
 }
 
 /**
- * Read-only backend that serves skill module files from a skills directory.
+ * Read-only, in-memory backend for loading skill modules into the code
+ * interpreter.
  *
- * Each subdirectory of `skillsDir` is treated as a skill module. Files are
- * loaded into memory at construction time and served under `/<name>/`
+ * Files are read from a directory into memory at construction time. Each
+ * subdirectory is treated as a skill module and served under `/<name>/`
  * prefixes so the skills middleware can discover them via `ls("/")`.
  *
- * Implements the subset of BackendProtocolV2 needed for CompositeBackend
- * routing — ls, read, readRaw, grep, glob. Write operations return errors.
+ * This backend does not support writes. It cannot be used as a top-level
+ * backend because features like ContextOffloading require write support.
+ * Mount it on a CompositeBackend under a read-only route (e.g. `/skills/`).
+ *
+ * @example
+ * ```typescript
+ * const skillsBackend = InMemoryBackend.fromDirectory("./skills");
+ * const backend = new CompositeBackend(primaryBackend, {
+ *   "/skills/": skillsBackend,
+ * });
+ * ```
  */
-export class SkillModuleBackend implements BackendProtocolV2 {
+export class InMemoryBackend implements BackendProtocolV2 {
   private files: Map<string, string>;
 
   constructor(skillsDir: string) {
     this.files = loadSkillsDirectory(skillsDir);
+  }
+
+  /**
+   * Create an InMemoryBackend from a directory on disk.
+   */
+  static fromDirectory(skillsDir: string): InMemoryBackend {
+    return new InMemoryBackend(skillsDir);
   }
 
   /**

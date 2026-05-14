@@ -59,4 +59,4 @@ export {
   type SwarmTaskMode,
 } from "./tools/swarm-task.js";
 
-export { SkillModuleBackend } from "./skill-module-backend.js";
+export { InMemoryBackend } from "./in-memory-backend.js";

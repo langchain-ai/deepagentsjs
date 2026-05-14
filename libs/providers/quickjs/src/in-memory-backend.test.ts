@@ -2,15 +2,15 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { SkillModuleBackend } from "./skill-module-backend.js";
+import { InMemoryBackend } from "./in-memory-backend.js";
 
-describe("SkillModuleBackend", () => {
+describe("InMemoryBackend", () => {
   let tmpDir: string;
   let skillDir: string;
   const SKILL_NAME = "test-skill";
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "skill-module-backend-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "in-memory-backend-"));
     skillDir = path.join(tmpDir, SKILL_NAME);
     fs.mkdirSync(skillDir);
     fs.writeFileSync(
@@ -33,7 +33,7 @@ describe("SkillModuleBackend", () => {
 
   describe("constructor", () => {
     it("loads files under /<subdirName>/ prefix", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.ls(`/${SKILL_NAME}`);
       const paths = result.files!.map((f) => f.path).sort();
       expect(paths).toEqual([
@@ -48,7 +48,7 @@ describe("SkillModuleBackend", () => {
       fs.mkdirSync(otherDir);
       fs.writeFileSync(path.join(otherDir, "index.ts"), "export default 2;");
 
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.ls("/");
       const dirs = result.files!.map((f) => f.path).sort();
       expect(dirs).toEqual(["/other-skill/", `/${SKILL_NAME}/`]);
@@ -57,7 +57,7 @@ describe("SkillModuleBackend", () => {
 
     it("ignores non-directory entries in skills dir", () => {
       fs.writeFileSync(path.join(tmpDir, "README.md"), "# Skills");
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.ls("/");
       expect(result.files).toHaveLength(1);
       expect(result.files![0].path).toBe(`/${SKILL_NAME}/`);
@@ -66,7 +66,7 @@ describe("SkillModuleBackend", () => {
     it("excludes test files", () => {
       fs.writeFileSync(path.join(skillDir, "index.test.ts"), "test");
       fs.writeFileSync(path.join(skillDir, "utils.spec.ts"), "spec");
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.ls(`/${SKILL_NAME}`);
       const paths = result.files!.map((f) => f.path).sort();
       expect(paths).toEqual([
@@ -79,7 +79,7 @@ describe("SkillModuleBackend", () => {
     it("excludes non-skill file extensions", () => {
       fs.writeFileSync(path.join(skillDir, "data.json"), "{}");
       fs.writeFileSync(path.join(skillDir, "notes.txt"), "hello");
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.ls(`/${SKILL_NAME}`);
       const paths = result.files!.map((f) => f.path).sort();
       expect(paths).toEqual([
@@ -92,7 +92,7 @@ describe("SkillModuleBackend", () => {
 
   describe("ls", () => {
     it("lists skills as directories at root", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.ls("/");
       expect(result.error).toBeUndefined();
       expect(result.files).toHaveLength(1);
@@ -101,7 +101,7 @@ describe("SkillModuleBackend", () => {
     });
 
     it("lists files inside skill directory", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.ls(`/${SKILL_NAME}`);
       expect(result.error).toBeUndefined();
       expect(result.files).toHaveLength(3);
@@ -112,13 +112,13 @@ describe("SkillModuleBackend", () => {
     });
 
     it("returns empty for non-existent subdirectory", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.ls("/nonexistent");
       expect(result.files).toEqual([]);
     });
 
     it("handles empty string as root", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.ls("");
       expect(result.files).toHaveLength(1);
       expect(result.files![0].is_dir).toBe(true);
@@ -127,7 +127,7 @@ describe("SkillModuleBackend", () => {
 
   describe("read", () => {
     it("reads file content by path", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.read(`/${SKILL_NAME}/index.ts`);
       expect(result.error).toBeUndefined();
       expect(result.content).toBe("export const x = 1;\nexport const y = 2;\n");
@@ -135,14 +135,14 @@ describe("SkillModuleBackend", () => {
     });
 
     it("reads file without leading slash", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.read(`${SKILL_NAME}/index.ts`);
       expect(result.error).toBeUndefined();
       expect(result.content).toBe("export const x = 1;\nexport const y = 2;\n");
     });
 
     it("returns error for missing file", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.read(`/${SKILL_NAME}/missing.ts`);
       expect(result.error).toBe(`File not found: /${SKILL_NAME}/missing.ts`);
       expect(result.content).toBeUndefined();
@@ -151,7 +151,7 @@ describe("SkillModuleBackend", () => {
 
   describe("readRaw", () => {
     it("returns FileData with content", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.readRaw(`/${SKILL_NAME}/SKILL.md`);
       expect(result.error).toBeUndefined();
       expect(result.data).toBeDefined();
@@ -160,7 +160,7 @@ describe("SkillModuleBackend", () => {
     });
 
     it("returns error for missing file", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.readRaw(`/${SKILL_NAME}/nope.ts`);
       expect(result.error).toBe(`File not found: /${SKILL_NAME}/nope.ts`);
     });
@@ -168,21 +168,21 @@ describe("SkillModuleBackend", () => {
 
   describe("grep", () => {
     it("finds matches across files", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.grep("export");
       expect(result.matches).toBeDefined();
       expect(result.matches!.length).toBeGreaterThanOrEqual(3);
     });
 
     it("filters by search path", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.grep("export", `/${SKILL_NAME}/utils.ts`);
       expect(result.matches).toHaveLength(1);
       expect(result.matches![0].path).toBe(`/${SKILL_NAME}/utils.ts`);
     });
 
     it("returns empty for no matches", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.grep("nonexistent_string_xyz");
       expect(result.matches).toEqual([]);
     });
@@ -190,7 +190,7 @@ describe("SkillModuleBackend", () => {
 
   describe("glob", () => {
     it("matches by extension", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.glob("**/*.ts");
       expect(result.files).toBeDefined();
       const paths = result.files!.map((f) => f.path).sort();
@@ -201,14 +201,14 @@ describe("SkillModuleBackend", () => {
     });
 
     it("matches markdown", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.glob("**/*.md");
       expect(result.files).toHaveLength(1);
       expect(result.files![0].path).toBe(`/${SKILL_NAME}/SKILL.md`);
     });
 
     it("returns empty for no matches", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.glob("**/*.py");
       expect(result.files).toEqual([]);
     });
@@ -216,15 +216,15 @@ describe("SkillModuleBackend", () => {
 
   describe("write operations", () => {
     it("write returns error", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.write(`/${SKILL_NAME}/new.ts`, "content");
-      expect(result.error).toBe("Skill module backend is read-only");
+      expect(result.error).toBe("InMemoryBackend is read-only");
     });
 
     it("edit returns error", () => {
-      const backend = new SkillModuleBackend(tmpDir);
+      const backend = new InMemoryBackend(tmpDir);
       const result = backend.edit(`/${SKILL_NAME}/index.ts`, "old", "new");
-      expect(result.error).toBe("Skill module backend is read-only");
+      expect(result.error).toBe("InMemoryBackend is read-only");
     });
   });
 });
