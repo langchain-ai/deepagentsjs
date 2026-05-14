@@ -14,38 +14,7 @@ import type {
   WriteResult,
 } from "deepagents";
 
-const SKILL_FILE_EXTENSIONS = new Set([
-  ".ts",
-  ".js",
-  ".mts",
-  ".mjs",
-  ".cts",
-  ".cjs",
-  ".tsx",
-  ".jsx",
-  ".md",
-]);
-
-const TEST_SUFFIXES = [".test.", ".spec."];
-
 const READ_ONLY_ERROR = "InMemoryBackend is read-only";
-
-/**
- * Check whether a filename should be included when loading a skill module.
- */
-function isSkillFile(filename: string): boolean {
-  const ext = path.extname(filename);
-
-  if (!SKILL_FILE_EXTENSIONS.has(ext)) {
-    return false;
-  }
-
-  if (TEST_SUFFIXES.some((s) => filename.includes(s))) {
-    return false;
-  }
-
-  return true;
-}
 
 /**
  * Convert a glob pattern to a compiled RegExp.
@@ -88,59 +57,37 @@ function stripLeadingSlash(filePath: string): string {
 }
 
 /**
- * Load all eligible files from a single skill subdirectory into the map.
+ * Recursively read all files from a directory into a map of virtual paths
+ * to file contents. The root directory is stripped from paths so a file at
+ * `<root>/foo/bar.ts` becomes `/foo/bar.ts`.
  */
-function loadSkillSubdirectory(
+function readDirectory(
+  rootDir: string,
+  currentDir: string,
   files: Map<string, string>,
-  subdirPath: string,
-  subdirName: string,
 ): void {
-  for (const entry of fs.readdirSync(subdirPath)) {
-    if (!isSkillFile(entry)) {
-      continue;
+  for (const entry of fs.readdirSync(currentDir)) {
+    const fullPath = path.join(currentDir, entry);
+    const stat = fs.statSync(fullPath);
+
+    if (stat.isDirectory()) {
+      readDirectory(rootDir, fullPath, files);
+    } else if (stat.isFile()) {
+      const relativePath = path.relative(rootDir, fullPath);
+      const virtualPath = "/" + relativePath.split(path.sep).join("/");
+      files.set(virtualPath, fs.readFileSync(fullPath, "utf-8"));
     }
-
-    const fullPath = path.join(subdirPath, entry);
-
-    if (!fs.statSync(fullPath).isFile()) {
-      continue;
-    }
-
-    const virtualPath = `/${subdirName}/${entry}`;
-    files.set(virtualPath, fs.readFileSync(fullPath, "utf-8"));
   }
 }
 
 /**
- * Scan a skills directory, loading each subdirectory as a skill module.
+ * Read-only, in-memory backend that loads all files from a directory at init
+ * time.
  *
- * Each immediate subdirectory is treated as one skill. Files within are
- * filtered by extension and test-suffix rules via `isSkillFile`.
- */
-function loadSkillsDirectory(skillsDir: string): Map<string, string> {
-  const resolved = path.resolve(skillsDir);
-  const files = new Map<string, string>();
-
-  for (const subdir of fs.readdirSync(resolved)) {
-    const subdirPath = path.join(resolved, subdir);
-
-    if (!fs.statSync(subdirPath).isDirectory()) {
-      continue;
-    }
-
-    loadSkillSubdirectory(files, subdirPath, subdir);
-  }
-
-  return files;
-}
-
-/**
- * Read-only, in-memory backend for loading skill modules into the code
- * interpreter.
- *
- * Files are read from a directory into memory at construction time. Each
- * subdirectory is treated as a skill module and served under `/<name>/`
- * prefixes so the skills middleware can discover them via `ls("/")`.
+ * All files are read eagerly into memory so there is no filesystem dependency
+ * at runtime. This is the recommended way to serve skill modules to the code
+ * interpreter, but the backend itself is generic and not tied to any specific
+ * use case.
  *
  * This backend does not support writes. It cannot be used as a top-level
  * backend because features like ContextOffloading require write support.
@@ -157,22 +104,26 @@ function loadSkillsDirectory(skillsDir: string): Map<string, string> {
 export class InMemoryBackend implements BackendProtocolV2 {
   private files: Map<string, string>;
 
-  constructor(skillsDir: string) {
-    this.files = loadSkillsDirectory(skillsDir);
+  /**
+   * Create an InMemoryBackend from a pre-built map of virtual paths to file
+   * contents.
+   */
+  constructor(files: Map<string, string>) {
+    this.files = files;
   }
 
   /**
-   * Create an InMemoryBackend from a directory on disk.
+   * Create an InMemoryBackend by reading all files from a directory on disk.
    */
-  static fromDirectory(skillsDir: string): InMemoryBackend {
-    return new InMemoryBackend(skillsDir);
+  static fromDirectory(dir: string): InMemoryBackend {
+    const resolved = path.resolve(dir);
+    const files = new Map<string, string>();
+    readDirectory(resolved, resolved, files);
+    return new InMemoryBackend(files);
   }
 
   /**
    * List files and subdirectories under `dirPath`.
-   *
-   * At the root (`/`), each skill module appears as a directory entry.
-   * Inside a skill directory, individual files are listed.
    */
   ls(dirPath: string): LsResult {
     const prefix = normalizeDirPrefix(dirPath);
@@ -297,8 +248,7 @@ export class InMemoryBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Download files as binary content. Used by CompositeBackend when the
-   * skills middleware loads SKILL.md files.
+   * Download files as binary content.
    */
   async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
     const encoder = new TextEncoder();
