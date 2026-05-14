@@ -99,6 +99,35 @@ describe("InMemoryBackend", () => {
       const result = backend.read(`/${SKILL_NAME}/sub/deep.ts`);
       expect(result.content).toBe("export const d = 1;");
     });
+
+    it("skips symlinks pointing outside the root directory", () => {
+      const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "outside-"));
+      const secretFile = path.join(outsideDir, "secret.txt");
+      fs.writeFileSync(secretFile, "sensitive data");
+
+      try {
+        fs.symlinkSync(secretFile, path.join(skillDir, "exfil.ts"));
+        const backend = InMemoryBackend.fromDirectory(tmpDir);
+        const result = backend.read(`/${SKILL_NAME}/exfil.ts`);
+        expect(result.error).toBeDefined();
+      } finally {
+        fs.rmSync(outsideDir, { recursive: true, force: true });
+      }
+    });
+
+    it("skips symlinked directories", () => {
+      const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "outside-"));
+      fs.writeFileSync(path.join(outsideDir, "secret.ts"), "sensitive");
+
+      try {
+        fs.symlinkSync(outsideDir, path.join(tmpDir, "linked-skill"));
+        const backend = InMemoryBackend.fromDirectory(tmpDir);
+        const result = backend.ls("/linked-skill");
+        expect(result.files).toEqual([]);
+      } finally {
+        fs.rmSync(outsideDir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe("ls", () => {

@@ -57,9 +57,26 @@ function stripLeadingSlash(filePath: string): string {
 }
 
 /**
+ * Check whether a resolved path is safely contained within a base directory.
+ */
+function isSafePath(targetPath: string, baseDir: string): boolean {
+  try {
+    const resolvedPath = fs.realpathSync(targetPath);
+    return (
+      resolvedPath.startsWith(baseDir + path.sep) || resolvedPath === baseDir
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Recursively read all files from a directory into a map of virtual paths
  * to file contents. The root directory is stripped from paths so a file at
  * `<root>/foo/bar.ts` becomes `/foo/bar.ts`.
+ *
+ * Symlinks are skipped and a containment check ensures no entry resolves
+ * outside the root directory.
  */
 function readDirectory(
   rootDir: string,
@@ -68,11 +85,19 @@ function readDirectory(
 ): void {
   for (const entry of fs.readdirSync(currentDir)) {
     const fullPath = path.join(currentDir, entry);
-    const stat = fs.statSync(fullPath);
+    const lstat = fs.lstatSync(fullPath);
 
-    if (stat.isDirectory()) {
+    if (lstat.isSymbolicLink()) {
+      continue;
+    }
+
+    if (!isSafePath(fullPath, rootDir)) {
+      continue;
+    }
+
+    if (lstat.isDirectory()) {
       readDirectory(rootDir, fullPath, files);
-    } else if (stat.isFile()) {
+    } else if (lstat.isFile()) {
       const relativePath = path.relative(rootDir, fullPath);
       const virtualPath = "/" + relativePath.split(path.sep).join("/");
       files.set(virtualPath, fs.readFileSync(fullPath, "utf-8"));
@@ -116,7 +141,7 @@ export class InMemoryBackend implements BackendProtocolV2 {
    * Create an InMemoryBackend by reading all files from a directory on disk.
    */
   static fromDirectory(dir: string): InMemoryBackend {
-    const resolved = path.resolve(dir);
+    const resolved = fs.realpathSync(path.resolve(dir));
     const files = new Map<string, string>();
     readDirectory(resolved, resolved, files);
     return new InMemoryBackend(files);
