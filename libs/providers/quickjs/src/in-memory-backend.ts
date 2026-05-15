@@ -118,6 +118,22 @@ function readDirectory(
  * backend because features like ContextOffloading require write support.
  * Mount it on a CompositeBackend under a read-only route (e.g. `/skills/`).
  *
+ * ### Filesystem security
+ *
+ * `fromDirectory` only touches the filesystem at init time. After construction,
+ * all reads are served from the in-memory map with no further disk access.
+ *
+ * The directory path is resolved to an absolute canonical path via
+ * `realpathSync` before scanning. During the recursive walk:
+ *
+ * - **Symbolic links are rejected.** Both file and directory symlinks are
+ *   detected with `lstatSync` and silently skipped.
+ * - **Path containment is enforced.** Every entry's real path is checked
+ *   against the resolved root. Entries that resolve outside the root (e.g.
+ *   via `..` components) are skipped.
+ * - **Relative paths are accepted** and resolved against `process.cwd()`
+ *   before canonicalization.
+ *
  * @example
  * ```typescript
  * const skillsBackend = InMemoryBackend.fromDirectory("./skills");
@@ -139,6 +155,10 @@ export class InMemoryBackend implements BackendProtocolV2 {
 
   /**
    * Create an InMemoryBackend by reading all files from a directory on disk.
+   *
+   * The path is resolved to its canonical absolute form. Symlinks are
+   * rejected and all entries are checked to be within the root directory.
+   * See the class-level "Filesystem security" section for details.
    */
   static fromDirectory(dir: string): InMemoryBackend {
     const resolved = fs.realpathSync(path.resolve(dir));
