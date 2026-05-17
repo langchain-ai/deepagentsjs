@@ -125,6 +125,7 @@ export {
   type SkillRegistryOptions,
   type SkillProvider,
   type LoadedSkill,
+  parseSkillMetadataFromContent,
   FilesystemSkillProvider,
   type FilesystemSkillProviderOptions,
   BackendSkillProvider,

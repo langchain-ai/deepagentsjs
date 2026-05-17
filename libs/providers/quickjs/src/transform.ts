@@ -144,14 +144,26 @@ export function transformForEval(code: string): string {
 
 function isTSOnlyNode(node: AcornNode): boolean {
   const t = node.type as string;
-  return (
+  if (
     t === "TSTypeAliasDeclaration" ||
     t === "TSInterfaceDeclaration" ||
     t === "TSEnumDeclaration" ||
     t === "TSModuleDeclaration" ||
     t === "TSDeclareFunction" ||
     t.startsWith("TS")
-  );
+  ) {
+    return true;
+  }
+  if (t === "VariableDeclaration" && (node as any).declare === true) {
+    return true;
+  }
+  if (t === "ImportDeclaration" && (node as any).importKind === "type") {
+    return true;
+  }
+  if (t === "ExportNamedDeclaration" && (node as any).exportKind === "type") {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -230,8 +242,24 @@ function stripTypeAnnotations(s: MagicString, node: AcornNode): void {
 }
 
 function stripTypeAnnotationFromNode(s: MagicString, n: any, offset = 0): void {
-  // Type annotations on parameters, variables, return types
-  if (n.typeAnnotation && n.typeAnnotation.start != null) {
+  if (
+    n.optional === true &&
+    n.typeAnnotation &&
+    n.typeAnnotation.start != null
+  ) {
+    s.remove(
+      n.typeAnnotation.start - 1 - offset,
+      n.typeAnnotation.end - offset,
+    );
+  } else if (n.optional === true && !n.typeAnnotation) {
+    const nameEnd =
+      n.type === "Identifier" && typeof n.name === "string"
+        ? n.start + n.name.length
+        : null;
+    if (nameEnd != null) {
+      s.remove(nameEnd - offset, nameEnd + 1 - offset);
+    }
+  } else if (n.typeAnnotation && n.typeAnnotation.start != null) {
     s.remove(n.typeAnnotation.start - offset, n.typeAnnotation.end - offset);
   }
   // Return type on functions
@@ -326,6 +354,14 @@ export function stripTypeSyntax(code: string): string {
     if (isTSOnlyNode(node)) {
       magicString.remove(node.start, node.end);
       continue;
+    }
+
+    if (node.type === "ExportNamedDeclaration") {
+      const n = node as any;
+      if (n.declaration && isTSOnlyNode(n.declaration)) {
+        magicString.remove(node.start, node.end);
+        continue;
+      }
     }
 
     walk(node as any, {

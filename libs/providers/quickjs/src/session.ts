@@ -440,7 +440,7 @@ export class ReplSession {
           `Skill '${parsed.name}': entrypoint '${loaded.entryRel}' missing from bundle`,
         );
       }
-      return source;
+      return `export * from "${specifier}/${loaded.entryRel}";`;
     }
 
     let source = loaded.files.get(parsed.rel);

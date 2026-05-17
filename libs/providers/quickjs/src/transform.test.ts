@@ -200,6 +200,24 @@ describe("stripTypeSyntax", () => {
       expect(result.trim()).toBe("");
     });
 
+    it("removes declare const with type annotation", () => {
+      const code = [
+        `declare const tools: { glob: (args: { pattern: string }) => Promise<string> };`,
+        `export function bar() { return 1; }`,
+      ].join("\n");
+      const result = stripTypeSyntax(code);
+      expect(result).not.toContain("declare");
+      expect(result).not.toContain("tools");
+      expect(result).toContain("export function bar");
+    });
+
+    it("removes declare const without type body", () => {
+      const result = stripTypeSyntax(
+        `declare const __sessionId__: string | undefined;`,
+      );
+      expect(result.trim()).toBe("");
+    });
+
     it("removes mixed TS-only and JS nodes, keeping JS", () => {
       const code = [
         "interface Foo { x: number }",
@@ -265,6 +283,22 @@ describe("stripTypeSyntax", () => {
       expect(result).toContain("const x");
       expect(result).not.toContain(": number");
     });
+
+    it("strips optional parameter markers alongside type annotations", () => {
+      const result = stripTypeSyntax(
+        "export function foo(x?: number) { return x; }",
+      );
+      expect(result).toContain("export function foo(x)");
+      expect(result).not.toContain("?");
+    });
+
+    it("strips optional parameter markers in multi-param functions", () => {
+      const result = stripTypeSyntax(
+        "export async function rows(tableId: string, options?: RowsOptions) {}",
+      );
+      expect(result).toContain("(tableId, options)");
+      expect(result).not.toContain("?");
+    });
   });
 
   describe("import and export declarations survive", () => {
@@ -304,6 +338,46 @@ describe("stripTypeSyntax", () => {
       ].join("\n");
       const result = stripTypeSyntax(code);
       expect(result).toContain("export function bar");
+      expect(result).not.toContain("import type");
+    });
+
+    it("strips export type declarations", () => {
+      const code = [
+        `export type { Foo } from "./types.js";`,
+        `export const x = 1;`,
+      ].join("\n");
+      const result = stripTypeSyntax(code);
+      expect(result).toContain("export const x = 1");
+      expect(result).not.toContain("export type");
+    });
+
+    it("strips exported interface declarations", () => {
+      const code = [
+        `export interface Foo { x: number }`,
+        `export function bar() { return 1; }`,
+      ].join("\n");
+      const result = stripTypeSyntax(code);
+      expect(result).toContain("export function bar");
+      expect(result).not.toContain("interface");
+    });
+
+    it("strips exported type alias declarations", () => {
+      const code = [`export type ID = string;`, `export const x = 1;`].join(
+        "\n",
+      );
+      const result = stripTypeSyntax(code);
+      expect(result).toContain("export const x = 1");
+      expect(result).not.toContain("type ID");
+    });
+
+    it("strips a file that is entirely type declarations", () => {
+      const code = [
+        `export interface SwarmHandle { id: string; count: number }`,
+        `export type BatchFn = (row: Record<string, unknown>) => number;`,
+        `export interface RunOptions { instruction: string }`,
+      ].join("\n");
+      const result = stripTypeSyntax(code);
+      expect(result.trim()).toBe("");
     });
   });
 
