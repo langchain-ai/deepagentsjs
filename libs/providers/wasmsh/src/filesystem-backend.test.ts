@@ -330,4 +330,14 @@ describe("WasmshFilesystemBackend path traversal containment", () => {
     await backend.ls("/etc/passwd");
     expect(sandbox.calls[0].args[0]).toBe("/etc/passwd");
   });
+
+  it("rejects an unscope leak of a sibling-prefix path without `..` segments", async () => {
+    // Targets the `#isContained` trailing-`/` anchor directly: a sandbox
+    // result whose path is `/memstoreX/x` shares the literal prefix
+    // `/mem` with the namespace `/mem`, but a bare `startsWith` would
+    // wrongly accept it. The trailing-separator anchor must reject.
+    const { sandbox, backend } = makeBackend("/mem");
+    sandbox.nextLs = { files: [{ path: "/memstoreX/x.txt" }] };
+    await expect(backend.ls("/")).rejects.toThrow(WasmshNamespaceEscapeError);
+  });
 });

@@ -311,4 +311,58 @@ describe("installPendingSkills", () => {
     expect(uploads).toHaveLength(0);
     expect(installed.size).toBe(0);
   });
+
+  it("re-throws WasmshNamespaceEscapeError instead of demoting it to a log", async () => {
+    // A namespaced filesystem backend would raise this from inside glob if
+    // a skill metadata `path` contains `..` segments. The skills loader
+    // must propagate the security signal, not swallow it.
+    const escapeError = Object.assign(new Error("escape"), {
+      name: "WasmshNamespaceEscapeError",
+    });
+    const backend: SkillBackend = {
+      async glob() {
+        throw escapeError;
+      },
+      async downloadFiles() {
+        return [];
+      },
+    };
+    const metadata = new Map([["order-helpers", { ...ORDER_HELPERS_META }]]);
+    const installed = new Set<string>();
+    const { sandbox } = makeSandbox();
+    await expect(
+      installPendingSkills({
+        source: "import skills.order_helpers",
+        metadata,
+        backend,
+        sandbox,
+        installed,
+      }),
+    ).rejects.toBe(escapeError);
+  });
+});
+
+describe("loadSkill asBytes type guard", () => {
+  it("rejects a backend that returns non-binary content", async () => {
+    // Misbehaving backend hands back a plain object instead of bytes.
+    // The asBytes guard must throw, not silently propagate `undefined`
+    // byteLength downstream (where it would poison the bundle-size cap
+    // and surface as a cryptic TypeError at upload time).
+    const backend = {
+      async glob() {
+        return { files: [{ path: "/skills/order-helpers/helper.py" }] };
+      },
+      async downloadFiles(paths: string[]) {
+        // Intentionally wrong shape: a plain object where bytes are expected.
+        return paths.map((p) => ({
+          path: p,
+          content: { not: "bytes" } as unknown as Uint8Array,
+          error: null,
+        }));
+      },
+    } satisfies SkillBackend;
+    await expect(loadSkill(ORDER_HELPERS_META, backend)).rejects.toThrow(
+      /non-binary content/,
+    );
+  });
 });

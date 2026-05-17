@@ -300,17 +300,16 @@ export function createWasmshInterpreterMiddleware(
       const systemMessage = baseSystemPrompt
         ? request.systemMessage.concat(baseSystemPrompt).concat(promptSuffix)
         : request.systemMessage.concat(promptSuffix);
-      // Surface the configured timeout/limit in the prompt by reference;
-      // the actual budget is enforced sandbox-side.
+      // `timeoutMs` is accepted as an option for API parity with the Python
+      // adapter but is not yet wired into the prompt or sandbox budget; see
+      // the open TODO on the constructor docstring.
       void timeoutMs;
       return handler({ ...request, systemMessage });
     },
-    afterAgent: async () => {
-      // Best-effort shutdown when the wrapping agent finishes. We don't
-      // tear down sandboxPromise here because the same middleware
-      // instance may be reused across agent.invoke() calls in a session
-      // — long-lived state is the whole point.
-    },
+    // No `afterAgent` cleanup: the lazily-booted sandbox is meant to span
+    // multiple `agent.invoke()` calls so REPL state persists across turns.
+    // Sandbox lifetime is bound to the middleware instance; rely on GC + the
+    // sandbox's own close-on-process-exit handlers for teardown.
   });
 }
 

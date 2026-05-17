@@ -110,11 +110,25 @@ async function enumerateSkillFiles(
 }
 
 function asBytes(content: unknown): Uint8Array {
-  // Matches the conversion shape used in `internal.ts::toInitialFiles`: the
-  // backend protocol guarantees `string | Uint8Array`, so a `typeof` check
-  // for string covers the union without resorting to `instanceof`.
+  // The backend protocol guarantees `string | Uint8Array`, but a wrong-
+  // shape return from a misbehaving backend would silently propagate
+  // garbage downstream — `byteLength` would be `undefined`, poisoning
+  // the bundle-size cap and surfacing as cryptic `TypeError` at upload
+  // time. Validate explicitly.
   if (typeof content === "string") return new TextEncoder().encode(content);
-  return content as Uint8Array;
+  // Structural check matching the codebase's `no-instanceof` lint rule.
+  if (
+    content !== null &&
+    typeof content === "object" &&
+    typeof (content as { byteLength?: unknown }).byteLength === "number" &&
+    ArrayBuffer.isView(content as ArrayBufferView)
+  ) {
+    const view = content as ArrayBufferView;
+    return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+  }
+  throw new Error(
+    `skill file returned non-binary content of type ${typeof content}`,
+  );
 }
 
 export async function loadSkill(
@@ -211,19 +225,34 @@ export async function installPendingSkills({
       await sandbox.uploadFiles([...loaded.files.entries()]);
       installed.add(loaded.packageName);
     } catch (err) {
-      // Best-effort: a single broken skill must not abort the eval. The
-      // failure is silently swallowed; callers wanting structured logs
-      // should observe the `installed` set vs. `metadata` keys to detect
-      // skipped skills.
+      // Security-relevant errors must not be demoted to a log line: if a
+      // skill metadata `path` contains `..` segments and the backend is a
+      // namespaced `WasmshFilesystemBackend`, the resulting throw is the
+      // namespace guard doing its job and must surface to the caller.
+      if (
+        err !== null &&
+        typeof err === "object" &&
+        (err as { name?: unknown }).name === "WasmshNamespaceEscapeError"
+      ) {
+        throw err as Error;
+      }
+      // Best-effort for non-security failures: a single broken skill must
+      // not abort the eval. The failure is logged; callers wanting
+      // structured diagnostics should compare `installed` vs `metadata`
+      // to detect skipped skills.
       const message =
         typeof err === "object" && err !== null && "message" in err
           ? String((err as { message: unknown }).message)
           : String(err);
-      // Surface via process.stderr to bypass the no-console lint without
-      // dropping the diagnostic entirely.
-      process.stderr.write(
-        `[wasmsh] failed to load skill ${JSON.stringify(meta.name)}: ${message}\n`,
-      );
+      const line = `[wasmsh] failed to load skill ${JSON.stringify(meta.name)}: ${message}\n`;
+      // Guard against environments without `process.stderr` (browser).
+      if (
+        typeof process !== "undefined" &&
+        process.stderr &&
+        typeof process.stderr.write === "function"
+      ) {
+        process.stderr.write(line);
+      }
     }
   }
 }

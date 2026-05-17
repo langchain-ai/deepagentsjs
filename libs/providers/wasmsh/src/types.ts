@@ -37,9 +37,10 @@ export interface WasmshMiddlewareOptions {
   ptc?: boolean | string[] | { include: string[] } | { exclude: string[] };
 
   /**
-   * Per-call advisory timeout in milliseconds. Surfaced to the model in
-   * the system prompt; actual budget enforcement happens via the
-   * sandbox's step budget.
+   * Per-call advisory timeout in milliseconds. Accepted today for API
+   * parity with the Python adapter; not yet wired into the prompt or
+   * the sandbox's budget. Budget enforcement happens via the sandbox's
+   * `stepBudget` constructor option for now.
    *
    * @default 30000
    */
