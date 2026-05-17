@@ -875,6 +875,77 @@ describe("skills module loader", () => {
     expect(result.ok).toBe(false);
   });
 
+  it("eagerly preloads all script-bearing skills on first eval", async () => {
+    const loadedNames: string[] = [];
+    const skillA = makeSkillsMeta("skill-a", "index.js");
+    const skillB = makeSkillsMeta("skill-b", "index.js");
+    const load = async (name: string) => {
+      loadedNames.push(name);
+      return {
+        files: new Map([["index.js", `export const NAME = "${name}";`]]),
+        entryRel: "index.js",
+      };
+    };
+
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+    });
+    session.setSkillsContext({ metadata: [skillA, skillB], load });
+
+    await session.eval(`1 + 1`, TIMEOUT);
+
+    expect(loadedNames).toEqual(["skill-a", "skill-b"]);
+  });
+
+  it("skips skills without an entrypoint during eager preload", async () => {
+    const loadedNames: string[] = [];
+    const withEntry = makeSkillsMeta("has-entry", "index.js");
+    const withoutEntry: SkillMetadata = {
+      name: "no-entry",
+      description: "Prose-only skill",
+      path: "/skills/no-entry/SKILL.md",
+    };
+    const load = async (name: string) => {
+      loadedNames.push(name);
+      return {
+        files: new Map([["index.js", `export const X = 1;`]]),
+        entryRel: "index.js",
+      };
+    };
+
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+    });
+    session.setSkillsContext({ metadata: [withEntry, withoutEntry], load });
+
+    await session.eval(`1`, TIMEOUT);
+
+    expect(loadedNames).toEqual(["has-entry"]);
+  });
+
+  it("runs eager preload only once across multiple evals", async () => {
+    let loadCount = 0;
+    const meta = makeSkillsMeta("my-skill", "index.js");
+    const load = async () => {
+      loadCount++;
+      return {
+        files: new Map([["index.js", "export const V = 1;"]]),
+        entryRel: "index.js",
+      };
+    };
+
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+    });
+    session.setSkillsContext({ metadata: [meta], load });
+
+    await session.eval(`1`, TIMEOUT);
+    await session.eval(`2`, TIMEOUT);
+    await session.eval(`3`, TIMEOUT);
+
+    expect(loadCount).toBe(1);
+  });
+
   it("caches a load failure and does not re-fetch from the loader", async () => {
     let loadCount = 0;
     const meta = makeSkillsMeta("my-skill", "index.js");

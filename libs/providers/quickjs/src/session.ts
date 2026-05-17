@@ -596,7 +596,7 @@ export class ReplSession {
   }
 
   /**
-   * Push the current skills metadata + backend into the session.
+   * Push the current skills metadata + loader into the session.
    * Called by the middleware once per `eval` invocation, before eval runs.
    * Pass `undefined` to clear the context (no skill imports will resolve).
    */

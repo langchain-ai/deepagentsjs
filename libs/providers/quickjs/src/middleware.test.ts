@@ -6,6 +6,7 @@ import {
   createCodeInterpreterMiddleware,
   generatePtcPrompt,
   resolveToolList,
+  SKILL_REGISTRY_INJECT_SYMBOL,
 } from "./middleware.js";
 import { ReplSession } from "./session.js";
 
@@ -245,6 +246,44 @@ describe("createCodeInterpreterMiddleware", () => {
 
     it("should return empty string for no tools", async () => {
       expect(await generatePtcPrompt([])).toBe("");
+    });
+  });
+
+  describe("registry injection symbol", () => {
+    it("should define the symbol property as non-enumerable", () => {
+      const middleware = createCodeInterpreterMiddleware();
+      const descriptor = Object.getOwnPropertyDescriptor(
+        middleware,
+        SKILL_REGISTRY_INJECT_SYMBOL,
+      );
+      expect(descriptor).toBeDefined();
+      expect(descriptor!.enumerable).toBe(false);
+      expect(descriptor!.writable).toBe(false);
+      expect(descriptor!.configurable).toBe(false);
+      expect(typeof descriptor!.value).toBe("function");
+    });
+
+    it("should not appear in Object.keys or for-in", () => {
+      const middleware = createCodeInterpreterMiddleware();
+      const keys = Object.keys(middleware);
+      expect(keys).not.toContain(SKILL_REGISTRY_INJECT_SYMBOL.toString());
+      const enumerated: string[] = [];
+      for (const key in middleware) {
+        enumerated.push(key);
+      }
+      expect(enumerated).not.toContain(SKILL_REGISTRY_INJECT_SYMBOL.toString());
+    });
+
+    it("should accept null without throwing", () => {
+      const middleware = createCodeInterpreterMiddleware();
+      const setter = (middleware as any)[SKILL_REGISTRY_INJECT_SYMBOL];
+      expect(() => setter(null)).not.toThrow();
+    });
+
+    it("should accept undefined without throwing", () => {
+      const middleware = createCodeInterpreterMiddleware();
+      const setter = (middleware as any)[SKILL_REGISTRY_INJECT_SYMBOL];
+      expect(() => setter(undefined)).not.toThrow();
     });
   });
 
