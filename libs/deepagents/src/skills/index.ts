@@ -8,12 +8,24 @@
  * - ListSkillsOptions: Type for listSkills options
  */
 
+// Legacy filesystem-only loader. Kept for back-compat — the package
+// index re-exports `SkillMetadata` from this file as `LoaderSkillMetadata`.
+export { listSkills, parseSkillMetadata } from "./loader.js";
+export type {
+  SkillMetadata as LoaderSkillMetadata,
+  ListSkillsOptions,
+} from "./loader.js";
+
+// SkillProvider abstraction.
+export type { SkillProvider, LoadedSkill } from "./provider.js";
+
+// Discovery primitives shared by middleware and providers.
+export type { SkillMetadata, SkillMetadataEntry } from "./discovery.js";
 export {
-  listSkills,
-  parseSkillMetadata,
+  parseSkillMetadataFromContent,
+  listSkillsFromBackend,
+  SKILL_MODULE_EXTENSIONS,
   MAX_SKILL_FILE_SIZE,
   MAX_SKILL_NAME_LENGTH,
   MAX_SKILL_DESCRIPTION_LENGTH,
-} from "./loader.js";
-
-export type { SkillMetadata, ListSkillsOptions } from "./loader.js";
+} from "./discovery.js";

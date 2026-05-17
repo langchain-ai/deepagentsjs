@@ -1,46 +1,23 @@
 /**
- * Backend-agnostic skills middleware for loading agent skills from any backend.
+ * Backend-agnostic skills middleware for loading agent skills from any
+ * backend.
  *
- * This middleware implements Anthropic's agent skills pattern with progressive disclosure,
- * loading skills from backend storage via configurable sources.
+ * The middleware loads skills from one or more configured **sources** —
+ * paths in a backend where skills are organized. Sources are loaded in
+ * order, with later sources overriding earlier ones when skills have the
+ * same name (last one wins). This enables layering: base → user →
+ * project → team skills.
  *
- * ## Architecture
+ * The middleware uses backend APIs exclusively (no direct filesystem
+ * access), making it portable across different storage backends
+ * (filesystem, state, remote storage, etc.).
  *
- * Skills are loaded from one or more **sources** - paths in a backend where skills are
- * organized. Sources are loaded in order, with later sources overriding earlier ones
- * when skills have the same name (last one wins). This enables layering: base -> user
- * -> project -> team skills.
- *
- * The middleware uses backend APIs exclusively (no direct filesystem access), making it
- * portable across different storage backends (filesystem, state, remote storage, etc.).
- *
- * ## Usage
- *
- * ```typescript
- * import { createSkillsMiddleware, FilesystemBackend } from "@anthropic/deepagents";
- *
- * const middleware = createSkillsMiddleware({
- *   backend: new FilesystemBackend({ rootDir: "/" }),
- *   sources: [
- *     "/skills/user/",
- *     "/skills/project/",
- *   ],
- * });
- *
- * const agent = createDeepAgent({ middleware: [middleware] });
- * ```
- *
- * Or use the `skills` parameter on createDeepAgent:
- *
- * ```typescript
- * const agent = createDeepAgent({
- *   skills: ["/skills/user/", "/skills/project/"],
- * });
- * ```
+ * Discovery primitives live in `../skills/discovery.ts`. This file is
+ * focused on the middleware wiring: state schema, system-prompt
+ * rendering, and the agent-facing factory.
  */
 
 import { z } from "zod";
-import yaml from "yaml";
 import {
   context,
   createMiddleware,
@@ -59,112 +36,47 @@ import { resolveBackend } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import { filesValue } from "../values.js";
-import { adaptBackendProtocol } from "../backends/utils.js";
 import { DEFAULT_READ_LINE_LIMIT } from "./fs.js";
 
-// Security: Maximum size for SKILL.md files to prevent DoS attacks (10MB)
-export const MAX_SKILL_FILE_SIZE = 10 * 1024 * 1024;
+import type { SkillMetadata, SkillMetadataEntry } from "../skills/discovery.js";
+import {
+  SkillMetadataEntrySchema,
+  listSkillsFromBackend,
+} from "../skills/discovery.js";
 
+// Re-export discovery primitives from this module so existing callers
+// that import from `./middleware/skills.js` keep working without source
+// edits.
+export {
+  parseSkillMetadataFromContent,
+  validateSkillName,
+  validateModulePath,
+  validateMetadata,
+  listSkillsFromBackend,
+  SKILL_MODULE_EXTENSIONS,
+  MAX_SKILL_FILE_SIZE,
+  MAX_SKILL_NAME_LENGTH,
+  MAX_SKILL_DESCRIPTION_LENGTH,
+  MAX_SKILL_COMPATIBILITY_LENGTH,
+  SkillMetadataEntrySchema,
+  type SkillMetadata,
+  type SkillMetadataEntry,
+} from "../skills/discovery.js";
+
+/**
+ * Line-read limit hint baked into the system prompt for the legacy
+ * `read_file`-driven activation flow. Phase 4 retires the read_file
+ * pattern; until then this stays so the existing prompt keeps working.
+ */
 export const DEFAULT_SKILL_READ_LINE_LIMIT = 1000;
-
-// Agent Skills specification constraints (https://agentskills.io/specification)
-export const MAX_SKILL_NAME_LENGTH = 64;
-export const MAX_SKILL_DESCRIPTION_LENGTH = 1024;
-export const MAX_SKILL_COMPATIBILITY_LENGTH = 500;
-
-/**
- * File extensions a skill module entrypoint may use.
- */
-export const SKILL_MODULE_EXTENSIONS = [
-  ".js",
-  ".mjs",
-  ".cjs",
-  ".ts",
-  ".mts",
-  ".cts",
-  ".jsx",
-  ".tsx",
-];
-
-/**
- * Metadata for a skill per Agent Skills specification.
- */
-export interface SkillMetadata {
-  /**
-   * Skill identifier.
-   *
-   * Constraints per Agent Skills specification:
-   *
-   * - 1-64 characters
-   * - Unicode lowercase alphanumeric and hyphens only (`a-z` and `-`).
-   * - Must not start or end with `-`
-   * - Must not contain consecutive `--`
-   * - Must match the parent directory name containing the `SKILL.md` file
-   */
-  name: string;
-
-  /**
-   * What the skill does.
-   *
-   * Constraints per Agent Skills specification:
-   *
-   * - 1-1024 characters
-   * - Should describe both what the skill does and when to use it
-   * - Should include specific keywords that help agents identify relevant tasks
-   */
-  description: string;
-
-  /** Path to the SKILL.md file in the backend */
-  path: string;
-
-  /** License name or reference to bundled license file. */
-  license?: string | null;
-
-  /**
-   * Environment requirements.
-   *
-   * Constraints per Agent Skills specification:
-   *
-   * - 1-500 characters if provided
-   * - Should only be included if there are specific compatibility requirements
-   * - Can indicate intended product, required packages, etc.
-   */
-  compatibility?: string | null;
-
-  /**
-   * Arbitrary key-value mapping for additional metadata.
-   *
-   * Clients can use this to store additional properties not defined by the spec.
-   *
-   * It is recommended to keep key names unique to avoid conflicts.
-   */
-  metadata?: Record<string, string>;
-
-  /**
-   * Tool names the skill recommends using.
-   *
-   * Warning: this is experimental.
-   *
-   * Constraints per Agent Skills specification:
-   *
-   * - Space-delimited list of tool names
-   */
-  allowedTools?: string[];
-
-  /**
-   * Path to a JS/TS entrypoint file for a QuickJS REPL module, relative to the skill
-   * directory.
-   */
-  module?: string;
-}
 
 /**
  * Options for the skills middleware.
  */
 export interface SkillsMiddlewareOptions {
   /**
-   * Backend instance or factory function for file operations.
-   * Use a factory for StateBackend since it requires runtime state.
+   * Backend instance or factory function for file operations. Use a
+   * factory for `StateBackend` since it requires runtime state.
    */
   backend:
     | AnyBackendProtocol
@@ -172,53 +84,30 @@ export interface SkillsMiddlewareOptions {
     | ((config: { state: unknown; store?: BaseStore }) => StateBackend);
 
   /**
-   * List of skill source paths to load (e.g., ["/skills/user/", "/skills/project/"]).
-   * Paths must use POSIX conventions (forward slashes).
-   * Later sources override earlier ones for skills with the same name (last one wins).
+   * List of skill source paths to load
+   * (e.g. `["/skills/user/", "/skills/project/"]`). Paths use POSIX
+   * conventions. Later sources override earlier ones for skills with the
+   * same name (last one wins).
    */
   sources: string[];
 }
 
 /**
- * Zod schema for a single skill metadata entry.
- */
-export const SkillMetadataEntrySchema = z.object({
-  name: z.string(),
-  description: z.string(),
-  path: z.string(),
-  license: z.string().nullable().optional(),
-  compatibility: z.string().nullable().optional(),
-  metadata: z.record(z.string(), z.string()).optional(),
-  allowedTools: z.array(z.string()).optional(),
-  module: z.string().optional(),
-});
-
-/**
- * Type for a single skill metadata entry.
- */
-export type SkillMetadataEntry = z.infer<typeof SkillMetadataEntrySchema>;
-
-/**
- * Reducer for skillsMetadata that merges arrays from parallel subagents.
- * Skills are deduplicated by name, with later values overriding earlier ones.
- *
- * @param current - The current skillsMetadata array (from state)
- * @param update - The new skillsMetadata array (from a subagent update)
- * @returns Merged array with duplicates resolved by name (later values win)
+ * Reducer for `skillsMetadata` that merges arrays from parallel
+ * subagents. Skills are deduplicated by name, with later values
+ * overriding earlier ones.
  */
 export function skillsMetadataReducer(
   current: SkillMetadataEntry[] | undefined,
   update: SkillMetadataEntry[] | undefined,
 ): SkillMetadataEntry[] {
-  // If no update, return current (or empty array)
   if (!update || update.length === 0) {
-    return current || [];
+    return current ?? [];
   }
-  // If no current, return update
   if (!current || current.length === 0) {
     return update;
   }
-  // Merge by skill name (later values override earlier ones)
+
   const merged = new Map<string, SkillMetadataEntry>();
   for (const skill of current) {
     merged.set(skill.name, skill);
@@ -226,12 +115,13 @@ export function skillsMetadataReducer(
   for (const skill of update) {
     merged.set(skill.name, skill);
   }
-  return Array.from(merged.values());
+  return [...merged.values()];
 }
 
 /**
- * State schema for skills middleware.
- * Uses ReducedValue for skillsMetadata to allow concurrent updates from parallel subagents.
+ * State schema for the skills middleware. `skillsMetadata` uses
+ * `ReducedValue` so parallel subagents can merge updates without
+ * clobbering each other.
  */
 const SkillsStateSchema = new StateSchema({
   skillsMetadata: new ReducedValue(
@@ -245,7 +135,9 @@ const SkillsStateSchema = new StateSchema({
 });
 
 /**
- * Skills System Documentation prompt template.
+ * System-prompt template documenting the skills system to the agent.
+ * Phase 4 replaces the read_file activation guidance with the
+ * `skill(name)` tool.
  */
 const SKILLS_SYSTEM_PROMPT = context`
   ## Skills System
@@ -273,116 +165,13 @@ const SKILLS_SYSTEM_PROMPT = context`
   - When you need specialized knowledge or structured workflows
   - When a skill provides proven patterns for complex tasks
 
-  **Skills are Self-Documenting:**
-  - Each SKILL.md tells you exactly what the skill does and how to use it
-  - The skill list above shows the full path for each skill's SKILL.md file
-
-  **Executing Skill Scripts:**
-  Skills may contain scripts or other executable files. Always use absolute paths from the skill list.
-
-  **Example Workflow:**
-
-  User: "Can you research the latest developments in quantum computing?"
-
-  1. Check available skills above → See "web-research" skill with its full path
-  2. Read the full skill file: \`read_file(path, limit=${DEFAULT_SKILL_READ_LINE_LIMIT})\`
-  3. Follow the skill's research workflow (search → organize → synthesize)
-  4. Use any helper scripts with absolute paths
-
   Remember: Skills are tools to make you more capable and consistent. When in doubt, check if a skill exists for the task!
 `;
 
 /**
- * Validate skill name per Agent Skills specification.
- *
- * Constraints per Agent Skills specification:
- *
- * - 1-64 characters
- * - Unicode lowercase alphanumeric and hyphens only (`a-z` and `-`).
- * - Must not start or end with `-`
- * - Must not contain consecutive `--`
- * - Must match the parent directory name containing the `SKILL.md` file
- *
- * Unicode lowercase alphanumeric means any lowercase or decimal digit, which
- * covers accented Latin characters (e.g., `'café'`, `'über-tool'`) and other
- * scripts.
- *
- * @param name - The skill name from YAML frontmatter
- * @param directoryName - The parent directory name
- * @returns `{ valid, error }` tuple. Error is empty string if valid.
- */
-export function validateSkillName(
-  name: string,
-  directoryName: string,
-): { valid: boolean; error: string } {
-  if (!name) {
-    return { valid: false, error: "name is required" };
-  }
-  if (name.length > MAX_SKILL_NAME_LENGTH) {
-    return { valid: false, error: "name exceeds 64 characters" };
-  }
-  if (name.startsWith("-") || name.endsWith("-") || name.includes("--")) {
-    return {
-      valid: false,
-      error: "name must be lowercase alphanumeric with single hyphens only",
-    };
-  }
-  for (const c of name) {
-    if (c === "-") continue;
-    if (/\p{Ll}/u.test(c) || /\p{Nd}/u.test(c)) continue;
-    return {
-      valid: false,
-      error: "name must be lowercase alphanumeric with single hyphens only",
-    };
-  }
-  if (name !== directoryName) {
-    return {
-      valid: false,
-      error: `name '${name}' must match directory name '${directoryName}'`,
-    };
-  }
-  return { valid: true, error: "" };
-}
-
-/**
- * Validate and normalize the metadata field from YAML frontmatter.
- *
- * YAML parsing can return any type for the `metadata` key. This ensures the
- * value in {@link SkillMetadata} is always a `Record<string, string>` by
- * coercing via `String()` and rejecting non-object inputs.
- *
- * @param raw - Raw value from `frontmatterData.metadata`.
- * @param skillPath - Path to the `SKILL.md` file (for warning messages).
- * @returns A validated `Record<string, string>`.
- */
-export function validateMetadata(
-  raw: unknown,
-  skillPath: string,
-): Record<string, string> {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    if (raw) {
-      console.warn(
-        `Ignoring non-object metadata in ${skillPath} (got ${typeof raw})`,
-      );
-    }
-    return {};
-  }
-  const result: Record<string, string> = {};
-  for (const [k, v] of Object.entries(raw)) {
-    result[String(k)] = String(v);
-  }
-  return result;
-}
-
-/**
  * Build a parenthetical annotation string from optional skill fields.
- *
  * Combines license and compatibility into a comma-separated string for
- * display in the system prompt skill listing.
- *
- * @param skill - Skill metadata to extract annotations from.
- * @returns Annotation string like `'License: MIT, Compatibility: Python 3.10+'`,
- *   or empty string if neither field is set.
+ * display in the system-prompt skill listing.
  */
 export function formatSkillAnnotations(skill: SkillMetadata): string {
   const parts: string[] = [];
@@ -396,219 +185,8 @@ export function formatSkillAnnotations(skill: SkillMetadata): string {
 }
 
 /**
- * Parse YAML frontmatter from `SKILL.md` content.
- *
- * Extracts metadata per Agent Skills specification from YAML frontmatter
- * delimited by `---` markers at the start of the content.
- *
- * @param content - Content of the `SKILL.md` file
- * @param skillPath - Path to the `SKILL.md` file (for error messages and metadata)
- * @param directoryName - Name of the parent directory containing the skill
- * @returns `SkillMetadata` if parsing succeeds, `null` if parsing fails or
- *   validation errors occur
- */
-export function parseSkillMetadataFromContent(
-  content: string,
-  skillPath: string,
-  directoryName: string,
-): SkillMetadata | null {
-  if (content.length > MAX_SKILL_FILE_SIZE) {
-    console.warn(
-      `Skipping ${skillPath}: content too large (${content.length} bytes)`,
-    );
-    return null;
-  }
-
-  // Match YAML frontmatter between --- delimiters
-  const frontmatterPattern = /^---\s*\n([\s\S]*?)\n---\s*\n/;
-  const match = content.match(frontmatterPattern);
-
-  if (!match) {
-    console.warn(`Skipping ${skillPath}: no valid YAML frontmatter found`);
-    return null;
-  }
-
-  const frontmatterStr = match[1];
-
-  // Parse YAML
-  let frontmatterData: Record<string, unknown>;
-  try {
-    frontmatterData = yaml.parse(frontmatterStr);
-  } catch (e) {
-    console.warn(`Invalid YAML in ${skillPath}:`, e);
-    return null;
-  }
-
-  if (!frontmatterData || typeof frontmatterData !== "object") {
-    console.warn(`Skipping ${skillPath}: frontmatter is not a mapping`);
-    return null;
-  }
-
-  // Validate required fields - coerce and strip whitespace
-  const name = String(frontmatterData.name ?? "").trim();
-  const description = String(frontmatterData.description ?? "").trim();
-
-  if (!name || !description) {
-    console.warn(
-      `Skipping ${skillPath}: missing required 'name' or 'description'`,
-    );
-    return null;
-  }
-
-  // Validate name format per spec (warn but continue for backwards compatibility)
-  const validation = validateSkillName(name, directoryName);
-  if (!validation.valid) {
-    console.warn(
-      `Skill '${name}' in ${skillPath} does not follow Agent Skills specification: ${validation.error}. Consider renaming for spec compliance.`,
-    );
-  }
-
-  // Validate description length per spec (max 1024 chars)
-  let descriptionStr = description;
-  if (descriptionStr.length > MAX_SKILL_DESCRIPTION_LENGTH) {
-    console.warn(
-      `Description exceeds ${MAX_SKILL_DESCRIPTION_LENGTH} characters in ${skillPath}, truncating`,
-    );
-    descriptionStr = descriptionStr.slice(0, MAX_SKILL_DESCRIPTION_LENGTH);
-  }
-
-  // Parse allowed-tools: support both YAML list and space-delimited string
-  const rawTools = frontmatterData["allowed-tools"];
-  let allowedTools: string[];
-  if (rawTools) {
-    if (Array.isArray(rawTools)) {
-      allowedTools = rawTools.map((t) => String(t).trim()).filter(Boolean);
-    } else {
-      // Split on whitespace (handles multiple consecutive spaces)
-      allowedTools = String(rawTools).split(/\s+/).filter(Boolean);
-    }
-  } else {
-    allowedTools = [];
-  }
-
-  // Validate and truncate compatibility length
-  let compatibilityStr =
-    String(frontmatterData.compatibility ?? "").trim() || null;
-  if (
-    compatibilityStr &&
-    compatibilityStr.length > MAX_SKILL_COMPATIBILITY_LENGTH
-  ) {
-    console.warn(
-      `Compatibility exceeds ${MAX_SKILL_COMPATIBILITY_LENGTH} characters in ${skillPath}, truncating`,
-    );
-    compatibilityStr = compatibilityStr.slice(
-      0,
-      MAX_SKILL_COMPATIBILITY_LENGTH,
-    );
-  }
-
-  return {
-    name,
-    description: descriptionStr,
-    path: skillPath,
-    metadata: validateMetadata(frontmatterData.metadata ?? {}, skillPath),
-    license: String(frontmatterData.license ?? "").trim() || null,
-    compatibility: compatibilityStr,
-    allowedTools,
-    module: validateModulePath(frontmatterData.module),
-  };
-}
-
-/**
- * List all skills from a backend source.
- */
-async function listSkillsFromBackend(
-  backend: AnyBackendProtocol,
-  sourcePath: string,
-): Promise<SkillMetadata[]> {
-  const adaptedBackend = adaptBackendProtocol(backend);
-  const skills: SkillMetadata[] = [];
-
-  // Detect path separator (Windows uses \, Unix uses /)
-  const pathSep = sourcePath.includes("\\") ? "\\" : "/";
-
-  // Normalize path to ensure it ends with the appropriate separator
-  const normalizedPath =
-    sourcePath.endsWith("/") || sourcePath.endsWith("\\")
-      ? sourcePath
-      : `${sourcePath}${pathSep}`;
-
-  // List directories in the source path using ls
-  let fileInfos: { path: string; is_dir?: boolean }[];
-  try {
-    const lsResult = await adaptedBackend.ls(normalizedPath);
-    if (lsResult.error || !lsResult.files) {
-      // Source path doesn't exist or can't be listed
-      return [];
-    }
-    fileInfos = lsResult.files;
-  } catch {
-    // Source path doesn't exist or can't be listed
-    return [];
-  }
-
-  // Convert FileInfo[] to entries format
-  // Handle both forward slashes (Unix) and backslashes (Windows) in paths
-  const entries = fileInfos.map((info) => ({
-    name:
-      info.path
-        .replace(/[/\\]$/, "") // Remove trailing slash or backslash
-        .split(/[/\\]/) // Split on either separator
-        .pop() || "",
-    type: (info.is_dir ? "directory" : "file") as "file" | "directory",
-  }));
-
-  // Look for subdirectories containing SKILL.md
-  for (const entry of entries) {
-    if (entry.type !== "directory") {
-      continue;
-    }
-
-    const skillMdPath = `${normalizedPath}${entry.name}${pathSep}SKILL.md`;
-
-    // Try to download the SKILL.md file
-    let content: string;
-    if (adaptedBackend.downloadFiles) {
-      const results = await adaptedBackend.downloadFiles([skillMdPath]);
-      if (results.length !== 1) {
-        continue;
-      }
-
-      const response = results[0];
-      if (response.error != null || response.content == null) {
-        continue;
-      }
-
-      // Decode content
-      content = new TextDecoder().decode(response.content);
-    } else {
-      // Fall back to read if downloadFiles is not available
-      const readResult = await adaptedBackend.read(skillMdPath);
-      if (readResult.error) {
-        continue;
-      }
-      if (typeof readResult.content !== "string") {
-        continue;
-      }
-      content = readResult.content;
-    }
-    const metadata = parseSkillMetadataFromContent(
-      content,
-      skillMdPath,
-      entry.name,
-    );
-
-    if (metadata) {
-      skills.push(metadata);
-    }
-  }
-
-  return skills;
-}
-
-/**
- * Format skills locations for display in system prompt.
- * Shows priority indicator for the last source (highest priority).
+ * Format skills locations for display in the system prompt. Shows a
+ * priority indicator next to the last source.
  */
 function formatSkillsLocations(sources: string[]): string {
   if (sources.length === 0) {
@@ -618,8 +196,6 @@ function formatSkillsLocations(sources: string[]): string {
   const lines: string[] = [];
   for (let i = 0; i < sources.length; i++) {
     const sourcePath = sources[i];
-    // Extract a friendly name from the path (last non-empty component)
-    // Handle both Unix (/) and Windows (\) path separators
     const name =
       sourcePath
         .replace(/[/\\]$/, "")
@@ -634,8 +210,9 @@ function formatSkillsLocations(sources: string[]): string {
 }
 
 /**
- * Format skills metadata for display in system prompt.
- * Shows allowed tools for each skill if specified.
+ * Format skills metadata for display in the system prompt. Includes the
+ * allowed-tools annotation for each skill if specified, and an `Import`
+ * hint for skills that expose an importable entrypoint.
  */
 export function formatSkillsList(
   skills: SkillMetadata[],
@@ -649,11 +226,11 @@ export function formatSkillsList(
   const lines: string[] = [];
   for (const skill of skills) {
     const annotations = formatSkillAnnotations(skill);
-    let descLine = `- **${skill.name}**: ${skill.description}`;
-    if (annotations) {
-      descLine += ` (${annotations})`;
-    }
-    lines.push(descLine);
+    const head = annotations
+      ? `- **${skill.name}**: ${skill.description} (${annotations})`
+      : `- **${skill.name}**: ${skill.description}`;
+    lines.push(head);
+
     if (skill.allowedTools && skill.allowedTools.length > 0) {
       lines.push(`  → Allowed tools: ${skill.allowedTools.join(", ")}`);
     }
@@ -667,85 +244,16 @@ export function formatSkillsList(
 }
 
 /**
- * Returns true when `value` ends with a recognized skill module extension.
- */
-function endsWithModuleExtension(value: string): boolean {
-  for (const ext of SKILL_MODULE_EXTENSIONS) {
-    if (value.endsWith(ext)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Validate and normalize the `module` frontmatter key from a `SKILL.md`.
+ * Build the skills middleware.
  *
- * Returns the normalized path (e.g. `"index.ts"`, `"lib/entry.js"`) or
- * `undefined` when the key is absent, empty, non-string, absolute, contains
- * path traversal, or uses an unsupported extension. Invalid values silently
- * degrade the skill to prose-only.
- */
-export function validateModulePath(raw: unknown): string | undefined {
-  if (raw === null || raw === undefined) {
-    return;
-  }
-
-  if (typeof raw !== "string") {
-    return;
-  }
-
-  const stripped = raw.trim();
-  if (stripped === "") {
-    return;
-  }
-
-  // Normalize "./x" → "x" so the value lines up with the keys the loader
-  // uses inside the installed module scope. Leaves "lib/util.js" untouched.
-  const normalized = stripped.startsWith("./") ? stripped.slice(2) : stripped;
-
-  if (normalized.startsWith("/")) {
-    return;
-  }
-
-  if (
-    normalized === ".." ||
-    normalized.startsWith("../") ||
-    normalized.includes("/../") ||
-    normalized.endsWith("/..")
-  ) {
-    return;
-  }
-
-  // Declaration files are type-only stubs with no runtime exports.
-  if (
-    normalized.endsWith(".d.ts") ||
-    normalized.endsWith(".d.mts") ||
-    normalized.endsWith(".d.cts")
-  ) {
-    return;
-  }
-
-  if (!endsWithModuleExtension(normalized)) {
-    return;
-  }
-
-  return normalized;
-}
-
-/**
- * Create backend-agnostic middleware for loading and exposing agent skills.
- *
- * This middleware loads skills from configurable backend sources and injects
- * skill metadata into the system prompt. It implements the progressive disclosure
- * pattern: skill names and descriptions are shown in the prompt, but the agent
- * reads full SKILL.md content only when needed.
- *
- * @param options - Configuration options
- * @returns AgentMiddleware for skills loading and injection
+ * Loads skills from configurable backend sources and injects skill
+ * metadata into the system prompt. Implements the progressive disclosure
+ * pattern: skill names and descriptions appear in the prompt; the agent
+ * reads full SKILL.md content only when needed (Phase 4 replaces this
+ * with a dedicated `skill(name)` tool).
  *
  * @example
- * ```typescript
+ * ```ts
  * const middleware = createSkillsMiddleware({
  *   backend: new FilesystemBackend({ rootDir: "/" }),
  *   sources: ["/skills/user/", "/skills/project/"],
@@ -755,8 +263,8 @@ export function validateModulePath(raw: unknown): string | undefined {
 export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
   const { backend, sources } = options;
 
-  // Closure variable to store loaded skills - wrapModelCall can access this
-  // directly since beforeAgent state updates aren't immediately available
+  // Closure variable so wrapModelCall sees what beforeAgent loaded, even
+  // before the state update propagates.
   let loadedSkills: SkillMetadata[] = [];
 
   return createMiddleware({
@@ -764,60 +272,21 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
     stateSchema: SkillsStateSchema,
 
     async beforeAgent(state) {
-      // Skip if already loaded (check both closure and state)
       if (loadedSkills.length > 0) {
         return undefined;
       }
-      // Check if skills were restored from checkpoint (non-empty array in state)
-      if (
-        "skillsMetadata" in state &&
-        Array.isArray(state.skillsMetadata) &&
-        state.skillsMetadata.length > 0
-      ) {
-        // Restore from state (e.g., after checkpoint restore)
-        loadedSkills = state.skillsMetadata as SkillMetadata[];
+      const restored = restoreFromState(state);
+      if (restored !== null) {
+        loadedSkills = restored;
         return undefined;
       }
 
-      const resolvedBackend = await resolveBackend(backend, {
-        state,
-      });
-      const allSkills: Map<string, SkillMetadata> = new Map();
-
-      // Load skills from each source in order (later sources override earlier)
-      for (const sourcePath of sources) {
-        try {
-          const skills = await listSkillsFromBackend(
-            resolvedBackend,
-            sourcePath,
-          );
-          for (const skill of skills) {
-            allSkills.set(skill.name, skill);
-          }
-        } catch (error) {
-          // Log but continue - individual source failures shouldn't break everything
-          console.debug(
-            `[BackendSkillsMiddleware] Failed to load skills from ${sourcePath}:`,
-            error,
-          );
-        }
-      }
-
-      // Store in closure for immediate access by wrapModelCall
-      loadedSkills = Array.from(allSkills.values());
-
+      loadedSkills = await discoverFromSources(backend, sources, state);
       return { skillsMetadata: loadedSkills };
     },
 
     wrapModelCall(request, handler) {
-      // Use closure variable which is populated by beforeAgent
-      // Fall back to state for checkpoint restore scenarios
-      const skillsMetadata: SkillMetadata[] =
-        loadedSkills.length > 0
-          ? loadedSkills
-          : (request.state?.skillsMetadata as SkillMetadata[]) || [];
-
-      // Format skills section
+      const skillsMetadata = currentSkillsMetadata(loadedSkills, request);
       const skillsLocations = formatSkillsLocations(sources);
       const skillsList = formatSkillsList(skillsMetadata, sources);
 
@@ -826,10 +295,70 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
         skillsLocations,
       ).replace("{skills_list}", skillsList);
 
-      // Combine with existing system message
       const newSystemMessage = request.systemMessage.concat(skillsSection);
-
       return handler({ ...request, systemMessage: newSystemMessage });
     },
   });
+}
+
+/**
+ * Pull skills back out of state on checkpoint restore so the middleware
+ * doesn't re-run discovery in resumed conversations.
+ */
+function restoreFromState(state: unknown): SkillMetadata[] | null {
+  const candidate = state as { skillsMetadata?: unknown };
+  if (
+    candidate !== null &&
+    candidate !== undefined &&
+    Array.isArray(candidate.skillsMetadata) &&
+    candidate.skillsMetadata.length > 0
+  ) {
+    return candidate.skillsMetadata as SkillMetadata[];
+  }
+  return null;
+}
+
+/**
+ * Return closure-cached metadata when populated, falling back to state
+ * for the checkpoint-restore case.
+ */
+function currentSkillsMetadata(
+  loaded: SkillMetadata[],
+  request: { state?: { skillsMetadata?: SkillMetadata[] } },
+): SkillMetadata[] {
+  if (loaded.length > 0) {
+    return loaded;
+  }
+  return request.state?.skillsMetadata ?? [];
+}
+
+/**
+ * Run skill discovery across every configured source. Per-source
+ * failures are logged and skipped so one broken source doesn't take
+ * down discovery for the others. Later sources override earlier ones
+ * on name collision.
+ */
+async function discoverFromSources(
+  backend: SkillsMiddlewareOptions["backend"],
+  sources: string[],
+  state: unknown,
+): Promise<SkillMetadata[]> {
+  const resolvedBackend = await resolveBackend(backend, { state });
+  const merged = new Map<string, SkillMetadata>();
+
+  for (const sourcePath of sources) {
+    try {
+      const skills = await listSkillsFromBackend(resolvedBackend, sourcePath);
+      for (const skill of skills) {
+        merged.set(skill.name, skill);
+      }
+    } catch (error) {
+      console.debug(
+        `[SkillsMiddleware] Failed to load skills from ${sourcePath}:`,
+        error,
+      );
+    }
+  }
+
+  return [...merged.values()];
 }
