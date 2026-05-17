@@ -69,6 +69,73 @@ const MIME_TYPES: Record<string, string> = {
   ".ppt": "application/vnd.ms-powerpoint",
   ".pptx":
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+
+  // text / code — explicit entries so these don't fall through to the
+  // "application/octet-stream" default meant for truly unknown binaries.
+  ".txt": "text/plain",
+  ".md": "text/markdown",
+  ".markdown": "text/markdown",
+  ".html": "text/html",
+  ".htm": "text/html",
+  ".css": "text/css",
+  ".csv": "text/csv",
+  ".xml": "text/xml",
+  ".json": "application/json",
+  ".js": "application/javascript",
+  ".mjs": "application/javascript",
+  ".cjs": "application/javascript",
+  ".ts": "text/plain",
+  ".tsx": "text/plain",
+  ".jsx": "text/plain",
+  ".py": "text/plain",
+  ".rb": "text/plain",
+  ".java": "text/plain",
+  ".c": "text/plain",
+  ".cpp": "text/plain",
+  ".h": "text/plain",
+  ".hpp": "text/plain",
+  ".go": "text/plain",
+  ".rs": "text/plain",
+  ".sh": "text/plain",
+  ".bash": "text/plain",
+  ".zsh": "text/plain",
+  ".yaml": "text/plain",
+  ".yml": "text/plain",
+  ".toml": "text/plain",
+  ".ini": "text/plain",
+  ".cfg": "text/plain",
+  ".conf": "text/plain",
+  ".env": "text/plain",
+  ".log": "text/plain",
+  ".sql": "text/plain",
+  ".graphql": "text/plain",
+  ".proto": "text/plain",
+  ".r": "text/plain",
+  ".swift": "text/plain",
+  ".kt": "text/plain",
+  ".kts": "text/plain",
+  ".scala": "text/plain",
+  ".dart": "text/plain",
+  ".lua": "text/plain",
+  ".pl": "text/plain",
+  ".pm": "text/plain",
+  ".php": "text/plain",
+  ".ex": "text/plain",
+  ".exs": "text/plain",
+  ".erl": "text/plain",
+  ".hs": "text/plain",
+  ".ml": "text/plain",
+  ".mli": "text/plain",
+  ".vue": "text/plain",
+  ".svelte": "text/plain",
+  ".astro": "text/plain",
+  ".tf": "text/plain",
+  ".cmake": "text/plain",
+  ".makefile": "text/plain",
+  ".dockerfile": "text/plain",
+  ".gitignore": "text/plain",
+  ".dockerignore": "text/plain",
+  ".editorconfig": "text/plain",
 };
 
 /**
@@ -740,14 +807,17 @@ export function formatGrepMatches(
 /**
  * Determine MIME type from a file path's extension.
  *
- * Returns "text/plain" for unknown extensions.
+ * Returns "application/octet-stream" for unknown extensions so that
+ * binary files are not accidentally treated as text (grep, read_file,
+ * etc. rely on {@link isTextMimeType} which would return true for
+ * "text/plain").
  *
  * @param filePath - File path to inspect
- * @returns MIME type string (e.g., "image/png", "text/plain")
+ * @returns MIME type string (e.g., "image/png", "application/octet-stream")
  */
 export function getMimeType(filePath: string): string {
   const ext = path.extname(filePath).toLocaleLowerCase();
-  return MIME_TYPES[ext] || "text/plain";
+  return MIME_TYPES[ext] || "application/octet-stream";
 }
 
 /**
