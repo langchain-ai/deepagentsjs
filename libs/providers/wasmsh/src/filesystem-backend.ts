@@ -10,7 +10,21 @@
  *   - is composable as a sub-backend in `CompositeBackend`.
  *
  * Mirrors `langchain_wasmsh.WasmshFilesystemBackend` from the Python adapter.
+ *
+ * ## Path traversal containment
+ *
+ * The namespace is a security boundary. A caller (including an LLM-driven
+ * agent that controls `file_path` arguments on the standard `read_file` /
+ * `write_file` / `edit_file` tools) must not be able to escape the
+ * namespace via `..` segments. The Pyodide VFS does resolve `..`, so a
+ * naive `${namespace}${userPath}` join is unsafe.
+ *
+ * `#scope` resolves the joined path with `posix.resolve` and rejects any
+ * input that, after normalisation, leaves the namespace root.
+ * `#unscope` applies the matching containment check on inbound result
+ * paths so an upstream bug elsewhere can't leak non-namespaced paths.
  */
+import { posix } from "node:path";
 import type {
   EditResult,
   FileDownloadResponse,
@@ -39,6 +53,20 @@ function normaliseNamespace(namespace: string | undefined): string {
   return prefixed.replace(/\/+$/, "");
 }
 
+/**
+ * Raised when a caller-supplied path would escape the configured namespace
+ * after `..` resolution. Surfaced as a `FileOperationError`-flavoured error
+ * by every protocol method that constructs scoped paths.
+ */
+export class WasmshNamespaceEscapeError extends Error {
+  override readonly name = "WasmshNamespaceEscapeError";
+  constructor(attemptedPath: string, namespace: string) {
+    super(
+      `path ${JSON.stringify(attemptedPath)} escapes namespace ${JSON.stringify(namespace)}`,
+    );
+  }
+}
+
 export class WasmshFilesystemBackend {
   readonly #sandbox: WasmshSandbox;
 
@@ -64,16 +92,39 @@ export class WasmshFilesystemBackend {
     if (!this.#namespace) return path;
     const abs = path.startsWith("/") ? path : `/${path}`;
     if (abs === "/") return this.#namespace || "/";
-    return `${this.#namespace}${abs}`;
+    // Defence in depth: cheap pre-check before the canonical resolve.
+    // `posix.resolve` collapses `..` segments; we then re-check that the
+    // result is still contained in the namespace prefix. This rejects
+    // `..` payloads regardless of how they are spelled (mixed slashes,
+    // leading/trailing dots, intermediate `./`).
+    const joined = `${this.#namespace}${abs}`;
+    const resolved = posix.resolve(joined);
+    if (!this.#isContained(resolved)) {
+      throw new WasmshNamespaceEscapeError(path, this.#namespace);
+    }
+    return resolved;
   }
 
   #unscope(path: string): string {
     if (!this.#namespace) return path;
-    if (path.startsWith(this.#namespace)) {
-      const stripped = path.slice(this.#namespace.length);
-      return stripped || "/";
+    // Containment check on the way back: an upstream bug (or a
+    // misbehaving sandbox) should never leak paths from outside the
+    // namespace into the caller's view.
+    if (!this.#isContained(path)) {
+      throw new WasmshNamespaceEscapeError(path, this.#namespace);
     }
-    return path;
+    const stripped = path.slice(this.#namespace.length);
+    return stripped || "/";
+  }
+
+  #isContained(resolved: string): boolean {
+    // A resolved path is contained iff it equals the namespace root
+    // exactly or sits at `<namespace>/...`. Plain string startsWith on
+    // the namespace would accept `<namespace>extra/...` (a different
+    // sibling directory whose name shares the prefix), so we anchor
+    // with the trailing separator explicitly.
+    if (resolved === this.#namespace) return true;
+    return resolved.startsWith(`${this.#namespace}/`);
   }
 
   // ── BackendProtocolV2 surface ──────────────────────────────────────

@@ -5,7 +5,10 @@
  * on every protocol method without booting Pyodide.
  */
 import { describe, it, expect } from "vitest";
-import { WasmshFilesystemBackend } from "./filesystem-backend.js";
+import {
+  WasmshFilesystemBackend,
+  WasmshNamespaceEscapeError,
+} from "./filesystem-backend.js";
 import type { WasmshSandbox } from "./sandbox.js";
 
 interface Call {
@@ -220,5 +223,111 @@ describe("WasmshFilesystemBackend with namespace prefix", () => {
   it("includes the namespace in id", () => {
     const { backend } = makeBackend("/mem");
     expect(backend.id).toBe("wasmsh-fs:wasmsh-fs-test/mem");
+  });
+});
+
+describe("WasmshFilesystemBackend path traversal containment", () => {
+  // Pyodide's POSIX VFS resolves `..` segments at the filesystem layer, so a
+  // namespaced backend must reject any input that, after canonicalisation,
+  // would leave its namespace root. The standard read_file/write_file/
+  // edit_file tools forward `file_path` verbatim, so the LLM controls this.
+  it("rejects a direct `..` escape on every protocol method", async () => {
+    const { backend } = makeBackend("/mem");
+    const escape = "/../skills/secret.py";
+    await expect(backend.ls(escape)).rejects.toThrow(
+      WasmshNamespaceEscapeError,
+    );
+    await expect(backend.read(escape)).rejects.toThrow(
+      WasmshNamespaceEscapeError,
+    );
+    await expect(backend.readRaw(escape)).rejects.toThrow(
+      WasmshNamespaceEscapeError,
+    );
+    await expect(backend.glob("*.py", escape)).rejects.toThrow(
+      WasmshNamespaceEscapeError,
+    );
+    await expect(backend.grep("TODO", escape)).rejects.toThrow(
+      WasmshNamespaceEscapeError,
+    );
+    await expect(backend.write(escape, "x")).rejects.toThrow(
+      WasmshNamespaceEscapeError,
+    );
+    await expect(backend.edit(escape, "a", "b")).rejects.toThrow(
+      WasmshNamespaceEscapeError,
+    );
+    await expect(
+      backend.uploadFiles([[escape, new Uint8Array([1])]]),
+    ).rejects.toThrow(WasmshNamespaceEscapeError);
+    await expect(backend.downloadFiles([escape])).rejects.toThrow(
+      WasmshNamespaceEscapeError,
+    );
+  });
+
+  it("rejects multi-segment `..` payloads (`../../skills/x`)", async () => {
+    const { backend } = makeBackend("/mem");
+    await expect(backend.read("../../skills/secret.py")).rejects.toThrow(
+      /escapes namespace/,
+    );
+  });
+
+  it("rejects payloads that traverse out via the namespace root", async () => {
+    // `/x/../../etc/passwd` resolves to `/etc/passwd` once the namespace
+    // prefix is prepended → outside the namespace.
+    const { backend } = makeBackend("/mem");
+    await expect(backend.read("/x/../../etc/passwd")).rejects.toThrow(
+      /escapes namespace/,
+    );
+  });
+
+  it("rejects an attempt to reach a sibling directory whose name shares the prefix", async () => {
+    // `/memstore/...` looks contained by a startsWith on `/mem` but is a
+    // different sibling directory. The trailing-separator anchor in
+    // `#isContained` catches this.
+    const { backend } = makeBackend("/mem");
+    // Spell it without `..` so we hit the prefix-anchor check, not the
+    // resolve-time guard.
+    await expect(
+      backend.write("/foo", "x").then(
+        () => {
+          // Should succeed (in-namespace), used only as a control.
+        },
+        () => {
+          // ignore
+        },
+      ),
+    ).resolves.toBeUndefined();
+    // Now an actual traversal landing on `/memstore`.
+    await expect(backend.read("/../memstore/x")).rejects.toThrow(
+      /escapes namespace/,
+    );
+  });
+
+  it("allows benign `.` and `./sub` paths inside the namespace", async () => {
+    const { sandbox, backend } = makeBackend("/mem");
+    await backend.ls("/./sub");
+    expect(sandbox.calls[0].args[0]).toBe("/mem/sub");
+  });
+
+  it("collapses interior `..` that stays inside the namespace", async () => {
+    const { sandbox, backend } = makeBackend("/mem");
+    // `/a/../b` resolves to `/mem/b` — still inside `/mem`, so allowed.
+    await backend.ls("/a/../b");
+    expect(sandbox.calls[0].args[0]).toBe("/mem/b");
+  });
+
+  it("throws when an upstream result tries to leak a non-namespaced path", async () => {
+    const { sandbox, backend } = makeBackend("/mem");
+    // Simulate a misbehaving sandbox returning a result from outside the
+    // namespace. The unscope guard must refuse to expose it to the caller.
+    sandbox.nextLs = { files: [{ path: "/etc/passwd" }] };
+    await expect(backend.ls("/")).rejects.toThrow(WasmshNamespaceEscapeError);
+  });
+
+  it("does not apply containment when no namespace is set", async () => {
+    const { sandbox, backend } = makeBackend();
+    // No namespace → no containment to enforce; absolute paths pass
+    // through unchanged.
+    await backend.ls("/etc/passwd");
+    expect(sandbox.calls[0].args[0]).toBe("/etc/passwd");
   });
 });
