@@ -4,24 +4,44 @@ import type { ReplResult } from "./types.js";
 
 describe("formatReplResult", () => {
   it("should format successful results", () => {
-    const result: ReplResult = { ok: true, value: 42, logs: [] };
+    const result: ReplResult = {
+      ok: true,
+      value: 42,
+      logs: [],
+      logsDroppedChars: 0,
+    };
     expect(formatReplResult(result)).toBe("→ 42");
   });
 
   it("should format string results", () => {
-    const result: ReplResult = { ok: true, value: "hello", logs: [] };
+    const result: ReplResult = {
+      ok: true,
+      value: "hello",
+      logs: [],
+      logsDroppedChars: 0,
+    };
     expect(formatReplResult(result)).toBe("→ hello");
   });
 
   it("should format object results", () => {
-    const result: ReplResult = { ok: true, value: { a: 1 }, logs: [] };
+    const result: ReplResult = {
+      ok: true,
+      value: { a: 1 },
+      logs: [],
+      logsDroppedChars: 0,
+    };
     const formatted = formatReplResult(result);
     expect(formatted).toContain("→");
     expect(formatted).toContain('"a": 1');
   });
 
   it("should include logs", () => {
-    const result: ReplResult = { ok: true, value: 42, logs: ["log1", "log2"] };
+    const result: ReplResult = {
+      ok: true,
+      value: 42,
+      logs: ["log1", "log2"],
+      logsDroppedChars: 0,
+    };
     const formatted = formatReplResult(result);
     expect(formatted).toContain("log1");
     expect(formatted).toContain("log2");
@@ -33,12 +53,18 @@ describe("formatReplResult", () => {
       ok: false,
       error: { name: "TypeError", message: "is not a function" },
       logs: [],
+      logsDroppedChars: 0,
     };
     expect(formatReplResult(result)).toContain("TypeError: is not a function");
   });
 
   it("should return '(no output)' for undefined results with no logs", () => {
-    const result: ReplResult = { ok: true, value: undefined, logs: [] };
+    const result: ReplResult = {
+      ok: true,
+      value: undefined,
+      logs: [],
+      logsDroppedChars: 0,
+    };
     expect(formatReplResult(result)).toBe("(no output)");
   });
 });
