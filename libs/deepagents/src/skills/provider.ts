@@ -31,8 +31,8 @@ export interface LoadedSkill {
  * Implementations decouple where skills come from (local filesystem, a
  * backend route, a future remote registry) from how they are consumed
  * (system-prompt discovery, code-interpreter module loading). The same
- * provider instance feeds both pipelines through a single `SkillRegistry`
- * inside `createDeepAgent`.
+ * provider instance feeds both pipelines after being passed to
+ * `createDeepAgent({ skills })`.
  *
  * Implementations should be cheap to construct. `list()` is the
  * lightweight discovery operation; `load(name)` is the expensive one and

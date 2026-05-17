@@ -29,8 +29,8 @@ export interface SkillRegistryOptions {
 }
 
 /**
- * Internal coordination object that sits between the configured skill
- * sources and the middleware that consume them.
+ * Coordination object that sits between the configured skill sources and
+ * the middleware that consume them.
  *
  * Owns three things:
  *
@@ -44,8 +44,9 @@ export interface SkillRegistryOptions {
  * and builds the per-name provider lookup. `load(name)` triggers
  * discovery internally if it hasn't run yet.
  *
- * Not exported from the package index — `createDeepAgent` constructs the
- * registry internally and passes it to the middleware that need it.
+ * Most callers don't need to construct this directly — `createDeepAgent`
+ * builds the registry from the configured `skills` list and forwards it
+ * to the middleware that need it.
  */
 export class SkillRegistry {
   private readonly skills: ReadonlyArray<string | SkillProvider>;

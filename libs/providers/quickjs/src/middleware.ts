@@ -22,8 +22,9 @@ import {
   type AnyBackendProtocol,
   type BackendFactory,
   type SkillMetadata,
+  type SkillRegistry,
 } from "deepagents";
-import type { CodeInterpreterMiddlewareOptions } from "./types.js";
+import type { CodeInterpreterMiddlewareOptions, SkillLoader } from "./types.js";
 import {
   ReplSession,
   DEFAULT_EXECUTION_TIMEOUT,
@@ -40,7 +41,8 @@ import {
   toolToTypeSignature,
   safeToJsonSchema,
 } from "./utils.js";
-import { scanSkillReferences } from "./skills.js";
+import { loadSkill, scanSkillReferences } from "./skills.js";
+import { stripTypeSyntax } from "./transform.js";
 
 /**
  * These type-only imports are required for TypeScript's type inference to work
@@ -52,6 +54,22 @@ import type * as _zodTypes from "@langchain/core/utils/types";
 import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
 import { LangGraphRunnableConfig } from "@langchain/langgraph";
+
+/**
+ * Cross-package symbol `createDeepAgent` looks up on each user-provided
+ * middleware to forward the agent's `SkillRegistry` into the code
+ * interpreter without the user having to configure skills twice.
+ *
+ * The value is a registry-shared symbol (`Symbol.for(...)`) so the same
+ * key is reachable from `deepagents` and `@langchain/quickjs` regardless
+ * of how either package is bundled or duplicated on disk.
+ *
+ * @internal Not part of the public SDK contract. Only `createDeepAgent`
+ *   should ever read or call this.
+ */
+export const SKILL_REGISTRY_INJECT_SYMBOL = Symbol.for(
+  "@langchain/quickjs.code-interpreter.injectSkillRegistry",
+);
 
 const DEFAULT_TOOL_NAME = "eval";
 
@@ -140,13 +158,97 @@ export function resolveToolList(
 }
 
 /**
- * Pull `skillsMetadata` from the task input, resolve the backend, and push
- * both into the session. Short-circuits with a `SkillNotAvailable` error if
- * the source references skills the agent doesn't have.
+ * Build a `SkillLoader` backed by the shared registry. The underlying
+ * `provider.load(name)` runs at most once per agent invocation since
+ * both the `skill` tool and this loader share the registry's cache.
+ */
+function buildRegistryLoader(registry: SkillRegistry): SkillLoader {
+  return async (name, metadata) => {
+    const loaded = await registry.load(name);
+    return assembleEntry(loaded.files, metadata);
+  };
+}
+
+/**
+ * Build a `SkillLoader` backed by the deprecated `skillsBackend`. Kept
+ * working for callers that still configure the code interpreter
+ * directly with a backend.
+ */
+function buildBackendLoader(
+  backend: AnyBackendProtocol | BackendFactory,
+): SkillLoader {
+  return async (_name, metadata) => {
+    const taskInput = getCurrentTaskInput();
+    const resolved = await resolveBackend(backend, { state: taskInput });
+    const loaded = await loadSkill(metadata, resolved);
+    return { files: loaded.files, entryRel: loaded.entryRel };
+  };
+}
+
+/**
+ * Convert a provider's raw source map into the QuickJS-shape entry the
+ * session expects (TS-stripped source, entrypoint identified).
+ */
+function assembleEntry(
+  rawFiles: Map<string, string>,
+  metadata: SkillMetadata,
+): { files: Map<string, string>; entryRel: string } {
+  const entryRel = resolveEntryRel(metadata);
+
+  const files = new Map<string, string>();
+  let entryPresent = false;
+  for (const [rel, source] of rawFiles) {
+    files.set(rel, stripTypeSyntax(source));
+    if (rel === entryRel) {
+      entryPresent = true;
+    }
+  }
+  if (!entryPresent) {
+    throw new Error(
+      `Skill '${metadata.name}': entrypoint '${entryRel}' did not match any file in the loaded bundle`,
+    );
+  }
+  return { files, entryRel };
+}
+
+/**
+ * Resolve the entrypoint path for a skill from its metadata. Prefers the
+ * spec-friendly `metadata.entrypoint` key; falls back to the legacy
+ * `module:` field for pre-spec skills.
+ */
+function resolveEntryRel(metadata: SkillMetadata): string {
+  const fromExtension = metadata.metadata?.entrypoint;
+  if (typeof fromExtension === "string" && fromExtension.length > 0) {
+    return normalizeRel(fromExtension);
+  }
+  if (typeof metadata.module === "string" && metadata.module.length > 0) {
+    return normalizeRel(metadata.module);
+  }
+  throw new Error(
+    `Skill '${metadata.name}' has no entrypoint (set \`metadata.entrypoint\` in SKILL.md)`,
+  );
+}
+
+/**
+ * Strip a leading `./` from a skill-relative path so the value matches
+ * the keys used inside the QuickJS session's in-memory module cache.
+ */
+function normalizeRel(p: string): string {
+  if (p.startsWith("./")) {
+    return p.slice(2);
+  }
+  return p;
+}
+
+/**
+ * Pull `skillsMetadata` from the task input and push it into the session
+ * paired with the per-eval skill loader. Short-circuits with a
+ * `SkillNotAvailable` error if the source references skills the agent
+ * doesn't have.
  */
 async function prepareSkillsForEval(
   session: ReplSession,
-  skillsBackend: AnyBackendProtocol | BackendFactory,
+  loader: SkillLoader,
   code: string,
 ): Promise<string | undefined> {
   const taskInput = getCurrentTaskInput<{ skillsMetadata?: SkillMetadata[] }>();
@@ -167,8 +269,7 @@ async function prepareSkillsForEval(
     }
   }
 
-  const resolved = await resolveBackend(skillsBackend, { state: taskInput });
-  session.setSkillsContext({ metadata, backend: resolved });
+  session.setSkillsContext({ metadata, load: loader });
   return undefined;
 }
 
@@ -194,6 +295,30 @@ export function createCodeInterpreterMiddleware(
   if (maxPtcCalls !== null && maxPtcCalls !== undefined && maxPtcCalls < 1) {
     throw new Error("`maxPtcCalls` must be >= 1 or null");
   }
+
+  // `SkillRegistry` arrives after the middleware is constructed when
+  // `createDeepAgent` calls the symbol setter installed below. Until that
+  // fires, only the deprecated `skillsBackend` path is available.
+  let injectedRegistry: SkillRegistry | undefined;
+  let cachedLoader: SkillLoader | undefined;
+
+  const skillsEnabled = (): boolean =>
+    injectedRegistry !== undefined || skillsBackend !== undefined;
+
+  const getSkillLoader = (): SkillLoader | undefined => {
+    if (cachedLoader !== undefined) {
+      return cachedLoader;
+    }
+    if (injectedRegistry !== undefined) {
+      cachedLoader = buildRegistryLoader(injectedRegistry);
+      return cachedLoader;
+    }
+    if (skillsBackend !== undefined) {
+      cachedLoader = buildBackendLoader(skillsBackend);
+      return cachedLoader;
+    }
+    return undefined;
+  };
 
   const baseSystemPrompt =
     customSystemPrompt ||
@@ -229,15 +354,16 @@ export function createCodeInterpreterMiddleware(
         maxStackSizeBytes,
         maxPtcCalls,
         tools: ptcTools,
-        skillsEnabled: skillsBackend !== undefined,
+        skillsEnabled: skillsEnabled(),
         maxResultChars,
         captureConsole,
       });
 
-      if (skillsBackend !== undefined) {
+      const loader = getSkillLoader();
+      if (loader !== undefined) {
         const setupError = await prepareSkillsForEval(
           session,
-          skillsBackend,
+          loader,
           input.code,
         );
         if (setupError !== undefined) {
@@ -267,7 +393,7 @@ export function createCodeInterpreterMiddleware(
     },
   );
 
-  return createMiddleware({
+  const middleware = createMiddleware({
     name: "CodeInterpreterMiddleware",
     tools: [evalTool],
     wrapModelCall: async (request, handler) => {
@@ -289,4 +415,25 @@ export function createCodeInterpreterMiddleware(
       ReplSession.deleteSession(sessionKey);
     },
   });
+
+  /**
+   * Setter installed for `createDeepAgent` to forward the agent's
+   * `SkillRegistry` into this middleware. Hidden behind `Symbol.for(...)`
+   * so it doesn't show up on user-facing surfaces but stays reachable
+   * across package boundaries. Idempotent; latest call wins.
+   */
+  Object.defineProperty(middleware, SKILL_REGISTRY_INJECT_SYMBOL, {
+    value: (registry: SkillRegistry | null | undefined): void => {
+      if (registry === null || registry === undefined) {
+        return;
+      }
+      injectedRegistry = registry;
+      cachedLoader = undefined;
+    },
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+
+  return middleware;
 }

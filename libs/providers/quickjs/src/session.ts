@@ -27,7 +27,8 @@ import type {
 } from "quickjs-emscripten-core";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
-import { loadSkill, scanSkillReferences, type LoadedSkill } from "./skills.js";
+import type { SkillMetadata } from "deepagents";
+import { type LoadedSkill } from "./skills.js";
 import { PTCCallBudgetExceededError } from "./errors.js";
 import type { ReplSessionOptions, ReplResult, SkillsContext } from "./types.js";
 import { toCamelCase } from "./utils.js";
@@ -90,6 +91,18 @@ function getSharedModule(): Promise<QuickJSAsyncWASMModule> {
 // spec), which causes `context.dump()` (JSON.stringify) to return `{}`.
 function makeErrorSource(message: string): string {
   return `throw { name: "Error", message: ${JSON.stringify(message)} };`;
+}
+
+/**
+ * True when a `SkillMetadata` declares an importable entrypoint
+ * reachable from `@/skills/<name>` imports.
+ */
+function hasEntrypoint(metadata: SkillMetadata): boolean {
+  const fromExt = metadata.metadata?.entrypoint;
+  if (typeof fromExt === "string" && fromExt.length > 0) {
+    return true;
+  }
+  return typeof metadata.module === "string" && metadata.module.length > 0;
 }
 
 /**
@@ -241,6 +254,7 @@ export class ReplSession {
   private skillsContext: SkillsContext | undefined;
   private skillsLoaded: Map<string, LoadedSkill> = new Map();
   private skillsFailed: Map<string, Error> = new Map();
+  private allSkillsPreloaded = false;
   private readonly maxPtcCalls: number | null;
   private ptcCallsRemaining: number | null = null;
 
@@ -328,7 +342,13 @@ export class ReplSession {
     }
 
     try {
-      const loaded = await loadSkill(metadata, ctx.backend);
+      const { files, entryRel } = await ctx.load(name, metadata);
+      const loaded: LoadedSkill = {
+        name,
+        specifier: `@/skills/${name}`,
+        entryRel,
+        files,
+      };
       this.skillsLoaded.set(name, loaded);
       return loaded;
     } catch (err) {
@@ -338,24 +358,38 @@ export class ReplSession {
   }
 
   /**
-   * Pre-load all skills referenced in source code into the in-memory
-   * cache. Must be called before `evalCodeAsync` so the module loader
-   * can resolve synchronously. An async loader would cause asyncify
-   * suspensions on each import, which is incompatible with the shared
-   * WASM module used by all sessions.
+   * Eagerly preload every script-bearing skill from the current
+   * `SkillsContext`. Called once per session, on the first eval that has
+   * skills configured. Skills without an entrypoint are skipped. Per-skill
+   * failures are cached in `skillsFailed` so the module loader can surface
+   * them inside QuickJS without re-attempting the load.
    */
-  async preloadReferencedSkills(code: string): Promise<void> {
-    const refs = scanSkillReferences(code);
-    for (const name of refs) {
-      if (this.skillsLoaded.has(name) || this.skillsFailed.has(name)) {
+  async preloadAllScriptSkills(): Promise<void> {
+    if (this.allSkillsPreloaded) {
+      return;
+    }
+    const ctx = this.skillsContext;
+    if (ctx === undefined) {
+      return;
+    }
+    this.allSkillsPreloaded = true;
+
+    for (const metadata of ctx.metadata) {
+      if (!hasEntrypoint(metadata)) {
+        continue;
+      }
+      if (this.skillsLoaded.has(metadata.name)) {
+        continue;
+      }
+      if (this.skillsFailed.has(metadata.name)) {
         continue;
       }
 
       try {
-        await this.ensureSkillLoaded(name);
+        await this.ensureSkillLoaded(metadata.name);
       } catch (err) {
-        if (!this.skillsFailed.has(name)) {
-          this.skillsFailed.set(name, err as Error);
+        if (!this.skillsFailed.has(metadata.name)) {
+          this.skillsFailed.set(metadata.name, err as Error);
         }
       }
     }
@@ -364,7 +398,7 @@ export class ReplSession {
   /**
    * Resolve a module specifier to source code. Strictly synchronous —
    * only reads from the in-memory skill cache populated by
-   * `preloadReferencedSkills`. Returns error source (not a thrown
+   * `preloadAllScriptSkills`. Returns error source (not a thrown
    * exception) for missing or failed skills so QuickJS reports the
    * error inside the VM.
    */
@@ -381,6 +415,17 @@ export class ReplSession {
 
     const loaded = this.skillsLoaded.get(parsed.name);
     if (loaded === undefined) {
+      const ctx = this.skillsContext;
+      if (ctx === undefined) {
+        return makeErrorSource(
+          `Skill '${parsed.name}' referenced but skills are not configured for this session`,
+        );
+      }
+      if (!ctx.metadata.some((m) => m.name === parsed.name)) {
+        return makeErrorSource(
+          `Skill '${parsed.name}' referenced but not available on this agent`,
+        );
+      }
       return makeErrorSource(
         `Skill '${parsed.name}' was not preloaded. ` +
           `Ensure the import specifier is a static string literal ` +
@@ -450,7 +495,7 @@ export class ReplSession {
    * Wire the QuickJS module loader and normalizer on this session's runtime.
    *
    * The loader is strictly synchronous — it reads from the in-memory skill
-   * cache populated by `preloadReferencedSkills`. This is critical: an async
+   * cache populated by `preloadAllScriptSkills`. This is critical: an async
    * module loader causes asyncify suspensions on each import, and disposing
    * a runtime after multi-file imports corrupts the shared module's asyncify
    * state, silently breaking the loader for all subsequent sessions.
@@ -573,8 +618,7 @@ export class ReplSession {
     const runtime = this.runtime!;
     const context = this.context!;
 
-    // Pre-load referenced skills so the module loader resolves synchronously.
-    await this.preloadReferencedSkills(code);
+    await this.preloadAllScriptSkills();
 
     const drainLogs = (): { logs: string[]; logsDroppedChars: number } => {
       const [raw, dropped] = this.consoleBuffer.drain();

@@ -310,7 +310,7 @@ export function validateMetadata(
  * Normalize the legacy `module` frontmatter key into a skill-relative
  * POSIX path. Rejects absolute paths, traversal sequences, declaration
  * files, and unsupported extensions. Returns `undefined` for any
- * unparseable value so the skill degrades to prose-only.
+ * unparsable value so the skill degrades to prose-only.
  */
 export function validateModulePath(raw: unknown): string | undefined {
   if (raw === null || raw === undefined) {

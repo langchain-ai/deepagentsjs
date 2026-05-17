@@ -119,6 +119,18 @@ export {
   type ListSkillsOptions,
 } from "./skills/index.js";
 
+// Export skill provider abstractions
+export {
+  SkillRegistry,
+  type SkillRegistryOptions,
+  type SkillProvider,
+  type LoadedSkill,
+  FilesystemSkillProvider,
+  type FilesystemSkillProviderOptions,
+  BackendSkillProvider,
+  type BackendSkillProviderOptions,
+} from "./skills/index.js";
+
 // Export backends
 export {
   StateBackend,

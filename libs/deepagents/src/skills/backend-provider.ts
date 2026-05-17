@@ -31,8 +31,9 @@ const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export interface BackendSkillProviderOptions {
   /**
    * Already-resolved backend. This provider does not accept factories
-   * directly; callers that need factory backends should construct the
-   * provider lazily from inside the `SkillRegistry` which threads state.
+   * directly; for factory-pattern backends, prefer the string-source
+   * shape on `createDeepAgent({ skills: ["/path/"] })` which handles
+   * resolution per-invocation.
    */
   backend: AnyBackendProtocol;
 

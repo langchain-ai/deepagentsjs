@@ -1,11 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { tool } from "langchain";
 import { z } from "zod/v4";
-import type {
-  AnyBackendProtocol,
-  FileDownloadResponse,
-  SkillMetadata,
-} from "deepagents";
+import type { SkillMetadata } from "deepagents";
 import { ReplSession } from "./session.js";
 import type { SkillsContext } from "./types.js";
 
@@ -748,29 +744,6 @@ describe("REPL Engine", () => {
 // Skills module loader
 // ---------------------------------------------------------------------------
 
-const enc = new TextEncoder();
-
-function makeSkillsBackend(files: Record<string, string>): AnyBackendProtocol {
-  return {
-    glob: async (pattern: string, basePath?: string) => {
-      const ext = pattern.replace("**/*", "");
-      const matches = Object.keys(files)
-        .filter((p) => p.startsWith(basePath ?? "") && p.endsWith(ext))
-        .map((p) => ({ path: p }));
-      return { files: matches };
-    },
-    downloadFiles: async (paths: string[]) => {
-      return paths.map((p): FileDownloadResponse => {
-        const content = files[p];
-        if (content === undefined) {
-          return { path: p, content: null, error: "file_not_found" };
-        }
-        return { path: p, content: enc.encode(content), error: null };
-      });
-    },
-  } as unknown as AnyBackendProtocol;
-}
-
 function makeSkillsMeta(
   name: string,
   module: string,
@@ -789,7 +762,21 @@ function makeSkillsContext(
   metadata: SkillMetadata[],
   files: Record<string, string>,
 ): SkillsContext {
-  return { metadata, backend: makeSkillsBackend(files) };
+  const load = async (name: string, meta: SkillMetadata) => {
+    const skillDir = `/skills/${name}`;
+    const result = new Map<string, string>();
+    for (const [path, content] of Object.entries(files)) {
+      if (path.startsWith(`${skillDir}/`)) {
+        const rel = path.slice(skillDir.length + 1);
+        result.set(rel, content);
+      }
+    }
+    return {
+      files: result,
+      entryRel: meta.module ?? "index.js",
+    };
+  };
+  return { metadata, load };
 }
 
 describe("skills module loader", () => {
@@ -888,33 +875,18 @@ describe("skills module loader", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("caches a load failure and does not re-fetch from the backend", async () => {
-    let downloadCount = 0;
+  it("caches a load failure and does not re-fetch from the loader", async () => {
+    let loadCount = 0;
     const meta = makeSkillsMeta("my-skill", "index.js");
-    const backend = {
-      glob: async (pattern: string) => {
-        const ext = pattern.replace("**/*", "");
-        if (ext === ".js") {
-          return { files: [{ path: "/skills/my-skill/index.js" }] };
-        }
-        return { files: [] };
-      },
-      downloadFiles: async (paths: string[]) => {
-        downloadCount++;
-        return paths.map(
-          (p): FileDownloadResponse => ({
-            path: p,
-            content: null,
-            error: "file_not_found",
-          }),
-        );
-      },
-    } as unknown as AnyBackendProtocol;
+    const load = async () => {
+      loadCount++;
+      throw new Error("file_not_found");
+    };
 
     session = ReplSession.getOrCreate(uniqueThreadId(), {
       skillsEnabled: true,
     });
-    session.setSkillsContext({ metadata: [meta], backend });
+    session.setSkillsContext({ metadata: [meta], load });
 
     await session.eval(
       `await import("@/skills/my-skill").catch(() => null)`,
@@ -925,6 +897,6 @@ describe("skills module loader", () => {
       TIMEOUT,
     );
 
-    expect(downloadCount).toBe(1);
+    expect(loadCount).toBe(1);
   });
 });

@@ -7,6 +7,34 @@ import type {
 } from "deepagents";
 
 /**
+ * Loader callback the QuickJS session invokes to resolve a single skill
+ * by name into its module-ready bundle.
+ */
+export type SkillLoader = (
+  name: string,
+  metadata: SkillMetadata,
+) => Promise<{ files: Map<string, string>; entryRel: string }>;
+
+/**
+ * Metadata + loader pair the session uses to resolve `@/skills/<name>`
+ * imports.
+ */
+export interface SkillsContext {
+  /**
+   * Snapshot of `state.skillsMetadata` for the current eval. Used to
+   * validate that referenced skills exist before the synchronous module
+   * loader fires.
+   */
+  metadata: SkillMetadata[];
+
+  /**
+   * Function the session calls to fetch a skill's source bundle on
+   * demand.
+   */
+  load: SkillLoader;
+}
+
+/**
  * Configuration options for the Code Interpreter middleware.
  */
 export interface CodeInterpreterMiddlewareOptions {
@@ -48,6 +76,9 @@ export interface CodeInterpreterMiddlewareOptions {
   /**
    * Backend the REPL reads skill module sources from. When provided alongside
    * `SkillsMiddleware`, skills with a `module:` key become dynamic-importable.
+   *
+   * @deprecated Configure skills via `createDeepAgent({ skills: [...] })`
+   * instead.
    */
   skillsBackend?: AnyBackendProtocol | BackendFactory;
 
@@ -112,19 +143,4 @@ export interface ReplResult {
   error?: { name?: string; message?: string; stack?: string };
   logs: string[];
   logsDroppedChars: number;
-}
-
-/**
- * Metadata + backend pair the session needs to resolve skill imports.
- */
-export interface SkillsContext {
-  /**
-   * Per-eval snapshot of `state.skillsMetadata`.
-   */
-  metadata: SkillMetadata[];
-
-  /**
-   * Backend the session fetches skill source files from.
-   */
-  backend: AnyBackendProtocol;
 }

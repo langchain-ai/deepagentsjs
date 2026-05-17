@@ -39,3 +39,5 @@ export {
   BackendSkillProvider,
   type BackendSkillProviderOptions,
 } from "./backend-provider.js";
+
+export { SkillRegistry, type SkillRegistryOptions } from "./registry.js";
