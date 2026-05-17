@@ -247,6 +247,7 @@ export class FilesystemSkillProvider implements SkillProvider {
       const detail = errno.message ?? errno.code ?? "unknown error";
       throw new Error(
         `FilesystemSkillProvider: cannot read '${skillMdPath}': ${detail}`,
+        { cause: err },
       );
     }
   }

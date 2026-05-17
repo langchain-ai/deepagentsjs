@@ -21,6 +21,7 @@ import { z } from "zod";
 import {
   context,
   createMiddleware,
+  tool,
   /**
    * required for type inference
    */
@@ -32,17 +33,14 @@ import type {
   AnyBackendProtocol,
   BackendFactory,
 } from "../backends/protocol.js";
-import { resolveBackend } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import { filesValue } from "../values.js";
-import { DEFAULT_READ_LINE_LIMIT } from "./fs.js";
 
 import type { SkillMetadata, SkillMetadataEntry } from "../skills/discovery.js";
-import {
-  SkillMetadataEntrySchema,
-  listSkillsFromBackend,
-} from "../skills/discovery.js";
+import { SkillMetadataEntrySchema } from "../skills/discovery.js";
+import { SkillProvider } from "../skills/provider.js";
+import { SkillRegistry } from "../skills/registry.js";
 
 // Re-export discovery primitives from this module so existing callers
 // that import from `./middleware/skills.js` keep working without source
@@ -64,13 +62,6 @@ export {
 } from "../skills/discovery.js";
 
 /**
- * Line-read limit hint baked into the system prompt for the legacy
- * `read_file`-driven activation flow. Phase 4 retires the read_file
- * pattern; until then this stays so the existing prompt keeps working.
- */
-export const DEFAULT_SKILL_READ_LINE_LIMIT = 1000;
-
-/**
  * Options for the skills middleware.
  */
 export interface SkillsMiddlewareOptions {
@@ -89,7 +80,24 @@ export interface SkillsMiddlewareOptions {
    * conventions. Later sources override earlier ones for skills with the
    * same name (last one wins).
    */
-  sources: string[];
+  sources: (string | SkillProvider)[];
+}
+
+/**
+ * Extract a human-readable message from a value caught in a `catch`
+ * clause. Performs a shape check rather than `instanceof Error` since the
+ * codebase prohibits `instanceof` (cross-realm errors fail it silently).
+ */
+function errorMessage(err: unknown): string {
+  if (
+    err !== null &&
+    typeof err === "object" &&
+    "message" in err &&
+    typeof (err as { message: unknown }).message === "string"
+  ) {
+    return (err as { message: string }).message;
+  }
+  return String(err);
 }
 
 /**
@@ -155,8 +163,7 @@ const SKILLS_SYSTEM_PROMPT = context`
   Skills follow a **progressive disclosure** pattern - you know they exist (name + description above), but you only read the full instructions when needed:
 
   1. **Recognize when a skill applies**: Check if the user's task matches any skill's description
-  2. **Read the skill's full instructions**: Use \`read_file\` on the path shown in the skill list above.
-     Pass \`limit=${DEFAULT_SKILL_READ_LINE_LIMIT}\` since the default of ${DEFAULT_READ_LINE_LIMIT} lines is too small for most skill files.
+  2. **Load the skill's full instructions**: Call \`skill({ name: "<skill-name>" })\` to load the full SKILL.md.
   3. **Follow the skill's instructions**: SKILL.md contains step-by-step workflows, best practices, and examples
   4. **Access supporting files**: Skills may include scripts, configs, or reference docs - use absolute paths
 
@@ -261,34 +268,93 @@ export function formatSkillsList(
  * ```
  */
 export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
-  const { backend, sources } = options;
+  const registry = new SkillRegistry({
+    skills: options.sources,
+    backend: options.backend,
+  });
 
-  // Closure variable so wrapModelCall sees what beforeAgent loaded, even
-  // before the state update propagates.
+  const promptSources = options.sources.filter(
+    (entry): entry is string => typeof entry === "string",
+  );
+
+  return createSkillsMiddlewareFromRegistry(registry, promptSources);
+}
+
+/**
+ * Build the skills middleware from a pre-constructed `SkillRegistry`.
+ * Used by `createDeepAgent` so a single registry instance can feed both
+ * this middleware and any opt-in user middleware.
+ *
+ * @internal
+ */
+export function createSkillsMiddlewareFromRegistry(
+  registry: SkillRegistry,
+  promptSources: string[] = [],
+) {
   let loadedSkills: SkillMetadata[] = [];
+
+  const skillTool = tool(
+    async ({ name }: { name: string }) => {
+      const metadata = loadedSkills.find((s) => s.name === name);
+      if (metadata === undefined) {
+        const available =
+          loadedSkills.map((s) => s.name).join(", ") || "(none)";
+        return `Skill '${name}' is not available. Available skills: ${available}`;
+      }
+      try {
+        const result = await registry.load(name);
+        return result.body;
+      } catch (err) {
+        return `Failed to load skill '${name}': ${errorMessage(err)}`;
+      }
+    },
+    {
+      name: "skill",
+      description:
+        "Activate a skill by name. Returns the full SKILL.md instructions for the named skill. Call this when the user's task matches one of the skills listed in the system prompt.",
+      schema: z.object({
+        name: z
+          .string()
+          .describe("Name of the skill to activate (kebab-case identifier)."),
+      }),
+    },
+  );
 
   return createMiddleware({
     name: "SkillsMiddleware",
     stateSchema: SkillsStateSchema,
+    tools: [skillTool],
 
     async beforeAgent(state) {
       if (loadedSkills.length > 0) {
         return undefined;
       }
-      const restored = restoreFromState(state);
-      if (restored !== null) {
-        loadedSkills = restored;
+      if (
+        "skillsMetadata" in state &&
+        Array.isArray(state.skillsMetadata) &&
+        state.skillsMetadata.length > 0
+      ) {
+        loadedSkills = state.skillsMetadata as SkillMetadata[];
         return undefined;
       }
 
-      loadedSkills = await discoverFromSources(backend, sources, state);
+      try {
+        loadedSkills = await registry.list(state);
+      } catch (error) {
+        console.debug(`[SkillsMiddleware] registry list failed:`, error);
+        loadedSkills = [];
+      }
       return { skillsMetadata: loadedSkills };
     },
 
     wrapModelCall(request, handler) {
-      const skillsMetadata = currentSkillsMetadata(loadedSkills, request);
-      const skillsLocations = formatSkillsLocations(sources);
-      const skillsList = formatSkillsList(skillsMetadata, sources);
+      const skillsMetadata: SkillMetadata[] =
+        loadedSkills.length > 0
+          ? loadedSkills
+          : (request.state?.skillsMetadata as SkillMetadata[]) || [];
+
+      const skillsLocations = formatSkillsLocations(promptSources);
+      const skillsList = formatSkillsList(skillsMetadata, promptSources);
 
       const skillsSection = SKILLS_SYSTEM_PROMPT.replace(
         "{skills_locations}",
@@ -299,66 +365,4 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
       return handler({ ...request, systemMessage: newSystemMessage });
     },
   });
-}
-
-/**
- * Pull skills back out of state on checkpoint restore so the middleware
- * doesn't re-run discovery in resumed conversations.
- */
-function restoreFromState(state: unknown): SkillMetadata[] | null {
-  const candidate = state as { skillsMetadata?: unknown };
-  if (
-    candidate !== null &&
-    candidate !== undefined &&
-    Array.isArray(candidate.skillsMetadata) &&
-    candidate.skillsMetadata.length > 0
-  ) {
-    return candidate.skillsMetadata as SkillMetadata[];
-  }
-  return null;
-}
-
-/**
- * Return closure-cached metadata when populated, falling back to state
- * for the checkpoint-restore case.
- */
-function currentSkillsMetadata(
-  loaded: SkillMetadata[],
-  request: { state?: { skillsMetadata?: SkillMetadata[] } },
-): SkillMetadata[] {
-  if (loaded.length > 0) {
-    return loaded;
-  }
-  return request.state?.skillsMetadata ?? [];
-}
-
-/**
- * Run skill discovery across every configured source. Per-source
- * failures are logged and skipped so one broken source doesn't take
- * down discovery for the others. Later sources override earlier ones
- * on name collision.
- */
-async function discoverFromSources(
-  backend: SkillsMiddlewareOptions["backend"],
-  sources: string[],
-  state: unknown,
-): Promise<SkillMetadata[]> {
-  const resolvedBackend = await resolveBackend(backend, { state });
-  const merged = new Map<string, SkillMetadata>();
-
-  for (const sourcePath of sources) {
-    try {
-      const skills = await listSkillsFromBackend(resolvedBackend, sourcePath);
-      for (const skill of skills) {
-        merged.set(skill.name, skill);
-      }
-    } catch (error) {
-      console.debug(
-        `[SkillsMiddleware] Failed to load skills from ${sourcePath}:`,
-        error,
-      );
-    }
-  }
-
-  return [...merged.values()];
 }
