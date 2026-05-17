@@ -29,3 +29,13 @@ export {
   MAX_SKILL_NAME_LENGTH,
   MAX_SKILL_DESCRIPTION_LENGTH,
 } from "./discovery.js";
+
+export {
+  FilesystemSkillProvider,
+  MAX_SKILL_BUNDLE_BYTES,
+  type FilesystemSkillProviderOptions,
+} from "./filesystem-provider.js";
+export {
+  BackendSkillProvider,
+  type BackendSkillProviderOptions,
+} from "./backend-provider.js";
