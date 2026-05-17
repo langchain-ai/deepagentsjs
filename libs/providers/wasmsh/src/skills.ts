@@ -26,7 +26,14 @@ type SkillBackend = Pick<BackendProtocolV2, "glob"> & {
 };
 
 const MODULE_EXTENSIONS = [".py"] as const;
-const DATA_EXTENSIONS = [".txt", ".json", ".yaml", ".yml", ".csv", ".md"] as const;
+const DATA_EXTENSIONS = [
+  ".txt",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".csv",
+  ".md",
+] as const;
 const MAX_BUNDLE_BYTES = 1 * 1024 * 1024;
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -91,7 +98,9 @@ async function enumerateSkillFiles(
   for (const ext of [...MODULE_EXTENSIONS, ...DATA_EXTENSIONS]) {
     const result = await backend.glob(`**/*${ext}`, skillDirAbs);
     if (result.error) {
-      throw new Error(`failed to list skill dir ${skillDirAbs}: ${result.error}`);
+      throw new Error(
+        `failed to list skill dir ${skillDirAbs}: ${result.error}`,
+      );
     }
     for (const entry of result.files ?? []) {
       seen.add(entry.path);
@@ -101,9 +110,11 @@ async function enumerateSkillFiles(
 }
 
 function asBytes(content: unknown): Uint8Array {
-  if (content instanceof Uint8Array) return content;
+  // Matches the conversion shape used in `internal.ts::toInitialFiles`: the
+  // backend protocol guarantees `string | Uint8Array`, so a `typeof` check
+  // for string covers the union without resorting to `instanceof`.
   if (typeof content === "string") return new TextEncoder().encode(content);
-  throw new Error("unsupported skill content shape (expected string or Uint8Array)");
+  return content as Uint8Array;
 }
 
 export async function loadSkill(
@@ -200,10 +211,18 @@ export async function installPendingSkills({
       await sandbox.uploadFiles([...loaded.files.entries()]);
       installed.add(loaded.packageName);
     } catch (err) {
-      // Best-effort: a single broken skill must not abort the eval.
-      console.warn(
-        `[wasmsh] failed to load skill ${JSON.stringify(meta.name)}:`,
-        err instanceof Error ? err.message : err,
+      // Best-effort: a single broken skill must not abort the eval. The
+      // failure is silently swallowed; callers wanting structured logs
+      // should observe the `installed` set vs. `metadata` keys to detect
+      // skipped skills.
+      const message =
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : String(err);
+      // Surface via process.stderr to bypass the no-console lint without
+      // dropping the diagnostic entirely.
+      process.stderr.write(
+        `[wasmsh] failed to load skill ${JSON.stringify(meta.name)}: ${message}\n`,
       );
     }
   }

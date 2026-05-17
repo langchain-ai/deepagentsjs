@@ -30,14 +30,18 @@ class StubSandbox {
   } = { ok: true, stdout: "", stderr: "", value: null };
 
   // The dispatcher we expose for assertion in tests.
-  capturedDispatcher: ((
-    call: { id: string; tool: string; args: Record<string, unknown> },
-  ) => Promise<{
-    ok: boolean;
-    value?: unknown;
-    error?: string;
-    message?: string;
-  }>) | null = null;
+  capturedDispatcher:
+    | ((call: {
+        id: string;
+        tool: string;
+        args: Record<string, unknown>;
+      }) => Promise<{
+        ok: boolean;
+        value?: unknown;
+        error?: string;
+        message?: string;
+      }>)
+    | null = null;
 
   async runPtc(params: {
     code: string;
@@ -92,9 +96,11 @@ describe("createWasmshInterpreterMiddleware", () => {
           ReturnType<typeof import("./sandbox.js").WasmshSandbox.createNode>
         >,
     });
-    const result = await (mw.tools![0] as unknown as {
-      invoke: (input: { code: string }, config: unknown) => Promise<string>;
-    }).invoke({ code: "2 * 21" }, {});
+    const result = await (
+      mw.tools![0] as unknown as {
+        invoke: (input: { code: string }, config: unknown) => Promise<string>;
+      }
+    ).invoke({ code: "2 * 21" }, {});
     expect(stub.runPtcCalls).toHaveLength(1);
     expect(stub.runPtcCalls[0].code).toBe("2 * 21");
     expect(stub.runPtcCalls[0].tools).toEqual([]);
@@ -117,9 +123,11 @@ describe("createWasmshInterpreterMiddleware", () => {
           ReturnType<typeof import("./sandbox.js").WasmshSandbox.createNode>
         >,
     });
-    const result = await (mw.tools![0] as unknown as {
-      invoke: (input: { code: string }, config: unknown) => Promise<string>;
-    }).invoke({ code: "foo" }, {});
+    const result = await (
+      mw.tools![0] as unknown as {
+        invoke: (input: { code: string }, config: unknown) => Promise<string>;
+      }
+    ).invoke({ code: "foo" }, {});
     expect(result).toContain("NameError");
     expect(result).toContain("name 'foo' is not defined");
   });
@@ -144,7 +152,9 @@ describe("skills scanner", () => {
   });
 
   it("ignores unrelated imports", () => {
-    expect(scanSkillReferences("import os\nfrom json import loads").size).toBe(0);
+    expect(scanSkillReferences("import os\nfrom json import loads").size).toBe(
+      0,
+    );
   });
 });
 

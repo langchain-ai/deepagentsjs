@@ -42,15 +42,13 @@ import {
 } from "@langchain/langgraph";
 
 import { WasmshSandbox } from "./sandbox.js";
+import { type WasmshMiddlewareOptions, type ReplEnvelope } from "./types.js";
 import {
-  type WasmshMiddlewareOptions,
-  type ReplEnvelope,
-} from "./types.js";
-import { formatEnvelope, isValidPythonIdentifier, toSnakeCase } from "./utils.js";
-import {
-  installPendingSkills,
-  type SkillMetadata,
-} from "./skills.js";
+  formatEnvelope,
+  isValidPythonIdentifier,
+  toSnakeCase,
+} from "./utils.js";
+import { installPendingSkills, type SkillMetadata } from "./skills.js";
 
 /** Default tool name; matches the Python adapter. */
 const DEFAULT_TOOL_NAME = "py_eval";
@@ -148,10 +146,7 @@ function filterToolsForPtc(
     return candidates.filter((t) => included.has(t.name));
   }
   if ("exclude" in ptc) {
-    const excluded = new Set([
-      ...DEFAULT_PTC_EXCLUDED_TOOLS,
-      ...ptc.exclude,
-    ]);
+    const excluded = new Set([...DEFAULT_PTC_EXCLUDED_TOOLS, ...ptc.exclude]);
     return candidates.filter((t) => !excluded.has(t.name));
   }
   return [];
@@ -202,8 +197,11 @@ export function createWasmshInterpreterMiddleware(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxResultChars = options.maxResultChars ?? DEFAULT_MAX_RESULT_CHARS;
   const baseSystemPrompt =
-    options.systemPrompt === undefined ? REPL_SYSTEM_PROMPT : options.systemPrompt;
-  const sandboxFactory = options.sandboxFactory ?? (() => WasmshSandbox.createNode());
+    options.systemPrompt === undefined
+      ? REPL_SYSTEM_PROMPT
+      : options.systemPrompt;
+  const sandboxFactory =
+    options.sandboxFactory ?? (() => WasmshSandbox.createNode());
 
   // Lazily-created sandbox shared across calls. The first eval boots it
   // (~1s) and subsequent calls reuse it for state persistence.
@@ -298,7 +296,7 @@ export function createWasmshInterpreterMiddleware(
       if (exposed.length > 0 && cachedPtcPrompt === null) {
         cachedPtcPrompt = generatePtcPrompt(exposed);
       }
-      const promptSuffix = exposed.length > 0 ? cachedPtcPrompt ?? "" : "";
+      const promptSuffix = exposed.length > 0 ? (cachedPtcPrompt ?? "") : "";
       const systemMessage = baseSystemPrompt
         ? request.systemMessage.concat(baseSystemPrompt).concat(promptSuffix)
         : request.systemMessage.concat(promptSuffix);
@@ -316,11 +314,13 @@ export function createWasmshInterpreterMiddleware(
   });
 }
 
-function collectSkillsMetadata(runtime: BackendRuntime): Map<string, SkillMetadata> {
+function collectSkillsMetadata(
+  runtime: BackendRuntime,
+): Map<string, SkillMetadata> {
   const state = (runtime as { state?: unknown }).state;
   const list =
     state && typeof state === "object" && "skills_metadata" in state
-      ? (state as { skills_metadata?: SkillMetadata[] }).skills_metadata ?? []
+      ? ((state as { skills_metadata?: SkillMetadata[] }).skills_metadata ?? [])
       : [];
   const out = new Map<string, SkillMetadata>();
   for (const meta of list) out.set(meta.name, meta);

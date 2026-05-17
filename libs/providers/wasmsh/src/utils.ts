@@ -11,7 +11,10 @@ export function isValidPythonIdentifier(name: string): boolean {
 }
 
 /** Format the launcher envelope into a single string for the agent. */
-export function formatEnvelope(env: ReplEnvelope, maxResultChars: number): string {
+export function formatEnvelope(
+  env: ReplEnvelope,
+  maxResultChars: number,
+): string {
   const parts: string[] = [];
   const block = (label: string, body: string) => {
     const trimmed =
@@ -35,7 +38,7 @@ export function formatEnvelope(env: ReplEnvelope, maxResultChars: number): strin
     const label = `error ${env.error ?? "Error"}`;
     const body = env.traceback
       ? `${env.message ?? ""}\n\n${env.traceback}`.trim()
-      : env.message ?? "";
+      : (env.message ?? "");
     block(label, body);
   }
   return parts.join("\n\n");

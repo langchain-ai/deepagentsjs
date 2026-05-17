@@ -44,7 +44,10 @@ export class WasmshFilesystemBackend {
 
   readonly #namespace: string;
 
-  constructor(sandbox: WasmshSandbox, options: WasmshFilesystemBackendOptions = {}) {
+  constructor(
+    sandbox: WasmshSandbox,
+    options: WasmshFilesystemBackendOptions = {},
+  ) {
     this.#sandbox = sandbox;
     this.#namespace = normaliseNamespace(options.namespace);
   }
@@ -101,10 +104,17 @@ export class WasmshFilesystemBackend {
     glob?: string | null,
   ): Promise<GrepResult> {
     const scoped = path ? this.#scope(path) : null;
-    const result = await this.#sandbox.grep(pattern, scoped ?? "/", glob ?? null);
+    const result = await this.#sandbox.grep(
+      pattern,
+      scoped ?? "/",
+      glob ?? null,
+    );
     if (result.error || !result.matches) return result;
     return {
-      matches: result.matches.map((m) => ({ ...m, path: this.#unscope(m.path) })),
+      matches: result.matches.map((m) => ({
+        ...m,
+        path: this.#unscope(m.path),
+      })),
     };
   }
 
@@ -126,7 +136,12 @@ export class WasmshFilesystemBackend {
     newString: string,
     replaceAll?: boolean,
   ): Promise<EditResult> {
-    return this.#sandbox.edit(this.#scope(filePath), oldString, newString, replaceAll);
+    return this.#sandbox.edit(
+      this.#scope(filePath),
+      oldString,
+      newString,
+      replaceAll,
+    );
   }
 
   async uploadFiles(
