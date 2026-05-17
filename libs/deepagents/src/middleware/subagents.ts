@@ -21,6 +21,7 @@ import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
 import { FilesystemPermission } from "../permissions/types.js";
+import type { SkillProvider } from "../skills/provider.js";
 
 export type { AgentMiddleware };
 
@@ -307,7 +308,7 @@ export interface SubAgent {
    * };
    * ```
    */
-  skills?: string[];
+  skills?: (string | SkillProvider)[];
 
   /**
    * Structured output response format for the subagent.

@@ -20,13 +20,14 @@ import {
   createPatchToolCallsMiddleware,
   createSummarizationMiddleware,
   createMemoryMiddleware,
-  createSkillsMiddleware,
   FILESYSTEM_TOOL_NAMES,
   ASYNC_TASK_TOOL_NAMES,
   type SubAgent,
   createAsyncSubAgentMiddleware,
   isAsyncSubAgent,
 } from "./middleware/index.js";
+import { createSkillsMiddlewareFromRegistry } from "./middleware/skills.js";
+import { SkillRegistry } from "./skills/registry.js";
 import { StateBackend } from "./backends/index.js";
 import { ConfigurationError } from "./errors.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
@@ -63,6 +64,44 @@ import {
   getModelProvider,
   getModelIdentifier,
 } from "./utils.js";
+
+/**
+ * Registry-shared symbol used by middleware that opts in to receiving
+ * the agent's `SkillRegistry` at construction time. Today only the code
+ * interpreter middleware participates; the mechanism is generic so
+ * future middleware can subscribe without API churn.
+ *
+ * The key must stay byte-for-byte identical with the corresponding
+ * `Symbol.for` call in `@langchain/quickjs`.
+ */
+const SKILL_REGISTRY_INJECT_SYMBOL = Symbol.for(
+  "@langchain/quickjs.code-interpreter.injectSkillRegistry",
+);
+
+/**
+ * Setter signature middleware expose under
+ * `SKILL_REGISTRY_INJECT_SYMBOL`. `createDeepAgent` casts the discovered
+ * setter to this type before invoking it.
+ */
+type SkillRegistryInjector = (registry: SkillRegistry) => void;
+
+/**
+ * Walk user-provided middleware and forward the agent's `SkillRegistry`
+ * to any middleware that opts in via the registry-shared symbol.
+ */
+function injectSkillRegistry(
+  middleware: readonly AgentMiddleware[],
+  registry: SkillRegistry,
+): void {
+  for (const mw of middleware) {
+    const setter = (mw as unknown as Record<symbol, unknown>)[
+      SKILL_REGISTRY_INJECT_SYMBOL
+    ];
+    if (typeof setter === "function") {
+      (setter as SkillRegistryInjector)(registry);
+    }
+  }
+}
 
 const BASE_AGENT_PROMPT = context`
   You are a Deep Agent, an AI assistant that helps users accomplish tasks using tools. You respond with text and tool calls. The user can see your responses and tool outputs in real time.
@@ -253,9 +292,24 @@ export function createDeepAgent<
       // Patches tool calls to ensure compatibility across different model providers.
       createPatchToolCallsMiddleware(),
       // Loads subagent-specific skills when configured.
-      ...(input.skills != null && input.skills.length > 0
-        ? [createSkillsMiddleware({ backend, sources: input.skills })]
-        : []),
+      ...(() => {
+        if (input.skills == null || input.skills.length === 0) {
+          return [];
+        }
+        const subRegistry = new SkillRegistry({
+          skills: input.skills,
+          backend,
+        });
+        const subPromptSources = input.skills.filter(
+          (entry): entry is string => typeof entry === "string",
+        );
+        if (input.middleware) {
+          injectSkillRegistry(input.middleware, subRegistry);
+        }
+        return [
+          createSkillsMiddlewareFromRegistry(subRegistry, subPromptSources),
+        ];
+      })(),
       // Appends custom middleware from the subagent spec.
       ...(input.middleware ?? []),
       // Adds Anthropic cache controls when supported by the model.
@@ -310,10 +364,23 @@ export function createDeepAgent<
     inlineSubagents.unshift(generalPurposeSpec);
   }
 
-  const skillsMiddleware =
+  const skillRegistry =
     skills != null && skills.length > 0
-      ? [createSkillsMiddleware({ backend, sources: skills })]
+      ? new SkillRegistry({ skills, backend })
+      : null;
+
+  const promptSources = (skills ?? []).filter(
+    (entry): entry is string => typeof entry === "string",
+  );
+
+  const skillsMiddleware =
+    skillRegistry !== null
+      ? [createSkillsMiddlewareFromRegistry(skillRegistry, promptSources)]
       : [];
+
+  if (skillRegistry !== null) {
+    injectSkillRegistry(customMiddleware, skillRegistry);
+  }
 
   // Built-in middleware array - core middleware with known types.
   // This tuple is typed without conditional spreads to preserve tuple inference.

@@ -24,6 +24,7 @@ import type {
 
 import type { AnyBackendProtocol } from "./backends/index.js";
 import type { AsyncSubAgent, SubAgent } from "./middleware/index.js";
+import type { SkillProvider } from "./skills/provider.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type { AnnotationRoot, StreamTransformer } from "@langchain/langgraph";
 import type { CompiledSubAgent } from "./middleware/subagents.js";
@@ -581,7 +582,7 @@ export interface CreateDeepAgentParams<
    * });
    * ```
    */
-  skills?: string[];
+  skills?: (string | SkillProvider)[];
   /**
    * Filesystem permission rules for this agent.
    *
