@@ -15,3 +15,24 @@ export {
   type WasmshBrowserWorkerOptions,
   type WasmshNodeSandboxOptions,
 } from "./sandbox.js";
+
+export {
+  createWasmshInterpreterMiddleware,
+  DEFAULT_PTC_EXCLUDED_TOOLS,
+} from "./middleware.js";
+
+export type { WasmshMiddlewareOptions, ReplEnvelope } from "./types.js";
+
+export {
+  WasmshFilesystemBackend,
+  type WasmshFilesystemBackendOptions,
+} from "./filesystem-backend.js";
+
+export {
+  scanSkillReferences,
+  loadSkill,
+  installPendingSkills,
+  type SkillMetadata,
+} from "./skills.js";
+
+export { formatEnvelope, toSnakeCase, isValidPythonIdentifier } from "./utils.js";

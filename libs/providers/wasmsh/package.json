@@ -38,28 +38,34 @@
   },
   "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "dependencies": {
-    "@mayflowergmbh/wasmsh-pyodide": "^0.5.1"
+    "@mayflowergmbh/wasmsh-pyodide": "^0.6.4",
+    "dedent": "^1.7.1"
   },
+  "//runtime-note": "PTC (runPtc + host_call protocol) requires @mayflowergmbh/wasmsh-pyodide >= 0.6.4. WasmshSandbox.runPtc duck-checks the underlying session and throws a clear error against older builds.",
   "peerDependencies": {
     "deepagents": ">=1.9.0-alpha.0"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
     "@langchain/anthropic": "^1.3.25",
-    "@langchain/core": "^1.1.33",
+    "@langchain/core": "^1.1.38",
+    "@langchain/langgraph": "^1.2.8",
     "@langchain/sandbox-standard-tests": "workspace:*",
     "@playwright/test": "^1.58.2",
     "@tsconfig/recommended": "^1.0.13",
+    "@types/dedent": "^0.7.2",
     "@types/node": "^25.1.0",
     "@vitest/coverage-v8": "^4.0.18",
     "deepagents": "workspace:*",
+    "langchain": "^1.3.1",
     "path-browserify": "^1.0.1",
     "sirv": "^3.0.2",
     "tsdown": "^0.21.4",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vite": "^8.0.3",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "zod": "^4.3.6"
   },
   "exports": {
     ".": {

@@ -105,6 +105,60 @@ export class WasmshSandbox extends BaseSandbox {
     });
   }
 
+  /**
+   * Run a code block with programmatic tool calling enabled.
+   *
+   * Returns the launcher envelope from the wasmsh runtime. Even when `tools`
+   * is empty, this preserves persistent Python globals across calls (via the
+   * sandbox's globals pickle) — making it the right primitive for an
+   * interpreter middleware regardless of whether PTC is configured.
+   */
+  async runPtc(params: {
+    code: string;
+    tools?: string[];
+    onHostCall: (call: {
+      id: string;
+      tool: string;
+      args: Record<string, unknown>;
+    }) => Promise<{
+      ok: boolean;
+      value?: unknown;
+      error?: string;
+      message?: string;
+    }>;
+  }): Promise<{
+    ok: boolean;
+    stdout: string;
+    stderr: string;
+    value?: unknown;
+    error?: string;
+    message?: string;
+    traceback?: string;
+  }> {
+    if (!this.#session) {
+      throw new Error("WasmshSandbox is not initialized");
+    }
+    const session = this.#session as unknown as {
+      runPtc: (p: typeof params) => Promise<{
+        ok: boolean;
+        stdout: string;
+        stderr: string;
+        value?: unknown;
+        error?: string;
+        message?: string;
+        traceback?: string;
+      }>;
+    };
+    if (typeof session.runPtc !== "function") {
+      throw new Error(
+        "wasmsh-pyodide session does not expose runPtc; " +
+          "upgrade @mayflowergmbh/wasmsh-pyodide to a version that " +
+          "advertises host_call capability",
+      );
+    }
+    return session.runPtc(params);
+  }
+
   async stop(): Promise<void> {
     if (!this.#session) {
       return;
