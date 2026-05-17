@@ -21,7 +21,11 @@ export {
   DEFAULT_PTC_EXCLUDED_TOOLS,
 } from "./middleware.js";
 
-export type { WasmshMiddlewareOptions, ReplEnvelope } from "./types.js";
+export type {
+  WasmshMiddlewareOptions,
+  WasmshLogger,
+  ReplEnvelope,
+} from "./types.js";
 
 export {
   WasmshFilesystemBackend,

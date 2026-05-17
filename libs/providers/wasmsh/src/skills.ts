@@ -17,6 +17,7 @@ import type {
   MaybePromise,
 } from "deepagents";
 import type { WasmshSandbox } from "./sandbox.js";
+import type { WasmshLogger } from "./types.js";
 
 // Skill loading needs the V2 glob surface plus a required downloadFiles
 // (V1's `downloadFiles?` is optional; we narrow to the concrete signature
@@ -207,12 +208,14 @@ export async function installPendingSkills({
   backend,
   sandbox,
   installed,
+  logger,
 }: {
   source: string;
   metadata: Map<string, SkillMetadata>;
   backend: SkillBackend;
   sandbox: WasmshSandbox;
   installed: Set<string>;
+  logger?: WasmshLogger;
 }): Promise<void> {
   const referenced = scanSkillReferences(source);
   for (const pkg of referenced) {
@@ -237,21 +240,29 @@ export async function installPendingSkills({
         throw err as Error;
       }
       // Best-effort for non-security failures: a single broken skill must
-      // not abort the eval. The failure is logged; callers wanting
-      // structured diagnostics should compare `installed` vs `metadata`
-      // to detect skipped skills.
-      const message =
-        typeof err === "object" && err !== null && "message" in err
-          ? String((err as { message: unknown }).message)
-          : String(err);
-      const line = `[wasmsh] failed to load skill ${JSON.stringify(meta.name)}: ${message}\n`;
-      // Guard against environments without `process.stderr` (browser).
-      if (
-        typeof process !== "undefined" &&
-        process.stderr &&
-        typeof process.stderr.write === "function"
-      ) {
-        process.stderr.write(line);
+      // not abort the eval. The structured logger is the preferred surface;
+      // when none is wired we fall back to stderr so the failure doesn't
+      // disappear entirely.
+      try {
+        logger?.skillLoadError?.({ skill: meta.name, error: err });
+      } catch {
+        // Logger contract forbids throwing; swallow so the other skills
+        // still get a chance to load.
+      }
+      if (!logger?.skillLoadError) {
+        const message =
+          typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: unknown }).message)
+            : String(err);
+        const line = `[wasmsh] failed to load skill ${JSON.stringify(meta.name)}: ${message}\n`;
+        // Guard against environments without `process.stderr` (browser).
+        if (
+          typeof process !== "undefined" &&
+          process.stderr &&
+          typeof process.stderr.write === "function"
+        ) {
+          process.stderr.write(line);
+        }
       }
     }
   }

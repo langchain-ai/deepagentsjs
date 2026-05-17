@@ -42,7 +42,11 @@ import {
 } from "@langchain/langgraph";
 
 import { WasmshSandbox } from "./sandbox.js";
-import { type WasmshMiddlewareOptions, type ReplEnvelope } from "./types.js";
+import {
+  type WasmshLogger,
+  type WasmshMiddlewareOptions,
+  type ReplEnvelope,
+} from "./types.js";
 import {
   formatEnvelope,
   isValidPythonIdentifier,
@@ -165,6 +169,7 @@ function ensurePythonIdentifier(tool: StructuredToolInterface): void {
 async function dispatchHostCall(
   call: { id: string; tool: string; args: Record<string, unknown> },
   toolsByPyName: Map<string, StructuredToolInterface>,
+  logger?: WasmshLogger,
 ): Promise<{ ok: boolean; value?: unknown; error?: string; message?: string }> {
   const tool = toolsByPyName.get(call.tool);
   if (!tool) {
@@ -178,6 +183,21 @@ async function dispatchHostCall(
     const raw = await tool.invoke(call.args ?? {});
     return { ok: true, value: raw };
   } catch (err) {
+    // The error must round-trip into the sandbox as a structured envelope —
+    // the model needs to see it to recover — but the stack and call context
+    // get lost in that conversion. The logger hook gives the host a single
+    // place to record the full original error for observability.
+    try {
+      logger?.ptcToolError?.({
+        tool: call.tool,
+        callId: call.id,
+        args: call.args ?? {},
+        error: err,
+      });
+    } catch {
+      // Logger contract forbids throwing; if it does anyway, swallow so the
+      // envelope still reaches the model.
+    }
     const error = err as { name?: string; message?: string } | undefined;
     return {
       ok: false,
@@ -247,6 +267,7 @@ export function createWasmshInterpreterMiddleware(
             },
             sandbox,
             installed: installedSkills,
+            logger: options.logger,
           });
         }
       }
@@ -260,7 +281,8 @@ export function createWasmshInterpreterMiddleware(
       const envelope: ReplEnvelope = await sandbox.runPtc({
         code: input.code,
         tools: [...toolsByPyName.keys()],
-        onHostCall: (call) => dispatchHostCall(call, toolsByPyName),
+        onHostCall: (call) =>
+          dispatchHostCall(call, toolsByPyName, options.logger),
       });
       return formatEnvelope(envelope, maxResultChars);
     },

@@ -68,6 +68,44 @@ export interface WasmshMiddlewareOptions {
    * langchain-wasmsh adapter.
    */
   toolName?: string;
+
+  /**
+   * Optional structured logger for diagnostics that are otherwise
+   * swallowed: PTC tool errors converted into envelopes, best-effort
+   * skill-load failures, etc. The host application gets a stack-trace
+   * and call context the model never sees.
+   *
+   * Defaults to a no-op so library consumers don't have to wire one up
+   * unless they want host-side observability.
+   */
+  logger?: WasmshLogger;
+}
+
+/**
+ * Diagnostic event surface for the middleware. Implementations are
+ * called from inside catch blocks that would otherwise drop the error
+ * (PTC dispatch / skill load), so the implementation must not throw.
+ */
+export interface WasmshLogger {
+  /**
+   * A PTC `host_call` round-tripped to a tool that threw or returned an
+   * error envelope. `event.tool` is the snake-cased name the model
+   * used; `event.error` is the original Error (or whatever was thrown).
+   */
+  ptcToolError?(event: {
+    tool: string;
+    callId: string;
+    args: Record<string, unknown>;
+    error: unknown;
+  }): void;
+
+  /**
+   * Best-effort skill load failed. The middleware proceeds without the
+   * skill staged, so an `import skills.<name>` in user code will raise
+   * `ModuleNotFoundError` inside Python; this hook is the host's only
+   * chance to learn why.
+   */
+  skillLoadError?(event: { skill: string; error: unknown }): void;
 }
 
 /**
