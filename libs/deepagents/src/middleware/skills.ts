@@ -17,6 +17,13 @@
  * rendering, and the agent-facing factory.
  */
 
+/**
+ * Registry-shared symbol used to expose the `SkillRegistry` on a skills
+ * middleware instance so `createDeepAgent` can extract it for injection
+ * into other middleware (e.g. the code interpreter).
+ */
+export const SKILL_REGISTRY_SYMBOL = Symbol.for("deepagents.skills.registry");
+
 import { z } from "zod";
 import {
   context,
@@ -26,12 +33,14 @@ import {
    * required for type inference
    */
   type AgentMiddleware as _AgentMiddleware,
+  type ToolRuntime,
 } from "langchain";
 import { StateSchema, ReducedValue } from "@langchain/langgraph";
 
-import type {
-  AnyBackendProtocol,
-  BackendFactory,
+import {
+  resolveBackend,
+  type AnyBackendProtocol,
+  type BackendFactory,
 } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
@@ -66,8 +75,9 @@ export {
  */
 export interface SkillsMiddlewareOptions {
   /**
-   * Backend instance or factory function for file operations. Use a
-   * factory for `StateBackend` since it requires runtime state.
+   * Backend instance or factory function for file operations. Used to
+   * resolve string-path sources and to write skill files into the
+   * execution environment when a skill is activated.
    */
   backend:
     | AnyBackendProtocol
@@ -75,10 +85,10 @@ export interface SkillsMiddlewareOptions {
     | ((config: { state: unknown; store?: BaseStore }) => StateBackend);
 
   /**
-   * List of skill source paths to load
-   * (e.g. `["/skills/user/", "/skills/project/"]`). Paths use POSIX
-   * conventions. Later sources override earlier ones for skills with the
-   * same name (last one wins).
+   * List of skill source paths or `SkillProvider` instances to load.
+   * String paths use POSIX conventions and require a `backend` to be set.
+   * Later sources override earlier ones for skills with the same name
+   * (last one wins).
    */
   sources: (string | SkillProvider)[];
 }
@@ -241,7 +251,6 @@ export function formatSkillsList(
     if (skill.allowedTools && skill.allowedTools.length > 0) {
       lines.push(`  → Allowed tools: ${skill.allowedTools.join(", ")}`);
     }
-    lines.push(`  → Read \`${skill.path}\` for full instructions`);
     if (skill.module !== undefined) {
       lines.push(`  → Import: \`await import("@/skills/${skill.name}")\``);
     }
@@ -277,7 +286,11 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
     (entry): entry is string => typeof entry === "string",
   );
 
-  return createSkillsMiddlewareFromRegistry(registry, promptSources);
+  return createSkillsMiddlewareFromRegistry(
+    registry,
+    promptSources,
+    options.backend,
+  );
 }
 
 /**
@@ -290,11 +303,12 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
 export function createSkillsMiddlewareFromRegistry(
   registry: SkillRegistry,
   promptSources: string[] = [],
+  backend?: AnyBackendProtocol | BackendFactory,
 ) {
   let loadedSkills: SkillMetadata[] = [];
 
   const skillTool = tool(
-    async ({ name }: { name: string }) => {
+    async ({ name }: { name: string }, runtime: ToolRuntime) => {
       const metadata = loadedSkills.find((s) => s.name === name);
       if (metadata === undefined) {
         const available =
@@ -303,6 +317,15 @@ export function createSkillsMiddlewareFromRegistry(
       }
       try {
         const result = await registry.load(name);
+
+        if (result.files.size > 0 && backend !== undefined) {
+          const resolvedBackend = await resolveBackend(backend, runtime);
+          for (const [relPath, content] of result.files) {
+            const destPath = `/skills/${name}/${relPath}`;
+            await resolvedBackend.write(destPath, content);
+          }
+        }
+
         return result.body;
       } catch (err) {
         return `Failed to load skill '${name}': ${errorMessage(err)}`;
@@ -320,7 +343,7 @@ export function createSkillsMiddlewareFromRegistry(
     },
   );
 
-  return createMiddleware({
+  const mw = createMiddleware({
     name: "SkillsMiddleware",
     stateSchema: SkillsStateSchema,
     tools: [skillTool],
@@ -365,4 +388,13 @@ export function createSkillsMiddlewareFromRegistry(
       return handler({ ...request, systemMessage: newSystemMessage });
     },
   });
+
+  Object.defineProperty(mw, SKILL_REGISTRY_SYMBOL, {
+    value: registry,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+
+  return mw;
 }

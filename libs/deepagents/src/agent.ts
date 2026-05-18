@@ -26,7 +26,10 @@ import {
   createAsyncSubAgentMiddleware,
   isAsyncSubAgent,
 } from "./middleware/index.js";
-import { createSkillsMiddlewareFromRegistry } from "./middleware/skills.js";
+import {
+  createSkillsMiddlewareFromRegistry,
+  SKILL_REGISTRY_SYMBOL,
+} from "./middleware/skills.js";
 import { SkillRegistry } from "./skills/registry.js";
 import { StateBackend } from "./backends/index.js";
 import { ConfigurationError } from "./errors.js";
@@ -307,7 +310,11 @@ export function createDeepAgent<
           injectSkillRegistry(input.middleware, subRegistry);
         }
         return [
-          createSkillsMiddlewareFromRegistry(subRegistry, subPromptSources),
+          createSkillsMiddlewareFromRegistry(
+            subRegistry,
+            subPromptSources,
+            backend,
+          ),
         ];
       })(),
       // Appends custom middleware from the subagent spec.
@@ -375,11 +382,30 @@ export function createDeepAgent<
 
   const skillsMiddleware =
     skillRegistry !== null
-      ? [createSkillsMiddlewareFromRegistry(skillRegistry, promptSources)]
+      ? [
+          createSkillsMiddlewareFromRegistry(
+            skillRegistry,
+            promptSources,
+            backend,
+          ),
+        ]
       : [];
 
   if (skillRegistry !== null) {
     injectSkillRegistry(customMiddleware, skillRegistry);
+  } else {
+    for (const mw of customMiddleware) {
+      const reg = (mw as unknown as Record<symbol, unknown>)[
+        SKILL_REGISTRY_SYMBOL
+      ];
+      if (
+        reg != null &&
+        typeof (reg as Record<string, unknown>).load === "function"
+      ) {
+        injectSkillRegistry(customMiddleware, reg as SkillRegistry);
+        break;
+      }
+    }
   }
 
   // Built-in middleware array - core middleware with known types.

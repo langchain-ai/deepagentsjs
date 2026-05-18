@@ -3,7 +3,6 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 
 import { parseSkillMetadataFromContent } from "./discovery.js";
-import { SKILL_MODULE_EXTENSIONS } from "./discovery.js";
 import type { SkillMetadata } from "./discovery.js";
 import type { LoadedSkill, SkillProvider } from "./provider.js";
 
@@ -162,12 +161,14 @@ export class FilesystemSkillProvider implements SkillProvider {
   }
 
   /**
-   * Walk the skill directory recursively and return its source files keyed
-   * by skill-relative POSIX path.
+   * Walk the skill directory recursively and return its files keyed by
+   * skill-relative POSIX path.
    *
-   * Skips entries that aren't regular code files (symlinks, non-code
-   * extensions, test files). Stops with an error once the accumulated
-   * decoded size exceeds {@link MAX_SKILL_BUNDLE_BYTES}.
+   * Collects all UTF-8–decodable regular files (scripts, references,
+   * configs, etc.) except SKILL.md (returned separately as `body`),
+   * test files, and symlinks. Binary files that fail UTF-8 decoding are
+   * silently skipped. Stops with an error once the accumulated decoded
+   * size exceeds {@link MAX_SKILL_BUNDLE_BYTES}.
    *
    * @param skillDir   Absolute path to the skill's directory under `rootAbs`.
    * @param skillName  Skill name used in diagnostic messages and for the
@@ -196,14 +197,19 @@ export class FilesystemSkillProvider implements SkillProvider {
         if (!entry.isFile()) {
           continue;
         }
-        if (!hasCodeExtension(entry.name)) {
-          continue;
-        }
         if (isTestFile(entry.name)) {
           continue;
         }
+        if (entry.name === "SKILL.md") {
+          continue;
+        }
 
-        const source = await this.readFileNoFollow(entryAbs);
+        let source: string;
+        try {
+          source = await this.readFileNoFollow(entryAbs);
+        } catch {
+          continue;
+        }
         totalBytes += source.length;
         if (totalBytes > MAX_SKILL_BUNDLE_BYTES) {
           throw new Error(
@@ -317,19 +323,6 @@ function stripFrontmatter(raw: string): string {
     return raw;
   }
   return raw.slice(match[0].length);
-}
-
-/**
- * True when the given filename ends in one of the supported skill-module
- * extensions.
- */
-function hasCodeExtension(filename: string): boolean {
-  for (const ext of SKILL_MODULE_EXTENSIONS) {
-    if (filename.endsWith(ext)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /**

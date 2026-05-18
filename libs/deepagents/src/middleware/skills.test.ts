@@ -763,9 +763,6 @@ description: [invalid yaml syntax: unclosed bracket
       expect(modifiedRequest.systemMessage.text).toContain("Skills System");
       expect(modifiedRequest.systemMessage.text).toContain("web-research");
       expect(modifiedRequest.systemMessage.text).toContain("Research the web");
-      expect(modifiedRequest.systemMessage.text).toContain(
-        "/skills/user/web-research/SKILL.md",
-      );
     });
 
     it("should show message when no skills available", () => {
@@ -1294,7 +1291,7 @@ describe("formatSkillsList with annotations", () => {
     ];
 
     const result = formatSkillsList(skills, ["/skills/"]);
-    expect(result).toContain("- **plain-skill**: A plain skill\n");
+    expect(result).toContain("- **plain-skill**: A plain skill");
     expect(result).not.toContain("License");
     expect(result).not.toContain("Compatibility");
   });
@@ -1335,26 +1332,6 @@ describe("formatSkillsList module import hint", () => {
     const result = formatSkillsList(skills, ["/skills/"]);
     expect(result).not.toContain("Import:");
     expect(result).not.toContain("@/skills/");
-  });
-
-  it("import hint appears after the read line", () => {
-    const skills: SkillMetadata[] = [
-      {
-        name: "my-skill",
-        description: "Does things",
-        path: "/skills/my-skill/SKILL.md",
-        license: null,
-        compatibility: null,
-        metadata: {},
-        module: "index.ts",
-      },
-    ];
-
-    const result = formatSkillsList(skills, ["/skills/"]);
-    const readIdx = result.indexOf("→ Read");
-    const importIdx = result.indexOf("→ Import:");
-    expect(readIdx).toBeGreaterThan(-1);
-    expect(importIdx).toBeGreaterThan(readIdx);
   });
 
   it("import hint appears after allowed tools line when both are present", () => {
@@ -1473,7 +1450,6 @@ description: Another test skill
     // Verify skill was injected into system prompt
     expect(systemPrompt).toContain("test-skill");
     expect(systemPrompt).toContain("A test skill for StateBackend integration");
-    expect(systemPrompt).toContain("/skills/test-skill/SKILL.md");
     invokeSpy.mockRestore();
   });
 
@@ -1620,9 +1596,8 @@ description: Project-level skill for team collaboration
     expect(invokeSpy).toHaveBeenCalled();
     const systemPrompt = getSystemPromptFromSpy(invokeSpy);
 
-    // Verify the full path is included for progressive disclosure
-    expect(systemPrompt).toContain("/skills/test-skill/SKILL.md");
-    // Verify progressive disclosure instructions are present
+    // Verify skill name is in prompt and progressive disclosure instructions are present
+    expect(systemPrompt).toContain("test-skill");
     expect(systemPrompt).toContain("Progressive Disclosure");
     invokeSpy.mockRestore();
   });
