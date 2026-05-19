@@ -3,4 +3,4 @@
 "deepagents": patch
 ---
 
-feat(quickjs): add swarm task tool and in memory backend
+feat(quickjs): add swarm task tool
