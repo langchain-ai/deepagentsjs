@@ -82,11 +82,43 @@ describe("loadSkill", () => {
       );
     });
 
-    it("throws when module is undefined", async () => {
+    it("throws when no entrypoint is defined", async () => {
       const meta = makeSkillMeta({ module: undefined });
       await expect(loadSkill(meta, makeBackend({}))).rejects.toThrow(
-        "no 'module' frontmatter key",
+        "has no entrypoint",
       );
+    });
+
+    it("resolves entrypoint from metadata.entrypoint when module is absent", async () => {
+      const meta = makeSkillMeta({
+        module: undefined,
+        metadata: { entrypoint: "scripts/index.ts" },
+      });
+      const entryAbs = `${SKILL_DIR}/scripts/index.ts`;
+      const backend = makeBackend({
+        glob: globFor(entryAbs),
+        downloadFiles: downloadWith([
+          okResponse(entryAbs, "export default 42;"),
+        ]),
+      });
+      const loaded = await loadSkill(meta, backend);
+      expect(loaded.entryRel).toBe("scripts/index.ts");
+    });
+
+    it("prefers metadata.entrypoint over module", async () => {
+      const meta = makeSkillMeta({
+        module: "index.ts",
+        metadata: { entrypoint: "scripts/main.ts" },
+      });
+      const entryAbs = `${SKILL_DIR}/scripts/main.ts`;
+      const backend = makeBackend({
+        glob: globFor(entryAbs),
+        downloadFiles: downloadWith([
+          okResponse(entryAbs, "export default 1;"),
+        ]),
+      });
+      const loaded = await loadSkill(meta, backend);
+      expect(loaded.entryRel).toBe("scripts/main.ts");
     });
 
     it("throws when backend has no downloadFiles", async () => {

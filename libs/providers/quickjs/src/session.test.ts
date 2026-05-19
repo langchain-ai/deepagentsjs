@@ -841,6 +841,27 @@ describe("skills module loader", () => {
     expect(result.value).toBe(3);
   });
 
+  it("resolves relative imports when entrypoint is in a subdirectory", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+    });
+    session.setSkillsContext(
+      makeSkillsContext([makeSkillsMeta("my-skill", "scripts/index.js")], {
+        "/my-skill/scripts/index.js":
+          "import { add } from './math.js'; export function compute() { return add(3, 4); }",
+        "/my-skill/scripts/math.js":
+          "export function add(a, b) { return a + b; }",
+      }),
+    );
+
+    const result = await session.eval(
+      `const { compute } = await import("@/skills/my-skill"); compute()`,
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe(7);
+  });
+
   it("rejects import of an unknown skill with a recognizable message", async () => {
     session = ReplSession.getOrCreate(uniqueThreadId(), {
       skillsEnabled: true,

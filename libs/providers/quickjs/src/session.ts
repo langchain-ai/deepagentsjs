@@ -495,13 +495,19 @@ export class ReplSession {
     }
 
     // A bare skill specifier like "@/skills/my-skill" has no file component, so
-    // posixDirname would return "@/skills". Treat the bare specifier itself as
-    // the directory so that "./lib/math.js" resolves to "@/skills/my-skill/lib/math.js".
+    // posixDirname would return "@/skills". Use the entrypoint's directory so
+    // relative imports resolve correctly when the entrypoint is in a subdirectory
+    // (e.g. entryRel="scripts/index.ts" → "@/skills/my-skill/scripts").
     const parsed = parseSkillSpecifier(base);
-    const baseDir =
-      parsed !== undefined && parsed.rel === undefined
-        ? base
-        : posixDirname(base);
+    let baseDir: string;
+    if (parsed !== undefined && parsed.rel === undefined) {
+      const loaded = this.skillsLoaded.get(parsed.name);
+      const entryDir =
+        loaded !== undefined ? posixDirname(loaded.entryRel) : "";
+      baseDir = entryDir ? `${base}/${entryDir}` : base;
+    } else {
+      baseDir = posixDirname(base);
+    }
     const resolved = posixJoin(baseDir, requested);
 
     const skillPrefix = matchSkillPrefix(base);

@@ -211,10 +211,14 @@ export async function loadSkill(
     );
   }
 
-  const entryRel = metadata.module;
+  const fromExtension = metadata.metadata?.entrypoint;
+  const entryRel =
+    typeof fromExtension === "string" && fromExtension.length > 0
+      ? fromExtension
+      : metadata.module;
   if (entryRel === undefined || entryRel === "") {
     throw new Error(
-      `Skill '${name}' has no 'module' frontmatter key - only skills with a declared entrypoint are installable`,
+      `Skill '${name}' has no entrypoint — set 'metadata.entrypoint' (preferred) or top-level 'module' in SKILL.md frontmatter`,
     );
   }
 
