@@ -773,7 +773,7 @@ function makeSkillsBackend(files: Record<string, string>): AnyBackendProtocol {
 
 function makeSkillsMeta(
   name: string,
-  module: string,
+  entrypoint: string,
   skillDir?: string,
 ): SkillMetadata {
   const dir = skillDir ?? `/skills/${name}`;
@@ -781,7 +781,7 @@ function makeSkillsMeta(
     name,
     description: `Test skill ${name}`,
     path: `${dir}/SKILL.md`,
-    module,
+    metadata: { entrypoint },
   };
 }
 

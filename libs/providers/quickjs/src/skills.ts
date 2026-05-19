@@ -211,14 +211,10 @@ export async function loadSkill(
     );
   }
 
-  const fromExtension = metadata.metadata?.entrypoint;
-  const entryRel =
-    typeof fromExtension === "string" && fromExtension.length > 0
-      ? fromExtension
-      : metadata.module;
-  if (entryRel === undefined || entryRel === "") {
+  const entryRel = metadata.metadata?.entrypoint;
+  if (typeof entryRel !== "string" || entryRel.length === 0) {
     throw new Error(
-      `Skill '${name}' has no entrypoint — set 'metadata.entrypoint' (preferred) or top-level 'module' in SKILL.md frontmatter`,
+      `Skill '${name}' has no entrypoint — set 'metadata.entrypoint' in SKILL.md frontmatter`,
     );
   }
 
