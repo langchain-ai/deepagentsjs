@@ -58,5 +58,3 @@ export {
   type SwarmSubAgent,
   type SwarmTaskMode,
 } from "./tools/swarm-task.js";
-
-export { InMemoryBackend } from "./in-memory-backend.js";
