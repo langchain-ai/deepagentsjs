@@ -15,7 +15,7 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const SKILL_DIR = "/skills/my-skill";
+const SKILL_DIR = "/my-skill";
 const ENTRY_ABS = `${SKILL_DIR}/index.ts`;
 
 function makeSkillMeta(overrides?: Partial<SkillMetadata>): SkillMetadata {
@@ -23,7 +23,7 @@ function makeSkillMeta(overrides?: Partial<SkillMetadata>): SkillMetadata {
     name: "my-skill",
     description: "A test skill",
     path: `${SKILL_DIR}/SKILL.md`,
-    module: "index.ts",
+    metadata: { entrypoint: "index.ts" },
     ...overrides,
   };
 }
@@ -82,11 +82,26 @@ describe("loadSkill", () => {
       );
     });
 
-    it("throws when module is undefined", async () => {
-      const meta = makeSkillMeta({ module: undefined });
+    it("throws when no entrypoint is defined", async () => {
+      const meta = makeSkillMeta({ metadata: {} });
       await expect(loadSkill(meta, makeBackend({}))).rejects.toThrow(
-        "no 'module' frontmatter key",
+        "has no entrypoint",
       );
+    });
+
+    it("resolves entrypoint from metadata.entrypoint", async () => {
+      const meta = makeSkillMeta({
+        metadata: { entrypoint: "scripts/index.ts" },
+      });
+      const entryAbs = `${SKILL_DIR}/scripts/index.ts`;
+      const backend = makeBackend({
+        glob: globFor(entryAbs),
+        downloadFiles: downloadWith([
+          okResponse(entryAbs, "export default 42;"),
+        ]),
+      });
+      const loaded = await loadSkill(meta, backend);
+      expect(loaded.entryRel).toBe("scripts/index.ts");
     });
 
     it("throws when backend has no downloadFiles", async () => {
@@ -163,7 +178,7 @@ describe("loadSkill", () => {
 
   describe("file map failures", () => {
     it("throws when the declared entrypoint is not in the enumerated files", async () => {
-      const meta = makeSkillMeta({ module: "missing.ts" });
+      const meta = makeSkillMeta({ metadata: { entrypoint: "missing.ts" } });
       const backend = makeBackend({
         glob: globFor(ENTRY_ABS), // returns index.ts, not missing.ts
         downloadFiles: downloadWith([
@@ -262,7 +277,7 @@ describe("loadSkill", () => {
     });
 
     it("accepts a multi-segment kebab-case skill name", async () => {
-      const dir = "/skills/pdf-extract";
+      const dir = "/pdf-extract";
       const entry = `${dir}/index.ts`;
       const meta = makeSkillMeta({
         name: "pdf-extract",

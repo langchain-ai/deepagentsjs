@@ -156,6 +156,16 @@ export interface SkillMetadata {
    * directory.
    */
   module?: string;
+
+  /**
+   * PTC tool names that must be present in the QuickJS middleware's `ptc` configuration
+   * for this skill to function. The middleware validates these at skill-load time and
+   * returns a descriptive error if any are missing.
+   *
+   * Tool names should match the agent tool names as configured in `ptc` (e.g.
+   * `read_file`, not `readFile`).
+   */
+  requiredPtcTools?: string[];
 }
 
 /**
@@ -272,7 +282,6 @@ const SKILLS_SYSTEM_PROMPT = context`
   - When the user's request matches a skill's domain (e.g., "research X" → web-research skill)
   - When you need specialized knowledge or structured workflows
   - When a skill provides proven patterns for complex tasks
-
   **Skills are Self-Documenting:**
   - Each SKILL.md tells you exactly what the skill does and how to use it
   - The skill list above shows the full path for each skill's SKILL.md file
@@ -502,6 +511,13 @@ export function parseSkillMetadataFromContent(
     );
   }
 
+  const metadataObj =
+    (frontmatterData.metadata as Record<string, unknown>) ?? {};
+  const rawRequiredPtcTools = metadataObj["required-ptc-tools"];
+  const requiredPtcTools = rawRequiredPtcTools
+    ? String(rawRequiredPtcTools).split(/\s+/).filter(Boolean)
+    : [];
+
   return {
     name,
     description: descriptionStr,
@@ -511,6 +527,7 @@ export function parseSkillMetadataFromContent(
     compatibility: compatibilityStr,
     allowedTools,
     module: validateModulePath(frontmatterData.module),
+    requiredPtcTools,
   };
 }
 
@@ -764,16 +781,19 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
     stateSchema: SkillsStateSchema,
 
     async beforeAgent(state) {
-      // Skip if already loaded (check both closure and state)
-      if (loadedSkills.length > 0) {
-        return undefined;
-      }
-      // Check if skills were restored from checkpoint (non-empty array in state)
-      if (
+      const stateHasSkills =
         "skillsMetadata" in state &&
         Array.isArray(state.skillsMetadata) &&
-        state.skillsMetadata.length > 0
-      ) {
+        state.skillsMetadata.length > 0;
+
+      if (loadedSkills.length > 0) {
+        // Closure has skills from a prior thread — push to state if missing
+        // so getCurrentTaskInput() sees them in the tool node.
+        return stateHasSkills ? undefined : { skillsMetadata: loadedSkills };
+      }
+
+      // Check if skills were restored from checkpoint (non-empty array in state)
+      if (stateHasSkills) {
         // Restore from state (e.g., after checkpoint restore)
         loadedSkills = state.skillsMetadata as SkillMetadata[];
         return undefined;
