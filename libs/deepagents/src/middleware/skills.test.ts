@@ -420,10 +420,16 @@ description: A skill with very large content
       const result1 = await middleware.beforeAgent?.({});
       expect(result1?.skillsMetadata).toHaveLength(1);
 
-      // Second call - should return undefined (already loaded in closure)
+      // Second call with empty state - should re-emit skills to state
+      // (new thread scenario: closure has skills but state doesn't)
       // @ts-expect-error - typing issue in LangChain
       const result2 = await middleware.beforeAgent?.({});
-      expect(result2).toBeUndefined();
+      expect(result2?.skillsMetadata).toHaveLength(1);
+
+      // Third call with skills in state - should skip (both closure and state have skills)
+      // @ts-expect-error - typing issue in LangChain
+      const result3 = await middleware.beforeAgent?.(result2);
+      expect(result3).toBeUndefined();
     });
 
     it("should skip reload when skillsMetadata exists in checkpoint state", async () => {
@@ -1424,6 +1430,66 @@ Content
     );
     expect(result).not.toBeNull();
     expect(result?.metadata).toEqual({ count: "42", active: "true" });
+  });
+
+  it("should parse space-delimited required-ptc-tools from metadata", () => {
+    const content = `---
+name: test-skill
+description: A test skill
+metadata:
+  required-ptc-tools: task read_file write_file glob
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+    expect(result).not.toBeNull();
+    expect(result?.requiredPtcTools).toEqual([
+      "task",
+      "read_file",
+      "write_file",
+      "glob",
+    ]);
+  });
+
+  it("should return empty requiredPtcTools when metadata has no required-ptc-tools", () => {
+    const content = `---
+name: test-skill
+description: A test skill
+metadata:
+  version: "1.0"
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+    expect(result).not.toBeNull();
+    expect(result?.requiredPtcTools).toEqual([]);
+  });
+
+  it("should return empty requiredPtcTools when no metadata field exists", () => {
+    const content = `---
+name: test-skill
+description: A test skill
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+    expect(result).not.toBeNull();
+    expect(result?.requiredPtcTools).toEqual([]);
   });
 });
 

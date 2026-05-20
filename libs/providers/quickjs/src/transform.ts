@@ -144,14 +144,29 @@ export function transformForEval(code: string): string {
 
 function isTSOnlyNode(node: AcornNode): boolean {
   const t = node.type as string;
-  return (
+  if (
     t === "TSTypeAliasDeclaration" ||
     t === "TSInterfaceDeclaration" ||
     t === "TSEnumDeclaration" ||
     t === "TSModuleDeclaration" ||
     t === "TSDeclareFunction" ||
     t.startsWith("TS")
-  );
+  ) {
+    return true;
+  }
+  // `declare const/let/var` — ambient variable declarations have no runtime effect
+  if (t === "VariableDeclaration" && (node as any).declare === true) {
+    return true;
+  }
+  // `import type { ... } from "..."` — type-only imports have no runtime effect
+  if (t === "ImportDeclaration" && (node as any).importKind === "type") {
+    return true;
+  }
+  // `export type { ... }` — type-only re-exports have no runtime effect
+  if (t === "ExportNamedDeclaration" && (node as any).exportKind === "type") {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -230,8 +245,30 @@ function stripTypeAnnotations(s: MagicString, node: AcornNode): void {
 }
 
 function stripTypeAnnotationFromNode(s: MagicString, n: any, offset = 0): void {
-  // Type annotations on parameters, variables, return types
-  if (n.typeAnnotation && n.typeAnnotation.start != null) {
+  // Optional parameter marker: `b?: string` → `b`
+  // The `?` sits between the identifier and the type annotation and must
+  // be removed along with (or independently of) the type annotation.
+  if (
+    n.optional === true &&
+    n.typeAnnotation &&
+    n.typeAnnotation.start != null
+  ) {
+    // Remove `?: string` as a single span (the `?` is one char before `:`)
+    s.remove(
+      n.typeAnnotation.start - 1 - offset,
+      n.typeAnnotation.end - offset,
+    );
+  } else if (n.optional === true && !n.typeAnnotation) {
+    // `b?` with no type annotation — remove just the `?`
+    const nameEnd =
+      n.type === "Identifier" && typeof n.name === "string"
+        ? n.start + n.name.length
+        : null;
+    if (nameEnd != null) {
+      s.remove(nameEnd - offset, nameEnd + 1 - offset);
+    }
+  } else if (n.typeAnnotation && n.typeAnnotation.start != null) {
+    // Regular type annotation without optional marker
     s.remove(n.typeAnnotation.start - offset, n.typeAnnotation.end - offset);
   }
   // Return type on functions

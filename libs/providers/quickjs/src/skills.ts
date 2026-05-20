@@ -211,10 +211,10 @@ export async function loadSkill(
     );
   }
 
-  const entryRel = metadata.module;
-  if (entryRel === undefined || entryRel === "") {
+  const entryRel = metadata.metadata?.entrypoint;
+  if (typeof entryRel !== "string" || entryRel.length === 0) {
     throw new Error(
-      `Skill '${name}' has no 'module' frontmatter key - only skills with a declared entrypoint are installable`,
+      `Skill '${name}' has no entrypoint — set 'metadata.entrypoint' in SKILL.md frontmatter`,
     );
   }
 
@@ -225,7 +225,7 @@ export async function loadSkill(
     );
   }
 
-  const skillDir = posix.dirname(metadata.path);
+  const skillDir = `/${name}`;
   const codeFiles = await enumerateCodeFiles(adapted, skillDir, name);
   if (codeFiles.length === 0) {
     throw new Error(`Skill '${name}': no JS/TS files under '${skillDir}'`);
