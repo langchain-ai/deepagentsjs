@@ -1,6 +1,5 @@
 import { z } from "zod/v4";
 import { createAgent, tool, type ReactAgent, StructuredTool } from "langchain";
-import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import type { StructuredToolInterface } from "@langchain/core/tools";
@@ -199,8 +198,8 @@ async function invokeModel(
     return result;
   }
 
-  if (result instanceof BaseMessage) {
-    return result.text;
+  if (result != null && typeof result === "object" && "text" in result) {
+    return String(result.text);
   }
 
   return JSON.stringify(result);
@@ -211,7 +210,10 @@ async function invokeWithStructuredOutput(
   messages: HumanMessage[],
   responseSchema: Record<string, unknown>,
 ): Promise<string> {
-  if (!(model instanceof BaseChatModel)) {
+  if (
+    !("withStructuredOutput" in model) ||
+    typeof model.withStructuredOutput !== "function"
+  ) {
     throw new Error(
       "invoke mode with response_schema requires a model that supports withStructuredOutput().",
     );
