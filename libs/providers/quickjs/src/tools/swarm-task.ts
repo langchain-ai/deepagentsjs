@@ -1,9 +1,10 @@
 import { z } from "zod/v4";
 import { createAgent, tool, type ReactAgent, StructuredTool } from "langchain";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import { BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { initChatModel } from "langchain/chat_models/universal";
 
 /**
@@ -113,43 +114,6 @@ interface AgentSpec {
   name: string;
 }
 
-/**
- * JSON Schema with a validated `type: "object"` constraint.
- */
-interface ObjectSchema {
-  /**
-   * The schema type, always `"object"` after validation.
-   */
-  type: "object";
-
-  /**
-   * Additional schema properties (e.g. `properties`, `required`).
-   */
-  [key: string]: unknown;
-}
-
-/**
- * A model that supports the `bindTools` method for structured output.
- */
-interface BindableModel {
-  /**
-   * Bind tool definitions to the model, returning a new runnable that
-   * will invoke the model with the given tools available.
-   */
-  bindTools(
-    tools: Array<Record<string, unknown>>,
-    kwargs?: Record<string, unknown>,
-  ): Runnable;
-}
-
-/**
- * Default time-to-live for cached schema-constrained agent variants.
- *
- * Entries are evicted when they haven't been accessed for this duration.
- * Within a `run()`, rows keep hitting the cache so entries stay warm.
- * After the run finishes, nobody accesses the entry and it expires on
- * the next cache access.
- */
 const VARIANT_TTL_MS = 60_000;
 
 /**
@@ -215,116 +179,6 @@ export class VariantCache<T> {
   }
 }
 
-/**
- * Check whether a value is a plain object suitable for JSON Schema traversal.
- */
-function isSchemaNode(value: unknown): value is Record<string, unknown> {
-  return value != null && typeof value === "object" && !Array.isArray(value);
-}
-
-/**
- * Recursively add `additionalProperties: false` to every object-typed node
- * in a JSON Schema.
- */
-export function normalizeSchema(
-  schema: Record<string, unknown>,
-): Record<string, unknown> {
-  if (schema.type !== "object" && schema.type !== "array") {
-    return schema;
-  }
-
-  if (schema.type === "array") {
-    const result: Record<string, unknown> = { ...schema };
-
-    if (isSchemaNode(result.items)) {
-      result.items = normalizeSchema(result.items);
-    }
-
-    return result;
-  }
-
-  const result: Record<string, unknown> = {
-    ...schema,
-    additionalProperties: false,
-  };
-
-  const props = schema.properties;
-
-  if (isSchemaNode(props)) {
-    const normalized: Record<string, unknown> = {};
-
-    for (const [key, value] of Object.entries(props)) {
-      normalized[key] = isSchemaNode(value) ? normalizeSchema(value) : value;
-    }
-
-    result.properties = normalized;
-  }
-
-  return result;
-}
-
-/**
- * Normalize a response schema and validate it has `type: "object"`.
- *
- * Combines `normalizeSchema` with the object-type check that both
- * `invokeModel` and `invokeAgent` require.
- */
-function normalizeResponseSchema(
-  schema: Record<string, unknown>,
-): ObjectSchema {
-  const normalized = normalizeSchema(schema);
-
-  if (normalized.type !== "object") {
-    throw new Error(
-      `response_schema must have type: "object", got: ${JSON.stringify(normalized.type)}`,
-    );
-  }
-
-  return normalized as ObjectSchema;
-}
-
-/**
- * Check whether a model supports `bindTools` for structured output.
- */
-function hasBindTools(model: unknown): model is BindableModel {
-  return (
-    model != null &&
-    typeof model === "object" &&
-    "bindTools" in model &&
-    typeof model.bindTools === "function"
-  );
-}
-
-/**
- * Convert message content (string or content-block array) to a plain string.
- *
- * Content blocks with a `text` field are concatenated. Non-text blocks
- * are JSON-stringified.
- */
-function contentToString(content: unknown): string {
-  if (typeof content === "string") {
-    return content;
-  }
-
-  if (Array.isArray(content)) {
-    return content
-      .map((block) => {
-        if (isSchemaNode(block) && "text" in block) {
-          return String(block.text);
-        }
-
-        return JSON.stringify(block);
-      })
-      .join("\n");
-  }
-
-  return JSON.stringify(content);
-}
-
-/**
- * Direct model invocation — single LLM call with optional structured output.
- * No tools, no agentic loop.
- */
 async function invokeModel(
   model: LanguageModelLike | string,
   description: string,
@@ -345,52 +199,27 @@ async function invokeModel(
     return result;
   }
 
-  if (result && typeof result === "object" && "content" in result) {
-    return contentToString(result.content);
+  if (result instanceof BaseMessage) {
+    return result.text;
   }
 
   return JSON.stringify(result);
 }
 
-/**
- * Bind a structured output tool to the model and extract the result
- * from the response's `tool_calls`.
- */
 async function invokeWithStructuredOutput(
   model: LanguageModelLike,
   messages: HumanMessage[],
   responseSchema: Record<string, unknown>,
 ): Promise<string> {
-  const normalized = normalizeResponseSchema(responseSchema);
-
-  if (!hasBindTools(model)) {
+  if (!(model instanceof BaseChatModel)) {
     throw new Error(
-      "invoke mode with response_schema requires a model that supports bindTools().",
+      "invoke mode with response_schema requires a model that supports withStructuredOutput().",
     );
   }
 
-  const toolName = "structured_output";
-
-  const bound = model.bindTools(
-    [
-      {
-        name: toolName,
-        description: "Return the structured result.",
-        schema: normalized,
-      },
-    ],
-    { tool_choice: toolName },
-  );
-
-  const response = await bound.invoke(messages);
-
-  if (!AIMessage.isInstance(response) || !response.tool_calls?.length) {
-    throw new Error(
-      "invoke mode with response_schema: model did not return structured output",
-    );
-  }
-
-  return JSON.stringify(response.tool_calls[0].args);
+  const structuredModel = model.withStructuredOutput(responseSchema);
+  const result = await structuredModel.invoke(messages);
+  return JSON.stringify(result);
 }
 
 /**
@@ -413,13 +242,18 @@ async function invokeAgent(
   let agent = entry.agent;
 
   if (responseSchema) {
-    const normalized = normalizeResponseSchema(responseSchema);
-    const cacheKey = `${entry.spec.name}::${JSON.stringify(normalized)}`;
+    if (responseSchema.type !== "object") {
+      throw new Error(
+        `response_schema must have type: "object", got: ${JSON.stringify(responseSchema.type)}`,
+      );
+    }
+    const schema = { ...responseSchema, type: "object" as const };
+    const cacheKey = `${entry.spec.name}::${JSON.stringify(schema)}`;
 
     agent = variantCache.getOrCreate(cacheKey, () =>
       createAgent({
         ...entry.spec,
-        responseFormat: normalized,
+        responseFormat: schema,
       }),
     );
   }
@@ -434,14 +268,14 @@ async function invokeAgent(
     return JSON.stringify(result.structuredResponse);
   }
 
-  const messages = result.messages as Array<{ content: unknown }>;
+  const messages = result.messages as BaseMessage[];
   const lastMessage = messages?.[messages.length - 1];
 
   if (!lastMessage) {
     return "Task completed";
   }
 
-  return contentToString(lastMessage.content);
+  return lastMessage.text;
 }
 
 /**
