@@ -1449,7 +1449,7 @@ Content
     );
     expect(result).not.toBeNull();
     expect(result).not.toHaveProperty("requiredPtcTools");
-    expect(result?.metadata["required-ptc-tools"]).toBe(
+    expect(result?.metadata?.["required-ptc-tools"]).toBe(
       "task read_file write_file glob",
     );
   });
