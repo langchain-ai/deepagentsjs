@@ -373,7 +373,9 @@ describe("createCodeInterpreterMiddleware", () => {
 
       expect(() =>
         (middleware as any).beforeAgent({
-          skillsMetadata: [{ name: "simple", description: "test", metadata: {} }],
+          skillsMetadata: [
+            { name: "simple", description: "test", metadata: {} },
+          ],
         }),
       ).not.toThrow();
     });
