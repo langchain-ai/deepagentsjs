@@ -320,7 +320,7 @@ describe("createCodeInterpreterMiddleware", () => {
             {
               name: "swarm",
               description: "test",
-              requiredPtcTools: ["task", "read_file", "glob"],
+              metadata: { "required-ptc-tools": "task read_file glob" },
             },
           ],
         }),
@@ -339,7 +339,7 @@ describe("createCodeInterpreterMiddleware", () => {
             {
               name: "my-skill",
               description: "test",
-              requiredPtcTools: ["write_file"],
+              metadata: { "required-ptc-tools": "write_file" },
             },
           ],
         }),
@@ -358,14 +358,14 @@ describe("createCodeInterpreterMiddleware", () => {
             {
               name: "swarm",
               description: "test",
-              requiredPtcTools: ["task", "read_file"],
+              metadata: { "required-ptc-tools": "task read_file" },
             },
           ],
         }),
       ).not.toThrow();
     });
 
-    it("does not throw when skill has no requiredPtcTools", () => {
+    it("does not throw when skill has no required-ptc-tools in metadata", () => {
       const middleware = createCodeInterpreterMiddleware({
         ptc: ["task"],
         skillsBackend: {} as any,
@@ -373,7 +373,7 @@ describe("createCodeInterpreterMiddleware", () => {
 
       expect(() =>
         (middleware as any).beforeAgent({
-          skillsMetadata: [{ name: "simple", description: "test" }],
+          skillsMetadata: [{ name: "simple", description: "test", metadata: {} }],
         }),
       ).not.toThrow();
     });
@@ -387,7 +387,7 @@ describe("createCodeInterpreterMiddleware", () => {
             {
               name: "swarm",
               description: "test",
-              requiredPtcTools: ["task"],
+              metadata: { "required-ptc-tools": "task" },
             },
           ],
         }),

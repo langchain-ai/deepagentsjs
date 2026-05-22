@@ -166,7 +166,11 @@ async function prepareSkillsForEval(
         continue;
       }
 
-      const missingPtc = (skill.requiredPtcTools ?? []).filter(
+      const rawPtc = skill.metadata?.["required-ptc-tools"] ?? "";
+      const requiredPtc = rawPtc
+        ? String(rawPtc).split(/\s+/).filter(Boolean)
+        : [];
+      const missingPtc = requiredPtc.filter(
         (t) => !ptcToolNames.has(t),
       );
 
@@ -303,7 +307,11 @@ export function createCodeInterpreterMiddleware(
           .skillsMetadata as SkillMetadata[]) ?? [];
 
       for (const skill of metadata) {
-        const missing = (skill.requiredPtcTools ?? []).filter(
+        const rawPtc = skill.metadata?.["required-ptc-tools"] ?? "";
+        const requiredPtc = rawPtc
+          ? String(rawPtc).split(/\s+/).filter(Boolean)
+          : [];
+        const missing = requiredPtc.filter(
           (t) => !ptcToolNames.has(t),
         );
         if (missing.length > 0) {
