@@ -156,16 +156,6 @@ export interface SkillMetadata {
    * directory.
    */
   module?: string;
-
-  /**
-   * PTC tool names that must be present in the QuickJS middleware's `ptc` configuration
-   * for this skill to function. The middleware validates these at skill-load time and
-   * returns a descriptive error if any are missing.
-   *
-   * Tool names should match the agent tool names as configured in `ptc` (e.g.
-   * `read_file`, not `readFile`).
-   */
-  requiredPtcTools?: string[];
 }
 
 /**
@@ -511,13 +501,6 @@ export function parseSkillMetadataFromContent(
     );
   }
 
-  const metadataObj =
-    (frontmatterData.metadata as Record<string, unknown>) ?? {};
-  const rawRequiredPtcTools = metadataObj["required-ptc-tools"];
-  const requiredPtcTools = rawRequiredPtcTools
-    ? String(rawRequiredPtcTools).split(/\s+/).filter(Boolean)
-    : [];
-
   return {
     name,
     description: descriptionStr,
@@ -527,7 +510,6 @@ export function parseSkillMetadataFromContent(
     compatibility: compatibilityStr,
     allowedTools,
     module: validateModulePath(frontmatterData.module),
-    requiredPtcTools,
   };
 }
 

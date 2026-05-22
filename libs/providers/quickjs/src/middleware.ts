@@ -166,9 +166,11 @@ async function prepareSkillsForEval(
         continue;
       }
 
-      const missingPtc = (skill.requiredPtcTools ?? []).filter(
-        (t) => !ptcToolNames.has(t),
-      );
+      const rawPtc = skill.metadata?.["required-ptc-tools"] ?? "";
+      const requiredPtc = rawPtc
+        ? String(rawPtc).split(/\s+/).filter(Boolean)
+        : [];
+      const missingPtc = requiredPtc.filter((t) => !ptcToolNames.has(t));
 
       if (missingPtc.length > 0) {
         session.setSkillsContext(undefined);
@@ -303,9 +305,11 @@ export function createCodeInterpreterMiddleware(
           .skillsMetadata as SkillMetadata[]) ?? [];
 
       for (const skill of metadata) {
-        const missing = (skill.requiredPtcTools ?? []).filter(
-          (t) => !ptcToolNames.has(t),
-        );
+        const rawPtc = skill.metadata?.["required-ptc-tools"] ?? "";
+        const requiredPtc = rawPtc
+          ? String(rawPtc).split(/\s+/).filter(Boolean)
+          : [];
+        const missing = requiredPtc.filter((t) => !ptcToolNames.has(t));
         if (missing.length > 0) {
           throw new Error(
             `Skill '${skill.name}' requires PTC tools that are not configured: ${missing.join(", ")}. ` +
