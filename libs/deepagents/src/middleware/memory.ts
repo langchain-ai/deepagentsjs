@@ -281,7 +281,9 @@ async function loadMemoryFromBackend(
  * });
  * ```
  */
-export function createMemoryMiddleware(options: MemoryMiddlewareOptions) {
+export function createMemoryMiddleware(
+  options: MemoryMiddlewareOptions,
+): _AgentMiddleware {
   const { backend, sources, addCacheControl = false } = options;
 
   return createMiddleware({

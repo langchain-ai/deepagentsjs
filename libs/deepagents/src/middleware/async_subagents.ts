@@ -6,6 +6,7 @@ import {
   ToolMessage,
   SystemMessage,
   type ToolRuntime,
+  type AgentMiddleware,
 } from "langchain";
 import { z } from "zod/v4";
 import type { AnySubAgent } from "../types.js";
@@ -881,7 +882,7 @@ export function isAsyncSubAgent(
 
 export function createAsyncSubAgentMiddleware(
   options: AsyncSubAgentMiddlewareOptions,
-) {
+): AgentMiddleware {
   const { asyncSubAgents, systemPrompt = ASYNC_TASK_SYSTEM_PROMPT } = options;
 
   if (!asyncSubAgents || asyncSubAgents.length === 0) {
