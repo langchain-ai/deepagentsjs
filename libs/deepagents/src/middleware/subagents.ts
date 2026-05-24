@@ -620,7 +620,7 @@ function createTaskTool(options: {
       const subagent = subagentGraphs[subagent_type];
 
       // Get current state and filter it for subagent
-      const currentState = getCurrentTaskInput<Record<string, unknown>>();
+      const currentState = getCurrentTaskInput<Record<string, unknown>>(config);
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
 
