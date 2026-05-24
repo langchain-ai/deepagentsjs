@@ -751,9 +751,7 @@ export function validateModulePath(raw: unknown): string | undefined {
  * });
  * ```
  */
-export function createSkillsMiddleware(
-  options: SkillsMiddlewareOptions,
-): _AgentMiddleware {
+export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
   const { backend, sources } = options;
 
   // Closure variable to store loaded skills - wrapModelCall can access this

@@ -1142,7 +1142,7 @@ function allPathsScopedToRoutes(
  */
 export function createFilesystemMiddleware(
   options: FilesystemMiddlewareOptions = {},
-): _AgentMiddleware {
+) {
   const {
     backend = (runtime: BackendRuntime) => new StateBackend(runtime),
     systemPrompt: customSystemPrompt = null,

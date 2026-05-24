@@ -162,21 +162,7 @@ export function createDeepAgent<
     TTools,
     TStreamTransformers
   >,
-): DeepAgent<
-  DeepAgentTypeConfig<
-    InferStructuredResponse<TResponse>,
-    undefined,
-    ContextSchema,
-    readonly [
-      ...AgentMiddleware[],
-      ...TMiddleware,
-      ...FlattenSubAgentMiddleware<TSubagents>,
-    ],
-    TTools,
-    TSubagents,
-    TStreamTransformers
-  >
-> {
+) {
   const {
     model = "anthropic:claude-sonnet-4-6",
     tools = [],
@@ -482,16 +468,18 @@ export function createDeepAgent<
     },
   });
 
+  type AllMiddleware = readonly [
+    ...typeof builtInMiddleware,
+    ...TMiddleware,
+    ...FlattenSubAgentMiddleware<TSubagents>,
+  ];
+
   return agent as unknown as DeepAgent<
     DeepAgentTypeConfig<
       InferStructuredResponse<TResponse>,
       undefined,
       ContextSchema,
-      readonly [
-        ...AgentMiddleware[],
-        ...TMiddleware,
-        ...FlattenSubAgentMiddleware<TSubagents>,
-      ],
+      AllMiddleware,
       TTools,
       TSubagents,
       TStreamTransformers
