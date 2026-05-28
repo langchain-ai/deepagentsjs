@@ -75,7 +75,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
    * @returns Resolved absolute path string
    * @throws Error if path traversal detected or path outside root
    */
-  private resolvePath(key: string): string {
+  protected resolvePath(key: string): string {
     if (this.virtualMode) {
       const vpath = key.startsWith("/") ? key : "/" + key;
       if (vpath.includes("..") || vpath.startsWith("~")) {

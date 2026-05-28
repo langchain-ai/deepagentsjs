@@ -227,7 +227,11 @@ export function formatToolCallTitle(
 }
 
 /**
- * Extract file locations from tool call arguments for ACP follow-along
+ * Extract file locations from tool call arguments for ACP follow-along.
+ *
+ * The backend runs in virtual mode, so tool paths are virtual paths rooted at
+ * the workspace (e.g. "/src/index.ts"). ACP clients expect real filesystem
+ * paths, so resolve them under workspaceRoot.
  */
 export function extractToolCallLocations(
   toolName: string,
@@ -247,9 +251,10 @@ export function extractToolCallLocations(
   ];
   if (!toolsWithPaths.includes(toolName)) return undefined;
 
-  const absPath = filePath.startsWith("/")
-    ? filePath
-    : `${workspaceRoot ?? ""}/${filePath}`;
+  const relativePath = filePath.replace(/^\/+/, "");
+  const absPath = workspaceRoot
+    ? `${workspaceRoot.replace(/\/+$/, "")}/${relativePath}`
+    : `/${relativePath}`;
 
   const line = (args.line ?? args.startLine) as number | undefined;
   return [{ path: absPath, ...(line != null ? { line } : {}) }];
