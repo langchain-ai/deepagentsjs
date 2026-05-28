@@ -625,6 +625,9 @@ export class FilesystemBackend implements BackendProtocolV2 {
       absolute: true,
       onlyFiles: true,
       dot: true,
+      // Skip directories we cannot read (e.g. OS-protected paths) instead of
+      // throwing EPERM and aborting the whole search.
+      suppressErrors: true,
     });
 
     for (const fp of files) {
@@ -715,6 +718,9 @@ export class FilesystemBackend implements BackendProtocolV2 {
         absolute: true,
         onlyFiles: true,
         dot: true,
+        // Skip directories we cannot read (e.g. OS-protected paths) instead of
+        // throwing EPERM and aborting the whole search.
+        suppressErrors: true,
       });
 
       for (const matchedPath of matches) {
