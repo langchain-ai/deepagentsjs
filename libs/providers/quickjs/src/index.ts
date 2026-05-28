@@ -53,7 +53,6 @@ export {
 export {
   createSwarmTaskTool,
   VariantCache,
-  normalizeSchema,
   type SwarmTaskToolOptions,
   type SwarmSubAgent,
   type SwarmTaskMode,

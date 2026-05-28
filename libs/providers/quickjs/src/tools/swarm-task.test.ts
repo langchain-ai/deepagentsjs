@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { RunnableLambda } from "@langchain/core/runnables";
+import { FakeToolCallingModel } from "langchain";
 import * as langchain from "langchain";
 
 vi.mock("langchain", async (importOriginal) => {
@@ -15,15 +16,12 @@ vi.mock("langchain", async (importOriginal) => {
   };
 });
 
-import {
-  createSwarmTaskTool,
-  VariantCache,
-  normalizeSchema,
-} from "./swarm-task.js";
+import { createSwarmTaskTool, VariantCache } from "./swarm-task.js";
 
 function makeMockModel(response: string = "model response"): any {
   return {
     invoke: vi.fn(async () => new AIMessage({ content: response })),
+    withStructuredOutput: vi.fn(),
   };
 }
 
@@ -223,7 +221,6 @@ describe("agent mode", () => {
       expect.objectContaining({
         responseFormat: expect.objectContaining({
           type: "object",
-          additionalProperties: false,
           properties: { label: { type: "string" } },
           required: ["label"],
         }),
@@ -247,45 +244,6 @@ describe("agent mode", () => {
 
     // No additional calls — uses pre-compiled agent
     expect(langchain.createAgent).toHaveBeenCalledTimes(1);
-  });
-
-  it("validates response_schema must have type 'object'", async () => {
-    const swarmTask = createSwarmTaskTool({
-      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
-      defaultModel: makeMockModel(),
-    });
-
-    await expect(
-      swarmTask.invoke({
-        description: "work",
-        subagent_type: "worker",
-        response_schema: { type: "array", items: { type: "string" } },
-      }),
-    ).rejects.toThrow('response_schema must have type: "object"');
-  });
-
-  it("normalizes schema by adding additionalProperties: false", async () => {
-    const swarmTask = createSwarmTaskTool({
-      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
-      defaultModel: makeMockModel(),
-    });
-
-    await swarmTask.invoke({
-      description: "work",
-      subagent_type: "worker",
-      response_schema: {
-        type: "object",
-        properties: { x: { type: "string" } },
-      },
-    });
-
-    expect(langchain.createAgent).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        responseFormat: expect.objectContaining({
-          additionalProperties: false,
-        }),
-      }),
-    );
   });
 });
 
@@ -339,28 +297,19 @@ describe("invoke mode", () => {
     expect(langchain.createAgent).toHaveBeenCalledTimes(afterConstruction);
   });
 
-  it("uses bindTools when response_schema is provided", async () => {
+  it("uses withStructuredOutput when response_schema is provided", async () => {
     const structuredResult = { label: "positive" };
-    const boundModel = {
-      invoke: vi.fn(
-        async () =>
-          new AIMessage({
-            content: [],
-            tool_calls: [
-              {
-                name: "structured_output",
-                args: structuredResult,
-                id: "tc_1",
-                type: "tool_call" as const,
-              },
-            ],
-          }),
-      ),
+    const schema = {
+      type: "object",
+      properties: { label: { type: "string" } },
     };
-    const model: any = {
-      invoke: vi.fn(),
-      bindTools: vi.fn(() => boundModel),
+    const structuredRunnable = {
+      invoke: vi.fn(async () => structuredResult),
     };
+    const model = new FakeToolCallingModel({ toolCalls: [] });
+    const withStructuredOutputSpy = vi
+      .spyOn(model, "withStructuredOutput")
+      .mockReturnValue(structuredRunnable as any);
 
     const swarmTask = createSwarmTaskTool({
       subagents: [],
@@ -370,49 +319,12 @@ describe("invoke mode", () => {
     const result = await swarmTask.invoke({
       description: "work",
       mode: "invoke",
-      response_schema: {
-        type: "object",
-        properties: { label: { type: "string" } },
-      },
+      response_schema: schema,
     });
 
-    expect(model.bindTools).toHaveBeenCalledWith(
-      [
-        {
-          name: "structured_output",
-          description: "Return the structured result.",
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            properties: { label: { type: "string" } },
-          },
-        },
-      ],
-      { tool_choice: "structured_output" },
-    );
-    expect(boundModel.invoke).toHaveBeenCalledOnce();
-    expect(model.invoke).not.toHaveBeenCalled();
+    expect(withStructuredOutputSpy).toHaveBeenCalledWith(schema);
+    expect(structuredRunnable.invoke).toHaveBeenCalledOnce();
     expect(result).toBe(JSON.stringify(structuredResult));
-  });
-
-  it("throws when model does not support bindTools", async () => {
-    const model = makeMockModel();
-
-    const swarmTask = createSwarmTaskTool({
-      subagents: [],
-      defaultModel: model,
-    });
-
-    await expect(
-      swarmTask.invoke({
-        description: "work",
-        mode: "invoke",
-        response_schema: {
-          type: "object",
-          properties: { label: { type: "string" } },
-        },
-      }),
-    ).rejects.toThrow("bindTools");
   });
 
   it("returns string content from model response", async () => {
@@ -445,21 +357,6 @@ describe("invoke mode", () => {
       mode: "invoke",
     });
     expect(result).toBe("plain string response");
-  });
-
-  it("validates response_schema must have type 'object'", async () => {
-    const swarmTask = createSwarmTaskTool({
-      subagents: [],
-      defaultModel: makeMockModel(),
-    });
-
-    await expect(
-      swarmTask.invoke({
-        description: "work",
-        mode: "invoke",
-        response_schema: { type: "array", items: { type: "string" } },
-      }),
-    ).rejects.toThrow('response_schema must have type: "object"');
   });
 
   it("works without response_schema", async () => {
@@ -797,124 +694,5 @@ describe("VariantCache", () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-});
-
-// ---------------------------------------------------------------------------
-// normalizeSchema
-// ---------------------------------------------------------------------------
-
-describe("normalizeSchema", () => {
-  it("adds additionalProperties: false to a top-level object", () => {
-    const result = normalizeSchema({
-      type: "object",
-      properties: { x: { type: "string" } },
-      required: ["x"],
-    });
-    expect(result.additionalProperties).toBe(false);
-  });
-
-  it("preserves an existing additionalProperties: false", () => {
-    const result = normalizeSchema({
-      type: "object",
-      additionalProperties: false,
-      properties: {},
-    });
-    expect(result.additionalProperties).toBe(false);
-  });
-
-  it("recurses into nested object properties", () => {
-    const schema = {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        counts: {
-          type: "object",
-          properties: { a: { type: "number" } },
-          required: ["a"],
-        },
-      },
-      required: ["counts"],
-    };
-    const result = normalizeSchema(schema);
-    const counts = (result.properties as Record<string, unknown>)
-      .counts as Record<string, unknown>;
-    expect(counts.additionalProperties).toBe(false);
-  });
-
-  it("recurses into array items", () => {
-    const schema = {
-      type: "array",
-      items: {
-        type: "object",
-        properties: { id: { type: "string" } },
-        required: ["id"],
-      },
-    };
-    const result = normalizeSchema(schema);
-    const items = result.items as Record<string, unknown>;
-    expect(items.additionalProperties).toBe(false);
-  });
-
-  it("handles deeply nested objects", () => {
-    const schema = {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        results: {
-          type: "array",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              counts: {
-                type: "object",
-                properties: { a: { type: "number" } },
-              },
-            },
-          },
-        },
-      },
-    };
-    const result = normalizeSchema(schema);
-    const items = (
-      (result.properties as Record<string, unknown>).results as Record<
-        string,
-        unknown
-      >
-    ).items as Record<string, unknown>;
-    const counts = (items.properties as Record<string, unknown>)
-      .counts as Record<string, unknown>;
-    expect(counts.additionalProperties).toBe(false);
-  });
-
-  it("passes through non-object/array types unchanged", () => {
-    const schema = { type: "string" };
-    expect(normalizeSchema(schema)).toEqual({ type: "string" });
-  });
-
-  it("preserves minItems on array types", () => {
-    expect(
-      normalizeSchema({ type: "array", minItems: 6, items: { type: "string" } })
-        .minItems,
-    ).toBe(6);
-    expect(
-      normalizeSchema({ type: "array", minItems: 0, items: { type: "string" } })
-        .minItems,
-    ).toBe(0);
-    expect(
-      normalizeSchema({ type: "array", minItems: 1, items: { type: "string" } })
-        .minItems,
-    ).toBe(1);
-  });
-
-  it("preserves maxItems on array types", () => {
-    expect(
-      normalizeSchema({
-        type: "array",
-        maxItems: 10,
-        items: { type: "string" },
-      }).maxItems,
-    ).toBe(10);
   });
 });
