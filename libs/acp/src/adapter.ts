@@ -7,6 +7,7 @@
 
 import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
 import type { ContentBlock } from "@agentclientprotocol/sdk";
+import path from "node:path";
 
 import type { ToolCallInfo, PlanEntry } from "./types.js";
 
@@ -251,10 +252,10 @@ export function extractToolCallLocations(
   ];
   if (!toolsWithPaths.includes(toolName)) return undefined;
 
-  const relativePath = filePath.replace(/^\/+/, "");
-  const absPath = workspaceRoot
-    ? `${workspaceRoot.replace(/\/+$/, "")}/${relativePath}`
-    : `/${relativePath}`;
+  // Virtual paths are rooted at the workspace; join under workspaceRoot to
+  // produce the real path ACP clients expect. posix.join also normalizes a
+  // leading "/" on the virtual path, so no regex stripping is needed.
+  const absPath = path.posix.join(workspaceRoot ?? "/", filePath);
 
   const line = (args.line ?? args.startLine) as number | undefined;
   return [{ path: absPath, ...(line != null ? { line } : {}) }];

@@ -165,9 +165,9 @@ describe("ACPFilesystemBackend", () => {
       await backend.write("/fallback-write.txt", "written locally");
 
       expect(mockConn.writeTextFile).not.toHaveBeenCalled();
-      expect(fs.readFileSync(path.join(tmpDir, "fallback-write.txt"), "utf-8")).toBe(
-        "written locally",
-      );
+      expect(
+        fs.readFileSync(path.join(tmpDir, "fallback-write.txt"), "utf-8"),
+      ).toBe("written locally");
     });
 
     it("should fall back to local FS when ACP write fails", async () => {
@@ -178,13 +178,16 @@ describe("ACPFilesystemBackend", () => {
       });
       backend.setSessionId("sess_123");
 
-      const result = await backend.write("/fallback-err.txt", "fallback content");
+      const result = await backend.write(
+        "/fallback-err.txt",
+        "fallback content",
+      );
 
       expect(mockConn.writeTextFile).toHaveBeenCalledTimes(1);
       expect(result).toBeDefined();
-      expect(fs.readFileSync(path.join(tmpDir, "fallback-err.txt"), "utf-8")).toBe(
-        "fallback content",
-      );
+      expect(
+        fs.readFileSync(path.join(tmpDir, "fallback-err.txt"), "utf-8"),
+      ).toBe("fallback content");
     });
   });
 
