@@ -197,6 +197,51 @@ describe("createCodeInterpreterMiddleware", () => {
       expect(req.systemMessage.text).toContain("tools.agentTool");
       expect(req.systemMessage.text).toContain("tools.extraTool");
     });
+
+    it("should forward eval tool config to PTC tool invocations", async () => {
+      const capturedConfigs: unknown[] = [];
+      const needsConfigTool = tool(
+        async (_input: Record<string, unknown>, config) => {
+          capturedConfigs.push(config);
+          return "ok";
+        },
+        {
+          name: "needs_config",
+          description: "Needs runnable config",
+          schema: z.object({}),
+        },
+      );
+      const middleware = createCodeInterpreterMiddleware({
+        ptc: ["needs_config"],
+      });
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: { configurable: { thread_id: "ptc-config-test" } },
+          tools: [needsConfigTool],
+        } as any,
+        mockHandler,
+      );
+
+      const evalConfig = {
+        configurable: {
+          thread_id: "ptc-config-test",
+          checkpoint_id: "checkpoint-1",
+        },
+      };
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+
+      await expect(
+        jsTool.invoke({ code: "await tools.needsConfig({})" }, evalConfig),
+      ).resolves.toContain("ok");
+
+      expect(capturedConfigs).toEqual([evalConfig]);
+    });
   });
 
   describe("generatePtcPrompt", () => {

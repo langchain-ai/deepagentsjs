@@ -275,6 +275,7 @@ export function createCodeInterpreterMiddleware(
         }
       }
 
+      session.setToolConfig(config);
       const result = await session.eval(input.code, executionTimeoutMs);
       return formatReplResult(result);
     },
