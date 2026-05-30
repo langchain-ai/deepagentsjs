@@ -85,6 +85,23 @@ describe("REPL Engine", () => {
       expect(result.ok).toBe(true);
       expect(result.value).toEqual([1, 2, 3]);
     });
+
+    it("should return bigints and objects containing bigint", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result1 = await session.eval("9007199254740993n + 7n", TIMEOUT);
+      expect(result1.ok).toBe(true);
+      expect(result1.value).toBe(9007199254741000n);
+
+      const result2 = await session.eval(
+        "({ count: 12345678901234567890n, nested: [2n, 3n] })",
+        TIMEOUT,
+      );
+      expect(result2.ok).toBe(true);
+      expect(result2.value).toEqual({
+        count: 12345678901234567890n,
+        nested: [2n, 3n],
+      });
+    });
   });
 
   describe("state persistence", () => {
@@ -168,6 +185,16 @@ describe("REPL Engine", () => {
       await session.eval('console.log("first")', TIMEOUT);
       const result = await session.eval('console.log("second")', TIMEOUT);
       expect(result.logs).toEqual(["second"]);
+    });
+
+    it("should capture console.log with BigInt", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result = await session.eval(
+        "console.log({ count: 12345678901234567890n }); 42",
+        TIMEOUT,
+      );
+      expect(result.logs[0]).toContain('"count":"12345678901234567890"');
+      expect(result.value).toBe(42);
     });
   });
 
