@@ -21,7 +21,7 @@ import {
   StateSchema,
   ReducedValue,
 } from "@langchain/langgraph";
-import { z } from "zod/v4";
+import { z } from "zod";
 import type {
   AnyBackendProtocol,
   BackendFactory,

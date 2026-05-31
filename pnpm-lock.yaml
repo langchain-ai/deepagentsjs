@@ -966,7 +966,7 @@ packages:
     resolution: {integrity: sha512-MzZtPabJF1b0FTDl6Z6H5ljphPwACLGP13lu8MTiB8jXaW/YXlpOp+Po2cVou3MPM5+f5toyLnul9whKCy7fBg==}
     hasBin: true
     peerDependencies:
-      zod: ^3.25.0 || ^4.0.0
+      zod: 3.25.76
     peerDependenciesMeta:
       zod:
         optional: true
@@ -3608,7 +3608,7 @@ packages:
     hasBin: true
     peerDependencies:
       ws: ^8.18.0
-      zod: ^3.25 || ^4.0
+      zod: 3.25.76
     peerDependenciesMeta:
       ws:
         optional: true

@@ -460,6 +460,29 @@ function returnCommandWithStateUpdate(
     }
   }
 
+  // Debug: log state keys being returned and todo details
+  const stateKeys = Object.keys(stateUpdate);
+  console.debug("[subagents] returnCommandWithStateUpdate", {
+    stateKeys,
+    hasTodos: "todos" in stateUpdate,
+    toolCallId: toolCallId.slice(0, 12),
+  });
+
+  if ("todos" in stateUpdate) {
+    const todos = stateUpdate.todos as Array<{
+      id?: string;
+      content: string;
+      status: string;
+    }>;
+    console.debug("[subagents] todos in Command update", {
+      count: todos?.length ?? 0,
+      statuses:
+        todos?.map(
+          (t) => `${(t.id ?? "no-id").slice(0, 8)}:${t.status}`,
+        ) ?? [],
+    });
+  }
+
   return new Command({
     update: {
       ...stateUpdate,
