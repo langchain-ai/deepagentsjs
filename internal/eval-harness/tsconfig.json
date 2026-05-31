@@ -1,0 +1,11 @@
+{
+  "extends": "@tsconfig/recommended",
+  "compilerOptions": {
+    "outDir": "dist",
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "types": ["@types/node"],
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"],
+}

@@ -1,4 +1,4 @@
-/* eslint-disable no-instanceof/no-instanceof */
+/* oxlint-disable no-instanceof/no-instanceof */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
 import { VfsSandbox } from "./sandbox.js";
@@ -280,6 +280,33 @@ describe("VfsSandbox", () => {
       expect(results).toHaveLength(2);
       expect(results[0].error).toBeNull();
       expect(results[1].error).toBe("file_not_found");
+    });
+  });
+
+  describe("readRaw", () => {
+    beforeEach(async () => {
+      sandbox = await VfsSandbox.create({
+        initialFiles: {
+          "/test.txt": "hello world",
+        },
+      });
+    });
+
+    it("should return ReadRawResult with v2 shape", async () => {
+      const raw = await sandbox.readRaw("/test.txt");
+      expect(raw.error).toBeUndefined();
+      expect(raw.data).toBeDefined();
+      expect(typeof raw.data!.content).toBe("string");
+      expect(raw.data!.content).toBe("hello world");
+      expect((raw.data as any).mimeType).toBe("text/plain");
+      expect(raw.data!.created_at).toBeDefined();
+      expect(raw.data!.modified_at).toBeDefined();
+    });
+
+    it("should return error for missing file", async () => {
+      const raw = await sandbox.readRaw("/nonexistent.txt");
+      expect(raw.error).toBeDefined();
+      expect(raw.data).toBeUndefined();
     });
   });
 

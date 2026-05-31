@@ -16,15 +16,20 @@
 import type {
   EditResult,
   ExecuteResponse,
-  FileData,
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
+  GlobResult,
   GrepMatch,
+  GrepResult,
+  LsResult,
   MaybePromise,
-  SandboxBackendProtocol,
+  ReadRawResult,
+  ReadResult,
+  SandboxBackendProtocolV2,
   WriteResult,
 } from "./protocol.js";
+import { getMimeType, isTextMimeType } from "./utils.js";
 
 /**
  * Shell-quote a string using single quotes (POSIX).
@@ -170,7 +175,7 @@ const STAT_C_SCRIPT =
  */
 function buildLsCommand(dirPath: string): string {
   const quotedPath = shellQuote(dirPath);
-  const findBase = `find ${quotedPath} -maxdepth 1 -not -path ${quotedPath}`;
+  const findBase = `find -L ${quotedPath} -maxdepth 1 -not -path ${quotedPath}`;
   return (
     `if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then ` +
     `${findBase} -printf '%s\\t%T@\\t%y\\t%p\\n' 2>/dev/null; ` +
@@ -190,7 +195,7 @@ function buildLsCommand(dirPath: string): string {
  */
 function buildFindCommand(searchPath: string): string {
   const quotedPath = shellQuote(searchPath);
-  const findBase = `find ${quotedPath} -not -path ${quotedPath}`;
+  const findBase = `find -L ${quotedPath} -not -path ${quotedPath}`;
   return (
     `if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then ` +
     `${findBase} -printf '%s\\t%T@\\t%y\\t%p\\n' 2>/dev/null; ` +
@@ -252,7 +257,7 @@ function buildGrepCommand(
   if (globPattern) {
     // Use find + grep for BusyBox compatibility (BusyBox grep lacks --include)
     const globEscaped = shellQuote(globPattern);
-    return `find ${searchPathQuoted} -type f -name ${globEscaped} -exec grep -HnF -e ${patternEscaped} {} + 2>/dev/null || true`;
+    return `find -L ${searchPathQuoted} -type f -name ${globEscaped} -exec grep -HnF -e ${patternEscaped} {} + 2>/dev/null || true`;
   }
 
   return `grep -rHnF -e ${patternEscaped} ${searchPathQuoted} 2>/dev/null || true`;
@@ -269,7 +274,7 @@ function buildGrepCommand(
  * available on any Linux including Alpine/busybox. No Python, Node.js, or
  * other runtime is required on the sandbox host.
  */
-export abstract class BaseSandbox implements SandboxBackendProtocol {
+export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
   /** Unique identifier for the sandbox backend */
   abstract readonly id: string;
 
@@ -300,9 +305,9 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
    * including Alpine. No Python or Node.js needed.
    *
    * @param path - Absolute path to directory
-   * @returns List of FileInfo objects for files and directories directly in the directory.
+   * @returns LsResult with list of FileInfo objects on success or error on failure.
    */
-  async lsInfo(path: string): Promise<FileInfo[]> {
+  async ls(path: string): Promise<LsResult> {
     const command = buildLsCommand(path);
     const result = await this.execute(command);
 
@@ -321,7 +326,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
       });
     }
 
-    return infos;
+    return { files: infos };
   }
 
   /**
@@ -340,18 +345,30 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     filePath: string,
     offset: number = 0,
     limit: number = 500,
-  ): Promise<string> {
+  ): Promise<ReadResult> {
+    const mimeType = getMimeType(filePath);
+
+    // for binary, download full file and return as Uint8Array
+    if (!isTextMimeType(mimeType)) {
+      const results = await this.downloadFiles([filePath]);
+      if (results[0].error || !results[0].content) {
+        return { error: `File '${filePath}' not found` };
+      }
+
+      return { content: results[0].content, mimeType };
+    }
+
     // limit=0 means return nothing
-    if (limit === 0) return "";
+    if (limit === 0) return { content: "", mimeType };
 
     const command = buildReadCommand(filePath, offset, limit);
     const result = await this.execute(command);
 
     if (result.exitCode !== 0) {
-      return `Error: File '${filePath}' not found`;
+      return { error: `File '${filePath}' not found` };
     }
 
-    return result.output;
+    return { content: result.output, mimeType };
   }
 
   /**
@@ -360,22 +377,37 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
    * Uses downloadFiles() directly — no runtime needed on the sandbox host.
    *
    * @param filePath - Absolute file path
-   * @returns Raw file content as FileData
+   * @returns ReadRawResult with raw file data on success or error on failure
    */
-  async readRaw(filePath: string): Promise<FileData> {
+  async readRaw(filePath: string): Promise<ReadRawResult> {
     const results = await this.downloadFiles([filePath]);
     if (results[0].error || !results[0].content) {
-      throw new Error(`File '${filePath}' not found`);
+      return { error: `File '${filePath}' not found` };
     }
 
-    const content = new TextDecoder().decode(results[0].content);
-    const lines = content.split("\n");
-
     const now = new Date().toISOString();
+    const mimeType = getMimeType(filePath);
+
+    // Binary: store as Uint8Array
+    if (!isTextMimeType(mimeType)) {
+      return {
+        data: {
+          content: results[0].content,
+          mimeType,
+          created_at: now,
+          modified_at: now,
+        },
+      };
+    }
+
+    // Text: store as string (v2 format)
     return {
-      content: lines,
-      created_at: now,
-      modified_at: now,
+      data: {
+        content: new TextDecoder().decode(results[0].content),
+        mimeType,
+        created_at: now,
+        modified_at: now,
+      },
     };
   }
 
@@ -387,17 +419,17 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
    * @param glob - Optional glob pattern to filter which files to search.
    * @returns List of GrepMatch dicts containing path, line number, and matched text.
    */
-  async grepRaw(
+  async grep(
     pattern: string,
     path: string = "/",
     glob: string | null = null,
-  ): Promise<GrepMatch[] | string> {
+  ): Promise<GrepResult> {
     const command = buildGrepCommand(pattern, path, glob);
     const result = await this.execute(command);
 
     const output = result.output.trim();
     if (!output) {
-      return [];
+      return { matches: [] };
     }
 
     // Parse grep output format: path:line_number:text
@@ -405,10 +437,18 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     for (const line of output.split("\n")) {
       const parts = line.split(":");
       if (parts.length >= 3) {
+        const filePath = parts[0];
+
+        // Skip binary files
+        const mimeType = getMimeType(filePath);
+        if (!isTextMimeType(mimeType)) {
+          continue;
+        }
+
         const lineNum = parseInt(parts[1], 10);
         if (!isNaN(lineNum)) {
           matches.push({
-            path: parts[0],
+            path: filePath,
             line: lineNum,
             text: parts.slice(2).join(":"),
           });
@@ -416,7 +456,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
       }
     }
 
-    return matches;
+    return { matches };
   }
 
   /**
@@ -432,7 +472,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
    * - `?`  matches a single character except `/`
    * - `[...]` character classes
    */
-  async globInfo(pattern: string, path: string = "/"): Promise<FileInfo[]> {
+  async glob(pattern: string, path: string = "/"): Promise<GlobResult> {
     const command = buildFindCommand(path);
     const result = await this.execute(command);
 
@@ -462,7 +502,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
       }
     }
 
-    return infos;
+    return { files: infos };
   }
 
   /**
@@ -484,10 +524,16 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
       // File doesn't exist, which is what we want for write
     }
 
-    const encoder = new TextEncoder();
-    const results = await this.uploadFiles([
-      [filePath, encoder.encode(content)],
-    ]);
+    const mimeType = getMimeType(filePath);
+    let fileContent: Uint8Array;
+
+    if (isTextMimeType(mimeType)) {
+      fileContent = new TextEncoder().encode(content);
+    } else {
+      fileContent = Buffer.from(content, "base64");
+    }
+
+    const results = await this.uploadFiles([[filePath, fileContent]]);
 
     if (results[0].error) {
       return {
@@ -503,6 +549,9 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
    *
    * Uses downloadFiles() to read, performs string replacement in TypeScript,
    * then uploadFiles() to write back. No runtime needed on the sandbox host.
+   *
+   * Memory-conscious: releases intermediate references early so the GC can
+   * reclaim buffers before the next large allocation is made.
    */
   async edit(
     filePath: string,
@@ -510,34 +559,101 @@ export abstract class BaseSandbox implements SandboxBackendProtocol {
     newString: string,
     replaceAll: boolean = false,
   ): Promise<EditResult> {
-    // Read the file
     const results = await this.downloadFiles([filePath]);
     if (results[0].error || !results[0].content) {
       return { error: `Error: File '${filePath}' not found` };
     }
 
     const text = new TextDecoder().decode(results[0].content);
-    const count = text.split(oldString).length - 1;
+    results[0].content = null as unknown as Uint8Array;
 
-    if (count === 0) {
+    /**
+     * are we editing an empty file?
+     */
+    if (oldString.length === 0) {
+      /**
+       * if the file is not empty, we cannot edit it with an empty oldString
+       */
+      if (text.length !== 0) {
+        return {
+          error: "oldString must not be empty unless the file is empty",
+        };
+      }
+      /**
+       * if the newString is empty, we can just return the file as is
+       */
+      if (newString.length === 0) {
+        return { path: filePath, filesUpdate: null, occurrences: 0 };
+      }
+
+      /**
+       * if the newString is not empty, we can edit the file
+       */
+      const encoded = new TextEncoder().encode(newString);
+      const uploadResults = await this.uploadFiles([[filePath, encoded]]);
+      /**
+       * if the upload fails, we return an error
+       */
+      if (uploadResults[0].error) {
+        return {
+          error: `Failed to write edited file '${filePath}': ${uploadResults[0].error}`,
+        };
+      }
+      return { path: filePath, filesUpdate: null, occurrences: 1 };
+    }
+
+    const firstIdx = text.indexOf(oldString);
+    if (firstIdx === -1) {
       return { error: `String not found in file '${filePath}'` };
     }
-    if (count > 1 && !replaceAll) {
-      return {
-        error: `Multiple occurrences found in '${filePath}'. Use replaceAll=true to replace all.`,
-      };
+
+    if (oldString === newString) {
+      return { path: filePath, filesUpdate: null, occurrences: 1 };
     }
 
-    // Perform replacement
-    const newText = replaceAll
-      ? text.split(oldString).join(newString)
-      : text.replace(oldString, newString);
+    let newText: string;
+    let count: number;
 
-    // Write back
-    const encoder = new TextEncoder();
-    const uploadResults = await this.uploadFiles([
-      [filePath, encoder.encode(newText)],
-    ]);
+    if (replaceAll) {
+      newText = text.replaceAll(oldString, newString);
+      /**
+       * Derive count from the length delta to avoid a separate O(n) counting pass
+       */
+      const lenDiff = oldString.length - newString.length;
+      if (lenDiff !== 0) {
+        count = (text.length - newText.length) / lenDiff;
+      } else {
+        /**
+         * Lengths are equal — count via indexOf (we already found the first)
+         */
+        count = 1;
+        let pos = firstIdx + oldString.length;
+        while (pos <= text.length) {
+          const idx = text.indexOf(oldString, pos);
+          if (idx === -1) break;
+          count++;
+          pos = idx + oldString.length;
+        }
+      }
+    } else {
+      const secondIdx = text.indexOf(oldString, firstIdx + oldString.length);
+      if (secondIdx !== -1) {
+        return {
+          error: `Multiple occurrences found in '${filePath}'. Use replaceAll=true to replace all.`,
+        };
+      }
+      count = 1;
+      /**
+       * Build result from the known index — avoids a redundant search by .replace()
+       */
+      newText =
+        text.slice(0, firstIdx) +
+        newString +
+        text.slice(firstIdx + oldString.length);
+    }
+
+    const encoded = new TextEncoder().encode(newText);
+    const uploadResults = await this.uploadFiles([[filePath, encoded]]);
 
     if (uploadResults[0].error) {
       return {

@@ -1,4 +1,4 @@
-/* eslint-disable no-instanceof/no-instanceof */
+/* oxlint-disable no-instanceof/no-instanceof */
 /**
  * Daytona Sandbox implementation of the SandboxBackendProtocol.
  *
@@ -230,6 +230,8 @@ export class DaytonaSandbox extends BaseSandbox {
           language?: string;
           envVars?: Record<string, string>;
           autoStopInterval?: number;
+          autoArchiveInterval?: number;
+          autoDeleteInterval?: number;
           labels?: Record<string, string>;
           resources?: { cpu?: number; memory?: number; disk?: number };
         } = {
@@ -243,6 +245,14 @@ export class DaytonaSandbox extends BaseSandbox {
 
         if (this.#options.autoStopInterval !== undefined) {
           createOptions.autoStopInterval = this.#options.autoStopInterval;
+        }
+
+        if (this.#options.autoArchiveInterval !== undefined) {
+          createOptions.autoArchiveInterval = this.#options.autoArchiveInterval;
+        }
+
+        if (this.#options.autoDeleteInterval !== undefined) {
+          createOptions.autoDeleteInterval = this.#options.autoDeleteInterval;
         }
 
         if (this.#options.labels) {
@@ -262,6 +272,8 @@ export class DaytonaSandbox extends BaseSandbox {
           snapshot?: string;
           envVars?: Record<string, string>;
           autoStopInterval?: number;
+          autoArchiveInterval?: number;
+          autoDeleteInterval?: number;
           labels?: Record<string, string>;
         } = {
           language: this.#options.language ?? "typescript",
@@ -277,6 +289,14 @@ export class DaytonaSandbox extends BaseSandbox {
 
         if (this.#options.autoStopInterval !== undefined) {
           createOptions.autoStopInterval = this.#options.autoStopInterval;
+        }
+
+        if (this.#options.autoArchiveInterval !== undefined) {
+          createOptions.autoArchiveInterval = this.#options.autoArchiveInterval;
+        }
+
+        if (this.#options.autoDeleteInterval !== undefined) {
+          createOptions.autoDeleteInterval = this.#options.autoDeleteInterval;
         }
 
         if (this.#options.labels) {

@@ -1,0 +1,13 @@
+src/
+*.ts
+!*.d.ts
+**/*.test.ts
+**/*.int.test.ts
+vitest.config.ts
+tsconfig.json
+tsdown.config.ts
+.tsdown/
+.env
+.env.*
+.vscode/
+.idea/

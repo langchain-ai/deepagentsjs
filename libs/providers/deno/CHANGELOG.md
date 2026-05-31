@@ -1,5 +1,29 @@
 # @langchain/deno
 
+## 0.2.2
+
+### Patch Changes
+
+- [#404](https://github.com/langchain-ai/deepagentsjs/pull/404) [`ca5cc0a`](https://github.com/langchain-ai/deepagentsjs/commit/ca5cc0acfbbeec08efd4f3aa651bdbefd2008518) Thanks [@hntrl](https://github.com/hntrl)! - chore(deepagents): refactor backend method names - lsInfo -> ls, grepRaw -> grep, globInfo -> glob
+
+## 0.2.2
+
+### Patch Changes
+
+- [#362](https://github.com/langchain-ai/deepagentsjs/pull/362) [`028f2f8`](https://github.com/langchain-ai/deepagentsjs/commit/028f2f818f9c4f95e71308fbdc80d035f0709224) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): extend BackendFactory and make it async
+
+## 0.2.1
+
+### Patch Changes
+
+- [#237](https://github.com/langchain-ai/deepagentsjs/pull/237) [`a827af7`](https://github.com/langchain-ai/deepagentsjs/commit/a827af7be8600e29a2bc8e209fca5b29bcbabc25) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deno): adding license file
+
+## 0.2.0
+
+### Minor Changes
+
+- [#216](https://github.com/langchain-ai/deepagentsjs/pull/216) [`786053f`](https://github.com/langchain-ai/deepagentsjs/commit/786053fe42e7df66a5d728cd4635a18bde049387) Thanks [@christian-bromann](https://github.com/christian-bromann)! - feat(deno): better support for sandboxes with volume
+
 ## 0.1.2
 
 ### Patch Changes

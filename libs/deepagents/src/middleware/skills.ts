@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Backend-agnostic skills middleware for loading agent skills from any backend.
  *
@@ -43,6 +42,7 @@
 import { z } from "zod";
 import yaml from "yaml";
 import {
+  context,
   createMiddleware,
   /**
    * required for type inference
@@ -51,42 +51,111 @@ import {
 } from "langchain";
 import { StateSchema, ReducedValue } from "@langchain/langgraph";
 
-import type { BackendProtocol, BackendFactory } from "../backends/protocol.js";
+import type {
+  AnyBackendProtocol,
+  BackendFactory,
+} from "../backends/protocol.js";
+import { resolveBackend } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import { filesValue } from "../values.js";
+import { adaptBackendProtocol } from "../backends/utils.js";
+import { DEFAULT_READ_LINE_LIMIT } from "./fs.js";
 
 // Security: Maximum size for SKILL.md files to prevent DoS attacks (10MB)
 export const MAX_SKILL_FILE_SIZE = 10 * 1024 * 1024;
 
+export const DEFAULT_SKILL_READ_LINE_LIMIT = 1000;
+
 // Agent Skills specification constraints (https://agentskills.io/specification)
 export const MAX_SKILL_NAME_LENGTH = 64;
 export const MAX_SKILL_DESCRIPTION_LENGTH = 1024;
+export const MAX_SKILL_COMPATIBILITY_LENGTH = 500;
+
+/**
+ * File extensions a skill module entrypoint may use.
+ */
+export const SKILL_MODULE_EXTENSIONS = [
+  ".js",
+  ".mjs",
+  ".cjs",
+  ".ts",
+  ".mts",
+  ".cts",
+  ".jsx",
+  ".tsx",
+];
 
 /**
  * Metadata for a skill per Agent Skills specification.
  */
 export interface SkillMetadata {
-  /** Skill identifier (max 64 chars, lowercase alphanumeric and hyphens) */
+  /**
+   * Skill identifier.
+   *
+   * Constraints per Agent Skills specification:
+   *
+   * - 1-64 characters
+   * - Unicode lowercase alphanumeric and hyphens only (`a-z` and `-`).
+   * - Must not start or end with `-`
+   * - Must not contain consecutive `--`
+   * - Must match the parent directory name containing the `SKILL.md` file
+   */
   name: string;
 
-  /** What the skill does (max 1024 chars) */
+  /**
+   * What the skill does.
+   *
+   * Constraints per Agent Skills specification:
+   *
+   * - 1-1024 characters
+   * - Should describe both what the skill does and when to use it
+   * - Should include specific keywords that help agents identify relevant tasks
+   */
   description: string;
 
   /** Path to the SKILL.md file in the backend */
   path: string;
 
-  /** License name or reference to bundled license file */
+  /** License name or reference to bundled license file. */
   license?: string | null;
 
-  /** Environment requirements (max 500 chars) */
+  /**
+   * Environment requirements.
+   *
+   * Constraints per Agent Skills specification:
+   *
+   * - 1-500 characters if provided
+   * - Should only be included if there are specific compatibility requirements
+   * - Can indicate intended product, required packages, etc.
+   */
   compatibility?: string | null;
 
-  /** Arbitrary key-value mapping for additional metadata */
+  /**
+   * Arbitrary key-value mapping for additional metadata.
+   *
+   * Clients can use this to store additional properties not defined by the spec.
+   *
+   * It is recommended to keep key names unique to avoid conflicts.
+   */
   metadata?: Record<string, string>;
 
-  /** List of pre-approved tools (experimental) */
+  /**
+   * Tool names the skill recommends using.
+   *
+   * Warning: this is experimental.
+   *
+   * Constraints per Agent Skills specification:
+   *
+   * - Space-delimited list of tool names
+   */
   allowedTools?: string[];
+
+  /**
+   * Path to a JS/TS entrypoint file for a QuickJS REPL module, relative to the skill
+   * directory.
+   */
+  module?: string;
 }
 
 /**
@@ -98,7 +167,7 @@ export interface SkillsMiddlewareOptions {
    * Use a factory for StateBackend since it requires runtime state.
    */
   backend:
-    | BackendProtocol
+    | AnyBackendProtocol
     | BackendFactory
     | ((config: { state: unknown; store?: BaseStore }) => StateBackend);
 
@@ -121,6 +190,7 @@ export const SkillMetadataEntrySchema = z.object({
   compatibility: z.string().nullable().optional(),
   metadata: z.record(z.string(), z.string()).optional(),
   allowedTools: z.array(z.string()).optional(),
+  module: z.string().optional(),
 });
 
 /**
@@ -177,54 +247,70 @@ const SkillsStateSchema = new StateSchema({
 /**
  * Skills System Documentation prompt template.
  */
-const SKILLS_SYSTEM_PROMPT = `
-## Skills System
+const SKILLS_SYSTEM_PROMPT = context`
+  ## Skills System
 
-You have access to a skills library that provides specialized capabilities and domain knowledge.
+  You have access to a skills library that provides specialized capabilities and domain knowledge.
 
-{skills_locations}
+  {skills_locations}
 
-**Available Skills:**
+  **Available Skills:**
 
-{skills_list}
+  {skills_list}
 
-**How to Use Skills (Progressive Disclosure):**
+  **How to Use Skills (Progressive Disclosure):**
 
-Skills follow a **progressive disclosure** pattern - you know they exist (name + description above), but you only read the full instructions when needed:
+  Skills follow a **progressive disclosure** pattern - you know they exist (name + description above), but you only read the full instructions when needed:
 
-1. **Recognize when a skill applies**: Check if the user's task matches any skill's description
-2. **Read the skill's full instructions**: The skill list above shows the exact path to use with read_file
-3. **Follow the skill's instructions**: SKILL.md contains step-by-step workflows, best practices, and examples
-4. **Access supporting files**: Skills may include Python scripts, configs, or reference docs - use absolute paths
+  1. **Recognize when a skill applies**: Check if the user's task matches any skill's description
+  2. **Read the skill's full instructions**: Use \`read_file\` on the path shown in the skill list above.
+     Pass \`limit=${DEFAULT_SKILL_READ_LINE_LIMIT}\` since the default of ${DEFAULT_READ_LINE_LIMIT} lines is too small for most skill files.
+  3. **Follow the skill's instructions**: SKILL.md contains step-by-step workflows, best practices, and examples
+  4. **Access supporting files**: Skills may include scripts, configs, or reference docs - use absolute paths
 
-**When to Use Skills:**
-- When the user's request matches a skill's domain (e.g., "research X" → web-research skill)
-- When you need specialized knowledge or structured workflows
-- When a skill provides proven patterns for complex tasks
+  **When to Use Skills:**
+  - When the user's request matches a skill's domain (e.g., "research X" → web-research skill)
+  - When you need specialized knowledge or structured workflows
+  - When a skill provides proven patterns for complex tasks
+  **Skills are Self-Documenting:**
+  - Each SKILL.md tells you exactly what the skill does and how to use it
+  - The skill list above shows the full path for each skill's SKILL.md file
 
-**Skills are Self-Documenting:**
-- Each SKILL.md tells you exactly what the skill does and how to use it
-- The skill list above shows the full path for each skill's SKILL.md file
+  **Executing Skill Scripts:**
+  Skills may contain scripts or other executable files. Always use absolute paths from the skill list.
 
-**Executing Skill Scripts:**
-Skills may contain Python scripts or other executable files. Always use absolute paths from the skill list.
+  **Example Workflow:**
 
-**Example Workflow:**
+  User: "Can you research the latest developments in quantum computing?"
 
-User: "Can you research the latest developments in quantum computing?"
+  1. Check available skills above → See "web-research" skill with its full path
+  2. Read the full skill file: \`read_file(path, limit=${DEFAULT_SKILL_READ_LINE_LIMIT})\`
+  3. Follow the skill's research workflow (search → organize → synthesize)
+  4. Use any helper scripts with absolute paths
 
-1. Check available skills above → See "web-research" skill with its full path
-2. Read the skill using the path shown in the list
-3. Follow the skill's research workflow (search → organize → synthesize)
-4. Use any helper scripts with absolute paths
-
-Remember: Skills are tools to make you more capable and consistent. When in doubt, check if a skill exists for the task!
+  Remember: Skills are tools to make you more capable and consistent. When in doubt, check if a skill exists for the task!
 `;
 
 /**
  * Validate skill name per Agent Skills specification.
+ *
+ * Constraints per Agent Skills specification:
+ *
+ * - 1-64 characters
+ * - Unicode lowercase alphanumeric and hyphens only (`a-z` and `-`).
+ * - Must not start or end with `-`
+ * - Must not contain consecutive `--`
+ * - Must match the parent directory name containing the `SKILL.md` file
+ *
+ * Unicode lowercase alphanumeric means any lowercase or decimal digit, which
+ * covers accented Latin characters (e.g., `'café'`, `'über-tool'`) and other
+ * scripts.
+ *
+ * @param name - The skill name from YAML frontmatter
+ * @param directoryName - The parent directory name
+ * @returns `{ valid, error }` tuple. Error is empty string if valid.
  */
-function validateSkillName(
+export function validateSkillName(
   name: string,
   directoryName: string,
 ): { valid: boolean; error: string } {
@@ -234,8 +320,15 @@ function validateSkillName(
   if (name.length > MAX_SKILL_NAME_LENGTH) {
     return { valid: false, error: "name exceeds 64 characters" };
   }
-  // Pattern: lowercase alphanumeric, single hyphens between segments, no start/end hyphen
-  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) {
+  if (name.startsWith("-") || name.endsWith("-") || name.includes("--")) {
+    return {
+      valid: false,
+      error: "name must be lowercase alphanumeric with single hyphens only",
+    };
+  }
+  for (const c of name) {
+    if (c === "-") continue;
+    if (/\p{Ll}/u.test(c) || /\p{Nd}/u.test(c)) continue;
     return {
       valid: false,
       error: "name must be lowercase alphanumeric with single hyphens only",
@@ -251,9 +344,69 @@ function validateSkillName(
 }
 
 /**
- * Parse YAML frontmatter from SKILL.md content.
+ * Validate and normalize the metadata field from YAML frontmatter.
+ *
+ * YAML parsing can return any type for the `metadata` key. This ensures the
+ * value in {@link SkillMetadata} is always a `Record<string, string>` by
+ * coercing via `String()` and rejecting non-object inputs.
+ *
+ * @param raw - Raw value from `frontmatterData.metadata`.
+ * @param skillPath - Path to the `SKILL.md` file (for warning messages).
+ * @returns A validated `Record<string, string>`.
  */
-function parseSkillMetadataFromContent(
+export function validateMetadata(
+  raw: unknown,
+  skillPath: string,
+): Record<string, string> {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    if (raw) {
+      console.warn(
+        `Ignoring non-object metadata in ${skillPath} (got ${typeof raw})`,
+      );
+    }
+    return {};
+  }
+  const result: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    result[String(k)] = String(v);
+  }
+  return result;
+}
+
+/**
+ * Build a parenthetical annotation string from optional skill fields.
+ *
+ * Combines license and compatibility into a comma-separated string for
+ * display in the system prompt skill listing.
+ *
+ * @param skill - Skill metadata to extract annotations from.
+ * @returns Annotation string like `'License: MIT, Compatibility: Python 3.10+'`,
+ *   or empty string if neither field is set.
+ */
+export function formatSkillAnnotations(skill: SkillMetadata): string {
+  const parts: string[] = [];
+  if (skill.license) {
+    parts.push(`License: ${skill.license}`);
+  }
+  if (skill.compatibility) {
+    parts.push(`Compatibility: ${skill.compatibility}`);
+  }
+  return parts.join(", ");
+}
+
+/**
+ * Parse YAML frontmatter from `SKILL.md` content.
+ *
+ * Extracts metadata per Agent Skills specification from YAML frontmatter
+ * delimited by `---` markers at the start of the content.
+ *
+ * @param content - Content of the `SKILL.md` file
+ * @param skillPath - Path to the `SKILL.md` file (for error messages and metadata)
+ * @param directoryName - Name of the parent directory containing the skill
+ * @returns `SkillMetadata` if parsing succeeds, `null` if parsing fails or
+ *   validation errors occur
+ */
+export function parseSkillMetadataFromContent(
   content: string,
   skillPath: string,
   directoryName: string,
@@ -290,9 +443,9 @@ function parseSkillMetadataFromContent(
     return null;
   }
 
-  // Validate required fields
-  const name = frontmatterData.name as string | undefined;
-  const description = frontmatterData.description as string | undefined;
+  // Validate required fields - coerce and strip whitespace
+  const name = String(frontmatterData.name ?? "").trim();
+  const description = String(frontmatterData.description ?? "").trim();
 
   if (!name || !description) {
     console.warn(
@@ -302,7 +455,7 @@ function parseSkillMetadataFromContent(
   }
 
   // Validate name format per spec (warn but continue for backwards compatibility)
-  const validation = validateSkillName(String(name), directoryName);
+  const validation = validateSkillName(name, directoryName);
   if (!validation.valid) {
     console.warn(
       `Skill '${name}' in ${skillPath} does not follow Agent Skills specification: ${validation.error}. Consider renaming for spec compliance.`,
@@ -310,7 +463,7 @@ function parseSkillMetadataFromContent(
   }
 
   // Validate description length per spec (max 1024 chars)
-  let descriptionStr = String(description).trim();
+  let descriptionStr = description;
   if (descriptionStr.length > MAX_SKILL_DESCRIPTION_LENGTH) {
     console.warn(
       `Description exceeds ${MAX_SKILL_DESCRIPTION_LENGTH} characters in ${skillPath}, truncating`,
@@ -318,26 +471,45 @@ function parseSkillMetadataFromContent(
     descriptionStr = descriptionStr.slice(0, MAX_SKILL_DESCRIPTION_LENGTH);
   }
 
-  // Parse allowed-tools
-  const allowedToolsStr = frontmatterData["allowed-tools"] as
-    | string
-    | undefined;
-  const allowedTools = allowedToolsStr ? allowedToolsStr.split(" ") : [];
+  // Parse allowed-tools: support both YAML list and space-delimited string
+  const rawTools = frontmatterData["allowed-tools"];
+  let allowedTools: string[];
+  if (rawTools) {
+    if (Array.isArray(rawTools)) {
+      allowedTools = rawTools.map((t) => String(t).trim()).filter(Boolean);
+    } else {
+      // Split on whitespace (handles multiple consecutive spaces)
+      allowedTools = String(rawTools).split(/\s+/).filter(Boolean);
+    }
+  } else {
+    allowedTools = [];
+  }
+
+  // Validate and truncate compatibility length
+  let compatibilityStr =
+    String(frontmatterData.compatibility ?? "").trim() || null;
+  if (
+    compatibilityStr &&
+    compatibilityStr.length > MAX_SKILL_COMPATIBILITY_LENGTH
+  ) {
+    console.warn(
+      `Compatibility exceeds ${MAX_SKILL_COMPATIBILITY_LENGTH} characters in ${skillPath}, truncating`,
+    );
+    compatibilityStr = compatibilityStr.slice(
+      0,
+      MAX_SKILL_COMPATIBILITY_LENGTH,
+    );
+  }
 
   return {
-    name: String(name),
+    name,
     description: descriptionStr,
     path: skillPath,
-    metadata: (frontmatterData.metadata as Record<string, string>) || {},
-    license:
-      typeof frontmatterData.license === "string"
-        ? frontmatterData.license.trim() || null
-        : null,
-    compatibility:
-      typeof frontmatterData.compatibility === "string"
-        ? frontmatterData.compatibility.trim() || null
-        : null,
+    metadata: validateMetadata(frontmatterData.metadata ?? {}, skillPath),
+    license: String(frontmatterData.license ?? "").trim() || null,
+    compatibility: compatibilityStr,
     allowedTools,
+    module: validateModulePath(frontmatterData.module),
   };
 }
 
@@ -345,9 +517,10 @@ function parseSkillMetadataFromContent(
  * List all skills from a backend source.
  */
 async function listSkillsFromBackend(
-  backend: BackendProtocol,
+  backend: AnyBackendProtocol,
   sourcePath: string,
 ): Promise<SkillMetadata[]> {
+  const adaptedBackend = adaptBackendProtocol(backend);
   const skills: SkillMetadata[] = [];
 
   // Detect path separator (Windows uses \, Unix uses /)
@@ -359,10 +532,15 @@ async function listSkillsFromBackend(
       ? sourcePath
       : `${sourcePath}${pathSep}`;
 
-  // List directories in the source path using lsInfo
+  // List directories in the source path using ls
   let fileInfos: { path: string; is_dir?: boolean }[];
   try {
-    fileInfos = await backend.lsInfo(normalizedPath);
+    const lsResult = await adaptedBackend.ls(normalizedPath);
+    if (lsResult.error || !lsResult.files) {
+      // Source path doesn't exist or can't be listed
+      return [];
+    }
+    fileInfos = lsResult.files;
   } catch {
     // Source path doesn't exist or can't be listed
     return [];
@@ -389,8 +567,8 @@ async function listSkillsFromBackend(
 
     // Try to download the SKILL.md file
     let content: string;
-    if (backend.downloadFiles) {
-      const results = await backend.downloadFiles([skillMdPath]);
+    if (adaptedBackend.downloadFiles) {
+      const results = await adaptedBackend.downloadFiles([skillMdPath]);
       if (results.length !== 1) {
         continue;
       }
@@ -404,11 +582,14 @@ async function listSkillsFromBackend(
       content = new TextDecoder().decode(response.content);
     } else {
       // Fall back to read if downloadFiles is not available
-      const readResult = await backend.read(skillMdPath);
-      if (readResult.startsWith("Error:")) {
+      const readResult = await adaptedBackend.read(skillMdPath);
+      if (readResult.error) {
         continue;
       }
-      content = readResult;
+      if (typeof readResult.content !== "string") {
+        continue;
+      }
+      content = readResult.content;
     }
     const metadata = parseSkillMetadataFromContent(
       content,
@@ -455,7 +636,10 @@ function formatSkillsLocations(sources: string[]): string {
  * Format skills metadata for display in system prompt.
  * Shows allowed tools for each skill if specified.
  */
-function formatSkillsList(skills: SkillMetadata[], sources: string[]): string {
+export function formatSkillsList(
+  skills: SkillMetadata[],
+  sources: string[],
+): string {
   if (skills.length === 0) {
     const paths = sources.map((s) => `\`${s}\``).join(" or ");
     return `(No skills available yet. You can create skills in ${paths})`;
@@ -463,14 +647,89 @@ function formatSkillsList(skills: SkillMetadata[], sources: string[]): string {
 
   const lines: string[] = [];
   for (const skill of skills) {
-    lines.push(`- **${skill.name}**: ${skill.description}`);
+    const annotations = formatSkillAnnotations(skill);
+    let descLine = `- **${skill.name}**: ${skill.description}`;
+    if (annotations) {
+      descLine += ` (${annotations})`;
+    }
+    lines.push(descLine);
     if (skill.allowedTools && skill.allowedTools.length > 0) {
       lines.push(`  → Allowed tools: ${skill.allowedTools.join(", ")}`);
     }
     lines.push(`  → Read \`${skill.path}\` for full instructions`);
+    if (skill.module !== undefined) {
+      lines.push(`  → Import: \`await import("@/skills/${skill.name}")\``);
+    }
   }
 
   return lines.join("\n");
+}
+
+/**
+ * Returns true when `value` ends with a recognized skill module extension.
+ */
+function endsWithModuleExtension(value: string): boolean {
+  for (const ext of SKILL_MODULE_EXTENSIONS) {
+    if (value.endsWith(ext)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Validate and normalize the `module` frontmatter key from a `SKILL.md`.
+ *
+ * Returns the normalized path (e.g. `"index.ts"`, `"lib/entry.js"`) or
+ * `undefined` when the key is absent, empty, non-string, absolute, contains
+ * path traversal, or uses an unsupported extension. Invalid values silently
+ * degrade the skill to prose-only.
+ */
+export function validateModulePath(raw: unknown): string | undefined {
+  if (raw === null || raw === undefined) {
+    return;
+  }
+
+  if (typeof raw !== "string") {
+    return;
+  }
+
+  const stripped = raw.trim();
+  if (stripped === "") {
+    return;
+  }
+
+  // Normalize "./x" → "x" so the value lines up with the keys the loader
+  // uses inside the installed module scope. Leaves "lib/util.js" untouched.
+  const normalized = stripped.startsWith("./") ? stripped.slice(2) : stripped;
+
+  if (normalized.startsWith("/")) {
+    return;
+  }
+
+  if (
+    normalized === ".." ||
+    normalized.startsWith("../") ||
+    normalized.includes("/../") ||
+    normalized.endsWith("/..")
+  ) {
+    return;
+  }
+
+  // Declaration files are type-only stubs with no runtime exports.
+  if (
+    normalized.endsWith(".d.ts") ||
+    normalized.endsWith(".d.mts") ||
+    normalized.endsWith(".d.cts")
+  ) {
+    return;
+  }
+
+  if (!endsWithModuleExtension(normalized)) {
+    return;
+  }
+
+  return normalized;
 }
 
 /**
@@ -499,37 +758,32 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
   // directly since beforeAgent state updates aren't immediately available
   let loadedSkills: SkillMetadata[] = [];
 
-  /**
-   * Resolve backend from instance or factory.
-   */
-  function getBackend(state: unknown): BackendProtocol {
-    if (typeof backend === "function") {
-      return backend({ state }) as BackendProtocol;
-    }
-    return backend;
-  }
-
   return createMiddleware({
     name: "SkillsMiddleware",
     stateSchema: SkillsStateSchema,
 
     async beforeAgent(state) {
-      // Skip if already loaded (check both closure and state)
-      if (loadedSkills.length > 0) {
-        return undefined;
-      }
-      // Check if skills were restored from checkpoint (non-empty array in state)
-      if (
+      const stateHasSkills =
         "skillsMetadata" in state &&
         Array.isArray(state.skillsMetadata) &&
-        state.skillsMetadata.length > 0
-      ) {
+        state.skillsMetadata.length > 0;
+
+      if (loadedSkills.length > 0) {
+        // Closure has skills from a prior thread — push to state if missing
+        // so getCurrentTaskInput() sees them in the tool node.
+        return stateHasSkills ? undefined : { skillsMetadata: loadedSkills };
+      }
+
+      // Check if skills were restored from checkpoint (non-empty array in state)
+      if (stateHasSkills) {
         // Restore from state (e.g., after checkpoint restore)
         loadedSkills = state.skillsMetadata as SkillMetadata[];
         return undefined;
       }
 
-      const resolvedBackend = getBackend(state);
+      const resolvedBackend = await resolveBackend(backend, {
+        state,
+      });
       const allSkills: Map<string, SkillMetadata> = new Map();
 
       // Load skills from each source in order (later sources override earlier)

@@ -1,4 +1,4 @@
-/* eslint-disable no-instanceof/no-instanceof */
+/* oxlint-disable no-instanceof/no-instanceof */
 /**
  * Node.js VFS Sandbox implementation of the SandboxBackendProtocol.
  *
@@ -21,10 +21,12 @@ import {
   BaseSandbox,
   type ExecuteResponse,
   type FileDownloadResponse,
-  type FileInfo,
   type FileOperationError,
   type FileUploadResponse,
-  type GrepMatch,
+  type GlobResult,
+  type GrepResult,
+  type LsResult,
+  type ReadResult,
   type BackendFactory,
 } from "deepagents";
 
@@ -276,11 +278,51 @@ export class VfsSandbox extends BaseSandbox {
   }
 
   /**
+   * Rewrite absolute paths in a command that reference VFS entries.
+   *
+   * When users define files with absolute paths like `/src/index.js` in the
+   * VFS, commands like `node /src/index.js` should resolve to the temp
+   * directory where files are synced for execution. This method replaces
+   * absolute paths whose top-level component matches a VFS workspace entry
+   * with the corresponding temp directory path, leaving system paths
+   * (e.g. `/bin/bash`, `/usr/local/bin/node`) untouched.
+   */
+  #rewriteVfsPaths(command: string, execDir: string): string {
+    let topLevelNames: string[];
+    try {
+      const entries = this.instance.readdirSync(this.#workingDirectory, {
+        withFileTypes: true,
+      });
+      topLevelNames = entries.map((e: { name: string }) => e.name);
+    } catch {
+      return command;
+    }
+
+    if (topLevelNames.length === 0) return command;
+
+    let result = command;
+    for (const name of topLevelNames) {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      // Match /<name> when it appears as a standalone path token:
+      // - NOT preceded by word chars, dots, or slashes (avoids matching
+      //   inside longer paths like "foo/src" or "../src")
+      // - Followed by /, whitespace, quotes, shell operators, or end
+      result = result.replace(
+        new RegExp(`(?<![\\w/.-])/${escaped}(?=/|[\\s"';|&><!\\])]|$)`, "gm"),
+        `${execDir}/${name}`,
+      );
+    }
+
+    return result;
+  }
+
+  /**
    * Execute a command in the sandbox.
    *
    * Commands are run using `/bin/bash -c` in the sandbox working directory.
    * When using VFS mode, files are synced to a temp directory before execution
-   * and synced back after.
+   * and synced back after. Absolute paths in the command that reference VFS
+   * entries are automatically rewritten to point to the temp directory.
    *
    * @param command - The shell command to execute
    * @returns Execution result with output, exit code, and truncation flag
@@ -292,13 +334,16 @@ export class VfsSandbox extends BaseSandbox {
     // Sync VFS to temp directory for command execution
     const execDir = await this.#syncToTempDir();
 
+    // Rewrite absolute VFS paths in the command to temp dir paths
+    const rewrittenCommand = this.#rewriteVfsPaths(command, execDir);
+
     return new Promise((resolve) => {
       const chunks: string[] = [];
       let truncated = false;
       const maxOutputBytes = 1024 * 1024; // 1MB output limit
       let totalBytes = 0;
 
-      const child = cp.spawn("/bin/bash", ["-c", command], {
+      const child = cp.spawn("/bin/bash", ["-c", rewrittenCommand], {
         cwd: execDir,
         env: { ...process.env, HOME: process.env.HOME },
       });
@@ -484,45 +529,42 @@ export class VfsSandbox extends BaseSandbox {
     filePath: string,
     offset: number = 0,
     limit: number = 500,
-  ): Promise<string> {
+  ): Promise<ReadResult> {
     return super.read(this.#normalizeExecPath(filePath), offset, limit);
   }
 
   /**
    * List files and directories in the specified directory.
    *
-   * Overrides BaseSandbox.lsInfo() to normalize paths with a leading `/`
+   * Overrides BaseSandbox.ls() to normalize paths with a leading `/`
    * so they resolve correctly in the temp execution directory.
    */
-  async lsInfo(dirPath: string): Promise<FileInfo[]> {
-    return super.lsInfo(this.#normalizeExecPath(dirPath));
+  async ls(dirPath: string): Promise<LsResult> {
+    return super.ls(this.#normalizeExecPath(dirPath));
   }
 
   /**
    * Search for a literal text pattern in files.
    *
-   * Overrides BaseSandbox.grepRaw() to normalize paths with a leading `/`
+   * Overrides BaseSandbox.grep() to normalize paths with a leading `/`
    * so they resolve correctly in the temp execution directory.
    */
-  async grepRaw(
+  async grep(
     pattern: string,
     searchPath: string = "/",
     glob: string | null = null,
-  ): Promise<GrepMatch[] | string> {
-    return super.grepRaw(pattern, this.#normalizeExecPath(searchPath), glob);
+  ): Promise<GrepResult> {
+    return super.grep(pattern, this.#normalizeExecPath(searchPath), glob);
   }
 
   /**
    * Structured glob matching returning FileInfo objects.
    *
-   * Overrides BaseSandbox.globInfo() to normalize paths with a leading `/`
+   * Overrides BaseSandbox.glob() to normalize paths with a leading `/`
    * so they resolve correctly in the temp execution directory.
    */
-  async globInfo(
-    pattern: string,
-    searchPath: string = "/",
-  ): Promise<FileInfo[]> {
-    return super.globInfo(pattern, this.#normalizeExecPath(searchPath));
+  async glob(pattern: string, searchPath: string = "/"): Promise<GlobResult> {
+    return super.glob(pattern, this.#normalizeExecPath(searchPath));
   }
 
   /**

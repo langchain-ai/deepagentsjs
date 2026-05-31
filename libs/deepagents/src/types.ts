@@ -8,6 +8,8 @@ import type {
   ResponseFormat,
   SystemMessage,
   ResponseFormatUndefined,
+  ToolStrategy,
+  ProviderStrategy,
 } from "langchain";
 import type {
   ClientTool,
@@ -20,15 +22,69 @@ import type {
   BaseStore,
 } from "@langchain/langgraph-checkpoint";
 
-import type { SubAgent } from "./middleware/index.js";
-import type { BackendProtocol } from "./backends/index.js";
+import type { AnyBackendProtocol } from "./backends/index.js";
+import type { AsyncSubAgent, SubAgent } from "./middleware/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
-import type { AnnotationRoot } from "@langchain/langgraph";
+import type { AnnotationRoot, StreamTransformer } from "@langchain/langgraph";
 import type { CompiledSubAgent } from "./middleware/subagents.js";
+import type {
+  ASYNC_TASK_TOOL_NAMES,
+  FILESYSTEM_TOOL_NAMES,
+} from "./middleware/index.js";
+import type { DeepAgentRunStream } from "./stream.js";
+import type { FilesystemPermission } from "./permissions/index.js";
 
 // LangChain uses AnyAnnotationRoot internally but doesn't export it
 // We use AnnotationRoot<any> as a compatible equivalent
 type AnyAnnotationRoot = AnnotationRoot<any>;
+
+/**
+ * Literal union of all built-in deep agent tool names.
+ * These are always present on the agent regardless of user-provided tools.
+ */
+type DeepAgentBuiltinToolName =
+  | (typeof FILESYSTEM_TOOL_NAMES)[number]
+  | (typeof ASYNC_TASK_TOOL_NAMES)[number]
+  | "task"
+  | "write_todos";
+
+/**
+ * A placeholder StructuredTool type with a literal `name` for each
+ * built-in tool. Used to thread built-in tool names into the
+ * `ToolCallStreamUnion` so they appear in `run.toolCalls` alongside
+ * user-provided tools.
+ */
+type BuiltinToolPlaceholder<N extends string> = {
+  name: N;
+} & StructuredTool;
+
+/**
+ * Tuple of placeholder tool types for all built-in deep agent tools.
+ * Combined with `TTypes["Tools"]` in the `DeepAgentRunStream` return type.
+ */
+type DeepAgentBuiltinToolsTuple = {
+  [K in DeepAgentBuiltinToolName]: BuiltinToolPlaceholder<K>;
+}[DeepAgentBuiltinToolName][];
+
+type InferDeepAgentStreamExtensions<
+  T extends ReadonlyArray<() => StreamTransformer<any>>,
+> = T extends readonly []
+  ? Record<string, never>
+  : T extends readonly [
+        () => StreamTransformer<infer P>,
+        ...infer Rest extends ReadonlyArray<() => StreamTransformer<any>>,
+      ]
+    ? P & InferDeepAgentStreamExtensions<Rest>
+    : Record<string, unknown>;
+
+/** Any subagent specification — sync, compiled, or async. */
+export type AnySubAgent = SubAgent | CompiledSubAgent | AsyncSubAgent;
+
+// TODO: import TypedToolStrategy from "langchain" once exported from the top-level entry point
+// (currently only available via "langchain/dist/agents/responses.js")
+interface TypedToolStrategy<T = unknown> extends Array<ToolStrategy<any>> {
+  _schemaType?: T;
+}
 
 /**
  * Helper type to extract middleware from a SubAgent definition
@@ -45,34 +101,73 @@ export type ExtractSubAgentMiddleware<T> = T extends { middleware?: infer M }
 /**
  * Helper type to flatten and merge middleware from all subagents
  */
-export type FlattenSubAgentMiddleware<
-  T extends readonly (SubAgent | CompiledSubAgent)[],
-> = T extends readonly []
-  ? readonly []
-  : T extends readonly [infer First, ...infer Rest]
-    ? Rest extends readonly (SubAgent | CompiledSubAgent)[]
-      ? readonly [
-          ...ExtractSubAgentMiddleware<First>,
-          ...FlattenSubAgentMiddleware<Rest>,
-        ]
-      : ExtractSubAgentMiddleware<First>
-    : readonly [];
+export type FlattenSubAgentMiddleware<T extends readonly AnySubAgent[]> =
+  T extends readonly []
+    ? readonly []
+    : T extends readonly [infer First, ...infer Rest]
+      ? Rest extends readonly AnySubAgent[]
+        ? readonly [
+            ...ExtractSubAgentMiddleware<First>,
+            ...FlattenSubAgentMiddleware<Rest>,
+          ]
+        : ExtractSubAgentMiddleware<First>
+      : readonly [];
 
 /**
  * Helper type to merge states from subagent middleware
  */
-export type InferSubAgentMiddlewareStates<
-  T extends readonly (SubAgent | CompiledSubAgent)[],
-> = InferMiddlewareStates<FlattenSubAgentMiddleware<T>>;
+export type InferSubAgentMiddlewareStates<T extends readonly AnySubAgent[]> =
+  InferMiddlewareStates<FlattenSubAgentMiddleware<T>>;
 
 /**
  * Combined state type including custom middleware and subagent middleware states
  */
 export type MergedDeepAgentState<
   TMiddleware extends readonly AgentMiddleware[],
-  TSubagents extends readonly (SubAgent | CompiledSubAgent)[],
+  TSubagents extends readonly AnySubAgent[],
 > = InferMiddlewareStates<TMiddleware> &
   InferSubAgentMiddlewareStates<TSubagents>;
+
+/**
+ * Union of all response format types accepted by `createDeepAgent`.
+ *
+ * Matches the formats supported by LangChain's `createAgent`:
+ * - `ToolStrategy<T>` — from `ToolStrategy.fromSchema(schema)`
+ * - `ProviderStrategy<T>` — from `providerStrategy(schema)`
+ * - `TypedToolStrategy<T>` — from `toolStrategy(schema)`
+ * - `ResponseFormat` — the base union of the above single-strategy types
+ */
+export type SupportedResponseFormat = ResponseFormat | TypedToolStrategy<any>;
+
+/**
+ * Utility type to extract the parsed response type from a ResponseFormat strategy.
+ *
+ * Maps `ToolStrategy<T>`, `ProviderStrategy<T>`, and `TypedToolStrategy<T>` to `T`
+ * (the parsed output type), so that `structuredResponse` is correctly typed as the
+ * schema's inferred type rather than the strategy wrapper.
+ *
+ * When no `responseFormat` is provided (i.e. `T` defaults to the full
+ * `SupportedResponseFormat` union), this resolves to `ResponseFormatUndefined` so
+ * that `structuredResponse` is excluded from the agent's output state.
+ *
+ * @example
+ * ```typescript
+ * type T1 = InferStructuredResponse<ToolStrategy<{ city: string }>>; // { city: string }
+ * type T2 = InferStructuredResponse<ProviderStrategy<{ answer: string }>>; // { answer: string }
+ * type T3 = InferStructuredResponse<TypedToolStrategy<{ city: string }>>; // { city: string }
+ * type T4 = InferStructuredResponse<SupportedResponseFormat>; // ResponseFormatUndefined (default/unset)
+ * ```
+ */
+export type InferStructuredResponse<T extends SupportedResponseFormat> =
+  SupportedResponseFormat extends T
+    ? ResponseFormatUndefined
+    : T extends TypedToolStrategy<infer U>
+      ? U
+      : T extends ToolStrategy<infer U>
+        ? U
+        : T extends ProviderStrategy<infer U>
+          ? U
+          : ResponseFormatUndefined;
 
 /**
  * Type bag that extends AgentTypeConfig with subagent type information.
@@ -116,11 +211,17 @@ export interface DeepAgentTypeConfig<
     | ClientTool
     | ServerTool
   )[],
-  TSubagents extends readonly (SubAgent | CompiledSubAgent)[] = readonly (
-    | SubAgent
-    | CompiledSubAgent
-  )[],
-> extends AgentTypeConfig<TResponse, TState, TContext, TMiddleware, TTools> {
+  TSubagents extends readonly AnySubAgent[] = readonly AnySubAgent[],
+  TStreamTransformers extends ReadonlyArray<() => StreamTransformer<any>> =
+    ReadonlyArray<() => StreamTransformer<any>>,
+> extends AgentTypeConfig<
+  TResponse,
+  TState,
+  TContext,
+  TMiddleware,
+  TTools,
+  TStreamTransformers
+> {
   /** The subagents array type for type-safe streaming */
   Subagents: TSubagents;
 }
@@ -135,7 +236,8 @@ export interface DefaultDeepAgentTypeConfig extends DeepAgentTypeConfig {
   Context: AnyAnnotationRoot;
   Middleware: readonly AgentMiddleware[];
   Tools: readonly (ClientTool | ServerTool)[];
-  Subagents: readonly (SubAgent | CompiledSubAgent)[];
+  Subagents: readonly AnySubAgent[];
+  StreamTransformers: readonly [];
 }
 
 /**
@@ -154,12 +256,100 @@ export interface DefaultDeepAgentTypeConfig extends DeepAgentTypeConfig {
  * type Subagents = InferDeepAgentSubagents<typeof agent>;
  * ```
  */
-export type DeepAgent<
+export interface DeepAgent<
   TTypes extends DeepAgentTypeConfig = DeepAgentTypeConfig,
-> = ReactAgent<TTypes> & {
+> extends ReactAgent<TTypes> {
   /** Type brand for DeepAgent type inference */
   readonly "~deepAgentTypes": TTypes;
-};
+
+  /**
+   * Executes the agent with the v3 streaming interface, returning an
+   * {@link DeepAgentRunStream} that provides ergonomic, typed projections for
+   * messages, tool calls, subagents, and middleware events.
+   *
+   * Pass `version: "v3"` to opt into this projection-oriented stream. Omitting
+   * `version` preserves the legacy internal LangGraph event-stream behavior
+   * for compatibility with LangGraph Platform integrations.
+   *
+   * This v3 stream is experimental and its API may change in future releases.
+   * It will become the default in a future major release.
+   *
+   * @param state - The initial state for the agent execution. Can be:
+   *   - An object containing `messages` array and any middleware-specific state properties
+   *   - A Command object for more advanced control flow
+   *
+   * @param config - Runtime configuration including:
+   * @param config.version - Must be `"v3"` to use the {@link DeepAgentRunStream}
+   *   interface. The default legacy event stream is maintained for internal
+   *   integrations and should not be used for new user-facing agent streaming.
+   * @param config.context - The context for the agent execution.
+   * @param config.configurable - LangGraph configuration options like `thread_id`, `run_id`, etc.
+   * @param config.store - The store for the agent execution for persisting state.
+   * @param config.signal - An optional AbortSignal for the agent execution.
+   * @param config.recursionLimit - The recursion limit for the agent execution.
+   *
+   * @returns A Promise that resolves to an {@link DeepAgentRunStream} providing:
+   *   - `run.messages` — all AI message lifecycles with streaming `.text` and `.reasoning`
+   *   - `run.toolCalls` — individual tool call streams with `.input`, `.output`, `.status`
+   *   - `run.subagents` — subagent delegation streams
+   *   - `run.middleware` — middleware lifecycle events (before/after agent/model)
+   *   - `run.values` — state snapshots (async iterable + promise-like)
+   *   - `run.output` — final agent state when the run completes
+   *   - `run.subgraphs` — child subgraph run streams
+   *   - `run.extensions` — merged projections from user-supplied transformers
+   *
+   * @example
+   * ```typescript
+   * const run = await agent.streamEvents(
+   *   {
+   *     messages: [{ role: "user", content: "What's the weather in Paris?" }],
+   *   },
+   *   { version: "v3" }
+   * );
+   *
+   * // Stream all messages
+   * for await (const msg of run.messages) {
+   *   for await (const token of msg.text) {
+   *     process.stdout.write(token);
+   *   }
+   * }
+   *
+   * // Observe tool calls
+   * for await (const call of run.toolCalls) {
+   *   console.log(`Tool: ${call.name}`, call.input);
+   *   console.log(`Result:`, await call.output);
+   * }
+   *
+   * // Observe subagent delegations
+   * for await (const subagent of run.subagents) {
+   *   console.log(`Subagent: ${subagent.name}`);
+   *
+   *   for await (const msg of subagent.messages) {
+   *     for await (const token of msg.text) {
+   *       process.stdout.write(token);
+   *     }
+   *   }
+   * }
+   *
+   * // Get final state
+   * const state = await run.output;
+   * ```
+   */
+  streamEvents: ((
+    state: Parameters<ReactAgent<TTypes>["invoke"]>[0],
+    config: NonNullable<Parameters<ReactAgent<TTypes>["invoke"]>[1]> & {
+      version: "v3";
+    },
+  ) => Promise<
+    DeepAgentRunStream<
+      Awaited<ReturnType<ReactAgent<TTypes>["invoke"]>>,
+      readonly [...TTypes["Tools"], ...DeepAgentBuiltinToolsTuple],
+      TTypes["Subagents"],
+      InferDeepAgentStreamExtensions<TTypes["StreamTransformers"]>
+    >
+  >) &
+    ReactAgent<TTypes>["streamEvents"];
+}
 
 /**
  * Helper type to resolve a DeepAgentTypeConfig from either:
@@ -303,20 +493,20 @@ export type InferSubagentReactAgentType<
  * @typeParam TMiddleware - The middleware array type for proper type inference
  * @typeParam TSubagents - The subagents array type for extracting subagent middleware states
  * @typeParam TTools - The tools array type
+ * @typeParam TStreamTransformers - Custom stream transformer factories
  */
 export interface CreateDeepAgentParams<
-  TResponse extends ResponseFormat = ResponseFormat,
+  TResponse extends SupportedResponseFormat = SupportedResponseFormat,
   ContextSchema extends AnnotationRoot<any> | InteropZodObject =
     AnnotationRoot<any>,
   TMiddleware extends readonly AgentMiddleware[] = readonly AgentMiddleware[],
-  TSubagents extends readonly (SubAgent | CompiledSubAgent)[] = readonly (
-    | SubAgent
-    | CompiledSubAgent
-  )[],
+  TSubagents extends readonly AnySubAgent[] = readonly AnySubAgent[],
   TTools extends readonly (ClientTool | ServerTool)[] = readonly (
     | ClientTool
     | ServerTool
   )[],
+  TStreamTransformers extends ReadonlyArray<() => StreamTransformer<any>> =
+    readonly [],
 > {
   /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
   model?: BaseLanguageModel | string;
@@ -326,7 +516,13 @@ export interface CreateDeepAgentParams<
   systemPrompt?: string | SystemMessage;
   /** Custom middleware to apply after standard middleware */
   middleware?: TMiddleware;
-  /** List of subagent specifications for task delegation */
+  /**
+   * List of subagent specifications for task delegation.
+   *
+   * Supports sync SubAgents, CompiledSubAgents, and AsyncSubAgents in the same array.
+   * AsyncSubAgents (identified by their `graphId` field) are automatically separated
+   * at runtime and wired to the async SubAgent middleware.
+   */
   subagents?: TSubagents;
   /** Structured output response format for the agent (Zod schema or other format) */
   responseFormat?: TResponse;
@@ -342,8 +538,8 @@ export interface CreateDeepAgentParams<
    * The factory receives a config object with state and store.
    */
   backend?:
-    | BackendProtocol
-    | ((config: { state: unknown; store?: BaseStore }) => BackendProtocol);
+    | AnyBackendProtocol
+    | ((config: { state: unknown; store?: BaseStore }) => AnyBackendProtocol);
   /** Optional interrupt configuration mapping tool names to interrupt configs */
   interruptOn?: Record<string, boolean | InterruptOnConfig>;
   /** The name of the agent */
@@ -386,4 +582,31 @@ export interface CreateDeepAgentParams<
    * ```
    */
   skills?: string[];
+  /**
+   * Filesystem permission rules for this agent.
+   *
+   * Rules are evaluated in declaration order; first match wins; permissive
+   * default. Applied to `ls`, `read_file`, `write_file`, `edit_file`, `glob`,
+   * and `grep`. Subagents inherit these rules unless they specify their own
+   * `permissions` field.
+   *
+   * @example
+   * ```ts
+   * createDeepAgent({
+   *   permissions: [
+   *     { operations: ["read"], paths: ["/workspace/**"] },
+   *     { operations: ["read"], paths: ["/**"], mode: "deny" },
+   *   ],
+   * });
+   * ```
+   */
+  permissions?: FilesystemPermission[];
+  /**
+   * Optional {@link StreamTransformer} factories to register with the underlying agent.
+   *
+   * Deepagents always registers its built-in subagent transformer; custom
+   * transformers are appended after it and are exposed on `run.extensions`
+   * when using `streamEvents(..., { version: "v3" })`.
+   */
+  streamTransformers?: TStreamTransformers;
 }

@@ -1,5 +1,4 @@
 #!/usr/bin/env npx tsx
-/* eslint-disable no-console */
 /**
  * arXiv Search.
  *

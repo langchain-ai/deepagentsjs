@@ -26,6 +26,7 @@
 # misc
 .DS_Store
 *.pem
+.idea
 
 # debug
 npm-debug.log*
@@ -57,3 +58,4 @@ agent-os
 # Sandbox workspace directory - created at runtime
 sandbox-workspace/
 coverage
+workspace/

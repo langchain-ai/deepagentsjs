@@ -6,7 +6,10 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { sandboxStandardTests, withRetry } from "@langchain/standard-tests";
+import {
+  sandboxStandardTests,
+  withRetry,
+} from "@langchain/sandbox-standard-tests/vitest";
 import os from "node:os";
 
 import { DaytonaSandbox } from "./index.js";

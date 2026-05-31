@@ -1,6 +1,7 @@
 export {
   createFilesystemMiddleware,
   type FilesystemMiddlewareOptions,
+  FILESYSTEM_TOOL_NAMES,
   // Eviction constants
   TOOLS_EXCLUDED_FROM_EVICTION,
   NUM_CHARS_PER_TOKEN,
@@ -40,13 +41,33 @@ export {
 // Middleware utilities
 export { appendToSystemMessage, prependToSystemMessage } from "./utils.js";
 
+// Completion callback middleware for async subagents
+export {
+  createCompletionCallbackMiddleware,
+  type CompletionCallbackOptions,
+} from "./completion_callback.js";
+
 // Summarization middleware
 export {
   // Backend-aware summarization middleware with history offloading
   createSummarizationMiddleware,
+  computeSummarizationDefaults,
   type SummarizationMiddlewareOptions,
+  type SummarizationEvent,
   type ContextSize,
   type TruncateArgsSettings,
   // Re-export base summarization middleware from langchain for users who don't need backend offloading
   summarizationMiddleware,
 } from "./summarization.js";
+
+// Async SubAgent middleware
+export {
+  createAsyncSubAgentMiddleware,
+  isAsyncSubAgent,
+  type AsyncSubAgentMiddlewareOptions,
+  type AsyncSubAgent,
+  type AsyncTask,
+  type AsyncTaskStatus,
+  ASYNC_TASK_SYSTEM_PROMPT,
+  ASYNC_TASK_TOOL_NAMES,
+} from "./async_subagents.js";

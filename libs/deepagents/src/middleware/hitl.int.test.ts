@@ -1,5 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { v4 as uuidv4 } from "uuid";
 
 import { MemorySaver, Command } from "@langchain/langgraph";
 import {
@@ -36,7 +35,7 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
         checkpointer,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       assertAllDeepAgentQualities(agent);
 
       // First invocation - should interrupt
@@ -130,7 +129,7 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
         checkpointer,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       assertAllDeepAgentQualities(agent);
 
       // First invocation - use subagent which should also interrupt
@@ -202,7 +201,7 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
         ],
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const result = await agent.invoke(
         {
           messages: [
@@ -254,7 +253,7 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
         checkpointer,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
 
       // Invoke with a task that will use the subagent which has HITL
       // The subagent should interrupt, and this interrupt should propagate
@@ -333,7 +332,7 @@ describe("Human-in-the-Loop (HITL) Integration Tests", () => {
         checkpointer,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
 
       // First invocation - should trigger interrupts for sample_tool and get_soccer_scores
       // but get_weather should run immediately

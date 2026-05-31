@@ -20,7 +20,7 @@ const internetSearch = tool(
       maxResults,
       tavilyApiKey: process.env.TAVILY_API_KEY,
     });
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // oxlint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     const tavilyResponse = await tavilySearch._call({ query });
     return tavilyResponse;
@@ -76,10 +76,9 @@ export const agent = createDeepAgent({
   systemPrompt,
   checkpointer: new MemorySaver(),
   store: new InMemoryStore(),
-  backend: (config) =>
-    new CompositeBackend(new StateBackend(config), {
-      "/memories/": new StoreBackend(config),
-    }),
+  backend: new CompositeBackend(new StateBackend(), {
+    "/memories/": new StoreBackend(),
+  }),
 });
 
 async function main() {

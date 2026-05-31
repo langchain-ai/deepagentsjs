@@ -117,6 +117,8 @@ describe("DaytonaSandbox", () => {
         language: "python",
         image: "python:3.12",
         resources: { cpu: 4, memory: 8 },
+        autoArchiveInterval: 60,
+        autoDeleteInterval: 120,
       });
 
       expect(mockDaytonaInstance.create).toHaveBeenCalledWith(
@@ -124,6 +126,26 @@ describe("DaytonaSandbox", () => {
           language: "python",
           image: "python:3.12",
           resources: { cpu: 4, memory: 8 },
+          autoArchiveInterval: 60,
+          autoDeleteInterval: 120,
+        }),
+      );
+    });
+
+    it("should pass archive and delete intervals for snapshot sandboxes", async () => {
+      await DaytonaSandbox.create({
+        language: "typescript",
+        snapshot: "my-snapshot-name",
+        autoArchiveInterval: 60,
+        autoDeleteInterval: 60,
+      });
+
+      expect(mockDaytonaInstance.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          language: "typescript",
+          snapshot: "my-snapshot-name",
+          autoArchiveInterval: 60,
+          autoDeleteInterval: 60,
         }),
       );
     });

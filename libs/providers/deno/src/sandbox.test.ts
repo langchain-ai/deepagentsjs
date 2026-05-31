@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import type { BackendRuntime } from "deepagents";
 import { DenoSandboxError } from "./types.js";
 
 // ============================================================================
@@ -374,15 +375,15 @@ describe("DenoSandbox", () => {
     it("should throw if not initialized", () => {
       const sandbox = new DenoSandbox();
 
-      expect(() => sandbox.sandbox).toThrow(DenoSandboxError);
-      expect(() => sandbox.sandbox).toThrow("not initialized");
+      expect(() => sandbox.instance).toThrow(DenoSandboxError);
+      expect(() => sandbox.instance).toThrow("not initialized");
     });
 
     it("should return sandbox instance after initialization", async () => {
       const sandbox = new DenoSandbox();
       await sandbox.initialize();
 
-      const sdkSandbox = sandbox.sandbox;
+      const sdkSandbox = sandbox.instance;
       expect(sdkSandbox).toBeDefined();
       expect(sdkSandbox.id).toBe("sandbox-mock-123");
     });
@@ -411,7 +412,7 @@ describe("DenoSandbox", () => {
 
   describe("static connect", () => {
     it("should reconnect to existing sandbox by ID", async () => {
-      const sandbox = await DenoSandbox.connect("existing-sandbox-id");
+      const sandbox = await DenoSandbox.fromId("existing-sandbox-id");
 
       expect(sandbox.id).toBe("existing-sandbox-id");
       expect(sandbox.isRunning).toBe(true);
@@ -686,22 +687,22 @@ describe("DenoSandbox", () => {
       expect(typeof sandbox.edit).toBe("function");
     });
 
-    it("should have lsInfo method from BaseSandbox", async () => {
+    it("should have ls method from BaseSandbox", async () => {
       const sandbox = await DenoSandbox.create();
 
-      expect(typeof sandbox.lsInfo).toBe("function");
+      expect(typeof sandbox.ls).toBe("function");
     });
 
-    it("should have grepRaw method from BaseSandbox", async () => {
+    it("should have grep method from BaseSandbox", async () => {
       const sandbox = await DenoSandbox.create();
 
-      expect(typeof sandbox.grepRaw).toBe("function");
+      expect(typeof sandbox.grep).toBe("function");
     });
 
-    it("should have globInfo method from BaseSandbox", async () => {
+    it("should have glob method from BaseSandbox", async () => {
       const sandbox = await DenoSandbox.create();
 
-      expect(typeof sandbox.globInfo).toBe("function");
+      expect(typeof sandbox.glob).toBe("function");
     });
   });
 
@@ -749,8 +750,10 @@ describe("DenoSandbox", () => {
   });
 
   describe("createDenoSandboxFactoryFromSandbox", () => {
-    // Mock StateAndStore for testing
-    const mockStateAndStore = { state: { files: {} }, store: undefined };
+    const mockRuntime = {
+      state: { files: {} },
+      store: undefined,
+    } as BackendRuntime;
 
     it("should return a BackendFactory function", async () => {
       const sandbox = await DenoSandbox.create();
@@ -763,8 +766,8 @@ describe("DenoSandbox", () => {
       const sandbox = await DenoSandbox.create();
       const factory = createDenoSandboxFactoryFromSandbox(sandbox);
 
-      const result1 = factory(mockStateAndStore);
-      const result2 = factory(mockStateAndStore);
+      const result1 = await Promise.resolve(factory(mockRuntime));
+      const result2 = await Promise.resolve(factory(mockRuntime));
 
       expect(result1).toBe(sandbox);
       expect(result2).toBe(sandbox);
@@ -775,8 +778,8 @@ describe("DenoSandbox", () => {
       const initialCalls = mockState.createCalls.length;
 
       const factory = createDenoSandboxFactoryFromSandbox(sandbox);
-      factory(mockStateAndStore);
-      factory(mockStateAndStore);
+      await Promise.resolve(factory(mockRuntime));
+      await Promise.resolve(factory(mockRuntime));
 
       expect(mockState.createCalls.length).toBe(initialCalls);
     });

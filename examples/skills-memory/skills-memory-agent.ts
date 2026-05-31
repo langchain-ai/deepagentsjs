@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Skills + Memory Agent Example
  *

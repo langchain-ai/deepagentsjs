@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Modal Sandbox Example
  *

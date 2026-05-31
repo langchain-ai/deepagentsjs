@@ -8,7 +8,6 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { v4 as uuidv4 } from "uuid";
 import { z } from "zod/v3";
 
 import {
@@ -158,7 +157,7 @@ describe("Subagent HITL Integration Tests - interrupt() primitive", () => {
         ],
       });
 
-      const threadId = uuidv4();
+      const threadId = crypto.randomUUID();
       const config = { configurable: { thread_id: threadId } };
 
       // Step 1: Invoke agent - sub-agent will use request_approval tool
@@ -282,7 +281,7 @@ describe("Subagent HITL Integration Tests - interrupt() primitive", () => {
         ],
       });
 
-      const threadId = uuidv4();
+      const threadId = crypto.randomUUID();
       const config = { configurable: { thread_id: threadId } };
 
       // Step 1: Invoke document-reviewer sub-agent
@@ -352,7 +351,7 @@ describe("Subagent HITL Integration Tests - interrupt() primitive", () => {
         ],
       });
 
-      const threadId = uuidv4();
+      const threadId = crypto.randomUUID();
       const config = { configurable: { thread_id: threadId } };
 
       // Step 1: Invoke interactive-agent to ask a question
@@ -432,7 +431,7 @@ describe("Subagent HITL Integration Tests - interrupt() primitive", () => {
         ],
       });
 
-      const threadId = uuidv4();
+      const threadId = crypto.randomUUID();
       const config = { configurable: { thread_id: threadId } };
 
       // Step 1: Start multi-step operation (3 steps)
@@ -516,7 +515,7 @@ describe("Subagent HITL Integration Tests - interrupt() primitive", () => {
         ],
       });
 
-      const threadId = uuidv4();
+      const threadId = crypto.randomUUID();
       const config = { configurable: { thread_id: threadId } };
 
       // Step 1: Request approval for a dangerous action
@@ -612,7 +611,7 @@ describe("Subagent HITL Integration Tests - interrupt() primitive", () => {
         ],
       });
 
-      const threadId = uuidv4();
+      const threadId = crypto.randomUUID();
       const config = { configurable: { thread_id: threadId } };
 
       // Test the interrupt() tool (askUser)

@@ -4,10 +4,10 @@
  * 2. A ReducedValue with merge-by-id + status-priority reducer
  *    (so parallel subagent todo updates don't clobber each other)
  *
- * This wraps langchain's todoListMiddleware and replaces its stateSchema
- * with one that uses ReducedValue for proper concurrent merging.
+ * This replaces langchain's todoListMiddleware with a stateSchema that uses
+ * ReducedValue for proper concurrent merging.
  */
-import { z } from "zod";
+import { z } from "zod/v4";
 import { randomUUID } from "crypto";
 import { Command, StateSchema, ReducedValue } from "@langchain/langgraph";
 import { tool } from "@langchain/core/tools";
@@ -29,32 +29,27 @@ const TodoSchema = z.object({
 
 type Todo = z.infer<typeof TodoSchema>;
 
+const STATUS_PRIORITY: Record<string, number> = {
+  pending: 0,
+  in_progress: 1,
+  completed: 2,
+};
+
 /**
  * Merge-by-id reducer with status priority.
  * - Existing IDs are updated in-place (never downgrading status)
  * - New IDs are appended
  * - Status priority: completed(2) > in_progress(1) > pending(0)
+ *
+ * Parallel subagents operate on stale snapshots of the todo list, so a late
+ * update must never move a todo backwards (e.g. completed -> in_progress).
  */
 function todosReducer(current: Todo[], update: Todo[]): Todo[] {
   if (!update) return current || [];
-  if (!current || current.length === 0) {
-    console.debug("[todosReducer] initial set", {
-      count: update.length,
-      ids: update.map((t) => t.id?.slice(0, 8)),
-    });
-    return update;
-  }
-
-  const STATUS_PRIORITY: Record<string, number> = {
-    pending: 0,
-    in_progress: 1,
-    completed: 2,
-  };
+  if (!current || current.length === 0) return update;
 
   const merged = [...current];
   const mergedById = new Map(merged.map((t, i) => [t.id, i]));
-  const changes: string[] = [];
-  const blocked: string[] = [];
 
   for (const todo of update) {
     const existingIdx = mergedById.get(todo.id);
@@ -62,32 +57,15 @@ function todosReducer(current: Todo[], update: Todo[]): Todo[] {
       const prev = merged[existingIdx]!;
       const prevPriority = STATUS_PRIORITY[prev.status] ?? 0;
       const nextPriority = STATUS_PRIORITY[todo.status] ?? 0;
-      // Never downgrade status — parallel subagents have stale snapshots
+      // Never downgrade status — parallel subagents have stale snapshots.
       if (nextPriority >= prevPriority) {
-        if (prev.status !== todo.status) {
-          changes.push(
-            `${(todo.id || "?").slice(0, 8)}: ${prev.status} → ${todo.status}`,
-          );
-        }
         merged[existingIdx] = todo;
-      } else {
-        blocked.push(
-          `${(todo.id || "?").slice(0, 8)}: BLOCKED ${prev.status} ← ${todo.status}`,
-        );
       }
     } else {
       mergedById.set(todo.id, merged.length);
       merged.push(todo);
     }
   }
-
-  console.debug("[todosReducer] merge", {
-    changes,
-    blocked,
-    resultStatuses: merged.map(
-      (t) => `${(t.id || "?").slice(0, 8)}:${t.status}`,
-    ),
-  });
 
   return merged;
 }
@@ -109,18 +87,12 @@ export interface TodoListMiddlewareOptions {
 export function todoListMiddleware(options?: TodoListMiddlewareOptions) {
   const writeTodos = tool(
     ({ todos }, config) => {
-      // Auto-generate UUIDs for any todos that don't have them
+      // Auto-generate UUIDs for any todos that don't have them so the
+      // merge-by-id reducer can track them across parallel subagent updates.
       const todosWithIds = todos.map((t) => ({
         ...t,
         id: t.id || randomUUID(),
       }));
-      console.debug("[todoListMiddleware] write_todos called", {
-        count: todosWithIds.length,
-        ids: todosWithIds.map((t) => t.id),
-        statuses: todosWithIds.map(
-          (t) => `${t.id.slice(0, 8)}:${t.status}`,
-        ),
-      });
       return new Command({
         update: {
           todos: todosWithIds,
@@ -139,9 +111,7 @@ export function todoListMiddleware(options?: TodoListMiddlewareOptions) {
         options?.toolDescription ??
         "Create and manage a structured task list. Pass the full list of todos with their current statuses.",
       schema: z.object({
-        todos: z
-          .array(TodoSchema)
-          .describe("List of todo items to update"),
+        todos: z.array(TodoSchema).describe("List of todo items to update"),
       }),
     },
   );
@@ -158,7 +128,7 @@ export function todoListMiddleware(options?: TodoListMiddlewareOptions) {
         ),
       }),
     afterModel: (state) => {
-      // Reject parallel write_todos calls
+      // Reject parallel write_todos calls — the list must be written atomically.
       const messages = state.messages;
       if (!messages || messages.length === 0) return undefined;
 

@@ -1,4 +1,5 @@
-import { z } from "zod";
+import { z } from "zod/v4";
+
 import {
   createMiddleware,
   createAgent,
@@ -7,14 +8,20 @@ import {
   ToolMessage,
   humanInTheLoopMiddleware,
   SystemMessage,
+  type ContentBlock,
+  type BaseMessage,
   type InterruptOnConfig,
   type ReactAgent,
+  type CreateAgentParams,
   StructuredTool,
+  context,
 } from "langchain";
 import { Command, getCurrentTaskInput, getWriter } from "@langchain/langgraph";
+import { randomUUID } from "crypto";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
+import { FilesystemPermission } from "../permissions/types.js";
 
 export type { AgentMiddleware };
 
@@ -56,117 +63,117 @@ export const DEFAULT_GENERAL_PURPOSE_DESCRIPTION =
 
 // Comprehensive task tool description from Python
 function getTaskToolDescription(subagentDescriptions: string[]): string {
-  return `
-Launch an ephemeral subagent to handle complex, multi-step independent tasks with isolated context windows.
+  return context`
+    Launch an ephemeral subagent to handle complex, multi-step independent tasks with isolated context windows.
 
-Available agent types and the tools they have access to:
-${subagentDescriptions.join("\n")}
+    Available agent types and the tools they have access to:
+    ${subagentDescriptions.join("\n")}
 
-When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
+    When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
 
-## Usage notes:
-1. Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses
-2. When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.
-3. Each agent invocation is stateless. You will not be able to send additional messages to the agent, nor will the agent be able to communicate with you outside of its final report. Therefore, your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.
-4. The agent's outputs should generally be trusted
-5. Clearly tell the agent whether you expect it to create content, perform analysis, or just do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent
-6. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
-7. When only the general-purpose agent is provided, you should use it for all tasks. It is great for isolating context and token usage, and completing specific, complex tasks, as it has all the same capabilities as the main agent.
+    ## Usage notes:
+    1. Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses
+    2. When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.
+    3. Each agent invocation is stateless. You will not be able to send additional messages to the agent, nor will the agent be able to communicate with you outside of its final report. Therefore, your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.
+    4. The agent's outputs should generally be trusted
+    5. Clearly tell the agent whether you expect it to create content, perform analysis, or just do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent
+    6. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
+    7. When only the general-purpose agent is provided, you should use it for all tasks. It is great for isolating context and token usage, and completing specific, complex tasks, as it has all the same capabilities as the main agent.
 
-### Example usage of the general-purpose agent:
+    ### Example usage of the general-purpose agent:
 
-<example_agent_descriptions>
-"general-purpose": use this agent for general purpose tasks, it has access to all tools as the main agent.
-</example_agent_descriptions>
+    <example_agent_descriptions>
+    "general-purpose": use this agent for general purpose tasks, it has access to all tools as the main agent.
+    </example_agent_descriptions>
 
-<example>
-User: "I want to conduct research on the accomplishments of Lebron James, Michael Jordan, and Kobe Bryant, and then compare them."
-Assistant: *Uses the task tool in parallel to conduct isolated research on each of the three players*
-Assistant: *Synthesizes the results of the three isolated research tasks and responds to the User*
-<commentary>
-Research is a complex, multi-step task in it of itself.
-The research of each individual player is not dependent on the research of the other players.
-The assistant uses the task tool to break down the complex objective into three isolated tasks.
-Each research task only needs to worry about context and tokens about one player, then returns synthesized information about each player as the Tool Result.
-This means each research task can dive deep and spend tokens and context deeply researching each player, but the final result is synthesized information, and saves us tokens in the long run when comparing the players to each other.
-</commentary>
-</example>
+    <example>
+    User: "I want to conduct research on the accomplishments of Lebron James, Michael Jordan, and Kobe Bryant, and then compare them."
+    Assistant: *Uses the task tool in parallel to conduct isolated research on each of the three players*
+    Assistant: *Synthesizes the results of the three isolated research tasks and responds to the User*
+    <commentary>
+    Research is a complex, multi-step task in it of itself.
+    The research of each individual player is not dependent on the research of the other players.
+    The assistant uses the task tool to break down the complex objective into three isolated tasks.
+    Each research task only needs to worry about context and tokens about one player, then returns synthesized information about each player as the Tool Result.
+    This means each research task can dive deep and spend tokens and context deeply researching each player, but the final result is synthesized information, and saves us tokens in the long run when comparing the players to each other.
+    </commentary>
+    </example>
 
-<example>
-User: "Analyze a single large code repository for security vulnerabilities and generate a report."
-Assistant: *Launches a single \`task\` subagent for the repository analysis*
-Assistant: *Receives report and integrates results into final summary*
-<commentary>
-Subagent is used to isolate a large, context-heavy task, even though there is only one. This prevents the main thread from being overloaded with details.
-If the user then asks followup questions, we have a concise report to reference instead of the entire history of analysis and tool calls, which is good and saves us time and money.
-</commentary>
-</example>
+    <example>
+    User: "Analyze a single large code repository for security vulnerabilities and generate a report."
+    Assistant: *Launches a single \`task\` subagent for the repository analysis*
+    Assistant: *Receives report and integrates results into final summary*
+    <commentary>
+    Subagent is used to isolate a large, context-heavy task, even though there is only one. This prevents the main thread from being overloaded with details.
+    If the user then asks followup questions, we have a concise report to reference instead of the entire history of analysis and tool calls, which is good and saves us time and money.
+    </commentary>
+    </example>
 
-<example>
-User: "Schedule two meetings for me and prepare agendas for each."
-Assistant: *Calls the task tool in parallel to launch two \`task\` subagents (one per meeting) to prepare agendas*
-Assistant: *Returns final schedules and agendas*
-<commentary>
-Tasks are simple individually, but subagents help silo agenda preparation.
-Each subagent only needs to worry about the agenda for one meeting.
-</commentary>
-</example>
+    <example>
+    User: "Schedule two meetings for me and prepare agendas for each."
+    Assistant: *Calls the task tool in parallel to launch two \`task\` subagents (one per meeting) to prepare agendas*
+    Assistant: *Returns final schedules and agendas*
+    <commentary>
+    Tasks are simple individually, but subagents help silo agenda preparation.
+    Each subagent only needs to worry about the agenda for one meeting.
+    </commentary>
+    </example>
 
-<example>
-User: "I want to order a pizza from Dominos, order a burger from McDonald's, and order a salad from Subway."
-Assistant: *Calls tools directly in parallel to order a pizza from Dominos, a burger from McDonald's, and a salad from Subway*
-<commentary>
-The assistant did not use the task tool because the objective is super simple and clear and only requires a few trivial tool calls.
-It is better to just complete the task directly and NOT use the \`task\`tool.
-</commentary>
-</example>
+    <example>
+    User: "I want to order a pizza from Dominos, order a burger from McDonald's, and order a salad from Subway."
+    Assistant: *Calls tools directly in parallel to order a pizza from Dominos, a burger from McDonald's, and a salad from Subway*
+    <commentary>
+    The assistant did not use the task tool because the objective is super simple and clear and only requires a few trivial tool calls.
+    It is better to just complete the task directly and NOT use the \`task\`tool.
+    </commentary>
+    </example>
 
-### Example usage with custom agents:
+    ### Example usage with custom agents:
 
-<example_agent_descriptions>
-"content-reviewer": use this agent after you are done creating significant content or documents
-"greeting-responder": use this agent when to respond to user greetings with a friendly joke
-"research-analyst": use this agent to conduct thorough research on complex topics
-</example_agent_description>
+    <example_agent_descriptions>
+    "content-reviewer": use this agent after you are done creating significant content or documents
+    "greeting-responder": use this agent when to respond to user greetings with a friendly joke
+    "research-analyst": use this agent to conduct thorough research on complex topics
+    </example_agent_description>
 
-<example>
-user: "Please write a function that checks if a number is prime"
-assistant: Sure let me write a function that checks if a number is prime
-assistant: First let me use the Write tool to write a function that checks if a number is prime
-assistant: I'm going to use the Write tool to write the following code:
-<code>
-function isPrime(n) {
-  if (n <= 1) return false
-  for (let i = 2; i * i <= n; i++) {
-    if (n % i === 0) return false
-  }
-  return true
-}
-</code>
-<commentary>
-Since significant content was created and the task was completed, now use the content-reviewer agent to review the work
-</commentary>
-assistant: Now let me use the content-reviewer agent to review the code
-assistant: Uses the Task tool to launch with the content-reviewer agent
-</example>
+    <example>
+    user: "Please write a function that checks if a number is prime"
+    assistant: Sure let me write a function that checks if a number is prime
+    assistant: First let me use the Write tool to write a function that checks if a number is prime
+    assistant: I'm going to use the Write tool to write the following code:
+    <code>
+    function isPrime(n) {{
+      if (n <= 1) return false
+      for (let i = 2; i * i <= n; i++) {{
+        if (n % i === 0) return false
+      }}
+      return true
+    }}
+    </code>
+    <commentary>
+    Since significant content was created and the task was completed, now use the content-reviewer agent to review the work
+    </commentary>
+    assistant: Now let me use the content-reviewer agent to review the code
+    assistant: Uses the Task tool to launch with the content-reviewer agent
+    </example>
 
-<example>
-user: "Can you help me research the environmental impact of different renewable energy sources and create a comprehensive report?"
-<commentary>
-This is a complex research task that would benefit from using the research-analyst agent to conduct thorough analysis
-</commentary>
-assistant: I'll help you research the environmental impact of renewable energy sources. Let me use the research-analyst agent to conduct comprehensive research on this topic.
-assistant: Uses the Task tool to launch with the research-analyst agent, providing detailed instructions about what research to conduct and what format the report should take
-</example>
+    <example>
+    user: "Can you help me research the environmental impact of different renewable energy sources and create a comprehensive report?"
+    <commentary>
+    This is a complex research task that would benefit from using the research-analyst agent to conduct thorough analysis
+    </commentary>
+    assistant: I'll help you research the environmental impact of renewable energy sources. Let me use the research-analyst agent to conduct comprehensive research on this topic.
+    assistant: Uses the Task tool to launch with the research-analyst agent, providing detailed instructions about what research to conduct and what format the report should take
+    </example>
 
-<example>
-user: "Hello"
-<commentary>
-Since the user is greeting, use the greeting-responder agent to respond with a friendly joke
-</commentary>
-assistant: "I'm going to use the Task tool to launch with the greeting-responder agent"
-</example>
-  `.trim();
+    <example>
+    user: "Hello"
+    <commentary>
+    Since the user is greeting, use the greeting-responder agent to respond with a friendly joke
+    </commentary>
+    assistant: "I'm going to use the Task tool to launch with the greeting-responder agent"
+    </example>
+  `;
 }
 
 /**
@@ -182,42 +189,46 @@ assistant: "I'm going to use the Task tool to launch with the greeting-responder
  * You can provide a custom `systemPrompt` to `createSubAgentMiddleware` to override
  * or extend this default.
  */
-export const TASK_SYSTEM_PROMPT = `## \`task\` (subagent spawner)
+export const TASK_SYSTEM_PROMPT = context`
+  ## \`task\` (subagent spawner)
 
-You have access to a \`task\` tool to launch short-lived subagents that handle isolated tasks. These agents are ephemeral — they live only for the duration of the task and return a single result.
+  You have access to a \`task\` tool to launch short-lived subagents that handle isolated tasks. These agents are ephemeral — they live only for the duration of the task and return a single result.
 
-When to use the task tool:
-- When a task is complex and multi-step, and can be fully delegated in isolation
-- When a task is independent of other tasks and can run in parallel
-- When a task requires focused reasoning or heavy token/context usage that would bloat the orchestrator thread
-- When sandboxing improves reliability (e.g. code execution, structured searches, data formatting)
-- When you only care about the output of the subagent, and not the intermediate steps (ex. performing a lot of research and then returned a synthesized report, performing a series of computations or lookups to achieve a concise, relevant answer.)
+  When to use the task tool:
+  - When a task is complex and multi-step, and can be fully delegated in isolation
+  - When a task is independent of other tasks and can run in parallel
+  - When a task requires focused reasoning or heavy token/context usage that would bloat the orchestrator thread
+  - When sandboxing improves reliability (e.g. code execution, structured searches, data formatting)
+  - When you only care about the output of the subagent, and not the intermediate steps (ex. performing a lot of research and then returned a synthesized report, performing a series of computations or lookups to achieve a concise, relevant answer.)
 
-Subagent lifecycle:
-1. **Spawn** → Provide clear role, instructions, and expected output
-2. **Run** → The subagent completes the task autonomously
-3. **Return** → The subagent provides a single structured result
-4. **Reconcile** → Incorporate or synthesize the result into the main thread
+  Subagent lifecycle:
+  1. **Spawn** → Provide clear role, instructions, and expected output
+  2. **Run** → The subagent completes the task autonomously
+  3. **Return** → The subagent provides a single structured result
+  4. **Reconcile** → Incorporate or synthesize the result into the main thread
 
-When NOT to use the task tool:
-- If you need to see the intermediate reasoning or steps after the subagent has completed (the task tool hides them)
-- If the task is trivial (a few tool calls or simple lookup)
-- If delegating does not reduce token usage, complexity, or context switching
-- If splitting would add latency without benefit
+  When NOT to use the task tool:
+  - If you need to see the intermediate reasoning or steps after the subagent has completed (the task tool hides them)
+  - If the task is trivial (a few tool calls or simple lookup)
+  - If delegating does not reduce token usage, complexity, or context switching
+  - If splitting would add latency without benefit
 
-## Important Task Tool Usage Notes to Remember
-- Whenever possible, parallelize the work that you do. This is true for both tool_calls, and for tasks. Whenever you have independent steps to complete - make tool_calls, or kick off tasks (subagents) in parallel to accomplish them faster. This saves time for the user, which is incredibly important.
-- Remember to use the \`task\` tool to silo independent tasks within a multi-part objective.
-- You should use the \`task\` tool whenever you have a complex task that will take multiple steps, and is independent from other tasks that the agent needs to complete. These agents are highly competent and efficient.`;
+  ## Important Task Tool Usage Notes to Remember
+  - Whenever possible, parallelize the work that you do. This is true for both tool_calls, and for tasks. Whenever you have independent steps to complete - make tool_calls, or kick off tasks (subagents) in parallel to accomplish them faster. This saves time for the user, which is incredibly important.
+  - Remember to use the \`task\` tool to silo independent tasks within a multi-part objective.
+  - You should use the \`task\` tool whenever you have a complex task that will take multiple steps, and is independent from other tasks that the agent needs to complete. These agents are highly competent and efficient.
+`;
 
 /**
  * Type definitions for pre-compiled agents.
  *
  * @typeParam TRunnable - The type of the runnable (ReactAgent or Runnable).
- *   When using `createAgent`, this preserves the middleware types for type inference.
+ *   When using `createAgent` or `createDeepAgent`, this preserves the middleware
+ *   types for type inference. Uses `ReactAgent<any>` to accept agents with any
+ *   type configuration (including DeepAgent instances).
  */
 export interface CompiledSubAgent<
-  TRunnable extends ReactAgent | Runnable = ReactAgent | Runnable,
+  TRunnable extends ReactAgent<any> | Runnable = ReactAgent<any> | Runnable,
 > {
   /** The name of the agent */
   name: string;
@@ -300,6 +311,55 @@ export interface SubAgent {
    * ```
    */
   skills?: string[];
+
+  /**
+   * Structured output response format for the subagent.
+   *
+   * When specified, the subagent will produce a `structuredResponse` conforming to the
+   * given schema. The structured response is JSON-serialized and returned as the
+   * ToolMessage content to the parent agent, replacing the default last-message extraction.
+   *
+   * Accepts any format supported by `createAgent`: Zod schemas, JSON schema objects,
+   * `toolStrategy(schema)`, `providerStrategy(schema)`, etc.
+   *
+   * @example
+   * ```typescript
+   * import { z } from "zod"
+   *
+   * const analyzer: SubAgent = {
+   *   name: "analyzer",
+   *   description: "Analyzes data and returns structured findings",
+   *   systemPrompt: "Analyze the data and return your findings.",
+   *   responseFormat: z.object({
+   *     findings: z.string(),
+   *     confidence: z.number(),
+   *   }),
+   * };
+   * ```
+   */
+  responseFormat?: CreateAgentParams["responseFormat"];
+
+  /**
+   * Filesystem permission rules for this subagent.
+   *
+   * When specified, these rules **replace** the parent agent's permissions
+   * for all tool calls made by this subagent. When omitted, the subagent
+   * inherits the parent agent's permissions.
+   *
+   * Subagent permissions are a full replacement, not a merge.
+   *
+   * @example
+   * ```ts
+   * // Parent denies /restricted/**; this subagent can read it.
+   * const reader: SubAgent = {
+   *   name: "reader",
+   *   permissions: [
+   *     { operations: ["read"], paths: ["/restricted/**"] },
+   *   ],
+   * };
+   * ```
+   */
+  permissions?: FilesystemPermission[];
 }
 
 /**
@@ -364,18 +424,41 @@ function filterStateForSubagent(
 }
 
 /**
- * Create Command with filtered state update from subagent result.
- *
- * Only includes non-excluded state keys. The todos key flows through
- * so that subagent auto-mark completions propagate to the parent.
+ * Invalid tool message block types
+ */
+const INVALID_TOOL_MESSAGE_BLOCK_TYPES = [
+  "tool_use",
+  "thinking",
+  "redacted_thinking",
+];
+
+/**
+ * Create Command with filtered state update from subagent result
  */
 function returnCommandWithStateUpdate(
   result: Record<string, unknown>,
   toolCallId: string,
 ): Command {
   const stateUpdate = filterStateForSubagent(result);
-  const messages = result.messages as Array<{ content: string }>;
-  const lastMessage = messages?.[messages.length - 1];
+
+  let content: string | ContentBlock[];
+
+  if (result.structuredResponse != null) {
+    content = JSON.stringify(result.structuredResponse);
+  } else {
+    const messages = result.messages as BaseMessage[];
+    const lastMessage = messages?.[messages.length - 1];
+
+    content = lastMessage?.content || "Task completed";
+    if (Array.isArray(content)) {
+      content = content.filter(
+        (block) => !INVALID_TOOL_MESSAGE_BLOCK_TYPES.includes(block.type),
+      );
+      if (content.length === 0) {
+        content = "Task completed";
+      }
+    }
+  }
 
   // Debug: log state keys being returned and todo details
   const stateKeys = Object.keys(stateUpdate);
@@ -405,7 +488,7 @@ function returnCommandWithStateUpdate(
       ...stateUpdate,
       messages: [
         new ToolMessage({
-          content: lastMessage?.content || "Task completed",
+          content,
           tool_call_id: toolCallId,
           name: "task",
         }),
@@ -461,6 +544,7 @@ function getSubagents(options: {
       systemPrompt: DEFAULT_SUBAGENT_PROMPT,
       tools: defaultTools as any,
       middleware: generalPurposeMiddleware,
+      name: "general-purpose",
     });
 
     agents["general-purpose"] = generalPurposeSubagent;
@@ -491,6 +575,10 @@ function getSubagents(options: {
         systemPrompt: agentParams.systemPrompt,
         tools: agentParams.tools ?? defaultTools,
         middleware,
+        name: agentParams.name,
+        ...(agentParams.responseFormat != null && {
+          responseFormat: agentParams.responseFormat,
+        }),
       });
     }
   }
@@ -565,8 +653,12 @@ function createTaskTool(options: {
         const w = getWriter(config) ?? getWriter();
         if (typeof w === "function") {
           streamWriter = w;
-        } else if (w && typeof (w as any).write === "function") {
-          streamWriter = (data: unknown) => (w as any).write(data);
+        } else if (
+          w &&
+          typeof (w as { write?: unknown }).write === "function"
+        ) {
+          streamWriter = (data: unknown) =>
+            (w as { write: (d: unknown) => void }).write(data);
         }
       } catch {
         // writer not available outside graph streaming context
@@ -577,60 +669,36 @@ function createTaskTool(options: {
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
 
-      // Mark todo as in_progress when subagent starts
-      if (todo_id && streamWriter) {
-        const todos = currentState.todos as
-          | Array<{ id: string; status: string; content: string }>
-          | undefined;
-        if (todos) {
-          const inProgressTodos = todos.map((t) =>
-            t.id === todo_id ? { ...t, status: "in_progress" } : t,
-          );
-          try {
-            streamWriter({
-              id: crypto.randomUUID(),
-              event: "__state_patch__",
-              todos: inProgressTodos,
-            });
-          } catch {
-            // emit failed — subagent will still mark completed when done
-          }
-        }
-      }
+      // Invoke the subagent with ls_agent_type metadata for LangSmith tracing
+      const subagentConfig = {
+        ...config,
+        configurable: {
+          ...config.configurable,
+          ls_agent_type: "subagent",
+        },
+      };
+      const result = (await subagent.invoke(
+        subagentState,
+        subagentConfig,
+      )) as Record<string, unknown>;
 
-      // Invoke the subagent
-      const result = (await subagent.invoke(subagentState, config)) as Record<
-        string,
-        unknown
-      >;
-
-      // Auto-mark the assigned parent todo as completed when the subagent finishes
+      // Auto-mark the assigned parent todo as completed when the subagent finishes.
       if (todo_id) {
-        const todosSource = result.todos ? "subagent-result" : "parent-state";
         const todos = (result.todos ?? currentState.todos) as
           | Array<{ id: string; status: string; content: string }>
           | undefined;
-        console.debug("[subagents] auto-mark attempt", {
-          todo_id: todo_id.slice(0, 12),
-          todosSource,
-          todosCount: todos?.length ?? 0,
-          todoIds: todos?.map((t) => t.id?.slice(0, 12)) ?? [],
-          matchFound: todos?.some((t) => t.id === todo_id) ?? false,
-        });
         if (todos) {
           result.todos = todos.map((t) =>
             t.id === todo_id ? { ...t, status: "completed" } : t,
           );
-          console.debug(
-            `[subagents] auto-marked todo ${todo_id.slice(0, 8)} as completed`,
-          );
 
-          // Emit immediately via writer() — bypasses Promise.all batching
-          // so the frontend sees this todo flip to completed right away
+          // Emit immediately via writer() — bypasses Promise.all batching so the
+          // frontend sees this todo flip to completed right away instead of all
+          // at once after every parallel subagent resolves.
           if (streamWriter) {
             try {
               streamWriter({
-                id: crypto.randomUUID(),
+                id: randomUUID(),
                 event: "__state_patch__",
                 todos: result.todos,
               });
@@ -641,9 +709,28 @@ function createTaskTool(options: {
         }
       }
 
-      // Return command with filtered state update
       if (!config.toolCall?.id) {
-        throw new Error("Tool call ID is required for subagent invocation");
+        if (result.structuredResponse != null) {
+          return JSON.stringify(result.structuredResponse);
+        }
+        const messages = result.messages as BaseMessage[];
+        const lastMessage = messages?.[messages.length - 1];
+        let content: string | ContentBlock[] =
+          lastMessage?.content || "Task completed";
+        if (Array.isArray(content)) {
+          content = content.filter(
+            (block) => !INVALID_TOOL_MESSAGE_BLOCK_TYPES.includes(block.type),
+          );
+          if (content.length === 0) {
+            return "Task completed";
+          }
+          return content
+            .map((block) =>
+              "text" in block ? block.text : JSON.stringify(block),
+            )
+            .join("\n");
+        }
+        return content;
       }
 
       return returnCommandWithStateUpdate(result, config.toolCall.id);

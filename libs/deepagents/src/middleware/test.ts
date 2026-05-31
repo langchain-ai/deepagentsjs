@@ -1,9 +1,9 @@
 import { vi } from "vitest";
 
 import type {
-  BackendProtocol,
+  BackendProtocolV2,
   FileDownloadResponse,
-  FileInfo,
+  LsResult,
   WriteResult,
   EditResult,
 } from "../backends/protocol.js";
@@ -22,7 +22,7 @@ export function createMockBackend(
     >;
     writeError?: string;
   } = {},
-): BackendProtocol {
+): BackendProtocolV2 {
   const writeError = config.writeError ?? undefined;
   const files = config.files ?? {};
   const directories = config.directories ?? {};
@@ -41,16 +41,18 @@ export function createMockBackend(
         };
       });
     },
-    async lsInfo(dirPath: string): Promise<FileInfo[]> {
+    async ls(dirPath: string): Promise<LsResult> {
       const entries = directories[dirPath];
       if (!entries) {
         throw new Error(`Directory not found: ${dirPath}`);
       }
       // Convert test format to FileInfo format
-      return entries.map((entry) => ({
-        path: entry.name + (entry.type === "directory" ? "/" : ""),
-        is_dir: entry.type === "directory",
-      }));
+      return {
+        files: entries.map((entry) => ({
+          path: entry.name + (entry.type === "directory" ? "/" : ""),
+          is_dir: entry.type === "directory",
+        })),
+      };
     },
     // Implement other required methods as stubs
     readFiles: vi.fn(),
@@ -73,5 +75,5 @@ export function createMockBackend(
       return { path, occurrences: 1 };
     },
     grep: vi.fn(),
-  } as unknown as BackendProtocol;
+  } as unknown as BackendProtocolV2;
 }

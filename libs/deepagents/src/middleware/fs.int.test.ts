@@ -12,8 +12,10 @@ import {
   StateBackend,
   StoreBackend,
   CompositeBackend,
+  type BackendRuntime,
 } from "../backends/index.js";
-import { v4 as uuidv4 } from "uuid";
+import { fileDataToString } from "../backends/utils.js";
+import type { FileData } from "../backends/protocol.js";
 import {
   SAMPLE_MODEL,
   getPremierLeagueStandings,
@@ -33,9 +35,9 @@ describe("Filesystem Middleware Integration Tests", () => {
       const store = useComposite ? new InMemoryStore() : undefined;
 
       const backend = useComposite
-        ? (stateAndStore: any) =>
-            new CompositeBackend(new StateBackend(stateAndStore), {
-              "/memories/": new StoreBackend(stateAndStore),
+        ? (runtime: BackendRuntime) =>
+            new CompositeBackend(new StateBackend(runtime), {
+              "/memories/": new StoreBackend(runtime),
             })
         : undefined; // Use default StateBackend
 
@@ -53,7 +55,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       });
 
       const config = useComposite
-        ? { configurable: { thread_id: uuidv4() } }
+        ? { configurable: { thread_id: crypto.randomUUID() } }
         : undefined;
       const response = await agent.invoke(
         {
@@ -80,9 +82,9 @@ describe("Filesystem Middleware Integration Tests", () => {
       const store = useComposite ? new InMemoryStore() : undefined;
 
       const backend = useComposite
-        ? (stateAndStore: any) =>
-            new CompositeBackend(new StateBackend(stateAndStore), {
-              "/memories/": new StoreBackend(stateAndStore),
+        ? (runtime: BackendRuntime) =>
+            new CompositeBackend(new StateBackend(runtime), {
+              "/memories/": new StoreBackend(runtime),
             })
         : undefined;
 
@@ -144,9 +146,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ] as const,
@@ -154,7 +156,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [new HumanMessage("List all of your files")],
@@ -209,9 +211,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ] as const,
@@ -219,7 +221,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [new HumanMessage("List all files in /pokemon")],
@@ -263,9 +265,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ] as const,
@@ -273,7 +275,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [new HumanMessage("Read the file /pizza.txt")],
@@ -294,7 +296,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       );
 
       expect(readMessage).toBeDefined();
-      expect(readMessage!.content.toString()).toContain(
+      expect(JSON.stringify(readMessage!.content)).toContain(
         "Pepperoni is the best",
       );
     },
@@ -317,9 +319,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -327,7 +329,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [new HumanMessage("Read the file /memories/test.txt")],
@@ -341,7 +343,58 @@ describe("Filesystem Middleware Integration Tests", () => {
       );
 
       expect(readMessage).toBeDefined();
-      expect(readMessage!.content.toString()).toContain("Hello from store");
+      expect(JSON.stringify(readMessage!.content)).toContain(
+        "Hello from store",
+      );
+    },
+  );
+
+  it.concurrent(
+    "should propagate store via invoke config (cloud deployment simulation)",
+    { timeout: 90 * 1000 },
+    async () => {
+      const checkpointer = new MemorySaver();
+      const store = new InMemoryStore();
+
+      await store.put(["filesystem"], "/test.txt", {
+        content: ["Hello from runtime store"],
+        created_at: "2021-01-01",
+        modified_at: "2021-01-01",
+      });
+
+      const agent = createAgent({
+        model: SAMPLE_MODEL,
+        middleware: [
+          createFilesystemMiddleware({
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
+              }),
+          }),
+        ],
+        checkpointer,
+      });
+
+      const config = {
+        configurable: { thread_id: crypto.randomUUID() },
+        store,
+      };
+      const response = await agent.invoke(
+        {
+          messages: [new HumanMessage("Read the file /memories/test.txt")],
+        },
+        config,
+      );
+
+      const messages = response.messages;
+      const readMessage = messages.find(
+        (msg) => ToolMessage.isInstance(msg) && msg.name === "read_file",
+      );
+
+      expect(readMessage).toBeDefined();
+      expect(JSON.stringify(readMessage!.content)).toContain(
+        "Hello from runtime store",
+      );
     },
   );
 
@@ -356,9 +409,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -366,7 +419,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       await agent.invoke(
         {
           messages: [
@@ -408,9 +461,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -418,7 +471,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [
@@ -455,9 +508,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -465,7 +518,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       await agent.invoke(
         {
           messages: [
@@ -498,9 +551,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         tools: [getNbaStandings],
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -508,7 +561,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [new HumanMessage("Get NBA standings")],
@@ -537,9 +590,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         tools: [getNbaStandings],
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
             toolTokenLimitBeforeEvict: 10000, // Low limit to trigger eviction
           }),
@@ -549,7 +602,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       });
 
       const config = {
-        configurable: { thread_id: uuidv4() },
+        configurable: { thread_id: crypto.randomUUID() },
         recursionLimit: 1000,
       };
       const response = await agent.invoke(
@@ -632,9 +685,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -642,7 +695,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [new HumanMessage("Write 'new content' to /existing.txt")],
@@ -679,7 +732,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         checkpointer,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [new HumanMessage("Use glob to find all Python files")],
@@ -744,9 +797,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -754,7 +807,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [
@@ -800,9 +853,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -810,7 +863,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [new HumanMessage("Use glob to find all Python files")],
@@ -856,7 +909,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         checkpointer,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [
@@ -925,9 +978,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -935,7 +988,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [
@@ -983,9 +1036,9 @@ describe("Filesystem Middleware Integration Tests", () => {
         model: SAMPLE_MODEL,
         middleware: [
           createFilesystemMiddleware({
-            backend: (stateAndStore: any) =>
-              new CompositeBackend(new StateBackend(stateAndStore), {
-                "/memories/": new StoreBackend(stateAndStore),
+            backend: (runtime: BackendRuntime) =>
+              new CompositeBackend(new StateBackend(runtime), {
+                "/memories/": new StoreBackend(runtime),
               }),
           }),
         ],
@@ -993,7 +1046,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
       const response = await agent.invoke(
         {
           messages: [
@@ -1041,7 +1094,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         checkpointer,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
 
       const response = await agent.invoke(
         {
@@ -1068,7 +1121,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         (msg) => ToolMessage.isInstance(msg) && msg.name === "read_file",
       );
       expect(readMessage).toBeDefined();
-      expect(readMessage!.content.toString()).toContain("Hello World");
+      expect(JSON.stringify(readMessage!.content)).toContain("Hello World");
     },
   );
 
@@ -1087,16 +1140,16 @@ describe("Filesystem Middleware Integration Tests", () => {
       });
 
       const agent = createDeepAgent({
-        backend: (stateAndStore: any) =>
-          new CompositeBackend(new StateBackend(stateAndStore), {
-            "/memories/": new StoreBackend(stateAndStore),
+        backend: (runtime: BackendRuntime) =>
+          new CompositeBackend(new StateBackend(runtime), {
+            "/memories/": new StoreBackend(runtime),
           }),
         checkpointer,
         store,
       });
 
       // Read from one thread
-      const config1 = { configurable: { thread_id: uuidv4() } };
+      const config1 = { configurable: { thread_id: crypto.randomUUID() } };
       const readResponse = await agent.invoke(
         {
           messages: [new HumanMessage("Read /memories/pokemon.txt")],
@@ -1109,10 +1162,10 @@ describe("Filesystem Middleware Integration Tests", () => {
         (msg) => ToolMessage.isInstance(msg) && msg.name === "read_file",
       );
       expect(readMessage).toBeDefined();
-      expect(readMessage!.content.toString()).toContain("Charmander");
+      expect(JSON.stringify(readMessage!.content)).toContain("Charmander");
 
       // List from another thread
-      const config2 = { configurable: { thread_id: uuidv4() } };
+      const config2 = { configurable: { thread_id: crypto.randomUUID() } };
       const listResponse = await agent.invoke(
         {
           messages: [new HumanMessage("List files in /memories")],
@@ -1128,7 +1181,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       expect(lsMessage!.content.toString()).toContain("/memories/pokemon.txt");
 
       // Edit from yet another thread
-      const config3 = { configurable: { thread_id: uuidv4() } };
+      const config3 = { configurable: { thread_id: crypto.randomUUID() } };
       const editResponse = await agent.invoke(
         {
           messages: [
@@ -1149,7 +1202,10 @@ describe("Filesystem Middleware Integration Tests", () => {
       // Verify the edit persisted in the store
       const updatedFile = await store.get(["filesystem"], "/pokemon.txt");
       expect(updatedFile).toBeDefined();
-      const content = (updatedFile!.value as any).content.join("\n");
+      const rawContent = (updatedFile!.value as any).content;
+      const content = Array.isArray(rawContent)
+        ? rawContent.join("\n")
+        : rawContent;
       expect(content).toContain("blazing");
     },
   );
@@ -1162,12 +1218,12 @@ describe("Filesystem Middleware Integration Tests", () => {
       const store = new InMemoryStore();
 
       const agent = createDeepAgent({
-        backend: (stateAndStore: any) => new StateBackend(stateAndStore),
+        backend: (runtime: BackendRuntime) => new StateBackend(runtime),
         checkpointer,
         store,
       });
 
-      const config = { configurable: { thread_id: uuidv4() } };
+      const config = { configurable: { thread_id: crypto.randomUUID() } };
 
       // Write a shortterm memory file
       const writeResponse = await agent.invoke(
@@ -1202,7 +1258,7 @@ describe("Filesystem Middleware Integration Tests", () => {
         .find((msg) => ToolMessage.isInstance(msg) && msg.name === "read_file");
       expect(readMessage).toBeDefined();
       expect(
-        readMessage!.content.toString().toLowerCase().includes("fiery"),
+        JSON.stringify(readMessage!.content).toLowerCase().includes("fiery"),
       ).toBe(true);
 
       // List all files in shortterm memory
@@ -1236,7 +1292,9 @@ describe("Filesystem Middleware Integration Tests", () => {
 
       const editedFiles = editResponse.files || {};
       expect(editedFiles["/charmander.txt"]).toBeDefined();
-      const content = editedFiles["/charmander.txt"]?.content.join("\n");
+      const content = editedFiles["/charmander.txt"]
+        ? fileDataToString(editedFiles["/charmander.txt"] as FileData)
+        : undefined;
       expect(content?.toLowerCase().includes("ember")).toBe(true);
 
       // Read again to verify edit
@@ -1257,8 +1315,54 @@ describe("Filesystem Middleware Integration Tests", () => {
         .find((msg) => ToolMessage.isInstance(msg) && msg.name === "read_file");
       expect(verifyReadMessage).toBeDefined();
       expect(
-        verifyReadMessage!.content.toString().toLowerCase().includes("ember"),
+        JSON.stringify(verifyReadMessage!.content)
+          .toLowerCase()
+          .includes("ember"),
       ).toBe(true);
+    },
+  );
+
+  it.concurrent(
+    "should propagate store via invoke config with createDeepAgent (cloud deployment simulation)",
+    { timeout: 90 * 1000 },
+    async () => {
+      const checkpointer = new MemorySaver();
+      const store = new InMemoryStore();
+
+      await store.put(["filesystem"], "/test.txt", {
+        content: ["Hello from cloud runtime store"],
+        created_at: "2021-01-01",
+        modified_at: "2021-01-01",
+      });
+
+      const agent = createDeepAgent({
+        backend: (runtime: BackendRuntime) =>
+          new CompositeBackend(new StateBackend(runtime), {
+            "/memories/": new StoreBackend(runtime),
+          }),
+        checkpointer,
+      });
+
+      const config = {
+        configurable: { thread_id: crypto.randomUUID() },
+        store,
+      };
+      const response = await agent.invoke(
+        {
+          messages: [new HumanMessage("Read the file /memories/test.txt")],
+        },
+        config,
+      );
+
+      const messages = response.messages;
+      const readMessage = messages.find(
+        (msg: any) => ToolMessage.isInstance(msg) && msg.name === "read_file",
+      );
+
+      expect(readMessage).toBeDefined();
+      expect(JSON.stringify(readMessage!.content)).toContain(
+        "Hello from cloud runtime store",
+      );
     },
   );
 });

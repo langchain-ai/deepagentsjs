@@ -2,27 +2,169 @@
  * StoreBackend: Adapter for LangGraph's BaseStore (persistent, cross-thread).
  */
 
-import type { Item } from "@langchain/langgraph";
+import {
+  Item,
+  getConfig,
+  getCurrentTaskInput,
+  getStore as getLangGraphStore,
+} from "@langchain/langgraph";
+import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import type {
-  BackendProtocol,
+  BackendOptions,
+  BackendProtocolV2,
   EditResult,
   FileData,
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
-  GrepMatch,
-  StateAndStore,
+  GlobResult,
+  GrepResult,
+  LsResult,
+  ReadRawResult,
+  ReadResult,
   WriteResult,
+  StateAndStore,
 } from "./protocol.js";
 import {
   createFileData,
   fileDataToString,
-  formatReadResponse,
+  getMimeType,
   globSearchFiles,
   grepMatchesFromFiles,
+  isFileDataBinary,
+  isFileDataV1,
+  isTextMimeType,
+  migrateToFileDataV2,
   performStringReplacement,
   updateFileData,
 } from "./utils.js";
+
+const NAMESPACE_COMPONENT_RE = /^[A-Za-z0-9\-_.@+:~]+$/;
+
+function getObjectRecord(value: unknown): Record<string, unknown> | undefined {
+  return value != null && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function getAssistantIdFromRecord(
+  value: Record<string, unknown> | undefined,
+): string | undefined {
+  const assistantId = value?.assistant_id ?? value?.assistantId;
+  return typeof assistantId === "string" && assistantId.length > 0
+    ? assistantId
+    : undefined;
+}
+
+/**
+ * Validate a namespace array.
+ *
+ * Each component must be a non-empty string containing only safe characters:
+ * alphanumeric (a-z, A-Z, 0-9), hyphen (-), underscore (_), dot (.),
+ * at sign (@), plus (+), colon (:), and tilde (~).
+ *
+ * Characters like *, ?, [, ], {, } etc. are rejected to prevent
+ * wildcard or glob injection in store lookups.
+ */
+function validateNamespace(namespace: string[]): string[] {
+  if (namespace.length === 0) {
+    throw new Error("Namespace array must not be empty.");
+  }
+  for (let i = 0; i < namespace.length; i++) {
+    const component = namespace[i];
+    if (typeof component !== "string") {
+      throw new TypeError(
+        `Namespace component at index ${i} must be a string, got ${typeof component}.`,
+      );
+    }
+    if (!component) {
+      throw new Error(`Namespace component at index ${i} must not be empty.`);
+    }
+    if (!NAMESPACE_COMPONENT_RE.test(component)) {
+      throw new Error(
+        `Namespace component at index ${i} contains disallowed characters: "${component}". ` +
+          `Only alphanumeric characters, hyphens, underscores, dots, @, +, colons, and tildes are allowed.`,
+      );
+    }
+  }
+  return namespace;
+}
+
+/**
+ * Context provided to dynamic namespace factory functions.
+ */
+export interface StoreBackendContext<StateT = unknown> {
+  /**
+   * Current graph state, when available.
+   *
+   * In legacy factory mode this is the injected runtime state. In zero-arg mode
+   * this is read from the current LangGraph execution context.
+   */
+  state: StateT;
+  /**
+   * Runnable config, when available.
+   *
+   * This mirrors the Python implementation's access to config metadata for
+   * namespace resolution.
+   */
+  config?: {
+    metadata?: Record<string, unknown>;
+    configurable?: Record<string, unknown>;
+  };
+  /**
+   * Legacy assistant identifier, resolved from config metadata first and then
+   * from the injected runtime for backwards compatibility.
+   */
+  assistantId?: string;
+}
+
+export type StoreBackendNamespaceFactory<StateT = unknown> = (
+  context: StoreBackendContext<StateT>,
+) => string[];
+
+/**
+ * Options for StoreBackend constructor.
+ */
+export interface StoreBackendOptions<StateT = unknown> extends BackendOptions {
+  /**
+   * Explicit store instance to use for persistence.
+   *
+   * This mirrors the Python API and allows constructing a backend directly with
+   * a store instance, e.g. `new StoreBackend({ store })`.
+   *
+   * When omitted, the backend uses the legacy injected runtime store or the
+   * LangGraph execution-context store.
+   */
+  store?: BaseStore;
+  /**
+   * Custom namespace for store operations.
+   *
+   * Accepts either a static namespace array or a factory that derives the
+   * namespace from the current backend context.
+   *
+   * If not provided, falls back to legacy assistant-id detection from config
+   * metadata, then the injected runtime's `assistantId`, and finally
+   * `["filesystem"]`.
+   *
+   * @example
+   * ```typescript
+   * // Static namespace
+   * new StoreBackend({
+   *   namespace: ["memories", orgId, userId, "filesystem"],
+   * });
+   *
+   * // Dynamic namespace
+   * new StoreBackend({
+   *   namespace: ({ state }) => [
+   *     "memories",
+   *     (state as { userId: string }).userId,
+   *     "filesystem",
+   *   ],
+   * });
+   * ```
+   */
+  namespace?: string[] | StoreBackendNamespaceFactory<StateT>;
+}
 
 /**
  * Backend that stores files in LangGraph's BaseStore (persistent).
@@ -30,45 +172,181 @@ import {
  * Uses LangGraph's Store for persistent, cross-conversation storage.
  * Files are organized via namespaces and persist across all threads.
  *
- * The namespace can include an optional assistant_id for multi-agent isolation.
+ * The namespace can be customized via a factory function for flexible
+ * isolation patterns (user-scoped, org-scoped, etc.), or falls back
+ * to legacy assistant_id-based isolation.
  */
-export class StoreBackend implements BackendProtocol {
-  private stateAndStore: StateAndStore;
+export class StoreBackend implements BackendProtocolV2 {
+  private stateAndStore: StateAndStore | undefined;
+  private storeOverride: BaseStore | undefined;
+  private _namespace: string[] | StoreBackendNamespaceFactory | undefined;
+  private fileFormat: "v1" | "v2";
 
-  constructor(stateAndStore: StateAndStore) {
-    this.stateAndStore = stateAndStore;
+  constructor(options?: StoreBackendOptions);
+  /**
+   * @deprecated Pass no `stateAndStore` argument
+   */
+  constructor(stateAndStore: StateAndStore, options?: StoreBackendOptions);
+  constructor(
+    stateAndStoreOrOptions?: StateAndStore | StoreBackendOptions,
+    options?: StoreBackendOptions,
+  ) {
+    let opts: StoreBackendOptions | undefined;
+    if (
+      stateAndStoreOrOptions != null &&
+      typeof stateAndStoreOrOptions === "object" &&
+      "state" in stateAndStoreOrOptions
+    ) {
+      // Legacy path
+      this.stateAndStore = stateAndStoreOrOptions;
+      opts = options;
+    } else {
+      this.stateAndStore = undefined;
+      opts = stateAndStoreOrOptions;
+    }
+
+    if (Array.isArray(opts?.namespace)) {
+      this._namespace = validateNamespace(opts.namespace);
+    } else if (opts?.namespace) {
+      this._namespace = opts.namespace;
+    }
+    this.storeOverride = opts?.store;
+    this.fileFormat = opts?.fileFormat ?? "v2";
   }
 
   /**
-   * Get the store instance.
+   * Get the BaseStore instance for persistent storage operations.
+   *
+   * In legacy mode, reads from the injected {@link StateAndStore}.
+   * In zero-arg mode, retrieves the store from the LangGraph execution
+   * context via {@link getLangGraphStore}.
    *
    * @returns BaseStore instance
-   * @throws Error if no store is available
+   * @throws Error if no store is available in either mode
    */
   private getStore() {
-    const store = this.stateAndStore.store;
-    if (!store) {
-      throw new Error("Store is required but not available in StateAndStore");
+    if (this.stateAndStore) {
+      const store = this.stateAndStore.store;
+      if (!store) {
+        throw new Error("Store is required but not available in runtime");
+      }
+      return store;
     }
+
+    if (this.storeOverride) {
+      return this.storeOverride;
+    }
+
+    const store = getLangGraphStore();
+    if (!store) {
+      throw new Error(
+        "Store is required but not available in LangGraph execution context. " +
+          "Ensure the graph was configured with a store.",
+      );
+    }
+
     return store;
+  }
+
+  /**
+   * Get the current graph state when available.
+   */
+  private getState(): unknown {
+    if (this.stateAndStore) {
+      return this.stateAndStore.state;
+    }
+
+    try {
+      return getCurrentTaskInput();
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Get the most relevant runnable config for namespace resolution.
+   */
+  private getNamespaceConfig():
+    | {
+        metadata?: Record<string, unknown>;
+        configurable?: Record<string, unknown>;
+      }
+    | undefined {
+    const injectedConfig = getObjectRecord(
+      (this.stateAndStore as { config?: unknown } | undefined)?.config,
+    );
+    if (injectedConfig) {
+      return {
+        metadata: getObjectRecord(injectedConfig.metadata),
+        configurable: getObjectRecord(injectedConfig.configurable),
+      };
+    }
+
+    try {
+      const config = getConfig();
+      const configRecord = getObjectRecord(config);
+      if (!configRecord) {
+        return undefined;
+      }
+      return {
+        metadata: getObjectRecord(configRecord.metadata),
+        configurable: getObjectRecord(configRecord.configurable),
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Legacy assistant-id detection compatible with both Python and the
+   * historical TypeScript `assistantId` runtime property.
+   */
+  private getLegacyAssistantId(): string | undefined {
+    const config = this.getNamespaceConfig();
+    const assistantIdFromConfig =
+      getAssistantIdFromRecord(config?.metadata) ??
+      getAssistantIdFromRecord(config?.configurable);
+    if (assistantIdFromConfig) {
+      return assistantIdFromConfig;
+    }
+
+    const assistantId = this.stateAndStore?.assistantId;
+    return typeof assistantId === "string" && assistantId.length > 0
+      ? assistantId
+      : undefined;
   }
 
   /**
    * Get the namespace for store operations.
    *
-   * If an assistant_id is available in stateAndStore, return
-   * [assistant_id, "filesystem"] to provide per-assistant isolation.
-   * Otherwise return ["filesystem"].
+   * Resolution order:
+   * 1. Explicit namespace from constructor options
+   * 2. Namespace factory resolved from the current backend context
+   * 3. Assistant ID from runtime config / LangGraph config metadata
+   * 4. Legacy `assistantId` from the injected runtime
+   * 5. `["filesystem"]`
    */
   protected getNamespace(): string[] {
-    const namespace = "filesystem";
-    const assistantId = this.stateAndStore.assistantId;
-
-    if (assistantId) {
-      return [assistantId, namespace];
+    if (Array.isArray(this._namespace)) {
+      return this._namespace;
     }
 
-    return [namespace];
+    if (this._namespace) {
+      return validateNamespace(
+        this._namespace({
+          state: this.getState(),
+          config: this.getNamespaceConfig(),
+          assistantId: this.getLegacyAssistantId(),
+        }),
+      );
+    }
+
+    const assistantId = this.getLegacyAssistantId();
+    if (assistantId) {
+      return [assistantId, "filesystem"];
+    }
+
+    return ["filesystem"];
   }
 
   /**
@@ -81,9 +359,14 @@ export class StoreBackend implements BackendProtocol {
   private convertStoreItemToFileData(storeItem: Item): FileData {
     const value = storeItem.value as any;
 
+    const hasValidContent =
+      value.content !== undefined &&
+      (Array.isArray(value.content) ||
+        typeof value.content === "string" ||
+        ArrayBuffer.isView(value.content));
+
     if (
-      !value.content ||
-      !Array.isArray(value.content) ||
+      !hasValidContent ||
       typeof value.created_at !== "string" ||
       typeof value.modified_at !== "string"
     ) {
@@ -94,6 +377,7 @@ export class StoreBackend implements BackendProtocol {
 
     return {
       content: value.content,
+      ...(value.mimeType ? { mimeType: value.mimeType } : {}),
       created_at: value.created_at,
       modified_at: value.modified_at,
     };
@@ -103,11 +387,12 @@ export class StoreBackend implements BackendProtocol {
    * Convert FileData to a value suitable for store.put().
    *
    * @param fileData - The FileData to convert
-   * @returns Object with content, created_at, and modified_at fields
+   * @returns Object with content, mimeType, created_at, and modified_at fields
    */
   private convertFileDataToStoreValue(fileData: FileData): Record<string, any> {
     return {
       content: fileData.content,
+      ...("mimeType" in fileData ? { mimeType: fileData.mimeType } : {}),
       created_at: fileData.created_at,
       modified_at: fileData.modified_at,
     };
@@ -162,10 +447,10 @@ export class StoreBackend implements BackendProtocol {
    * List files and directories in the specified directory (non-recursive).
    *
    * @param path - Absolute path to directory
-   * @returns List of FileInfo objects for files and directories directly in the directory.
+   * @returns LsResult with list of FileInfo objects on success or error on failure.
    *          Directories have a trailing / in their path and is_dir=true.
    */
-  async lsInfo(path: string): Promise<FileInfo[]> {
+  async ls(path: string): Promise<LsResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
 
@@ -200,7 +485,11 @@ export class StoreBackend implements BackendProtocol {
       // This is a file directly in the current directory
       try {
         const fd = this.convertStoreItemToFileData(item);
-        const size = fd.content.join("\n").length;
+        const size = isFileDataV1(fd)
+          ? fd.content.join("\n").length
+          : isFileDataBinary(fd)
+            ? fd.content.byteLength
+            : fd.content.length;
         infos.push({
           path: itemKey,
           is_dir: false,
@@ -224,27 +513,48 @@ export class StoreBackend implements BackendProtocol {
     }
 
     infos.sort((a, b) => a.path.localeCompare(b.path));
-    return infos;
+    return { files: infos };
   }
 
   /**
-   * Read file content with line numbers.
+   * Read file content.
+   *
+   * Text files are paginated by line offset/limit.
+   * Binary files return full Uint8Array content (offset/limit ignored).
    *
    * @param filePath - Absolute file path
    * @param offset - Line offset to start reading from (0-indexed)
    * @param limit - Maximum number of lines to read
-   * @returns Formatted file content with line numbers, or error message
+   * @returns ReadResult with content on success or error on failure
    */
   async read(
     filePath: string,
     offset: number = 0,
     limit: number = 500,
-  ): Promise<string> {
+  ): Promise<ReadResult> {
     try {
-      const fileData = await this.readRaw(filePath);
-      return formatReadResponse(fileData, offset, limit);
+      const readRawResult = await this.readRaw(filePath);
+      if (readRawResult.error || !readRawResult.data) {
+        return { error: readRawResult.error || "File data not found" };
+      }
+
+      const fileDataV2 = migrateToFileDataV2(readRawResult.data, filePath);
+
+      // ignore pagination and return full content
+      if (!isTextMimeType(fileDataV2.mimeType)) {
+        return { content: fileDataV2.content, mimeType: fileDataV2.mimeType };
+      }
+
+      if (typeof fileDataV2.content !== "string") {
+        return {
+          error: `File '${filePath}' has binary content but text MIME type`,
+        };
+      }
+      const lines = fileDataV2.content.split("\n");
+      const selected = lines.slice(offset, offset + limit);
+      return { content: selected.join("\n"), mimeType: fileDataV2.mimeType };
     } catch (e: any) {
-      return `Error: ${e.message}`;
+      return { error: e.message };
     }
   }
 
@@ -252,15 +562,17 @@ export class StoreBackend implements BackendProtocol {
    * Read file content as raw FileData.
    *
    * @param filePath - Absolute file path
-   * @returns Raw file content as FileData
+   * @returns ReadRawResult with raw file data on success or error on failure
    */
-  async readRaw(filePath: string): Promise<FileData> {
+  async readRaw(filePath: string): Promise<ReadRawResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
     const item = await store.get(namespace, filePath);
 
-    if (!item) throw new Error(`File '${filePath}' not found`);
-    return this.convertStoreItemToFileData(item);
+    if (!item) {
+      return { error: `File '${filePath}' not found` };
+    }
+    return { data: this.convertStoreItemToFileData(item) };
   }
 
   /**
@@ -280,7 +592,13 @@ export class StoreBackend implements BackendProtocol {
     }
 
     // Create new file
-    const fileData = createFileData(content);
+    const mimeType = getMimeType(filePath);
+    const fileData = createFileData(
+      content,
+      undefined,
+      this.fileFormat,
+      mimeType,
+    );
     const storeValue = this.convertFileDataToStoreValue(fileData);
     await store.put(namespace, filePath, storeValue);
     return { path: filePath, filesUpdate: null };
@@ -332,13 +650,14 @@ export class StoreBackend implements BackendProtocol {
   }
 
   /**
-   * Structured search results or error string for invalid input.
+   * Search file contents for a literal text pattern.
+   * Binary files are skipped.
    */
-  async grepRaw(
+  async grep(
     pattern: string,
     path: string = "/",
     glob: string | null = null,
-  ): Promise<GrepMatch[] | string> {
+  ): Promise<GrepResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
     const items = await this.searchStorePaginated(store, namespace);
@@ -353,13 +672,14 @@ export class StoreBackend implements BackendProtocol {
       }
     }
 
-    return grepMatchesFromFiles(files, pattern, path, glob);
+    const matches = grepMatchesFromFiles(files, pattern, path, glob);
+    return { matches };
   }
 
   /**
    * Structured glob matching returning FileInfo objects.
    */
-  async globInfo(pattern: string, path: string = "/"): Promise<FileInfo[]> {
+  async glob(pattern: string, path: string = "/"): Promise<GlobResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
     const items = await this.searchStorePaginated(store, namespace);
@@ -376,14 +696,20 @@ export class StoreBackend implements BackendProtocol {
 
     const result = globSearchFiles(files, pattern, path);
     if (result === "No files found") {
-      return [];
+      return { files: [] };
     }
 
     const paths = result.split("\n");
     const infos: FileInfo[] = [];
     for (const p of paths) {
       const fd = files[p];
-      const size = fd ? fd.content.join("\n").length : 0;
+      const size = fd
+        ? isFileDataV1(fd)
+          ? fd.content.join("\n").length
+          : isFileDataBinary(fd)
+            ? fd.content.byteLength
+            : fd.content.length
+        : 0;
       infos.push({
         path: p,
         is_dir: false,
@@ -391,7 +717,7 @@ export class StoreBackend implements BackendProtocol {
         modified_at: fd?.modified_at || "",
       });
     }
-    return infos;
+    return { files: infos };
   }
 
   /**
@@ -409,8 +735,22 @@ export class StoreBackend implements BackendProtocol {
 
     for (const [path, content] of files) {
       try {
-        const contentStr = new TextDecoder().decode(content);
-        const fileData = createFileData(contentStr);
+        const mimeType = getMimeType(path);
+        const isBinary = this.fileFormat === "v2" && !isTextMimeType(mimeType);
+
+        let fileData: FileData;
+        if (isBinary) {
+          fileData = createFileData(content, undefined, "v2", mimeType);
+        } else {
+          const contentStr = new TextDecoder().decode(content);
+          fileData = createFileData(
+            contentStr,
+            undefined,
+            this.fileFormat,
+            mimeType,
+          );
+        }
+
         const storeValue = this.convertFileDataToStoreValue(fileData);
         await store.put(namespace, path, storeValue);
         responses.push({ path, error: null });
@@ -442,9 +782,14 @@ export class StoreBackend implements BackendProtocol {
         }
 
         const fileData = this.convertStoreItemToFileData(item);
-        const contentStr = fileDataToString(fileData);
-        const content = new TextEncoder().encode(contentStr);
-        responses.push({ path, content, error: null });
+        const fileDataV2 = migrateToFileDataV2(fileData, path);
+
+        if (typeof fileDataV2.content === "string") {
+          const content = new TextEncoder().encode(fileDataV2.content);
+          responses.push({ path, content, error: null });
+        } else {
+          responses.push({ path, content: fileDataV2.content, error: null });
+        }
       } catch {
         responses.push({ path, content: null, error: "file_not_found" });
       }

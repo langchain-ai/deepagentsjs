@@ -1,0 +1,76 @@
+import { adaptSandboxInstance } from "../adapter.js";
+import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
+
+/**
+ * Register integration workflow tests that combine multiple operations.
+ */
+export function registerIntegrationTests<T extends AnySandboxInstance>(
+  getShared: () => T,
+  config: StandardTestsConfig<T>,
+  timeout: number,
+): void {
+  const { describe, it, expect } = config.runner;
+
+  describe("integration workflows", () => {
+    it(
+      "should complete a write-read-edit-read workflow",
+      async () => {
+        const shared = adaptSandboxInstance(getShared());
+        const filePath = config.resolvePath("intg-workflow.txt");
+
+        // Write initial content
+        const writeResult = await shared.write(filePath, "Original content");
+        expect(writeResult.error).toBeUndefined();
+
+        // Read it back
+        const content = await shared.read(filePath);
+        expect(content.content).toContain("Original content");
+
+        // Edit it
+        const editResult = await shared.edit(filePath, "Original", "Modified");
+        expect(editResult.error).toBeUndefined();
+
+        // Read again to verify
+        const updatedContent = await shared.read(filePath);
+        expect(updatedContent.content).toContain("Modified content");
+        expect(updatedContent.content).not.toContain("Original");
+      },
+      timeout,
+    );
+
+    it(
+      "should handle complex directory operations",
+      async () => {
+        const shared = adaptSandboxInstance(getShared());
+        const baseDir = config.resolvePath("intg-complex");
+
+        // Create directory structure with files
+        await shared.write(`${baseDir}/root.txt`, "root file");
+        await shared.write(`${baseDir}/subdir1/file1.txt`, "file 1");
+        await shared.write(`${baseDir}/subdir1/file2.py`, "file 2");
+        await shared.write(`${baseDir}/subdir2/file3.txt`, "file 3");
+
+        // List root directory
+        const lsResult = await shared.ls(baseDir);
+        expect(lsResult.error).toBeUndefined();
+        const result = lsResult.files || [];
+        const lsPaths = result.map((info) => info.path.replace(/\/$/, ""));
+        expect(lsPaths).toContain(`${baseDir}/root.txt`);
+        expect(lsPaths).toContain(`${baseDir}/subdir1`);
+        expect(lsPaths).toContain(`${baseDir}/subdir2`);
+
+        // Glob for txt files
+        const globResult = await shared.glob("**/*.txt", baseDir);
+        expect(globResult.error).toBeUndefined();
+        const files = globResult.files || [];
+        expect(files.length).toBe(3);
+
+        // Grep for a pattern
+        const grepResult = await shared.grep("file", baseDir);
+        expect(grepResult.error).toBeUndefined();
+        expect(grepResult.matches!.length).toBeGreaterThanOrEqual(3);
+      },
+      timeout,
+    );
+  });
+}

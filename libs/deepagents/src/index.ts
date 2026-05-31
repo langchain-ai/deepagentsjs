@@ -6,7 +6,29 @@
  */
 
 export { createDeepAgent } from "./agent.js";
+export { ConfigurationError, type ConfigurationErrorCode } from "./errors.js";
+
+// Export harness profiles
+export {
+  type HarnessProfile,
+  type HarnessProfileOptions,
+  type HarnessProfileConfigData,
+  type GeneralPurposeSubagentConfig,
+  createHarnessProfile,
+  serializeProfile,
+  parseHarnessProfileConfig,
+  registerHarnessProfile,
+  getHarnessProfile,
+  harnessProfileConfigSchema,
+  generalPurposeSubagentConfigSchema,
+  EMPTY_HARNESS_PROFILE,
+  REQUIRED_MIDDLEWARE_NAMES,
+} from "./profiles/index.js";
+
+export { createSubagentTransformer } from "./stream.js";
+export type { DeepAgentRunStream, SubagentRunStream } from "./stream.js";
 export type {
+  AnySubAgent,
   CreateDeepAgentParams,
   MergedDeepAgentState,
   // DeepAgent type bag and helper types
@@ -22,6 +44,9 @@ export type {
   ExtractSubAgentMiddleware,
   FlattenSubAgentMiddleware,
   InferSubAgentMiddlewareStates,
+  // Response format type utilities
+  SupportedResponseFormat,
+  InferStructuredResponse,
 } from "./types.js";
 
 // Export config
@@ -32,12 +57,23 @@ export {
   type SettingsOptions,
 } from "./config.js";
 
+// Export permissions
+export {
+  type FilesystemPermission,
+  type FilesystemOperation,
+  type PermissionMode,
+} from "./permissions/index.js";
+
 // Export middleware (matches Python's interface)
 export {
   createFilesystemMiddleware,
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
+  createSummarizationMiddleware,
+  computeSummarizationDefaults,
   createMemoryMiddleware,
+  createAsyncSubAgentMiddleware,
+  isAsyncSubAgent,
   // Skills middleware - matches Python's SkillsMiddleware interface
   createSkillsMiddleware,
   type SkillsMiddlewareOptions,
@@ -51,12 +87,19 @@ export {
   DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
   DEFAULT_SUBAGENT_PROMPT,
   TASK_SYSTEM_PROMPT,
+  // Completion callback middleware for async subagents
+  createCompletionCallbackMiddleware,
+  type CompletionCallbackOptions,
   // Other middleware types
   type FilesystemMiddlewareOptions,
   type SubAgentMiddlewareOptions,
   type MemoryMiddlewareOptions,
   type SubAgent,
   type CompiledSubAgent,
+  type AsyncSubAgentMiddlewareOptions,
+  type AsyncSubAgent,
+  type AsyncTask,
+  type AsyncTaskStatus,
 } from "./middleware/index.js";
 
 // Export shared state values (similar to LangGraph's messagesValue pattern)
@@ -86,15 +129,30 @@ export {
 export {
   StateBackend,
   StoreBackend,
+  type StoreBackendContext,
+  type StoreBackendNamespaceFactory,
+  type StoreBackendOptions,
   FilesystemBackend,
   CompositeBackend,
+  ContextHubBackend,
   BaseSandbox,
   isSandboxBackend,
+  isSandboxProtocol,
   SandboxError,
+  type AnyBackendProtocol,
   type BackendProtocol,
+  type BackendProtocolV1,
+  type BackendProtocolV2,
   type BackendFactory,
+  type BackendRuntime,
+  resolveBackend,
   type FileInfo,
   type GrepMatch,
+  type GlobResult,
+  type GrepResult,
+  type LsResult,
+  type ReadResult,
+  type ReadRawResult,
   type WriteResult,
   type EditResult,
   // Sandbox execution types
@@ -104,6 +162,9 @@ export {
   type FileDownloadResponse,
   type FileUploadResponse,
   type SandboxBackendProtocol,
+  type SandboxBackendProtocolV1,
+  type SandboxBackendProtocolV2,
+  type StateAndStore,
   type MaybePromise,
   // Sandbox provider types
   type SandboxInfo,
@@ -111,6 +172,19 @@ export {
   type SandboxListOptions,
   type SandboxGetOrCreateOptions,
   type SandboxDeleteOptions,
+  // LangSmith sandbox backend
+  LangSmithSandbox,
+  type LangSmithSandboxOptions,
+  type LangSmithSandboxCreateOptions,
+  type LangSmithSnapshot,
+  type LangSmithCaptureSnapshotOptions,
+  type LangSmithStartSandboxOptions,
   // Sandbox error types
   type SandboxErrorCode,
+  // Local shell backend
+  LocalShellBackend,
+  type LocalShellBackendOptions,
+  // Backend protocol adapters (v1 -> v2)
+  adaptBackendProtocol,
+  adaptSandboxProtocol,
 } from "./backends/index.js";
