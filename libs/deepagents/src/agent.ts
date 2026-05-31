@@ -3,11 +3,11 @@ import {
   createMiddleware,
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
-  todoListMiddleware,
   SystemMessage,
   type AgentMiddleware,
   context,
 } from "langchain";
+import { todoListMiddleware } from "./middleware/todos.js";
 import type {
   ClientTool,
   ServerTool,

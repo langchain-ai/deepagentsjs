@@ -16,7 +16,8 @@ import {
   StructuredTool,
   context,
 } from "langchain";
-import { Command, getCurrentTaskInput } from "@langchain/langgraph";
+import { Command, getCurrentTaskInput, getWriter } from "@langchain/langgraph";
+import { randomUUID } from "crypto";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
@@ -37,15 +38,17 @@ export const DEFAULT_SUBAGENT_PROMPT =
  *
  * When returning updates:
  * 1. The messages key is handled explicitly to ensure only the final message is included
- * 2. The todos and structuredResponse keys are excluded as they do not have a defined reducer
- *    and no clear meaning for returning them from a subagent to the main agent.
+ * 2. The structuredResponse key is excluded as it has no defined reducer and no clear meaning
+ *    for returning from a subagent to the main agent.
  * 3. The skillsMetadata and memoryContents keys are automatically excluded from subagent output
  *    to prevent parent state from leaking to child agents. Each agent loads its own skills/memory
  *    independently based on its middleware configuration.
+ *
+ * Note: todos flows through so subagents can mark their assigned parent todos as completed.
+ * The parent's todosReducer merges by id, so parallel subagent updates are safe.
  */
 const EXCLUDED_STATE_KEYS = [
   "messages",
-  "todos",
   "structuredResponse",
   "skillsMetadata",
   "memoryContents",
@@ -602,10 +605,10 @@ function createTaskTool(options: {
 
   return tool(
     async (
-      input: { description: string; subagent_type: string },
+      input: { description: string; subagent_type: string; todo_id?: string },
       config,
     ): Promise<Command | string> => {
-      const { description, subagent_type } = input;
+      const { description, subagent_type, todo_id } = input;
 
       // Validate subagent type
       if (!(subagent_type in subagentGraphs)) {
@@ -618,6 +621,25 @@ function createTaskTool(options: {
       }
 
       const subagent = subagentGraphs[subagent_type];
+
+      // Capture the stream writer BEFORE subagent.invoke() — the subagent's
+      // graph invocation replaces the AsyncLocalStorage context, so getWriter()
+      // returns undefined after invoke() completes.
+      let streamWriter: ((data: unknown) => void) | undefined;
+      try {
+        const w = getWriter(config) ?? getWriter();
+        if (typeof w === "function") {
+          streamWriter = w;
+        } else if (
+          w &&
+          typeof (w as { write?: unknown }).write === "function"
+        ) {
+          streamWriter = (data: unknown) =>
+            (w as { write: (d: unknown) => void }).write(data);
+        }
+      } catch {
+        // writer not available outside graph streaming context
+      }
 
       // Get current state and filter it for subagent
       const currentState = getCurrentTaskInput<Record<string, unknown>>();
@@ -636,6 +658,33 @@ function createTaskTool(options: {
         subagentState,
         subagentConfig,
       )) as Record<string, unknown>;
+
+      // Auto-mark the assigned parent todo as completed when the subagent finishes.
+      if (todo_id) {
+        const todos = (result.todos ?? currentState.todos) as
+          | Array<{ id: string; status: string; content: string }>
+          | undefined;
+        if (todos) {
+          result.todos = todos.map((t) =>
+            t.id === todo_id ? { ...t, status: "completed" } : t,
+          );
+
+          // Emit immediately via writer() — bypasses Promise.all batching so the
+          // frontend sees this todo flip to completed right away instead of all
+          // at once after every parallel subagent resolves.
+          if (streamWriter) {
+            try {
+              streamWriter({
+                id: randomUUID(),
+                event: "__state_patch__",
+                todos: result.todos,
+              });
+            } catch {
+              // emit failed — falls back to normal state update after Promise.all
+            }
+          }
+        }
+      }
 
       if (!config.toolCall?.id) {
         if (result.structuredResponse != null) {
@@ -674,6 +723,12 @@ function createTaskTool(options: {
           .string()
           .describe(
             `Name of the agent to use. Available: ${Object.keys(subagentGraphs).join(", ")}`,
+          ),
+        todo_id: z
+          .string()
+          .optional()
+          .describe(
+            "ID of the parent todo item to automatically mark as completed when this task finishes. Pass this to get real-time progress tracking.",
           ),
       }),
     },
