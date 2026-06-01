@@ -35,11 +35,6 @@ import { VirtualFileSystem } from "node-vfs-polyfill";
 import { HOST_ABSOLUTE_ROOT_ALLOWLIST } from "./const.js";
 import { VfsSandboxError, type VfsSandboxOptions } from "./types.js";
 
-interface HeredocPlaceholder {
-  token: string;
-  body: string;
-}
-
 /**
  * Node.js VFS Sandbox backend for deepagents.
  *
@@ -305,78 +300,146 @@ export class VfsSandbox extends BaseSandbox {
     }
 
     const vfsRootNames = new Set(topLevelNames);
-    const { command: protectedCommand, placeholders } =
-      this.#protectHeredocBodies(command);
-
-    // First rewrite unknown roots to sandbox unless explicitly allowlisted.
-    let rewritten = protectedCommand;
-    rewritten = rewritten.replace(
-      /(?<![\w/.-])\/([^/\s"';|&><!\])]+)(?=\/|[\s"';|&><!\])]|$)/gm,
-      (match, rootName: string) => {
-        if (vfsRootNames.has(rootName)) {
-          return match;
-        }
-        if (!HOST_ABSOLUTE_ROOT_ALLOWLIST.has(rootName)) {
-          return `${execDir}/${rootName}`;
-        }
-        return match;
-      },
-    );
-
-    // Then rewrite known VFS roots exactly (supports special characters).
     const sortedVfsRoots = [...vfsRootNames].sort(
       (a, b) => b.length - a.length,
     );
-    for (const rootName of sortedVfsRoots) {
-      const escapedRootName = rootName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      rewritten = rewritten.replace(
-        new RegExp(
-          `(?<![\\w/.-])/${escapedRootName}(?=/|[\\s"';|&><!\\])]|$)`,
-          "gm",
-        ),
-        `${execDir}/${rootName}`,
+    const lines = command.split("\n");
+    const rewrittenLines: string[] = [];
+    const pendingHeredocs: Array<{ delimiter: string; allowTabs: boolean }> =
+      [];
+
+    for (const line of lines) {
+      if (pendingHeredocs.length > 0) {
+        rewrittenLines.push(line);
+
+        const current = pendingHeredocs[0];
+        const candidate = current.allowTabs ? line.replace(/^\t+/, "") : line;
+        if (candidate === current.delimiter) {
+          pendingHeredocs.shift();
+        }
+        continue;
+      }
+
+      let rewrittenLine = line.replace(
+        /(?<![\w/.-])\/([^/\s"';|&><!\])]+)(?=\/|[\s"';|&><!\])]|$)/g,
+        (match, rootName: string) => {
+          if (vfsRootNames.has(rootName)) {
+            return match;
+          }
+          if (!HOST_ABSOLUTE_ROOT_ALLOWLIST.has(rootName)) {
+            return `${execDir}/${rootName}`;
+          }
+          return match;
+        },
       );
+
+      for (const rootName of sortedVfsRoots) {
+        const escapedRootName = rootName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        rewrittenLine = rewrittenLine.replace(
+          new RegExp(
+            `(?<![\\w/.-])/${escapedRootName}(?=/|[\\s"';|&><!\\])]|$)`,
+            "g",
+          ),
+          `${execDir}/${rootName}`,
+        );
+      }
+
+      rewrittenLines.push(rewrittenLine);
+
+      for (const heredoc of this.#extractHeredocDelimiters(line)) {
+        pendingHeredocs.push(heredoc);
+      }
     }
 
-    return this.#restoreHeredocBodies(rewritten, placeholders);
+    return rewrittenLines.join("\n");
   }
 
-  #protectHeredocBodies(command: string): {
-    command: string;
-    placeholders: HeredocPlaceholder[];
-  } {
-    const placeholders: HeredocPlaceholder[] = [];
-    const heredocPattern =
-      /((?:^|\n)[^\n]*<<-?\s*(['"]?)([^\s'"`\\]+)\2[^\n]*\n)([\s\S]*?)(\n(?:\t*)?\3(?=\n|$))/g;
+  #extractHeredocDelimiters(
+    line: string,
+  ): Array<{ delimiter: string; allowTabs: boolean }> {
+    const delimiters: Array<{ delimiter: string; allowTabs: boolean }> = [];
+    let inSingleQuote = false;
+    let inDoubleQuote = false;
+    let escapeNext = false;
 
-    const protectedCommand = command.replace(
-      heredocPattern,
-      (
-        _full,
-        prefix: string,
-        _quote: string,
-        _delimiter: string,
-        body: string,
-        suffix: string,
-      ) => {
-        const token = `__VFS_HEREDOC_BODY_${placeholders.length}__`;
-        placeholders.push({ token, body });
-        return `${prefix}${token}${suffix}`;
-      },
-    );
+    for (let i = 0; i < line.length; i += 1) {
+      const ch = line[i];
 
-    return { command: protectedCommand, placeholders };
-  }
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
 
-  #restoreHeredocBodies(
-    command: string,
-    placeholders: HeredocPlaceholder[],
-  ): string {
-    let restored = command;
-    for (const placeholder of placeholders) {
-      restored = restored.split(placeholder.token).join(placeholder.body);
+      if (ch === "\\" && !inSingleQuote) {
+        escapeNext = true;
+        continue;
+      }
+
+      if (ch === "'" && !inDoubleQuote) {
+        inSingleQuote = !inSingleQuote;
+        continue;
+      }
+
+      if (ch === '"' && !inSingleQuote) {
+        inDoubleQuote = !inDoubleQuote;
+        continue;
+      }
+
+      if (inSingleQuote || inDoubleQuote) {
+        continue;
+      }
+
+      if (line[i] !== "<" || line[i + 1] !== "<") {
+        continue;
+      }
+
+      let j = i + 2;
+      let allowTabs = false;
+      if (line[j] === "-") {
+        allowTabs = true;
+        j += 1;
+      }
+
+      while (j < line.length && /\s/.test(line[j])) {
+        j += 1;
+      }
+
+      if (j >= line.length) {
+        break;
+      }
+
+      let delimiter = "";
+      const quoteChar = line[j];
+      if (quoteChar === "'" || quoteChar === '"') {
+        j += 1;
+        const start = j;
+        while (j < line.length && line[j] !== quoteChar) {
+          j += 1;
+        }
+        delimiter = line.slice(start, j);
+        if (j < line.length) {
+          j += 1;
+        }
+      } else {
+        const start = j;
+        while (
+          j < line.length &&
+          !/\s/.test(line[j]) &&
+          !";|&<>()".includes(line[j])
+        ) {
+          j += 1;
+        }
+        delimiter = line.slice(start, j);
+      }
+
+      if (delimiter.length > 0) {
+        delimiters.push({ delimiter, allowTabs });
+      }
+
+      i = j - 1;
     }
-    return restored;
+
+    return delimiters;
   }
 
   /**
