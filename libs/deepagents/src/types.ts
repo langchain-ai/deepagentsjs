@@ -27,6 +27,7 @@ import type { AsyncSubAgent, SubAgent } from "./middleware/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type {
   AnnotationRoot,
+  AnyStateSchema,
   StateDefinitionInit,
   StreamTransformer,
 } from "@langchain/langgraph";
@@ -510,7 +511,8 @@ export interface CreateDeepAgentParams<
   )[],
   TStreamTransformers extends ReadonlyArray<() => StreamTransformer<any>> =
     readonly [],
-  TStateSchema extends StateDefinitionInit | undefined = undefined,
+  TStateSchema extends AnyStateSchema | InteropZodObject | undefined =
+    undefined,
 > {
   /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
   model?: BaseLanguageModel | string;
