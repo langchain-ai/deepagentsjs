@@ -261,9 +261,13 @@ const SkillsStateSchema = new StateSchema({
 });
 
 /**
- * Skills System Documentation prompt template.
+ * Skills System prompt template for eager discovery.
+ *
+ * Used when skill count is at or below the skill count threshold
+ * (or when no threshold is configured). Injects all skill names and
+ * descriptions directly into the system prompt.
  */
-const SKILLS_SYSTEM_PROMPT = context`
+const EAGER_SKILLS_SYSTEM_PROMPT = context`
   ## Skills System
 
   You have access to a skills library that provides specialized capabilities and domain knowledge.
@@ -305,6 +309,55 @@ const SKILLS_SYSTEM_PROMPT = context`
   4. Use any helper scripts with absolute paths
 
   Remember: Skills are tools to make you more capable and consistent. When in doubt, check if a skill exists for the task!
+`;
+
+/**
+ * Skills System prompt template for lazy discovery.
+ *
+ * Used when skill count exceeds the skill count threshold. Directs
+ * the agent to grep a skills index file instead of listing all
+ * skills inline.
+ */
+const LAZY_SKILLS_SYSTEM_PROMPT = context`
+  ## Skills System
+
+  You have access to a skills library that provides specialized capabilities and domain knowledge.
+
+  {skills_locations}
+
+  **Available Skills:**
+
+  There are {skill_count} skills available. A skills index is available at \`{index_path}\` containing one line per skill (name and description). Use \`grep\` on this file to find relevant skills.
+
+  **How to Use Skills (Progressive Disclosure):**
+
+  Skills follow a **progressive disclosure** pattern. Only search for skills when the task requires specialized knowledge or a structured workflow:
+
+  1. **Find relevant skills**: Use \`grep\` on \`{index_path}\` to search for skills matching the task
+  2. **Read the skill's full instructions**: Use \`read_file\` on the SKILL.md path shown in the grep result.
+     Pass \`limit=${DEFAULT_SKILL_READ_LINE_LIMIT}\` since the default of ${DEFAULT_READ_LINE_LIMIT} lines is too small for most skill files.
+  3. **Follow the skill's instructions**: SKILL.md contains step-by-step workflows, best practices, and examples
+  4. **Access supporting files**: Skills may include scripts, configs, or reference docs - use absolute paths
+
+  **When to Use Skills:**
+  - When the user's request matches a skill's domain (e.g., "process invoices" → grep for "invoice")
+  - When you need specialized knowledge or structured workflows
+  - When a skill provides proven patterns for complex tasks
+
+  **Executing Skill Scripts:**
+  Skills may contain scripts or other executable files. Always use absolute paths.
+
+  **Example Workflow:**
+
+  User: "Can you help me process these invoices?"
+
+  1. Search the skills index: \`grep("invoice", "{index_path}")\`
+  2. See "invoice-parser" in results → Read its SKILL.md for full instructions
+  3. Read the full skill file: \`read_file(path, limit=${DEFAULT_SKILL_READ_LINE_LIMIT})\`
+  4. Follow the skill's workflow
+  5. Use any helper scripts with absolute paths
+
+  Remember: Skills are tools to make you more capable and consistent. When in doubt, search the skills index for the task!
 `;
 
 /**
@@ -780,7 +833,10 @@ async function writeSkillsIndex(
   const adaptedBackend = adaptBackendProtocol(backend);
   const content = formatSkillsIndex(skills);
 
-  await adaptedBackend.write(SKILLS_INDEX_PATH, content);
+  const result = await adaptedBackend.write(SKILLS_INDEX_PATH, content);
+  if (result.error) {
+    throw new Error(result.error);
+  }
   return SKILLS_INDEX_PATH;
 }
 
@@ -888,14 +944,28 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
           ? loadedSkills
           : (request.state?.skillsMetadata as SkillMetadata[]) || [];
 
-      // Format skills section
       const skillsLocations = formatSkillsLocations(sources);
-      const skillsList = formatSkillsList(skillsMetadata, sources);
 
-      const skillsSection = SKILLS_SYSTEM_PROMPT.replace(
-        "{skills_locations}",
-        skillsLocations,
-      ).replace("{skills_list}", skillsList);
+      let skillsSection: string;
+
+      if (
+        indexPath !== undefined &&
+        skillCountThreshold !== undefined &&
+        skillsMetadata.length > skillCountThreshold
+      ) {
+        skillsSection = LAZY_SKILLS_SYSTEM_PROMPT.replace(
+          "{skills_locations}",
+          skillsLocations,
+        )
+          .replace(/\{skill_count\}/g, String(skillsMetadata.length))
+          .replace(/\{index_path\}/g, indexPath);
+      } else {
+        const skillsList = formatSkillsList(skillsMetadata, sources);
+        skillsSection = EAGER_SKILLS_SYSTEM_PROMPT.replace(
+          "{skills_locations}",
+          skillsLocations,
+        ).replace("{skills_list}", skillsList);
+      }
 
       // Combine with existing system message
       const newSystemMessage = request.systemMessage.concat(skillsSection);

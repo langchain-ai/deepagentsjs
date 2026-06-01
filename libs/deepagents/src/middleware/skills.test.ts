@@ -2330,4 +2330,98 @@ describe("deferred skill loading", () => {
 
     expect(result?.skillsMetadata).toHaveLength(5);
   });
+
+  it("should use lazy prompt when skill count exceeds threshold", async () => {
+    const { files, entries } = makeSkills(5);
+    const mockBackend = createMockBackend({
+      files,
+      directories: { "/skills/user/": entries },
+    });
+
+    const middleware = createSkillsMiddleware({
+      backend: mockBackend,
+      sources: ["/skills/user/"],
+      skillCountThreshold: 3,
+    });
+
+    // @ts-expect-error - typing issue in LangChain
+    await middleware.beforeAgent?.({});
+
+    const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+    const request: any = {
+      systemMessage: new SystemMessage("Base prompt"),
+      state: {},
+    };
+
+    middleware.wrapModelCall!(request, mockHandler);
+
+    const modifiedRequest = mockHandler.mock.calls[0][0];
+    const prompt = modifiedRequest.systemMessage.text;
+    expect(prompt).toContain("5 skills available");
+    expect(prompt).toContain("/skills/.skills-index");
+    expect(prompt).toContain("grep");
+    expect(prompt).not.toContain("skill-0: Skill number 0");
+  });
+
+  it("should use eager prompt when skill count is at or below threshold", async () => {
+    const { files, entries } = makeSkills(3);
+    const mockBackend = createMockBackend({
+      files,
+      directories: { "/skills/user/": entries },
+    });
+
+    const middleware = createSkillsMiddleware({
+      backend: mockBackend,
+      sources: ["/skills/user/"],
+      skillCountThreshold: 3,
+    });
+
+    // @ts-expect-error - typing issue in LangChain
+    await middleware.beforeAgent?.({});
+
+    const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+    const request: any = {
+      systemMessage: new SystemMessage("Base prompt"),
+      state: {},
+    };
+
+    middleware.wrapModelCall!(request, mockHandler);
+
+    const modifiedRequest = mockHandler.mock.calls[0][0];
+    const prompt = modifiedRequest.systemMessage.text;
+    expect(prompt).toContain("skill-0");
+    expect(prompt).toContain("Skill number 0");
+    expect(prompt).not.toContain(".skills-index");
+  });
+
+  it("should use eager prompt when index write failed", async () => {
+    const { files, entries } = makeSkills(5);
+    const mockBackend = createMockBackend({
+      files,
+      directories: { "/skills/user/": entries },
+      writeError: "write failed",
+    });
+
+    const middleware = createSkillsMiddleware({
+      backend: mockBackend,
+      sources: ["/skills/user/"],
+      skillCountThreshold: 3,
+    });
+
+    // @ts-expect-error - typing issue in LangChain
+    await middleware.beforeAgent?.({});
+
+    const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+    const request: any = {
+      systemMessage: new SystemMessage("Base prompt"),
+      state: {},
+    };
+
+    middleware.wrapModelCall!(request, mockHandler);
+
+    const modifiedRequest = mockHandler.mock.calls[0][0];
+    const prompt = modifiedRequest.systemMessage.text;
+    expect(prompt).toContain("skill-0");
+    expect(prompt).not.toContain(".skills-index");
+  });
 });
