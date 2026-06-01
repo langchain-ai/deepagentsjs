@@ -322,6 +322,91 @@ describe("streamEvents", () => {
     }
   });
 
+  it("isolates toolCalls for parallel same-type subagent invocations", async () => {
+    const transformer = createSubagentTransformer([])();
+    const projection = transformer.init();
+    const iterator = projection.subagents[Symbol.asyncIterator]();
+
+    const nextA = iterator.next();
+    transformer.process(
+      makeToolEvent([], {
+        event: "tool-started",
+        tool_name: "task",
+        tool_call_id: "task-a",
+        input: {
+          description: "Task A",
+          subagent_type: "researcher",
+        },
+      }),
+    );
+    const subA = (await nextA).value;
+
+    const nextB = iterator.next();
+    transformer.process(
+      makeToolEvent([], {
+        event: "tool-started",
+        tool_name: "task",
+        tool_call_id: "task-b",
+        input: {
+          description: "Task B",
+          subagent_type: "researcher",
+        },
+      }),
+    );
+    const subB = (await nextB).value;
+
+    expect(subA.name).toBe("researcher");
+    expect(subB.name).toBe("researcher");
+    expect(subA.toolCalls).not.toBe(subB.toolCalls);
+
+    const pingAIter = subA.toolCalls[Symbol.asyncIterator]();
+    const pingBIter = subB.toolCalls[Symbol.asyncIterator]();
+
+    const nextPingA = pingAIter.next();
+    transformer.process(
+      makeToolEvent(["tools:task-a", "tools"], {
+        event: "tool-started",
+        tool_name: "ping",
+        tool_call_id: "ping-a",
+        input: { value: "from-A" },
+      }),
+    );
+    transformer.process(
+      makeToolEvent(["tools:task-a", "tools"], {
+        event: "tool-finished",
+        tool_name: "ping",
+        tool_call_id: "ping-a",
+        output: "pong:A",
+      }),
+    );
+    const pingA = (await nextPingA).value;
+    expect(pingA.name).toBe("ping");
+    expect(pingA.input).toEqual({ value: "from-A" });
+
+    const nextPingB = pingBIter.next();
+    transformer.process(
+      makeToolEvent(["tools:task-b", "tools"], {
+        event: "tool-started",
+        tool_name: "ping",
+        tool_call_id: "ping-b",
+        input: { value: "from-B" },
+      }),
+    );
+    transformer.process(
+      makeToolEvent(["tools:task-b", "tools"], {
+        event: "tool-finished",
+        tool_name: "ping",
+        tool_call_id: "ping-b",
+        output: "pong:B",
+      }),
+    );
+    const pingB = (await nextPingB).value;
+    expect(pingB.name).toBe("ping");
+    expect(pingB.input).toEqual({ value: "from-B" });
+
+    transformer.finalize?.();
+  });
+
   it("resolves subagent output from the subagent lifecycle before root task completion", async () => {
     const transformer = createSubagentTransformer([])();
     const projection = transformer.init();

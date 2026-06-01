@@ -148,10 +148,17 @@ interface SubagentProjection {
 interface PendingSubagent {
   name: string;
   callId: string;
+  invocationKey: string;
   resolveTaskInput: (v: string) => void;
   resolveOutput: (v: unknown) => void;
   rejectOutput: (e: unknown) => void;
 }
+
+type SubagentStreamLogs = {
+  messagesLog: StreamChannel<ChatModelStream>;
+  toolCallsLog: StreamChannel<ToolCallStream<string, unknown, ToolMessage>>;
+  nestedSubagentsLog: StreamChannel<SubagentRunStream>;
+};
 
 /**
  * Native transformer that correlates `task` tool calls into
@@ -170,19 +177,12 @@ export function createSubagentTransformer(
     const pendingByNamespaceSegment = new Map<string, PendingSubagent>();
     const latestValuesByNamespaceSegment = new Map<string, unknown>();
 
-    const subagentsByName = new Map<
-      string,
-      {
-        messagesLog: StreamChannel<ChatModelStream>;
-        toolCallsLog: StreamChannel<
-          ToolCallStream<string, unknown, ToolMessage>
-        >;
-        nestedSubagentsLog: StreamChannel<SubagentRunStream>;
-      }
-    >();
+    const subagentsByKey = new Map<string, SubagentStreamLogs>();
 
-    /** Maps tools-node namespace segment to subagent name. */
-    const toolsNodeToName = new Map<string, string>();
+    /** Maps tools-node namespace segment to subagent invocation key. */
+    const toolsNodeToKey = new Map<string, string>();
+
+    let fallbackInvocationSeq = 0;
 
     const childToolCalls = new Map<
       string,
@@ -194,7 +194,7 @@ export function createSubagentTransformer(
       }
     >();
 
-    /** Active ChatModelStreamImpl per subagent (keyed by subagent name). */
+    /** Active ChatModelStreamImpl per subagent invocation. */
     const activeMessages = new Map<
       string,
       {
@@ -202,6 +202,12 @@ export function createSubagentTransformer(
         eventsLog: StreamChannel<ChatModelStreamEvent>;
       }
     >();
+
+    function subagentInvocationKey(toolCallId: string | undefined): string {
+      if (toolCallId) return `task:${toolCallId}`;
+      fallbackInvocationSeq += 1;
+      return `subagent:${fallbackInvocationSeq}`;
+    }
 
     function deletePendingSubagent(pending: PendingSubagent): void {
       pendingByCallId.delete(pending.callId);
@@ -217,8 +223,8 @@ export function createSubagentTransformer(
       return ns.length === path.length + 1 ? ns[path.length] : undefined;
     }
 
-    function getOrCreateSubagentLogs(name: string) {
-      let logs = subagentsByName.get(name);
+    function getOrCreateSubagentLogs(invocationKey: string) {
+      let logs = subagentsByKey.get(invocationKey);
       if (!logs) {
         logs = {
           messagesLog: StreamChannel.local<ChatModelStream>(),
@@ -226,7 +232,7 @@ export function createSubagentTransformer(
             StreamChannel.local<ToolCallStream<string, unknown, ToolMessage>>(),
           nestedSubagentsLog: StreamChannel.local<SubagentRunStream>(),
         };
-        subagentsByName.set(name, logs);
+        subagentsByKey.set(invocationKey, logs);
       }
       return logs;
     }
@@ -274,9 +280,12 @@ export function createSubagentTransformer(
               rejectOutput = rej;
             });
 
+            const invocationKey = subagentInvocationKey(toolCallId);
+
             const pending: PendingSubagent = {
               name: subagentName,
               callId: toolCallId,
+              invocationKey,
               resolveTaskInput,
               resolveOutput,
               rejectOutput,
@@ -289,16 +298,16 @@ export function createSubagentTransformer(
             resolveTaskInput(taskDescription);
 
             if (depth === 1) {
-              toolsNodeToName.set(ns[path.length], subagentName);
+              toolsNodeToKey.set(ns[path.length], invocationKey);
               pendingByNamespaceSegment.set(ns[path.length], pending);
             }
             if (toolCallId) {
               const taskSegment = `tools:${toolCallId}`;
-              toolsNodeToName.set(taskSegment, subagentName);
+              toolsNodeToKey.set(taskSegment, invocationKey);
               pendingByNamespaceSegment.set(taskSegment, pending);
             }
 
-            const logs = getOrCreateSubagentLogs(subagentName);
+            const logs = getOrCreateSubagentLogs(invocationKey);
 
             subagentsLog.push({
               name: subagentName,
@@ -353,12 +362,12 @@ export function createSubagentTransformer(
         // ── Child namespace events → route into per-subagent channels ──
         if (depth >= 2) {
           const parentSegment = ns[path.length];
-          const subagentName = toolsNodeToName.get(parentSegment);
-          const logs = subagentName
-            ? subagentsByName.get(subagentName)
+          const invocationKey = toolsNodeToKey.get(parentSegment);
+          const logs = invocationKey
+            ? subagentsByKey.get(invocationKey)
             : undefined;
 
-          if (logs && subagentName) {
+          if (logs && invocationKey) {
             // ── Route tools events ──
             if (event.method === "tools") {
               const data = event.params.data as ToolsEventData;
@@ -388,7 +397,8 @@ export function createSubagentTransformer(
                   resolveError = res;
                 });
 
-                childToolCalls.set(toolCallId, {
+                const childToolCallKey = `${invocationKey}:${toolCallId}`;
+                childToolCalls.set(childToolCallKey, {
                   resolveOutput,
                   rejectOutput,
                   resolveStatus,
@@ -410,25 +420,28 @@ export function createSubagentTransformer(
                 });
               }
 
-              const pending = toolCallId
-                ? childToolCalls.get(toolCallId)
+              const childToolCallKey = toolCallId
+                ? `${invocationKey}:${toolCallId}`
                 : undefined;
-              if (pending) {
+              const pendingChild = childToolCallKey
+                ? childToolCalls.get(childToolCallKey)
+                : undefined;
+              if (pendingChild && childToolCallKey) {
                 if (data.event === "tool-finished") {
-                  pending.resolveOutput(
+                  pendingChild.resolveOutput(
                     (data as Record<string, unknown>).output,
                   );
-                  pending.resolveStatus("finished");
-                  pending.resolveError(undefined);
-                  childToolCalls.delete(toolCallId);
+                  pendingChild.resolveStatus("finished");
+                  pendingChild.resolveError(undefined);
+                  childToolCalls.delete(childToolCallKey);
                 } else if (data.event === "tool-error") {
                   const message =
                     ((data as Record<string, unknown>).message as string) ??
                     "unknown error";
-                  pending.rejectOutput(new Error(message));
-                  pending.resolveStatus("error");
-                  pending.resolveError(message);
-                  childToolCalls.delete(toolCallId);
+                  pendingChild.rejectOutput(new Error(message));
+                  pendingChild.resolveStatus("error");
+                  pendingChild.resolveError(message);
+                  childToolCalls.delete(childToolCallKey);
                 }
               }
             }
@@ -441,17 +454,17 @@ export function createSubagentTransformer(
                 const eventsLog = StreamChannel.local<ChatModelStreamEvent>();
                 const stream = new ChatModelStreamImpl(eventsLog);
                 eventsLog.push(data as ChatModelStreamEvent);
-                activeMessages.set(subagentName, { stream, eventsLog });
+                activeMessages.set(invocationKey, { stream, eventsLog });
                 logs.messagesLog.push(stream as unknown as ChatModelStream);
               } else if (data.event === "message-finish") {
-                const active = activeMessages.get(subagentName);
+                const active = activeMessages.get(invocationKey);
                 if (active) {
                   active.eventsLog.push(data as ChatModelStreamEvent);
                   active.eventsLog.close();
-                  activeMessages.delete(subagentName);
+                  activeMessages.delete(invocationKey);
                 }
               } else {
-                const active = activeMessages.get(subagentName);
+                const active = activeMessages.get(invocationKey);
                 active?.eventsLog.push(data as ChatModelStreamEvent);
               }
             }
@@ -479,7 +492,7 @@ export function createSubagentTransformer(
         }
         activeMessages.clear();
         subagentsLog.close();
-        for (const logs of subagentsByName.values()) {
+        for (const logs of subagentsByKey.values()) {
           logs.toolCallsLog.close();
           logs.messagesLog.close();
           logs.nestedSubagentsLog.close();
@@ -505,7 +518,7 @@ export function createSubagentTransformer(
         }
         activeMessages.clear();
         subagentsLog.fail(err);
-        for (const logs of subagentsByName.values()) {
+        for (const logs of subagentsByKey.values()) {
           logs.toolCallsLog.fail(err);
           logs.messagesLog.fail(err);
           logs.nestedSubagentsLog.fail(err);
