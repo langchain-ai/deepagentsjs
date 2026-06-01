@@ -35,6 +35,11 @@ import { VirtualFileSystem } from "node-vfs-polyfill";
 import { HOST_ABSOLUTE_ROOT_ALLOWLIST } from "./const.js";
 import { VfsSandboxError, type VfsSandboxOptions } from "./types.js";
 
+interface HeredocPlaceholder {
+  token: string;
+  body: string;
+}
+
 /**
  * Node.js VFS Sandbox backend for deepagents.
  *
@@ -300,27 +305,78 @@ export class VfsSandbox extends BaseSandbox {
     }
 
     const vfsRootNames = new Set(topLevelNames);
+    const { command: protectedCommand, placeholders } =
+      this.#protectHeredocBodies(command);
 
-    // Match /<name> when it appears as a standalone path token:
-    // - NOT preceded by word chars, dots, or slashes (avoids matching
-    //   inside longer paths like "foo/src" or "../src")
-    // - Followed by /, whitespace, quotes, shell operators, or end
-    return command.replace(
-      /(?<![\w/.-])\/([A-Za-z0-9._-]+)(?=\/|[\s"';|&><!\])]|$)/gm,
+    // First rewrite unknown roots to sandbox unless explicitly allowlisted.
+    let rewritten = protectedCommand;
+    rewritten = rewritten.replace(
+      /(?<![\w/.-])\/([^/\s"';|&><!\])]+)(?=\/|[\s"';|&><!\])]|$)/gm,
       (match, rootName: string) => {
-        // Sandbox-first behavior:
-        // - Always rewrite roots present in VFS (even if they look system-ish).
-        // - Rewrite unknown roots to sandbox.
-        // - Keep known host roots absolute unless shadowed by VFS.
-        if (
-          vfsRootNames.has(rootName) ||
-          !HOST_ABSOLUTE_ROOT_ALLOWLIST.has(rootName)
-        ) {
+        if (vfsRootNames.has(rootName)) {
+          return match;
+        }
+        if (!HOST_ABSOLUTE_ROOT_ALLOWLIST.has(rootName)) {
           return `${execDir}/${rootName}`;
         }
         return match;
       },
     );
+
+    // Then rewrite known VFS roots exactly (supports special characters).
+    const sortedVfsRoots = [...vfsRootNames].sort(
+      (a, b) => b.length - a.length,
+    );
+    for (const rootName of sortedVfsRoots) {
+      const escapedRootName = rootName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      rewritten = rewritten.replace(
+        new RegExp(
+          `(?<![\\w/.-])/${escapedRootName}(?=/|[\\s"';|&><!\\])]|$)`,
+          "gm",
+        ),
+        `${execDir}/${rootName}`,
+      );
+    }
+
+    return this.#restoreHeredocBodies(rewritten, placeholders);
+  }
+
+  #protectHeredocBodies(command: string): {
+    command: string;
+    placeholders: HeredocPlaceholder[];
+  } {
+    const placeholders: HeredocPlaceholder[] = [];
+    const heredocPattern =
+      /((?:^|\n)[^\n]*<<-?\s*(['"]?)([^\s'"`\\]+)\2[^\n]*\n)([\s\S]*?)(\n(?:\t*)?\3(?=\n|$))/g;
+
+    const protectedCommand = command.replace(
+      heredocPattern,
+      (
+        _full,
+        prefix: string,
+        _quote: string,
+        _delimiter: string,
+        body: string,
+        suffix: string,
+      ) => {
+        const token = `__VFS_HEREDOC_BODY_${placeholders.length}__`;
+        placeholders.push({ token, body });
+        return `${prefix}${token}${suffix}`;
+      },
+    );
+
+    return { command: protectedCommand, placeholders };
+  }
+
+  #restoreHeredocBodies(
+    command: string,
+    placeholders: HeredocPlaceholder[],
+  ): string {
+    let restored = command;
+    for (const placeholder of placeholders) {
+      restored = restored.split(placeholder.token).join(placeholder.body);
+    }
+    return restored;
   }
 
   /**

@@ -539,6 +539,48 @@ try {
       expect(content.trim()).toBe("hello redirection");
     });
 
+    it("should rewrite VFS roots that include special characters", async () => {
+      sandbox = await VfsSandbox.create({
+        initialFiles: {
+          "/foo+bar/data.txt": "special-root-content",
+        },
+      });
+
+      const result = await sandbox.execute("cat /foo+bar/data.txt");
+      expect(result.exitCode).toBe(0);
+      expect(result.output.trim()).toBe("special-root-content");
+    });
+
+    it("should not rewrite absolute-looking strings inside heredoc bodies", async () => {
+      sandbox = await VfsSandbox.create();
+
+      const result = await sandbox.execute(
+        `cat > routes.json <<'EOF'
+{"base":"/api","health":"/healthz"}
+EOF`,
+      );
+      expect(result.exitCode).toBe(0);
+
+      const downloaded = await sandbox.downloadFiles(["/routes.json"]);
+      expect(downloaded[0].error).toBeNull();
+      const content = new TextDecoder().decode(downloaded[0].content!);
+      expect(content.trim()).toBe('{"base":"/api","health":"/healthz"}');
+    });
+
+    it("should rewrite broad host roots like /etc to the sandbox workspace", async () => {
+      sandbox = await VfsSandbox.create();
+
+      const result = await sandbox.execute(
+        'mkdir -p /etc && echo "sandbox etc path" > /etc/vfs.txt',
+      );
+      expect(result.exitCode).toBe(0);
+
+      const downloaded = await sandbox.downloadFiles(["/etc/vfs.txt"]);
+      expect(downloaded[0].error).toBeNull();
+      const content = new TextDecoder().decode(downloaded[0].content!);
+      expect(content.trim()).toBe("sandbox etc path");
+    });
+
     it("should keep host absolute system paths for known roots", async () => {
       sandbox = await VfsSandbox.create();
 
@@ -549,15 +591,15 @@ try {
     it("should prefer VFS paths when they shadow allowlisted roots", async () => {
       sandbox = await VfsSandbox.create({
         initialFiles: {
-          "/tmp/vfs-shadow-marker-259.txt": "sandbox tmp marker",
+          "/private/vfs-shadow-marker-259.txt": "sandbox private marker",
         },
       });
 
       const result = await sandbox.execute(
-        "cat /tmp/vfs-shadow-marker-259.txt",
+        "cat /private/vfs-shadow-marker-259.txt",
       );
       expect(result.exitCode).toBe(0);
-      expect(result.output.trim()).toBe("sandbox tmp marker");
+      expect(result.output.trim()).toBe("sandbox private marker");
     });
   });
 
