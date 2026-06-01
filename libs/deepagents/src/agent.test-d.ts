@@ -18,6 +18,7 @@ import {
   toolStrategy,
   providerStrategy,
 } from "langchain";
+import { Annotation, StateSchema } from "@langchain/langgraph";
 import { z } from "zod/v4";
 import { createDeepAgent } from "./agent.js";
 import type {
@@ -316,6 +317,40 @@ describe("createDeepAgent types", () => {
       expectTypeOf(result.structuredResponse).toEqualTypeOf<
         z.infer<typeof schema1> | z.infer<typeof schema2>
       >();
+    });
+  });
+
+  describe("stateSchema parameter", () => {
+    it("should expose StateSchema fields on the invoke result, typed", async () => {
+      const agent = createDeepAgent({
+        stateSchema: new StateSchema({
+          author: z.string(),
+        }),
+      });
+      const result = await agent.invoke({ messages: [] });
+
+      expectTypeOf(result).toHaveProperty("author");
+      expectTypeOf(result.author).toEqualTypeOf<string>();
+      expectTypeOf(result.author).not.toBeAny();
+    });
+
+    it("should merge stateSchema fields with middleware-derived state", async () => {
+      const agent = createDeepAgent({
+        middleware: [ResearchMiddleware],
+        stateSchema: new StateSchema({ author: z.string() }),
+      });
+      const result = await agent.invoke({ messages: [] });
+
+      expectTypeOf(result.author).toEqualTypeOf<string>();
+      expectTypeOf(result.research).toEqualTypeOf<string>();
+    });
+
+    it("accepts the full StateDefinitionInit union", () => {
+      createDeepAgent({ stateSchema: new StateSchema({ a: z.string() }) });
+      createDeepAgent({ stateSchema: z.object({ b: z.string() }) });
+      createDeepAgent({
+        stateSchema: Annotation.Root({ c: Annotation<string> }),
+      });
     });
   });
 });
