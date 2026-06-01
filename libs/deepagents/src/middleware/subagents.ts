@@ -22,6 +22,7 @@ import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
 import { FilesystemPermission } from "../permissions/types.js";
+import { subagentWarmGate } from "./subagentWarmGate.js";
 
 export type { AgentMiddleware };
 
@@ -669,14 +670,26 @@ function createTaskTool(options: {
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
 
-      // Invoke the subagent with ls_agent_type metadata for LangSmith tracing
+      // Invoke the subagent with ls_agent_type metadata for LangSmith tracing.
+      // callerId: a fresh per-dispatch identity (fork delta). Stock mints no
+      // stable per-sync-subagent id, so a shared backend can't tell parallel
+      // coders apart for optimistic-concurrency purposes. Stamping it here in
+      // configurable makes it ambient (readable via getConfig()) for the
+      // subagent's whole run — and each dispatch (incl. nested sub-coders)
+      // gets a distinct one, so per-caller read-shasum tracking works.
       const subagentConfig = {
         ...config,
         configurable: {
           ...config.configurable,
           ls_agent_type: "subagent",
+          callerId: randomUUID(),
         },
       };
+      // Serialize-first cache warming: the first dispatch of this type warms
+      // the shared system+tools prefix; concurrent siblings wait out the warm
+      // window so they cache-read it instead of each re-writing it.
+      await subagentWarmGate.gate(subagent_type);
+
       const result = (await subagent.invoke(
         subagentState,
         subagentConfig,
