@@ -25,7 +25,11 @@ import type {
 import type { AnyBackendProtocol } from "./backends/index.js";
 import type { AsyncSubAgent, SubAgent } from "./middleware/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
-import type { AnnotationRoot, StreamTransformer } from "@langchain/langgraph";
+import type {
+  AnnotationRoot,
+  StateDefinitionInit,
+  StreamTransformer,
+} from "@langchain/langgraph";
 import type { CompiledSubAgent } from "./middleware/subagents.js";
 import type {
   ASYNC_TASK_TOOL_NAMES,
@@ -199,9 +203,8 @@ export interface DeepAgentTypeConfig<
   TResponse extends Record<string, any> | ResponseFormatUndefined =
     | Record<string, any>
     | ResponseFormatUndefined,
-  TState extends AnyAnnotationRoot | InteropZodObject | undefined =
-    | AnyAnnotationRoot
-    | InteropZodObject
+  TState extends StateDefinitionInit | undefined =
+    | StateDefinitionInit
     | undefined,
   TContext extends AnyAnnotationRoot | InteropZodObject =
     | AnyAnnotationRoot
@@ -507,6 +510,7 @@ export interface CreateDeepAgentParams<
   )[],
   TStreamTransformers extends ReadonlyArray<() => StreamTransformer<any>> =
     readonly [],
+  TStateSchema extends StateDefinitionInit | undefined = undefined,
 > {
   /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
   model?: BaseLanguageModel | string;
@@ -514,6 +518,34 @@ export interface CreateDeepAgentParams<
   tools?: TTools | StructuredTool[];
   /** Custom system prompt for the agent. This will be combined with the base agent prompt */
   systemPrompt?: string | SystemMessage;
+  /**
+   * Optional schema for custom agent state. Allows you to define custom state properties
+   * beyond built-in `messages`, `todos`, and `files`. These properties can be accessed
+   * in hooks, middleware, and throughout the agent's execution.
+   *
+   * Unlike `contextSchema` the state is persisted between agent invocations when using a
+   * checkpointer, making it suitable for maintaining conversation history, user preferences,
+   * or any other data that should persist across multiple interactions.
+   *
+   * @example
+   * ```ts
+   * import { StateSchema } from "@langchain/langgraph";
+   * import { z } from "zod";
+   *
+   * const agent = createDeepAgent({
+   *   stateSchema: new StateSchema({
+   *     author: z.string().default("unknown"),
+   *   }),
+   * });
+   *
+   * const result = await agent.invoke({
+   *   messages: [{ role: "user", content: "Take a note" }],
+   *   author: "Me",
+   * });
+   * // result.author is typed `string`
+   * ```
+   */
+  stateSchema?: TStateSchema;
   /** Custom middleware to apply after standard middleware */
   middleware?: TMiddleware;
   /**
