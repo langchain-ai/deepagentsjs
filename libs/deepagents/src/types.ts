@@ -498,6 +498,7 @@ export type InferSubagentReactAgentType<
  * @typeParam TSubagents - The subagents array type for extracting subagent middleware states
  * @typeParam TTools - The tools array type
  * @typeParam TStreamTransformers - Custom stream transformer factories
+ * @typeParam TStateSchema - The custom state schema type
  */
 export interface CreateDeepAgentParams<
   TResponse extends SupportedResponseFormat = SupportedResponseFormat,
