@@ -510,6 +510,57 @@ try {
     });
   });
 
+  describe("Absolute path rewriting for execute()", () => {
+    it("should rewrite absolute destination paths in shell copy commands", async () => {
+      sandbox = await VfsSandbox.create({
+        initialFiles: {
+          "/a.txt": "hello from source",
+        },
+      });
+
+      const result = await sandbox.execute("cp /a.txt /b.txt");
+      expect(result.exitCode).toBe(0);
+
+      const downloaded = await sandbox.downloadFiles(["/b.txt"]);
+      expect(downloaded[0].error).toBeNull();
+      const content = new TextDecoder().decode(downloaded[0].content!);
+      expect(content).toBe("hello from source");
+    });
+
+    it("should rewrite absolute redirection targets even with an empty workspace", async () => {
+      sandbox = await VfsSandbox.create();
+
+      const result = await sandbox.execute('echo "hello redirection" > /b.txt');
+      expect(result.exitCode).toBe(0);
+
+      const downloaded = await sandbox.downloadFiles(["/b.txt"]);
+      expect(downloaded[0].error).toBeNull();
+      const content = new TextDecoder().decode(downloaded[0].content!);
+      expect(content.trim()).toBe("hello redirection");
+    });
+
+    it("should keep host absolute system paths for known roots", async () => {
+      sandbox = await VfsSandbox.create();
+
+      const result = await sandbox.execute("test -x /bin/sh");
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("should prefer VFS paths when they shadow allowlisted roots", async () => {
+      sandbox = await VfsSandbox.create({
+        initialFiles: {
+          "/tmp/vfs-shadow-marker-259.txt": "sandbox tmp marker",
+        },
+      });
+
+      const result = await sandbox.execute(
+        "cat /tmp/vfs-shadow-marker-259.txt",
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.output.trim()).toBe("sandbox tmp marker");
+    });
+  });
+
   describe("Factory functions", () => {
     it("should create sandbox via factory", async () => {
       const factory = createVfsSandboxFactory({

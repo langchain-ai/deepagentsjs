@@ -32,6 +32,7 @@ import {
 
 import { VirtualFileSystem } from "node-vfs-polyfill";
 
+import { HOST_ABSOLUTE_ROOT_ALLOWLIST } from "./const.js";
 import { VfsSandboxError, type VfsSandboxOptions } from "./types.js";
 
 /**
@@ -298,22 +299,28 @@ export class VfsSandbox extends BaseSandbox {
       return command;
     }
 
-    if (topLevelNames.length === 0) return command;
+    const vfsRootNames = new Set(topLevelNames);
 
-    let result = command;
-    for (const name of topLevelNames) {
-      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      // Match /<name> when it appears as a standalone path token:
-      // - NOT preceded by word chars, dots, or slashes (avoids matching
-      //   inside longer paths like "foo/src" or "../src")
-      // - Followed by /, whitespace, quotes, shell operators, or end
-      result = result.replace(
-        new RegExp(`(?<![\\w/.-])/${escaped}(?=/|[\\s"';|&><!\\])]|$)`, "gm"),
-        `${execDir}/${name}`,
-      );
-    }
-
-    return result;
+    // Match /<name> when it appears as a standalone path token:
+    // - NOT preceded by word chars, dots, or slashes (avoids matching
+    //   inside longer paths like "foo/src" or "../src")
+    // - Followed by /, whitespace, quotes, shell operators, or end
+    return command.replace(
+      /(?<![\w/.-])\/([A-Za-z0-9._-]+)(?=\/|[\s"';|&><!\])]|$)/gm,
+      (match, rootName: string) => {
+        // Sandbox-first behavior:
+        // - Always rewrite roots present in VFS (even if they look system-ish).
+        // - Rewrite unknown roots to sandbox.
+        // - Keep known host roots absolute unless shadowed by VFS.
+        if (
+          vfsRootNames.has(rootName) ||
+          !HOST_ABSOLUTE_ROOT_ALLOWLIST.has(rootName)
+        ) {
+          return `${execDir}/${rootName}`;
+        }
+        return match;
+      },
+    );
   }
 
   /**

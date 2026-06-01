@@ -1,0 +1,22 @@
+// Host filesystem roots that should stay absolute unless shadowed by a VFS root.
+export const HOST_ABSOLUTE_ROOT_ALLOWLIST = new Set([
+  "Applications",
+  "Library",
+  "System",
+  "Users",
+  "Volumes",
+  "bin",
+  "dev",
+  "etc",
+  "home",
+  "lib",
+  "lib64",
+  "opt",
+  "private",
+  "proc",
+  "sbin",
+  "sys",
+  "tmp",
+  "usr",
+  "var",
+]);
