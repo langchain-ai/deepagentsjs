@@ -18,7 +18,7 @@ import {
   toolStrategy,
   providerStrategy,
 } from "langchain";
-import { Annotation, StateSchema } from "@langchain/langgraph";
+import { StateSchema } from "@langchain/langgraph";
 import { z } from "zod/v4";
 import { createDeepAgent } from "./agent.js";
 import type {
@@ -345,12 +345,16 @@ describe("createDeepAgent types", () => {
       expectTypeOf(result.research).toEqualTypeOf<string>();
     });
 
-    it("accepts the full StateDefinitionInit union", () => {
-      createDeepAgent({ stateSchema: new StateSchema({ a: z.string() }) });
-      createDeepAgent({ stateSchema: z.object({ b: z.string() }) });
-      createDeepAgent({
-        stateSchema: Annotation.Root({ c: Annotation<string> }),
-      });
+    it("accepts the two schema forms applied at runtime", async () => {
+      const fromStateSchema = await createDeepAgent({
+        stateSchema: new StateSchema({ a: z.string() }),
+      }).invoke({ messages: [] });
+      expectTypeOf(fromStateSchema.a).toEqualTypeOf<string>();
+
+      const fromZod = await createDeepAgent({
+        stateSchema: z.object({ b: z.string().default("") }),
+      }).invoke({ messages: [] });
+      expectTypeOf(fromZod.b).toEqualTypeOf<string>();
     });
   });
 });
