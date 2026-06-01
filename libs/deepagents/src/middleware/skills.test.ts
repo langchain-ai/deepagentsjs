@@ -17,6 +17,7 @@ import {
   validateMetadata,
   formatSkillAnnotations,
   formatSkillsList,
+  formatSkillsIndex,
   type SkillMetadata,
   type SkillMetadataEntry,
 } from "./skills.js";
@@ -2197,5 +2198,136 @@ description: Project-level skill for team collaboration
     // Should still have a system prompt with the "no skills" message
     expect(systemPrompt).toContain("No skills available yet");
     invokeSpy.mockRestore();
+  });
+});
+
+describe("formatSkillsIndex", () => {
+  it("should format skills as one line per skill", () => {
+    const skills: SkillMetadata[] = [
+      {
+        name: "web-research",
+        description: "Research the web",
+        path: "/skills/user/web-research/SKILL.md",
+      },
+      {
+        name: "code-review",
+        description: "Review code for bugs",
+        path: "/skills/project/code-review/SKILL.md",
+      },
+    ];
+
+    const result = formatSkillsIndex(skills);
+    const lines = result.split("\n");
+
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe(
+      "web-research: Research the web → /skills/user/web-research/SKILL.md",
+    );
+    expect(lines[1]).toBe(
+      "code-review: Review code for bugs → /skills/project/code-review/SKILL.md",
+    );
+  });
+
+  it("should return empty string for empty skills array", () => {
+    expect(formatSkillsIndex([])).toBe("");
+  });
+});
+
+describe("deferred skill loading", () => {
+  const makeSkills = (count: number) => {
+    const files: Record<string, string> = {};
+    const entries: Array<{ name: string; type: "file" | "directory" }> = [];
+
+    for (let i = 0; i < count; i++) {
+      const name = `skill-${i}`;
+      files[`/skills/user/${name}/SKILL.md`] =
+        `---\nname: ${name}\ndescription: Skill number ${i}\n---\n# ${name}`;
+      entries.push({ name, type: "directory" });
+    }
+
+    return { files, entries };
+  };
+
+  it("should write index file when skill count exceeds threshold", async () => {
+    const { files, entries } = makeSkills(5);
+    const mockBackend = createMockBackend({
+      files,
+      directories: { "/skills/user/": entries },
+    });
+
+    const middleware = createSkillsMiddleware({
+      backend: mockBackend,
+      sources: ["/skills/user/"],
+      skillCountThreshold: 3,
+    });
+
+    // @ts-expect-error - typing issue in LangChain
+    await middleware.beforeAgent?.({});
+
+    const indexContent = mockBackend.writtenFiles["/skills/.skills-index"];
+    expect(indexContent).toBeDefined();
+
+    const lines = indexContent.split("\n");
+    expect(lines).toHaveLength(5);
+    expect(lines[0]).toContain("skill-0");
+    expect(lines[0]).toContain("Skill number 0");
+    expect(lines[0]).toContain("/skills/user/skill-0/SKILL.md");
+  });
+
+  it("should not write index file when skill count is at or below threshold", async () => {
+    const { files, entries } = makeSkills(3);
+    const mockBackend = createMockBackend({
+      files,
+      directories: { "/skills/user/": entries },
+    });
+
+    const middleware = createSkillsMiddleware({
+      backend: mockBackend,
+      sources: ["/skills/user/"],
+      skillCountThreshold: 3,
+    });
+
+    // @ts-expect-error - typing issue in LangChain
+    await middleware.beforeAgent?.({});
+
+    expect(mockBackend.writtenFiles["/skills/.skills-index"]).toBeUndefined();
+  });
+
+  it("should not write index file when threshold is not set", async () => {
+    const { files, entries } = makeSkills(10);
+    const mockBackend = createMockBackend({
+      files,
+      directories: { "/skills/user/": entries },
+    });
+
+    const middleware = createSkillsMiddleware({
+      backend: mockBackend,
+      sources: ["/skills/user/"],
+    });
+
+    // @ts-expect-error - typing issue in LangChain
+    await middleware.beforeAgent?.({});
+
+    expect(mockBackend.writtenFiles["/skills/.skills-index"]).toBeUndefined();
+  });
+
+  it("should fall back gracefully when index write fails", async () => {
+    const { files, entries } = makeSkills(5);
+    const mockBackend = createMockBackend({
+      files,
+      directories: { "/skills/user/": entries },
+      writeError: "write failed",
+    });
+
+    const middleware = createSkillsMiddleware({
+      backend: mockBackend,
+      sources: ["/skills/user/"],
+      skillCountThreshold: 3,
+    });
+
+    // @ts-expect-error - typing issue in LangChain
+    const result = await middleware.beforeAgent?.({});
+
+    expect(result?.skillsMetadata).toHaveLength(5);
   });
 });

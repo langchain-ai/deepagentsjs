@@ -73,6 +73,11 @@ export const MAX_SKILL_DESCRIPTION_LENGTH = 1024;
 export const MAX_SKILL_COMPATIBILITY_LENGTH = 500;
 
 /**
+ * Path for the skills index file on the backend.
+ */
+const SKILLS_INDEX_PATH = "/skills/.skills-index";
+
+/**
  * File extensions a skill module entrypoint may use.
  */
 export const SKILL_MODULE_EXTENSIONS = [
@@ -177,6 +182,17 @@ export interface SkillsMiddlewareOptions {
    * Later sources override earlier ones for skills with the same name (last one wins).
    */
   sources: string[];
+
+  /**
+   * Maximum number of skills to inject into the system prompt.
+   *
+   * When the total skill count exceeds this threshold, the middleware writes
+   * a skills index file to the backend and injects a shorter prompt that
+   * directs the agent to grep the index for relevant skills.
+   *
+   * When not set, all skills are injected into the system prompt (current behavior).
+   */
+  skillCountThreshold?: number;
 }
 
 /**
@@ -733,6 +749,42 @@ export function validateModulePath(raw: unknown): string | undefined {
 }
 
 /**
+ * Format skill metadata into an index file string.
+ *
+ * Each line contains the skill name, description, and path to its SKILL.md,
+ * formatted for grep-based discovery by the agent.
+ *
+ * @param skills - All discovered skill metadata.
+ * @returns Index file content with one skill per line.
+ */
+export function formatSkillsIndex(skills: SkillMetadata[]): string {
+  const lines = skills.map((s) => `${s.name}: ${s.description} → ${s.path}`);
+  return lines.join("\n");
+}
+
+/**
+ * Write the skills index file to the backend.
+ *
+ * The index is written to a fixed path (`/skills/.skills-index`) on the
+ * backend. The path is deterministic so the deferred prompt can reference
+ * it directly.
+ *
+ * @param backend - Resolved backend instance.
+ * @param skills - All discovered skill metadata.
+ * @returns The path of the written index file.
+ */
+async function writeSkillsIndex(
+  backend: AnyBackendProtocol,
+  skills: SkillMetadata[],
+): Promise<string> {
+  const adaptedBackend = adaptBackendProtocol(backend);
+  const content = formatSkillsIndex(skills);
+
+  await adaptedBackend.write(SKILLS_INDEX_PATH, content);
+  return SKILLS_INDEX_PATH;
+}
+
+/**
  * Create backend-agnostic middleware for loading and exposing agent skills.
  *
  * This middleware loads skills from configurable backend sources and injects
@@ -752,11 +804,12 @@ export function validateModulePath(raw: unknown): string | undefined {
  * ```
  */
 export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
-  const { backend, sources } = options;
+  const { backend, sources, skillCountThreshold } = options;
 
   // Closure variable to store loaded skills - wrapModelCall can access this
   // directly since beforeAgent state updates aren't immediately available
   let loadedSkills: SkillMetadata[] = [];
+  let indexPath: string | undefined;
 
   return createMiddleware({
     name: "SkillsMiddleware",
@@ -807,6 +860,22 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
 
       // Store in closure for immediate access by wrapModelCall
       loadedSkills = Array.from(allSkills.values());
+
+      if (
+        skillCountThreshold !== undefined &&
+        loadedSkills.length > skillCountThreshold
+      ) {
+        try {
+          const resolvedForIndex = await resolveBackend(backend, { state });
+          indexPath = await writeSkillsIndex(resolvedForIndex, loadedSkills);
+        } catch (error) {
+          console.debug(
+            `[SkillsMiddleware] Failed to write skills index:`,
+            error,
+          );
+          indexPath = undefined;
+        }
+      }
 
       return { skillsMetadata: loadedSkills };
     },
