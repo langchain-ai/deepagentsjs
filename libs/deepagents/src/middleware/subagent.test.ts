@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { MemorySaver } from "@langchain/langgraph-checkpoint";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
+import { createAgent, tool } from "langchain";
 import {
   AIMessage,
   BaseMessage,
@@ -9,6 +10,7 @@ import {
   ToolMessage,
 } from "@langchain/core/messages";
 import { RunnableLambda } from "@langchain/core/runnables";
+import { z } from "zod/v4";
 import { CallbackManager } from "@langchain/core/callbacks/manager";
 import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
 import { LangChainTracer } from "@langchain/core/tracers/tracer_langchain";
@@ -832,5 +834,172 @@ describe("ls_agent_type tracing metadata", () => {
       (run) => run?.extra?.metadata?.ls_agent_type === "subagent",
     );
     expect(subagentRuns.length).toBeGreaterThan(0);
+  });
+});
+
+describe("lc_agent_name propagation for subagents", () => {
+  it("should pass subagent name for compiled subagents", async () => {
+    let capturedSubagentAgentName: string | undefined;
+
+    const identifyCaller = tool(
+      (_input, config) => {
+        capturedSubagentAgentName = config.metadata?.lc_agent_name as
+          | string
+          | undefined;
+        return "captured";
+      },
+      {
+        name: "identify_caller",
+        description: "Capture lc_agent_name from metadata",
+        schema: z.object({}),
+      },
+    );
+
+    const compiledSubagentModel = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "compiled_tool_call",
+              name: "identify_caller",
+              args: {},
+            },
+          ],
+        }) as unknown as string,
+        "Subagent done",
+      ],
+    });
+
+    const compiledSubagent = createAgent({
+      model: compiledSubagentModel,
+      systemPrompt:
+        "Use identify_caller to capture who invoked this subagent, then finish.",
+      tools: [identifyCaller],
+      name: "compiled-worker-inner",
+    });
+
+    const parentModel = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "task_call_compiled",
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+
+    const agent = createDeepAgent({
+      model: parentModel,
+      name: "main-agent",
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: compiledSubagent,
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: {
+          thread_id: `test-lc-agent-name-compiled-${Date.now()}`,
+        },
+        recursionLimit: 50,
+      },
+    );
+
+    expect(capturedSubagentAgentName).toBe("worker");
+  });
+
+  it("should pass subagent name for standard subagent specs", async () => {
+    let capturedSubagentAgentName: string | undefined;
+
+    const identifyCaller = tool(
+      (_input, config) => {
+        capturedSubagentAgentName = config.metadata?.lc_agent_name as
+          | string
+          | undefined;
+        return "captured";
+      },
+      {
+        name: "identify_caller",
+        description: "Capture lc_agent_name from metadata",
+        schema: z.object({}),
+      },
+    );
+
+    const standardSubagentModel = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "standard_tool_call",
+              name: "identify_caller",
+              args: {},
+            },
+          ],
+        }) as unknown as string,
+        "Subagent done",
+      ],
+    });
+
+    const parentModel = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "task_call_standard",
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+
+    const agent = createDeepAgent({
+      model: parentModel,
+      name: "main-agent",
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          systemPrompt:
+            "Use identify_caller to capture who invoked this subagent, then finish.",
+          tools: [identifyCaller],
+          model: standardSubagentModel,
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: {
+          thread_id: `test-lc-agent-name-standard-${Date.now()}`,
+        },
+        recursionLimit: 50,
+      },
+    );
+
+    expect(capturedSubagentAgentName).toBe("worker");
   });
 });
