@@ -52,10 +52,7 @@ import { createSubagentTransformer } from "./stream.js";
  */
 import type * as _messages from "@langchain/core/messages";
 import type * as _langgraph from "@langchain/langgraph";
-import type {
-  StateDefinitionInit,
-  StreamTransformer,
-} from "@langchain/langgraph";
+import type { AnyStateSchema, StreamTransformer } from "@langchain/langgraph";
 import {
   resolveHarnessProfile,
   applyProfilePrompt,
@@ -150,7 +147,8 @@ export function createDeepAgent<
   const TStreamTransformers extends ReadonlyArray<
     () => StreamTransformer<any>
   > = readonly [],
-  TStateSchema extends StateDefinitionInit | undefined = undefined,
+  TStateSchema extends AnyStateSchema | InteropZodObject | undefined =
+    undefined,
 >(
   params: CreateDeepAgentParams<
     TResponse,
