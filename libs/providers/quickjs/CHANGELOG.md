@@ -1,5 +1,15 @@
 # @langchain/quickjs
 
+## 0.4.1
+
+### Patch Changes
+
+- [#545](https://github.com/langchain-ai/deepagentsjs/pull/545) [`b3f0d6e`](https://github.com/langchain-ai/deepagentsjs/commit/b3f0d6e8fa2980652123e0053c116fc9945720ac) Thanks [@colifran](https://github.com/colifran)! - chore(quickjs): update swarm task tool to use withStructuredOutput
+
+- [#500](https://github.com/langchain-ai/deepagentsjs/pull/500) [`bfb6eec`](https://github.com/langchain-ai/deepagentsjs/commit/bfb6eecdfe617645b3bdebf9a60d4b08e575cef7) Thanks [@colifran](https://github.com/colifran)! - feat(quickjs): add swarm task tool
+
+- [#549](https://github.com/langchain-ai/deepagentsjs/pull/549) [`9221c8a`](https://github.com/langchain-ai/deepagentsjs/commit/9221c8a2b5236954f674e30f3ef0e2962f54fb56) Thanks [@colifran](https://github.com/colifran)! - chore(deepagents): move required ptc tools to metadata
+
 ## 0.4.0
 
 ### Minor Changes
