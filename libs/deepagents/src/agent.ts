@@ -52,7 +52,7 @@ import { createSubagentTransformer } from "./stream.js";
  */
 import type * as _messages from "@langchain/core/messages";
 import type * as _langgraph from "@langchain/langgraph";
-import type { StreamTransformer } from "@langchain/langgraph";
+import type { AnyStateSchema, StreamTransformer } from "@langchain/langgraph";
 import {
   resolveHarnessProfile,
   applyProfilePrompt,
@@ -123,7 +123,7 @@ const BUILTIN_TOOL_NAMES: ReadonlySet<string> = new Set([
  *
  * @example
  * ```typescript
- * // Middleware with custom state
+ * // Custom state from middleware and/or the agent stateSchema param — both are merged
  * const ResearchMiddleware = createMiddleware({
  *   name: "ResearchMiddleware",
  *   stateSchema: z.object({ research: z.string().default("") }),
@@ -131,10 +131,11 @@ const BUILTIN_TOOL_NAMES: ReadonlySet<string> = new Set([
  *
  * const agent = createDeepAgent({
  *   middleware: [ResearchMiddleware],
+ *   stateSchema: z.object({ author: z.string().default("Me") }),
  * });
  *
  * const result = await agent.invoke({ messages: [...] });
- * // result.research is properly typed as string
+ * // result.research and result.author are properly typed as strings
  * ```
  */
 export function createDeepAgent<
@@ -146,6 +147,8 @@ export function createDeepAgent<
   const TStreamTransformers extends ReadonlyArray<
     () => StreamTransformer<any>
   > = readonly [],
+  TStateSchema extends AnyStateSchema | InteropZodObject | undefined =
+    undefined,
 >(
   params: CreateDeepAgentParams<
     TResponse,
@@ -153,20 +156,23 @@ export function createDeepAgent<
     TMiddleware,
     TSubagents,
     TTools,
-    TStreamTransformers
+    TStreamTransformers,
+    TStateSchema
   > = {} as CreateDeepAgentParams<
     TResponse,
     ContextSchema,
     TMiddleware,
     TSubagents,
     TTools,
-    TStreamTransformers
+    TStreamTransformers,
+    TStateSchema
   >,
 ) {
   const {
     model = "anthropic:claude-sonnet-4-6",
     tools = [],
     systemPrompt,
+    stateSchema,
     middleware: customMiddleware = [],
     subagents = [],
     responseFormat,
@@ -449,6 +455,7 @@ export function createDeepAgent<
   const agent = createAgent({
     model,
     systemPrompt: finalSystemPrompt,
+    stateSchema,
     tools: effectiveTools,
     middleware,
     ...(responseFormat !== null && { responseFormat }),
@@ -481,7 +488,7 @@ export function createDeepAgent<
   /**
    * Return as DeepAgent with proper DeepAgentTypeConfig
    * - Response: InferStructuredResponse<TResponse> (unwraps ToolStrategy<T>/ProviderStrategy<T> → T)
-   * - State: undefined (state comes from middleware)
+   * - State: User-provided stateSchema, merged with middleware-derived state downstream
    * - Context: ContextSchema
    * - Middleware: AllMiddleware (built-in + custom + subagent middleware for state inference)
    * - Tools: TTools
@@ -491,7 +498,7 @@ export function createDeepAgent<
   return agent as unknown as DeepAgent<
     DeepAgentTypeConfig<
       InferStructuredResponse<TResponse>,
-      undefined,
+      TStateSchema,
       ContextSchema,
       AllMiddleware,
       TTools,
