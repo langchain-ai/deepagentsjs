@@ -8,11 +8,11 @@
 import { SandboxError, type SandboxErrorCode } from "deepagents";
 
 /**
- * Configuration options for creating a VFS Sandbox.
+ * Configuration options for creating a VFS backend.
  *
  * @example
  * ```typescript
- * const options: VfsSandboxOptions = {
+ * const options: VfsBackendOptions = {
  *   mountPath: "/vfs",
  *   initialFiles: {
  *     "/app/index.js": "console.log('Hello')",
@@ -21,7 +21,7 @@ import { SandboxError, type SandboxErrorCode } from "deepagents";
  * };
  * ```
  */
-export interface VfsSandboxOptions {
+export interface VfsBackendOptions {
   /**
    * The mount path for the virtual file system.
    *
@@ -46,13 +46,6 @@ export interface VfsSandboxOptions {
    * ```
    */
   initialFiles?: Record<string, string | Uint8Array>;
-
-  /**
-   * Command timeout in milliseconds.
-   *
-   * @default 30000 (30 seconds)
-   */
-  timeout?: number;
 }
 
 /**
@@ -78,15 +71,15 @@ const VFS_SANDBOX_ERROR_SYMBOL = Symbol.for("vfs.sandbox.error");
  * @example
  * ```typescript
  * try {
- *   await sandbox.execute("some command");
+ *   await sandbox.read("/some/file.txt");
  * } catch (error) {
  *   if (error instanceof VfsSandboxError) {
  *     switch (error.code) {
  *       case "NOT_INITIALIZED":
  *         await sandbox.initialize();
  *         break;
- *       case "COMMAND_TIMEOUT":
- *         console.error("Command took too long");
+ *       case "FILE_OPERATION_FAILED":
+ *         console.error("File operation failed");
  *         break;
  *       default:
  *         throw error;
