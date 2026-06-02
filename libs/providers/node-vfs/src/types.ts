@@ -49,11 +49,6 @@ export interface VfsBackendOptions {
 }
 
 /**
- * @deprecated Use `VfsBackendOptions` instead.
- */
-export type VfsSandboxOptions = VfsBackendOptions;
-
-/**
  * Error codes for VFS Sandbox operations.
  */
 export type VfsSandboxErrorCode =

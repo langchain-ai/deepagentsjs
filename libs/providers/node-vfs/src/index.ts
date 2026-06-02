@@ -42,23 +42,17 @@
  * @packageDocumentation
  */
 
-// Export main class and backward-compatible alias
-export { VfsBackend, VfsSandbox } from "./backend.js";
+// Export main class
+export { VfsBackend } from "./backend.js";
 
 // Export factory functions
 export {
   createVfsBackendFactory,
   createVfsBackendFactoryFromBackend,
-  createVfsSandboxFactory,
-  createVfsSandboxFactoryFromSandbox,
 } from "./backend.js";
 
 // Export types
-export type {
-  VfsBackendOptions,
-  VfsSandboxOptions,
-  VfsSandboxErrorCode,
-} from "./types.js";
+export type { VfsBackendOptions, VfsSandboxErrorCode } from "./types.js";
 
 // Export error class (value export)
 export { VfsSandboxError } from "./types.js";

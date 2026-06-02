@@ -77,7 +77,7 @@ const backend = await VfsBackend.create({
 
 ##### `backend.uploadFiles(files)`
 
-Upload files to the sandbox.
+Upload files to the backend.
 
 ```typescript
 const encoder = new TextEncoder();
@@ -89,7 +89,7 @@ await backend.uploadFiles([
 
 ##### `backend.downloadFiles(paths)`
 
-Download files from the sandbox.
+Download files from the backend.
 
 ```typescript
 const results = await backend.downloadFiles(["src/app.js"]);
@@ -102,7 +102,7 @@ for (const result of results) {
 
 ##### `backend.stop()`
 
-Stop the sandbox and clean up resources.
+Stop the backend and clean up resources.
 
 ```typescript
 await backend.stop();
@@ -124,7 +124,7 @@ const backend = await factory();
 
 #### `createVfsBackendFactoryFromBackend(backend)`
 
-Create a factory that reuses an existing sandbox.
+Create a factory that reuses an existing backend.
 
 ```typescript
 const backend = await VfsBackend.create();
@@ -182,10 +182,6 @@ The VFS backend is fully in-memory:
 
 This approach keeps filesystem operations isolated and avoids host shell execution from this provider.
 
-## Backward Compatibility
-
-- `VfsSandbox` is still exported as a deprecated alias of `VfsBackend`.
-- `createVfsSandboxFactory` and `createVfsSandboxFactoryFromSandbox` are still exported as deprecated aliases.
 
 ## Future: Native Node.js VFS
 

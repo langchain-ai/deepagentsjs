@@ -1,12 +1,7 @@
 /* oxlint-disable no-instanceof/no-instanceof */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
-import {
-  VfsBackend,
-  VfsSandbox,
-  createVfsBackendFactory,
-  createVfsSandboxFactory,
-} from "./backend.js";
+import { VfsBackend } from "./backend.js";
 import { VfsSandboxError } from "./types.js";
 
 describe("VfsBackend", () => {
@@ -89,40 +84,6 @@ describe("VfsBackend", () => {
       const results = await sandbox.downloadFiles(["/hello.txt"]);
       expect(results[0].error).toBeNull();
       expect(new TextDecoder().decode(results[0].content!)).toBe("Hello!");
-    });
-  });
-
-  describe("backward compatibility", () => {
-    it("keeps VfsSandbox as an alias to VfsBackend", async () => {
-      const backendFromAlias = await VfsSandbox.create({
-        initialFiles: { "/alias.txt": "ok" },
-      });
-      try {
-        expect(backendFromAlias).toBeInstanceOf(VfsBackend);
-      } finally {
-        await backendFromAlias.stop();
-      }
-    });
-
-    it("keeps createVfsSandboxFactory as an alias", async () => {
-      const newFactory = createVfsBackendFactory({
-        initialFiles: { "/f.txt": "factory" },
-      });
-      const oldFactory = createVfsSandboxFactory({
-        initialFiles: { "/f.txt": "factory" },
-      });
-
-      const [fromNew, fromOld] = await Promise.all([
-        newFactory(),
-        oldFactory(),
-      ]);
-      try {
-        expect(fromNew).toBeInstanceOf(VfsBackend);
-        expect(fromOld).toBeInstanceOf(VfsBackend);
-      } finally {
-        await fromNew.stop();
-        await fromOld.stop();
-      }
     });
   });
 

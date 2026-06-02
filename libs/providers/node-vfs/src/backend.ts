@@ -368,8 +368,8 @@ function performStringReplacement(
  * ```typescript
  * import { VfsBackend } from "@langchain/node-vfs";
  *
- * // Create and initialize a VFS sandbox
- * const sandbox = await VfsBackend.create({
+ * // Create and initialize a VFS backend
+ * const backend = await VfsBackend.create({
  *   initialFiles: {
  *     "/src/index.js": "console.log('Hello')",
  *   },
@@ -377,10 +377,10 @@ function performStringReplacement(
  *
  * try {
  *   // Read files directly
- *   const result = await sandbox.read("/src/index.js");
+ *   const result = await backend.read("/src/index.js");
  *   console.log(result.content);
  * } finally {
- *   await sandbox.stop();
+ *   await backend.stop();
  * }
  * ```
  *
@@ -390,12 +390,12 @@ function performStringReplacement(
  * import { createDeepAgent } from "deepagents";
  * import { VfsBackend } from "@langchain/node-vfs";
  *
- * const sandbox = await VfsBackend.create();
+ * const backend = await VfsBackend.create();
  *
  * const agent = createDeepAgent({
  *   model: new ChatAnthropic({ model: "claude-sonnet-4-20250514" }),
  *   systemPrompt: "You are a coding assistant with VFS access.",
- *   backend: sandbox,
+ *   backend,
  * });
  * ```
  */
@@ -409,7 +409,7 @@ export class VfsBackend implements BackendProtocolV2 {
   /** The working directory path (virtual) */
   #workingDirectory: string;
 
-  /** Whether the sandbox is initialized */
+  /** Whether the backend is initialized */
   #initialized = false;
 
   /**
@@ -433,7 +433,7 @@ export class VfsBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Check if the sandbox is initialized and running.
+   * Check if the backend is initialized and running.
    */
   get isRunning(): boolean {
     return this.#initialized;
@@ -452,7 +452,7 @@ export class VfsBackend implements BackendProtocolV2 {
    * Note: This only creates the instance. Call `initialize()` to actually
    * set up the VFS, or use the static `VfsBackend.create()` method.
    *
-   * @param options - Configuration options for the sandbox
+   * @param options - Configuration options for the backend
    */
   constructor(options: VfsBackendOptions = {}) {
     this.#options = options;
@@ -460,7 +460,7 @@ export class VfsBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Initialize the VFS sandbox.
+   * Initialize the VFS backend.
    *
    * This method sets up the virtual file system and populates it with
    * any initial files specified in the options.
@@ -573,7 +573,7 @@ export class VfsBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Upload files to the sandbox.
+   * Upload files to the backend.
    *
    * Files are written to the VFS.
    * Parent directories are created automatically if they don't exist.
@@ -610,7 +610,7 @@ export class VfsBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Download files from the sandbox.
+   * Download files from the backend.
    *
    * @param paths - Array of file paths to download
    * @returns Download result for each file, with content or error
@@ -669,7 +669,7 @@ export class VfsBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Stop the sandbox and release all resources.
+   * Stop the backend and release all resources.
    */
   async stop(): Promise<void> {
     // Clear VFS reference
@@ -1061,7 +1061,7 @@ export class VfsBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Ensure the sandbox is initialized before operations.
+   * Ensure the backend is initialized before operations.
    */
   #ensureInitialized(): void {
     if (!this.#initialized) {
@@ -1100,12 +1100,12 @@ export class VfsBackend implements BackendProtocolV2 {
    * This is the recommended way to create a backend. It combines
    * construction and initialization into a single async operation.
    *
-   * @param options - Configuration options for the sandbox
-   * @returns An initialized and ready-to-use sandbox
+   * @param options - Configuration options for the backend
+   * @returns An initialized and ready-to-use backend
    *
    * @example
    * ```typescript
-   * const sandbox = await VfsBackend.create({
+   * const backend = await VfsBackend.create({
    *   initialFiles: {
    *     "/src/index.js": "console.log('Hello')",
    *   },
@@ -1113,22 +1113,17 @@ export class VfsBackend implements BackendProtocolV2 {
    * ```
    */
   static async create(options?: VfsBackendOptions): Promise<VfsBackend> {
-    const sandbox = new VfsBackend(options);
-    await sandbox.initialize();
-    return sandbox;
+    const backend = new VfsBackend(options);
+    await backend.initialize();
+    return backend;
   }
 }
 
 /**
- * @deprecated Use `VfsBackend` instead.
- */
-export const VfsSandbox = VfsBackend;
-
-/**
  * Create a backend factory that creates a new VFS backend per invocation.
  *
- * @param options - Optional configuration for sandbox creation
- * @returns A factory function that creates new sandboxes
+ * @param options - Optional configuration for backend creation
+ * @returns A factory function that creates new backends
  *
  * @example
  * ```typescript
@@ -1138,7 +1133,7 @@ export const VfsSandbox = VfsBackend;
  *   initialFiles: { "/README.md": "# Hello" },
  * });
  *
- * const sandbox = await factory();
+ * const backend = await factory();
  * ```
  */
 export function createVfsBackendFactory(
@@ -1152,19 +1147,19 @@ export function createVfsBackendFactory(
 /**
  * Create a backend factory that reuses an existing VFS backend.
  *
- * @param sandbox - An existing VfsBackend instance (must be initialized)
- * @returns A BackendFactory that returns the provided sandbox
+ * @param backend - An existing VfsBackend instance (must be initialized)
+ * @returns A BackendFactory that returns the provided backend
  *
  * @example
  * ```typescript
- * const sandbox = await VfsBackend.create();
+ * const backend = await VfsBackend.create();
  *
  * const agent = createDeepAgent({
  *   model: new ChatAnthropic({ model: "claude-sonnet-4-20250514" }),
  *   systemPrompt: "You are a coding assistant.",
  *   middlewares: [
  *     createFilesystemMiddleware({
- *       backend: createVfsBackendFactoryFromBackend(sandbox),
+ *       backend: createVfsBackendFactoryFromBackend(backend),
  *     }),
  *   ],
  * });
@@ -1175,14 +1170,3 @@ export function createVfsBackendFactoryFromBackend(
 ): BackendFactory {
   return () => backend;
 }
-
-/**
- * @deprecated Use `createVfsBackendFactory` instead.
- */
-export const createVfsSandboxFactory = createVfsBackendFactory;
-
-/**
- * @deprecated Use `createVfsBackendFactoryFromBackend` instead.
- */
-export const createVfsSandboxFactoryFromSandbox =
-  createVfsBackendFactoryFromBackend;
