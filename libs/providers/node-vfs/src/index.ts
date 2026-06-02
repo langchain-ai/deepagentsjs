@@ -3,7 +3,7 @@
  *
  * Node.js Virtual File System backend for deepagents.
  *
- * This package provides an in-memory VFS implementation of the SandboxBackendProtocol,
+ * This package provides an in-memory VFS implementation of BackendProtocolV2,
  * enabling agents to work with files in an isolated environment without touching
  * the real filesystem.
  *
@@ -17,8 +17,8 @@
  * import { createDeepAgent } from "deepagents";
  * import { ChatAnthropic } from "@langchain/anthropic";
  *
- * // Create and initialize a VFS sandbox
- * const sandbox = await VfsSandbox.create({
+ * // Create and initialize a VFS backend
+ * const backend = await VfsSandbox.create({
  *   initialFiles: {
  *     "/src/index.js": "console.log('Hello')",
  *   },
@@ -28,14 +28,14 @@
  *   const agent = createDeepAgent({
  *     model: new ChatAnthropic({ model: "claude-sonnet-4-20250514" }),
  *     systemPrompt: "You are a coding assistant with VFS access.",
- *     backend: sandbox,
+ *     backend,
  *   });
  *
  *   const result = await agent.invoke({
  *     messages: [new HumanMessage("Create a hello world app")],
  *   });
  * } finally {
- *   await sandbox.stop();
+ *   await backend.stop();
  * }
  * ```
  *

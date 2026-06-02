@@ -18,19 +18,6 @@ describe.skipIf(isWindows)("VfsSandbox Integration", () => {
     }
   });
 
-  describe("execute", () => {
-    it("returns unsupported response", async () => {
-      sandbox = await VfsSandbox.create();
-
-      const result = await sandbox.execute("echo hello");
-
-      expect(result.exitCode).toBe(127);
-      expect(result.truncated).toBe(false);
-      expect(result.output).toContain("not supported");
-      expect(result.output).toContain("echo hello");
-    });
-  });
-
   describe("read/ls/grep/glob", () => {
     it("reads initial files with or without leading slash", async () => {
       sandbox = await VfsSandbox.create({

@@ -46,16 +46,6 @@ export interface VfsSandboxOptions {
    * ```
    */
   initialFiles?: Record<string, string | Uint8Array>;
-
-  /**
-   * Backward-compatible timeout option.
-   *
-   * Retained for API compatibility; currently unused because this provider
-   * does not execute shell commands.
-   *
-   * @default 30000 (30 seconds)
-   */
-  timeout?: number;
 }
 
 /**

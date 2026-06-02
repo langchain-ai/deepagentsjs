@@ -1,6 +1,6 @@
 /* oxlint-disable no-instanceof/no-instanceof */
 /**
- * Node.js VFS Sandbox implementation of the SandboxBackendProtocol.
+ * Node.js VFS backend implementation of BackendProtocolV2.
  *
  * This module provides an in-memory virtual file system backend for deepagents,
  * enabling agents to work with files in an isolated environment without touching
@@ -16,16 +16,18 @@ import path from "node:path";
 import type { Stats } from "node:fs";
 
 import {
-  BaseSandbox,
-  type ExecuteResponse,
+  type BackendProtocolV2,
+  type EditResult,
   type FileDownloadResponse,
   type FileOperationError,
   type FileUploadResponse,
   type GlobResult,
   type GrepResult,
   type LsResult,
+  type ReadRawResult,
   type ReadResult,
   type BackendFactory,
+  type WriteResult,
 } from "deepagents";
 
 import { VirtualFileSystem } from "node-vfs-polyfill";
@@ -136,6 +138,33 @@ function globToPathRegex(pattern: string): RegExp {
   return new RegExp(regex);
 }
 
+function performStringReplacement(
+  content: string,
+  oldString: string,
+  newString: string,
+  replaceAll: boolean,
+): [string, number] | string {
+  if (content === "" && oldString === "") {
+    return [newString, 0];
+  }
+
+  if (oldString === "") {
+    return "Error: oldString cannot be empty when file has content";
+  }
+
+  const occurrences = content.split(oldString).length - 1;
+
+  if (occurrences === 0) {
+    return `Error: String not found in file: '${oldString}'`;
+  }
+
+  if (occurrences > 1 && !replaceAll) {
+    return `Error: String '${oldString}' has multiple occurrences (appears ${occurrences} times) in file. Use replace_all=True to replace all instances, or provide a more specific string with surrounding context.`;
+  }
+
+  return [content.split(oldString).join(newString), occurrences];
+}
+
 /**
  * Node.js VFS Sandbox backend for deepagents.
  *
@@ -181,28 +210,18 @@ function globToPathRegex(pattern: string): RegExp {
  * });
  * ```
  */
-export class VfsSandbox extends BaseSandbox {
+export class VfsSandbox implements BackendProtocolV2 {
   /** Private reference to the VirtualFileSystem instance */
   #vfs?: VirtualFileSystem;
 
-  /** Configuration options for this sandbox */
+  /** Configuration options for this backend */
   #options: VfsSandboxOptions;
-
-  /** Unique identifier for this sandbox instance */
-  #id: string;
 
   /** The working directory path (virtual) */
   #workingDirectory: string;
 
   /** Whether the sandbox is initialized */
   #initialized = false;
-
-  /**
-   * Get the unique identifier for this sandbox.
-   */
-  get id(): string {
-    return this.#id;
-  }
 
   /**
    * Get the VirtualFileSystem instance.
@@ -247,14 +266,7 @@ export class VfsSandbox extends BaseSandbox {
    * @param options - Configuration options for the sandbox
    */
   constructor(options: VfsSandboxOptions = {}) {
-    super();
-
-    this.#options = {
-      timeout: 30000,
-      ...options,
-    };
-
-    this.#id = `vfs-sandbox-${Date.now()}`;
+    this.#options = options;
     this.#workingDirectory = "/workspace";
   }
 
@@ -369,29 +381,6 @@ export class VfsSandbox extends BaseSandbox {
         this.#walk(entryPath, callback);
       }
     }
-  }
-
-  /**
-   * Execute a command in the sandbox.
-   *
-   * Node VFS is an in-memory filesystem backend only and does not execute shell
-   * commands. Use a shell-backed sandbox provider when command execution is
-   * required.
-   *
-   * @param command - The shell command to execute
-   * @returns Execution result with output, exit code, and truncation flag
-   * @throws {VfsSandboxError} If the sandbox is not initialized
-   */
-  async execute(command: string): Promise<ExecuteResponse> {
-    this.#ensureInitialized();
-    const trimmed = command.trim();
-    return {
-      output:
-        "Command execution is not supported by @langchain/node-vfs. " +
-        `Received command: ${trimmed || "<empty command>"}`,
-      exitCode: 127,
-      truncated: false,
-    };
   }
 
   /**
@@ -548,6 +537,159 @@ export class VfsSandbox extends BaseSandbox {
     }
 
     return { content: lines.slice(start, end).join("\n"), mimeType };
+  }
+
+  /**
+   * Read file content as raw FileData.
+   */
+  async readRaw(filePath: string): Promise<ReadRawResult> {
+    this.#ensureInitialized();
+
+    const resolvedPath = this.#resolvePath(filePath);
+    if (!resolvedPath || !this.instance.existsSync(resolvedPath)) {
+      return { error: `File '${filePath}' not found` };
+    }
+
+    let stat: Stats;
+    try {
+      stat = this.instance.statSync(resolvedPath);
+    } catch {
+      return { error: `File '${filePath}' not found` };
+    }
+
+    if (!stat.isFile()) {
+      return { error: `File '${filePath}' not found` };
+    }
+
+    const mimeType = getMimeType(filePath);
+    const createdAt = stat.ctime.toISOString();
+    const modifiedAt = stat.mtime.toISOString();
+
+    if (!isTextMimeType(mimeType)) {
+      const content = this.instance.readFileSync(resolvedPath) as Buffer;
+      return {
+        data: {
+          content: new Uint8Array(content),
+          mimeType,
+          created_at: createdAt,
+          modified_at: modifiedAt,
+        },
+      };
+    }
+
+    const content = this.instance.readFileSync(resolvedPath, {
+      encoding: "utf-8",
+    }) as string;
+    return {
+      data: {
+        content,
+        mimeType,
+        created_at: createdAt,
+        modified_at: modifiedAt,
+      },
+    };
+  }
+
+  /**
+   * Create a new file with content.
+   */
+  async write(filePath: string, content: string): Promise<WriteResult> {
+    this.#ensureInitialized();
+
+    const resolvedPath = this.#resolvePath(filePath);
+    if (!resolvedPath) {
+      return { error: `Error writing file '${filePath}': invalid path` };
+    }
+
+    try {
+      if (this.instance.existsSync(resolvedPath)) {
+        return {
+          error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
+        };
+      }
+
+      this.instance.mkdirSync(path.posix.dirname(resolvedPath), {
+        recursive: true,
+      });
+
+      const mimeType = getMimeType(filePath);
+      if (isTextMimeType(mimeType)) {
+        this.instance.writeFileSync(resolvedPath, content);
+      } else {
+        this.instance.writeFileSync(
+          resolvedPath,
+          Buffer.from(content, "base64"),
+        );
+      }
+
+      return { path: filePath, filesUpdate: null };
+    } catch (error) {
+      return {
+        error: `Error writing file '${filePath}': ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
+  }
+
+  /**
+   * Edit a file by replacing string occurrences.
+   */
+  async edit(
+    filePath: string,
+    oldString: string,
+    newString: string,
+    replaceAll: boolean = false,
+  ): Promise<EditResult> {
+    this.#ensureInitialized();
+
+    const resolvedPath = this.#resolvePath(filePath);
+    if (!resolvedPath || !this.instance.existsSync(resolvedPath)) {
+      return { error: `Error: File '${filePath}' not found` };
+    }
+
+    let stat: Stats;
+    try {
+      stat = this.instance.statSync(resolvedPath);
+    } catch {
+      return { error: `Error: File '${filePath}' not found` };
+    }
+
+    if (!stat.isFile()) {
+      return { error: `Error: File '${filePath}' not found` };
+    }
+
+    const mimeType = getMimeType(filePath);
+    if (!isTextMimeType(mimeType)) {
+      return {
+        error: `Error editing file '${filePath}': binary files are not supported`,
+      };
+    }
+
+    try {
+      const content = this.instance.readFileSync(resolvedPath, {
+        encoding: "utf-8",
+      }) as string;
+      const result = performStringReplacement(
+        content,
+        oldString,
+        newString,
+        replaceAll,
+      );
+      if (typeof result === "string") {
+        return { error: result };
+      }
+
+      const [newContent, occurrences] = result;
+      this.instance.writeFileSync(resolvedPath, newContent);
+      return { path: filePath, filesUpdate: null, occurrences };
+    } catch (error) {
+      return {
+        error: `Error editing file '${filePath}': ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
   }
 
   /**

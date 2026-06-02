@@ -16,16 +16,14 @@ describe("VfsSandbox", () => {
   describe("constructor", () => {
     it("should create a sandbox with default options", () => {
       sandbox = new VfsSandbox();
-      expect(sandbox.id).toMatch(/^vfs-sandbox-\d+$/);
       expect(sandbox.isRunning).toBe(false);
     });
 
     it("should create a sandbox with custom options", () => {
       sandbox = new VfsSandbox({
         mountPath: "/custom",
-        timeout: 60000,
       });
-      expect(sandbox.id).toMatch(/^vfs-sandbox-\d+$/);
+      expect(sandbox.isRunning).toBe(false);
     });
   });
 
@@ -86,30 +84,6 @@ describe("VfsSandbox", () => {
       const results = await sandbox.downloadFiles(["/hello.txt"]);
       expect(results[0].error).toBeNull();
       expect(new TextDecoder().decode(results[0].content!)).toBe("Hello!");
-    });
-  });
-
-  describe("execute", () => {
-    beforeEach(async () => {
-      sandbox = await VfsSandbox.create();
-    });
-
-    it("should throw if not initialized", async () => {
-      const uninitSandbox = new VfsSandbox();
-      await expect(uninitSandbox.execute("echo test")).rejects.toThrow(
-        VfsSandboxError,
-      );
-      await expect(uninitSandbox.execute("echo test")).rejects.toMatchObject({
-        code: "NOT_INITIALIZED",
-      });
-    });
-
-    it("should return unsupported response", async () => {
-      const result = await sandbox.execute("echo 'Hello, World!'");
-      expect(result.exitCode).toBe(127);
-      expect(result.truncated).toBe(false);
-      expect(result.output).toContain("not supported");
-      expect(result.output).toContain("echo 'Hello, World!'");
     });
   });
 

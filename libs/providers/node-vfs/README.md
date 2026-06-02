@@ -19,8 +19,8 @@ import { VfsSandbox } from "@langchain/node-vfs";
 import { createDeepAgent } from "deepagents";
 import { ChatAnthropic } from "@langchain/anthropic";
 
-// Create and initialize a VFS sandbox
-const sandbox = await VfsSandbox.create({
+// Create and initialize a VFS backend
+const backend = await VfsSandbox.create({
   initialFiles: {
     "/src/index.js": "console.log('Hello from VFS!')",
   },
@@ -30,14 +30,14 @@ try {
   const agent = createDeepAgent({
     model: new ChatAnthropic({ model: "claude-sonnet-4-20250514" }),
     systemPrompt: "You are a coding assistant with VFS access.",
-    backend: sandbox,
+    backend,
   });
 
   const result = await agent.invoke({
     messages: [{ role: "user", content: "Run the index.js file" }],
   });
 } finally {
-  await sandbox.stop();
+  await backend.stop();
 }
 ```
 
@@ -46,26 +46,25 @@ try {
 - **In-Memory File Storage** - Files are stored in a virtual file system using [node-vfs-polyfill](https://github.com/vercel-labs/node-vfs-polyfill)
 - **Zero Setup** - No Docker, cloud services, or external dependencies required
 - **Native File Tools** - `read`, `ls`, `grep`, and `glob` run directly against VFS data
-- **Automatic Cleanup** - All resources are cleaned up when sandbox stops
+- **Automatic Cleanup** - All resources are cleaned up when the backend stops
 - **Initial Files** - Pre-populate the sandbox with files at creation time
 - **Path Confinement** - File operations are constrained to the virtual workspace root
 
 ## API Reference
 
-### VfsSandbox
+### VfsSandbox (`BackendProtocolV2`)
 
-The main class for creating and managing VFS sandboxes.
+The main class for creating and managing the in-memory VFS backend.
 
 #### Static Methods
 
 ##### `VfsSandbox.create(options?)`
 
-Create and initialize a new VFS sandbox in one step.
+Create and initialize a new VFS backend in one step.
 
 ```typescript
 const sandbox = await VfsSandbox.create({
   mountPath: "/vfs", // Mount path for the VFS (default: "/vfs")
-  timeout: 30000, // Backward-compatible option (no-op in VFS-only mode)
   initialFiles: {
     // Initial files to populate
     "/README.md": "# Hello",
@@ -75,17 +74,6 @@ const sandbox = await VfsSandbox.create({
 ```
 
 #### Instance Methods
-
-##### `sandbox.execute(command)`
-
-`@langchain/node-vfs` is filesystem-only and does not execute shell commands.
-The method is preserved for protocol compatibility and returns an unsupported response.
-
-```typescript
-const result = await sandbox.execute("node src/index.js");
-console.log(result.output); // "Command execution is not supported..."
-console.log(result.exitCode); // 127
-```
 
 ##### `sandbox.uploadFiles(files)`
 
@@ -124,7 +112,7 @@ await sandbox.stop();
 
 #### `createVfsSandboxFactory(options?)`
 
-Create an async factory that creates new sandboxes per invocation.
+Create an async factory that creates new backend instances per invocation.
 
 ```typescript
 const factory = createVfsSandboxFactory({
@@ -148,7 +136,6 @@ const factory = createVfsSandboxFactoryFromSandbox(sandbox);
 | Option         | Type                                   | Default     | Description                               |
 | -------------- | -------------------------------------- | ----------- | ----------------------------------------- |
 | `mountPath`    | `string`                               | `"/vfs"`    | Mount path for the virtual file system    |
-| `timeout`      | `number`                               | `30000`     | Backward-compatible option (currently unused) |
 | `initialFiles` | `Record<string, string \| Uint8Array>` | `undefined` | Initial files to populate the VFS         |
 
 ## Error Handling
@@ -159,15 +146,18 @@ The package exports a `VfsSandboxError` class for typed error handling:
 import { VfsSandboxError } from "@langchain/node-vfs";
 
 try {
-  await sandbox.execute("some-command");
+  const result = await sandbox.read("/src/index.js");
+  if (result.error) {
+    throw new Error(result.error);
+  }
 } catch (error) {
   if (error instanceof VfsSandboxError) {
     switch (error.code) {
       case "NOT_INITIALIZED":
         // Handle uninitialized sandbox
         break;
-      case "COMMAND_FAILED":
-        // Handle provider-specific command failures
+      case "FILE_OPERATION_FAILED":
+        // Handle file operation failures
         break;
     }
   }
@@ -179,14 +169,12 @@ try {
 - `NOT_INITIALIZED` - Sandbox not initialized
 - `ALREADY_INITIALIZED` - Sandbox already initialized
 - `INITIALIZATION_FAILED` - Failed to initialize VFS
-- `COMMAND_TIMEOUT` - Reserved error code from shared protocol
-- `COMMAND_FAILED` - Reserved error code from shared protocol
 - `FILE_OPERATION_FAILED` - File operation failed
 - `NOT_SUPPORTED` - VFS not supported in environment
 
 ## How It Works
 
-The VFS sandbox is fully in-memory:
+The VFS backend is fully in-memory:
 
 1. **File Storage** - Files are stored in-memory using the `VirtualFileSystem` from [node-vfs-polyfill](https://github.com/vercel-labs/node-vfs-polyfill)
 2. **File Operations** - `read`, `ls`, `grep`, and `glob` operate directly on VFS paths
