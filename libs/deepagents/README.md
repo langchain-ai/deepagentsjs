@@ -68,16 +68,19 @@ The agent can plan, read/write files, and manage longer tasks with sub-agents an
 
 `deepagents` now publishes environment-specific entrypoints:
 
-- `deepagents` - default entrypoint. In Node.js it includes the full API. In browser-aware bundlers it resolves to the browser-safe build.
-- `deepagents/browser` - explicit browser-safe entrypoint (no Node-only exports).
-- `deepagents/node` - explicit Node.js entrypoint (includes Node-only exports like `FilesystemBackend` and `LocalShellBackend`).
+- `deepagents` - default Node.js/server entrypoint with the full API.
+- `deepagents/browser` - recommended browser entrypoint (no Node-only exports).
+- `deepagents/node` - optional explicit Node.js entrypoint (same full API as `deepagents`).
 
 ```typescript
 // Browser-safe usage
 import { createDeepAgent, StateBackend } from "deepagents/browser";
 
-// Explicit Node.js usage
-import { createDeepAgent, FilesystemBackend } from "deepagents/node";
+// Node.js usage (recommended)
+import { createDeepAgent, FilesystemBackend } from "deepagents";
+
+// Optional explicit Node.js usage
+// import { createDeepAgent, FilesystemBackend } from "deepagents/node";
 ```
 
 ## Customization
