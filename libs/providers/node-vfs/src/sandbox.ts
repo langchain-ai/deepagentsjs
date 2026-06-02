@@ -300,146 +300,35 @@ export class VfsSandbox extends BaseSandbox {
     }
 
     const vfsRootNames = new Set(topLevelNames);
+    let rewritten = command.replace(
+      /(?<![\w/.-])\/([^/\s"';|&><!\])]+)(?=\/|[\s"';|&><!\])]|$)/gm,
+      (match, rootName: string) => {
+        if (vfsRootNames.has(rootName)) {
+          return match;
+        }
+        if (!HOST_ABSOLUTE_ROOT_ALLOWLIST.has(rootName)) {
+          return `${execDir}/${rootName}`;
+        }
+        return match;
+      },
+    );
+
+    // Rewrite known VFS roots exactly (supports special characters).
     const sortedVfsRoots = [...vfsRootNames].sort(
       (a, b) => b.length - a.length,
     );
-    const lines = command.split("\n");
-    const rewrittenLines: string[] = [];
-    const pendingHeredocs: Array<{ delimiter: string; allowTabs: boolean }> =
-      [];
-
-    for (const line of lines) {
-      if (pendingHeredocs.length > 0) {
-        rewrittenLines.push(line);
-
-        const current = pendingHeredocs[0];
-        const candidate = current.allowTabs ? line.replace(/^\t+/, "") : line;
-        if (candidate === current.delimiter) {
-          pendingHeredocs.shift();
-        }
-        continue;
-      }
-
-      let rewrittenLine = line.replace(
-        /(?<![\w/.-])\/([^/\s"';|&><!\])]+)(?=\/|[\s"';|&><!\])]|$)/g,
-        (match, rootName: string) => {
-          if (vfsRootNames.has(rootName)) {
-            return match;
-          }
-          if (!HOST_ABSOLUTE_ROOT_ALLOWLIST.has(rootName)) {
-            return `${execDir}/${rootName}`;
-          }
-          return match;
-        },
+    for (const rootName of sortedVfsRoots) {
+      const escapedRootName = rootName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      rewritten = rewritten.replace(
+        new RegExp(
+          `(?<![\\w/.-])/${escapedRootName}(?=/|[\\s"';|&><!\\])]|$)`,
+          "gm",
+        ),
+        `${execDir}/${rootName}`,
       );
-
-      for (const rootName of sortedVfsRoots) {
-        const escapedRootName = rootName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        rewrittenLine = rewrittenLine.replace(
-          new RegExp(
-            `(?<![\\w/.-])/${escapedRootName}(?=/|[\\s"';|&><!\\])]|$)`,
-            "g",
-          ),
-          `${execDir}/${rootName}`,
-        );
-      }
-
-      rewrittenLines.push(rewrittenLine);
-
-      for (const heredoc of this.#extractHeredocDelimiters(line)) {
-        pendingHeredocs.push(heredoc);
-      }
     }
 
-    return rewrittenLines.join("\n");
-  }
-
-  #extractHeredocDelimiters(
-    line: string,
-  ): Array<{ delimiter: string; allowTabs: boolean }> {
-    const delimiters: Array<{ delimiter: string; allowTabs: boolean }> = [];
-    let inSingleQuote = false;
-    let inDoubleQuote = false;
-    let escapeNext = false;
-
-    for (let i = 0; i < line.length; i += 1) {
-      const ch = line[i];
-
-      if (escapeNext) {
-        escapeNext = false;
-        continue;
-      }
-
-      if (ch === "\\" && !inSingleQuote) {
-        escapeNext = true;
-        continue;
-      }
-
-      if (ch === "'" && !inDoubleQuote) {
-        inSingleQuote = !inSingleQuote;
-        continue;
-      }
-
-      if (ch === '"' && !inSingleQuote) {
-        inDoubleQuote = !inDoubleQuote;
-        continue;
-      }
-
-      if (inSingleQuote || inDoubleQuote) {
-        continue;
-      }
-
-      if (line[i] !== "<" || line[i + 1] !== "<") {
-        continue;
-      }
-
-      let j = i + 2;
-      let allowTabs = false;
-      if (line[j] === "-") {
-        allowTabs = true;
-        j += 1;
-      }
-
-      while (j < line.length && /\s/.test(line[j])) {
-        j += 1;
-      }
-
-      if (j >= line.length) {
-        break;
-      }
-
-      let delimiter = "";
-      const quoteChar = line[j];
-      if (quoteChar === "'" || quoteChar === '"') {
-        j += 1;
-        const start = j;
-        while (j < line.length && line[j] !== quoteChar) {
-          j += 1;
-        }
-        delimiter = line.slice(start, j);
-        if (j < line.length) {
-          j += 1;
-        }
-      } else {
-        const start = j;
-        while (
-          j < line.length &&
-          !/\s/.test(line[j]) &&
-          !";|&<>()".includes(line[j])
-        ) {
-          j += 1;
-        }
-        delimiter = line.slice(start, j);
-      }
-
-      if (delimiter.length > 0) {
-        delimiters.push({ delimiter, allowTabs });
-      }
-
-      i = j - 1;
-    }
-
-    return delimiters;
+    return rewritten;
   }
 
   /**

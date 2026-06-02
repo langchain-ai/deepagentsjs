@@ -551,22 +551,6 @@ try {
       expect(result.output.trim()).toBe("special-root-content");
     });
 
-    it("should not rewrite absolute-looking strings inside heredoc bodies", async () => {
-      sandbox = await VfsSandbox.create();
-
-      const result = await sandbox.execute(
-        `cat > routes.json <<'EOF'
-{"base":"/api","health":"/healthz"}
-EOF`,
-      );
-      expect(result.exitCode).toBe(0);
-
-      const downloaded = await sandbox.downloadFiles(["/routes.json"]);
-      expect(downloaded[0].error).toBeNull();
-      const content = new TextDecoder().decode(downloaded[0].content!);
-      expect(content.trim()).toBe('{"base":"/api","health":"/healthz"}');
-    });
-
     it("should rewrite broad host roots like /etc to the sandbox workspace", async () => {
       sandbox = await VfsSandbox.create();
 
