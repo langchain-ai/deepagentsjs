@@ -1,11 +1,16 @@
 /* oxlint-disable no-instanceof/no-instanceof */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
-import { VfsSandbox } from "./backend.js";
+import {
+  VfsBackend,
+  VfsSandbox,
+  createVfsBackendFactory,
+  createVfsSandboxFactory,
+} from "./backend.js";
 import { VfsSandboxError } from "./types.js";
 
-describe("VfsSandbox", () => {
-  let sandbox: VfsSandbox;
+describe("VfsBackend", () => {
+  let sandbox: VfsBackend;
 
   afterEach(async () => {
     if (sandbox?.isRunning) {
@@ -15,12 +20,12 @@ describe("VfsSandbox", () => {
 
   describe("constructor", () => {
     it("should create a sandbox with default options", () => {
-      sandbox = new VfsSandbox();
+      sandbox = new VfsBackend();
       expect(sandbox.isRunning).toBe(false);
     });
 
     it("should create a sandbox with custom options", () => {
-      sandbox = new VfsSandbox({
+      sandbox = new VfsBackend({
         mountPath: "/custom",
       });
       expect(sandbox.isRunning).toBe(false);
@@ -29,14 +34,14 @@ describe("VfsSandbox", () => {
 
   describe("initialize", () => {
     it("should initialize the sandbox", async () => {
-      sandbox = new VfsSandbox();
+      sandbox = new VfsBackend();
       await sandbox.initialize();
       expect(sandbox.isRunning).toBe(true);
       expect(sandbox.workingDirectory).toBeTruthy();
     });
 
     it("should throw if already initialized", async () => {
-      sandbox = new VfsSandbox();
+      sandbox = new VfsBackend();
       await sandbox.initialize();
 
       await expect(sandbox.initialize()).rejects.toThrow(VfsSandboxError);
@@ -47,7 +52,7 @@ describe("VfsSandbox", () => {
 
     it("should populate initial files", async () => {
       const encoder = new TextEncoder();
-      sandbox = new VfsSandbox({
+      sandbox = new VfsBackend({
         initialFiles: {
           "/test.txt": "Hello, World!",
           "/src/index.js": "console.log('Hi')",
@@ -70,12 +75,12 @@ describe("VfsSandbox", () => {
 
   describe("static create", () => {
     it("should create and initialize in one step", async () => {
-      sandbox = await VfsSandbox.create();
+      sandbox = await VfsBackend.create();
       expect(sandbox.isRunning).toBe(true);
     });
 
     it("should create with initial files", async () => {
-      sandbox = await VfsSandbox.create({
+      sandbox = await VfsBackend.create({
         initialFiles: {
           "/hello.txt": "Hello!",
         },
@@ -87,13 +92,47 @@ describe("VfsSandbox", () => {
     });
   });
 
+  describe("backward compatibility", () => {
+    it("keeps VfsSandbox as an alias to VfsBackend", async () => {
+      const backendFromAlias = await VfsSandbox.create({
+        initialFiles: { "/alias.txt": "ok" },
+      });
+      try {
+        expect(backendFromAlias).toBeInstanceOf(VfsBackend);
+      } finally {
+        await backendFromAlias.stop();
+      }
+    });
+
+    it("keeps createVfsSandboxFactory as an alias", async () => {
+      const newFactory = createVfsBackendFactory({
+        initialFiles: { "/f.txt": "factory" },
+      });
+      const oldFactory = createVfsSandboxFactory({
+        initialFiles: { "/f.txt": "factory" },
+      });
+
+      const [fromNew, fromOld] = await Promise.all([
+        newFactory(),
+        oldFactory(),
+      ]);
+      try {
+        expect(fromNew).toBeInstanceOf(VfsBackend);
+        expect(fromOld).toBeInstanceOf(VfsBackend);
+      } finally {
+        await fromNew.stop();
+        await fromOld.stop();
+      }
+    });
+  });
+
   describe("uploadFiles", () => {
     beforeEach(async () => {
-      sandbox = await VfsSandbox.create();
+      sandbox = await VfsBackend.create();
     });
 
     it("should throw if not initialized", async () => {
-      const uninitSandbox = new VfsSandbox();
+      const uninitSandbox = new VfsBackend();
       await expect(
         uninitSandbox.uploadFiles([["test.txt", new Uint8Array([])]]),
       ).rejects.toThrow(VfsSandboxError);
@@ -145,7 +184,7 @@ describe("VfsSandbox", () => {
 
   describe("downloadFiles", () => {
     beforeEach(async () => {
-      sandbox = await VfsSandbox.create({
+      sandbox = await VfsBackend.create({
         initialFiles: {
           "/existing.txt": "Existing content",
           "/dir/nested.txt": "Nested content",
@@ -154,7 +193,7 @@ describe("VfsSandbox", () => {
     });
 
     it("should throw if not initialized", async () => {
-      const uninitSandbox = new VfsSandbox();
+      const uninitSandbox = new VfsBackend();
       await expect(uninitSandbox.downloadFiles(["test.txt"])).rejects.toThrow(
         VfsSandboxError,
       );
@@ -205,7 +244,7 @@ describe("VfsSandbox", () => {
 
   describe("readRaw", () => {
     beforeEach(async () => {
-      sandbox = await VfsSandbox.create({
+      sandbox = await VfsBackend.create({
         initialFiles: {
           "/test.txt": "hello world",
         },
@@ -232,7 +271,7 @@ describe("VfsSandbox", () => {
 
   describe("stop", () => {
     it("should stop the sandbox", async () => {
-      sandbox = await VfsSandbox.create();
+      sandbox = await VfsBackend.create();
       expect(sandbox.isRunning).toBe(true);
 
       await sandbox.stop();
@@ -240,7 +279,7 @@ describe("VfsSandbox", () => {
     });
 
     it("should be safe to call multiple times", async () => {
-      sandbox = await VfsSandbox.create();
+      sandbox = await VfsBackend.create();
 
       await sandbox.stop();
       await sandbox.stop(); // Should not throw

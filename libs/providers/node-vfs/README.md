@@ -15,12 +15,12 @@ pnpm add @langchain/node-vfs deepagents
 ## Quick Start
 
 ```typescript
-import { VfsSandbox } from "@langchain/node-vfs";
+import { VfsBackend } from "@langchain/node-vfs";
 import { createDeepAgent } from "deepagents";
 import { ChatAnthropic } from "@langchain/anthropic";
 
 // Create and initialize a VFS backend
-const backend = await VfsSandbox.create({
+const backend = await VfsBackend.create({
   initialFiles: {
     "/src/index.js": "console.log('Hello from VFS!')",
   },
@@ -47,23 +47,23 @@ try {
 - **Zero Setup** - No Docker, cloud services, or external dependencies required
 - **Native File Tools** - `read`, `ls`, `grep`, and `glob` run directly against VFS data
 - **Automatic Cleanup** - All resources are cleaned up when the backend stops
-- **Initial Files** - Pre-populate the sandbox with files at creation time
+- **Initial Files** - Pre-populate the backend with files at creation time
 - **Path Confinement** - File operations are constrained to the virtual workspace root
 
 ## API Reference
 
-### VfsSandbox (`BackendProtocolV2`)
+### VfsBackend (`BackendProtocolV2`)
 
 The main class for creating and managing the in-memory VFS backend.
 
 #### Static Methods
 
-##### `VfsSandbox.create(options?)`
+##### `VfsBackend.create(options?)`
 
 Create and initialize a new VFS backend in one step.
 
 ```typescript
-const sandbox = await VfsSandbox.create({
+const backend = await VfsBackend.create({
   mountPath: "/vfs", // Mount path for the VFS (default: "/vfs")
   initialFiles: {
     // Initial files to populate
@@ -75,24 +75,24 @@ const sandbox = await VfsSandbox.create({
 
 #### Instance Methods
 
-##### `sandbox.uploadFiles(files)`
+##### `backend.uploadFiles(files)`
 
 Upload files to the sandbox.
 
 ```typescript
 const encoder = new TextEncoder();
-await sandbox.uploadFiles([
+await backend.uploadFiles([
   ["src/app.js", encoder.encode("console.log('Hi')")],
   ["package.json", encoder.encode('{"name": "test"}')],
 ]);
 ```
 
-##### `sandbox.downloadFiles(paths)`
+##### `backend.downloadFiles(paths)`
 
 Download files from the sandbox.
 
 ```typescript
-const results = await sandbox.downloadFiles(["src/app.js"]);
+const results = await backend.downloadFiles(["src/app.js"]);
 for (const result of results) {
   if (result.content) {
     console.log(new TextDecoder().decode(result.content));
@@ -100,35 +100,35 @@ for (const result of results) {
 }
 ```
 
-##### `sandbox.stop()`
+##### `backend.stop()`
 
 Stop the sandbox and clean up resources.
 
 ```typescript
-await sandbox.stop();
+await backend.stop();
 ```
 
 ### Factory Functions
 
-#### `createVfsSandboxFactory(options?)`
+#### `createVfsBackendFactory(options?)`
 
 Create an async factory that creates new backend instances per invocation.
 
 ```typescript
-const factory = createVfsSandboxFactory({
+const factory = createVfsBackendFactory({
   initialFiles: { "/README.md": "# Hello" },
 });
 
-const sandbox = await factory();
+const backend = await factory();
 ```
 
-#### `createVfsSandboxFactoryFromSandbox(sandbox)`
+#### `createVfsBackendFactoryFromBackend(backend)`
 
 Create a factory that reuses an existing sandbox.
 
 ```typescript
-const sandbox = await VfsSandbox.create();
-const factory = createVfsSandboxFactoryFromSandbox(sandbox);
+const backend = await VfsBackend.create();
+const factory = createVfsBackendFactoryFromBackend(backend);
 ```
 
 ## Configuration Options
@@ -146,7 +146,7 @@ The package exports a `VfsSandboxError` class for typed error handling:
 import { VfsSandboxError } from "@langchain/node-vfs";
 
 try {
-  const result = await sandbox.read("/src/index.js");
+  const result = await backend.read("/src/index.js");
   if (result.error) {
     throw new Error(result.error);
   }
@@ -154,7 +154,7 @@ try {
   if (error instanceof VfsSandboxError) {
     switch (error.code) {
       case "NOT_INITIALIZED":
-        // Handle uninitialized sandbox
+        // Handle uninitialized backend
         break;
       case "FILE_OPERATION_FAILED":
         // Handle file operation failures
@@ -166,8 +166,8 @@ try {
 
 ### Error Codes
 
-- `NOT_INITIALIZED` - Sandbox not initialized
-- `ALREADY_INITIALIZED` - Sandbox already initialized
+- `NOT_INITIALIZED` - Backend not initialized
+- `ALREADY_INITIALIZED` - Backend already initialized
 - `INITIALIZATION_FAILED` - Failed to initialize VFS
 - `FILE_OPERATION_FAILED` - File operation failed
 - `NOT_SUPPORTED` - VFS not supported in environment
@@ -181,6 +181,11 @@ The VFS backend is fully in-memory:
 3. **Isolation** - Paths are confined under the virtual workspace root
 
 This approach keeps filesystem operations isolated and avoids host shell execution from this provider.
+
+## Backward Compatibility
+
+- `VfsSandbox` is still exported as a deprecated alias of `VfsBackend`.
+- `createVfsSandboxFactory` and `createVfsSandboxFactoryFromSandbox` are still exported as deprecated aliases.
 
 ## Future: Native Node.js VFS
 

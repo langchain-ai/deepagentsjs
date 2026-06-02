@@ -13,12 +13,12 @@
  *
  * @example
  * ```typescript
- * import { VfsSandbox } from "@langchain/node-vfs";
+ * import { VfsBackend } from "@langchain/node-vfs";
  * import { createDeepAgent } from "deepagents";
  * import { ChatAnthropic } from "@langchain/anthropic";
  *
  * // Create and initialize a VFS backend
- * const backend = await VfsSandbox.create({
+ * const backend = await VfsBackend.create({
  *   initialFiles: {
  *     "/src/index.js": "console.log('Hello')",
  *   },
@@ -42,17 +42,23 @@
  * @packageDocumentation
  */
 
-// Export main class and provider
-export { VfsSandbox } from "./backend.js";
+// Export main class and backward-compatible alias
+export { VfsBackend, VfsSandbox } from "./backend.js";
 
 // Export factory functions
 export {
+  createVfsBackendFactory,
+  createVfsBackendFactoryFromBackend,
   createVfsSandboxFactory,
   createVfsSandboxFactoryFromSandbox,
 } from "./backend.js";
 
 // Export types
-export type { VfsSandboxOptions, VfsSandboxErrorCode } from "./types.js";
+export type {
+  VfsBackendOptions,
+  VfsSandboxOptions,
+  VfsSandboxErrorCode,
+} from "./types.js";
 
 // Export error class (value export)
 export { VfsSandboxError } from "./types.js";

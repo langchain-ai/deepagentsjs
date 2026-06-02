@@ -8,11 +8,11 @@
 import { SandboxError, type SandboxErrorCode } from "deepagents";
 
 /**
- * Configuration options for creating a VFS Sandbox.
+ * Configuration options for creating a VFS backend.
  *
  * @example
  * ```typescript
- * const options: VfsSandboxOptions = {
+ * const options: VfsBackendOptions = {
  *   mountPath: "/vfs",
  *   initialFiles: {
  *     "/app/index.js": "console.log('Hello')",
@@ -21,7 +21,7 @@ import { SandboxError, type SandboxErrorCode } from "deepagents";
  * };
  * ```
  */
-export interface VfsSandboxOptions {
+export interface VfsBackendOptions {
   /**
    * The mount path for the virtual file system.
    *
@@ -47,6 +47,11 @@ export interface VfsSandboxOptions {
    */
   initialFiles?: Record<string, string | Uint8Array>;
 }
+
+/**
+ * @deprecated Use `VfsBackendOptions` instead.
+ */
+export type VfsSandboxOptions = VfsBackendOptions;
 
 /**
  * Error codes for VFS Sandbox operations.

@@ -1,16 +1,16 @@
 /**
- * Integration tests for VfsSandbox.
+ * Integration tests for VfsBackend.
  *
  * These tests verify end-to-end VFS file behavior without shell execution.
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import { VfsSandbox, createVfsSandboxFactory } from "./backend.js";
+import { VfsBackend, createVfsBackendFactory } from "./backend.js";
 
 const isWindows = process.platform === "win32";
 
-describe.skipIf(isWindows)("VfsSandbox Integration", () => {
-  let sandbox: VfsSandbox;
+describe.skipIf(isWindows)("VfsBackend Integration", () => {
+  let sandbox: VfsBackend;
 
   afterEach(async () => {
     if (sandbox?.isRunning) {
@@ -20,7 +20,7 @@ describe.skipIf(isWindows)("VfsSandbox Integration", () => {
 
   describe("read/ls/grep/glob", () => {
     it("reads initial files with or without leading slash", async () => {
-      sandbox = await VfsSandbox.create({
+      sandbox = await VfsBackend.create({
         initialFiles: {
           "/src/index.js": "console.log('Hello from VFS!')",
         },
@@ -36,7 +36,7 @@ describe.skipIf(isWindows)("VfsSandbox Integration", () => {
     });
 
     it("supports ls for absolute and relative directory paths", async () => {
-      sandbox = await VfsSandbox.create({
+      sandbox = await VfsBackend.create({
         initialFiles: {
           "/src/index.js": "console.log('Hello')",
           "/src/utils.js": "module.exports = {}",
@@ -60,7 +60,7 @@ describe.skipIf(isWindows)("VfsSandbox Integration", () => {
     });
 
     it("supports literal grep recursively", async () => {
-      sandbox = await VfsSandbox.create({
+      sandbox = await VfsBackend.create({
         initialFiles: {
           "/a.txt": "alpha\nbeta\nalpha",
           "/nested/b.txt": "gamma\nalpha",
@@ -77,7 +77,7 @@ describe.skipIf(isWindows)("VfsSandbox Integration", () => {
     });
 
     it("supports grep glob filters", async () => {
-      sandbox = await VfsSandbox.create({
+      sandbox = await VfsBackend.create({
         initialFiles: {
           "/dir/a.txt": "target",
           "/dir/b.py": "target",
@@ -93,7 +93,7 @@ describe.skipIf(isWindows)("VfsSandbox Integration", () => {
     });
 
     it("supports glob with recursive patterns and directories", async () => {
-      sandbox = await VfsSandbox.create({
+      sandbox = await VfsBackend.create({
         initialFiles: {
           "/project/src/index.ts": "export {}",
           "/project/src/lib/math.ts": "export const n = 1",
@@ -119,7 +119,7 @@ describe.skipIf(isWindows)("VfsSandbox Integration", () => {
     });
 
     it("rejects excessively long glob patterns", async () => {
-      sandbox = await VfsSandbox.create({
+      sandbox = await VfsBackend.create({
         initialFiles: {
           "/project/src/index.ts": "export {}",
         },
@@ -132,7 +132,7 @@ describe.skipIf(isWindows)("VfsSandbox Integration", () => {
     });
 
     it("rejects excessively long grep glob filters", async () => {
-      sandbox = await VfsSandbox.create({
+      sandbox = await VfsBackend.create({
         initialFiles: {
           "/project/src/index.ts": "export {}",
         },
@@ -145,7 +145,7 @@ describe.skipIf(isWindows)("VfsSandbox Integration", () => {
     });
 
     it("returns binary content as Uint8Array from read", async () => {
-      sandbox = await VfsSandbox.create();
+      sandbox = await VfsBackend.create();
       const pngHeader = new Uint8Array([
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
       ]);
@@ -161,7 +161,7 @@ describe.skipIf(isWindows)("VfsSandbox Integration", () => {
 
   describe("path confinement", () => {
     it("rejects uploads outside the virtual workspace", async () => {
-      sandbox = await VfsSandbox.create();
+      sandbox = await VfsBackend.create();
 
       const result = await sandbox.uploadFiles([
         ["../../outside.txt", new TextEncoder().encode("no")],
@@ -171,7 +171,7 @@ describe.skipIf(isWindows)("VfsSandbox Integration", () => {
     });
 
     it("rejects downloads outside the virtual workspace", async () => {
-      sandbox = await VfsSandbox.create({
+      sandbox = await VfsBackend.create({
         initialFiles: { "/safe.txt": "ok" },
       });
 
@@ -184,7 +184,7 @@ describe.skipIf(isWindows)("VfsSandbox Integration", () => {
 
   describe("Factory functions", () => {
     it("creates sandbox via factory", async () => {
-      const factory = createVfsSandboxFactory({
+      const factory = createVfsBackendFactory({
         initialFiles: {
           "/factory.txt": "Created by factory",
         },
@@ -200,7 +200,7 @@ describe.skipIf(isWindows)("VfsSandbox Integration", () => {
     });
 
     it("creates independent sandboxes", async () => {
-      const factory = createVfsSandboxFactory();
+      const factory = createVfsBackendFactory();
 
       const sandbox1 = await factory();
       const sandbox2 = await factory();
