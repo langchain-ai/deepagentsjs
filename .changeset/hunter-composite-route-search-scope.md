@@ -2,7 +2,7 @@
 "deepagents": patch
 ---
 
-fix(backends): scope CompositeBackend grep/glob route fanout by search path
+fix: scope CompositeBackend grep/glob route fanout by search path
 
 CompositeBackend now limits fallback route fanout to routes mounted under the requested search path, instead of querying all routed backends unconditionally.
 
