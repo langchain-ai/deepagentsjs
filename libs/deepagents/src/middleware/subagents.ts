@@ -22,7 +22,6 @@ import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
 import { FilesystemPermission } from "../permissions/types.js";
-import { subagentWarmGate } from "./subagentWarmGate.js";
 
 export type { AgentMiddleware };
 
@@ -410,7 +409,10 @@ export const GENERAL_PURPOSE_SUBAGENT: Pick<
 } as const;
 
 /**
- * Filter state to exclude certain keys when passing to subagents
+ * Filter state to exclude certain keys when passing INTO subagents.
+ *
+ * The input path is a denylist: a subagent inherits the parent's context
+ * (jwt, ids, mode, …) minus the keys that must not leak down.
  */
 function filterStateForSubagent(
   state: Record<string, unknown>,
@@ -420,6 +422,36 @@ function filterStateForSubagent(
     if (!EXCLUDED_STATE_KEYS.includes(key as never)) {
       filtered[key] = value;
     }
+  }
+  return filtered;
+}
+
+/**
+ * Channels a subagent may write BACK to the parent on completion.
+ *
+ * The return path is an ALLOWLIST, not a denylist. A subagent's output is
+ * its final message (handled separately as a ToolMessage) plus the
+ * reducer-backed channels it legitimately accumulates into — `todos` (the
+ * parent's todosReducer merges by id) and `files` (fileDataReducer merges
+ * by path). Everything else it carries is inherited PARENT context (jwt,
+ * websiteId, mode, accountId, error, …); echoing those back means every one
+ * of N parallel coders writes the same channel in one superstep, and any
+ * plain LastValue channel throws "LastValue can only receive one value per
+ * step" (traces fe0786e3: `error`, fa4945ba: `jwt`). Allowlisting the
+ * mergeable channels stops the whole crash class at the source — no parent
+ * scalar is ever echoed, so future inherited fields can't reintroduce it.
+ */
+export const RETURN_STATE_ALLOWLIST = ["todos", "files"] as const;
+
+/**
+ * Filter a subagent's final state to only the channels it may write back.
+ */
+export function filterReturnState(
+  state: Record<string, unknown>,
+): Record<string, unknown> {
+  const filtered: Record<string, unknown> = {};
+  for (const key of RETURN_STATE_ALLOWLIST) {
+    if (key in state) filtered[key] = state[key];
   }
   return filtered;
 }
@@ -440,7 +472,7 @@ function returnCommandWithStateUpdate(
   result: Record<string, unknown>,
   toolCallId: string,
 ): Command {
-  const stateUpdate = filterStateForSubagent(result);
+  const stateUpdate = filterReturnState(result);
 
   let content: string | ContentBlock[];
 
@@ -600,6 +632,7 @@ function createTaskTool(options: {
   subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
   taskDescription: string | null;
+  subagentTypeDescription: string | null;
 }) {
   const {
     defaultModel,
@@ -610,6 +643,7 @@ function createTaskTool(options: {
     subagents,
     generalPurposeAgent,
     taskDescription,
+    subagentTypeDescription,
   } = options;
 
   const { agents: subagentGraphs, descriptions: subagentDescriptions } =
@@ -685,10 +719,6 @@ function createTaskTool(options: {
           callerId: randomUUID(),
         },
       };
-      // Serialize-first cache warming: the first dispatch of this type warms
-      // the shared system+tools prefix; concurrent siblings wait out the warm
-      // window so they cache-read it instead of each re-writing it.
-      await subagentWarmGate.gate(subagent_type);
 
       const result = (await subagent.invoke(
         subagentState,
@@ -758,7 +788,8 @@ function createTaskTool(options: {
         subagent_type: z
           .string()
           .describe(
-            `Name of the agent to use. Available: ${Object.keys(subagentGraphs).join(", ")}`,
+            subagentTypeDescription ??
+              `Name of the agent to use. Available: ${Object.keys(subagentGraphs).join(", ")}`,
           ),
         todo_id: z
           .string()
@@ -796,6 +827,15 @@ export interface SubAgentMiddlewareOptions {
   generalPurposeAgent?: boolean;
   /** Custom description for the task tool */
   taskDescription?: string | null;
+  /**
+   * Override the `subagent_type` schema-field description. Defaults to
+   * `"Name of the agent to use. Available: <roster>"`. Pass a roster-free
+   * constant to keep the task tool's wire bytes identical across agents that
+   * register different subagent sets (cache-prefix stability); the dispatch
+   * roster can then be delivered out-of-band (e.g. a tail reminder). The name
+   * is still validated against the registered graphs at dispatch.
+   */
+  subagentTypeDescription?: string | null;
 }
 
 /**
@@ -812,6 +852,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     systemPrompt = TASK_SYSTEM_PROMPT,
     generalPurposeAgent = true,
     taskDescription = null,
+    subagentTypeDescription = null,
   } = options;
 
   const taskTool = createTaskTool({
@@ -823,6 +864,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     subagents,
     generalPurposeAgent,
     taskDescription,
+    subagentTypeDescription,
   });
 
   return createMiddleware({
