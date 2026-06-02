@@ -360,7 +360,14 @@ export class VfsSandbox extends BaseSandbox {
 
       const child = cp.spawn("/bin/bash", ["-c", rewrittenCommand], {
         cwd: execDir,
-        env: { ...process.env, HOME: process.env.HOME },
+        // Keep environment minimal to avoid leaking host secrets to commands.
+        env: {
+          PATH: process.env.PATH ?? "/usr/bin:/bin",
+          HOME: execDir,
+          LANG: process.env.LANG ?? "C.UTF-8",
+          LC_ALL: process.env.LC_ALL ?? process.env.LANG ?? "C.UTF-8",
+          TMPDIR: execDir,
+        },
       });
 
       const collectOutput = (data: Buffer) => {

@@ -5,7 +5,6 @@ export const HOST_ABSOLUTE_ROOT_ALLOWLIST = new Set([
   "lib",
   "lib64",
   "private",
-  "proc",
   "sbin",
   "sys",
   "usr",

@@ -565,6 +565,35 @@ try {
       expect(content.trim()).toBe("sandbox etc path");
     });
 
+    it("should rewrite /proc paths into the sandbox workspace", async () => {
+      sandbox = await VfsSandbox.create();
+
+      const result = await sandbox.execute(
+        'mkdir -p /proc/self && echo "sandbox proc path" > /proc/self/environ && cat /proc/self/environ',
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.output.trim()).toBe("sandbox proc path");
+    });
+
+    it("should not expose host process environment variables to execute()", async () => {
+      const key = "VFS_SANDBOX_SECRET_TEST_259";
+      const originalValue = process.env[key];
+      process.env[key] = "do-not-leak";
+
+      try {
+        sandbox = await VfsSandbox.create();
+        const result = await sandbox.execute(`printenv ${key}`);
+        expect(result.exitCode).toBe(1);
+        expect(result.output.trim()).toBe("");
+      } finally {
+        if (originalValue === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = originalValue;
+        }
+      }
+    });
+
     it("should keep host absolute system paths for known roots", async () => {
       sandbox = await VfsSandbox.create();
 
