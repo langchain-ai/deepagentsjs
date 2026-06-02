@@ -43,13 +43,13 @@
  */
 
 // Export main class and provider
-export { VfsSandbox } from "./sandbox.js";
+export { VfsSandbox } from "./backend.js";
 
 // Export factory functions
 export {
   createVfsSandboxFactory,
   createVfsSandboxFactoryFromSandbox,
-} from "./sandbox.js";
+} from "./backend.js";
 
 // Export types
 export type { VfsSandboxOptions, VfsSandboxErrorCode } from "./types.js";

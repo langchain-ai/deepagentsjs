@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import { VfsSandbox, createVfsSandboxFactory } from "./sandbox.js";
+import { VfsSandbox, createVfsSandboxFactory } from "./backend.js";
 
 const isWindows = process.platform === "win32";
 
