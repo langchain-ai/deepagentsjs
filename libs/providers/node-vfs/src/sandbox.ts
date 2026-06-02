@@ -12,10 +12,8 @@
  * @packageDocumentation
  */
 
-import cp from "node:child_process";
-import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
+import type { Stats } from "node:fs";
 
 import {
   BaseSandbox,
@@ -34,6 +32,110 @@ import { VirtualFileSystem } from "node-vfs-polyfill";
 
 import { VfsSandboxError, type VfsSandboxOptions } from "./types.js";
 
+const MIME_TYPES: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+  ".heic": "image/heic",
+  ".heif": "image/heif",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".aiff": "audio/aiff",
+  ".aac": "audio/aac",
+  ".ogg": "audio/ogg",
+  ".flac": "audio/flac",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mpeg": "video/mpeg",
+  ".mov": "video/quicktime",
+  ".avi": "video/x-msvideo",
+  ".flv": "video/x-flv",
+  ".mpg": "video/mpeg",
+  ".wmv": "video/x-ms-wmv",
+  ".3gpp": "video/3gpp",
+  ".pdf": "application/pdf",
+  ".ppt": "application/vnd.ms-powerpoint",
+  ".pptx":
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+};
+
+function getMimeType(filePath: string): string {
+  const ext = path.posix.extname(filePath).toLocaleLowerCase();
+  return MIME_TYPES[ext] || "text/plain";
+}
+
+function isTextMimeType(mimeType: string): boolean {
+  return (
+    mimeType.startsWith("text/") ||
+    mimeType === "application/json" ||
+    mimeType === "application/javascript" ||
+    mimeType === "image/svg+xml"
+  );
+}
+
+/**
+ * Convert a glob pattern to a path-aware RegExp.
+ *
+ * - `*`  matches any characters except `/`
+ * - `**` matches any characters including `/`
+ * - `?`  matches a single character except `/`
+ * - `[...]` character classes
+ */
+function globToPathRegex(pattern: string): RegExp {
+  let regex = "^";
+  let i = 0;
+
+  while (i < pattern.length) {
+    const c = pattern[i];
+
+    if (c === "*") {
+      if (i + 1 < pattern.length && pattern[i + 1] === "*") {
+        i += 2;
+        if (i < pattern.length && pattern[i] === "/") {
+          regex += "(.*/)?";
+          i++;
+        } else {
+          regex += ".*";
+        }
+      } else {
+        regex += "[^/]*";
+        i++;
+      }
+    } else if (c === "?") {
+      regex += "[^/]";
+      i++;
+    } else if (c === "[") {
+      let j = i + 1;
+      while (j < pattern.length && pattern[j] !== "]") j++;
+      regex += pattern.slice(i, j + 1);
+      i = j + 1;
+    } else if (
+      c === "." ||
+      c === "+" ||
+      c === "^" ||
+      c === "$" ||
+      c === "{" ||
+      c === "}" ||
+      c === "(" ||
+      c === ")" ||
+      c === "|" ||
+      c === "\\"
+    ) {
+      regex += `\\${c}`;
+      i++;
+    } else {
+      regex += c;
+      i++;
+    }
+  }
+
+  regex += "$";
+  return new RegExp(regex);
+}
+
 /**
  * Node.js VFS Sandbox backend for deepagents.
  *
@@ -41,8 +143,7 @@ import { VfsSandboxError, type VfsSandboxOptions } from "./types.js";
  * agents to read/write files without affecting the real filesystem.
  *
  * This implementation uses node-vfs-polyfill which implements the upcoming
- * Node.js VFS feature. Files are stored in-memory using the VFS, and when
- * command execution is needed, files are synced to a temp directory.
+ * Node.js VFS feature. Files are stored entirely in-memory using the VFS.
  *
  * ## Basic Usage
  *
@@ -57,9 +158,9 @@ import { VfsSandboxError, type VfsSandboxOptions } from "./types.js";
  * });
  *
  * try {
- *   // Execute commands
- *   const result = await sandbox.execute("node src/index.js");
- *   console.log(result.output);
+ *   // Read files directly
+ *   const result = await sandbox.read("/src/index.js");
+ *   console.log(result.content);
  * } finally {
  *   await sandbox.stop();
  * }
@@ -92,9 +193,6 @@ export class VfsSandbox extends BaseSandbox {
 
   /** The working directory path (virtual) */
   #workingDirectory: string;
-
-  /** Temp directory for command execution */
-  #tempDir?: string;
 
   /** Whether the sandbox is initialized */
   #initialized = false;
@@ -134,10 +232,10 @@ export class VfsSandbox extends BaseSandbox {
   }
 
   /**
-   * Check if VFS mode is active (vs temp directory fallback).
+   * Check if VFS mode is active.
    */
   get isVfsMode(): boolean {
-    return this.#vfs !== null;
+    return this.#vfs !== undefined;
   }
 
   /**
@@ -204,125 +302,81 @@ export class VfsSandbox extends BaseSandbox {
     this.#initialized = true;
   }
 
-  /**
-   * Sync VFS contents to a temp directory for command execution.
-   * Creates the temp directory if it doesn't exist.
-   */
-  async #syncToTempDir(): Promise<string> {
-    // Create temp directory if needed
-    if (!this.#tempDir) {
-      this.#tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "vfs-exec-"));
+  #resolvePath(inputPath: string): string | null {
+    const raw = inputPath.trim() || ".";
+    const normalizedInput = raw === "/" ? "." : path.posix.normalize(raw);
+
+    const candidate =
+      normalizedInput === this.#workingDirectory ||
+      normalizedInput.startsWith(`${this.#workingDirectory}/`)
+        ? normalizedInput
+        : path.posix.resolve(
+            this.#workingDirectory,
+            normalizedInput.startsWith("/")
+              ? normalizedInput.slice(1)
+              : normalizedInput,
+          );
+
+    if (
+      candidate !== this.#workingDirectory &&
+      !candidate.startsWith(`${this.#workingDirectory}/`)
+    ) {
+      return null;
     }
 
-    // Recursively copy VFS contents to temp directory
-    await this.#syncDirToTemp(this.#workingDirectory, this.#tempDir);
-
-    return this.#tempDir;
+    return candidate;
   }
 
-  /**
-   * Recursively sync a VFS directory to the temp directory.
-   */
-  async #syncDirToTemp(vfsPath: string, tempPath: string): Promise<void> {
-    // Ensure temp directory exists
-    fs.mkdirSync(tempPath, { recursive: true });
-
-    // Read VFS directory
-    const entries = this.instance.readdirSync(vfsPath, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const vfsEntryPath = path.posix.join(vfsPath, entry.name);
-      const tempEntryPath = path.join(tempPath, entry.name);
-
-      if (entry.isDirectory()) {
-        await this.#syncDirToTemp(vfsEntryPath, tempEntryPath);
-      } else {
-        const content = this.instance.readFileSync(vfsEntryPath);
-        fs.writeFileSync(tempEntryPath, content);
-      }
+  #toPublicPath(absolutePath: string): string {
+    const relative = path.posix.relative(this.#workingDirectory, absolutePath);
+    if (!relative || relative === ".") {
+      return ".";
     }
+    return relative;
   }
 
-  /**
-   * Sync temp directory contents back to VFS after command execution.
-   */
-  async #syncFromTempDir(): Promise<void> {
-    if (!this.#tempDir) {
+  #walk(
+    basePath: string,
+    callback: (
+      fullPath: string,
+      isDir: boolean,
+      mtime: Date,
+      size: number,
+    ) => void,
+  ): void {
+    let entries: Array<{ name: string }>;
+    try {
+      entries = this.instance.readdirSync(basePath, {
+        withFileTypes: true,
+      }) as Array<{ name: string }>;
+    } catch {
       return;
     }
 
-    await this.#syncDirFromTemp(this.#tempDir, this.#workingDirectory);
-  }
-
-  /**
-   * Recursively sync a temp directory to the VFS.
-   */
-  async #syncDirFromTemp(tempPath: string, vfsPath: string): Promise<void> {
-    // Ensure VFS directory exists
-    this.instance.mkdirSync(vfsPath, { recursive: true });
-
-    // Read temp directory
-    const entries = fs.readdirSync(tempPath, { withFileTypes: true });
-
     for (const entry of entries) {
-      const tempEntryPath = path.join(tempPath, entry.name);
-      const vfsEntryPath = path.posix.join(vfsPath, entry.name);
+      const entryPath = path.posix.join(basePath, entry.name);
+      let stat: Stats;
+      try {
+        stat = this.instance.statSync(entryPath);
+      } catch {
+        continue;
+      }
 
-      if (entry.isDirectory()) {
-        await this.#syncDirFromTemp(tempEntryPath, vfsEntryPath);
-      } else {
-        const content = fs.readFileSync(tempEntryPath);
-        this.instance.writeFileSync(vfsEntryPath, content);
+      const isDir = stat.isDirectory();
+      callback(entryPath, isDir, stat.mtime, isDir ? 0 : stat.size);
+
+      if (isDir) {
+        this.#walk(entryPath, callback);
       }
     }
-  }
-
-  /**
-   * Rewrite absolute paths in a command that reference VFS entries.
-   *
-   * When users define files with absolute paths like `/src/index.js` in the
-   * VFS, commands like `node /src/index.js` should resolve to the temp
-   * directory where files are synced for execution. This method replaces
-   * absolute paths whose top-level component matches a VFS workspace entry
-   * with the corresponding temp directory path, leaving system paths
-   * (e.g. `/bin/bash`, `/usr/local/bin/node`) untouched.
-   */
-  #rewriteVfsPaths(command: string, execDir: string): string {
-    let topLevelNames: string[];
-    try {
-      const entries = this.instance.readdirSync(this.#workingDirectory, {
-        withFileTypes: true,
-      });
-      topLevelNames = entries.map((e: { name: string }) => e.name);
-    } catch {
-      return command;
-    }
-
-    if (topLevelNames.length === 0) return command;
-
-    let result = command;
-    for (const name of topLevelNames) {
-      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      // Match /<name> when it appears as a standalone path token:
-      // - NOT preceded by word chars, dots, or slashes (avoids matching
-      //   inside longer paths like "foo/src" or "../src")
-      // - Followed by /, whitespace, quotes, shell operators, or end
-      result = result.replace(
-        new RegExp(`(?<![\\w/.-])/${escaped}(?=/|[\\s"';|&><!\\])]|$)`, "gm"),
-        `${execDir}/${name}`,
-      );
-    }
-
-    return result;
   }
 
   /**
    * Execute a command in the sandbox.
    *
-   * Commands are run using `/bin/bash -c` in the sandbox working directory.
-   * When using VFS mode, files are synced to a temp directory before execution
-   * and synced back after. Absolute paths in the command that reference VFS
-   * entries are automatically rewritten to point to the temp directory.
+   * Node VFS is an in-memory filesystem backend only and does not execute shell
+   * commands. Use a shell-backed sandbox provider when command execution is
+   * required.
    *
    * @param command - The shell command to execute
    * @returns Execution result with output, exit code, and truncation flag
@@ -330,72 +384,14 @@ export class VfsSandbox extends BaseSandbox {
    */
   async execute(command: string): Promise<ExecuteResponse> {
     this.#ensureInitialized();
-
-    // Sync VFS to temp directory for command execution
-    const execDir = await this.#syncToTempDir();
-
-    // Rewrite absolute VFS paths in the command to temp dir paths
-    const rewrittenCommand = this.#rewriteVfsPaths(command, execDir);
-
-    return new Promise((resolve) => {
-      const chunks: string[] = [];
-      let truncated = false;
-      const maxOutputBytes = 1024 * 1024; // 1MB output limit
-      let totalBytes = 0;
-
-      const child = cp.spawn("/bin/bash", ["-c", rewrittenCommand], {
-        cwd: execDir,
-        env: { ...process.env, HOME: process.env.HOME },
-      });
-
-      const collectOutput = (data: Buffer) => {
-        const str = data.toString();
-        totalBytes += data.byteLength;
-
-        if (totalBytes <= maxOutputBytes) {
-          chunks.push(str);
-        } else {
-          truncated = true;
-        }
-      };
-
-      child.stdout.on("data", collectOutput);
-      child.stderr.on("data", collectOutput);
-
-      // Handle timeout
-      const timer = setTimeout(() => {
-        child.kill("SIGTERM");
-        // Sync back before resolving
-        this.#syncFromTempDir().then(() => {
-          resolve({
-            output: chunks.join("") + "\n[Command timed out]",
-            exitCode: null,
-            truncated,
-          });
-        });
-      }, this.#options.timeout);
-
-      child.on("close", (exitCode) => {
-        clearTimeout(timer);
-        // Sync files back from temp directory to VFS
-        this.#syncFromTempDir().then(() => {
-          resolve({
-            output: chunks.join(""),
-            exitCode,
-            truncated,
-          });
-        });
-      });
-
-      child.on("error", (err) => {
-        clearTimeout(timer);
-        resolve({
-          output: `Error spawning process: ${err.message}`,
-          exitCode: 1,
-          truncated: false,
-        });
-      });
-    });
+    const trimmed = command.trim();
+    return {
+      output:
+        "Command execution is not supported by @langchain/node-vfs. " +
+        `Received command: ${trimmed || "<empty command>"}`,
+      exitCode: 127,
+      truncated: false,
+    };
   }
 
   /**
@@ -415,7 +411,11 @@ export class VfsSandbox extends BaseSandbox {
 
     for (const [filePath, content] of files) {
       try {
-        const fullPath = path.posix.join(this.#workingDirectory, filePath);
+        const fullPath = this.#resolvePath(filePath);
+        if (!fullPath) {
+          results.push({ path: filePath, error: "invalid_path" });
+          continue;
+        }
         const parentDir = path.posix.dirname(fullPath);
 
         // Ensure parent directory exists
@@ -443,7 +443,15 @@ export class VfsSandbox extends BaseSandbox {
 
     for (const filePath of paths) {
       try {
-        const fullPath = path.posix.join(this.#workingDirectory, filePath);
+        const fullPath = this.#resolvePath(filePath);
+        if (!fullPath) {
+          results.push({
+            path: filePath,
+            content: null,
+            error: "invalid_path",
+          });
+          continue;
+        }
 
         if (!this.instance.existsSync(fullPath)) {
           results.push({
@@ -484,20 +492,8 @@ export class VfsSandbox extends BaseSandbox {
 
   /**
    * Stop the sandbox and release all resources.
-   *
-   * Cleans up the temp directory used for command execution.
    */
   async stop(): Promise<void> {
-    // Clean up temp directory
-    if (this.#tempDir) {
-      try {
-        fs.rmSync(this.#tempDir, { recursive: true, force: true });
-      } catch {
-        // Ignore cleanup errors
-      }
-      this.#tempDir = undefined;
-    }
-
     // Clear VFS reference
     this.#vfs = undefined;
     this.#initialized = false;
@@ -505,66 +501,222 @@ export class VfsSandbox extends BaseSandbox {
   }
 
   /**
-   * Normalize a user-supplied file path for use in execute()-based operations.
-   *
-   * Since execute() runs commands in a temp directory, absolute paths like
-   * `/src/index.js` would resolve against the real filesystem instead of
-   * the sandbox working directory. This method strips the leading `/` so
-   * paths resolve relative to the temp directory (cwd of the shell).
-   *
-   * Both `/src/index.js` and `src/index.js` refer to the same sandbox file.
-   */
-  #normalizeExecPath(filePath: string): string {
-    const stripped = filePath.startsWith("/") ? filePath.slice(1) : filePath;
-    return stripped || ".";
-  }
-
-  /**
-   * Read file content with line numbers.
-   *
-   * Overrides BaseSandbox.read() to normalize paths with a leading `/`
-   * so they resolve correctly in the temp execution directory.
+   * Read file content.
    */
   async read(
     filePath: string,
     offset: number = 0,
     limit: number = 500,
   ): Promise<ReadResult> {
-    return super.read(this.#normalizeExecPath(filePath), offset, limit);
+    this.#ensureInitialized();
+
+    const resolvedPath = this.#resolvePath(filePath);
+    if (!resolvedPath || !this.instance.existsSync(resolvedPath)) {
+      return { error: `File '${filePath}' not found` };
+    }
+
+    let stat: Stats;
+    try {
+      stat = this.instance.statSync(resolvedPath);
+    } catch {
+      return { error: `File '${filePath}' not found` };
+    }
+
+    if (!stat.isFile()) {
+      return { error: `File '${filePath}' not found` };
+    }
+
+    const mimeType = getMimeType(filePath);
+    if (!isTextMimeType(mimeType)) {
+      const content = this.instance.readFileSync(resolvedPath) as Buffer;
+      return { content: new Uint8Array(content), mimeType };
+    }
+
+    if (limit === 0) {
+      return { content: "", mimeType };
+    }
+
+    const content = this.instance.readFileSync(resolvedPath, {
+      encoding: "utf-8",
+    }) as string;
+    const lines = content.split("\n");
+    const start = Math.max(0, offset);
+    const end = Math.max(start, start + Math.max(0, limit));
+
+    if (start >= lines.length) {
+      return { content: "", mimeType };
+    }
+
+    return { content: lines.slice(start, end).join("\n"), mimeType };
   }
 
   /**
    * List files and directories in the specified directory.
-   *
-   * Overrides BaseSandbox.ls() to normalize paths with a leading `/`
-   * so they resolve correctly in the temp execution directory.
    */
   async ls(dirPath: string): Promise<LsResult> {
-    return super.ls(this.#normalizeExecPath(dirPath));
+    this.#ensureInitialized();
+
+    const resolvedPath = this.#resolvePath(dirPath);
+    if (!resolvedPath || !this.instance.existsSync(resolvedPath)) {
+      return { files: [] };
+    }
+
+    let dirStat: Stats;
+    try {
+      dirStat = this.instance.statSync(resolvedPath);
+    } catch {
+      return { files: [] };
+    }
+
+    if (!dirStat.isDirectory()) {
+      return { files: [] };
+    }
+
+    let entries: Array<{ name: string }>;
+    try {
+      entries = this.instance.readdirSync(resolvedPath, {
+        withFileTypes: true,
+      }) as Array<{ name: string }>;
+    } catch {
+      return { files: [] };
+    }
+
+    const files = entries
+      .map((entry) => {
+        const fullPath = path.posix.join(resolvedPath, entry.name);
+        const stat = this.instance.statSync(fullPath);
+        const isDir = stat.isDirectory();
+        return {
+          path: this.#toPublicPath(fullPath) + (isDir ? "/" : ""),
+          is_dir: isDir,
+          size: isDir ? 0 : stat.size,
+          modified_at: stat.mtime.toISOString(),
+        };
+      })
+      .sort((a, b) => a.path.localeCompare(b.path));
+
+    return { files };
   }
 
   /**
    * Search for a literal text pattern in files.
-   *
-   * Overrides BaseSandbox.grep() to normalize paths with a leading `/`
-   * so they resolve correctly in the temp execution directory.
    */
   async grep(
     pattern: string,
     searchPath: string = "/",
     glob: string | null = null,
   ): Promise<GrepResult> {
-    return super.grep(pattern, this.#normalizeExecPath(searchPath), glob);
+    this.#ensureInitialized();
+
+    const resolvedPath = this.#resolvePath(searchPath);
+    if (!resolvedPath || !this.instance.existsSync(resolvedPath)) {
+      return { matches: [] };
+    }
+
+    let rootStat: Stats;
+    try {
+      rootStat = this.instance.statSync(resolvedPath);
+    } catch {
+      return { matches: [] };
+    }
+
+    const matches: NonNullable<GrepResult["matches"]> = [];
+    const globMatcher = glob ? globToPathRegex(glob) : null;
+
+    const scanFile = (fileAbsolutePath: string) => {
+      if (
+        globMatcher &&
+        !globMatcher.test(path.posix.basename(fileAbsolutePath))
+      ) {
+        return;
+      }
+
+      const publicPath = this.#toPublicPath(fileAbsolutePath);
+      const mimeType = getMimeType(publicPath);
+      if (!isTextMimeType(mimeType)) {
+        return;
+      }
+
+      let text: string;
+      try {
+        text = this.instance.readFileSync(fileAbsolutePath, {
+          encoding: "utf-8",
+        }) as string;
+      } catch {
+        return;
+      }
+
+      const lines = text.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes(pattern)) {
+          matches.push({
+            path: publicPath,
+            line: i + 1,
+            text: lines[i],
+          });
+        }
+      }
+    };
+
+    if (rootStat.isDirectory()) {
+      this.#walk(resolvedPath, (fileAbsolutePath, isDir) => {
+        if (!isDir) {
+          scanFile(fileAbsolutePath);
+        }
+      });
+    } else {
+      scanFile(resolvedPath);
+    }
+
+    return { matches };
   }
 
   /**
    * Structured glob matching returning FileInfo objects.
-   *
-   * Overrides BaseSandbox.glob() to normalize paths with a leading `/`
-   * so they resolve correctly in the temp execution directory.
    */
   async glob(pattern: string, searchPath: string = "/"): Promise<GlobResult> {
-    return super.glob(pattern, this.#normalizeExecPath(searchPath));
+    this.#ensureInitialized();
+
+    let effectivePattern = pattern;
+    if (effectivePattern.startsWith("/")) {
+      effectivePattern = effectivePattern.slice(1);
+    }
+
+    const resolvedPath = this.#resolvePath(searchPath);
+    if (!resolvedPath || !this.instance.existsSync(resolvedPath)) {
+      return { files: [] };
+    }
+
+    let rootStat: Stats;
+    try {
+      rootStat = this.instance.statSync(resolvedPath);
+    } catch {
+      return { files: [] };
+    }
+
+    if (!rootStat.isDirectory()) {
+      return { files: [] };
+    }
+
+    const matcher = globToPathRegex(effectivePattern);
+    const files: NonNullable<GlobResult["files"]> = [];
+
+    this.#walk(resolvedPath, (entryPath, isDir, mtime, size) => {
+      const relPath = path.posix.relative(resolvedPath, entryPath);
+      if (!relPath) return;
+
+      if (matcher.test(relPath)) {
+        files.push({
+          path: relPath,
+          is_dir: isDir,
+          size,
+          modified_at: mtime.toISOString(),
+        });
+      }
+    });
+
+    files.sort((a, b) => a.path.localeCompare(b.path));
+    return { files };
   }
 
   /**

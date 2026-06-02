@@ -104,66 +104,12 @@ describe("VfsSandbox", () => {
       });
     });
 
-    // Note: When VFS polyfill is active (not using temp directory fallback),
-    // command execution may fail because the VFS mount path doesn't exist
-    // on the real filesystem for child_process.spawn.
-    // These tests verify behavior when using temp directory fallback.
-
-    it("should execute a simple command or handle VFS mode gracefully", async () => {
+    it("should return unsupported response", async () => {
       const result = await sandbox.execute("echo 'Hello, World!'");
-      // In temp dir mode, this works. In VFS mode, it may fail with ENOENT.
-      if (result.output.includes("ENOENT")) {
-        // VFS mode - command execution not supported with virtual paths
-        expect(result.exitCode).toBe(1);
-      } else {
-        expect(result.output.trim()).toBe("Hello, World!");
-        expect(result.exitCode).toBe(0);
-        expect(result.truncated).toBe(false);
-      }
-    });
-
-    it("should capture stderr or handle VFS mode", async () => {
-      const result = await sandbox.execute("echo 'error' >&2");
-      if (result.output.includes("ENOENT")) {
-        expect(result.exitCode).toBe(1);
-      } else {
-        expect(result.output.trim()).toBe("error");
-        expect(result.exitCode).toBe(0);
-      }
-    });
-
-    it("should return non-zero exit code for failed commands or VFS mode", async () => {
-      const result = await sandbox.execute("exit 42");
-      if (result.output.includes("ENOENT")) {
-        expect(result.exitCode).toBe(1);
-      } else {
-        expect(result.exitCode).toBe(42);
-      }
-    });
-
-    it("should execute commands in the working directory or handle VFS mode", async () => {
-      const result = await sandbox.execute("pwd");
-      if (result.output.includes("ENOENT")) {
-        expect(result.exitCode).toBe(1);
-      } else {
-        // In VFS mode, commands execute in a temp directory (not the virtual path)
-        // In temp dir fallback mode, commands execute in the actual working directory
-        const output = result.output.trim();
-
-        if (sandbox.isVfsMode) {
-          // VFS mode: commands run in a temp directory for execution
-          expect(output).toMatch(/vfs-(sandbox|exec)/);
-        } else {
-          // Temp dir fallback mode: working directory is the actual path
-          const expected = sandbox.workingDirectory;
-          // On macOS, /var is a symlink to /private/var, so pwd may resolve differently
-          expect(
-            output === expected ||
-              output === `/private${expected}` ||
-              expected === `/private${output}`,
-          ).toBe(true);
-        }
-      }
+      expect(result.exitCode).toBe(127);
+      expect(result.truncated).toBe(false);
+      expect(result.output).toContain("not supported");
+      expect(result.output).toContain("echo 'Hello, World!'");
     });
   });
 

@@ -48,7 +48,10 @@ export interface VfsSandboxOptions {
   initialFiles?: Record<string, string | Uint8Array>;
 
   /**
-   * Command timeout in milliseconds.
+   * Backward-compatible timeout option.
+   *
+   * Retained for API compatibility; currently unused because this provider
+   * does not execute shell commands.
    *
    * @default 30000 (30 seconds)
    */
@@ -78,15 +81,15 @@ const VFS_SANDBOX_ERROR_SYMBOL = Symbol.for("vfs.sandbox.error");
  * @example
  * ```typescript
  * try {
- *   await sandbox.execute("some command");
+ *   await sandbox.read("/some/file.txt");
  * } catch (error) {
  *   if (error instanceof VfsSandboxError) {
  *     switch (error.code) {
  *       case "NOT_INITIALIZED":
  *         await sandbox.initialize();
  *         break;
- *       case "COMMAND_TIMEOUT":
- *         console.error("Command took too long");
+ *       case "FILE_OPERATION_FAILED":
+ *         console.error("File operation failed");
  *         break;
  *       default:
  *         throw error;

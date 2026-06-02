@@ -45,10 +45,10 @@ try {
 
 - **In-Memory File Storage** - Files are stored in a virtual file system using [node-vfs-polyfill](https://github.com/vercel-labs/node-vfs-polyfill)
 - **Zero Setup** - No Docker, cloud services, or external dependencies required
-- **Full Command Execution** - Execute shell commands with automatic file syncing
+- **Native File Tools** - `read`, `ls`, `grep`, and `glob` run directly against VFS data
 - **Automatic Cleanup** - All resources are cleaned up when sandbox stops
 - **Initial Files** - Pre-populate the sandbox with files at creation time
-- **Fallback Mode** - Automatically falls back to temp directory if VFS is unavailable
+- **Path Confinement** - File operations are constrained to the virtual workspace root
 
 ## API Reference
 
@@ -65,7 +65,7 @@ Create and initialize a new VFS sandbox in one step.
 ```typescript
 const sandbox = await VfsSandbox.create({
   mountPath: "/vfs", // Mount path for the VFS (default: "/vfs")
-  timeout: 30000, // Command timeout in ms (default: 30000)
+  timeout: 30000, // Backward-compatible option (no-op in VFS-only mode)
   initialFiles: {
     // Initial files to populate
     "/README.md": "# Hello",
@@ -78,12 +78,13 @@ const sandbox = await VfsSandbox.create({
 
 ##### `sandbox.execute(command)`
 
-Execute a shell command in the sandbox.
+`@langchain/node-vfs` is filesystem-only and does not execute shell commands.
+The method is preserved for protocol compatibility and returns an unsupported response.
 
 ```typescript
 const result = await sandbox.execute("node src/index.js");
-console.log(result.output); // Command output
-console.log(result.exitCode); // Exit code (0 = success)
+console.log(result.output); // "Command execution is not supported..."
+console.log(result.exitCode); // 127
 ```
 
 ##### `sandbox.uploadFiles(files)`
@@ -147,7 +148,7 @@ const factory = createVfsSandboxFactoryFromSandbox(sandbox);
 | Option         | Type                                   | Default     | Description                               |
 | -------------- | -------------------------------------- | ----------- | ----------------------------------------- |
 | `mountPath`    | `string`                               | `"/vfs"`    | Mount path for the virtual file system    |
-| `timeout`      | `number`                               | `30000`     | Command execution timeout in milliseconds |
+| `timeout`      | `number`                               | `30000`     | Backward-compatible option (currently unused) |
 | `initialFiles` | `Record<string, string \| Uint8Array>` | `undefined` | Initial files to populate the VFS         |
 
 ## Error Handling
@@ -165,8 +166,8 @@ try {
       case "NOT_INITIALIZED":
         // Handle uninitialized sandbox
         break;
-      case "COMMAND_TIMEOUT":
-        // Handle timeout
+      case "COMMAND_FAILED":
+        // Handle provider-specific command failures
         break;
     }
   }
@@ -178,20 +179,20 @@ try {
 - `NOT_INITIALIZED` - Sandbox not initialized
 - `ALREADY_INITIALIZED` - Sandbox already initialized
 - `INITIALIZATION_FAILED` - Failed to initialize VFS
-- `COMMAND_TIMEOUT` - Command execution timed out
-- `COMMAND_FAILED` - Command execution failed
+- `COMMAND_TIMEOUT` - Reserved error code from shared protocol
+- `COMMAND_FAILED` - Reserved error code from shared protocol
 - `FILE_OPERATION_FAILED` - File operation failed
 - `NOT_SUPPORTED` - VFS not supported in environment
 
 ## How It Works
 
-The VFS sandbox uses a hybrid approach for maximum compatibility:
+The VFS sandbox is fully in-memory:
 
 1. **File Storage** - Files are stored in-memory using the `VirtualFileSystem` from [node-vfs-polyfill](https://github.com/vercel-labs/node-vfs-polyfill)
-2. **Command Execution** - When executing commands, files are synced to a temp directory, the command runs, and changes are synced back to VFS
-3. **Fallback Mode** - If node-vfs-polyfill is unavailable, falls back to using a temp directory for both storage and execution
+2. **File Operations** - `read`, `ls`, `grep`, and `glob` operate directly on VFS paths
+3. **Isolation** - Paths are confined under the virtual workspace root
 
-This approach provides the benefits of in-memory storage (isolation, speed) while maintaining full shell command execution support.
+This approach keeps filesystem operations isolated and avoids host shell execution from this provider.
 
 ## Future: Native Node.js VFS
 
