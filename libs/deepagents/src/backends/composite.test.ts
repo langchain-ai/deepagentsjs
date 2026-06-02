@@ -332,6 +332,81 @@ describe("CompositeBackend", () => {
     expect(archPaths).not.toContain("/archive/2023/log.txt");
   });
 
+  it("grep should only fan out to routed backends mounted under the search path", async () => {
+    const { state, runtime } = makeConfig();
+
+    const memoriesBackend = new StoreBackend(runtime);
+    const skillsBackend = new StoreBackend(runtime);
+    const composite = new CompositeBackend(new StateBackend(runtime), {
+      "/workspace/memories/": memoriesBackend,
+      "/skills/": skillsBackend,
+    });
+
+    const outsideSpy = vi
+      .spyOn(skillsBackend, "grep")
+      .mockResolvedValue({ error: "OUTSIDE_ROUTE_CALLED" });
+    const insideSpy = vi.spyOn(memoriesBackend, "grep");
+
+    const defaultWrite = await composite.write("/workspace/index.ts", "index");
+    expect(defaultWrite.error).toBeUndefined();
+    if (defaultWrite.filesUpdate) {
+      Object.assign(state.files, defaultWrite.filesUpdate);
+    }
+
+    const routedWrite = await composite.write(
+      "/workspace/memories/note.md",
+      "index memory",
+    );
+    expect(routedWrite.error).toBeUndefined();
+
+    const result = await composite.grep("index", "/workspace", "**/*");
+    expect(result.error).toBeUndefined();
+
+    const paths = new Set((result.matches || []).map((m) => m.path));
+    expect(paths).toContain("/workspace/index.ts");
+    expect(paths).toContain("/workspace/memories/note.md");
+    expect(outsideSpy).not.toHaveBeenCalled();
+    expect(insideSpy).toHaveBeenCalledWith("index", "/", "**/*");
+  });
+
+  it("glob should only fan out to routed backends mounted under the search path", async () => {
+    const { state, runtime } = makeConfig();
+
+    const memoriesBackend = new StoreBackend(runtime);
+    const skillsBackend = new StoreBackend(runtime);
+    const composite = new CompositeBackend(new StateBackend(runtime), {
+      "/workspace/memories/": memoriesBackend,
+      "/skills/": skillsBackend,
+    });
+
+    const outsideSpy = vi.spyOn(skillsBackend, "glob").mockResolvedValue({
+      files: [{ path: "/outside.txt" }],
+    });
+    const insideSpy = vi.spyOn(memoriesBackend, "glob");
+
+    const defaultWrite = await composite.write("/workspace/index.ts", "index");
+    expect(defaultWrite.error).toBeUndefined();
+    if (defaultWrite.filesUpdate) {
+      Object.assign(state.files, defaultWrite.filesUpdate);
+    }
+
+    const routedWrite = await composite.write(
+      "/workspace/memories/note.md",
+      "index memory",
+    );
+    expect(routedWrite.error).toBeUndefined();
+
+    const result = await composite.glob("**/*", "/workspace");
+    expect(result.error).toBeUndefined();
+
+    const paths = new Set((result.files || []).map((f) => f.path));
+    expect(paths).toContain("/workspace/index.ts");
+    expect(paths).toContain("/workspace/memories/note.md");
+    expect(paths).not.toContain("/skills/outside.txt");
+    expect(outsideSpy).not.toHaveBeenCalled();
+    expect(insideSpy).toHaveBeenCalledWith("**/*", "/");
+  });
+
   it("should return ReadRawResult from readRaw across backends", async () => {
     const { state, runtime } = makeConfig();
 
