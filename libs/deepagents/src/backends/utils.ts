@@ -7,7 +7,6 @@
  */
 
 import micromatch from "micromatch";
-import path, { basename } from "path";
 import type {
   AnyBackendProtocol,
   AnySandboxProtocol,
@@ -137,6 +136,18 @@ const MIME_TYPES: Record<string, string> = {
   ".dockerignore": "text/plain",
   ".editorconfig": "text/plain",
 };
+
+function basename(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, "/");
+  const slashIdx = normalized.lastIndexOf("/");
+  return slashIdx === -1 ? normalized : normalized.slice(slashIdx + 1);
+}
+
+function extname(filePath: string): string {
+  const name = basename(filePath);
+  const dotIdx = name.lastIndexOf(".");
+  return dotIdx <= 0 ? "" : name.slice(dotIdx);
+}
 
 /**
  * Sanitize tool_call_id to prevent path traversal and separator issues.
@@ -816,7 +827,7 @@ export function formatGrepMatches(
  * @returns MIME type string (e.g., "image/png", "application/octet-stream")
  */
 export function getMimeType(filePath: string): string {
-  const ext = path.extname(filePath).toLocaleLowerCase();
+  const ext = extname(filePath).toLocaleLowerCase();
   return MIME_TYPES[ext] || "application/octet-stream";
 }
 
