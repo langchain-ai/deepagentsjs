@@ -616,11 +616,11 @@ describe("StoreBackend", () => {
 
     expect(result).toBeInstanceOf(ToolMessage);
     expect(result.content).toContain("Tool result too large");
-    expect(result.content).toContain("/large_tool_results/test_456.txt");
+    expect(result.content).toContain("/large_tool_results/test_456");
 
     const storedContent = await store.get(
       ["filesystem"],
-      "/large_tool_results/test_456.txt",
+      "/large_tool_results/test_456",
     );
     expect(storedContent).toBeDefined();
     expect((storedContent!.value as any).content).toBe(largeContent);

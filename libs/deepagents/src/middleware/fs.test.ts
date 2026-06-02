@@ -566,7 +566,7 @@ describe("createFilesystemMiddleware", () => {
       const mockWrite = vi.fn().mockResolvedValue({
         error: null,
         filesUpdate: {
-          "/large_tool_results/test-id.txt": {
+          "/large_tool_results/test-id": {
             content: ["large content"],
             created_at: "2024-01-01T00:00:00Z",
             modified_at: "2024-01-01T00:00:00Z",
@@ -600,7 +600,7 @@ describe("createFilesystemMiddleware", () => {
 
       // Should have written to backend
       expect(mockWrite).toHaveBeenCalledWith(
-        "/large_tool_results/test-id.txt",
+        "/large_tool_results/test-id",
         largeContent,
       );
 
@@ -613,14 +613,12 @@ describe("createFilesystemMiddleware", () => {
 
         const truncatedMsg = update.messages[0];
         expect(truncatedMsg.content).toContain("Tool result too large");
-        expect(truncatedMsg.content).toContain(
-          "/large_tool_results/test-id.txt",
-        );
+        expect(truncatedMsg.content).toContain("/large_tool_results/test-id");
         expect(truncatedMsg.tool_call_id).toBe("test-id");
 
         // Should have filesUpdate
         expect(update.files).toBeDefined();
-        expect(update.files["/large_tool_results/test-id.txt"]).toBeDefined();
+        expect(update.files["/large_tool_results/test-id"]).toBeDefined();
       }
     });
 
@@ -629,7 +627,7 @@ describe("createFilesystemMiddleware", () => {
       const mockWrite = vi.fn().mockResolvedValue({
         error: null,
         filesUpdate: {
-          "/large_tool_results/test-id.txt": {
+          "/large_tool_results/test-id": {
             content: ["large content"],
             created_at: "2024-01-01T00:00:00Z",
             modified_at: "2024-01-01T00:00:00Z",
@@ -690,7 +688,7 @@ describe("createFilesystemMiddleware", () => {
       const mockWrite = vi.fn().mockResolvedValue({
         error: null,
         filesUpdate: {
-          "/large_tool_results/test-id-1.txt": {
+          "/large_tool_results/test-id-1": {
             content: ["large content 1"],
             created_at: "2024-01-01T00:00:00Z",
             modified_at: "2024-01-01T00:00:00Z",
@@ -740,7 +738,7 @@ describe("createFilesystemMiddleware", () => {
 
       // Should have written large content
       expect(mockWrite).toHaveBeenCalledWith(
-        "/large_tool_results/test-id-1.txt",
+        "/large_tool_results/test-id-1",
         largeContent,
       );
 
@@ -757,7 +755,7 @@ describe("createFilesystemMiddleware", () => {
         expect(update.messages[1].content).toBe(smallContent);
 
         // Should accumulate files
-        expect(update.files["/large_tool_results/test-id-1.txt"]).toBeDefined();
+        expect(update.files["/large_tool_results/test-id-1"]).toBeDefined();
       }
     });
 
@@ -807,7 +805,7 @@ describe("createFilesystemMiddleware", () => {
       const mockWrite = vi.fn().mockResolvedValue({
         error: null,
         filesUpdate: {
-          "/large_tool_results/test-id.txt": {
+          "/large_tool_results/test-id": {
             content: ["large content"],
             created_at: "2024-01-01T00:00:00Z",
             modified_at: "2024-01-01T00:00:00Z",
@@ -843,7 +841,7 @@ describe("createFilesystemMiddleware", () => {
       );
 
       expect(mockWrite).toHaveBeenCalledWith(
-        "/large_tool_results/test-id.txt",
+        "/large_tool_results/test-id",
         largeText + " extra",
       );
 
@@ -853,9 +851,7 @@ describe("createFilesystemMiddleware", () => {
         expect(update.messages).toHaveLength(1);
         const truncatedMsg = update.messages[0];
         expect(truncatedMsg.content).toContain("Tool result too large");
-        expect(truncatedMsg.content).toContain(
-          "/large_tool_results/test-id.txt",
-        );
+        expect(truncatedMsg.content).toContain("/large_tool_results/test-id");
         expect(truncatedMsg.tool_call_id).toBe("test-id");
       }
     });
@@ -1236,7 +1232,7 @@ describe("createFilesystemMiddleware", () => {
       // Message is tagged with the file path
       const evictedTo = tagged.additional_kwargs?.lc_evicted_to;
       expect(evictedTo).toBeDefined();
-      expect(evictedTo).toMatch(/^\/conversation_history\/[a-f0-9]{12}\.txt$/);
+      expect(evictedTo).toMatch(/^\/conversation_history\/[a-f0-9]{12}$/);
 
       // Content was written to backend
       expect(mockWrite).toHaveBeenCalledTimes(1);
@@ -1264,9 +1260,7 @@ describe("createFilesystemMiddleware", () => {
         messages: [
           new HumanMessage({
             content: largeContent,
-            additional_kwargs: {
-              lc_evicted_to: "/conversation_history/abc.txt",
-            },
+            additional_kwargs: { lc_evicted_to: "/conversation_history/abc" },
           }),
         ],
       };
@@ -1309,7 +1303,7 @@ describe("createFilesystemMiddleware", () => {
       const mockBackend = createMockBackend();
       const mockWrite = vi.fn().mockResolvedValue({
         error: null,
-        filesUpdate: { "/conversation_history/abc123.txt": fileData },
+        filesUpdate: { "/conversation_history/abc123": fileData },
       });
       mockBackend.write = mockWrite;
 
@@ -1366,7 +1360,7 @@ describe("createFilesystemMiddleware", () => {
       expect(tagged.additional_kwargs).toEqual({
         trace: "xyz",
         lc_evicted_to: expect.stringMatching(
-          /^\/conversation_history\/[a-f0-9]{12}\.txt$/,
+          /^\/conversation_history\/[a-f0-9]{12}$/,
         ),
       });
       expect(tagged.response_metadata).toEqual({ provider: "test" });
@@ -1443,7 +1437,7 @@ describe("createFilesystemMiddleware", () => {
         content: largeContent,
         id: "tagged-1",
         additional_kwargs: {
-          lc_evicted_to: "/conversation_history/abc123.txt",
+          lc_evicted_to: "/conversation_history/abc123",
         },
       });
 
@@ -1466,7 +1460,7 @@ describe("createFilesystemMiddleware", () => {
       const truncated = modelMessages[0];
       expect(HumanMessage.isInstance(truncated)).toBe(true);
       expect(truncated.content).not.toBe(largeContent);
-      expect(truncated.content).toContain("/conversation_history/abc123.txt");
+      expect(truncated.content).toContain("/conversation_history/abc123");
       expect(truncated.content).toContain("read_file");
     });
 
@@ -1507,7 +1501,7 @@ describe("createFilesystemMiddleware", () => {
       const taggedMessage = new HumanMessage({
         content: largeContent,
         additional_kwargs: {
-          lc_evicted_to: "/conversation_history/abc123.txt",
+          lc_evicted_to: "/conversation_history/abc123",
         },
       });
       const normalMessage = new HumanMessage({ content: "normal" });
@@ -1553,7 +1547,7 @@ describe("createFilesystemMiddleware", () => {
       const taggedMessage = new HumanMessage({
         content: [{ type: "text", text: largeText }, imageBlock],
         additional_kwargs: {
-          lc_evicted_to: "/conversation_history/abc123.txt",
+          lc_evicted_to: "/conversation_history/abc123",
         },
       });
 
@@ -1590,7 +1584,7 @@ describe("createFilesystemMiddleware", () => {
       const taggedMessage = new HumanMessage({
         content: "large content here",
         additional_kwargs: {
-          lc_evicted_to: "/conversation_history/abc123.txt",
+          lc_evicted_to: "/conversation_history/abc123",
         },
       });
 

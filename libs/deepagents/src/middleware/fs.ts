@@ -669,8 +669,13 @@ function createReadFileTool(
       }
 
       const mimeType = readResult.mimeType ?? getMimeType(file_path);
+      const isInternalEvictedTextArtifact =
+        (file_path.startsWith("/large_tool_results/") ||
+          file_path.startsWith("/conversation_history/")) &&
+        mimeType === "application/octet-stream" &&
+        typeof readResult.content === "string";
 
-      if (!isTextMimeType(mimeType)) {
+      if (!isTextMimeType(mimeType) && !isInternalEvictedTextArtifact) {
         const binaryContent = readResult.content;
         if (!binaryContent) {
           return [
@@ -1245,7 +1250,7 @@ export function createFilesystemMiddleware(
       } as BackendRuntime);
 
       const fileId = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
-      const filePath = `/conversation_history/${fileId}.txt`;
+      const filePath = `/conversation_history/${fileId}`;
       const writeResult = await resolvedBackend.write(filePath, contentStr);
 
       if (writeResult.error) {
@@ -1358,7 +1363,7 @@ export function createFilesystemMiddleware(
           const sanitizedId = sanitizeToolCallId(
             request.toolCall?.id || msg.tool_call_id,
           );
-          const evictPath = `/large_tool_results/${sanitizedId}.txt`;
+          const evictPath = `/large_tool_results/${sanitizedId}`;
 
           const writeResult = await resolvedBackend.write(
             evictPath,
