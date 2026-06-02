@@ -58,6 +58,7 @@ import {
   applyProfilePrompt,
   resolveMiddleware,
 } from "./profiles/index.js";
+import { mergeMiddleware } from "./profiles/harness/merge.js";
 import {
   isAnthropicModel,
   getModelProvider,
@@ -238,7 +239,7 @@ export function createDeepAgent<
     // Middleware for custom subagents (does NOT include skills from main agent).
     // Uses createSummarizationMiddleware (deepagents version) with backend support
     // and auto-computed defaults from model profile.
-    const subagentMiddleware = [
+    const subagentBaseMiddleware = [
       // Provides todo list management capabilities for tracking tasks.
       todoListMiddleware(),
       // Enables filesystem operations and optional long-term memory storage.
@@ -256,8 +257,14 @@ export function createDeepAgent<
       ...(input.skills != null && input.skills.length > 0
         ? [createSkillsMiddleware({ backend, sources: input.skills })]
         : []),
-      // Appends custom middleware from the subagent spec.
-      ...(input.middleware ?? []),
+    ];
+    const subagentMiddleware = [
+      ...resolveMiddleware(
+        mergeMiddleware(
+          subagentBaseMiddleware,
+          (input.middleware ?? []) as AgentMiddleware[],
+        ),
+      ),
       // Adds Anthropic cache controls when supported by the model.
       ...cacheMiddleware,
     ];
@@ -350,20 +357,25 @@ export function createDeepAgent<
   // Runtime middleware array: combine built-in + optional middleware.
   // Note: The full type is handled separately via AllMiddleware.
   const middleware = [
-    // Built-in middleware with deterministic ordering.
-    todoMiddleware,
-    // Optional root-level skills.
-    ...skillsMiddleware,
-    fsMiddleware,
-    subagentMiddleware,
-    summarizationMiddleware,
-    patchToolCallsMiddleware,
-    // Optional async subagent bridge.
-    ...(asyncSubAgents.length > 0
-      ? [createAsyncSubAgentMiddleware({ asyncSubAgents })]
-      : []),
-    // User-provided middleware.
-    ...customMiddleware,
+    ...resolveMiddleware(
+      mergeMiddleware(
+        [
+          // Built-in middleware with deterministic ordering.
+          todoMiddleware,
+          // Optional root-level skills.
+          ...skillsMiddleware,
+          fsMiddleware,
+          subagentMiddleware,
+          summarizationMiddleware,
+          patchToolCallsMiddleware,
+          // Optional async subagent bridge.
+          ...(asyncSubAgents.length > 0
+            ? [createAsyncSubAgentMiddleware({ asyncSubAgents })]
+            : []),
+        ],
+        customMiddleware as unknown as AgentMiddleware[],
+      ),
+    ),
     // Optional Anthropic cache controls.
     ...cacheMiddleware,
     // Optional memory support.

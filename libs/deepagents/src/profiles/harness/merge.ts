@@ -14,7 +14,7 @@ import { createHarnessProfile } from "./create.js";
  *
  * Returns a factory to ensure fresh resolution on each call.
  */
-function mergeMiddleware(
+export function mergeMiddleware(
   base: AgentMiddleware[] | (() => AgentMiddleware[]),
   override: AgentMiddleware[] | (() => AgentMiddleware[]),
 ): (() => AgentMiddleware[]) | AgentMiddleware[] {
