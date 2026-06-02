@@ -66,7 +66,7 @@ function renderReplSystemPrompt(opts: {
     An \`${opts.toolName}\` tool is available. It runs JavaScript in a persistent REPL.
     - State (variables, functions) persists across tool calls within a single turn of conversation. They DO NOT persist across multiple turns.
     - Top-level \`await\` works; Promises resolve before the call returns.
-    - Sandboxed: no filesystem, no stdlib, no network, no real clock, no \`fetch\`, no \`require\`.
+    - Runtime sandbox: no built-in filesystem, network, stdlib, or wall-clock APIs (\`fetch\`, \`require\`, \`fs\`, \`process\`, real \`Date.now()\` are unavailable or stubbed). External side effects from inside the REPL are only reachable via the \`tools.*\` namespace when it is exposed (see below); without it, the REPL is pure computation.
     - Timeout: ${opts.timeout}s per call. Memory: ${opts.memoryLimitMb} MB total.
     - \`console.log\` output is captured and returned alongside the result.
   `;
