@@ -32,6 +32,8 @@ import { SandboxError } from "./protocol.js";
 export interface LocalShellBackendOptions {
   /**
    * Working directory for both filesystem operations and shell commands.
+   * When set with `virtualMode: false` (default), absolute paths and `..` can
+   * bypass rootDir for filesystem operations.
    * @defaultValue `process.cwd()`
    */
   rootDir?: string;
@@ -39,6 +41,7 @@ export interface LocalShellBackendOptions {
   /**
    * Enable virtual path mode for filesystem operations.
    * When true, treats rootDir as a virtual root filesystem.
+   * When false (default), preserves legacy path behavior.
    * Does NOT restrict shell commands.
    * @defaultValue `false`
    */
@@ -112,6 +115,7 @@ export interface LocalShellBackendOptions {
  * // Create backend with explicit environment
  * const backend = new LocalShellBackend({
  *   rootDir: "/home/user/project",
+ *   virtualMode: true,
  *   env: { PATH: "/usr/bin:/bin" },
  * });
  *
@@ -127,6 +131,7 @@ export interface LocalShellBackendOptions {
  * // Inherit all environment variables
  * const backend2 = new LocalShellBackend({
  *   rootDir: "/home/user/project",
+ *   virtualMode: true,
  *   inheritEnv: true,
  * });
  * ```

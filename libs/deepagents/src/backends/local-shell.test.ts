@@ -362,6 +362,29 @@ describe("LocalShellBackend", () => {
   });
 
   describe("virtual mode", () => {
+    it("should preserve absolute path behavior when virtualMode is false", async () => {
+      const outsidePath = path.join(
+        os.tmpdir(),
+        `deepagents-local-shell-legacy-${Date.now()}.txt`,
+      );
+
+      try {
+        const backend = new LocalShellBackend({
+          rootDir: tmpDir,
+          virtualMode: false,
+        });
+
+        const writeResult = await backend.write(outsidePath, "legacy mode");
+        expect(writeResult.error).toBeUndefined();
+        expect(fsSync.existsSync(outsidePath)).toBe(true);
+        expect(
+          fsSync.existsSync(path.join(tmpDir, path.basename(outsidePath))),
+        ).toBe(false);
+      } finally {
+        await fs.rm(outsidePath, { force: true });
+      }
+    });
+
     it("should restrict filesystem paths but not shell commands", async () => {
       const backend = new LocalShellBackend({
         rootDir: tmpDir,
