@@ -64,6 +64,25 @@ The agent can plan, read/write files, and manage longer tasks with sub-agents an
 > [!TIP]
 > For developing, debugging, and deploying AI agents and LLM applications, see [LangSmith](https://docs.langchain.com/langsmith/home).
 
+## Runtime Entrypoints
+
+`deepagents` now publishes environment-specific entrypoints:
+
+- `deepagents` - default Node.js/server entrypoint with the full API.
+- `deepagents/browser` - recommended browser entrypoint (no Node-only exports).
+- `deepagents/node` - optional explicit Node.js entrypoint (same full API as `deepagents`).
+
+```typescript
+// Browser-safe usage
+import { createDeepAgent, StateBackend } from "deepagents/browser";
+
+// Node.js usage (recommended)
+import { createDeepAgent, FilesystemBackend } from "deepagents";
+
+// Optional explicit Node.js usage
+// import { createDeepAgent, FilesystemBackend } from "deepagents/node";
+```
+
 ## Customization
 
 Add tools, swap models, and customize prompts as needed:

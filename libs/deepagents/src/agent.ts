@@ -27,7 +27,7 @@ import {
   createAsyncSubAgentMiddleware,
   isAsyncSubAgent,
 } from "./middleware/index.js";
-import { StateBackend } from "./backends/index.js";
+import { StateBackend } from "./backends/state.js";
 import { ConfigurationError } from "./errors.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
