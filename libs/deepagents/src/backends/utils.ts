@@ -821,13 +821,16 @@ export function formatGrepMatches(
  * Returns "application/octet-stream" for unknown extensions so that
  * binary files are not accidentally treated as text (grep, read_file,
  * etc. rely on {@link isTextMimeType} which would return true for
- * "text/plain").
+ * "text/plain"). Files without an extension default to "text/plain",
+ * which is useful for generated text artifacts like temporary tool
+ * outputs.
  *
  * @param filePath - File path to inspect
  * @returns MIME type string (e.g., "image/png", "application/octet-stream")
  */
 export function getMimeType(filePath: string): string {
   const ext = extname(filePath).toLocaleLowerCase();
+  if (!ext) return "text/plain";
   return MIME_TYPES[ext] || "application/octet-stream";
 }
 

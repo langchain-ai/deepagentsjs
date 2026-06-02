@@ -463,6 +463,11 @@ describe("getMimeType", () => {
     expect(getMimeType("/compiled.pyc")).toBe("application/octet-stream");
     expect(getMimeType("/package.jar")).toBe("application/octet-stream");
   });
+
+  it("should return text/plain for paths without extension", () => {
+    expect(getMimeType("/large_tool_results/abc123")).toBe("text/plain");
+    expect(getMimeType("/README")).toBe("text/plain");
+  });
 });
 
 describe("isTextMimeType", () => {
