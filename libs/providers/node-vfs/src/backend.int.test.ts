@@ -118,6 +118,32 @@ describe.skipIf(isWindows)("VfsSandbox Integration", () => {
       ).toBe(true);
     });
 
+    it("rejects excessively long glob patterns", async () => {
+      sandbox = await VfsSandbox.create({
+        initialFiles: {
+          "/project/src/index.ts": "export {}",
+        },
+      });
+
+      const result = await sandbox.glob("a".repeat(1024), "/project");
+
+      expect(result.files).toEqual([]);
+      expect(result.error).toContain("maximum length");
+    });
+
+    it("rejects excessively long grep glob filters", async () => {
+      sandbox = await VfsSandbox.create({
+        initialFiles: {
+          "/project/src/index.ts": "export {}",
+        },
+      });
+
+      const result = await sandbox.grep("export", "/project", "a".repeat(1024));
+
+      expect(result.matches).toEqual([]);
+      expect(result.error).toContain("maximum length");
+    });
+
     it("returns binary content as Uint8Array from read", async () => {
       sandbox = await VfsSandbox.create();
       const pngHeader = new Uint8Array([

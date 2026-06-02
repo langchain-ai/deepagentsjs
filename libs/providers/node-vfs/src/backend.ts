@@ -78,64 +78,253 @@ function isTextMimeType(mimeType: string): boolean {
   );
 }
 
-/**
- * Convert a glob pattern to a path-aware RegExp.
- *
- * - `*`  matches any characters except `/`
- * - `**` matches any characters including `/`
- * - `?`  matches a single character except `/`
- * - `[...]` character classes
- */
-function globToPathRegex(pattern: string): RegExp {
-  let regex = "^";
-  let i = 0;
+const MAX_GLOB_PATTERN_LENGTH = 512;
+const MAX_GLOB_SEGMENTS = 64;
+const MAX_GLOBSTAR_SEGMENTS = 16;
 
-  while (i < pattern.length) {
-    const c = pattern[i];
+type SegmentToken =
+  | { type: "star" }
+  | { type: "qmark" }
+  | { type: "literal"; value: string }
+  | { type: "class"; negated: boolean; specs: CharacterClassSpec[] };
 
-    if (c === "*") {
-      if (i + 1 < pattern.length && pattern[i + 1] === "*") {
-        i += 2;
-        if (i < pattern.length && pattern[i] === "/") {
-          regex += "(.*/)?";
-          i++;
-        } else {
-          regex += ".*";
-        }
-      } else {
-        regex += "[^/]*";
-        i++;
+type CharacterClassSpec =
+  | { type: "char"; value: string }
+  | { type: "range"; start: string; end: string };
+
+function validateGlobPattern(pattern: string): string | null {
+  if (pattern.length > MAX_GLOB_PATTERN_LENGTH) {
+    return `Glob pattern exceeds maximum length (${MAX_GLOB_PATTERN_LENGTH})`;
+  }
+  if (
+    pattern.includes("\u0000") ||
+    pattern.includes("\r") ||
+    pattern.includes("\n")
+  ) {
+    return "Glob pattern contains invalid control characters";
+  }
+
+  const segments = pattern.split("/");
+  if (segments.length > MAX_GLOB_SEGMENTS) {
+    return `Glob pattern exceeds maximum segment count (${MAX_GLOB_SEGMENTS})`;
+  }
+
+  const globstarCount = segments.filter((segment) => segment === "**").length;
+  if (globstarCount > MAX_GLOBSTAR_SEGMENTS) {
+    return `Glob pattern exceeds maximum '**' count (${MAX_GLOBSTAR_SEGMENTS})`;
+  }
+
+  return null;
+}
+
+function tokenizeSegmentPattern(segmentPattern: string): SegmentToken[] {
+  const tokens: SegmentToken[] = [];
+
+  for (let i = 0; i < segmentPattern.length; i++) {
+    const ch = segmentPattern[i];
+
+    if (ch === "*") {
+      // Collapse consecutive '*' tokens in a single segment.
+      if (tokens[tokens.length - 1]?.type !== "star") {
+        tokens.push({ type: "star" });
       }
-    } else if (c === "?") {
-      regex += "[^/]";
-      i++;
-    } else if (c === "[") {
-      let j = i + 1;
-      while (j < pattern.length && pattern[j] !== "]") j++;
-      regex += pattern.slice(i, j + 1);
-      i = j + 1;
-    } else if (
-      c === "." ||
-      c === "+" ||
-      c === "^" ||
-      c === "$" ||
-      c === "{" ||
-      c === "}" ||
-      c === "(" ||
-      c === ")" ||
-      c === "|" ||
-      c === "\\"
-    ) {
-      regex += `\\${c}`;
-      i++;
-    } else {
-      regex += c;
-      i++;
+      continue;
+    }
+
+    if (ch === "?") {
+      tokens.push({ type: "qmark" });
+      continue;
+    }
+
+    if (ch !== "[") {
+      tokens.push({ type: "literal", value: ch });
+      continue;
+    }
+
+    let j = i + 1;
+    while (j < segmentPattern.length && segmentPattern[j] !== "]") {
+      j++;
+    }
+
+    // Treat unterminated classes literally.
+    if (j >= segmentPattern.length) {
+      tokens.push({ type: "literal", value: "[" });
+      continue;
+    }
+
+    const rawClass = segmentPattern.slice(i + 1, j);
+    const parsedClass = parseCharacterClass(rawClass);
+    if (parsedClass.specs.length === 0) {
+      // Preserve previous behavior for malformed classes by treating '[' literally.
+      tokens.push({ type: "literal", value: "[" });
+      continue;
+    }
+
+    tokens.push({
+      type: "class",
+      negated: parsedClass.negated,
+      specs: parsedClass.specs,
+    });
+    i = j;
+  }
+
+  return tokens;
+}
+
+function parseCharacterClass(rawClass: string): {
+  negated: boolean;
+  specs: CharacterClassSpec[];
+} {
+  if (!rawClass) {
+    return { negated: false, specs: [] };
+  }
+
+  let cursor = 0;
+  let negated = false;
+  if (rawClass[0] === "!" || rawClass[0] === "^") {
+    negated = true;
+    cursor = 1;
+  }
+
+  const specs: CharacterClassSpec[] = [];
+  while (cursor < rawClass.length) {
+    const start = rawClass[cursor];
+    const hasRange =
+      cursor + 2 < rawClass.length && rawClass[cursor + 1] === "-";
+
+    if (hasRange) {
+      specs.push({
+        type: "range",
+        start,
+        end: rawClass[cursor + 2],
+      });
+      cursor += 3;
+      continue;
+    }
+
+    specs.push({ type: "char", value: start });
+    cursor += 1;
+  }
+
+  return { negated, specs };
+}
+
+function matchesCharacterClass(
+  ch: string,
+  negated: boolean,
+  specs: CharacterClassSpec[],
+): boolean {
+  let matched = false;
+  const code = ch.charCodeAt(0);
+
+  for (const spec of specs) {
+    if (spec.type === "char") {
+      if (ch === spec.value) {
+        matched = true;
+        break;
+      }
+      continue;
+    }
+
+    const startCode = spec.start.charCodeAt(0);
+    const endCode = spec.end.charCodeAt(0);
+    const lower = Math.min(startCode, endCode);
+    const upper = Math.max(startCode, endCode);
+    if (code >= lower && code <= upper) {
+      matched = true;
+      break;
     }
   }
 
-  regex += "$";
-  return new RegExp(regex);
+  return negated ? !matched : matched;
+}
+
+function matchSegmentPattern(segmentPattern: string, segment: string): boolean {
+  const tokens = tokenizeSegmentPattern(segmentPattern);
+  const memo = new Map<string, boolean>();
+
+  const match = (ti: number, si: number): boolean => {
+    const key = `${ti}:${si}`;
+    const cached = memo.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    if (ti === tokens.length) {
+      const done = si === segment.length;
+      memo.set(key, done);
+      return done;
+    }
+
+    const token = tokens[ti];
+    let result = false;
+
+    if (token.type === "star") {
+      result = match(ti + 1, si) || (si < segment.length && match(ti, si + 1));
+    } else if (token.type === "qmark") {
+      result = si < segment.length && match(ti + 1, si + 1);
+    } else if (token.type === "literal") {
+      result =
+        si < segment.length &&
+        segment[si] === token.value &&
+        match(ti + 1, si + 1);
+    } else if (token.type === "class") {
+      result =
+        si < segment.length &&
+        matchesCharacterClass(segment[si], token.negated, token.specs) &&
+        match(ti + 1, si + 1);
+    }
+
+    memo.set(key, result);
+    return result;
+  };
+
+  return match(0, 0);
+}
+
+function splitPathSegments(value: string): string[] {
+  if (!value) return [];
+  return value.split("/").filter((segment) => segment.length > 0);
+}
+
+function globMatchesPath(pattern: string, candidate: string): boolean {
+  const patternSegments = splitPathSegments(pattern);
+  const candidateSegments = splitPathSegments(candidate);
+  const memo = new Map<string, boolean>();
+
+  const match = (pi: number, ci: number): boolean => {
+    const key = `${pi}:${ci}`;
+    const cached = memo.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    if (pi === patternSegments.length) {
+      const done = ci === candidateSegments.length;
+      memo.set(key, done);
+      return done;
+    }
+
+    const segmentPattern = patternSegments[pi];
+    let result = false;
+
+    if (segmentPattern === "**") {
+      // "**" can match zero segments or consume one segment and continue.
+      result =
+        match(pi + 1, ci) ||
+        (ci < candidateSegments.length && match(pi, ci + 1));
+    } else {
+      result =
+        ci < candidateSegments.length &&
+        matchSegmentPattern(segmentPattern, candidateSegments[ci]) &&
+        match(pi + 1, ci + 1);
+    }
+
+    memo.set(key, result);
+    return result;
+  };
+
+  return match(0, 0);
 }
 
 function performStringReplacement(
@@ -762,13 +951,19 @@ export class VfsSandbox implements BackendProtocolV2 {
       return { matches: [] };
     }
 
+    if (glob) {
+      const globValidationError = validateGlobPattern(glob);
+      if (globValidationError) {
+        return { error: globValidationError, matches: [] };
+      }
+    }
+
     const matches: NonNullable<GrepResult["matches"]> = [];
-    const globMatcher = glob ? globToPathRegex(glob) : null;
 
     const scanFile = (fileAbsolutePath: string) => {
       if (
-        globMatcher &&
-        !globMatcher.test(path.posix.basename(fileAbsolutePath))
+        glob &&
+        !globMatchesPath(glob, path.posix.basename(fileAbsolutePath))
       ) {
         return;
       }
@@ -824,6 +1019,11 @@ export class VfsSandbox implements BackendProtocolV2 {
       effectivePattern = effectivePattern.slice(1);
     }
 
+    const globValidationError = validateGlobPattern(effectivePattern);
+    if (globValidationError) {
+      return { error: globValidationError, files: [] };
+    }
+
     const resolvedPath = this.#resolvePath(searchPath);
     if (!resolvedPath || !this.instance.existsSync(resolvedPath)) {
       return { files: [] };
@@ -840,14 +1040,13 @@ export class VfsSandbox implements BackendProtocolV2 {
       return { files: [] };
     }
 
-    const matcher = globToPathRegex(effectivePattern);
     const files: NonNullable<GlobResult["files"]> = [];
 
     this.#walk(resolvedPath, (entryPath, isDir, mtime, size) => {
       const relPath = path.posix.relative(resolvedPath, entryPath);
       if (!relPath) return;
 
-      if (matcher.test(relPath)) {
+      if (globMatchesPath(effectivePattern, relPath)) {
         files.push({
           path: relPath,
           is_dir: isDir,
