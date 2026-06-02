@@ -1245,7 +1245,7 @@ export function createFilesystemMiddleware(
       } as BackendRuntime);
 
       const fileId = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
-      const filePath = `/conversation_history/${fileId}`;
+      const filePath = `/conversation_history/${fileId}.txt`;
       const writeResult = await resolvedBackend.write(filePath, contentStr);
 
       if (writeResult.error) {
@@ -1358,7 +1358,7 @@ export function createFilesystemMiddleware(
           const sanitizedId = sanitizeToolCallId(
             request.toolCall?.id || msg.tool_call_id,
           );
-          const evictPath = `/large_tool_results/${sanitizedId}`;
+          const evictPath = `/large_tool_results/${sanitizedId}.txt`;
 
           const writeResult = await resolvedBackend.write(
             evictPath,

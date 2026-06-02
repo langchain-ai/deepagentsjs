@@ -464,9 +464,11 @@ describe("getMimeType", () => {
     expect(getMimeType("/package.jar")).toBe("application/octet-stream");
   });
 
-  it("should return text/plain for paths without extension", () => {
-    expect(getMimeType("/large_tool_results/abc123")).toBe("text/plain");
-    expect(getMimeType("/README")).toBe("text/plain");
+  it("should return application/octet-stream for paths without extension", () => {
+    expect(getMimeType("/large_tool_results/abc123")).toBe(
+      "application/octet-stream",
+    );
+    expect(getMimeType("/README")).toBe("application/octet-stream");
   });
 });
 
