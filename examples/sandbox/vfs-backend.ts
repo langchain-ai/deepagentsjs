@@ -1,8 +1,8 @@
 /**
  * Node.js VFS Backend Example
  *
- * This example demonstrates DeepAgents with an in-memory VFS backend.
- * using an in-memory Virtual File System. It shows how to:
+ * This example demonstrates DeepAgents with an in-memory Virtual File System backend.
+ * It shows how to:
  * 1. Create a VFS backend using the @langchain/node-vfs package
  * 2. Pre-populate the backend with initial files
  * 3. Let the agent use filesystem tools (`ls`, `read_file`, `write_file`, etc.)
@@ -20,9 +20,9 @@
  * ## Running the Example
  *
  * ```bash
- * npx tsx examples/sandbox/vfs-sandbox.ts
+ * npx tsx examples/sandbox/vfs-backend.ts
  * # or
- * bun run examples/sandbox/vfs-sandbox.ts
+ * bun run examples/sandbox/vfs-backend.ts
  * ```
  */
 
