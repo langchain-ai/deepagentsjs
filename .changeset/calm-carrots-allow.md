@@ -2,7 +2,7 @@
 "@langchain/node-vfs": minor
 ---
 
-refactor(node-vfs): remove shell execution from the VFS provider
+BREAKING: remove shell execution from the VFS provider
 
 `VfsBackend` now operates as a filesystem-only `BackendProtocolV2` implementation and no longer exposes command execution.
 
