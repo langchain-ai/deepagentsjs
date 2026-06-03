@@ -627,6 +627,10 @@ function createTaskTool(options: {
       // Invoke the subagent with ls_agent_type metadata for LangSmith tracing
       const subagentConfig = {
         ...config,
+        metadata: {
+          ...config.metadata,
+          lc_agent_name: subagent_type,
+        },
         configurable: {
           ...config.configurable,
           ls_agent_type: "subagent",

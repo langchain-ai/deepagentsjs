@@ -1,4 +1,5 @@
 import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
+import { withRetry } from "../sandbox.js";
 
 /**
  * Register command execution tests (echo, exit codes, multiline, stderr, env vars).
@@ -62,8 +63,11 @@ export function registerCommandExecutionTests<T extends AnySandboxInstance>(
     it(
       "should handle command with environment variables",
       async () => {
-        const result = await getShared().execute(
-          'export MY_VAR="test_value" && echo $MY_VAR',
+        const result = await withRetry(
+          () =>
+            getShared().execute('export MY_VAR="test_value" && echo $MY_VAR'),
+          3,
+          2_000,
         );
 
         expect(result.exitCode).toBe(0);

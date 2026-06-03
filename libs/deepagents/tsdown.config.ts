@@ -6,7 +6,7 @@ const external = (id: string) =>
 
 export default defineConfig([
   {
-    entry: ["./src/index.ts"],
+    entry: ["./src/index.ts", "./src/browser.ts", "./src/node.ts"],
     format: ["esm"],
     dts: true,
     clean: true,
@@ -16,7 +16,7 @@ export default defineConfig([
     external,
   },
   {
-    entry: ["./src/index.ts"],
+    entry: ["./src/index.ts", "./src/browser.ts", "./src/node.ts"],
     format: ["cjs"],
     dts: true,
     clean: true,

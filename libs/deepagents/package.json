@@ -1,6 +1,6 @@
 {
   "name": "deepagents",
-  "version": "1.10.2",
+  "version": "1.10.3",
   "description": "Deep Agents - a library for building controllable AI agents with LangGraph",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -66,6 +66,7 @@
   },
   "exports": {
     ".": {
+      "browser": "./dist/browser.js",
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -73,6 +74,26 @@
       "require": {
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
+      }
+    },
+    "./browser": {
+      "import": {
+        "types": "./dist/browser.d.ts",
+        "default": "./dist/browser.js"
+      },
+      "require": {
+        "types": "./dist/browser.d.cts",
+        "default": "./dist/browser.cjs"
+      }
+    },
+    "./node": {
+      "import": {
+        "types": "./dist/node.d.ts",
+        "default": "./dist/node.js"
+      },
+      "require": {
+        "types": "./dist/node.d.cts",
+        "default": "./dist/node.cjs"
       }
     },
     "./package.json": "./package.json"

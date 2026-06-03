@@ -1,11 +1,11 @@
 /* oxlint-disable no-instanceof/no-instanceof */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
-import { VfsSandbox } from "./sandbox.js";
+import { VfsBackend } from "./backend.js";
 import { VfsSandboxError } from "./types.js";
 
-describe("VfsSandbox", () => {
-  let sandbox: VfsSandbox;
+describe("VfsBackend", () => {
+  let sandbox: VfsBackend;
 
   afterEach(async () => {
     if (sandbox?.isRunning) {
@@ -15,30 +15,28 @@ describe("VfsSandbox", () => {
 
   describe("constructor", () => {
     it("should create a sandbox with default options", () => {
-      sandbox = new VfsSandbox();
-      expect(sandbox.id).toMatch(/^vfs-sandbox-\d+$/);
+      sandbox = new VfsBackend();
       expect(sandbox.isRunning).toBe(false);
     });
 
     it("should create a sandbox with custom options", () => {
-      sandbox = new VfsSandbox({
+      sandbox = new VfsBackend({
         mountPath: "/custom",
-        timeout: 60000,
       });
-      expect(sandbox.id).toMatch(/^vfs-sandbox-\d+$/);
+      expect(sandbox.isRunning).toBe(false);
     });
   });
 
   describe("initialize", () => {
     it("should initialize the sandbox", async () => {
-      sandbox = new VfsSandbox();
+      sandbox = new VfsBackend();
       await sandbox.initialize();
       expect(sandbox.isRunning).toBe(true);
       expect(sandbox.workingDirectory).toBeTruthy();
     });
 
     it("should throw if already initialized", async () => {
-      sandbox = new VfsSandbox();
+      sandbox = new VfsBackend();
       await sandbox.initialize();
 
       await expect(sandbox.initialize()).rejects.toThrow(VfsSandboxError);
@@ -49,7 +47,7 @@ describe("VfsSandbox", () => {
 
     it("should populate initial files", async () => {
       const encoder = new TextEncoder();
-      sandbox = new VfsSandbox({
+      sandbox = new VfsBackend({
         initialFiles: {
           "/test.txt": "Hello, World!",
           "/src/index.js": "console.log('Hi')",
@@ -72,12 +70,12 @@ describe("VfsSandbox", () => {
 
   describe("static create", () => {
     it("should create and initialize in one step", async () => {
-      sandbox = await VfsSandbox.create();
+      sandbox = await VfsBackend.create();
       expect(sandbox.isRunning).toBe(true);
     });
 
     it("should create with initial files", async () => {
-      sandbox = await VfsSandbox.create({
+      sandbox = await VfsBackend.create({
         initialFiles: {
           "/hello.txt": "Hello!",
         },
@@ -89,91 +87,13 @@ describe("VfsSandbox", () => {
     });
   });
 
-  describe("execute", () => {
-    beforeEach(async () => {
-      sandbox = await VfsSandbox.create();
-    });
-
-    it("should throw if not initialized", async () => {
-      const uninitSandbox = new VfsSandbox();
-      await expect(uninitSandbox.execute("echo test")).rejects.toThrow(
-        VfsSandboxError,
-      );
-      await expect(uninitSandbox.execute("echo test")).rejects.toMatchObject({
-        code: "NOT_INITIALIZED",
-      });
-    });
-
-    // Note: When VFS polyfill is active (not using temp directory fallback),
-    // command execution may fail because the VFS mount path doesn't exist
-    // on the real filesystem for child_process.spawn.
-    // These tests verify behavior when using temp directory fallback.
-
-    it("should execute a simple command or handle VFS mode gracefully", async () => {
-      const result = await sandbox.execute("echo 'Hello, World!'");
-      // In temp dir mode, this works. In VFS mode, it may fail with ENOENT.
-      if (result.output.includes("ENOENT")) {
-        // VFS mode - command execution not supported with virtual paths
-        expect(result.exitCode).toBe(1);
-      } else {
-        expect(result.output.trim()).toBe("Hello, World!");
-        expect(result.exitCode).toBe(0);
-        expect(result.truncated).toBe(false);
-      }
-    });
-
-    it("should capture stderr or handle VFS mode", async () => {
-      const result = await sandbox.execute("echo 'error' >&2");
-      if (result.output.includes("ENOENT")) {
-        expect(result.exitCode).toBe(1);
-      } else {
-        expect(result.output.trim()).toBe("error");
-        expect(result.exitCode).toBe(0);
-      }
-    });
-
-    it("should return non-zero exit code for failed commands or VFS mode", async () => {
-      const result = await sandbox.execute("exit 42");
-      if (result.output.includes("ENOENT")) {
-        expect(result.exitCode).toBe(1);
-      } else {
-        expect(result.exitCode).toBe(42);
-      }
-    });
-
-    it("should execute commands in the working directory or handle VFS mode", async () => {
-      const result = await sandbox.execute("pwd");
-      if (result.output.includes("ENOENT")) {
-        expect(result.exitCode).toBe(1);
-      } else {
-        // In VFS mode, commands execute in a temp directory (not the virtual path)
-        // In temp dir fallback mode, commands execute in the actual working directory
-        const output = result.output.trim();
-
-        if (sandbox.isVfsMode) {
-          // VFS mode: commands run in a temp directory for execution
-          expect(output).toMatch(/vfs-(sandbox|exec)/);
-        } else {
-          // Temp dir fallback mode: working directory is the actual path
-          const expected = sandbox.workingDirectory;
-          // On macOS, /var is a symlink to /private/var, so pwd may resolve differently
-          expect(
-            output === expected ||
-              output === `/private${expected}` ||
-              expected === `/private${output}`,
-          ).toBe(true);
-        }
-      }
-    });
-  });
-
   describe("uploadFiles", () => {
     beforeEach(async () => {
-      sandbox = await VfsSandbox.create();
+      sandbox = await VfsBackend.create();
     });
 
     it("should throw if not initialized", async () => {
-      const uninitSandbox = new VfsSandbox();
+      const uninitSandbox = new VfsBackend();
       await expect(
         uninitSandbox.uploadFiles([["test.txt", new Uint8Array([])]]),
       ).rejects.toThrow(VfsSandboxError);
@@ -225,7 +145,7 @@ describe("VfsSandbox", () => {
 
   describe("downloadFiles", () => {
     beforeEach(async () => {
-      sandbox = await VfsSandbox.create({
+      sandbox = await VfsBackend.create({
         initialFiles: {
           "/existing.txt": "Existing content",
           "/dir/nested.txt": "Nested content",
@@ -234,7 +154,7 @@ describe("VfsSandbox", () => {
     });
 
     it("should throw if not initialized", async () => {
-      const uninitSandbox = new VfsSandbox();
+      const uninitSandbox = new VfsBackend();
       await expect(uninitSandbox.downloadFiles(["test.txt"])).rejects.toThrow(
         VfsSandboxError,
       );
@@ -285,7 +205,7 @@ describe("VfsSandbox", () => {
 
   describe("readRaw", () => {
     beforeEach(async () => {
-      sandbox = await VfsSandbox.create({
+      sandbox = await VfsBackend.create({
         initialFiles: {
           "/test.txt": "hello world",
         },
@@ -312,7 +232,7 @@ describe("VfsSandbox", () => {
 
   describe("stop", () => {
     it("should stop the sandbox", async () => {
-      sandbox = await VfsSandbox.create();
+      sandbox = await VfsBackend.create();
       expect(sandbox.isRunning).toBe(true);
 
       await sandbox.stop();
@@ -320,7 +240,7 @@ describe("VfsSandbox", () => {
     });
 
     it("should be safe to call multiple times", async () => {
-      sandbox = await VfsSandbox.create();
+      sandbox = await VfsBackend.create();
 
       await sandbox.stop();
       await sandbox.stop(); // Should not throw

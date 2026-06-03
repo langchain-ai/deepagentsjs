@@ -1,14 +1,14 @@
 /**
- * Node.js VFS Sandbox Example
+ * Node.js VFS Backend Example
  *
- * This example demonstrates the Sandbox Execution Support feature of DeepAgents
- * using an in-memory Virtual File System. It shows how to:
- * 1. Create a VFS Sandbox backend using the @langchain/node-vfs package
- * 2. Use the `execute` tool to run shell commands in an isolated environment
- * 3. Pre-populate the sandbox with initial files
+ * This example demonstrates DeepAgents with an in-memory Virtual File System backend.
+ * It shows how to:
+ * 1. Create a VFS backend using the @langchain/node-vfs package
+ * 2. Pre-populate the backend with initial files
+ * 3. Let the agent use filesystem tools (`ls`, `read_file`, `write_file`, etc.)
  *
- * The VfsSandbox runs commands in an isolated in-memory filesystem,
- * perfect for code execution without affecting the real filesystem.
+ * The VfsBackend provides an isolated in-memory filesystem,
+ * perfect for file workflows without affecting the real filesystem.
  * No external services, Docker, or cloud setup required!
  *
  * ## About Node.js VFS
@@ -20,9 +20,9 @@
  * ## Running the Example
  *
  * ```bash
- * npx tsx examples/sandbox/vfs-sandbox.ts
+ * npx tsx examples/sandbox/vfs-backend.ts
  * # or
- * bun run examples/sandbox/vfs-sandbox.ts
+ * bun run examples/sandbox/vfs-backend.ts
  * ```
  */
 
@@ -32,20 +32,15 @@ import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import { ChatAnthropic } from "@langchain/anthropic";
 
 import { createDeepAgent } from "deepagents";
-import { VfsSandbox } from "@langchain/node-vfs";
+import { VfsBackend } from "@langchain/node-vfs";
 
-// System prompt that leverages the execute capability
+// System prompt for a filesystem-only backend
 const systemPrompt = `You are a powerful coding assistant with access to an in-memory virtual file system.
 
-You can execute shell commands to:
-- Analyze code and projects (e.g., find patterns, count lines, check dependencies)
-- Run build tools and scripts (npm, node, etc.)
-- Create and run code files
-- Manipulate files and directories
+You can inspect and modify files safely inside this virtual workspace.
 
 ## Tools Available
 
-- **execute**: Run any shell command and see the output
 - **ls**: List directory contents
 - **read_file**: Read file contents
 - **write_file**: Create new files
@@ -55,22 +50,20 @@ You can execute shell commands to:
 
 ## Best Practices
 
-1. Start by exploring the workspace: \`ls\` or \`execute("ls -la")\`
+1. Start by exploring the workspace: \`ls\`
 2. Use the right tool for the job:
-   - Use \`execute\` for complex commands, pipelines, and running programs
    - Use \`read_file\` for viewing file contents
    - Use \`write_file\` for creating new files
-3. Chain commands when needed: \`execute("npm install && npm test")\`
-4. Check exit codes to verify success
+3. Prefer focused file edits and verification steps
 
-You're working in an isolated in-memory file system, so feel free to experiment!
-All files exist only in memory and are cleaned up when the sandbox stops.`;
+You're working in an isolated in-memory file system, so feel free to experiment.
+All files exist only in memory and are cleaned up when the backend stops.`;
 
 async function main() {
-  // Create the VFS Sandbox with some initial files
-  console.log("🚀 Creating VFS Sandbox...\n");
+  // Create the VFS backend with some initial files
+  console.log("🚀 Creating VFS backend...\n");
 
-  const sandbox = await VfsSandbox.create({
+  const backend = await VfsBackend.create({
     initialFiles: {
       // Pre-populate with a simple project structure
       "/package.json": JSON.stringify(
@@ -87,18 +80,18 @@ async function main() {
     },
   });
 
-  console.log(`✅ Sandbox created with ID: ${sandbox.id}`);
-  console.log(`📁 Working directory: ${sandbox.workingDirectory}\n`);
+  console.log("✅ Backend created.");
+  console.log(`📁 Working directory: ${backend.workingDirectory}\n`);
 
   try {
-    // Create the agent with sandbox backend
+    // Create the agent with VFS backend
     const agent = createDeepAgent({
       model: new ChatAnthropic({
         model: "claude-haiku-4-5",
         temperature: 0,
       }),
       systemPrompt,
-      backend: sandbox,
+      backend,
     });
 
     console.log("🤖 Running agent...\n");
@@ -108,8 +101,8 @@ async function main() {
         messages: [
           new HumanMessage(
             `Create a simple Node.js project with a hello.js file that prints "Hello from VFS!".
-            Then run it with node to verify it works.
-            Finally, show me the output and list all files in the workspace.`,
+            Then explain what to run locally to verify it.
+            Finally, list all files in the workspace.`,
           ),
         ],
       },
@@ -125,10 +118,10 @@ async function main() {
       console.log(lastAIMessage.content);
     }
   } finally {
-    // Always cleanup the sandbox
-    console.log("\n🧹 Cleaning up sandbox...");
-    await sandbox.stop();
-    console.log("✅ Sandbox stopped. All files cleaned up.");
+    // Always cleanup the backend
+    console.log("\n🧹 Cleaning up backend...");
+    await backend.stop();
+    console.log("✅ Backend stopped. All files cleaned up.");
   }
 }
 

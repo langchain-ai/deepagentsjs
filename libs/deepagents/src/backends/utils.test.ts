@@ -438,10 +438,30 @@ describe("getMimeType", () => {
     expect(getMimeType("/audio.FLAC")).toBe("audio/flac");
   });
 
-  it("should return text/plain for unknown extensions", () => {
+  it("should return text/plain for known text extensions", () => {
     expect(getMimeType("/file.txt")).toBe("text/plain");
     expect(getMimeType("/code.ts")).toBe("text/plain");
-    expect(getMimeType("/unknown.xyz")).toBe("text/plain");
+    expect(getMimeType("/script.py")).toBe("text/plain");
+    expect(getMimeType("/style.css")).toBe("text/css");
+    expect(getMimeType("/page.html")).toBe("text/html");
+  });
+
+  it("should return application/json for .json files", () => {
+    expect(getMimeType("/data.json")).toBe("application/json");
+  });
+
+  it("should return application/javascript for .js files", () => {
+    expect(getMimeType("/app.js")).toBe("application/javascript");
+  });
+
+  it("should return application/octet-stream for unknown extensions", () => {
+    expect(getMimeType("/unknown.xyz")).toBe("application/octet-stream");
+    expect(getMimeType("/archive.zip")).toBe("application/octet-stream");
+    expect(getMimeType("/binary.exe")).toBe("application/octet-stream");
+    expect(getMimeType("/data.wasm")).toBe("application/octet-stream");
+    expect(getMimeType("/db.sqlite")).toBe("application/octet-stream");
+    expect(getMimeType("/compiled.pyc")).toBe("application/octet-stream");
+    expect(getMimeType("/package.jar")).toBe("application/octet-stream");
   });
 });
 
