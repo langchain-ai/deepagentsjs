@@ -735,48 +735,83 @@ export class ReplSession {
 
   private safeDump(handle: QuickJSHandle): unknown {
     const context = this.context!;
-    const value = context.dump(handle);
-    if (value === "[object Object]") {
-      try {
-        const stringifyFn = context.evalCode(`
-          (val) => JSON.stringify(val, (k, v) => typeof v === "bigint" ? "__BIGINT__:" + v.toString() : v)
-        `);
-        if (stringifyFn.error) {
-          stringifyFn.error.dispose();
-          return value;
+    try {
+      const typeOfHandle = context.typeof(handle);
+
+      // Fast-path for BigInt handles: return a native BigInt.
+      if (typeOfHandle === "bigint") {
+        const toStringFn = context.evalCode(`(v) => v.toString()`);
+        if (toStringFn.error) {
+          toStringFn.error.dispose();
+          return context.dump(handle);
         }
-        const stringified = context.callFunction(
-          stringifyFn.value,
+        const strRes = context.callFunction(
+          toStringFn.value,
           context.undefined,
           handle,
         );
-        stringifyFn.value.dispose();
+        toStringFn.value.dispose();
 
-        if (stringified.error) {
-          stringified.error.dispose();
-          return value;
+        if (strRes.error) {
+          strRes.error.dispose();
+          return context.dump(handle);
         }
 
-        const typeofStringified = context.typeof(stringified.value);
-        if (typeofStringified === "undefined") {
-          stringified.value.dispose();
-          return value;
-        }
-
-        const jsonStr = context.getString(stringified.value);
-        stringified.value.dispose();
-
-        return JSON.parse(jsonStr, (_k, v) => {
-          if (typeof v === "string" && v.startsWith("__BIGINT__:")) {
-            return BigInt(v.slice(11));
-          }
-          return v;
-        });
-      } catch {
-        return value;
+        const s = context.getString(strRes.value);
+        strRes.value.dispose();
+        return BigInt(s);
       }
+
+      // Default dump — for some QuickJS values `dump` returns the
+      // unhelpful string "[object Object]". In that case attempt a
+      // JSON.stringify inside the guest, converting BigInt values to
+      // a prefixed string so we can revive them back to BigInt here.
+      const value = context.dump(handle);
+      if (value === "[object Object]") {
+        try {
+          const stringifyFn = context.evalCode(`
+            (val) => JSON.stringify(val, (k, v) => typeof v === "bigint" ? "__BIGINT__:" + v.toString() : v)
+          `);
+          if (stringifyFn.error) {
+            stringifyFn.error.dispose();
+            return value;
+          }
+          const stringified = context.callFunction(
+            stringifyFn.value,
+            context.undefined,
+            handle,
+          );
+          stringifyFn.value.dispose();
+
+          if (stringified.error) {
+            stringified.error.dispose();
+            return value;
+          }
+
+          const typeofStringified = context.typeof(stringified.value);
+          if (typeofStringified === "undefined") {
+            stringified.value.dispose();
+            return value;
+          }
+
+          const jsonStr = context.getString(stringified.value);
+          stringified.value.dispose();
+
+          return JSON.parse(jsonStr, (_k, v) => {
+            if (typeof v === "string" && v.startsWith("__BIGINT__:")) {
+              return BigInt(v.slice(11));
+            }
+            return v;
+          });
+        } catch {
+          return value;
+        }
+      }
+
+      return value;
+    } catch {
+      return context.dump(handle);
     }
-    return value;
   }
 
   dispose(): void {
