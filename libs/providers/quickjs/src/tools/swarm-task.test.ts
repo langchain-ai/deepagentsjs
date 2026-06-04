@@ -4,29 +4,10 @@ import { RunnableLambda } from "@langchain/core/runnables";
 import { FakeToolCallingModel } from "langchain";
 import * as langchain from "langchain";
 
-const SENTINEL_PATCH_TOOL_CALLS = { name: "PatchToolCallsMiddleware" };
-const SENTINEL_SUMMARIZATION = { name: "SummarizationMiddleware" };
-const SENTINEL_CACHE_BREAKPOINT = { name: "CacheBreakpointMiddleware" };
-const SENTINEL_PROMPT_CACHING = { name: "AnthropicPromptCachingMiddleware" };
-
-vi.mock("deepagents", () => ({
-  isAnthropicModel: (model: unknown) => {
-    if (typeof model === "string") {
-      if (model.includes(":")) return model.split(":")[0] === "anthropic";
-      return model.startsWith("claude");
-    }
-    return false;
-  },
-  createPatchToolCallsMiddleware: () => SENTINEL_PATCH_TOOL_CALLS,
-  createSummarizationMiddleware: () => SENTINEL_SUMMARIZATION,
-  createCacheBreakpointMiddleware: () => SENTINEL_CACHE_BREAKPOINT,
-}));
-
 vi.mock("langchain", async (importOriginal) => {
   const actual = await importOriginal<typeof import("langchain")>();
   return {
     ...actual,
-    anthropicPromptCachingMiddleware: () => SENTINEL_PROMPT_CACHING,
     createAgent: vi.fn((_params: unknown) => {
       return RunnableLambda.from(async () => ({
         messages: [new AIMessage({ content: "agent response" })],
@@ -717,76 +698,13 @@ describe("VariantCache", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Default middleware
+// Middleware pass-through
 // ---------------------------------------------------------------------------
 
-describe("default middleware", () => {
-  it("always includes patchToolCalls middleware", () => {
-    createSwarmTaskTool({
-      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
-      defaultModel: makeMockModel(),
-    });
-
-    expect(langchain.createAgent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        middleware: expect.arrayContaining([SENTINEL_PATCH_TOOL_CALLS]),
-      }),
-    );
-  });
-
-  it("includes anthropic caching middleware for anthropic models", () => {
-    createSwarmTaskTool({
-      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
-      defaultModel: "anthropic:claude-haiku-4-5-20251001",
-    });
-
-    expect(langchain.createAgent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        middleware: expect.arrayContaining([
-          SENTINEL_PROMPT_CACHING,
-          SENTINEL_CACHE_BREAKPOINT,
-        ]),
-      }),
-    );
-  });
-
-  it("excludes anthropic caching middleware for non-anthropic models", () => {
-    createSwarmTaskTool({
-      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
-      defaultModel: makeMockModel(),
-    });
-
-    const mw = vi.mocked(langchain.createAgent).mock.calls[0][0].middleware!;
-    expect(mw).not.toContain(SENTINEL_PROMPT_CACHING);
-    expect(mw).not.toContain(SENTINEL_CACHE_BREAKPOINT);
-  });
-
-  it("includes summarization middleware when backend is provided", () => {
-    createSwarmTaskTool({
-      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
-      defaultModel: makeMockModel(),
-      backend: {} as any,
-    });
-
-    expect(langchain.createAgent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        middleware: expect.arrayContaining([SENTINEL_SUMMARIZATION]),
-      }),
-    );
-  });
-
-  it("excludes summarization middleware when backend is omitted", () => {
-    createSwarmTaskTool({
-      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
-      defaultModel: makeMockModel(),
-    });
-
-    const mw = vi.mocked(langchain.createAgent).mock.calls[0][0].middleware!;
-    expect(mw).not.toContain(SENTINEL_SUMMARIZATION);
-  });
-
-  it("appends per-subagent middleware after defaults", () => {
-    const customMiddleware = { name: "CustomMiddleware" } as any;
+describe("middleware", () => {
+  it("passes subagent middleware to createAgent", () => {
+    const mw1 = { name: "MW1" } as any;
+    const mw2 = { name: "MW2" } as any;
 
     createSwarmTaskTool({
       subagents: [
@@ -794,27 +712,7 @@ describe("default middleware", () => {
           name: "worker",
           description: "W",
           systemPrompt: "W.",
-          middleware: [customMiddleware],
-        },
-      ],
-      defaultModel: makeMockModel(),
-    });
-
-    const mw = vi.mocked(langchain.createAgent).mock.calls[0][0].middleware!;
-    expect(mw).toContain(customMiddleware);
-    const patchIdx = mw.indexOf(SENTINEL_PATCH_TOOL_CALLS);
-    const customIdx = mw.indexOf(customMiddleware);
-    expect(patchIdx).toBeLessThan(customIdx);
-  });
-
-  it("uses per-subagent model for caching detection, not defaultModel", () => {
-    createSwarmTaskTool({
-      subagents: [
-        {
-          name: "worker",
-          description: "W",
-          systemPrompt: "W.",
-          model: "anthropic:claude-haiku-4-5-20251001",
+          middleware: [mw1, mw2],
         },
       ],
       defaultModel: makeMockModel(),
@@ -822,21 +720,49 @@ describe("default middleware", () => {
 
     expect(langchain.createAgent).toHaveBeenCalledWith(
       expect.objectContaining({
-        middleware: expect.arrayContaining([
-          SENTINEL_PROMPT_CACHING,
-          SENTINEL_CACHE_BREAKPOINT,
-        ]),
+        middleware: [mw1, mw2],
+      }),
+    );
+  });
+
+  it("defaults to empty middleware when none provided", () => {
+    createSwarmTaskTool({
+      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
+      defaultModel: makeMockModel(),
+    });
+
+    expect(langchain.createAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        middleware: [],
       }),
     );
   });
 
   it("passes middleware through to schema-variant agents", async () => {
-    createSwarmTaskTool({
-      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
+    const mw = { name: "MW" } as any;
+
+    const swarmTask = createSwarmTaskTool({
+      subagents: [
+        {
+          name: "worker",
+          description: "W",
+          systemPrompt: "W.",
+          middleware: [mw],
+        },
+      ],
       defaultModel: makeMockModel(),
     });
 
-    const firstCall = vi.mocked(langchain.createAgent).mock.calls[0][0];
-    expect(firstCall.middleware).toContain(SENTINEL_PATCH_TOOL_CALLS);
+    await swarmTask.invoke({
+      description: "work",
+      subagent_type: "worker",
+      response_schema: {
+        type: "object",
+        properties: { label: { type: "string" } },
+      },
+    });
+
+    const variantCall = vi.mocked(langchain.createAgent).mock.calls[1][0];
+    expect(variantCall.middleware).toEqual([mw]);
   });
 });

@@ -6,7 +6,6 @@
  */
 
 export { createDeepAgent } from "./agent.js";
-export { isAnthropicModel } from "./utils.js";
 export { ConfigurationError, type ConfigurationErrorCode } from "./errors.js";
 
 // Export harness profiles
@@ -70,7 +69,6 @@ export {
   createFilesystemMiddleware,
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
-  createCacheBreakpointMiddleware,
   createSummarizationMiddleware,
   computeSummarizationDefaults,
   createMemoryMiddleware,

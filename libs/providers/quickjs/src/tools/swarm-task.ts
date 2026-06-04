@@ -2,7 +2,6 @@ import { z } from "zod/v4";
 import {
   createAgent,
   tool,
-  anthropicPromptCachingMiddleware,
   type ReactAgent,
   type AgentMiddleware,
   StructuredTool,
@@ -12,14 +11,6 @@ import type { Runnable } from "@langchain/core/runnables";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { initChatModel } from "langchain/chat_models/universal";
-import {
-  isAnthropicModel,
-  createSummarizationMiddleware,
-  createPatchToolCallsMiddleware,
-  createCacheBreakpointMiddleware,
-  type AnyBackendProtocol,
-  type BackendFactory,
-} from "deepagents";
 
 /**
  * Dispatch mode for swarm task invocations.
@@ -63,7 +54,7 @@ export interface SwarmSubAgent {
   model?: LanguageModelLike | string;
 
   /**
-   * Additional middleware appended after the default middleware stack.
+   * Middleware stack applied to this subagent.
    */
   middleware?: AgentMiddleware[];
 }
@@ -86,14 +77,6 @@ export interface SwarmTaskToolOptions {
    * and for `invoke` mode direct model calls.
    */
   defaultModel: LanguageModelLike | string;
-
-  /**
-   * Backend for the summarization middleware. When provided, subagents
-   * receive summarization middleware that auto-compresses conversation
-   * history as token limits are approached. When omitted, summarization
-   * is skipped.
-   */
-  backend?: AnyBackendProtocol | BackendFactory;
 }
 
 /**
@@ -314,47 +297,6 @@ async function invokeAgent(
 }
 
 /**
- * Build the default middleware stack for a swarm subagent.
- *
- * Always includes patch-tool-calls. Conditionally includes summarization
- * (when a backend is provided) and Anthropic prompt caching (when the
- * resolved model is an Anthropic model).
- */
-function buildMiddleware(opts: {
-  model: LanguageModelLike | string;
-  backend?: AnyBackendProtocol | BackendFactory;
-  subagentMiddleware?: AgentMiddleware[];
-}): AgentMiddleware[] {
-  const { model, backend, subagentMiddleware = [] } = opts;
-
-  // Cast needed because the quickjs and deepagents packages may resolve
-  // different @langchain/core versions in the monorepo, making their
-  // LanguageModelLike / BaseLanguageModel types nominally incompatible.
-  const anthropic = isAnthropicModel(
-    model as Parameters<typeof isAnthropicModel>[0],
-  );
-
-  const cacheMiddleware: AgentMiddleware[] = anthropic
-    ? [
-        anthropicPromptCachingMiddleware({
-          unsupportedModelBehavior: "ignore",
-          minMessagesToCache: 1,
-        }),
-        createCacheBreakpointMiddleware() as AgentMiddleware,
-      ]
-    : [];
-
-  return [
-    ...(backend
-      ? [createSummarizationMiddleware({ backend }) as AgentMiddleware]
-      : []),
-    createPatchToolCallsMiddleware() as AgentMiddleware,
-    ...subagentMiddleware,
-    ...cacheMiddleware,
-  ];
-}
-
-/**
  * Create a PTC-only tool for swarm subagent dispatch.
  *
  * The returned tool is designed to be passed directly into the REPL
@@ -391,25 +333,19 @@ function buildMiddleware(opts: {
 export function createSwarmTaskTool(
   options: SwarmTaskToolOptions,
 ): StructuredToolInterface {
-  const { subagents = [], defaultModel, backend } = options;
+  const { subagents = [], defaultModel } = options;
 
   const compiled = new Map<string, CompiledAgent>();
 
   for (const sub of subagents) {
     const effectiveModel = sub.model ?? defaultModel;
 
-    const middleware = buildMiddleware({
-      model: effectiveModel,
-      backend,
-      subagentMiddleware: sub.middleware,
-    });
-
     const spec: AgentSpec = {
       model: effectiveModel,
       systemPrompt: sub.systemPrompt,
       tools: sub.tools ?? [],
       name: sub.name,
-      middleware,
+      middleware: sub.middleware ?? [],
     };
 
     compiled.set(sub.name, {
