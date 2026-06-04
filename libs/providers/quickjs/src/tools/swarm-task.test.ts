@@ -807,31 +807,6 @@ describe("default middleware", () => {
     expect(patchIdx).toBeLessThan(customIdx);
   });
 
-  it("appends tool-level middleware after defaults but before per-subagent", () => {
-    const toolMw = { name: "ToolMiddleware" } as any;
-    const subMw = { name: "SubMiddleware" } as any;
-
-    createSwarmTaskTool({
-      subagents: [
-        {
-          name: "worker",
-          description: "W",
-          systemPrompt: "W.",
-          middleware: [subMw],
-        },
-      ],
-      defaultModel: makeMockModel(),
-      middleware: [toolMw],
-    });
-
-    const mw = vi.mocked(langchain.createAgent).mock.calls[0][0].middleware!;
-    const patchIdx = mw.indexOf(SENTINEL_PATCH_TOOL_CALLS);
-    const toolIdx = mw.indexOf(toolMw);
-    const subIdx = mw.indexOf(subMw);
-    expect(patchIdx).toBeLessThan(toolIdx);
-    expect(toolIdx).toBeLessThan(subIdx);
-  });
-
   it("uses per-subagent model for caching detection, not defaultModel", () => {
     createSwarmTaskTool({
       subagents: [

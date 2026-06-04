@@ -94,13 +94,6 @@ export interface SwarmTaskToolOptions {
    * is skipped.
    */
   backend?: AnyBackendProtocol | BackendFactory;
-
-  /**
-   * Additional middleware appended after the default middleware stack
-   * for all subagents. Per-subagent middleware (on `SwarmSubAgent`) is
-   * appended after these.
-   */
-  middleware?: AgentMiddleware[];
 }
 
 /**
@@ -330,10 +323,9 @@ async function invokeAgent(
 function buildMiddleware(opts: {
   model: LanguageModelLike | string;
   backend?: AnyBackendProtocol | BackendFactory;
-  toolLevelMiddleware: AgentMiddleware[];
   subagentMiddleware?: AgentMiddleware[];
 }): AgentMiddleware[] {
-  const { model, backend, toolLevelMiddleware, subagentMiddleware = [] } = opts;
+  const { model, backend, subagentMiddleware = [] } = opts;
 
   // Cast needed because the quickjs and deepagents packages may resolve
   // different @langchain/core versions in the monorepo, making their
@@ -357,7 +349,6 @@ function buildMiddleware(opts: {
       ? [createSummarizationMiddleware({ backend }) as AgentMiddleware]
       : []),
     createPatchToolCallsMiddleware() as AgentMiddleware,
-    ...toolLevelMiddleware,
     ...subagentMiddleware,
     ...cacheMiddleware,
   ];
@@ -400,12 +391,7 @@ function buildMiddleware(opts: {
 export function createSwarmTaskTool(
   options: SwarmTaskToolOptions,
 ): StructuredToolInterface {
-  const {
-    subagents = [],
-    defaultModel,
-    backend,
-    middleware: toolLevelMiddleware = [],
-  } = options;
+  const { subagents = [], defaultModel, backend } = options;
 
   const compiled = new Map<string, CompiledAgent>();
 
@@ -415,7 +401,6 @@ export function createSwarmTaskTool(
     const middleware = buildMiddleware({
       model: effectiveModel,
       backend,
-      toolLevelMiddleware,
       subagentMiddleware: sub.middleware,
     });
 
