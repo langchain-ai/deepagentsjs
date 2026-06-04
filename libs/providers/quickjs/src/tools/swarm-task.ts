@@ -1,10 +1,25 @@
 import { z } from "zod/v4";
-import { createAgent, tool, type ReactAgent, StructuredTool } from "langchain";
+import {
+  createAgent,
+  tool,
+  anthropicPromptCachingMiddleware,
+  type ReactAgent,
+  type AgentMiddleware,
+  StructuredTool,
+} from "langchain";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { initChatModel } from "langchain/chat_models/universal";
+import {
+  isAnthropicModel,
+  createSummarizationMiddleware,
+  createPatchToolCallsMiddleware,
+  createCacheBreakpointMiddleware,
+  type AnyBackendProtocol,
+  type BackendFactory,
+} from "deepagents";
 
 /**
  * Dispatch mode for swarm task invocations.
@@ -46,6 +61,11 @@ export interface SwarmSubAgent {
    * Model override for this subagent. Falls back to the tool's `defaultModel`.
    */
   model?: LanguageModelLike | string;
+
+  /**
+   * Additional middleware appended after the default middleware stack.
+   */
+  middleware?: AgentMiddleware[];
 }
 
 /**
@@ -66,6 +86,21 @@ export interface SwarmTaskToolOptions {
    * and for `invoke` mode direct model calls.
    */
   defaultModel: LanguageModelLike | string;
+
+  /**
+   * Backend for the summarization middleware. When provided, subagents
+   * receive summarization middleware that auto-compresses conversation
+   * history as token limits are approached. When omitted, summarization
+   * is skipped.
+   */
+  backend?: AnyBackendProtocol | BackendFactory;
+
+  /**
+   * Additional middleware appended after the default middleware stack
+   * for all subagents. Per-subagent middleware (on `SwarmSubAgent`) is
+   * appended after these.
+   */
+  middleware?: AgentMiddleware[];
 }
 
 /**
@@ -111,6 +146,11 @@ interface AgentSpec {
    * Unique name identifying this subagent type.
    */
   name: string;
+
+  /**
+   * Middleware stack applied to this subagent.
+   */
+  middleware: AgentMiddleware[];
 }
 
 const VARIANT_TTL_MS = 60_000;
@@ -281,6 +321,49 @@ async function invokeAgent(
 }
 
 /**
+ * Build the default middleware stack for a swarm subagent.
+ *
+ * Always includes patch-tool-calls. Conditionally includes summarization
+ * (when a backend is provided) and Anthropic prompt caching (when the
+ * resolved model is an Anthropic model).
+ */
+function buildMiddleware(opts: {
+  model: LanguageModelLike | string;
+  backend?: AnyBackendProtocol | BackendFactory;
+  toolLevelMiddleware: AgentMiddleware[];
+  subagentMiddleware?: AgentMiddleware[];
+}): AgentMiddleware[] {
+  const { model, backend, toolLevelMiddleware, subagentMiddleware = [] } = opts;
+
+  // Cast needed because the quickjs and deepagents packages may resolve
+  // different @langchain/core versions in the monorepo, making their
+  // LanguageModelLike / BaseLanguageModel types nominally incompatible.
+  const anthropic = isAnthropicModel(
+    model as Parameters<typeof isAnthropicModel>[0],
+  );
+
+  const cacheMiddleware: AgentMiddleware[] = anthropic
+    ? [
+        anthropicPromptCachingMiddleware({
+          unsupportedModelBehavior: "ignore",
+          minMessagesToCache: 1,
+        }),
+        createCacheBreakpointMiddleware() as AgentMiddleware,
+      ]
+    : [];
+
+  return [
+    ...(backend
+      ? [createSummarizationMiddleware({ backend }) as AgentMiddleware]
+      : []),
+    createPatchToolCallsMiddleware() as AgentMiddleware,
+    ...toolLevelMiddleware,
+    ...subagentMiddleware,
+    ...cacheMiddleware,
+  ];
+}
+
+/**
  * Create a PTC-only tool for swarm subagent dispatch.
  *
  * The returned tool is designed to be passed directly into the REPL
@@ -317,16 +400,31 @@ async function invokeAgent(
 export function createSwarmTaskTool(
   options: SwarmTaskToolOptions,
 ): StructuredToolInterface {
-  const { subagents = [], defaultModel } = options;
+  const {
+    subagents = [],
+    defaultModel,
+    backend,
+    middleware: toolLevelMiddleware = [],
+  } = options;
 
   const compiled = new Map<string, CompiledAgent>();
 
   for (const sub of subagents) {
+    const effectiveModel = sub.model ?? defaultModel;
+
+    const middleware = buildMiddleware({
+      model: effectiveModel,
+      backend,
+      toolLevelMiddleware,
+      subagentMiddleware: sub.middleware,
+    });
+
     const spec: AgentSpec = {
-      model: sub.model ?? defaultModel,
+      model: effectiveModel,
       systemPrompt: sub.systemPrompt,
       tools: sub.tools ?? [],
       name: sub.name,
+      middleware,
     };
 
     compiled.set(sub.name, {

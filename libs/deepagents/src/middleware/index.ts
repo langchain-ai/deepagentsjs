@@ -22,6 +22,7 @@ export {
   createPatchToolCallsMiddleware,
   patchDanglingToolCalls,
 } from "./patch_tool_calls.js";
+export { createCacheBreakpointMiddleware } from "./cache.js";
 export {
   createMemoryMiddleware,
   type MemoryMiddlewareOptions,
