@@ -2,12 +2,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { tool } from "langchain";
 import * as z from "zod";
 import { SystemMessage } from "@langchain/core/messages";
+import type { StructuredToolInterface } from "@langchain/core/tools";
 import {
   createCodeInterpreterMiddleware,
   generatePtcPrompt,
   resolveToolList,
 } from "./middleware.js";
 import { ReplSession } from "./session.js";
+import type { InterpreterLibrary } from "./library.js";
 
 describe("createCodeInterpreterMiddleware", () => {
   beforeEach(() => {
@@ -405,6 +407,219 @@ describe("createCodeInterpreterMiddleware", () => {
       expect(() =>
         (middleware as any).beforeAgent({ skillsMetadata: [] }),
       ).not.toThrow();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Interpreter libraries
+  // ---------------------------------------------------------------------------
+
+  describe("interpreter libraries", () => {
+    function makeLibrary(
+      overrides: Partial<InterpreterLibrary> = {},
+    ): InterpreterLibrary {
+      return {
+        name: overrides.name ?? "test-lib",
+        description: overrides.description ?? "A test library",
+        ptcTools: overrides.ptcTools ?? [],
+        source: overrides.source ?? "export const x = 1;",
+        docs: overrides.docs ?? "# Test Lib",
+      };
+    }
+
+    describe("PTC tool aggregation", () => {
+      it("merges library ptcTools with explicit ptc", async () => {
+        const readFile = tool(async () => "content", {
+          name: "read_file",
+          description: "Read a file",
+          schema: z.object({ path: z.string() }),
+        });
+
+        const middleware = createCodeInterpreterMiddleware({
+          ptc: ["write_file"],
+          libraries: [makeLibrary({ ptcTools: [readFile] })],
+        });
+
+        const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+        const agentWriteFile = tool(async () => "ok", {
+          name: "write_file",
+          description: "Write a file",
+          schema: z.object({ path: z.string(), content: z.string() }),
+        });
+
+        await middleware.wrapModelCall!(
+          {
+            systemMessage: new SystemMessage("Base"),
+            state: {},
+            runtime: { configurable: { thread_id: "agg-1" } },
+            tools: [agentWriteFile],
+          } as any,
+          mockHandler,
+        );
+
+        const req = mockHandler.mock.calls[0][0];
+        const text = req.systemMessage.text;
+        expect(text).toContain("tools.writeFile");
+        expect(text).toContain("tools.readFile");
+      });
+
+      it("deduplicates — explicit ptc takes precedence over library ptcTools", async () => {
+        const libReadFile = tool(async () => "lib version", {
+          name: "read_file",
+          description: "Lib read",
+          schema: z.object({ path: z.string() }),
+        });
+        const explicitReadFile = tool(async () => "explicit version", {
+          name: "read_file",
+          description: "Explicit read",
+          schema: z.object({ path: z.string() }),
+        });
+
+        const middleware = createCodeInterpreterMiddleware({
+          ptc: [explicitReadFile],
+          libraries: [makeLibrary({ ptcTools: [libReadFile] })],
+        });
+
+        const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+
+        await middleware.wrapModelCall!(
+          {
+            systemMessage: new SystemMessage("Base"),
+            state: {},
+            runtime: { configurable: { thread_id: "dedup-1" } },
+            tools: [],
+          } as any,
+          mockHandler,
+        );
+
+        const req = mockHandler.mock.calls[0][0];
+        const text = req.systemMessage.text;
+        expect(text).toContain("Explicit read");
+        expect(text).not.toContain("Lib read");
+      });
+
+      it("includes library ptcTools in beforeAgent validation", () => {
+        const middleware = createCodeInterpreterMiddleware({
+          libraries: [makeLibrary({ ptcTools: ["read_file"] })],
+          skillsBackend: {} as any,
+        });
+
+        expect(() =>
+          (middleware as any).beforeAgent({
+            skillsMetadata: [
+              {
+                name: "my-skill",
+                description: "test",
+                metadata: { "required-ptc-tools": "read_file" },
+              },
+            ],
+          }),
+        ).not.toThrow();
+      });
+    });
+
+    describe("system prompt injection", () => {
+      it("renders library section in system prompt", async () => {
+        const middleware = createCodeInterpreterMiddleware({
+          libraries: [
+            makeLibrary({
+              name: "swarm",
+              description: "Multi-agent orchestration",
+            }),
+          ],
+        });
+
+        const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+
+        await middleware.wrapModelCall!(
+          {
+            systemMessage: new SystemMessage("Base"),
+            state: {},
+            runtime: { configurable: { thread_id: "prompt-1" } },
+            tools: [],
+          } as any,
+          mockHandler,
+        );
+
+        const req = mockHandler.mock.calls[0][0];
+        const text = req.systemMessage.text;
+        expect(text).toContain("### Interpreter Libraries");
+        expect(text).toContain("**swarm**");
+        expect(text).toContain("Multi-agent orchestration");
+        expect(text).toContain('import { ... } from "swarm"');
+        expect(text).toContain("/libraries/swarm/LIBRARY.md");
+      });
+
+      it("renders multiple libraries in prompt", async () => {
+        const middleware = createCodeInterpreterMiddleware({
+          libraries: [
+            makeLibrary({ name: "lib-a", description: "First library" }),
+            makeLibrary({ name: "lib-b", description: "Second library" }),
+          ],
+        });
+
+        const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+
+        await middleware.wrapModelCall!(
+          {
+            systemMessage: new SystemMessage("Base"),
+            state: {},
+            runtime: { configurable: { thread_id: "prompt-2" } },
+            tools: [],
+          } as any,
+          mockHandler,
+        );
+
+        const req = mockHandler.mock.calls[0][0];
+        const text = req.systemMessage.text;
+        expect(text).toContain("**lib-a**");
+        expect(text).toContain("**lib-b**");
+      });
+
+      it("omits library section when no libraries configured", async () => {
+        const middleware = createCodeInterpreterMiddleware();
+
+        const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+
+        await middleware.wrapModelCall!(
+          {
+            systemMessage: new SystemMessage("Base"),
+            state: {},
+            runtime: { configurable: { thread_id: "prompt-3" } },
+            tools: [],
+          } as any,
+          mockHandler,
+        );
+
+        const req = mockHandler.mock.calls[0][0];
+        const text = req.systemMessage.text;
+        expect(text).not.toContain("### Interpreter Libraries");
+      });
+    });
+
+    describe("library passthrough to session", () => {
+      it("passes libraries to session and resolves imports", async () => {
+        const middleware = createCodeInterpreterMiddleware({
+          libraries: [
+            makeLibrary({
+              name: "greeting",
+              source: 'export function hello() { return "hi"; }',
+              docs: "# Greeting",
+            }),
+          ],
+        });
+
+        const jsTool = middleware.tools!.find(
+          (t: any) => t.name === "eval",
+        ) as any;
+
+        const result = await jsTool.invoke(
+          { code: 'const { hello } = await import("greeting"); hello()' },
+          { configurable: { thread_id: "lib-pass-1" } },
+        );
+
+        expect(result).toContain("hi");
+      });
     });
   });
 });

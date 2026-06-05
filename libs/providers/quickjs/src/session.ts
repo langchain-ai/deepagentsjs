@@ -33,7 +33,7 @@ import type {
   ReplSessionOptions,
   ReplResult,
   SkillsContext,
-  LibraryRegistration,
+  LibraryEntry,
 } from "./types.js";
 import { toCamelCase } from "./utils.js";
 import { transformForEval } from "./transform.js";
@@ -453,7 +453,7 @@ export class ReplSession {
    * resolvable as a bare-specifier import (e.g. `import { create } from "swarm"`).
    * Docs are stored separately for read_file access.
    */
-  private registerLibraries(libraries: LibraryRegistration[]): void {
+  private registerLibraries(libraries: LibraryEntry[]): void {
     for (const lib of libraries) {
       this.libraries.set(lib.name, lib.source);
       if (lib.docs) {

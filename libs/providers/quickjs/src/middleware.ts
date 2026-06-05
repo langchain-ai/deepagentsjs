@@ -23,7 +23,10 @@ import {
   type BackendFactory,
   type SkillMetadata,
 } from "deepagents";
-import type { CodeInterpreterMiddlewareOptions } from "./types.js";
+import type {
+  CodeInterpreterMiddlewareOptions,
+  LibraryEntry,
+} from "./types.js";
 import {
   ReplSession,
   DEFAULT_EXECUTION_TIMEOUT,
@@ -41,6 +44,7 @@ import {
   safeToJsonSchema,
 } from "./utils.js";
 import { scanSkillReferences } from "./skills.js";
+import type { InterpreterLibrary } from "./library.js";
 
 /**
  * These type-only imports are required for TypeScript's type inference to work
@@ -200,7 +204,6 @@ export function createCodeInterpreterMiddleware(
   options: CodeInterpreterMiddlewareOptions = {},
 ) {
   const {
-    ptc,
     memoryLimitBytes = DEFAULT_MEMORY_LIMIT,
     maxStackSizeBytes = DEFAULT_MAX_STACK_SIZE,
     executionTimeoutMs = DEFAULT_EXECUTION_TIMEOUT,
@@ -225,20 +228,78 @@ export function createCodeInterpreterMiddleware(
     });
 
   const middlewareId = crypto.randomUUID();
-
   let cachedPtcPrompt: string | null = null;
-
   let ptcTools: StructuredToolInterface[] = [];
+
+  const libraries = options.libraries ?? [];
+  const aggregatedPtc = aggregatePtcTools(options.ptc, libraries);
 
   function filterToolsForPtc(
     allTools: StructuredToolInterface[],
   ): StructuredToolInterface[] {
-    if (!ptc) return [];
+    if (aggregatedPtc.length === 0) return [];
 
     const candidates = allTools.filter((t) => t.name !== toolName);
 
-    return resolveToolList(ptc, candidates);
+    return resolveToolList(aggregatedPtc, candidates);
   }
+
+  function aggregatePtcTools(
+    explicitPtc: (string | StructuredToolInterface)[] | undefined,
+    libs: InterpreterLibrary[],
+  ): (string | StructuredToolInterface)[] {
+    const seen = new Set<string>();
+    const result: (string | StructuredToolInterface)[] = [];
+
+    // Explicit ptc first — user declarations take precedence
+    for (const item of explicitPtc ?? []) {
+      const name = typeof item === "string" ? item : item.name;
+      if (!seen.has(name)) {
+        seen.add(name);
+        result.push(item);
+      }
+    }
+
+    // Library tool declarations — only add if not already explicit
+    for (const lib of libs) {
+      for (const item of lib.ptcTools) {
+        const name = typeof item === "string" ? item : item.name;
+        if (!seen.has(name)) {
+          seen.add(name);
+          result.push(item);
+        }
+      }
+    }
+
+    return result;
+  }
+
+  function renderLibrariesPrompt(libs: InterpreterLibrary[]): string {
+    if (libs.length === 0) return "";
+
+    const entries = libs
+      .map(
+        (lib) =>
+          `- **${lib.name}**: ${lib.description}\n` +
+          `  → \`import { ... } from "${lib.name}"\`\n` +
+          `  → Read \`/libraries/${lib.name}/LIBRARY.md\` for full API documentation`,
+      )
+      .join("\n");
+
+    return dedent`
+  
+      ### Interpreter Libraries
+  
+      The following libraries are pre-loaded in the code interpreter and available via \`import\`:
+  
+      ${entries}
+  
+      These libraries are always available. Read a library's LIBRARY.md when you need
+      detailed usage instructions, API signatures, or examples.
+    `;
+  }
+
+  const librariesPrompt = renderLibrariesPrompt(libraries);
 
   const evalTool = tool(
     async (input, config: LangGraphRunnableConfig) => {
@@ -251,6 +312,13 @@ export function createCodeInterpreterMiddleware(
         maxPtcCalls,
         tools: ptcTools,
         skillsEnabled: skillsBackend !== undefined,
+        libraries: libraries.map(
+          (lib): LibraryEntry => ({
+            name: lib.name,
+            source: lib.source,
+            docs: lib.docs,
+          }),
+        ),
         maxResultChars,
         captureConsole,
         sessionId: threadId,
@@ -291,7 +359,7 @@ export function createCodeInterpreterMiddleware(
   );
 
   const ptcToolNames = new Set(
-    (ptc ?? []).map((t) => (typeof t === "string" ? t : t.name)),
+    aggregatedPtc.map((t) => (typeof t === "string" ? t : t.name)),
   );
 
   return createMiddleware({
@@ -328,7 +396,8 @@ export function createCodeInterpreterMiddleware(
 
       const systemMessage = request.systemMessage
         .concat(baseSystemPrompt)
-        .concat(cachedPtcPrompt || "");
+        .concat(cachedPtcPrompt || "")
+        .concat(librariesPrompt);
       return handler({ ...request, systemMessage });
     },
     afterAgent: async (_state, runtime) => {

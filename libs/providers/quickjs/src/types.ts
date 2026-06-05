@@ -1,4 +1,5 @@
 import type { StructuredToolInterface } from "@langchain/core/tools";
+import type { InterpreterLibrary } from "./library.js";
 
 import type {
   AnyBackendProtocol,
@@ -88,6 +89,16 @@ export interface CodeInterpreterMiddlewareOptions {
    * @default true
    */
   captureConsole?: boolean;
+
+  /**
+   * Interpreter libraries to pre-load into the QuickJS module resolver.
+   *
+   * Each library is always available for `import` by name. Libraries
+   * bundle their own PTC tool requirements — the middleware aggregates
+   * them with any explicit `ptc` tools.
+   * @default []
+   */
+  libraries?: InterpreterLibrary[];
 }
 
 /**
@@ -98,7 +109,7 @@ export interface CodeInterpreterMiddlewareOptions {
  * The full `InterpreterLibrary` (with PTC tools, etc.) lives in
  * the middleware layer.
  */
-export interface LibraryRegistration {
+export interface LibraryEntry {
   /**
    * Module name used in bare-specifier imports.
    */
@@ -127,7 +138,7 @@ export interface ReplSessionOptions {
   maxResultChars?: number;
   captureConsole?: boolean;
   sessionId?: string;
-  libraries?: LibraryRegistration[];
+  libraries?: LibraryEntry[];
 }
 
 /**
