@@ -95,7 +95,7 @@ async function main() {
     ptcTools: ["write_file"],
     source: fs.readFileSync(path.join(evaluatorDir, "index.ts"), "utf-8"),
     instructions: fs.readFileSync(
-      path.join(evaluatorDir, "LIBRARY.md"),
+      path.join(evaluatorDir, "INSTRUCTIONS.md"),
       "utf-8",
     ),
   };

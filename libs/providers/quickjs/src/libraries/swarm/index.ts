@@ -22,7 +22,7 @@ const SWARM_DIR = fs.existsSync(path.join(__dirname, "source"))
   ? __dirname
   : path.join(__dirname, "libraries", "swarm");
 const SOURCE_DIR = path.join(SWARM_DIR, "source");
-const LIBRARY_MD_PATH = path.join(SWARM_DIR, "LIBRARY.md");
+const INSTRUCTIONS_PATH = path.join(SWARM_DIR, "INSTRUCTIONS.md");
 
 /**
  * Configuration options for the pre-built swarm library.
@@ -112,7 +112,7 @@ function loadSwarmSources(): {
  * Read the swarm LIBRARY.md instructions from disk.
  */
 function loadSwarmInstructions(): string {
-  return fs.readFileSync(LIBRARY_MD_PATH, "utf-8");
+  return fs.readFileSync(INSTRUCTIONS_PATH, "utf-8");
 }
 
 /**

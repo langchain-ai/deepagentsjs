@@ -1,9 +1,3 @@
----
-name: evaluator
-description: Multi-pass evaluation pipeline built on swarm
-ptcTools: [write_file]
----
-
 # Evaluator
 
 Run a structured multi-pass comparison of candidates against weighted
