@@ -27,6 +27,7 @@ import * as path from "node:path";
 import * as url from "node:url";
 import dedent from "dedent";
 import { HumanMessage } from "@langchain/core/messages";
+import { awaitAllCallbacks } from "@langchain/core/callbacks/promises";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { TavilySearch } from "@langchain/tavily";
 import { createDeepAgent } from "deepagents";
@@ -160,3 +161,5 @@ const last = result.messages[result.messages.length - 1];
 console.log(
   typeof last.content === "string" ? last.content.slice(0, 2000) : last.content,
 );
+
+await awaitAllCallbacks();
