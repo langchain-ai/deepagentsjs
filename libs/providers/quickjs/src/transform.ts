@@ -74,9 +74,16 @@ export function transformForEval(code: string): string {
       continue;
     }
 
-    // Remove import/export declarations (not supported in QuickJS eval)
+    // Convert import declarations to dynamic await import() calls.
+    // Static imports can't appear inside the async IIFE wrapper, but
+    // dynamic imports work and trigger the QuickJS module loader.
+    if (node.type === "ImportDeclaration") {
+      s.overwrite(node.start, node.end, importToAwaitImport(node));
+      continue;
+    }
+
+    // Remove export declarations (not supported in QuickJS eval)
     if (
-      node.type === "ImportDeclaration" ||
       node.type === "ExportNamedDeclaration" ||
       node.type === "ExportDefaultDeclaration" ||
       node.type === "ExportAllDeclaration"
@@ -140,6 +147,68 @@ export function transformForEval(code: string): string {
   s.append("\n})()");
 
   return s.toString();
+}
+
+/**
+ * Convert a static ImportDeclaration AST node to a dynamic `await import()`.
+ */
+function importToAwaitImport(node: AcornNode): string {
+  const decl = node as any;
+  const source = decl.source.raw ?? JSON.stringify(decl.source.value);
+  const specifiers = decl.specifiers ?? [];
+
+  if (specifiers.length === 0) {
+    return `await import(${source});`;
+  }
+
+  const hasDefault = specifiers.some(
+    (s: any) => s.type === "ImportDefaultSpecifier",
+  );
+  const namespace = specifiers.find(
+    (s: any) => s.type === "ImportNamespaceSpecifier",
+  );
+  const named = specifiers.filter((s: any) => s.type === "ImportSpecifier");
+
+  // Simple cases: only one kind of specifier
+  if (!hasDefault && namespace) {
+    return `const ${namespace.local.name} = await import(${source});`;
+  }
+
+  if (!hasDefault && named.length > 0) {
+    const bindings = named
+      .map((s: any) =>
+        s.imported.name === s.local.name
+          ? s.local.name
+          : `${s.imported.name}: ${s.local.name}`,
+      )
+      .join(", ");
+    return `const { ${bindings} } = await import(${source});`;
+  }
+
+  if (hasDefault && named.length === 0) {
+    const defaultSpec = specifiers.find(
+      (s: any) => s.type === "ImportDefaultSpecifier",
+    );
+    return `const { default: ${defaultSpec.local.name} } = await import(${source});`;
+  }
+
+  // Mixed: default + named — use a temp variable
+  const tmpName = `__imp_${decl.source.value.replace(/[^a-zA-Z0-9]/g, "_")}`;
+  const defaultSpec = specifiers.find(
+    (s: any) => s.type === "ImportDefaultSpecifier",
+  );
+  const namedBindings = named
+    .map((s: any) =>
+      s.imported.name === s.local.name
+        ? s.local.name
+        : `${s.imported.name}: ${s.local.name}`,
+    )
+    .join(", ");
+  return (
+    `const ${tmpName} = await import(${source}); ` +
+    `const ${defaultSpec.local.name} = ${tmpName}.default; ` +
+    `const { ${namedBindings} } = ${tmpName};`
+  );
 }
 
 function isTSOnlyNode(node: AcornNode): boolean {

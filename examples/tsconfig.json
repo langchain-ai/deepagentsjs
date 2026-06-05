@@ -23,5 +23,5 @@
     "isolatedModules": true
   },
   "include": ["**/*.ts"],
-  "exclude": ["node_modules", "dist", "dist-examples"]
+  "exclude": ["node_modules", "dist", "dist-examples", "**/libraries/**"]
 }

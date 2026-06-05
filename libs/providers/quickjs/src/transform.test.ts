@@ -161,6 +161,55 @@ describe("transformForEval", () => {
       expect(result).toContain("{{{{invalid syntax");
     });
   });
+
+  describe("import declarations converted to dynamic imports", () => {
+    it("converts named imports", () => {
+      const result = transformForEval('import { a, b } from "m";');
+      expect(result).toContain('const { a, b } = await import("m")');
+      expect(result).not.toContain("import {");
+    });
+
+    it("converts aliased named imports", () => {
+      const result = transformForEval('import { a as x } from "m";');
+      expect(result).toContain('const { a: x } = await import("m")');
+    });
+
+    it("converts default imports", () => {
+      const result = transformForEval('import x from "m";');
+      expect(result).toContain('const { default: x } = await import("m")');
+    });
+
+    it("converts namespace imports", () => {
+      const result = transformForEval('import * as ns from "m";');
+      expect(result).toContain('const ns = await import("m")');
+    });
+
+    it("converts side-effect imports", () => {
+      const result = transformForEval('import "m";');
+      expect(result).toContain('await import("m")');
+      expect(result).not.toContain("const");
+    });
+
+    it("converts mixed default + named imports", () => {
+      const result = transformForEval('import x, { a, b } from "m";');
+      expect(result).toContain('await import("m")');
+      expect(result).toContain("x = __imp_m.default");
+      expect(result).toContain("const { a, b } = __imp_m");
+    });
+
+    it("still removes type-only imports", () => {
+      const result = transformForEval('import type { Foo } from "m";');
+      expect(result).not.toContain("import");
+      expect(result).not.toContain("Foo");
+    });
+
+    it("still removes export declarations", () => {
+      const result = transformForEval(
+        "export const x = 1; export function foo() {}",
+      );
+      expect(result).not.toContain("export");
+    });
+  });
 });
 
 describe("stripTypeSyntax", () => {

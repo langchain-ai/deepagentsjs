@@ -16,8 +16,13 @@ import {
 import { stripTypeSyntax } from "../../transform.js";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
-const SOURCE_DIR = path.join(__dirname, "source");
-const LIBRARY_MD_PATH = path.join(__dirname, "LIBRARY.md");
+// In source: __dirname is src/libraries/swarm/ and assets are adjacent.
+// Bundled into dist/index.js: __dirname is dist/ and assets are under libraries/swarm/.
+const SWARM_DIR = fs.existsSync(path.join(__dirname, "source"))
+  ? __dirname
+  : path.join(__dirname, "libraries", "swarm");
+const SOURCE_DIR = path.join(SWARM_DIR, "source");
+const LIBRARY_MD_PATH = path.join(SWARM_DIR, "LIBRARY.md");
 
 /**
  * Configuration options for the pre-built swarm library.
