@@ -1,5 +1,11 @@
 import { z } from "zod/v4";
-import { createAgent, tool, type ReactAgent, StructuredTool } from "langchain";
+import {
+  createAgent,
+  tool,
+  type ReactAgent,
+  type AgentMiddleware,
+  StructuredTool,
+} from "langchain";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import type { StructuredToolInterface } from "@langchain/core/tools";
@@ -46,6 +52,15 @@ export interface SwarmSubAgent {
    * Model override for this subagent. Falls back to the tool's `defaultModel`.
    */
   model?: LanguageModelLike | string;
+
+  /**
+   * Middleware applied to this subagent's agent graph.
+   *
+   * The `swarm()` factory populates this with default middleware
+   * (patch-tool-calls, Anthropic cache controls). Custom middleware
+   * provided here is appended after the defaults.
+   */
+  middleware?: AgentMiddleware[];
 }
 
 /**
@@ -111,6 +126,11 @@ interface AgentSpec {
    * Unique name identifying this subagent type.
    */
   name: string;
+
+  /**
+   * Middleware applied to this subagent's agent graph.
+   */
+  middleware: AgentMiddleware[];
 }
 
 const VARIANT_TTL_MS = 60_000;
@@ -327,6 +347,7 @@ export function createSwarmTaskTool(
       systemPrompt: sub.systemPrompt,
       tools: sub.tools ?? [],
       name: sub.name,
+      middleware: sub.middleware ?? [],
     };
 
     compiled.set(sub.name, {

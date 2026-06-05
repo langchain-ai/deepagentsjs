@@ -316,6 +316,7 @@ export function createCodeInterpreterMiddleware(
           (lib): LibraryEntry => ({
             name: lib.name,
             source: lib.source,
+            files: lib.files,
             docs: lib.docs,
           }),
         ),

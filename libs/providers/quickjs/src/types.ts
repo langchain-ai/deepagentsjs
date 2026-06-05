@@ -124,6 +124,15 @@ export interface LibraryEntry {
    * Documentation content for read_file interception.
    */
   docs: string;
+
+  /**
+   * Additional module files keyed by relative POSIX path.
+   *
+   * Enables multi-file libraries — QuickJS resolves
+   * `import { x } from "<name>/table.js"` to `files.get("table.js")`.
+   * Single-file libraries can omit this.
+   */
+  files?: Map<string, string>;
 }
 
 /**

@@ -7,6 +7,7 @@
 
 export { createDeepAgent } from "./agent.js";
 export { ConfigurationError, type ConfigurationErrorCode } from "./errors.js";
+export { isAnthropicModel } from "./utils.js";
 
 // Export harness profiles
 export {
@@ -90,6 +91,8 @@ export {
   // Completion callback middleware for async subagents
   createCompletionCallbackMiddleware,
   type CompletionCallbackOptions,
+  // Cache breakpoint middleware
+  createCacheBreakpointMiddleware,
   // Other middleware types
   type FilesystemMiddlewareOptions,
   type SubAgentMiddlewareOptions,
@@ -101,6 +104,9 @@ export {
   type AsyncTask,
   type AsyncTaskStatus,
 } from "./middleware/index.js";
+
+// Re-export prompt caching middleware from langchain
+export { anthropicPromptCachingMiddleware } from "langchain";
 
 // Export shared state values (similar to LangGraph's messagesValue pattern)
 export { filesValue } from "./values.js";

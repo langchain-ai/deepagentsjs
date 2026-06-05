@@ -76,6 +76,21 @@ const sharedEvalQueue = new AsyncEvalQueue();
  */
 let sharedModulePromise: Promise<QuickJSAsyncWASMModule> | undefined;
 
+/**
+ * Internal registry entry for a loaded interpreter library.
+ */
+interface RegisteredLibrary {
+  /**
+   * Entrypoint source (bare specifier resolves here).
+   */
+  source: string;
+
+  /**
+   * Additional files keyed by relative path.
+   */
+  files: Map<string, string>;
+}
+
 function getSharedModule(): Promise<QuickJSAsyncWASMModule> {
   if (!sharedModulePromise) {
     sharedModulePromise = (async () => {
@@ -315,7 +330,7 @@ export class ReplSession {
   private skillsFailed: Map<string, Error> = new Map();
   private readonly maxPtcCalls: number | null;
   private ptcCallsRemaining: number | null = null;
-  private libraries: Map<string, string> = new Map();
+  private libraries: Map<string, RegisteredLibrary> = new Map();
   private libraryDocs: Map<string, string> = new Map();
 
   /**
@@ -451,11 +466,15 @@ export class ReplSession {
    *
    * Called once during session setup. Each library's source becomes
    * resolvable as a bare-specifier import (e.g. `import { create } from "swarm"`).
+   * Multi-file libraries register sub-modules in the files map.
    * Docs are stored separately for read_file access.
    */
   private registerLibraries(libraries: LibraryEntry[]): void {
     for (const lib of libraries) {
-      this.libraries.set(lib.name, lib.source);
+      this.libraries.set(lib.name, {
+        source: lib.source,
+        files: lib.files ?? new Map(),
+      });
       if (lib.docs) {
         this.libraryDocs.set(lib.name, lib.docs);
       }
@@ -479,6 +498,43 @@ export class ReplSession {
   }
 
   /**
+   * Resolve a specifier against the library registry.
+   *
+   * Handles bare specifiers (`"swarm"` → entrypoint) and
+   * sub-module paths (`"swarm/table.js"` → files map lookup).
+   * Returns `undefined` if the specifier doesn't match any library.
+   */
+  private resolveLibrarySpecifier(specifier: string): string | undefined {
+    // Bare specifier: exact match on library name
+    const lib = this.libraries.get(specifier);
+    if (lib !== undefined) {
+      return lib.source;
+    }
+
+    // Sub-module: "<name>/<rel>" pattern
+    const slashIdx = specifier.indexOf("/");
+    if (slashIdx === -1) return undefined;
+
+    const libName = specifier.slice(0, slashIdx);
+    const rel = specifier.slice(slashIdx + 1);
+    const parentLib = this.libraries.get(libName);
+    if (parentLib === undefined) return undefined;
+
+    let source = parentLib.files.get(rel);
+    // TS convention: source files use .ts but import specifiers use .js
+    if (source === undefined && rel.endsWith(".js")) {
+      source = parentLib.files.get(rel.slice(0, -3) + ".ts");
+    }
+    if (source !== undefined) {
+      return source;
+    }
+
+    return makeErrorSource(
+      `Library '${libName}': sub-module '${rel}' not found`,
+    );
+  }
+
+  /**
    * Resolve a module specifier to source code. Strictly synchronous —
    * only reads from the in-memory skill cache populated by
    * `preloadReferencedSkills`. Returns error source (not a thrown
@@ -486,10 +542,10 @@ export class ReplSession {
    * error inside the VM.
    */
   private resolveSpecifier(specifier: string): string {
-    // 1. Check library registry (bare specifier, e.g. "swarm")
-    const librarySource = this.libraries.get(specifier);
-    if (librarySource !== undefined) {
-      return librarySource;
+    // 1. Check library registry
+    const resolved = this.resolveLibrarySpecifier(specifier);
+    if (resolved !== undefined) {
+      return resolved;
     }
 
     // 2. Existing skill resolution (@/skills/<name>)
@@ -537,6 +593,28 @@ export class ReplSession {
   }
 
   /**
+   * Return the library name if `base` is a library specifier or
+   * a sub-module of a library. Returns `undefined` otherwise.
+   */
+  private matchLibraryPrefix(base: string): string | undefined {
+    // Exact library name
+    if (this.libraries.has(base)) {
+      return base;
+    }
+
+    // Sub-module: "<name>/..."
+    const slashIdx = base.indexOf("/");
+    if (slashIdx !== -1) {
+      const prefix = base.slice(0, slashIdx);
+      if (this.libraries.has(prefix)) {
+        return prefix;
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
    * Canonicalize an `import` specifier. Bare specifiers pass through;
    * relative specifiers are resolved against the importing module's path.
    * Traversal out of a skill's `@/skills/<name>/` namespace is rejected.
@@ -546,6 +624,17 @@ export class ReplSession {
       requested.startsWith("./") || requested.startsWith("../");
     if (!isRelative) {
       return requested;
+    }
+
+    // Check if base is a library specifier
+    const libPrefix = this.matchLibraryPrefix(base);
+    if (libPrefix !== undefined) {
+      const baseDir = posixDirname(base === libPrefix ? base : base);
+      const resolved = posixJoin(baseDir, requested);
+      if (!resolved.startsWith(`${libPrefix}/`) && resolved !== libPrefix) {
+        return `__resolve_error__:${requested} escapes ${libPrefix}`;
+      }
+      return resolved;
     }
 
     // A bare skill specifier like "@/skills/my-skill" has no file component, so

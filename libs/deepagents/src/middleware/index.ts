@@ -71,3 +71,6 @@ export {
   ASYNC_TASK_SYSTEM_PROMPT,
   ASYNC_TASK_TOOL_NAMES,
 } from "./async_subagents.js";
+
+// Cache breakpoint middleware
+export { createCacheBreakpointMiddleware } from "./cache.js";

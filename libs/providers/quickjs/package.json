@@ -7,7 +7,7 @@
   "types": "./dist/index.d.ts",
   "type": "module",
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && cp -r src/libraries dist/ && find dist/libraries -name '*.test.ts' -delete && rm -rf dist/libraries/swarm/__tests__",
     "clean": "rm -rf dist/ .tsdown/",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
