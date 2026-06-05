@@ -422,7 +422,7 @@ describe("createCodeInterpreterMiddleware", () => {
         description: overrides.description ?? "A test library",
         ptcTools: overrides.ptcTools ?? [],
         source: overrides.source ?? "export const x = 1;",
-        docs: overrides.docs ?? "# Test Lib",
+        instructions: overrides.instructions ?? "# Test Lib",
       };
     }
 
@@ -546,7 +546,7 @@ describe("createCodeInterpreterMiddleware", () => {
         expect(text).toContain("**swarm**");
         expect(text).toContain("Multi-agent orchestration");
         expect(text).toContain('import { ... } from "swarm"');
-        expect(text).toContain("/libraries/swarm/LIBRARY.md");
+        expect(text).toContain("# Test Lib");
       });
 
       it("renders multiple libraries in prompt", async () => {
@@ -603,7 +603,7 @@ describe("createCodeInterpreterMiddleware", () => {
             makeLibrary({
               name: "greeting",
               source: 'export function hello() { return "hi"; }',
-              docs: "# Greeting",
+              instructions: "# Greeting",
             }),
           ],
         });

@@ -36,7 +36,7 @@ import type {
   LibraryEntry,
 } from "./types.js";
 import { toCamelCase } from "./utils.js";
-import { transformForEval } from "./transform.js";
+import { transformForEval, stripTypeSyntax } from "./transform.js";
 import { AsyncEvalQueue } from "./eval-queue.js";
 
 export const DEFAULT_MEMORY_LIMIT = 64 * 1024 * 1024;
@@ -47,7 +47,6 @@ export const DEFAULT_MAX_PTC_CALLS = 256;
 export const DEFAULT_MAX_RESULTS_CHARS = 4000;
 
 const LINE_NUMBER_RE = /^\s*\d+(?:\.\d+)?\t/;
-const LIBRARY_DOC_RE = /^\/libraries\/([a-z0-9]+(?:-[a-z0-9]+)*)\/LIBRARY\.md$/;
 
 const variantImport = import("@jitl/quickjs-ng-wasmfile-release-asyncify");
 
@@ -331,7 +330,6 @@ export class ReplSession {
   private readonly maxPtcCalls: number | null;
   private ptcCallsRemaining: number | null = null;
   private libraries: Map<string, RegisteredLibrary> = new Map();
-  private libraryDocs: Map<string, string> = new Map();
 
   /**
    * Reset the shared WASM module. Forces the next session to instantiate
@@ -467,34 +465,14 @@ export class ReplSession {
    * Called once during session setup. Each library's source becomes
    * resolvable as a bare-specifier import (e.g. `import { create } from "swarm"`).
    * Multi-file libraries register sub-modules in the files map.
-   * Docs are stored separately for read_file access.
    */
   private registerLibraries(libraries: LibraryEntry[]): void {
     for (const lib of libraries) {
       this.libraries.set(lib.name, {
-        source: lib.source,
+        source: stripTypeSyntax(lib.source),
         files: lib.files ?? new Map(),
       });
-      if (lib.docs) {
-        this.libraryDocs.set(lib.name, lib.docs);
-      }
     }
-  }
-
-  /**
-   * Check if a read_file call targets a library doc path and return
-   * the in-memory content if so. Returns `undefined` for non-library paths.
-   */
-  private resolveLibraryDoc(
-    input: Record<string, unknown>,
-  ): string | undefined {
-    const filePath = (input.file_path ?? input.path) as string | undefined;
-    if (typeof filePath !== "string") return undefined;
-
-    const match = filePath.match(LIBRARY_DOC_RE);
-    if (!match) return undefined;
-
-    return this.libraryDocs.get(match[1]);
   }
 
   /**
@@ -956,16 +934,6 @@ export class ReplSession {
               this.consumePtcBudget(camelName);
               const rawInput =
                 typeof input === "object" && input !== null ? input : {};
-              if (t.name === "read_file") {
-                const docs = this.resolveLibraryDoc(rawInput);
-                if (docs !== undefined) {
-                  const val = context.newString(docs);
-                  promise.resolve(val);
-                  val.dispose();
-                  promise.settled.then(context.runtime.executePendingJobs);
-                  return;
-                }
-              }
               const result = await t.invoke(rawInput);
               let text = extractToolText(result);
               if (t.name === "read_file") {

@@ -109,9 +109,9 @@ function loadSwarmSources(): {
 }
 
 /**
- * Read the swarm LIBRARY.md documentation from disk.
+ * Read the swarm LIBRARY.md instructions from disk.
  */
-function loadSwarmDocs(): string {
+function loadSwarmInstructions(): string {
   return fs.readFileSync(LIBRARY_MD_PATH, "utf-8");
 }
 
@@ -148,7 +148,7 @@ export function swarm(options: SwarmOptions): InterpreterLibrary {
   });
 
   const { entrySource, files } = loadSwarmSources();
-  const docs = loadSwarmDocs();
+  const instructions = loadSwarmInstructions();
 
   return {
     name: "swarm",
@@ -157,6 +157,6 @@ export function swarm(options: SwarmOptions): InterpreterLibrary {
     ptcTools: [swarmTaskTool, "read_file", "write_file", "edit_file", "glob"],
     source: entrySource,
     files,
-    docs,
+    instructions,
   };
 }

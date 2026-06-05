@@ -59,6 +59,6 @@ export {
   type SwarmTaskMode,
 } from "./tools/swarm-task.js";
 
-export { loadLibrary, type InterpreterLibrary } from "./library.js";
+export { type InterpreterLibrary } from "./library.js";
 
 export { swarm, type SwarmOptions } from "./libraries/swarm/index.js";

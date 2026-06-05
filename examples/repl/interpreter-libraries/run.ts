@@ -24,6 +24,7 @@
  */
 import "dotenv/config";
 import * as path from "node:path";
+import * as fs from "node:fs";
 import * as url from "node:url";
 import dedent from "dedent";
 import { HumanMessage } from "@langchain/core/messages";
@@ -31,11 +32,8 @@ import { awaitAllCallbacks } from "@langchain/core/callbacks/promises";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { TavilySearch } from "@langchain/tavily";
 import { createDeepAgent } from "deepagents";
-import {
-  createCodeInterpreterMiddleware,
-  swarm,
-  loadLibrary,
-} from "@langchain/quickjs";
+import { createCodeInterpreterMiddleware, swarm } from "@langchain/quickjs";
+import type { InterpreterLibrary } from "@langchain/quickjs";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
@@ -90,9 +88,17 @@ async function main() {
 
   // Custom evaluator library — imports swarm internally to build
   // a multi-pass pipeline (score → filter → research → benchmarks → ecosystem)
-  const evaluatorLib = await loadLibrary(
-    path.join(__dirname, "libraries", "evaluator"),
-  );
+  const evaluatorDir = path.join(__dirname, "libraries", "evaluator");
+  const evaluatorLib: InterpreterLibrary = {
+    name: "evaluator",
+    description: "Multi-pass evaluation pipeline built on swarm",
+    ptcTools: ["write_file"],
+    source: fs.readFileSync(path.join(evaluatorDir, "index.ts"), "utf-8"),
+    instructions: fs.readFileSync(
+      path.join(evaluatorDir, "LIBRARY.md"),
+      "utf-8",
+    ),
+  };
 
   const agent = createDeepAgent({
     model,

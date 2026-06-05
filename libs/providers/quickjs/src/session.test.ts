@@ -970,7 +970,6 @@ describe("interpreter libraries", () => {
         {
           name: "greeting",
           source: 'export function hello() { return "hi"; }',
-          docs: "# Greeting\n\nSay hi.",
         },
       ],
     });
@@ -989,7 +988,6 @@ describe("interpreter libraries", () => {
         {
           name: "greeting",
           source: "export const x = 1;",
-          docs: "",
         },
       ],
     });
@@ -1006,7 +1004,6 @@ describe("interpreter libraries", () => {
         {
           name: "math-utils",
           source: "export const add = (a, b) => a + b;",
-          docs: "",
         },
       ],
     });
@@ -1026,7 +1023,6 @@ describe("interpreter libraries", () => {
         {
           name: "greeting",
           source: 'export function hello() { return "from-lib"; }',
-          docs: "",
         },
       ],
     });
@@ -1051,77 +1047,6 @@ describe("interpreter libraries", () => {
     expect(skillResult.value).toBe("from-skill");
   });
 
-  it("serves library docs via read_file interception", async () => {
-    const { readTool, writeTool, store } = createInMemoryFileTools();
-    store.set("/real-file.txt", "real content");
-
-    session = ReplSession.getOrCreate(uniqueThreadId(), {
-      tools: [readTool, writeTool],
-      libraries: [
-        {
-          name: "greeting",
-          source: "export const x = 1;",
-          docs: "# Greeting Library\n\nUse `hello()` to greet.",
-        },
-      ],
-    });
-
-    const result = await session.eval(
-      'await tools.readFile({ path: "/libraries/greeting/LIBRARY.md" })',
-      TIMEOUT,
-    );
-    expect(result.ok).toBe(true);
-    expect(result.value).toBe("# Greeting Library\n\nUse `hello()` to greet.");
-  });
-
-  it("passes through non-library read_file paths to the real tool", async () => {
-    const { readTool, writeTool, store } = createInMemoryFileTools();
-    store.set("/data.txt", "real data");
-
-    session = ReplSession.getOrCreate(uniqueThreadId(), {
-      tools: [readTool, writeTool],
-      libraries: [
-        {
-          name: "greeting",
-          source: "export const x = 1;",
-          docs: "docs here",
-        },
-      ],
-    });
-
-    const result = await session.eval(
-      'await tools.readFile({ path: "/data.txt" })',
-      TIMEOUT,
-    );
-    expect(result.ok).toBe(true);
-    expect(result.value).toBe("real data");
-  });
-
-  it("returns undefined for unregistered library doc paths", async () => {
-    const { readTool, writeTool } = createInMemoryFileTools();
-
-    session = ReplSession.getOrCreate(uniqueThreadId(), {
-      tools: [readTool, writeTool],
-      libraries: [
-        {
-          name: "greeting",
-          source: "export const x = 1;",
-          docs: "docs here",
-        },
-      ],
-    });
-
-    const result = await session.eval(
-      `var msg;
-       try { await tools.readFile({ path: "/libraries/unknown-lib/LIBRARY.md" }) }
-       catch (e) { msg = e.message }
-       msg`,
-      TIMEOUT,
-    );
-    expect(result.ok).toBe(true);
-    expect(result.value).toContain("ENOENT");
-  });
-
   it("resolves multi-file library sub-modules", async () => {
     session = ReplSession.getOrCreate(uniqueThreadId(), {
       libraries: [
@@ -1131,7 +1056,6 @@ describe("interpreter libraries", () => {
           files: new Map([
             ["math.js", "export function add(a, b) { return a + b; }"],
           ]),
-          docs: "",
         },
       ],
     });
@@ -1151,13 +1075,11 @@ describe("interpreter libraries", () => {
         {
           name: "base",
           source: 'export const VERSION = "1.0";',
-          docs: "",
         },
         {
           name: "consumer",
           source:
             'import { VERSION } from "base"; export const info = `v${VERSION}`;',
-          docs: "",
         },
       ],
     });
@@ -1176,12 +1098,10 @@ describe("interpreter libraries", () => {
         {
           name: "lib-a",
           source: 'export const A = "alpha";',
-          docs: "",
         },
         {
           name: "lib-b",
           source: 'export const B = "beta";',
-          docs: "",
         },
       ],
     });

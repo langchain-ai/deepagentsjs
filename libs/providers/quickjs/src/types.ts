@@ -105,9 +105,8 @@ export interface CodeInterpreterMiddlewareOptions {
  * Lightweight library descriptor passed from middleware to session.
  *
  * Carries only the data the session needs to register a library:
- * module source, optional sub-module files, and documentation.
- * The full `InterpreterLibrary` (with PTC tools, etc.) lives in
- * the middleware layer.
+ * module source and optional sub-module files. Instructions live
+ * in the middleware layer (injected into the system prompt).
  */
 export interface LibraryEntry {
   /**
@@ -119,11 +118,6 @@ export interface LibraryEntry {
    * JS source for the entrypoint module.
    */
   source: string;
-
-  /**
-   * Documentation content for read_file interception.
-   */
-  docs: string;
 
   /**
    * Additional module files keyed by relative POSIX path.

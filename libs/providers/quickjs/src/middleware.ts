@@ -281,21 +281,27 @@ export function createCodeInterpreterMiddleware(
       .map(
         (lib) =>
           `- **${lib.name}**: ${lib.description}\n` +
-          `  → \`import { ... } from "${lib.name}"\`\n` +
-          `  → Read \`/libraries/${lib.name}/LIBRARY.md\` for full API documentation`,
+          `  → \`import { ... } from "${lib.name}"\``,
       )
       .join("\n");
 
+    const instructionBlocks = libs
+      .filter((lib) => lib.instructions)
+      .map(
+        (lib) =>
+          `<library name="${lib.name}">\n${lib.instructions}\n</library>`,
+      )
+      .join("\n\n");
+
     return dedent`
-  
+
       ### Interpreter Libraries
-  
+
       The following libraries are pre-loaded in the code interpreter and available via \`import\`:
-  
+
       ${entries}
-  
-      These libraries are always available. Read a library's LIBRARY.md when you need
-      detailed usage instructions, API signatures, or examples.
+
+      ${instructionBlocks}
     `;
   }
 
@@ -317,7 +323,6 @@ export function createCodeInterpreterMiddleware(
             name: lib.name,
             source: lib.source,
             files: lib.files,
-            docs: lib.docs,
           }),
         ),
         maxResultChars,

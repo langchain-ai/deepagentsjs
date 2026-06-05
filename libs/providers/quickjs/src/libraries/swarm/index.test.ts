@@ -194,7 +194,7 @@ describe("swarm() factory", () => {
     expect(lib.name).toBe("swarm");
     expect(lib.description).toContain("table");
     expect(lib.source).toBeTruthy();
-    expect(lib.docs).toBeTruthy();
+    expect(lib.instructions).toBeTruthy();
     expect(lib.files).toBeInstanceOf(Map);
   });
 
@@ -237,10 +237,10 @@ describe("swarm() factory", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Source and docs loading
+// Source and instructions loading
 // ---------------------------------------------------------------------------
 
-describe("source and docs loading", () => {
+describe("source and instructions loading", () => {
   it("loads and strips swarm source files from disk", () => {
     const lib = swarm({ defaultModel: "openai:gpt-4o" });
 
@@ -266,12 +266,12 @@ describe("source and docs loading", () => {
     }
   });
 
-  it("loads LIBRARY.md as docs", () => {
+  it("loads LIBRARY.md as instructions", () => {
     const lib = swarm({ defaultModel: "openai:gpt-4o" });
 
-    expect(lib.docs).toContain("# Swarm");
-    expect(lib.docs).toContain("create");
-    expect(lib.docs).toContain("run");
-    expect(lib.docs).toContain("rows");
+    expect(lib.instructions).toContain("# Swarm");
+    expect(lib.instructions).toContain("create");
+    expect(lib.instructions).toContain("run");
+    expect(lib.instructions).toContain("rows");
   });
 });
