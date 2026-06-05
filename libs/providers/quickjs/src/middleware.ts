@@ -149,8 +149,11 @@ async function prepareSkillsForEval(
   skillsBackend: AnyBackendProtocol | BackendFactory,
   code: string,
   ptcTools: StructuredToolInterface[],
+  config: LangGraphRunnableConfig,
 ): Promise<string | undefined> {
-  const taskInput = getCurrentTaskInput<{ skillsMetadata?: SkillMetadata[] }>();
+  const taskInput = getCurrentTaskInput<{ skillsMetadata?: SkillMetadata[] }>(
+    config,
+  );
   const metadata: SkillMetadata[] = taskInput?.skillsMetadata ?? [];
 
   const referenced = scanSkillReferences(code);
@@ -188,7 +191,10 @@ async function prepareSkillsForEval(
     }
   }
 
-  const resolved = await resolveBackend(skillsBackend, { state: taskInput });
+  const resolved = await resolveBackend(skillsBackend, {
+    ...config,
+    state: taskInput,
+  });
   session.setSkillsContext({ metadata, backend: resolved });
   return undefined;
 }
@@ -262,12 +268,14 @@ export function createCodeInterpreterMiddleware(
           skillsBackend,
           input.code,
           ptcTools,
+          config,
         );
         if (setupError !== undefined) {
           return setupError;
         }
       }
 
+      session.setToolConfig(config);
       const result = await session.eval(input.code, executionTimeoutMs);
       return formatReplResult(result);
     },

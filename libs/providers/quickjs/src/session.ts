@@ -26,6 +26,7 @@ import type {
   QuickJSAsyncWASMModule,
 } from "quickjs-emscripten-core";
 import type { StructuredToolInterface } from "@langchain/core/tools";
+import type { RunnableConfig } from "@langchain/core/runnables";
 
 import { loadSkill, scanSkillReferences, type LoadedSkill } from "./skills.js";
 import { PTCCallBudgetExceededError } from "./errors.js";
@@ -309,6 +310,7 @@ export class ReplSession {
   private skillsFailed: Map<string, Error> = new Map();
   private readonly maxPtcCalls: number | null;
   private ptcCallsRemaining: number | null = null;
+  private toolConfig: RunnableConfig | undefined;
 
   /**
    * Reset the shared WASM module. Forces the next session to instantiate
@@ -636,6 +638,14 @@ export class ReplSession {
   }
 
   /**
+   * Store the active LangGraph tool config for the current eval invocation.
+   * Programmatic tool calls inside QuickJS forward this config to bridged tools.
+   */
+  setToolConfig(config?: RunnableConfig): void {
+    this.toolConfig = config;
+  }
+
+  /**
    * Evaluate code in this session.
    *
    * Lazily starts the QuickJS runtime on the first call. Code is
@@ -730,6 +740,7 @@ export class ReplSession {
       };
     } finally {
       this.ptcCallsRemaining = null;
+      this.toolConfig = undefined;
     }
   }
 
@@ -813,7 +824,7 @@ export class ReplSession {
               this.consumePtcBudget(camelName);
               const rawInput =
                 typeof input === "object" && input !== null ? input : {};
-              const result = await t.invoke(rawInput);
+              const result = await t.invoke(rawInput, this.toolConfig);
               let text = extractToolText(result);
               if (t.name === "read_file") {
                 text = stripLineNumbers(text);
