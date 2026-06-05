@@ -258,17 +258,28 @@ export async function globFiles(pattern: string): Promise<string[]> {
   }
 
   const raw = await tools.glob({ pattern });
-  const parsed = JSON.parse(raw);
-  if (!Array.isArray(parsed)) {
-    return [];
+
+  // The glob PTC tool may return newline-separated paths or a JSON array.
+  let items: unknown[];
+  try {
+    const parsed = JSON.parse(raw);
+    items = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    items = raw
+      .split("\n")
+      .map((l: string) => l.trim())
+      .filter(Boolean);
   }
 
   const paths: string[] = [];
-  for (const item of parsed) {
+  for (const item of items) {
     if (typeof item === "string") {
       paths.push(item);
-    } else if (item && typeof item.path === "string") {
-      paths.push(item.path);
+    } else if (
+      item &&
+      typeof (item as Record<string, unknown>).path === "string"
+    ) {
+      paths.push((item as Record<string, unknown>).path as string);
     }
   }
 

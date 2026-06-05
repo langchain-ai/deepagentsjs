@@ -205,6 +205,26 @@ describe("globFiles", () => {
     (globalThis as Record<string, unknown>).tools = {};
     await expect(globFiles("*.ts")).rejects.toThrow("glob");
   });
+
+  it("parses newline-separated path responses", async () => {
+    const tools = (globalThis as Record<string, unknown>).tools as Record<
+      string,
+      unknown
+    >;
+    tools.glob = vi.fn(async () => "src/a.ts\nsrc/b.ts\nsrc/c.ts");
+    const result = await globFiles("src/**/*.ts");
+    expect(result).toEqual(["src/a.ts", "src/b.ts", "src/c.ts"]);
+  });
+
+  it("handles newline-separated paths with trailing newline", async () => {
+    const tools = (globalThis as Record<string, unknown>).tools as Record<
+      string,
+      unknown
+    >;
+    tools.glob = vi.fn(async () => "a.ts\nb.ts\n");
+    const result = await globFiles("**/*.ts");
+    expect(result).toEqual(["a.ts", "b.ts"]);
+  });
 });
 
 describe("readFile", () => {
