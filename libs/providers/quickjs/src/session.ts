@@ -629,7 +629,7 @@ export class ReplSession {
     // Check if base is a library specifier
     const libPrefix = this.matchLibraryPrefix(base);
     if (libPrefix !== undefined) {
-      const baseDir = posixDirname(base === libPrefix ? base : base);
+      const baseDir = base === libPrefix ? libPrefix : posixDirname(base);
       const resolved = posixJoin(baseDir, requested);
       if (!resolved.startsWith(`${libPrefix}/`) && resolved !== libPrefix) {
         return `__resolve_error__:${requested} escapes ${libPrefix}`;

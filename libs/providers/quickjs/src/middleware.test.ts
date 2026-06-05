@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { tool } from "langchain";
 import * as z from "zod";
 import { SystemMessage } from "@langchain/core/messages";
-import type { StructuredToolInterface } from "@langchain/core/tools";
 import {
   createCodeInterpreterMiddleware,
   generatePtcPrompt,

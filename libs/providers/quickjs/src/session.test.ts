@@ -1122,6 +1122,54 @@ describe("interpreter libraries", () => {
     expect(result.value).toContain("ENOENT");
   });
 
+  it("resolves multi-file library sub-modules", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      libraries: [
+        {
+          name: "mylib",
+          source: 'export { add } from "./math.js";',
+          files: new Map([
+            ["math.js", "export function add(a, b) { return a + b; }"],
+          ]),
+          docs: "",
+        },
+      ],
+    });
+
+    const result = await session.eval(
+      'const { add } = await import("mylib"); add(2, 3)',
+      TIMEOUT,
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe(5);
+  });
+
+  it("allows libraries to import other libraries", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      libraries: [
+        {
+          name: "base",
+          source: 'export const VERSION = "1.0";',
+          docs: "",
+        },
+        {
+          name: "consumer",
+          source:
+            'import { VERSION } from "base"; export const info = `v${VERSION}`;',
+          docs: "",
+        },
+      ],
+    });
+
+    const result = await session.eval(
+      'const { info } = await import("consumer"); info',
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe("v1.0");
+  });
+
   it("registers multiple libraries", async () => {
     session = ReplSession.getOrCreate(uniqueThreadId(), {
       libraries: [
