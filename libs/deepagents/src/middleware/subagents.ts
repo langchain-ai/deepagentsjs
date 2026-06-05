@@ -637,7 +637,8 @@ function createTaskTool(options: {
         },
       };
       const result = (await subagent.invoke(
-        subagentState,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- langgraph's InvokeStateParameter union includes Command which doesn't apply here
+        subagentState as any,
         subagentConfig,
       )) as Record<string, unknown>;
 

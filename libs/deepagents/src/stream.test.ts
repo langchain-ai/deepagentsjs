@@ -294,7 +294,7 @@ describe("streamEvents", () => {
         const msgs = await collectWithTimeout(sub.messages);
         expect(msgs.length).toBeGreaterThanOrEqual(1);
         const texts = await Promise.all(msgs.map((m) => m.text));
-        expect(texts).toContain("pong:from-researcher");
+        expect(texts).toContain("Research findings: AI is growing fast.");
       }
 
       if (sub.name === "coder") {
@@ -317,7 +317,7 @@ describe("streamEvents", () => {
         const msgs = await collectWithTimeout(sub.messages);
         expect(msgs.length).toBeGreaterThanOrEqual(1);
         const texts = await Promise.all(msgs.map((m) => m.text));
-        expect(texts).toContain("pong:from-coder");
+        expect(texts).toContain("Code written: console.log('hello')");
       }
     }
   });
