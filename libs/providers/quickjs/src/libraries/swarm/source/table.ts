@@ -259,6 +259,11 @@ export async function globFiles(pattern: string): Promise<string[]> {
 
   const raw = await tools.glob({ pattern });
 
+  // The glob tool returns status strings for no-match / error cases.
+  if (raw.startsWith("No files found") || raw.startsWith("Error")) {
+    return [];
+  }
+
   // The glob PTC tool may return newline-separated paths or a JSON array.
   let items: unknown[];
   try {

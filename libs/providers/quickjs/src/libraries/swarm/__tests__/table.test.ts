@@ -225,6 +225,28 @@ describe("globFiles", () => {
     const result = await globFiles("**/*.ts");
     expect(result).toEqual(["a.ts", "b.ts"]);
   });
+
+  it("returns empty array for no-match status string", async () => {
+    const tools = (globalThis as Record<string, unknown>).tools as Record<
+      string,
+      unknown
+    >;
+    tools.glob = vi.fn(
+      async () => "No files found matching pattern 'missing/**/*.ts'",
+    );
+    const result = await globFiles("missing/**/*.ts");
+    expect(result).toEqual([]);
+  });
+
+  it("returns empty array for error status string", async () => {
+    const tools = (globalThis as Record<string, unknown>).tools as Record<
+      string,
+      unknown
+    >;
+    tools.glob = vi.fn(async () => "Error finding files: permission denied");
+    const result = await globFiles("restricted/**/*");
+    expect(result).toEqual([]);
+  });
 });
 
 describe("readFile", () => {
