@@ -39,15 +39,16 @@ import {
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
-const model = new ChatAnthropic({
-  model: "claude-sonnet-4-5",
-  temperature: 0,
-});
+async function main() {
+  const model = new ChatAnthropic({
+    model: "claude-sonnet-4-5",
+    temperature: 0,
+  });
 
-const defaultModel = "anthropic:claude-sonnet-4-5";
+  const defaultModel = "anthropic:claude-sonnet-4-5";
 
-// Built-in swarm library with three specialized subagents
-const swarmLib = swarm({
+  // Built-in swarm library with three specialized subagents
+  const swarmLib = swarm({
   defaultModel,
   subagents: [
     {
@@ -157,9 +158,10 @@ const result = await agent.invoke({
   ],
 });
 
-const last = result.messages[result.messages.length - 1];
-console.log(
-  typeof last.content === "string" ? last.content.slice(0, 2000) : last.content,
-);
+  const last = result.messages[result.messages.length - 1];
+  console.log(typeof last.content === "string" ? last.content : last.content);
 
-await awaitAllCallbacks();
+  await awaitAllCallbacks();
+}
+
+main().catch(console.error);
