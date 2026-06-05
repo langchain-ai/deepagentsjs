@@ -853,6 +853,9 @@ importers:
       quickjs-emscripten-core:
         specifier: ^0.32.0
         version: 0.32.0
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
     devDependencies:
       '@langchain/core':
         specifier: ^1.1.42
@@ -7755,8 +7758,7 @@ snapshots:
 
   yaml@2.8.3: {}
 
-  yaml@2.9.0:
-    optional: true
+  yaml@2.9.0: {}
 
   yargs-parser@21.1.1: {}
 

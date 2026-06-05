@@ -57,3 +57,5 @@ export {
   type SwarmSubAgent,
   type SwarmTaskMode,
 } from "./tools/swarm-task.js";
+
+export { loadLibrary, type InterpreterLibrary } from "./library.js";
