@@ -566,7 +566,7 @@ describe("createFilesystemMiddleware", () => {
       const mockWrite = vi.fn().mockResolvedValue({
         error: null,
         filesUpdate: {
-          "/large_tool_results/test-id": {
+          "/large_tool_results/test-id.txt": {
             content: ["large content"],
             created_at: "2024-01-01T00:00:00Z",
             modified_at: "2024-01-01T00:00:00Z",
@@ -600,7 +600,7 @@ describe("createFilesystemMiddleware", () => {
 
       // Should have written to backend
       expect(mockWrite).toHaveBeenCalledWith(
-        "/large_tool_results/test-id",
+        "/large_tool_results/test-id.txt",
         largeContent,
       );
 
@@ -613,12 +613,14 @@ describe("createFilesystemMiddleware", () => {
 
         const truncatedMsg = update.messages[0];
         expect(truncatedMsg.content).toContain("Tool result too large");
-        expect(truncatedMsg.content).toContain("/large_tool_results/test-id");
+        expect(truncatedMsg.content).toContain(
+          "/large_tool_results/test-id.txt",
+        );
         expect(truncatedMsg.tool_call_id).toBe("test-id");
 
         // Should have filesUpdate
         expect(update.files).toBeDefined();
-        expect(update.files["/large_tool_results/test-id"]).toBeDefined();
+        expect(update.files["/large_tool_results/test-id.txt"]).toBeDefined();
       }
     });
 
@@ -627,7 +629,7 @@ describe("createFilesystemMiddleware", () => {
       const mockWrite = vi.fn().mockResolvedValue({
         error: null,
         filesUpdate: {
-          "/large_tool_results/test-id": {
+          "/large_tool_results/test-id.txt": {
             content: ["large content"],
             created_at: "2024-01-01T00:00:00Z",
             modified_at: "2024-01-01T00:00:00Z",
@@ -688,7 +690,7 @@ describe("createFilesystemMiddleware", () => {
       const mockWrite = vi.fn().mockResolvedValue({
         error: null,
         filesUpdate: {
-          "/large_tool_results/test-id-1": {
+          "/large_tool_results/test-id-1.txt": {
             content: ["large content 1"],
             created_at: "2024-01-01T00:00:00Z",
             modified_at: "2024-01-01T00:00:00Z",
@@ -738,7 +740,7 @@ describe("createFilesystemMiddleware", () => {
 
       // Should have written large content
       expect(mockWrite).toHaveBeenCalledWith(
-        "/large_tool_results/test-id-1",
+        "/large_tool_results/test-id-1.txt",
         largeContent,
       );
 
@@ -755,7 +757,7 @@ describe("createFilesystemMiddleware", () => {
         expect(update.messages[1].content).toBe(smallContent);
 
         // Should accumulate files
-        expect(update.files["/large_tool_results/test-id-1"]).toBeDefined();
+        expect(update.files["/large_tool_results/test-id-1.txt"]).toBeDefined();
       }
     });
 
@@ -805,7 +807,7 @@ describe("createFilesystemMiddleware", () => {
       const mockWrite = vi.fn().mockResolvedValue({
         error: null,
         filesUpdate: {
-          "/large_tool_results/test-id": {
+          "/large_tool_results/test-id.txt": {
             content: ["large content"],
             created_at: "2024-01-01T00:00:00Z",
             modified_at: "2024-01-01T00:00:00Z",
@@ -841,7 +843,7 @@ describe("createFilesystemMiddleware", () => {
       );
 
       expect(mockWrite).toHaveBeenCalledWith(
-        "/large_tool_results/test-id",
+        "/large_tool_results/test-id.txt",
         largeText + " extra",
       );
 
@@ -851,7 +853,9 @@ describe("createFilesystemMiddleware", () => {
         expect(update.messages).toHaveLength(1);
         const truncatedMsg = update.messages[0];
         expect(truncatedMsg.content).toContain("Tool result too large");
-        expect(truncatedMsg.content).toContain("/large_tool_results/test-id");
+        expect(truncatedMsg.content).toContain(
+          "/large_tool_results/test-id.txt",
+        );
         expect(truncatedMsg.tool_call_id).toBe("test-id");
       }
     });
