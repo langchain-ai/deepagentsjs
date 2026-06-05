@@ -49,54 +49,54 @@ async function main() {
 
   // Built-in swarm library with three specialized subagents
   const swarmLib = swarm({
-  defaultModel,
-  subagents: [
-    {
-      name: "researcher",
-      description: "General research and fact-finding via web search",
-      systemPrompt: dedent`
+    defaultModel,
+    subagents: [
+      {
+        name: "researcher",
+        description: "General research and fact-finding via web search",
+        systemPrompt: dedent`
         You are a technical researcher. Use web search to find current,
         factual information about the technology you're evaluating.
         Focus on official docs, adoption trends, and survey data.
         Cite specific numbers and sources. Be concise but substantive.
       `,
-      tools: [new TavilySearch({ maxResults: 3 })],
-    },
-    {
-      name: "benchmarker",
-      description: "Performance benchmark specialist",
-      systemPrompt: dedent`
+        tools: [new TavilySearch({ maxResults: 3 })],
+      },
+      {
+        name: "benchmarker",
+        description: "Performance benchmark specialist",
+        systemPrompt: dedent`
         You are a performance analyst. Use web search to find benchmarks,
         profiling data, and performance comparisons for the technology
         you're evaluating. Focus on startup time, memory usage, binary
         size, and throughput. Cite benchmark sources and methodology.
       `,
-      tools: [new TavilySearch({ maxResults: 3 })],
-    },
-    {
-      name: "community_analyst",
-      description: "Ecosystem and community analysis",
-      systemPrompt: dedent`
+        tools: [new TavilySearch({ maxResults: 3 })],
+      },
+      {
+        name: "community_analyst",
+        description: "Ecosystem and community analysis",
+        systemPrompt: dedent`
         You are a developer ecosystem analyst. Use web search to assess
         the community, ecosystem, and tooling around the technology
         you're evaluating. Cover: package counts, key libraries,
         GitHub activity, StackOverflow trends, and recent momentum.
         Cite specific numbers.
       `,
-      tools: [new TavilySearch({ maxResults: 3 })],
-    },
-  ],
-});
+        tools: [new TavilySearch({ maxResults: 3 })],
+      },
+    ],
+  });
 
-// Custom evaluator library — imports swarm internally to build
-// a multi-pass pipeline (score → filter → research → benchmarks → ecosystem)
-const evaluatorLib = await loadLibrary(
-  path.join(__dirname, "libraries", "evaluator"),
-);
+  // Custom evaluator library — imports swarm internally to build
+  // a multi-pass pipeline (score → filter → research → benchmarks → ecosystem)
+  const evaluatorLib = await loadLibrary(
+    path.join(__dirname, "libraries", "evaluator"),
+  );
 
-const agent = createDeepAgent({
-  model,
-  systemPrompt: dedent`
+  const agent = createDeepAgent({
+    model,
+    systemPrompt: dedent`
     You are a tech stack evaluator. You have an \`evaluator\` library that
     orchestrates a full multi-pass comparison pipeline via swarm.
 
@@ -134,18 +134,18 @@ const agent = createDeepAgent({
     findings, benchmarks, ecosystem analysis, and a final recommendation.
     Do not write to a file — just respond directly.
   `,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- middleware types vary across langchain version resolutions in the monorepo
-  middleware: [
-    createCodeInterpreterMiddleware({
-      libraries: [swarmLib, evaluatorLib],
-      executionTimeoutMs: -1,
-    }) as any,
-  ],
-});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- middleware types vary across langchain version resolutions in the monorepo
+    middleware: [
+      createCodeInterpreterMiddleware({
+        libraries: [swarmLib, evaluatorLib],
+        executionTimeoutMs: -1,
+      }) as any,
+    ],
+  });
 
-const result = await agent.invoke({
-  messages: [
-    new HumanMessage(dedent`
+  const result = await agent.invoke({
+    messages: [
+      new HumanMessage(dedent`
       Compare Rust, Go, Python, TypeScript, Java, C#, Zig, Swift, Kotlin, and Ruby
       for building CLI tools. Evaluate on:
       - Developer experience (weight: 0.3)
@@ -155,8 +155,8 @@ const result = await agent.invoke({
 
       Deep-dive the top 5.
     `),
-  ],
-});
+    ],
+  });
 
   const last = result.messages[result.messages.length - 1];
   console.log(typeof last.content === "string" ? last.content : last.content);
