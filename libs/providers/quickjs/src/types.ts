@@ -91,6 +91,31 @@ export interface CodeInterpreterMiddlewareOptions {
 }
 
 /**
+ * Lightweight library descriptor passed from middleware to session.
+ *
+ * Carries only the data the session needs to register a library:
+ * module source, optional sub-module files, and documentation.
+ * The full `InterpreterLibrary` (with PTC tools, etc.) lives in
+ * the middleware layer.
+ */
+export interface LibraryRegistration {
+  /**
+   * Module name used in bare-specifier imports.
+   */
+  name: string;
+
+  /**
+   * JS source for the entrypoint module.
+   */
+  source: string;
+
+  /**
+   * Documentation content for read_file interception.
+   */
+  docs: string;
+}
+
+/**
  * Options for creating a ReplSession.
  */
 export interface ReplSessionOptions {
@@ -102,6 +127,7 @@ export interface ReplSessionOptions {
   maxResultChars?: number;
   captureConsole?: boolean;
   sessionId?: string;
+  libraries?: LibraryRegistration[];
 }
 
 /**

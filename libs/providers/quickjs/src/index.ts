@@ -24,6 +24,7 @@ export type {
   CodeInterpreterMiddlewareOptions,
   ReplSessionOptions,
   ReplResult,
+  LibraryRegistration,
 } from "./types.js";
 
 export {

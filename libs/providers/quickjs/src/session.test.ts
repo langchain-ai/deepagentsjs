@@ -948,3 +948,208 @@ describe("skills module loader", () => {
     expect(downloadCount).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Interpreter libraries
+// ---------------------------------------------------------------------------
+
+describe("interpreter libraries", () => {
+  let session: ReplSession;
+
+  beforeEach(() => {
+    ReplSession.clearCache();
+  });
+
+  afterEach(() => {
+    if (session) session.dispose();
+  });
+
+  it("resolves a bare-specifier library import", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      libraries: [
+        {
+          name: "greeting",
+          source: 'export function hello() { return "hi"; }',
+          docs: "# Greeting\n\nSay hi.",
+        },
+      ],
+    });
+
+    const result = await session.eval(
+      'const { hello } = await import("greeting"); hello()',
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe("hi");
+  });
+
+  it("returns module-not-found for an unknown bare specifier", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      libraries: [
+        {
+          name: "greeting",
+          source: "export const x = 1;",
+          docs: "",
+        },
+      ],
+    });
+
+    const result = await session.eval('await import("unknown-lib")', TIMEOUT);
+    expect(result.ok).toBe(false);
+    expect(result.error?.message).toContain("Module not found");
+  });
+
+  it("installs module loader when libraries present but skillsEnabled is false", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: false,
+      libraries: [
+        {
+          name: "math-utils",
+          source: "export const add = (a, b) => a + b;",
+          docs: "",
+        },
+      ],
+    });
+
+    const result = await session.eval(
+      'const { add } = await import("math-utils"); add(3, 4)',
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe(7);
+  });
+
+  it("coexists with skills — both resolve correctly", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+      libraries: [
+        {
+          name: "greeting",
+          source: 'export function hello() { return "from-lib"; }',
+          docs: "",
+        },
+      ],
+    });
+    session.setSkillsContext(
+      makeSkillsContext([makeSkillsMeta("my-skill", "index.js")], {
+        "/my-skill/index.js": 'export const VALUE = "from-skill";',
+      }),
+    );
+
+    const libResult = await session.eval(
+      'const { hello } = await import("greeting"); hello()',
+      TIMEOUT,
+    );
+    expect(libResult.ok).toBe(true);
+    expect(libResult.value).toBe("from-lib");
+
+    const skillResult = await session.eval(
+      'const mod = await import("@/skills/my-skill"); mod.VALUE',
+      TIMEOUT,
+    );
+    expect(skillResult.ok).toBe(true);
+    expect(skillResult.value).toBe("from-skill");
+  });
+
+  it("serves library docs via read_file interception", async () => {
+    const { readTool, writeTool, store } = createInMemoryFileTools();
+    store.set("/real-file.txt", "real content");
+
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      tools: [readTool, writeTool],
+      libraries: [
+        {
+          name: "greeting",
+          source: "export const x = 1;",
+          docs: "# Greeting Library\n\nUse `hello()` to greet.",
+        },
+      ],
+    });
+
+    const result = await session.eval(
+      'await tools.readFile({ path: "/libraries/greeting/LIBRARY.md" })',
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe("# Greeting Library\n\nUse `hello()` to greet.");
+  });
+
+  it("passes through non-library read_file paths to the real tool", async () => {
+    const { readTool, writeTool, store } = createInMemoryFileTools();
+    store.set("/data.txt", "real data");
+
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      tools: [readTool, writeTool],
+      libraries: [
+        {
+          name: "greeting",
+          source: "export const x = 1;",
+          docs: "docs here",
+        },
+      ],
+    });
+
+    const result = await session.eval(
+      'await tools.readFile({ path: "/data.txt" })',
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe("real data");
+  });
+
+  it("returns undefined for unregistered library doc paths", async () => {
+    const { readTool, writeTool } = createInMemoryFileTools();
+
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      tools: [readTool, writeTool],
+      libraries: [
+        {
+          name: "greeting",
+          source: "export const x = 1;",
+          docs: "docs here",
+        },
+      ],
+    });
+
+    const result = await session.eval(
+      `var msg;
+       try { await tools.readFile({ path: "/libraries/unknown-lib/LIBRARY.md" }) }
+       catch (e) { msg = e.message }
+       msg`,
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value).toContain("ENOENT");
+  });
+
+  it("registers multiple libraries", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      libraries: [
+        {
+          name: "lib-a",
+          source: 'export const A = "alpha";',
+          docs: "",
+        },
+        {
+          name: "lib-b",
+          source: 'export const B = "beta";',
+          docs: "",
+        },
+      ],
+    });
+
+    const resultA = await session.eval(
+      'const modA = await import("lib-a"); modA.A',
+      TIMEOUT,
+    );
+    expect(resultA.ok).toBe(true);
+    expect(resultA.value).toBe("alpha");
+
+    const resultB = await session.eval(
+      'const modB = await import("lib-b"); modB.B',
+      TIMEOUT,
+    );
+    expect(resultB.ok).toBe(true);
+    expect(resultB.value).toBe("beta");
+  });
+});

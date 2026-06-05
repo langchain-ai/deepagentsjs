@@ -29,7 +29,12 @@ import type { StructuredToolInterface } from "@langchain/core/tools";
 
 import { loadSkill, scanSkillReferences, type LoadedSkill } from "./skills.js";
 import { PTCCallBudgetExceededError } from "./errors.js";
-import type { ReplSessionOptions, ReplResult, SkillsContext } from "./types.js";
+import type {
+  ReplSessionOptions,
+  ReplResult,
+  SkillsContext,
+  LibraryRegistration,
+} from "./types.js";
 import { toCamelCase } from "./utils.js";
 import { transformForEval } from "./transform.js";
 import { AsyncEvalQueue } from "./eval-queue.js";
@@ -42,6 +47,7 @@ export const DEFAULT_MAX_PTC_CALLS = 256;
 export const DEFAULT_MAX_RESULTS_CHARS = 4000;
 
 const LINE_NUMBER_RE = /^\s*\d+(?:\.\d+)?\t/;
+const LIBRARY_DOC_RE = /^\/libraries\/([a-z0-9]+(?:-[a-z0-9]+)*)\/LIBRARY\.md$/;
 
 const variantImport = import("@jitl/quickjs-ng-wasmfile-release-asyncify");
 
@@ -309,6 +315,8 @@ export class ReplSession {
   private skillsFailed: Map<string, Error> = new Map();
   private readonly maxPtcCalls: number | null;
   private ptcCallsRemaining: number | null = null;
+  private libraries: Map<string, string> = new Map();
+  private libraryDocs: Map<string, string> = new Map();
 
   /**
    * Reset the shared WASM module. Forces the next session to instantiate
@@ -365,8 +373,15 @@ export class ReplSession {
     context.setProp(context.global, "__sessionId__", sessionIdHandle);
     sessionIdHandle.dispose();
 
-    if (skillsEnabled) {
+    if (
+      skillsEnabled ||
+      (this.options.libraries && this.options.libraries.length > 0)
+    ) {
       this.installModuleLoader();
+    }
+
+    if (this.options.libraries && this.options.libraries.length > 0) {
+      this.registerLibraries(this.options.libraries);
     }
   }
 
@@ -432,6 +447,38 @@ export class ReplSession {
   }
 
   /**
+   * Register a set of interpreter libraries in the module resolver.
+   *
+   * Called once during session setup. Each library's source becomes
+   * resolvable as a bare-specifier import (e.g. `import { create } from "swarm"`).
+   * Docs are stored separately for read_file access.
+   */
+  private registerLibraries(libraries: LibraryRegistration[]): void {
+    for (const lib of libraries) {
+      this.libraries.set(lib.name, lib.source);
+      if (lib.docs) {
+        this.libraryDocs.set(lib.name, lib.docs);
+      }
+    }
+  }
+
+  /**
+   * Check if a read_file call targets a library doc path and return
+   * the in-memory content if so. Returns `undefined` for non-library paths.
+   */
+  private resolveLibraryDoc(
+    input: Record<string, unknown>,
+  ): string | undefined {
+    const filePath = (input.file_path ?? input.path) as string | undefined;
+    if (typeof filePath !== "string") return undefined;
+
+    const match = filePath.match(LIBRARY_DOC_RE);
+    if (!match) return undefined;
+
+    return this.libraryDocs.get(match[1]);
+  }
+
+  /**
    * Resolve a module specifier to source code. Strictly synchronous —
    * only reads from the in-memory skill cache populated by
    * `preloadReferencedSkills`. Returns error source (not a thrown
@@ -439,6 +486,13 @@ export class ReplSession {
    * error inside the VM.
    */
   private resolveSpecifier(specifier: string): string {
+    // 1. Check library registry (bare specifier, e.g. "swarm")
+    const librarySource = this.libraries.get(specifier);
+    if (librarySource !== undefined) {
+      return librarySource;
+    }
+
+    // 2. Existing skill resolution (@/skills/<name>)
     const parsed = parseSkillSpecifier(specifier);
     if (parsed === undefined) {
       return makeErrorSource(`Module not found: ${specifier}`);
@@ -813,6 +867,16 @@ export class ReplSession {
               this.consumePtcBudget(camelName);
               const rawInput =
                 typeof input === "object" && input !== null ? input : {};
+              if (t.name === "read_file") {
+                const docs = this.resolveLibraryDoc(rawInput);
+                if (docs !== undefined) {
+                  const val = context.newString(docs);
+                  promise.resolve(val);
+                  val.dispose();
+                  promise.settled.then(context.runtime.executePendingJobs);
+                  return;
+                }
+              }
               const result = await t.invoke(rawInput);
               let text = extractToolText(result);
               if (t.name === "read_file") {
