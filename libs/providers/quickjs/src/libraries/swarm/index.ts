@@ -8,6 +8,7 @@ import {
   createPatchToolCallsMiddleware,
   createCacheBreakpointMiddleware,
 } from "deepagents";
+import { summarizationMiddleware } from "langchain";
 import type { InterpreterLibrary } from "../../library.js";
 import {
   createSwarmTaskTool,
@@ -55,7 +56,10 @@ function normalizeSubagent(
 ): SwarmSubAgent {
   const effectiveModel = sub.model ?? defaultModel;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- middleware types vary across langchain version resolutions in the monorepo
-  const middleware: any[] = [createPatchToolCallsMiddleware()];
+  const middleware: any[] = [
+    createPatchToolCallsMiddleware(),
+    summarizationMiddleware({ model: effectiveModel as any }),
+  ];
 
   if (isAnthropicModel(effectiveModel)) {
     middleware.push(

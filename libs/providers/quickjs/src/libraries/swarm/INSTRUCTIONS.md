@@ -21,6 +21,69 @@ const result = await run(table.id, {
 const data = await rows(table.id);
 ```
 
+## Compose Complete Pipelines
+
+Write the entire pipeline — create, all run passes, rows retrieval, and
+aggregation — in a **single eval script**. Do not split operations across
+multiple tool calls. Each round-trip through the interpreter is expensive;
+a single script avoids unnecessary overhead and prevents context loss
+between evals.
+
+```javascript
+import { create, run, rows } from "swarm";
+
+// Create table from files on disk
+const table = await create({ glob: "src/**/*.ts" });
+
+// Pass 1: find issues
+await run(table.id, {
+  instruction: "Review {file} for bugs",
+  subagentType: "bug-finder",
+  responseSchema: {
+    type: "object",
+    properties: {
+      findings: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            severity: { type: "string" },
+          },
+          required: ["title", "severity"],
+        },
+      },
+    },
+    required: ["findings"],
+  },
+});
+
+// Pass 2: verify — flatten findings into a new table, dispatch each
+const reviewed = await rows(table.id);
+const allFindings = reviewed.flatMap((r) =>
+  (r.findings || []).map((f) => ({ id: `${r.id}-${f.title}`, ...f, file: r.file }))
+);
+const verifyTable = await create({ tasks: allFindings });
+await run(verifyTable.id, {
+  instruction: 'Verify whether "{title}" in {file} is a real bug',
+  subagentType: "verifier",
+  responseSchema: {
+    type: "object",
+    properties: {
+      confirmed: { type: "boolean" },
+      reason: { type: "string" },
+    },
+    required: ["confirmed", "reason"],
+  },
+});
+
+// Aggregate results in JS
+const verified = await rows(verifyTable.id);
+const confirmed = verified.filter((r) => r.confirmed);
+console.log(`${confirmed.length}/${verified.length} findings confirmed`);
+console.log(JSON.stringify(confirmed, null, 2));
+```
+
 ## API
 
 ### `create(source)` → `SwarmHandle`

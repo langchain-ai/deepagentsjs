@@ -7,12 +7,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockPatchToolCalls = { name: "patchToolCalls" };
 const mockCacheBreakpoint = { name: "cacheBreakpoint" };
 const mockPromptCaching = { name: "promptCaching" };
+const mockSummarization = { name: "summarization" };
 
 vi.mock("deepagents", () => ({
   isAnthropicModel: vi.fn(() => false),
   createPatchToolCallsMiddleware: vi.fn(() => mockPatchToolCalls),
   anthropicPromptCachingMiddleware: vi.fn(() => mockPromptCaching),
   createCacheBreakpointMiddleware: vi.fn(() => mockCacheBreakpoint),
+}));
+
+vi.mock("langchain", () => ({
+  summarizationMiddleware: vi.fn(() => mockSummarization),
 }));
 
 const mockSwarmTaskTool = { name: "swarm_task" };
@@ -30,6 +35,7 @@ import {
   anthropicPromptCachingMiddleware,
   createCacheBreakpointMiddleware,
 } from "deepagents";
+import { summarizationMiddleware } from "langchain";
 import { createSwarmTaskTool } from "../../tools/swarm-task.js";
 import { swarm } from "./index.js";
 
@@ -52,6 +58,17 @@ describe("normalizeSubagent (via swarm factory)", () => {
     expect(createPatchToolCallsMiddleware).toHaveBeenCalled();
   });
 
+  it("always injects summarization middleware with effective model", () => {
+    swarm({
+      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
+      defaultModel: "openai:gpt-4o",
+    });
+
+    expect(summarizationMiddleware).toHaveBeenCalledWith({
+      model: "openai:gpt-4o",
+    });
+  });
+
   it("does not add Anthropic cache middleware for non-Anthropic models", () => {
     vi.mocked(isAnthropicModel).mockReturnValue(false);
 
@@ -62,7 +79,7 @@ describe("normalizeSubagent (via swarm factory)", () => {
 
     const call = vi.mocked(createSwarmTaskTool).mock.calls[0][0];
     const sub = call.subagents![0];
-    expect(sub.middleware).toEqual([mockPatchToolCalls]);
+    expect(sub.middleware).toEqual([mockPatchToolCalls, mockSummarization]);
     expect(anthropicPromptCachingMiddleware).not.toHaveBeenCalled();
     expect(createCacheBreakpointMiddleware).not.toHaveBeenCalled();
   });
@@ -79,6 +96,7 @@ describe("normalizeSubagent (via swarm factory)", () => {
     const sub = call.subagents![0];
     expect(sub.middleware).toEqual([
       mockPatchToolCalls,
+      mockSummarization,
       mockPromptCaching,
       mockCacheBreakpoint,
     ]);
@@ -143,6 +161,7 @@ describe("normalizeSubagent (via swarm factory)", () => {
     const sub = call.subagents![0];
     expect(sub.middleware).toEqual([
       mockPatchToolCalls,
+      mockSummarization,
       mockPromptCaching,
       mockCacheBreakpoint,
       customMiddleware,
@@ -178,8 +197,8 @@ describe("normalizeSubagent (via swarm factory)", () => {
     )!;
     const openaiSub = call.subagents!.find((s) => s.name === "openai-worker")!;
 
-    expect(anthropicSub.middleware).toHaveLength(3);
-    expect(openaiSub.middleware).toHaveLength(1);
+    expect(anthropicSub.middleware).toHaveLength(4);
+    expect(openaiSub.middleware).toHaveLength(2);
   });
 });
 
