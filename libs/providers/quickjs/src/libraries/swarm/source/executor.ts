@@ -16,6 +16,7 @@ declare const tools: {
     subagent_type?: string;
     response_schema?: Record<string, unknown>;
     mode?: "agent" | "invoke";
+    recursion_limit?: number;
   }) => Promise<string>;
 };
 
@@ -37,6 +38,7 @@ export async function callTask(args: {
   subagent_type?: string;
   response_schema?: Record<string, unknown>;
   mode?: "agent" | "invoke";
+  recursion_limit?: number;
 }): Promise<string> {
   if (typeof tools.swarmTask !== "function") {
     throw new Error(
@@ -78,6 +80,9 @@ export async function dispatch(
             response_schema: spec.responseSchema,
           }),
           ...(spec.mode != null && { mode: spec.mode }),
+          ...(spec.recursionLimit != null && {
+            recursion_limit: spec.recursionLimit,
+          }),
         });
         results[i] = {
           id: spec.id,

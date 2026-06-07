@@ -59,6 +59,7 @@ function buildDispatchUnits(
     subagentType?: string;
     responseSchema: Record<string, unknown>;
     mode: "agent" | "invoke";
+    recursionLimit?: number;
   },
 ): { units: DispatchUnit[]; errors: TaskResult[] } {
   const units: DispatchUnit[] = [];
@@ -84,6 +85,7 @@ function buildDispatchUnits(
             subagentType: opts.subagentType,
             responseSchema: opts.responseSchema,
             mode: opts.mode,
+            recursionLimit: opts.recursionLimit,
           },
           rowIds: [rowId],
         });
@@ -104,6 +106,7 @@ function buildDispatchUnits(
           subagentType: opts.subagentType,
           responseSchema: wrapSchema(opts.responseSchema, batch.length),
           mode: opts.mode,
+          recursionLimit: opts.recursionLimit,
         },
         rowIds,
       });
@@ -262,6 +265,7 @@ export async function run(
     responseSchema,
     batchSize,
     concurrency,
+    recursionLimit,
   } = options;
   const mode = subagentType != null ? "agent" : "invoke";
 
@@ -308,6 +312,7 @@ export async function run(
     subagentType,
     responseSchema,
     mode,
+    recursionLimit,
   });
 
   // -----------------------------------------------------------------------

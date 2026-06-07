@@ -63,6 +63,21 @@ interface AgentSpec {
 const VARIANT_TTL_MS = 60_000;
 
 /**
+ * Default maximum agentic loop iterations for swarm subagent dispatches.
+ *
+ * Without an explicit limit, subagents inherit the parent agent's
+ * recursionLimit (10,000) via AsyncLocalStorage config propagation,
+ * which can cause runaway cost when a subagent goes off on a tangent.
+ */
+const DEFAULT_RECURSION_LIMIT = 25;
+
+/**
+ * Hard ceiling for recursion_limit — the LLM can request more iterations
+ * per dispatch, but the value is clamped to this maximum.
+ */
+const MAX_RECURSION_LIMIT = 75;
+
+/**
  * TTL cache for compiled agent variants.
  *
  * Stores values keyed by string with a last-accessed timestamp. On every
@@ -187,6 +202,7 @@ async function invokeAgent(
   description: string,
   responseSchema: Record<string, unknown> | undefined,
   variantCache: VariantCache<ReactAgent | Runnable>,
+  recursionLimit: number,
 ): Promise<string> {
   let agent = entry.agent;
 
@@ -211,7 +227,9 @@ async function invokeAgent(
     messages: [new HumanMessage({ content: description })],
   };
 
-  const result = (await agent.invoke(state)) as Record<string, unknown>;
+  const result = (await agent.invoke(state, {
+    recursionLimit,
+  })) as Record<string, unknown>;
 
   if (result.structuredResponse != null) {
     return JSON.stringify(result.structuredResponse);
@@ -278,6 +296,8 @@ function compilePoolSpecs(
  * @param options - Pool ref for subagent specs.
  * @returns A `StructuredToolInterface` suitable for the `ptc` config.
  */
+export { DEFAULT_RECURSION_LIMIT, MAX_RECURSION_LIMIT };
+
 export function createSwarmTaskTool(
   options: SwarmTaskToolOptions,
 ): StructuredToolInterface {
@@ -292,6 +312,7 @@ export function createSwarmTaskTool(
       subagent_type?: string;
       response_schema?: Record<string, unknown>;
       mode?: SwarmTaskMode;
+      recursion_limit?: number;
     }): Promise<string> => {
       const pool = subagentPool.current;
       if (!pool) {
@@ -306,7 +327,13 @@ export function createSwarmTaskTool(
         subagent_type: subagentType,
         response_schema: responseSchema,
         mode = "agent",
+        recursion_limit: rawLimit,
       } = input;
+
+      const recursionLimit = Math.max(
+        1,
+        Math.min(rawLimit ?? DEFAULT_RECURSION_LIMIT, MAX_RECURSION_LIMIT),
+      );
 
       if (mode === "invoke") {
         return invokeModel(pool.model, description, responseSchema);
@@ -333,7 +360,13 @@ export function createSwarmTaskTool(
         );
       }
 
-      return invokeAgent(entry, description, responseSchema, variantCache);
+      return invokeAgent(
+        entry,
+        description,
+        responseSchema,
+        variantCache,
+        recursionLimit,
+      );
     },
     {
       name: "swarm_task",
@@ -362,6 +395,15 @@ export function createSwarmTaskTool(
             'Dispatch mode. "agent" (default) runs a full agentic loop ' +
               'with tools. "invoke" makes a single model call with no tools — ' +
               "use for classification, extraction, and labeling.",
+          ),
+        recursion_limit: z
+          .number()
+          .int()
+          .optional()
+          .describe(
+            "Max agentic loop iterations for this dispatch. " +
+              `Defaults to ${DEFAULT_RECURSION_LIMIT}, ` +
+              `clamped to [1, ${MAX_RECURSION_LIMIT}].`,
           ),
       }),
     },

@@ -17,7 +17,12 @@ vi.mock("langchain", async (importOriginal) => {
   };
 });
 
-import { createSwarmTaskTool, VariantCache } from "./swarm-task.js";
+import {
+  createSwarmTaskTool,
+  VariantCache,
+  DEFAULT_RECURSION_LIMIT,
+  MAX_RECURSION_LIMIT,
+} from "./swarm-task.js";
 
 function makeMockModel(response: string = "model response"): any {
   return {
@@ -747,5 +752,131 @@ describe("VariantCache", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Recursion limit
+// ---------------------------------------------------------------------------
+
+describe("recursion limit", () => {
+  it("passes default recursionLimit to agent.invoke", async () => {
+    const invokedConfig: unknown[] = [];
+    vi.mocked(langchain.createAgent).mockImplementation(() => {
+      return RunnableLambda.from(
+        async (state: Record<string, unknown>, config: unknown) => {
+          invokedConfig.push(config);
+          return { messages: [new AIMessage({ content: "done" })] };
+        },
+      ) as any;
+    });
+
+    const subagentPool = makePool(
+      [{ name: "worker", description: "W", systemPrompt: "W." }],
+      makeMockModel(),
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
+
+    await swarmTask.invoke({
+      description: "work",
+      subagent_type: "worker",
+    });
+
+    const config = invokedConfig[invokedConfig.length - 1] as Record<
+      string,
+      unknown
+    >;
+    // LangGraph decrements recursionLimit by 1 per nesting level
+    expect(config.recursionLimit).toBe(DEFAULT_RECURSION_LIMIT - 1);
+  });
+
+  it("passes custom recursion_limit to agent.invoke", async () => {
+    const invokedConfig: unknown[] = [];
+    vi.mocked(langchain.createAgent).mockImplementation(() => {
+      return RunnableLambda.from(
+        async (state: Record<string, unknown>, config: unknown) => {
+          invokedConfig.push(config);
+          return { messages: [new AIMessage({ content: "done" })] };
+        },
+      ) as any;
+    });
+
+    const subagentPool = makePool(
+      [{ name: "worker", description: "W", systemPrompt: "W." }],
+      makeMockModel(),
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
+
+    await swarmTask.invoke({
+      description: "work",
+      subagent_type: "worker",
+      recursion_limit: 10,
+    });
+
+    const config = invokedConfig[invokedConfig.length - 1] as Record<
+      string,
+      unknown
+    >;
+    expect(config.recursionLimit).toBe(9);
+  });
+
+  it("clamps recursion_limit to MAX_RECURSION_LIMIT", async () => {
+    const invokedConfig: unknown[] = [];
+    vi.mocked(langchain.createAgent).mockImplementation(() => {
+      return RunnableLambda.from(
+        async (state: Record<string, unknown>, config: unknown) => {
+          invokedConfig.push(config);
+          return { messages: [new AIMessage({ content: "done" })] };
+        },
+      ) as any;
+    });
+
+    const subagentPool = makePool(
+      [{ name: "worker", description: "W", systemPrompt: "W." }],
+      makeMockModel(),
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
+
+    await swarmTask.invoke({
+      description: "work",
+      subagent_type: "worker",
+      recursion_limit: 9999,
+    });
+
+    const config = invokedConfig[invokedConfig.length - 1] as Record<
+      string,
+      unknown
+    >;
+    expect(config.recursionLimit).toBe(MAX_RECURSION_LIMIT - 1);
+  });
+
+  it("clamps recursion_limit to minimum of 1", async () => {
+    const invokedConfig: unknown[] = [];
+    vi.mocked(langchain.createAgent).mockImplementation(() => {
+      return RunnableLambda.from(
+        async (state: Record<string, unknown>, config: unknown) => {
+          invokedConfig.push(config);
+          return { messages: [new AIMessage({ content: "done" })] };
+        },
+      ) as any;
+    });
+
+    const subagentPool = makePool(
+      [{ name: "worker", description: "W", systemPrompt: "W." }],
+      makeMockModel(),
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
+
+    await swarmTask.invoke({
+      description: "work",
+      subagent_type: "worker",
+      recursion_limit: -5,
+    });
+
+    const config = invokedConfig[invokedConfig.length - 1] as Record<
+      string,
+      unknown
+    >;
+    expect(config.recursionLimit).toBe(0);
   });
 });
