@@ -15,10 +15,6 @@
  * It holds an `id` that keys into a static session map. The heavy QuickJS
  * runtime is lazily started on the first `.eval()` call, making the session
  * safe across graph interrupts and checkpointing.
- *
- * File writes inside the REPL are buffered (`pendingWrites`) and only
- * flushed to the backend after a script finishes executing. Call
- * `session.flushWrites(backend)` after eval to persist them.
  */
 
 import { shouldInterruptAfterDeadline } from "quickjs-emscripten";
@@ -27,38 +23,266 @@ import { newQuickJSAsyncWASMModuleFromVariant } from "quickjs-emscripten-core";
 import type {
   QuickJSAsyncContext,
   QuickJSAsyncRuntime,
+  QuickJSAsyncWASMModule,
 } from "quickjs-emscripten-core";
-import type { AnyBackendProtocol, BackendProtocolV2 } from "deepagents";
-import { adaptBackendProtocol } from "deepagents";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
-import type { ReplSessionOptions, ReplResult } from "./types.js";
+import { loadSkill, scanSkillReferences, type LoadedSkill } from "./skills.js";
+import { PTCCallBudgetExceededError } from "./errors.js";
+import type { ReplSessionOptions, ReplResult, SkillsContext } from "./types.js";
 import { toCamelCase } from "./utils.js";
 import { transformForEval } from "./transform.js";
+import { AsyncEvalQueue } from "./eval-queue.js";
 
-export const DEFAULT_MEMORY_LIMIT = 50 * 1024 * 1024;
+export const DEFAULT_MEMORY_LIMIT = 64 * 1024 * 1024;
 export const DEFAULT_MAX_STACK_SIZE = 320 * 1024;
-export const DEFAULT_EXECUTION_TIMEOUT = 30_000;
+export const DEFAULT_EXECUTION_TIMEOUT = 5_000;
 export const DEFAULT_SESSION_ID = "__default__";
+export const DEFAULT_MAX_PTC_CALLS = 256;
+export const DEFAULT_MAX_RESULTS_CHARS = 4000;
 
-let asyncModulePromise: Promise<any> | undefined;
+const LINE_NUMBER_RE = /^\s*\d+(?:\.\d+)?\t/;
 
-async function getAsyncModule() {
-  if (!asyncModulePromise) {
-    asyncModulePromise = (async () => {
-      const variant =
-        await import("@jitl/quickjs-ng-wasmfile-release-asyncify");
+const variantImport = import("@jitl/quickjs-ng-wasmfile-release-asyncify");
+
+/**
+ * Process-global eval queue. Serializes all evalCodeAsync calls across
+ * sessions to enforce the asyncify one-at-a-time constraint.
+ */
+const sharedEvalQueue = new AsyncEvalQueue();
+
+/**
+ * Process-global WASM module shared by all sessions.
+ *
+ * Each session creates its own runtime and context on this module,
+ * providing full isolation for globals, heap, and stack. The module
+ * itself is stateless between runtimes — only the compiled WASM code
+ * and Emscripten infrastructure are shared.
+ *
+ * This is safe because:
+ * - The module loader is synchronous (preloaded skill cache), so
+ *   imports don't cause asyncify suspensions.
+ * - Tool injection uses the promise-based pattern (newFunction +
+ *   newPromise), not newAsyncifiedFunction, so tool calls don't
+ *   cause asyncify suspensions.
+ * - The eval queue serializes evalCodeAsync calls to satisfy the
+ *   one-concurrent-async-call-per-module constraint.
+ */
+let sharedModulePromise: Promise<QuickJSAsyncWASMModule> | undefined;
+
+function getSharedModule(): Promise<QuickJSAsyncWASMModule> {
+  if (!sharedModulePromise) {
+    sharedModulePromise = (async () => {
+      const variant = await variantImport;
       return newQuickJSAsyncWASMModuleFromVariant(
         (variant.default ?? variant) as any,
       );
     })();
   }
-  return asyncModulePromise;
+  return sharedModulePromise;
 }
 
-export interface PendingWrite {
-  path: string;
-  content: string;
+// The module loader must never reject. A rejected Promise in the loader
+// path triggers a WASM FFI call at the wrong point in the asyncify
+// lifecycle, which corrupts memory. This helper returns source code that
+// throws at evaluation time inside the VM instead.
+//
+// The thrown value is a plain object (not `new Error()`) because QuickJS
+// stores Error's `name` and `message` as non-enumerable properties (per
+// spec), which causes `context.dump()` (JSON.stringify) to return `{}`.
+function makeErrorSource(message: string): string {
+  return `throw { name: "Error", message: ${JSON.stringify(message)} };`;
+}
+
+/**
+ * Parse a canonicalized skill specifier into `{ name, rel }`.
+ * Returns `undefined` for anything that isn't a valid `@/skills/<name>` or
+ * `@/skills/<name>/<rel>` shape. `rel` is absent for the bare form.
+ */
+function parseSkillSpecifier(
+  specifier: string,
+): { name: string; rel?: string } | undefined {
+  const prefix = "@/skills/";
+  if (!specifier.startsWith(prefix)) {
+    return;
+  }
+
+  const tail = specifier.slice(prefix.length);
+  const slashIdx = tail.indexOf("/");
+  const name = slashIdx === -1 ? tail : tail.slice(0, slashIdx);
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) {
+    return;
+  }
+
+  const rel = slashIdx === -1 ? undefined : tail.slice(slashIdx + 1);
+  if (rel !== undefined && rel === "") {
+    return;
+  }
+
+  return { name, rel };
+}
+
+/**
+ * Return the `@/skills/<name>` prefix for the skill that owns `base`, or `undefined`.
+ */
+function matchSkillPrefix(base: string): string | undefined {
+  const parsed = parseSkillSpecifier(base);
+  if (parsed === undefined) {
+    return;
+  }
+  return `@/skills/${parsed.name}`;
+}
+
+/**
+ * Return the directory portion of a slash-separated specifier path.
+ */
+function posixDirname(p: string): string {
+  const idx = p.lastIndexOf("/");
+  if (idx === -1) {
+    return "";
+  }
+  return p.slice(0, idx);
+}
+
+/**
+ * POSIX join for slash-separated specifiers. Avoids `node:path/posix`
+ * since session.ts is consumed in browser bundles.
+ */
+function posixJoin(base: string, rel: string): string {
+  const out: string[] = [];
+
+  const segments = `${base}/${rel}`.split("/");
+  for (const segment of segments) {
+    if (segment === "" || segment === ".") {
+      continue;
+    }
+
+    if (segment === "..") {
+      out.pop();
+      continue;
+    }
+
+    out.push(segment);
+  }
+
+  return out.join("/");
+}
+
+/**
+ * Unwrap a PTC tool result to a plain string for use inside QuickJS.
+ *
+ * Tool results may arrive as a raw string, or as an array of LangChain
+ * content blocks (`{ type: "text", text: "..." }`). Blocks are joined
+ * with newlines; non-text block types are silently skipped. Anything
+ * else (objects, nulls) is JSON-serialised as a fallback.
+ *
+ * @param result - Raw return value from `tool.invoke()`.
+ * @returns Plain string representation of the tool output.
+ */
+function extractToolText(result: unknown): string {
+  if (typeof result === "string") {
+    return result;
+  }
+
+  if (Array.isArray(result)) {
+    const texts: string[] = [];
+    for (const block of result) {
+      if (
+        typeof block === "object" &&
+        block !== null &&
+        (block as Record<string, unknown>).type === "text" &&
+        typeof (block as Record<string, unknown>).text === "string"
+      ) {
+        texts.push((block as Record<string, unknown>).text as string);
+      }
+    }
+
+    if (texts.length > 0) {
+      return texts.join("\n");
+    }
+  }
+  return JSON.stringify(result);
+}
+
+/**
+ * Remove the `cat -n` line-number prefix from every line of a string.
+ *
+ * The filesystem backend formats file content with line numbers in the
+ * form `"     N\t"` so human readers can navigate by line. That prefix
+ * is useful for the agent but noise for QuickJS code that parses the
+ * text programmatically (e.g. swarm reading `/context.txt`).
+ *
+ * The function is conservative: if any non-empty line lacks the prefix,
+ * the text is returned unchanged so nothing is silently corrupted.
+ *
+ * @param text - Raw file content, possibly line-number prefixed.
+ * @returns Content with line-number prefixes stripped, or the original
+ *          text if it doesn't match the expected format throughout.
+ */
+function stripLineNumbers(text: string): string {
+  const lines = text.split("\n");
+  if (lines.length === 0) {
+    return text;
+  }
+
+  if (!lines.every((l) => l === "" || LINE_NUMBER_RE.test(l))) {
+    return text;
+  }
+
+  return lines.map((l) => l.replace(LINE_NUMBER_RE, "")).join("\n");
+}
+
+/**
+ * Fixed-size character buffer for capturing console output from the QuickJS VM.
+ *
+ * Lines are accumulated up to `maxChars`. Once the cap is reached, excess
+ * characters are counted as dropped rather than silently discarded without
+ * attribution, so callers can surface a truncation notice to the user.
+ */
+class ConsoleBuffer {
+  private readonly maxChars: number;
+  private buffer: string = "";
+  private droppedChars: number = 0;
+
+  constructor(maxChars: number) {
+    this.maxChars = Math.max(maxChars, 0);
+  }
+
+  /**
+   * Append `line` to the buffer.
+   *
+   * If the buffer is already full the entire line is counted as dropped.
+   * If `line` partially fits, the fitting prefix is stored and the remainder
+   * is counted as dropped.
+   */
+  append(line: string): void {
+    const remaining = this.maxChars - this.buffer.length;
+    if (remaining <= 0) {
+      this.droppedChars += line.length;
+      return;
+    }
+
+    if (line.length <= remaining) {
+      this.buffer += line;
+    } else {
+      this.buffer += line.slice(0, remaining);
+      this.droppedChars += line.length - remaining;
+    }
+  }
+
+  /**
+   * Return the buffered output and dropped-character count as `[buffered,
+   * droppedChars]`, then reset both to zero.
+   */
+  drain(): [string, number] {
+    const out = this.buffer;
+    const dropped = this.droppedChars;
+
+    this.buffer = "";
+    this.droppedChars = 0;
+
+    return [out, dropped];
+  }
 }
 
 /**
@@ -68,34 +292,42 @@ export interface PendingWrite {
  * The QuickJS runtime is lazily started on the first `.eval()` call
  * and reconnected if a session with the same id already exists.
  * This makes it safe to store in LangGraph state across interrupts.
- *
- * File writes are buffered during execution and flushed via
- * `flushWrites(backend)` after eval completes.
  */
 export class ReplSession {
   private static sessions = new Map<string, ReplSession>();
 
   readonly id: string;
-  readonly pendingWrites: PendingWrite[] = [];
 
   private runtime: QuickJSAsyncRuntime | null = null;
   private context: QuickJSAsyncContext | null = null;
-  private logs: string[] = [];
-  private _options: ReplSessionOptions;
+  private consoleBuffer: ConsoleBuffer = new ConsoleBuffer(
+    DEFAULT_MAX_RESULTS_CHARS,
+  );
+  private options: ReplSessionOptions;
+  private skillsContext: SkillsContext | undefined;
+  private skillsLoaded: Map<string, LoadedSkill> = new Map();
+  private skillsFailed: Map<string, Error> = new Map();
+  private readonly maxPtcCalls: number | null;
+  private ptcCallsRemaining: number | null = null;
 
-  private _backend: BackendProtocolV2 | null = null;
+  /**
+   * Reset the shared WASM module. Forces the next session to instantiate
+   * a fresh module. Only needed in tests where module state must be
+   * isolated between test files.
+   *
+   * @internal
+   */
+  static resetSharedModule(): void {
+    sharedModulePromise = undefined;
+  }
 
   constructor(id: string, options: ReplSessionOptions = {}) {
     this.id = id;
-    this._options = options;
-  }
-
-  get backend(): BackendProtocolV2 | null {
-    return this._backend;
-  }
-
-  set backend(b: AnyBackendProtocol | null) {
-    this._backend = b ? adaptBackendProtocol(b) : null;
+    this.options = options;
+    this.maxPtcCalls =
+      options.maxPtcCalls !== undefined
+        ? options.maxPtcCalls
+        : DEFAULT_MAX_PTC_CALLS;
   }
 
   private async ensureStarted(): Promise<void> {
@@ -104,11 +336,13 @@ export class ReplSession {
     const {
       memoryLimitBytes = DEFAULT_MEMORY_LIMIT,
       maxStackSizeBytes = DEFAULT_MAX_STACK_SIZE,
-      backend,
       tools,
-    } = this._options;
+      skillsEnabled = false,
+      maxResultChars = DEFAULT_MAX_RESULTS_CHARS,
+      captureConsole = true,
+    } = this.options;
 
-    const asyncModule = await getAsyncModule();
+    const asyncModule = await getSharedModule();
     const runtime: QuickJSAsyncRuntime = asyncModule.newRuntime();
     runtime.setMemoryLimit(memoryLimitBytes);
     runtime.setMaxStackSize(maxStackSizeBytes);
@@ -117,15 +351,226 @@ export class ReplSession {
     this.runtime = runtime;
     this.context = context;
 
-    this.setupConsole();
-
-    if (backend) {
-      this._backend = adaptBackendProtocol(backend);
+    this.consoleBuffer = new ConsoleBuffer(maxResultChars);
+    if (captureConsole) {
+      this.setupConsole();
     }
-    this.injectVfs();
-    if (tools && tools.length > 0) {
+
+    if (tools !== undefined && tools.length > 0) {
       this.injectTools(tools);
     }
+
+    const sessionId = this.options.sessionId ?? "default";
+    const sessionIdHandle = context.newString(sessionId);
+    context.setProp(context.global, "__sessionId__", sessionIdHandle);
+    sessionIdHandle.dispose();
+
+    if (skillsEnabled) {
+      this.installModuleLoader();
+    }
+  }
+
+  /**
+   * Load the skill into cache on first access and replay cached errors.
+   */
+  private async ensureSkillLoaded(name: string): Promise<LoadedSkill> {
+    const cached = this.skillsLoaded.get(name);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const cachedError = this.skillsFailed.get(name);
+    if (cachedError !== undefined) {
+      throw cachedError;
+    }
+
+    const ctx = this.skillsContext;
+    if (ctx === undefined) {
+      throw new Error(
+        `Skill '${name}' referenced but skills are not configured for this session`,
+      );
+    }
+
+    const metadata = ctx.metadata.find((m) => m.name === name);
+    if (metadata === undefined) {
+      throw new Error(
+        `Skill '${name}' referenced but not available on this agent`,
+      );
+    }
+
+    try {
+      const loaded = await loadSkill(metadata, ctx.backend);
+      this.skillsLoaded.set(name, loaded);
+      return loaded;
+    } catch (err) {
+      this.skillsFailed.set(name, err as Error);
+      throw err;
+    }
+  }
+
+  /**
+   * Pre-load all skills referenced in source code into the in-memory
+   * cache. Must be called before `evalCodeAsync` so the module loader
+   * can resolve synchronously — `executePendingJobs` is a sync FFI
+   * call that cannot handle asyncify suspensions.
+   */
+  async preloadReferencedSkills(code: string): Promise<void> {
+    const refs = scanSkillReferences(code);
+    for (const name of refs) {
+      if (this.skillsLoaded.has(name) || this.skillsFailed.has(name)) {
+        continue;
+      }
+      try {
+        await this.ensureSkillLoaded(name);
+      } catch (err) {
+        // Cache the error so resolveSpecifier surfaces the original message
+        if (!this.skillsFailed.has(name)) {
+          this.skillsFailed.set(name, err as Error);
+        }
+      }
+    }
+  }
+
+  /**
+   * Resolve a module specifier to source code. Strictly synchronous —
+   * only reads from the in-memory skill cache populated by
+   * `preloadReferencedSkills`. Returns error source (not a thrown
+   * exception) for missing or failed skills so QuickJS reports the
+   * error inside the VM.
+   */
+  private resolveSpecifier(specifier: string): string {
+    const parsed = parseSkillSpecifier(specifier);
+    if (parsed === undefined) {
+      return makeErrorSource(`Module not found: ${specifier}`);
+    }
+
+    const cachedError = this.skillsFailed.get(parsed.name);
+    if (cachedError !== undefined) {
+      return makeErrorSource(cachedError.message ?? String(cachedError));
+    }
+
+    const loaded = this.skillsLoaded.get(parsed.name);
+    if (loaded === undefined) {
+      return makeErrorSource(
+        `Skill '${parsed.name}' was not preloaded. ` +
+          `Ensure the import specifier is a static string literal ` +
+          `(dynamic specifiers like \`import("@/skills/" + name)\` are not supported).`,
+      );
+    }
+
+    if (parsed.rel === undefined) {
+      const source = loaded.files.get(loaded.entryRel);
+      if (source === undefined) {
+        return makeErrorSource(
+          `Skill '${parsed.name}': entrypoint '${loaded.entryRel}' missing from bundle`,
+        );
+      }
+      return source;
+    }
+
+    let source = loaded.files.get(parsed.rel);
+    // TS convention: source files use .ts but import specifiers use .js
+    if (source === undefined && parsed.rel.endsWith(".js")) {
+      source = loaded.files.get(parsed.rel.slice(0, -3) + ".ts");
+    }
+    if (source === undefined) {
+      return makeErrorSource(
+        `Skill '${parsed.name}': '${parsed.rel}' not found in bundle`,
+      );
+    }
+
+    return source;
+  }
+
+  /**
+   * Canonicalize an `import` specifier. Bare specifiers pass through;
+   * relative specifiers are resolved against the importing module's path.
+   * Traversal out of a skill's `@/skills/<name>/` namespace is rejected.
+   */
+  private normalizeSpecifier(base: string, requested: string): string {
+    const isRelative =
+      requested.startsWith("./") || requested.startsWith("../");
+    if (!isRelative) {
+      return requested;
+    }
+
+    // A bare skill specifier like "@/skills/my-skill" has no file component, so
+    // posixDirname would return "@/skills". Use the entrypoint's directory so
+    // relative imports resolve correctly when the entrypoint is in a subdirectory
+    // (e.g. entryRel="scripts/index.ts" → "@/skills/my-skill/scripts").
+    const parsed = parseSkillSpecifier(base);
+    let baseDir: string;
+    if (parsed !== undefined && parsed.rel === undefined) {
+      const loaded = this.skillsLoaded.get(parsed.name);
+      const entryDir =
+        loaded !== undefined ? posixDirname(loaded.entryRel) : "";
+      baseDir = entryDir ? `${base}/${entryDir}` : base;
+    } else {
+      baseDir = posixDirname(base);
+    }
+    const resolved = posixJoin(baseDir, requested);
+
+    const skillPrefix = matchSkillPrefix(base);
+    if (skillPrefix === undefined) {
+      return resolved;
+    }
+
+    if (!resolved.startsWith(`${skillPrefix}/`)) {
+      return `__resolve_error__:${requested} escapes ${skillPrefix}`;
+    }
+
+    return resolved;
+  }
+
+  /**
+   * Wire the QuickJS module loader and normalizer on this session's runtime.
+   *
+   * The loader is strictly synchronous — it reads from the in-memory skill
+   * cache populated by `preloadReferencedSkills`. This is critical: an async
+   * module loader causes asyncify suspensions on each import, and disposing
+   * a runtime after multi-file imports corrupts the shared module's asyncify
+   * state, silently breaking the loader for all subsequent sessions.
+   */
+  private installModuleLoader(): void {
+    if (this.runtime === null) {
+      return;
+    }
+
+    this.runtime.setModuleLoader(
+      (specifier: string) => this.resolveSpecifier(specifier),
+      (base: string, requested: string) =>
+        this.normalizeSpecifier(base, requested),
+    );
+  }
+
+  /**
+   * Initialise the per-eval PTC counter. Called at the top of every `eval()`.
+   */
+  private resetPtcBudget(): void {
+    this.ptcCallsRemaining =
+      this.maxPtcCalls === null ? null : this.maxPtcCalls;
+  }
+
+  /**
+   * Decrement the PTC call counter and throw if the budget is exhausted.
+   * `null` budget means unlimited — returns immediately without decrementing.
+   */
+  private consumePtcBudget(functionName: string): void {
+    if (this.ptcCallsRemaining === null) {
+      return;
+    }
+
+    if (this.ptcCallsRemaining > 0) {
+      this.ptcCallsRemaining--;
+      return;
+    }
+
+    const limit = this.maxPtcCalls ?? 0;
+    throw new PTCCallBudgetExceededError({
+      limit,
+      attempted: limit + 1,
+      functionName,
+    });
   }
 
   /**
@@ -141,9 +586,6 @@ export class ReplSession {
   ): ReplSession {
     const existing = ReplSession.sessions.get(id);
     if (existing) {
-      if (options.backend) {
-        existing._backend = adaptBackendProtocol(options.backend);
-      }
       return existing;
     }
 
@@ -160,6 +602,40 @@ export class ReplSession {
   }
 
   /**
+   * Returns true if any session exists whose key equals `threadId` or starts
+   * with `threadId:`. Useful for tests that need to confirm a session was
+   * created without knowing the full `threadId:middlewareId` key.
+   */
+  static hasAnyForThread(threadId: string): boolean {
+    const prefix = `${threadId}:`;
+    for (const key of ReplSession.sessions.keys()) {
+      if (key === threadId || key.startsWith(prefix)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Dispose and remove the session with the given key, if it exists.
+   */
+  static deleteSession(key: string): void {
+    const session = ReplSession.sessions.get(key);
+    if (session) {
+      session.dispose();
+    }
+  }
+
+  /**
+   * Push the current skills metadata + backend into the session.
+   * Called by the middleware once per `eval` invocation, before eval runs.
+   * Pass `undefined` to clear the context (no skill imports will resolve).
+   */
+  setSkillsContext(ctx?: SkillsContext): void {
+    this.skillsContext = ctx;
+  }
+
+  /**
    * Evaluate code in this session.
    *
    * Lazily starts the QuickJS runtime on the first call. Code is
@@ -173,79 +649,87 @@ export class ReplSession {
     const runtime = this.runtime!;
     const context = this.context!;
 
-    this.logs.length = 0;
+    // Pre-load referenced skills so the module loader resolves synchronously.
+    await this.preloadReferencedSkills(code);
 
-    if (timeoutMs >= 0) {
-      runtime.setInterruptHandler(
-        shouldInterruptAfterDeadline(Date.now() + timeoutMs),
-      );
-    } else {
-      runtime.setInterruptHandler(() => false);
-    }
-
-    const transformed = transformForEval(code);
-    const result = await context.evalCodeAsync(transformed);
-
-    if (result.error) {
-      const error = context.dump(result.error);
-      result.error.dispose();
-      return { ok: false, error, logs: [...this.logs] };
-    }
-
-    const promiseState = context.getPromiseState(result.value);
-
-    if (promiseState.type === "fulfilled") {
-      if (promiseState.notAPromise) {
-        const value = context.dump(result.value);
-        result.value.dispose();
-        return { ok: true, value, logs: [...this.logs] };
-      }
-      const value = context.dump(promiseState.value);
-      promiseState.value.dispose();
-      result.value.dispose();
-      return { ok: true, value, logs: [...this.logs] };
-    }
-
-    if (promiseState.type === "rejected") {
-      const error = context.dump(promiseState.error);
-      promiseState.error.dispose();
-      result.value.dispose();
-      return { ok: false, error, logs: [...this.logs] };
-    }
-
-    const noTimeout = timeoutMs < 0;
-    const deadline = noTimeout ? Infinity : Date.now() + timeoutMs;
-    while (noTimeout || Date.now() < deadline) {
-      context.runtime.executePendingJobs();
-      const state = context.getPromiseState(result.value);
-      if (state.type === "fulfilled") {
-        const value = context.dump(state.value);
-        state.value.dispose();
-        result.value.dispose();
-        return { ok: true, value, logs: [...this.logs] };
-      }
-      if (state.type === "rejected") {
-        const error = context.dump(state.error);
-        state.error.dispose();
-        result.value.dispose();
-        return { ok: false, error, logs: [...this.logs] };
-      }
-      await new Promise((r) => setTimeout(r, 1));
-    }
-
-    result.value.dispose();
-    return {
-      ok: false,
-      error: { message: "Promise timed out — execution interrupted" },
-      logs: [...this.logs],
+    const drainLogs = (): { logs: string[]; logsDroppedChars: number } => {
+      const [raw, dropped] = this.consoleBuffer.drain();
+      return {
+        logs: raw.length > 0 ? raw.split("\n").filter((l) => l.length > 0) : [],
+        logsDroppedChars: dropped,
+      };
     };
-  }
 
-  async flushWrites(backend: AnyBackendProtocol): Promise<void> {
-    const adapted = adaptBackendProtocol(backend);
-    const writes = this.pendingWrites.splice(0);
-    for (const { path, content } of writes) {
-      await adapted.write(path, content);
+    this.resetPtcBudget();
+    try {
+      if (timeoutMs >= 0) {
+        runtime.setInterruptHandler(
+          shouldInterruptAfterDeadline(Date.now() + timeoutMs),
+        );
+      } else {
+        runtime.setInterruptHandler(() => false);
+      }
+
+      const transformed = transformForEval(code);
+      const result = await sharedEvalQueue.enqueue(() =>
+        context.evalCodeAsync(transformed),
+      );
+
+      if (result.error) {
+        const error = context.dump(result.error);
+        result.error.dispose();
+        return { ok: false, error, ...drainLogs() };
+      }
+
+      const promiseState = context.getPromiseState(result.value);
+
+      if (promiseState.type === "fulfilled") {
+        if (promiseState.notAPromise) {
+          const value = context.dump(result.value);
+          result.value.dispose();
+          return { ok: true, value, ...drainLogs() };
+        }
+        const value = context.dump(promiseState.value);
+        promiseState.value.dispose();
+        result.value.dispose();
+        return { ok: true, value, ...drainLogs() };
+      }
+
+      if (promiseState.type === "rejected") {
+        const error = context.dump(promiseState.error);
+        promiseState.error.dispose();
+        result.value.dispose();
+        return { ok: false, error, ...drainLogs() };
+      }
+
+      const noTimeout = timeoutMs < 0;
+      const deadline = noTimeout ? Infinity : Date.now() + timeoutMs;
+      while (noTimeout || Date.now() < deadline) {
+        context.runtime.executePendingJobs();
+        const state = context.getPromiseState(result.value);
+        if (state.type === "fulfilled") {
+          const value = context.dump(state.value);
+          state.value.dispose();
+          result.value.dispose();
+          return { ok: true, value, ...drainLogs() };
+        }
+        if (state.type === "rejected") {
+          const error = context.dump(state.error);
+          state.error.dispose();
+          result.value.dispose();
+          return { ok: false, error, ...drainLogs() };
+        }
+        await new Promise((r) => setTimeout(r, 1));
+      }
+
+      result.value.dispose();
+      return {
+        ok: false,
+        error: { message: "Promise timed out — execution interrupted" },
+        ...drainLogs(),
+      };
+    } finally {
+      this.ptcCallsRemaining = null;
     }
   }
 
@@ -286,7 +770,6 @@ export class ReplSession {
 
   private setupConsole(): void {
     const context = this.context!;
-    const logs = this.logs;
     const consoleHandle = context.newObject();
     for (const method of ["log", "warn", "error", "info", "debug"] as const) {
       const fnHandle = context.newFunction(
@@ -300,11 +783,11 @@ export class ReplSession {
                 : String(a),
             )
             .join(" ");
-          logs.push(
+          const line =
             method === "log" || method === "info" || method === "debug"
               ? formatted
-              : `[${method}] ${formatted}`,
-          );
+              : `[${method}] ${formatted}`;
+          this.consoleBuffer.append(line + "\n");
         },
       );
       context.setProp(consoleHandle, method, fnHandle);
@@ -312,83 +795,6 @@ export class ReplSession {
     }
     context.setProp(context.global, "console", consoleHandle);
     consoleHandle.dispose();
-  }
-
-  private injectVfs(): void {
-    const context = this.context!;
-    const getBackend = () => this._backend;
-    const { pendingWrites } = this;
-
-    const readFileHandle = context.newFunction(
-      "readFile",
-      (pathHandle: QuickJSHandle) => {
-        const backend = getBackend();
-        if (!backend) {
-          const promise = context.newPromise();
-          const err = context.newError("Backend not available");
-          promise.reject(err);
-          err.dispose();
-          promise.settled.then(context.runtime.executePendingJobs);
-          return promise.handle;
-        }
-        const path = context.getString(pathHandle);
-        const promise = context.newPromise();
-        (async () => {
-          try {
-            const result = await backend.readRaw(path);
-            if (result.error || !result.data) {
-              const err = context.newError(
-                `ENOENT: no such file or directory '${path}'.`,
-              );
-              promise.reject(err);
-              err.dispose();
-            } else {
-              const content = Array.isArray(result.data.content)
-                ? result.data.content.join("\n")
-                : typeof result.data.content === "string"
-                  ? result.data.content
-                  : null;
-              if (content === null) {
-                const err = context.newError(
-                  `Cannot read binary file '${path}' as text.`,
-                );
-                promise.reject(err);
-                err.dispose();
-                return;
-              }
-              const val = context.newString(content);
-              promise.resolve(val);
-              val.dispose();
-            }
-          } catch {
-            const err = context.newError(
-              `ENOENT: no such file or directory '${path}'.`,
-            );
-            promise.reject(err);
-            err.dispose();
-          }
-          promise.settled.then(context.runtime.executePendingJobs);
-        })();
-        return promise.handle;
-      },
-    );
-    context.setProp(context.global, "readFile", readFileHandle);
-    readFileHandle.dispose();
-
-    const writeFileHandle = context.newFunction(
-      "writeFile",
-      (pathHandle: QuickJSHandle, contentHandle: QuickJSHandle) => {
-        const path = context.getString(pathHandle);
-        const content = context.getString(contentHandle);
-        const promise = context.newPromise();
-        pendingWrites.push({ path, content });
-        promise.resolve(context.undefined);
-        promise.settled.then(context.runtime.executePendingJobs);
-        return promise.handle;
-      },
-    );
-    context.setProp(context.global, "writeFile", writeFileHandle);
-    writeFileHandle.dispose();
   }
 
   private injectTools(tools: StructuredToolInterface[]): void {
@@ -404,12 +810,15 @@ export class ReplSession {
           const promise = context.newPromise();
           (async () => {
             try {
+              this.consumePtcBudget(camelName);
               const rawInput =
                 typeof input === "object" && input !== null ? input : {};
               const result = await t.invoke(rawInput);
-              const val = context.newString(
-                typeof result === "string" ? result : JSON.stringify(result),
-              );
+              let text = extractToolText(result);
+              if (t.name === "read_file") {
+                text = stripLineNumbers(text);
+              }
+              const val = context.newString(text);
               promise.resolve(val);
               val.dispose();
             } catch (e: unknown) {

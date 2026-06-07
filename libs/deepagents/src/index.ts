@@ -7,6 +7,26 @@
 
 export { createDeepAgent } from "./agent.js";
 export { ConfigurationError, type ConfigurationErrorCode } from "./errors.js";
+
+// Export harness profiles
+export {
+  type HarnessProfile,
+  type HarnessProfileOptions,
+  type HarnessProfileConfigData,
+  type GeneralPurposeSubagentConfig,
+  createHarnessProfile,
+  serializeProfile,
+  parseHarnessProfileConfig,
+  registerHarnessProfile,
+  getHarnessProfile,
+  harnessProfileConfigSchema,
+  generalPurposeSubagentConfigSchema,
+  EMPTY_HARNESS_PROFILE,
+  REQUIRED_MIDDLEWARE_NAMES,
+} from "./profiles/index.js";
+
+export { createSubagentTransformer } from "./stream.js";
+export type { DeepAgentRunStream, SubagentRunStream } from "./stream.js";
 export type {
   AnySubAgent,
   CreateDeepAgentParams,
@@ -36,6 +56,13 @@ export {
   type Settings,
   type SettingsOptions,
 } from "./config.js";
+
+// Export permissions
+export {
+  type FilesystemPermission,
+  type FilesystemOperation,
+  type PermissionMode,
+} from "./permissions/index.js";
 
 // Export middleware (matches Python's interface)
 export {
@@ -96,9 +123,12 @@ export {
 export {
   StateBackend,
   StoreBackend,
+  type StoreBackendContext,
+  type StoreBackendNamespaceFactory,
   type StoreBackendOptions,
   FilesystemBackend,
   CompositeBackend,
+  ContextHubBackend,
   BaseSandbox,
   isSandboxBackend,
   isSandboxProtocol,
@@ -139,6 +169,10 @@ export {
   // LangSmith sandbox backend
   LangSmithSandbox,
   type LangSmithSandboxOptions,
+  type LangSmithSandboxCreateOptions,
+  type LangSmithSnapshot,
+  type LangSmithCaptureSnapshotOptions,
+  type LangSmithStartSandboxOptions,
   // Sandbox error types
   type SandboxErrorCode,
   // Local shell backend

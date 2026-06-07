@@ -1,14 +1,17 @@
 import { describe, it, expect, vi } from "vitest";
-import { createDeepAgent, isAnthropicModel } from "./agent.js";
+import { createDeepAgent } from "./agent.js";
+import { isAnthropicModel } from "./utils.js";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
 import {
   HumanMessage,
   SystemMessage,
   type BaseMessage,
 } from "@langchain/core/messages";
-import { MemorySaver } from "@langchain/langgraph";
+import { MemorySaver, StateSchema } from "@langchain/langgraph";
 import { createFileData } from "./backends/utils.js";
 import { ConfigurationError } from "./errors.js";
+import { assertAllDeepAgentQualities } from "./testing/utils.js";
+import { z } from "zod/v4";
 
 describe("isAnthropicModel", () => {
   it("should detect claude model strings", () => {
@@ -166,5 +169,19 @@ describe("Built-in tool name collision detection", () => {
     expect(() =>
       createDeepAgent({ model, tools: [makeTool("my_custom_tool")] }),
     ).not.toThrow();
+  });
+});
+
+describe("State schema propagation", () => {
+  it("should add StateSchema channels to the compiled graph + ensure built-in channels", () => {
+    const stateSchema = new StateSchema({
+      foo: z.string().default("foo"),
+    });
+    const model = new FakeListChatModel({ responses: ["Done"] });
+    const agent = createDeepAgent({ model, stateSchema });
+
+    const channelNames = Object.keys(agent.graph?.channels ?? {});
+    expect(channelNames).toContain("foo");
+    assertAllDeepAgentQualities(agent);
   });
 });

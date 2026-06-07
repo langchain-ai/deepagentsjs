@@ -128,7 +128,7 @@ const TOO_LARGE_TOOL_MSG = context`
   Tool result too large, the result of this tool call {tool_call_id} was saved in the filesystem at this path: {file_path}
   You can read the result from the filesystem by using the read_file tool, but make sure to only read part of the result at a time.
   You can do this by specifying an offset and limit in the read_file tool call.
-  For example, to read the first 100 lines, you can use the read_file tool with offset=0 and limit=100.
+  For example, to read the first ${DEFAULT_READ_LINE_LIMIT} lines, you can use the read_file tool with offset=0 and limit=${DEFAULT_READ_LINE_LIMIT}.
 
   Here is a preview showing the head and tail of the result (lines of the form
   ... [N lines truncated] ...
@@ -265,6 +265,16 @@ export function createContentPreview(
 import type * as _zodTypes from "@langchain/core/utils/types";
 import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
+import {
+  FilesystemOperation,
+  FilesystemPermission,
+} from "../permissions/types.js";
+import {
+  decidePathAccess,
+  validatePath,
+  validatePermissionPaths,
+} from "../permissions/enforce.js";
+import { CompositeBackend } from "../backends/composite.js";
 
 /**
  * Zod schema for legacy FileDataV1 (content as line array).
@@ -362,6 +372,62 @@ const FilesystemStateSchema = new StateSchema({
   ),
 });
 
+/**
+ * Throw a permission-denied error if `path` is denied under `rules`.
+ *
+ * No-op when `rules` is empty (permissive default). Paths that fail
+ * `validatePath` are silently skipped — the tool's own input validation
+ * will surface a better error.
+ *
+ * @internal
+ */
+function enforcePermission(
+  rules: FilesystemPermission[],
+  operation: FilesystemOperation,
+  path: string,
+): void {
+  if (rules.length === 0) {
+    return;
+  }
+
+  const canonical = validatePath(path);
+
+  if (decidePathAccess(rules, operation, canonical) === "deny") {
+    throw new Error(
+      `Error: permission denied for ${operation} on ${canonical}`,
+    );
+  }
+}
+
+/**
+ * Filter a list of filesystem entries to those the rules permit.
+ *
+ * `getPath` extracts the absolute path from each entry. Entries with
+ * unparsable paths are included (not silently dropped). Returns the
+ * original array unchanged when `rules` is empty.
+ *
+ * @internal
+ */
+function filterByPermissions<T>(
+  entries: T[],
+  rules: readonly FilesystemPermission[],
+  operation: FilesystemOperation,
+  getPath: (entry: T) => string,
+): T[] {
+  if (rules.length === 0) {
+    return entries;
+  }
+
+  return entries.filter((entry) => {
+    try {
+      const canonical = validatePath(getPath(entry));
+      return decidePathAccess(rules, operation, canonical) !== "deny";
+    } catch {
+      return true;
+    }
+  });
+}
+
 // System prompts
 const FILESYSTEM_SYSTEM_PROMPT = context`
   ## Following Conventions
@@ -395,12 +461,12 @@ export const READ_FILE_TOOL_DESCRIPTION = context`
   Assume this tool is able to read all files. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
 
   Usage:
-  - By default, it reads up to 100 lines starting from the beginning of the file
+  - By default, it reads up to ${DEFAULT_READ_LINE_LIMIT} lines starting from the beginning of the file
   - **IMPORTANT for large files and codebase exploration**: Use pagination with offset and limit parameters to avoid context overflow
-    - First scan: read_file(path, limit=100) to see file structure
-    - Read more sections: read_file(path, offset=100, limit=200) for next 200 lines
+    - First scan: read_file(path, limit=${DEFAULT_READ_LINE_LIMIT}) to see file structure
+    - Read more sections: read_file(path, offset=${DEFAULT_READ_LINE_LIMIT}, limit=200) for next 200 lines
     - Only omit limit (read full file) when necessary for editing
-  - Specify offset and limit: read_file(path, offset=0, limit=100) reads first 100 lines
+  - Specify offset and limit: read_file(path, offset=0, limit=${DEFAULT_READ_LINE_LIMIT}) reads first ${DEFAULT_READ_LINE_LIMIT} lines
   - Results are returned using cat -n format, with line numbers starting at 1
 - Lines longer than ${INT_FORMATTER.format(MAX_LINE_LENGTH)} characters will be split into multiple lines with continuation markers (e.g., 5.1, 5.2, etc.). When you specify a limit, these continuation lines count towards the limit.
   - You have the capability to call multiple tools in a single response. It is always better to speculatively read multiple files as a batch that are potentially useful.
@@ -513,11 +579,16 @@ export const EXECUTION_SYSTEM_PROMPT = context`
  */
 function createLsTool(
   backend: AnyBackendProtocol | BackendFactory,
-  options: { customDescription: string | undefined },
+  options: {
+    customDescription: string | undefined;
+    permissions: FilesystemPermission[];
+  },
 ) {
-  const { customDescription } = options;
+  const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
+      enforcePermission(permissions, "read", input.path ?? "/");
+
       const resolvedBackend = await resolveBackend(backend, runtime);
       const path = input.path || "/";
       const lsResult = await resolvedBackend.ls(path);
@@ -526,7 +597,13 @@ function createLsTool(
         return `Error listing files: ${lsResult.error}`;
       }
 
-      const infos = lsResult.files || [];
+      const infos = filterByPermissions(
+        lsResult.files ?? [],
+        permissions,
+        "read",
+        (info) => info.path,
+      );
+
       if (infos.length === 0) {
         return `No files found in ${path}`;
       }
@@ -571,11 +648,14 @@ function createReadFileTool(
   options: {
     customDescription: string | undefined;
     toolTokenLimitBeforeEvict: number | null;
+    permissions: FilesystemPermission[];
   },
 ) {
-  const { customDescription, toolTokenLimitBeforeEvict } = options;
+  const { customDescription, toolTokenLimitBeforeEvict, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
+      enforcePermission(permissions, "read", input.file_path);
+
       const resolvedBackend = await resolveBackend(backend, runtime);
       const {
         file_path,
@@ -692,11 +772,16 @@ function createReadFileTool(
  */
 function createWriteFileTool(
   backend: AnyBackendProtocol | BackendFactory,
-  options: { customDescription: string | undefined },
+  options: {
+    customDescription: string | undefined;
+    permissions: FilesystemPermission[];
+  },
 ) {
-  const { customDescription } = options;
+  const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
+      enforcePermission(permissions, "write", input.file_path);
+
       const resolvedBackend = await resolveBackend(backend, runtime);
       const { file_path, content } = input;
       const result = await resolvedBackend.write(file_path, content);
@@ -740,11 +825,16 @@ function createWriteFileTool(
  */
 function createEditFileTool(
   backend: AnyBackendProtocol | BackendFactory,
-  options: { customDescription: string | undefined },
+  options: {
+    customDescription: string | undefined;
+    permissions: FilesystemPermission[];
+  },
 ) {
-  const { customDescription } = options;
+  const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
+      enforcePermission(permissions, "write", input.file_path);
+
       const resolvedBackend = await resolveBackend(backend, runtime);
       const { file_path, old_string, new_string, replace_all = false } = input;
       const result = await resolvedBackend.edit(
@@ -799,11 +889,16 @@ function createEditFileTool(
  */
 function createGlobTool(
   backend: AnyBackendProtocol | BackendFactory,
-  options: { customDescription: string | undefined },
+  options: {
+    customDescription: string | undefined;
+    permissions: FilesystemPermission[];
+  },
 ) {
-  const { customDescription } = options;
+  const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
+      enforcePermission(permissions, "read", input.path ?? "/");
+
       const resolvedBackend = await resolveBackend(backend, runtime);
       const { pattern, path = "/" } = input;
       const globResult = await resolvedBackend.glob(pattern, path);
@@ -812,7 +907,13 @@ function createGlobTool(
         return `Error finding files: ${globResult.error}`;
       }
 
-      const infos = globResult.files || [];
+      const infos = filterByPermissions(
+        globResult.files ?? [],
+        permissions,
+        "read",
+        (info) => info.path,
+      );
+
       if (infos.length === 0) {
         return `No files found matching pattern '${pattern}'`;
       }
@@ -845,11 +946,16 @@ function createGlobTool(
  */
 function createGrepTool(
   backend: AnyBackendProtocol | BackendFactory,
-  options: { customDescription: string | undefined },
+  options: {
+    customDescription: string | undefined;
+    permissions: FilesystemPermission[];
+  },
 ) {
-  const { customDescription } = options;
+  const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
+      enforcePermission(permissions, "read", input.path ?? "/");
+
       const resolvedBackend = await resolveBackend(backend, runtime);
       const { pattern, path = "/", glob = null } = input;
       const result = await resolvedBackend.grep(pattern, path, glob);
@@ -859,7 +965,12 @@ function createGrepTool(
         return result.error;
       }
 
-      const matches = result.matches ?? [];
+      const matches = filterByPermissions(
+        result.matches ?? [],
+        permissions,
+        "read",
+        (m) => m.path,
+      );
 
       if (matches.length === 0) {
         return `No matches found for pattern '${pattern}'`;
@@ -909,9 +1020,12 @@ function createGrepTool(
  */
 function createExecuteTool(
   backend: AnyBackendProtocol | BackendFactory,
-  options: { customDescription: string | undefined },
+  options: {
+    customDescription: string | undefined;
+    permissions: FilesystemPermission[];
+  },
 ) {
-  const { customDescription } = options;
+  const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
       const resolvedBackend = await resolveBackend(backend, runtime);
@@ -922,6 +1036,20 @@ function createExecuteTool(
           "Error: Execution not available. This agent's backend " +
           "does not support command execution (SandboxBackendProtocol). " +
           "To use the execute tool, provide a backend that implements SandboxBackendProtocol."
+        );
+      }
+
+      // Guard against factory-backed sandbox backends used with permissions.
+      // The startup check skips factory backends since they can't be resolved
+      // at configuration time — this catches that case at invocation.
+      if (
+        permissions.length > 0 &&
+        !allPathsScopedToRoutes(permissions, resolvedBackend)
+      ) {
+        return (
+          "Error: Execution not available. Filesystem permissions cannot be " +
+          "used with a backend that supports command execution because shell " +
+          "commands can access any path, making path-based rules ineffective."
         );
       }
 
@@ -965,6 +1093,48 @@ export interface FilesystemMiddlewareOptions {
   toolTokenLimitBeforeEvict?: number | null;
   /** Optional token limit before evicting a HumanMessage to the filesystem (default: 50000 tokens, ~200KB) */
   humanMessageTokenLimitBeforeEvict?: number | null;
+  /**
+   * Filesystem permission rules enforced on every tool call.
+   *
+   * Rules are evaluated in declaration order; first match wins; permissive
+   * default. Applies to `ls`, `read_file`, `write_file`, `edit_file`,
+   * `glob`, and `grep`.
+   *
+   * **Note on `execute`**: permissions are not enforced on `execute` because
+   * shell commands can access any path regardless of path-based rules. Using
+   * permissions with an execution-capable backend (one where `isSandboxBackend`
+   * returns `true`) throws a `ConfigurationError` unless the backend is a
+   * `CompositeBackend` and every permission path is scoped to a route prefix.
+   *
+   * When omitted or empty, all filesystem operations are permitted.
+   */
+  permissions?: FilesystemPermission[];
+}
+
+/**
+ * Returns true only when backend exposes route prefixes (CompositeBackend) and
+ * every permission path is scoped under one of them.
+ */
+function allPathsScopedToRoutes(
+  permissions: FilesystemPermission[],
+  backend: AnyBackendProtocol,
+): boolean {
+  if (!CompositeBackend.isInstance(backend)) {
+    return false;
+  }
+
+  const prefixes = backend.routePrefixes;
+  if (prefixes.length === 0) {
+    return false;
+  }
+
+  return permissions.every((rule) =>
+    rule.paths.every((path) =>
+      prefixes.some((prefix) =>
+        path.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`),
+      ),
+    ),
+  );
 }
 
 /**
@@ -979,7 +1149,27 @@ export function createFilesystemMiddleware(
     customToolDescriptions = null,
     toolTokenLimitBeforeEvict = 20000,
     humanMessageTokenLimitBeforeEvict = 50000,
+    permissions = [],
   } = options;
+
+  if (permissions.length > 0) {
+    validatePermissionPaths(permissions);
+  }
+
+  if (
+    permissions.length > 0 &&
+    typeof backend !== "function" &&
+    isSandboxBackend(backend) &&
+    !allPathsScopedToRoutes(permissions, backend)
+  ) {
+    throw new Error(
+      "Filesystem permissions cannot be used with a backend that supports command " +
+        "execution. Shell commands can access any path, making path-based rules " +
+        "ineffective. Either remove permissions, use a backend without execution " +
+        "support, or use a CompositeBackend with all permission paths scoped to a " +
+        "route prefix.",
+    );
+  }
 
   const baseSystemPrompt = customSystemPrompt || FILESYSTEM_SYSTEM_PROMPT;
 
@@ -991,25 +1181,32 @@ export function createFilesystemMiddleware(
   const allToolsByName = {
     ls: createLsTool(backend, {
       customDescription: customToolDescriptions?.ls,
+      permissions,
     }),
     read_file: createReadFileTool(backend, {
       customDescription: customToolDescriptions?.read_file,
       toolTokenLimitBeforeEvict,
+      permissions,
     }),
     write_file: createWriteFileTool(backend, {
       customDescription: customToolDescriptions?.write_file,
+      permissions,
     }),
     edit_file: createEditFileTool(backend, {
       customDescription: customToolDescriptions?.edit_file,
+      permissions,
     }),
     glob: createGlobTool(backend, {
       customDescription: customToolDescriptions?.glob,
+      permissions,
     }),
     grep: createGrepTool(backend, {
       customDescription: customToolDescriptions?.grep,
+      permissions,
     }),
     execute: createExecuteTool(backend, {
       customDescription: customToolDescriptions?.execute,
+      permissions,
     }),
   } satisfies Record<FilesystemToolName, unknown>;
   const allTools = Object.values(allToolsByName);
@@ -1149,9 +1346,10 @@ export function createFilesystemMiddleware(
         msg: ToolMessage,
         toolTokenLimitBeforeEvict: number,
       ) {
+        const textContent = msg.text;
         if (
-          typeof msg.content === "string" &&
-          msg.content.length > toolTokenLimitBeforeEvict * NUM_CHARS_PER_TOKEN
+          textContent.length >
+          toolTokenLimitBeforeEvict * NUM_CHARS_PER_TOKEN
         ) {
           const resolvedBackend = await resolveBackend(backend, {
             ...request.runtime,
@@ -1164,7 +1362,7 @@ export function createFilesystemMiddleware(
 
           const writeResult = await resolvedBackend.write(
             evictPath,
-            msg.content,
+            textContent,
           );
 
           if (writeResult.error) {
@@ -1172,7 +1370,7 @@ export function createFilesystemMiddleware(
           }
 
           // Create preview showing head and tail of the result
-          const contentSample = createContentPreview(msg.content);
+          const contentSample = createContentPreview(textContent);
           const replacementText = TOO_LARGE_TOOL_MSG.replace(
             "{tool_call_id}",
             msg.tool_call_id,

@@ -2,12 +2,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { StoreBackend } from "./store.js";
 import type { BackendRuntime } from "./protocol.js";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
-import { getStore as getLangGraphStore } from "@langchain/langgraph";
+import {
+  getConfig,
+  getCurrentTaskInput,
+  getStore as getLangGraphStore,
+} from "@langchain/langgraph";
 
 vi.mock("@langchain/langgraph", async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...(actual as any),
+    getConfig: vi.fn(),
+    getCurrentTaskInput: vi.fn(),
     getStore: vi.fn(),
   };
 });
@@ -32,6 +38,8 @@ function makeConfig() {
 describe("StoreBackend", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getConfig).mockReturnValue({} as any);
+    vi.mocked(getCurrentTaskInput).mockReturnValue(undefined as any);
   });
 
   it("should handle CRUD and search operations", async () => {
@@ -251,6 +259,30 @@ describe("StoreBackend", () => {
 
     const defaultItems = await store.search(["filesystem"]);
     expect(defaultItems.some((item) => item.key === "/test.txt")).toBe(false);
+  });
+
+  it("should prefer assistant_id from runtime config metadata", async () => {
+    const { store } = makeConfig();
+    const runtimeWithConfig = {
+      state: { files: {}, messages: [] },
+      store,
+      assistantId: "legacy-assistant",
+      config: {
+        metadata: {
+          assistant_id: "config-assistant",
+        },
+      },
+    };
+
+    const backend = new StoreBackend(runtimeWithConfig);
+
+    await backend.write("/test.txt", "content");
+
+    const configItems = await store.search(["config-assistant", "filesystem"]);
+    expect(configItems.some((item) => item.key === "/test.txt")).toBe(true);
+
+    const legacyItems = await store.search(["legacy-assistant", "filesystem"]);
+    expect(legacyItems.some((item) => item.key === "/test.txt")).toBe(false);
   });
 
   describe("uploadFiles", () => {
@@ -532,6 +564,27 @@ describe("StoreBackend", () => {
     expect(items.some((item) => item.key === "/test.txt")).toBe(true);
   });
 
+  it("should resolve namespace from a factory in legacy mode", async () => {
+    const { store } = makeConfig();
+    const runtime = {
+      state: { files: {}, messages: [], userId: "legacy-user" },
+      store,
+    };
+
+    const backend = new StoreBackend(runtime, {
+      namespace: ({ state }) => [
+        "memories",
+        (state as { userId: string }).userId,
+        "filesystem",
+      ],
+    });
+
+    await backend.write("/test.txt", "context-derived namespace");
+
+    const items = await store.search(["memories", "legacy-user", "filesystem"]);
+    expect(items.some((item) => item.key === "/test.txt")).toBe(true);
+  });
+
   it("should handle large tool result interception via middleware", async () => {
     const { store } = makeConfig();
     const { createFilesystemMiddleware } = await import("../middleware/fs.js");
@@ -706,9 +759,14 @@ describe("StoreBackend", () => {
     /**
      * Helper to set up a zero-arg StoreBackend with a mocked getStore.
      */
-    function makeZeroArgConfig() {
+    function makeZeroArgConfig(options?: {
+      state?: unknown;
+      config?: Record<string, unknown>;
+    }) {
       const store = new InMemoryStore();
       vi.mocked(getLangGraphStore).mockReturnValue(store);
+      vi.mocked(getCurrentTaskInput).mockReturnValue(options?.state as any);
+      vi.mocked(getConfig).mockReturnValue((options?.config ?? {}) as any);
       return { store };
     }
 
@@ -769,6 +827,21 @@ describe("StoreBackend", () => {
       expect(defaultItems.some((item) => item.key === "/test.txt")).toBe(false);
     });
 
+    it("uses an explicit store passed in constructor options", async () => {
+      const store = new InMemoryStore();
+      vi.mocked(getLangGraphStore).mockReturnValue(undefined as any);
+
+      const backend = new StoreBackend({
+        store,
+        namespace: ["test", "filesystem"],
+      });
+
+      await backend.write("/test.txt", "explicit store");
+
+      const items = await store.search(["test", "filesystem"]);
+      expect(items.some((item) => item.key === "/test.txt")).toBe(true);
+    });
+
     it("falls back to ['filesystem'] namespace without explicit namespace", async () => {
       makeZeroArgConfig();
       const backend = new StoreBackend();
@@ -777,6 +850,48 @@ describe("StoreBackend", () => {
 
       const readRes = await backend.read("/test.txt");
       expect(readRes.content).toContain("default ns");
+    });
+
+    it("uses assistant_id from LangGraph config metadata", async () => {
+      const { store } = makeZeroArgConfig({
+        config: {
+          metadata: {
+            assistant_id: "zero-arg-assistant",
+          },
+        },
+      });
+      const backend = new StoreBackend();
+
+      await backend.write("/test.txt", "default ns");
+
+      const items = await store.search(["zero-arg-assistant", "filesystem"]);
+      expect(items.some((item) => item.key === "/test.txt")).toBe(true);
+    });
+
+    it("uses namespace factory with current task state", async () => {
+      const { store } = makeZeroArgConfig({
+        state: {
+          files: {},
+          messages: [],
+          userId: "zero-arg-user",
+        },
+      });
+      const backend = new StoreBackend({
+        namespace: ({ state }) => [
+          "memories",
+          (state as { userId: string }).userId,
+          "filesystem",
+        ],
+      });
+
+      await backend.write("/test.txt", "namespaced content");
+
+      const items = await store.search([
+        "memories",
+        "zero-arg-user",
+        "filesystem",
+      ]);
+      expect(items.some((item) => item.key === "/test.txt")).toBe(true);
     });
 
     it("throws when no store is available in execution context", () => {

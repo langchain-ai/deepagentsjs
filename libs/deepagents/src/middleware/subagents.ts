@@ -20,6 +20,7 @@ import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
+import { FilesystemPermission } from "../permissions/types.js";
 
 export type { AgentMiddleware };
 
@@ -334,6 +335,28 @@ export interface SubAgent {
    * ```
    */
   responseFormat?: CreateAgentParams["responseFormat"];
+
+  /**
+   * Filesystem permission rules for this subagent.
+   *
+   * When specified, these rules **replace** the parent agent's permissions
+   * for all tool calls made by this subagent. When omitted, the subagent
+   * inherits the parent agent's permissions.
+   *
+   * Subagent permissions are a full replacement, not a merge.
+   *
+   * @example
+   * ```ts
+   * // Parent denies /restricted/**; this subagent can read it.
+   * const reader: SubAgent = {
+   *   name: "reader",
+   *   permissions: [
+   *     { operations: ["read"], paths: ["/restricted/**"] },
+   *   ],
+   * };
+   * ```
+   */
+  permissions?: FilesystemPermission[];
 }
 
 /**
@@ -601,11 +624,22 @@ function createTaskTool(options: {
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
 
-      // Invoke the subagent
-      const result = (await subagent.invoke(subagentState, config)) as Record<
-        string,
-        unknown
-      >;
+      // Invoke the subagent with ls_agent_type metadata for LangSmith tracing
+      const subagentConfig = {
+        ...config,
+        metadata: {
+          ...config.metadata,
+          lc_agent_name: subagent_type,
+        },
+        configurable: {
+          ...config.configurable,
+          ls_agent_type: "subagent",
+        },
+      };
+      const result = (await subagent.invoke(
+        subagentState,
+        subagentConfig,
+      )) as Record<string, unknown>;
 
       if (!config.toolCall?.id) {
         if (result.structuredResponse != null) {

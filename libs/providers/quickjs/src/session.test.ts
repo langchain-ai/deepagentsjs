@@ -1,8 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { tool } from "langchain";
 import { z } from "zod/v4";
-import type { BackendProtocolV2, ReadRawResult, WriteResult } from "deepagents";
+import type {
+  AnyBackendProtocol,
+  FileDownloadResponse,
+  SkillMetadata,
+} from "deepagents";
 import { ReplSession } from "./session.js";
+import type { SkillsContext } from "./types.js";
 
 const TIMEOUT = 5000;
 let nextId = 0;
@@ -11,39 +16,34 @@ function uniqueThreadId() {
   return `test-${++nextId}-${Date.now()}`;
 }
 
-function createMockBackend(
-  files: Record<string, string> = {},
-): BackendProtocolV2 & { written: Record<string, string> } {
-  const store = { ...files };
-  const written: Record<string, string> = {};
-
-  return {
-    written,
-    ls: async () => ({ files: [] }),
-    read: async (filePath: string) => ({ content: store[filePath] ?? "" }),
-    readRaw: async (filePath: string): Promise<ReadRawResult> => {
-      if (!(filePath in store)) {
-        return { error: `ENOENT: ${filePath}` };
+function createInMemoryFileTools() {
+  const store = new Map<string, string>();
+  const readTool = tool(
+    async (input: { path: string }) => {
+      const content = store.get(input.path);
+      if (content === undefined) {
+        throw new Error(`ENOENT: no such file or directory '${input.path}'`);
       }
-      const now = new Date().toISOString();
-      return {
-        data: {
-          content: store[filePath],
-          mimeType: "text/plain",
-          created_at: now,
-          modified_at: now,
-        },
-      };
+      return content;
     },
-    grep: async () => ({ matches: [] }),
-    glob: async () => ({ files: [] }),
-    write: async (filePath: string, content: string): Promise<WriteResult> => {
-      store[filePath] = content;
-      written[filePath] = content;
-      return { path: filePath };
+    {
+      name: "read_file",
+      description: "Read a file",
+      schema: z.object({ path: z.string() }),
     },
-    edit: async () => ({ error: "not implemented" }),
-  };
+  );
+  const writeTool = tool(
+    async (input: { path: string; content: string }) => {
+      store.set(input.path, input.content);
+      return "ok";
+    },
+    {
+      name: "write_file",
+      description: "Write a file",
+      schema: z.object({ path: z.string(), content: z.string() }),
+    },
+  );
+  return { readTool, writeTool, store };
 }
 
 describe("REPL Engine", () => {
@@ -252,6 +252,51 @@ describe("REPL Engine", () => {
     });
   });
 
+  describe("console buffer", () => {
+    it("caps output at maxResultChars and reports dropped chars", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        maxResultChars: 10,
+      });
+      const result = await session.eval(
+        'console.log("hello world this is too long")',
+        TIMEOUT,
+      );
+      expect(result.logsDroppedChars).toBeGreaterThan(0);
+      expect(result.logs.join("\n").length).toBeLessThanOrEqual(10);
+    });
+
+    it("preserves early output when overflow occurs", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        maxResultChars: 5,
+      });
+      const result = await session.eval('console.log("abcdefghij")', TIMEOUT);
+      expect(result.logs.join("")).toMatch(/^abcde/);
+      expect(result.logsDroppedChars).toBeGreaterThan(0);
+    });
+
+    it("resets truncation state between evaluations", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        maxResultChars: 10,
+      });
+      await session.eval(
+        'console.log("overflow: this is way too long")',
+        TIMEOUT,
+      );
+      const result = await session.eval('console.log("hi")', TIMEOUT);
+      expect(result.logsDroppedChars).toBe(0);
+      expect(result.logs.join("")).toContain("hi");
+    });
+
+    it("drops everything with a zero-char budget", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        maxResultChars: 0,
+      });
+      const result = await session.eval('console.log("anything")', TIMEOUT);
+      expect(result.logs).toHaveLength(0);
+      expect(result.logsDroppedChars).toBeGreaterThan(0);
+    });
+  });
+
   describe("execution limits", () => {
     it("should timeout on infinite loops", async () => {
       session = ReplSession.getOrCreate(uniqueThreadId());
@@ -292,52 +337,199 @@ describe("REPL Engine", () => {
     });
   });
 
-  describe("backend VFS", () => {
-    it("should read files from the backend", async () => {
+  describe("sandbox globals", () => {
+    it("should not expose readFile as a global", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result = await session.eval("typeof readFile", TIMEOUT);
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("undefined");
+    });
+
+    it("should not expose writeFile as a global", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result = await session.eval("typeof writeFile", TIMEOUT);
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("undefined");
+    });
+  });
+
+  describe("PTC file tools", () => {
+    it("should read files via PTC tool", async () => {
+      const { readTool, writeTool, store } = createInMemoryFileTools();
+      store.set("/data.json", '{"n":42}');
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend({ "/data.json": '{"n": 42}' }),
+        tools: [readTool, writeTool],
       });
 
       const result = await session.eval(
-        'const raw = await readFile("/data.json"); JSON.parse(raw).n',
+        'const raw = await tools.readFile({ path: "/data.json" }); JSON.parse(raw).n',
         TIMEOUT,
       );
+      expect(result.ok).toBe(true);
       expect(result.value).toBe(42);
     });
 
-    it("should error on missing files", async () => {
+    it("should error on missing files via PTC tool", async () => {
+      const { readTool, writeTool } = createInMemoryFileTools();
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
+        tools: [readTool, writeTool],
       });
 
       const result = await session.eval(
-        'var msg; try { await readFile("/missing") } catch(e) { msg = e.message }\nmsg',
+        'var msg; try { await tools.readFile({ path: "/missing" }) } catch(e) { msg = e.message }\nmsg',
         TIMEOUT,
       );
       expect(result.ok).toBe(true);
       expect(result.value).toContain("ENOENT");
     });
 
-    it("should buffer writes and flush to the backend", async () => {
-      const backend = createMockBackend();
-      session = ReplSession.getOrCreate(uniqueThreadId(), { backend });
+    it("should write and read back in the same eval", async () => {
+      const { readTool, writeTool } = createInMemoryFileTools();
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [readTool, writeTool],
+      });
 
-      await session.eval('await writeFile("/out.txt", "hello")', TIMEOUT);
-      expect(backend.written["/out.txt"]).toBeUndefined();
-      expect(session.pendingWrites).toHaveLength(1);
-      await session.flushWrites(backend);
-      expect(backend.written["/out.txt"]).toBe("hello");
-      expect(session.pendingWrites).toHaveLength(0);
+      const result = await session.eval(
+        `await tools.writeFile({ path: "/f.txt", content: "hello" });
+         await tools.readFile({ path: "/f.txt" })`,
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("hello");
     });
 
-    it("should read back written files after flush", async () => {
-      const backend = createMockBackend();
-      session = ReplSession.getOrCreate(uniqueThreadId(), { backend });
+    it("should write in one eval and read in the next", async () => {
+      const { readTool, writeTool } = createInMemoryFileTools();
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [readTool, writeTool],
+      });
 
-      await session.eval('await writeFile("/f.txt", "content")', TIMEOUT);
-      await session.flushWrites(backend);
-      const result = await session.eval('await readFile("/f.txt")', TIMEOUT);
-      expect(result.value).toBe("content");
+      await session.eval(
+        'await tools.writeFile({ path: "/out.txt", content: "persisted" })',
+        TIMEOUT,
+      );
+      const result = await session.eval(
+        'await tools.readFile({ path: "/out.txt" })',
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("persisted");
+    });
+  });
+
+  describe("PTC call budget", () => {
+    const greetTool = tool(
+      async (input: { name: string }) => `hello ${input.name}`,
+      {
+        name: "greet",
+        description: "Greet someone",
+        schema: z.object({ name: z.string() }),
+      },
+    );
+
+    it("should reject on the call that exceeds the budget", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: 1,
+      });
+
+      const result = await session.eval(
+        `await tools.greet({ name: "a" });
+         await tools.greet({ name: "b" });`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("PTC call budget");
+    });
+
+    it("should succeed when calls stay within the budget", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: 2,
+      });
+
+      const result = await session.eval(
+        `const a = await tools.greet({ name: "a" });
+         const b = await tools.greet({ name: "b" });
+         a + " " + b`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("hello a hello b");
+    });
+
+    it("should reset the budget between evals", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: 1,
+      });
+
+      const first = await session.eval(
+        `await tools.greet({ name: "a" })`,
+        TIMEOUT,
+      );
+      const second = await session.eval(
+        `await tools.greet({ name: "b" })`,
+        TIMEOUT,
+      );
+
+      expect(first.ok).toBe(true);
+      expect(second.ok).toBe(true);
+    });
+
+    it("should allow unlimited calls when maxPtcCalls is null", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: null,
+      });
+
+      // Build a string that makes more calls than DEFAULT_MAX_PTC_CALLS
+      const calls = Array.from(
+        { length: 300 },
+        (_, i) => `await tools.greet({ name: "${i}" })`,
+      ).join(";\n");
+
+      const result = await session.eval(calls, TIMEOUT * 6);
+
+      expect(result.ok).toBe(true);
+    });
+
+    it("should surface budget message via JS try/catch", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: 1,
+      });
+
+      const result = await session.eval(
+        `var msg;
+         await tools.greet({ name: "a" });
+         try { await tools.greet({ name: "b" }) } catch (e) { msg = e.message }
+         msg`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toContain("PTC call budget");
+    });
+
+    it("should reject Promise.all when any call exceeds the budget", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: 1,
+      });
+
+      const result = await session.eval(
+        `await Promise.all([
+           tools.greet({ name: "a" }),
+           tools.greet({ name: "b" }),
+         ])`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("PTC call budget");
     });
   });
 
@@ -350,7 +542,6 @@ describe("REPL Engine", () => {
       });
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [addTool],
       });
 
@@ -370,7 +561,6 @@ describe("REPL Engine", () => {
       });
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [addTool],
       });
 
@@ -392,7 +582,6 @@ describe("REPL Engine", () => {
       });
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [upperTool, lowerTool],
       });
 
@@ -420,7 +609,6 @@ describe("REPL Engine", () => {
       );
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [webSearchTool],
       });
 
@@ -440,7 +628,6 @@ describe("REPL Engine", () => {
       });
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [echoTool],
       });
 
@@ -470,7 +657,6 @@ describe("REPL Engine", () => {
       );
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [failingTool],
       });
 
@@ -542,5 +728,223 @@ describe("REPL Engine", () => {
       const result = await restored.eval("msg", TIMEOUT);
       expect(result.value).toBe("hello");
     });
+  });
+
+  describe("session deletion", () => {
+    it("should dispose and remove an existing session", () => {
+      const session = ReplSession.getOrCreate("test-key");
+      expect(ReplSession.get("test-key")).toBe(session);
+      ReplSession.deleteSession("test-key");
+      expect(ReplSession.get("test-key")).toBeNull();
+    });
+
+    it("should no-op for a key that does not exist", () => {
+      expect(() => ReplSession.deleteSession("nonexistent")).not.toThrow();
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Skills module loader
+// ---------------------------------------------------------------------------
+
+const enc = new TextEncoder();
+
+function makeSkillsBackend(files: Record<string, string>): AnyBackendProtocol {
+  return {
+    glob: async (pattern: string, basePath?: string) => {
+      const ext = pattern.replace("**/*", "");
+      const matches = Object.keys(files)
+        .filter((p) => p.startsWith(basePath ?? "") && p.endsWith(ext))
+        .map((p) => ({ path: p }));
+      return { files: matches };
+    },
+    downloadFiles: async (paths: string[]) => {
+      return paths.map((p): FileDownloadResponse => {
+        const content = files[p];
+        if (content === undefined) {
+          return { path: p, content: null, error: "file_not_found" };
+        }
+        return { path: p, content: enc.encode(content), error: null };
+      });
+    },
+  } as unknown as AnyBackendProtocol;
+}
+
+function makeSkillsMeta(
+  name: string,
+  entrypoint: string,
+  skillDir?: string,
+): SkillMetadata {
+  const dir = skillDir ?? `/skills/${name}`;
+  return {
+    name,
+    description: `Test skill ${name}`,
+    path: `${dir}/SKILL.md`,
+    metadata: { entrypoint },
+  };
+}
+
+function makeSkillsContext(
+  metadata: SkillMetadata[],
+  files: Record<string, string>,
+): SkillsContext {
+  return { metadata, backend: makeSkillsBackend(files) };
+}
+
+describe("skills module loader", () => {
+  let session: ReplSession;
+
+  beforeEach(() => {
+    ReplSession.clearCache();
+  });
+
+  afterEach(() => {
+    if (session) session.dispose();
+  });
+
+  it("resolves a single-file skill and exposes its exports", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+    });
+    session.setSkillsContext(
+      makeSkillsContext([makeSkillsMeta("my-skill", "index.js")], {
+        "/my-skill/index.js": "export const VALUE = 42;",
+      }),
+    );
+
+    const result = await session.eval(
+      `const mod = await import("@/skills/my-skill"); mod.VALUE`,
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe(42);
+  });
+
+  it("resolves relative imports inside a multi-file skill", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+    });
+    session.setSkillsContext(
+      makeSkillsContext([makeSkillsMeta("my-skill", "index.js")], {
+        "/my-skill/index.js":
+          "import { add } from './lib/math.js'; export function compute() { return add(1, 2); }",
+        "/my-skill/lib/math.js": "export function add(a, b) { return a + b; }",
+      }),
+    );
+
+    const result = await session.eval(
+      `const { compute } = await import("@/skills/my-skill"); compute()`,
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe(3);
+  });
+
+  it("resolves relative imports when entrypoint is in a subdirectory", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+    });
+    session.setSkillsContext(
+      makeSkillsContext([makeSkillsMeta("my-skill", "scripts/index.js")], {
+        "/my-skill/scripts/index.js":
+          "import { add } from './math.js'; export function compute() { return add(3, 4); }",
+        "/my-skill/scripts/math.js":
+          "export function add(a, b) { return a + b; }",
+      }),
+    );
+
+    const result = await session.eval(
+      `const { compute } = await import("@/skills/my-skill"); compute()`,
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe(7);
+  });
+
+  it("rejects import of an unknown skill with a recognizable message", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+    });
+    session.setSkillsContext(makeSkillsContext([], {}));
+
+    const result = await session.eval(
+      `await import("@/skills/unknown")`,
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error?.message).toContain("not available on this agent");
+  });
+
+  it("rejects import when skills context is cleared", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+    });
+    session.setSkillsContext(undefined);
+
+    const result = await session.eval(
+      `await import("@/skills/my-skill")`,
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.error?.message).toContain("not configured");
+  });
+
+  it("rejects traversal escape from inside a skill", async () => {
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+    });
+    session.setSkillsContext(
+      makeSkillsContext([makeSkillsMeta("my-skill", "index.js")], {
+        "/skills/my-skill/index.js":
+          "export { escape } from '../../other-skill/index.js';",
+      }),
+    );
+
+    const result = await session.eval(
+      `await import("@/skills/my-skill")`,
+      TIMEOUT,
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("caches a load failure and does not re-fetch from the backend", async () => {
+    let downloadCount = 0;
+    const meta = makeSkillsMeta("my-skill", "index.js");
+    const backend = {
+      glob: async (pattern: string) => {
+        const ext = pattern.replace("**/*", "");
+        if (ext === ".js") {
+          return { files: [{ path: "/skills/my-skill/index.js" }] };
+        }
+        return { files: [] };
+      },
+      downloadFiles: async (paths: string[]) => {
+        downloadCount++;
+        return paths.map(
+          (p): FileDownloadResponse => ({
+            path: p,
+            content: null,
+            error: "file_not_found",
+          }),
+        );
+      },
+    } as unknown as AnyBackendProtocol;
+
+    session = ReplSession.getOrCreate(uniqueThreadId(), {
+      skillsEnabled: true,
+    });
+    session.setSkillsContext({ metadata: [meta], backend });
+
+    await session.eval(
+      `await import("@/skills/my-skill").catch(() => null)`,
+      TIMEOUT,
+    );
+    await session.eval(
+      `await import("@/skills/my-skill").catch(() => null)`,
+      TIMEOUT,
+    );
+
+    expect(downloadCount).toBe(1);
   });
 });

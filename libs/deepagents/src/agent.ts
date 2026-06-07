@@ -1,5 +1,6 @@
 import {
   createAgent,
+  createMiddleware,
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
   todoListMiddleware,
@@ -7,7 +8,6 @@ import {
   type AgentMiddleware,
   context,
 } from "langchain";
-import { ChatAnthropic } from "@langchain/anthropic";
 import type {
   ClientTool,
   ServerTool,
@@ -27,7 +27,7 @@ import {
   createAsyncSubAgentMiddleware,
   isAsyncSubAgent,
 } from "./middleware/index.js";
-import { StateBackend } from "./backends/index.js";
+import { StateBackend } from "./backends/state.js";
 import { ConfigurationError } from "./errors.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
@@ -45,13 +45,24 @@ import type {
   InferStructuredResponse,
   SupportedResponseFormat,
 } from "./types.js";
+import { createSubagentTransformer } from "./stream.js";
 
 /**
  * required for type inference
  */
 import type * as _messages from "@langchain/core/messages";
 import type * as _langgraph from "@langchain/langgraph";
-import type { BaseLanguageModel } from "@langchain/core/language_models/base";
+import type { AnyStateSchema, StreamTransformer } from "@langchain/langgraph";
+import {
+  resolveHarnessProfile,
+  applyProfilePrompt,
+  resolveMiddleware,
+} from "./profiles/index.js";
+import {
+  isAnthropicModel,
+  getModelProvider,
+  getModelIdentifier,
+} from "./utils.js";
 
 const BASE_AGENT_PROMPT = context`
   You are a Deep Agent, an AI assistant that helps users accomplish tasks using tools. You respond with text and tool calls. The user can see your responses and tool outputs in real time.
@@ -97,21 +108,6 @@ const BUILTIN_TOOL_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Detect whether a model is an Anthropic model.
- * Used to gate Anthropic-specific prompt caching optimizations (cache_control breakpoints).
- */
-export function isAnthropicModel(model: BaseLanguageModel | string): boolean {
-  if (typeof model === "string") {
-    if (model.includes(":")) return model.split(":")[0] === "anthropic";
-    return model.startsWith("claude");
-  }
-  if (model.getName() === "ConfigurableModel") {
-    return (model as any)._defaultConfig?.modelProvider === "anthropic";
-  }
-  return model.getName() === "ChatAnthropic";
-}
-
-/**
  * Create a Deep Agent.
  *
  * This is the main entry point for building a production-style agent with
@@ -127,7 +123,7 @@ export function isAnthropicModel(model: BaseLanguageModel | string): boolean {
  *
  * @example
  * ```typescript
- * // Middleware with custom state
+ * // Custom state from middleware and/or the agent stateSchema param — both are merged
  * const ResearchMiddleware = createMiddleware({
  *   name: "ResearchMiddleware",
  *   stateSchema: z.object({ research: z.string().default("") }),
@@ -135,10 +131,11 @@ export function isAnthropicModel(model: BaseLanguageModel | string): boolean {
  *
  * const agent = createDeepAgent({
  *   middleware: [ResearchMiddleware],
+ *   stateSchema: z.object({ author: z.string().default("Me") }),
  * });
  *
  * const result = await agent.invoke({ messages: [...] });
- * // result.research is properly typed as string
+ * // result.research and result.author are properly typed as strings
  * ```
  */
 export function createDeepAgent<
@@ -147,25 +144,35 @@ export function createDeepAgent<
   const TMiddleware extends readonly AgentMiddleware[] = readonly [],
   const TSubagents extends readonly AnySubAgent[] = readonly [],
   const TTools extends readonly (ClientTool | ServerTool)[] = readonly [],
+  const TStreamTransformers extends ReadonlyArray<
+    () => StreamTransformer<any>
+  > = readonly [],
+  TStateSchema extends AnyStateSchema | InteropZodObject | undefined =
+    undefined,
 >(
   params: CreateDeepAgentParams<
     TResponse,
     ContextSchema,
     TMiddleware,
     TSubagents,
-    TTools
+    TTools,
+    TStreamTransformers,
+    TStateSchema
   > = {} as CreateDeepAgentParams<
     TResponse,
     ContextSchema,
     TMiddleware,
     TSubagents,
-    TTools
+    TTools,
+    TStreamTransformers,
+    TStateSchema
   >,
 ) {
   const {
-    model = new ChatAnthropic("claude-sonnet-4-6"),
+    model = "anthropic:claude-sonnet-4-6",
     tools = [],
     systemPrompt,
+    stateSchema,
     middleware: customMiddleware = [],
     subagents = [],
     responseFormat,
@@ -177,6 +184,8 @@ export function createDeepAgent<
     name,
     memory,
     skills,
+    permissions = [],
+    streamTransformers = [],
   } = params;
 
   const collidingTools = tools
@@ -190,6 +199,26 @@ export function createDeepAgent<
       "TOOL_NAME_COLLISION",
     );
   }
+
+  const harnessProfile =
+    typeof model === "string"
+      ? resolveHarnessProfile({ spec: model })
+      : resolveHarnessProfile({
+          providerHint: getModelProvider(model),
+          identifierHint: getModelIdentifier(model),
+        });
+
+  const toolOverrides = harnessProfile.toolDescriptionOverrides;
+  const effectiveTools: StructuredTool[] =
+    Object.keys(toolOverrides).length > 0
+      ? (tools as StructuredTool[]).map((t) =>
+          t.name in toolOverrides
+            ? Object.assign(Object.create(Object.getPrototypeOf(t)), t, {
+                description: toolOverrides[t.name],
+              })
+            : t,
+        )
+      : (tools as StructuredTool[]);
 
   const anthropicModel = isAnthropicModel(model);
   const cacheMiddleware = anthropicModel
@@ -210,6 +239,8 @@ export function createDeepAgent<
    * If a custom subagent needs skills, it must specify its own `skills` array.
    */
   const normalizeSubagentSpec = (input: SubAgent): SubAgent => {
+    const effectivePermissions = input.permissions ?? permissions;
+
     // Middleware for custom subagents (does NOT include skills from main agent).
     // Uses createSummarizationMiddleware (deepagents version) with backend support
     // and auto-computed defaults from model profile.
@@ -217,11 +248,14 @@ export function createDeepAgent<
       // Provides todo list management capabilities for tracking tasks.
       todoListMiddleware(),
       // Enables filesystem operations and optional long-term memory storage.
-      createFilesystemMiddleware({ backend }),
+      createFilesystemMiddleware({
+        backend,
+        permissions: effectivePermissions,
+      }),
       // Automatically summarizes conversation history when token limits are approached.
       // Uses createSummarizationMiddleware (deepagents version) with backend support
       // and auto-computed defaults from model profile.
-      createSummarizationMiddleware({ backend, model }),
+      createSummarizationMiddleware({ backend }),
       // Patches tool calls to ensure compatibility across different model providers.
       createPatchToolCallsMiddleware(),
       // Loads subagent-specific skills when configured.
@@ -257,16 +291,27 @@ export function createDeepAgent<
     )
     .map((item) => ("runnable" in item ? item : normalizeSubagentSpec(item)));
 
+  const gpConfig = harnessProfile.generalPurposeSubagent;
+  const gpDisabled = gpConfig?.enabled === false;
+
   if (
+    !gpDisabled &&
     !inlineSubagents.some(
       (item) => item.name === GENERAL_PURPOSE_SUBAGENT["name"],
     )
   ) {
+    const gpSystemPrompt =
+      gpConfig?.systemPrompt ??
+      applyProfilePrompt(harnessProfile, GENERAL_PURPOSE_SUBAGENT.systemPrompt);
+
     const generalPurposeSpec = normalizeSubagentSpec({
       ...GENERAL_PURPOSE_SUBAGENT,
+      description:
+        gpConfig?.description ?? GENERAL_PURPOSE_SUBAGENT.description,
+      systemPrompt: gpSystemPrompt,
       model,
       skills,
-      tools: tools as StructuredTool[],
+      tools: effectiveTools,
     });
     inlineSubagents.unshift(generalPurposeSpec);
   }
@@ -283,11 +328,11 @@ export function createDeepAgent<
     // Provides todo list management capabilities for tracking tasks.
     todoListMiddleware(),
     // Enables filesystem operations and optional long-term memory storage.
-    createFilesystemMiddleware({ backend }),
+    createFilesystemMiddleware({ backend, permissions }),
     // Enables delegation to specialized subagents for complex tasks.
     createSubAgentMiddleware({
       defaultModel: model,
-      defaultTools: tools as StructuredTool[],
+      defaultTools: effectiveTools,
       defaultInterruptOn: interruptOn,
       subagents: inlineSubagents,
       generalPurposeAgent: false,
@@ -295,7 +340,7 @@ export function createDeepAgent<
     // Automatically summarizes conversation history when token limits are approached.
     // Uses createSummarizationMiddleware (deepagents version) with backend support
     // for conversation history offloading and auto-computed defaults from model profile.
-    createSummarizationMiddleware({ model, backend }),
+    createSummarizationMiddleware({ backend }),
     // Patches tool calls to ensure compatibility across different model providers.
     createPatchToolCallsMiddleware(),
   ] as const;
@@ -341,36 +386,87 @@ export function createDeepAgent<
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
   ];
 
-  // Combine system prompt parameter with BASE_AGENT_PROMPT
+  // Apply profile middleware additions. Inserted before cache middleware
+  // so profile-injected middleware participates in prompt caching.
+  const profileMiddleware = resolveMiddleware(harnessProfile.extraMiddleware);
+  if (profileMiddleware.length > 0) {
+    const cacheIdx = middleware.findIndex(
+      (m) => m.name === "AnthropicPromptCachingMiddleware",
+    );
+    if (cacheIdx !== -1) {
+      middleware.splice(cacheIdx, 0, ...profileMiddleware);
+    } else {
+      middleware.push(...profileMiddleware);
+    }
+  }
+
+  // Apply profile middleware exclusions.
+  if (harnessProfile.excludedMiddleware.size > 0) {
+    const excluded = harnessProfile.excludedMiddleware;
+    const filtered = middleware.filter((m) => !excluded.has(m.name));
+    middleware.length = 0;
+    middleware.push(...filtered);
+  }
+
+  // Apply profile tool exclusions via a filtering middleware that runs
+  // after all tool-injecting middleware.
+  if (harnessProfile.excludedTools.size > 0) {
+    const excludedTools = harnessProfile.excludedTools;
+    middleware.push(
+      createMiddleware({
+        name: "_ToolExclusionMiddleware",
+        wrapModelCall: async (request: any, handler: any) => {
+          return handler({
+            ...request,
+            tools: request.tools?.filter(
+              (t: { name: string }) => !excludedTools.has(t.name),
+            ),
+          });
+        },
+      }),
+    );
+  }
+
+  // Combine system prompt parameter with profile-aware base prompt.
+  const effectiveBasePrompt = applyProfilePrompt(
+    harnessProfile,
+    BASE_AGENT_PROMPT,
+  );
+
   const finalSystemPrompt =
     typeof systemPrompt === "string"
       ? new SystemMessage({
           contentBlocks: [
             { type: "text", text: systemPrompt },
-            { type: "text", text: BASE_AGENT_PROMPT },
+            { type: "text", text: effectiveBasePrompt },
           ],
         })
       : SystemMessage.isInstance(systemPrompt)
         ? new SystemMessage({
             contentBlocks: [
               ...systemPrompt.contentBlocks,
-              { type: "text", text: BASE_AGENT_PROMPT },
+              { type: "text", text: effectiveBasePrompt },
             ],
           })
         : new SystemMessage({
-            contentBlocks: [{ type: "text", text: BASE_AGENT_PROMPT }],
+            contentBlocks: [{ type: "text", text: effectiveBasePrompt }],
           });
 
   const agent = createAgent({
     model,
     systemPrompt: finalSystemPrompt,
-    tools: tools as StructuredTool[],
+    stateSchema,
+    tools: effectiveTools,
     middleware,
     ...(responseFormat !== null && { responseFormat }),
     contextSchema,
     checkpointer,
     store,
     name,
+    streamTransformers: [
+      createSubagentTransformer([]),
+      ...streamTransformers,
+    ] as const,
   }).withConfig({
     recursionLimit: 10_000,
     metadata: {
@@ -392,20 +488,22 @@ export function createDeepAgent<
   /**
    * Return as DeepAgent with proper DeepAgentTypeConfig
    * - Response: InferStructuredResponse<TResponse> (unwraps ToolStrategy<T>/ProviderStrategy<T> → T)
-   * - State: undefined (state comes from middleware)
+   * - State: User-provided stateSchema, merged with middleware-derived state downstream
    * - Context: ContextSchema
    * - Middleware: AllMiddleware (built-in + custom + subagent middleware for state inference)
    * - Tools: TTools
    * - Subagents: TSubagents (for type-safe streaming)
+   * - StreamTransformers: TStreamTransformers
    */
   return agent as unknown as DeepAgent<
     DeepAgentTypeConfig<
       InferStructuredResponse<TResponse>,
-      undefined,
+      TStateSchema,
       ContextSchema,
       AllMiddleware,
       TTools,
-      TSubagents
+      TSubagents,
+      TStreamTransformers
     >
   >;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { transformForEval } from "./transform.js";
+import { transformForEval, stripTypeSyntax } from "./transform.js";
 
 describe("transformForEval", () => {
   describe("basic wrapping", () => {
@@ -159,6 +159,209 @@ describe("transformForEval", () => {
       const result = transformForEval("{{{{invalid syntax");
       expect(result).toContain("(async () => {");
       expect(result).toContain("{{{{invalid syntax");
+    });
+  });
+});
+
+describe("stripTypeSyntax", () => {
+  describe("plain JS passthrough", () => {
+    it("returns an empty string unchanged", () => {
+      expect(stripTypeSyntax("")).toBe("");
+    });
+
+    it("returns plain JS module unchanged", () => {
+      const code = `export function add(a, b) { return a + b; }`;
+      expect(stripTypeSyntax(code)).toBe(code);
+    });
+  });
+
+  describe("TS-only top-level forms are removed", () => {
+    it("removes interface declarations", () => {
+      const result = stripTypeSyntax("interface Foo { x: number }");
+      expect(result).not.toContain("interface");
+      expect(result.trim()).toBe("");
+    });
+
+    it("removes type aliases", () => {
+      const result = stripTypeSyntax("type ID = string;");
+      expect(result).not.toContain("type ID");
+      expect(result.trim()).toBe("");
+    });
+
+    it("removes enum declarations", () => {
+      const result = stripTypeSyntax("enum Direction { Up, Down }");
+      expect(result).not.toContain("enum");
+      expect(result.trim()).toBe("");
+    });
+
+    it("removes declare function", () => {
+      const result = stripTypeSyntax("declare function foo(x: number): void;");
+      expect(result).not.toContain("declare");
+      expect(result.trim()).toBe("");
+    });
+
+    it("removes declare const", () => {
+      const result = stripTypeSyntax(
+        "declare const tools: { glob: (args: { pattern: string }) => Promise<string> };",
+      );
+      expect(result).not.toContain("declare");
+      expect(result).not.toContain("tools");
+      expect(result.trim()).toBe("");
+    });
+
+    it("removes declare const but keeps regular const", () => {
+      const code = [
+        "declare const tools: { x: number };",
+        "const y = 42;",
+      ].join("\n");
+      const result = stripTypeSyntax(code);
+      expect(result).not.toContain("declare");
+      expect(result).not.toContain("tools");
+      expect(result).toContain("const y = 42");
+    });
+
+    it("removes mixed TS-only and JS nodes, keeping JS", () => {
+      const code = [
+        "interface Foo { x: number }",
+        "export function bar() { return 1; }",
+      ].join("\n");
+      const result = stripTypeSyntax(code);
+      expect(result).not.toContain("interface");
+      expect(result).toContain("export function bar");
+    });
+  });
+
+  describe("type annotations stripped from expressions", () => {
+    it("strips optional parameter marker with type", () => {
+      const result = stripTypeSyntax(
+        "export function foo(a: number, b?: string) { return a; }",
+      );
+      expect(result).toContain("function foo(a, b)");
+      expect(result).not.toContain("?");
+    });
+
+    it("strips optional parameter marker without type", () => {
+      const result = stripTypeSyntax(
+        "export function foo(a, b?) { return a; }",
+      );
+      expect(result).toContain("function foo(a, b)");
+      expect(result).not.toContain("?");
+    });
+
+    it("strips parameter types", () => {
+      const result = stripTypeSyntax(
+        "export function add(a: number, b: number) { return a + b; }",
+      );
+      expect(result).toContain("function add(a, b)");
+      expect(result).not.toContain(": number");
+    });
+
+    it("strips return types", () => {
+      const result = stripTypeSyntax(
+        "export function id(x: string): string { return x; }",
+      );
+      expect(result).not.toContain("): string");
+      expect(result).toContain("function id");
+    });
+
+    it("strips generics from function declarations", () => {
+      const result = stripTypeSyntax(
+        "export function wrap<T>(x: T): T { return x; }",
+      );
+      expect(result).not.toContain("<T>");
+      expect(result).toContain("function wrap");
+    });
+
+    it("strips `as` type casts", () => {
+      const result = stripTypeSyntax(
+        "export const x = JSON.parse(raw) as { n: number };",
+      );
+      expect(result).toContain("JSON.parse(raw)");
+      expect(result).not.toContain("as {");
+    });
+
+    it("strips non-null assertions", () => {
+      const result = stripTypeSyntax(
+        "export const el = document.getElementById('x')!;",
+      );
+      expect(result).toContain("document.getElementById('x')");
+      expect(result).not.toMatch(/getElementById\('x'\)!/);
+    });
+
+    it("strips satisfies expressions", () => {
+      const result = stripTypeSyntax(
+        "export const cfg = { port: 8080 } satisfies Config;",
+      );
+      expect(result).toContain("{ port: 8080 }");
+      expect(result).not.toContain("satisfies");
+    });
+
+    it("strips type annotations from variable declarations", () => {
+      const result = stripTypeSyntax("const x: number = 42;");
+      expect(result).toContain("const x");
+      expect(result).not.toContain(": number");
+    });
+  });
+
+  describe("import and export declarations survive", () => {
+    it("preserves named import declarations", () => {
+      const result = stripTypeSyntax(`import { foo } from "./foo.js";`);
+      expect(result).toContain(`import { foo } from "./foo.js"`);
+    });
+
+    it("preserves default import declarations", () => {
+      const result = stripTypeSyntax(`import bar from "./bar.js";`);
+      expect(result).toContain(`import bar from "./bar.js"`);
+    });
+
+    it("preserves named export declarations", () => {
+      const result = stripTypeSyntax(
+        "export function greet() { return 'hi'; }",
+      );
+      expect(result).toContain("export function greet");
+    });
+
+    it("preserves export default", () => {
+      const result = stripTypeSyntax(
+        "export default function () { return 1; }",
+      );
+      expect(result).toContain("export default function");
+    });
+
+    it("preserves re-export declarations", () => {
+      const result = stripTypeSyntax(`export { foo } from "./foo.js";`);
+      expect(result).toContain(`export { foo } from "./foo.js"`);
+    });
+
+    it("strips type-only imports", () => {
+      const code = [
+        `import type { Foo } from "./types.js";`,
+        `export function bar() { return 1; }`,
+      ].join("\n");
+      const result = stripTypeSyntax(code);
+      expect(result).not.toContain("import type");
+      expect(result).toContain("export function bar");
+    });
+
+    it("strips type-only exports", () => {
+      const code = [
+        `export type { Foo } from "./types.js";`,
+        `export function bar() { return 1; }`,
+      ].join("\n");
+      const result = stripTypeSyntax(code);
+      expect(result).not.toContain("export type");
+      expect(result).toContain("export function bar");
+    });
+  });
+
+  describe("parse failure fallback", () => {
+    it("returns original source on invalid syntax", () => {
+      const code = "{{{{invalid syntax";
+      expect(stripTypeSyntax(code)).toBe(code);
+    });
+
+    it("does not throw on parse failure", () => {
+      expect(() => stripTypeSyntax("}{")).not.toThrow();
     });
   });
 });

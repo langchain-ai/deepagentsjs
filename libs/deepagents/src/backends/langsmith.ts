@@ -5,7 +5,7 @@
  * ```typescript
  * import { LangSmithSandbox, createDeepAgent } from "deepagents";
  *
- * const sandbox = await LangSmithSandbox.create({ templateName: "deepagents-cli" });
+ * const sandbox = await LangSmithSandbox.create({ snapshotId: "your-snapshot-id" });
  *
  * const agent = createDeepAgent({ model, backend: sandbox });
  *
@@ -15,11 +15,16 @@
  *   await sandbox.close();
  * }
  * ```
+ *
+ * @module
  */
 
 import {
   type Sandbox,
+  type Snapshot,
   type CreateSandboxOptions,
+  type CaptureSnapshotOptions,
+  type StartSandboxOptions,
   LangSmithResourceNotFoundError,
   LangSmithSandboxError,
   SandboxClient,
@@ -46,11 +51,18 @@ export interface LangSmithSandboxOptions {
 /** Options for the `LangSmithSandbox.create()` static factory. */
 export interface LangSmithSandboxCreateOptions extends Omit<
   CreateSandboxOptions,
-  "name" | "timeout" | "waitForReady"
+  "name" | "timeout" | "waitForReady" | "snapshotName"
 > {
   /**
+   * Snapshot ID to boot from.
+   * Mutually exclusive with `templateName`.
+   */
+  snapshotId?: string;
+  /**
    * Name of the LangSmith sandbox template to use.
-   * @default "deepagents"
+   * Mutually exclusive with `snapshotId`.
+   * @deprecated Use `snapshotId` instead. Template-based creation will be
+   * removed in a future release.
    */
   templateName?: string;
   /**
@@ -72,6 +84,8 @@ export interface LangSmithSandboxCreateOptions extends Omit<
  *
  * Use the static `LangSmithSandbox.create()` factory for the simplest setup,
  * or construct directly with an existing `Sandbox` instance.
+ *
+ * @experimental This feature is experimental, and breaking changes are expected.
  */
 export class LangSmithSandbox extends BaseSandbox {
   #sandbox: Sandbox;
@@ -191,6 +205,47 @@ export class LangSmithSandbox extends BaseSandbox {
   }
 
   /**
+   * Start a stopped sandbox and wait until it is ready.
+   *
+   * After calling this, `isRunning` will be `true` and the sandbox
+   * can be used for command execution and file operations again.
+   *
+   * @param options - Start options (timeout, signal).
+   */
+  async start(options: StartSandboxOptions = {}): Promise<void> {
+    await this.#sandbox.start(options);
+    this.#isRunning = true;
+  }
+
+  /**
+   * Stop the sandbox without deleting it.
+   *
+   * Sandbox files are preserved and the sandbox can be restarted later
+   * with `start()`. After calling this, `isRunning` will be `false`.
+   */
+  async stop(): Promise<void> {
+    await this.#sandbox.stop();
+    this.#isRunning = false;
+  }
+
+  /**
+   * Capture a snapshot from this running sandbox.
+   *
+   * Snapshots can be used to create new sandboxes via
+   * `LangSmithSandbox.create({ snapshotId })`.
+   *
+   * @param name - Name for the snapshot.
+   * @param options - Capture options (checkpoint, timeout).
+   * @returns The created Snapshot in "ready" status.
+   */
+  async captureSnapshot(
+    name: string,
+    options: CaptureSnapshotOptions = {},
+  ): Promise<Snapshot> {
+    return this.#sandbox.captureSnapshot(name, options);
+  }
+
+  /**
    * Create and return a new LangSmithSandbox in one step.
    *
    * This is the recommended way to create a sandbox — no need to import
@@ -198,7 +253,10 @@ export class LangSmithSandbox extends BaseSandbox {
    *
    * @example
    * ```typescript
-   * const sandbox = await LangSmithSandbox.create({ templateName: "deepagents" });
+   * const sandbox = await LangSmithSandbox.create({
+   *   snapshotId: "abc-123",
+   * });
+   *
    * try {
    *   const agent = createDeepAgent({ model, backend: sandbox });
    *   await agent.invoke({ messages: [...] });
@@ -208,20 +266,40 @@ export class LangSmithSandbox extends BaseSandbox {
    * ```
    */
   static async create(
-    options: LangSmithSandboxCreateOptions = {},
+    options: LangSmithSandboxCreateOptions,
   ): Promise<LangSmithSandbox> {
     const {
-      templateName = "deepagents",
+      templateName,
       apiKey = process.env.LANGSMITH_API_KEY,
       defaultTimeout,
+      snapshotId,
       ...createSandboxOptions
     } = options;
 
+    if (snapshotId && templateName) {
+      throw new Error(
+        "snapshotId and templateName are mutually exclusive. " +
+          "Pass only one creation source.",
+      );
+    }
+
+    if (!snapshotId && !templateName) {
+      throw new Error(
+        "Either snapshotId or templateName is required. " +
+          "snapshotId is recommended — template-based creation is deprecated.",
+      );
+    }
+
+    const sandboxOptions: CreateSandboxOptions = {
+      ...createSandboxOptions,
+    };
+
+    if (templateName) {
+      sandboxOptions.snapshotName = templateName;
+    }
+
     const client = new SandboxClient({ apiKey });
-    const sandbox = await client.createSandbox(
-      templateName,
-      createSandboxOptions,
-    );
+    const sandbox = await client.createSandbox(snapshotId, sandboxOptions);
     return new LangSmithSandbox({ sandbox, defaultTimeout });
   }
 }

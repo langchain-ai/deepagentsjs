@@ -1,38 +1,62 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { StateBackend } from "./state.js";
 import type { FileData, FileDataV1 } from "./protocol.js";
-import { getCurrentTaskInput, getConfig, Command } from "@langchain/langgraph";
+import { getConfig, Command } from "@langchain/langgraph";
 import { ToolMessage } from "@langchain/core/messages";
 
 vi.mock("@langchain/langgraph", async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...(actual as any),
-    getCurrentTaskInput: vi.fn(),
     getConfig: vi.fn(),
   };
 });
 
-/**
- * Helper to create a mock config with state
- */
 function makeConfig(files: Record<string, FileData> = {}) {
-  const state = {
-    messages: [],
-    files,
-  };
-  const sendSpy = vi.fn();
-  vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+  const state = { messages: [], files: { ...files } };
+  const pendingFilesSends: Record<string, FileData>[] = [];
+
+  const sendSpy = vi
+    .fn()
+    .mockImplementation((sends: [string, Record<string, FileData>][]) => {
+      for (const [channel, update] of sends) {
+        if (channel === "files") pendingFilesSends.push(update);
+      }
+    });
+
+  const readSpy = vi
+    .fn()
+    .mockImplementation((channel: string, fresh?: boolean) => {
+      if (channel !== "files") return undefined;
+      if (!fresh || pendingFilesSends.length === 0) return state.files;
+      const merged = { ...state.files };
+      for (const update of pendingFilesSends) Object.assign(merged, update);
+      return merged;
+    });
+
   vi.mocked(getConfig).mockReturnValue({
-    configurable: {
-      __pregel_send: sendSpy,
-    },
+    configurable: { __pregel_send: sendSpy, __pregel_read: readSpy },
   } as any);
+
+  // Simulate Pregel committing task.writes to state and clearing the buffer.
+  function commitSends() {
+    for (const update of pendingFilesSends) Object.assign(state.files, update);
+    pendingFilesSends.length = 0;
+  }
+
+  // Simulate Pregel discarding task.writes without committing (e.g., node rollback).
+  function clearPending() {
+    pendingFilesSends.length = 0;
+  }
+
   return {
     state,
     runtime: { state, store: undefined },
     config: {},
     sendSpy,
+    readSpy,
+    commitSends,
+    clearPending,
   };
 }
 
@@ -688,19 +712,6 @@ describe("StateBackend", () => {
   });
 
   describe("zero-arg constructor", () => {
-    /**
-     * Helper to apply a __pregel_send update to the mocked state.
-     * Extracts the files update from the sendSpy call and merges it.
-     */
-    function applySendUpdate(
-      state: { files: Record<string, FileData> },
-      sendSpy: ReturnType<typeof vi.fn>,
-      callIndex = 0,
-    ) {
-      const sent = sendSpy.mock.calls[callIndex][0];
-      Object.assign(state.files, sent[0][1]);
-    }
-
     it("write sends update via __pregel_send and returns no filesUpdate", () => {
       const { sendSpy } = makeConfig();
       const backend = new StateBackend();
@@ -718,11 +729,10 @@ describe("StateBackend", () => {
     });
 
     it("edit sends update via __pregel_send and returns no filesUpdate", () => {
-      const { state, sendSpy } = makeConfig();
+      const { sendSpy } = makeConfig();
       const backend = new StateBackend();
 
       backend.write("/notes.txt", "hello world");
-      applySendUpdate(state, sendSpy);
       sendSpy.mockClear();
 
       const result = backend.edit("/notes.txt", "hello", "hi");
@@ -753,36 +763,25 @@ describe("StateBackend", () => {
     });
 
     it("full CRUD cycle: write, read, edit, read, ls, grep, glob", () => {
-      const { state, sendSpy } = makeConfig();
+      makeConfig();
       const backend = new StateBackend();
 
-      // Write
       backend.write("/notes.txt", "hello world");
-      applySendUpdate(state, sendSpy);
-      sendSpy.mockClear();
 
-      // Read
       const readRes = backend.read("/notes.txt");
       expect(readRes.content).toContain("hello world");
 
-      // Edit
       backend.edit("/notes.txt", "hello", "hi");
-      applySendUpdate(state, sendSpy);
-      sendSpy.mockClear();
 
-      // Read after edit
       const readRes2 = backend.read("/notes.txt");
       expect(readRes2.content).toContain("hi world");
 
-      // Ls
       const listing = backend.ls("/");
       expect(listing.files!.some((fi) => fi.path === "/notes.txt")).toBe(true);
 
-      // Grep
       const grepRes = backend.grep("hi", "/");
       expect(grepRes.matches!.some((m) => m.path === "/notes.txt")).toBe(true);
 
-      // Glob
       const globRes = backend.glob("*.txt", "/");
       expect(globRes.files!.some((i) => i.path === "/notes.txt")).toBe(true);
     });

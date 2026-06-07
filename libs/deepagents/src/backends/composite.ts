@@ -65,6 +65,25 @@ export class CompositeBackend implements BackendProtocolV2 {
     return isSandboxBackend(this.default) ? this.default.id : "";
   }
 
+  /** Route prefixes registered on this backend (e.g. `["/workspace"]`). */
+  get routePrefixes(): string[] {
+    return Object.keys(this.routes);
+  }
+
+  /**
+   * Type guard — returns true if `backend` is a {@link CompositeBackend}.
+   *
+   * Uses duck-typing on `routePrefixes` so it works across module boundaries
+   * where `instanceof` may fail.
+   */
+  static isInstance(backend: unknown): backend is CompositeBackend {
+    return (
+      typeof backend === "object" &&
+      backend !== null &&
+      Array.isArray((backend as Record<string, unknown>).routePrefixes)
+    );
+  }
+
   /**
    * Determine which backend handles this key and strip prefix.
    *
@@ -88,6 +107,37 @@ export class CompositeBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Returns true when `path` points at `routePrefix` or its descendants.
+   */
+  private isPathWithinRoute(path: string, routePrefix: string): boolean {
+    const normalizedRoute = routePrefix.endsWith("/")
+      ? routePrefix
+      : `${routePrefix}/`;
+    const routeRoot = normalizedRoute.slice(0, -1);
+    return path === routeRoot || path.startsWith(normalizedRoute);
+  }
+
+  /**
+   * Returns true when `routePrefix` is inside `path` (or equal to it).
+   *
+   * Examples:
+   * - path `/` includes all routes
+   * - path `/workspace` includes route `/workspace/memories/`
+   * - path `/workspace` excludes route `/skills/`
+   */
+  private isRouteUnderPath(routePrefix: string, path: string): boolean {
+    if (path === "/") {
+      return true;
+    }
+
+    const normalizedPath = path.endsWith("/") ? path : `${path}/`;
+    const normalizedRoute = routePrefix.endsWith("/")
+      ? routePrefix
+      : `${routePrefix}/`;
+    return normalizedRoute.startsWith(normalizedPath);
+  }
+
+  /**
    * List files and directories in the specified directory (non-recursive).
    *
    * @param path - Absolute path to directory
@@ -97,7 +147,7 @@ export class CompositeBackend implements BackendProtocolV2 {
   async ls(path: string): Promise<LsResult> {
     // Check if path matches a specific route
     for (const [routePrefix, backend] of this.sortedRoutes) {
-      if (path.startsWith(routePrefix.replace(/\/$/, ""))) {
+      if (this.isPathWithinRoute(path, routePrefix)) {
         // Query only the matching routed backend
         const suffix = path.substring(routePrefix.length);
         const searchPath = suffix ? "/" + suffix : "/";
@@ -181,14 +231,16 @@ export class CompositeBackend implements BackendProtocolV2 {
    */
   async grep(
     pattern: string,
-    path: string = "/",
+    path: string | null = "/",
     glob: string | null = null,
   ): Promise<GrepResult> {
+    const searchPath = path || "/";
+
     // If path targets a specific route, search only that backend
     for (const [routePrefix, backend] of this.sortedRoutes) {
-      if (path.startsWith(routePrefix.replace(/\/$/, ""))) {
-        const searchPath = path.substring(routePrefix.length - 1);
-        const raw = await backend.grep(pattern, searchPath || "/", glob);
+      if (this.isPathWithinRoute(searchPath, routePrefix)) {
+        const routeSearchPath = searchPath.substring(routePrefix.length - 1);
+        const raw = await backend.grep(pattern, routeSearchPath || "/", glob);
 
         if (raw.error) {
           return raw;
@@ -203,9 +255,9 @@ export class CompositeBackend implements BackendProtocolV2 {
       }
     }
 
-    // Otherwise, search default and all routed backends and merge
+    // Otherwise, search default and routed backends mounted inside this path
     const allMatches: GrepMatch[] = [];
-    const rawDefault = await this.default.grep(pattern, path, glob);
+    const rawDefault = await this.default.grep(pattern, searchPath, glob);
 
     if (rawDefault.error) {
       return rawDefault;
@@ -213,8 +265,12 @@ export class CompositeBackend implements BackendProtocolV2 {
 
     allMatches.push(...(rawDefault.matches || []));
 
-    // Search all routes
+    // Search only routes that are descendants of the requested path
     for (const [routePrefix, backend] of Object.entries(this.routes)) {
+      if (!this.isRouteUnderPath(routePrefix, searchPath)) {
+        continue;
+      }
+
       const raw = await backend.grep(pattern, "/", glob);
 
       if (raw.error) {
@@ -240,7 +296,7 @@ export class CompositeBackend implements BackendProtocolV2 {
 
     // Route based on path, not pattern
     for (const [routePrefix, backend] of this.sortedRoutes) {
-      if (path.startsWith(routePrefix.replace(/\/$/, ""))) {
+      if (this.isPathWithinRoute(path, routePrefix)) {
         const searchPath = path.substring(routePrefix.length - 1);
         const result = await backend.glob(pattern, searchPath || "/");
 
@@ -257,7 +313,7 @@ export class CompositeBackend implements BackendProtocolV2 {
       }
     }
 
-    // Path doesn't match any specific route - search default backend AND all routed backends
+    // Path doesn't match any specific route - search default and route descendants
     const defaultResult = await this.default.glob(pattern, path);
     if (defaultResult.error) {
       return defaultResult;
@@ -265,6 +321,10 @@ export class CompositeBackend implements BackendProtocolV2 {
     results.push(...(defaultResult.files || []));
 
     for (const [routePrefix, backend] of Object.entries(this.routes)) {
+      if (!this.isRouteUnderPath(routePrefix, path)) {
+        continue;
+      }
+
       const result = await backend.glob(pattern, "/");
       if (result.error) {
         continue; // Skip backends that error

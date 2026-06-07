@@ -1,0 +1,246 @@
+[
+  {
+    "benchmark": "frames",
+    "id": "frames_10",
+    "prompt": "Inspect the files under `/cases/frames_10/` and answer the question using only those notes. Return only the final answer.\n\nQuestion: Multiply the number of Tony Awards won by the guest host of SNL on 1997-12-06 by the number of Oscar nominations received by the 2023 film directed by Greta Gerwig. Then divide by the number of Grammy Awards won by the band behind the 1979 album 'Tusk'.",
+    "files": {
+      "/cases/frames_10/reference/snlepisode.txt": "Saturday Night Live episode dated 1997-12-06 was hosted by Nathan Lane.\n",
+      "/cases/frames_10/reference/nathan_lane.txt": "Nathan Lane has won 3 Tony Awards.\n",
+      "/cases/frames_10/reference/barbie_2023.txt": "Barbie is the 2023 film directed by Greta Gerwig. It received 8 Oscar nominations.\n",
+      "/cases/frames_10/reference/fleetwood_mac.txt": "Fleetwood Mac released the 1979 album Tusk and won 2 Grammy Awards.\n",
+      "/cases/frames_10/reference/distractor.txt": "Little Women was also directed by Greta Gerwig, but this note is not about the 2023 film.\n"
+    },
+    "answer_snippets": ["12"],
+    "difficulty": "hard"
+  },
+  {
+    "benchmark": "frames",
+    "id": "frames_11",
+    "prompt": "Inspect the files under `/cases/frames_11/` and answer the question using only those notes. Return only the final number.\n\nQuestion: Add the ages as of 2010 of the inventors of the cotton gin, vacuum pump, and commercial toilet paper, then subtract the ages as of 2010 of the inventors of the safety pin and the sewing machine.",
+    "files": {
+      "/cases/frames_11/reference/cotton_gin.txt": "Reference sheet: the inventor of the cotton gin is treated as being 245 years old in 2010.\n",
+      "/cases/frames_11/reference/vacuum_pump.txt": "Reference sheet: the inventor of the vacuum pump is treated as being 363 years old in 2010.\n",
+      "/cases/frames_11/reference/toilet_paper.txt": "Reference sheet: the inventor of commercial toilet paper is treated as being 183 years old in 2010.\n",
+      "/cases/frames_11/reference/safety_pin.txt": "Reference sheet: the inventor of the safety pin is treated as being 84 years old in 2010.\n",
+      "/cases/frames_11/reference/sewing_machine.txt": "Reference sheet: the inventor of the sewing machine is treated as being 85 years old in 2010.\n"
+    },
+    "answer_snippets": ["622"],
+    "difficulty": "hard"
+  },
+  {
+    "benchmark": "frames",
+    "id": "frames_12",
+    "prompt": "Inspect the files under `/cases/frames_12/` and answer the question using only those notes. Return only the name of the oldest person.\n\nQuestion: Edmund turned 10 on the day of the Battle of Hastings. Edward turned 12 on the day Guy Fawkes was executed. Eddie turned 14 on the day of the London 2012 opening ceremony. Who would be oldest on the comparison dates in the notes?",
+    "files": {
+      "/cases/frames_12/reference/source_events.txt": "Battle of Hastings: 1066. Guy Fawkes execution: 1606. London 2012 opening ceremony: 2012.\n",
+      "/cases/frames_12/reference/comparison_events.txt": "Henry I of England died in 1135. Battle of Naseby took place in 1645. Liz Truss announced her resignation as Conservative Party leader in 2022.\n",
+      "/cases/frames_12/reference/instructions.txt": "Ignore months and days; use year-based age comparisons only.\n"
+    },
+    "answer_snippets": ["Edmund"],
+    "difficulty": "hard"
+  },
+  {
+    "benchmark": "frames",
+    "id": "frames_18",
+    "prompt": "Inspect the files under `/cases/frames_18/` and answer the question using only those notes. Return only the year.\n\nQuestion: Using only the Winter and Summer Olympic events that occurred in the same country in the same year, which year had the highest combined number of women competitors?",
+    "files": {
+      "/cases/frames_18/reference/eligible_years.txt": "The Winter and Summer Olympics occurred in the same country in the same year in 1924 (France), 1932 (United States), and 1936 (Germany).\n",
+      "/cases/frames_18/reference/1924.txt": "1924 Winter women competitors: 13. 1924 Summer women competitors: 135.\n",
+      "/cases/frames_18/reference/1932.txt": "1932 Winter women competitors: 17. 1932 Summer women competitors: 126.\n",
+      "/cases/frames_18/reference/1936.txt": "1936 Winter women competitors: 80. 1936 Summer women competitors: 331.\n",
+      "/cases/frames_18/reference/distractor.txt": "1984 Summer Olympics were in the United States, but the Winter Olympics that year were in a different country.\n"
+    },
+    "answer_snippets": ["1936"],
+    "difficulty": "hard"
+  },
+  {
+    "benchmark": "frames",
+    "id": "frames_16",
+    "prompt": "Inspect the files under `/cases/frames_16/` and answer the question using only those notes. Return only the song and the inspiring book.\n\nQuestion: Joan Didion's second fiction novel has a film adaptation. The director of that adaptation is the uncle of a famous pop singer. That singer had a song nominated for Best Pop Solo Performance and Record of the Year at the 54th Annual Grammy Awards, and the song was inspired by another book. Name the song and the book.",
+    "files": {
+      "/cases/frames_16/reference/didion.txt": "Joan Didion's second fiction novel is Play It as It Lays.\n",
+      "/cases/frames_16/reference/play_it_as_it_lays_film.txt": "The film adaptation of Play It as It Lays was directed by Frank Perry.\n",
+      "/cases/frames_16/reference/frank_perry.txt": "Frank Perry was the uncle of Katy Perry.\n",
+      "/cases/frames_16/reference/firework.txt": "Katy Perry song Firework was nominated for Record of the Year and Best Pop Solo Performance at the 54th Annual Grammy Awards.\n",
+      "/cases/frames_16/reference/book_inspiration.txt": "Firework was inspired by the novel On the Road by Jack Kerouac.\n",
+      "/cases/frames_16/reference/distractor.txt": "Roar is another Katy Perry song, but it is not the one relevant to this chain.\n"
+    },
+    "answer_snippets": ["Firework", "On the Road"],
+    "difficulty": "hard"
+  },
+  {
+    "benchmark": "nexus",
+    "id": "nexus_nvd_nested_13",
+    "prompt": "Inspect the files under `/cases/nexus_nvd_nested_13/` and write the exact function-composition expression that solves the request. Return only the expression.\n\nRequest: I need the first non-deprecated CPE record matching the partial string cpe:2.3:a:microsoft:exchange_server:2013:, then I need the vulnerabilities associated with its full CPE name.",
+    "files": {
+      "/cases/nexus_nvd_nested_13/api_reference.md": "Available functions:\n- searchCVE(cpeMatchString=...) -> list of CPE records\n- searchCVE(keywordExactMatch=True, keywordSearch=...) -> list of CPE records\n- searchCVE(cpeName=...) -> list of CVEs\n- filterDeprecatedCPEs(records) -> only non-deprecated CPE records\n- get_first_object_from_list(records) -> first record\n- getCPEName(cpe_record) -> full CPE name string\n",
+      "/cases/nexus_nvd_nested_13/syntax.md": "Write the final answer as an exact function-composition expression. Use the function names and argument names from the docs exactly. Separate independent expressions with ';'.\n"
+    },
+    "answer_snippets": [
+      "filterDeprecatedCPEs(searchCVE(cpeMatchString='cpe:2.3:a:microsoft:exchange_server:2013:'))",
+      "searchCVE(cpeName=getCPEName(get_first_object_from_list("
+    ],
+    "difficulty": "hard"
+  },
+  {
+    "benchmark": "nexus",
+    "id": "nexus_nvd_nested_14",
+    "prompt": "Inspect the files under `/cases/nexus_nvd_nested_14/` and write the exact function-composition expression that solves the request. Return only the expression.\n\nRequest: Find the first non-deprecated CPE name from the NVD database using an exact keyword search for Windows, then find the associated vulnerabilities.",
+    "files": {
+      "/cases/nexus_nvd_nested_14/api_reference.md": "Available functions:\n- searchCVE(cpeMatchString=...) -> list of CPE records\n- searchCVE(keywordExactMatch=True, keywordSearch=...) -> list of CPE records\n- searchCVE(cpeName=...) -> list of CVEs\n- filterDeprecatedCPEs(records) -> only non-deprecated CPE records\n- get_first_object_from_list(records) -> first record\n- getCPEName(cpe_record) -> full CPE name string\n",
+      "/cases/nexus_nvd_nested_14/syntax.md": "Write the final answer as an exact function-composition expression. Use the function names and argument names from the docs exactly. Separate independent expressions with ';'.\n"
+    },
+    "answer_snippets": [
+      "searchCVE(cpeName=getCPEName(get_first_object_from_list(filterDeprecatedCPEs(searchCVE(keywordExactMatch=True, keywordSearch='Windows')))))"
+    ],
+    "difficulty": "hard"
+  },
+  {
+    "benchmark": "nexus",
+    "id": "nexus_placesapi_15",
+    "prompt": "Inspect the files under `/cases/nexus_placesapi_15/` and write the exact function-composition expression that solves the request. Return only the expression.\n\nRequest: Get me good food near my current location, and also get me good food near Reno.",
+    "files": {
+      "/cases/nexus_placesapi_15/api_reference.md": "Available functions:\n- get_current_location()\n- get_latitude_longitude(location=...)\n- get_recommendations(topics=['food'], lat_long=...)\n- sort_results(places=..., sort='distance', ascending=True)\nFor two independent requests, write two expressions separated by ';'.\n",
+      "/cases/nexus_placesapi_15/syntax.md": "Write the final answer as an exact function-composition expression. Use the function names and argument names from the docs exactly. Separate independent expressions with ';'.\n"
+    },
+    "answer_snippets": [
+      "sort_results(places=get_recommendations(topics=['food'], lat_long=get_latitude_longitude(location=get_current_location())), sort='distance', ascending=True); sort_results(places=get_recommendations(topics=['food'], lat_long=get_latitude_longitude(location='Reno')), sort='distance', ascending=True);"
+    ],
+    "difficulty": "hard"
+  },
+  {
+    "benchmark": "nexus",
+    "id": "nexus_multiversemath_17",
+    "prompt": "Inspect the files under `/cases/nexus_multiversemath_17/` and write the exact function-composition expression that solves the request. Return only the expression.\n\nRequest: Get the values for (sin(pi) - sin(-(cos((8.0 + pi))))), pi, -(cos(5.0)), and -(pi ** sin(8.0)) using only the documented functions.",
+    "files": {
+      "/cases/nexus_multiversemath_17/api_reference.md": "Available functions:\n- pi()\n- sin(radians=...)\n- cos(radians=...)\n- add(a=..., b=...)\n- subtract(a=..., b=...)\n- negate(a=...)\n- power(a=..., b=...)\n",
+      "/cases/nexus_multiversemath_17/syntax.md": "Write the final answer as an exact function-composition expression. Use the function names and argument names from the docs exactly. Separate independent expressions with ';'.\n"
+    },
+    "answer_snippets": [
+      "subtract(a=sin(radians=pi()), b=sin(radians=negate(a=cos(radians=add(a=8.0, b=pi()))))); pi(); negate(a=cos(radians=5.0)); negate(a=power(a=pi(), b=sin(radians=8.0)))"
+    ],
+    "difficulty": "hard"
+  },
+  {
+    "benchmark": "nexus",
+    "id": "nexus_multiversemath_18",
+    "prompt": "Inspect the files under `/cases/nexus_multiversemath_18/` and write the exact function-composition expression that solves the request. Return only the expression.\n\nRequest: Get the values for 0.0, pi, 0.0, and pi ** -(-((cos(5.0) + sin(0.0)))) using only the documented functions.",
+    "files": {
+      "/cases/nexus_multiversemath_18/api_reference.md": "Available functions:\n- pi()\n- sin(radians=...)\n- cos(radians=...)\n- add(a=..., b=...)\n- negate(a=...)\n- power(a=..., b=...)\n",
+      "/cases/nexus_multiversemath_18/syntax.md": "Write the final answer as an exact function-composition expression. Use the function names and argument names from the docs exactly. Separate independent expressions with ';'.\n"
+    },
+    "answer_snippets": [
+      "0.0; pi(); 0.0; power(a=pi(), b=negate(a=negate(a=add(a=cos(radians=5.0), b=sin(radians=0.0)))))"
+    ],
+    "difficulty": "hard"
+  },
+  {
+    "benchmark": "bfcl_v3",
+    "id": "multi_turn_composite_97",
+    "prompt": "Inspect the files under `/cases/multi_turn_composite_97/` and produce the complete ordered API call plan needed to satisfy the user's requests across the full conversation. Return only the calls, one per line, in order.",
+    "files": {
+      "/cases/multi_turn_composite_97/conversation.md": "Conversation transcript:\n1. User asks for the distance between Rivermist and Stonebrook.\n2. User worries whether the current fuel level can cover the trip.\n3. User asks to fill the tank completely.\n4. User asks to start the car once ready.\n5. User asks to send a message that says 'I am on my way.' to Sarah, whose receiver id is USR002.\n6. User asks to view received messages.\n",
+      "/cases/multi_turn_composite_97/state.json": "{\n  \"MessageAPI\": {\n    \"receiver_lookup\": {\n      \"Sarah\": \"USR002\"\n    },\n    \"sender_id\": \"USR001\"\n  },\n  \"VehicleControlAPI\": {\n    \"fuelLevel\": 5.0,\n    \"tankCapacity\": 50.0\n  }\n}",
+      "/cases/multi_turn_composite_97/reference.md": "City lookup: Rivermist -> 83214, Stonebrook -> 74532.\nDistance between 83214 and 74532 is 750.0 miles.\nTo fill the tank completely from the current state, add 45.0 gallons.\nTo start the vehicle safely, lock all doors, engage the parking brake, then start the engine in START mode.\nWhen the trip update is sent, the message text should be exactly 'I am on my way.'.\n",
+      "/cases/multi_turn_composite_97/api_reference.md": "Relevant functions:\nget_zipcode_based_on_city(city='...')\nestimate_distance(cityA='...', cityB='...')\nestimate_drive_feasibility_by_mileage(distance=...)\nfillFuelTank(fuelAmount=...)\nlockDoors(unlock=False, door=['driver','passenger','rear_left','rear_right'])\nactivateParkingBrake('engage')\nstartEngine(ignitionMode='START')\nsend_message(sender_id='...', receiver_id='...', message='...')\nview_messages_received()\n"
+    },
+    "answer_snippets": [
+      "estimate_distance(",
+      "estimate_drive_feasibility_by_mileage(distance=750.0)",
+      "fillFuelTank(fuelAmount=45.0)",
+      "lockDoors(unlock=False, door=['driver', 'passenger', 'rear_left', 'rear_right'])",
+      "activateParkingBrake('engage')",
+      "startEngine(ignitionMode='START')",
+      "send_message(sender_id='USR001', receiver_id='USR002', message='I am on my way.')",
+      "view_messages_received()"
+    ],
+    "difficulty": "hard"
+  },
+  {
+    "benchmark": "bfcl_v3",
+    "id": "multi_turn_composite_116",
+    "prompt": "Inspect the files under `/cases/multi_turn_composite_116/` and produce the complete ordered API call plan needed to satisfy the user's requests across the full conversation. Return only the calls, one per line, in order.",
+    "files": {
+      "/cases/multi_turn_composite_116/conversation.md": "Conversation transcript:\n1. Inspect the watchlist.\n2. Remove Zeta Corp from the watchlist.\n3. Look up Omega Industries stock details.\n4. List Technology sector stocks.\n5. Fund the account with an extra $10,000.\n6. Buy 50 shares of Apple at $150 per share.\n",
+      "/cases/multi_turn_composite_116/state.json": "{\n  \"TradingBot\": {\n    \"balance\": 15000.0,\n    \"market_status\": \"Open\",\n    \"watch_list\": [\n      \"NVDA\",\n      \"OMEG\",\n      \"ZETA\"\n    ]\n  }\n}",
+      "/cases/multi_turn_composite_116/reference.md": "Company name lookup: Zeta Corp -> ZETA, Omega Industries -> OMEG, Apple -> AAPL.\nTechnology sector stock discovery uses get_available_stocks(sector='Technology').\nFunding uses fund_account(amount=10000).\nBuying Apple uses place_order(order_type='Buy', symbol='AAPL', price=150.0, amount=50).\n",
+      "/cases/multi_turn_composite_116/api_reference.md": "Relevant functions:\nget_watchlist()\nget_symbol_by_name(name='...')\nremove_stock_from_watchlist(symbol='...')\nget_stock_info(symbol='...')\nget_available_stocks(sector='...')\nfund_account(amount=...)\nplace_order(order_type='Buy', symbol='...', price=..., amount=...)\n"
+    },
+    "answer_snippets": [
+      "get_watchlist()",
+      "remove_stock_from_watchlist(symbol='ZETA')",
+      "get_stock_info(symbol='OMEG')",
+      "get_available_stocks(sector='Technology')",
+      "fund_account(amount=10000)",
+      "place_order(order_type='Buy', symbol='AAPL', price=150.0, amount=50)"
+    ],
+    "difficulty": "hard"
+  },
+  {
+    "benchmark": "bfcl_v3",
+    "id": "multi_turn_composite_199",
+    "prompt": "Inspect the files under `/cases/multi_turn_composite_199/` and produce the complete ordered API call plan needed to satisfy the user's requests across the full conversation. Return only the calls, one per line, in order.",
+    "files": {
+      "/cases/multi_turn_composite_199/conversation.md": "Conversation transcript:\n1. Book a business-class flight from Los Angeles to New York on 2024-04-15 using the linked EUR card and access token.\n2. Retrieve the invoice.\n3. Contact customer support about booking hiccups.\n4. Brief a colleague using the sender id.\n5. The colleague id is Kevin1048.\n6. View all received message responses.\n",
+      "/cases/multi_turn_composite_199/state.json": "{\n  \"MessageAPI\": {\n    \"colleague_id\": \"Kevin1048\",\n    \"sender_id\": \"MichaelTpss\"\n  },\n  \"TravelAPI\": {\n    \"access_token\": \"abc123xyz\",\n    \"booking_id\": \"5431449\",\n    \"card_id\": \"card_123456789\",\n    \"currency\": \"EUR\"\n  }\n}",
+      "/cases/multi_turn_composite_199/reference.md": "Airport lookup: Los Angeles -> LAX, New York -> JFK.\nBusiness-class flight cost on 2024-04-15 from LAX to JFK is 2400.0 USD.\nConvert 2400.0 USD to EUR by calling compute_exchange_rate(base_currency='USD', target_currency='EUR', value=2400.0); the converted travel cost to use for booking is 960.0 EUR.\nCustomer support message text should be: 'There were hiccups during the booking process. Please assist.'\nColleague update text should be: 'Update on flight issue and customer support contact.'\n",
+      "/cases/multi_turn_composite_199/api_reference.md": "Relevant functions:\nget_nearest_airport_by_city(location='...')\nget_flight_cost(travel_from='...', travel_to='...', travel_date='...', travel_class='...')\ncompute_exchange_rate(base_currency='USD', target_currency='EUR', value=...)\nbook_flight(access_token='...', card_id='...', travel_date='...', travel_from='...', travel_to='...', travel_class='...', travel_cost=...)\nretrieve_invoice(access_token='...', booking_id='...')\ncontact_customer_support(booking_id='...', message='...')\nsend_message(sender_id='...', receiver_id='...', message='...')\nview_messages_received()\n"
+    },
+    "answer_snippets": [
+      "get_nearest_airport_by_city(location='Los Angeles')",
+      "get_nearest_airport_by_city(location='New York')",
+      "get_flight_cost(travel_from='LAX', travel_to='JFK', travel_date='2024-04-15', travel_class='business')",
+      "compute_exchange_rate(base_currency='USD', target_currency='EUR', value=2400.0)",
+      "book_flight(access_token='abc123xyz', card_id='card_123456789', travel_date='2024-04-15', travel_from='LAX', travel_to='JFK', travel_class='business', travel_cost=960.0)",
+      "retrieve_invoice(access_token='abc123xyz', booking_id='5431449')",
+      "contact_customer_support(booking_id='5431449', message='There were hiccups during the booking process. Please assist.')",
+      "send_message(sender_id='MichaelTpss', receiver_id='Kevin1048', message='Update on flight issue and customer support contact.')",
+      "view_messages_received()"
+    ],
+    "difficulty": "hard"
+  },
+  {
+    "benchmark": "bfcl_v3",
+    "id": "multi_turn_miss_func_55",
+    "prompt": "Inspect the files under `/cases/multi_turn_miss_func_55/` and produce the complete ordered API call plan needed to satisfy the user's requests across the full conversation. Return only the calls, one per line, in order.",
+    "files": {
+      "/cases/multi_turn_miss_func_55/conversation.md": "Conversation transcript:\n1. If fuel is lower than 10, add double that amount, then prepare to drive immediately.\n2. Check tire pressure.\n3. Create a top-priority Tire Pressure Issue ticket with description 'Urgent tire pressure issue.'.\n4. Fetch the newly created ticket.\n5. Resolve it with the update 'Issue resolved!'.\n",
+      "/cases/multi_turn_miss_func_55/state.json": "{\n  \"TicketAPI\": {\n    \"next_ticket_id\": 2\n  },\n  \"VehicleControlAPI\": {\n    \"fuelLevel\": 7.5,\n    \"tire_pressures\": {\n      \"frontLeft\": 28.0,\n      \"frontRight\": 28.0,\n      \"rearLeft\": 26.0,\n      \"rearRight\": 26.0\n    }\n  }\n}",
+      "/cases/multi_turn_miss_func_55/reference.md": "When fuel is below 10 and the instruction says add double that amount, add 15.0 gallons.\nTo prepare to drive, lock all doors, press the brake pedal to 1.0, and start the engine in START mode.\nThe urgent tire ticket should use priority=5.\nThe newly created ticket id is 2.\n",
+      "/cases/multi_turn_miss_func_55/api_reference.md": "Relevant functions:\ndisplayCarStatus('fuel')\nfillFuelTank(15.0)\nlockDoors(unlock=False, door=['driver','passenger','rear_left','rear_right'])\npressBrakePedal(pedalPosition=1.0)\nstartEngine(ignitionMode='START')\ncheck_tire_pressure()\ncreate_ticket(title='Tire Pressure Issue', description='Urgent tire pressure issue.', priority=5)\nget_ticket(ticket_id=2)\nresolve_ticket(ticket_id=2, resolution='Issue resolved!')\n"
+    },
+    "answer_snippets": [
+      "fillFuelTank(15.0)",
+      "lockDoors(unlock=False, door=['driver', 'passenger', 'rear_left', 'rear_right'])",
+      "pressBrakePedal(pedalPosition=1.0)",
+      "startEngine(ignitionMode='START')",
+      "check_tire_pressure()",
+      "create_ticket(title='Tire Pressure Issue', description='Urgent tire pressure issue.', priority=5)",
+      "get_ticket(ticket_id=2)",
+      "resolve_ticket(ticket_id=2, resolution='Issue resolved!')"
+    ],
+    "difficulty": "hard"
+  },
+  {
+    "benchmark": "bfcl_v3",
+    "id": "multi_turn_miss_param_55",
+    "prompt": "Inspect the files under `/cases/multi_turn_miss_param_55/` and produce the complete ordered API call plan needed to satisfy the user's requests across the full conversation. Return only the calls, one per line, in order.",
+    "files": {
+      "/cases/multi_turn_miss_param_55/conversation.md": "Conversation transcript:\n1. User initially gives an incomplete condition: if fuel is lower than [missing value], add double that amount and prepare to drive.\n2. User clarifies: if the fuel level is lower than 10, then we need to double it.\n3. Check tire pressure.\n4. Create a top-priority Tire Pressure Issue ticket with description 'Urgent tire pressure issue.'.\n5. Fetch the newly created ticket.\n6. Resolve it with the update 'Issue resolved!'.\n",
+      "/cases/multi_turn_miss_param_55/state.json": "{\n  \"TicketAPI\": {\n    \"next_ticket_id\": 2\n  },\n  \"VehicleControlAPI\": {\n    \"fuelLevel\": 7.5,\n    \"tire_pressures\": {\n      \"frontLeft\": 28.0,\n      \"frontRight\": 28.0,\n      \"rearLeft\": 26.0,\n      \"rearRight\": 26.0\n    }\n  }\n}",
+      "/cases/multi_turn_miss_param_55/reference.md": "After the clarification, the threshold is 10 and the fuel add amount is 15.0 gallons.\nTo prepare to drive, lock all doors, press the brake pedal to 1.0, and start the engine in START mode.\nThe urgent tire ticket should use priority=5.\nThe newly created ticket id is 2.\n",
+      "/cases/multi_turn_miss_param_55/api_reference.md": "Relevant functions:\ndisplayCarStatus('fuel')\nfillFuelTank(15.0)\nlockDoors(unlock=False, door=['driver','passenger','rear_left','rear_right'])\npressBrakePedal(pedalPosition=1.0)\nstartEngine(ignitionMode='START')\ncheck_tire_pressure()\ncreate_ticket(title='Tire Pressure Issue', description='Urgent tire pressure issue.', priority=5)\nget_ticket(ticket_id=2)\nresolve_ticket(ticket_id=2, resolution='Issue resolved!')\n"
+    },
+    "answer_snippets": [
+      "fillFuelTank(15.0)",
+      "lockDoors(unlock=False, door=['driver', 'passenger', 'rear_left', 'rear_right'])",
+      "pressBrakePedal(pedalPosition=1.0)",
+      "startEngine(ignitionMode='START')",
+      "check_tire_pressure()",
+      "create_ticket(title='Tire Pressure Issue', description='Urgent tire pressure issue.', priority=5)",
+      "get_ticket(ticket_id=2)",
+      "resolve_ticket(ticket_id=2, resolution='Issue resolved!')"
+    ],
+    "difficulty": "hard"
+  }
+]

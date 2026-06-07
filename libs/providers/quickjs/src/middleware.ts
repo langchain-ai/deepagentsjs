@@ -1,11 +1,10 @@
 /**
- * QuickJS REPL middleware for deepagents.
+ * Code Interpreter middleware for deepagents.
  *
- * Provides a `js_eval` tool that runs JavaScript in a WASM-sandboxed QuickJS
+ * Provides an `eval` tool that runs JavaScript in a WASM-sandboxed QuickJS
  * interpreter. Supports:
  * - Persistent state across evaluations (true REPL)
- * - VFS integration via readFile/writeFile
- * - Programmatic tool calling (PTC)
+ * - Programmatic tool calling (PTC) — expose agent or custom tools inside the REPL
  */
 
 import {
@@ -15,23 +14,33 @@ import {
 } from "langchain";
 import { z } from "zod/v4";
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import { StateBackend, type BackendRuntime, resolveBackend } from "deepagents";
 
 import dedent from "dedent";
-import type { QuickJSMiddlewareOptions } from "./types.js";
+import { getCurrentTaskInput } from "@langchain/langgraph";
+import {
+  resolveBackend,
+  type AnyBackendProtocol,
+  type BackendFactory,
+  type SkillMetadata,
+} from "deepagents";
+import type { CodeInterpreterMiddlewareOptions } from "./types.js";
 import {
   ReplSession,
   DEFAULT_EXECUTION_TIMEOUT,
   DEFAULT_MEMORY_LIMIT,
   DEFAULT_MAX_STACK_SIZE,
   DEFAULT_SESSION_ID,
+  DEFAULT_MAX_PTC_CALLS,
+  DEFAULT_MAX_RESULTS_CHARS,
 } from "./session.js";
 import {
   formatReplResult,
+  formatSkillNotAvailable,
   toCamelCase,
   toolToTypeSignature,
   safeToJsonSchema,
 } from "./utils.js";
+import { scanSkillReferences } from "./skills.js";
 
 /**
  * These type-only imports are required for TypeScript's type inference to work
@@ -42,72 +51,26 @@ import {
 import type * as _zodTypes from "@langchain/core/utils/types";
 import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
-import {
-  getCurrentTaskInput,
-  LangGraphRunnableConfig,
-} from "@langchain/langgraph";
+import { LangGraphRunnableConfig } from "@langchain/langgraph";
 
-/**
- * Backend-provided tools excluded from PTC by default.
- * These are redundant inside the REPL since VFS helpers (readFile/writeFile)
- * already cover file I/O against the agent's in-memory working set.
- */
-export const DEFAULT_PTC_EXCLUDED_TOOLS = [
-  "ls",
-  "read_file",
-  "write_file",
-  "edit_file",
-  "glob",
-  "grep",
-  "execute",
-] as const;
+const DEFAULT_TOOL_NAME = "eval";
 
-const REPL_SYSTEM_PROMPT = dedent`
-  ## TypeScript/JavaScript REPL (\`js_eval\`)
+function renderReplSystemPrompt(opts: {
+  toolName: string;
+  timeout: number;
+  memoryLimitMb: number;
+}): string {
+  return dedent`
+    ### Interpreter
 
-  You have access to a sandboxed TypeScript/JavaScript REPL running in an isolated interpreter.
-  TypeScript syntax (type annotations, interfaces, generics, \`as\` casts) is supported and stripped at evaluation time.
-  Variables, functions, and closures persist across calls within the same session.
-
-  ### Hard rules
-
-  - **No network, no filesystem** — only the helpers below. Do not attempt \`fetch\`, \`require\`, or \`import\`.
-  - **Cite your sources** — when reporting values from files, include the path and key/index so the user can verify.
-  - **Use console.log()** for output — it is captured and returned. \`console.warn()\` and \`console.error()\` are also available.
-  - **Reuse state from previous cells** — variables, functions, and results from earlier \`js_eval\` calls persist across calls. Reference them by name in follow-up cells instead of re-embedding data as inline JSON literals.
-
-  ### First-time usage
-
-  \`\`\`typescript
-  // Read a file from the agent's virtual filesystem
-  const raw: string = await readFile("/data.json");
-  const data = JSON.parse(raw) as { n: number };
-  console.log(data);
-
-  // Write results back
-  await writeFile("/output.txt", JSON.stringify({ result: data.n }));
-  \`\`\`
-
-  ### API Reference — built-in globals
-
-  \`\`\`typescript
-  /**
-   * Read a file from the agent's virtual filesystem. Throws if the file does not exist.
-   */
-  async readFile(path: string): Promise<string>
-
-  /**
-   * Write a file to the agent's virtual filesystem.
-   */
-  async writeFile(path: string, content: string): Promise<void>
-  \`\`\`
-
-  ### Limitations
-
-  - ES2023+ syntax with TypeScript support. No Node.js APIs, no \`require\`, no \`import\`.
-  - Output is truncated beyond a fixed character limit — be selective about what you log.
-  - Execution timeout per call (default 30 s).
-`;
+    An \`${opts.toolName}\` tool is available. It runs JavaScript in a persistent REPL.
+    - State (variables, functions) persists across tool calls within a single turn of conversation. They DO NOT persist across multiple turns.
+    - Top-level \`await\` works; Promises resolve before the call returns.
+    - Runtime sandbox: no built-in filesystem, network, stdlib, or wall-clock APIs (\`fetch\`, \`require\`, \`fs\`, \`process\`, real \`Date.now()\` are unavailable or stubbed). External side effects from inside the REPL are only reachable via the \`tools.*\` namespace when it is exposed (see below); without it, the REPL is pure computation.
+    - Timeout: ${opts.timeout}s per call. Memory: ${opts.memoryLimitMb} MB total.
+    - \`console.log\` output is captured and returned alongside the result.
+  `;
+}
 
 /**
  * Generate the PTC API Reference section for the system prompt.
@@ -157,22 +120,111 @@ export async function generatePtcPrompt(
 }
 
 /**
- * Create the QuickJS REPL middleware.
+ * Resolves a mixed list of tool names and tool instances into a flat list of
+ * StructuredToolInterface objects. Strings are looked up by name in agentTools;
+ * instances are included directly without requiring agent registration. Strings
+ * that don't match any agent tool are silently omitted.
  */
-export function createQuickJSMiddleware(
-  options: QuickJSMiddlewareOptions = {},
+export function resolveToolList(
+  items: (string | StructuredToolInterface)[],
+  agentTools: StructuredToolInterface[],
+): StructuredToolInterface[] {
+  const agentByName = new Map(agentTools.map((t) => [t.name, t]));
+  return items.flatMap((item) => {
+    if (typeof item === "string") {
+      const found = agentByName.get(item);
+      return found ? [found] : [];
+    }
+    return [item];
+  });
+}
+
+/**
+ * Pull `skillsMetadata` from the task input, resolve the backend, and push
+ * both into the session. Short-circuits with a `SkillNotAvailable` error if
+ * the source references skills the agent doesn't have.
+ */
+async function prepareSkillsForEval(
+  session: ReplSession,
+  skillsBackend: AnyBackendProtocol | BackendFactory,
+  code: string,
+  ptcTools: StructuredToolInterface[],
+): Promise<string | undefined> {
+  const taskInput = getCurrentTaskInput<{ skillsMetadata?: SkillMetadata[] }>();
+  const metadata: SkillMetadata[] = taskInput?.skillsMetadata ?? [];
+
+  const referenced = scanSkillReferences(code);
+  if (referenced.size > 0) {
+    const known = new Map(metadata.map((m) => [m.name, m]));
+    const missing: string[] = [];
+    const ptcToolNames = new Set(ptcTools.map((t) => t.name));
+
+    for (const name of referenced) {
+      const skill = known.get(name);
+      if (!skill) {
+        missing.push(name);
+        continue;
+      }
+
+      const rawPtc = skill.metadata?.["required-ptc-tools"] ?? "";
+      const requiredPtc = rawPtc
+        ? String(rawPtc).split(/\s+/).filter(Boolean)
+        : [];
+      const missingPtc = requiredPtc.filter((t) => !ptcToolNames.has(t));
+
+      if (missingPtc.length > 0) {
+        session.setSkillsContext(undefined);
+        return (
+          `Skill '${name}' requires PTC tools that are not configured: ` +
+          `${missingPtc.join(", ")}. ` +
+          `Add them to createQuickJSMiddleware({ ptc: [...] }).`
+        );
+      }
+    }
+
+    if (missing.length > 0) {
+      session.setSkillsContext(undefined);
+      return formatSkillNotAvailable(missing);
+    }
+  }
+
+  const resolved = await resolveBackend(skillsBackend, { state: taskInput });
+  session.setSkillsContext({ metadata, backend: resolved });
+  return undefined;
+}
+
+/**
+ * Create the Code Interpreter middleware.
+ */
+export function createCodeInterpreterMiddleware(
+  options: CodeInterpreterMiddlewareOptions = {},
 ) {
   const {
-    backend = (runtime: BackendRuntime) => new StateBackend(runtime),
-    ptc = false,
+    ptc,
     memoryLimitBytes = DEFAULT_MEMORY_LIMIT,
     maxStackSizeBytes = DEFAULT_MAX_STACK_SIZE,
     executionTimeoutMs = DEFAULT_EXECUTION_TIMEOUT,
     systemPrompt: customSystemPrompt = null,
+    skillsBackend,
+    maxPtcCalls = DEFAULT_MAX_PTC_CALLS,
+    maxResultChars = DEFAULT_MAX_RESULTS_CHARS,
+    toolName = DEFAULT_TOOL_NAME,
+    captureConsole = true,
   } = options;
 
-  const usePtc = ptc !== false;
-  const baseSystemPrompt = customSystemPrompt || REPL_SYSTEM_PROMPT;
+  if (maxPtcCalls !== null && maxPtcCalls !== undefined && maxPtcCalls < 1) {
+    throw new Error("`maxPtcCalls` must be >= 1 or null");
+  }
+
+  const baseSystemPrompt =
+    customSystemPrompt ||
+    renderReplSystemPrompt({
+      toolName,
+      timeout: executionTimeoutMs / 1000,
+      memoryLimitMb: Math.floor(memoryLimitBytes / (1024 * 1024)),
+    });
+
+  const middlewareId = crypto.randomUUID();
 
   let cachedPtcPrompt: string | null = null;
 
@@ -181,62 +233,53 @@ export function createQuickJSMiddleware(
   function filterToolsForPtc(
     allTools: StructuredToolInterface[],
   ): StructuredToolInterface[] {
-    if (ptc === false) return [];
+    if (!ptc) return [];
 
-    const candidates = allTools.filter((t) => t.name !== "js_eval");
+    const candidates = allTools.filter((t) => t.name !== toolName);
 
-    if (ptc === true) {
-      const excluded = new Set<string>(DEFAULT_PTC_EXCLUDED_TOOLS);
-      return candidates.filter((t) => !excluded.has(t.name));
-    }
-
-    if (Array.isArray(ptc)) {
-      const included = new Set(ptc);
-      return candidates.filter((t) => included.has(t.name));
-    }
-
-    if ("include" in ptc) {
-      const included = new Set(ptc.include);
-      return candidates.filter((t) => included.has(t.name));
-    }
-
-    if ("exclude" in ptc) {
-      const excluded = new Set([...DEFAULT_PTC_EXCLUDED_TOOLS, ...ptc.exclude]);
-      return candidates.filter((t) => !excluded.has(t.name));
-    }
-
-    return [];
+    return resolveToolList(ptc, candidates);
   }
 
-  const jsEvalTool = tool(
+  const evalTool = tool(
     async (input, config: LangGraphRunnableConfig) => {
       const threadId = config.configurable?.thread_id || DEFAULT_SESSION_ID;
+      const sessionKey = `${threadId}:${middlewareId}`;
 
-      const runtime: BackendRuntime = {
-        ...config,
-        state: getCurrentTaskInput(config) || {},
-      } as BackendRuntime;
-      const resolvedBackend = await resolveBackend(backend, runtime);
-
-      const session = ReplSession.getOrCreate(threadId, {
+      const session = ReplSession.getOrCreate(sessionKey, {
         memoryLimitBytes,
         maxStackSizeBytes,
-        backend: resolvedBackend,
+        maxPtcCalls,
         tools: ptcTools,
+        skillsEnabled: skillsBackend !== undefined,
+        maxResultChars,
+        captureConsole,
+        sessionId: threadId,
       });
 
-      const result = await session.eval(input.code, executionTimeoutMs);
-      await session.flushWrites(resolvedBackend);
+      if (skillsBackend !== undefined) {
+        const setupError = await prepareSkillsForEval(
+          session,
+          skillsBackend,
+          input.code,
+          ptcTools,
+        );
+        if (setupError !== undefined) {
+          return setupError;
+        }
+      }
 
+      const result = await session.eval(input.code, executionTimeoutMs);
       return formatReplResult(result);
     },
     {
-      name: "js_eval",
+      name: toolName,
       description: dedent`
         Evaluate TypeScript/JavaScript code in a sandboxed REPL. State persists across calls.
-        Use readFile(path) and writeFile(path, content) for file access.
         Use console.log() for output. Returns the result of the last expression.
+        If file or other tools are available, call them via the tools namespace: await tools.readFile({ path }).
+        If skills are configured, dynamically import them: await import("@/skills/<name>").
       `,
+      metadata: { ls_code_input_language: "javascript" },
       schema: z.object({
         code: z
           .string()
@@ -247,12 +290,37 @@ export function createQuickJSMiddleware(
     },
   );
 
+  const ptcToolNames = new Set(
+    (ptc ?? []).map((t) => (typeof t === "string" ? t : t.name)),
+  );
+
   return createMiddleware({
-    name: "QuickJSMiddleware",
-    tools: [jsEvalTool],
+    name: "CodeInterpreterMiddleware",
+    tools: [evalTool],
+    beforeAgent(state) {
+      if (!skillsBackend) return;
+
+      const metadata: SkillMetadata[] =
+        ((state as Record<string, unknown>)
+          .skillsMetadata as SkillMetadata[]) ?? [];
+
+      for (const skill of metadata) {
+        const rawPtc = skill.metadata?.["required-ptc-tools"] ?? "";
+        const requiredPtc = rawPtc
+          ? String(rawPtc).split(/\s+/).filter(Boolean)
+          : [];
+        const missing = requiredPtc.filter((t) => !ptcToolNames.has(t));
+        if (missing.length > 0) {
+          throw new Error(
+            `Skill '${skill.name}' requires PTC tools that are not configured: ${missing.join(", ")}. ` +
+              `Add them to createQuickJSMiddleware({ ptc: [...] }).`,
+          );
+        }
+      }
+    },
     wrapModelCall: async (request, handler) => {
       const agentTools = (request.tools || []) as StructuredToolInterface[];
-      ptcTools = usePtc ? filterToolsForPtc(agentTools) : [];
+      ptcTools = filterToolsForPtc(agentTools);
 
       if (ptcTools.length > 0 && !cachedPtcPrompt) {
         cachedPtcPrompt = await generatePtcPrompt(ptcTools);
@@ -262,6 +330,11 @@ export function createQuickJSMiddleware(
         .concat(baseSystemPrompt)
         .concat(cachedPtcPrompt || "");
       return handler({ ...request, systemMessage });
+    },
+    afterAgent: async (_state, runtime) => {
+      const threadId = runtime.configurable?.thread_id ?? DEFAULT_SESSION_ID;
+      const sessionKey = `${threadId}:${middlewareId}`;
+      ReplSession.deleteSession(sessionKey);
     },
   });
 }

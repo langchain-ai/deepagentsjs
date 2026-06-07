@@ -2,31 +2,45 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { tool } from "langchain";
 import * as z from "zod";
 import { SystemMessage } from "@langchain/core/messages";
-import { createQuickJSMiddleware, generatePtcPrompt } from "./middleware.js";
+import {
+  createCodeInterpreterMiddleware,
+  generatePtcPrompt,
+  resolveToolList,
+} from "./middleware.js";
 import { ReplSession } from "./session.js";
 
-describe("createQuickJSMiddleware", () => {
+describe("createCodeInterpreterMiddleware", () => {
   beforeEach(() => {
     ReplSession.clearCache();
   });
 
   describe("tool registration", () => {
-    it("should register js_eval tool", () => {
-      const middleware = createQuickJSMiddleware();
+    it("should register eval tool", () => {
+      const middleware = createCodeInterpreterMiddleware();
       expect(middleware.tools).toBeDefined();
       const names = middleware.tools!.map((t: { name: string }) => t.name);
-      expect(names).toContain("js_eval");
+      expect(names).toContain("eval");
+      const jsEval = middleware.tools!.find(
+        (t: { name: string }) => t.name === "eval",
+      ) as {
+        metadata?: Record<string, unknown>;
+      };
+      expect(jsEval.metadata?.ls_code_input_language).toBe("javascript");
     });
 
     it("should register exactly one tool", () => {
-      const middleware = createQuickJSMiddleware();
+      const middleware = createCodeInterpreterMiddleware();
       expect(middleware.tools!.length).toBe(1);
+      expect(
+        (middleware.tools![0] as { metadata?: Record<string, unknown> })
+          .metadata,
+      ).toMatchObject({ ls_code_input_language: "javascript" });
     });
   });
 
   describe("wrapModelCall", () => {
     it("should add REPL system prompt with API Reference structure", async () => {
-      const middleware = createQuickJSMiddleware();
+      const middleware = createCodeInterpreterMiddleware();
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
 
       await middleware.wrapModelCall!(
@@ -42,18 +56,16 @@ describe("createQuickJSMiddleware", () => {
       const req = mockHandler.mock.calls[0][0];
       const text = req.systemMessage.text;
       expect(text).toContain("Base");
-      expect(text).toContain("js_eval");
-      expect(text).toContain("### Hard rules");
-      expect(text).toContain("### First-time usage");
-      expect(text).toContain("### API Reference");
-      expect(text).toContain("async readFile(path: string): Promise<string>");
-      expect(text).toContain(
-        "async writeFile(path: string, content: string): Promise<void>",
-      );
+      expect(text).toContain("### Interpreter");
+      expect(text).toContain("`eval`");
+      expect(text).toContain("5s per call");
+      expect(text).toContain("64 MB total");
+      expect(text).not.toContain("async readFile");
+      expect(text).not.toContain("async writeFile");
     });
 
     it("should use custom system prompt when provided", async () => {
-      const middleware = createQuickJSMiddleware({
+      const middleware = createCodeInterpreterMiddleware({
         systemPrompt: "Custom REPL prompt",
       });
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
@@ -70,7 +82,120 @@ describe("createQuickJSMiddleware", () => {
 
       const req = mockHandler.mock.calls[0][0];
       expect(req.systemMessage.text).toContain("Custom REPL prompt");
-      expect(req.systemMessage.text).not.toContain("Hard rules");
+      expect(req.systemMessage.text).not.toContain("### Interpreter");
+    });
+  });
+
+  describe("resolveToolList", () => {
+    const agentSearch = tool(async () => "results", {
+      name: "search",
+      description: "Search",
+      schema: z.object({ query: z.string() }),
+    });
+    const agentGrep = tool(async () => "matches", {
+      name: "grep",
+      description: "Grep",
+      schema: z.object({ pattern: z.string() }),
+    });
+    const extraTool = tool(async () => "extra", {
+      name: "extra_tool",
+      description: "Not on agent",
+      schema: z.object({}),
+    });
+
+    it("should resolve string entries from agentTools", () => {
+      const result = resolveToolList(["search"], [agentSearch, agentGrep]);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBe(agentSearch);
+    });
+
+    it("should include tool instances directly without agent lookup", () => {
+      const result = resolveToolList([extraTool], [agentSearch]);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBe(extraTool);
+    });
+
+    it("should handle a mixed list of strings and instances", () => {
+      const result = resolveToolList(
+        ["search", extraTool],
+        [agentSearch, agentGrep],
+      );
+      expect(result).toHaveLength(2);
+      expect(result[0]).toBe(agentSearch);
+      expect(result[1]).toBe(extraTool);
+    });
+
+    it("should silently omit strings that don't match any agent tool", () => {
+      const result = resolveToolList(["nonexistent"], [agentSearch]);
+      expect(result).toHaveLength(0);
+    });
+
+    it("should include instance even if its name matches an agent tool", () => {
+      const customSearch = tool(async () => "custom", {
+        name: "search",
+        description: "Custom search",
+        schema: z.object({}),
+      });
+      const result = resolveToolList([customSearch], [agentSearch]);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBe(customSearch);
+      expect(result[0]).not.toBe(agentSearch);
+    });
+
+    it("should return empty array for empty items list", () => {
+      expect(resolveToolList([], [agentSearch])).toHaveLength(0);
+    });
+  });
+
+  describe("ptc with tool instances via wrapModelCall", () => {
+    const agentTool = tool(async () => "agent result", {
+      name: "agent_tool",
+      description: "Agent tool",
+      schema: z.object({ q: z.string() }),
+    });
+    const extraTool = tool(async () => "extra result", {
+      name: "extra_tool",
+      description: "Not on agent",
+      schema: z.object({}),
+    });
+
+    it("should include directly injected instances in PTC prompt", async () => {
+      const middleware = createCodeInterpreterMiddleware({ ptc: [extraTool] });
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: { configurable: { thread_id: "ptc-inst-1" } },
+          tools: [],
+        } as any,
+        mockHandler,
+      );
+
+      const req = mockHandler.mock.calls[0][0];
+      expect(req.systemMessage.text).toContain("tools.extraTool");
+    });
+
+    it("should include both named agent tools and injected instances in mixed ptc array", async () => {
+      const middleware = createCodeInterpreterMiddleware({
+        ptc: ["agent_tool", extraTool],
+      });
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: { configurable: { thread_id: "ptc-mixed-1" } },
+          tools: [agentTool],
+        } as any,
+        mockHandler,
+      );
+
+      const req = mockHandler.mock.calls[0][0];
+      expect(req.systemMessage.text).toContain("tools.agentTool");
+      expect(req.systemMessage.text).toContain("tools.extraTool");
     });
   });
 
@@ -120,6 +245,166 @@ describe("createQuickJSMiddleware", () => {
 
     it("should return empty string for no tools", async () => {
       expect(await generatePtcPrompt([])).toBe("");
+    });
+  });
+
+  describe("afterAgent call", () => {
+    it("should dispose of the session for the current thread", async () => {
+      const middleware = createCodeInterpreterMiddleware();
+
+      // Trigger session creation via eval
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+      await jsTool.invoke(
+        { code: "1 + 1" },
+        { configurable: { thread_id: "cleanup-test" } },
+      );
+
+      expect(ReplSession.hasAnyForThread("cleanup-test")).toBe(true);
+
+      // Fire afterAgent
+      await (middleware as any).afterAgent(
+        {},
+        { configurable: { thread_id: "cleanup-test" } },
+      );
+
+      expect(ReplSession.hasAnyForThread("cleanup-test")).toBe(false);
+    });
+
+    it("should no-op for afterAgent on a thread with no session", async () => {
+      const middleware = createCodeInterpreterMiddleware();
+      await expect(
+        (middleware as any).afterAgent(
+          {},
+          { configurable: { thread_id: "no-session-thread" } },
+        ),
+      ).resolves.not.toThrow();
+    });
+
+    it("should only remove the session for the finished thread, not others", async () => {
+      const middleware = createCodeInterpreterMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+
+      await jsTool.invoke(
+        { code: "1" },
+        { configurable: { thread_id: "thread-a" } },
+      );
+      await jsTool.invoke(
+        { code: "1" },
+        { configurable: { thread_id: "thread-b" } },
+      );
+
+      await (middleware as any).afterAgent(
+        {},
+        { configurable: { thread_id: "thread-a" } },
+      );
+
+      expect(ReplSession.hasAnyForThread("thread-a")).toBe(false);
+      expect(ReplSession.hasAnyForThread("thread-b")).toBe(true);
+    });
+  });
+
+  describe("beforeAgent PTC validation", () => {
+    it("throws when a skill requires PTC tools that are not configured", () => {
+      const middleware = createCodeInterpreterMiddleware({
+        ptc: ["task"],
+        skillsBackend: {} as any,
+      });
+
+      expect(() =>
+        (middleware as any).beforeAgent({
+          skillsMetadata: [
+            {
+              name: "swarm",
+              description: "test",
+              metadata: { "required-ptc-tools": "task read_file glob" },
+            },
+          ],
+        }),
+      ).toThrow("read_file, glob");
+    });
+
+    it("throws with skill name in the error message", () => {
+      const middleware = createCodeInterpreterMiddleware({
+        ptc: [],
+        skillsBackend: {} as any,
+      });
+
+      expect(() =>
+        (middleware as any).beforeAgent({
+          skillsMetadata: [
+            {
+              name: "my-skill",
+              description: "test",
+              metadata: { "required-ptc-tools": "write_file" },
+            },
+          ],
+        }),
+      ).toThrow("Skill 'my-skill'");
+    });
+
+    it("does not throw when all required PTC tools are configured", () => {
+      const middleware = createCodeInterpreterMiddleware({
+        ptc: ["task", "read_file", "write_file", "glob"],
+        skillsBackend: {} as any,
+      });
+
+      expect(() =>
+        (middleware as any).beforeAgent({
+          skillsMetadata: [
+            {
+              name: "swarm",
+              description: "test",
+              metadata: { "required-ptc-tools": "task read_file" },
+            },
+          ],
+        }),
+      ).not.toThrow();
+    });
+
+    it("does not throw when skill has no required-ptc-tools in metadata", () => {
+      const middleware = createCodeInterpreterMiddleware({
+        ptc: ["task"],
+        skillsBackend: {} as any,
+      });
+
+      expect(() =>
+        (middleware as any).beforeAgent({
+          skillsMetadata: [
+            { name: "simple", description: "test", metadata: {} },
+          ],
+        }),
+      ).not.toThrow();
+    });
+
+    it("does not throw when skillsBackend is not configured", () => {
+      const middleware = createCodeInterpreterMiddleware({ ptc: [] });
+
+      expect(() =>
+        (middleware as any).beforeAgent({
+          skillsMetadata: [
+            {
+              name: "swarm",
+              description: "test",
+              metadata: { "required-ptc-tools": "task" },
+            },
+          ],
+        }),
+      ).not.toThrow();
+    });
+
+    it("does not throw when skillsMetadata is empty", () => {
+      const middleware = createCodeInterpreterMiddleware({
+        ptc: [],
+        skillsBackend: {} as any,
+      });
+
+      expect(() =>
+        (middleware as any).beforeAgent({ skillsMetadata: [] }),
+      ).not.toThrow();
     });
   });
 });

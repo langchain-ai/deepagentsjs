@@ -35,7 +35,11 @@ export function formatReplResult(result: ReplResult): string {
   const parts: string[] = [];
 
   if (result.logs.length > 0) {
-    parts.push(result.logs.join("\n"));
+    let logsText = result.logs.join("\n");
+    if (result.logsDroppedChars > 0) {
+      logsText += `\n[truncated ${result.logsDroppedChars} chars]`;
+    }
+    parts.push(logsText);
   }
 
   if (result.ok) {
@@ -112,4 +116,12 @@ export async function toolToTypeSignature(
      */
     async tools.${name}(input: ${inputType}): Promise<string>
   `;
+}
+
+/**
+ * Render a pre-eval error when referenced skills are not available on the agent.
+ */
+export function formatSkillNotAvailable(missing: readonly string[]): string {
+  const list = [...missing].sort().join(", ");
+  return `Skills unavailable: ${list}`;
 }

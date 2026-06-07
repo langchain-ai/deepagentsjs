@@ -104,8 +104,14 @@ describe
           // Close the connection (but sandbox keeps running due to duration lifetime)
           await originalSandbox.close();
 
-          // Reconnect using DenoSandbox.fromId()
-          const reconnectedSandbox = await DenoSandbox.fromId(sandboxId);
+          // Reconnect using DenoSandbox.fromId().
+          // The deployment can take a short moment to become reconnectable
+          // after the original WebSocket closes.
+          const reconnectedSandbox = await withRetry(
+            () => DenoSandbox.fromId(sandboxId),
+            5,
+            1_000,
+          );
 
           expect(reconnectedSandbox.id).toBe(sandboxId);
           expect(reconnectedSandbox.isRunning).toBe(true);
@@ -114,6 +120,8 @@ describe
             "cat /home/app/reconnect.txt",
           );
           expect(result.output.trim()).toBe("Reconnect test");
+
+          await reconnectedSandbox.close();
         },
         TEST_TIMEOUT * 2,
       );
