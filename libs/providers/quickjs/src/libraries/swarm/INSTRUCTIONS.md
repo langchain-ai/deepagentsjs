@@ -106,38 +106,35 @@ comes back as the tool response, and an oversized tool response wastes
 context window and slows you down.
 
 Use the filesystem to keep the tool response small. During the eval, write
-detailed results to files and only `console.log` a compact summary with
-counts and file paths. After the eval completes, you still have full access
-to the data — just `readFile` the results path if you need more detail to
-answer the user.
+detailed results to files and only `console.log` counts and file paths.
+Do NOT log individual finding titles, descriptions, reasons, or any
+per-item details — that data belongs in the files. After the eval
+completes, you still have full access — just `readFile` the results path
+if you need more detail to answer the user.
 
 ```javascript
-// Write full results to a file — keeps them out of the tool response
+// Write full results to files
 await tools.writeFile({
   file_path: "/results/findings.json",
   content: JSON.stringify(confirmed, null, 2),
 });
 
-// Log only a compact summary — this is what comes back as the tool response
-console.log(`=== SUMMARY ===`);
+// Log ONLY counts and file paths — nothing else
 console.log(`${confirmed.length}/${total.length} findings confirmed`);
-console.log(`  Critical: ${confirmed.filter(f => f.severity === "critical").length}`);
-console.log(`  High: ${confirmed.filter(f => f.severity === "high").length}`);
-console.log(`Full results: /results/findings.json`);
+console.log(`  Critical: ${bySeverity.critical.length}`);
+console.log(`  High: ${bySeverity.high.length}`);
+console.log(`Results: /results/findings.json`);
+
+// WRONG — do not loop over findings in console.log:
+// for (const f of confirmed) {
+//   console.log(`[${f.severity}] ${f.title}`);   // ← NO
+//   console.log(`  ${f.description}`);            // ← NO
+// }
 ```
 
-For multi-file output, organize by category or stage:
-
-```javascript
-await tools.writeFile({ file_path: "/results/pass1-findings.json", content: ... });
-await tools.writeFile({ file_path: "/results/pass2-verified.json", content: ... });
-console.log("Results written to /results/pass1-findings.json and /results/pass2-verified.json");
-```
-
-**Rule of thumb**: `console.log` the shape (counts, severity breakdown,
-file paths), write the details to files. After the eval completes, read
-the results file to formulate your response. This keeps the eval tool
-response small while preserving full access to the data.
+**Rule of thumb**: `console.log` gets counts and file paths. The files
+get everything else. After the eval, `readFile` the results to build
+your response.
 
 ## Write Effective Instructions
 
