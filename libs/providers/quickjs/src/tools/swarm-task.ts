@@ -69,13 +69,13 @@ const VARIANT_TTL_MS = 60_000;
  * recursionLimit (10,000) via AsyncLocalStorage config propagation,
  * which can cause runaway cost when a subagent goes off on a tangent.
  */
-const DEFAULT_RECURSION_LIMIT = 25;
+const DEFAULT_RECURSION_LIMIT = 50;
 
 /**
  * Hard ceiling for recursion_limit — the LLM can request more iterations
  * per dispatch, but the value is clamped to this maximum.
  */
-const MAX_RECURSION_LIMIT = 75;
+const MAX_RECURSION_LIMIT = 150;
 
 /**
  * TTL cache for compiled agent variants.
@@ -223,8 +223,13 @@ async function invokeAgent(
     );
   }
 
+  const budgetNote =
+    `\n\n[You have a budget of approximately ${Math.floor(recursionLimit / 2)} ` +
+    `tool-calling iterations. Stay focused on the task and produce your ` +
+    `final answer once you have enough evidence rather than continuing to explore.]`;
+
   const state = {
-    messages: [new HumanMessage({ content: description })],
+    messages: [new HumanMessage({ content: description + budgetNote })],
   };
 
   const result = (await agent.invoke(state, {

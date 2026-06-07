@@ -224,7 +224,7 @@ Dispatch work across table rows and update the table in place.
 | `responseSchema` | `object` | JSON Schema (`type: "object"`) for structured output. |
 | `batchSize` | `number \| function?` | Controls row grouping. See Batching. |
 | `concurrency` | `number?` | Max concurrent dispatches (1–10, default 10). |
-| `recursionLimit` | `number?` | Max agentic loop iterations per dispatch (1–75, default 25). |
+| `recursionLimit` | `number?` | Max agentic loop iterations per dispatch (1–150, default 50). |
 
 **Returns** `{ completed, failed, skipped, failures }`.
 

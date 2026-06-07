@@ -194,7 +194,9 @@ describe("agent mode", () => {
     >;
     const messages = state.messages as HumanMessage[];
     expect(messages).toHaveLength(1);
-    expect(messages[0].content).toBe("classify this trace");
+    expect(
+      (messages[0].content as string).startsWith("classify this trace"),
+    ).toBe(true);
   });
 
   it("returns structuredResponse as JSON string when present", async () => {
