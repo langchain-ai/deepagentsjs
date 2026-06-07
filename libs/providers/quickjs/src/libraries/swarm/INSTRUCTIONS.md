@@ -86,18 +86,25 @@ console.log(JSON.stringify(confirmed, null, 2));
 
 ## Manage Output Size
 
-Raw swarm results can be very large — dozens of findings with full
-descriptions easily exceed what fits in an eval response. Write verbose
-results to files and log only a compact summary:
+Swarm results can get large — dozens of findings with full descriptions
+easily produce thousands of lines. Everything you `console.log` in an eval
+comes back as the tool response, and an oversized tool response wastes
+context window and slows you down.
+
+Use the filesystem to keep the tool response small. During the eval, write
+detailed results to files and only `console.log` a compact summary with
+counts and file paths. After the eval completes, you still have full access
+to the data — just `readFile` the results path if you need more detail to
+answer the user.
 
 ```javascript
-// Write full results to a file
+// Write full results to a file — keeps them out of the tool response
 await tools.writeFile({
   file_path: "/results/findings.json",
   content: JSON.stringify(confirmed, null, 2),
 });
 
-// Log a compact summary — counts, top items, file path
+// Log only a compact summary — this is what comes back as the tool response
 console.log(`=== SUMMARY ===`);
 console.log(`${confirmed.length}/${total.length} findings confirmed`);
 console.log(`  Critical: ${confirmed.filter(f => f.severity === "critical").length}`);
@@ -114,7 +121,9 @@ console.log("Results written to /results/pass1-findings.json and /results/pass2-
 ```
 
 **Rule of thumb**: `console.log` the shape (counts, severity breakdown,
-file paths), write the details to files.
+file paths), write the details to files. After the eval completes, read
+the results file to formulate your response. This keeps the eval tool
+response small while preserving full access to the data.
 
 ## API
 
