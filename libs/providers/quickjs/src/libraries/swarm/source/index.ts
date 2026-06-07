@@ -64,17 +64,6 @@ function buildDispatchUnits(
   const units: DispatchUnit[] = [];
   const errors: TaskResult[] = [];
 
-  const BASELINE_CONTEXT =
-    "Work primarily with the content provided. " +
-    "Use tools only to verify specific details, not for general guidance.";
-
-  const effectiveContext =
-    opts.mode === "agent"
-      ? opts.context
-        ? `${BASELINE_CONTEXT}\n\n${opts.context}`
-        : BASELINE_CONTEXT
-      : opts.context;
-
   let batchIndex = 0;
   for (const batch of batches) {
     if (batch.length === 1) {
@@ -84,8 +73,8 @@ function buildDispatchUnits(
 
       try {
         let prompt = interpolate(opts.instruction, row);
-        if (effectiveContext) {
-          prompt = `${effectiveContext}\n\n${prompt}`;
+        if (opts.context) {
+          prompt = `${opts.context}\n\n${prompt}`;
         }
 
         units.push({
@@ -111,7 +100,7 @@ function buildDispatchUnits(
       units.push({
         task: {
           id: `batch_${batchIndex}`,
-          prompt: buildBatchPrompt(opts.instruction, batch, effectiveContext),
+          prompt: buildBatchPrompt(opts.instruction, batch, opts.context),
           subagentType: opts.subagentType,
           responseSchema: wrapSchema(opts.responseSchema, batch.length),
           mode: opts.mode,
