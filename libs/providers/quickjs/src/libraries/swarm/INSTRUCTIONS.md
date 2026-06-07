@@ -4,6 +4,13 @@ Process many independent items in parallel. `create` builds a table handle;
 `run` fans work out across rows and merges results back. One row = one unit
 of work — swarm handles batching automatically.
 
+**IMPORTANT: Always write the complete pipeline — `create`, all `run` passes,
+`rows`, and aggregation — in a single eval call.** Never split swarm
+operations across multiple eval calls. Do not call `create` in one eval and
+`run` in another. Do not use `glob` or `readFile` as separate tool calls to
+explore files before creating a table — `create({ glob })` handles that for
+you inside the eval. One eval, one complete pipeline.
+
 ## Quick Start
 
 ```javascript
@@ -23,12 +30,19 @@ const data = await rows(table.id);
 
 ## Compose Complete Pipelines
 
-Write the entire pipeline — create, all run passes, rows retrieval, and
-aggregation — in a **single eval script**. Do not split operations across
-multiple tool calls. Each round-trip through the interpreter is expensive;
-a single script avoids unnecessary overhead and prevents context loss
-between evals.
+ALWAYS write the entire pipeline in a **single eval script**. This means
+one eval that contains `create`, all `run` passes, `rows` retrieval, and
+result aggregation together. Never split these across multiple eval calls.
 
+Wrong — two separate evals:
+```
+// Eval 1
+const table = await create({ glob: "src/**/*.ts" });
+// Eval 2 (don't do this)
+await run("t_abc123", { ... });
+```
+
+Right — one complete eval:
 ```javascript
 import { create, run, rows } from "swarm";
 
@@ -125,12 +139,54 @@ file paths), write the details to files. After the eval completes, read
 the results file to formulate your response. This keeps the eval tool
 response small while preserving full access to the data.
 
+## Write Effective Instructions
+
+The quality of your `instruction` and `context` directly determines how
+well subagents perform. Vague instructions cause subagents to over-use
+tools, produce shallow results, and waste time. Specific instructions
+produce focused, faster work.
+
+Bad — vague, subagent doesn't know what matters:
+```javascript
+await run(table.id, {
+  instruction: "Review {file} for issues",
+  subagentType: "reviewer",
+  responseSchema: { ... },
+});
+```
+
+Good — tells the subagent exactly what to look for and what to skip:
+```javascript
+await run(table.id, {
+  instruction: "Find race conditions, resource leaks, and injection vectors in {file}. Cite line numbers. Ignore style and naming.",
+  subagentType: "reviewer",
+  responseSchema: { ... },
+});
+```
+
+Use `context` to set shared constraints across all dispatches — scope the
+task, constrain tool usage, or provide project background that applies to
+every row:
+
+```javascript
+await run(table.id, {
+  instruction: "Review {file} for bugs",
+  context: "These are backend modules for an AI agent framework. Focus on the code provided. Only search the web to verify a specific API or pattern — do not search for general review guidance.",
+  subagentType: "reviewer",
+  responseSchema: { ... },
+});
+```
+
+Thorough instructions and context help subagents work faster and produce
+better results — invest the extra detail up front.
+
 ## API
 
 ### `create(source)` → `SwarmHandle`
 
 Create a table from a source specification. Returns a lightweight handle
-with `id`, `count`, and `columns`.
+with `id`, `count`, and `columns`. Always call `create` inside the same
+eval as `run` and `rows` — never in a separate eval.
 
 **Source types** — exactly one of:
 
@@ -189,13 +245,19 @@ Nested access via dot paths: `{meta.score}`, `{config.model}`.
 
 #### Context
 
-Shared prose prepended to every subagent prompt. Use for project-wide
-background that applies to all rows:
+Shared prose prepended to every subagent prompt. Use `context` to shape
+how subagents behave — constrain tool usage, set priorities, provide
+project background, or scope the task. This is one of the most effective
+levers for controlling subagent quality and cost.
 
 ```javascript
 await run(table.id, {
   instruction: "Analyze {file}",
-  context: "This is a React project using TypeScript and Tailwind CSS.",
+  context:
+    "This is a React project using TypeScript and Tailwind CSS. " +
+    "Focus on the code provided. Only use web search to verify " +
+    "a specific API or pattern you are unsure about.",
+  subagentType: "reviewer",
   responseSchema: { ... },
 });
 ```
