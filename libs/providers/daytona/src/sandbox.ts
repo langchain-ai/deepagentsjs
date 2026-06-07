@@ -700,10 +700,13 @@ export class DaytonaSandbox extends BaseSandbox {
       target: credentials.target,
     });
 
-    const { items } = await daytona.list(labels);
+    const sandboxes: Sandbox[] = [];
+    for await (const sandbox of daytona.list({ labels })) {
+      sandboxes.push(sandbox);
+    }
 
     const results = await Promise.all(
-      items.map((sandbox) =>
+      sandboxes.map((sandbox) =>
         daytona
           .delete(sandbox)
           .then(() => true)

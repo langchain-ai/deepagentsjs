@@ -22,7 +22,15 @@ const mockSandbox = {
 const mockDaytonaInstance = {
   create: vi.fn().mockResolvedValue(mockSandbox),
   get: vi.fn().mockResolvedValue(mockSandbox),
+  list: vi.fn(),
+  delete: vi.fn().mockResolvedValue(undefined),
 };
+
+async function* asyncIterator<T>(items: T[]): AsyncIterableIterator<T> {
+  for (const item of items) {
+    yield item;
+  }
+}
 
 // Mock the Daytona SDK with a proper class
 vi.mock("@daytonaio/sdk", () => {
@@ -30,6 +38,8 @@ vi.mock("@daytonaio/sdk", () => {
     Daytona: class MockDaytona {
       create = mockDaytonaInstance.create;
       get = mockDaytonaInstance.get;
+      list = mockDaytonaInstance.list;
+      delete = mockDaytonaInstance.delete;
     },
   };
 });
@@ -306,6 +316,37 @@ describe("DaytonaSandbox", () => {
       await expect(
         DaytonaSandbox.connect("nonexistent-sandbox"),
       ).rejects.toThrow("Sandbox not found");
+    });
+  });
+
+  describe("static deleteAll", () => {
+    it("should delete sandboxes returned by async iterable list", async () => {
+      const labels = { purpose: "test" };
+      const sandboxes = [{ id: "sandbox-1" }, { id: "sandbox-2" }];
+      mockDaytonaInstance.list.mockReturnValueOnce(asyncIterator(sandboxes));
+
+      const deleted = await DaytonaSandbox.deleteAll(labels);
+
+      expect(mockDaytonaInstance.list).toHaveBeenCalledWith({ labels });
+      expect(mockDaytonaInstance.delete).toHaveBeenCalledTimes(2);
+      expect(mockDaytonaInstance.delete).toHaveBeenNthCalledWith(
+        1,
+        sandboxes[0],
+      );
+      expect(mockDaytonaInstance.delete).toHaveBeenNthCalledWith(
+        2,
+        sandboxes[1],
+      );
+      expect(deleted).toBe(2);
+    });
+
+    it("should return zero when list is empty", async () => {
+      mockDaytonaInstance.list.mockReturnValueOnce(asyncIterator([]));
+
+      const deleted = await DaytonaSandbox.deleteAll({ purpose: "test" });
+
+      expect(mockDaytonaInstance.delete).not.toHaveBeenCalled();
+      expect(deleted).toBe(0);
     });
   });
 });
