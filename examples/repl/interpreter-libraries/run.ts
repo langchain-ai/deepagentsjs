@@ -4,8 +4,8 @@
  * Demonstrates two interpreter libraries working together:
  *
  * 1. **swarm** (built-in) — parallel task dispatch infrastructure.
- *    Configured with three specialized subagents, each with Tavily
- *    web search: researcher, benchmarker, and community_analyst.
+ *    Subagents (researcher, benchmarker, community_analyst) are registered
+ *    on createDeepAgent and discovered by swarm via the shared pool.
  *
  * 2. **evaluator** (custom, imports swarm) — multi-pass evaluation
  *    pipeline. Pass 1 does quick scoring (invoke mode), filters to the
@@ -43,48 +43,50 @@ async function main() {
     temperature: 0,
   });
 
-  const defaultModel = "anthropic:claude-sonnet-4-5";
+  // Built-in swarm library — provides create/run/rows API inside the interpreter.
+  // Subagents are registered on createDeepAgent below; swarm discovers them
+  // automatically via the shared subagent pool.
+  const swarmLib = swarm();
 
-  // Built-in swarm library with three specialized subagents
-  const swarmLib = swarm({
-    defaultModel,
-    subagents: [
-      {
-        name: "researcher",
-        description: "General research and fact-finding via web search",
-        systemPrompt: dedent`
+  // Subagent definitions — these are passed to createDeepAgent, which
+  // populates the swarm subagent pool so dispatches like
+  // run(..., { subagentType: "researcher" }) resolve correctly.
+  const subagents = [
+    {
+      name: "researcher",
+      description: "General research and fact-finding via web search",
+      systemPrompt: dedent`
         You are a technical researcher. Use web search to find current,
         factual information about the technology you're evaluating.
         Focus on official docs, adoption trends, and survey data.
         Cite specific numbers and sources. Be concise but substantive.
       `,
-        tools: [new TavilySearch({ maxResults: 3 })],
-      },
-      {
-        name: "benchmarker",
-        description: "Performance benchmark specialist",
-        systemPrompt: dedent`
+      tools: [new TavilySearch({ maxResults: 3 })],
+    },
+    {
+      name: "benchmarker",
+      description: "Performance benchmark specialist",
+      systemPrompt: dedent`
         You are a performance analyst. Use web search to find benchmarks,
         profiling data, and performance comparisons for the technology
         you're evaluating. Focus on startup time, memory usage, binary
         size, and throughput. Cite benchmark sources and methodology.
       `,
-        tools: [new TavilySearch({ maxResults: 3 })],
-      },
-      {
-        name: "community_analyst",
-        description: "Ecosystem and community analysis",
-        systemPrompt: dedent`
+      tools: [new TavilySearch({ maxResults: 3 })],
+    },
+    {
+      name: "community_analyst",
+      description: "Ecosystem and community analysis",
+      systemPrompt: dedent`
         You are a developer ecosystem analyst. Use web search to assess
         the community, ecosystem, and tooling around the technology
         you're evaluating. Cover: package counts, key libraries,
         GitHub activity, StackOverflow trends, and recent momentum.
         Cite specific numbers.
       `,
-        tools: [new TavilySearch({ maxResults: 3 })],
-      },
-    ],
-  });
+      tools: [new TavilySearch({ maxResults: 3 })],
+    },
+  ];
 
   // Custom evaluator library — imports swarm internally to build
   // a multi-pass pipeline (score → filter → research → benchmarks → ecosystem)
@@ -102,6 +104,7 @@ async function main() {
 
   const agent = createDeepAgent({
     model,
+    subagents,
     systemPrompt: dedent`
     You are a tech stack evaluator. You have an \`evaluator\` library that
     orchestrates a full multi-pass comparison pipeline via swarm.

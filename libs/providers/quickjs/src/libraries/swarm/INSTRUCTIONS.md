@@ -286,6 +286,52 @@ await run(table.id, {
 });
 ```
 
+#### Recursion Limit
+
+Each agent-mode dispatch has a budget of agentic loop iterations
+(default 50, ~25 tool-calling turns). When a subagent exhausts this
+budget it is stopped and the dispatch is recorded as a failure.
+
+The default is appropriate for most tasks (classification, single-file
+review, extraction). Increase it for tasks that require deep exploration
+— multi-file code review, research with many web searches, or complex
+multi-step reasoning:
+
+```javascript
+// Deep code review — subagents may need to read many imports
+await run(table.id, {
+  instruction: "Review {file} for security issues, tracing data flow across imports",
+  subagentType: "reviewer",
+  recursionLimit: 100,
+  responseSchema: findingsSchema,
+});
+```
+
+If some dispatches hit the limit while others succeed, retry the
+failed rows with a higher limit rather than raising the default for
+all dispatches:
+
+```javascript
+const result = await run(table.id, {
+  instruction: "Review {file} for bugs",
+  subagentType: "reviewer",
+  responseSchema: findingsSchema,
+});
+
+if (result.failed > 0) {
+  await run(table.id, {
+    instruction: "Review {file} for bugs",
+    subagentType: "reviewer",
+    recursionLimit: 120,
+    responseSchema: findingsSchema,
+    filter: { column: "findings", exists: false },
+  });
+}
+```
+
+Only applies to agent mode — invoke mode makes a single model call
+with no iteration.
+
 #### Response Schema
 
 Every `run()` requires a `responseSchema` — a JSON Schema with `type: "object"`.
