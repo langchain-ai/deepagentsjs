@@ -136,14 +136,60 @@ console.log(`Results: /results/findings.json`);
 get everything else. After the eval, `readFile` the results to build
 your response.
 
-## Write Effective Instructions
+## Write Effective Dispatches
 
-The quality of your `instruction` and `context` directly determines how
-well subagents perform. Vague instructions cause subagents to over-use
-tools, produce shallow results, and waste time. Specific instructions
-produce focused, faster work.
+Subagents have the full agentic loop — tools, middleware, iteration. This
+is powerful but expensive. A subagent told to "review {file} for issues"
+will read the file, chase its imports, grep for callers, and explore
+broadly. That's 20+ tool calls per dispatch when 3-5 would suffice.
 
-Bad — vague, subagent doesn't know what matters:
+**Your job as the orchestrator is to do the thinking upfront.** A few
+minutes of scoping work before `run()` is far cheaper than 10 subagents
+each spending 30 iterations figuring out their own scope. Write dispatches
+that eliminate subagent guesswork.
+
+### Scope Before You Dispatch
+
+Before writing a `run()`, understand what you're sending subagents into.
+You don't need deep research — just enough context to write specific
+prompts. Read a representative file, check the project structure, or
+look at imports to understand the shape of things.
+
+```javascript
+import { create, run, rows } from "swarm";
+
+// Read a representative file to understand patterns and conventions
+const sample = await tools.readFile({ file_path: "src/api/users.ts" });
+
+// Now you can write informed, specific instructions
+const table = await create({ glob: "src/api/*.ts" });
+await run(table.id, {
+  instruction:
+    "In {file}, find SQL injection risks in query construction, " +
+    "unvalidated request parameters passed to database calls, and " +
+    "missing authorization checks on route handlers. Cite line numbers.",
+  context:
+    "These are Express route handlers using Knex for database access. " +
+    "Each file exports a router. Auth middleware is applied at the " +
+    "router level, not per-route — check for routes that should have " +
+    "additional permission checks beyond authentication.",
+  subagentType: "reviewer",
+  responseSchema: findingsSchema,
+});
+```
+
+The scoping pass told you the stack (Express + Knex), the auth pattern
+(router-level middleware), and what to look for. Without it, you'd write
+"review {file} for security issues" and each subagent would spend
+iterations rediscovering this context independently.
+
+### Write Specific Instructions
+
+Tell subagents exactly what to look for, what to skip, and how to work.
+Vague instructions cause subagents to explore broadly and use tools
+unnecessarily.
+
+Bad — subagent doesn't know what matters:
 ```javascript
 await run(table.id, {
   instruction: "Review {file} for issues",
@@ -152,30 +198,67 @@ await run(table.id, {
 });
 ```
 
-Good — tells the subagent exactly what to look for and what to skip:
+Good — subagent knows exactly what to do:
 ```javascript
 await run(table.id, {
-  instruction: "Find race conditions, resource leaks, and injection vectors in {file}. Cite line numbers. Ignore style and naming.",
+  instruction:
+    "Find race conditions, resource leaks, and injection vectors " +
+    "in {file}. Cite line numbers. Ignore style and naming.",
   subagentType: "reviewer",
   responseSchema: { ... },
 });
 ```
 
-Use `context` to set shared constraints across all dispatches — scope the
-task, constrain tool usage, or provide project background that applies to
-every row:
+### Constrain Tool Usage with Context
+
+Use `context` to tell subagents what **not** to do. Without constraints,
+subagents will read imports, grep for callers, and explore the codebase.
+Each extra tool call adds tokens to the conversation, making subsequent
+calls more expensive (prompt tokens grow with each iteration).
 
 ```javascript
 await run(table.id, {
-  instruction: "Review {file} for bugs",
-  context: "These are backend modules for an AI agent framework. Focus on the code provided. Only search the web to verify a specific API or pattern — do not search for general review guidance.",
+  instruction: "Find bugs in {file}. Cite line numbers.",
+  context:
+    "Analyze only the dispatched file. Do not read imports, trace " +
+    "dependencies, or grep the codebase. If a finding depends on " +
+    "external behavior, note it as an assumption and move on. " +
+    "Produce your findings after reading the file — do not iterate " +
+    "beyond what is necessary.",
   subagentType: "reviewer",
-  responseSchema: { ... },
+  responseSchema: findingsSchema,
 });
 ```
 
-Thorough instructions and context help subagents work faster and produce
-better results — invest the extra detail up front.
+### Inline Small Files
+
+For files under ~500 lines, read them during the scoping pass and include
+the content directly in the instruction. This eliminates the subagent's
+need to call `readFile` at all — it already has the code.
+
+```javascript
+const table = await create({ glob: "src/utils/*.ts" });
+const allRows = await rows(table.id);
+
+// Read files and add content as a column
+for (const row of allRows) {
+  const content = await tools.readFile({ file_path: row.file });
+  row.content = content;
+}
+
+// Subagent gets the code inline — no file reads needed
+await run(table.id, {
+  instruction:
+    "Find bugs in the following code from {file}:\n\n{content}\n\n" +
+    "Cite line numbers. Do not read any files.",
+  context: "All code is provided inline. Do not use file tools.",
+  subagentType: "reviewer",
+  responseSchema: findingsSchema,
+});
+```
+
+For large files (500+ lines), let the subagent read the file but constrain
+it to only that file via `context`.
 
 ## API
 

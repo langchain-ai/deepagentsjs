@@ -223,13 +223,14 @@ async function invokeAgent(
     );
   }
 
-  const budgetNote =
-    `\n\n[You have a budget of approximately ${Math.floor(recursionLimit / 2)} ` +
-    `tool-calling iterations. Stay focused on the task and produce your ` +
-    `final answer once you have enough evidence rather than continuing to explore.]`;
+  const dispatchNote =
+    `\n\n[You have approximately ${Math.floor(recursionLimit / 2)} ` +
+    `tool-calling iterations. Work only on the task above — do not ` +
+    `explore beyond what is necessary. Produce your final answer once ` +
+    `you have enough evidence.]`;
 
   const state = {
-    messages: [new HumanMessage({ content: description + budgetNote })],
+    messages: [new HumanMessage({ content: description + dispatchNote })],
   };
 
   const result = (await agent.invoke(state, {
