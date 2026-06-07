@@ -84,6 +84,38 @@ console.log(`${confirmed.length}/${verified.length} findings confirmed`);
 console.log(JSON.stringify(confirmed, null, 2));
 ```
 
+## Manage Output Size
+
+Raw swarm results can be very large — dozens of findings with full
+descriptions easily exceed what fits in an eval response. Write verbose
+results to files and log only a compact summary:
+
+```javascript
+// Write full results to a file
+await tools.writeFile({
+  file_path: "/results/findings.json",
+  content: JSON.stringify(confirmed, null, 2),
+});
+
+// Log a compact summary — counts, top items, file path
+console.log(`=== SUMMARY ===`);
+console.log(`${confirmed.length}/${total.length} findings confirmed`);
+console.log(`  Critical: ${confirmed.filter(f => f.severity === "critical").length}`);
+console.log(`  High: ${confirmed.filter(f => f.severity === "high").length}`);
+console.log(`Full results: /results/findings.json`);
+```
+
+For multi-file output, organize by category or stage:
+
+```javascript
+await tools.writeFile({ file_path: "/results/pass1-findings.json", content: ... });
+await tools.writeFile({ file_path: "/results/pass2-verified.json", content: ... });
+console.log("Results written to /results/pass1-findings.json and /results/pass2-verified.json");
+```
+
+**Rule of thumb**: `console.log` the shape (counts, severity breakdown,
+file paths), write the details to files.
+
 ## API
 
 ### `create(source)` → `SwarmHandle`
