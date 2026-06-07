@@ -48,6 +48,9 @@ export type {
   // Response format type utilities
   SupportedResponseFormat,
   InferStructuredResponse,
+  // Subagent pool types (internal, used by quickjs swarm)
+  SubagentPoolRef,
+  SubagentPoolSpec,
 } from "./types.js";
 
 // Export config

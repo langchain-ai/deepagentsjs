@@ -43,6 +43,7 @@ import type {
   DeepAgentTypeConfig,
   FlattenSubAgentMiddleware,
   InferStructuredResponse,
+  SubagentPoolRef,
   SupportedResponseFormat,
 } from "./types.js";
 import { createSubagentTransformer } from "./stream.js";
@@ -314,6 +315,38 @@ export function createDeepAgent<
       tools: effectiveTools,
     });
     inlineSubagents.unshift(generalPurposeSpec);
+  }
+
+  // Populate subagent pool refs on any CodeInterpreterMiddleware in
+  // the user's middleware. This bridges the main agent's subagent specs
+  // to the swarm library without the user having to wire it explicitly.
+  const poolData = {
+    specs: inlineSubagents
+      .filter((sub) => !("runnable" in sub))
+      .map((sub) => ({
+        name: sub.name,
+        description: ("description" in sub ? sub.description : "") ?? "",
+        systemPrompt: "systemPrompt" in sub ? sub.systemPrompt : "",
+        model: ("model" in sub ? sub.model : undefined) ?? model,
+        tools:
+          "tools" in sub && sub.tools && sub.tools.length > 0
+            ? sub.tools
+            : effectiveTools,
+        middleware: [
+          ...(("middleware" in sub ? sub.middleware : undefined) ?? []),
+        ],
+      })),
+    model,
+  };
+
+  for (const mw of customMiddleware) {
+    if (mw.name === "CodeInterpreterMiddleware" && "_subagentPoolRefs" in mw) {
+      const refs = (mw as Record<string, unknown>)
+        ._subagentPoolRefs as SubagentPoolRef[];
+      for (const ref of refs) {
+        ref.current = poolData;
+      }
+    }
   }
 
   const skillsMiddleware =

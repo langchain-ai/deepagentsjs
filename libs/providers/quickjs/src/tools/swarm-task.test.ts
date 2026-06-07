@@ -3,6 +3,7 @@ import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { RunnableLambda } from "@langchain/core/runnables";
 import { FakeToolCallingModel } from "langchain";
 import * as langchain from "langchain";
+import type { SubagentPoolRef } from "deepagents";
 
 vi.mock("langchain", async (importOriginal) => {
   const actual = await importOriginal<typeof import("langchain")>();
@@ -25,8 +26,61 @@ function makeMockModel(response: string = "model response"): any {
   };
 }
 
+/**
+ * Create a populated SubagentPoolRef for testing.
+ */
+function makePool(
+  specs: Array<{
+    name: string;
+    description?: string;
+    systemPrompt?: string;
+    model?: any;
+    tools?: any[];
+    middleware?: any[];
+  }>,
+  model: any,
+): SubagentPoolRef {
+  return {
+    current: {
+      specs: specs.map((s) => ({
+        name: s.name,
+        description: s.description ?? "",
+        systemPrompt: s.systemPrompt ?? "",
+        model: s.model ?? model,
+        tools: s.tools ?? [],
+        middleware: s.middleware ?? [],
+      })),
+      model,
+    },
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+// ---------------------------------------------------------------------------
+// Uninitialized pool
+// ---------------------------------------------------------------------------
+
+describe("uninitialized pool", () => {
+  it("throws when pool is not initialized", async () => {
+    const subagentPool: SubagentPoolRef = { current: null };
+    const swarmTask = createSwarmTaskTool({ subagentPool });
+
+    await expect(
+      swarmTask.invoke({ description: "do work", subagent_type: "worker" }),
+    ).rejects.toThrow("Swarm subagent pool not initialized");
+  });
+
+  it("throws in invoke mode when pool is not initialized", async () => {
+    const subagentPool: SubagentPoolRef = { current: null };
+    const swarmTask = createSwarmTaskTool({ subagentPool });
+
+    await expect(
+      swarmTask.invoke({ description: "do work", mode: "invoke" }),
+    ).rejects.toThrow("Swarm subagent pool not initialized");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -35,16 +89,17 @@ beforeEach(() => {
 
 describe("subagent validation", () => {
   it("throws when subagent_type is not in the configured list", async () => {
-    const swarmTask = createSwarmTaskTool({
-      subagents: [
+    const subagentPool = makePool(
+      [
         {
           name: "screener",
           description: "A screener",
           systemPrompt: "Screen.",
         },
       ],
-      defaultModel: makeMockModel(),
-    });
+      makeMockModel(),
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
     await expect(
       swarmTask.invoke({
@@ -55,13 +110,14 @@ describe("subagent validation", () => {
   });
 
   it("includes available subagent names in the error message", async () => {
-    const swarmTask = createSwarmTaskTool({
-      subagents: [
+    const subagentPool = makePool(
+      [
         { name: "alpha", description: "A", systemPrompt: "A." },
         { name: "beta", description: "B", systemPrompt: "B." },
       ],
-      defaultModel: makeMockModel(),
-    });
+      makeMockModel(),
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
     await expect(
       swarmTask.invoke({
@@ -91,13 +147,14 @@ describe("agent mode", () => {
       return callCount === 1 ? (alphaAgent as any) : (betaAgent as any);
     });
 
-    const swarmTask = createSwarmTaskTool({
-      subagents: [
+    const subagentPool = makePool(
+      [
         { name: "alpha", description: "A", systemPrompt: "A." },
         { name: "beta", description: "B", systemPrompt: "B." },
       ],
-      defaultModel: makeMockModel(),
-    });
+      makeMockModel(),
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
     const result = await swarmTask.invoke({
       description: "do work",
@@ -115,10 +172,11 @@ describe("agent mode", () => {
       }) as any;
     });
 
-    const swarmTask = createSwarmTaskTool({
-      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
-      defaultModel: makeMockModel(),
-    });
+    const subagentPool = makePool(
+      [{ name: "worker", description: "W", systemPrompt: "W." }],
+      makeMockModel(),
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
     await swarmTask.invoke({
       description: "classify this trace",
@@ -142,10 +200,11 @@ describe("agent mode", () => {
       })) as any;
     });
 
-    const swarmTask = createSwarmTaskTool({
-      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
-      defaultModel: makeMockModel(),
-    });
+    const subagentPool = makePool(
+      [{ name: "worker", description: "W", systemPrompt: "W." }],
+      makeMockModel(),
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
     const result = await swarmTask.invoke({
       description: "classify",
@@ -164,10 +223,11 @@ describe("agent mode", () => {
       })) as any;
     });
 
-    const swarmTask = createSwarmTaskTool({
-      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
-      defaultModel: makeMockModel(),
-    });
+    const subagentPool = makePool(
+      [{ name: "worker", description: "W", systemPrompt: "W." }],
+      makeMockModel(),
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
     const result = await swarmTask.invoke({
       description: "work",
@@ -183,10 +243,11 @@ describe("agent mode", () => {
       })) as any;
     });
 
-    const swarmTask = createSwarmTaskTool({
-      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
-      defaultModel: makeMockModel(),
-    });
+    const subagentPool = makePool(
+      [{ name: "worker", description: "W", systemPrompt: "W." }],
+      makeMockModel(),
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
     const result = await swarmTask.invoke({
       description: "work",
@@ -196,12 +257,11 @@ describe("agent mode", () => {
   });
 
   it("compiles a new agent with responseFormat when response_schema is provided", async () => {
-    const swarmTask = createSwarmTaskTool({
-      subagents: [
-        { name: "worker", description: "W", systemPrompt: "Analyze." },
-      ],
-      defaultModel: makeMockModel(),
-    });
+    const subagentPool = makePool(
+      [{ name: "worker", description: "W", systemPrompt: "Analyze." }],
+      makeMockModel(),
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
     const schema = {
       type: "object",
@@ -215,7 +275,7 @@ describe("agent mode", () => {
       response_schema: schema,
     });
 
-    // One call at construction (pre-compiled), one for the schema variant
+    // One call for lazy compilation, one for the schema variant
     expect(langchain.createAgent).toHaveBeenCalledTimes(2);
     expect(langchain.createAgent).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -228,21 +288,22 @@ describe("agent mode", () => {
     );
   });
 
-  it("does not compile a new agent when response_schema is omitted", async () => {
-    const swarmTask = createSwarmTaskTool({
-      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
-      defaultModel: makeMockModel(),
-    });
+  it("does not compile a schema variant when response_schema is omitted", async () => {
+    const subagentPool = makePool(
+      [{ name: "worker", description: "W", systemPrompt: "W." }],
+      makeMockModel(),
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
-    // createAgent called once at construction
-    expect(langchain.createAgent).toHaveBeenCalledTimes(1);
+    // No createAgent calls at construction (lazy compilation)
+    expect(langchain.createAgent).not.toHaveBeenCalled();
 
     await swarmTask.invoke({
       description: "work",
       subagent_type: "worker",
     });
 
-    // No additional calls — uses pre-compiled agent
+    // One call for lazy compilation only — no schema variant
     expect(langchain.createAgent).toHaveBeenCalledTimes(1);
   });
 });
@@ -252,13 +313,10 @@ describe("agent mode", () => {
 // ---------------------------------------------------------------------------
 
 describe("invoke mode", () => {
-  it("calls defaultModel.invoke directly with a human message", async () => {
+  it("calls pool model directly with a human message", async () => {
     const model = makeMockModel("classified: positive");
-
-    const swarmTask = createSwarmTaskTool({
-      subagents: [],
-      defaultModel: model,
-    });
+    const subagentPool = makePool([], model);
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
     await swarmTask.invoke({
       description: "classify this",
@@ -273,28 +331,19 @@ describe("invoke mode", () => {
   });
 
   it("does not call createAgent in invoke mode", async () => {
-    const swarmTask = createSwarmTaskTool({
-      subagents: [
-        {
-          name: "worker",
-          description: "W",
-          systemPrompt: "W.",
-          model: makeMockModel(),
-        },
-      ],
-      defaultModel: makeMockModel(),
-    });
-
-    const afterConstruction = vi.mocked(langchain.createAgent).mock.calls
-      .length;
+    const subagentPool = makePool(
+      [{ name: "worker", description: "W", systemPrompt: "W." }],
+      makeMockModel(),
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
     await swarmTask.invoke({
       description: "work",
       mode: "invoke",
     });
 
-    // No new createAgent calls beyond construction
-    expect(langchain.createAgent).toHaveBeenCalledTimes(afterConstruction);
+    // Invoke mode bypasses agent compilation entirely
+    expect(langchain.createAgent).not.toHaveBeenCalled();
   });
 
   it("uses withStructuredOutput when response_schema is provided", async () => {
@@ -311,10 +360,8 @@ describe("invoke mode", () => {
       .spyOn(model, "withStructuredOutput")
       .mockReturnValue(structuredRunnable as any);
 
-    const swarmTask = createSwarmTaskTool({
-      subagents: [],
-      defaultModel: model,
-    });
+    const subagentPool = makePool([], model);
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
     const result = await swarmTask.invoke({
       description: "work",
@@ -329,11 +376,8 @@ describe("invoke mode", () => {
 
   it("returns string content from model response", async () => {
     const model = makeMockModel("the answer");
-
-    const swarmTask = createSwarmTaskTool({
-      subagents: [],
-      defaultModel: model,
-    });
+    const subagentPool = makePool([], model);
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
     const result = await swarmTask.invoke({
       description: "work",
@@ -346,11 +390,8 @@ describe("invoke mode", () => {
     const model: any = {
       invoke: vi.fn(async () => "plain string response"),
     };
-
-    const swarmTask = createSwarmTaskTool({
-      subagents: [],
-      defaultModel: model,
-    });
+    const subagentPool = makePool([], model);
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
     const result = await swarmTask.invoke({
       description: "work",
@@ -361,11 +402,8 @@ describe("invoke mode", () => {
 
   it("works without response_schema", async () => {
     const model = makeMockModel("plain response");
-
-    const swarmTask = createSwarmTaskTool({
-      subagents: [],
-      defaultModel: model,
-    });
+    const subagentPool = makePool([], model);
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
     const result = await swarmTask.invoke({
       description: "work",
@@ -385,13 +423,11 @@ describe("invoke mode", () => {
 describe("mode defaulting", () => {
   it('defaults to "agent" mode when mode is not provided', async () => {
     const model = makeMockModel();
-
-    const swarmTask = createSwarmTaskTool({
-      subagents: [
-        { name: "worker", description: "W", systemPrompt: "W.", model },
-      ],
-      defaultModel: makeMockModel(),
-    });
+    const subagentPool = makePool(
+      [{ name: "worker", description: "W", systemPrompt: "W.", model }],
+      makeMockModel(),
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
     await swarmTask.invoke({
       description: "work",
@@ -412,8 +448,8 @@ describe("multiple subagents", () => {
     const screenerModel = makeMockModel();
     const defaultModel = makeMockModel();
 
-    createSwarmTaskTool({
-      subagents: [
+    const subagentPool = makePool(
+      [
         {
           name: "screener",
           description: "S",
@@ -422,20 +458,33 @@ describe("multiple subagents", () => {
         },
       ],
       defaultModel,
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
+
+    // Trigger lazy compilation
+    await swarmTask.invoke({
+      description: "screen this",
+      subagent_type: "screener",
     });
 
-    // createAgent should have been called with the screener's model, not the default
     expect(langchain.createAgent).toHaveBeenCalledWith(
       expect.objectContaining({ model: screenerModel }),
     );
   });
 
-  it("falls back to defaultModel when subagent has no model", async () => {
+  it("falls back to pool model when subagent has no model override", async () => {
     const defaultModel = makeMockModel();
 
-    createSwarmTaskTool({
-      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
+    const subagentPool = makePool(
+      [{ name: "worker", description: "W", systemPrompt: "W." }],
       defaultModel,
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
+
+    // Trigger lazy compilation
+    await swarmTask.invoke({
+      description: "work",
+      subagent_type: "worker",
     });
 
     expect(langchain.createAgent).toHaveBeenCalledWith(
@@ -450,10 +499,11 @@ describe("multiple subagents", () => {
 
 describe("TTL variant cache", () => {
   it("reuses the compiled agent on repeated calls with the same schema", async () => {
-    const swarmTask = createSwarmTaskTool({
-      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
-      defaultModel: makeMockModel(),
-    });
+    const subagentPool = makePool(
+      [{ name: "worker", description: "W", systemPrompt: "W." }],
+      makeMockModel(),
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
     const schema = {
       type: "object",
@@ -476,15 +526,16 @@ describe("TTL variant cache", () => {
       response_schema: schema,
     });
 
-    // 1 at construction + 1 for the schema variant (reused for rows 2 and 3)
+    // 1 lazy compile + 1 schema variant (reused for rows 2 and 3)
     expect(langchain.createAgent).toHaveBeenCalledTimes(2);
   });
 
   it("compiles separate variants for distinct schemas", async () => {
-    const swarmTask = createSwarmTaskTool({
-      subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
-      defaultModel: makeMockModel(),
-    });
+    const subagentPool = makePool(
+      [{ name: "worker", description: "W", systemPrompt: "W." }],
+      makeMockModel(),
+    );
+    const swarmTask = createSwarmTaskTool({ subagentPool });
 
     await swarmTask.invoke({
       description: "work",
@@ -503,7 +554,7 @@ describe("TTL variant cache", () => {
       },
     });
 
-    // 1 at construction + 2 schema variants
+    // 1 lazy compile + 2 schema variants
     expect(langchain.createAgent).toHaveBeenCalledTimes(3);
   });
 
@@ -511,34 +562,35 @@ describe("TTL variant cache", () => {
     vi.useFakeTimers();
 
     try {
-      const swarmTask = createSwarmTaskTool({
-        subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
-        defaultModel: makeMockModel(),
-      });
+      const subagentPool = makePool(
+        [{ name: "worker", description: "W", systemPrompt: "W." }],
+        makeMockModel(),
+      );
+      const swarmTask = createSwarmTaskTool({ subagentPool });
 
       const schema = {
         type: "object",
         properties: { label: { type: "string" } },
       };
 
-      // First call — cache miss, compiles
+      // First call — lazy compile + schema variant
       await swarmTask.invoke({
         description: "row 1",
         subagent_type: "worker",
         response_schema: schema,
       });
-      expect(langchain.createAgent).toHaveBeenCalledTimes(2); // 1 construction + 1 variant
+      expect(langchain.createAgent).toHaveBeenCalledTimes(2);
 
       // Advance past TTL
       vi.advanceTimersByTime(61_000);
 
-      // Next call — entry expired, recompiles
+      // Next call — entry expired, recompiles variant
       await swarmTask.invoke({
         description: "row 2",
         subagent_type: "worker",
         response_schema: schema,
       });
-      expect(langchain.createAgent).toHaveBeenCalledTimes(3); // 1 new compilation
+      expect(langchain.createAgent).toHaveBeenCalledTimes(3);
     } finally {
       vi.useRealTimers();
     }
@@ -548,10 +600,11 @@ describe("TTL variant cache", () => {
     vi.useFakeTimers();
 
     try {
-      const swarmTask = createSwarmTaskTool({
-        subagents: [{ name: "worker", description: "W", systemPrompt: "W." }],
-        defaultModel: makeMockModel(),
-      });
+      const subagentPool = makePool(
+        [{ name: "worker", description: "W", systemPrompt: "W." }],
+        makeMockModel(),
+      );
+      const swarmTask = createSwarmTaskTool({ subagentPool });
 
       const schema = {
         type: "object",
@@ -580,7 +633,7 @@ describe("TTL variant cache", () => {
         response_schema: schema,
       });
 
-      // Still only 1 construction + 1 variant — cache was refreshed each time
+      // Still only 1 lazy compile + 1 variant — cache was refreshed each time
       expect(langchain.createAgent).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();

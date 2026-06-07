@@ -1,4 +1,5 @@
 import type { StructuredToolInterface } from "@langchain/core/tools";
+import type { SubagentPoolRef } from "deepagents";
 
 /**
  * A reusable code module pre-loaded into the QuickJS interpreter.
@@ -48,4 +49,10 @@ export interface InterpreterLibrary {
    * guidance for using the library.
    */
   instructions: string;
+
+  /**
+   * @internal Mutable ref populated by `createDeepAgent` with subagent specs.
+   * Used by the swarm library to bridge the main agent's subagent pool.
+   */
+  subagentPool?: SubagentPoolRef;
 }

@@ -1,16 +1,11 @@
 import { z } from "zod/v4";
-import {
-  createAgent,
-  tool,
-  type ReactAgent,
-  type AgentMiddleware,
-  StructuredTool,
-} from "langchain";
+import { createAgent, tool, type ReactAgent, StructuredTool } from "langchain";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { initChatModel } from "langchain/chat_models/universal";
+import type { SubagentPoolRef } from "deepagents";
 
 /**
  * Dispatch mode for swarm task invocations.
@@ -21,66 +16,17 @@ import { initChatModel } from "langchain/chat_models/universal";
 export type SwarmTaskMode = "agent" | "invoke";
 
 /**
- * Subagent specification for swarm dispatch targets.
- *
- * These subagents are owned by the swarm task tool and are independent
- * of the main agent's subagent pool. They are only reachable via
- * `tools.swarmTask()` from QuickJS skill code.
- */
-export interface SwarmSubAgent {
-  /**
-   * Identifier used to select this subagent in swarm dispatch calls.
-   */
-  name: string;
-
-  /**
-   * Human-readable description of what this subagent does.
-   */
-  description: string;
-
-  /**
-   * System prompt injected at the start of the subagent's conversation.
-   */
-  systemPrompt: string;
-
-  /**
-   * Tools available to this subagent. Defaults to an empty array.
-   */
-  tools?: StructuredTool[];
-
-  /**
-   * Model override for this subagent. Falls back to the tool's `defaultModel`.
-   */
-  model?: LanguageModelLike | string;
-
-  /**
-   * Middleware applied to this subagent's agent graph.
-   *
-   * The `swarm()` factory populates this with default middleware
-   * (patch-tool-calls, Anthropic cache controls). Custom middleware
-   * provided here is appended after the defaults.
-   */
-  middleware?: AgentMiddleware[];
-}
-
-/**
  * Options for creating a swarm task tool.
  */
 export interface SwarmTaskToolOptions {
   /**
-   * Subagent specifications for swarm dispatch targets.
+   * Mutable reference to the main agent's subagent pool.
    *
-   * Each entry becomes a dispatch target selectable via the `subagent_type`
-   * parameter. These subagents are private to the swarm tool — they do not
-   * appear in the main agent's `task` tool.
+   * Starts as `{ current: null }` and is populated by `createDeepAgent`
+   * during agent construction. The tool lazily compiles agents from
+   * these specs on first invocation.
    */
-  subagents?: SwarmSubAgent[];
-
-  /**
-   * Default model used for subagents that don't specify their own,
-   * and for `invoke` mode direct model calls.
-   */
-  defaultModel: LanguageModelLike | string;
+  subagentPool: SubagentPoolRef;
 }
 
 /**
@@ -107,30 +53,11 @@ interface CompiledAgent {
  * schema.
  */
 interface AgentSpec {
-  /**
-   * Language model used by this subagent.
-   */
   model: LanguageModelLike | string;
-
-  /**
-   * System prompt injected at the start of the subagent's conversation.
-   */
   systemPrompt: string;
-
-  /**
-   * Tools available to this subagent during execution.
-   */
   tools: StructuredTool[];
-
-  /**
-   * Unique name identifying this subagent type.
-   */
   name: string;
-
-  /**
-   * Middleware applied to this subagent's agent graph.
-   */
-  middleware: AgentMiddleware[];
+  middleware: unknown[];
 }
 
 const VARIANT_TTL_MS = 60_000;
@@ -250,7 +177,7 @@ async function invokeWithStructuredOutput(
  *
  * When `response_schema` is provided, the agent is compiled with
  * `responseFormat` set to the normalized schema. Compiled variants are
- * stored in a TTL cache keyed by `subagentType::normalizedSchema`.
+ * stored in a TTL cache keyed by `name::schemaJSON`.
  * Within a `run()`, all rows hit the cache so the agent is compiled
  * exactly once. After the run completes, the entry expires after
  * `VARIANT_TTL_MS` of inactivity.
@@ -301,11 +228,44 @@ async function invokeAgent(
 }
 
 /**
+ * Compile pool specs into agent entries on first invocation.
+ *
+ * Called lazily because the pool is populated by `createDeepAgent`
+ * after the swarm task tool is created.
+ */
+function compilePoolSpecs(
+  pool: NonNullable<SubagentPoolRef["current"]>,
+): Map<string, CompiledAgent> {
+  const compiled = new Map<string, CompiledAgent>();
+
+  for (const spec of pool.specs) {
+    const agentSpec: AgentSpec = {
+      model: spec.model,
+      systemPrompt: spec.systemPrompt,
+      tools: spec.tools as StructuredTool[],
+      name: spec.name,
+      middleware: spec.middleware,
+    };
+
+    compiled.set(spec.name, {
+      agent: createAgent({ ...agentSpec }),
+      spec: agentSpec,
+    });
+  }
+
+  return compiled;
+}
+
+/**
  * Create a PTC-only tool for swarm subagent dispatch.
  *
  * The returned tool is designed to be passed directly into the REPL
  * middleware's `ptc` array. It is never exposed to the LLM — only
  * callable from QuickJS skill code via `tools.swarmTask()`.
+ *
+ * Subagent specs are provided via a {@link SubagentPoolRef} that is
+ * populated by `createDeepAgent` during agent construction. The tool
+ * lazily compiles agents from these specs on first invocation.
  *
  * Supports two dispatch modes:
  * - `agent` (default): Full agentic loop with tools. Schema-constrained
@@ -315,48 +275,15 @@ async function invokeAgent(
  * - `invoke`: Direct model call with structured output. No tools, no
  *   iteration. Ideal for classification and extraction tasks.
  *
- * @param options - Subagent specs and default model configuration.
+ * @param options - Pool ref for subagent specs.
  * @returns A `StructuredToolInterface` suitable for the `ptc` config.
- *
- * @example
- * ```typescript
- * import { createSwarmTaskTool, createREPLMiddleware } from "@langchain/quickjs";
- *
- * const swarmTask = createSwarmTaskTool({
- *   subagents: [
- *     { name: "screener", description: "Classifier", systemPrompt: "..." },
- *   ],
- *   defaultModel: "anthropic:claude-haiku-4-5-20251001",
- * });
- *
- * const replMiddleware = createREPLMiddleware({
- *   ptc: [swarmTask],
- * });
- * ```
  */
 export function createSwarmTaskTool(
   options: SwarmTaskToolOptions,
 ): StructuredToolInterface {
-  const { subagents = [], defaultModel } = options;
+  const { subagentPool } = options;
 
-  const compiled = new Map<string, CompiledAgent>();
-
-  for (const sub of subagents) {
-    const spec: AgentSpec = {
-      model: sub.model ?? defaultModel,
-      systemPrompt: sub.systemPrompt,
-      tools: sub.tools ?? [],
-      name: sub.name,
-      middleware: sub.middleware ?? [],
-    };
-
-    compiled.set(sub.name, {
-      agent: createAgent({ ...spec }),
-      spec,
-    });
-  }
-
-  const subagentNames = subagents.map((s) => s.name);
+  let compiled: Map<string, CompiledAgent> | null = null;
   const variantCache = new VariantCache<ReactAgent | Runnable>();
 
   return tool(
@@ -366,6 +293,14 @@ export function createSwarmTaskTool(
       response_schema?: Record<string, unknown>;
       mode?: SwarmTaskMode;
     }): Promise<string> => {
+      const pool = subagentPool.current;
+      if (!pool) {
+        throw new Error(
+          "Swarm subagent pool not initialized. " +
+            "Ensure subagents are configured on createDeepAgent.",
+        );
+      }
+
       const {
         description,
         subagent_type: subagentType,
@@ -374,13 +309,18 @@ export function createSwarmTaskTool(
       } = input;
 
       if (mode === "invoke") {
-        return invokeModel(defaultModel, description, responseSchema);
+        return invokeModel(pool.model, description, responseSchema);
+      }
+
+      // Lazy-compile pool specs on first agent-mode dispatch
+      if (!compiled) {
+        compiled = compilePoolSpecs(pool);
       }
 
       if (!subagentType) {
         throw new Error(
           "agent mode requires subagent_type. " +
-            `Available: ${subagentNames.join(", ")}`,
+            `Available: ${[...compiled.keys()].join(", ")}`,
         );
       }
 
@@ -389,7 +329,7 @@ export function createSwarmTaskTool(
       if (!entry) {
         throw new Error(
           `Unknown swarm subagent type "${subagentType}". ` +
-            `Available: ${subagentNames.join(", ")}`,
+            `Available: ${[...compiled.keys()].join(", ")}`,
         );
       }
 
@@ -407,9 +347,7 @@ export function createSwarmTaskTool(
         subagent_type: z
           .string()
           .optional()
-          .describe(
-            `Name of the swarm subagent to use. Available: ${subagentNames.join(", ")}`,
-          ),
+          .describe("Name of the subagent to dispatch to."),
         response_schema: z
           .record(z.string(), z.unknown())
           .optional()

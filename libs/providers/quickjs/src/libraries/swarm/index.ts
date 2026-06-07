@@ -1,19 +1,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as url from "node:url";
-import type { LanguageModelLike } from "@langchain/core/language_models/base";
-import {
-  isAnthropicModel,
-  anthropicPromptCachingMiddleware,
-  createPatchToolCallsMiddleware,
-  createCacheBreakpointMiddleware,
-} from "deepagents";
-import { summarizationMiddleware } from "langchain";
+import type { SubagentPoolRef } from "deepagents";
 import type { InterpreterLibrary } from "../../library.js";
-import {
-  createSwarmTaskTool,
-  type SwarmSubAgent,
-} from "../../tools/swarm-task.js";
+import { createSwarmTaskTool } from "../../tools/swarm-task.js";
 import { stripTypeSyntax } from "../../transform.js";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
@@ -24,57 +14,6 @@ const SWARM_DIR = fs.existsSync(path.join(__dirname, "source"))
   : path.join(__dirname, "libraries", "swarm");
 const SOURCE_DIR = path.join(SWARM_DIR, "source");
 const INSTRUCTIONS_PATH = path.join(SWARM_DIR, "INSTRUCTIONS.md");
-
-/**
- * Configuration options for the pre-built swarm library.
- */
-export interface SwarmOptions {
-  /**
-   * Subagent specifications for dispatch targets.
-   *
-   * Each entry becomes a dispatch target selectable via the `subagent_type`
-   * parameter in `run()`. These subagents are private to the swarm tool.
-   */
-  subagents?: SwarmSubAgent[];
-
-  /**
-   * Default model for subagent dispatch and invoke mode.
-   */
-  defaultModel: LanguageModelLike | string;
-}
-
-/**
- * Normalize a subagent spec by injecting default middleware.
- *
- * Builds a middleware stack with patch-tool-calls (always) and Anthropic
- * cache controls (when the effective model is Anthropic). Any middleware
- * already on the subagent is appended after the defaults.
- */
-function normalizeSubagent(
-  sub: SwarmSubAgent,
-  defaultModel: LanguageModelLike | string,
-): SwarmSubAgent {
-  const effectiveModel = sub.model ?? defaultModel;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- middleware types vary across langchain version resolutions in the monorepo
-  const middleware: any[] = [
-    createPatchToolCallsMiddleware(),
-    summarizationMiddleware({ model: effectiveModel as any }),
-  ];
-
-  if (isAnthropicModel(effectiveModel)) {
-    middleware.push(
-      anthropicPromptCachingMiddleware({
-        unsupportedModelBehavior: "ignore",
-        minMessagesToCache: 1,
-      }),
-      createCacheBreakpointMiddleware(),
-    );
-  }
-
-  middleware.push(...(sub.middleware ?? []));
-
-  return { ...sub, middleware };
-}
 
 /**
  * Read and strip all swarm module source files from disk.
@@ -122,34 +61,33 @@ function loadSwarmInstructions(): string {
 /**
  * Create a pre-built swarm interpreter library.
  *
- * Bundles the swarm module source, the `swarm_task` PTC tool, and
- * standard file operation PTC tools into a single `InterpreterLibrary`.
- * Each subagent is normalized with default middleware (patch-tool-calls,
- * Anthropic cache controls when applicable).
+ * Subagent specs are not configured here — they are automatically
+ * inherited from the main agent's subagent pool via `createDeepAgent`.
+ * The swarm library creates an internal {@link SubagentPoolRef} that
+ * `createDeepAgent` discovers and populates during agent construction.
  *
  * @example
  * ```typescript
  * import { swarm, createCodeInterpreterMiddleware } from "@langchain/quickjs";
+ * import { createDeepAgent } from "deepagents";
  *
  * const interpreter = createCodeInterpreterMiddleware({
- *   libraries: [
- *     swarm({
- *       subagents: [screener],
- *       defaultModel: "anthropic:claude-sonnet-4-6",
- *     }),
+ *   libraries: [swarm()],
+ * });
+ *
+ * const agent = createDeepAgent({
+ *   model,
+ *   subagents: [
+ *     { name: "reviewer", description: "Reviews code", systemPrompt: "..." },
  *   ],
+ *   middleware: [interpreter],
  * });
  * ```
  */
-export function swarm(options: SwarmOptions): InterpreterLibrary {
-  const normalizedSubagents = (options.subagents ?? []).map((sub) =>
-    normalizeSubagent(sub, options.defaultModel),
-  );
+export function swarm(): InterpreterLibrary {
+  const subagentPool: SubagentPoolRef = { current: null };
 
-  const swarmTaskTool = createSwarmTaskTool({
-    subagents: normalizedSubagents,
-    defaultModel: options.defaultModel,
-  });
+  const swarmTaskTool = createSwarmTaskTool({ subagentPool });
 
   const { entrySource, files } = loadSwarmSources();
   const instructions = loadSwarmInstructions();
@@ -162,5 +100,6 @@ export function swarm(options: SwarmOptions): InterpreterLibrary {
     source: entrySource,
     files,
     instructions,
+    subagentPool,
   };
 }

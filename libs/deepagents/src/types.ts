@@ -16,7 +16,10 @@ import type {
   ServerTool,
   StructuredTool,
 } from "@langchain/core/tools";
-import type { BaseLanguageModel } from "@langchain/core/language_models/base";
+import type {
+  BaseLanguageModel,
+  LanguageModelLike,
+} from "@langchain/core/language_models/base";
 import type {
   BaseCheckpointSaver,
   BaseStore,
@@ -42,6 +45,61 @@ import type { FilesystemPermission } from "./permissions/index.js";
 // LangChain uses AnyAnnotationRoot internally but doesn't export it
 // We use AnnotationRoot<any> as a compatible equivalent
 type AnyAnnotationRoot = AnnotationRoot<any>;
+
+/**
+ * Uncompiled subagent specification stored in the pool.
+ *
+ * Contains everything needed to compile a subagent on demand,
+ * including its full middleware stack and resolved tools. Specs
+ * are populated by {@link createDeepAgent} and consumed by the
+ * swarm task tool at dispatch time.
+ */
+export interface SubagentPoolSpec {
+  /** Identifier used to select this subagent in swarm dispatches. */
+  name: string;
+
+  /** Description of the subagent's role, shown to the orchestrating model. */
+  description: string;
+
+  /** System prompt for the subagent. */
+  systemPrompt: string;
+
+  /** Model to use for this subagent. Falls back to the pool-level model. */
+  model: LanguageModelLike | string;
+
+  /** Tools available to the subagent. Defaults to the main agent's tools. */
+  tools: StructuredTool[];
+
+  /** Middleware stack applied when compiling the subagent. */
+  middleware: AgentMiddleware[];
+}
+
+/**
+ * Mutable reference to a pool of uncompiled subagent specs.
+ *
+ * Bridges the main agent's subagent configuration to libraries
+ * that need to dispatch through them (e.g. swarm). The `current`
+ * field starts as `null` and is populated by `createDeepAgent`
+ * during agent construction.
+ *
+ * @internal Not part of the user-facing API — wired automatically
+ * between `createDeepAgent` and `swarm()`.
+ */
+export interface SubagentPoolRef {
+  /**
+   * Pool data populated by `createDeepAgent` during agent construction.
+   *
+   * `null` until the agent is built. Contains uncompiled specs so the
+   * swarm task tool can lazily compile agents — and recompile with
+   * `responseFormat` for schema-constrained dispatches.
+   */
+  current: {
+    /** Uncompiled subagent specs. Excludes pre-compiled (runnable) subagents. */
+    specs: SubagentPoolSpec[];
+    /** Default model inherited from the main agent. Used for invoke-mode dispatches. */
+    model: LanguageModelLike | string;
+  } | null;
+}
 
 /**
  * Literal union of all built-in deep agent tool names.

@@ -55,10 +55,9 @@ export {
   createSwarmTaskTool,
   VariantCache,
   type SwarmTaskToolOptions,
-  type SwarmSubAgent,
   type SwarmTaskMode,
 } from "./tools/swarm-task.js";
 
 export { type InterpreterLibrary } from "./library.js";
 
-export { swarm, type SwarmOptions } from "./libraries/swarm/index.js";
+export { swarm } from "./libraries/swarm/index.js";

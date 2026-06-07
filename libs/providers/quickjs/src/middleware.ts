@@ -45,6 +45,7 @@ import {
 } from "./utils.js";
 import { scanSkillReferences } from "./skills.js";
 import type { InterpreterLibrary } from "./library.js";
+import type { SubagentPoolRef } from "deepagents";
 
 /**
  * These type-only imports are required for TypeScript's type inference to work
@@ -368,7 +369,7 @@ export function createCodeInterpreterMiddleware(
     aggregatedPtc.map((t) => (typeof t === "string" ? t : t.name)),
   );
 
-  return createMiddleware({
+  const mw = createMiddleware({
     name: "CodeInterpreterMiddleware",
     tools: [evalTool],
     beforeAgent(state) {
@@ -412,4 +413,12 @@ export function createCodeInterpreterMiddleware(
       ReplSession.deleteSession(sessionKey);
     },
   });
+
+  // Collect subagent pool refs from libraries so createDeepAgent can
+  // discover and populate them during agent construction.
+  const subagentPoolRefs = libraries
+    .map((lib) => lib.subagentPool)
+    .filter((ref): ref is SubagentPoolRef => ref != null);
+
+  return Object.assign(mw, { _subagentPoolRefs: subagentPoolRefs });
 }
