@@ -1382,7 +1382,7 @@ export function createFilesystemMiddleware(
           const sanitizedId = sanitizeToolCallId(
             request.toolCall?.id || msg.tool_call_id,
           );
-          const evictPath = `/large_tool_results/${sanitizedId}`;
+          const evictPath = `/large_tool_results/${sanitizedId}.txt`;
 
           const writeResult = await resolvedBackend.write(
             evictPath,
