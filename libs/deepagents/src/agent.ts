@@ -6,6 +6,7 @@ import {
   todoListMiddleware,
   SystemMessage,
   type AgentMiddleware,
+  type AnyAgentMiddleware,
   context,
 } from "langchain";
 import type {
@@ -355,7 +356,7 @@ export function createDeepAgent<
 
   // Runtime middleware array: combine built-in + optional middleware.
   // Note: The full type is handled separately via AllMiddleware.
-  const middleware = [
+  const middleware: AnyAgentMiddleware[] = [
     // Built-in middleware with deterministic ordering.
     todoMiddleware,
     // Optional root-level skills.

@@ -143,9 +143,7 @@ describe("streamEvents", () => {
     if (weatherCall && weatherCall.name === "get_weather") {
       expect(weatherCall.callId).toBe("weather-1");
       expect(weatherCall.input).toEqual({ city: "Paris" });
-      await expect(weatherCall.output).resolves.toEqual(
-        expect.objectContaining({ content: "Sunny in Paris" }),
-      );
+      await expect(weatherCall.output).resolves.toBe("Sunny in Paris");
     }
   });
 
@@ -216,7 +214,7 @@ describe("streamEvents", () => {
         .respondWithTools([
           { name: "ping", id: "ping-r", args: { value: "from-researcher" } },
         ])
-        .respond(new AIMessage("Research findings: AI is growing fast.")),
+        .respond(new AIMessage("pong:from-researcher")),
       tools: [pingTool],
       name: "researcher",
     });
@@ -226,7 +224,7 @@ describe("streamEvents", () => {
         .respondWithTools([
           { name: "ping", id: "ping-c", args: { value: "from-coder" } },
         ])
-        .respond(new AIMessage("Code written: console.log('hello')")),
+        .respond(new AIMessage("pong:from-coder")),
       tools: [pingTool],
       name: "coder",
     });
