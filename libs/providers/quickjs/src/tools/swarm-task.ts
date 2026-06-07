@@ -69,13 +69,13 @@ const VARIANT_TTL_MS = 60_000;
  * recursionLimit (10,000) via AsyncLocalStorage config propagation,
  * which can cause runaway cost when a subagent goes off on a tangent.
  */
-const DEFAULT_RECURSION_LIMIT = 50;
+const DEFAULT_RECURSION_LIMIT = 100;
 
 /**
  * Hard ceiling for recursion_limit — the LLM can request more iterations
  * per dispatch, but the value is clamped to this maximum.
  */
-const MAX_RECURSION_LIMIT = 150;
+const MAX_RECURSION_LIMIT = 500;
 
 /**
  * TTL cache for compiled agent variants.

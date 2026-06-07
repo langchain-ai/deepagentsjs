@@ -224,7 +224,7 @@ Dispatch work across table rows and update the table in place.
 | `responseSchema` | `object` | JSON Schema (`type: "object"`) for structured output. |
 | `batchSize` | `number \| function?` | Controls row grouping. See Batching. |
 | `concurrency` | `number?` | Max concurrent dispatches (1–10, default 10). |
-| `recursionLimit` | `number?` | Max agentic loop iterations per dispatch (1–150, default 50). |
+| `recursionLimit` | `number?` | Max agentic loop iterations per dispatch (1–500, default 100). |
 
 **Returns** `{ completed, failed, skipped, failures }`.
 
@@ -289,12 +289,12 @@ await run(table.id, {
 #### Recursion Limit
 
 Each agent-mode dispatch has a budget of agentic loop iterations
-(default 50, ~25 tool-calling turns). When a subagent exhausts this
+(default 100, ~50 tool-calling turns). When a subagent exhausts this
 budget it is stopped and the dispatch is recorded as a failure.
 
-The default is appropriate for most tasks (classification, single-file
-review, extraction). Increase it for tasks that require deep exploration
-— multi-file code review, research with many web searches, or complex
+The default is appropriate for most tasks including single-file code
+review, research, and extraction. Increase it for tasks that require
+deep exploration — multi-file tracing, exhaustive search, or complex
 multi-step reasoning:
 
 ```javascript
