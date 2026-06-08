@@ -214,6 +214,7 @@ export function createCodeInterpreterMiddleware(
     maxResultChars = DEFAULT_MAX_RESULTS_CHARS,
     toolName = DEFAULT_TOOL_NAME,
     captureConsole = true,
+    enableWorkflows = false,
   } = options;
 
   if (maxPtcCalls !== null && maxPtcCalls !== undefined && maxPtcCalls < 1) {
@@ -234,6 +235,13 @@ export function createCodeInterpreterMiddleware(
 
   const libraries = options.libraries ?? [];
   const aggregatedPtc = aggregatePtcTools(options.ptc, libraries);
+
+  /**
+   * Libraries registered at construction time plus any promoted from
+   * workflow drafts via `save_workflow`. The session and prompt are
+   * rebuilt each turn from this list so new libraries are picked up.
+   */
+  const allLibraries: InterpreterLibrary[] = [...libraries];
 
   function filterToolsForPtc(
     allTools: StructuredToolInterface[],
@@ -306,7 +314,8 @@ export function createCodeInterpreterMiddleware(
     `;
   }
 
-  const librariesPrompt = renderLibrariesPrompt(libraries);
+  // Libraries prompt is rebuilt each turn to pick up saved workflows.
+  let librariesPrompt = renderLibrariesPrompt(allLibraries);
 
   const evalTool = tool(
     async (input, config: LangGraphRunnableConfig) => {
@@ -365,13 +374,218 @@ export function createCodeInterpreterMiddleware(
     },
   );
 
+  // --------------- Workflow tools (POC) ---------------
+
+  interface WorkflowEntry {
+    name: string;
+    description: string;
+    code: string;
+  }
+
+  const workflowDrafts = new Map<string, WorkflowEntry>();
+
+  /**
+   * Get or create the shared ReplSession for a given config.
+   */
+  function getSession(config: LangGraphRunnableConfig): ReplSession {
+    const threadId = config.configurable?.thread_id || DEFAULT_SESSION_ID;
+    const sessionKey = `${threadId}:${middlewareId}`;
+    return ReplSession.getOrCreate(sessionKey, {
+      memoryLimitBytes,
+      maxStackSizeBytes,
+      maxPtcCalls,
+      tools: ptcTools,
+      skillsEnabled: skillsBackend !== undefined,
+      libraries: allLibraries.map(
+        (lib): LibraryEntry => ({
+          name: lib.name,
+          source: lib.source,
+          files: lib.files,
+        }),
+      ),
+      maxResultChars,
+      captureConsole,
+      sessionId: threadId,
+    });
+  }
+
+  const runWorkflowTool = tool(
+    async (input, config: LangGraphRunnableConfig) => {
+      const session = getSession(config);
+
+      if (skillsBackend !== undefined) {
+        const setupError = await prepareSkillsForEval(
+          session,
+          skillsBackend,
+          input.code,
+          ptcTools,
+        );
+        if (setupError !== undefined) {
+          return setupError;
+        }
+      }
+
+      const result = await session.eval(input.code, executionTimeoutMs);
+
+      workflowDrafts.set(input.name, {
+        name: input.name,
+        description: input.description,
+        code: input.code,
+      });
+
+      const resultText = formatReplResult(result);
+      return `Workflow "${input.name}" executed and saved as draft.\n\n${resultText}`;
+    },
+    {
+      name: "run_workflow",
+      description: dedent`
+        Execute a workflow pipeline in the code interpreter and save it as a reusable draft.
+        Use this instead of eval when the user asks for a workflow or reusable pipeline.
+        The code runs in the same sandboxed REPL as eval — all libraries and tools are available.
+      `,
+      metadata: { ls_code_input_language: "javascript" },
+      schema: z.object({
+        name: z
+          .string()
+          .describe(
+            "Short kebab-case name for the workflow (e.g. review-and-verify)",
+          ),
+        description: z
+          .string()
+          .describe("One-line description of what this workflow does"),
+        code: z
+          .string()
+          .describe("TypeScript/JavaScript code for the workflow pipeline"),
+      }),
+    },
+  );
+
+  const listWorkflowsTool = tool(
+    async () => {
+      const entries: string[] = [];
+
+      if (workflowDrafts.size > 0) {
+        entries.push("**Drafts:**");
+        for (const w of workflowDrafts.values()) {
+          entries.push(`- ${w.name}: ${w.description}`);
+        }
+      }
+
+      const saved = allLibraries.filter((lib) => !libraries.includes(lib));
+      if (saved.length > 0) {
+        entries.push("**Saved (available as libraries):**");
+        for (const lib of saved) {
+          entries.push(`- ${lib.name}: ${lib.description}`);
+        }
+      }
+
+      return entries.length > 0 ? entries.join("\n") : "No workflows found.";
+    },
+    {
+      name: "list_workflows",
+      description:
+        "List all workflow drafts and permanently saved workflows.",
+      schema: z.object({}),
+    },
+  );
+
+  const saveWorkflowTool = tool(
+    async (input) => {
+      const draft = workflowDrafts.get(input.name);
+      if (!draft) {
+        return `No draft workflow named "${input.name}" found. Run it first with run_workflow.`;
+      }
+
+      const lib: InterpreterLibrary = {
+        name: draft.name,
+        description: draft.description,
+        ptcTools: [],
+        source: draft.code,
+        instructions: [
+          `Saved workflow: ${draft.description}`,
+          `Import and execute: \`import "${draft.name}"\``,
+          `Or import specific exports if the workflow defines them.`,
+        ].join("\n"),
+      };
+
+      allLibraries.push(lib);
+      workflowDrafts.delete(input.name);
+
+      return (
+        `Workflow "${input.name}" saved as an interpreter library. ` +
+        `It will be available via \`import "${input.name}"\` on subsequent turns.`
+      );
+    },
+    {
+      name: "save_workflow",
+      description:
+        "Promote a draft workflow to a permanent interpreter library that can be imported on future turns.",
+      schema: z.object({
+        name: z
+          .string()
+          .describe("Name of the draft workflow to save permanently"),
+      }),
+    },
+  );
+
+  const deleteWorkflowTool = tool(
+    async (input) => {
+      if (workflowDrafts.has(input.name)) {
+        workflowDrafts.delete(input.name);
+        return `Draft workflow "${input.name}" deleted.`;
+      }
+
+      const idx = allLibraries.findIndex(
+        (lib) => lib.name === input.name && !libraries.includes(lib),
+      );
+      if (idx !== -1) {
+        allLibraries.splice(idx, 1);
+        return `Saved workflow "${input.name}" deleted. It will no longer be importable.`;
+      }
+
+      return `Workflow "${input.name}" not found.`;
+    },
+    {
+      name: "delete_workflow",
+      description:
+        "Delete a draft or saved workflow. Saved workflows are removed from the library list.",
+      schema: z.object({
+        name: z.string().describe("Name of the workflow to delete"),
+      }),
+    },
+  );
+
+  const workflowTools = enableWorkflows
+    ? [runWorkflowTool, listWorkflowsTool, saveWorkflowTool, deleteWorkflowTool]
+    : [];
+
+  const workflowPrompt = enableWorkflows
+    ? dedent`
+
+      ### Workflows
+
+      Workflow tools are available for composing reusable pipelines:
+
+      - **\`run_workflow\`**: Execute a pipeline and save it as a draft. Use this instead of \`eval\` when the user asks for a "workflow" or reusable pipeline. The code runs in the same interpreter — all libraries and tools are available.
+      - **\`list_workflows\`**: List draft and saved workflows.
+      - **\`save_workflow\`**: Promote a draft to a permanent interpreter library. Once saved, the workflow becomes importable via \`import "workflow-name"\` on future turns — just like any other library.
+      - **\`delete_workflow\`**: Delete a draft or saved workflow.
+
+      **When to use \`run_workflow\` vs \`eval\`:**
+      - Use \`run_workflow\` when the user explicitly asks for a workflow, pipeline, or reusable process.
+      - Use \`eval\` for one-off computations, data exploration, and scratch work.
+    `
+    : "";
+
+  // --------------- end workflow tools ---------------
+
   const ptcToolNames = new Set(
     aggregatedPtc.map((t) => (typeof t === "string" ? t : t.name)),
   );
 
   const mw = createMiddleware({
     name: "CodeInterpreterMiddleware",
-    tools: [evalTool],
+    tools: [evalTool, ...workflowTools],
     beforeAgent(state) {
       if (!skillsBackend) return;
 
@@ -401,10 +615,13 @@ export function createCodeInterpreterMiddleware(
         cachedPtcPrompt = await generatePtcPrompt(ptcTools);
       }
 
+      librariesPrompt = renderLibrariesPrompt(allLibraries);
+
       const systemMessage = request.systemMessage
         .concat(baseSystemPrompt)
         .concat(cachedPtcPrompt || "")
-        .concat(librariesPrompt);
+        .concat(librariesPrompt)
+        .concat(workflowPrompt);
       return handler({ ...request, systemMessage });
     },
     afterAgent: async (_state, runtime) => {
