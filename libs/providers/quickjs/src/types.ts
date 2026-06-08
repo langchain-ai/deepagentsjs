@@ -102,11 +102,12 @@ export interface CodeInterpreterMiddlewareOptions {
 
   /**
    * Register workflow tools (`run_workflow`, `list_workflows`,
-   * `load_workflow`, `save_workflow`) alongside the eval tool.
+   * `save_workflow`, `delete_workflow`) alongside the eval tool.
    *
    * When enabled, the agent can compose reusable pipelines via
    * `run_workflow` which executes code in the interpreter and
-   * auto-saves it as a draft workflow.
+   * auto-saves it as a draft workflow. Drafts can be promoted to
+   * interpreter libraries via `save_workflow`.
    *
    * @default false
    */

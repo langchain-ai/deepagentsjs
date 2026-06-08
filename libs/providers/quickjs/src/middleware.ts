@@ -425,7 +425,10 @@ export function createCodeInterpreterMiddleware(
         }
       }
 
-      const result = await session.eval(input.code, executionTimeoutMs);
+      // Strip `export` keywords for eval (only valid in module context).
+      // The original code with exports is preserved for the saved library.
+      const evalCode = input.code.replace(/\bexport\s+(default\s+)?/g, "");
+      const result = await session.eval(evalCode, executionTimeoutMs);
 
       workflowDrafts.set(input.name, {
         name: input.name,
@@ -442,6 +445,8 @@ export function createCodeInterpreterMiddleware(
         Execute a workflow pipeline in the code interpreter and save it as a reusable draft.
         Use this instead of eval when the user asks for a workflow or reusable pipeline.
         The code runs in the same sandboxed REPL as eval — all libraries and tools are available.
+        IMPORTANT: Write workflows as exported async functions, then call them at the bottom.
+        This allows saved workflows to be composed via import { fn } from "name".
       `,
       metadata: { ls_code_input_language: "javascript" },
       schema: z.object({
@@ -503,8 +508,8 @@ export function createCodeInterpreterMiddleware(
         source: draft.code,
         instructions: [
           `Saved workflow: ${draft.description}`,
-          `Import and execute: \`import "${draft.name}"\``,
-          `Or import specific exports if the workflow defines them.`,
+          `Import exported functions: \`import { fn } from "${draft.name}"\``,
+          `Call the imported functions to compose with this workflow.`,
         ].join("\n"),
       };
 
@@ -574,6 +579,44 @@ export function createCodeInterpreterMiddleware(
       **When to use \`run_workflow\` vs \`eval\`:**
       - Use \`run_workflow\` when the user explicitly asks for a workflow, pipeline, or reusable process.
       - Use \`eval\` for one-off computations, data exploration, and scratch work.
+
+      **IMPORTANT — Writing workflows:**
+      Workflows MUST be written as exported async functions, not top-level scripts.
+      This is required so that saved workflows can be composed — importing a workflow
+      should give the caller access to callable functions, not trigger side effects.
+
+      Correct:
+      \`\`\`javascript
+      export async function quickReview(files) {
+        const table = await create({ files });
+        await run(table.id, { instruction: "Review {file}", subagentType: "reviewer" });
+        return rows(table.id);
+      }
+      const result = await quickReview(["src/a.ts", "src/b.ts"]);
+      console.log(JSON.stringify(result));
+      \`\`\`
+
+      Wrong (top-level script — cannot be composed):
+      \`\`\`javascript
+      const table = await create({ files: ["src/a.ts"] });
+      await run(table.id, { ... });
+      const result = await rows(table.id);
+      console.log(result);
+      \`\`\`
+
+      **Composing workflows:**
+      When building a workflow that uses a previously saved one, import its exported
+      functions and call them — do NOT rely on side effects from \`import\`.
+
+      \`\`\`javascript
+      import { quickReview } from "quick-review";
+      export async function reviewAndSummarize(files) {
+        const results = await quickReview(files);
+        return \`Found \${results.length} issues across \${files.length} files\`;
+      }
+      const summary = await reviewAndSummarize(["src/a.ts", "src/b.ts"]);
+      console.log(summary);
+      \`\`\`
     `
     : "";
 
