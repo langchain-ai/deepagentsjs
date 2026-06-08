@@ -1400,23 +1400,6 @@ export function createFilesystemMiddleware(
         }
       }
 
-      if (toolTokenLimitBeforeEvict && messages) {
-        const processedMessages = [];
-        for (const msg of messages) {
-          if (ToolMessage.isInstance(msg)) {
-            const processed = await processToolMessage(
-              msg,
-              request.runtime,
-              request.state,
-            );
-            processedMessages.push(processed.message);
-          } else {
-            processedMessages.push(msg);
-          }
-        }
-        messages = processedMessages;
-      }
-
       return handler({
         ...request,
         tools,

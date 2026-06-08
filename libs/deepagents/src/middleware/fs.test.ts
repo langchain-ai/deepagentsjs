@@ -463,62 +463,6 @@ describe("createFilesystemMiddleware", () => {
         "Filesystem Tools",
       );
     });
-
-    it("should sanitize large ToolMessages before model formatting", async () => {
-      const mockBackend = createMockBackend();
-      const mockWrite = vi.fn().mockResolvedValue({
-        error: null,
-        filesUpdate: {
-          "/large_tool_results/test-id.txt": {
-            content: ["large content"],
-            created_at: "2024-01-01T00:00:00Z",
-            modified_at: "2024-01-01T00:00:00Z",
-          },
-        },
-      });
-      mockBackend.write = mockWrite;
-
-      const middleware = createFilesystemMiddleware({
-        backend: mockBackend,
-        toolTokenLimitBeforeEvict: 100,
-      });
-
-      const largeText = "x".repeat(100 * NUM_CHARS_PER_TOKEN + 1000);
-      const toolMessage = new ToolMessage({
-        content: [
-          {
-            type: "file",
-            mimeType: "text/plain",
-            data: largeText,
-          },
-        ] as any,
-        tool_call_id: "test-id",
-        name: "some_tool",
-      });
-
-      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
-      const request = {
-        systemMessage: new SystemMessage("Base prompt"),
-        state: {},
-        config: {},
-        tools: middleware.tools || [],
-        messages: [new HumanMessage("hello"), toolMessage],
-      };
-
-      await middleware.wrapModelCall!(request as any, mockHandler);
-
-      expect(mockWrite).toHaveBeenCalledWith(
-        "/large_tool_results/test-id.txt",
-        expect.stringContaining('"mimeType":"text/plain"'),
-      );
-      const modifiedRequest = mockHandler.mock.calls[0][0];
-      expect(modifiedRequest.messages[1].content).toContain(
-        "Tool result too large",
-      );
-      expect(modifiedRequest.messages[1].content).not.toEqual(
-        toolMessage.content,
-      );
-    });
   });
 
   describe("wrapToolCall", () => {
