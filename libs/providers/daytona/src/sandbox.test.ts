@@ -22,7 +22,15 @@ const mockSandbox = {
 const mockDaytonaInstance = {
   create: vi.fn().mockResolvedValue(mockSandbox),
   get: vi.fn().mockResolvedValue(mockSandbox),
+  list: vi.fn(),
+  delete: vi.fn().mockResolvedValue(undefined),
 };
+
+async function* asyncIterator<T>(items: T[]): AsyncIterableIterator<T> {
+  for (const item of items) {
+    yield item;
+  }
+}
 
 // Mock the Daytona SDK with a proper class
 vi.mock("@daytonaio/sdk", () => {
@@ -30,6 +38,8 @@ vi.mock("@daytonaio/sdk", () => {
     Daytona: class MockDaytona {
       create = mockDaytonaInstance.create;
       get = mockDaytonaInstance.get;
+      list = mockDaytonaInstance.list;
+      delete = mockDaytonaInstance.delete;
     },
   };
 });
@@ -40,6 +50,10 @@ describe("DaytonaSandbox", () => {
   beforeEach(() => {
     process.env.DAYTONA_API_KEY = "test-api-key";
     vi.clearAllMocks();
+    mockSandbox.process.executeCommand.mockResolvedValue({
+      result: "",
+      exitCode: 0,
+    });
   });
 
   afterEach(() => {
@@ -211,6 +225,27 @@ describe("DaytonaSandbox", () => {
       expect(results[1]).toEqual({ path: "src/main.ts", error: null });
     });
 
+    it("should create parent directories idempotently", async () => {
+      mockSandbox.fs.uploadFile.mockResolvedValue(undefined);
+      mockSandbox.fs.createFolder.mockResolvedValue(undefined);
+
+      const sandbox = await DaytonaSandbox.create();
+      const encoder = new TextEncoder();
+
+      const results = await sandbox.uploadFiles([
+        ["src/file1.txt", encoder.encode("Hello World")],
+        ["src/file2.txt", encoder.encode("Hello Again")],
+      ]);
+
+      expect(results[0]).toEqual({ path: "src/file1.txt", error: null });
+      expect(results[1]).toEqual({ path: "src/file2.txt", error: null });
+      expect(mockSandbox.process.executeCommand).toHaveBeenCalledTimes(2);
+      expect(mockSandbox.process.executeCommand.mock.calls[0][0]).toContain(
+        "mkdir -p 'src'",
+      );
+      expect(mockSandbox.fs.createFolder).not.toHaveBeenCalled();
+    });
+
     it("should handle upload errors", async () => {
       mockSandbox.fs.uploadFile.mockRejectedValueOnce(
         new Error("Permission denied"),
@@ -306,6 +341,37 @@ describe("DaytonaSandbox", () => {
       await expect(
         DaytonaSandbox.connect("nonexistent-sandbox"),
       ).rejects.toThrow("Sandbox not found");
+    });
+  });
+
+  describe("static deleteAll", () => {
+    it("should delete sandboxes returned by async iterable list", async () => {
+      const labels = { purpose: "test" };
+      const sandboxes = [{ id: "sandbox-1" }, { id: "sandbox-2" }];
+      mockDaytonaInstance.list.mockReturnValueOnce(asyncIterator(sandboxes));
+
+      const deleted = await DaytonaSandbox.deleteAll(labels);
+
+      expect(mockDaytonaInstance.list).toHaveBeenCalledWith({ labels });
+      expect(mockDaytonaInstance.delete).toHaveBeenCalledTimes(2);
+      expect(mockDaytonaInstance.delete).toHaveBeenNthCalledWith(
+        1,
+        sandboxes[0],
+      );
+      expect(mockDaytonaInstance.delete).toHaveBeenNthCalledWith(
+        2,
+        sandboxes[1],
+      );
+      expect(deleted).toBe(2);
+    });
+
+    it("should return zero when list is empty", async () => {
+      mockDaytonaInstance.list.mockReturnValueOnce(asyncIterator([]));
+
+      const deleted = await DaytonaSandbox.deleteAll({ purpose: "test" });
+
+      expect(mockDaytonaInstance.delete).not.toHaveBeenCalled();
+      expect(deleted).toBe(0);
     });
   });
 });

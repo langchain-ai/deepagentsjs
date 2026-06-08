@@ -511,11 +511,13 @@ describe("CompositeBackend", () => {
 
     expect(result).toBeInstanceOf(Command);
     expect(result.update.files).toBeDefined();
-    expect(result.update.files["/large_tool_results/test_789"]).toBeDefined();
+    expect(
+      result.update.files["/large_tool_results/test_789.txt"],
+    ).toBeDefined();
     // v2 format: content is a string, not an array
-    expect(result.update.files["/large_tool_results/test_789"].content).toEqual(
-      largeContent,
-    );
+    expect(
+      result.update.files["/large_tool_results/test_789.txt"].content,
+    ).toEqual(largeContent);
 
     expect(result.update.messages).toHaveLength(1);
     expect(result.update.messages[0].content).toContain(
@@ -557,9 +559,12 @@ describe("CompositeBackend", () => {
 
     expect(result).toBeInstanceOf(ToolMessage);
     expect(result.content).toContain("Tool result too large");
-    expect(result.content).toContain("/large_tool_results/test_routed_123");
+    expect(result.content).toContain("/large_tool_results/test_routed_123.txt");
 
-    const storedContent = await store.get(["filesystem"], "/test_routed_123");
+    const storedContent = await store.get(
+      ["filesystem"],
+      "/test_routed_123.txt",
+    );
     expect(storedContent).toBeDefined();
     // v2 format: content is a string, not an array
     expect((storedContent!.value as any).content).toEqual(largeContent);

@@ -566,7 +566,7 @@ describe("createFilesystemMiddleware", () => {
       const mockWrite = vi.fn().mockResolvedValue({
         error: null,
         filesUpdate: {
-          "/large_tool_results/test-id": {
+          "/large_tool_results/test-id.txt": {
             content: ["large content"],
             created_at: "2024-01-01T00:00:00Z",
             modified_at: "2024-01-01T00:00:00Z",
@@ -600,7 +600,7 @@ describe("createFilesystemMiddleware", () => {
 
       // Should have written to backend
       expect(mockWrite).toHaveBeenCalledWith(
-        "/large_tool_results/test-id",
+        "/large_tool_results/test-id.txt",
         largeContent,
       );
 
@@ -613,12 +613,14 @@ describe("createFilesystemMiddleware", () => {
 
         const truncatedMsg = update.messages[0];
         expect(truncatedMsg.content).toContain("Tool result too large");
-        expect(truncatedMsg.content).toContain("/large_tool_results/test-id");
+        expect(truncatedMsg.content).toContain(
+          "/large_tool_results/test-id.txt",
+        );
         expect(truncatedMsg.tool_call_id).toBe("test-id");
 
         // Should have filesUpdate
         expect(update.files).toBeDefined();
-        expect(update.files["/large_tool_results/test-id"]).toBeDefined();
+        expect(update.files["/large_tool_results/test-id.txt"]).toBeDefined();
       }
     });
 
@@ -627,7 +629,7 @@ describe("createFilesystemMiddleware", () => {
       const mockWrite = vi.fn().mockResolvedValue({
         error: null,
         filesUpdate: {
-          "/large_tool_results/test-id": {
+          "/large_tool_results/test-id.txt": {
             content: ["large content"],
             created_at: "2024-01-01T00:00:00Z",
             modified_at: "2024-01-01T00:00:00Z",
@@ -688,7 +690,7 @@ describe("createFilesystemMiddleware", () => {
       const mockWrite = vi.fn().mockResolvedValue({
         error: null,
         filesUpdate: {
-          "/large_tool_results/test-id-1": {
+          "/large_tool_results/test-id-1.txt": {
             content: ["large content 1"],
             created_at: "2024-01-01T00:00:00Z",
             modified_at: "2024-01-01T00:00:00Z",
@@ -738,7 +740,7 @@ describe("createFilesystemMiddleware", () => {
 
       // Should have written large content
       expect(mockWrite).toHaveBeenCalledWith(
-        "/large_tool_results/test-id-1",
+        "/large_tool_results/test-id-1.txt",
         largeContent,
       );
 
@@ -755,7 +757,7 @@ describe("createFilesystemMiddleware", () => {
         expect(update.messages[1].content).toBe(smallContent);
 
         // Should accumulate files
-        expect(update.files["/large_tool_results/test-id-1"]).toBeDefined();
+        expect(update.files["/large_tool_results/test-id-1.txt"]).toBeDefined();
       }
     });
 
@@ -793,10 +795,13 @@ describe("createFilesystemMiddleware", () => {
       // Should attempt to write
       expect(mockWrite).toHaveBeenCalled();
 
-      // Should return original message when write fails
+      // Should return a small error message instead of sending the oversized
+      // content back to the model.
       expect(ToolMessage.isInstance(result)).toBe(true);
       if (ToolMessage.isInstance(result)) {
-        expect(result.content).toBe(largeContent);
+        expect(result.content).toContain("Tool result too large");
+        expect(result.content).toContain("could not be saved");
+        expect(result.content).not.toContain(largeContent);
       }
     });
 
@@ -805,7 +810,7 @@ describe("createFilesystemMiddleware", () => {
       const mockWrite = vi.fn().mockResolvedValue({
         error: null,
         filesUpdate: {
-          "/large_tool_results/test-id": {
+          "/large_tool_results/test-id.txt": {
             content: ["large content"],
             created_at: "2024-01-01T00:00:00Z",
             modified_at: "2024-01-01T00:00:00Z",
@@ -841,8 +846,8 @@ describe("createFilesystemMiddleware", () => {
       );
 
       expect(mockWrite).toHaveBeenCalledWith(
-        "/large_tool_results/test-id",
-        largeText + " extra",
+        "/large_tool_results/test-id.txt",
+        `${largeText}\n extra`,
       );
 
       expect(isCommand(result)).toBe(true);
@@ -851,8 +856,124 @@ describe("createFilesystemMiddleware", () => {
         expect(update.messages).toHaveLength(1);
         const truncatedMsg = update.messages[0];
         expect(truncatedMsg.content).toContain("Tool result too large");
-        expect(truncatedMsg.content).toContain("/large_tool_results/test-id");
+        expect(truncatedMsg.content).toContain(
+          "/large_tool_results/test-id.txt",
+        );
         expect(truncatedMsg.tool_call_id).toBe("test-id");
+      }
+    });
+
+    it("should evict large non-text tool content blocks", async () => {
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: null,
+        filesUpdate: {
+          "/large_tool_results/test-id.txt": {
+            content: ["large content"],
+            created_at: "2024-01-01T00:00:00Z",
+            modified_at: "2024-01-01T00:00:00Z",
+          },
+        },
+      });
+      mockBackend.write = mockWrite;
+
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        toolTokenLimitBeforeEvict: 100,
+      });
+
+      const largeText = "x".repeat(100 * NUM_CHARS_PER_TOKEN + 1000);
+      const mockMessage = new ToolMessage({
+        content: [
+          {
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "text/plain",
+              data: largeText,
+            },
+          },
+        ] as any,
+        tool_call_id: "test-id",
+        name: "some_tool",
+      });
+      const mockHandler = vi.fn().mockResolvedValue(mockMessage);
+      const request = {
+        toolCall: { id: "test-id", name: "some_tool" },
+        state: {},
+        config: {},
+      };
+
+      const result = await middleware.wrapToolCall!(
+        request as any,
+        mockHandler,
+      );
+
+      expect(mockWrite).toHaveBeenCalledWith(
+        "/large_tool_results/test-id.txt",
+        expect.stringContaining('"media_type":"text/plain"'),
+      );
+      expect(isCommand(result)).toBe(true);
+      if (isCommand(result)) {
+        const update = result.update as any;
+        expect(update.messages).toHaveLength(1);
+        expect(update.messages[0].content).toContain("Tool result too large");
+      }
+    });
+
+    it("should evict large file content blocks before provider formatting", async () => {
+      const mockBackend = createMockBackend();
+      const mockWrite = vi.fn().mockResolvedValue({
+        error: null,
+        filesUpdate: {
+          "/large_tool_results/test-id.txt": {
+            content: ["large content"],
+            created_at: "2024-01-01T00:00:00Z",
+            modified_at: "2024-01-01T00:00:00Z",
+          },
+        },
+      });
+      mockBackend.write = mockWrite;
+
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        toolTokenLimitBeforeEvict: 100,
+      });
+
+      const largeText = "x".repeat(100 * NUM_CHARS_PER_TOKEN + 1000);
+      const mockMessage = new ToolMessage({
+        content: [
+          {
+            type: "file",
+            mimeType: "text/plain",
+            data: largeText,
+          },
+        ] as any,
+        tool_call_id: "test-id",
+        name: "some_tool",
+      });
+      const mockHandler = vi.fn().mockResolvedValue(mockMessage);
+      const request = {
+        toolCall: { id: "test-id", name: "some_tool" },
+        state: {},
+        config: {},
+      };
+
+      const result = await middleware.wrapToolCall!(
+        request as any,
+        mockHandler,
+      );
+
+      expect(mockWrite).toHaveBeenCalledWith(
+        "/large_tool_results/test-id.txt",
+        expect.stringContaining('"mimeType":"text/plain"'),
+      );
+      expect(isCommand(result)).toBe(true);
+      if (isCommand(result)) {
+        const update = result.update as any;
+        expect(update.messages).toHaveLength(1);
+        expect(update.messages[0].content).toContain("Tool result too large");
+        expect(update.messages[0].content).not.toEqual(mockMessage.content);
       }
     });
 

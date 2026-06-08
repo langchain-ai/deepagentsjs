@@ -636,7 +636,7 @@ function createTaskTool(options: {
           ls_agent_type: "subagent",
         },
       };
-      const result = (await subagent.invoke(
+      const result = (await (subagent as Runnable).invoke(
         subagentState,
         subagentConfig,
       )) as Record<string, unknown>;
