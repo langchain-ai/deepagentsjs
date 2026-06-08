@@ -50,6 +50,10 @@ describe("DaytonaSandbox", () => {
   beforeEach(() => {
     process.env.DAYTONA_API_KEY = "test-api-key";
     vi.clearAllMocks();
+    mockSandbox.process.executeCommand.mockResolvedValue({
+      result: "",
+      exitCode: 0,
+    });
   });
 
   afterEach(() => {
@@ -219,6 +223,27 @@ describe("DaytonaSandbox", () => {
       expect(results).toHaveLength(2);
       expect(results[0]).toEqual({ path: "test.txt", error: null });
       expect(results[1]).toEqual({ path: "src/main.ts", error: null });
+    });
+
+    it("should create parent directories idempotently", async () => {
+      mockSandbox.fs.uploadFile.mockResolvedValue(undefined);
+      mockSandbox.fs.createFolder.mockResolvedValue(undefined);
+
+      const sandbox = await DaytonaSandbox.create();
+      const encoder = new TextEncoder();
+
+      const results = await sandbox.uploadFiles([
+        ["src/file1.txt", encoder.encode("Hello World")],
+        ["src/file2.txt", encoder.encode("Hello Again")],
+      ]);
+
+      expect(results[0]).toEqual({ path: "src/file1.txt", error: null });
+      expect(results[1]).toEqual({ path: "src/file2.txt", error: null });
+      expect(mockSandbox.process.executeCommand).toHaveBeenCalledTimes(2);
+      expect(mockSandbox.process.executeCommand.mock.calls[0][0]).toContain(
+        "mkdir -p 'src'",
+      );
+      expect(mockSandbox.fs.createFolder).not.toHaveBeenCalled();
     });
 
     it("should handle upload errors", async () => {

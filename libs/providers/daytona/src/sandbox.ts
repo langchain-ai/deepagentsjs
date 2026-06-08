@@ -22,6 +22,10 @@ import {
 import { getAuthCredentials } from "./auth.js";
 import { DaytonaSandboxError, type DaytonaSandboxOptions } from "./types.js";
 
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
 /**
  * Daytona Sandbox backend for deepagents.
  *
@@ -426,7 +430,7 @@ export class DaytonaSandbox extends BaseSandbox {
         // Ensure parent directory exists
         const parentDir = path.substring(0, path.lastIndexOf("/"));
         if (parentDir) {
-          await sandbox.fs.createFolder(parentDir, "755");
+          await this.#ensureParentDirectory(parentDir);
         }
 
         // Upload the file content
@@ -439,6 +443,13 @@ export class DaytonaSandbox extends BaseSandbox {
     }
 
     return results;
+  }
+
+  async #ensureParentDirectory(parentDir: string): Promise<void> {
+    const result = await this.execute(`mkdir -p ${shellQuote(parentDir)}`);
+    if (result.exitCode !== 0) {
+      throw new Error(`Failed to create parent directory: ${parentDir}`);
+    }
   }
 
   /**
