@@ -561,7 +561,10 @@ describe("CompositeBackend", () => {
     expect(result.content).toContain("Tool result too large");
     expect(result.content).toContain("/large_tool_results/test_routed_123.txt");
 
-    const storedContent = await store.get(["filesystem"], "/test_routed_123.txt");
+    const storedContent = await store.get(
+      ["filesystem"],
+      "/test_routed_123.txt",
+    );
     expect(storedContent).toBeDefined();
     // v2 format: content is a string, not an array
     expect((storedContent!.value as any).content).toEqual(largeContent);

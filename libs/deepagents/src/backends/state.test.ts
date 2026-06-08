@@ -552,9 +552,7 @@ describe("StateBackend", () => {
     ).toBeDefined();
     expect(
       result.update.files["/large_tool_results/test_123.txt"].content,
-    ).toBe(
-      largeContent,
-    );
+    ).toBe(largeContent);
 
     expect(result.update.messages).toHaveLength(1);
     expect(result.update.messages[0].content).toContain(
