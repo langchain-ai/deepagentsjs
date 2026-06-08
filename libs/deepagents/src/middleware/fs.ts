@@ -1235,6 +1235,66 @@ export function createFilesystemMiddleware(
   } satisfies Record<FilesystemToolName, unknown>;
   const allTools = Object.values(allToolsByName);
 
+  async function processToolMessage(
+    msg: ToolMessage,
+    runtime: Record<string, unknown> | undefined,
+    state: Record<string, unknown>,
+    fallbackToolCallId?: string,
+  ) {
+    if (!toolTokenLimitBeforeEvict) {
+      return { message: msg, filesUpdate: null };
+    }
+
+    if (
+      msg.name &&
+      TOOLS_EXCLUDED_FROM_EVICTION.includes(
+        msg.name as (typeof TOOLS_EXCLUDED_FROM_EVICTION)[number],
+      )
+    ) {
+      return { message: msg, filesUpdate: null };
+    }
+
+    const textContent = stringifyToolContent(msg.content);
+    if (textContent.length <= toolTokenLimitBeforeEvict * NUM_CHARS_PER_TOKEN) {
+      return { message: msg, filesUpdate: null };
+    }
+
+    const resolvedBackend = await resolveBackend(backend, {
+      ...runtime,
+      state,
+    });
+    const sanitizedId = sanitizeToolCallId(
+      fallbackToolCallId || msg.tool_call_id,
+    );
+    const evictPath = `/large_tool_results/${sanitizedId}`;
+
+    const writeResult = await resolvedBackend.write(evictPath, textContent);
+
+    const contentSample = createContentPreview(textContent);
+    const replacementText = writeResult.error
+      ? `Tool result too large, but the result could not be saved to the filesystem: ${writeResult.error}`
+      : TOO_LARGE_TOOL_MSG.replace("{tool_call_id}", msg.tool_call_id)
+          .replace("{file_path}", evictPath)
+          .replace("{content_sample}", contentSample);
+
+    const truncatedMessage = new ToolMessage({
+      content: replacementText,
+      tool_call_id: msg.tool_call_id,
+      name: msg.name,
+      id: msg.id,
+      artifact: msg.artifact,
+      status: msg.status,
+      metadata: msg.metadata,
+      additional_kwargs: msg.additional_kwargs,
+      response_metadata: msg.response_metadata,
+    });
+
+    return {
+      message: truncatedMessage,
+      filesUpdate: writeResult.error ? null : writeResult.filesUpdate,
+    };
+  }
+
   return createMiddleware({
     name: "FilesystemMiddleware",
     stateSchema: FilesystemStateSchema,
@@ -1340,6 +1400,23 @@ export function createFilesystemMiddleware(
         }
       }
 
+      if (toolTokenLimitBeforeEvict && messages) {
+        const processedMessages = [];
+        for (const msg of messages) {
+          if (ToolMessage.isInstance(msg)) {
+            const processed = await processToolMessage(
+              msg,
+              request.runtime,
+              request.state,
+            );
+            processedMessages.push(processed.message);
+          } else {
+            processedMessages.push(msg);
+          }
+        }
+        messages = processedMessages;
+      }
+
       return handler({
         ...request,
         tools,
@@ -1366,66 +1443,12 @@ export function createFilesystemMiddleware(
 
       const result = await handler(request);
 
-      async function processToolMessage(
-        msg: ToolMessage,
-        toolTokenLimitBeforeEvict: number,
-      ) {
-        const textContent = msg.text || stringifyToolContent(msg.content);
-        if (
-          textContent.length >
-          toolTokenLimitBeforeEvict * NUM_CHARS_PER_TOKEN
-        ) {
-          const resolvedBackend = await resolveBackend(backend, {
-            ...request.runtime,
-            state: request.state,
-          });
-          const sanitizedId = sanitizeToolCallId(
-            request.toolCall?.id || msg.tool_call_id,
-          );
-          const evictPath = `/large_tool_results/${sanitizedId}`;
-
-          const writeResult = await resolvedBackend.write(
-            evictPath,
-            textContent,
-          );
-
-          if (writeResult.error) {
-            return { message: msg, filesUpdate: null };
-          }
-
-          // Create preview showing head and tail of the result
-          const contentSample = createContentPreview(textContent);
-          const replacementText = TOO_LARGE_TOOL_MSG.replace(
-            "{tool_call_id}",
-            msg.tool_call_id,
-          )
-            .replace("{file_path}", evictPath)
-            .replace("{content_sample}", contentSample);
-
-          const truncatedMessage = new ToolMessage({
-            content: replacementText,
-            tool_call_id: msg.tool_call_id,
-            name: msg.name,
-            id: msg.id,
-            artifact: msg.artifact,
-            status: msg.status,
-            metadata: msg.metadata,
-            additional_kwargs: msg.additional_kwargs,
-            response_metadata: msg.response_metadata,
-          });
-
-          return {
-            message: truncatedMessage,
-            filesUpdate: writeResult.filesUpdate,
-          };
-        }
-        return { message: msg, filesUpdate: null };
-      }
-
       if (ToolMessage.isInstance(result)) {
         const processed = await processToolMessage(
           result,
-          toolTokenLimitBeforeEvict,
+          request.runtime,
+          request.state,
+          request.toolCall?.id,
         );
 
         if (processed.filesUpdate) {
@@ -1456,7 +1479,9 @@ export function createFilesystemMiddleware(
           if (ToolMessage.isInstance(msg)) {
             const processed = await processToolMessage(
               msg,
-              toolTokenLimitBeforeEvict,
+              request.runtime,
+              request.state,
+              request.toolCall?.id,
             );
             processedMessages.push(processed.message);
 
