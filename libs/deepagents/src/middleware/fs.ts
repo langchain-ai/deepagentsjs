@@ -171,30 +171,6 @@ function extractTextFromMessage(message: {
   return String(message.content);
 }
 
-function stringifyToolContent(content: unknown): string {
-  if (typeof content === "string") {
-    return content;
-  }
-  if (Array.isArray(content)) {
-    return content
-      .map((block) => {
-        if (
-          typeof block === "object" &&
-          block !== null &&
-          "type" in block &&
-          block.type === "text" &&
-          "text" in block &&
-          typeof block.text === "string"
-        ) {
-          return block.text;
-        }
-        return JSON.stringify(block);
-      })
-      .join("\n");
-  }
-  return String(content);
-}
-
 /**
  * Build replacement content for an evicted HumanMessage, preserving non-text blocks.
  *
@@ -1370,7 +1346,7 @@ export function createFilesystemMiddleware(
         msg: ToolMessage,
         toolTokenLimitBeforeEvict: number,
       ) {
-        const textContent = msg.text || stringifyToolContent(msg.content);
+        const textContent = msg.text;
         if (
           textContent.length >
           toolTokenLimitBeforeEvict * NUM_CHARS_PER_TOKEN
@@ -1382,7 +1358,7 @@ export function createFilesystemMiddleware(
           const sanitizedId = sanitizeToolCallId(
             request.toolCall?.id || msg.tool_call_id,
           );
-          const evictPath = `/large_tool_results/${sanitizedId}.txt`;
+          const evictPath = `/large_tool_results/${sanitizedId}`;
 
           const writeResult = await resolvedBackend.write(
             evictPath,

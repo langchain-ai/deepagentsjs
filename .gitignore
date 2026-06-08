@@ -26,8 +26,6 @@
 # misc
 .DS_Store
 *.pem
-*.key
-*.crt
 .idea
 
 # debug
@@ -38,7 +36,6 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
-.env.*
 
 # vercel
 .vercel
@@ -48,8 +45,6 @@ yarn-error.log*
 next-env.d.ts
 
 credentials.json
-__pycache__/
-.venv/
 
 # LangGraph API
 .langgraph_api
