@@ -4,9 +4,9 @@
 export type FilesystemOperation = "read" | "write";
 
 /**
- * Whether a matched rule permits or blocks the operation.
+ * Whether a matched rule permits, blocks, or pauses the operation for approval.
  */
-export type PermissionMode = "allow" | "deny";
+export type PermissionMode = "allow" | "deny" | "interrupt";
 
 /**
  * A single filesystem permission rule.
@@ -34,7 +34,13 @@ export interface FilesystemPermission {
   paths: string[];
 
   /**
-   * Whether matching paths are permitted or blocked. Defaults to `"allow"`.
+   * Whether matching paths are permitted, blocked, or paused for human approval.
+   *
+   * - `"allow"` (default): operation proceeds normally.
+   * - `"deny"`: operation is rejected with a permission error.
+   * - `"interrupt"`: matching tool calls pause for human approval via
+   *   `HumanInTheLoopMiddleware` (auto-installed when any interrupt-mode
+   *   rule is present).
    */
   mode?: PermissionMode;
 }

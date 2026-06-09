@@ -44,6 +44,12 @@ const denyWrite = (paths: string[]) => ({
   mode: "deny" as const,
 });
 
+const interruptRead = (paths: string[]) => ({
+  operations: ["read"] as const,
+  paths,
+  mode: "interrupt" as const,
+});
+
 describe("fs tool permissions", () => {
   describe("no permissions configured", () => {
     it("all tools operate normally when permissions is empty", async () => {
@@ -301,6 +307,24 @@ describe("fs tool permissions", () => {
 
       const result = await getTool(middleware, "ls").invoke({ path: "/" });
       expect(result).toMatch(/no files found/i);
+    });
+
+    it("does not post-filter interrupt-mode paths from results", async () => {
+      const backend = createMockBackend();
+      backend.ls = vi.fn().mockResolvedValue({
+        files: [
+          { path: "/secret/a.txt", is_dir: false },
+          { path: "/public/b.txt", is_dir: false },
+        ],
+      });
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [interruptRead(["/secret/**"])],
+      });
+
+      const result = await getTool(middleware, "ls").invoke({ path: "/" });
+      expect(result).toContain("/secret/a.txt");
+      expect(result).toContain("/public/b.txt");
     });
   });
 
