@@ -38,6 +38,8 @@ export interface RunAgentParams {
   query: string;
   /** Optional seed files to pre-populate the agent's file system. */
   initialFiles?: Record<string, string>;
+  /** Optional name for the root trace. Defaults to the graph name ("LangGraph"). */
+  runName?: string;
 }
 
 /**
