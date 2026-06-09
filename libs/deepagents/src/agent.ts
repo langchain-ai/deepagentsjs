@@ -173,6 +173,7 @@ export function createDeepAgent<
     model = "anthropic:claude-sonnet-4-6",
     tools = [],
     systemPrompt,
+    middlewareSystemPrompts,
     stateSchema,
     middleware: customMiddleware = [],
     subagents = [],
@@ -247,11 +248,14 @@ export function createDeepAgent<
     // and auto-computed defaults from model profile.
     const subagentMiddleware = [
       // Provides todo list management capabilities for tracking tasks.
-      todoListMiddleware(),
+      todoListMiddleware({
+        systemPrompt: middlewareSystemPrompts?.todoList,
+      }),
       // Enables filesystem operations and optional long-term memory storage.
       createFilesystemMiddleware({
         backend,
         permissions: effectivePermissions,
+        systemPrompt: middlewareSystemPrompts?.filesystem,
       }),
       // Automatically summarizes conversation history when token limits are approached.
       // Uses createSummarizationMiddleware (deepagents version) with backend support
@@ -327,9 +331,15 @@ export function createDeepAgent<
   // Optional middleware (skills, memory, HITL, async) are appended at runtime.
   const builtInMiddleware = [
     // Provides todo list management capabilities for tracking tasks.
-    todoListMiddleware(),
+    todoListMiddleware({
+      systemPrompt: middlewareSystemPrompts?.todoList,
+    }),
     // Enables filesystem operations and optional long-term memory storage.
-    createFilesystemMiddleware({ backend, permissions }),
+    createFilesystemMiddleware({
+      backend,
+      permissions,
+      systemPrompt: middlewareSystemPrompts?.filesystem,
+    }),
     // Enables delegation to specialized subagents for complex tasks.
     createSubAgentMiddleware({
       defaultModel: model,
@@ -337,6 +347,7 @@ export function createDeepAgent<
       defaultInterruptOn: interruptOn,
       subagents: inlineSubagents,
       generalPurposeAgent: false,
+      systemPrompt: middlewareSystemPrompts?.subagent,
     }),
     // Automatically summarizes conversation history when token limits are approached.
     // Uses createSummarizationMiddleware (deepagents version) with backend support
@@ -367,7 +378,12 @@ export function createDeepAgent<
     patchToolCallsMiddleware,
     // Optional async subagent bridge.
     ...(asyncSubAgents.length > 0
-      ? [createAsyncSubAgentMiddleware({ asyncSubAgents })]
+      ? [
+          createAsyncSubAgentMiddleware({
+            asyncSubAgents,
+            systemPrompt: middlewareSystemPrompts?.asyncSubagent,
+          }),
+        ]
       : []),
     // User-provided middleware.
     ...customMiddleware,

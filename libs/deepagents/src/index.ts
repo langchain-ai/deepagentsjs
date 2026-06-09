@@ -30,6 +30,7 @@ export type { DeepAgentRunStream, SubagentRunStream } from "./stream.js";
 export type {
   AnySubAgent,
   CreateDeepAgentParams,
+  DeepAgentMiddlewareSystemPrompts,
   MergedDeepAgentState,
   // DeepAgent type bag and helper types
   DeepAgent,
