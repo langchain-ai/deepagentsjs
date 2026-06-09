@@ -1,4 +1,5 @@
 import { getDefaultRunner } from "@deepagents/evals";
+import * as ls from "langsmith/vitest";
 import { oolongAppReviewsSuite } from "./app_reviews.js";
 
 const runner = getDefaultRunner();

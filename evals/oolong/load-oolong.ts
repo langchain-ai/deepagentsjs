@@ -1,27 +1,25 @@
 /**
  * Oolong dataset loader.
  *
- * Fetches tasks from the HuggingFace datasets server API
- * (oolongbench/oolong-synth, validation split) and caches them locally
- * as JSONL in `.cache/tasks.jsonl`.
+ * Reads tasks from Hugging Face auto-converted Parquet files via DuckDB's
+ * `hf://` protocol and caches results locally as JSONL in `.cache/`.
  *
- * Each row in the dataset represents one aggregation question over a
- * context window of labelled data. The agent must classify/count items
- * and answer distributional questions.
- *
- * Supports filtering by context_len and limiting tasks per source dataset
- * via environment variables.
+ * To avoid downloading huge context columns unnecessarily, loading is done in
+ * two passes:
+ * 1. query metadata columns only (with optional `context_len` filter)
+ * 2. fetch `context_window_text` only for selected IDs
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { DuckDBInstance } from "@duckdb/node-api";
 
 export interface OolongTask {
   /** Unique row ID from the dataset. */
   id: number;
-  /** Source dataset name (e.g. "spam", "trec_coarse", "ag_news"). */
+  /** Source dataset name (e.g. "spam", "trec_coarse"). */
   dataset: string;
-  /** Context length bucket (1024, 4096, 32768, 131072). */
+  /** Context length bucket. */
   contextLen: number;
   /** The full context text the agent must reason over. */
   contextWindowText: string;
@@ -29,9 +27,9 @@ export interface OolongTask {
   question: string;
   /** Task group (e.g. "counting", "user", "temporal"). */
   taskGroup: string;
-  /** Specific task type (e.g. "TASK_TYPE.MOST_FREQ", "TASK_TYPE.NUMERIC_ONE_CLASS"). */
+  /** Specific task type (e.g. "TASK_TYPE.MOST_FREQ"). */
   task: string;
-  /** Gold answer (may be JSON-encoded Python list like "['spam']"). */
+  /** Gold answer (may be JSON-encoded list). */
   answer: string;
   /** Answer type (e.g. "ANSWER_TYPE.LABEL", "ANSWER_TYPE.NUMERIC"). */
   answerType: string;
@@ -43,102 +41,198 @@ export interface OolongTask {
   contextWindowId: number;
 }
 
-/** Shape of each row from the HuggingFace datasets server API. */
-interface HfRow {
-  id: number;
-  context_len: number;
+interface OolongMetadataRow {
+  id: bigint | number | string;
+  context_len: bigint | number | string;
   dataset: string;
-  context_window_text: string;
   question: string;
   task_group: string;
   task: string;
   answer: string;
   answer_type: string;
-  input_subset: string;
-  num_labels: number;
-  context_window_id: number;
+  input_subset: boolean | string | number | null;
+  num_labels: bigint | number | string;
+  context_window_id: bigint | number | string;
 }
 
-/** HF datasets server response shape. */
-interface HfRowsResponse {
-  rows: Array<{ row_idx: number; row: HfRow; truncated_cells: string[] }>;
-  num_rows_total: number;
-  num_rows_per_page: number;
+interface OolongContextRow {
+  id: bigint | number | string;
+  context_window_text: string;
 }
 
 const CACHE_DIR = join(import.meta.dirname, ".cache");
 const CACHE_PATH = join(CACHE_DIR, "tasks.jsonl");
+const PARQUET_GLOB =
+  "hf://datasets/oolongbench/oolong-synth@~parquet/default/partial-validation/*.parquet";
 
-const HF_ROWS_URL =
-  "https://datasets-server.huggingface.co/rows" +
-  "?dataset=oolongbench/oolong-synth&config=default&split=validation";
+function getCachePath(contextLen?: number): string {
+  if (contextLen == null) {
+    return CACHE_PATH;
+  }
+  return join(CACHE_DIR, `tasks.context_len_${contextLen}.jsonl`);
+}
 
-const PAGE_SIZE = 100;
+function toNumber(value: bigint | number | string, fieldName: string): number {
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+  if (typeof value === "number") {
+    return value;
+  }
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) {
+    throw new Error(`Unexpected non-numeric ${fieldName}: ${String(value)}`);
+  }
+  return parsed;
+}
 
-/**
- * Fetch ALL validation rows from HuggingFace and cache as JSONL.
- *
- * The validation split has ~1,300 rows across multiple source datasets
- * and context length buckets. We fetch all of them; filtering happens
- * at load time.
- */
-async function fetchAndCache(): Promise<void> {
-  mkdirSync(CACHE_DIR, { recursive: true });
+function toBoolean(
+  value: boolean | string | number | null,
+  fieldName: string,
+): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1";
+  }
+  if (value == null) {
+    return false;
+  }
+  throw new Error(`Unexpected non-boolean ${fieldName}: ${String(value)}`);
+}
 
-  const allRows: HfRow[] = [];
-  let offset = 0;
+function normalizeContextLen(value: unknown): number | undefined {
+  if (value == null) return undefined;
+  const parsed =
+    typeof value === "number" ? value : Number.parseInt(String(value), 10);
+  if (Number.isNaN(parsed)) {
+    throw new Error(`Invalid OOLONG_CONTEXT_LEN value: ${String(value)}`);
+  }
+  return parsed;
+}
 
-  // oxlint-disable-next-line no-console
-  console.log("Fetching Oolong validation split from HuggingFace...");
+function quoteSqlString(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
 
-  while (true) {
-    const url = `${HF_ROWS_URL}&offset=${offset}&length=${PAGE_SIZE}`;
-    const resp = await fetch(url);
-    if (!resp.ok) {
-      throw new Error(
-        `HuggingFace API error: ${resp.status} ${resp.statusText}\n${await resp.text()}`,
-      );
-    }
-    const data = (await resp.json()) as HfRowsResponse;
+function buildMetadataQuery(contextLen?: number): string {
+  const whereClause =
+    contextLen != null ? `WHERE context_len = ${contextLen}` : "";
+  return `
+    SELECT
+      id,
+      context_len,
+      dataset,
+      question,
+      task_group,
+      task,
+      answer,
+      answer_type,
+      input_subset,
+      num_labels,
+      context_window_id
+    FROM ${quoteSqlString(PARQUET_GLOB)}
+    ${whereClause}
+    ORDER BY id
+  `;
+}
 
-    for (const { row } of data.rows) {
-      allRows.push(row);
-    }
+function buildContextQuery(ids: number[]): string {
+  if (ids.length === 0) {
+    throw new Error("Cannot build context query for empty id list");
+  }
+  return `
+    SELECT
+      id,
+      context_window_text
+    FROM ${quoteSqlString(PARQUET_GLOB)}
+    WHERE id IN (${ids.join(", ")})
+    ORDER BY id
+  `;
+}
 
-    offset += data.rows.length;
-    if (data.rows.length < PAGE_SIZE || offset >= data.num_rows_total) {
-      break;
-    }
+async function runQuery<T extends object>(sql: string): Promise<T[]> {
+  const instance = await DuckDBInstance.create();
+  const connection = await instance.connect();
+  try {
+    const reader = await connection.runAndReadAll(sql);
+    return reader.getRowObjects() as T[];
+  } finally {
+    connection.disconnectSync();
+  }
+}
+
+async function fetchTasks(contextLen?: number): Promise<OolongTask[]> {
+  const metadataRows = await runQuery<OolongMetadataRow>(
+    buildMetadataQuery(contextLen),
+  );
+
+  if (metadataRows.length === 0) {
+    return [];
   }
 
-  if (allRows.length === 0) {
-    throw new Error(
-      "No rows found in oolongbench/oolong-synth validation split",
+  const ids = metadataRows.map((row) => toNumber(row.id, "id"));
+  const contextRows = await runQuery<OolongContextRow>(buildContextQuery(ids));
+  const contextById = new Map<number, string>();
+  for (const row of contextRows) {
+    contextById.set(
+      toNumber(row.id, "id"),
+      String(row.context_window_text ?? ""),
     );
   }
 
-  const jsonl = allRows.map((r) => JSON.stringify(r)).join("\n") + "\n";
-  writeFileSync(CACHE_PATH, jsonl, "utf-8");
-
-  // oxlint-disable-next-line no-console
-  console.log(`Cached ${allRows.length} Oolong tasks -> ${CACHE_PATH}`);
+  return metadataRows.map((row) => {
+    const id = toNumber(row.id, "id");
+    const contextWindowText = contextById.get(id);
+    if (contextWindowText == null) {
+      throw new Error(`Missing context_window_text for id=${id}`);
+    }
+    return {
+      id,
+      dataset: String(row.dataset),
+      contextLen: toNumber(row.context_len, "context_len"),
+      contextWindowText,
+      question: String(row.question),
+      taskGroup: String(row.task_group),
+      task: String(row.task),
+      answer: String(row.answer),
+      answerType: String(row.answer_type),
+      inputSubset: toBoolean(row.input_subset, "input_subset"),
+      numLabels: toNumber(row.num_labels, "num_labels"),
+      contextWindowId: toNumber(row.context_window_id, "context_window_id"),
+    };
+  });
 }
 
-function parseRow(row: HfRow): OolongTask {
-  return {
-    id: row.id,
-    dataset: row.dataset,
-    contextLen: row.context_len,
-    contextWindowText: row.context_window_text,
-    question: row.question,
-    taskGroup: row.task_group,
-    task: row.task,
-    answer: row.answer,
-    answerType: row.answer_type,
-    inputSubset: row.input_subset === "True",
-    numLabels: row.num_labels,
-    contextWindowId: row.context_window_id,
-  };
+async function fetchAndCache(contextLen?: number): Promise<void> {
+  mkdirSync(CACHE_DIR, { recursive: true });
+  const cachePath = getCachePath(contextLen);
+
+  // oxlint-disable-next-line no-console
+  console.log(
+    `Fetching Oolong tasks via DuckDB${contextLen != null ? ` (context_len=${contextLen})` : ""}...`,
+  );
+
+  const tasks = await fetchTasks(contextLen);
+
+  if (tasks.length === 0) {
+    throw new Error(
+      contextLen != null
+        ? `No rows found in oolongbench/oolong-synth for context_len=${contextLen}.`
+        : "No rows found in oolongbench/oolong-synth.",
+    );
+  }
+
+  const jsonl = tasks.map((task) => JSON.stringify(task)).join("\n") + "\n";
+  writeFileSync(cachePath, jsonl, "utf-8");
+
+  // oxlint-disable-next-line no-console
+  console.log(`Cached ${tasks.length} Oolong tasks -> ${cachePath}`);
 }
 
 export interface LoadOptions {
@@ -156,11 +250,7 @@ export interface LoadOptions {
 }
 
 /**
- * Load Oolong tasks. Downloads from HuggingFace on first call, then
- * reads from `.cache/tasks.jsonl`.
- *
- * By default returns up to 10 tasks per source dataset for cost
- * efficiency. Set `maxPerDataset: 0` for the full validation split.
+ * Load Oolong tasks from local cache (fetching via DuckDB on cache miss).
  *
  * Environment variable overrides:
  * - `OOLONG_MAX_PER_DATASET` — override maxPerDataset
@@ -169,53 +259,48 @@ export interface LoadOptions {
 export async function loadOolongTasks(
   options: LoadOptions = {},
 ): Promise<OolongTask[]> {
-  // Fetch if not cached
-  if (!existsSync(CACHE_PATH)) {
-    await fetchAndCache();
-  }
-
-  // Read cache
-  const raw = readFileSync(CACHE_PATH, "utf-8");
-  const rows: HfRow[] = raw
-    .split("\n")
-    .filter((line) => line.trim())
-    .map((line) => JSON.parse(line) as HfRow);
-
-  // Resolve options with env var overrides
   const envMax = process.env.OOLONG_MAX_PER_DATASET;
   const maxPerDataset =
     envMax != null ? Number(envMax) : (options.maxPerDataset ?? 10);
 
-  const envCtxLen = process.env.OOLONG_CONTEXT_LEN;
-  const contextLen = envCtxLen != null ? Number(envCtxLen) : options.contextLen;
+  const contextLen = normalizeContextLen(
+    process.env.OOLONG_CONTEXT_LEN ?? options.contextLen,
+  );
 
-  // Filter by context_len if specified
-  let filtered = rows;
-  if (contextLen != null) {
-    filtered = filtered.filter((r) => r.context_len === contextLen);
+  const cachePath = getCachePath(contextLen);
+  if (!existsSync(cachePath)) {
+    await fetchAndCache(contextLen);
   }
 
-  // Group by source dataset and take up to maxPerDataset from each
-  const tasks: OolongTask[] = [];
-
-  if (maxPerDataset > 0 && maxPerDataset < Infinity) {
-    const perDataset = new Map<string, number>();
-    for (const row of filtered) {
-      const count = perDataset.get(row.dataset) ?? 0;
-      if (count >= maxPerDataset) continue;
-      perDataset.set(row.dataset, count + 1);
-      tasks.push(parseRow(row));
-    }
-  } else {
-    for (const row of filtered) {
-      tasks.push(parseRow(row));
-    }
-  }
+  const raw = readFileSync(cachePath, "utf-8");
+  const tasks: OolongTask[] = raw.trim()
+    ? raw
+        .split("\n")
+        .filter((line) => line.trim())
+        .map((line) => JSON.parse(line) as OolongTask)
+    : [];
 
   if (tasks.length === 0) {
     throw new Error(
-      `No Oolong tasks matched filters (contextLen=${contextLen}, maxPerDataset=${maxPerDataset})`,
+      `No Oolong tasks found in cache (contextLen=${contextLen ?? "all"}).`,
     );
+  }
+
+  if (maxPerDataset > 0 && maxPerDataset < Infinity) {
+    const selected: OolongTask[] = [];
+    const perDataset = new Map<string, number>();
+    for (const task of tasks) {
+      const count = perDataset.get(task.dataset) ?? 0;
+      if (count >= maxPerDataset) continue;
+      perDataset.set(task.dataset, count + 1);
+      selected.push(task);
+    }
+    if (selected.length === 0) {
+      throw new Error(
+        `No Oolong tasks matched maxPerDataset=${maxPerDataset} (contextLen=${contextLen ?? "all"}).`,
+      );
+    }
+    return selected;
   }
 
   return tasks;
@@ -223,29 +308,30 @@ export async function loadOolongTasks(
 
 export type OolongTasksByDataset = Map<string, OolongTask[]>;
 
-/** Module-level cache for the grouped task map. */
-let _grouped: OolongTasksByDataset | null = null;
+/** Module-level cache for grouped task maps by options/env key. */
+const _groupedByKey = new Map<string, OolongTasksByDataset>();
 
 /**
  * Load Oolong tasks grouped by source dataset name.
- *
- * The result is cached at the module level so repeated imports across
- * multiple test files share the same data without re-fetching or
- * re-parsing.
  */
 export async function loadOolongTasksByDataset(
   options: LoadOptions = {},
 ): Promise<OolongTasksByDataset> {
-  if (_grouped) return _grouped;
+  const key = JSON.stringify({
+    maxPerDataset: process.env.OOLONG_MAX_PER_DATASET ?? options.maxPerDataset,
+    contextLen: process.env.OOLONG_CONTEXT_LEN ?? options.contextLen ?? null,
+  });
+
+  const cached = _groupedByKey.get(key);
+  if (cached) return cached;
 
   const tasks = await loadOolongTasks(options);
   const grouped = new Map<string, OolongTask[]>();
   for (const task of tasks) {
-    const key = task.dataset;
-    if (!grouped.has(key)) grouped.set(key, []);
-    grouped.get(key)!.push(task);
+    if (!grouped.has(task.dataset)) grouped.set(task.dataset, []);
+    grouped.get(task.dataset)!.push(task);
   }
 
-  _grouped = grouped;
+  _groupedByKey.set(key, grouped);
   return grouped;
 }

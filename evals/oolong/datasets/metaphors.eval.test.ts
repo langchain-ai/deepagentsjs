@@ -1,4 +1,5 @@
 import { getDefaultRunner } from "@deepagents/evals";
+import * as ls from "langsmith/vitest";
 import { oolongMetaphorsSuite } from "./metaphors.js";
 
 const runner = getDefaultRunner();

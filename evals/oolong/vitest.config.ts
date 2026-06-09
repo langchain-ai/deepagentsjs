@@ -7,7 +7,8 @@ export default defineConfig({
     testTimeout: 600_000, // 10 min — long-context aggregation tasks
     hookTimeout: 120_000, // 2 min — dataset download on first run
     teardownTimeout: 60_000,
+    setupFiles: ["./vitest.setup.ts"],
     include: ["datasets/**/*.test.ts"],
-    reporters: ["default", "langsmith/vitest/reporter"],
+    reporters: ["langsmith/vitest/reporter"],
   },
 });
