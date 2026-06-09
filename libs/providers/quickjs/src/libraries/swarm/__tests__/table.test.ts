@@ -1,24 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   generateId,
-  tablePath,
   serializeJsonl,
   parseJsonl,
-  extractIdFromPath,
-  extractSeqFromPath,
   pathsToRows,
   globFiles,
-  readFile,
-  writeFile,
   createTable,
   loadTable,
   saveTable,
   _resetForTesting,
 } from "../source/table.js";
-import { SwarmHandle } from "../source/types.js";
 
 // ---------------------------------------------------------------------------
-// In-memory file system stub for PTC tools
+// In-memory file system stub for PTC glob tool
 // ---------------------------------------------------------------------------
 
 let files: Map<string, string>;
@@ -32,24 +26,6 @@ function setupTools(existingFiles?: Map<string, string>) {
       const matched = [...files.keys()].filter((f) => regex.test(f));
       return JSON.stringify(matched);
     }),
-    readFile: vi.fn(async ({ file_path }: { file_path: string }) => {
-      const content = files.get(file_path);
-      if (content === undefined)
-        throw new Error(`File not found: ${file_path}`);
-      return content;
-    }),
-    writeFile: vi.fn(
-      async ({
-        file_path,
-        content,
-      }: {
-        file_path: string;
-        content: string;
-      }) => {
-        files.set(file_path, content);
-        return "ok";
-      },
-    ),
   };
 }
 
@@ -71,23 +47,6 @@ describe("generateId", () => {
   it("generates unique IDs", () => {
     const ids = new Set(Array.from({ length: 50 }, () => generateId()));
     expect(ids.size).toBeGreaterThan(1);
-  });
-});
-
-describe("tablePath", () => {
-  it("zero-pads the sequence number", () => {
-    expect(tablePath(0, "t_abc123")).toBe(
-      "/tmp/.swarm/default/000-t_abc123.jsonl",
-    );
-    expect(tablePath(3, "t_abc123")).toBe(
-      "/tmp/.swarm/default/003-t_abc123.jsonl",
-    );
-    expect(tablePath(42, "t_abc123")).toBe(
-      "/tmp/.swarm/default/042-t_abc123.jsonl",
-    );
-    expect(tablePath(999, "t_abc123")).toBe(
-      "/tmp/.swarm/default/999-t_abc123.jsonl",
-    );
   });
 });
 
@@ -135,28 +94,6 @@ describe("serializeJsonl / parseJsonl", () => {
   });
 });
 
-describe("extractIdFromPath", () => {
-  it("extracts the table ID from a valid path", () => {
-    expect(extractIdFromPath(".swarm/003-t_a1b2c3.jsonl")).toBe("t_a1b2c3");
-  });
-
-  it("returns undefined for a non-matching filename", () => {
-    expect(extractIdFromPath("random-file.txt")).toBeUndefined();
-    expect(extractIdFromPath(".swarm/bad.jsonl")).toBeUndefined();
-  });
-});
-
-describe("extractSeqFromPath", () => {
-  it("extracts the sequence number from a valid path", () => {
-    expect(extractSeqFromPath(".swarm/003-t_a1b2c3.jsonl")).toBe(3);
-    expect(extractSeqFromPath(".swarm/042-t_abc123.jsonl")).toBe(42);
-  });
-
-  it("returns 0 for a non-matching filename", () => {
-    expect(extractSeqFromPath("bad.jsonl")).toBe(0);
-  });
-});
-
 describe("pathsToRows", () => {
   it("uses basename as ID", () => {
     const rows = pathsToRows(["src/index.ts", "src/utils.ts"]);
@@ -184,9 +121,9 @@ describe("pathsToRows", () => {
 
 describe("globFiles", () => {
   it("parses string array responses", async () => {
-    files.set(".swarm/000-t_abc123.jsonl", "{}");
-    const result = await globFiles(".swarm/*.jsonl");
-    expect(result).toEqual([".swarm/000-t_abc123.jsonl"]);
+    files.set("src/a.ts", "");
+    const result = await globFiles("src/*.ts");
+    expect(result).toEqual(["src/a.ts"]);
   });
 
   it("parses { path } object array responses", async () => {
@@ -249,85 +186,6 @@ describe("globFiles", () => {
   });
 });
 
-describe("readFile", () => {
-  it("returns file content", async () => {
-    files.set("test.txt", "hello");
-    expect(await readFile("test.txt")).toBe("hello");
-  });
-
-  it("throws when readFile tool is not configured", async () => {
-    (globalThis as Record<string, unknown>).tools = {};
-    await expect(readFile("test.txt")).rejects.toThrow("readFile");
-  });
-});
-
-describe("writeFile", () => {
-  it("writes content to the file store", async () => {
-    await writeFile("out.txt", "data");
-    expect(files.get("out.txt")).toBe("data");
-  });
-
-  it("throws when writeFile tool is not configured", async () => {
-    (globalThis as Record<string, unknown>).tools = {};
-    await expect(writeFile("out.txt", "data")).rejects.toThrow("writeFile");
-  });
-
-  it("falls back to editFile when file already exists", async () => {
-    const toolsObj = (globalThis as Record<string, unknown>).tools as Record<
-      string,
-      unknown
-    >;
-    toolsObj.writeFile = vi.fn(async () => {
-      return `Cannot write to existing.txt because it already exists. Read and then make an edit, or write to a new path.`;
-    });
-    toolsObj.editFile = vi.fn(
-      async ({
-        file_path,
-        new_string,
-      }: {
-        file_path: string;
-        old_string: string;
-        new_string: string;
-      }) => {
-        files.set(file_path, new_string);
-        return "ok";
-      },
-    );
-
-    await writeFile("existing.txt", "new content", "old content");
-    expect(files.get("existing.txt")).toBe("new content");
-    expect(toolsObj.editFile).toHaveBeenCalledWith({
-      file_path: "existing.txt",
-      old_string: "old content",
-      new_string: "new content",
-    });
-  });
-
-  it("throws when file exists but editFile is not available", async () => {
-    const toolsObj = (globalThis as Record<string, unknown>).tools as Record<
-      string,
-      unknown
-    >;
-    toolsObj.writeFile = vi.fn(async () => "already exists");
-    delete toolsObj.editFile;
-    await expect(writeFile("x.txt", "data", "prev")).rejects.toThrow(
-      "edit_file",
-    );
-  });
-
-  it("throws when file exists but no previousContent provided", async () => {
-    const toolsObj = (globalThis as Record<string, unknown>).tools as Record<
-      string,
-      unknown
-    >;
-    toolsObj.writeFile = vi.fn(async () => "already exists");
-    toolsObj.editFile = vi.fn();
-    await expect(writeFile("x.txt", "data")).rejects.toThrow(
-      "no previous content",
-    );
-  });
-});
-
 // ---------------------------------------------------------------------------
 // createTable
 // ---------------------------------------------------------------------------
@@ -355,7 +213,6 @@ describe("createTable", () => {
   });
 
   it("creates a table from glob", async () => {
-    files.set(".swarm/placeholder", "");
     const tools = (globalThis as Record<string, unknown>).tools as Record<
       string,
       unknown
@@ -366,14 +223,12 @@ describe("createTable", () => {
     expect(handle.count).toBe(2);
   });
 
-  it("persists the table as JSONL to the backend", async () => {
+  it("stores rows in memory", async () => {
     const handle = await createTable({
       tasks: [{ id: "t1", value: 1 }],
     });
-    const path = [...files.keys()].find((k) => k.includes(handle.id));
-    expect(path).toBeDefined();
-    const content = files.get(path as string);
-    expect(content).toContain('"id":"t1"');
+    const rows = await loadTable(handle.id);
+    expect(rows).toEqual([{ id: "t1", value: 1 }]);
   });
 
   it("throws when zero sources are provided", async () => {
@@ -403,6 +258,12 @@ describe("createTable", () => {
       "missing string 'id' field",
     );
   });
+
+  it("throws on duplicate row IDs", async () => {
+    await expect(
+      createTable({ tasks: [{ id: "dup" }, { id: "dup" }] }),
+    ).rejects.toThrow("duplicate row ids");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -410,21 +271,10 @@ describe("createTable", () => {
 // ---------------------------------------------------------------------------
 
 describe("loadTable", () => {
-  it("returns rows from cache on cache hit", async () => {
+  it("returns rows from the in-memory store", async () => {
     const handle = await createTable({
       tasks: [{ id: "r1", val: "a" }],
     });
-    const rows = await loadTable(handle.id);
-    expect(rows).toEqual([{ id: "r1", val: "a" }]);
-  });
-
-  it("reads from backend on cache miss", async () => {
-    const handle = await createTable({
-      tasks: [{ id: "r1", val: "a" }],
-    });
-    _resetForTesting();
-    setupTools(files);
-
     const rows = await loadTable(handle.id);
     expect(rows).toEqual([{ id: "r1", val: "a" }]);
   });
@@ -433,9 +283,12 @@ describe("loadTable", () => {
     await expect(loadTable("t_doesnt_exist")).rejects.toThrow("not found");
   });
 
-  it("throws for an evicted table (empty file)", async () => {
-    files.set(".swarm/default/000-t_evicted.jsonl", "");
-    await expect(loadTable("t_evicted")).rejects.toThrow("evicted");
+  it("throws after cache reset (no backend fallback)", async () => {
+    const handle = await createTable({
+      tasks: [{ id: "r1", val: "a" }],
+    });
+    _resetForTesting();
+    await expect(loadTable(handle.id)).rejects.toThrow("not found");
   });
 });
 
@@ -444,68 +297,19 @@ describe("loadTable", () => {
 // ---------------------------------------------------------------------------
 
 describe("saveTable", () => {
-  it("persists updated rows to the backend", async () => {
+  it("updates rows in memory", async () => {
     const handle = await createTable({
       tasks: [{ id: "r1", val: "a" }],
     });
     await saveTable(handle.id, [{ id: "r1", val: "a", result: "done" }]);
 
-    const path = [...files.keys()].find((k) => k.includes(handle.id));
-    const content = files.get(path as string);
-    expect(content).toContain('"result":"done"');
+    const rows = await loadTable(handle.id);
+    expect(rows).toEqual([{ id: "r1", val: "a", result: "done" }]);
   });
 
   it("throws when table is not loaded", async () => {
     await expect(saveTable("t_notloaded", [{ id: "r1" }])).rejects.toThrow(
       "not loaded",
     );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Eviction
-// ---------------------------------------------------------------------------
-
-describe("eviction", () => {
-  it("evicts oldest tables when count exceeds MAX_TABLES", async () => {
-    const handles: SwarmHandle[] = [];
-    for (let i = 0; i < 6; i++) {
-      handles.push(await createTable({ tasks: [{ id: `row-${i}` }] }));
-    }
-
-    const firstPath = [...files.keys()].find((k) => k.includes(handles[0].id));
-    expect(firstPath).toBeDefined();
-    expect(files.get(firstPath as string)).toBe("");
-  });
-
-  it("evicted tables are not loadable", async () => {
-    const handles = [];
-    for (let i = 0; i < 6; i++) {
-      handles.push(await createTable({ tasks: [{ id: `row-${i}` }] }));
-    }
-
-    _resetForTesting();
-    setupTools(files);
-
-    await expect(loadTable(handles[0].id)).rejects.toThrow("evicted");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Sequence numbering
-// ---------------------------------------------------------------------------
-
-describe("sequence numbering", () => {
-  it("avoids collisions across cache resets", async () => {
-    await createTable({ tasks: [{ id: "r1" }] });
-    await createTable({ tasks: [{ id: "r2" }] });
-
-    _resetForTesting();
-    setupTools(files);
-
-    const handle = await createTable({ tasks: [{ id: "r3" }] });
-    const path = [...files.keys()].find((k) => k.includes(handle.id));
-    expect(path).toBeDefined();
-    expect(path).toMatch(/^\/tmp\/\.swarm\/default\/00[2-9]/);
   });
 });

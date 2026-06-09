@@ -117,13 +117,6 @@ export interface RunOptions {
    * Defaults to MAX_SUBAGENTS (10) when omitted.
    */
   concurrency?: number;
-
-  /**
-   * Maximum agentic loop iterations per dispatch. Prevents runaway
-   * subagents from burning excessive tokens. Clamped to
-   * [1, MAX_RECURSION_LIMIT] by the swarm_task tool.
-   */
-  recursionLimit?: number;
 }
 
 /**
@@ -300,11 +293,6 @@ export interface TaskSpec {
    * @default "agent"
    */
   mode?: "agent" | "invoke";
-
-  /**
-   * Maximum agentic loop iterations for this dispatch.
-   */
-  recursionLimit?: number;
 }
 
 /**

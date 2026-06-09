@@ -1,11 +1,17 @@
 import { z } from "zod/v4";
-import { createAgent, tool, type ReactAgent, StructuredTool } from "langchain";
+import {
+  createAgent,
+  tool,
+  type ReactAgent,
+  StructuredTool,
+} from "langchain";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
-import type { Runnable } from "@langchain/core/runnables";
+import type { Runnable, RunnableConfig } from "@langchain/core/runnables";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { initChatModel } from "langchain/chat_models/universal";
-import type { SubagentPoolRef } from "deepagents";
+import { getCurrentTaskInput } from "@langchain/langgraph";
+import { type SubagentPoolRef } from "deepagents";
 
 /**
  * Dispatch mode for swarm task invocations.
@@ -62,20 +68,30 @@ interface AgentSpec {
 
 const VARIANT_TTL_MS = 60_000;
 
-/**
- * Default maximum agentic loop iterations for swarm subagent dispatches.
- *
- * Without an explicit limit, subagents inherit the parent agent's
- * recursionLimit (10,000) via AsyncLocalStorage config propagation,
- * which can cause runaway cost when a subagent goes off on a tangent.
- */
-const DEFAULT_RECURSION_LIMIT = 100;
+const EXCLUDED_STATE_KEYS = [
+  "messages",
+  "todos",
+  "structuredResponse",
+  "skillsMetadata",
+  "memoryContents",
+];
 
 /**
- * Hard ceiling for recursion_limit — the LLM can request more iterations
- * per dispatch, but the value is clamped to this maximum.
+ * Filter parent state for subagent invocation, mirroring the regular
+ * task tool's behavior in subagents.ts.
  */
-const MAX_RECURSION_LIMIT = 500;
+function filterStateForSubagent(
+  state: Record<string, unknown>,
+): Record<string, unknown> {
+  const filtered: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(state)) {
+    if (!EXCLUDED_STATE_KEYS.includes(key)) {
+      filtered[key] = value;
+    }
+  }
+  return filtered;
+}
+
 
 /**
  * TTL cache for compiled agent variants.
@@ -202,7 +218,7 @@ async function invokeAgent(
   description: string,
   responseSchema: Record<string, unknown> | undefined,
   variantCache: VariantCache<ReactAgent | Runnable>,
-  recursionLimit: number,
+  config: RunnableConfig,
 ): Promise<string> {
   let agent = entry.agent;
 
@@ -223,19 +239,31 @@ async function invokeAgent(
     );
   }
 
-  const dispatchNote =
-    `\n\n[You have approximately ${Math.floor(recursionLimit / 2)} ` +
-    `tool-calling iterations. Work only on the task above — do not ` +
-    `explore beyond what is necessary. Produce your final answer once ` +
-    `you have enough evidence.]`;
+  let currentState: Record<string, unknown>;
+  try {
+    currentState = getCurrentTaskInput<Record<string, unknown>>() ?? {};
+  } catch {
+    currentState = {};
+  }
+  const subagentState = filterStateForSubagent(currentState);
+  subagentState.messages = [new HumanMessage({ content: description })];
 
-  const state = {
-    messages: [new HumanMessage({ content: description + dispatchNote })],
+  const subagentConfig = {
+    ...config,
+    metadata: {
+      ...(config.metadata ?? {}),
+      lc_agent_name: entry.spec.name,
+    },
+    configurable: {
+      ...(config.configurable ?? {}),
+      ls_agent_type: "subagent",
+    },
   };
 
-  const result = (await agent.invoke(state, {
-    recursionLimit,
-  })) as Record<string, unknown>;
+  const result = (await agent.invoke(
+    subagentState,
+    subagentConfig,
+  )) as Record<string, unknown>;
 
   if (result.structuredResponse != null) {
     return JSON.stringify(result.structuredResponse);
@@ -255,7 +283,9 @@ async function invokeAgent(
  * Compile pool specs into agent entries on first invocation.
  *
  * Called lazily because the pool is populated by `createDeepAgent`
- * after the swarm task tool is created.
+ * after the swarm task tool is created. Pool specs already include the
+ * full middleware stack (including `createFilesystemMiddleware`) from
+ * `normalizeSubagentSpec` in agent.ts.
  */
 function compilePoolSpecs(
   pool: NonNullable<SubagentPoolRef["current"]>,
@@ -268,7 +298,7 @@ function compilePoolSpecs(
       systemPrompt: spec.systemPrompt,
       tools: spec.tools as StructuredTool[],
       name: spec.name,
-      middleware: spec.middleware,
+      middleware: [...spec.middleware],
     };
 
     compiled.set(spec.name, {
@@ -302,8 +332,6 @@ function compilePoolSpecs(
  * @param options - Pool ref for subagent specs.
  * @returns A `StructuredToolInterface` suitable for the `ptc` config.
  */
-export { DEFAULT_RECURSION_LIMIT, MAX_RECURSION_LIMIT };
-
 export function createSwarmTaskTool(
   options: SwarmTaskToolOptions,
 ): StructuredToolInterface {
@@ -313,13 +341,15 @@ export function createSwarmTaskTool(
   const variantCache = new VariantCache<ReactAgent | Runnable>();
 
   return tool(
-    async (input: {
-      description: string;
-      subagent_type?: string;
-      response_schema?: Record<string, unknown>;
-      mode?: SwarmTaskMode;
-      recursion_limit?: number;
-    }): Promise<string> => {
+    async (
+      input: {
+        description: string;
+        subagent_type?: string;
+        response_schema?: Record<string, unknown>;
+        mode?: SwarmTaskMode;
+      },
+      config: RunnableConfig,
+    ): Promise<string> => {
       const pool = subagentPool.current;
       if (!pool) {
         throw new Error(
@@ -333,13 +363,7 @@ export function createSwarmTaskTool(
         subagent_type: subagentType,
         response_schema: responseSchema,
         mode = "agent",
-        recursion_limit: rawLimit,
       } = input;
-
-      const recursionLimit = Math.max(
-        1,
-        Math.min(rawLimit ?? DEFAULT_RECURSION_LIMIT, MAX_RECURSION_LIMIT),
-      );
 
       if (mode === "invoke") {
         return invokeModel(pool.model, description, responseSchema);
@@ -371,7 +395,7 @@ export function createSwarmTaskTool(
         description,
         responseSchema,
         variantCache,
-        recursionLimit,
+        config,
       );
     },
     {
@@ -401,15 +425,6 @@ export function createSwarmTaskTool(
             'Dispatch mode. "agent" (default) runs a full agentic loop ' +
               'with tools. "invoke" makes a single model call with no tools — ' +
               "use for classification, extraction, and labeling.",
-          ),
-        recursion_limit: z
-          .number()
-          .int()
-          .optional()
-          .describe(
-            "Max agentic loop iterations for this dispatch. " +
-              `Defaults to ${DEFAULT_RECURSION_LIMIT}, ` +
-              `clamped to [1, ${MAX_RECURSION_LIMIT}].`,
           ),
       }),
     },

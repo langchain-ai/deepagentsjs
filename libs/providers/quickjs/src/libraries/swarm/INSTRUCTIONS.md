@@ -1,85 +1,101 @@
 # Swarm
 
-Process many independent items in parallel. `create` builds a table handle;
-`run` fans work out across rows and merges results back. One row = one unit
-of work — swarm handles batching automatically.
+Process many items in parallel by dispatching a table of rows to subagents.
 
-**IMPORTANT: Always write the complete pipeline — `create`, all `run` passes,
-`rows`, and aggregation — in a single eval call.** Never split swarm
-operations across multiple eval calls. Do not call `create` in one eval and
-`run` in another. Do not use `glob` or `readFile` as separate tool calls to
-explore files before creating a table — `create({ glob })` handles that for
-you inside the eval. One eval, one complete pipeline.
+**A swarm table is a spreadsheet.** Each `run()` adds new columns to the
+existing rows — the properties on `responseSchema` become row columns.
+Use `filter` to choose which rows the next `run()` processes. Multi-stage
+analysis is just multiple `run()` calls on the same table, each
+conditioned on columns produced by an earlier run.
+
+**Write the whole pipeline in one eval.** Tables are session-scoped — they
+exist only inside the eval script that created them. `create`, every
+`run`, and `rows` must live in the same eval. Splitting across evals
+throws "table not found."
 
 ## Quick Start
 
 ```javascript
 import { create, run, rows } from "swarm";
 
-const table = await create({ tasks: items });
-const result = await run(table.id, {
-  instruction: "Classify {text}",
+const table = await create({
+  tasks: [
+    { id: "1", text: "Loved the product!" },
+    { id: "2", text: "Shipping was slow." },
+  ],
+});
+
+// `label` becomes a column on every row
+await run(table.id, {
+  instruction: "Classify {text} as positive, negative, or neutral",
   responseSchema: {
     type: "object",
     properties: { label: { type: "string" } },
     required: ["label"],
   },
 });
+
 const data = await rows(table.id);
 ```
 
-## Compose Complete Pipelines
+## Compose with Multiple Runs on One Table
 
-ALWAYS write the entire pipeline in a **single eval script**. This means
-one eval that contains `create`, all `run` passes, `rows` retrieval, and
-result aggregation together. Never split these across multiple eval calls.
+The most powerful pattern is **one table, multiple `run()` passes, with
+filters narrowing the work each pass**. The table grows columns; filters
+select rows by the columns earlier runs produced.
 
-Wrong — two separate evals:
+Walk through a row's lifecycle:
+
 ```
-// Eval 1
-const table = await create({ glob: "src/**/*.ts" });
-// Eval 2 (don't do this)
-await run("t_abc123", { ... });
+After create():     { id: "users.ts", file: "src/users.ts" }
+After classify run: { id, file, category: "handler" }
+After review run:   { id, file, category, vulnerabilities: [...], severity: "high" }
+After verify run:   { id, file, category, vulnerabilities, severity, confirmed: true }
 ```
 
-Right — one complete eval:
+Same row, same `id`, more columns. Each `run` writes its `responseSchema`
+properties onto the existing row.
+
+### Canonical Multi-Stage Pipeline
+
 ```javascript
 import { create, run, rows } from "swarm";
 
-// Create table from files on disk
 const table = await create({ glob: "src/**/*.ts" });
 
-// Pass 1: find issues
+// Stage 1 — invoke mode (no subagentType): cheap classification on every row
 await run(table.id, {
-  instruction: "Review {file} for bugs",
-  subagentType: "bug-finder",
+  instruction: "Classify {file} as 'handler', 'util', or 'test'",
   responseSchema: {
     type: "object",
-    properties: {
-      findings: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            title: { type: "string" },
-            severity: { type: "string" },
-          },
-          required: ["title", "severity"],
-        },
-      },
-    },
-    required: ["findings"],
+    properties: { category: { type: "string" } },
+    required: ["category"],
   },
 });
 
-// Pass 2: verify — flatten findings into a new table, dispatch each
-const reviewed = await rows(table.id);
-const allFindings = reviewed.flatMap((r) =>
-  (r.findings || []).map((f) => ({ id: `${r.id}-${f.title}`, ...f, file: r.file }))
-);
-const verifyTable = await create({ tasks: allFindings });
-await run(verifyTable.id, {
-  instruction: 'Verify whether "{title}" in {file} is a real bug',
+// Stage 2 — agent mode, ONLY on handlers (filter uses Stage 1's column)
+await run(table.id, {
+  instruction:
+    "Review {file} for SQL injection and missing auth checks. " +
+    "Cite line numbers.",
+  filter: { column: "category", equals: "handler" },
+  subagentType: "reviewer",
+  responseSchema: {
+    type: "object",
+    properties: {
+      vulnerabilities: { type: "array", items: { type: "string" } },
+      severity: { type: "string" },
+    },
+    required: ["vulnerabilities", "severity"],
+  },
+});
+
+// Stage 3 — verify only high-severity findings (filter uses Stage 2's column)
+await run(table.id, {
+  instruction:
+    "Independently verify these vulnerabilities found in {file}: " +
+    "{vulnerabilities}. Are they real?",
+  filter: { column: "severity", equals: "high" },
   subagentType: "verifier",
   responseSchema: {
     type: "object",
@@ -91,378 +107,196 @@ await run(verifyTable.id, {
   },
 });
 
-// Aggregate results in JS
-const verified = await rows(verifyTable.id);
-const confirmed = verified.filter((r) => r.confirmed);
-console.log(`${confirmed.length}/${verified.length} findings confirmed`);
-console.log(JSON.stringify(confirmed, null, 2));
-```
+// Aggregate with a filter on rows()
+const confirmed = await rows(table.id, {
+  filter: {
+    and: [
+      { column: "severity", equals: "high" },
+      { column: "confirmed", equals: true },
+    ],
+  },
+});
 
-## Manage Output Size
-
-Swarm results can get large — dozens of findings with full descriptions
-easily produce thousands of lines. Everything you `console.log` in an eval
-comes back as the tool response, and an oversized tool response wastes
-context window and slows you down.
-
-Use the filesystem to keep the tool response small. During the eval, write
-detailed results to files and only `console.log` counts and file paths.
-Do NOT log individual finding titles, descriptions, reasons, or any
-per-item details — that data belongs in the files. After the eval
-completes, you still have full access — just `readFile` the results path
-if you need more detail to answer the user.
-
-```javascript
-// Write full results to files
 await tools.writeFile({
   file_path: "/results/findings.json",
   content: JSON.stringify(confirmed, null, 2),
 });
 
-// Log ONLY counts and file paths — nothing else
-console.log(`${confirmed.length}/${total.length} findings confirmed`);
-console.log(`  Critical: ${bySeverity.critical.length}`);
-console.log(`  High: ${bySeverity.high.length}`);
-console.log(`Results: /results/findings.json`);
-
-// WRONG — do not loop over findings in console.log:
-// for (const f of confirmed) {
-//   console.log(`[${f.severity}] ${f.title}`);   // ← NO
-//   console.log(`  ${f.description}`);            // ← NO
-// }
+console.log(`${confirmed.length} confirmed high-severity findings`);
+console.log("Results: /results/findings.json");
 ```
 
-**Rule of thumb**: `console.log` gets counts and file paths. The files
-get everything else. After the eval, `readFile` the results to build
-your response.
+Every stage operates on the same rows; filters control which rows
+participate. Stage 1 uses invoke mode (cheap, no tools) to tag rows for
+later stages to filter on.
+
+### When to Use a New Table vs. Filter the Existing One
+
+Default to **filtering the same table**. Only create a new table when row
+identity needs to change.
+
+| Situation | Approach |
+|---|---|
+| Different work for a subset of existing rows | Same table + `filter` |
+| Aggregating info into rows you already have | Same table — schema adds columns |
+| One input row produces N output items, each needs its own dispatch | New table from flattened rows |
+| Items have no natural relationship to existing rows | New table |
+
+When one row produces N items that each need their own dispatch, flatten
+them into a new table:
+
+```javascript
+const files = await rows(fileTable.id);
+const findingTable = await create({
+  tasks: files.flatMap((r) =>
+    (r.findings ?? []).map((f, i) => ({
+      id: `${r.id}-${i}`,
+      file: r.file,
+      title: f.title,
+    })),
+  ),
+});
+// Now dispatch verification per finding...
+```
+
+If you're tempted to flatten just to attach more columns to existing
+items — don't. Filter the original table instead.
 
 ## Write Effective Dispatches
 
-Subagents have the full agentic loop — tools, middleware, iteration. This
-is powerful but expensive. A subagent told to "review {file} for issues"
-will read the file, chase its imports, grep for callers, and explore
-broadly. That's 20+ tool calls per dispatch when 3-5 would suffice.
+Subagents have the full agentic loop. Vague prompts produce expensive,
+unfocused work — a "review this file" dispatch can spend 30 iterations
+chasing imports and grepping callers. Do the thinking upfront so each
+dispatch is scoped.
 
-**Your job as the orchestrator is to do the thinking upfront.** A few
-minutes of scoping work before `run()` is far cheaper than 10 subagents
-each spending 30 iterations figuring out their own scope. Write dispatches
-that eliminate subagent guesswork.
-
-### Scope Before You Dispatch
-
-Before writing a `run()`, understand what you're sending subagents into.
-You don't need deep research — just enough context to write specific
-prompts. Read a representative file, check the project structure, or
-look at imports to understand the shape of things.
+Two levers: a specific `instruction` and a constraining `context`. Read
+a representative file first so you know what to ask for and what to
+forbid.
 
 ```javascript
-import { create, run, rows } from "swarm";
-
-// Read a representative file to understand patterns and conventions
 const sample = await tools.readFile({ file_path: "src/api/users.ts" });
 
-// Now you can write informed, specific instructions
-const table = await create({ glob: "src/api/*.ts" });
 await run(table.id, {
   instruction:
-    "In {file}, find SQL injection risks in query construction, " +
-    "unvalidated request parameters passed to database calls, and " +
-    "missing authorization checks on route handlers. Cite line numbers.",
+    "In {file}, find SQL injection in query construction, " +
+    "unvalidated request params, and missing auth checks on routes. " +
+    "Cite line numbers.",
   context:
-    "These are Express route handlers using Knex for database access. " +
-    "Each file exports a router. Auth middleware is applied at the " +
-    "router level, not per-route — check for routes that should have " +
-    "additional permission checks beyond authentication.",
+    "Express + Knex. Auth middleware is router-level — flag routes " +
+    "needing additional permission checks. Analyze only the dispatched " +
+    "file: do not read imports, trace dependencies, or grep the codebase.",
   subagentType: "reviewer",
   responseSchema: findingsSchema,
 });
 ```
 
-The scoping pass told you the stack (Express + Knex), the auth pattern
-(router-level middleware), and what to look for. Without it, you'd write
-"review {file} for security issues" and each subagent would spend
-iterations rediscovering this context independently.
+`context` is prepended to every subagent prompt — use it to tell
+subagents what NOT to do. Every extra tool call grows the subagent's
+prompt for the next call, so constraints compound.
 
-### Write Specific Instructions
+## Manage Output Size
 
-Tell subagents exactly what to look for, what to skip, and how to work.
-Vague instructions cause subagents to explore broadly and use tools
-unnecessarily.
-
-Bad — subagent doesn't know what matters:
-```javascript
-await run(table.id, {
-  instruction: "Review {file} for issues",
-  subagentType: "reviewer",
-  responseSchema: { ... },
-});
-```
-
-Good — subagent knows exactly what to do:
-```javascript
-await run(table.id, {
-  instruction:
-    "Find race conditions, resource leaks, and injection vectors " +
-    "in {file}. Cite line numbers. Ignore style and naming.",
-  subagentType: "reviewer",
-  responseSchema: { ... },
-});
-```
-
-### Constrain Tool Usage with Context
-
-Use `context` to tell subagents what **not** to do. Without constraints,
-subagents will read imports, grep for callers, and explore the codebase.
-Each extra tool call adds tokens to the conversation, making subsequent
-calls more expensive (prompt tokens grow with each iteration).
+Everything you `console.log` comes back as the tool response. Write
+detailed results to files; log only counts and file paths. After the
+eval completes you can `readFile` the results if you need detail to
+answer the user.
 
 ```javascript
-await run(table.id, {
-  instruction: "Find bugs in {file}. Cite line numbers.",
-  context:
-    "Analyze only the dispatched file. Do not read imports, trace " +
-    "dependencies, or grep the codebase. If a finding depends on " +
-    "external behavior, note it as an assumption and move on. " +
-    "Produce your findings after reading the file — do not iterate " +
-    "beyond what is necessary.",
-  subagentType: "reviewer",
-  responseSchema: findingsSchema,
+await tools.writeFile({
+  file_path: "/results/findings.json",
+  content: JSON.stringify(confirmed, null, 2),
 });
+
+console.log(`${confirmed.length}/${total} findings confirmed`);
+console.log(`Results: /results/findings.json`);
+// DO NOT loop and log per-item details.
 ```
 
-### Inline Small Files
-
-For files under ~500 lines, read them during the scoping pass and include
-the content directly in the instruction. This eliminates the subagent's
-need to call `readFile` at all — it already has the code.
-
-```javascript
-const table = await create({ glob: "src/utils/*.ts" });
-const allRows = await rows(table.id);
-
-// Read files and add content as a column
-for (const row of allRows) {
-  const content = await tools.readFile({ file_path: row.file });
-  row.content = content;
-}
-
-// Subagent gets the code inline — no file reads needed
-await run(table.id, {
-  instruction:
-    "Find bugs in the following code from {file}:\n\n{content}\n\n" +
-    "Cite line numbers. Do not read any files.",
-  context: "All code is provided inline. Do not use file tools.",
-  subagentType: "reviewer",
-  responseSchema: findingsSchema,
-});
-```
-
-For large files (500+ lines), let the subagent read the file but constrain
-it to only that file via `context`.
-
-## API
+## API Reference
 
 ### `create(source)` → `SwarmHandle`
 
-Create a table from a source specification. Returns a lightweight handle
-with `id`, `count`, and `columns`. Always call `create` inside the same
-eval as `run` and `rows` — never in a separate eval.
+Returns a lightweight handle with `id`, `count`, `columns`. Always call
+inside the same eval as `run` and `rows`.
 
-**Source types** — exactly one of:
-
-| Field | Description |
-|-------|-------------|
-| `glob` | Glob pattern(s). Each match → row with `{ id, file }` columns. |
-| `filePaths` | Explicit file list. Same `{ id, file }` row shape as glob. |
-| `tasks` | Custom row data. Each object must include a string `id` field. |
-
-```javascript
-// From glob
-const t1 = await create({ glob: "src/**/*.ts" });
-
-// From explicit paths
-const t2 = await create({ filePaths: ["a.ts", "b.ts"] });
-
-// From custom data
-const t3 = await create({
-  tasks: [
-    { id: "1", text: "Hello world", lang: "en" },
-    { id: "2", text: "Bonjour le monde", lang: "fr" },
-  ],
-});
-```
+| Source | Description |
+|---|---|
+| `glob` | Glob pattern(s). Each match → `{ id, file }` row. |
+| `filePaths` | Explicit list. Same `{ id, file }` shape. |
+| `tasks` | Custom rows. Each object must include a string `id`. |
 
 ### `run(tableId, options)` → `RunResult`
 
-Dispatch work across table rows and update the table in place.
+Dispatches work across matching rows and merges results back as columns.
 
-**Options:**
+| Option | Description |
+|---|---|
+| `instruction` | Template with `{column}` placeholders interpolated per-row. |
+| `context` | Shared prose prepended to every subagent prompt. |
+| `filter` | Select a subset of rows. See Filtering. |
+| `subagentType` | Subagent name for agent mode. Omit for invoke mode. |
+| `responseSchema` | JSON Schema (`type: "object"`). Properties become row columns. |
+| `batchSize` | Number or `(row, total) => number` for row grouping. |
+| `concurrency` | Max concurrent dispatches (1–10, default 10). |
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `instruction` | `string` | Template with `{column}` placeholders interpolated per-row. |
-| `context` | `string?` | Shared background prepended to every subagent prompt. |
-| `filter` | `SwarmFilter?` | Select a subset of rows to process. |
-| `subagentType` | `string?` | Name of the subagent for agent mode. Omit for invoke mode. |
-| `responseSchema` | `object` | JSON Schema (`type: "object"`) for structured output. |
-| `batchSize` | `number \| function?` | Controls row grouping. See Batching. |
-| `concurrency` | `number?` | Max concurrent dispatches (1–10, default 10). |
-| `recursionLimit` | `number?` | Max agentic loop iterations per dispatch (1–500, default 100). |
+Returns `{ completed, failed, skipped, failures }`. Note `skipped` counts
+rows excluded by the filter — that's expected when filtering, not an error.
 
-**Returns** `{ completed, failed, skipped, failures }`.
+#### Agent vs. Invoke Mode
 
-#### Instruction Templates
-
-Use `{column}` placeholders that are interpolated per-row:
-
-```javascript
-await run(table.id, {
-  instruction: "Review {file} for security issues",
-  responseSchema: { ... },
-});
-```
-
-Nested access via dot paths: `{meta.score}`, `{config.model}`.
-
-#### Context
-
-Shared prose prepended to every subagent prompt. Use `context` to shape
-how subagents behave — constrain tool usage, set priorities, provide
-project background, or scope the task. This is one of the most effective
-levers for controlling subagent quality and cost.
+- **Agent mode** (`subagentType` set): full agentic loop with tools.
+  Expensive. Use for code review, research, anything requiring iteration.
+- **Invoke mode** (no `subagentType`): single model call, structured
+  output, no tools. Cheap. Use for classification, extraction, labeling —
+  especially as a Stage 1 to tag rows for later filtering.
 
 ```javascript
+// Invoke — cheap classification, no tools
 await run(table.id, {
-  instruction: "Analyze {file}",
-  context:
-    "This is a React project using TypeScript and Tailwind CSS. " +
-    "Focus on the code provided. Only use web search to verify " +
-    "a specific API or pattern you are unsure about.",
-  subagentType: "reviewer",
-  responseSchema: { ... },
-});
-```
-
-#### Dispatch Modes
-
-- **Agent mode** (`subagentType` set): Full agentic loop with tools. The
-  subagent can call tools, iterate, and reason. Use for complex tasks.
-- **Invoke mode** (`subagentType` omitted): Direct model call with structured
-  output. No tools, no iteration. Use for classification, extraction, labeling.
-
-```javascript
-// Agent mode — subagent has tools and can iterate
-await run(table.id, {
-  instruction: "Review {file} thoroughly",
-  subagentType: "reviewer",
-  responseSchema: { ... },
-});
-
-// Invoke mode — single model call, structured output
-await run(table.id, {
-  instruction: "Classify {text} as positive, negative, or neutral",
+  instruction: "Classify {text} as positive/negative/neutral",
   responseSchema: {
     type: "object",
     properties: { sentiment: { type: "string" } },
     required: ["sentiment"],
   },
 });
-```
 
-#### Recursion Limit
-
-Each agent-mode dispatch has a budget of agentic loop iterations
-(default 100, ~50 tool-calling turns). When a subagent exhausts this
-budget it is stopped and the dispatch is recorded as a failure.
-
-The default is appropriate for most tasks including single-file code
-review, research, and extraction. Increase it for tasks that require
-deep exploration — multi-file tracing, exhaustive search, or complex
-multi-step reasoning:
-
-```javascript
-// Deep code review — subagents may need to read many imports
+// Agent — full loop
 await run(table.id, {
-  instruction: "Review {file} for security issues, tracing data flow across imports",
+  instruction: "Review {file} thoroughly",
   subagentType: "reviewer",
-  recursionLimit: 100,
-  responseSchema: findingsSchema,
+  responseSchema: { ... },
 });
 ```
 
-If some dispatches hit the limit while others succeed, retry the
-failed rows with a higher limit rather than raising the default for
-all dispatches:
+#### Instruction Placeholders
 
-```javascript
-const result = await run(table.id, {
-  instruction: "Review {file} for bugs",
-  subagentType: "reviewer",
-  responseSchema: findingsSchema,
-});
-
-if (result.failed > 0) {
-  await run(table.id, {
-    instruction: "Review {file} for bugs",
-    subagentType: "reviewer",
-    recursionLimit: 120,
-    responseSchema: findingsSchema,
-    filter: { column: "findings", exists: false },
-  });
-}
-```
-
-Only applies to agent mode — invoke mode makes a single model call
-with no iteration.
-
-#### Response Schema
-
-Every `run()` requires a `responseSchema` — a JSON Schema with `type: "object"`.
-Each property in the schema becomes a column on the row after the run completes.
-
-```javascript
-await run(table.id, {
-  instruction: "Extract entities from {text}",
-  responseSchema: {
-    type: "object",
-    properties: {
-      entities: {
-        type: "array",
-        items: { type: "string" },
-      },
-      count: { type: "number" },
-    },
-    required: ["entities", "count"],
-  },
-});
-```
+`{column}` is interpolated per-row. Strings insert verbatim; numbers and
+booleans are stringified; arrays and objects are JSON-encoded (so
+`{vulnerabilities}` for an array column produces `["...", "..."]` in
+the prompt). Dot paths for nested: `{meta.score}`. `run()` validates
+every placeholder resolves on at least one matched row.
 
 ### `rows(tableId, options?)` → `Record<string, unknown>[]`
 
-Retrieve rows from a table for inspection or JS-based aggregation.
+Read rows for JS-side aggregation or to write to a file.
 
-**Options:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `filter` | `SwarmFilter?` | Only return matching rows. |
-| `columns` | `string[]?` | Project to specific columns. |
-| `limit` | `number?` | Max rows to return. |
+| Option | Description |
+|---|---|
+| `filter` | Only return matching rows. |
+| `columns` | Project to specific columns. |
+| `limit` | Max rows to return. |
 
 ```javascript
-// All rows
-const all = await rows(table.id);
-
-// Filtered + projected
-const failed = await rows(table.id, {
-  filter: { column: "status", equals: "failed" },
-  columns: ["id", "error"],
+const confirmed = await rows(table.id, {
+  filter: { column: "confirmed", equals: true },
+  columns: ["id", "file", "vulnerabilities"],
 });
 ```
 
 ## Filtering
 
-Filters select subsets of rows for `run()` or `rows()`.
+Used by both `run()` and `rows()`.
 
 **Leaf predicates:**
 
@@ -470,7 +304,7 @@ Filters select subsets of rows for `run()` or `rows()`.
 { column: "status", equals: "pending" }
 { column: "status", notEquals: "completed" }
 { column: "lang", in: ["en", "fr", "de"] }
-{ column: "result", exists: true }    // non-null/undefined
+{ column: "result", exists: true }    // non-null
 { column: "result", exists: false }   // null/undefined
 ```
 
@@ -478,104 +312,28 @@ Filters select subsets of rows for `run()` or `rows()`.
 
 ```javascript
 { and: [
-  { column: "status", equals: "failed" },
-  { column: "retries", exists: true },
+  { column: "category", equals: "handler" },
+  { column: "severity", equals: "high" },
 ]}
 
-{ or: [
-  { column: "priority", equals: "high" },
-  { column: "age", equals: "stale" },
-]}
+{ or: [...] }
 ```
 
-Dot-path column access: `{ column: "meta.score", exists: true }`.
+Dot-path access: `{ column: "meta.score", exists: true }`.
 
 ## Batching
 
-By default, swarm auto-batches rows to keep total dispatches within the
-concurrency cap (max 10). You can override with `batchSize`:
+Swarm auto-batches to stay within concurrency (max 10). Pass
+`batchSize: N` to force N rows per dispatch (multi-row batches use a
+wrapped schema the model fills per-row).
 
-```javascript
-// Fixed batch size — 5 rows per subagent call
-await run(table.id, {
-  instruction: "Classify these items: {text}",
-  batchSize: 5,
-  responseSchema: { ... },
-});
+## Notes
 
-// Dynamic batch size — function receives (row, totalRows)
-await run(table.id, {
-  instruction: "Process {text}",
-  batchSize: (row, total) => total > 100 ? 10 : 1,
-  responseSchema: { ... },
-});
-```
-
-Single-row batches produce interpolated per-row prompts. Multi-row batches
-produce batch prompts with wrapped schemas that the model fills per-row.
-
-## Chaining Runs
-
-Chain multiple `run()` calls to build multi-stage pipelines. Each run
-updates the table in place — new columns from the response schema are
-merged onto existing rows.
-
-```javascript
-const table = await create({ glob: "src/**/*.ts" });
-
-// Stage 1: classify
-await run(table.id, {
-  instruction: "Classify {file} as 'component', 'utility', or 'test'",
-  responseSchema: {
-    type: "object",
-    properties: { category: { type: "string" } },
-    required: ["category"],
-  },
-});
-
-// Stage 2: review only components (uses column from stage 1)
-await run(table.id, {
-  instruction: "Review {file} for accessibility issues",
-  filter: { column: "category", equals: "component" },
-  subagentType: "reviewer",
-  responseSchema: {
-    type: "object",
-    properties: {
-      issues: { type: "array", items: { type: "string" } },
-      severity: { type: "string" },
-    },
-    required: ["issues", "severity"],
-  },
-});
-```
-
-## Action-Only Tasks
-
-For tasks that produce side effects (writing files, running commands) rather
-than structured data, use a minimal response schema:
-
-```javascript
-await run(table.id, {
-  instruction: "Fix the lint errors in {file}",
-  subagentType: "fixer",
-  responseSchema: {
-    type: "object",
-    properties: { fixed: { type: "boolean" } },
-    required: ["fixed"],
-  },
-});
-```
-
-## Technical Notes
-
-- **Concurrency**: Max 10 concurrent subagent dispatches per `run()`. Rows
-  exceeding this are queued.
-- **Table persistence**: Tables are stored as JSONL on the backend. The handle
-  (`id`, `count`, `columns`) is lightweight — row data stays on disk.
-- **Handle-based design**: `create()` returns a handle, not the data. Use
-  `rows()` to retrieve data for JS-based aggregation. This keeps large
-  datasets out of the agent's context window.
+- **Session-scoped**: Tables live only inside the eval that created them.
+  No cross-eval persistence.
+- **Handle-based**: `create()` returns a small handle; row data stays
+  in the sandbox. Use `rows()` to pull data when you need it.
 - **Failures**: `RunResult.failures` groups errors by message with counts
-  and affected row IDs. Use this to decide whether to retry.
-- **Placeholder validation**: `run()` validates that every `{column}`
-  reference in the instruction resolves on at least one matched row.
+  and row IDs. Use to decide whether to retry.
+- **Placeholder validation**: `run()` errors if a `{column}` placeholder
+  resolves on no matched row.

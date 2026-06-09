@@ -167,17 +167,15 @@ describe("run (single dispatch)", () => {
     expect(result.failures[0].error).toBe("subagent timeout");
   });
 
-  it("persists updated rows to backend", async () => {
+  it("updates rows in memory after run", async () => {
     const handle = await create({ tasks: [{ id: "r1", text: "hi" }] });
     await run(handle.id, {
       instruction: "Do {text}",
       responseSchema: resultSchema,
     });
 
-    const path = [...files.keys()].find((k) => k.includes(handle.id));
-    expect(path).toBeDefined();
-    const content = files.get(path as string) ?? "";
-    expect(content).toContain('"result"');
+    const updatedRows = await rows(handle.id);
+    expect(updatedRows[0]).toHaveProperty("result");
   });
 });
 

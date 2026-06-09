@@ -59,7 +59,6 @@ function buildDispatchUnits(
     subagentType?: string;
     responseSchema: Record<string, unknown>;
     mode: "agent" | "invoke";
-    recursionLimit?: number;
   },
 ): { units: DispatchUnit[]; errors: TaskResult[] } {
   const units: DispatchUnit[] = [];
@@ -85,7 +84,6 @@ function buildDispatchUnits(
             subagentType: opts.subagentType,
             responseSchema: opts.responseSchema,
             mode: opts.mode,
-            recursionLimit: opts.recursionLimit,
           },
           rowIds: [rowId],
         });
@@ -106,7 +104,6 @@ function buildDispatchUnits(
           subagentType: opts.subagentType,
           responseSchema: wrapSchema(opts.responseSchema, batch.length),
           mode: opts.mode,
-          recursionLimit: opts.recursionLimit,
         },
         rowIds,
       });
@@ -228,10 +225,7 @@ function validatePlaceholders(
 }
 
 /**
- * Create a table from a source specification and persist it to the backend.
- *
- * Thin wrapper around `createTable` — validates the source, builds rows,
- * runs eviction if necessary, and persists the table as JSONL.
+ * Create a table from a source specification and store it in memory.
  *
  * @param source - Exactly one of `glob`, `filePaths`, or `tasks`.
  * @returns A lightweight handle with the table's ID, row count, and columns.
@@ -265,7 +259,6 @@ export async function run(
     responseSchema,
     batchSize,
     concurrency,
-    recursionLimit,
   } = options;
   const mode = subagentType != null ? "agent" : "invoke";
 
@@ -312,7 +305,6 @@ export async function run(
     subagentType,
     responseSchema,
     mode,
-    recursionLimit,
   });
 
   // -----------------------------------------------------------------------
