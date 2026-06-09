@@ -3,6 +3,7 @@ import { createDeepAgent } from "deepagents";
 import { createCodeInterpreterMiddleware, swarm } from "@langchain/quickjs";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { createSubagentTool } from "./subagent.js";
+import { createSubagentReplInstructionMiddleware } from "./subagent-instructions.js";
 
 registerDeepAgentRunner(
   "claude-sonnet-4-6-swarm",
@@ -40,6 +41,7 @@ registerDeepAgentRunner(
           ],
           executionTimeoutMs: -1,
         }) as any,
+        createSubagentReplInstructionMiddleware(),
       ],
       model: new ChatAnthropic({ model: "claude-sonnet-4-6" }),
     }) as any,
