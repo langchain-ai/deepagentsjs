@@ -194,6 +194,52 @@ export interface RowsOptions {
 }
 
 /**
+ * Options for `reduce()`.
+ *
+ * Controls how table rows are synthesized into a single artifact by a
+ * subagent (or a hierarchical tree of subagents when the data exceeds
+ * one context window).
+ */
+export interface ReduceOptions {
+  /**
+   * How to synthesize the rows, e.g. "Summarize the confirmed
+   * high-severity findings into a report grouped by file".
+   */
+  instruction: string;
+
+  /**
+   * Only synthesize rows matching this filter. Omit to reduce all rows.
+   */
+  filter?: SwarmFilter;
+
+  /**
+   * Project to specific columns before synthesizing. Use to drop large
+   * columns the synthesis doesn't need, keeping reducer contexts small.
+   */
+  columns?: string[];
+
+  /**
+   * Name of a subagent type to run the reduction in agent mode (with
+   * tools). Omit for invoke mode — a single model call with no tools,
+   * which is the right default for pure synthesis.
+   */
+  subagentType?: string;
+
+  /**
+   * Approximate token budget for the row data sent to a single reducer.
+   * When the (filtered, projected) rows exceed this, the reduction is
+   * split into parallel leaf reducers whose summaries are then combined.
+   * Defaults to a conservative per-context budget.
+   */
+  tokenBudget?: number;
+
+  /**
+   * Maximum concurrent reducer dispatches. Clamped to [1, MAX_SUBAGENTS].
+   */
+  concurrency?: number;
+}
+
+/**
  * Filter clause for selecting rows. Can be a leaf predicate or a
  * combinator (`and`/`or`) composing multiple clauses.
  *

@@ -15,6 +15,7 @@ import type {
   RunOptions,
   RunResult,
   RowsOptions,
+  ReduceOptions,
   TaskSpec,
   TaskResult,
 } from "./types.js";
@@ -26,6 +27,16 @@ import type {
  * auto-batching groups rows to stay within this concurrency budget.
  */
 const MAX_SUBAGENTS = 10;
+
+/**
+ * Default per-reducer token budget for `reduce()`.
+ *
+ * When the rows being reduced exceed this, the reduction fans out into
+ * parallel leaf reducers whose summaries are combined hierarchically.
+ * Sized well under a model's context window to leave room for the
+ * instruction, the subagent's reasoning, and its output.
+ */
+const REDUCE_TOKEN_BUDGET = 50_000;
 
 /**
  * A dispatch unit is a single task for the executor. It tracks
@@ -386,4 +397,265 @@ export async function rows(
   }
 
   return result;
+}
+
+/**
+ * Estimate the token count of a string with a chars/4 heuristic.
+ *
+ * Deliberately rough — used only to decide when reducer input exceeds a
+ * context budget, where a conservative over-estimate is safe.
+ */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/**
+ * Greedily pack items into chunks whose total estimated size stays
+ * within `budget`. Each item lands in exactly one chunk; an item larger
+ * than the budget on its own becomes a single-item chunk.
+ */
+function chunkBySize<T>(
+  items: T[],
+  sizeOf: (item: T) => number,
+  budget: number,
+): T[][] {
+  const chunks: T[][] = [];
+  let current: T[] = [];
+  let currentSize = 0;
+
+  for (const item of items) {
+    const size = sizeOf(item);
+    if (current.length > 0 && currentSize + size > budget) {
+      chunks.push(current);
+      current = [];
+      currentSize = 0;
+    }
+    current.push(item);
+    currentSize += size;
+  }
+
+  if (current.length > 0) {
+    chunks.push(current);
+  }
+
+  return chunks;
+}
+
+/**
+ * Build the prompt for a leaf reducer that synthesizes raw table rows.
+ */
+function buildLeafPrompt(
+  instruction: string,
+  rowsChunk: Record<string, unknown>[],
+): string {
+  return (
+    `${instruction}\n\n` +
+    `Base your answer only on the following ${rowsChunk.length} ` +
+    `record(s):\n\n${JSON.stringify(rowsChunk, null, 2)}`
+  );
+}
+
+/**
+ * Build the prompt for a reducer that combines partial summaries from
+ * earlier reducers into a single unified answer.
+ */
+function buildCombinePrompt(instruction: string, partials: string[]): string {
+  const sections = partials
+    .map((p, i) => `--- Partial summary ${i + 1} of ${partials.length} ---\n${p}`)
+    .join("\n\n");
+  return (
+    `${instruction}\n\n` +
+    `The data was processed in ${partials.length} groups, each summarized ` +
+    `below. Combine them into a single unified answer. Do not refer to the ` +
+    `grouping or to "partial summaries" in your output.\n\n${sections}`
+  );
+}
+
+/**
+ * Dispatch a set of reducer prompts and return their text outputs.
+ *
+ * Reducers run in invoke mode by default (a single model call, no tools);
+ * pass `subagentType` to run them as full agents. Throws if any reducer
+ * fails — a partial synthesis would silently misrepresent the data.
+ */
+async function dispatchReducers(
+  specs: Array<{ id: string; prompt: string }>,
+  subagentType: string | undefined,
+  mode: "agent" | "invoke",
+  concurrency: number,
+): Promise<string[]> {
+  const tasks: TaskSpec[] = specs.map((s) => ({
+    id: s.id,
+    prompt: s.prompt,
+    mode,
+    ...(subagentType != null && { subagentType }),
+  }));
+
+  const results = await dispatch(tasks, { concurrency });
+
+  const failed = results.filter((r) => r.status === "failed");
+  if (failed.length > 0) {
+    const detail = deduplicateFailures(results)
+      .map((g) => `${g.error} (${g.count})`)
+      .join("; ");
+    throw new Error(`reduce: ${failed.length} reducer(s) failed: ${detail}`);
+  }
+
+  return results.map((r) => r.result ?? "");
+}
+
+/**
+ * Synthesize table rows into a single artifact via a subagent, keeping
+ * the row data out of the orchestrator's context.
+ *
+ * Unlike `rows()` — which pulls raw data back into the eval (and thus the
+ * agent's context) — `reduce()` dispatches the synthesis to a separate,
+ * disposable context and returns only the result. When the rows fit one
+ * reducer's token budget, a single reducer runs. When they don't, rows
+ * are split into parallel leaf reducers whose summaries are combined
+ * hierarchically until one answer remains — so no single context (and
+ * never the orchestrator's) holds the full dataset.
+ *
+ * @param tableId - A table handle's `id`.
+ * @param options - Synthesis instruction plus optional filter/projection.
+ * @returns The synthesized artifact as a string.
+ */
+export async function reduce(
+  tableId: string,
+  options: ReduceOptions,
+): Promise<string> {
+  const {
+    instruction,
+    filter,
+    columns,
+    subagentType,
+    tokenBudget = REDUCE_TOKEN_BUDGET,
+    concurrency,
+  } = options;
+
+  if (typeof instruction !== "string" || instruction.length === 0) {
+    throw new Error("reduce() requires a non-empty string instruction");
+  }
+
+  // -----------------------------------------------------------------------
+  // 1. Load, filter, and project the rows to synthesize
+  // -----------------------------------------------------------------------
+
+  let data = await loadTable(tableId);
+
+  if (filter) {
+    data = data.filter((row) => evaluateFilter(filter, row));
+  }
+
+  if (columns) {
+    data = data.map((row) => {
+      const projected: Record<string, unknown> = {};
+      for (const col of columns) {
+        if (col in row) projected[col] = row[col];
+      }
+      return projected;
+    });
+  }
+
+  if (data.length === 0) {
+    return "No rows matched the reduce filter.";
+  }
+
+  const mode = subagentType != null ? "agent" : "invoke";
+  const effectiveConcurrency = Math.max(
+    1,
+    Math.min(concurrency ?? MAX_SUBAGENTS, MAX_SUBAGENTS),
+  );
+
+  // -----------------------------------------------------------------------
+  // 2. Single reducer when everything fits one context
+  // -----------------------------------------------------------------------
+
+  if (estimateTokens(JSON.stringify(data)) <= tokenBudget) {
+    const [result] = await dispatchReducers(
+      [{ id: "reduce_0", prompt: buildLeafPrompt(instruction, data) }],
+      subagentType,
+      mode,
+      1,
+    );
+    return result;
+  }
+
+  // -----------------------------------------------------------------------
+  // 3. Map: leaf reducers over row chunks, in parallel
+  // -----------------------------------------------------------------------
+
+  const rowChunks = chunkBySize(
+    data,
+    (row) => estimateTokens(JSON.stringify(row)),
+    tokenBudget,
+  );
+
+  let partials = await dispatchReducers(
+    rowChunks.map((chunk, i) => ({
+      id: `reduce_leaf_${i}`,
+      prompt: buildLeafPrompt(instruction, chunk),
+    })),
+    subagentType,
+    mode,
+    effectiveConcurrency,
+  );
+
+  // -----------------------------------------------------------------------
+  // 4. Reduce: fold partial summaries until a single answer remains
+  // -----------------------------------------------------------------------
+
+  while (partials.length > 1) {
+    // Combine in one pass when the partials fit a single context.
+    if (estimateTokens(partials.join("\n\n")) <= tokenBudget) {
+      const [combined] = await dispatchReducers(
+        [
+          {
+            id: "reduce_root",
+            prompt: buildCombinePrompt(instruction, partials),
+          },
+        ],
+        subagentType,
+        mode,
+        1,
+      );
+      return combined;
+    }
+
+    const partialGroups = chunkBySize(
+      partials,
+      (p) => estimateTokens(p),
+      tokenBudget,
+    );
+
+    // Each partial already exceeds the budget alone — grouping can't
+    // shrink the count, so combine everything in one final best-effort
+    // pass rather than loop forever.
+    if (partialGroups.length >= partials.length) {
+      const [combined] = await dispatchReducers(
+        [
+          {
+            id: "reduce_root",
+            prompt: buildCombinePrompt(instruction, partials),
+          },
+        ],
+        subagentType,
+        mode,
+        1,
+      );
+      return combined;
+    }
+
+    partials = await dispatchReducers(
+      partialGroups.map((group, i) => ({
+        id: `reduce_combine_${i}`,
+        prompt: buildCombinePrompt(instruction, group),
+      })),
+      subagentType,
+      mode,
+      effectiveConcurrency,
+    );
+  }
+
+  return partials[0];
 }

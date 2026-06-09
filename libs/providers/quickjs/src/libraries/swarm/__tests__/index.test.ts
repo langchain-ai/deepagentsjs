@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { create, run, rows } from "../source/index.js";
+import { create, run, rows, reduce } from "../source/index.js";
 import { _resetForTesting } from "../source/table.js";
 
 // ---------------------------------------------------------------------------
@@ -698,5 +698,152 @@ describe("rows", () => {
     });
     expect(data).toHaveLength(2);
     expect(Object.keys(data[0])).toEqual(["id", "score"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// reduce
+// ---------------------------------------------------------------------------
+
+/**
+ * Override the swarmTask stub with a reducer-aware mock that distinguishes
+ * leaf reducers from combine reducers by inspecting the prompt.
+ */
+function stubReducer(): ReturnType<typeof vi.fn> {
+  const mock = vi.fn(async ({ description }: { description: string }) =>
+    description.includes("Partial summary") ? "COMBINED" : "LEAF",
+  );
+  (globalThis as Record<string, unknown>).tools = {
+    ...((globalThis as Record<string, unknown>).tools as Record<
+      string,
+      unknown
+    >),
+    swarmTask: mock,
+  };
+  return mock;
+}
+
+describe("reduce", () => {
+  it("runs a single reducer when rows fit the token budget", async () => {
+    const mock = stubReducer();
+    const handle = await create({
+      tasks: [
+        { id: "r1", finding: "a" },
+        { id: "r2", finding: "b" },
+      ],
+    });
+
+    const result = await reduce(handle.id, {
+      instruction: "Summarize the findings",
+    });
+
+    expect(result).toBe("LEAF");
+    expect(mock).toHaveBeenCalledOnce();
+    const { description } = mock.mock.calls[0][0];
+    expect(description).toContain("Summarize the findings");
+    expect(description).toContain('"finding": "a"');
+  });
+
+  it("dispatches in invoke mode (no subagent_type) by default", async () => {
+    const mock = stubReducer();
+    const handle = await create({ tasks: [{ id: "r1", x: 1 }] });
+
+    await reduce(handle.id, { instruction: "Summarize" });
+
+    const args = mock.mock.calls[0][0];
+    expect(args.mode).toBe("invoke");
+    expect(args.subagent_type).toBeUndefined();
+  });
+
+  it("dispatches in agent mode when subagentType is set", async () => {
+    const mock = stubReducer();
+    const handle = await create({ tasks: [{ id: "r1", x: 1 }] });
+
+    await reduce(handle.id, {
+      instruction: "Summarize",
+      subagentType: "synthesizer",
+    });
+
+    const args = mock.mock.calls[0][0];
+    expect(args.mode).toBe("agent");
+    expect(args.subagent_type).toBe("synthesizer");
+  });
+
+  it("applies filter and column projection before synthesizing", async () => {
+    const mock = stubReducer();
+    const handle = await create({
+      tasks: [
+        { id: "r1", status: "done", secret: "x", note: "keep" },
+        { id: "r2", status: "pending", secret: "y", note: "drop" },
+      ],
+    });
+
+    await reduce(handle.id, {
+      instruction: "Summarize",
+      filter: { column: "status", equals: "done" },
+      columns: ["id", "note"],
+    });
+
+    const { description } = mock.mock.calls[0][0];
+    expect(description).toContain('"note": "keep"');
+    expect(description).not.toContain("pending");
+    expect(description).not.toContain("secret");
+  });
+
+  it("returns a sentinel when no rows match the filter", async () => {
+    const mock = stubReducer();
+    const handle = await create({ tasks: [{ id: "r1", status: "pending" }] });
+
+    const result = await reduce(handle.id, {
+      instruction: "Summarize",
+      filter: { column: "status", equals: "done" },
+    });
+
+    expect(result).toBe("No rows matched the reduce filter.");
+    expect(mock).not.toHaveBeenCalled();
+  });
+
+  it("fans out into leaf reducers and combines when rows exceed the budget", async () => {
+    const mock = stubReducer();
+    const handle = await create({
+      tasks: [
+        { id: "r1", text: "alpha alpha alpha alpha" },
+        { id: "r2", text: "bravo bravo bravo bravo" },
+        { id: "r3", text: "charlie charlie charlie" },
+      ],
+    });
+
+    // Tiny budget forces one leaf per row, then a single combine pass.
+    const result = await reduce(handle.id, {
+      instruction: "Summarize",
+      tokenBudget: 5,
+    });
+
+    expect(result).toBe("COMBINED");
+    // 3 leaves + 1 combine
+    expect(mock).toHaveBeenCalledTimes(4);
+
+    const combineCalls = mock.mock.calls.filter(([a]) =>
+      (a.description as string).includes("Partial summary"),
+    );
+    expect(combineCalls).toHaveLength(1);
+    expect(combineCalls[0][0].description).toContain("LEAF");
+  });
+
+  it("throws when a reducer fails", async () => {
+    (globalThis as Record<string, unknown>).tools = {
+      ...((globalThis as Record<string, unknown>).tools as Record<
+        string,
+        unknown
+      >),
+      swarmTask: vi.fn(async () => {
+        throw new Error("model overloaded");
+      }),
+    };
+    const handle = await create({ tasks: [{ id: "r1", x: 1 }] });
+
+    await expect(
+      reduce(handle.id, { instruction: "Summarize" }),
+    ).rejects.toThrow("reduce: 1 reducer(s) failed: model overloaded");
   });
 });

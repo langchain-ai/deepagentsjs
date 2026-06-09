@@ -8,10 +8,22 @@ Use `filter` to choose which rows the next `run()` processes. Multi-stage
 analysis is just multiple `run()` calls on the same table, each
 conditioned on columns produced by an earlier run.
 
-**Write the whole pipeline in one eval.** Tables are session-scoped — they
-exist only inside the eval script that created them. `create`, every
-`run`, and `rows` must live in the same eval. Splitting across evals
-throws "table not found."
+**Tables persist across evals within a turn — but re-import each eval.**
+A table you `create` in one eval is still there in later evals: keep its
+`id` and pass it to subsequent `run`/`reduce`/`rows` calls. Do NOT call
+`create` again for a table you already built. **However, imported names do
+NOT carry over** — start every eval with `import { create, run, reduce, rows }
+from "swarm";` (a bare `run(...)` in a later eval throws `run is not
+defined`). In short: re-import the functions each eval, reuse the table
+handle. (Only the table data persists between evals; variable/import
+bindings reset. Everything resets between separate user turns.) Doing a
+whole workflow in one eval avoids this entirely and saves round-trips, but
+splitting is fine as long as each eval re-imports and reuses the handle.
+
+**Land results with `reduce`, not raw `rows`.** To turn the table into a
+human-facing answer, `reduce()` synthesizes it in a separate subagent
+context and returns only the result — keeping the raw data out of your
+context. Dumping `rows()` (or files) back into your context floods it.
 
 ## Quick Start
 
@@ -59,7 +71,7 @@ properties onto the existing row.
 ### Canonical Multi-Stage Pipeline
 
 ```javascript
-import { create, run, rows } from "swarm";
+import { create, run, reduce } from "swarm";
 
 const table = await create({ glob: "src/**/*.ts" });
 
@@ -107,23 +119,20 @@ await run(table.id, {
   },
 });
 
-// Aggregate with a filter on rows()
-const confirmed = await rows(table.id, {
+// Synthesize a human-facing report — raw rows stay out of your context
+const report = await reduce(table.id, {
   filter: {
     and: [
       { column: "severity", equals: "high" },
       { column: "confirmed", equals: true },
     ],
   },
+  instruction:
+    "Write a security report of the confirmed high-severity findings, " +
+    "grouped by file. Include line numbers and a one-line fix for each.",
 });
 
-await tools.writeFile({
-  file_path: "/results/findings.json",
-  content: JSON.stringify(confirmed, null, 2),
-});
-
-console.log(`${confirmed.length} confirmed high-severity findings`);
-console.log("Results: /results/findings.json");
+console.log(report);
 ```
 
 Every stage operates on the same rows; filters control which rows
@@ -194,30 +203,59 @@ await run(table.id, {
 subagents what NOT to do. Every extra tool call grows the subagent's
 prompt for the next call, so constraints compound.
 
-## Manage Output Size
+## Get Results Out Without Flooding Your Context
 
-Everything you `console.log` comes back as the tool response. Write
-detailed results to files; log only counts and file paths. After the
-eval completes you can `readFile` the results if you need detail to
-answer the user.
+The table keeps row data in the sandbox during the fan-out. The trap is
+pulling it all back at the end: `rows()` followed by `console.log` of the
+data — or `writeFile` then `readFile` — drops the entire dataset into your
+context in one shot, undoing the isolation the table bought you.
+
+There are two right ways to land results, depending on what you need:
+
+**1. Acting on the data → keep it in the sandbox.** If the next step is
+more work per row (verify, fix, re-classify), chain another `run()` with a
+filter. The data never needs to enter your context — see "Compose with
+Multiple Runs on One Table" above.
+
+**2. A human-facing answer → `reduce()` it.** When you need a synthesized
+report, summary, or judgment over the rows, use `reduce()`. It dispatches
+the synthesis to a separate subagent context and returns only the result —
+the raw rows never touch your context. When the rows are too large for one
+context, `reduce()` automatically fans out into parallel sub-reducers and
+combines their summaries, so it scales past a single window.
 
 ```javascript
-await tools.writeFile({
-  file_path: "/results/findings.json",
-  content: JSON.stringify(confirmed, null, 2),
+const report = await reduce(table.id, {
+  filter: { column: "confirmed", equals: true },
+  instruction:
+    "Write a security report of the confirmed findings, grouped by file, " +
+    "ordered by severity. Include line numbers.",
 });
-
-console.log(`${confirmed.length}/${total} findings confirmed`);
-console.log(`Results: /results/findings.json`);
-// DO NOT loop and log per-item details.
+console.log(report); // small, synthesized — the only thing crossing back
 ```
+
+Reach for `console.log(await rows(...))` only for **small** results (a
+handful of rows, or a count you computed in JS). For anything large or
+narrative, `reduce()` — never dump raw rows into your context, and don't
+use files as a workaround for *reading* (reading a file back into context
+is the same flood).
+
+**Persisting results to a file is fine — and is different from reading them
+back.** If asked to save structured output (e.g. to `/results/output.json`),
+do it from *inside* the eval: `const r = await rows(table.id); await
+tools.writeFile({ file_path: "/results/output.json", content:
+JSON.stringify(r) });`. The rows stay in the sandbox and only a small
+write-confirmation returns — your context is never flooded. Persisting and
+`reduce()` compose: write the structured artifact for downstream use, and
+`reduce()` for the human-facing summary.
 
 ## API Reference
 
 ### `create(source)` → `SwarmHandle`
 
-Returns a lightweight handle with `id`, `count`, `columns`. Always call
-inside the same eval as `run` and `rows`.
+Returns a lightweight handle with `id`, `count`, `columns`. Call `create`
+once per table and reuse the returned `id` for all later `run`/`reduce`/`rows`
+calls — including in subsequent evals.
 
 | Source | Description |
 |---|---|
@@ -294,9 +332,37 @@ const confirmed = await rows(table.id, {
 });
 ```
 
+Use `rows()` for in-JS logic (counts, branching, building a new table) or
+small results. For large or human-facing output, use `reduce()` instead —
+`rows()` pulls raw data into your context.
+
+### `reduce(tableId, options)` → `string`
+
+Synthesize rows into a single artifact via a subagent, keeping the raw
+data out of your context. Returns only the synthesized string. When the
+rows exceed one context, `reduce()` fans out into parallel sub-reducers
+and combines their summaries automatically.
+
+| Option | Description |
+|---|---|
+| `instruction` | How to synthesize, e.g. "Summarize findings by file". |
+| `filter` | Only synthesize matching rows. |
+| `columns` | Project to specific columns first (drop large unused ones). |
+| `subagentType` | Run reduction in agent mode (with tools). Omit for a single model call. |
+| `concurrency` | Max concurrent sub-reducers (1–10) when fanning out. |
+| `tokenBudget` | Approx. row-data tokens per reducer before splitting. Has a sane default. |
+
+```javascript
+const report = await reduce(table.id, {
+  filter: { column: "confirmed", equals: true },
+  instruction: "Write a report of confirmed findings, grouped by file.",
+});
+console.log(report);
+```
+
 ## Filtering
 
-Used by both `run()` and `rows()`.
+Used by `run()`, `rows()`, and `reduce()`.
 
 **Leaf predicates:**
 
@@ -329,8 +395,10 @@ wrapped schema the model fills per-row).
 
 ## Notes
 
-- **Session-scoped**: Tables live only inside the eval that created them.
-  No cross-eval persistence.
+- **Persistence**: Table *data* lives for the whole turn — a handle from one
+  eval works in every later eval. But *imports and variables* do not carry
+  across evals; re-import `{ create, run, reduce, rows }` at the top of each
+  eval. Everything resets between separate user turns.
 - **Handle-based**: `create()` returns a small handle; row data stays
   in the sandbox. Use `rows()` to pull data when you need it.
 - **Failures**: `RunResult.failures` groups errors by message with counts

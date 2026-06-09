@@ -95,7 +95,7 @@ export function swarm(): InterpreterLibrary {
   return {
     name: "swarm",
     description:
-      "Parallel task processing with handle-based tables (create, run, rows)",
+      "Parallel task processing with handle-based tables (create, run, reduce, rows)",
     ptcTools: [swarmTaskTool, "read_file", "write_file", "edit_file", "glob"],
     source: entrySource,
     files,
