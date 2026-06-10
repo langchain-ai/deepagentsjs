@@ -47,6 +47,10 @@ import type {
   SupportedResponseFormat,
 } from "./types.js";
 import { createSubagentTransformer } from "./stream.js";
+import {
+  SUBAGENT_SPECS_CONFIG_KEY,
+  buildSubagentSpecsPayload,
+} from "./middleware/subagents.js";
 
 /**
  * required for type inference
@@ -346,6 +350,11 @@ export function createDeepAgent<
     createPatchToolCallsMiddleware(),
   ] as const;
 
+  const subagentSpecsPayload = buildSubagentSpecsPayload(inlineSubagents, {
+    defaultModel: model,
+    defaultTools: effectiveTools,
+  });
+
   const [
     todoMiddleware,
     fsMiddleware,
@@ -470,6 +479,9 @@ export function createDeepAgent<
     ] as const,
   }).withConfig({
     recursionLimit: 10_000,
+    configurable: {
+      [SUBAGENT_SPECS_CONFIG_KEY]: subagentSpecsPayload,
+    },
     metadata: {
       ls_integration: "deepagents",
       lc_agent_name: name,

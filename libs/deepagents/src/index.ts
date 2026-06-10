@@ -182,3 +182,12 @@ export {
   adaptBackendProtocol,
   adaptSandboxProtocol,
 } from "./backends/index.js";
+
+export {
+  SUBAGENT_SPECS_CONFIG_KEY,
+  buildSubagentSpecsPayload,
+  type SubagentSpecEntry,
+  type SubagentSpecsPayload,
+  type CreateSubAgentOptions,
+  createSubAgent,
+} from "./middleware/subagents.js";
