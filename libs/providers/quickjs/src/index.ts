@@ -34,21 +34,9 @@ export {
   DEFAULT_MAX_PTC_CALLS,
 } from "./session.js";
 
-export {
-  formatReplResult,
-  toCamelCase,
-  formatSkillNotAvailable,
-} from "./utils.js";
+export { formatReplResult, toCamelCase } from "./utils.js";
 
 export { transformForEval, stripTypeSyntax } from "./transform.js";
-
-export {
-  loadSkill,
-  scanSkillReferences,
-  SKILL_MODULE_EXTENSIONS,
-  MAX_SKILL_BUNDLE_BYTES,
-  type LoadedSkill,
-} from "./skills.js";
 
 export {
   createSwarmTaskTool,

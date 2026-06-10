@@ -117,11 +117,3 @@ export async function toolToTypeSignature(
     async tools.${name}(input: ${inputType}): Promise<string>
   `;
 }
-
-/**
- * Render a pre-eval error when referenced skills are not available on the agent.
- */
-export function formatSkillNotAvailable(missing: readonly string[]): string {
-  const list = [...missing].sort().join(", ");
-  return `Skills unavailable: ${list}`;
-}
