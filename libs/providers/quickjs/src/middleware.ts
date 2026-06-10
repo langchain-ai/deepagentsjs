@@ -14,9 +14,16 @@ import {
 } from "langchain";
 import { z } from "zod/v4";
 import type { StructuredToolInterface } from "@langchain/core/tools";
+import {
+  SUBAGENT_SPECS_CONFIG_KEY,
+  type SubagentSpecsPayload,
+} from "deepagents";
 
 import dedent from "dedent";
-import type { CodeInterpreterMiddlewareOptions } from "./types.js";
+import type {
+  CodeInterpreterMiddlewareOptions,
+  SubagentBridgeOptions,
+} from "./types.js";
 import {
   ReplSession,
   DEFAULT_EXECUTION_TIMEOUT,
@@ -25,6 +32,7 @@ import {
   DEFAULT_SESSION_ID,
   DEFAULT_MAX_PTC_CALLS,
   DEFAULT_MAX_RESULTS_CHARS,
+  DEFAULT_MAX_SUBAGENT_CONCURRENCY,
 } from "./session.js";
 import {
   formatReplResult,
@@ -32,6 +40,7 @@ import {
   toolToTypeSignature,
   safeToJsonSchema,
 } from "./utils.js";
+import { SubagentDispatcher } from "./subagent-dispatch.js";
 
 /**
  * These type-only imports are required for TypeScript's type inference to work
@@ -60,6 +69,48 @@ function renderReplSystemPrompt(opts: {
     - Runtime sandbox: no built-in filesystem, network, stdlib, or wall-clock APIs (\`fetch\`, \`require\`, \`fs\`, \`process\`, real \`Date.now()\` are unavailable or stubbed). External side effects from inside the REPL are only reachable via the \`tools.*\` namespace when it is exposed (see below); without it, the REPL is pure computation.
     - Timeout: ${opts.timeout}s per call. Memory: ${opts.memoryLimitMb} MB total.
     - \`console.log\` output is captured and returned alongside the result.
+  `;
+}
+
+/**
+ * Generate the system prompt section for the subagent primitive.
+ *
+ * @param descriptions - Available subagent names and descriptions.
+ */
+function renderSubagentPrompt(
+  descriptions: Array<{ name: string; description: string }>,
+): string {
+  const descList = descriptions
+    .map((d) => `- \`${d.name}\`: ${d.description}`)
+    .join("\n");
+
+  return dedent`
+    ### Subagent Primitive
+
+    A \`subagent()\` function is available as a global in the REPL for spawning subagents programmatically.
+
+    \`\`\`typescript
+    /**
+     * Spawn a subagent to handle an isolated task.
+     * @returns Text response, or a parsed object when responseSchema is provided.
+     */
+    async subagent(input: {
+      /** Task description — be specific about what to do and what to return. */
+      description: string;
+      /** Subagent type name. */
+      subagentType: string;
+      /** JSON Schema for structured output. The subagent is recompiled with this as its response format. */
+      responseSchema?: Record<string, unknown>;
+    }): Promise<string | object>
+    \`\`\`
+
+    Available subagent types:
+    ${descList}
+
+    - Without \`responseSchema\`: returns the subagent's text response as a string.
+    - With \`responseSchema\`: the subagent is compiled with structured output enforcement and returns a parsed object.
+    - Use \`Promise.all\` for concurrent execution. Concurrency is managed automatically (max 16 in-flight).
+    - The \`subagent\` function is independent of the \`tools\` namespace.
   `;
 }
 
@@ -146,6 +197,7 @@ export function createCodeInterpreterMiddleware(
     maxResultChars = DEFAULT_MAX_RESULTS_CHARS,
     toolName = DEFAULT_TOOL_NAME,
     captureConsole = true,
+    maxSubagentConcurrency = DEFAULT_MAX_SUBAGENT_CONCURRENCY,
   } = options;
 
   if (maxPtcCalls !== null && maxPtcCalls !== undefined && maxPtcCalls < 1) {
@@ -163,8 +215,9 @@ export function createCodeInterpreterMiddleware(
   const middlewareId = crypto.randomUUID();
 
   let cachedPtcPrompt: string | null = null;
-
   let ptcTools: StructuredToolInterface[] = [];
+  let dispatcher: SubagentDispatcher | null = null;
+  let subagentPrompt: string | null = null;
 
   function filterToolsForPtc(
     allTools: StructuredToolInterface[],
@@ -176,10 +229,35 @@ export function createCodeInterpreterMiddleware(
     return resolveToolList(ptc, candidates);
   }
 
+  function createBridgeDispatch(
+    dispatcher: SubagentDispatcher,
+  ): SubagentBridgeOptions["dispatch"] {
+    return async (input) => {
+      return dispatcher.invoke(
+        input.description,
+        input.subagentType,
+        input.responseSchema,
+      );
+    };
+  }
+
   const evalTool = tool(
     async (input, config: LangGraphRunnableConfig) => {
       const threadId = config.configurable?.thread_id || DEFAULT_SESSION_ID;
       const sessionKey = `${threadId}:${middlewareId}`;
+
+      // Build the dispatcher from specs on first eval (specs arrive via configurable)
+      if (!dispatcher && maxSubagentConcurrency > 0) {
+        const payload = config.configurable?.[SUBAGENT_SPECS_CONFIG_KEY] as
+          | SubagentSpecsPayload
+          | undefined;
+        if (payload) {
+          dispatcher = new SubagentDispatcher(payload);
+          subagentPrompt = renderSubagentPrompt(
+            dispatcher.subagentDescriptions,
+          );
+        }
+      }
 
       const session = ReplSession.getOrCreate(sessionKey, {
         memoryLimitBytes,
@@ -189,6 +267,12 @@ export function createCodeInterpreterMiddleware(
         maxResultChars,
         captureConsole,
         sessionId: threadId,
+        subagentBridge: dispatcher
+          ? {
+              dispatch: createBridgeDispatch(dispatcher),
+              maxConcurrency: maxSubagentConcurrency,
+            }
+          : undefined,
       });
 
       const result = await session.eval(input.code, executionTimeoutMs);
@@ -225,7 +309,8 @@ export function createCodeInterpreterMiddleware(
 
       const systemMessage = request.systemMessage
         .concat(baseSystemPrompt)
-        .concat(cachedPtcPrompt || "");
+        .concat(cachedPtcPrompt || "")
+        .concat(subagentPrompt || "");
       return handler({ ...request, systemMessage });
     },
     afterAgent: async (_state, runtime) => {

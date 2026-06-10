@@ -2,12 +2,25 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { tool } from "langchain";
 import * as z from "zod";
 import { SystemMessage } from "@langchain/core/messages";
+import { AIMessage } from "@langchain/core/messages";
+import { SUBAGENT_SPECS_CONFIG_KEY } from "deepagents";
 import {
   createCodeInterpreterMiddleware,
   generatePtcPrompt,
   resolveToolList,
 } from "./middleware.js";
 import { ReplSession } from "./session.js";
+
+vi.mock("deepagents", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    createSubAgent: vi.fn(),
+  };
+});
+
+import { createSubAgent } from "deepagents";
+const mockedCreateSubAgent = vi.mocked(createSubAgent);
 
 describe("createCodeInterpreterMiddleware", () => {
   beforeEach(() => {
@@ -304,6 +317,237 @@ describe("createCodeInterpreterMiddleware", () => {
 
       expect(ReplSession.hasAnyForThread("thread-a")).toBe(false);
       expect(ReplSession.hasAnyForThread("thread-b")).toBe(true);
+    });
+  });
+
+  describe("subagent primitive", () => {
+    function makeSpecsPayload(
+      subagents: Array<{ name: string; description: string }>,
+    ) {
+      return {
+        subagents: subagents.map((s) => ({
+          name: s.name,
+          description: s.description,
+          spec: {
+            name: s.name,
+            description: s.description,
+            systemPrompt: `You are ${s.name}.`,
+          },
+          runnableBacked: false,
+        })),
+        compileOptions: { defaultModel: "openai:gpt-4o", defaultTools: [] },
+      };
+    }
+
+    function fakeRunnable(output: Record<string, unknown>) {
+      return { invoke: vi.fn().mockResolvedValue(output) } as any;
+    }
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it("should append subagent prompt after first eval with specs", async () => {
+      mockedCreateSubAgent.mockReturnValue(
+        fakeRunnable({ messages: [new AIMessage({ content: "ok" })] }),
+      );
+
+      const middleware = createCodeInterpreterMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+
+      const payload = makeSpecsPayload([
+        { name: "researcher", description: "Researches topics" },
+        { name: "coder", description: "Writes code" },
+      ]);
+
+      // First eval — triggers dispatcher creation
+      await jsTool.invoke(
+        { code: "1 + 1" },
+        {
+          configurable: {
+            thread_id: "subagent-prompt-test",
+            [SUBAGENT_SPECS_CONFIG_KEY]: payload,
+          },
+        },
+      );
+
+      // Now wrapModelCall should include the subagent prompt
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: {
+            configurable: { thread_id: "subagent-prompt-test" },
+          },
+          tools: middleware.tools || [],
+        } as any,
+        mockHandler,
+      );
+
+      const req = mockHandler.mock.calls[0][0];
+      const text = req.systemMessage.text;
+      expect(text).toContain("### Subagent Primitive");
+      expect(text).toContain("`researcher`");
+      expect(text).toContain("Researches topics");
+      expect(text).toContain("`coder`");
+      expect(text).toContain("Writes code");
+      expect(text).toContain("responseSchema");
+    });
+
+    it("should not append subagent prompt when no specs in configurable", async () => {
+      const middleware = createCodeInterpreterMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+
+      // Eval without specs
+      await jsTool.invoke(
+        { code: "1 + 1" },
+        { configurable: { thread_id: "no-specs-test" } },
+      );
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: { configurable: { thread_id: "no-specs-test" } },
+          tools: middleware.tools || [],
+        } as any,
+        mockHandler,
+      );
+
+      const req = mockHandler.mock.calls[0][0];
+      expect(req.systemMessage.text).not.toContain("### Subagent Primitive");
+    });
+
+    it("should not create dispatcher when maxSubagentConcurrency is 0", async () => {
+      const middleware = createCodeInterpreterMiddleware({
+        maxSubagentConcurrency: 0,
+      });
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+
+      const payload = makeSpecsPayload([
+        { name: "researcher", description: "Researches" },
+      ]);
+
+      await jsTool.invoke(
+        { code: "1 + 1" },
+        {
+          configurable: {
+            thread_id: "disabled-subagent-test",
+            [SUBAGENT_SPECS_CONFIG_KEY]: payload,
+          },
+        },
+      );
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: {
+            configurable: { thread_id: "disabled-subagent-test" },
+          },
+          tools: middleware.tools || [],
+        } as any,
+        mockHandler,
+      );
+
+      const req = mockHandler.mock.calls[0][0];
+      expect(req.systemMessage.text).not.toContain("### Subagent Primitive");
+    });
+
+    it("should invoke subagent from within the REPL", async () => {
+      mockedCreateSubAgent.mockReturnValue(
+        fakeRunnable({
+          messages: [new AIMessage({ content: "research result" })],
+        }),
+      );
+
+      const middleware = createCodeInterpreterMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+
+      const payload = makeSpecsPayload([
+        { name: "researcher", description: "Researches topics" },
+      ]);
+
+      const result = await jsTool.invoke(
+        {
+          code: `await subagent({ description: "find bugs", subagentType: "researcher" })`,
+        },
+        {
+          configurable: {
+            thread_id: "invoke-subagent-test",
+            [SUBAGENT_SPECS_CONFIG_KEY]: payload,
+          },
+        },
+      );
+
+      expect(result).toContain("research result");
+      expect(mockedCreateSubAgent).toHaveBeenCalledTimes(1);
+    });
+
+    it("should return structured output as native JS object in REPL", async () => {
+      const structured = { bugs: ["bug1", "bug2"] };
+      mockedCreateSubAgent.mockReturnValue(
+        fakeRunnable({
+          messages: [new AIMessage({ content: "ignored" })],
+          structuredResponse: structured,
+        }),
+      );
+
+      const middleware = createCodeInterpreterMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+
+      const payload = makeSpecsPayload([
+        { name: "researcher", description: "Researches" },
+      ]);
+
+      const result = await jsTool.invoke(
+        {
+          code: `const r = await subagent({
+            description: "find bugs",
+            subagentType: "researcher",
+            responseSchema: { type: "object", properties: { bugs: { type: "array" } } },
+          });
+          r.bugs[0]`,
+        },
+        {
+          configurable: {
+            thread_id: "structured-test",
+            [SUBAGENT_SPECS_CONFIG_KEY]: payload,
+          },
+        },
+      );
+
+      expect(result).toContain("bug1");
+    });
+
+    it("should error when subagent() is called without specs configured", async () => {
+      const middleware = createCodeInterpreterMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+
+      const result = await jsTool.invoke(
+        {
+          code: `await subagent({ description: "x", subagentType: "y" })`,
+        },
+        { configurable: { thread_id: "no-bridge-test" } },
+      );
+
+      expect(result).toContain("subagent");
+      expect(result).toMatch(/not a function|not defined|undefined/i);
     });
   });
 });
