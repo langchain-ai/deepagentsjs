@@ -1,0 +1,29 @@
+libs/deepagents/src/middleware/subagents.ts
+  h_f78d33d4280f3f 475-541,607-611
+libs/deepagents/src/middleware/subagent.test.ts
+  s_b7a9c4eed50f37::t_76164eff710e78 1018-1163
+  s_b7a9c4eed50f37::t_f876af4b6c695b 34-36
+  s_b7a9c4eed50f37::t_ec13750cdcd8fb 13
+  s_b7a9c4eed50f37::t_6127e08f17e763 1-6,8-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "5447165018ef91838ffcd6e921e5ac926773548c",
+  "prompts": {},
+  "humans": {
+    "h_f78d33d4280f3f": {
+      "author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  },
+  "sessions": {
+    "s_b7a9c4eed50f37": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "06118624-7549-4b90-b92e-e080f3cd4c62",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
