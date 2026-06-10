@@ -3,13 +3,11 @@ import type { ToolCallRequest } from "langchain";
 import {
   buildInterruptOnFromPermissions,
   mergeFsInterruptOn,
-  _testExports,
+  makeFsWhenPredicate,
 } from "./fs-interrupt.js";
 import { decidePathAccess } from "../permissions/enforce.js";
 import { globAnchor, pathsOverlap } from "../permissions/path-utils.js";
 import type { FilesystemPermission } from "../permissions/types.js";
-
-const { makeFsWhenPredicate } = _testExports;
 
 function fakeReq(args: Record<string, unknown>): ToolCallRequest {
   return {

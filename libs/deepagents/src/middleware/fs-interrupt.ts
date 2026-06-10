@@ -204,7 +204,7 @@ function makeBulkWhenPredicate(
   };
 }
 
-function makeFsWhenPredicate(
+export function makeFsWhenPredicate(
   rules: readonly FilesystemPermission[],
   operation: FilesystemOperation,
   pathArgName: string,
@@ -273,10 +273,3 @@ export function mergeFsInterruptOn(
     ...(userInterruptOn ?? {}),
   };
 }
-
-/** @internal Exported for unit tests. */
-export const _testExports = {
-  makeFsWhenPredicate,
-  bulkSubtreeCouldInterrupt,
-  FS_TOOL_PATH_ARGS,
-};
