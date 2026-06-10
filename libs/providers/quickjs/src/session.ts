@@ -28,10 +28,15 @@ import type {
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
 import { PTCCallBudgetExceededError } from "./errors.js";
-import type { ReplSessionOptions, ReplResult } from "./types.js";
+import type {
+  ReplSessionOptions,
+  ReplResult,
+  SubagentBridgeOptions,
+} from "./types.js";
 import { toCamelCase } from "./utils.js";
 import { transformForEval } from "./transform.js";
 import { AsyncEvalQueue } from "./eval-queue.js";
+import { Semaphore } from "./semaphore.js";
 
 export const DEFAULT_MEMORY_LIMIT = 64 * 1024 * 1024;
 export const DEFAULT_MAX_STACK_SIZE = 320 * 1024;
@@ -39,6 +44,7 @@ export const DEFAULT_EXECUTION_TIMEOUT = 5_000;
 export const DEFAULT_SESSION_ID = "__default__";
 export const DEFAULT_MAX_PTC_CALLS = 256;
 export const DEFAULT_MAX_RESULTS_CHARS = 4000;
+export const DEFAULT_MAX_SUBAGENT_CONCURRENCY = 16;
 
 const LINE_NUMBER_RE = /^\s*\d+(?:\.\d+)?\t/;
 
@@ -219,6 +225,14 @@ export class ReplSession {
   private options: ReplSessionOptions;
   private readonly maxPtcCalls: number | null;
   private ptcCallsRemaining: number | null = null;
+  private subagentSemaphore: Semaphore | null = null;
+
+  /** Allowed keys in the subagent input object. */
+  private static readonly SUBAGENT_ALLOWED_KEYS = new Set([
+    "description",
+    "subagentType",
+    "responseSchema",
+  ]);
 
   /**
    * Reset the shared WASM module. Forces the next session to instantiate
@@ -267,6 +281,12 @@ export class ReplSession {
 
     if (tools !== undefined && tools.length > 0) {
       this.injectTools(tools);
+    }
+
+    const { subagentBridge } = this.options;
+    if (subagentBridge) {
+      this.subagentSemaphore = new Semaphore(subagentBridge.maxConcurrency);
+      this.injectSubagentBridge(subagentBridge.dispatch);
     }
 
     const sessionId = this.options.sessionId ?? "default";
@@ -561,5 +581,128 @@ export class ReplSession {
 
     context.setProp(context.global, "tools", toolsNs);
     toolsNs.dispose();
+  }
+
+  /**
+   * Install the `subagent` global on the QuickJS context.
+   *
+   * Registers the host function directly as `globalThis.subagent`,
+   * then freezes it via `evalCode`. Structured results (when
+   * responseSchema is provided) are marshaled into native QuickJS
+   * objects on the host side — no JS wrapper needed.
+   */
+  private injectSubagentBridge(
+    dispatch: SubagentBridgeOptions["dispatch"],
+  ): void {
+    const context = this.context!;
+    const semaphore = this.subagentSemaphore!;
+
+    const hostFn = context.newFunction(
+      "subagent",
+      (inputHandle: QuickJSHandle) => {
+        const input = context.dump(inputHandle);
+        const promise = context.newPromise();
+
+        (async () => {
+          try {
+            if (
+              input == null ||
+              typeof input !== "object" ||
+              Array.isArray(input)
+            ) {
+              throw new Error("subagent: expected an object argument");
+            }
+            const obj = input as Record<string, unknown>;
+
+            const unknownKeys = Object.keys(obj).filter(
+              (k) => !ReplSession.SUBAGENT_ALLOWED_KEYS.has(k),
+            );
+            if (unknownKeys.length > 0) {
+              throw new Error(
+                `subagent: unknown keys: ${unknownKeys.join(", ")}. ` +
+                  `Allowed: ${[...ReplSession.SUBAGENT_ALLOWED_KEYS].join(", ")}`,
+              );
+            }
+
+            const { description, subagentType, responseSchema } = obj;
+
+            if (typeof description !== "string" || description.length === 0) {
+              throw new Error(
+                "subagent: 'description' is required and must be a non-empty string",
+              );
+            }
+            if (typeof subagentType !== "string" || subagentType.length === 0) {
+              throw new Error(
+                "subagent: 'subagentType' is required and must be a non-empty string",
+              );
+            }
+            if (
+              responseSchema !== undefined &&
+              (responseSchema == null ||
+                typeof responseSchema !== "object" ||
+                Array.isArray(responseSchema))
+            ) {
+              throw new Error(
+                "subagent: 'responseSchema' must be a plain object (JSON Schema) when provided",
+              );
+            }
+
+            await semaphore.acquire();
+            try {
+              const result = await dispatch({
+                description: description as string,
+                subagentType: subagentType as string,
+                ...(responseSchema !== undefined && {
+                  responseSchema: responseSchema as Record<string, unknown>,
+                }),
+              });
+              if (typeof result === "string") {
+                const val = context.newString(result);
+                promise.resolve(val);
+                val.dispose();
+              } else {
+                const jsonResult = context.evalCode(
+                  `(${JSON.stringify(result)})`,
+                );
+                if (jsonResult.error) {
+                  const errDump = context.dump(jsonResult.error);
+                  jsonResult.error.dispose();
+                  throw new Error(
+                    `subagent: failed to marshal structured response: ${JSON.stringify(errDump)}`,
+                  );
+                }
+                promise.resolve(jsonResult.value);
+                jsonResult.value.dispose();
+              }
+            } finally {
+              semaphore.release();
+            }
+          } catch (e: unknown) {
+            const msg =
+              e != null && typeof (e as Error).message === "string"
+                ? (e as Error).message
+                : String(e);
+            const err = context.newError(msg);
+            promise.reject(err);
+            err.dispose();
+          }
+          promise.settled.then(context.runtime.executePendingJobs);
+        })();
+
+        return promise.handle;
+      },
+    );
+
+    context.setProp(context.global, "subagent", hostFn);
+    hostFn.dispose();
+
+    context.evalCode(
+      "Object.freeze(globalThis.subagent);" +
+        "Object.defineProperty(globalThis, 'subagent', {" +
+        " value: globalThis.subagent," +
+        " writable: false," +
+        " configurable: false," +
+        "}); undefined",
+    );
   }
 }

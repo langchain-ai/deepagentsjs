@@ -76,6 +76,44 @@ export interface CodeInterpreterMiddlewareOptions {
    * @default true
    */
   captureConsole?: boolean;
+
+  /**
+   * Maximum concurrent `subagent()` calls from the REPL.
+   *
+   * When subagent specs are available in configurable, a built-in
+   * `subagent()` global is installed in the REPL with this concurrency cap.
+   * Set to `0` to disable the subagent primitive entirely.
+   *
+   * @default 16
+   */
+  maxSubagentConcurrency?: number;
+}
+
+/**
+ * Configuration for the built-in subagent primitive.
+ *
+ * When provided to a ReplSession, a frozen `subagent()` global is
+ * installed in the QuickJS context. Calls are gated by a semaphore
+ * and forwarded to the dispatch callback.
+ */
+export interface SubagentBridgeOptions {
+  /**
+   * Callback that invokes a subagent. Receives validated input from
+   * the QuickJS guest and returns the subagent's output — a string
+   * for text responses or an object for structured (responseSchema)
+   * responses.
+   */
+  dispatch: (input: {
+    description: string;
+    subagentType: string;
+    responseSchema?: Record<string, unknown>;
+  }) => Promise<unknown>;
+
+  /**
+   * Maximum number of concurrent subagent calls within a single eval.
+   * Excess calls queue and resolve as permits free up.
+   */
+  maxConcurrency: number;
 }
 
 /**
@@ -89,6 +127,7 @@ export interface ReplSessionOptions {
   maxResultChars?: number;
   captureConsole?: boolean;
   sessionId?: string;
+  subagentBridge?: SubagentBridgeOptions;
 }
 
 /**
