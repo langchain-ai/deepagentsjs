@@ -1,11 +1,5 @@
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
-import type {
-  AnyBackendProtocol,
-  BackendFactory,
-  SkillMetadata,
-} from "deepagents";
-
 /**
  * Configuration options for the Code Interpreter middleware.
  */
@@ -44,12 +38,6 @@ export interface CodeInterpreterMiddlewareOptions {
    * @default null (uses built-in prompt)
    */
   systemPrompt?: string | null;
-
-  /**
-   * Backend the REPL reads skill module sources from. When provided alongside
-   * `SkillsMiddleware`, skills with a `module:` key become dynamic-importable.
-   */
-  skillsBackend?: AnyBackendProtocol | BackendFactory;
 
   /**
    * Maximum number of `tools.*` bridge calls allowed per `eval()` invocation.
@@ -97,7 +85,6 @@ export interface ReplSessionOptions {
   memoryLimitBytes?: number;
   maxStackSizeBytes?: number;
   tools?: StructuredToolInterface[];
-  skillsEnabled?: boolean;
   maxPtcCalls?: number | null;
   maxResultChars?: number;
   captureConsole?: boolean;
@@ -113,19 +100,4 @@ export interface ReplResult {
   error?: { name?: string; message?: string; stack?: string };
   logs: string[];
   logsDroppedChars: number;
-}
-
-/**
- * Metadata + backend pair the session needs to resolve skill imports.
- */
-export interface SkillsContext {
-  /**
-   * Per-eval snapshot of `state.skillsMetadata`.
-   */
-  metadata: SkillMetadata[];
-
-  /**
-   * Backend the session fetches skill source files from.
-   */
-  backend: AnyBackendProtocol;
 }
