@@ -126,6 +126,30 @@ describe("bulk when predicate", () => {
   ])("%j -> %s", (args, expected) => {
     expect(when(fakeReq(args))).toBe(expected);
   });
+
+  it("honors first-match-wins allow carve-outs for bulk calls", () => {
+    const carvedRules: FilesystemPermission[] = [
+      { operations: ["read"], paths: ["/public/**"] },
+      { operations: ["read"], paths: ["/**"], mode: "interrupt" },
+    ];
+    const carvedWhen = makeFsWhenPredicate(carvedRules, "read", "path", "bulk");
+
+    expect(carvedWhen(fakeReq({ path: "/public" }))).toBe(false);
+    expect(carvedWhen(fakeReq({ path: "/public/sub" }))).toBe(false);
+    expect(carvedWhen(fakeReq({ path: "/" }))).toBe(true);
+    expect(carvedWhen(fakeReq({ path: "/workspace" }))).toBe(true);
+  });
+
+  it("does not interrupt bulk calls when deny wins first-match", () => {
+    const denyFirstRules: FilesystemPermission[] = [
+      { operations: ["read"], paths: ["/secrets/**"], mode: "deny" },
+      { operations: ["read"], paths: ["/secrets/**"], mode: "interrupt" },
+    ];
+    const denyWhen = makeFsWhenPredicate(denyFirstRules, "read", "path", "bulk");
+
+    expect(denyWhen(fakeReq({ path: "/secrets" }))).toBe(false);
+    expect(denyWhen(fakeReq({ path: "/secrets/sub" }))).toBe(false);
+  });
 });
 
 describe("glob bulk pattern predicate", () => {
@@ -133,6 +157,21 @@ describe("glob bulk pattern predicate", () => {
     { operations: ["read"], paths: ["/secrets/**"], mode: "interrupt" },
   ];
   const when = buildInterruptOnFromPermissions(rules).glob.when!;
+
+  it("honors allow carve-outs when glob path is scoped", () => {
+    const carvedRules: FilesystemPermission[] = [
+      { operations: ["read"], paths: ["/public/**"] },
+      { operations: ["read"], paths: ["/**"], mode: "interrupt" },
+    ];
+    const carvedWhen = buildInterruptOnFromPermissions(carvedRules).glob.when!;
+
+    expect(
+      carvedWhen(fakeReq({ pattern: "*.txt", path: "/public" })),
+    ).toBe(false);
+    expect(
+      carvedWhen(fakeReq({ pattern: "*.txt", path: "/workspace" })),
+    ).toBe(true);
+  });
 
   it.each([
     [{ pattern: "/secrets/**", path: "/workspace" }, true],

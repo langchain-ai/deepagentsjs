@@ -8,7 +8,7 @@
 
 import type { InterruptOnConfig, ToolCallRequest } from "langchain";
 import { validateFilePath } from "../backends/utils.js";
-import { decidePathAccess } from "../permissions/enforce.js";
+import { decidePathAccess, globMatch } from "../permissions/enforce.js";
 import type {
   FilesystemOperation,
   FilesystemPermission,
@@ -55,19 +55,105 @@ function makeExactWhenPredicate(
   };
 }
 
-function bulkPatternFires(
+/**
+ * Build a probe path inside `callPath`'s subtree that could match `rulePattern`.
+ *
+ * Used with `decidePathAccess` so bulk interrupts honor first-match-wins.
+ */
+function representativeProbePath(callPath: string, rulePattern: string): string {
+  const anchor = globAnchor(rulePattern);
+  const call = callPath.replace(/\/+$/, "") || "/";
+
+  if (call === "/") {
+    if (rulePattern.includes("**")) {
+      return anchor === "/" ? "/__hitl_probe__" : `${anchor}/__hitl_probe__`;
+    }
+    return anchor;
+  }
+
+  const childProbe = `${call}/__hitl_probe__`;
+  if (globMatch(childProbe, rulePattern)) {
+    return childProbe;
+  }
+  if (globMatch(call, rulePattern)) {
+    return call;
+  }
+
+  if (pathsOverlap(call, anchor)) {
+    if (rulePattern.includes("**")) {
+      const base =
+        call === anchor || anchor.startsWith(`${call}/`) ? anchor : call;
+      return base === "/" ? "/__hitl_probe__" : `${base}/__hitl_probe__`;
+    }
+    return anchor;
+  }
+
+  return anchor === "/" ? "/__hitl_probe__" : `${anchor}/__hitl_probe__`;
+}
+
+/**
+ * Return true when a bulk call rooted at `callPath` could surface paths that
+ * resolve to interrupt under first-match-wins rule ordering.
+ */
+function bulkSubtreeCouldInterrupt(
+  rules: readonly FilesystemPermission[],
+  operation: FilesystemOperation,
+  callPath: string,
+): boolean {
+  for (const rule of rules) {
+    if (rule.mode !== "interrupt" || !rule.operations.includes(operation)) {
+      continue;
+    }
+
+    for (const pattern of rule.paths) {
+      const anchor = globAnchor(pattern);
+      if (!pathsOverlap(callPath, anchor)) {
+        continue;
+      }
+
+      const probePath = representativeProbePath(callPath, pattern);
+      if (decidePathAccess(rules, operation, probePath) === "interrupt") {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function bulkPatternCouldInterrupt(
+  rules: readonly FilesystemPermission[],
+  operation: FilesystemOperation,
+  normalizedPath: string,
   rawPattern: string,
-  interruptAnchors: readonly string[],
 ): boolean {
   const posixPattern = toPosixPath(rawPattern);
   if (posixPattern.startsWith("/")) {
-    const anchor = globAnchor(rawPattern);
-    return interruptAnchors.some((ruleAnchor) =>
-      pathsOverlap(anchor, ruleAnchor),
+    return bulkSubtreeCouldInterrupt(
+      rules,
+      operation,
+      globAnchor(rawPattern),
     );
   }
 
-  return posixPattern.split("/").includes("..");
+  if (posixPattern.split("/").includes("..")) {
+    return rules.some(
+      (rule) =>
+        rule.mode === "interrupt" && rule.operations.includes(operation),
+    );
+  }
+
+  return bulkSubtreeCouldInterrupt(rules, operation, normalizedPath);
+}
+
+function hasInterruptRules(
+  rules: readonly FilesystemPermission[],
+  operation: FilesystemOperation,
+): boolean {
+  return rules.some(
+    (rule) =>
+      rule.mode === "interrupt" && rule.operations.includes(operation),
+  );
 }
 
 function makeBulkWhenPredicate(
@@ -76,21 +162,15 @@ function makeBulkWhenPredicate(
   pathArgName: string,
   patternArgName: string | null,
 ): (request: ToolCallRequest) => boolean {
-  const interruptAnchors = rules.flatMap((rule) =>
-    rule.mode === "interrupt" && rule.operations.includes(operation)
-      ? rule.paths.map((pattern) => globAnchor(pattern))
-      : [],
-  );
-
   return (request) => {
-    if (interruptAnchors.length === 0) {
+    if (!hasInterruptRules(rules, operation)) {
       return false;
     }
 
     const args = request.toolCall.args ?? {};
     const rawPath = args[pathArgName];
     if (rawPath == null) {
-      return true;
+      return bulkSubtreeCouldInterrupt(rules, operation, "/");
     }
     if (typeof rawPath !== "string") {
       return false;
@@ -107,9 +187,7 @@ function makeBulkWhenPredicate(
       normalized = "/";
     }
 
-    if (
-      interruptAnchors.some((anchor) => pathsOverlap(normalized, anchor))
-    ) {
+    if (bulkSubtreeCouldInterrupt(rules, operation, normalized)) {
       return true;
     }
 
@@ -117,7 +195,7 @@ function makeBulkWhenPredicate(
       const rawPattern = args[patternArgName];
       if (
         typeof rawPattern === "string" &&
-        bulkPatternFires(rawPattern, interruptAnchors)
+        bulkPatternCouldInterrupt(rules, operation, normalized, rawPattern)
       ) {
         return true;
       }
@@ -203,5 +281,6 @@ export function mergeFsInterruptOn(
 /** @internal Exported for unit tests. */
 export const _testExports = {
   makeFsWhenPredicate,
+  bulkSubtreeCouldInterrupt,
   FS_TOOL_PATH_ARGS,
 };
