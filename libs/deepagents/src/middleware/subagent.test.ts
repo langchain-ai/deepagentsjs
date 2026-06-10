@@ -31,7 +31,7 @@ import { createDeepAgent } from "../agent.js";
 import { createSkillsMiddleware } from "./skills.js";
 import { createFileData } from "../backends/utils.js";
 import { createMockBackend } from "./test.js";
-import { createSubAgent, type SubAgent } from "./subagents.js";
+import { createSubAgent } from "./subagents.js";
 
 const createAgentMock = vi.mocked(createAgent);
 
@@ -1030,14 +1030,13 @@ describe("createSubAgent", () => {
   });
 
   it("compiles a declarative spec into a runnable via createAgent", () => {
-    const spec: SubAgent = {
+    createSubAgent({
       name: "worker",
       description: "Does work",
       systemPrompt: "Work on the task.",
+      model: fakeModel,
       tools: [getWeather],
-    };
-
-    createSubAgent(spec, { defaultModel: fakeModel });
+    });
 
     expect(createAgentMock).toHaveBeenCalledOnce();
     const call = createAgentMock.mock.calls[0][0];
@@ -1047,68 +1046,54 @@ describe("createSubAgent", () => {
     expect(call.name).toBe("worker");
   });
 
-  it("uses spec model over default when provided", () => {
-    const specModel = new FakeListChatModel({ responses: ["hello"] });
-    const spec: SubAgent = {
-      name: "worker",
-      description: "Does work",
-      systemPrompt: "Work.",
-      model: specModel,
-    };
-
-    createSubAgent(spec, { defaultModel: fakeModel });
-
-    const call = createAgentMock.mock.calls[0][0];
-    expect(call.model).toBe(specModel);
+  it("throws when model is missing", () => {
+    expect(() =>
+      createSubAgent({
+        name: "worker",
+        description: "Does work",
+        systemPrompt: "Work.",
+        tools: [getWeather],
+      }),
+    ).toThrow("SubAgent 'worker' must specify 'model'");
   });
 
-  it("falls back to defaultTools when spec omits tools", () => {
-    const spec: SubAgent = {
-      name: "worker",
-      description: "Does work",
-      systemPrompt: "Work.",
-    };
-
-    createSubAgent(spec, {
-      defaultModel: fakeModel,
-      defaultTools: [getWeather],
-    });
-
-    const call = createAgentMock.mock.calls[0][0];
-    expect(call.tools).toEqual([getWeather]);
+  it("throws when tools is missing", () => {
+    expect(() =>
+      createSubAgent({
+        name: "worker",
+        description: "Does work",
+        systemPrompt: "Work.",
+        model: fakeModel,
+      }),
+    ).toThrow("SubAgent 'worker' must specify 'tools'");
   });
 
-  it("prepends defaultMiddleware before spec middleware", () => {
-    const baseMiddleware = { name: "base" } as unknown as AgentMiddleware;
+  it("passes middleware through to createAgent", () => {
     const customMiddleware = { name: "custom" } as unknown as AgentMiddleware;
 
-    const spec: SubAgent = {
+    createSubAgent({
       name: "worker",
       description: "Does work",
       systemPrompt: "Work.",
+      model: fakeModel,
+      tools: [getWeather],
       middleware: [customMiddleware],
-    };
-
-    createSubAgent(spec, {
-      defaultModel: fakeModel,
-      defaultMiddleware: [baseMiddleware],
     });
 
     const call = createAgentMock.mock.calls[0][0];
     const middleware = call.middleware as AgentMiddleware[];
-    expect(middleware[0]).toBe(baseMiddleware);
-    expect(middleware[1]).toBe(customMiddleware);
+    expect(middleware[0]).toBe(customMiddleware);
   });
 
   it("appends humanInTheLoopMiddleware when interruptOn is specified", () => {
-    const spec: SubAgent = {
+    createSubAgent({
       name: "worker",
       description: "Does work",
       systemPrompt: "Work.",
+      model: fakeModel,
+      tools: [getWeather],
       interruptOn: { get_weather: true },
-    };
-
-    createSubAgent(spec, { defaultModel: fakeModel });
+    });
 
     const call = createAgentMock.mock.calls[0][0];
     const middleware = call.middleware as AgentMiddleware[];
@@ -1116,46 +1101,30 @@ describe("createSubAgent", () => {
     expect(middleware[0]).toHaveProperty("name");
   });
 
-  it("falls back to defaultInterruptOn when spec omits interruptOn", () => {
-    const spec: SubAgent = {
-      name: "worker",
-      description: "Does work",
-      systemPrompt: "Work.",
-    };
-
-    createSubAgent(spec, {
-      defaultModel: fakeModel,
-      defaultInterruptOn: { get_weather: true },
-    });
-
-    const call = createAgentMock.mock.calls[0][0];
-    const middleware = call.middleware as AgentMiddleware[];
-    expect(middleware.length).toBe(1);
-  });
-
   it("forwards responseFormat when specified", () => {
     const schema = z.object({ answer: z.string() });
-    const spec: SubAgent = {
+
+    createSubAgent({
       name: "worker",
       description: "Does work",
       systemPrompt: "Work.",
+      model: fakeModel,
+      tools: [getWeather],
       responseFormat: schema,
-    };
-
-    createSubAgent(spec, { defaultModel: fakeModel });
+    });
 
     const call = createAgentMock.mock.calls[0][0];
     expect(call.responseFormat).toBe(schema);
   });
 
   it("does not set responseFormat when not specified", () => {
-    const spec: SubAgent = {
+    createSubAgent({
       name: "worker",
       description: "Does work",
       systemPrompt: "Work.",
-    };
-
-    createSubAgent(spec, { defaultModel: fakeModel });
+      model: fakeModel,
+      tools: [],
+    });
 
     const call = createAgentMock.mock.calls[0][0];
     expect(call.responseFormat).toBeUndefined();

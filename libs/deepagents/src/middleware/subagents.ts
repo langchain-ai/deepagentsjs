@@ -472,65 +472,38 @@ function returnCommandWithStateUpdate(
 }
 
 /**
- * Options for creating a subagent from a declarative spec.
- */
-export interface CreateSubAgentOptions {
-  /**
-   * Fallback model when the spec omits `model`.
-   */
-  defaultModel: LanguageModelLike | string;
-
-  /**
-   * Fallback tools when the spec omits `tools`.
-   */
-  defaultTools?: StructuredTool[];
-
-  /**
-   * Base middleware prepended to the spec's own middleware.
-   */
-  defaultMiddleware?: AgentMiddleware[];
-
-  /**
-   * Fallback interrupt-on config when the spec omits `interruptOn`.
-   */
-  defaultInterruptOn?: Record<string, boolean | InterruptOnConfig> | null;
-}
-
-/**
  * Create a runnable agent from a declarative `SubAgent` spec.
  *
  * This is the shared entrypoint for compiling a `SubAgent` into a
  * `ReactAgent`. Pre-compiled `CompiledSubAgent` runnables bypass this
  * function entirely.
  *
- * @param spec - Declarative subagent specification.
- * @param options - Default model, tools, middleware, and interrupt-on config.
+ * The spec must have `model` and `tools` set — the caller is responsible
+ * for coalescing any defaults before calling this function.
+ *
+ * @param spec - Declarative subagent specification. Must specify `model` and `tools`.
  * @returns A compiled `ReactAgent` ready for task-tool invocation.
  */
-export function createSubAgent(
-  spec: SubAgent,
-  options: CreateSubAgentOptions,
-): ReactAgent {
-  const {
-    defaultModel,
-    defaultTools = [],
-    defaultMiddleware = [],
-    defaultInterruptOn = null,
-  } = options;
+export function createSubAgent(spec: SubAgent): ReactAgent {
+  if (!spec.model) {
+    throw new Error(`SubAgent '${spec.name}' must specify 'model'`);
+  }
+  if (!spec.tools) {
+    throw new Error(`SubAgent '${spec.name}' must specify 'tools'`);
+  }
 
-  const middleware: AgentMiddleware[] = spec.middleware
-    ? [...defaultMiddleware, ...spec.middleware]
-    : [...defaultMiddleware];
+  const middleware: AgentMiddleware[] = [...(spec.middleware ?? [])];
 
-  const interruptOn = spec.interruptOn || defaultInterruptOn;
-  if (interruptOn) {
-    middleware.push(humanInTheLoopMiddleware({ interruptOn }));
+  if (spec.interruptOn) {
+    middleware.push(
+      humanInTheLoopMiddleware({ interruptOn: spec.interruptOn }),
+    );
   }
 
   return createAgent({
-    model: spec.model ?? defaultModel,
+    model: spec.model,
     systemPrompt: spec.systemPrompt,
-    tools: spec.tools ?? defaultTools,
+    tools: spec.tools,
     middleware,
     name: spec.name,
     ...(spec.responseFormat != null && {
@@ -604,11 +577,15 @@ function getSubagents(options: {
     if ("runnable" in agentParams) {
       agents[agentParams.name] = agentParams.runnable;
     } else {
-      agents[agentParams.name] = createSubAgent(agentParams, {
-        defaultModel,
-        defaultTools,
-        defaultMiddleware: defaultSubagentMiddleware,
-        defaultInterruptOn,
+      agents[agentParams.name] = createSubAgent({
+        ...agentParams,
+        model: agentParams.model ?? defaultModel,
+        tools: agentParams.tools ?? defaultTools,
+        middleware: [
+          ...defaultSubagentMiddleware,
+          ...(agentParams.middleware ?? []),
+        ],
+        interruptOn: agentParams.interruptOn ?? defaultInterruptOn ?? undefined,
       });
     }
   }
