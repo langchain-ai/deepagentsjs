@@ -5,9 +5,9 @@ import { oolongTrecCoarseSuite } from "./trec_coarse.js";
 const runner = getDefaultRunner();
 
 ls.describe(
-  "deepagents-js-oolong-trec-coarse",
+  runner.name,
   () => {
     oolongTrecCoarseSuite(runner);
   },
-  { projectName: runner.name, upsert: true },
+  { projectName: "deepagents-js-oolong-trec-coarse", upsert: true },
 );
