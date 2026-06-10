@@ -61,7 +61,10 @@ function makeExactWhenPredicate(
  *
  * Used with `decidePathAccess` so bulk interrupts honor first-match-wins.
  */
-function representativeProbePath(callPath: string, rulePattern: string): string {
+function representativeProbePath(
+  callPath: string,
+  rulePattern: string,
+): string {
   const anchor = globAnchor(rulePattern);
   const call = stripTrailingSlashes(callPath) || "/";
 
@@ -130,11 +133,7 @@ function bulkPatternCouldInterrupt(
 ): boolean {
   const posixPattern = toPosixPath(rawPattern);
   if (posixPattern.startsWith("/")) {
-    return bulkSubtreeCouldInterrupt(
-      rules,
-      operation,
-      globAnchor(rawPattern),
-    );
+    return bulkSubtreeCouldInterrupt(rules, operation, globAnchor(rawPattern));
   }
 
   if (posixPattern.split("/").includes("..")) {
@@ -152,8 +151,7 @@ function hasInterruptRules(
   operation: FilesystemOperation,
 ): boolean {
   return rules.some(
-    (rule) =>
-      rule.mode === "interrupt" && rule.operations.includes(operation),
+    (rule) => rule.mode === "interrupt" && rule.operations.includes(operation),
   );
 }
 
@@ -217,12 +215,7 @@ function makeFsWhenPredicate(
     return makeExactWhenPredicate(rules, operation, pathArgName);
   }
 
-  return makeBulkWhenPredicate(
-    rules,
-    operation,
-    pathArgName,
-    patternArgName,
-  );
+  return makeBulkWhenPredicate(rules, operation, pathArgName, patternArgName);
 }
 
 /**
@@ -236,12 +229,14 @@ export function buildInterruptOnFromPermissions(
   }
 
   const result: Record<string, InterruptOnConfig> = {};
-  for (const [toolName, [operation, pathArg, scope, patternArg]] of Object.entries(
-    FS_TOOL_PATH_ARGS,
-  )) {
+  for (const [
+    toolName,
+    [operation, pathArg, scope, patternArg],
+  ] of Object.entries(FS_TOOL_PATH_ARGS)) {
     if (
       !rules.some(
-        (rule) => rule.mode === "interrupt" && rule.operations.includes(operation),
+        (rule) =>
+          rule.mode === "interrupt" && rule.operations.includes(operation),
       )
     ) {
       continue;

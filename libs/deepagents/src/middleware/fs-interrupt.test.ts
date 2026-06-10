@@ -77,7 +77,9 @@ describe("decidePathAccess interrupt mode", () => {
     const rules: FilesystemPermission[] = [
       { operations: ["write"], paths: ["/secrets/**"], mode: "interrupt" },
     ];
-    expect(decidePathAccess(rules, "write", "/secrets/x.txt")).toBe("interrupt");
+    expect(decidePathAccess(rules, "write", "/secrets/x.txt")).toBe(
+      "interrupt",
+    );
     expect(decidePathAccess(rules, "write", "/workspace/x.txt")).toBe("allow");
   });
 
@@ -145,7 +147,12 @@ describe("bulk when predicate", () => {
       { operations: ["read"], paths: ["/secrets/**"], mode: "deny" },
       { operations: ["read"], paths: ["/secrets/**"], mode: "interrupt" },
     ];
-    const denyWhen = makeFsWhenPredicate(denyFirstRules, "read", "path", "bulk");
+    const denyWhen = makeFsWhenPredicate(
+      denyFirstRules,
+      "read",
+      "path",
+      "bulk",
+    );
 
     expect(denyWhen(fakeReq({ path: "/secrets" }))).toBe(false);
     expect(denyWhen(fakeReq({ path: "/secrets/sub" }))).toBe(false);
@@ -165,12 +172,12 @@ describe("glob bulk pattern predicate", () => {
     ];
     const carvedWhen = buildInterruptOnFromPermissions(carvedRules).glob.when!;
 
-    expect(
-      carvedWhen(fakeReq({ pattern: "*.txt", path: "/public" })),
-    ).toBe(false);
-    expect(
-      carvedWhen(fakeReq({ pattern: "*.txt", path: "/workspace" })),
-    ).toBe(true);
+    expect(carvedWhen(fakeReq({ pattern: "*.txt", path: "/public" }))).toBe(
+      false,
+    );
+    expect(carvedWhen(fakeReq({ pattern: "*.txt", path: "/workspace" }))).toBe(
+      true,
+    );
   });
 
   it.each([
