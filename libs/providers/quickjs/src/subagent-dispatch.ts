@@ -246,7 +246,7 @@ class SubagentEntry {
       );
     }
 
-    const cacheKey = `${this.name}::${JSON.stringify(responseSchema, Object.keys(responseSchema).sort())}`;
+    const cacheKey = `${this.name}::${JSON.stringify(responseSchema)}`;
     return cache.getOrCreate(cacheKey, () =>
       createSubAgent(
         { ...this.spec, responseFormat: responseSchema },

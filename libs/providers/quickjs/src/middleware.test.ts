@@ -347,40 +347,24 @@ describe("createCodeInterpreterMiddleware", () => {
       vi.clearAllMocks();
     });
 
-    it("should append subagent prompt after first eval with specs", async () => {
-      mockedCreateSubAgent.mockReturnValue(
-        fakeRunnable({ messages: [new AIMessage({ content: "ok" })] }),
-      );
-
+    it("should include subagent prompt on first wrapModelCall (before any eval)", async () => {
       const middleware = createCodeInterpreterMiddleware();
-      const jsTool = middleware.tools!.find(
-        (t: any) => t.name === "eval",
-      ) as any;
 
       const payload = makeSpecsPayload([
         { name: "researcher", description: "Researches topics" },
         { name: "coder", description: "Writes code" },
       ]);
 
-      // First eval — triggers dispatcher creation
-      await jsTool.invoke(
-        { code: "1 + 1" },
-        {
-          configurable: {
-            thread_id: "subagent-prompt-test",
-            [SUBAGENT_SPECS_CONFIG_KEY]: payload,
-          },
-        },
-      );
-
-      // Now wrapModelCall should include the subagent prompt
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       await middleware.wrapModelCall!(
         {
           systemMessage: new SystemMessage("Base"),
           state: {},
           runtime: {
-            configurable: { thread_id: "subagent-prompt-test" },
+            configurable: {
+              thread_id: "subagent-prompt-test",
+              [SUBAGENT_SPECS_CONFIG_KEY]: payload,
+            },
           },
           tools: middleware.tools || [],
         } as any,
@@ -428,23 +412,10 @@ describe("createCodeInterpreterMiddleware", () => {
       const middleware = createCodeInterpreterMiddleware({
         maxSubagentConcurrency: 0,
       });
-      const jsTool = middleware.tools!.find(
-        (t: any) => t.name === "eval",
-      ) as any;
 
       const payload = makeSpecsPayload([
         { name: "researcher", description: "Researches" },
       ]);
-
-      await jsTool.invoke(
-        { code: "1 + 1" },
-        {
-          configurable: {
-            thread_id: "disabled-subagent-test",
-            [SUBAGENT_SPECS_CONFIG_KEY]: payload,
-          },
-        },
-      );
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       await middleware.wrapModelCall!(
@@ -452,7 +423,10 @@ describe("createCodeInterpreterMiddleware", () => {
           systemMessage: new SystemMessage("Base"),
           state: {},
           runtime: {
-            configurable: { thread_id: "disabled-subagent-test" },
+            configurable: {
+              thread_id: "disabled-subagent-test",
+              [SUBAGENT_SPECS_CONFIG_KEY]: payload,
+            },
           },
           tools: middleware.tools || [],
         } as any,

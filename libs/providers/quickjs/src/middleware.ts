@@ -253,9 +253,6 @@ export function createCodeInterpreterMiddleware(
           | undefined;
         if (payload) {
           dispatcher = new SubagentDispatcher(payload);
-          subagentPrompt = renderSubagentPrompt(
-            dispatcher.subagentDescriptions,
-          );
         }
       }
 
@@ -305,6 +302,23 @@ export function createCodeInterpreterMiddleware(
 
       if (ptcTools.length > 0 && !cachedPtcPrompt) {
         cachedPtcPrompt = await generatePtcPrompt(ptcTools);
+      }
+
+      if (!subagentPrompt && maxSubagentConcurrency > 0) {
+        const configurable = (request as any).runtime?.configurable as
+          | Record<string, unknown>
+          | undefined;
+        const payload = configurable?.[SUBAGENT_SPECS_CONFIG_KEY] as
+          | SubagentSpecsPayload
+          | undefined;
+        if (payload) {
+          subagentPrompt = renderSubagentPrompt(
+            payload.subagents.map((s) => ({
+              name: s.name,
+              description: s.description,
+            })),
+          );
+        }
       }
 
       const systemMessage = request.systemMessage
