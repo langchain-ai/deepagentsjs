@@ -7,6 +7,15 @@ export function toPosixPath(path: string): string {
   return path.replace(/\\/g, "/");
 }
 
+/** Strip trailing `/` characters in O(n) time without regex backtracking. */
+export function stripTrailingSlashes(path: string): string {
+  let end = path.length;
+  while (end > 0 && path[end - 1] === "/") {
+    end--;
+  }
+  return end === path.length ? path : path.slice(0, end);
+}
+
 /**
  * Return the longest leading directory of `pattern` with no wildcards.
  *
@@ -34,7 +43,7 @@ export function globAnchor(pattern: string): string {
 }
 
 function pathComponents(path: string): string[] {
-  const trimmed = toPosixPath(path).replace(/\/+$/, "");
+  const trimmed = stripTrailingSlashes(toPosixPath(path));
   if (!trimmed || trimmed === "/") {
     return [];
   }

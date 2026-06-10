@@ -16,6 +16,7 @@ import type {
 import {
   globAnchor,
   pathsOverlap,
+  stripTrailingSlashes,
   toPosixPath,
 } from "../permissions/path-utils.js";
 
@@ -62,7 +63,7 @@ function makeExactWhenPredicate(
  */
 function representativeProbePath(callPath: string, rulePattern: string): string {
   const anchor = globAnchor(rulePattern);
-  const call = callPath.replace(/\/+$/, "") || "/";
+  const call = stripTrailingSlashes(callPath) || "/";
 
   if (call === "/") {
     if (rulePattern.includes("**")) {
