@@ -472,6 +472,74 @@ function returnCommandWithStateUpdate(
 }
 
 /**
+ * Options for creating a subagent from a declarative spec.
+ */
+export interface CreateSubAgentOptions {
+  /**
+   * Fallback model when the spec omits `model`.
+   */
+  defaultModel: LanguageModelLike | string;
+
+  /**
+   * Fallback tools when the spec omits `tools`.
+   */
+  defaultTools?: StructuredTool[];
+
+  /**
+   * Base middleware prepended to the spec's own middleware.
+   */
+  defaultMiddleware?: AgentMiddleware[];
+
+  /**
+   * Fallback interrupt-on config when the spec omits `interruptOn`.
+   */
+  defaultInterruptOn?: Record<string, boolean | InterruptOnConfig> | null;
+}
+
+/**
+ * Create a runnable agent from a declarative `SubAgent` spec.
+ *
+ * This is the shared entrypoint for compiling a `SubAgent` into a
+ * `ReactAgent`. Pre-compiled `CompiledSubAgent` runnables bypass this
+ * function entirely.
+ *
+ * @param spec - Declarative subagent specification.
+ * @param options - Default model, tools, middleware, and interrupt-on config.
+ * @returns A compiled `ReactAgent` ready for task-tool invocation.
+ */
+export function createSubAgent(
+  spec: SubAgent,
+  options: CreateSubAgentOptions,
+): ReactAgent {
+  const {
+    defaultModel,
+    defaultTools = [],
+    defaultMiddleware = [],
+    defaultInterruptOn = null,
+  } = options;
+
+  const middleware: AgentMiddleware[] = spec.middleware
+    ? [...defaultMiddleware, ...spec.middleware]
+    : [...defaultMiddleware];
+
+  const interruptOn = spec.interruptOn || defaultInterruptOn;
+  if (interruptOn) {
+    middleware.push(humanInTheLoopMiddleware({ interruptOn }));
+  }
+
+  return createAgent({
+    model: spec.model ?? defaultModel,
+    systemPrompt: spec.systemPrompt,
+    tools: spec.tools ?? defaultTools,
+    middleware,
+    name: spec.name,
+    ...(spec.responseFormat != null && {
+      responseFormat: spec.responseFormat,
+    }),
+  });
+}
+
+/**
  * Create subagent instances from specifications
  */
 function getSubagents(options: {
@@ -536,23 +604,11 @@ function getSubagents(options: {
     if ("runnable" in agentParams) {
       agents[agentParams.name] = agentParams.runnable;
     } else {
-      const middleware = agentParams.middleware
-        ? [...defaultSubagentMiddleware, ...agentParams.middleware]
-        : [...defaultSubagentMiddleware];
-
-      const interruptOn = agentParams.interruptOn || defaultInterruptOn;
-      if (interruptOn)
-        middleware.push(humanInTheLoopMiddleware({ interruptOn }));
-
-      agents[agentParams.name] = createAgent({
-        model: agentParams.model ?? defaultModel,
-        systemPrompt: agentParams.systemPrompt,
-        tools: agentParams.tools ?? defaultTools,
-        middleware,
-        name: agentParams.name,
-        ...(agentParams.responseFormat != null && {
-          responseFormat: agentParams.responseFormat,
-        }),
+      agents[agentParams.name] = createSubAgent(agentParams, {
+        defaultModel,
+        defaultTools,
+        defaultMiddleware: defaultSubagentMiddleware,
+        defaultInterruptOn,
       });
     }
   }
