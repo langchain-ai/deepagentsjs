@@ -1,0 +1,26 @@
+libs/providers/quickjs/src/semaphore.test.ts
+  s_dfc0de3b3b35aa::t_4e560f85a7460f 1-6,8-9,11-113
+libs/providers/quickjs/src/semaphore.ts
+  h_f78d33d4280f3f 1-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "fcb008edc85120d41b006309edd372e0e5eaf30d",
+  "prompts": {},
+  "humans": {
+    "h_f78d33d4280f3f": {
+      "author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  },
+  "sessions": {
+    "s_dfc0de3b3b35aa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "024570eb-5363-48c9-8e34-0cfa5231421b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
