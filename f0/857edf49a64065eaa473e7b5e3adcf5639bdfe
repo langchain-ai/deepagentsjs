@@ -1,0 +1,39 @@
+libs/providers/quickjs/src/session.ts
+  s_8c9b4345b2ed04::t_24ed72822698e2 655
+  s_8c9b4345b2ed04::t_615d34c941f969 665
+  s_8c9b4345b2ed04::t_18e19962996ae3 709,713-715
+  s_8c9b4345b2ed04::t_59a7c20a83888a 687-688
+  s_8c9b4345b2ed04::t_e5084cc880d6ae 632
+  s_8c9b4345b2ed04::t_6731a9c1065cf5 592,594
+  s_8c9b4345b2ed04::t_bf0b7b13cee168 640-641
+  s_8c9b4345b2ed04::t_1c180aad0ef308 650
+  s_8c9b4345b2ed04::t_d096beda7cc9b5 621
+libs/providers/quickjs/src/middleware.ts
+  s_8c9b4345b2ed04::t_fec12b1e1c03fa 89,91,98,113-114
+libs/providers/quickjs/src/middleware.test.ts
+  s_8c9b4345b2ed04::t_6a5952e5425b52 588
+  s_8c9b4345b2ed04::t_cdec8c77704e18 361
+  s_8c9b4345b2ed04::t_2ef23282ed671b 458,505,560,573,596
+  s_8c9b4345b2ed04::t_6d4defa68423ca 601
+libs/providers/quickjs/src/session.test.ts
+  s_8c9b4345b2ed04::t_621857e11fc9cb 903-904
+  s_8c9b4345b2ed04::t_d9b54eed77a250 931-933
+  s_8c9b4345b2ed04::t_5feeac7f33f380 943,946
+  s_8c9b4345b2ed04::t_9a7c89b9ef59a9 759,776,802,816,830,844,858,870,886
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "f0857edf49a64065eaa473e7b5e3adcf5639bdfe",
+  "prompts": {},
+  "sessions": {
+    "s_8c9b4345b2ed04": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e332ab9c-f19a-4da1-9264-541434466ff2",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
