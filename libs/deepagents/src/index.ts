@@ -184,10 +184,6 @@ export {
 } from "./backends/index.js";
 
 export {
-  SUBAGENT_SPECS_CONFIG_KEY,
   SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY,
-  buildSubagentSpecsPayload,
-  type SubagentSpecEntry,
-  type SubagentSpecsPayload,
   createSubAgent,
 } from "./middleware/subagents.js";

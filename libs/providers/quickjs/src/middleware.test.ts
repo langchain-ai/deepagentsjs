@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { tool } from "langchain";
 import * as z from "zod";
 import { SystemMessage } from "@langchain/core/messages";
-import { SUBAGENT_SPECS_CONFIG_KEY } from "deepagents";
 import {
   createCodeInterpreterMiddleware,
   generatePtcPrompt,
@@ -309,117 +308,8 @@ describe("createCodeInterpreterMiddleware", () => {
   });
 
   describe("subagent primitive", () => {
-    function makeSpecsPayload(
-      subagents: Array<{ name: string; description: string }>,
-    ) {
-      return {
-        subagents: subagents.map((s) => ({
-          name: s.name,
-          description: s.description,
-          spec: {
-            name: s.name,
-            description: s.description,
-            systemPrompt: `You are ${s.name}.`,
-            model: "openai:gpt-4o",
-            tools: [],
-          },
-          runnableBacked: false,
-        })),
-      };
-    }
-
     beforeEach(() => {
       vi.clearAllMocks();
-    });
-
-    it("should include subagent prompt on first wrapModelCall (before any eval)", async () => {
-      const middleware = createCodeInterpreterMiddleware();
-
-      const payload = makeSpecsPayload([
-        { name: "researcher", description: "Researches topics" },
-        { name: "coder", description: "Writes code" },
-      ]);
-
-      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
-      await middleware.wrapModelCall!(
-        {
-          systemMessage: new SystemMessage("Base"),
-          state: {},
-          runtime: {
-            configurable: {
-              thread_id: "subagent-prompt-test",
-              [SUBAGENT_SPECS_CONFIG_KEY]: payload,
-            },
-          },
-          tools: middleware.tools || [],
-        } as any,
-        mockHandler,
-      );
-
-      const req = mockHandler.mock.calls[0][0];
-      const text = req.systemMessage.text;
-      expect(text).toContain("### Dispatching Subagents with `task`");
-      expect(text).toContain("`researcher`");
-      expect(text).toContain("Researches topics");
-      expect(text).toContain("`coder`");
-      expect(text).toContain("Writes code");
-      expect(text).toContain("responseSchema");
-    });
-
-    it("should not append subagent prompt when no specs in configurable", async () => {
-      const middleware = createCodeInterpreterMiddleware();
-      const jsTool = middleware.tools!.find(
-        (t: any) => t.name === "eval",
-      ) as any;
-
-      // Eval without specs
-      await jsTool.invoke(
-        { code: "1 + 1" },
-        { configurable: { thread_id: "no-specs-test" } },
-      );
-
-      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
-      await middleware.wrapModelCall!(
-        {
-          systemMessage: new SystemMessage("Base"),
-          state: {},
-          runtime: { configurable: { thread_id: "no-specs-test" } },
-          tools: middleware.tools || [],
-        } as any,
-        mockHandler,
-      );
-
-      const req = mockHandler.mock.calls[0][0];
-      expect(req.systemMessage.text).not.toContain("### Dispatching Subagents");
-    });
-
-    it("should not wire subagent bridge when maxSubagentConcurrency is 0", async () => {
-      const middleware = createCodeInterpreterMiddleware({
-        maxSubagentConcurrency: 0,
-      });
-
-      const payload = makeSpecsPayload([
-        { name: "researcher", description: "Researches" },
-      ]);
-
-      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
-      await middleware.wrapModelCall!(
-        {
-          systemMessage: new SystemMessage("Base"),
-          state: {},
-          runtime: {
-            configurable: {
-              thread_id: "disabled-subagent-test",
-              [SUBAGENT_SPECS_CONFIG_KEY]: payload,
-            },
-          },
-          tools: middleware.tools || [],
-        } as any,
-        mockHandler,
-      );
-
-      const req = mockHandler.mock.calls[0][0];
-      expect(req.systemMessage.text).not.toContain("### Dispatching Subagents");
     });
 
     it("should invoke subagent from within the REPL", async () => {
@@ -433,10 +323,6 @@ describe("createCodeInterpreterMiddleware", () => {
         (t: any) => t.name === "eval",
       ) as any;
 
-      const payload = makeSpecsPayload([
-        { name: "researcher", description: "Researches topics" },
-      ]);
-
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       await middleware.wrapModelCall!(
         {
@@ -445,7 +331,6 @@ describe("createCodeInterpreterMiddleware", () => {
           runtime: {
             configurable: {
               thread_id: "invoke-subagent-test",
-              [SUBAGENT_SPECS_CONFIG_KEY]: payload,
             },
           },
           tools: [...(middleware.tools || []), mockTaskTool],
@@ -480,10 +365,6 @@ describe("createCodeInterpreterMiddleware", () => {
         (t: any) => t.name === "eval",
       ) as any;
 
-      const payload = makeSpecsPayload([
-        { name: "researcher", description: "Researches" },
-      ]);
-
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       await middleware.wrapModelCall!(
         {
@@ -492,7 +373,6 @@ describe("createCodeInterpreterMiddleware", () => {
           runtime: {
             configurable: {
               thread_id: "structured-test",
-              [SUBAGENT_SPECS_CONFIG_KEY]: payload,
             },
           },
           tools: [...(middleware.tools || []), mockTaskTool],
@@ -534,10 +414,6 @@ describe("createCodeInterpreterMiddleware", () => {
         (t: any) => t.name === "eval",
       ) as any;
 
-      const payload = makeSpecsPayload([
-        { name: "researcher", description: "Researches" },
-      ]);
-
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       await middleware.wrapModelCall!(
         {
@@ -546,7 +422,6 @@ describe("createCodeInterpreterMiddleware", () => {
           runtime: {
             configurable: {
               thread_id: "fresh-config-test",
-              [SUBAGENT_SPECS_CONFIG_KEY]: payload,
             },
           },
           tools: [...(middleware.tools || []), mockTaskTool],

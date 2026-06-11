@@ -14,11 +14,7 @@ import {
 } from "langchain";
 import { z } from "zod/v4";
 import type { StructuredToolInterface } from "@langchain/core/tools";
-import {
-  SUBAGENT_SPECS_CONFIG_KEY,
-  SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY,
-  type SubagentSpecsPayload,
-} from "deepagents";
+import { SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY } from "deepagents";
 
 import dedent from "dedent";
 import type {
@@ -70,226 +66,6 @@ function renderReplSystemPrompt(opts: {
     - Runtime sandbox: no built-in filesystem, network, stdlib, or wall-clock APIs (\`fetch\`, \`require\`, \`fs\`, \`process\`, real \`Date.now()\` are unavailable or stubbed). External side effects from inside the REPL are only reachable via the \`tools.*\` namespace when it is exposed (see below); without it, the REPL is pure computation.
     - Timeout: ${opts.timeout}s per call. Memory: ${opts.memoryLimitMb} MB total.
     - \`console.log\` output is captured and returned alongside the result.
-  `;
-}
-
-/**
- * Generate the system prompt section for the task primitive.
- *
- * @param descriptions - Available subagent names and descriptions.
- * @param evalToolName - Name of the eval tool (default "eval").
- */
-function renderSubagentPrompt(
-  descriptions: Array<{ name: string; description: string }>,
-  evalToolName: string = "eval",
-): string {
-  const descList = descriptions
-    .map((d) => `- \`${d.name}\`: ${d.description}`)
-    .join("\n");
-
-  return dedent`
-    ### Dispatching Subagents with \`task\`
-
-    \`task\` is your primitive for running configured subagents from inside the
-    JavaScript REPL. You orchestrate everything else — fan-out, filtering,
-    deduplication, multi-stage flow, and synthesis — in plain JavaScript.
-
-    #### The primitive
-
-    \`\`\`javascript
-    await task({
-      description,      // full autonomous task prompt
-      subagentType,     // configured subagent name
-      responseSchema,   // optional JSON Schema for structured output
-    }); // -> Promise<unknown>
-    \`\`\`
-
-    \`task\` runs a full agentic loop for the selected configured subagent. The
-    subagent can use whatever tools it was configured with, iterate, inspect
-    context, and return one final result. \`subagentType\` is required; use one of
-    the configured subagent names:
-    ${descList}
-
-    \`description\` is the only prompt the subagent receives for this dispatch. Make
-    it complete: include the goal, constraints, relevant context, what to inspect,
-    and the exact shape or level of detail you expect back. Each dispatch is
-    stateless from the caller's perspective; you cannot send follow-up messages to
-    the same subagent run.
-
-    \`responseSchema\` is optional. When provided, the resolved value is already a
-    typed JavaScript value matching the schema. Do not call \`JSON.parse\` unless the
-    subagent intentionally returned a JSON string. Dynamic schemas work for
-    declarative subagents; runnable-backed subagents reject dynamic schemas because
-    their runnable is already compiled.
-
-    #### Approval model
-
-    \`task\` dispatches from inside the already-running \`${evalToolName}\` call. It
-    does not route through the parent agent's \`ToolNode\`-managed \`task\` tool and
-    does not trigger parent-level \`interruptOn\` / HITL approval for each dispatch.
-    Declarative subagents still honor approval middleware configured inside their
-    own spec. If you need approval before launching a subagent from the parent, use
-    the normal \`task\` tool outside JavaScript or ensure the \`${evalToolName}\` call
-    itself is approval-gated.
-
-    #### Mental model
-
-    Hold your work in JS: an array of items in, an array of results out. Merge each
-    dispatch result back onto its item. Multi-stage analysis means: run a pass,
-    filter or regroup the array in JS, then run another pass over the survivors.
-
-    Prefer one \`${evalToolName}\` call that performs the whole workflow. Splitting the
-    workflow across multiple \`${evalToolName}\` calls costs model turns and forces you to
-    re-establish state.
-
-    #### Fan out with bounded concurrency
-
-    Dispatch independent work in parallel with \`Promise.all\`, but in explicit
-    batches around 10 so you do not launch hundreds of subagents at once. The bridge
-    enforces a hard per-REPL cap of 32 concurrent subagent calls.
-
-    \`\`\`javascript
-    const batchSize = 10;
-    const reviewed = [];
-    for (let i = 0; i < items.length; i += batchSize) {
-      const batch = items.slice(i, i + batchSize);
-      reviewed.push(...(await Promise.all(batch.map(async (it) => {
-        const result = await task({
-          description: "Review " + it.file + " for SQL injection. Cite line numbers.",
-          subagentType: "reviewer",
-          responseSchema: {
-            type: "object",
-            properties: {
-              vulnerabilities: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    type: { type: "string" },
-                    line: { type: "number" },
-                    evidence: { type: "string" },
-                  },
-                  required: ["type", "line", "evidence"],
-                },
-              },
-            },
-            required: ["vulnerabilities"],
-          },
-        });
-        return { ...it, ...result };
-      }))));
-    }
-    \`\`\`
-
-    #### Use parent JS for cheap work; use subagents for agentic work
-
-    Use JavaScript in the parent REPL for deterministic orchestration: joining
-    arrays, deduping, sorting, filtering, grouping, batching, and merging results.
-    If the \`tools.*\` namespace is exposed, also use it to pre-read files or collect
-    shared data once, then pass only the relevant content to each subagent in
-    \`description\`.
-
-    Use \`task\` for work that benefits from an autonomous agentic loop: reading
-    or searching with the subagent's own tools, inspecting multiple files, following
-    leads, making judgment calls, or producing a final synthesized report.
-
-    #### Pre-read shared context in the parent when useful
-
-    If many subagents need the same source list or file content and \`tools.*\` is
-    available, gather that context once in the parent REPL before dispatching:
-
-    \`\`\`javascript
-    const files = (await tools.glob({ pattern: "src/**/*.ts" }))
-      .split("\\n")
-      .filter(Boolean);
-
-    const items = await Promise.all(files.map(async (file) => {
-      const content = await tools.readFile({ filePath: file });
-      return { file, content };
-    }));
-
-    const batchSize = 10;
-    const results = [];
-    for (let i = 0; i < items.length; i += batchSize) {
-      const batch = items.slice(i, i + batchSize);
-      results.push(...(await Promise.all(batch.map(async (it) => {
-        const finding = await task({
-          description:
-            "Review this file for auth bypasses. Return concrete findings only.\\n\\n" +
-            "File: " + it.file + "\\n\\n" +
-            it.content,
-          subagentType: "reviewer",
-          responseSchema: {
-            type: "object",
-            properties: {
-              findings: { type: "array", items: { type: "object" } },
-            },
-            required: ["findings"],
-          },
-        });
-        return { ...it, ...finding };
-      }))));
-    }
-    \`\`\`
-
-    #### Compose multiple stages
-
-    Filter the array in JS between passes. For example: first ask subagents for a
-    cheap classification, filter to the risky items, then dispatch deeper reviews
-    only for those items.
-
-    \`\`\`javascript
-    const tagged = [];
-    for (let i = 0; i < items.length; i += 10) {
-      const batch = items.slice(i, i + 10);
-      tagged.push(...(await Promise.all(batch.map(async (it) => {
-        const tag = await task({
-          description: "Classify " + it.file + " as handler, util, test, or config.",
-          subagentType: "reviewer",
-          responseSchema: {
-            type: "object",
-            properties: { kind: { type: "string" }, risky: { type: "boolean" } },
-            required: ["kind", "risky"],
-          },
-        });
-        return { ...it, ...tag };
-      }))));
-    }
-
-    const riskyHandlers = tagged.filter((it) => it.kind === "handler" && it.risky);
-    const deepReviews = [];
-    for (let i = 0; i < riskyHandlers.length; i += 10) {
-      const batch = riskyHandlers.slice(i, i + 10);
-      deepReviews.push(...(await Promise.all(batch.map(async (it) => {
-        const review = await task({
-          description: "Deep security review of " + it.file + ". Cite line numbers.",
-          subagentType: "reviewer",
-        });
-        return { ...it, review };
-      }))));
-    }
-    \`\`\`
-
-    #### Get results out without flooding your context
-
-    Keep large result sets in JS variables. Do not \`console.log\` the full result set.
-    If \`tools.writeFile\` is exposed, persist structured output from inside the eval:
-
-    \`\`\`javascript
-    await tools.writeFile({
-      filePath: "/results/task-output.json",
-      content: JSON.stringify(deepReviews),
-    });
-    \`\`\`
-
-    Otherwise return a compact summary or a small slice of the results, not the
-    entire intermediate dataset.
-
-    #### Across evals
-
-    Variables persist according to the interpreter persistence mode above, but
-    re-establish what you need in each eval. Doing the whole workflow in one
-    \`${evalToolName}\` call is usually simplest.
   `;
 }
 
@@ -396,7 +172,6 @@ export function createCodeInterpreterMiddleware(
   let cachedPtcPrompt: string | null = null;
   let ptcTools: StructuredToolInterface[] = [];
   let taskTool: StructuredToolInterface | null = null;
-  let subagentPrompt: string | null = null;
 
   function filterToolsForPtc(
     allTools: StructuredToolInterface[],
@@ -515,28 +290,9 @@ export function createCodeInterpreterMiddleware(
         cachedPtcPrompt = await generatePtcPrompt(ptcTools);
       }
 
-      if (!subagentPrompt && maxSubagentConcurrency > 0) {
-        const configurable = (request as any).runtime?.configurable as
-          | Record<string, unknown>
-          | undefined;
-        const payload = configurable?.[SUBAGENT_SPECS_CONFIG_KEY] as
-          | SubagentSpecsPayload
-          | undefined;
-        if (payload) {
-          subagentPrompt = renderSubagentPrompt(
-            payload.subagents.map((s) => ({
-              name: s.name,
-              description: s.description,
-            })),
-            toolName,
-          );
-        }
-      }
-
       const systemMessage = request.systemMessage
         .concat(baseSystemPrompt)
-        .concat(cachedPtcPrompt || "")
-        .concat(subagentPrompt || "");
+        .concat(cachedPtcPrompt || "");
       return handler({ ...request, systemMessage });
     },
     afterAgent: async (_state, runtime) => {

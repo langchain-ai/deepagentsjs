@@ -25,13 +25,6 @@ import { FilesystemPermission } from "../permissions/types.js";
 export type { AgentMiddleware };
 
 /**
- * Config key for subagent specs in LangGraph configurable.
- *
- * Set by `createDeepAgent`, read by code interpreter middleware.
- */
-export const SUBAGENT_SPECS_CONFIG_KEY = "__deepagents_subagent_specs__";
-
-/**
  * Config key used by task-tool callers to request dynamic response format.
  *
  * When set in `config.configurable`, the task tool recompiles the target
@@ -787,103 +780,6 @@ export interface SubAgentMiddlewareOptions {
   generalPurposeAgent?: boolean;
   /** Custom description for the task tool */
   taskDescription?: string | null;
-}
-
-/**
- * A single subagent entry in the specs payload.
- *
- * Carries the raw declarative spec for lazy compilation and variant
- * creation. For pre-compiled (CompiledSubAgent) entries, the `runnable`
- * is set and `runnableBacked` is true.
- */
-export interface SubagentSpecEntry {
-  /**
-   * Subagent name for dispatch routing.
-   */
-  name: string;
-
-  /**
-   * Human-readable description for prompt rendering.
-   */
-  description: string;
-
-  /**
-   * Raw declarative spec — present when the subagent is spec-based.
-   */
-  spec: SubAgent;
-
-  /**
-   * Pre-compiled runnable — present for CompiledSubAgent entries.
-   */
-  runnable?: ReactAgent<any> | Runnable;
-
-  /**
-   * True if the entry was provided as a CompiledSubAgent.
-   */
-  runnableBacked: boolean;
-}
-
-/**
- * Payload shape passed through LangGraph configurable from the
- * subagent middleware to the code interpreter middleware.
- *
- * Contains everything the dispatcher needs to independently compile
- * and invoke subagents without going through the task tool.
- */
-export interface SubagentSpecsPayload {
-  /**
-   * Subagent entries with their raw specs and optional pre-compiled runnables.
-   *
-   * Declarative specs are fully resolved — `model` and `tools` are already
-   * coalesced from defaults by the builder.
-   */
-  subagents: SubagentSpecEntry[];
-}
-
-/**
- * Build the specs payload for code interpreter dispatchers.
- *
- * Packages subagent specs so an independent dispatcher can lazily compile
- * agents without going through the task tool. Declarative specs are
- * coalesced with the provided defaults so that each entry is self-contained.
- */
-export function buildSubagentSpecsPayload(
-  subagents: (SubAgent | CompiledSubAgent)[],
-  defaults: {
-    model: LanguageModelLike | string;
-    tools: StructuredTool[];
-  },
-): SubagentSpecsPayload {
-  const entries: SubagentSpecEntry[] = [];
-
-  for (const agent of subagents) {
-    if ("runnable" in agent) {
-      entries.push({
-        name: agent.name,
-        description: agent.description,
-        spec: {
-          name: agent.name,
-          description: agent.description,
-          systemPrompt: "",
-        },
-        runnable: agent.runnable,
-        runnableBacked: true,
-      });
-    } else {
-      entries.push({
-        name: agent.name,
-        description: agent.description,
-        spec: {
-          ...agent,
-          model: agent.model ?? defaults.model,
-          tools: agent.tools ?? defaults.tools,
-        },
-        runnableBacked: false,
-      });
-    }
-  }
-
-  return { subagents: entries };
 }
 
 /**
