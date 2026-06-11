@@ -1,0 +1,20 @@
+libs/providers/quickjs/src/middleware.ts
+  s_e329a283a6993a::t_5efe66748ddc96 295
+  s_e329a283a6993a::t_00c80318e64ac8 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "5cbab971a0b51a6033d3afc7056ce9f2314724bd",
+  "prompts": {},
+  "sessions": {
+    "s_e329a283a6993a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8029323d-29dd-4209-bb9c-e664ef60c43b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
