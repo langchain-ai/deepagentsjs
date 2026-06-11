@@ -43,6 +43,5 @@ export { transformForEval, stripTypeSyntax } from "./transform.js";
 export { Semaphore } from "./semaphore.js";
 export {
   SubagentDispatcher,
-  VariantCache,
   validateResponseSchema,
 } from "./subagent-dispatch.js";

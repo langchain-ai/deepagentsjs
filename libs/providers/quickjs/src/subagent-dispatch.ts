@@ -3,95 +3,11 @@ import type { Runnable } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
 import { createSubAgent, type SubagentSpecsPayload } from "deepagents";
 
-const VARIANT_TTL_MS = 60_000;
 const VARIANT_MAX_ENTRIES = 64;
 
 const SCHEMA_MAX_BYTES = 4096;
 const SCHEMA_MAX_DEPTH = 5;
 const SCHEMA_MAX_PROPERTIES = 32;
-
-/**
- * TTL cache for dynamically compiled subagent variants.
- *
- * Stores runnables keyed by a string identifier. Entries expire after
- * `ttlMs` of inactivity. When the cache reaches `maxEntries`, the
- * least-recently-used entry is evicted.
- */
-export class VariantCache {
-  private entries = new Map<
-    string,
-    { value: Runnable; lastAccessed: number }
-  >();
-  private readonly ttlMs: number;
-  private readonly maxEntries: number;
-
-  constructor(
-    ttlMs: number = VARIANT_TTL_MS,
-    maxEntries: number = VARIANT_MAX_ENTRIES,
-  ) {
-    this.ttlMs = ttlMs;
-    this.maxEntries = maxEntries;
-  }
-
-  /**
-   * Return a cached runnable or create one via `factory` on cache miss.
-   *
-   * Sweeps expired entries before lookup. Cache hits refresh the
-   * last-accessed timestamp. Evicts LRU when at capacity.
-   */
-  getOrCreate(key: string, factory: () => Runnable): Runnable {
-    this.sweep();
-
-    const cached = this.entries.get(key);
-    if (cached) {
-      cached.lastAccessed = Date.now();
-      return cached.value;
-    }
-
-    if (this.entries.size >= this.maxEntries) {
-      this.evictLru();
-    }
-
-    const value = factory();
-    this.entries.set(key, { value, lastAccessed: Date.now() });
-    return value;
-  }
-
-  /** Number of entries currently in the cache. */
-  get size(): number {
-    return this.entries.size;
-  }
-
-  /**
-   * Remove entries that haven't been accessed within the TTL window.
-   */
-  private sweep(): void {
-    const now = Date.now();
-    for (const [key, entry] of this.entries) {
-      if (now - entry.lastAccessed > this.ttlMs) {
-        this.entries.delete(key);
-      }
-    }
-  }
-
-  /**
-   * Evict the least-recently-used entry.
-   */
-  private evictLru(): void {
-    if (this.entries.size === 0) return;
-    let oldestKey: string | undefined;
-    let oldestTime = Infinity;
-    for (const [key, entry] of this.entries) {
-      if (entry.lastAccessed < oldestTime) {
-        oldestTime = entry.lastAccessed;
-        oldestKey = key;
-      }
-    }
-    if (oldestKey !== undefined) {
-      this.entries.delete(oldestKey);
-    }
-  }
-}
 
 /**
  * Validate that a response schema does not exceed size, depth, or
@@ -179,7 +95,7 @@ function extractOutput(result: Record<string, unknown>): unknown {
  * Internal entry representing a single configured subagent.
  *
  * Lazily compiles the base runnable on first invocation.
- * Schema-constrained variants are compiled on demand via `VariantCache`.
+ * Schema-constrained variants are compiled on demand and cached by the dispatcher.
  */
 class SubagentEntry {
   /** Subagent name used for dispatch routing. */
@@ -222,14 +138,13 @@ class SubagentEntry {
    * Return a schema-constrained variant runnable for this spec.
    *
    * Recompiles the agent with `responseFormat` set to the given schema.
-   * Variants are cached in the provided `VariantCache` keyed by
-   * `name::normalizedSchemaJson`.
+   * Variants are cached in the provided map keyed by `name::schemaJson`.
    *
    * @throws Error if this is a runnable-backed entry (no spec to recompile).
    */
   variantRunnable(
     responseSchema: Record<string, unknown>,
-    cache: VariantCache,
+    cache: Map<string, Runnable>,
   ): Runnable {
     if (this.runnableBacked) {
       throw new Error(
@@ -239,9 +154,23 @@ class SubagentEntry {
     }
 
     const cacheKey = `${this.name}::${JSON.stringify(responseSchema)}`;
-    return cache.getOrCreate(cacheKey, () =>
-      createSubAgent({ ...this.spec, responseFormat: responseSchema }),
-    );
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      cache.delete(cacheKey);
+      cache.set(cacheKey, cached);
+      return cached;
+    }
+
+    if (cache.size >= VARIANT_MAX_ENTRIES) {
+      cache.delete(cache.keys().next().value!);
+    }
+
+    const variant = createSubAgent({
+      ...this.spec,
+      responseFormat: responseSchema,
+    });
+    cache.set(cacheKey, variant);
+    return variant;
   }
 }
 
@@ -249,12 +178,12 @@ class SubagentEntry {
  * Invoke subagents recreated from specs exposed by `createDeepAgent`.
  *
  * Receives the specs payload from configurable, lazily compiles agents
- * using `createSubAgent`, caches schema-constrained variants via
- * `VariantCache`, and invokes agents directly.
+ * using `createSubAgent`, caches schema-constrained variants, and
+ * invokes agents directly.
  */
 export class SubagentDispatcher {
   private entries: Map<string, SubagentEntry> = new Map();
-  private variantCache: VariantCache = new VariantCache();
+  private variantCache = new Map<string, Runnable>();
 
   constructor(payload: SubagentSpecsPayload) {
     for (const sub of payload.subagents) {

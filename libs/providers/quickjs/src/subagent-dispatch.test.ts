@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import {
-  VariantCache,
   validateResponseSchema,
   SubagentDispatcher,
 } from "./subagent-dispatch.js";
@@ -38,104 +37,6 @@ function makePayload(
     })),
   };
 }
-
-// ---------------------------------------------------------------------------
-// VariantCache
-// ---------------------------------------------------------------------------
-
-describe("VariantCache", () => {
-  it("returns factory result on cache miss", () => {
-    const cache = new VariantCache();
-    const runnable = fakeRunnable();
-    const result = cache.getOrCreate("key", () => runnable);
-    expect(result).toBe(runnable);
-    expect(cache.size).toBe(1);
-  });
-
-  it("returns cached value on cache hit", () => {
-    const cache = new VariantCache();
-    const runnable = fakeRunnable();
-    cache.getOrCreate("key", () => runnable);
-
-    let factoryCalled = false;
-    const result = cache.getOrCreate("key", () => {
-      factoryCalled = true;
-      return fakeRunnable();
-    });
-    expect(result).toBe(runnable);
-    expect(factoryCalled).toBe(false);
-  });
-
-  it("evicts expired entries on access", () => {
-    const cache = new VariantCache(50, 64);
-    cache.getOrCreate("old", () => fakeRunnable());
-
-    vi.advanceTimersByTime(100);
-
-    const fresh = fakeRunnable();
-    cache.getOrCreate("new", () => fresh);
-
-    expect(cache.size).toBe(1);
-    // "old" was evicted, "new" is the only entry
-    let factoryCalled = false;
-    cache.getOrCreate("old", () => {
-      factoryCalled = true;
-      return fakeRunnable();
-    });
-    expect(factoryCalled).toBe(true);
-  });
-
-  it("evicts LRU when at max capacity", () => {
-    const cache = new VariantCache(60_000, 2);
-    const r1 = fakeRunnable();
-    const r2 = fakeRunnable();
-    cache.getOrCreate("a", () => r1);
-    cache.getOrCreate("b", () => r2);
-    expect(cache.size).toBe(2);
-
-    // Adding a third should evict "a" (oldest)
-    const r3 = fakeRunnable();
-    cache.getOrCreate("c", () => r3);
-    expect(cache.size).toBe(2);
-
-    // "a" should be gone
-    let factoryCalled = false;
-    cache.getOrCreate("a", () => {
-      factoryCalled = true;
-      return fakeRunnable();
-    });
-    expect(factoryCalled).toBe(true);
-  });
-
-  it("refreshes last-accessed on cache hit", () => {
-    const cache = new VariantCache(60_000, 3);
-    cache.getOrCreate("a", () => fakeRunnable());
-    vi.advanceTimersByTime(10);
-    cache.getOrCreate("b", () => fakeRunnable());
-    vi.advanceTimersByTime(10);
-    cache.getOrCreate("c", () => fakeRunnable());
-    vi.advanceTimersByTime(10);
-
-    // Access "a" to refresh it — now "b" is LRU
-    cache.getOrCreate("a", () => fakeRunnable());
-    vi.advanceTimersByTime(10);
-
-    // Inserting "d" should evict "b" (oldest unrefreshed) not "a"
-    cache.getOrCreate("d", () => fakeRunnable());
-
-    // Verify "a" survived (was refreshed) and "b" was evicted
-    let aEvicted = false;
-    cache.getOrCreate("a", () => {
-      aEvicted = true;
-      return fakeRunnable();
-    });
-    expect(aEvicted).toBe(false);
-  });
-
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-});
 
 // ---------------------------------------------------------------------------
 // validateResponseSchema
