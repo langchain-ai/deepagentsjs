@@ -78,15 +78,17 @@ export interface CodeInterpreterMiddlewareOptions {
   captureConsole?: boolean;
 
   /**
-   * Maximum concurrent `subagent()` calls from the REPL.
+   * Expose the built-in `task()` global for subagent orchestration.
    *
-   * When subagent specs are available in configurable, a built-in
-   * `subagent()` global is installed in the REPL with this concurrency cap.
-   * Set to `0` to disable the subagent primitive entirely.
+   * When `true` (default) and subagent specs are available, a `task()`
+   * global is installed in the REPL that dispatches subagents
+   * programmatically with a fixed concurrency cap of 32.
+   * Set to `false` to require subagent dispatch through the normal
+   * `task` tool path.
    *
-   * @default 32
+   * @default true
    */
-  maxSubagentConcurrency?: number;
+  subagents?: boolean;
 }
 
 /**

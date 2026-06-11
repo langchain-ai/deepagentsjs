@@ -363,8 +363,12 @@ export function createCodeInterpreterMiddleware(
     maxResultChars = DEFAULT_MAX_RESULTS_CHARS,
     toolName = DEFAULT_TOOL_NAME,
     captureConsole = true,
-    maxSubagentConcurrency = DEFAULT_MAX_SUBAGENT_CONCURRENCY,
+    subagents = true,
   } = options;
+
+  const maxSubagentConcurrency = subagents
+    ? DEFAULT_MAX_SUBAGENT_CONCURRENCY
+    : 0;
 
   if (maxPtcCalls !== null && maxPtcCalls !== undefined && maxPtcCalls < 1) {
     throw new Error("`maxPtcCalls` must be >= 1 or null");
