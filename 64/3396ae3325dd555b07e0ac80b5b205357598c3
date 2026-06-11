@@ -1,0 +1,29 @@
+libs/deepagents/src/middleware/subagents.test.ts
+  s_dfc0de3b3b35aa::t_0bafbecee25886 9-11,38,44,54-75,78,90,103,114
+libs/providers/quickjs/src/subagent-dispatch.test.ts
+  s_dfc0de3b3b35aa::t_8d72471c6249c5 33-34
+libs/deepagents/src/middleware/subagents.ts
+  s_dfc0de3b3b35aa::t_72e7a3486ad6de 798-800,808-810,814-817,838-842,848
+libs/deepagents/src/agent.ts
+  s_dfc0de3b3b35aa::t_f6a67a6e71f34d 354-355
+libs/providers/quickjs/src/subagent-dispatch.ts
+  s_dfc0de3b3b35aa::t_592c927afbbd8f 194,201,219,246
+libs/providers/quickjs/src/middleware.test.ts
+  s_dfc0de3b3b35aa::t_a338ee899aefbb 335-336
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "643396ae3325dd555b07e0ac80b5b205357598c3",
+  "prompts": {},
+  "sessions": {
+    "s_dfc0de3b3b35aa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "024570eb-5363-48c9-8e34-0cfa5231421b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
