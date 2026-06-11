@@ -1,0 +1,19 @@
+.changeset/rare-candies-drop.md
+  s_e329a283a6993a::t_5810fff09f1c83 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "e8dfed3dde1c875ce28e5b0dc7fcee95a05554d5",
+  "prompts": {},
+  "sessions": {
+    "s_e329a283a6993a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8029323d-29dd-4209-bb9c-e664ef60c43b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
