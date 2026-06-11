@@ -1,0 +1,19 @@
+.changeset/ready-banks-cry.md
+  s_e329a283a6993a::t_1eb9a9eeb15a16 2-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "e98fbce0ffaff036b9999241c4808800d83c3943",
+  "prompts": {},
+  "sessions": {
+    "s_e329a283a6993a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8029323d-29dd-4209-bb9c-e664ef60c43b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
