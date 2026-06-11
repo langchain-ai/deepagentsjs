@@ -33,7 +33,6 @@ export {
   DEFAULT_MAX_STACK_SIZE,
   DEFAULT_EXECUTION_TIMEOUT,
   DEFAULT_MAX_PTC_CALLS,
-  DEFAULT_MAX_SUBAGENT_CONCURRENCY,
 } from "./session.js";
 
 export { formatReplResult, toCamelCase } from "./utils.js";
