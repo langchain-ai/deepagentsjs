@@ -1,10 +1,7 @@
 import { type BaseMessage } from "langchain";
 import type { Runnable } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
-import {
-  createSubAgent,
-  type SubagentSpecsPayload,
-} from "deepagents";
+import { createSubAgent, type SubagentSpecsPayload } from "deepagents";
 
 const VARIANT_TTL_MS = 60_000;
 const VARIANT_MAX_ENTRIES = 64;
