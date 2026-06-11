@@ -84,7 +84,7 @@ export interface CodeInterpreterMiddlewareOptions {
    * `subagent()` global is installed in the REPL with this concurrency cap.
    * Set to `0` to disable the subagent primitive entirely.
    *
-   * @default 16
+   * @default 32
    */
   maxSubagentConcurrency?: number;
 }
@@ -93,8 +93,8 @@ export interface CodeInterpreterMiddlewareOptions {
  * Configuration for the built-in subagent primitive.
  *
  * When provided to a ReplSession, a frozen `subagent()` global is
- * installed in the QuickJS context. Calls are gated by a semaphore
- * and forwarded to the dispatch callback.
+ * installed in the QuickJS context. Calls are gated by a concurrency
+ * queue and forwarded to the dispatch callback.
  */
 export interface SubagentBridgeOptions {
   /**

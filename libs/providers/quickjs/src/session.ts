@@ -36,7 +36,7 @@ import type {
 import { toCamelCase } from "./utils.js";
 import { transformForEval } from "./transform.js";
 import { AsyncEvalQueue } from "./eval-queue.js";
-import { Semaphore } from "./semaphore.js";
+import PQueue from "p-queue";
 
 export const DEFAULT_MEMORY_LIMIT = 64 * 1024 * 1024;
 export const DEFAULT_MAX_STACK_SIZE = 320 * 1024;
@@ -44,7 +44,7 @@ export const DEFAULT_EXECUTION_TIMEOUT = 5_000;
 export const DEFAULT_SESSION_ID = "__default__";
 export const DEFAULT_MAX_PTC_CALLS = 256;
 export const DEFAULT_MAX_RESULTS_CHARS = 4000;
-export const DEFAULT_MAX_SUBAGENT_CONCURRENCY = 16;
+export const DEFAULT_MAX_SUBAGENT_CONCURRENCY = 32;
 
 const LINE_NUMBER_RE = /^\s*\d+(?:\.\d+)?\t/;
 
@@ -225,7 +225,10 @@ export class ReplSession {
   private options: ReplSessionOptions;
   private readonly maxPtcCalls: number | null;
   private ptcCallsRemaining: number | null = null;
-  private subagentSemaphore: Semaphore | null = null;
+  private subagentQueue: PQueue | null = null;
+  private bridgeDispatchRef: {
+    current: SubagentBridgeOptions["dispatch"];
+  } | null = null;
 
   /** Allowed keys in the subagent input object. */
   private static readonly SUBAGENT_ALLOWED_KEYS = new Set([
@@ -285,7 +288,9 @@ export class ReplSession {
 
     const { subagentBridge } = this.options;
     if (subagentBridge) {
-      this.subagentSemaphore = new Semaphore(subagentBridge.maxConcurrency);
+      this.subagentQueue = new PQueue({
+        concurrency: subagentBridge.maxConcurrency,
+      });
       this.injectSubagentBridge(subagentBridge.dispatch);
     }
 
@@ -591,11 +596,27 @@ export class ReplSession {
    * responseSchema is provided) are marshaled into native QuickJS
    * objects on the host side — no JS wrapper needed.
    */
+  /**
+   * Replace the active bridge dispatch with a fresh one.
+   *
+   * Call this before each eval so the dispatch closure carries
+   * the current invocation's config (tracing callbacks, run ID, etc.)
+   * rather than the stale config from session creation.
+   */
+  updateBridgeDispatch(dispatch: SubagentBridgeOptions["dispatch"]): void {
+    if (this.bridgeDispatchRef) {
+      this.bridgeDispatchRef.current = dispatch;
+    }
+  }
+
   private injectSubagentBridge(
     dispatch: SubagentBridgeOptions["dispatch"],
   ): void {
     const context = this.context!;
-    const semaphore = this.subagentSemaphore!;
+    const queue = this.subagentQueue!;
+
+    this.bridgeDispatchRef = { current: dispatch };
+    const ref = this.bridgeDispatchRef;
 
     const hostFn = context.newFunction(
       "subagent",
@@ -647,35 +668,32 @@ export class ReplSession {
               );
             }
 
-            await semaphore.acquire();
-            try {
-              const result = await dispatch({
+            const result = await queue.add(() =>
+              ref.current({
                 description: description as string,
                 subagentType: subagentType as string,
                 ...(responseSchema !== undefined && {
                   responseSchema: responseSchema as Record<string, unknown>,
                 }),
-              });
-              if (typeof result === "string") {
-                const val = context.newString(result);
-                promise.resolve(val);
-                val.dispose();
-              } else {
-                const jsonResult = context.evalCode(
-                  `(${JSON.stringify(result)})`,
+              }),
+            );
+            if (typeof result === "string") {
+              const val = context.newString(result);
+              promise.resolve(val);
+              val.dispose();
+            } else {
+              const jsonResult = context.evalCode(
+                `(${JSON.stringify(result)})`,
+              );
+              if (jsonResult.error) {
+                const errDump = context.dump(jsonResult.error);
+                jsonResult.error.dispose();
+                throw new Error(
+                  `subagent: failed to marshal structured response: ${JSON.stringify(errDump)}`,
                 );
-                if (jsonResult.error) {
-                  const errDump = context.dump(jsonResult.error);
-                  jsonResult.error.dispose();
-                  throw new Error(
-                    `subagent: failed to marshal structured response: ${JSON.stringify(errDump)}`,
-                  );
-                }
-                promise.resolve(jsonResult.value);
-                jsonResult.value.dispose();
               }
-            } finally {
-              semaphore.release();
+              promise.resolve(jsonResult.value);
+              jsonResult.value.dispose();
             }
           } catch (e: unknown) {
             const msg =

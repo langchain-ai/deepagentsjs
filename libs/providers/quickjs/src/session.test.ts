@@ -917,7 +917,7 @@ describe("REPL Engine", () => {
       });
     });
 
-    it("should gate concurrency via semaphore", async () => {
+    it("should gate concurrency via queue", async () => {
       let concurrentCalls = 0;
       let maxConcurrentCalls = 0;
       const dispatch = vi.fn().mockImplementation(async () => {

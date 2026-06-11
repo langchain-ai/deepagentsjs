@@ -185,6 +185,7 @@ export {
 
 export {
   SUBAGENT_SPECS_CONFIG_KEY,
+  SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY,
   buildSubagentSpecsPayload,
   type SubagentSpecEntry,
   type SubagentSpecsPayload,

@@ -16,6 +16,7 @@ import { z } from "zod/v4";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import {
   SUBAGENT_SPECS_CONFIG_KEY,
+  SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY,
   type SubagentSpecsPayload,
 } from "deepagents";
 
@@ -40,7 +41,7 @@ import {
   toolToTypeSignature,
   safeToJsonSchema,
 } from "./utils.js";
-import { SubagentDispatcher } from "./subagent-dispatch.js";
+import { validateResponseSchema } from "./subagent-dispatch.js";
 
 /**
  * These type-only imports are required for TypeScript's type inference to work
@@ -216,7 +217,7 @@ export function createCodeInterpreterMiddleware(
 
   let cachedPtcPrompt: string | null = null;
   let ptcTools: StructuredToolInterface[] = [];
-  let dispatcher: SubagentDispatcher | null = null;
+  let taskTool: StructuredToolInterface | null = null;
   let subagentPrompt: string | null = null;
 
   function filterToolsForPtc(
@@ -229,15 +230,47 @@ export function createCodeInterpreterMiddleware(
     return resolveToolList(ptc, candidates);
   }
 
+  function findTaskTool(
+    tools: StructuredToolInterface[],
+  ): StructuredToolInterface | null {
+    return tools.find((t) => t.name === "task") ?? null;
+  }
+
   function createBridgeDispatch(
-    dispatcher: SubagentDispatcher,
+    subagentTaskTool: StructuredToolInterface,
+    config: LangGraphRunnableConfig,
   ): SubagentBridgeOptions["dispatch"] {
     return async (input) => {
-      return dispatcher.invoke(
-        input.description,
-        input.subagentType,
-        input.responseSchema,
+      if (input.responseSchema != null) {
+        validateResponseSchema(input.responseSchema);
+      }
+
+      const toolConfig = {
+        ...config,
+        configurable: {
+          ...config.configurable,
+          ...(input.responseSchema != null && {
+            [SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY]: input.responseSchema,
+          }),
+        },
+      };
+
+      const result = await subagentTaskTool.invoke(
+        {
+          description: input.description,
+          subagent_type: input.subagentType,
+        },
+        toolConfig,
       );
+
+      if (typeof result === "string") {
+        try {
+          return JSON.parse(result);
+        } catch {
+          return result;
+        }
+      }
+      return result;
     };
   }
 
@@ -245,16 +278,6 @@ export function createCodeInterpreterMiddleware(
     async (input, config: LangGraphRunnableConfig) => {
       const threadId = config.configurable?.thread_id || DEFAULT_SESSION_ID;
       const sessionKey = `${threadId}:${middlewareId}`;
-
-      // Build the dispatcher from specs on first eval (specs arrive via configurable)
-      if (!dispatcher && maxSubagentConcurrency > 0) {
-        const payload = config.configurable?.[SUBAGENT_SPECS_CONFIG_KEY] as
-          | SubagentSpecsPayload
-          | undefined;
-        if (payload) {
-          dispatcher = new SubagentDispatcher(payload);
-        }
-      }
 
       const session = ReplSession.getOrCreate(sessionKey, {
         memoryLimitBytes,
@@ -264,13 +287,18 @@ export function createCodeInterpreterMiddleware(
         maxResultChars,
         captureConsole,
         sessionId: threadId,
-        subagentBridge: dispatcher
-          ? {
-              dispatch: createBridgeDispatch(dispatcher),
-              maxConcurrency: maxSubagentConcurrency,
-            }
-          : undefined,
+        subagentBridge:
+          taskTool && maxSubagentConcurrency > 0
+            ? {
+                dispatch: createBridgeDispatch(taskTool, config),
+                maxConcurrency: maxSubagentConcurrency,
+              }
+            : undefined,
       });
+
+      if (taskTool && maxSubagentConcurrency > 0) {
+        session.updateBridgeDispatch(createBridgeDispatch(taskTool, config));
+      }
 
       const result = await session.eval(input.code, executionTimeoutMs);
       return formatReplResult(result);
@@ -299,6 +327,10 @@ export function createCodeInterpreterMiddleware(
     wrapModelCall: async (request, handler) => {
       const agentTools = (request.tools || []) as StructuredToolInterface[];
       ptcTools = filterToolsForPtc(agentTools);
+
+      if (!taskTool && maxSubagentConcurrency > 0) {
+        taskTool = findTaskTool(agentTools);
+      }
 
       if (ptcTools.length > 0 && !cachedPtcPrompt) {
         cachedPtcPrompt = await generatePtcPrompt(ptcTools);

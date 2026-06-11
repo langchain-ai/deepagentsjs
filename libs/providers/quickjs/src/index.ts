@@ -40,8 +40,4 @@ export { formatReplResult, toCamelCase } from "./utils.js";
 
 export { transformForEval, stripTypeSyntax } from "./transform.js";
 
-export { Semaphore } from "./semaphore.js";
-export {
-  SubagentDispatcher,
-  validateResponseSchema,
-} from "./subagent-dispatch.js";
+export { validateResponseSchema } from "./subagent-dispatch.js";
