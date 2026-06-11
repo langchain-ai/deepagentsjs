@@ -1,0 +1,24 @@
+libs/providers/quickjs/src/subagent-dispatch.ts
+  s_dfc0de3b3b35aa::t_8c8f687ac68c87 186
+  s_dfc0de3b3b35aa::t_3d00aad44bcc31 98
+  s_dfc0de3b3b35aa::t_89887829d2cc8d 141,147,157,163,168-173
+  s_dfc0de3b3b35aa::t_ff2acd6314b9a5 158-162
+  s_dfc0de3b3b35aa::t_8b6ba193cb9150 164-167
+  s_dfc0de3b3b35aa::t_0619650d697e6d 181-182
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "be8cea7a1f7edf0a3fd4d4dcbf5c36e9c9156585",
+  "prompts": {},
+  "sessions": {
+    "s_dfc0de3b3b35aa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "024570eb-5363-48c9-8e34-0cfa5231421b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
