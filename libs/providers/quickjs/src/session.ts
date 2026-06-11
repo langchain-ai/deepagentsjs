@@ -631,7 +631,18 @@ export class ReplSession {
           ) {
             throw new Error("task: expected an object argument");
           }
-          const obj = input as Record<string, unknown>;
+          const raw = input as Record<string, unknown>;
+
+          // Accept snake_case aliases so models don't need to know our convention
+          const obj: Record<string, unknown> = { ...raw };
+          if ("subagent_type" in obj) {
+            obj.subagentType ??= obj.subagent_type;
+            delete obj.subagent_type;
+          }
+          if ("response_schema" in obj) {
+            obj.responseSchema ??= obj.response_schema;
+            delete obj.response_schema;
+          }
 
           const unknownKeys = Object.keys(obj).filter(
             (k) => !ReplSession.SUBAGENT_ALLOWED_KEYS.has(k),
