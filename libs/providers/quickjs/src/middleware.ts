@@ -241,15 +241,16 @@ export function createCodeInterpreterMiddleware(
     config: LangGraphRunnableConfig,
   ): SubagentBridgeOptions["dispatch"] {
     return async (input) => {
-      if (input.responseSchema != null) {
-        validateResponseSchema(input.responseSchema);
+      const hasSchema = input.responseSchema != null;
+      if (hasSchema) {
+        validateResponseSchema(input.responseSchema!);
       }
 
       const toolConfig = {
         ...config,
         configurable: {
           ...config.configurable,
-          ...(input.responseSchema != null && {
+          ...(hasSchema && {
             [SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY]: input.responseSchema,
           }),
         },
@@ -263,7 +264,7 @@ export function createCodeInterpreterMiddleware(
         toolConfig,
       );
 
-      if (typeof result === "string") {
+      if (hasSchema && typeof result === "string") {
         try {
           return JSON.parse(result);
         } catch {

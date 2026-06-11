@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { tool } from "langchain";
 import * as z from "zod";
 import { SystemMessage } from "@langchain/core/messages";
-import { AIMessage } from "@langchain/core/messages";
 import { SUBAGENT_SPECS_CONFIG_KEY } from "deepagents";
 import {
   createCodeInterpreterMiddleware,
@@ -10,17 +9,6 @@ import {
   resolveToolList,
 } from "./middleware.js";
 import { ReplSession } from "./session.js";
-
-vi.mock("deepagents", async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>;
-  return {
-    ...actual,
-    createSubAgent: vi.fn(),
-  };
-});
-
-import { createSubAgent } from "deepagents";
-const mockedCreateSubAgent = vi.mocked(createSubAgent);
 
 describe("createCodeInterpreterMiddleware", () => {
   beforeEach(() => {
@@ -338,10 +326,6 @@ describe("createCodeInterpreterMiddleware", () => {
           runnableBacked: false,
         })),
       };
-    }
-
-    function fakeRunnable(output: Record<string, unknown>) {
-      return { invoke: vi.fn().mockResolvedValue(output) } as any;
     }
 
     beforeEach(() => {
