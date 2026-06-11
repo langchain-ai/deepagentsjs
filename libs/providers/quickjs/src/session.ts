@@ -589,9 +589,9 @@ export class ReplSession {
   }
 
   /**
-   * Install the `subagent` global on the QuickJS context.
+   * Install the `task` global on the QuickJS context.
    *
-   * Registers the host function directly as `globalThis.subagent`,
+   * Registers the host function directly as `globalThis.task`,
    * then freezes it via `evalCode`. Structured results (when
    * responseSchema is provided) are marshaled into native QuickJS
    * objects on the host side — no JS wrapper needed.
@@ -618,106 +618,101 @@ export class ReplSession {
     this.bridgeDispatchRef = { current: dispatch };
     const ref = this.bridgeDispatchRef;
 
-    const hostFn = context.newFunction(
-      "subagent",
-      (inputHandle: QuickJSHandle) => {
-        const input = context.dump(inputHandle);
-        const promise = context.newPromise();
+    const hostFn = context.newFunction("task", (inputHandle: QuickJSHandle) => {
+      const input = context.dump(inputHandle);
+      const promise = context.newPromise();
 
-        (async () => {
-          try {
-            if (
-              input == null ||
-              typeof input !== "object" ||
-              Array.isArray(input)
-            ) {
-              throw new Error("subagent: expected an object argument");
-            }
-            const obj = input as Record<string, unknown>;
-
-            const unknownKeys = Object.keys(obj).filter(
-              (k) => !ReplSession.SUBAGENT_ALLOWED_KEYS.has(k),
-            );
-            if (unknownKeys.length > 0) {
-              throw new Error(
-                `subagent: unknown keys: ${unknownKeys.join(", ")}. ` +
-                  `Allowed: ${[...ReplSession.SUBAGENT_ALLOWED_KEYS].join(", ")}`,
-              );
-            }
-
-            const { description, subagentType, responseSchema } = obj;
-
-            if (typeof description !== "string" || description.length === 0) {
-              throw new Error(
-                "subagent: 'description' is required and must be a non-empty string",
-              );
-            }
-            if (typeof subagentType !== "string" || subagentType.length === 0) {
-              throw new Error(
-                "subagent: 'subagentType' is required and must be a non-empty string",
-              );
-            }
-            if (
-              responseSchema !== undefined &&
-              (responseSchema == null ||
-                typeof responseSchema !== "object" ||
-                Array.isArray(responseSchema))
-            ) {
-              throw new Error(
-                "subagent: 'responseSchema' must be a plain object (JSON Schema) when provided",
-              );
-            }
-
-            const result = await queue.add(() =>
-              ref.current({
-                description: description as string,
-                subagentType: subagentType as string,
-                ...(responseSchema !== undefined && {
-                  responseSchema: responseSchema as Record<string, unknown>,
-                }),
-              }),
-            );
-            if (typeof result === "string") {
-              const val = context.newString(result);
-              promise.resolve(val);
-              val.dispose();
-            } else {
-              const jsonResult = context.evalCode(
-                `(${JSON.stringify(result)})`,
-              );
-              if (jsonResult.error) {
-                const errDump = context.dump(jsonResult.error);
-                jsonResult.error.dispose();
-                throw new Error(
-                  `subagent: failed to marshal structured response: ${JSON.stringify(errDump)}`,
-                );
-              }
-              promise.resolve(jsonResult.value);
-              jsonResult.value.dispose();
-            }
-          } catch (e: unknown) {
-            const msg =
-              e != null && typeof (e as Error).message === "string"
-                ? (e as Error).message
-                : String(e);
-            const err = context.newError(msg);
-            promise.reject(err);
-            err.dispose();
+      (async () => {
+        try {
+          if (
+            input == null ||
+            typeof input !== "object" ||
+            Array.isArray(input)
+          ) {
+            throw new Error("task: expected an object argument");
           }
-          promise.settled.then(context.runtime.executePendingJobs);
-        })();
+          const obj = input as Record<string, unknown>;
 
-        return promise.handle;
-      },
-    );
+          const unknownKeys = Object.keys(obj).filter(
+            (k) => !ReplSession.SUBAGENT_ALLOWED_KEYS.has(k),
+          );
+          if (unknownKeys.length > 0) {
+            throw new Error(
+              `task: unknown keys: ${unknownKeys.join(", ")}. ` +
+                `Allowed: ${[...ReplSession.SUBAGENT_ALLOWED_KEYS].join(", ")}`,
+            );
+          }
 
-    context.setProp(context.global, "subagent", hostFn);
+          const { description, subagentType, responseSchema } = obj;
+
+          if (typeof description !== "string" || description.length === 0) {
+            throw new Error(
+              "task: 'description' is required and must be a non-empty string",
+            );
+          }
+          if (typeof subagentType !== "string" || subagentType.length === 0) {
+            throw new Error(
+              "task: 'subagentType' is required and must be a non-empty string",
+            );
+          }
+          if (
+            responseSchema !== undefined &&
+            (responseSchema == null ||
+              typeof responseSchema !== "object" ||
+              Array.isArray(responseSchema))
+          ) {
+            throw new Error(
+              "task: 'responseSchema' must be a plain object (JSON Schema) when provided",
+            );
+          }
+
+          const result = await queue.add(() =>
+            ref.current({
+              description: description as string,
+              subagentType: subagentType as string,
+              ...(responseSchema !== undefined && {
+                responseSchema: responseSchema as Record<string, unknown>,
+              }),
+            }),
+          );
+          if (typeof result === "string") {
+            const val = context.newString(result);
+            promise.resolve(val);
+            val.dispose();
+          } else {
+            const jsonResult = context.evalCode(`(${JSON.stringify(result)})`);
+            if (jsonResult.error) {
+              const errDump = context.dump(jsonResult.error);
+              jsonResult.error.dispose();
+              throw new Error(
+                `task: failed to marshal structured response: ${JSON.stringify(errDump)}`,
+              );
+            }
+            promise.resolve(jsonResult.value);
+            jsonResult.value.dispose();
+          }
+        } catch (e: unknown) {
+          const msg =
+            e != null && typeof (e as Error).message === "string"
+              ? (e as Error).message
+              : String(e);
+          const err = context.newError(msg);
+          promise.reject(err);
+          err.dispose();
+        }
+        promise.settled.then(context.runtime.executePendingJobs);
+      })();
+
+      return promise.handle;
+    });
+
+    context.setProp(context.global, "task", hostFn);
     hostFn.dispose();
 
     context.evalCode(
-      "Object.freeze(globalThis.subagent);" +
-        "Object.defineProperty(globalThis, 'subagent', {" +
-        " value: globalThis.subagent," +
+      "Object.freeze(globalThis.task);" +
+        "Object.defineProperty(globalThis, 'task', {" +
+        " value: globalThis.task," +
         " writable: false," +
         " configurable: false," +
         "}); undefined",

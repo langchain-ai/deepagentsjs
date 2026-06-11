@@ -86,16 +86,16 @@ function renderSubagentPrompt(
     .join("\n");
 
   return dedent`
-    ### Subagent Primitive
+    ### Task Primitive
 
-    A \`subagent()\` function is available as a global in the REPL for spawning subagents programmatically.
+    A \`task()\` function is available as a global in the REPL for spawning subagents programmatically.
 
     \`\`\`typescript
     /**
      * Spawn a subagent to handle an isolated task.
      * @returns Text response, or a parsed object when responseSchema is provided.
      */
-    async subagent(input: {
+    async task(input: {
       /** Task description — be specific about what to do and what to return. */
       description: string;
       /** Subagent type name. */
@@ -110,8 +110,8 @@ function renderSubagentPrompt(
 
     - Without \`responseSchema\`: returns the subagent's text response as a string.
     - With \`responseSchema\`: the subagent is compiled with structured output enforcement and returns a parsed object.
-    - Use \`Promise.all\` for concurrent execution. Concurrency is managed automatically (max 16 in-flight).
-    - The \`subagent\` function is independent of the \`tools\` namespace.
+    - Use \`Promise.all\` for concurrent execution. Concurrency is managed automatically.
+    - The \`task\` function is independent of the \`tools\` namespace.
   `;
 }
 

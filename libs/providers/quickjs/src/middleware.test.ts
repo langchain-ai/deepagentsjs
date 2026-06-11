@@ -358,7 +358,7 @@ describe("createCodeInterpreterMiddleware", () => {
 
       const req = mockHandler.mock.calls[0][0];
       const text = req.systemMessage.text;
-      expect(text).toContain("### Subagent Primitive");
+      expect(text).toContain("### Task Primitive");
       expect(text).toContain("`researcher`");
       expect(text).toContain("Researches topics");
       expect(text).toContain("`coder`");
@@ -455,7 +455,7 @@ describe("createCodeInterpreterMiddleware", () => {
 
       const result = await jsTool.invoke(
         {
-          code: `await subagent({ description: "find bugs", subagentType: "researcher" })`,
+          code: `await task({ description: "find bugs", subagentType: "researcher" })`,
         },
         {
           configurable: {
@@ -502,7 +502,7 @@ describe("createCodeInterpreterMiddleware", () => {
 
       const result = await jsTool.invoke(
         {
-          code: `const r = await subagent({
+          code: `const r = await task({
             description: "find bugs",
             subagentType: "researcher",
             responseSchema: { type: "object", properties: { bugs: { type: "array" } } },
@@ -557,7 +557,7 @@ describe("createCodeInterpreterMiddleware", () => {
       // First eval — config carries marker "run-1"
       await jsTool.invoke(
         {
-          code: `await subagent({ description: "a", subagentType: "researcher" })`,
+          code: `await task({ description: "a", subagentType: "researcher" })`,
         },
         {
           configurable: {
@@ -570,7 +570,7 @@ describe("createCodeInterpreterMiddleware", () => {
       // Second eval — config carries marker "run-2"
       await jsTool.invoke(
         {
-          code: `await subagent({ description: "b", subagentType: "researcher" })`,
+          code: `await task({ description: "b", subagentType: "researcher" })`,
         },
         {
           configurable: {
@@ -585,7 +585,7 @@ describe("createCodeInterpreterMiddleware", () => {
       expect(configs[1].configurable.run_id).toBe("run-2");
     });
 
-    it("should error when subagent() is called without specs configured", async () => {
+    it("should error when task() is called without specs configured", async () => {
       const middleware = createCodeInterpreterMiddleware();
       const jsTool = middleware.tools!.find(
         (t: any) => t.name === "eval",
@@ -593,12 +593,12 @@ describe("createCodeInterpreterMiddleware", () => {
 
       const result = await jsTool.invoke(
         {
-          code: `await subagent({ description: "x", subagentType: "y" })`,
+          code: `await task({ description: "x", subagentType: "y" })`,
         },
         { configurable: { thread_id: "no-bridge-test" } },
       );
 
-      expect(result).toContain("subagent");
+      expect(result).toContain("task");
       expect(result).toMatch(/not a function|not defined|undefined/i);
     });
   });

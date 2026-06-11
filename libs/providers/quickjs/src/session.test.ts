@@ -756,7 +756,7 @@ describe("REPL Engine", () => {
       session = createSubagentSession(dispatch);
 
       const result = await session.eval(
-        `await subagent({ description: "find bugs", subagentType: "researcher" })`,
+        `await task({ description: "find bugs", subagentType: "researcher" })`,
         TIMEOUT,
       );
 
@@ -773,7 +773,7 @@ describe("REPL Engine", () => {
       session = createSubagentSession(dispatch);
 
       const result = await session.eval(
-        `await subagent({
+        `await task({
           description: "analyze",
           subagentType: "coder",
           responseSchema: { type: "object", properties: { bugs: { type: "array" } } },
@@ -799,7 +799,7 @@ describe("REPL Engine", () => {
       session = createSubagentSession(dispatch);
 
       const result = await session.eval(
-        `const r = await subagent({ description: "list", subagentType: "worker" });
+        `const r = await task({ description: "list", subagentType: "worker" });
          r.items[1].name + ":" + r.count`,
         TIMEOUT,
       );
@@ -813,7 +813,7 @@ describe("REPL Engine", () => {
       session = createSubagentSession(dispatch);
 
       const result = await session.eval(
-        `await subagent({ subagentType: "researcher" })`,
+        `await task({ subagentType: "researcher" })`,
         TIMEOUT,
       );
 
@@ -827,7 +827,7 @@ describe("REPL Engine", () => {
       session = createSubagentSession(dispatch);
 
       const result = await session.eval(
-        `await subagent({ description: "do something" })`,
+        `await task({ description: "do something" })`,
         TIMEOUT,
       );
 
@@ -841,7 +841,7 @@ describe("REPL Engine", () => {
       session = createSubagentSession(dispatch);
 
       const result = await session.eval(
-        `await subagent({ description: "x", subagentType: "y", badKey: true })`,
+        `await task({ description: "x", subagentType: "y", badKey: true })`,
         TIMEOUT,
       );
 
@@ -855,10 +855,7 @@ describe("REPL Engine", () => {
       const dispatch = vi.fn();
       session = createSubagentSession(dispatch);
 
-      const result = await session.eval(
-        `await subagent("not an object")`,
-        TIMEOUT,
-      );
+      const result = await session.eval(`await task("not an object")`, TIMEOUT);
 
       expect(result.ok).toBe(false);
       expect(result.error?.message).toContain("expected an object");
@@ -870,7 +867,7 @@ describe("REPL Engine", () => {
       session = createSubagentSession(dispatch);
 
       const result = await session.eval(
-        `await subagent({ description: "x", subagentType: "y", responseSchema: "bad" })`,
+        `await task({ description: "x", subagentType: "y", responseSchema: "bad" })`,
         TIMEOUT,
       );
 
@@ -886,7 +883,7 @@ describe("REPL Engine", () => {
       const result = await session.eval(
         `let caught = "none";
          try {
-           await subagent({ description: "x", subagentType: "y" });
+           await task({ description: "x", subagentType: "y" });
          } catch (e) {
            caught = e.message;
          }
@@ -903,8 +900,8 @@ describe("REPL Engine", () => {
       session = createSubagentSession(dispatch);
 
       const result = await session.eval(
-        `const frozen = Object.isFrozen(subagent);
-         const desc = Object.getOwnPropertyDescriptor(globalThis, "subagent");
+        `const frozen = Object.isFrozen(task);
+         const desc = Object.getOwnPropertyDescriptor(globalThis, "task");
          ({ frozen, writable: desc.writable, configurable: desc.configurable })`,
         TIMEOUT,
       );
@@ -931,9 +928,9 @@ describe("REPL Engine", () => {
 
       const result = await session.eval(
         `await Promise.all([
-          subagent({ description: "a", subagentType: "w" }),
-          subagent({ description: "b", subagentType: "w" }),
-          subagent({ description: "c", subagentType: "w" }),
+          task({ description: "a", subagentType: "w" }),
+          task({ description: "b", subagentType: "w" }),
+          task({ description: "c", subagentType: "w" }),
         ])`,
         TIMEOUT,
       );
@@ -943,10 +940,10 @@ describe("REPL Engine", () => {
       expect(maxConcurrentCalls).toBeLessThanOrEqual(2);
     });
 
-    it("should not install subagent when bridge is not configured", async () => {
+    it("should not install task when bridge is not configured", async () => {
       session = ReplSession.getOrCreate(uniqueThreadId());
 
-      const result = await session.eval(`typeof globalThis.subagent`, TIMEOUT);
+      const result = await session.eval(`typeof globalThis.task`, TIMEOUT);
 
       expect(result.ok).toBe(true);
       expect(result.value).toBe("undefined");
