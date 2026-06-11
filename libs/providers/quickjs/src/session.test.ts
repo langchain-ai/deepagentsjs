@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { tool } from "langchain";
 import { z } from "zod/v4";
 import { ReplSession } from "./session.js";
@@ -734,6 +734,219 @@ describe("REPL Engine", () => {
 
     it("should no-op for a key that does not exist", () => {
       expect(() => ReplSession.deleteSession("nonexistent")).not.toThrow();
+    });
+  });
+
+  describe("subagent bridge", () => {
+    function createSubagentSession(
+      dispatch: (input: {
+        description: string;
+        subagentType: string;
+        responseSchema?: Record<string, unknown>;
+      }) => Promise<unknown>,
+      maxConcurrency = 16,
+    ) {
+      return ReplSession.getOrCreate(uniqueThreadId(), {
+        subagentBridge: { dispatch, maxConcurrency },
+      });
+    }
+
+    it("should invoke dispatch with correct arguments", async () => {
+      const dispatch = vi.fn().mockResolvedValue("done");
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `await task({ description: "find bugs", subagentType: "researcher" })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("done");
+      expect(dispatch).toHaveBeenCalledWith({
+        description: "find bugs",
+        subagentType: "researcher",
+      });
+    });
+
+    it("should pass responseSchema to dispatch", async () => {
+      const dispatch = vi.fn().mockResolvedValue({ bugs: [] });
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `await task({
+          description: "analyze",
+          subagentType: "coder",
+          responseSchema: { type: "object", properties: { bugs: { type: "array" } } },
+        })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toEqual({ bugs: [] });
+      expect(dispatch).toHaveBeenCalledWith({
+        description: "analyze",
+        subagentType: "coder",
+        responseSchema: {
+          type: "object",
+          properties: { bugs: { type: "array" } },
+        },
+      });
+    });
+
+    it("should return structured objects as native JS values", async () => {
+      const structured = { items: [{ name: "a" }, { name: "b" }], count: 2 };
+      const dispatch = vi.fn().mockResolvedValue(structured);
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `const r = await task({ description: "list", subagentType: "worker" });
+         r.items[1].name + ":" + r.count`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("b:2");
+    });
+
+    it("should reject when description is missing", async () => {
+      const dispatch = vi.fn();
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `await task({ subagentType: "researcher" })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("description");
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    it("should reject when subagentType is missing", async () => {
+      const dispatch = vi.fn();
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `await task({ description: "do something" })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("subagentType");
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    it("should reject unknown keys", async () => {
+      const dispatch = vi.fn();
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `await task({ description: "x", subagentType: "y", badKey: true })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("unknown keys");
+      expect(result.error?.message).toContain("badKey");
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    it("should reject non-object argument", async () => {
+      const dispatch = vi.fn();
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(`await task("not an object")`, TIMEOUT);
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("expected an object");
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    it("should reject non-object responseSchema", async () => {
+      const dispatch = vi.fn();
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `await task({ description: "x", subagentType: "y", responseSchema: "bad" })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("responseSchema");
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    it("should propagate dispatch errors to guest code", async () => {
+      const dispatch = vi.fn().mockRejectedValue(new Error("subagent crashed"));
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `let caught = "none";
+         try {
+           await task({ description: "x", subagentType: "y" });
+         } catch (e) {
+           caught = e.message;
+         }
+         caught`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("subagent crashed");
+    });
+
+    it("should be frozen and non-writable on globalThis", async () => {
+      const dispatch = vi.fn().mockResolvedValue("ok");
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `const frozen = Object.isFrozen(task);
+         const desc = Object.getOwnPropertyDescriptor(globalThis, "task");
+         ({ frozen, writable: desc.writable, configurable: desc.configurable })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toEqual({
+        frozen: true,
+        writable: false,
+        configurable: false,
+      });
+    });
+
+    it("should gate concurrency via queue", async () => {
+      let concurrentCalls = 0;
+      let maxConcurrentCalls = 0;
+      const dispatch = vi.fn().mockImplementation(async () => {
+        concurrentCalls++;
+        maxConcurrentCalls = Math.max(maxConcurrentCalls, concurrentCalls);
+        await new Promise((r) => setTimeout(r, 50));
+        concurrentCalls--;
+        return "done";
+      });
+      session = createSubagentSession(dispatch, 2);
+
+      const result = await session.eval(
+        `await Promise.all([
+          task({ description: "a", subagentType: "w" }),
+          task({ description: "b", subagentType: "w" }),
+          task({ description: "c", subagentType: "w" }),
+        ])`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(dispatch).toHaveBeenCalledTimes(3);
+      expect(maxConcurrentCalls).toBeLessThanOrEqual(2);
+    });
+
+    it("should not install task when bridge is not configured", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+
+      const result = await session.eval(`typeof globalThis.task`, TIMEOUT);
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("undefined");
     });
   });
 });

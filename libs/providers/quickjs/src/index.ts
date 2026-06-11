@@ -24,6 +24,7 @@ export type {
   CodeInterpreterMiddlewareOptions,
   ReplSessionOptions,
   ReplResult,
+  SubagentBridgeOptions,
 } from "./types.js";
 
 export {
@@ -32,16 +33,11 @@ export {
   DEFAULT_MAX_STACK_SIZE,
   DEFAULT_EXECUTION_TIMEOUT,
   DEFAULT_MAX_PTC_CALLS,
+  DEFAULT_MAX_SUBAGENT_CONCURRENCY,
 } from "./session.js";
 
 export { formatReplResult, toCamelCase } from "./utils.js";
 
 export { transformForEval, stripTypeSyntax } from "./transform.js";
 
-export {
-  createSwarmTaskTool,
-  VariantCache,
-  type SwarmTaskToolOptions,
-  type SwarmSubAgent,
-  type SwarmTaskMode,
-} from "./tools/swarm-task.js";
+export { validateResponseSchema } from "./subagent-dispatch.js";

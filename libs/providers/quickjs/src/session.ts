@@ -28,10 +28,15 @@ import type {
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
 import { PTCCallBudgetExceededError } from "./errors.js";
-import type { ReplSessionOptions, ReplResult } from "./types.js";
+import type {
+  ReplSessionOptions,
+  ReplResult,
+  SubagentBridgeOptions,
+} from "./types.js";
 import { toCamelCase } from "./utils.js";
 import { transformForEval } from "./transform.js";
 import { AsyncEvalQueue } from "./eval-queue.js";
+import PQueue from "p-queue";
 
 export const DEFAULT_MEMORY_LIMIT = 64 * 1024 * 1024;
 export const DEFAULT_MAX_STACK_SIZE = 320 * 1024;
@@ -39,6 +44,7 @@ export const DEFAULT_EXECUTION_TIMEOUT = 5_000;
 export const DEFAULT_SESSION_ID = "__default__";
 export const DEFAULT_MAX_PTC_CALLS = 256;
 export const DEFAULT_MAX_RESULTS_CHARS = 4000;
+export const DEFAULT_MAX_SUBAGENT_CONCURRENCY = 32;
 
 const LINE_NUMBER_RE = /^\s*\d+(?:\.\d+)?\t/;
 
@@ -219,6 +225,17 @@ export class ReplSession {
   private options: ReplSessionOptions;
   private readonly maxPtcCalls: number | null;
   private ptcCallsRemaining: number | null = null;
+  private subagentQueue: PQueue | null = null;
+  private bridgeDispatchRef: {
+    current: SubagentBridgeOptions["dispatch"];
+  } | null = null;
+
+  /** Allowed keys in the subagent input object. */
+  private static readonly SUBAGENT_ALLOWED_KEYS = new Set([
+    "description",
+    "subagentType",
+    "responseSchema",
+  ]);
 
   /**
    * Reset the shared WASM module. Forces the next session to instantiate
@@ -267,6 +284,14 @@ export class ReplSession {
 
     if (tools !== undefined && tools.length > 0) {
       this.injectTools(tools);
+    }
+
+    const { subagentBridge } = this.options;
+    if (subagentBridge) {
+      this.subagentQueue = new PQueue({
+        concurrency: subagentBridge.maxConcurrency,
+      });
+      this.injectSubagentBridge(subagentBridge.dispatch);
     }
 
     const sessionId = this.options.sessionId ?? "default";
@@ -561,5 +586,147 @@ export class ReplSession {
 
     context.setProp(context.global, "tools", toolsNs);
     toolsNs.dispose();
+  }
+
+  /**
+   * Install the `task` global on the QuickJS context.
+   *
+   * Registers the host function directly as `globalThis.task`,
+   * then freezes it via `evalCode`. Structured results (when
+   * responseSchema is provided) are marshaled into native QuickJS
+   * objects on the host side — no JS wrapper needed.
+   */
+  /**
+   * Replace the active bridge dispatch with a fresh one.
+   *
+   * Call this before each eval so the dispatch closure carries
+   * the current invocation's config (tracing callbacks, run ID, etc.)
+   * rather than the stale config from session creation.
+   */
+  updateBridgeDispatch(dispatch: SubagentBridgeOptions["dispatch"]): void {
+    if (this.bridgeDispatchRef) {
+      this.bridgeDispatchRef.current = dispatch;
+    }
+  }
+
+  private injectSubagentBridge(
+    dispatch: SubagentBridgeOptions["dispatch"],
+  ): void {
+    const context = this.context!;
+    const queue = this.subagentQueue!;
+
+    this.bridgeDispatchRef = { current: dispatch };
+    const ref = this.bridgeDispatchRef;
+
+    const hostFn = context.newFunction("task", (inputHandle: QuickJSHandle) => {
+      const input = context.dump(inputHandle);
+      const promise = context.newPromise();
+
+      (async () => {
+        try {
+          if (
+            input == null ||
+            typeof input !== "object" ||
+            Array.isArray(input)
+          ) {
+            throw new Error("task: expected an object argument");
+          }
+          const raw = input as Record<string, unknown>;
+
+          // Accept snake_case aliases so models don't need to know our convention
+          const obj: Record<string, unknown> = { ...raw };
+          if ("subagent_type" in obj) {
+            obj.subagentType ??= obj.subagent_type;
+            delete obj.subagent_type;
+          }
+          if ("response_schema" in obj) {
+            obj.responseSchema ??= obj.response_schema;
+            delete obj.response_schema;
+          }
+
+          const unknownKeys = Object.keys(obj).filter(
+            (k) => !ReplSession.SUBAGENT_ALLOWED_KEYS.has(k),
+          );
+          if (unknownKeys.length > 0) {
+            throw new Error(
+              `task: unknown keys: ${unknownKeys.join(", ")}. ` +
+                `Allowed: ${[...ReplSession.SUBAGENT_ALLOWED_KEYS].join(", ")}`,
+            );
+          }
+
+          const { description, subagentType, responseSchema } = obj;
+
+          if (typeof description !== "string" || description.length === 0) {
+            throw new Error(
+              "task: 'description' is required and must be a non-empty string",
+            );
+          }
+          if (typeof subagentType !== "string" || subagentType.length === 0) {
+            throw new Error(
+              "task: 'subagentType' is required and must be a non-empty string",
+            );
+          }
+          if (
+            responseSchema !== undefined &&
+            (responseSchema == null ||
+              typeof responseSchema !== "object" ||
+              Array.isArray(responseSchema))
+          ) {
+            throw new Error(
+              "task: 'responseSchema' must be a plain object (JSON Schema) when provided",
+            );
+          }
+
+          const result = await queue.add(() =>
+            ref.current({
+              description: description as string,
+              subagentType: subagentType as string,
+              ...(responseSchema !== undefined && {
+                responseSchema: responseSchema as Record<string, unknown>,
+              }),
+            }),
+          );
+          if (typeof result === "string") {
+            const val = context.newString(result);
+            promise.resolve(val);
+            val.dispose();
+          } else {
+            const jsonResult = context.evalCode(`(${JSON.stringify(result)})`);
+            if (jsonResult.error) {
+              const errDump = context.dump(jsonResult.error);
+              jsonResult.error.dispose();
+              throw new Error(
+                `task: failed to marshal structured response: ${JSON.stringify(errDump)}`,
+              );
+            }
+            promise.resolve(jsonResult.value);
+            jsonResult.value.dispose();
+          }
+        } catch (e: unknown) {
+          const msg =
+            e != null && typeof (e as Error).message === "string"
+              ? (e as Error).message
+              : String(e);
+          const err = context.newError(msg);
+          promise.reject(err);
+          err.dispose();
+        }
+        promise.settled.then(context.runtime.executePendingJobs);
+      })();
+
+      return promise.handle;
+    });
+
+    context.setProp(context.global, "task", hostFn);
+    hostFn.dispose();
+
+    context.evalCode(
+      "Object.freeze(globalThis.task);" +
+        "Object.defineProperty(globalThis, 'task', {" +
+        " value: globalThis.task," +
+        " writable: false," +
+        " configurable: false," +
+        "}); undefined",
+    );
   }
 }

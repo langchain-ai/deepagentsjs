@@ -306,4 +306,175 @@ describe("createCodeInterpreterMiddleware", () => {
       expect(ReplSession.hasAnyForThread("thread-b")).toBe(true);
     });
   });
+
+  describe("subagent primitive", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it("should invoke subagent from within the REPL", async () => {
+      const mockTaskTool = {
+        name: "task",
+        invoke: vi.fn().mockResolvedValue("research result"),
+      };
+
+      const middleware = createCodeInterpreterMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: {
+            configurable: {
+              thread_id: "invoke-subagent-test",
+            },
+          },
+          tools: [...(middleware.tools || []), mockTaskTool],
+        } as any,
+        mockHandler,
+      );
+
+      const result = await jsTool.invoke(
+        {
+          code: `await task({ description: "find bugs", subagentType: "researcher" })`,
+        },
+        {
+          configurable: {
+            thread_id: "invoke-subagent-test",
+          },
+        },
+      );
+
+      expect(result).toContain("research result");
+      expect(mockTaskTool.invoke).toHaveBeenCalledTimes(1);
+    });
+
+    it("should return structured output as native JS object in REPL", async () => {
+      const structured = { bugs: ["bug1", "bug2"] };
+      const mockTaskTool = {
+        name: "task",
+        invoke: vi.fn().mockResolvedValue(JSON.stringify(structured)),
+      };
+
+      const middleware = createCodeInterpreterMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: {
+            configurable: {
+              thread_id: "structured-test",
+            },
+          },
+          tools: [...(middleware.tools || []), mockTaskTool],
+        } as any,
+        mockHandler,
+      );
+
+      const result = await jsTool.invoke(
+        {
+          code: `const r = await task({
+            description: "find bugs",
+            subagentType: "researcher",
+            responseSchema: { type: "object", properties: { bugs: { type: "array" } } },
+          });
+          r.bugs[0]`,
+        },
+        {
+          configurable: {
+            thread_id: "structured-test",
+          },
+        },
+      );
+
+      expect(result).toContain("bug1");
+    });
+
+    it("should use fresh config on each eval call for tracing context", async () => {
+      const configs: any[] = [];
+      const mockTaskTool = {
+        name: "task",
+        invoke: vi.fn().mockImplementation((_input, config) => {
+          configs.push(config);
+          return "ok";
+        }),
+      };
+
+      const middleware = createCodeInterpreterMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: {
+            configurable: {
+              thread_id: "fresh-config-test",
+            },
+          },
+          tools: [...(middleware.tools || []), mockTaskTool],
+        } as any,
+        mockHandler,
+      );
+
+      // First eval — config carries marker "run-1"
+      await jsTool.invoke(
+        {
+          code: `await task({ description: "a", subagentType: "researcher" })`,
+        },
+        {
+          configurable: {
+            thread_id: "fresh-config-test",
+            run_id: "run-1",
+          },
+        },
+      );
+
+      // Second eval — config carries marker "run-2"
+      await jsTool.invoke(
+        {
+          code: `await task({ description: "b", subagentType: "researcher" })`,
+        },
+        {
+          configurable: {
+            thread_id: "fresh-config-test",
+            run_id: "run-2",
+          },
+        },
+      );
+
+      expect(configs).toHaveLength(2);
+      expect(configs[0].configurable.run_id).toBe("run-1");
+      expect(configs[1].configurable.run_id).toBe("run-2");
+    });
+
+    it("should error when task() is called without specs configured", async () => {
+      const middleware = createCodeInterpreterMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+
+      const result = await jsTool.invoke(
+        {
+          code: `await task({ description: "x", subagentType: "y" })`,
+        },
+        { configurable: { thread_id: "no-bridge-test" } },
+      );
+
+      expect(result).toContain("task");
+      expect(result).toMatch(/not a function|not defined|undefined/i);
+    });
+  });
 });
