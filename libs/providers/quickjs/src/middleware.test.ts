@@ -358,7 +358,7 @@ describe("createCodeInterpreterMiddleware", () => {
 
       const req = mockHandler.mock.calls[0][0];
       const text = req.systemMessage.text;
-      expect(text).toContain("### Task Primitive");
+      expect(text).toContain("### Dispatching Subagents with `task`");
       expect(text).toContain("`researcher`");
       expect(text).toContain("Researches topics");
       expect(text).toContain("`coder`");
@@ -390,7 +390,7 @@ describe("createCodeInterpreterMiddleware", () => {
       );
 
       const req = mockHandler.mock.calls[0][0];
-      expect(req.systemMessage.text).not.toContain("### Subagent Primitive");
+      expect(req.systemMessage.text).not.toContain("### Dispatching Subagents");
     });
 
     it("should not wire subagent bridge when maxSubagentConcurrency is 0", async () => {
@@ -419,7 +419,7 @@ describe("createCodeInterpreterMiddleware", () => {
       );
 
       const req = mockHandler.mock.calls[0][0];
-      expect(req.systemMessage.text).not.toContain("### Subagent Primitive");
+      expect(req.systemMessage.text).not.toContain("### Dispatching Subagents");
     });
 
     it("should invoke subagent from within the REPL", async () => {
