@@ -1,0 +1,30 @@
+libs/providers/quickjs/src/middleware.ts
+  h_f78d33d4280f3f 17-20,24-25,35,43,76-116,200,219-220,232-235,237-240,243,249-255,259-261,270-275,313
+  s_dfc0de3b3b35aa::t_514aa8ac8127f0 236
+  s_dfc0de3b3b35aa::t_7dfe2e045e688d 308-309
+libs/providers/quickjs/src/middleware.test.ts
+  s_dfc0de3b3b35aa::t_793ef187495ba8 5,14-23
+  s_dfc0de3b3b35aa::t_c82ad82b8f3a0d 6
+  s_dfc0de3b3b35aa::t_c53d25c4d9b60d 322-349,355,359-363,375,377-382,384-430,434-437,448-454,456-552
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "c19470eea43e7b27c4dbd0401d33385f639cd886",
+  "prompts": {},
+  "humans": {
+    "h_f78d33d4280f3f": {
+      "author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  },
+  "sessions": {
+    "s_dfc0de3b3b35aa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "024570eb-5363-48c9-8e34-0cfa5231421b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
