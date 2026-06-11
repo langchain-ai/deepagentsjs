@@ -351,8 +351,8 @@ export function createDeepAgent<
   ] as const;
 
   const subagentSpecsPayload = buildSubagentSpecsPayload(inlineSubagents, {
-    defaultModel: model,
-    defaultTools: effectiveTools,
+    model,
+    tools: effectiveTools,
   });
 
   const [

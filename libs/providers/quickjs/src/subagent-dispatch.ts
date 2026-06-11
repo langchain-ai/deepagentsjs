@@ -3,8 +3,6 @@ import type { Runnable } from "@langchain/core/runnables";
 import { HumanMessage } from "@langchain/core/messages";
 import {
   createSubAgent,
-  type SubAgent,
-  type CreateSubAgentOptions,
   type SubagentSpecsPayload,
 } from "deepagents";
 
@@ -193,23 +191,20 @@ class SubagentEntry {
   /** Human-readable description for prompt rendering. */
   description: string;
 
-  private spec: SubAgent;
-  private compileOptions: CreateSubAgentOptions;
+  private spec: SubagentSpecsPayload["subagents"][number]["spec"];
   private runnableBacked: boolean;
   private runnable: Runnable | null;
 
   constructor(opts: {
     name: string;
     description: string;
-    spec: SubAgent;
-    compileOptions: CreateSubAgentOptions;
+    spec: SubagentSpecsPayload["subagents"][number]["spec"];
     runnableBacked: boolean;
     runnable: Runnable | null;
   }) {
     this.name = opts.name;
     this.description = opts.description;
     this.spec = opts.spec;
-    this.compileOptions = opts.compileOptions;
     this.runnableBacked = opts.runnableBacked;
     this.runnable = opts.runnable;
   }
@@ -221,7 +216,7 @@ class SubagentEntry {
     if (this.runnable != null) {
       return this.runnable;
     }
-    const runnable = createSubAgent(this.spec, this.compileOptions);
+    const runnable = createSubAgent(this.spec);
     this.runnable = runnable;
     return runnable;
   }
@@ -248,10 +243,7 @@ class SubagentEntry {
 
     const cacheKey = `${this.name}::${JSON.stringify(responseSchema)}`;
     return cache.getOrCreate(cacheKey, () =>
-      createSubAgent(
-        { ...this.spec, responseFormat: responseSchema },
-        this.compileOptions,
-      ),
+      createSubAgent({ ...this.spec, responseFormat: responseSchema }),
     );
   }
 }
@@ -276,7 +268,6 @@ export class SubagentDispatcher {
             name: sub.name,
             description: sub.description,
             spec: sub.spec,
-            compileOptions: payload.compileOptions,
             runnableBacked: true,
             runnable: sub.runnable,
           }),
@@ -288,7 +279,6 @@ export class SubagentDispatcher {
             name: sub.name,
             description: sub.description,
             spec: sub.spec,
-            compileOptions: payload.compileOptions,
             runnableBacked: false,
             runnable: null,
           }),

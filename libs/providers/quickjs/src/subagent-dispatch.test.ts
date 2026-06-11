@@ -30,11 +30,12 @@ function makePayload(
         name: s.name,
         description: s.description,
         systemPrompt: `You are ${s.name}.`,
+        model: "openai:gpt-4o",
+        tools: [],
       },
       runnableBacked: s.runnableBacked ?? false,
       runnable: s.runnable,
     })),
-    compileOptions: { defaultModel: "openai:gpt-4o", defaultTools: [] },
   };
 }
 
@@ -400,7 +401,6 @@ describe("SubagentDispatcher", () => {
     expect(mockedCreateSubAgent).toHaveBeenCalledTimes(1);
     expect(mockedCreateSubAgent).toHaveBeenCalledWith(
       expect.objectContaining({ responseFormat: schema }),
-      expect.any(Object),
     );
   });
 

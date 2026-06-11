@@ -4,12 +4,11 @@ import {
   SUBAGENT_SPECS_CONFIG_KEY,
   type SubAgent,
   type CompiledSubAgent,
-  type CreateSubAgentOptions,
 } from "./subagents.js";
 
-const COMPILE_OPTIONS: CreateSubAgentOptions = {
-  defaultModel: "openai:gpt-4o",
-  defaultTools: [],
+const DEFAULTS = {
+  model: "openai:gpt-4o" as const,
+  tools: [] as any[],
 };
 
 function makeDeclarativeSpec(name: string): SubAgent {
@@ -36,27 +35,47 @@ describe("SUBAGENT_SPECS_CONFIG_KEY", () => {
 
 describe("buildSubagentSpecsPayload", () => {
   it("returns empty subagents for an empty array", () => {
-    const payload = buildSubagentSpecsPayload([], COMPILE_OPTIONS);
+    const payload = buildSubagentSpecsPayload([], DEFAULTS);
     expect(payload.subagents).toEqual([]);
-    expect(payload.compileOptions).toBe(COMPILE_OPTIONS);
   });
 
   it("packages a declarative SubAgent as a spec-based entry", () => {
     const spec = makeDeclarativeSpec("researcher");
-    const payload = buildSubagentSpecsPayload([spec], COMPILE_OPTIONS);
+    const payload = buildSubagentSpecsPayload([spec], DEFAULTS);
 
     expect(payload.subagents).toHaveLength(1);
     const entry = payload.subagents[0];
     expect(entry.name).toBe("researcher");
     expect(entry.description).toBe("researcher description");
-    expect(entry.spec).toBe(spec);
     expect(entry.runnableBacked).toBe(false);
     expect(entry.runnable).toBeUndefined();
   });
 
+  it("coalesces defaults into declarative specs", () => {
+    const spec = makeDeclarativeSpec("researcher");
+    const payload = buildSubagentSpecsPayload([spec], DEFAULTS);
+
+    const entry = payload.subagents[0];
+    expect(entry.spec.model).toBe("openai:gpt-4o");
+    expect(entry.spec.tools).toEqual([]);
+  });
+
+  it("preserves spec model and tools when already set", () => {
+    const spec: SubAgent = {
+      ...makeDeclarativeSpec("researcher"),
+      model: "anthropic:claude-sonnet-4-20250514",
+      tools: [{ name: "custom" } as any],
+    };
+    const payload = buildSubagentSpecsPayload([spec], DEFAULTS);
+
+    const entry = payload.subagents[0];
+    expect(entry.spec.model).toBe("anthropic:claude-sonnet-4-20250514");
+    expect(entry.spec.tools).toEqual([{ name: "custom" }]);
+  });
+
   it("packages a CompiledSubAgent as a runnable-backed entry", () => {
     const compiled = makeCompiledSpec("coder");
-    const payload = buildSubagentSpecsPayload([compiled], COMPILE_OPTIONS);
+    const payload = buildSubagentSpecsPayload([compiled], DEFAULTS);
 
     expect(payload.subagents).toHaveLength(1);
     const entry = payload.subagents[0];
@@ -68,7 +87,7 @@ describe("buildSubagentSpecsPayload", () => {
 
   it("creates a stub spec for compiled entries", () => {
     const compiled = makeCompiledSpec("coder");
-    const payload = buildSubagentSpecsPayload([compiled], COMPILE_OPTIONS);
+    const payload = buildSubagentSpecsPayload([compiled], DEFAULTS);
 
     const entry = payload.subagents[0];
     expect(entry.spec).toEqual({
@@ -81,10 +100,7 @@ describe("buildSubagentSpecsPayload", () => {
   it("handles mixed declarative and compiled subagents", () => {
     const spec = makeDeclarativeSpec("researcher");
     const compiled = makeCompiledSpec("coder");
-    const payload = buildSubagentSpecsPayload(
-      [spec, compiled],
-      COMPILE_OPTIONS,
-    );
+    const payload = buildSubagentSpecsPayload([spec, compiled], DEFAULTS);
 
     expect(payload.subagents).toHaveLength(2);
     expect(payload.subagents[0].runnableBacked).toBe(false);
@@ -95,24 +111,12 @@ describe("buildSubagentSpecsPayload", () => {
 
   it("preserves entry order", () => {
     const specs = ["alpha", "beta", "gamma"].map(makeDeclarativeSpec);
-    const payload = buildSubagentSpecsPayload(specs, COMPILE_OPTIONS);
+    const payload = buildSubagentSpecsPayload(specs, DEFAULTS);
 
     expect(payload.subagents.map((e) => e.name)).toEqual([
       "alpha",
       "beta",
       "gamma",
     ]);
-  });
-
-  it("passes compileOptions through unchanged", () => {
-    const options: CreateSubAgentOptions = {
-      defaultModel: "anthropic:claude-sonnet-4-20250514",
-      defaultTools: [{ name: "tool1" } as any],
-    };
-    const payload = buildSubagentSpecsPayload(
-      [makeDeclarativeSpec("a")],
-      options,
-    );
-    expect(payload.compileOptions).toBe(options);
   });
 });

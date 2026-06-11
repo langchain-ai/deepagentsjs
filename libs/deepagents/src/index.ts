@@ -188,6 +188,5 @@ export {
   buildSubagentSpecsPayload,
   type SubagentSpecEntry,
   type SubagentSpecsPayload,
-  type CreateSubAgentOptions,
   createSubAgent,
 } from "./middleware/subagents.js";

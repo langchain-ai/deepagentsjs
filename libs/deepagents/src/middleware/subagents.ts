@@ -795,24 +795,26 @@ export interface SubagentSpecEntry {
 export interface SubagentSpecsPayload {
   /**
    * Subagent entries with their raw specs and optional pre-compiled runnables.
+   *
+   * Declarative specs are fully resolved — `model` and `tools` are already
+   * coalesced from defaults by the builder.
    */
   subagents: SubagentSpecEntry[];
-
-  /**
-   * Options used when compiling declarative specs.
-   */
-  compileOptions: CreateSubAgentOptions;
 }
 
 /**
  * Build the specs payload for code interpreter dispatchers.
  *
- * Packages the raw subagent specs and compile options so an independent
- * dispatcher can lazily compile agents without going through the task tool.
+ * Packages subagent specs so an independent dispatcher can lazily compile
+ * agents without going through the task tool. Declarative specs are
+ * coalesced with the provided defaults so that each entry is self-contained.
  */
 export function buildSubagentSpecsPayload(
   subagents: (SubAgent | CompiledSubAgent)[],
-  compileOptions: CreateSubAgentOptions,
+  defaults: {
+    model: LanguageModelLike | string;
+    tools: StructuredTool[];
+  },
 ): SubagentSpecsPayload {
   const entries: SubagentSpecEntry[] = [];
 
@@ -833,13 +835,17 @@ export function buildSubagentSpecsPayload(
       entries.push({
         name: agent.name,
         description: agent.description,
-        spec: agent,
+        spec: {
+          ...agent,
+          model: agent.model ?? defaults.model,
+          tools: agent.tools ?? defaults.tools,
+        },
         runnableBacked: false,
       });
     }
   }
 
-  return { subagents: entries, compileOptions };
+  return { subagents: entries };
 }
 
 /**

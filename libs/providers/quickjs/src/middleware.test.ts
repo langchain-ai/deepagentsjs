@@ -332,10 +332,11 @@ describe("createCodeInterpreterMiddleware", () => {
             name: s.name,
             description: s.description,
             systemPrompt: `You are ${s.name}.`,
+            model: "openai:gpt-4o",
+            tools: [],
           },
           runnableBacked: false,
         })),
-        compileOptions: { defaultModel: "openai:gpt-4o", defaultTools: [] },
       };
     }
 
