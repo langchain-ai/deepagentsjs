@@ -472,6 +472,47 @@ function returnCommandWithStateUpdate(
 }
 
 /**
+ * Create a runnable agent from a declarative `SubAgent` spec.
+ *
+ * This is the shared entrypoint for compiling a `SubAgent` into a
+ * `ReactAgent`. Pre-compiled `CompiledSubAgent` runnables bypass this
+ * function entirely.
+ *
+ * The spec must have `model` and `tools` set — the caller is responsible
+ * for coalescing any defaults before calling this function.
+ *
+ * @param spec - Declarative subagent specification. Must specify `model` and `tools`.
+ * @returns A compiled `ReactAgent` ready for task-tool invocation.
+ */
+export function createSubAgent(spec: SubAgent): ReactAgent {
+  if (!spec.model) {
+    throw new Error(`SubAgent '${spec.name}' must specify 'model'`);
+  }
+  if (!spec.tools) {
+    throw new Error(`SubAgent '${spec.name}' must specify 'tools'`);
+  }
+
+  const middleware: AgentMiddleware[] = [...(spec.middleware ?? [])];
+
+  if (spec.interruptOn) {
+    middleware.push(
+      humanInTheLoopMiddleware({ interruptOn: spec.interruptOn }),
+    );
+  }
+
+  return createAgent({
+    model: spec.model,
+    systemPrompt: spec.systemPrompt,
+    tools: spec.tools,
+    middleware,
+    name: spec.name,
+    ...(spec.responseFormat != null && {
+      responseFormat: spec.responseFormat,
+    }),
+  });
+}
+
+/**
  * Create subagent instances from specifications
  */
 function getSubagents(options: {
@@ -536,23 +577,15 @@ function getSubagents(options: {
     if ("runnable" in agentParams) {
       agents[agentParams.name] = agentParams.runnable;
     } else {
-      const middleware = agentParams.middleware
-        ? [...defaultSubagentMiddleware, ...agentParams.middleware]
-        : [...defaultSubagentMiddleware];
-
-      const interruptOn = agentParams.interruptOn || defaultInterruptOn;
-      if (interruptOn)
-        middleware.push(humanInTheLoopMiddleware({ interruptOn }));
-
-      agents[agentParams.name] = createAgent({
+      agents[agentParams.name] = createSubAgent({
+        ...agentParams,
         model: agentParams.model ?? defaultModel,
-        systemPrompt: agentParams.systemPrompt,
         tools: agentParams.tools ?? defaultTools,
-        middleware,
-        name: agentParams.name,
-        ...(agentParams.responseFormat != null && {
-          responseFormat: agentParams.responseFormat,
-        }),
+        middleware: [
+          ...defaultSubagentMiddleware,
+          ...(agentParams.middleware ?? []),
+        ],
+        interruptOn: agentParams.interruptOn ?? defaultInterruptOn ?? undefined,
       });
     }
   }
