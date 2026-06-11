@@ -1,0 +1,61 @@
+libs/providers/quickjs/src/session.test.ts
+  s_8c9b4345b2ed04::t_9021be9719a797 920
+libs/providers/quickjs/src/index.ts
+  s_8c9b4345b2ed04::t_13a4cb373dee40 43
+libs/providers/quickjs/src/session.ts
+  s_8c9b4345b2ed04::t_9f4b56f5a5ea77 599-605,607-611,617-619,672
+  s_8c9b4345b2ed04::t_fec013de1444db 228
+  s_8c9b4345b2ed04::t_945db7a29f3bbf 229-231
+  s_8c9b4345b2ed04::t_593f1c8fd19fa0 291-293
+  s_8c9b4345b2ed04::t_e79aa5716c3216 39
+  s_8c9b4345b2ed04::t_58f8c60b290f6c 606
+  s_8c9b4345b2ed04::t_1315caa1f0d581 616,671,678-692,695-696
+  s_8c9b4345b2ed04::t_13c2dd102b0163 47
+libs/providers/quickjs/src/types.ts
+  s_8c9b4345b2ed04::t_41ca15bee3757a 87
+  s_8c9b4345b2ed04::t_cf77a47c52fa09 96-97
+libs/providers/quickjs/src/subagent-dispatch.test.ts
+  s_8c9b4345b2ed04::t_a0f37628e06977 1-2
+libs/providers/quickjs/src/middleware.test.ts
+  s_8c9b4345b2ed04::t_1dda3b2d75017b 412
+  s_8c9b4345b2ed04::t_08ff1f3615dc54 538-603
+  s_8c9b4345b2ed04::t_435bb9162ea5fb 442-445,456-471,484,489-492,503-517
+libs/deepagents/src/index.ts
+  s_8c9b4345b2ed04::t_cb94e63097ab49 188
+libs/providers/quickjs/package.json
+  s_8c9b4345b2ed04::t_d3ec795e319c37 48
+libs/deepagents/src/middleware/subagents.ts
+  s_8c9b4345b2ed04::t_7dc562c87b6eec 503-506,522-523,530-531
+  s_8c9b4345b2ed04::t_49ee772706f180 537-540,552,569,580-582,587,589-590,603,605,614-616,620
+  s_8c9b4345b2ed04::t_d5026e5b41fed1 647-678,700,717
+  s_8c9b4345b2ed04::t_c90154f4ab8c24 35-42
+libs/providers/quickjs/src/middleware.ts
+  s_8c9b4345b2ed04::t_4f6d44ec6f5eef 44
+  s_8c9b4345b2ed04::t_4bc00cd73b9c1c 331-334
+  s_8c9b4345b2ed04::t_545266011b7a6e 220,233-238,241,244-257,259-263,265-273
+  s_8c9b4345b2ed04::t_1afe11fde00a55 19
+  s_8c9b4345b2ed04::t_600e5c5b0aa088 240,258
+  s_8c9b4345b2ed04::t_f03208797a80de 299-302
+  s_8c9b4345b2ed04::t_bca14f9da66561 290-296
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "9303f86dfc65d808c8cf7884b14e1096756c7758",
+  "prompts": {},
+  "humans": {
+    "h_f78d33d4280f3f": {
+      "author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  },
+  "sessions": {
+    "s_8c9b4345b2ed04": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e332ab9c-f19a-4da1-9264-541434466ff2",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
