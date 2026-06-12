@@ -14,6 +14,20 @@ import type {
 } from "../backends/protocol.js";
 import { createMockBackend } from "./test.js";
 
+const mockCountTokensApproximately = vi.hoisted(() => vi.fn());
+
+vi.mock("langchain", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("langchain")>();
+  mockCountTokensApproximately.mockImplementation(
+    actual.countTokensApproximately,
+  );
+
+  return {
+    ...actual,
+    countTokensApproximately: mockCountTokensApproximately,
+  };
+});
+
 // Mock the initChatModel function from langchain/chat_models/universal
 vi.mock("langchain/chat_models/universal", () => {
   return {
@@ -462,6 +476,31 @@ describe("createSummarizationMiddleware", () => {
   });
 
   describe("argument truncation", () => {
+    it("should count tokens once when nothing is truncated or summarized", async () => {
+      const middleware = createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: createMockBackend(),
+        trigger: { type: "messages", value: 10 },
+        truncateArgsSettings: {
+          trigger: { type: "tokens", value: 1_000_000 },
+          keep: { type: "messages", value: 1 },
+        },
+      });
+
+      const messages = [
+        new HumanMessage({ content: "Hello" }),
+        new AIMessage({ content: "Hi there!" }),
+      ];
+
+      const { result, capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
+
+      expect(AIMessage.isInstance(result)).toBe(true);
+      expect(capturedRequest?.messages).toEqual(messages);
+      expect(mockCountTokensApproximately).toHaveBeenCalledTimes(1);
+    });
+
     it("should truncate large tool call arguments", async () => {
       const mockBackend = createMockBackend();
       const middleware = createSummarizationMiddleware({
