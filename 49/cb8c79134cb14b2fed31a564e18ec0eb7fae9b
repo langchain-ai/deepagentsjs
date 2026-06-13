@@ -1,0 +1,19 @@
+.github/workflows/cli-release.yml
+  s_2e4926135f1d93::t_101e7ce184e488 129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "49cb8c79134cb14b2fed31a564e18ec0eb7fae9b",
+  "prompts": {},
+  "sessions": {
+    "s_2e4926135f1d93": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "af892f84-322f-4faf-a42f-71972a8b97de",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Mason Daugherty <github@mdrxy.com>"
+    }
+  }
+}
