@@ -144,7 +144,6 @@ describe("streamEvents", () => {
     for (const sub of subagents) {
       if (sub.name === "researcher") {
         expectTypeOf(sub.name).toEqualTypeOf<"researcher">();
-        expectTypeOf(sub.taskInput).toEqualTypeOf<Promise<string>>();
 
         const tc = await collectWithTimeout(sub.toolCalls);
         const pingCall = tc.find((t) => t.name === "ping");
@@ -156,7 +155,6 @@ describe("streamEvents", () => {
 
       if (sub.name === "coder") {
         expectTypeOf(sub.name).toEqualTypeOf<"coder">();
-        expectTypeOf(sub.taskInput).toEqualTypeOf<Promise<string>>();
 
         const tc = await collectWithTimeout(sub.toolCalls);
         const pongCall = tc.find((t) => t.name === "pong");

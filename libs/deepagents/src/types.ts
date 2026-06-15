@@ -76,11 +76,11 @@ type InferDeepAgentStreamExtensions<
 > = T extends readonly []
   ? Record<string, never>
   : T extends readonly [
-        () => StreamTransformer<infer P>,
-        ...infer Rest extends ReadonlyArray<() => StreamTransformer<any>>,
-      ]
-    ? P & InferDeepAgentStreamExtensions<Rest>
-    : Record<string, unknown>;
+    () => StreamTransformer<infer P>,
+    ...infer Rest extends ReadonlyArray<() => StreamTransformer<any>>,
+  ]
+  ? P & InferDeepAgentStreamExtensions<Rest>
+  : Record<string, unknown>;
 
 /** Any subagent specification — sync, compiled, or async. */
 export type AnySubAgent = SubAgent | CompiledSubAgent | AsyncSubAgent;
@@ -97,10 +97,10 @@ interface TypedToolStrategy<T = unknown> extends Array<ToolStrategy<any>> {
  */
 export type ExtractSubAgentMiddleware<T> = T extends { middleware?: infer M }
   ? M extends readonly AgentMiddleware[]
-    ? M
-    : M extends AgentMiddleware[]
-      ? M
-      : readonly []
+  ? M
+  : M extends AgentMiddleware[]
+  ? M
+  : readonly []
   : readonly [];
 
 /**
@@ -108,15 +108,15 @@ export type ExtractSubAgentMiddleware<T> = T extends { middleware?: infer M }
  */
 export type FlattenSubAgentMiddleware<T extends readonly AnySubAgent[]> =
   T extends readonly []
-    ? readonly []
-    : T extends readonly [infer First, ...infer Rest]
-      ? Rest extends readonly AnySubAgent[]
-        ? readonly [
-            ...ExtractSubAgentMiddleware<First>,
-            ...FlattenSubAgentMiddleware<Rest>,
-          ]
-        : ExtractSubAgentMiddleware<First>
-      : readonly [];
+  ? readonly []
+  : T extends readonly [infer First, ...infer Rest]
+  ? Rest extends readonly AnySubAgent[]
+  ? readonly [
+    ...ExtractSubAgentMiddleware<First>,
+    ...FlattenSubAgentMiddleware<Rest>,
+  ]
+  : ExtractSubAgentMiddleware<First>
+  : readonly [];
 
 /**
  * Helper type to merge states from subagent middleware
@@ -165,14 +165,14 @@ export type SupportedResponseFormat = ResponseFormat | TypedToolStrategy<any>;
  */
 export type InferStructuredResponse<T extends SupportedResponseFormat> =
   SupportedResponseFormat extends T
-    ? ResponseFormatUndefined
-    : T extends TypedToolStrategy<infer U>
-      ? U
-      : T extends ToolStrategy<infer U>
-        ? U
-        : T extends ProviderStrategy<infer U>
-          ? U
-          : ResponseFormatUndefined;
+  ? ResponseFormatUndefined
+  : T extends TypedToolStrategy<infer U>
+  ? U
+  : T extends ToolStrategy<infer U>
+  ? U
+  : T extends ProviderStrategy<infer U>
+  ? U
+  : ResponseFormatUndefined;
 
 /**
  * Type bag that extends AgentTypeConfig with subagent type information.
@@ -202,14 +202,14 @@ export type InferStructuredResponse<T extends SupportedResponseFormat> =
  */
 export interface DeepAgentTypeConfig<
   TResponse extends Record<string, any> | ResponseFormatUndefined =
-    | Record<string, any>
-    | ResponseFormatUndefined,
+  | Record<string, any>
+  | ResponseFormatUndefined,
   TState extends StateDefinitionInit | undefined =
-    | StateDefinitionInit
-    | undefined,
+  | StateDefinitionInit
+  | undefined,
   TContext extends AnyAnnotationRoot | InteropZodObject =
-    | AnyAnnotationRoot
-    | InteropZodObject,
+  | AnyAnnotationRoot
+  | InteropZodObject,
   TMiddleware extends readonly AgentMiddleware[] = readonly AgentMiddleware[],
   TTools extends readonly (ClientTool | ServerTool)[] = readonly (
     | ClientTool
@@ -217,7 +217,7 @@ export interface DeepAgentTypeConfig<
   )[],
   TSubagents extends readonly AnySubAgent[] = readonly AnySubAgent[],
   TStreamTransformers extends ReadonlyArray<() => StreamTransformer<any>> =
-    ReadonlyArray<() => StreamTransformer<any>>,
+  ReadonlyArray<() => StreamTransformer<any>>,
 > extends AgentTypeConfig<
   TResponse,
   TState,
@@ -352,7 +352,7 @@ export interface DeepAgent<
       InferDeepAgentStreamExtensions<TTypes["StreamTransformers"]>
     >
   >) &
-    ReactAgent<TTypes>["streamEvents"];
+  ReactAgent<TTypes>["streamEvents"];
 }
 
 /**
@@ -370,11 +370,11 @@ export type ResolveDeepAgentTypeConfig<T> = T extends {
   "~deepAgentTypes": infer Types;
 }
   ? Types extends DeepAgentTypeConfig
-    ? Types
-    : never
+  ? Types
+  : never
   : T extends DeepAgentTypeConfig
-    ? T
-    : never;
+  ? T
+  : never;
 
 /**
  * Helper type to extract any property from a DeepAgentTypeConfig or DeepAgent.
@@ -455,10 +455,10 @@ export type InferRegularSubagents<T> = Exclude<
  */
 export type InferSubagentByName<T, TName extends string> =
   InferDeepAgentSubagents<T> extends readonly (infer SA)[]
-    ? SA extends { name: TName }
-      ? SA
-      : never
-    : never;
+  ? SA extends { name: TName }
+  ? SA
+  : never
+  : never;
 
 /**
  * Helper type to extract the ReactAgent type from a subagent definition.
@@ -477,16 +477,16 @@ export type InferSubagentReactAgentType<
 > = TSubagent extends CompiledSubAgent
   ? TSubagent["runnable"]
   : TSubagent extends SubAgent
-    ? ReactAgent<
-        AgentTypeConfig<
-          ResponseFormatUndefined,
-          undefined,
-          AnyAnnotationRoot,
-          ExtractSubAgentMiddleware<TSubagent>,
-          readonly []
-        >
-      >
-    : never;
+  ? ReactAgent<
+    AgentTypeConfig<
+      ResponseFormatUndefined,
+      undefined,
+      AnyAnnotationRoot,
+      ExtractSubAgentMiddleware<TSubagent>,
+      readonly []
+    >
+  >
+  : never;
 
 /**
  * Configuration parameters for creating a Deep Agent
@@ -503,7 +503,7 @@ export type InferSubagentReactAgentType<
 export interface CreateDeepAgentParams<
   TResponse extends SupportedResponseFormat = SupportedResponseFormat,
   ContextSchema extends AnnotationRoot<any> | InteropZodObject =
-    AnnotationRoot<any>,
+  AnnotationRoot<any>,
   TMiddleware extends readonly AgentMiddleware[] = readonly AgentMiddleware[],
   TSubagents extends readonly AnySubAgent[] = readonly AnySubAgent[],
   TTools extends readonly (ClientTool | ServerTool)[] = readonly (
@@ -511,9 +511,9 @@ export interface CreateDeepAgentParams<
     | ServerTool
   )[],
   TStreamTransformers extends ReadonlyArray<() => StreamTransformer<any>> =
-    readonly [],
+  readonly [],
   TStateSchema extends AnyStateSchema | InteropZodObject | undefined =
-    undefined,
+  undefined,
 > {
   /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
   model?: BaseLanguageModel | string;
@@ -573,8 +573,8 @@ export interface CreateDeepAgentParams<
    * The factory receives a config object with state and store.
    */
   backend?:
-    | AnyBackendProtocol
-    | ((config: { state: unknown; store?: BaseStore }) => AnyBackendProtocol);
+  | AnyBackendProtocol
+  | ((config: { state: unknown; store?: BaseStore }) => AnyBackendProtocol);
   /** Optional interrupt configuration mapping tool names to interrupt configs */
   interruptOn?: Record<string, boolean | InterruptOnConfig>;
   /** The name of the agent */
@@ -639,9 +639,13 @@ export interface CreateDeepAgentParams<
   /**
    * Optional {@link StreamTransformer} factories to register with the underlying agent.
    *
-   * Deepagents always registers its built-in subagent transformer; custom
-   * transformers are appended after it and are exposed on `run.extensions`
-   * when using `streamEvents(..., { version: "v3" })`.
+   * These are forwarded as-is to `createAgent` and their projections are
+   * exposed under `run.extensions` when using `streamEvents(..., { version:
+   * "v3" })`.
+   *
+   * This is separate from the built-in streams `createAgent` provides on its
+   * own — such as `run.subagents` (nested named agents) and `run.toolCalls`
+   * (tool calls), which land directly on the run, not under `run.extensions`.
    */
   streamTransformers?: TStreamTransformers;
 }

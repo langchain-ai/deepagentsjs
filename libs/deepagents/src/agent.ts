@@ -46,8 +46,6 @@ import type {
   InferStructuredResponse,
   SupportedResponseFormat,
 } from "./types.js";
-import { createSubagentTransformer } from "./stream.js";
-
 /**
  * required for type inference
  */
@@ -464,10 +462,7 @@ export function createDeepAgent<
     checkpointer,
     store,
     name,
-    streamTransformers: [
-      createSubagentTransformer([]),
-      ...streamTransformers,
-    ] as const,
+    streamTransformers,
   }).withConfig({
     recursionLimit: 10_000,
     metadata: {
