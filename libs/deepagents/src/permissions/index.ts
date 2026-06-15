@@ -10,3 +10,10 @@ export {
   decidePathAccess,
   validatePermissionPaths,
 } from "./enforce.js";
+
+export {
+  buildFsInterruptPredicates,
+  hasInterruptPermission,
+  globAnchor,
+  pathsOverlap,
+} from "./interrupt.js";

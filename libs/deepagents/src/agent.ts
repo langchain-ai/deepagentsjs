@@ -17,6 +17,7 @@ import type {
 
 import {
   createFilesystemMiddleware,
+  createFilesystemInterruptMiddleware,
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
   createSummarizationMiddleware,
@@ -29,6 +30,7 @@ import {
   isAsyncSubAgent,
 } from "./middleware/index.js";
 import { StateBackend } from "./backends/state.js";
+import { hasInterruptPermission } from "./permissions/index.js";
 import { ConfigurationError } from "./errors.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
@@ -253,6 +255,16 @@ export function createDeepAgent<
         backend,
         permissions: effectivePermissions,
       }),
+      // Path-gated filesystem permission interrupts for the subagent. Tools
+      // already covered by the subagent's interruptOn are excluded.
+      ...(hasInterruptPermission(effectivePermissions)
+        ? [
+            createFilesystemInterruptMiddleware({
+              permissions: effectivePermissions,
+              excludeTools: Object.keys(input.interruptOn ?? interruptOn ?? {}),
+            }),
+          ]
+        : []),
       // Automatically summarizes conversation history when token limits are approached.
       // Uses createSummarizationMiddleware (deepagents version) with backend support
       // and auto-computed defaults from model profile.
@@ -380,6 +392,16 @@ export function createDeepAgent<
             backend,
             sources: memory,
             addCacheControl: anthropicModel,
+          }),
+        ]
+      : []),
+    // Optional path-gated filesystem permission interrupts. Tools already
+    // covered by `interruptOn` are excluded so the user-supplied config wins.
+    ...(hasInterruptPermission(permissions)
+      ? [
+          createFilesystemInterruptMiddleware({
+            permissions,
+            excludeTools: interruptOn ? Object.keys(interruptOn) : [],
           }),
         ]
       : []),

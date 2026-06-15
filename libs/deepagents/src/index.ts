@@ -67,6 +67,8 @@ export {
 // Export middleware (matches Python's interface)
 export {
   createFilesystemMiddleware,
+  createFilesystemInterruptMiddleware,
+  type FilesystemInterruptMiddlewareOptions,
   createSubAgentMiddleware,
   createPatchToolCallsMiddleware,
   createSummarizationMiddleware,

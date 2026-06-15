@@ -4,9 +4,14 @@
 export type FilesystemOperation = "read" | "write";
 
 /**
- * Whether a matched rule permits or blocks the operation.
+ * Effect when a tool call matches a rule.
+ *
+ * - `"allow"` (default): the call proceeds.
+ * - `"deny"`: the tool returns a permission-denied error.
+ * - `"interrupt"`: the call is paused for human approval before it runs,
+ *   via the same human-in-the-loop interrupt used by `interruptOn`.
  */
-export type PermissionMode = "allow" | "deny";
+export type PermissionMode = "allow" | "deny" | "interrupt";
 
 /**
  * A single filesystem permission rule.
@@ -34,7 +39,16 @@ export interface FilesystemPermission {
   paths: string[];
 
   /**
-   * Whether matching paths are permitted or blocked. Defaults to `"allow"`.
+   * What happens when this rule matches. Defaults to `"allow"`.
+   *
+   * - `"allow"`: the call proceeds.
+   * - `"deny"`: the tool returns a permission-denied error.
+   * - `"interrupt"`: the call pauses for human approval before it runs.
+   *   Best paired with patterns that have a literal leading anchor (e.g.
+   *   `/secrets/**`). Bulk tools (`ls`/`glob`/`grep`) fire the interrupt
+   *   whenever their search subtree could overlap the rule's anchored
+   *   prefix, so a fully unanchored pattern (`/**\/secrets`) conservatively
+   *   over-fires for any bulk call.
    */
   mode?: PermissionMode;
 }

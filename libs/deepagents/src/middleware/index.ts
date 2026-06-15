@@ -8,6 +8,10 @@ export {
   createContentPreview,
 } from "./fs.js";
 export {
+  createFilesystemInterruptMiddleware,
+  type FilesystemInterruptMiddlewareOptions,
+} from "./fs_interrupt.js";
+export {
   createSubAgentMiddleware,
   type SubAgentMiddlewareOptions,
   type SubAgent,

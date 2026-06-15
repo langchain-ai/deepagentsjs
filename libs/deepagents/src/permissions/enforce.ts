@@ -69,7 +69,8 @@ export function globMatch(path: string, pattern: string): boolean {
  *
  * First-match-wins; permissive default.
  *
- * @returns `"allow"` if the operation is permitted, `"deny"` otherwise.
+ * @returns the matched rule's mode (`"allow"`, `"deny"`, or `"interrupt"`),
+ * or `"allow"` when no rule matches.
  */
 export function decidePathAccess(
   rules: readonly FilesystemPermission[],
