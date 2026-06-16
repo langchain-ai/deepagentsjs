@@ -1,0 +1,241 @@
+examples/repl/orchestration-patterns/visualizer/index.html
+  s_16e43c85598024::t_2a7e43b4ca9560 1531
+  s_8308012c7a39aa::t_2d552eb7c6a885 174-178
+  s_16e43c85598024::t_872dd7ce0774c4 362-365,367,371-425,427-489
+  s_16e43c85598024::t_f384b25e779412 1532,1534-1535
+  s_16e43c85598024::t_2eeb3bce5ad8e5 1460,1463-1464,1473-1474,1482
+  s_16e43c85598024::t_eb6b39bc28e345 1497-1505
+  s_16e43c85598024::t_2c0063e55c4f54 1303-1307
+  s_16e43c85598024::t_08a793dfcab541 651-653
+  s_8308012c7a39aa::t_2da3be21318e40 252
+  s_8308012c7a39aa::t_ac48f63a0ace51 187-188,193-194,196-197,199
+  s_16e43c85598024::t_9561c3abe2df61 1442
+  s_16e43c85598024::t_e4e161cfd1031e 276-277
+  s_16e43c85598024::t_a5e1f88dbd64c1 1164,1170
+  s_8308012c7a39aa::t_1e802c6ae399b8 162
+  s_16e43c85598024::t_ccb0771147a4c4 691-692
+  s_8308012c7a39aa::t_198476fb5117c1 223-224
+  s_8308012c7a39aa::t_9c60a7b2899a44 724-725
+  s_16e43c85598024::t_2971ea4054449e 872-878,881
+  s_16e43c85598024::t_b0e0872009e23f 1041-1051
+  s_16e43c85598024::t_9b2d37d60e36e8 1177
+  s_16e43c85598024::t_407ec9bb02fb7c 1-161,163-173,179-186,189-192,195,198,200-222,225-251,253-275,278-361,366,368-370,426,490-616,618-624,628-650,654-690,693-723,726-871,879-880,882-945,1322-1335,1338-1370,1375-1441,1443-1445,1447-1452,1457-1459,1461-1462,1465-1470,1485-1496,1506-1530,1533,1536-1612
+  s_16e43c85598024::t_0942e24678c7de 617,625-627
+  s_16e43c85598024::t_8c57269e4c5fb0 1446,1453-1456,1471,1483-1484
+  s_16e43c85598024::t_d60bb74a9e1515 1472,1475-1481
+  s_16e43c85598024::t_997618d9bffe6c 946-1040,1052-1163,1165-1169,1171-1176,1178-1302,1308-1321,1336-1337,1371-1374
+examples/repl/orchestration-patterns/03-adversarial-verification.ts
+  s_794bdb5b694ce2::t_2ca95b13245d13 61-62,65-66,69-70,75
+  s_794bdb5b694ce2::t_fbecad43e1d966 15
+  s_e329a283a6993a::t_1fd8fb3a100c9f 1-14,17-50,59-60,67-68,84-85
+  s_794bdb5b694ce2::t_be5d370690d9d6 71-74,76-78,80-83
+  s_8308012c7a39aa::t_188b7824e55857 86-94
+  s_8308012c7a39aa::t_232b447a9d60f6 16,95-98
+  h_f78d33d4280f3f 63-64
+  s_794bdb5b694ce2::t_06625c79f3627f 51-58
+  s_794bdb5b694ce2::t_1a514b787b372a 79
+examples/repl/orchestration-patterns/fixtures/src/middleware/upload.ts
+  s_8308012c7a39aa::t_980f1dca8e1e51 1-119
+examples/repl/orchestration-patterns/fixtures/src/routes/notifications.ts
+  s_e329a283a6993a::t_eac3833fc5a667 1-31,35-37,40-65,83,98,122,124-132,134-136,138-139,141-142,144-154,156-157,171-172
+  s_e329a283a6993a::t_ab378f9cb4cdfc 32-34,38-39,66-82,84-97,99-121,123,133,137,140,143,155,158-170
+examples/repl/orchestration-patterns/04-generate-and-filter.ts
+  h_f78d33d4280f3f 47-48
+  s_794bdb5b694ce2::t_8a833f4d205862 53-61,66-69
+  s_794bdb5b694ce2::t_299404bfb1b5d4 35-42
+  s_e329a283a6993a::t_0271dc2af0efe7 1-13,16-34,43-44,51-52,70-71
+  s_794bdb5b694ce2::t_dc0ebd104a692f 45-46,49-50
+  s_794bdb5b694ce2::t_eea7db99bf0e61 62-65
+  s_8308012c7a39aa::t_188b7824e55857 72-80
+  s_8308012c7a39aa::t_232b447a9d60f6 15,81-84
+  s_794bdb5b694ce2::t_723c4966f8b9d4 14
+examples/repl/orchestration-patterns/fixtures/src/routes/reviews.ts
+  s_8308012c7a39aa::t_f87ed92e90a8ea 1-156
+examples/repl/orchestration-patterns/fixtures/src/routes/users.ts
+  s_e329a283a6993a::t_dd84f3792c7b87 1-15,19-24,26-29,31-43,49-54,56,60-61,65-67,69-83,85-100,104,113,119,125,131,140,142-144,146-150,152-163,165-166,169-171,173-175,177-184,186-192,194-196,198-204,206-207,209-219,221-226,228-229,231-235
+  s_e329a283a6993a::t_28a09676f34fc0 16-18,25,30,44-48,55,57-59,62-64,68,84,101-103,105-112,114-118,120-124,126-130,132-139,141,145,151,164,167-168,172,176,185,193,197,205,208,220,227,230
+examples/repl/orchestration-patterns/fixtures/src/models/user.ts
+  s_e329a283a6993a::t_0e9a244f51fd68 22,29,36,65-66,108,112,133-134,147-150,160,162,164,174,176,178,180-181
+  s_e329a283a6993a::t_3c9f494b565b1c 1-21,23-28,30-35,37-64,67-107,109-111,113-132,135-146,151-159,161,163,165-173,175,177,179,182-200
+examples/repl/orchestration-patterns/fixtures/src/routes/admin.ts
+  s_8308012c7a39aa::t_0af6fb96e1825e 1-149
+examples/repl/orchestration-patterns/fixtures/src/services/email.ts
+  s_8308012c7a39aa::t_8ea01d38d5c514 1-149
+examples/repl/orchestration-patterns/01-classify-and-act.ts
+  s_794bdb5b694ce2::t_5df68bd5021494 73-76,78-81,83-86
+  s_8308012c7a39aa::t_188b7824e55857 89-97
+  s_794bdb5b694ce2::t_b8639f25c85d87 63-64,66-68,72,77
+  s_8308012c7a39aa::t_232b447a9d60f6 15,98-101
+  s_794bdb5b694ce2::t_a78ac81beb85b6 53-60
+  s_e329a283a6993a::t_ffca729d4bcf88 1-13,16-52,61-62,69-70,87-88
+  s_794bdb5b694ce2::t_08b018ecc83a20 71
+  s_794bdb5b694ce2::t_032d4d22784ca1 14
+  h_f78d33d4280f3f 65
+  s_794bdb5b694ce2::t_3a2f0bacc764ef 82
+examples/repl/orchestration-patterns/fixtures/src/models/product.ts
+  s_8308012c7a39aa::t_39283eee938eab 1-172
+examples/repl/orchestration-patterns/fixtures/src/services/payment-gateway.ts
+  s_8308012c7a39aa::t_bf74abb791e28c 30-31
+  s_8308012c7a39aa::t_39b3ec6aaf1f0e 1-29,32-164
+examples/repl/orchestration-patterns/fixtures/src/models/order.ts
+  s_e329a283a6993a::t_832820c2b2b598 1-3,6-7,10-12,17-19,22-37,40-41,44-46,49-55,58-60,62,65-69,72-74,92-99,104-106,108-113,115,121,123,125,131-133,135-137,141,144-148,150-152,154-158,160,163-167,169,171-172,174,176-177,179-182,184,186,189-190,192-193,196-197,199-203
+  s_e329a283a6993a::t_87e1f90f80613d 183,185,187-188,191,194-195,198
+  s_e329a283a6993a::t_1c559ca9e9c30d 4-5,38-39,42-43,47-48,56-57,61,63-64,70-71,75-91,100-103,114,126,129-130,134,138-140,142-143,149,153,159,161-162,168,170,173,175,178
+  s_e329a283a6993a::t_869980dc59861b 8-9,13-16,20-21
+  s_e329a283a6993a::t_00cf0044d5ae64 107,116-120,122,124,127-128
+examples/repl/orchestration-patterns/06-loop-until-done.ts
+  s_e329a283a6993a::t_ceb9a3684ba999 1-14,17-35,46-47,54-55,72-73
+  s_794bdb5b694ce2::t_cf88122b42621c 36-37
+  s_794bdb5b694ce2::t_10601ae3d5feef 48-49,52-53,56-57
+  s_794bdb5b694ce2::t_cbfcb5c3a32eba 15
+  h_f78d33d4280f3f 50-51
+  s_794bdb5b694ce2::t_453f85d7577b2f 58-61,68-71
+  s_794bdb5b694ce2::t_9e83eeeabec5d7 62-67
+  s_8308012c7a39aa::t_188b7824e55857 74-82
+  s_794bdb5b694ce2::t_ca486520f44e43 38-45
+  s_8308012c7a39aa::t_232b447a9d60f6 16,83-86
+examples/repl/orchestration-patterns/fixtures/src/routes/webhooks.ts
+  s_8308012c7a39aa::t_9b3c866602ad8f 1-136
+examples/repl/orchestration-patterns/fixtures/src/middleware/rate-limiter.ts
+  s_e329a283a6993a::t_b34b44297cfd1b 47-49,57-61,64-67,70-73,76-79,89-269,275,279,283-290,292,301,315-316,319-321,324,328-331,335-336,338,344-348,350,352-354,374,376-427,430-432,434-441,443-446,454-455,457-459,462-477,520-547,560,562-563,565-566,568-574,581-589,591-595
+examples/repl/orchestration-patterns/fixtures/src/routes/payments.ts
+  s_e329a283a6993a::t_1e8b274640e53f 257-259,267
+  s_e329a283a6993a::t_814b80ffc0fb5d 278,283,285
+  s_e329a283a6993a::t_e94a7388572ae2 9,18,53-54,57,72,99,144,169,179,193,202,205,217-229,231-232,234,236-238,240,277,279,282,286
+  s_e329a283a6993a::t_7149cf4a473dc2 82,85,88,94,102-103,106
+  s_e329a283a6993a::t_96107946274e27 230,233,235
+  s_e329a283a6993a::t_eee0c618bedde5 1-8,10-17,19-52,55-56,58-71,73-81,83-84,86-87,89-93,95-98,100-101,104-105,107-143,145-168,170-178,180-192,194-201,203-204,206-216,239,241-256,260-266,268-276,280-281,284,287-290
+examples/repl/orchestration-patterns/fixtures/data/support-tickets.jsonl
+  s_8308012c7a39aa::t_1e277baf6428c0 1-50
+examples/repl/orchestration-patterns/visualizer/patterns.ts
+  s_16e43c85598024::t_5fb95fee43e133 1-256,261-264
+  s_16e43c85598024::t_ea8081bced4a26 257-260
+examples/repl/orchestration-patterns/visualizer/README.md
+  s_16e43c85598024::t_c13b70e2186622 1-4,26-60
+  s_16e43c85598024::t_8c9999bcfd4dba 61-68
+  s_16e43c85598024::t_45189e1b153485 5-25
+examples/repl/orchestration-patterns/fixtures/src/utils/jwt.ts
+  s_8308012c7a39aa::t_b0305b027c12e8 1-121
+examples/repl/orchestration-patterns/fixtures/src/utils/sanitize.ts
+  s_8308012c7a39aa::t_807cbeaf2043fe 1-118
+examples/repl/orchestration-patterns/fixtures/src/routes/products.ts
+  s_e329a283a6993a::t_21b80817b84dc6 32-37,39-48,50-65,67-83,85,89,92,94,97-102,104-112,114-124,126,128-137,139-140,143-144,146-149,152-158,160-167,169-177
+  s_e329a283a6993a::t_60faf0a1e09e4f 1-31,38,49,66,84,86-88,90-91,93,95-96,103,113,125,127,138,141-142,145,150-151,159,168,178-179
+examples/repl/orchestration-patterns/fixtures/src/middleware/validation.ts
+  s_8308012c7a39aa::t_976c9973fd0109 1-124
+examples/repl/orchestration-patterns/fixtures/src/models/session.ts
+  s_8308012c7a39aa::t_22fa6e98d0f725 1-125
+examples/repl/orchestration-patterns/fixtures/src/logger.ts
+  s_8308012c7a39aa::t_65b0171196716c 1-18
+examples/repl/orchestration-patterns/fixtures/src/routes/orders.ts
+  s_e329a283a6993a::t_499e048de7fec6 4,35-52,54-56,58-62,64-67,69-71,75-77,79-85,87-115,119-120,122-123,127,130,133-149,151-164,166,171-172,174,177,180,182,184,186,192,195,199-200,203,207
+  s_e329a283a6993a::t_d6de822376798c 1-3,5-34,53,57,63,68,72-74,78,86,116-118,121,124-126,128-129,131-132,150,165,167-170,173,175-176,178-179,181,183,185,187-191,193-194,196-198,201-202,204-206,208-210
+examples/repl/.env.example
+  s_e329a283a6993a::t_80532bbd2d93fc 1
+examples/repl/orchestration-patterns/fixtures/src/middleware/auth.ts
+  s_e329a283a6993a::t_89b525d95a6742 1-201
+examples/repl/orchestration-patterns/fixtures/src/routes/auth.ts
+  s_e329a283a6993a::t_9585ed101094c9 1,16,32-33,76,86,155,161,178,184,188,209,235-237
+  s_e329a283a6993a::t_d8e466b4350ac9 2-15,17-31,34-75,77-85,87-154,156-160,162-177,179-183,185-187,189-208,210-234,238-247
+examples/repl/orchestration-patterns/fixtures/src/routes/cart.ts
+  s_8308012c7a39aa::t_b6f3068bdad45d 1-162
+swarm-retro-timeline.md
+  s_794bdb5b694ce2::t_1b96c84c69f97f 4-5
+  s_794bdb5b694ce2::t_25e8b060409ece 21
+  s_794bdb5b694ce2::t_02c643521b14ad 38-39,41-42,47-48,50-51,56-58,62-64,67-68,70-71
+  s_794bdb5b694ce2::t_79390f9d63f3a3 1-2,7-10,15-16,20,32-33,36-37,40,44-45,54-55,59-60,65-66,75-78,81-83
+  s_794bdb5b694ce2::t_94f7bc2f1c7404 3,6,17-19,22-31,34-35,43,46,49,52-53,61,69,72-74,79-80
+  s_794bdb5b694ce2::t_1b785a8834730b 11-14
+examples/repl/orchestration-patterns/02-fan-out-and-synthesize.ts
+  s_8308012c7a39aa::t_232b447a9d60f6 15,79-82
+  s_794bdb5b694ce2::t_441cf4389430ab 46-51,54-55,60
+  s_794bdb5b694ce2::t_842617ad2dab53 63
+  s_794bdb5b694ce2::t_9f0b8972903a3e 56-59,61-62,64-67
+  s_e329a283a6993a::t_914b619237a7bf 1-13,16-35,44-45,52-53,68-69
+  s_794bdb5b694ce2::t_59e9efc1750658 14
+  s_8308012c7a39aa::t_188b7824e55857 70-78
+  s_794bdb5b694ce2::t_8b3139c703b452 36-43
+examples/repl/orchestration-patterns/visualizer/server.ts
+  s_16e43c85598024::t_230faeac97dc5e 19-22,39,42-44,60-61,132-134,139-158,162-163,166-167,181,195,197,200-204,206-296,298-350,354-355,377-384,387-409,412,414,416,466,468
+  s_16e43c85598024::t_cfb2d6f7bc9128 164-165,168-180,182-192
+  s_16e43c85598024::t_37f2ccd7be8314 1-18,23-38,40-41,45-59,62-131,135-138,159-161,193-194,196,198-199,205,297,351-353,356-376,385-386,410-411,413,415,417-465,467,469-540
+examples/repl/orchestration-patterns/fixtures/src/db.ts
+  s_8308012c7a39aa::t_4bd54cc22f5652 1-44
+examples/repl/orchestration-patterns/fixtures/data/support-tickets.smoke.jsonl
+  s_794bdb5b694ce2::t_2e6dc2a990078c 1,4,7
+  s_794bdb5b694ce2::t_371681ac79457b 2-3,5-6,8-10
+examples/repl/orchestration-patterns/fixtures/src/middleware/logging.ts
+  s_e329a283a6993a::t_f2dd8d498d3319 1-205
+libs/deepagents/src/backends/utils.ts
+  s_e329a283a6993a::t_a13c045716f7b4 83
+examples/repl/orchestration-patterns/fixtures/src/middleware/cors.ts
+  s_8308012c7a39aa::t_e940d678572ab1 1-110
+examples/repl/orchestration-patterns/README.md
+  s_794bdb5b694ce2::t_a9ef66fcdb9efe 45-55
+  s_794bdb5b694ce2::t_b108b428d52fd2 6-10
+  s_16e43c85598024::t_5657b28821f758 57-62
+  s_e329a283a6993a::t_ed2f2c60ed6fca 1-5,11-41,63-70
+  s_794bdb5b694ce2::t_cb42a093615ef1 42-44,56
+examples/repl/orchestration-patterns/ground-truth-categories.json
+  s_8308012c7a39aa::t_1e277baf6428c0 1-52
+examples/repl/orchestration-patterns/05-tournament.ts
+  s_794bdb5b694ce2::t_8d86a2c2e319d6 48-55
+  s_794bdb5b694ce2::t_24ea83efa7f415 14
+  h_f78d33d4280f3f 60-61
+  s_8308012c7a39aa::t_188b7824e55857 85-93
+  s_794bdb5b694ce2::t_fda3c261a8f7bd 58-59,62-63
+  s_794bdb5b694ce2::t_d89a76cce74090 75-78
+  s_8308012c7a39aa::t_232b447a9d60f6 15,94-97
+  s_e329a283a6993a::t_3b304003425adf 1-13,16-47,56-57,64-65,83-84
+  s_794bdb5b694ce2::t_88887abc5cbff1 66-74,79-82
+examples/repl/orchestration-patterns/fixtures/src/utils/crypto.ts
+  s_e329a283a6993a::t_2f1a8082284108 1-40,42-46,48-56,58,60-63,65-80,82-103,105,107-139,141-147,149-155
+  s_e329a283a6993a::t_a0fd51c0026868 41,47,57,59,64,81,104,106,140,148
+examples/repl/orchestration-patterns/visualizer/.gitignore
+  s_16e43c85598024::t_dd716b21e8d9f0 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "7f8e29257a54a6b179a2d9ae07569a2523de43f3",
+  "prompts": {},
+  "humans": {
+    "h_f78d33d4280f3f": {
+      "author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  },
+  "sessions": {
+    "s_16e43c85598024": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c71b59bd-337a-4514-9929-3154d2c6ff4c",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    },
+    "s_794bdb5b694ce2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "86b64e86-0069-486b-ae39-54de3e3b1889",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    },
+    "s_8308012c7a39aa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e465b169-c09d-474c-a3b0-52495b1282ef",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    },
+    "s_e329a283a6993a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8029323d-29dd-4209-bb9c-e664ef60c43b",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
