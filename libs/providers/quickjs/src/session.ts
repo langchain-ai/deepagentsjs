@@ -33,7 +33,7 @@ import type {
   ReplResult,
   SubagentBridgeOptions,
 } from "./types.js";
-import { toCamelCase } from "./utils.js";
+import { toCamelCase, stringifyJson } from "./utils.js";
 import { transformForEval } from "./transform.js";
 import { AsyncEvalQueue } from "./eval-queue.js";
 import PQueue from "p-queue";
@@ -120,7 +120,7 @@ function extractToolText(result: unknown): string {
       return texts.join("\n");
     }
   }
-  return JSON.stringify(result);
+  return stringifyJson(result);
 }
 
 /**
@@ -421,7 +421,7 @@ export class ReplSession {
       );
 
       if (result.error) {
-        const error = context.dump(result.error);
+        const error = this.safeDump(result.error) as any;
         result.error.dispose();
         return { ok: false, error, ...drainLogs() };
       }
@@ -430,18 +430,18 @@ export class ReplSession {
 
       if (promiseState.type === "fulfilled") {
         if (promiseState.notAPromise) {
-          const value = context.dump(result.value);
+          const value = this.safeDump(result.value);
           result.value.dispose();
           return { ok: true, value, ...drainLogs() };
         }
-        const value = context.dump(promiseState.value);
+        const value = this.safeDump(promiseState.value);
         promiseState.value.dispose();
         result.value.dispose();
         return { ok: true, value, ...drainLogs() };
       }
 
       if (promiseState.type === "rejected") {
-        const error = context.dump(promiseState.error);
+        const error = this.safeDump(promiseState.error) as any;
         promiseState.error.dispose();
         result.value.dispose();
         return { ok: false, error, ...drainLogs() };
@@ -453,13 +453,13 @@ export class ReplSession {
         context.runtime.executePendingJobs();
         const state = context.getPromiseState(result.value);
         if (state.type === "fulfilled") {
-          const value = context.dump(state.value);
+          const value = this.safeDump(state.value);
           state.value.dispose();
           result.value.dispose();
           return { ok: true, value, ...drainLogs() };
         }
         if (state.type === "rejected") {
-          const error = context.dump(state.error);
+          const error = this.safeDump(state.error) as any;
           state.error.dispose();
           result.value.dispose();
           return { ok: false, error, ...drainLogs() };
@@ -475,6 +475,87 @@ export class ReplSession {
       };
     } finally {
       this.ptcCallsRemaining = null;
+    }
+  }
+
+  private safeDump(handle: QuickJSHandle): unknown {
+    const context = this.context!;
+    try {
+      const typeOfHandle = context.typeof(handle);
+
+      // Fast-path for BigInt handles: return a native BigInt.
+      if (typeOfHandle === "bigint") {
+        const toStringFn = context.evalCode(`(v) => v.toString()`);
+        if (toStringFn.error) {
+          toStringFn.error.dispose();
+          return context.dump(handle);
+        }
+        const strRes = context.callFunction(
+          toStringFn.value,
+          context.undefined,
+          handle,
+        );
+        toStringFn.value.dispose();
+
+        if (strRes.error) {
+          strRes.error.dispose();
+          return context.dump(handle);
+        }
+
+        const s = context.getString(strRes.value);
+        strRes.value.dispose();
+        return BigInt(s);
+      }
+
+      // Default dump — for some QuickJS values `dump` returns the
+      // unhelpful string "[object Object]". In that case attempt a
+      // JSON.stringify inside the guest, converting BigInt values to
+      // a prefixed string so we can revive them back to BigInt here.
+      const value = context.dump(handle);
+      if (value === "[object Object]") {
+        try {
+          const stringifyFn = context.evalCode(`
+            (val) => JSON.stringify(val, (k, v) => typeof v === "bigint" ? "__BIGINT__:" + v.toString() : v)
+          `);
+          if (stringifyFn.error) {
+            stringifyFn.error.dispose();
+            return value;
+          }
+          const stringified = context.callFunction(
+            stringifyFn.value,
+            context.undefined,
+            handle,
+          );
+          stringifyFn.value.dispose();
+
+          if (stringified.error) {
+            stringified.error.dispose();
+            return value;
+          }
+
+          const typeofStringified = context.typeof(stringified.value);
+          if (typeofStringified === "undefined") {
+            stringified.value.dispose();
+            return value;
+          }
+
+          const jsonStr = context.getString(stringified.value);
+          stringified.value.dispose();
+
+          return JSON.parse(jsonStr, (_k, v) => {
+            if (typeof v === "string" && v.startsWith("__BIGINT__:")) {
+              return BigInt(v.slice(11));
+            }
+            return v;
+          });
+        } catch {
+          return value;
+        }
+      }
+
+      return value;
+    } catch {
+      return context.dump(handle);
     }
   }
 
@@ -520,11 +601,11 @@ export class ReplSession {
       const fnHandle = context.newFunction(
         method,
         (...args: QuickJSHandle[]) => {
-          const nativeArgs = args.map((a: QuickJSHandle) => context.dump(a));
+          const nativeArgs = args.map((a: QuickJSHandle) => this.safeDump(a));
           const formatted = nativeArgs
             .map((a: unknown) =>
               typeof a === "object" && a !== null
-                ? JSON.stringify(a)
+                ? stringifyJson(a)
                 : String(a),
             )
             .join(" ");
@@ -551,7 +632,7 @@ export class ReplSession {
       const fnHandle = context.newFunction(
         camelName,
         (inputHandle: QuickJSHandle) => {
-          const input = context.dump(inputHandle);
+          const input = this.safeDump(inputHandle);
           const promise = context.newPromise();
           (async () => {
             try {

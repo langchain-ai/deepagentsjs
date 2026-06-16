@@ -11,6 +11,17 @@ export function toCamelCase(name: string): string {
 }
 
 /**
+ * Safely stringifies a value to JSON, converting BigInt values to strings.
+ */
+export function stringifyJson(value: unknown, space?: string | number): string {
+  return JSON.stringify(
+    value,
+    (_, item) => (typeof item === "bigint" ? item.toString() : item),
+    space,
+  );
+}
+
+/**
  * Recursively collect all string values from an object, array, or primitive.
  */
 export function collectStrings(obj: unknown): string[] {
@@ -47,7 +58,9 @@ export function formatReplResult(result: ReplResult): string {
       const formatted =
         typeof result.value === "string"
           ? result.value
-          : JSON.stringify(result.value, null, 2);
+          : typeof result.value === "bigint"
+            ? result.value.toString()
+            : stringifyJson(result.value, 2);
       parts.push(`→ ${formatted}`);
     }
   } else if (result.error) {
