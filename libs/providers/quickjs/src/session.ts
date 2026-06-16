@@ -28,7 +28,11 @@ import type {
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
 import { PTCCallBudgetExceededError } from "./errors.js";
-import type { ReplSessionOptions, ReplResult, SkillsContext } from "./types.js";
+import type {
+  ReplSessionOptions,
+  ReplResult,
+  SubagentBridgeOptions,
+} from "./types.js";
 import { toCamelCase, stringifyJson } from "./utils.js";
 import { transformForEval } from "./transform.js";
 import { AsyncEvalQueue } from "./eval-queue.js";
