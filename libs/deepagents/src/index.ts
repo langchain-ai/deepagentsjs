@@ -182,3 +182,8 @@ export {
   adaptBackendProtocol,
   adaptSandboxProtocol,
 } from "./backends/index.js";
+
+export {
+  SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY,
+  createSubAgent,
+} from "./middleware/subagents.js";

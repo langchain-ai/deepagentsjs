@@ -1,11 +1,5 @@
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
-import type {
-  AnyBackendProtocol,
-  BackendFactory,
-  SkillMetadata,
-} from "deepagents";
-
 /**
  * Configuration options for the Code Interpreter middleware.
  */
@@ -46,12 +40,6 @@ export interface CodeInterpreterMiddlewareOptions {
   systemPrompt?: string | null;
 
   /**
-   * Backend the REPL reads skill module sources from. When provided alongside
-   * `SkillsMiddleware`, skills with a `module:` key become dynamic-importable.
-   */
-  skillsBackend?: AnyBackendProtocol | BackendFactory;
-
-  /**
    * Maximum number of `tools.*` bridge calls allowed per `eval()` invocation.
    *
    * Each call to any function in the `tools` namespace decrements the counter.
@@ -88,6 +76,46 @@ export interface CodeInterpreterMiddlewareOptions {
    * @default true
    */
   captureConsole?: boolean;
+
+  /**
+   * Expose the built-in `task()` global for subagent orchestration.
+   *
+   * When `true` (default) and subagent specs are available, a `task()`
+   * global is installed in the REPL that dispatches subagents
+   * programmatically with a fixed concurrency cap of 32.
+   * Set to `false` to require subagent dispatch through the normal
+   * `task` tool path.
+   *
+   * @default true
+   */
+  subagents?: boolean;
+}
+
+/**
+ * Configuration for the built-in subagent primitive.
+ *
+ * When provided to a ReplSession, a frozen `subagent()` global is
+ * installed in the QuickJS context. Calls are gated by a concurrency
+ * queue and forwarded to the dispatch callback.
+ */
+export interface SubagentBridgeOptions {
+  /**
+   * Callback that invokes a subagent. Receives validated input from
+   * the QuickJS guest and returns the subagent's output — a string
+   * for text responses or an object for structured (responseSchema)
+   * responses.
+   */
+  dispatch: (input: {
+    description: string;
+    subagentType: string;
+    responseSchema?: Record<string, unknown>;
+  }) => Promise<unknown>;
+
+  /**
+   * Maximum number of concurrent subagent calls within a single eval.
+   * Excess calls queue and resolve as permits free up.
+   */
+  maxConcurrency: number;
 }
 
 /**
@@ -97,11 +125,11 @@ export interface ReplSessionOptions {
   memoryLimitBytes?: number;
   maxStackSizeBytes?: number;
   tools?: StructuredToolInterface[];
-  skillsEnabled?: boolean;
   maxPtcCalls?: number | null;
   maxResultChars?: number;
   captureConsole?: boolean;
   sessionId?: string;
+  subagentBridge?: SubagentBridgeOptions;
 }
 
 /**
@@ -113,19 +141,4 @@ export interface ReplResult {
   error?: { name?: string; message?: string; stack?: string };
   logs: string[];
   logsDroppedChars: number;
-}
-
-/**
- * Metadata + backend pair the session needs to resolve skill imports.
- */
-export interface SkillsContext {
-  /**
-   * Per-eval snapshot of `state.skillsMetadata`.
-   */
-  metadata: SkillMetadata[];
-
-  /**
-   * Backend the session fetches skill source files from.
-   */
-  backend: AnyBackendProtocol;
 }

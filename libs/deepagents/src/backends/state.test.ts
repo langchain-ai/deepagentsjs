@@ -547,17 +547,19 @@ describe("StateBackend", () => {
 
     expect(result).toBeInstanceOf(Command);
     expect(result.update.files).toBeDefined();
-    expect(result.update.files["/large_tool_results/test_123"]).toBeDefined();
-    expect(result.update.files["/large_tool_results/test_123"].content).toBe(
-      largeContent,
-    );
+    expect(
+      result.update.files["/large_tool_results/test_123.txt"],
+    ).toBeDefined();
+    expect(
+      result.update.files["/large_tool_results/test_123.txt"].content,
+    ).toBe(largeContent);
 
     expect(result.update.messages).toHaveLength(1);
     expect(result.update.messages[0].content).toContain(
       "Tool result too large",
     );
     expect(result.update.messages[0].content).toContain(
-      "/large_tool_results/test_123",
+      "/large_tool_results/test_123.txt",
     );
   });
 

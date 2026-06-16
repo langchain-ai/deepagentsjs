@@ -25,6 +25,15 @@ import { FilesystemPermission } from "../permissions/types.js";
 export type { AgentMiddleware };
 
 /**
+ * Config key used by task-tool callers to request dynamic response format.
+ *
+ * When set in `config.configurable`, the task tool recompiles the target
+ * subagent with this response format instead of using the pre-compiled graph.
+ */
+export const SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY =
+  "__deepagents_subagent_response_format";
+
+/**
  * Default system prompt for subagents.
  * Provides a minimal base prompt that can be extended by specific subagent configurations.
  */
@@ -472,19 +481,68 @@ function returnCommandWithStateUpdate(
 }
 
 /**
- * Create subagent instances from specifications
+ * Create a runnable agent from a declarative `SubAgent` spec.
+ *
+ * This is the shared entrypoint for compiling a `SubAgent` into a
+ * `ReactAgent`. Pre-compiled `CompiledSubAgent` runnables bypass this
+ * function entirely.
+ *
+ * The spec must have `model` and `tools` set — the caller is responsible
+ * for coalescing any defaults before calling this function.
+ *
+ * @param spec - Declarative subagent specification. Must specify `model` and `tools`.
+ * @returns A compiled `ReactAgent` ready for task-tool invocation.
+ */
+export function createSubAgent(
+  spec: SubAgent,
+  options?: { responseFormat?: CreateAgentParams["responseFormat"] },
+): ReactAgent {
+  if (!spec.model) {
+    throw new Error(`SubAgent '${spec.name}' must specify 'model'`);
+  }
+  if (!spec.tools) {
+    throw new Error(`SubAgent '${spec.name}' must specify 'tools'`);
+  }
+
+  const middleware: AgentMiddleware[] = [...(spec.middleware ?? [])];
+
+  if (spec.interruptOn) {
+    middleware.push(
+      humanInTheLoopMiddleware({ interruptOn: spec.interruptOn }),
+    );
+  }
+
+  const selectedResponseFormat = options?.responseFormat ?? spec.responseFormat;
+
+  return createAgent({
+    model: spec.model,
+    systemPrompt: spec.systemPrompt,
+    tools: spec.tools,
+    middleware,
+    name: spec.name,
+    ...(selectedResponseFormat != null && {
+      responseFormat: selectedResponseFormat,
+    }),
+  });
+}
+
+/**
+ * Create subagent instances from specifications.
+ *
+ * Returns compiled agents, raw specs keyed by name (for on-demand
+ * recompilation with dynamic response formats), and descriptions.
  */
 function getSubagents(options: {
   defaultModel: LanguageModelLike | string;
   defaultTools: StructuredTool[];
   defaultMiddleware: AgentMiddleware[] | null;
-  /** Middleware specifically for the general-purpose subagent (includes skills from main agent) */
   generalPurposeMiddleware: AgentMiddleware[] | null;
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
   subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
 }): {
   agents: Record<string, ReactAgent | Runnable>;
+  specsByName: Record<string, SubAgent | CompiledSubAgent>;
   descriptions: string[];
 } {
   const {
@@ -498,13 +556,12 @@ function getSubagents(options: {
   } = options;
 
   const defaultSubagentMiddleware = defaultMiddleware || [];
-  // General-purpose middleware includes skills from main agent, falls back to default
   const generalPurposeMiddlewareBase =
     gpMiddleware || defaultSubagentMiddleware;
   const agents: Record<string, ReactAgent | Runnable> = {};
+  const specsByName: Record<string, SubAgent | CompiledSubAgent> = {};
   const subagentDescriptions: string[] = [];
 
-  // Create general-purpose agent if enabled
   if (generalPurposeAgent) {
     const generalPurposeMiddleware = [...generalPurposeMiddlewareBase];
     if (defaultInterruptOn) {
@@ -513,21 +570,22 @@ function getSubagents(options: {
       );
     }
 
-    const generalPurposeSubagent = createAgent({
+    const gpSpec: SubAgent = {
+      name: "general-purpose",
+      description: DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
       model: defaultModel,
       systemPrompt: DEFAULT_SUBAGENT_PROMPT,
       tools: defaultTools as any,
       middleware: generalPurposeMiddleware,
-      name: "general-purpose",
-    });
+    };
 
-    agents["general-purpose"] = generalPurposeSubagent;
+    agents["general-purpose"] = createSubAgent(gpSpec);
+    specsByName["general-purpose"] = gpSpec;
     subagentDescriptions.push(
       `- general-purpose: ${DEFAULT_GENERAL_PURPOSE_DESCRIPTION}`,
     );
   }
 
-  // Process custom subagents (use defaultMiddleware WITHOUT skills)
   for (const agentParams of subagents) {
     subagentDescriptions.push(
       `- ${agentParams.name}: ${agentParams.description}`,
@@ -535,29 +593,24 @@ function getSubagents(options: {
 
     if ("runnable" in agentParams) {
       agents[agentParams.name] = agentParams.runnable;
+      specsByName[agentParams.name] = agentParams;
     } else {
-      const middleware = agentParams.middleware
-        ? [...defaultSubagentMiddleware, ...agentParams.middleware]
-        : [...defaultSubagentMiddleware];
-
-      const interruptOn = agentParams.interruptOn || defaultInterruptOn;
-      if (interruptOn)
-        middleware.push(humanInTheLoopMiddleware({ interruptOn }));
-
-      agents[agentParams.name] = createAgent({
+      const resolvedSpec: SubAgent = {
+        ...agentParams,
         model: agentParams.model ?? defaultModel,
-        systemPrompt: agentParams.systemPrompt,
         tools: agentParams.tools ?? defaultTools,
-        middleware,
-        name: agentParams.name,
-        ...(agentParams.responseFormat != null && {
-          responseFormat: agentParams.responseFormat,
-        }),
-      });
+        middleware: [
+          ...defaultSubagentMiddleware,
+          ...(agentParams.middleware ?? []),
+        ],
+        interruptOn: agentParams.interruptOn ?? defaultInterruptOn ?? undefined,
+      };
+      agents[agentParams.name] = createSubAgent(resolvedSpec);
+      specsByName[agentParams.name] = resolvedSpec;
     }
   }
 
-  return { agents, descriptions: subagentDescriptions };
+  return { agents, specsByName, descriptions: subagentDescriptions };
 }
 
 /**
@@ -567,7 +620,6 @@ function createTaskTool(options: {
   defaultModel: LanguageModelLike | string;
   defaultTools: StructuredTool[];
   defaultMiddleware: AgentMiddleware[] | null;
-  /** Middleware specifically for the general-purpose subagent (includes skills from main agent) */
   generalPurposeMiddleware: AgentMiddleware[] | null;
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
   subagents: (SubAgent | CompiledSubAgent)[];
@@ -585,16 +637,38 @@ function createTaskTool(options: {
     taskDescription,
   } = options;
 
-  const { agents: subagentGraphs, descriptions: subagentDescriptions } =
-    getSubagents({
-      defaultModel,
-      defaultTools,
-      defaultMiddleware,
-      generalPurposeMiddleware,
-      defaultInterruptOn,
-      subagents,
-      generalPurposeAgent,
-    });
+  const {
+    agents: subagentGraphs,
+    specsByName,
+    descriptions: subagentDescriptions,
+  } = getSubagents({
+    defaultModel,
+    defaultTools,
+    defaultMiddleware,
+    generalPurposeMiddleware,
+    defaultInterruptOn,
+    subagents,
+    generalPurposeAgent,
+  });
+
+  function selectSubagent(
+    subagentType: string,
+    config: Record<string, any>,
+  ): Runnable {
+    const responseFormat =
+      config.configurable?.[SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY];
+    if (responseFormat != null) {
+      const spec = specsByName[subagentType];
+      if ("runnable" in spec) {
+        throw new Error(
+          `responseSchema cannot be used with compiled subagent "${spec.name}"; ` +
+            "dynamic schemas require a declarative SubAgent spec.",
+        );
+      }
+      return createSubAgent(spec, { responseFormat }) as unknown as Runnable;
+    }
+    return subagentGraphs[subagentType] as Runnable;
+  }
 
   const finalTaskDescription = taskDescription
     ? taskDescription
@@ -607,7 +681,6 @@ function createTaskTool(options: {
     ): Promise<Command | string> => {
       const { description, subagent_type } = input;
 
-      // Validate subagent type
       if (!(subagent_type in subagentGraphs)) {
         const allowedTypes = Object.keys(subagentGraphs)
           .map((k) => `\`${k}\``)
@@ -617,14 +690,12 @@ function createTaskTool(options: {
         );
       }
 
-      const subagent = subagentGraphs[subagent_type];
+      const subagent = selectSubagent(subagent_type, config);
 
-      // Get current state and filter it for subagent
       const currentState = getCurrentTaskInput<Record<string, unknown>>();
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
 
-      // Invoke the subagent with ls_agent_type metadata for LangSmith tracing
       const subagentConfig = {
         ...config,
         metadata: {

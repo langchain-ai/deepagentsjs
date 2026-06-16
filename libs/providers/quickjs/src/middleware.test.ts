@@ -307,104 +307,174 @@ describe("createCodeInterpreterMiddleware", () => {
     });
   });
 
-  describe("beforeAgent PTC validation", () => {
-    it("throws when a skill requires PTC tools that are not configured", () => {
-      const middleware = createCodeInterpreterMiddleware({
-        ptc: ["task"],
-        skillsBackend: {} as any,
-      });
+  describe("subagent primitive", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
 
-      expect(() =>
-        (middleware as any).beforeAgent({
-          skillsMetadata: [
-            {
-              name: "swarm",
-              description: "test",
-              metadata: { "required-ptc-tools": "task read_file glob" },
+    it("should invoke subagent from within the REPL", async () => {
+      const mockTaskTool = {
+        name: "task",
+        invoke: vi.fn().mockResolvedValue("research result"),
+      };
+
+      const middleware = createCodeInterpreterMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: {
+            configurable: {
+              thread_id: "invoke-subagent-test",
             },
-          ],
-        }),
-      ).toThrow("read_file, glob");
+          },
+          tools: [...(middleware.tools || []), mockTaskTool],
+        } as any,
+        mockHandler,
+      );
+
+      const result = await jsTool.invoke(
+        {
+          code: `await task({ description: "find bugs", subagentType: "researcher" })`,
+        },
+        {
+          configurable: {
+            thread_id: "invoke-subagent-test",
+          },
+        },
+      );
+
+      expect(result).toContain("research result");
+      expect(mockTaskTool.invoke).toHaveBeenCalledTimes(1);
     });
 
-    it("throws with skill name in the error message", () => {
-      const middleware = createCodeInterpreterMiddleware({
-        ptc: [],
-        skillsBackend: {} as any,
-      });
+    it("should return structured output as native JS object in REPL", async () => {
+      const structured = { bugs: ["bug1", "bug2"] };
+      const mockTaskTool = {
+        name: "task",
+        invoke: vi.fn().mockResolvedValue(JSON.stringify(structured)),
+      };
 
-      expect(() =>
-        (middleware as any).beforeAgent({
-          skillsMetadata: [
-            {
-              name: "my-skill",
-              description: "test",
-              metadata: { "required-ptc-tools": "write_file" },
+      const middleware = createCodeInterpreterMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: {
+            configurable: {
+              thread_id: "structured-test",
             },
-          ],
-        }),
-      ).toThrow("Skill 'my-skill'");
+          },
+          tools: [...(middleware.tools || []), mockTaskTool],
+        } as any,
+        mockHandler,
+      );
+
+      const result = await jsTool.invoke(
+        {
+          code: `const r = await task({
+            description: "find bugs",
+            subagentType: "researcher",
+            responseSchema: { type: "object", properties: { bugs: { type: "array" } } },
+          });
+          r.bugs[0]`,
+        },
+        {
+          configurable: {
+            thread_id: "structured-test",
+          },
+        },
+      );
+
+      expect(result).toContain("bug1");
     });
 
-    it("does not throw when all required PTC tools are configured", () => {
-      const middleware = createCodeInterpreterMiddleware({
-        ptc: ["task", "read_file", "write_file", "glob"],
-        skillsBackend: {} as any,
-      });
+    it("should use fresh config on each eval call for tracing context", async () => {
+      const configs: any[] = [];
+      const mockTaskTool = {
+        name: "task",
+        invoke: vi.fn().mockImplementation((_input, config) => {
+          configs.push(config);
+          return "ok";
+        }),
+      };
 
-      expect(() =>
-        (middleware as any).beforeAgent({
-          skillsMetadata: [
-            {
-              name: "swarm",
-              description: "test",
-              metadata: { "required-ptc-tools": "task read_file" },
+      const middleware = createCodeInterpreterMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: {
+            configurable: {
+              thread_id: "fresh-config-test",
             },
-          ],
-        }),
-      ).not.toThrow();
+          },
+          tools: [...(middleware.tools || []), mockTaskTool],
+        } as any,
+        mockHandler,
+      );
+
+      // First eval — config carries marker "run-1"
+      await jsTool.invoke(
+        {
+          code: `await task({ description: "a", subagentType: "researcher" })`,
+        },
+        {
+          configurable: {
+            thread_id: "fresh-config-test",
+            run_id: "run-1",
+          },
+        },
+      );
+
+      // Second eval — config carries marker "run-2"
+      await jsTool.invoke(
+        {
+          code: `await task({ description: "b", subagentType: "researcher" })`,
+        },
+        {
+          configurable: {
+            thread_id: "fresh-config-test",
+            run_id: "run-2",
+          },
+        },
+      );
+
+      expect(configs).toHaveLength(2);
+      expect(configs[0].configurable.run_id).toBe("run-1");
+      expect(configs[1].configurable.run_id).toBe("run-2");
     });
 
-    it("does not throw when skill has no required-ptc-tools in metadata", () => {
-      const middleware = createCodeInterpreterMiddleware({
-        ptc: ["task"],
-        skillsBackend: {} as any,
-      });
+    it("should error when task() is called without specs configured", async () => {
+      const middleware = createCodeInterpreterMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
 
-      expect(() =>
-        (middleware as any).beforeAgent({
-          skillsMetadata: [
-            { name: "simple", description: "test", metadata: {} },
-          ],
-        }),
-      ).not.toThrow();
-    });
+      const result = await jsTool.invoke(
+        {
+          code: `await task({ description: "x", subagentType: "y" })`,
+        },
+        { configurable: { thread_id: "no-bridge-test" } },
+      );
 
-    it("does not throw when skillsBackend is not configured", () => {
-      const middleware = createCodeInterpreterMiddleware({ ptc: [] });
-
-      expect(() =>
-        (middleware as any).beforeAgent({
-          skillsMetadata: [
-            {
-              name: "swarm",
-              description: "test",
-              metadata: { "required-ptc-tools": "task" },
-            },
-          ],
-        }),
-      ).not.toThrow();
-    });
-
-    it("does not throw when skillsMetadata is empty", () => {
-      const middleware = createCodeInterpreterMiddleware({
-        ptc: [],
-        skillsBackend: {} as any,
-      });
-
-      expect(() =>
-        (middleware as any).beforeAgent({ skillsMetadata: [] }),
-      ).not.toThrow();
+      expect(result).toContain("task");
+      expect(result).toMatch(/not a function|not defined|undefined/i);
     });
   });
 });

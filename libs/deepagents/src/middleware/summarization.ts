@@ -758,8 +758,10 @@ export function createSummarizationMiddleware(
     maxInputTokens?: number,
     systemMessage?: SystemMessage | unknown,
     tools?: (ServerTool | ClientTool)[] | unknown[],
+    options?: { totalTokens?: number },
   ): { messages: BaseMessage[]; modified: boolean } {
-    const totalTokens = countTotalTokens(messages, systemMessage, tools);
+    const totalTokens =
+      options?.totalTokens ?? countTotalTokens(messages, systemMessage, tools);
     if (!shouldTruncateArgs(messages, totalTokens, maxInputTokens)) {
       return { messages, modified: false };
     }
@@ -1205,30 +1207,39 @@ export function createSummarizationMiddleware(
       const maxInputTokens = getMaxInputTokens(resolvedModel);
       applyModelDefaults(resolvedModel);
 
+      const totalTokens = countTotalTokens(
+        effectiveMessages,
+        request.systemMessage,
+        request.tools,
+      );
+
       /**
        * Step 1: Truncate args if configured
        */
-      const { messages: truncatedMessages } = truncateArgs(
-        effectiveMessages,
-        maxInputTokens,
-        request.systemMessage,
-        request.tools,
-      );
+      const { messages: truncatedMessages, modified: truncateModified } =
+        truncateArgs(
+          effectiveMessages,
+          maxInputTokens,
+          request.systemMessage,
+          request.tools,
+          { totalTokens },
+        );
 
       /**
        * Step 2: Check if summarization should happen.
-       * Count tokens including system message and tools to match what's
-       * actually sent to the model (matching Python implementation).
+       * Recount only if truncation changed messages.
        */
-      const totalTokens = countTotalTokens(
-        truncatedMessages,
-        request.systemMessage,
-        request.tools,
-      );
+      const tokensForSummary = truncateModified
+        ? countTotalTokens(
+            truncatedMessages,
+            request.systemMessage,
+            request.tools,
+          )
+        : totalTokens;
 
       const shouldDoSummarization = shouldSummarize(
         truncatedMessages,
-        totalTokens,
+        tokensForSummary,
         maxInputTokens,
       );
 
@@ -1248,8 +1259,8 @@ export function createSummarizationMiddleware(
             throw err;
           }
 
-          if (maxInputTokens && totalTokens > 0) {
-            const observedRatio = maxInputTokens / totalTokens;
+          if (maxInputTokens && tokensForSummary > 0) {
+            const observedRatio = maxInputTokens / tokensForSummary;
             if (observedRatio > tokenEstimationMultiplier) {
               tokenEstimationMultiplier = observedRatio * 1.1;
             }

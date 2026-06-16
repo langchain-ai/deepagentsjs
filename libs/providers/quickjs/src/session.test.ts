@@ -1,13 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { tool } from "langchain";
 import { z } from "zod/v4";
-import type {
-  AnyBackendProtocol,
-  FileDownloadResponse,
-  SkillMetadata,
-} from "deepagents";
 import { ReplSession } from "./session.js";
-import type { SkillsContext } from "./types.js";
 
 const TIMEOUT = 5000;
 let nextId = 0;
@@ -769,209 +763,217 @@ describe("REPL Engine", () => {
       expect(() => ReplSession.deleteSession("nonexistent")).not.toThrow();
     });
   });
-});
 
-// ---------------------------------------------------------------------------
-// Skills module loader
-// ---------------------------------------------------------------------------
-
-const enc = new TextEncoder();
-
-function makeSkillsBackend(files: Record<string, string>): AnyBackendProtocol {
-  return {
-    glob: async (pattern: string, basePath?: string) => {
-      const ext = pattern.replace("**/*", "");
-      const matches = Object.keys(files)
-        .filter((p) => p.startsWith(basePath ?? "") && p.endsWith(ext))
-        .map((p) => ({ path: p }));
-      return { files: matches };
-    },
-    downloadFiles: async (paths: string[]) => {
-      return paths.map((p): FileDownloadResponse => {
-        const content = files[p];
-        if (content === undefined) {
-          return { path: p, content: null, error: "file_not_found" };
-        }
-        return { path: p, content: enc.encode(content), error: null };
+  describe("subagent bridge", () => {
+    function createSubagentSession(
+      dispatch: (input: {
+        description: string;
+        subagentType: string;
+        responseSchema?: Record<string, unknown>;
+      }) => Promise<unknown>,
+      maxConcurrency = 16,
+    ) {
+      return ReplSession.getOrCreate(uniqueThreadId(), {
+        subagentBridge: { dispatch, maxConcurrency },
       });
-    },
-  } as unknown as AnyBackendProtocol;
-}
+    }
 
-function makeSkillsMeta(
-  name: string,
-  entrypoint: string,
-  skillDir?: string,
-): SkillMetadata {
-  const dir = skillDir ?? `/skills/${name}`;
-  return {
-    name,
-    description: `Test skill ${name}`,
-    path: `${dir}/SKILL.md`,
-    metadata: { entrypoint },
-  };
-}
+    it("should invoke dispatch with correct arguments", async () => {
+      const dispatch = vi.fn().mockResolvedValue("done");
+      session = createSubagentSession(dispatch);
 
-function makeSkillsContext(
-  metadata: SkillMetadata[],
-  files: Record<string, string>,
-): SkillsContext {
-  return { metadata, backend: makeSkillsBackend(files) };
-}
+      const result = await session.eval(
+        `await task({ description: "find bugs", subagentType: "researcher" })`,
+        TIMEOUT,
+      );
 
-describe("skills module loader", () => {
-  let session: ReplSession;
-
-  beforeEach(() => {
-    ReplSession.clearCache();
-  });
-
-  afterEach(() => {
-    if (session) session.dispose();
-  });
-
-  it("resolves a single-file skill and exposes its exports", async () => {
-    session = ReplSession.getOrCreate(uniqueThreadId(), {
-      skillsEnabled: true,
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("done");
+      expect(dispatch).toHaveBeenCalledWith({
+        description: "find bugs",
+        subagentType: "researcher",
+      });
     });
-    session.setSkillsContext(
-      makeSkillsContext([makeSkillsMeta("my-skill", "index.js")], {
-        "/my-skill/index.js": "export const VALUE = 42;",
-      }),
-    );
 
-    const result = await session.eval(
-      `const mod = await import("@/skills/my-skill"); mod.VALUE`,
-      TIMEOUT,
-    );
-    expect(result.ok).toBe(true);
-    expect(result.value).toBe(42);
-  });
+    it("should pass responseSchema to dispatch", async () => {
+      const dispatch = vi.fn().mockResolvedValue({ bugs: [] });
+      session = createSubagentSession(dispatch);
 
-  it("resolves relative imports inside a multi-file skill", async () => {
-    session = ReplSession.getOrCreate(uniqueThreadId(), {
-      skillsEnabled: true,
+      const result = await session.eval(
+        `await task({
+          description: "analyze",
+          subagentType: "coder",
+          responseSchema: { type: "object", properties: { bugs: { type: "array" } } },
+        })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toEqual({ bugs: [] });
+      expect(dispatch).toHaveBeenCalledWith({
+        description: "analyze",
+        subagentType: "coder",
+        responseSchema: {
+          type: "object",
+          properties: { bugs: { type: "array" } },
+        },
+      });
     });
-    session.setSkillsContext(
-      makeSkillsContext([makeSkillsMeta("my-skill", "index.js")], {
-        "/my-skill/index.js":
-          "import { add } from './lib/math.js'; export function compute() { return add(1, 2); }",
-        "/my-skill/lib/math.js": "export function add(a, b) { return a + b; }",
-      }),
-    );
 
-    const result = await session.eval(
-      `const { compute } = await import("@/skills/my-skill"); compute()`,
-      TIMEOUT,
-    );
-    expect(result.ok).toBe(true);
-    expect(result.value).toBe(3);
-  });
+    it("should return structured objects as native JS values", async () => {
+      const structured = { items: [{ name: "a" }, { name: "b" }], count: 2 };
+      const dispatch = vi.fn().mockResolvedValue(structured);
+      session = createSubagentSession(dispatch);
 
-  it("resolves relative imports when entrypoint is in a subdirectory", async () => {
-    session = ReplSession.getOrCreate(uniqueThreadId(), {
-      skillsEnabled: true,
+      const result = await session.eval(
+        `const r = await task({ description: "list", subagentType: "worker" });
+         r.items[1].name + ":" + r.count`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("b:2");
     });
-    session.setSkillsContext(
-      makeSkillsContext([makeSkillsMeta("my-skill", "scripts/index.js")], {
-        "/my-skill/scripts/index.js":
-          "import { add } from './math.js'; export function compute() { return add(3, 4); }",
-        "/my-skill/scripts/math.js":
-          "export function add(a, b) { return a + b; }",
-      }),
-    );
 
-    const result = await session.eval(
-      `const { compute } = await import("@/skills/my-skill"); compute()`,
-      TIMEOUT,
-    );
-    expect(result.ok).toBe(true);
-    expect(result.value).toBe(7);
-  });
+    it("should reject when description is missing", async () => {
+      const dispatch = vi.fn();
+      session = createSubagentSession(dispatch);
 
-  it("rejects import of an unknown skill with a recognizable message", async () => {
-    session = ReplSession.getOrCreate(uniqueThreadId(), {
-      skillsEnabled: true,
+      const result = await session.eval(
+        `await task({ subagentType: "researcher" })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("description");
+      expect(dispatch).not.toHaveBeenCalled();
     });
-    session.setSkillsContext(makeSkillsContext([], {}));
 
-    const result = await session.eval(
-      `await import("@/skills/unknown")`,
-      TIMEOUT,
-    );
-    expect(result.ok).toBe(false);
-    expect(result.error?.message).toContain("not available on this agent");
-  });
+    it("should reject when subagentType is missing", async () => {
+      const dispatch = vi.fn();
+      session = createSubagentSession(dispatch);
 
-  it("rejects import when skills context is cleared", async () => {
-    session = ReplSession.getOrCreate(uniqueThreadId(), {
-      skillsEnabled: true,
+      const result = await session.eval(
+        `await task({ description: "do something" })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("subagentType");
+      expect(dispatch).not.toHaveBeenCalled();
     });
-    session.setSkillsContext(undefined);
 
-    const result = await session.eval(
-      `await import("@/skills/my-skill")`,
-      TIMEOUT,
-    );
-    expect(result.ok).toBe(false);
-    expect(result.error?.message).toContain("not configured");
-  });
+    it("should reject unknown keys", async () => {
+      const dispatch = vi.fn();
+      session = createSubagentSession(dispatch);
 
-  it("rejects traversal escape from inside a skill", async () => {
-    session = ReplSession.getOrCreate(uniqueThreadId(), {
-      skillsEnabled: true,
+      const result = await session.eval(
+        `await task({ description: "x", subagentType: "y", badKey: true })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("unknown keys");
+      expect(result.error?.message).toContain("badKey");
+      expect(dispatch).not.toHaveBeenCalled();
     });
-    session.setSkillsContext(
-      makeSkillsContext([makeSkillsMeta("my-skill", "index.js")], {
-        "/skills/my-skill/index.js":
-          "export { escape } from '../../other-skill/index.js';",
-      }),
-    );
 
-    const result = await session.eval(
-      `await import("@/skills/my-skill")`,
-      TIMEOUT,
-    );
-    expect(result.ok).toBe(false);
-  });
+    it("should reject non-object argument", async () => {
+      const dispatch = vi.fn();
+      session = createSubagentSession(dispatch);
 
-  it("caches a load failure and does not re-fetch from the backend", async () => {
-    let downloadCount = 0;
-    const meta = makeSkillsMeta("my-skill", "index.js");
-    const backend = {
-      glob: async (pattern: string) => {
-        const ext = pattern.replace("**/*", "");
-        if (ext === ".js") {
-          return { files: [{ path: "/skills/my-skill/index.js" }] };
-        }
-        return { files: [] };
-      },
-      downloadFiles: async (paths: string[]) => {
-        downloadCount++;
-        return paths.map(
-          (p): FileDownloadResponse => ({
-            path: p,
-            content: null,
-            error: "file_not_found",
-          }),
-        );
-      },
-    } as unknown as AnyBackendProtocol;
+      const result = await session.eval(`await task("not an object")`, TIMEOUT);
 
-    session = ReplSession.getOrCreate(uniqueThreadId(), {
-      skillsEnabled: true,
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("expected an object");
+      expect(dispatch).not.toHaveBeenCalled();
     });
-    session.setSkillsContext({ metadata: [meta], backend });
 
-    await session.eval(
-      `await import("@/skills/my-skill").catch(() => null)`,
-      TIMEOUT,
-    );
-    await session.eval(
-      `await import("@/skills/my-skill").catch(() => null)`,
-      TIMEOUT,
-    );
+    it("should reject non-object responseSchema", async () => {
+      const dispatch = vi.fn();
+      session = createSubagentSession(dispatch);
 
-    expect(downloadCount).toBe(1);
+      const result = await session.eval(
+        `await task({ description: "x", subagentType: "y", responseSchema: "bad" })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("responseSchema");
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    it("should propagate dispatch errors to guest code", async () => {
+      const dispatch = vi.fn().mockRejectedValue(new Error("subagent crashed"));
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `let caught = "none";
+         try {
+           await task({ description: "x", subagentType: "y" });
+         } catch (e) {
+           caught = e.message;
+         }
+         caught`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("subagent crashed");
+    });
+
+    it("should be frozen and non-writable on globalThis", async () => {
+      const dispatch = vi.fn().mockResolvedValue("ok");
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `const frozen = Object.isFrozen(task);
+         const desc = Object.getOwnPropertyDescriptor(globalThis, "task");
+         ({ frozen, writable: desc.writable, configurable: desc.configurable })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toEqual({
+        frozen: true,
+        writable: false,
+        configurable: false,
+      });
+    });
+
+    it("should gate concurrency via queue", async () => {
+      let concurrentCalls = 0;
+      let maxConcurrentCalls = 0;
+      const dispatch = vi.fn().mockImplementation(async () => {
+        concurrentCalls++;
+        maxConcurrentCalls = Math.max(maxConcurrentCalls, concurrentCalls);
+        await new Promise((r) => setTimeout(r, 50));
+        concurrentCalls--;
+        return "done";
+      });
+      session = createSubagentSession(dispatch, 2);
+
+      const result = await session.eval(
+        `await Promise.all([
+          task({ description: "a", subagentType: "w" }),
+          task({ description: "b", subagentType: "w" }),
+          task({ description: "c", subagentType: "w" }),
+        ])`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(dispatch).toHaveBeenCalledTimes(3);
+      expect(maxConcurrentCalls).toBeLessThanOrEqual(2);
+    });
+
+    it("should not install task when bridge is not configured", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+
+      const result = await session.eval(`typeof globalThis.task`, TIMEOUT);
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("undefined");
+    });
   });
 });

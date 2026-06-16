@@ -27,12 +27,12 @@ import type {
 } from "quickjs-emscripten-core";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
-import { loadSkill, scanSkillReferences, type LoadedSkill } from "./skills.js";
 import { PTCCallBudgetExceededError } from "./errors.js";
 import type { ReplSessionOptions, ReplResult, SkillsContext } from "./types.js";
 import { toCamelCase, stringifyJson } from "./utils.js";
 import { transformForEval } from "./transform.js";
 import { AsyncEvalQueue } from "./eval-queue.js";
+import PQueue from "p-queue";
 
 export const DEFAULT_MEMORY_LIMIT = 64 * 1024 * 1024;
 export const DEFAULT_MAX_STACK_SIZE = 320 * 1024;
@@ -40,6 +40,7 @@ export const DEFAULT_EXECUTION_TIMEOUT = 5_000;
 export const DEFAULT_SESSION_ID = "__default__";
 export const DEFAULT_MAX_PTC_CALLS = 256;
 export const DEFAULT_MAX_RESULTS_CHARS = 4000;
+export const DEFAULT_MAX_SUBAGENT_CONCURRENCY = 32;
 
 const LINE_NUMBER_RE = /^\s*\d+(?:\.\d+)?\t/;
 
@@ -80,92 +81,6 @@ function getSharedModule(): Promise<QuickJSAsyncWASMModule> {
     })();
   }
   return sharedModulePromise;
-}
-
-// The module loader must never reject. A rejected Promise in the loader
-// path triggers a WASM FFI call at the wrong point in the asyncify
-// lifecycle, which corrupts memory. This helper returns source code that
-// throws at evaluation time inside the VM instead.
-//
-// The thrown value is a plain object (not `new Error()`) because QuickJS
-// stores Error's `name` and `message` as non-enumerable properties (per
-// spec), which causes `context.dump()` (JSON.stringify) to return `{}`.
-function makeErrorSource(message: string): string {
-  return `throw { name: "Error", message: ${JSON.stringify(message)} };`;
-}
-
-/**
- * Parse a canonicalized skill specifier into `{ name, rel }`.
- * Returns `undefined` for anything that isn't a valid `@/skills/<name>` or
- * `@/skills/<name>/<rel>` shape. `rel` is absent for the bare form.
- */
-function parseSkillSpecifier(
-  specifier: string,
-): { name: string; rel?: string } | undefined {
-  const prefix = "@/skills/";
-  if (!specifier.startsWith(prefix)) {
-    return;
-  }
-
-  const tail = specifier.slice(prefix.length);
-  const slashIdx = tail.indexOf("/");
-  const name = slashIdx === -1 ? tail : tail.slice(0, slashIdx);
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) {
-    return;
-  }
-
-  const rel = slashIdx === -1 ? undefined : tail.slice(slashIdx + 1);
-  if (rel !== undefined && rel === "") {
-    return;
-  }
-
-  return { name, rel };
-}
-
-/**
- * Return the `@/skills/<name>` prefix for the skill that owns `base`, or `undefined`.
- */
-function matchSkillPrefix(base: string): string | undefined {
-  const parsed = parseSkillSpecifier(base);
-  if (parsed === undefined) {
-    return;
-  }
-  return `@/skills/${parsed.name}`;
-}
-
-/**
- * Return the directory portion of a slash-separated specifier path.
- */
-function posixDirname(p: string): string {
-  const idx = p.lastIndexOf("/");
-  if (idx === -1) {
-    return "";
-  }
-  return p.slice(0, idx);
-}
-
-/**
- * POSIX join for slash-separated specifiers. Avoids `node:path/posix`
- * since session.ts is consumed in browser bundles.
- */
-function posixJoin(base: string, rel: string): string {
-  const out: string[] = [];
-
-  const segments = `${base}/${rel}`.split("/");
-  for (const segment of segments) {
-    if (segment === "" || segment === ".") {
-      continue;
-    }
-
-    if (segment === "..") {
-      out.pop();
-      continue;
-    }
-
-    out.push(segment);
-  }
-
-  return out.join("/");
 }
 
 /**
@@ -304,11 +219,19 @@ export class ReplSession {
     DEFAULT_MAX_RESULTS_CHARS,
   );
   private options: ReplSessionOptions;
-  private skillsContext: SkillsContext | undefined;
-  private skillsLoaded: Map<string, LoadedSkill> = new Map();
-  private skillsFailed: Map<string, Error> = new Map();
   private readonly maxPtcCalls: number | null;
   private ptcCallsRemaining: number | null = null;
+  private subagentQueue: PQueue | null = null;
+  private bridgeDispatchRef: {
+    current: SubagentBridgeOptions["dispatch"];
+  } | null = null;
+
+  /** Allowed keys in the subagent input object. */
+  private static readonly SUBAGENT_ALLOWED_KEYS = new Set([
+    "description",
+    "subagentType",
+    "responseSchema",
+  ]);
 
   /**
    * Reset the shared WASM module. Forces the next session to instantiate
@@ -337,7 +260,6 @@ export class ReplSession {
       memoryLimitBytes = DEFAULT_MEMORY_LIMIT,
       maxStackSizeBytes = DEFAULT_MAX_STACK_SIZE,
       tools,
-      skillsEnabled = false,
       maxResultChars = DEFAULT_MAX_RESULTS_CHARS,
       captureConsole = true,
     } = this.options;
@@ -360,187 +282,18 @@ export class ReplSession {
       this.injectTools(tools);
     }
 
+    const { subagentBridge } = this.options;
+    if (subagentBridge) {
+      this.subagentQueue = new PQueue({
+        concurrency: subagentBridge.maxConcurrency,
+      });
+      this.injectSubagentBridge(subagentBridge.dispatch);
+    }
+
     const sessionId = this.options.sessionId ?? "default";
     const sessionIdHandle = context.newString(sessionId);
     context.setProp(context.global, "__sessionId__", sessionIdHandle);
     sessionIdHandle.dispose();
-
-    if (skillsEnabled) {
-      this.installModuleLoader();
-    }
-  }
-
-  /**
-   * Load the skill into cache on first access and replay cached errors.
-   */
-  private async ensureSkillLoaded(name: string): Promise<LoadedSkill> {
-    const cached = this.skillsLoaded.get(name);
-    if (cached !== undefined) {
-      return cached;
-    }
-
-    const cachedError = this.skillsFailed.get(name);
-    if (cachedError !== undefined) {
-      throw cachedError;
-    }
-
-    const ctx = this.skillsContext;
-    if (ctx === undefined) {
-      throw new Error(
-        `Skill '${name}' referenced but skills are not configured for this session`,
-      );
-    }
-
-    const metadata = ctx.metadata.find((m) => m.name === name);
-    if (metadata === undefined) {
-      throw new Error(
-        `Skill '${name}' referenced but not available on this agent`,
-      );
-    }
-
-    try {
-      const loaded = await loadSkill(metadata, ctx.backend);
-      this.skillsLoaded.set(name, loaded);
-      return loaded;
-    } catch (err) {
-      this.skillsFailed.set(name, err as Error);
-      throw err;
-    }
-  }
-
-  /**
-   * Pre-load all skills referenced in source code into the in-memory
-   * cache. Must be called before `evalCodeAsync` so the module loader
-   * can resolve synchronously — `executePendingJobs` is a sync FFI
-   * call that cannot handle asyncify suspensions.
-   */
-  async preloadReferencedSkills(code: string): Promise<void> {
-    const refs = scanSkillReferences(code);
-    for (const name of refs) {
-      if (this.skillsLoaded.has(name) || this.skillsFailed.has(name)) {
-        continue;
-      }
-      try {
-        await this.ensureSkillLoaded(name);
-      } catch (err) {
-        // Cache the error so resolveSpecifier surfaces the original message
-        if (!this.skillsFailed.has(name)) {
-          this.skillsFailed.set(name, err as Error);
-        }
-      }
-    }
-  }
-
-  /**
-   * Resolve a module specifier to source code. Strictly synchronous —
-   * only reads from the in-memory skill cache populated by
-   * `preloadReferencedSkills`. Returns error source (not a thrown
-   * exception) for missing or failed skills so QuickJS reports the
-   * error inside the VM.
-   */
-  private resolveSpecifier(specifier: string): string {
-    const parsed = parseSkillSpecifier(specifier);
-    if (parsed === undefined) {
-      return makeErrorSource(`Module not found: ${specifier}`);
-    }
-
-    const cachedError = this.skillsFailed.get(parsed.name);
-    if (cachedError !== undefined) {
-      return makeErrorSource(cachedError.message ?? String(cachedError));
-    }
-
-    const loaded = this.skillsLoaded.get(parsed.name);
-    if (loaded === undefined) {
-      return makeErrorSource(
-        `Skill '${parsed.name}' was not preloaded. ` +
-          `Ensure the import specifier is a static string literal ` +
-          `(dynamic specifiers like \`import("@/skills/" + name)\` are not supported).`,
-      );
-    }
-
-    if (parsed.rel === undefined) {
-      const source = loaded.files.get(loaded.entryRel);
-      if (source === undefined) {
-        return makeErrorSource(
-          `Skill '${parsed.name}': entrypoint '${loaded.entryRel}' missing from bundle`,
-        );
-      }
-      return source;
-    }
-
-    let source = loaded.files.get(parsed.rel);
-    // TS convention: source files use .ts but import specifiers use .js
-    if (source === undefined && parsed.rel.endsWith(".js")) {
-      source = loaded.files.get(parsed.rel.slice(0, -3) + ".ts");
-    }
-    if (source === undefined) {
-      return makeErrorSource(
-        `Skill '${parsed.name}': '${parsed.rel}' not found in bundle`,
-      );
-    }
-
-    return source;
-  }
-
-  /**
-   * Canonicalize an `import` specifier. Bare specifiers pass through;
-   * relative specifiers are resolved against the importing module's path.
-   * Traversal out of a skill's `@/skills/<name>/` namespace is rejected.
-   */
-  private normalizeSpecifier(base: string, requested: string): string {
-    const isRelative =
-      requested.startsWith("./") || requested.startsWith("../");
-    if (!isRelative) {
-      return requested;
-    }
-
-    // A bare skill specifier like "@/skills/my-skill" has no file component, so
-    // posixDirname would return "@/skills". Use the entrypoint's directory so
-    // relative imports resolve correctly when the entrypoint is in a subdirectory
-    // (e.g. entryRel="scripts/index.ts" → "@/skills/my-skill/scripts").
-    const parsed = parseSkillSpecifier(base);
-    let baseDir: string;
-    if (parsed !== undefined && parsed.rel === undefined) {
-      const loaded = this.skillsLoaded.get(parsed.name);
-      const entryDir =
-        loaded !== undefined ? posixDirname(loaded.entryRel) : "";
-      baseDir = entryDir ? `${base}/${entryDir}` : base;
-    } else {
-      baseDir = posixDirname(base);
-    }
-    const resolved = posixJoin(baseDir, requested);
-
-    const skillPrefix = matchSkillPrefix(base);
-    if (skillPrefix === undefined) {
-      return resolved;
-    }
-
-    if (!resolved.startsWith(`${skillPrefix}/`)) {
-      return `__resolve_error__:${requested} escapes ${skillPrefix}`;
-    }
-
-    return resolved;
-  }
-
-  /**
-   * Wire the QuickJS module loader and normalizer on this session's runtime.
-   *
-   * The loader is strictly synchronous — it reads from the in-memory skill
-   * cache populated by `preloadReferencedSkills`. This is critical: an async
-   * module loader causes asyncify suspensions on each import, and disposing
-   * a runtime after multi-file imports corrupts the shared module's asyncify
-   * state, silently breaking the loader for all subsequent sessions.
-   */
-  private installModuleLoader(): void {
-    if (this.runtime === null) {
-      return;
-    }
-
-    this.runtime.setModuleLoader(
-      (specifier: string) => this.resolveSpecifier(specifier),
-      (base: string, requested: string) =>
-        this.normalizeSpecifier(base, requested),
-    );
   }
 
   /**
@@ -627,15 +380,6 @@ export class ReplSession {
   }
 
   /**
-   * Push the current skills metadata + backend into the session.
-   * Called by the middleware once per `eval` invocation, before eval runs.
-   * Pass `undefined` to clear the context (no skill imports will resolve).
-   */
-  setSkillsContext(ctx?: SkillsContext): void {
-    this.skillsContext = ctx;
-  }
-
-  /**
    * Evaluate code in this session.
    *
    * Lazily starts the QuickJS runtime on the first call. Code is
@@ -648,9 +392,6 @@ export class ReplSession {
     await this.ensureStarted();
     const runtime = this.runtime!;
     const context = this.context!;
-
-    // Pre-load referenced skills so the module loader resolves synchronously.
-    await this.preloadReferencedSkills(code);
 
     const drainLogs = (): { logs: string[]; logsDroppedChars: number } => {
       const [raw, dropped] = this.consoleBuffer.drain();
@@ -922,5 +663,147 @@ export class ReplSession {
 
     context.setProp(context.global, "tools", toolsNs);
     toolsNs.dispose();
+  }
+
+  /**
+   * Install the `task` global on the QuickJS context.
+   *
+   * Registers the host function directly as `globalThis.task`,
+   * then freezes it via `evalCode`. Structured results (when
+   * responseSchema is provided) are marshaled into native QuickJS
+   * objects on the host side — no JS wrapper needed.
+   */
+  /**
+   * Replace the active bridge dispatch with a fresh one.
+   *
+   * Call this before each eval so the dispatch closure carries
+   * the current invocation's config (tracing callbacks, run ID, etc.)
+   * rather than the stale config from session creation.
+   */
+  updateBridgeDispatch(dispatch: SubagentBridgeOptions["dispatch"]): void {
+    if (this.bridgeDispatchRef) {
+      this.bridgeDispatchRef.current = dispatch;
+    }
+  }
+
+  private injectSubagentBridge(
+    dispatch: SubagentBridgeOptions["dispatch"],
+  ): void {
+    const context = this.context!;
+    const queue = this.subagentQueue!;
+
+    this.bridgeDispatchRef = { current: dispatch };
+    const ref = this.bridgeDispatchRef;
+
+    const hostFn = context.newFunction("task", (inputHandle: QuickJSHandle) => {
+      const input = context.dump(inputHandle);
+      const promise = context.newPromise();
+
+      (async () => {
+        try {
+          if (
+            input == null ||
+            typeof input !== "object" ||
+            Array.isArray(input)
+          ) {
+            throw new Error("task: expected an object argument");
+          }
+          const raw = input as Record<string, unknown>;
+
+          // Accept snake_case aliases so models don't need to know our convention
+          const obj: Record<string, unknown> = { ...raw };
+          if ("subagent_type" in obj) {
+            obj.subagentType ??= obj.subagent_type;
+            delete obj.subagent_type;
+          }
+          if ("response_schema" in obj) {
+            obj.responseSchema ??= obj.response_schema;
+            delete obj.response_schema;
+          }
+
+          const unknownKeys = Object.keys(obj).filter(
+            (k) => !ReplSession.SUBAGENT_ALLOWED_KEYS.has(k),
+          );
+          if (unknownKeys.length > 0) {
+            throw new Error(
+              `task: unknown keys: ${unknownKeys.join(", ")}. ` +
+                `Allowed: ${[...ReplSession.SUBAGENT_ALLOWED_KEYS].join(", ")}`,
+            );
+          }
+
+          const { description, subagentType, responseSchema } = obj;
+
+          if (typeof description !== "string" || description.length === 0) {
+            throw new Error(
+              "task: 'description' is required and must be a non-empty string",
+            );
+          }
+          if (typeof subagentType !== "string" || subagentType.length === 0) {
+            throw new Error(
+              "task: 'subagentType' is required and must be a non-empty string",
+            );
+          }
+          if (
+            responseSchema !== undefined &&
+            (responseSchema == null ||
+              typeof responseSchema !== "object" ||
+              Array.isArray(responseSchema))
+          ) {
+            throw new Error(
+              "task: 'responseSchema' must be a plain object (JSON Schema) when provided",
+            );
+          }
+
+          const result = await queue.add(() =>
+            ref.current({
+              description: description as string,
+              subagentType: subagentType as string,
+              ...(responseSchema !== undefined && {
+                responseSchema: responseSchema as Record<string, unknown>,
+              }),
+            }),
+          );
+          if (typeof result === "string") {
+            const val = context.newString(result);
+            promise.resolve(val);
+            val.dispose();
+          } else {
+            const jsonResult = context.evalCode(`(${JSON.stringify(result)})`);
+            if (jsonResult.error) {
+              const errDump = context.dump(jsonResult.error);
+              jsonResult.error.dispose();
+              throw new Error(
+                `task: failed to marshal structured response: ${JSON.stringify(errDump)}`,
+              );
+            }
+            promise.resolve(jsonResult.value);
+            jsonResult.value.dispose();
+          }
+        } catch (e: unknown) {
+          const msg =
+            e != null && typeof (e as Error).message === "string"
+              ? (e as Error).message
+              : String(e);
+          const err = context.newError(msg);
+          promise.reject(err);
+          err.dispose();
+        }
+        promise.settled.then(context.runtime.executePendingJobs);
+      })();
+
+      return promise.handle;
+    });
+
+    context.setProp(context.global, "task", hostFn);
+    hostFn.dispose();
+
+    context.evalCode(
+      "Object.freeze(globalThis.task);" +
+        "Object.defineProperty(globalThis, 'task', {" +
+        " value: globalThis.task," +
+        " writable: false," +
+        " configurable: false," +
+        "}); undefined",
+    );
   }
 }
