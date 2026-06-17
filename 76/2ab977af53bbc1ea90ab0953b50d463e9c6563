@@ -1,0 +1,26 @@
+libs/providers/quickjs/src/coerce.test.ts
+  s_55bb2e5cb9e884::t_20909ea31a4d22 68-88
+libs/providers/quickjs/src/coerce.ts
+  s_55bb2e5cb9e884::t_b1a68ff0b5ba3f 32,36-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "762ab977af53bbc1ea90ab0953b50d463e9c6563",
+  "prompts": {},
+  "humans": {
+    "h_f78d33d4280f3f": {
+      "author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  },
+  "sessions": {
+    "s_55bb2e5cb9e884": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90d8eefc-b814-4369-9677-981c907ab665",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
