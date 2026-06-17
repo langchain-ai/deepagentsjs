@@ -1,0 +1,37 @@
+examples/repl/orchestration-patterns/04-generate-and-filter.ts
+  h_f78d33d4280f3f 73
+examples/repl/orchestration-patterns/01-classify-and-act.ts
+  h_f78d33d4280f3f 76
+examples/repl/orchestration-patterns/06-loop-until-done.ts
+  h_f78d33d4280f3f 61-63
+examples/repl/orchestration-patterns/05-tournament.ts
+  h_f78d33d4280f3f 76-78
+examples/repl/orchestration-patterns/03-adversarial-verification.ts
+  h_f78d33d4280f3f 76
+examples/repl/orchestration-patterns/02-fan-out-and-synthesize.ts
+  h_f78d33d4280f3f 58
+libs/providers/quickjs/src/middleware.ts
+  s_55bb2e5cb9e884::t_dcb18d3a5298b9 247,249-273
+  s_55bb2e5cb9e884::t_abbca5aa2b9a6e 122-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "cfe2ef1a1a8492619fe890b5d6de1c3af91bff18",
+  "prompts": {},
+  "humans": {
+    "h_f78d33d4280f3f": {
+      "author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  },
+  "sessions": {
+    "s_55bb2e5cb9e884": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90d8eefc-b814-4369-9677-981c907ab665",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
