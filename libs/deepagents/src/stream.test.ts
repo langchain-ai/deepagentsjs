@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { fakeModel } from "@langchain/core/testing";
-import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import {
+  AIMessage,
+  HumanMessage,
+  type BaseMessage,
+} from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 import { createAgent, tool } from "langchain";
 import { z } from "zod/v4";
@@ -300,6 +304,146 @@ describe("streamEvents", () => {
     expect(subagentNames.length).toBeGreaterThanOrEqual(2);
     expect(subagentNames).toContain("researcher");
     expect(subagentNames).toContain("coder");
+  });
+
+  it("isolates toolCalls for parallel same-type subagent invocations", async () => {
+    // Two invocations of the SAME subagent type must NOT share `toolCalls`
+    // channels. Each `task` tool call roots under its own namespace
+    // (`tools:<task_id>`), so the native transformer keys a distinct handle —
+    // and a distinct `toolCalls` stream — per invocation.
+    const pingTool = tool(
+      async (input: { value: string }) => `pong:${input.value}`,
+      {
+        name: "ping",
+        description: "A simple ping tool",
+        schema: z.object({ value: z.string() }),
+      },
+    );
+
+    const rootModel = fakeModel()
+      .respondWithTools([
+        {
+          name: "task",
+          id: "task-a",
+          args: {
+            description: "research topic-A",
+            subagent_type: "researcher",
+          },
+        },
+        {
+          name: "task",
+          id: "task-b",
+          args: {
+            description: "research topic-B",
+            subagent_type: "researcher",
+          },
+        },
+      ])
+      .respond(new AIMessage("Both research tasks completed"));
+
+    // A single shared runnable backs both `researcher` invocations, which run
+    // in parallel and share one FIFO response queue. Drive the model from the
+    // conversation content (not queue position) so each invocation
+    // deterministically pings with its own topic regardless of interleaving:
+    // topic-A -> ping "A" (id `ping-A`), topic-B -> ping "B" (id `ping-B`).
+    const researcherResponse = (messages: BaseMessage[]): AIMessage => {
+      const human = messages.find((m) => m.getType() === "human");
+      const text =
+        typeof human?.content === "string"
+          ? human.content
+          : JSON.stringify(human?.content ?? "");
+      const topic = text.includes("topic-A") ? "A" : "B";
+      const hasPingResult = messages.some((m) => m.getType() === "tool");
+      if (hasPingResult) return new AIMessage(`pong:${topic}`);
+      return new AIMessage({
+        content: "",
+        tool_calls: [
+          {
+            name: "ping",
+            id: `ping-${topic}`,
+            args: { value: topic },
+            type: "tool_call",
+          },
+        ],
+      });
+    };
+
+    const researcherModel = fakeModel();
+    // 2 invocations x 2 model calls each = 4; queue extra to be safe.
+    for (let i = 0; i < 8; i += 1) researcherModel.respond(researcherResponse);
+
+    const researcherAgent = createAgent({
+      model: researcherModel,
+      tools: [pingTool],
+      name: "researcher",
+    });
+
+    const agent = createDeepAgent({
+      model: rootModel,
+      checkpointer: new MemorySaver(),
+      subagents: [
+        {
+          name: "researcher",
+          description: "Research agent",
+          runnable: researcherAgent,
+        },
+      ],
+    });
+
+    const run = await agent.streamEvents(
+      { messages: [new HumanMessage("Do both research tasks")] },
+      {
+        version: "v3",
+        configurable: { thread_id: `test-same-type-subagents-${Date.now()}` },
+        recursionLimit: 100,
+      },
+    );
+
+    // Drive root tool calls concurrently while we consume each subagent's
+    // (non-replayable) per-invocation toolCalls stream inline.
+    const rootToolCallsPromise = collectWithTimeout(run.toolCalls);
+
+    const collected: {
+      cause: string;
+      pingIds: string[];
+      pingValues: string[];
+    }[] = [];
+    for await (const sub of run.subagents) {
+      expect(sub.name).toBe("researcher");
+      const cause =
+        sub.cause?.type === "toolCall" ? sub.cause.tool_call_id : "";
+
+      const tc = await collectWithTimeout(sub.toolCalls);
+      const pings = tc.filter((t) => t.name === "ping");
+      collected.push({
+        cause,
+        pingIds: pings.map((p) => p.callId),
+        pingValues: pings.map((p) => (p.input as { value: string }).value),
+      });
+    }
+
+    const state = await run.output;
+    const rootToolCalls = await rootToolCallsPromise;
+
+    expect(state.messages.length).toBeGreaterThanOrEqual(2);
+
+    // Two distinct same-type invocations surfaced, each tied to its own
+    // triggering `task` tool call.
+    expect(collected).toHaveLength(2);
+    const byCause = Object.fromEntries(collected.map((c) => [c.cause, c]));
+    expect(Object.keys(byCause).sort()).toEqual(["task-a", "task-b"]);
+
+    // Each invocation must instead see ONLY its own ping — task-a -> "A",
+    // task-b -> "B" — proving the per-invocation toolCalls streams are isolated.
+    expect(byCause["task-a"].pingValues).toEqual(["A"]);
+    expect(byCause["task-a"].pingIds).toEqual(["ping-A"]);
+    expect(byCause["task-b"].pingValues).toEqual(["B"]);
+    expect(byCause["task-b"].pingIds).toEqual(["ping-B"]);
+
+    // Root stream sees the two task calls (subagents' pings stay scoped to
+    // their own per-invocation streams, asserted above).
+    const rootTaskCalls = rootToolCalls.filter((tc) => tc.name === "task");
+    expect(rootTaskCalls).toHaveLength(2);
   });
 
   it("run.subagents streams a single subagent's messages", async () => {
