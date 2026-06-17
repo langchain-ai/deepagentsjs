@@ -31,7 +31,10 @@ import {
   ToolMessage,
 } from "@langchain/core/messages";
 import type { InteropZodObject } from "@langchain/core/utils/types";
-import { MemorySaver } from "@langchain/langgraph-checkpoint";
+import {
+  MemorySaver,
+  type BaseCheckpointSaver,
+} from "@langchain/langgraph-checkpoint";
 
 import type {
   DeepAgentConfig,
@@ -134,14 +137,15 @@ const DEFAULT_COMMANDS = [
  */
 export class DeepAgentsServer {
   private connection: AgentSideConnection | null = null;
-  private agents: Map<string, ReturnType<typeof createDeepAgent>> = new Map();
-  private agentConfigs: Map<string, DeepAgentConfig> = new Map();
-  private sessions: Map<string, SessionState> = new Map();
-  private checkpointer: MemorySaver;
+  protected agents: Map<string, ReturnType<typeof createDeepAgent>> = new Map();
+  protected agentConfigs: Map<string, DeepAgentConfig> = new Map();
+  protected sessions: Map<string, SessionState> = new Map();
+  protected checkpointer: BaseCheckpointSaver;
   private clientCapabilities: ACPCapabilities = {};
   private isRunning = false;
   private currentPromptAbortController: AbortController | null = null;
-  private acpBackends: Map<string, ACPFilesystemBackend> = new Map();
+  private readonly hasCustomSessions: boolean;
+  protected acpBackends: Map<string, ACPFilesystemBackend> = new Map();
 
   private readonly serverName: string;
   private readonly serverVersion: string;
@@ -165,7 +169,11 @@ export class DeepAgentsServer {
     });
 
     // Shared checkpointer for session persistence
-    this.checkpointer = new MemorySaver();
+    this.checkpointer = options.checkpointer ?? new MemorySaver();
+
+    // Sessions map for session metadata
+    this.hasCustomSessions = options.sessions !== undefined;
+    this.sessions = options.sessions ?? new Map();
 
     // Initialize agent configurations
     const agentConfigs = Array.isArray(options.agents)
@@ -319,7 +327,9 @@ export class DeepAgentsServer {
 
     this.isRunning = false;
     this.connection = null;
-    this.sessions.clear();
+    if (!this.hasCustomSessions) {
+      this.sessions.clear();
+    }
     this.log("Server stopped");
 
     // Close the logger to flush any pending writes
@@ -329,7 +339,7 @@ export class DeepAgentsServer {
   /**
    * Create the Agent handler for ACP
    */
-  private createAgentHandler(conn: AgentSideConnection): Agent {
+  protected createAgentHandler(conn: AgentSideConnection): Agent {
     return {
       initialize: (params) =>
         this.handleInitialize(params as InitializeRequest),
@@ -502,7 +512,7 @@ export class DeepAgentsServer {
   /**
    * Handle ACP session/load request
    */
-  private async handleLoadSession(
+  protected async handleLoadSession(
     params: LoadSessionRequest,
     conn: AgentSideConnection,
   ): Promise<LoadSessionResponse> {
@@ -520,6 +530,12 @@ export class DeepAgentsServer {
       mode: session.mode,
     });
     session.lastActivityAt = new Date();
+
+    // Ensure agent is created (e.g. after server restart with persistent sessions)
+    if (!this.agents.has(session.agentName)) {
+      this.log("Creating agent for loaded session:", session.agentName);
+      this.createAgent(session.agentName);
+    }
 
     const acpBackend = this.acpBackends.get(session.agentName);
     if (acpBackend) {
@@ -1265,7 +1281,7 @@ export class DeepAgentsServer {
   /**
    * Create a DeepAgent instance for the given configuration
    */
-  private createAgent(agentName: string): void {
+  protected createAgent(agentName: string): void {
     const config = this.agentConfigs.get(agentName);
 
     if (!config) {
@@ -1380,7 +1396,7 @@ export class DeepAgentsServer {
   /**
    * Log a debug message
    */
-  private log(...args: unknown[]): void {
+  protected log(...args: unknown[]): void {
     this.logger.log(...args);
   }
 

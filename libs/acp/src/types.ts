@@ -6,6 +6,7 @@
  */
 
 import type { CreateDeepAgentParams } from "deepagents";
+import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
 
 /**
  * Configuration for a DeepAgent exposed via ACP
@@ -164,6 +165,35 @@ export interface DeepAgentsServerOptions {
    * @see https://agentclientprotocol.com/rfds/auth-methods
    */
   authMethods?: ACPAuthMethod[];
+
+  /**
+   * Custom checkpointer for conversation history persistence.
+   *
+   * Defaults to MemorySaver (in-memory, no persistence across restarts).
+   * Provide a SqliteSaver or other BaseCheckpointSaver implementation
+   * to persist conversation history across server restarts.
+   *
+   * @example
+   * ```typescript
+   * import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
+   *
+   * const server = new DeepAgentsServer({
+   *   agents: { name: "my-agent" },
+   *   checkpointer: SqliteSaver.fromConnString("./sessions.db"),
+   * });
+   * ```
+   */
+  checkpointer?: BaseCheckpointSaver;
+
+  /**
+   * Custom sessions map for storing session metadata.
+   *
+   * Defaults to an in-memory Map. Provide a persistent Map implementation
+   * (e.g., one that syncs to a database) to retain session metadata across
+   * server restarts. The map must implement the Map<string, SessionState>
+   * interface.
+   */
+  sessions?: Map<string, SessionState>;
 }
 
 /**
