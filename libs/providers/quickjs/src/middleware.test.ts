@@ -62,6 +62,10 @@ describe("createCodeInterpreterMiddleware", () => {
       expect(text).toContain("64 MB total");
       expect(text).not.toContain("async readFile");
       expect(text).not.toContain("async writeFile");
+      // With no PTC tools exposed, the REPL prompt should not reference the
+      // `tools.*` namespace and should say the REPL is pure computation.
+      expect(text).toContain("pure computation");
+      expect(text).not.toContain("`tools.*` namespace documented below");
     });
 
     it("should use custom system prompt when provided", async () => {
@@ -196,6 +200,11 @@ describe("createCodeInterpreterMiddleware", () => {
       const req = mockHandler.mock.calls[0][0];
       expect(req.systemMessage.text).toContain("tools.agentTool");
       expect(req.systemMessage.text).toContain("tools.extraTool");
+      // With PTC exposed, the REPL prompt references the `tools.*` namespace.
+      expect(req.systemMessage.text).toContain(
+        "`tools.*` namespace documented below",
+      );
+      expect(req.systemMessage.text).not.toContain("pure computation");
     });
   });
 
