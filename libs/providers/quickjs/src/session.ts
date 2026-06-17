@@ -34,6 +34,7 @@ import type {
   SubagentBridgeOptions,
 } from "./types.js";
 import { toCamelCase } from "./utils.js";
+import { unwrapToolEnvelope } from "./coerce.js";
 import { transformForEval } from "./transform.js";
 import { AsyncEvalQueue } from "./eval-queue.js";
 import PQueue from "p-queue";
@@ -99,6 +100,10 @@ function getSharedModule(): Promise<QuickJSAsyncWASMModule> {
  * @returns Plain string representation of the tool output.
  */
 function extractToolText(result: unknown): string {
+  // Unwrap LangChain Command / ToolMessage / message-list envelopes (e.g. a
+  // PTC tool that returns a Command) before extracting text.
+  result = unwrapToolEnvelope(result);
+
   if (typeof result === "string") {
     return result;
   }

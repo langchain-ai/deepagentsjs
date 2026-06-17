@@ -399,6 +399,52 @@ describe("createCodeInterpreterMiddleware", () => {
       expect(result).toContain("bug1");
     });
 
+    it("should unwrap a Command result and parse structured output in REPL", async () => {
+      // The real deepagents task tool resolves to a Command envelope, not a
+      // plain string. The bridge must unwrap update.messages[-1].content.
+      const structured = { bugs: ["bug1", "bug2"] };
+      const mockTaskTool = {
+        name: "task",
+        invoke: vi.fn().mockResolvedValue({
+          lg_name: "Command",
+          update: {
+            files: {},
+            messages: [{ content: JSON.stringify(structured) }],
+          },
+        }),
+      };
+
+      const middleware = createCodeInterpreterMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: { configurable: { thread_id: "command-unwrap-test" } },
+          tools: [...(middleware.tools || []), mockTaskTool],
+        } as any,
+        mockHandler,
+      );
+
+      const result = await jsTool.invoke(
+        {
+          code: `const r = await task({
+            description: "find bugs",
+            subagentType: "researcher",
+            responseSchema: { type: "object", properties: { bugs: { type: "array" } } },
+          });
+          r.bugs[1]`,
+        },
+        { configurable: { thread_id: "command-unwrap-test" } },
+      );
+
+      expect(result).toContain("bug2");
+    });
+
     it("should use fresh config on each eval call for tracing context", async () => {
       const configs: any[] = [];
       const mockTaskTool = {
