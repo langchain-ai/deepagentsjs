@@ -93,12 +93,10 @@ export function unwrapToolEnvelope(value: unknown): unknown {
   if (typeof value === "string") {
     return value;
   }
-
   if (isCommandLike(value)) {
     const inner = extractCommandContent(value);
     return inner === value ? value : unwrapToolEnvelope(inner);
   }
-
   if (isMessageLike(value)) {
     return unwrapToolEnvelope(messageContent(value));
   }
