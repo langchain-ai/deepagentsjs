@@ -1,0 +1,197 @@
+examples/repl/orchestration-patterns/fixtures/src/routes/users.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 17-18,20,50-51,53,107-113,115-121,130-131,133-134,141-142,148,152-153,158,160,186-187,189,204-206,229-230,232,235-236,238,250-251,253,260-261,263,266-267,269
+examples/repl/orchestration-patterns/fixtures/src/db.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 29,31
+examples/repl/orchestration-patterns/01-classify-and-act.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 53-54,65-67,74-76,84-87
+  s_55bb2e5cb9e884::t_f4540acfd64f63 63,69
+  s_55bb2e5cb9e884::t_bcf64b1c776a02 68,70-72
+examples/repl/orchestration-patterns/fixtures/src/routes/cart.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 27-40,42-44,46-47,49-52,57-63,66-69,71,74-80,84-88,91-94,96,99-107,124-128,131-133,135-139,141,149-155,159-167,169,172-180,183-189,191-195,197,205-211,213-219,221-225,227,230-236,238-240,242-246,248
+examples/repl/orchestration-patterns/fixtures/src/services/email.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 52-53,55,61-62,64,88-89,91,114-116,118,138,140
+examples/repl/orchestration-patterns/fixtures/src/routes/products.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 40-59,61-66,68-71,75-81,84-87,89,92-102,104-119,122-126,128,131-137,139-147,149,152-161,163-172,174-180,183-185,187-191,193,196-227,229-235,237-240,243,246-253,255-261,263-267,269,272-277,279-283,285,288-304,323
+examples/repl/orchestration-patterns/fixtures/src/routes/reviews.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 25-34,36-37,39-40,42-44,49-55,58-61,63,66-72,74-82,84,87-95,97-101,103-104,106-112,114-115,119-121,123-127,129,135-141,145-152,154,167-170,172,175-181,183-189,191-195,197,200-206,210-215,217-223,234
+examples/repl/orchestration-patterns/fixtures/src/models/session.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 49-53
+examples/repl/orchestration-patterns/fixtures/deep/app.ts
+  s_a4db7985e688d0::t_46347bb1f2b26d 1-3
+libs/providers/quickjs/src/middleware.ts
+  s_55bb2e5cb9e884::t_67ded727dd4aab 236,238-243,245
+  s_55bb2e5cb9e884::t_8f60bd3ce24324 139
+  s_55bb2e5cb9e884::t_900a197c4e8418 142-144,146-147
+  s_55bb2e5cb9e884::t_a236d6eef34343 96-101
+  s_55bb2e5cb9e884::t_134cfb2496c469 89-94
+  s_55bb2e5cb9e884::t_e25e36c16f2bbb 68-71
+  s_55bb2e5cb9e884::t_28856aea747a8c 168
+  s_55bb2e5cb9e884::t_34e9e3b3ef528a 253
+  s_55bb2e5cb9e884::t_fac71e5b18c1ef 432-436,438,440,443
+  s_55bb2e5cb9e884::t_0f9aea014c20f9 271,273-275,282
+  s_55bb2e5cb9e884::t_e4d5fe7817b5e6 246-248
+  s_55bb2e5cb9e884::t_817a1ed874d33e 122-130
+  s_55bb2e5cb9e884::t_094a864afa1d67 509-517
+  s_55bb2e5cb9e884::t_93041ab6533446 198-205
+  s_55bb2e5cb9e884::t_35b2c77f0911e1 259-263
+  s_55bb2e5cb9e884::t_180d5913fb71c5 173,175-179,181-183,185-186,188-192,194-196
+  s_55bb2e5cb9e884::t_32700b9a6a0191 40-43
+  s_55bb2e5cb9e884::t_df13c8ecb21699 214-225,228-233,255-258
+examples/repl/orchestration-patterns/fixtures/deep/core/scheduler/queue.ts
+  s_a4db7985e688d0::t_d548662c45fada 1-2
+examples/repl/orchestration-patterns/fixtures/src/routes/auth.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 86,88,157-158,160,166-167,169,192,194,198-199,201,248-249,251-252,254-255,257
+libs/providers/quickjs/src/middleware.test.ts
+  s_55bb2e5cb9e884::t_25c50831b68af5 203-207
+  s_55bb2e5cb9e884::t_6fc9c8f9143f9f 411-464
+  s_55bb2e5cb9e884::t_fa87513d15c06b 65-68
+examples/repl/orchestration-patterns/prior-run-artifacts/ticket-analyses.json
+  s_794bdb5b694ce2::t_9b77eeed0102f5 16,49,82,115,148,181,214,247,280,315,342,375,408,435,462,495,530,563,596,629,650
+examples/repl/orchestration-patterns/fixtures/src/middleware/rate-limiter.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 212-213,215,458-460,462
+examples/repl/orchestration-patterns/05-tournament.ts
+  s_55bb2e5cb9e884::t_0308c78578fff4 22-24,26-32
+  s_55bb2e5cb9e884::t_81949cd2d55d3a 38-40,42-47
+  s_794bdb5b694ce2::t_9b77eeed0102f5 52-53,84-87
+  s_55bb2e5cb9e884::t_3b41abbee80a2c 66-72
+examples/repl/orchestration-patterns/fixtures/src/utils/tokens.ts
+  s_55bb2e5cb9e884::t_ec446f03dc19e1 1-4,7-9,12-13,15-21,25-26,28-29,33-34,36-37,41-42,44-45,49,51-52,56-57,59-61
+docs/blog.md
+  h_f78d33d4280f3f 1,3,5,7,9,11,13,15,17-19,21-23,25-29,31,33,35,37,39,41,43,47,49,51-56,59,61,65,67,69-77,80-82,84-101,103-105,109-124,126,130-132,134-147,149,151,153,155-163,165,167,169,171
+examples/repl/orchestration-patterns/fixtures/deep/core/config.ts
+  s_a4db7985e688d0::t_0b9862e73e7f5b 1-3
+examples/repl/orchestration-patterns/fixtures/deep/services/payments/gateways/stripe.ts
+  s_a4db7985e688d0::t_ae8beb5b852ae1 1-3
+examples/repl/orchestration-patterns/fixtures/src/utils/jwt.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 35-36,38,92,94,108-109,111,125,127
+examples/repl/orchestration-patterns/fixtures/src/routes/notifications.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 20-22,34-36,38,65-66,68,76-90,92-94,97-102,104,107-117,119-123,126-129,131-135,138-141,143,146-170,172-175,179-185,188-191,193,196-201,203-212,215-219,221,224-230,232-240,248,251-258,262-267,269
+examples/repl/orchestration-patterns/fixtures/src/utils/crypto.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 57-58,60,84-85,87
+examples/repl/orchestration-patterns/visualizer/server.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 146,148-149,151-152,171,173
+examples/repl/orchestration-patterns/fixtures/src/services/payment-gateway.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 77-78,80,89-90,92,111-114,123-124,126,134-138,140,142-143
+libs/providers/quickjs/src/subagent-dispatch.ts
+  s_55bb2e5cb9e884::t_a7352d12ecb523 6-58
+examples/repl/orchestration-patterns/02-fan-out-and-synthesize.ts
+  h_f78d33d4280f3f 41
+  s_55bb2e5cb9e884::t_abfd55f253a34f 46
+  s_55bb2e5cb9e884::t_038176c7d5411b 47-48,52
+  s_794bdb5b694ce2::t_9b77eeed0102f5 36-37,49-51,56-58,66-69
+  s_55bb2e5cb9e884::t_e2304b2d847254 53-55
+examples/repl/orchestration-patterns/prior-run-artifacts/ticket-results.json
+  s_794bdb5b694ce2::t_9b77eeed0102f5 11,32,53,74,95,116,137,158,179,202,223,244,265,286,307,328,351,372,393,414,428
+examples/repl/orchestration-patterns/03-adversarial-verification.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 51-52,65-67,74-75,84-87
+  s_55bb2e5cb9e884::t_edbeaf6e99def3 69-73
+  s_55bb2e5cb9e884::t_183f3b050dae4a 61-64
+  s_55bb2e5cb9e884::t_8a48f96281c653 68
+examples/repl/orchestration-patterns/fixtures/.gitignore
+  s_55bb2e5cb9e884::t_007a440f2e4a7a 1-9
+libs/providers/quickjs/src/subagent-dispatch.test.ts
+  s_55bb2e5cb9e884::t_43d9d2b562d936 81-132
+  s_55bb2e5cb9e884::t_fc31b8bf952748 2-5
+examples/repl/orchestration-patterns/06-loop-until-done.ts
+  s_55bb2e5cb9e884::t_a4357e504df8aa 53-56
+  s_55bb2e5cb9e884::t_2ded2882eb88c0 47-48
+  s_794bdb5b694ce2::t_9b77eeed0102f5 37-38,69-72
+  s_55bb2e5cb9e884::t_514a5f0d97f79f 23-25
+examples/repl/orchestration-patterns/README.md
+  s_55bb2e5cb9e884::t_f194b41df10d0e 6-13
+  s_55bb2e5cb9e884::t_18cfc7b94af78a 42,45,47-48,50-63
+  s_55bb2e5cb9e884::t_ec134327d111f0 80
+examples/repl/orchestration-patterns/fixtures/src/routes/orders.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 24-28,30,38-45,47-48,52-65,67-68,70-71,73-95,97-98,114-117,119-125,128-130,132-133,135-142,145-148,166,169-189,191-194,197-203,206-209,211,214-221,223-232,264,283,287-289,291-294,296-300,302,305-313,315-335,337-338,340-343,368,371-377,379-393,395-399,401
+examples/repl/orchestration-patterns/fixtures/deep/core/scheduler/worker.ts
+  s_a4db7985e688d0::t_b6a01b1ea4860c 1-2
+examples/repl/orchestration-patterns/fixtures/src/routes/admin.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 28-49,51-53,55-56,58-61,64-70,73-76,78,81-88,90-98,100,103-112,114-121,123-127,129,135-143,146-151,153-156,158-162,165-168,170,173-180,182-187,189-191,193-197,199,202-209,211-217,219-223,225,228-235,249-256,258-260,262-266,268
+examples/repl/orchestration-patterns/fixtures/src/middleware/validation.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 81-82,84
+examples/repl/orchestration-patterns/fixtures/data/support-tickets.demo.jsonl
+  s_55bb2e5cb9e884::t_f4fa481efbcdd5 1-4
+examples/repl/orchestration-patterns/fixtures/src/routes/webhooks.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 43-48,54-66,68-69,93-101,103-108,110-111,128,149,157-162,164-166,168-172,174
+examples/repl/orchestration-patterns/fixtures/src/middleware/upload.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 7-12,14,47-48,50,68,70,109,111
+examples/repl/orchestration-patterns/fixtures/src/routes/payments.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 53-59,64-67,69,94-97,100-105,108-111,117-123,127-129,131,135-139,144-146,148,189-191,213,215,225-228,251-255,260-264,266,278-286,288-309,311-312,314-316,318-324,327-331,333,350-352,354-358,360-364,366-367,375-376,387-390,392-394,396,400-402,404-406,409-411,413
+examples/repl/orchestration-patterns/visualizer/index.html
+  s_794bdb5b694ce2::t_9b77eeed0102f5 3,6,8-10,12-13,17-24,38-110,112-682,684-824,855,1110,1463,1499,1976-2037
+examples/repl/orchestration-patterns/fixtures/src/models/product.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 88-89
+examples/repl/orchestration-patterns/fixtures/src/logger.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 3-6,8-10,12-14,16,18-21,23,29-36
+examples/repl/orchestration-patterns/fixtures/src/utils/sanitize.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 94-95,97,109-113
+examples/repl/orchestration-patterns/fixtures/src/models/user.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 121-122,125-128,138-140,154-156,158-161,171-173,175,191-192,194,199-201,214-216
+docs/blog-v2.md
+  s_861fed197beea2::t_df076227b15c6d 220
+  s_861fed197beea2::t_8bdd5df1884560 76,78-81
+  s_861fed197beea2::t_1ab9b410862521 1-2,4,15-16,18,20,22-24,26-46,65-66,69-71,73-75,82,84-91,95-98,100,103-104,106-120,123,125-146,148,151-168,171,173-192,194,197-200,202-204,208-210,213,215-218
+  s_861fed197beea2::t_1ecf5393a140c3 219,221-224
+  h_f78d33d4280f3f 3,5-14,17,19,21,25,47-64,67-68,72,77,83,92-94,99,101-102,105,121-122,124,147,149-150,169-170,172,193,195-196,201,205-207,211-212,214
+examples/repl/orchestration-patterns/fixtures/src/models/order.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 4-10,13-19,23-34,38-41,62-65,69-73,81-84,88-90,92-95,102-103,107-130,132-133,160-163,165-167,177,189,191,193-196,212-214,216-221,223,230-232,234,237-238,240-241,244-246,251-252,254,256-257,260-261,264-265,268-271,274-275
+examples/repl/orchestration-patterns/fixtures/src/utils/password.ts
+  s_55bb2e5cb9e884::t_c2453ce284597e 1-4,8-9,11,13-14,17-18,20-23,27-28,30-33,37-38,40-43,47-48,50-58,64-65,67-70,72-76,80-81,83-84,88,90-92
+examples/repl/orchestration-patterns/fixtures/deep/services/payments/refunds.ts
+  s_a4db7985e688d0::t_cbf5f35ffa8ebf 1-2
+examples/repl/orchestration-patterns/04-generate-and-filter.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 50-51,60-62,71-73,81-84
+  s_55bb2e5cb9e884::t_5f3fbce85e4c45 63-68
+  s_55bb2e5cb9e884::t_f9d3fd2eee1e28 69
+  s_55bb2e5cb9e884::t_052425d8adc39e 52
+  s_55bb2e5cb9e884::t_a8bc0f62b50b13 19-20,22-25,27-45
+examples/repl/orchestration-patterns/fixtures/deep/services/email.ts
+  s_a4db7985e688d0::t_28512cf17312e0 1-2
+examples/repl/orchestration-patterns/fixtures/src/middleware/cors.ts
+  s_794bdb5b694ce2::t_9b77eeed0102f5 8-11,13,32-34,36,71-72,74,111,113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "28ced2578824872583063ecad64a4aa6439f264b",
+  "prompts": {},
+  "humans": {
+    "h_f78d33d4280f3f": {
+      "author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  },
+  "sessions": {
+    "s_55bb2e5cb9e884": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90d8eefc-b814-4369-9677-981c907ab665",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    },
+    "s_794bdb5b694ce2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "86b64e86-0069-486b-ae39-54de3e3b1889",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    },
+    "s_861fed197beea2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d07d622e-9a6f-4195-b617-33bfe2d798c1",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    },
+    "s_a4db7985e688d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "49b4358d-ec51-4365-a799-8ea6ddf55918",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
