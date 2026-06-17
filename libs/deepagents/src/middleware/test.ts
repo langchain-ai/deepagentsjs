@@ -9,9 +9,9 @@ import type {
 } from "../backends/protocol.js";
 
 /**
- * Mock backend that returns specified files and directory listings
+ * Mock backend that returns specified files and directory listings.
  * @param config - Configuration object containing files and directories
- * @returns Mock backend that returns specified files and directory listings
+ * @returns Object with `backend` and `writtenFiles` for asserting on writes.
  */
 export function createMockBackend(
   config: {
@@ -22,12 +22,13 @@ export function createMockBackend(
     >;
     writeError?: string;
   } = {},
-): BackendProtocolV2 {
+): BackendProtocolV2 & { writtenFiles: Record<string, string> } {
   const writeError = config.writeError ?? undefined;
   const files = config.files ?? {};
   const directories = config.directories ?? {};
   const writtenFiles: Record<string, string> = { ...files };
   return {
+    writtenFiles,
     async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
       return paths.map((path) => {
         const content = files[path];
