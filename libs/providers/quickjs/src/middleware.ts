@@ -116,15 +116,12 @@ function renderSubagentPrompt(toolName: string): string {
     dispatch result back onto its item. Multi-stage analysis means: run a pass,
     filter or regroup the array in JS, then run another pass over the survivors.
 
-    Once you have explored and are ready to run the workflow, compose the whole
-    thing as a single \`${toolName}\` script that executes end to end — even a
-    multi-stage one. A tournament (generate candidates, compare them pairwise,
-    pick a winner) or a fan-out-and-synthesize (review every item, then combine
-    the findings) is one script, with each stage feeding the next in JS, not a
-    series of separate \`${toolName}\` calls. Splitting across calls costs model
-    turns and forces you to re-establish REPL state. Reach for another call only
-    when a later stage genuinely depends on your own judgment of what an earlier
-    stage produced.
+    You can run the whole workflow in one \`${toolName}\` call or split it across
+    several — both are fine. A single end-to-end script (generate, compare, pick a
+    winner; or review every item, then synthesize) is clean when you can write it
+    in one go; splitting is also fine when you want to inspect results between
+    stages. Either way, don't redo work across calls — reuse what is already in
+    scope (see "Reuse what earlier evals left in scope" below).
 
     #### Fan out with bounded concurrency
 
@@ -244,11 +241,33 @@ function renderSubagentPrompt(toolName: string): string {
     have a subagent write it, or write it with your own file tool outside the
     \`${toolName}\` call.
 
-    #### Across evals
+    #### Reuse what earlier evals left in scope
 
-    Variables persist according to the interpreter persistence mode above, but
-    re-establish what you need in each eval. Doing the dispatch in one
-    \`${toolName}\` call is usually simplest.
+    The REPL is persistent within a turn: every top-level variable, function, and
+    class you declare is kept and is available in your next \`${toolName}\` call
+    (each is hoisted to global scope). So if a later step needs something an
+    earlier eval produced or bound, **reference that variable by name** — do not
+    write a new literal that re-types data a previous eval already returned or
+    computed.
+
+    If you catch yourself pasting a big array or object of values you produced in
+    an earlier call, that is the tell: the variable is still in scope, so use it.
+    Re-typing prior results as a fresh literal wastes tokens and drifts from what
+    actually ran.
+
+    \`\`\`javascript
+    // An earlier eval bound this:
+    //   const auditResults = await Promise.all(files.map(/* ...audit... */));
+
+    // A later eval — reference it; do NOT paste the findings back in as a literal:
+    const findings = auditResults.flatMap((r) =>
+      r.findings.map((f) => ({ ...f, file: r.file }))
+    );
+    const verified = await Promise.all(findings.map((f) =>
+      task({ description: "Verify this finding: " + f.evidence, subagentType: "verifier" })
+        .then((v) => ({ ...f, ...v }))
+    ));
+    \`\`\`
 
     #### When the user asks for a "workflow"
 
