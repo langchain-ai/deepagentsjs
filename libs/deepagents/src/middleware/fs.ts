@@ -438,9 +438,8 @@ const FILESYSTEM_SYSTEM_PROMPT = context`
   ## Filesystem Tools \`ls\`, \`read_file\`, \`write_file\`, \`edit_file\`, \`glob\`, \`grep\`
 
   You have access to a filesystem which you can interact with using these tools.
-  All file paths must start with a /.
 
-  - ls: list files in a directory (requires absolute path)
+  - ls: list files in a directory
   - read_file: read a file from the filesystem
   - write_file: write to a file in the filesystem
   - edit_file: edit a file in the filesystem
@@ -1164,10 +1163,10 @@ export function createFilesystemMiddleware(
   ) {
     throw new Error(
       "Filesystem permissions cannot be used with a backend that supports command " +
-        "execution. Shell commands can access any path, making path-based rules " +
-        "ineffective. Either remove permissions, use a backend without execution " +
-        "support, or use a CompositeBackend with all permission paths scoped to a " +
-        "route prefix.",
+      "execution. Shell commands can access any path, making path-based rules " +
+      "ineffective. Either remove permissions, use a backend without execution " +
+      "support, or use a CompositeBackend with all permission paths scoped to a " +
+      "route prefix.",
     );
   }
 
