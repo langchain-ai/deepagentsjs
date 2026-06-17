@@ -29,10 +29,17 @@ function isCommandLike(value: unknown): value is Record<string, unknown> {
  * by a message discriminator so arbitrary tool results aren't misread.
  */
 function isMessageLike(value: unknown): boolean {
-  if (!isPlainObject(value) || "update" in value || !("content" in value)) {
+  if (!isPlainObject(value) || "update" in value) {
     return false;
   }
   const v = value as Record<string, unknown>;
+  // Content sits at the top level on live instances, or under `kwargs` on the
+  // serialized form — accept either so bare serialized messages aren't missed.
+  const hasContent =
+    "content" in v || (isPlainObject(v.kwargs) && "content" in v.kwargs);
+  if (!hasContent) {
+    return false;
+  }
   return (
     typeof v._getType === "function" ||
     typeof v.getType === "function" ||

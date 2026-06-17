@@ -65,6 +65,27 @@ describe("unwrapToolEnvelope", () => {
     expect(unwrapToolEnvelope(toolMessage("hello"))).toBe("hello");
   });
 
+  /** A serialized LangChain message (payload only under kwargs.content). */
+  function serializedMessage(content: unknown) {
+    return {
+      lc: 1,
+      type: "constructor",
+      id: ["langchain_core", "messages", "ToolMessage"],
+      kwargs: { content },
+    };
+  }
+
+  it("unwraps a bare serialized ToolMessage (content under kwargs)", () => {
+    expect(unwrapToolEnvelope(serializedMessage("serialized"))).toBe(
+      "serialized",
+    );
+  });
+
+  it("unwraps the last entry from a list of serialized messages", () => {
+    const list = [serializedMessage("a"), serializedMessage("b")];
+    expect(unwrapToolEnvelope(list)).toBe("b");
+  });
+
   it("unwraps the last ToolMessage from a message list", () => {
     const list = [toolMessage("a"), toolMessage("b")];
     expect(unwrapToolEnvelope(list)).toBe("b");
