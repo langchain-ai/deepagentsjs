@@ -1,5 +1,19 @@
 # @langchain/quickjs
 
+## 0.5.0
+
+### Minor Changes
+
+- [#590](https://github.com/langchain-ai/deepagentsjs/pull/590) [`7ee3feb`](https://github.com/langchain-ai/deepagentsjs/commit/7ee3feb674c361305b2a031db9132253e3d0543b) Thanks [@colifran](https://github.com/colifran)! - chore(quickjs): remove skills backend and associated plumbing
+
+- [#592](https://github.com/langchain-ai/deepagentsjs/pull/592) [`72cfb0c`](https://github.com/langchain-ai/deepagentsjs/commit/72cfb0c0384b30059b5e8028139a2e167c1be882) Thanks [@colifran](https://github.com/colifran)! - feat(quickjs): implement default subagent primitive in code interpreter for programmatic subagent calling
+
+### Patch Changes
+
+- [#594](https://github.com/langchain-ai/deepagentsjs/pull/594) [`61db938`](https://github.com/langchain-ai/deepagentsjs/commit/61db9381494f61b4548cd80b715e5af72fdde381) Thanks [@colifran](https://github.com/colifran)! - chore(quickjs): remove configurable concurrency and add subagents option with true default
+
+- [#546](https://github.com/langchain-ai/deepagentsjs/pull/546) [`b7a5f26`](https://github.com/langchain-ai/deepagentsjs/commit/b7a5f26fd9cba992b11e1a4cf18607d64533503b) Thanks [@open-swe](https://github.com/apps/open-swe)! - fix(quickjs): scope `CodeInterpreterMiddleware` REPL prompt sandbox bullet to the runtime
+
 ## 0.4.1
 
 ### Patch Changes

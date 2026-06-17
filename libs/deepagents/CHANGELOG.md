@@ -1,5 +1,51 @@
 # deepagents
 
+## 1.10.4
+
+### Patch Changes
+
+- [#551](https://github.com/langchain-ai/deepagentsjs/pull/551) [`18557db`](https://github.com/langchain-ai/deepagentsjs/commit/18557db7bbdf92052ed5f994512fb70e11989e69) Thanks [@antonnak](https://github.com/antonnak)! - fix(deepagents): gate cache_control writes on per-call request.model
+
+  `createCacheBreakpointMiddleware` and `createMemoryMiddleware` were gating
+  the Anthropic-specific `cache_control` write at agent-creation time only.
+  When `modelFallbackMiddleware` swapped `request.model` to a non-Anthropic
+  provider mid-flight (e.g. on Anthropic 5xx), the marker leaked through
+  and the fallback provider rejected the request with
+  `400 Unknown parameter: 'cache_control'`. Both middlewares now also
+  check `isAnthropicModel(request.model)` inside `wrapModelCall`. Fixes [#550](https://github.com/langchain-ai/deepagentsjs/issues/550).
+
+- [#591](https://github.com/langchain-ai/deepagentsjs/pull/591) [`773cac5`](https://github.com/langchain-ai/deepagentsjs/commit/773cac5dc7efc7843dd882642d91f7d64d6fde81) Thanks [@colifran](https://github.com/colifran)! - chore(deepagents): expose createSubAgent
+
+- [#541](https://github.com/langchain-ai/deepagentsjs/pull/541) [`1ca6dc9`](https://github.com/langchain-ai/deepagentsjs/commit/1ca6dc92fd40a6d845d24b95ba14b8f2643db394) Thanks [@ixchio](https://github.com/ixchio)! - fix getMimeType to return application/octet-stream for unknown file extensions instead of text/plain
+
+- [#572](https://github.com/langchain-ai/deepagentsjs/pull/572) [`03df237`](https://github.com/langchain-ai/deepagentsjs/commit/03df237385fbdfefd862076c5588eb39cb6e43c3) Thanks [@hntrl](https://github.com/hntrl)! - fix: scope CompositeBackend grep/glob route fanout by search path
+
+  CompositeBackend now limits fallback route fanout to routes mounted under the requested search path, instead of querying all routed backends unconditionally.
+
+  This avoids unrelated routed backend calls (and side-effect errors) for scoped searches like `path="/workspace"`, while preserving full fanout behavior at root (`path="/"`).
+
+- [#574](https://github.com/langchain-ai/deepagentsjs/pull/574) [`84f3c0c`](https://github.com/langchain-ai/deepagentsjs/commit/84f3c0c2f1cad271191bcc138b84ba5b9c9205c9) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): add explicit browser and node entrypoints
+  - add `deepagents/browser` and `deepagents/node` subpath exports
+  - route browser bundlers to the browser-safe bundle via the root `browser` export condition
+  - avoid named Node builtin imports in backend utils that can break browser builds
+  - document browser guidance to import from `deepagents/browser`
+
+- [#592](https://github.com/langchain-ai/deepagentsjs/pull/592) [`72cfb0c`](https://github.com/langchain-ai/deepagentsjs/commit/72cfb0c0384b30059b5e8028139a2e167c1be882) Thanks [@colifran](https://github.com/colifran)! - feat(quickjs): implement default subagent primitive in code interpreter for programmatic subagent calling
+
+- [#566](https://github.com/langchain-ai/deepagentsjs/pull/566) [`04cc3fc`](https://github.com/langchain-ai/deepagentsjs/commit/04cc3fc26001ee566ed94de44c2dda2cf6adecc4) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): propagate subagent `lc_agent_name` during task delegation
+  - Ensure `task` tool subagent invocations override `metadata.lc_agent_name` with the selected `subagent_type`.
+  - Add regression coverage for both compiled subagents (`runnable`) and standard subagent specs to verify tool-time metadata reflects the active subagent.
+  - Update the `langsmith` peer dependency range in `deepagents` to `^0.7.1`.
+
+- [#595](https://github.com/langchain-ai/deepagentsjs/pull/595) [`18fbb48`](https://github.com/langchain-ai/deepagentsjs/commit/18fbb4839050e98ae3cfd36ec69b11f0725ad6d6) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): count tokens once per model call in summarization middleware
+
+  `createSummarizationMiddleware` counted tokens twice on every model call—once
+  inside `truncateArgs` and again for the should-summarize check—even when
+  nothing was truncated or summarized. Count once and pass the total into
+  `truncateArgs`; recount only when truncation actually modifies messages.
+
+- [#242](https://github.com/langchain-ai/deepagentsjs/pull/242) [`e3d4b53`](https://github.com/langchain-ai/deepagentsjs/commit/e3d4b5367b1825df56c919b483ec4a3e117d631f) Thanks [@alvedder](https://github.com/alvedder)! - feat(deepagents): support direct skill paths as sources in createSkillsMiddleware
+
 ## 1.10.3
 
 ### Patch Changes
