@@ -1,0 +1,8 @@
+src/
+*.config.ts
+tsconfig.json
+vitest.config.ts
+*.test.ts
+*.int.test.ts
+coverage/
+.tsdown/

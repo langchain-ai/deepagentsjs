@@ -54,6 +54,7 @@ jobs:
             quickjs
             node-vfs
             deno
+            vercel
             evals
             examples
             docs
