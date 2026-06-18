@@ -1,5 +1,13 @@
 # @langchain/quickjs
 
+## 0.5.1
+
+### Patch Changes
+
+- [#602](https://github.com/langchain-ai/deepagentsjs/pull/602) [`204cb27`](https://github.com/langchain-ai/deepagentsjs/commit/204cb27414c82c34a0c681c7e5a5336e1834f058) Thanks [@colifran](https://github.com/colifran)! - chore(quickjs): refine dynamic subagent prompt to trigger on workflow keyword and to improve iterative eval behavior
+
+- [#604](https://github.com/langchain-ai/deepagentsjs/pull/604) [`0971007`](https://github.com/langchain-ai/deepagentsjs/commit/0971007ab2491e73eb1a78c5426ab934470d5620) Thanks [@colifran](https://github.com/colifran)! - fix(quickjs): unwrap Command/ToolMessage envelopes from tool and subagent results
+
 ## 0.5.0
 
 ### Minor Changes

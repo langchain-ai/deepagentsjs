@@ -1,5 +1,17 @@
 # deepagents
 
+## 1.10.5
+
+### Patch Changes
+
+- [#598](https://github.com/langchain-ai/deepagentsjs/pull/598) [`7c4a11e`](https://github.com/langchain-ai/deepagentsjs/commit/7c4a11eacc11c3720b70d802068300ac3b4d8651) Thanks [@christian-bromann](https://github.com/christian-bromann)! - refactor(stream): use langchain `run.subagents` instead of bespoke transformer
+
+  Remove deepagents' custom `createSubagentTransformer` and rely on the native
+  subagent stream that `createAgent` registers (langchain#37739). Keep
+  `DeepAgentRunStream` as a compile-time overlay that narrows `run.subagents` to
+  declared subagent specs. Update streaming tests for `cause` and per-subagent
+  message coverage.
+
 ## 1.10.4
 
 ### Patch Changes
