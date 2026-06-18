@@ -58,8 +58,6 @@
   "packageManager": "pnpm@10.29.2",
   "pnpm": {
     "overrides": {
-      "@langchain/langgraph": "https://pkg.pr.new/langchain-ai/langgraphjs/@langchain/langgraph@d2312cf",
-      "@langchain/langgraph-checkpoint": "https://pkg.pr.new/langchain-ai/langgraphjs/@langchain/langgraph-checkpoint@d2312cf",
       "minimatch@<3.1.4": "3.1.4",
       "minimatch@>=9 <10.2.1": "10.2.4",
       "fast-xml-parser@>=4.0.0-beta.3 <=5.5.6": "5.5.10",
