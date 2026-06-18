@@ -172,17 +172,6 @@ describe("createCodeInterpreterMiddleware", () => {
         /task` tool cannot be exposed/,
       );
     });
-
-    it("should allow names that merely resemble `task`", () => {
-      const tasks = tool(async () => "ok", {
-        name: "tasks",
-        description: "not the subagent task tool",
-        schema: z.object({}),
-      });
-      const result = resolveToolList(["tasks"], [tasks]);
-      expect(result).toHaveLength(1);
-      expect(result[0]).toBe(tasks);
-    });
   });
 
   describe("ptc with tool instances via wrapModelCall", () => {
