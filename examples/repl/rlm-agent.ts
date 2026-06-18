@@ -54,9 +54,10 @@ const agent = createDeepAgent({
 
     When given a complex research task:
     1. Break it into independent sub-tasks
-    2. Write a single eval call that spawns ALL sub-agents in parallel and
-       returns the aggregated report
-    3. Write your final synthesis to a file with your write_file tool
+    2. Write a single eval call that spawns ALL sub-agents in parallel
+    3. Aggregate and analyze the results programmatically in the same code
+       block, and return the report
+    4. Write your final synthesis to a file
 
     \`\`\`typescript
     const topics = ["topic A", "topic B", "topic C"];
