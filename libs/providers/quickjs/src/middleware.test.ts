@@ -150,6 +150,28 @@ describe("createCodeInterpreterMiddleware", () => {
     it("should return empty array for empty items list", () => {
       expect(resolveToolList([], [agentSearch])).toHaveLength(0);
     });
+
+    it("should throw when the `task` tool is requested by name", () => {
+      const taskTool = tool(async () => "ok", {
+        name: "task",
+        description: "subagent task",
+        schema: z.object({}),
+      });
+      expect(() => resolveToolList(["task"], [taskTool])).toThrow(
+        /task` tool cannot be exposed/,
+      );
+    });
+
+    it("should throw when a `task`-named tool instance is requested", () => {
+      const taskTool = tool(async () => "ok", {
+        name: "task",
+        description: "subagent task",
+        schema: z.object({}),
+      });
+      expect(() => resolveToolList([taskTool], [])).toThrow(
+        /task` tool cannot be exposed/,
+      );
+    });
   });
 
   describe("ptc with tool instances via wrapModelCall", () => {

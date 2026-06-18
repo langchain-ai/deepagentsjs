@@ -1,10 +1,11 @@
 /**
  * Recursive Language Model (RLM) Example
  *
- * Demonstrates the RLM pattern using the QuickJS REPL middleware with
- * programmatic tool calling (PTC). The agent writes code that spawns
- * sub-agents via `tools.task()`, processes their results programmatically,
- * and aggregates findings — all within the sandboxed REPL.
+ * Demonstrates the RLM pattern using the QuickJS REPL middleware. The agent
+ * writes code that spawns sub-agents via the `task()` global, processes their
+ * results programmatically, and aggregates findings — all within the
+ * sandboxed REPL. `task()` is always available in the REPL when the agent has
+ * subagents configured; it does not need to be exposed via PTC.
  *
  * This is the core RLM insight: instead of the LLM verbalizing each
  * sub-agent call as a separate tool invocation, it writes a loop that
@@ -12,10 +13,10 @@
  *
  * Architecture:
  * ```
- * Agent (with eval + PTC)
+ * Agent (with eval)
  *   └── REPL code
- *       ├── tools.task({ description: "analyze chunk 1", ... })
- *       ├── tools.task({ description: "analyze chunk 2", ... })
+ *       ├── task({ description: "analyze chunk 1", ... })
+ *       ├── task({ description: "analyze chunk 2", ... })
  *       └── ... (N parallel sub-agent calls via Promise.all)
  *       └── programmatic aggregation of results
  * ```
@@ -25,7 +26,7 @@ import "dotenv/config";
 import dedent from "dedent";
 import { HumanMessage } from "@langchain/core/messages";
 import { createDeepAgent, type SubAgent } from "deepagents";
-import { createREPLMiddleware } from "@langchain/quickjs";
+import { createCodeInterpreterMiddleware } from "@langchain/quickjs";
 import { ChatOpenAI } from "@langchain/openai";
 
 const generalPurpose: SubAgent = {
@@ -47,8 +48,8 @@ const agent = createDeepAgent({
     You are a research analyst that uses code to orchestrate sub-agents.
 
     **CRITICAL: Always use Promise.all to spawn sub-agents in parallel.**
-    Never call tools.task() sequentially in a loop — always build an array
-    of promises and await them together with Promise.all. This runs all
+    Never call task() sequentially in a loop — always build an array of
+    promises and await them together with Promise.all. This runs all
     sub-agents concurrently and is dramatically faster.
 
     When given a complex research task:
@@ -60,31 +61,27 @@ const agent = createDeepAgent({
     \`\`\`typescript
     const topics = ["topic A", "topic B", "topic C"];
 
-    // ALWAYS fan out in parallel like this:
+    // ALWAYS fan out in parallel like this, using the task() global:
     const results = await Promise.all(
       topics.map(topic =>
-        tools.task({
+        task({
           description: \`Research \${topic} in depth. Return key findings.\`,
           subagentType: "general-purpose",
         })
       )
     );
 
-    // Then aggregate programmatically
+    // Aggregate programmatically and return the report from the eval.
     const report = topics.map((t, i) => \`## \${t}\\n\${results[i]}\`).join("\\n\\n");
-    await writeFile("/research.md", report);
+    report;
     \`\`\`
 
-    Do all sub-agent spawning, result processing, and file writing in a
-    single eval call. Do not use multiple sequential eval calls
-    when the work can be parallelized.
+    Do all sub-agent spawning and aggregation in a single eval call and return
+    the report. Then write your final synthesis to a file with write_file. Do
+    not use multiple sequential eval calls when the work can be parallelized.
   `,
   subagents: [generalPurpose],
-  middleware: [
-    createREPLMiddleware({
-      ptc: ["task"],
-    }),
-  ],
+  middleware: [createCodeInterpreterMiddleware()],
 });
 
 const result = await agent.invoke({

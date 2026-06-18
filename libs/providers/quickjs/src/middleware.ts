@@ -354,6 +354,9 @@ export async function generatePtcPrompt(
  * StructuredToolInterface objects. Strings are looked up by name in agentTools;
  * instances are included directly without requiring agent registration. Strings
  * that don't match any agent tool are silently omitted.
+ *
+ * Throws if the subagent `task` tool is requested (by name or instance): it is
+ * reserved for the `task()` global and cannot be a `tools.*` PTC member.
  */
 export function resolveToolList(
   items: (string | StructuredToolInterface)[],
@@ -361,6 +364,16 @@ export function resolveToolList(
 ): StructuredToolInterface[] {
   const agentByName = new Map(agentTools.map((t) => [t.name, t]));
   return items.flatMap((item) => {
+    const name = typeof item === "string" ? item : item.name;
+    if (name === "task") {
+      throw new Error(
+        "The subagent `task` tool cannot be exposed via `ptc`. It is always " +
+          "available as the top-level `task()` global inside the REPL (with " +
+          "`subagentType` and `responseSchema` support); exposing it through the " +
+          "`tools.*` namespace would create a second, conflicting dispatch path " +
+          'that drops `responseSchema`. Remove "task" from `ptc`.',
+      );
+    }
     if (typeof item === "string") {
       const found = agentByName.get(item);
       return found ? [found] : [];
