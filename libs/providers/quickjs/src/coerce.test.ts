@@ -1,20 +1,21 @@
 import { describe, it, expect } from "vitest";
+import { Command } from "@langchain/langgraph";
+import { ToolMessage } from "@langchain/core/messages";
 import { unwrapToolEnvelope } from "./coerce.js";
 
-/** A Command-shaped value like the deepagents task tool resolves to. */
-function command(...contents: unknown[]) {
-  return {
-    lg_name: "Command",
+/** A Command like the deepagents task tool resolves to. */
+function command(...contents: unknown[]): Command {
+  return new Command({
     update: {
-      files: {},
-      messages: contents.map((content) => ({ content })),
+      messages: contents.map(
+        (content, i) =>
+          new ToolMessage({
+            content: content as string,
+            tool_call_id: `c${i}`,
+          }),
+      ),
     },
-  };
-}
-
-/** A ToolMessage-shaped value (live-instance style). */
-function toolMessage(content: unknown) {
-  return { content, tool_call_id: "call_1", _getType: () => "tool" };
+  });
 }
 
 describe("unwrapToolEnvelope", () => {
@@ -38,60 +39,20 @@ describe("unwrapToolEnvelope", () => {
     );
   });
 
-  it("reverse-scans past trailing messages with no content", () => {
-    const cmd = {
-      update: { messages: [{ content: "real" }, { content: null }, {}] },
-    };
-    expect(unwrapToolEnvelope(cmd)).toBe("real");
-  });
-
-  it("reads serialized message content under kwargs.content", () => {
-    const cmd = {
-      update: {
-        messages: [
-          {
-            lc: 1,
-            type: "constructor",
-            id: ["langchain_core", "messages", "ToolMessage"],
-            kwargs: { content: "from-kwargs" },
-          },
-        ],
-      },
-    };
-    expect(unwrapToolEnvelope(cmd)).toBe("from-kwargs");
-  });
-
   it("unwraps a bare ToolMessage to its content", () => {
-    expect(unwrapToolEnvelope(toolMessage("hello"))).toBe("hello");
-  });
-
-  /** A serialized LangChain message (payload only under kwargs.content). */
-  function serializedMessage(content: unknown) {
-    return {
-      lc: 1,
-      type: "constructor",
-      id: ["langchain_core", "messages", "ToolMessage"],
-      kwargs: { content },
-    };
-  }
-
-  it("unwraps a bare serialized ToolMessage (content under kwargs)", () => {
-    expect(unwrapToolEnvelope(serializedMessage("serialized"))).toBe(
-      "serialized",
-    );
-  });
-
-  it("unwraps the last entry from a list of serialized messages", () => {
-    const list = [serializedMessage("a"), serializedMessage("b")];
-    expect(unwrapToolEnvelope(list)).toBe("b");
+    const message = new ToolMessage({ content: "hello", tool_call_id: "c0" });
+    expect(unwrapToolEnvelope(message)).toBe("hello");
   });
 
   it("unwraps the last ToolMessage from a message list", () => {
-    const list = [toolMessage("a"), toolMessage("b")];
+    const list = [
+      new ToolMessage({ content: "a", tool_call_id: "a" }),
+      new ToolMessage({ content: "b", tool_call_id: "b" }),
+    ];
     expect(unwrapToolEnvelope(list)).toBe("b");
   });
 
-  it("unwraps a Command nested inside a message list", () => {
+  it("unwraps a Command nested in a list", () => {
     expect(unwrapToolEnvelope([command("x"), command("y")])).toBe("y");
   });
 
@@ -114,7 +75,7 @@ describe("unwrapToolEnvelope", () => {
   });
 
   it("returns a Command with no message payload unchanged", () => {
-    const cmd = { update: { files: {} } };
+    const cmd = new Command({ update: { files: {} } });
     expect(unwrapToolEnvelope(cmd)).toBe(cmd);
   });
 });

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { tool } from "langchain";
 import * as z from "zod";
-import { SystemMessage } from "@langchain/core/messages";
+import { SystemMessage, ToolMessage } from "@langchain/core/messages";
+import { Command } from "@langchain/langgraph";
 import {
   createCodeInterpreterMiddleware,
   generatePtcPrompt,
@@ -405,13 +406,18 @@ describe("createCodeInterpreterMiddleware", () => {
       const structured = { bugs: ["bug1", "bug2"] };
       const mockTaskTool = {
         name: "task",
-        invoke: vi.fn().mockResolvedValue({
-          lg_name: "Command",
-          update: {
-            files: {},
-            messages: [{ content: JSON.stringify(structured) }],
-          },
-        }),
+        invoke: vi.fn().mockResolvedValue(
+          new Command({
+            update: {
+              messages: [
+                new ToolMessage({
+                  content: JSON.stringify(structured),
+                  tool_call_id: "c0",
+                }),
+              ],
+            },
+          }),
+        ),
       };
 
       const middleware = createCodeInterpreterMiddleware();
