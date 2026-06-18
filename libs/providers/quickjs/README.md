@@ -100,7 +100,9 @@ PTC configuration is progressive:
 
 ### Recursive Language Model (RLM)
 
-When the `task` tool is exposed via PTC, the agent can spawn sub-agents in parallel from within the REPL:
+When the agent has subagents configured, a `task()` global is available inside
+the REPL (no PTC needed), so the agent can spawn sub-agents in parallel from
+within the REPL:
 
 ```typescript
 const agent = createDeepAgent({
@@ -112,7 +114,7 @@ const agent = createDeepAgent({
       systemPrompt: "...",
     },
   ],
-  middleware: [createQuickJSMiddleware({ ptc: ["task"] })],
+  middleware: [createQuickJSMiddleware()],
 });
 ```
 
@@ -122,15 +124,20 @@ The agent then writes code like:
 const topics = ["quantum computing", "fusion energy", "CRISPR"];
 const results = await Promise.all(
   topics.map((topic) =>
-    tools.task({
+    task({
       description: `Research ${topic} in depth`,
       subagentType: "general-purpose",
     }),
   ),
 );
+// Aggregate and return the report from the eval; the agent then writes it to a
+// file with its own write_file tool.
 const report = topics.map((t, i) => `## ${t}\n${results[i]}`).join("\n\n");
-await writeFile("/research.md", report);
+report;
 ```
+
+> `task` cannot be exposed via `ptc` — it is reserved for the `task()` global,
+> so passing `ptc: ["task"]` throws.
 
 ## API
 
