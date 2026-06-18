@@ -639,9 +639,13 @@ export interface CreateDeepAgentParams<
   /**
    * Optional {@link StreamTransformer} factories to register with the underlying agent.
    *
-   * Deepagents always registers its built-in subagent transformer; custom
-   * transformers are appended after it and are exposed on `run.extensions`
-   * when using `streamEvents(..., { version: "v3" })`.
+   * These are forwarded as-is to `createAgent` and their projections are
+   * exposed under `run.extensions` when using `streamEvents(..., { version:
+   * "v3" })`.
+   *
+   * This is separate from the built-in streams `createAgent` provides on its
+   * own — such as `run.subagents` (nested named agents) and `run.toolCalls`
+   * (tool calls), which land directly on the run, not under `run.extensions`.
    */
   streamTransformers?: TStreamTransformers;
 }
