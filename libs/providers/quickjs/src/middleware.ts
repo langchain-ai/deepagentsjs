@@ -38,6 +38,7 @@ import {
   safeToJsonSchema,
 } from "./utils.js";
 import { validateResponseSchema } from "./subagent-dispatch.js";
+import { unwrapToolEnvelope } from "./coerce.js";
 
 /**
  * These type-only imports are required for TypeScript's type inference to work
@@ -445,14 +446,18 @@ export function createCodeInterpreterMiddleware(
         toolConfig,
       );
 
-      if (hasSchema && typeof result === "string") {
+      // The task tool resolves to a Command envelope; unwrap it to the
+      // subagent's actual output before handing it back to the REPL.
+      const content = unwrapToolEnvelope(result);
+
+      if (hasSchema && typeof content === "string") {
         try {
-          return JSON.parse(result);
+          return JSON.parse(content);
         } catch {
-          return result;
+          return content;
         }
       }
-      return result;
+      return content;
     };
   }
 
