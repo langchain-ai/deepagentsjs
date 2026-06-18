@@ -47,6 +47,10 @@ import type {
   SupportedResponseFormat,
 } from "./types.js";
 import { createSubagentTransformer } from "./stream.js";
+import {
+  buildInterruptOnFromPermissions,
+  mergeFsInterruptOn,
+} from "./middleware/fs-interrupt.js";
 
 /**
  * required for type inference
@@ -239,8 +243,17 @@ export function createDeepAgent<
    * Only the general-purpose subagent inherits the main agent's skills.
    * If a custom subagent needs skills, it must specify its own `skills` array.
    */
+  const mainInterruptOn = mergeFsInterruptOn(
+    buildInterruptOnFromPermissions(permissions),
+    interruptOn,
+  );
+
   const normalizeSubagentSpec = (input: SubAgent): SubAgent => {
     const effectivePermissions = input.permissions ?? permissions;
+    const subagentInterruptOn = mergeFsInterruptOn(
+      buildInterruptOnFromPermissions(effectivePermissions),
+      input.interruptOn ?? interruptOn,
+    );
 
     // Middleware for custom subagents (does NOT include skills from main agent).
     // Uses createSummarizationMiddleware (deepagents version) with backend support
@@ -272,6 +285,7 @@ export function createDeepAgent<
       ...input,
       tools: input.tools ?? [],
       middleware: subagentMiddleware,
+      ...(subagentInterruptOn != null && { interruptOn: subagentInterruptOn }),
     };
   };
 
@@ -334,7 +348,7 @@ export function createDeepAgent<
     createSubAgentMiddleware({
       defaultModel: model,
       defaultTools: effectiveTools,
-      defaultInterruptOn: interruptOn,
+      defaultInterruptOn: mainInterruptOn ?? null,
       subagents: inlineSubagents,
       generalPurposeAgent: false,
     }),
@@ -383,8 +397,10 @@ export function createDeepAgent<
           }),
         ]
       : []),
-    // Optional human-in-the-loop tool interrupts.
-    ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
+    // Optional human-in-the-loop tool interrupts (user config + fs interrupt rules).
+    ...(mainInterruptOn
+      ? [humanInTheLoopMiddleware({ interruptOn: mainInterruptOn })]
+      : []),
   ];
 
   // Apply profile middleware additions. Inserted before cache middleware

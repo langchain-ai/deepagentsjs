@@ -625,6 +625,11 @@ export interface CreateDeepAgentParams<
    * and `grep`. Subagents inherit these rules unless they specify their own
    * `permissions` field.
    *
+   * Use `mode: "interrupt"` to pause matching tool calls for human approval.
+   * `HumanInTheLoopMiddleware` is auto-installed when any interrupt-mode rule
+   * is present, and generated `interruptOn` entries are merged with the
+   * `interruptOn` argument (user-supplied entries win per tool name).
+   *
    * @example
    * ```ts
    * createDeepAgent({
