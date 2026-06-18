@@ -1,0 +1,30 @@
+libs/providers/quickjs/src/middleware.test.ts
+  s_55bb2e5cb9e884::t_82bedc656b25cf 409-420
+  s_55bb2e5cb9e884::t_dada9bce15ecc4 4-5
+libs/providers/quickjs/src/coerce.ts
+  s_55bb2e5cb9e884::t_05791d0e3d84be 10-11,18-23,26-28,44-46,50-52,58-59,61,63
+libs/providers/quickjs/src/coerce.test.ts
+  s_55bb2e5cb9e884::t_c00996e8a17596 43-44,48-51
+  s_55bb2e5cb9e884::t_ee39fcc962f56b 2-3,6-8,10-13,15-16,18,55,78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "7577419770ac4bcd5f42b78588155898f1884a08",
+  "prompts": {},
+  "humans": {
+    "h_f78d33d4280f3f": {
+      "author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  },
+  "sessions": {
+    "s_55bb2e5cb9e884": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90d8eefc-b814-4369-9677-981c907ab665",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
