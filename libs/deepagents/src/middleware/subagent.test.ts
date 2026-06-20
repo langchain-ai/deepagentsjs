@@ -345,10 +345,8 @@ describe("Subagent content block filtering", () => {
       ],
     });
 
-    const checkpointer = new MemorySaver();
     const agent = createDeepAgent({
       model,
-      checkpointer,
       subagents: [
         {
           name: "worker",
@@ -384,10 +382,7 @@ describe("Subagent content block filtering", () => {
       (msg: BaseMessage) => (msg as ToolMessage).name === "task",
     ) as ToolMessage;
     expect(taskToolMessage).toBeDefined();
-    expect(taskToolMessage.content).toContainEqual({
-      type: "text",
-      text: "Here is the result",
-    });
+    expect(taskToolMessage.content).toBe("Here is the result");
   });
 
   it("should filter thinking and redacted_thinking blocks from subagent response content", async () => {
@@ -424,10 +419,8 @@ describe("Subagent content block filtering", () => {
       ],
     });
 
-    const checkpointer = new MemorySaver();
     const agent = createDeepAgent({
       model,
-      checkpointer,
       subagents: [
         {
           name: "worker",
@@ -452,19 +445,125 @@ describe("Subagent content block filtering", () => {
         ToolMessage.isInstance(msg) && (msg as ToolMessage).name === "task",
     ) as ToolMessage;
     expect(taskToolMessage).toBeDefined();
-    expect(taskToolMessage.content).toContainEqual({
-      type: "text",
-      text: "Final answer",
+    expect(taskToolMessage.content).toBe("Final answer");
+  });
+
+  it("should filter Anthropic server-tool blocks from subagent response content", async () => {
+    const mockSubagent = RunnableLambda.from(async () => ({
+      messages: [
+        new AIMessage({
+          content: [
+            {
+              type: "server_tool_use",
+              id: "srvtoolu_1",
+              name: "web_search",
+              input: { query: "example" },
+            },
+            {
+              type: "web_search_tool_result",
+              tool_use_id: "srvtoolu_1",
+              content: [
+                {
+                  type: "web_search_result",
+                  title: "Example",
+                  url: "https://example.com",
+                  encrypted_content: "...",
+                },
+              ],
+            },
+            { type: "text", text: "Final answer" },
+          ],
+        }),
+      ],
+    }));
+
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: `call_${Date.now()}`,
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+        "Done",
+      ],
     });
-    if (Array.isArray(taskToolMessage.content)) {
-      const invalidBlocks = (
-        taskToolMessage.content as Array<{ type: string }>
-      ).filter(
-        (block) =>
-          block.type === "thinking" || block.type === "redacted_thinking",
-      );
-      expect(invalidBlocks).toHaveLength(0);
-    }
+
+    const agent = createDeepAgent({
+      model,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    const result = await agent.invoke({ messages: [new HumanMessage("Test")] });
+
+    const taskToolMessage = result.messages.find(
+      (msg: BaseMessage) =>
+        ToolMessage.isInstance(msg) && (msg as ToolMessage).name === "task",
+    ) as ToolMessage;
+    expect(taskToolMessage.content).not.toContain("server_tool_use");
+  });
+
+  it("should use the last AIMessage with non-empty text, skipping a trailing empty message", async () => {
+    const mockSubagent = RunnableLambda.from(async () => ({
+      messages: [
+        new AIMessage({ content: "The real answer" }),
+        // Anthropic sometimes emits a trailing empty `end_turn` AIMessage.
+        new AIMessage({ content: "" }),
+      ],
+    }));
+
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: `call_${Date.now()}`,
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+        "Done",
+      ],
+    });
+
+    const agent = createDeepAgent({
+      model,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: mockSubagent,
+        },
+      ],
+    });
+
+    const result = await agent.invoke({ messages: [new HumanMessage("Test")] });
+
+    const taskToolMessage = result.messages.find(
+      (msg: BaseMessage) =>
+        ToolMessage.isInstance(msg) && (msg as ToolMessage).name === "task",
+    ) as ToolMessage;
+    expect(taskToolMessage.content).toBe("The real answer");
   });
 
   it("should fall back to 'Task completed' when all content blocks are invalid", async () => {
