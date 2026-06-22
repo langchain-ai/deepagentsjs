@@ -19,7 +19,7 @@ import {
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
-import { HumanMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { FilesystemPermission } from "../permissions/types.js";
 
 export type { AgentMiddleware };
@@ -452,16 +452,22 @@ function returnCommandWithStateUpdate(
   if (result.structuredResponse != null) {
     content = JSON.stringify(result.structuredResponse);
   } else {
-    const messages = result.messages as BaseMessage[];
-    const lastMessage = messages?.[messages.length - 1];
-
-    content = lastMessage?.content || "Task completed";
-    if (Array.isArray(content)) {
-      content = content.filter(
-        (block) => !INVALID_TOOL_MESSAGE_BLOCK_TYPES.includes(block.type),
-      );
-      if (content.length === 0) {
-        content = "Task completed";
+    // Walk back to the last AIMessage with non-empty text and forward only that
+    // text as a string. Anthropic sometimes emits a trailing empty `end_turn`
+    // AIMessage after a final tool call, which would otherwise be forwarded as
+    // an empty ToolMessage.
+    const messages = (result.messages as BaseMessage[]) ?? [];
+    content = "Task completed";
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      if (!message || !AIMessage.isInstance(message)) continue;
+      const text =
+        typeof message.content === "string"
+          ? message.content.trim()
+          : (message.text?.trim() ?? "");
+      if (text) {
+        content = text;
+        break;
       }
     }
   }
