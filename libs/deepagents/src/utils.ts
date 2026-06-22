@@ -27,6 +27,32 @@ export function isAnthropicModel(
 }
 
 /**
+ * Detect whether a model is an AWS Bedrock Converse model.
+ *
+ * Accepts the wider `RunnableInterface` shape (the type of `request.model`
+ * inside `wrapModelCall`, aliased as `AgentLanguageModelLike` in langchain)
+ * because the function only depends on `.getName()`, which is part of the
+ * Runnable contract. `BaseLanguageModel` extends `Runnable`, so existing
+ * call sites still type-check.
+ */
+export function isBedrockConverseModel(
+  model: BaseLanguageModel | RunnableInterface<unknown, unknown> | string,
+): boolean {
+  if (typeof model === "string") {
+    if (model.includes(":")) {
+      const provider = model.split(":")[0];
+      return provider === "bedrock" || provider === "aws";
+    }
+    return false;
+  }
+  if (model.getName() === "ConfigurableModel") {
+    const provider = (model as any)._defaultConfig?.modelProvider;
+    return provider === "bedrock" || provider === "aws";
+  }
+  return model.getName() === "ChatBedrockConverse";
+}
+
+/**
  * Extract the provider name from a model instance for profile lookup.
  *
  * Checks `_defaultConfig.modelProvider` (ConfigurableModel) and falls
