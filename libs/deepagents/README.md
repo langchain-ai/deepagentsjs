@@ -46,7 +46,7 @@ yarn add deepagents
 
 > [!IMPORTANT]
 > `deepagents` declares the LangChain runtime packages as **peer dependencies** so
-> your app controls their versions and everything resolves to a single shared copy. 
+> your app controls their versions and everything resolves to a single shared copy.
 > npm 7+ and pnpm 8+ install these automatically; **Yarn users must add them explicitly**:
 >
 > ```bash
