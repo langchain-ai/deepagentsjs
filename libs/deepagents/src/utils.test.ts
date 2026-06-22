@@ -29,10 +29,24 @@ describe("isBedrockConverseModel", () => {
       expect(isBedrockConverseModel("aws:amazon.nova-pro-v1:0")).toBe(true);
     });
 
+    it("should detect bare amazon.* model strings (langchain auto-inference)", () => {
+      expect(isBedrockConverseModel("amazon.nova-pro-v1:0")).toBe(true);
+      expect(isBedrockConverseModel("amazon.titan-text-express-v1")).toBe(true);
+    });
+
     it("should reject non-Bedrock provider-prefixed model strings", () => {
-      expect(isBedrockConverseModel("amazon.nova-pro-v1:0")).toBe(false);
       expect(isBedrockConverseModel("anthropic:claude-3-opus")).toBe(false);
       expect(isBedrockConverseModel("openai:gpt-4")).toBe(false);
+      expect(isBedrockConverseModel("google:gemini-pro")).toBe(false);
+    });
+
+    it("should reject bare non-amazon model strings", () => {
+      expect(
+        isBedrockConverseModel("anthropic.claude-3-5-sonnet-20240620-v1:0"),
+      ).toBe(false);
+      expect(isBedrockConverseModel("meta.llama3-70b-instruct-v1:0")).toBe(
+        false,
+      );
     });
   });
 
