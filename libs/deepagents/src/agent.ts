@@ -3,6 +3,7 @@ import {
   createMiddleware,
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
+  bedrockPromptCachingMiddleware,
   todoListMiddleware,
   SystemMessage,
   type AgentMiddleware,
@@ -61,6 +62,7 @@ import {
   isAnthropicModel,
   getModelProvider,
   getModelIdentifier,
+  isBedrockConverseModel,
 } from "./utils.js";
 
 const BASE_AGENT_PROMPT = context`
@@ -220,15 +222,26 @@ export function createDeepAgent<
       : (tools as StructuredTool[]);
 
   const anthropicModel = isAnthropicModel(model);
-  const cacheMiddleware = anthropicModel
-    ? [
-        anthropicPromptCachingMiddleware({
-          unsupportedModelBehavior: "ignore",
-          minMessagesToCache: 1,
-        }),
-        createCacheBreakpointMiddleware(),
-      ]
-    : [];
+  const bedrockModel = isBedrockConverseModel(model);
+  let cacheMiddleware: AnyAgentMiddleware[] = [];
+
+  if (anthropicModel) {
+    cacheMiddleware = [
+      ...cacheMiddleware,
+      anthropicPromptCachingMiddleware({
+        unsupportedModelBehavior: "ignore",
+        minMessagesToCache: 1,
+      }),
+      createCacheBreakpointMiddleware(),
+    ];
+  }
+
+  if (bedrockModel) {
+    cacheMiddleware = [
+      ...cacheMiddleware,
+      bedrockPromptCachingMiddleware({ unsupportedModelBehavior: "ignore" }),
+    ];
+  }
 
   /**
    * Process subagents to add SkillsMiddleware for those with their own skills.
