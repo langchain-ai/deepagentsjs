@@ -464,11 +464,7 @@ function returnCommandWithStateUpdate(
       const text =
         typeof message.content === "string"
           ? message.content.trim()
-          : message.content
-              .filter((block) => block.type === "text")
-              .map((block) => ("text" in block ? block.text : ""))
-              .join("\n")
-              .trim();
+          : message.text?.trim() ?? "";
       if (text) {
         content = text;
         break;
