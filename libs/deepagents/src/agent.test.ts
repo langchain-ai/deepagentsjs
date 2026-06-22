@@ -123,6 +123,56 @@ describe("System prompt cache control breakpoints", () => {
   });
 });
 
+describe("Middleware system prompt overrides", () => {
+  function getSystemMessageFromSpy(
+    invokeSpy: ReturnType<typeof vi.spyOn>,
+  ): BaseMessage | undefined {
+    const lastCall = invokeSpy.mock.calls[invokeSpy.mock.calls.length - 1];
+    const messages = lastCall?.[0] as BaseMessage[] | undefined;
+    if (!messages) return undefined;
+    return messages.find(SystemMessage.isInstance);
+  }
+
+  it("applies custom prompts to default middleware", async () => {
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    const model = new FakeListChatModel({ responses: ["Done"] });
+
+    const agent = createDeepAgent({
+      model,
+      subagents: [
+        {
+          name: "async-researcher",
+          description: "Researches asynchronously",
+          graphId: "research_graph",
+        },
+      ],
+      middlewareSystemPrompts: {
+        todoList: "CUSTOM TODO PROMPT",
+        filesystem: "CUSTOM FILESYSTEM PROMPT",
+        subagent: "CUSTOM SUBAGENT PROMPT",
+        asyncSubagent: "CUSTOM ASYNC SUBAGENT PROMPT",
+      },
+    });
+
+    await agent.invoke({ messages: [new HumanMessage("Hello")] });
+
+    const systemMessage = getSystemMessageFromSpy(invokeSpy);
+    expect(systemMessage).toBeDefined();
+    const systemText = systemMessage!.text;
+
+    expect(systemText).toContain("CUSTOM TODO PROMPT");
+    expect(systemText).toContain("CUSTOM FILESYSTEM PROMPT");
+    expect(systemText).toContain("CUSTOM SUBAGENT PROMPT");
+    expect(systemText).toContain("CUSTOM ASYNC SUBAGENT PROMPT");
+    expect(systemText).not.toContain("## `write_todos`");
+    expect(systemText).not.toContain("## Filesystem Tools");
+    expect(systemText).not.toContain("## `task` (subagent spawner)");
+    expect(systemText).not.toContain("## Async subagents");
+
+    invokeSpy.mockRestore();
+  });
+});
+
 describe("Built-in tool name collision detection", () => {
   const model = new FakeListChatModel({ responses: ["Done"] });
 
