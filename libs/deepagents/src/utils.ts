@@ -39,11 +39,15 @@ export function isBedrockConverseModel(
   model: BaseLanguageModel | RunnableInterface<unknown, unknown> | string,
 ): boolean {
   if (typeof model === "string") {
-    if (model.includes(":")) {
-      const provider = model.split(":")[0];
-      return provider === "bedrock" || provider === "aws";
+    // Explicit provider prefix (`bedrock:` or `aws:`) — both map to
+    // ChatBedrockConverse in langchain's initChatModel.
+    const colonIdx = model.indexOf(":");
+    if (colonIdx !== -1) {
+      const prefix = model.slice(0, colonIdx);
+      if (prefix === "bedrock" || prefix === "aws") return true;
     }
-    return false;
+
+    return model.startsWith("amazon.");
   }
   if (model.getName() === "ConfigurableModel") {
     const provider = (model as any)._defaultConfig?.modelProvider;
