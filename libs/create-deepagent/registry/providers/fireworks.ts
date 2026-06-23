@@ -4,7 +4,7 @@ export const fireworks = createProvider({
   id: "fireworks",
   title: "Fireworks",
   defaultModel: "accounts/fireworks/models/glm-5p1",
-  dependencies: ["@langchain/community"],
+  dependencies: ["@langchain/fireworks"],
   env: [
     {
       name: "FIREWORKS_API_KEY",
