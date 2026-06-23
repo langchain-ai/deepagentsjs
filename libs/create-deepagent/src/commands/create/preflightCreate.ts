@@ -2,7 +2,8 @@ import path from "node:path";
 import * as clack from "@clack/prompts";
 import { logger } from "../../utils/logger.js";
 import {
-  isFolderEmpty,
+  dirExists,
+  isDirEmpty,
   isWriteable,
   validatePkgName,
 } from "../../utils/validate.js";
@@ -33,17 +34,20 @@ export async function preflightCreate(
   // 2. Resolve project path
   const projectPath = path.resolve(projectName);
 
-  // 3. Check if dir exists and is not empty
-  const empty = await isFolderEmpty(projectPath);
-  if (!empty && !force) {
-    const proceed = await clack.confirm({
-      message: `Directory "${projectName}" is not empty. Continue anyway?`,
-      initialValue: false,
-    });
+  // 3. Check if target dir already exists and is not empty
+  const exists = await dirExists(projectPath);
+  if (exists && !force) {
+    const empty = await isDirEmpty(projectPath);
+    if (!empty) {
+      const proceed = await clack.confirm({
+        message: `Directory "${projectName}" is not empty. Continue anyway?`,
+        initialValue: false,
+      });
 
-    if (clack.isCancel(proceed) || proceed === false) {
-      clack.cancel("Cancelled, exiting...");
-      process.exit(0);
+      if (clack.isCancel(proceed) || proceed === false) {
+        clack.cancel("Cancelled, exiting...");
+        process.exit(0);
+      }
     }
   }
 
