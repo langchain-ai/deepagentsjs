@@ -505,16 +505,20 @@ export const GLOB_TOOL_DESCRIPTION = context`
 `;
 
 export const GREP_TOOL_DESCRIPTION = context`
-  Search for a text pattern across files.
+  Search file contents with a ripgrep regular expression.
 
-  Searches for literal text (not regex) and returns matching files or content based on output_mode.
-  Special characters like parentheses, brackets, pipes, etc. are treated as literal characters, not regex operators.
+  The pattern is a regex (ripgrep syntax): alternation \`a|b\`, anchors \`^\`/\`$\`,
+  character classes, word boundaries \`\\b\`, etc. Returns the matching lines
+  grouped by file, with line numbers. An invalid regex returns an error that
+  describes the problem — read it and fix the pattern rather than guessing.
+
+  To match literal text that contains regex metacharacters, wrap it in \`\\Q…\\E\`.
 
   Examples:
-  - Search all files: \`grep(pattern="TODO")\`
-  - Search Python files only: \`grep(pattern="import", glob="*.py")\`
-  - Show matching lines: \`grep(pattern="error", output_mode="content")\`
-  - Search for code with special chars: \`grep(pattern="def __init__(self):")\`
+  - Find a symbol: \`grep(pattern="TODO")\`
+  - Either name in one pass: \`grep(pattern="LeadForm|LeadCapture")\`
+  - Imports in .tsx files: \`grep(pattern="^import", glob="*.tsx")\`
+  - Literal code with special chars: \`grep(pattern="\\Qdef __init__(self):\\E")\`
 `;
 
 export const EXECUTE_TOOL_DESCRIPTION = context`
