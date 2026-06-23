@@ -1,6 +1,4 @@
-import {
-  createFramework,
-} from "../../src/registry/framework.js";
+import { createFramework } from "../../src/registry/framework.js";
 
 export const hono = createFramework({
   id: "react-vite",

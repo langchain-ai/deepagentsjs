@@ -28,6 +28,8 @@ export interface FrameworkConfig<T extends string = string> {
   postInit?: (opts: { projectPath: string }) => void;
 }
 
-export function createFramework<T extends string>(config: FrameworkConfig<T>): FrameworkConfig<T> {
+export function createFramework<T extends string>(
+  config: FrameworkConfig<T>,
+): FrameworkConfig<T> {
   return config;
 }

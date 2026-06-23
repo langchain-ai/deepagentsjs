@@ -22,6 +22,8 @@ export interface ProviderConfig<T extends string = string> {
   env: EnvVarSpec[];
 }
 
-export function createProvider<T extends string>(config: ProviderConfig<T>): ProviderConfig<T> {
+export function createProvider<T extends string>(
+  config: ProviderConfig<T>,
+): ProviderConfig<T> {
   return config;
 }
