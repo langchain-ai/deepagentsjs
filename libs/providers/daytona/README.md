@@ -208,7 +208,7 @@ await sdk.fs.createFolder("src", "755");
 await sdk.fs.uploadFile(Buffer.from("content"), "src/index.ts");
 ```
 
-See the [@daytonaio/sdk documentation](https://www.npmjs.com/package/@daytonaio/sdk) for all available SDK methods.
+See the [@daytona/sdk documentation](https://www.npmjs.com/package/@daytona/sdk) for all available SDK methods.
 
 ## Factory Functions
 
