@@ -7,7 +7,6 @@ import { handleError } from "../../utils/handleError.js";
 import { logger } from "../../utils/logger.js";
 
 const cliOptionsSchema = z.object({
-  cwd: z.string().optional(),
   name: z.string().optional(),
   force: z.boolean().optional(),
 });
@@ -17,11 +16,6 @@ type TUIOptions = Awaited<ReturnType<typeof runCreateConfig>>;
 export const create = new Command()
   .name("create")
   .description("Initialize your project and install dependencies")
-  .option(
-    "-c, --cwd <cwd>",
-    "The working directory. Defaults to the current directory.",
-    process.cwd(),
-  )
   .option("-f, --force", "Force overwrite of existing files")
   .option("-n, --name <name>", "The name for the new project")
   .action(async (opts) => {
@@ -30,8 +24,8 @@ export const create = new Command()
       const tuiOptions = await runCreateConfig();
       const options = mergeOptions(cliOptions, tuiOptions);
 
-      await preflightCreate();
-      await runCreate(options);
+      const projectPath = await preflightCreate(options);
+      await runCreate(projectPath, options);
     } catch (e) {
       handleError(e);
     }
@@ -42,7 +36,7 @@ export const create = new Command()
  * pretty slim.
  */
 function mergeOptions(cliOptions: CLIOptions, tuiOptions: TUIOptions) {
-  const { cwd, force, name } = cliOptions;
+  const { name, force } = cliOptions;
   const { frameworkChoice, envVars, langSmithKey, providerChoice, tracing } =
     tuiOptions;
 
@@ -53,7 +47,6 @@ function mergeOptions(cliOptions: CLIOptions, tuiOptions: TUIOptions) {
     framework,
     provider,
     projectName: name || framework.defaultProjectName,
-    cwd,
     force,
     tracing,
     langSmithKey,
@@ -62,7 +55,7 @@ function mergeOptions(cliOptions: CLIOptions, tuiOptions: TUIOptions) {
 }
 
 type RunCreateOptions = ReturnType<typeof mergeOptions>;
-async function runCreate(options: RunCreateOptions) {
+async function runCreate(projectPath: string, options: RunCreateOptions) {
   // no-op for now
-  logger.info(JSON.stringify(options));
+  logger.info(JSON.stringify([projectPath, options]));
 }
