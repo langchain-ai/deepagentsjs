@@ -90,42 +90,26 @@ async function collectEnvVars(
   const envVars: Record<string, string> = {};
   for (const spec of provider.env) {
     const optionalExitMessage = `Skipping ${spec.prompt}. You can add this later in ${framework.envFilePath}`;
+    const optionalSuffix = ' (press enter to skip)?';
 
     if (!spec.required) {
-      const proceed = (await clack.select({
-        message: `Enter your ${spec.prompt ?? spec.name}?`,
-        initialValue: false,
-        options: [
-          { value: false, label: "Skip for now" },
-          { value: true, label: "Yes" },
-        ],
-      })) as boolean;
+      const result = (await clack.password({
+        message: `Enter ${spec.prompt ?? spec.name}${optionalSuffix}`,
+        mask: "*",
+      })) as string;
+      const resultString = typeof result === 'string' && result.trim() ? result.trim() : undefined;
 
-      if (clack.isCancel(proceed)) {
+      if (clack.isCancel(result) || resultString === undefined) {
+        if (spec.required) {
+          clack.cancel(PROCESSS_EXIT_MESSAGE);
+          process.exit(0);
+        }
+
         clack.cancel(optionalExitMessage);
         return;
       }
 
-      if (!proceed) continue;
-    }
-
-    const val = (await clack.password({
-      message: spec.prompt ?? spec.name,
-      mask: "*",
-    })) as string;
-
-    if (clack.isCancel(val)) {
-      if (spec.required) {
-        clack.cancel(PROCESSS_EXIT_MESSAGE);
-        process.exit(0);
-      }
-
-      clack.cancel(optionalExitMessage);
-      return;
-    }
-
-    if (val && val.trim()) {
-      envVars[spec.name] = val;
+      envVars[spec.name] = resultString;
     }
   }
   return envVars;
@@ -139,8 +123,8 @@ async function selectTracing() {
   })) as boolean;
 
   if (clack.isCancel(tracing)) {
-    clack.cancel("Skipping LangSmith tracing");
-    return;
+    clack.cancel(PROCESSS_EXIT_MESSAGE);
+    process.exit(0);
   }
 
   return tracing;
@@ -155,29 +139,16 @@ async function collectLangSmithKey(
 
   const exitMessage = `Skipping LangSmith API key. You can add this later in ${framework.envFilePath}`;
 
-  const proceed = await clack.select({
-    message: `Enter your LangSmith API key now?`,
-    initialValue: false,
-    options: [
-      { value: false, label: "Skip for now" },
-      { value: true, label: "Yes" },
-    ],
-  });
-
-  if (clack.isCancel(proceed) || proceed === false) {
-    clack.cancel(exitMessage);
-    return;
-  }
-
-  const langSmithKey = (await clack.password({
-    message: "Enter your LangSmith API key",
+  const result = (await clack.password({
+    message: "Enter your LangSmith API key (press enter to skip)?",
     mask: "*",
-  })) as string;
+  }));
+  const resultString = typeof result === 'string' && result.trim() ? result.trim() : undefined;
 
-  if (clack.isCancel(langSmithKey)) {
+  if (clack.isCancel(result) || resultString === undefined) {
     clack.cancel(exitMessage);
     return;
   }
 
-  return langSmithKey.trim() ? langSmithKey.trim() : undefined;
+  return resultString;
 }
