@@ -8,7 +8,7 @@ import {
   FrameworkConfig,
 } from "../../registry/index.js";
 
-const PROCESSS_EXIT_MESSAGE = 'Cancelled, exiting...';
+const PROCESSS_EXIT_MESSAGE = "Cancelled, exiting...";
 
 /**
  * Guides the user through the config TUI. On SIGINT, either moves to the next
@@ -83,10 +83,13 @@ async function selectProvider() {
 }
 
 /** Prompt the user to enter env vars as are required by the provider spec */
-async function collectEnvVars(provider: ProviderConfig, framework: FrameworkConfig) {
+async function collectEnvVars(
+  provider: ProviderConfig,
+  framework: FrameworkConfig,
+) {
   const envVars: Record<string, string> = {};
   for (const spec of provider.env) {
-    const optionalExitMessage = `Skipping ${spec.prompt}. You can add this later in ${framework.envFilePath}`
+    const optionalExitMessage = `Skipping ${spec.prompt}. You can add this later in ${framework.envFilePath}`;
 
     if (!spec.required) {
       const proceed = (await clack.select({
@@ -144,19 +147,22 @@ async function selectTracing() {
 }
 
 /** Prompt a user for their LangSmith API if tracing is enabled */
-async function collectLangSmithKey(tracing: boolean, framework: FrameworkConfig) {
+async function collectLangSmithKey(
+  tracing: boolean,
+  framework: FrameworkConfig,
+) {
   if (!tracing) return;
 
   const exitMessage = `Skipping LangSmith API key. You can add this later in ${framework.envFilePath}`;
 
-  const proceed = (await clack.select({
+  const proceed = await clack.select({
     message: `Enter your LangSmith API key now?`,
     initialValue: false,
     options: [
       { value: false, label: "Skip for now" },
       { value: true, label: "Yes" },
     ],
-  }));
+  });
 
   if (clack.isCancel(proceed) || proceed === false) {
     clack.cancel(exitMessage);

@@ -1,9 +1,10 @@
 import { Command } from "commander";
 import { preflightCreate } from "./preflightCreate.js";
-import { logger } from "../../utils/logger.js";
 import { z } from "zod";
 import { runCreateConfig } from "./runCreateConfig.js";
 import { frameworks, providers } from "../../registry/index.js";
+import { handleError } from "../../utils/handleError.js";
+import { logger } from "../../utils/logger.js";
 
 const cliOptionsSchema = z.object({
   cwd: z.string().optional(),
@@ -32,12 +33,7 @@ export const create = new Command()
       await preflightCreate();
       await runCreate(options);
     } catch (e) {
-      logger.break();
-      logger.error(
-        `Something went wrong. Please check the error below for more details.`,
-      );
-      logger.error(`If the problem persists, please open an issue on GitHub.`);
-      console.error(e);
+      handleError(e);
     }
   });
 
