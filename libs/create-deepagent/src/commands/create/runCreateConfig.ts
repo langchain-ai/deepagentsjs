@@ -90,14 +90,15 @@ async function collectEnvVars(
   const envVars: Record<string, string> = {};
   for (const spec of provider.env) {
     const optionalExitMessage = `Skipping ${spec.prompt}. You can add this later in ${framework.envFilePath}`;
-    const optionalSuffix = ' (press enter to skip)?';
+    const optionalSuffix = " (press enter to skip)?";
 
     if (!spec.required) {
       const result = (await clack.password({
         message: `Enter ${spec.prompt ?? spec.name}${optionalSuffix}`,
         mask: "*",
       })) as string;
-      const resultString = typeof result === 'string' && result.trim() ? result.trim() : undefined;
+      const resultString =
+        typeof result === "string" && result.trim() ? result.trim() : undefined;
 
       if (clack.isCancel(result) || resultString === undefined) {
         if (spec.required) {
@@ -139,11 +140,12 @@ async function collectLangSmithKey(
 
   const exitMessage = `Skipping LangSmith API key. You can add this later in ${framework.envFilePath}`;
 
-  const result = (await clack.password({
+  const result = await clack.password({
     message: "Enter your LangSmith API key (press enter to skip)?",
     mask: "*",
-  }));
-  const resultString = typeof result === 'string' && result.trim() ? result.trim() : undefined;
+  });
+  const resultString =
+    typeof result === "string" && result.trim() ? result.trim() : undefined;
 
   if (clack.isCancel(result) || resultString === undefined) {
     clack.cancel(exitMessage);
