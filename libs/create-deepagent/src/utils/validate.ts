@@ -5,7 +5,7 @@ export async function dirExists(dir: string): Promise<boolean> {
   try {
     const stat = await fs.promises.stat(dir);
     return stat.isDirectory();
-  } catch (e) {
+  } catch {
     return false;
   }
 }
