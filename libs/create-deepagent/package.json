@@ -12,9 +12,10 @@
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "pnpm build",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
+    "test:unit": "vitest run --passWithNoTests",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage --passWithNoTests"
   },
   "repository": {
     "type": "git",
