@@ -1,0 +1,32 @@
+import {
+  createFramework,
+  ProviderAwareFile,
+} from "../../src/registry/framework.js";
+
+const ENV_D_TS: ProviderAwareFile = {
+  path: "worker/env.d.ts",
+  getContent: ({ providerConfig }) => {
+    const envVars = providerConfig.env
+      .map((e) => `  ${e.name}: string;`)
+      .join("\n");
+
+    return `interface Env {
+  ASSETS: Fetcher;
+  SESSIONS: DurableObjectNamespace;
+${envVars}
+  [key: string]: string | undefined;
+}
+`;
+  },
+};
+
+export const hono = createFramework({
+  id: "hono",
+  title: "Hono",
+  defaultProjectName: "hono-deepagents",
+  frameworkDir: "hono",
+  envFilePath: ".env",
+  packageJsonPath: "package.json",
+  agentPath: "worker/agent",
+  files: [ENV_D_TS],
+});
