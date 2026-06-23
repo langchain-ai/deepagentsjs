@@ -158,7 +158,7 @@ async function collectLangSmithKey(tracing: boolean, framework: FrameworkConfig)
     ],
   }));
 
-  if (clack.isCancel(proceed)) {
+  if (clack.isCancel(proceed) || proceed === false) {
     clack.cancel(exitMessage);
     return;
   }
