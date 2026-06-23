@@ -32,7 +32,7 @@ export const frameworks = {
   [next.id]: next,
   [nuxt.id]: nuxt,
   [hono.id]: hono,
-  [deno.id]: deno,
   [vite.id]: vite,
+  [deno.id]: deno,
 } as const;
 export type FrameworkKey = keyof typeof frameworks;
