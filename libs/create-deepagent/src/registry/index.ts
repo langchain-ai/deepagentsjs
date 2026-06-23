@@ -18,6 +18,7 @@ import { next } from "../../registry/frameworks/next.js";
 import { nuxt } from "../../registry/frameworks/nuxt.js";
 import { hono } from "../../registry/frameworks/hono.js";
 import { deno } from "../../registry/frameworks/deno.js";
+import { vite } from "../../registry/frameworks/vite.js";
 
 export const providers = {
   [openai.id]: openai,
@@ -32,5 +33,6 @@ export const frameworks = {
   [nuxt.id]: nuxt,
   [hono.id]: hono,
   [deno.id]: deno,
+  [vite.id]: vite,
 } as const;
 export type FrameworkKey = keyof typeof frameworks;

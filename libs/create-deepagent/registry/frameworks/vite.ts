@@ -1,6 +1,6 @@
 import { createFramework } from "../../src/registry/framework.js";
 
-export const hono = createFramework({
+export const vite = createFramework({
   id: "react-vite",
   title: "React + Vite",
   defaultProjectName: "react-deepagents",
