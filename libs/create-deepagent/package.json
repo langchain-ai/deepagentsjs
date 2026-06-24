@@ -51,6 +51,7 @@
     "vitest": "^4.0.18"
   },
   "files": [
-    "dist/**/*"
+    "dist/**/*",
+    "registry/frameworks/**/*"
   ]
 }
