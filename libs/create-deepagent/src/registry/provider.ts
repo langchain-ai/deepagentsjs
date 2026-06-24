@@ -1,3 +1,10 @@
+export interface ProviderAwareFile {
+  /** Path relative to project root, e.g. "worker/env.d.ts" */
+  path: string;
+  /** Returns the file content, optionally using provider config for string injection */
+  getContent: (config: { providerConfig: ProviderConfig }) => string;
+}
+
 export interface EnvVarSpec {
   /** Env var name, e.g. "OPENAI_API_KEY" */
   name: string;
