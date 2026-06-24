@@ -87,7 +87,7 @@ async function runCreate(projectPath: string, options: RunCreateOptions) {
 /**
  * Create an env file with values the user fills in.
  */
-export function createEnvFile(
+function createEnvFile(
   envFilePath: string,
   opts: {
     envVars?: Record<string, string>;
