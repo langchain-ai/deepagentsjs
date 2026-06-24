@@ -19,7 +19,7 @@
     "**/dist",
     "**/dist-examples",
     "**/node_modules",
-    "libs/create-deepagent/registry/templates/**/*",
+    "libs/create-deepagent/registry/frameworks/**/*",
   ],
   "rules": {
     "constructor-super": "error",
