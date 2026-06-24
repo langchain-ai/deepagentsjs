@@ -16,8 +16,12 @@ export interface ProviderConfig<T extends string = string> {
   title: string;
   /** Default model, e.g. "gpt-5.4" */
   defaultModel: string;
-  /** Required dependencies to merge into package.json */
-  dependencies: string[];
+  /** LangChain chat model package, e.g. "@langchain/openai" */
+  dependency: string;
+  /** LangChain chat model class name, e.g. "ChatOpenAI" */
+  chatModelClass: string;
+  /** Extra constructor args for the coordinator model as raw JS, e.g. `reasoning: { effort: "low", summary: "auto" }` */
+  coordinatorModelConfig?: string;
   /** Credential vars to prompt for + write to the env file */
   env: EnvVarSpec[];
 }
