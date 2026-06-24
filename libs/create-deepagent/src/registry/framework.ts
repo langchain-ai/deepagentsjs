@@ -2,8 +2,6 @@ import { createModelFile } from "./model.js";
 import { createEnvExampleFile } from "./files/envExample.js";
 import type { ProviderAwareFile } from "./provider.js";
 
-
-
 export interface FrameworkConfig<T extends string = string> {
   /** Unique identifier. Probably the same as frameworkDir */
   id: T;

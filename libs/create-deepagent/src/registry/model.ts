@@ -1,6 +1,5 @@
 import type { ProviderAwareFile } from "./provider.js";
 
-
 /**
  * Create a ProviderAwareFile for `model.ts` that exports `coordinatorModel` and
  * `subagentModel`, instantiated from the selected provider's chat model class.

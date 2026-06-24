@@ -1,11 +1,11 @@
-export interface ProviderAwareFile {
+export type ProviderAwareFile = {
   /** Path relative to project root, e.g. "worker/env.d.ts" */
   path: string;
   /** Returns the file content, optionally using provider config for string injection */
   getContent: (config: { providerConfig: ProviderConfig }) => string;
-}
+};
 
-export interface EnvVarSpec {
+export type EnvVarSpec = {
   /** Env var name, e.g. "OPENAI_API_KEY" */
   name: string;
   /** Prompt label, e.g. "OpenAI API key" */
@@ -14,7 +14,7 @@ export interface EnvVarSpec {
   required?: boolean;
   /** Prefill value */
   default?: string;
-}
+};
 
 export interface ProviderConfig<T extends string = string> {
   /** Unique id, e.g. "anthropic" */
