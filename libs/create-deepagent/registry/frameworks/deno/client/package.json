@@ -1,0 +1,30 @@
+{
+  "name": "js-deno-client",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@langchain/core": "1.1.48",
+    "@langchain/langgraph-sdk": "^1.9.20",
+    "@langchain/react": "^1.0.20",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4.4.1",
+    "typescript": "^5",
+    "vite": "^6.3.5"
+  },
+  "pnpm": {
+    "overrides": {
+      "@langchain/core": "1.1.50-dev-1781580357424"
+    }
+  },
+  "packageManager": "pnpm@10.33.2"
+}

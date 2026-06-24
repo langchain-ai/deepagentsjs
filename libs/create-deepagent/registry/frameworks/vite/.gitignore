@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+.langgraph/
+
+# LangGraph API
+.langgraph_api

@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "lib": ["deno.window", "deno.unstable"],
+    "strict": true
+  },
+  "tasks": {
+    "dev": "deno run --watch --allow-env --allow-net --allow-read --allow-sys main.ts",
+    "start": "deno run --allow-env --allow-net --allow-read --allow-sys main.ts",
+    "build:client": "cd client && pnpm install && pnpm build"
+  },
+  "nodeModulesDir": "auto",
+  "deploy": {
+    "entrypoint": "main.ts",
+    "include": [
+      "main.ts",
+      "server/",
+      "dist/"
+    ]
+  }
+}
