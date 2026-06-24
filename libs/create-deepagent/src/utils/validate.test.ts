@@ -37,9 +37,7 @@ describe("validatePkgName", () => {
   });
 
   it("returns an error for an uppercase name", () => {
-    expect(validatePkgName("MyApp")).toBe(
-      "Project name must be lowercase",
-    );
+    expect(validatePkgName("MyApp")).toBe("Project name must be lowercase");
   });
 
   it("returns an error for a name with spaces", () => {
