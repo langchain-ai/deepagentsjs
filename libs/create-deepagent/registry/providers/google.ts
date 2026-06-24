@@ -3,8 +3,8 @@ import { createProvider } from "../../src/registry/provider.js";
 export const google = createProvider({
   id: "google-genai",
   title: "Google",
-  defaultModel: "gemini-3.5-flash",
-  dependencies: ["@langchain/google-genai"],
+  defaultModel: "google-genai:gemini-3.5-flash",
+  dependency: "@langchain/google-genai",
   env: [
     {
       name: "GOOGLE_API_KEY",

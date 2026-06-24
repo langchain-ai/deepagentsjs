@@ -12,10 +12,10 @@
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "pnpm build",
-    "test": "vitest run --passWithNoTests",
-    "test:unit": "vitest run --passWithNoTests",
+    "test": "vitest run",
+    "test:unit": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage --passWithNoTests"
+    "test:coverage": "vitest run --coverage"
   },
   "repository": {
     "type": "git",
@@ -51,6 +51,7 @@
     "vitest": "^4.0.18"
   },
   "files": [
-    "dist/**/*"
+    "dist/**/*",
+    "registry/frameworks/**/*"
   ]
 }

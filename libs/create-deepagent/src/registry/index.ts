@@ -3,11 +3,7 @@ export {
   type ProviderConfig,
   type EnvVarSpec,
 } from "./provider.js";
-export {
-  createFramework,
-  type FrameworkConfig,
-  type ProviderAwareFile,
-} from "./framework.js";
+export { createFramework, type FrameworkConfig } from "./framework.js";
 
 import { openai } from "../../registry/providers/openai.js";
 import { anthropic } from "../../registry/providers/anthropic.js";

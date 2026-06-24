@@ -1,10 +1,18 @@
 import { Command } from "commander";
-import { preflightCreate } from "./preflightCreate.js";
+import path from "node:path";
 import { z } from "zod";
+import { spinner } from "@clack/prompts";
+
+import { preflightCreate } from "./preflightCreate.js";
 import { runCreateConfig } from "./runCreateConfig.js";
 import { frameworks, providers } from "../../registry/index.js";
 import { handleError } from "../../utils/handleError.js";
-import { logger } from "../../utils/logger.js";
+import {
+  copyDir,
+  writeFile,
+  resolveTemplateDir,
+} from "../../utils/fileUtils.js";
+import type { ProviderAwareFile } from "../../registry/provider.js";
 
 const cliOptionsSchema = z.object({
   name: z.string().optional(),
@@ -55,7 +63,57 @@ function mergeOptions(cliOptions: CLIOptions, tuiOptions: TUIOptions) {
 }
 
 type RunCreateOptions = ReturnType<typeof mergeOptions>;
+
 async function runCreate(projectPath: string, options: RunCreateOptions) {
-  // no-op for now
-  logger.info(JSON.stringify([projectPath, options]));
+  const { framework, provider } = options;
+  const s = spinner();
+
+  // 1. Copy the template project
+  const templateDir = resolveTemplateDir(framework.frameworkDir);
+  s.start(`Copying ${framework.title} template...`);
+  await copyDir(templateDir, projectPath);
+
+  // 2. Write files
+  const envFile = createEnvFile(framework.envFilePath, options);
+  const allFiles = [...framework.files, envFile];
+  for (const file of allFiles) {
+    const content = file.getContent({ providerConfig: provider });
+    await writeFile(path.join(projectPath, file.path), content);
+  }
+
+  s.stop();
+}
+
+/**
+ * Create an env file with values the user fills in.
+ */
+function createEnvFile(
+  envFilePath: string,
+  opts: {
+    envVars?: Record<string, string>;
+    tracing: boolean;
+    langSmithKey?: string;
+  },
+): ProviderAwareFile {
+  const envVars = opts.envVars || {};
+
+  return {
+    path: envFilePath,
+    getContent: () => {
+      const lines: string[] = [];
+
+      for (const [key, value] of Object.entries(envVars)) {
+        lines.push(`${key}=${value}`);
+      }
+
+      if (opts.tracing) {
+        lines.push("LANGSMITH_TRACING=true");
+        if (opts.langSmithKey) {
+          lines.push(`LANGSMITH_API_KEY=${opts.langSmithKey}`);
+        }
+      }
+
+      return lines.join("\n") + "\n";
+    },
+  };
 }
