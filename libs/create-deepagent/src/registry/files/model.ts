@@ -2,7 +2,7 @@ import type { ProviderAwareFile } from "../provider.js";
 
 /**
  * Create a ProviderAwareFile for `model.ts` that exports `coordinatorModel` and
- * `subagentModel`, instantiated from the selected provider's chat model class.
+ * `subagentModel`, instantiated via `initChatModel` with the selected provider.
  *
  * @param agentPath - Path relative to project root, e.g. "lib/agent"
  */
@@ -10,27 +10,21 @@ export function createModelFile(agentPath: string): ProviderAwareFile {
   return {
     path: `${agentPath}/model.ts`,
     getContent: ({ providerConfig }) => {
-      const {
-        chatModelClass,
-        dependency,
-        defaultModel,
-        coordinatorModelConfig,
-      } = providerConfig;
-      const pkg = dependency;
-      const extra = coordinatorModelConfig
-        ? `,\n  ${coordinatorModelConfig}`
-        : "";
+      const { defaultModel, coordinatorModelConfig } = providerConfig;
 
-      return `import { ${chatModelClass} } from "${pkg}";
+      const lines: string[] = [
+        'import { initChatModel } from "langchain/chat_models/universal";',
+        "",
+        `const coordinatorModel = await initChatModel("${defaultModel}"${
+          coordinatorModelConfig ? `, { ${coordinatorModelConfig} }` : ""
+        });`,
+        "",
+        `const subagentModel = await initChatModel("${defaultModel}");`,
+        "",
+        "export { coordinatorModel, subagentModel };",
+      ];
 
-const coordinatorModel = new ${chatModelClass}({
-  model: "${defaultModel}"${extra}
-});
-
-const subagentModel = new ${chatModelClass}({ model: "${defaultModel}" });
-
-export { coordinatorModel, subagentModel };
-`;
+      return lines.join("\n") + "\n";
     },
   };
 }
