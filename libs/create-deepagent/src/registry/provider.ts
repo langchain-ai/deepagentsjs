@@ -1,3 +1,5 @@
+import { JSONValue } from "../types.js";
+
 export type ProviderAwareFile = {
   /** Path relative to project root, e.g. "worker/env.d.ts" */
   path: string;
@@ -25,8 +27,8 @@ export interface ProviderConfig<T extends string = string> {
   defaultModel: string;
   /** LangChain chat model package, e.g. "@langchain/openai" */
   dependency: string;
-  /** Extra constructor args for the coordinator model as raw JS, e.g. `reasoning: { effort: "low", summary: "auto" }` */
-  coordinatorModelConfig?: string;
+  /** Extra constructor options for the coordinator model, e.g. `{ reasoning: { effort: "low", summary: "auto" } }` */
+  coordinatorModelConfig?: Record<string, JSONValue>;
   /** Credential vars to prompt for + write to the env file */
   env: EnvVarSpec[];
 }

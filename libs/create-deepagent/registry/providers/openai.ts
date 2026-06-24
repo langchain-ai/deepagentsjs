@@ -4,7 +4,7 @@ export const openai = createProvider({
   id: "openai",
   title: "OpenAI",
   defaultModel: "openai:gpt-5.4-mini",
-  coordinatorModelConfig: 'reasoning: { effort: "low", summary: "auto" }',
+  coordinatorModelConfig: { reasoning: { effort: "low", summary: "auto" } },
   dependency: "@langchain/openai",
   env: [
     {

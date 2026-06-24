@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import type { ProviderAwareFile } from "../provider.js";
 
 /**
@@ -12,12 +13,14 @@ export function createModelFile(agentPath: string): ProviderAwareFile {
     getContent: ({ providerConfig }) => {
       const { defaultModel, coordinatorModelConfig } = providerConfig;
 
+      const coordinatorOptions = coordinatorModelConfig
+        ? `, ${inspect(coordinatorModelConfig, { depth: null, compact: false })}`
+        : "";
+
       const lines: string[] = [
         'import { initChatModel } from "langchain/chat_models/universal";',
         "",
-        `const coordinatorModel = await initChatModel("${defaultModel}"${
-          coordinatorModelConfig ? `, { ${coordinatorModelConfig} }` : ""
-        });`,
+        `const coordinatorModel = await initChatModel("${defaultModel}"${coordinatorOptions});`,
         "",
         `const subagentModel = await initChatModel("${defaultModel}");`,
         "",
