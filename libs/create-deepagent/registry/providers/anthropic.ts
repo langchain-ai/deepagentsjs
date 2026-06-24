@@ -4,7 +4,8 @@ export const anthropic = createProvider({
   id: "anthropic",
   title: "Anthropic",
   defaultModel: "claude-sonnet-4-5-20250929",
-  dependencies: ["@langchain/anthropic"],
+  chatModelClass: "ChatAnthropic",
+  dependency: "@langchain/anthropic",
   env: [
     {
       name: "ANTHROPIC_API_KEY",
