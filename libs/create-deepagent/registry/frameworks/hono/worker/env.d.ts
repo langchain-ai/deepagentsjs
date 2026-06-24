@@ -1,6 +1,10 @@
 /// <reference types="@cloudflare/workers-types" />
 
-import type { Command, CommandResponse, ErrorResponse } from "@langchain/protocol";
+import type {
+  Command,
+  CommandResponse,
+  ErrorResponse,
+} from "@langchain/protocol";
 
 declare global {
   interface Env {

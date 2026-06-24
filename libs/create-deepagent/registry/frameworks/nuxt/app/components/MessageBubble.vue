@@ -45,7 +45,10 @@ function formatToolArgs(args: Record<string, unknown>) {
   >
     <span>{{ messageLabel(message) }}</span>
     <ul v-if="calls.length > 0" class="tool-call-list">
-      <li v-for="(toolCall, toolIndex) in calls" :key="toolCall.id ?? toolIndex">
+      <li
+        v-for="(toolCall, toolIndex) in calls"
+        :key="toolCall.id ?? toolIndex"
+      >
         <strong>{{ toolCall.name }}</strong>
         <template v-if="formatToolArgs(toolCall.args ?? {})">
           ({{ formatToolArgs(toolCall.args ?? {}) }})

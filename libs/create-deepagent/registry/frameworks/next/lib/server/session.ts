@@ -57,7 +57,7 @@ function encodeSse(event: ProtocolEvent) {
   const id = eventId ?? (typeof event.seq === "number" ? `${event.seq}` : "");
   const idLine = id ? `id: ${id}\n` : "";
   return new TextEncoder().encode(
-    `${idLine}event: message\ndata: ${JSON.stringify(event)}\n\n`
+    `${idLine}event: message\ndata: ${JSON.stringify(event)}\n\n`,
   );
 }
 
@@ -116,7 +116,7 @@ export class LocalThreadSession {
    * flow asynchronously through active `/stream` subscriptions.
    */
   async handleCommand(
-    command: Command
+    command: Command,
   ): Promise<CommandResponse | ErrorResponse> {
     if (command.method !== "run.start") {
       return {

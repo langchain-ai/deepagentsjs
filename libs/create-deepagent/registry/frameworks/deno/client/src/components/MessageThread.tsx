@@ -38,7 +38,7 @@ export function MessageThread({
   taskRenderer?: (
     tasks: ToolCallLike[],
     message: AIMessage,
-    index: number
+    index: number,
   ) => ReactNode | null;
 }) {
   const resultsByCallId = useMemo(() => {
@@ -73,7 +73,9 @@ export function MessageThread({
           !hasToolCalls;
         items.push({
           key: `reason-${message.id ?? index}`,
-          node: <MessageReasoning active={reasoningActive} reasoning={reasoning} />,
+          node: (
+            <MessageReasoning active={reasoningActive} reasoning={reasoning} />
+          ),
         });
       }
 
@@ -104,9 +106,13 @@ export function MessageThread({
           name: call.name,
           args: call.args ?? {},
           output: result?.text,
-          status: result ? (errored ? "error" : "complete") : isLoading
-            ? "running"
-            : "complete",
+          status: result
+            ? errored
+              ? "error"
+              : "complete"
+            : isLoading
+              ? "running"
+              : "complete",
         };
         items.push({ key: `tc-${view.id}`, node: <ToolCall call={view} /> });
       });
