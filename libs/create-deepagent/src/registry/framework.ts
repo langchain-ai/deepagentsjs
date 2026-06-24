@@ -1,13 +1,8 @@
-import type { ProviderConfig } from "./provider.js";
 import { createModelFile } from "./model.js";
-import { createEnvExampleFile } from "./env.js";
+import { createEnvExampleFile } from "./files/envExample.js";
+import type { ProviderAwareFile } from "./provider.js";
 
-export interface ProviderAwareFile {
-  /** Path relative to project root, e.g. "worker/env.d.ts" */
-  path: string;
-  /** Returns the file content, optionally using provider config for string injection */
-  getContent: (config: { providerConfig: ProviderConfig }) => string;
-}
+
 
 export interface FrameworkConfig<T extends string = string> {
   /** Unique identifier. Probably the same as frameworkDir */

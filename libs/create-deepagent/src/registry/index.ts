@@ -6,7 +6,6 @@ export {
 export {
   createFramework,
   type FrameworkConfig,
-  type ProviderAwareFile,
 } from "./framework.js";
 
 import { openai } from "../../registry/providers/openai.js";
