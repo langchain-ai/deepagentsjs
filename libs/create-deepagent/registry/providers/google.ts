@@ -4,7 +4,8 @@ export const google = createProvider({
   id: "google-genai",
   title: "Google",
   defaultModel: "gemini-3.5-flash",
-  dependencies: ["@langchain/google-genai"],
+  chatModelClass: "ChatGoogleGenerativeAI",
+  dependency: "@langchain/google-genai",
   env: [
     {
       name: "GOOGLE_API_KEY",
