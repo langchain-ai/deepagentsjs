@@ -1,4 +1,4 @@
-import { createModelFile } from "./model.js";
+import { createModelFile } from "./files/model.js";
 import { createEnvExampleFile } from "./files/envExample.js";
 import type { ProviderAwareFile } from "./provider.js";
 
