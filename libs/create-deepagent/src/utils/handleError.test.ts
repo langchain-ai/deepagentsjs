@@ -35,7 +35,7 @@ describe("handleError", () => {
 
   it("prints field errors for a real ZodError", () => {
     const result = userSchema.safeParse({ name: "", email: "not-an-email" });
-    handleError(result.error);
+    if (result.success === false) handleError(result.error);
 
     const calls = mockError.mock.calls.map((c) => String(c[0]));
     expect(calls.some((c) => c.startsWith("- name:"))).toBe(true);
