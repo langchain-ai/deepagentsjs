@@ -1,7 +1,5 @@
-import {
-  createFramework,
-  ProviderAwareFile,
-} from "../../src/registry/framework.js";
+import { createFramework } from "../../src/registry/framework.js";
+import type { ProviderAwareFile } from "../../src/registry/provider.js";
 
 const ENV_D_TS: ProviderAwareFile = {
   path: "worker/env.d.ts",
