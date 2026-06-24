@@ -1,4 +1,4 @@
-import type { ProviderAwareFile } from "../framework.js";
+import type { ProviderAwareFile } from "../provider.js";
 
 /**
  * Create a ProviderAwareFile for `.env.example` with the provider's env var
