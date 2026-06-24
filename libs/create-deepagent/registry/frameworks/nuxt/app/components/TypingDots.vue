@@ -3,7 +3,10 @@ defineProps<{ variant?: "block" | "inline" }>();
 </script>
 
 <template>
-  <span aria-hidden :class="variant === 'inline' ? 'inline-dots' : 'typing-dots'">
+  <span
+    aria-hidden
+    :class="variant === 'inline' ? 'inline-dots' : 'typing-dots'"
+  >
     <span />
     <span />
     <span />

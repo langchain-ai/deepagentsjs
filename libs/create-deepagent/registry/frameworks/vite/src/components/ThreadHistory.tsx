@@ -53,7 +53,9 @@ export function ThreadHistory({
               type="button"
             >
               <span className="thread-title">{thread.title}</span>
-              <span className="thread-time">{formatTime(thread.updatedAt)}</span>
+              <span className="thread-time">
+                {formatTime(thread.updatedAt)}
+              </span>
             </button>
             <button
               aria-label="Delete conversation"

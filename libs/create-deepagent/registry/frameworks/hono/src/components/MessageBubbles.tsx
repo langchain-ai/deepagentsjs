@@ -35,7 +35,7 @@ export function getReasoningText(message: BaseMessage): string {
     return message.contentBlocks
       .filter(
         (block): block is { type: "reasoning"; reasoning: string } =>
-          (block as { type?: string })?.type === "reasoning"
+          (block as { type?: string })?.type === "reasoning",
       )
       .map((block) => block.reasoning)
       .join("")

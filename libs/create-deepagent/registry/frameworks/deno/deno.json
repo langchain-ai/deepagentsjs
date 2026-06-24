@@ -11,10 +11,6 @@
   "nodeModulesDir": "auto",
   "deploy": {
     "entrypoint": "main.ts",
-    "include": [
-      "main.ts",
-      "server/",
-      "dist/"
-    ]
+    "include": ["main.ts", "server/", "dist/"]
   }
 }

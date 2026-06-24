@@ -67,7 +67,7 @@ function threadConfig(threadId: string): RunnableConfig {
  */
 function historyConfig(
   threadId: string,
-  checkpoint?: Record<string, unknown> | null
+  checkpoint?: Record<string, unknown> | null,
 ): RunnableConfig {
   const configurable: Record<string, unknown> = {
     thread_id: threadId,
@@ -109,7 +109,7 @@ function serializeTaskError(error: unknown): string | null {
 /** Map a LangGraph run config to the SDK checkpoint wire shape. */
 function runnableConfigToCheckpoint(
   config: RunnableConfig | null | undefined,
-  fallbackThreadId?: string
+  fallbackThreadId?: string,
 ): Record<string, unknown> | null {
   if (!config || !isRecord(config.configurable)) return null;
   const c = config.configurable;
@@ -126,7 +126,7 @@ function runnableConfigToCheckpoint(
 }
 
 function taskCheckpointFromState(
-  state: unknown
+  state: unknown,
 ): Record<string, unknown> | null {
   if (state == null || !isRecord(state) || !isRecord(state.configurable)) {
     return null;
@@ -135,8 +135,7 @@ function taskCheckpointFromState(
   if (typeof c.thread_id !== "string") return null;
   return {
     thread_id: c.thread_id,
-    checkpoint_id:
-      typeof c.checkpoint_id === "string" ? c.checkpoint_id : null,
+    checkpoint_id: typeof c.checkpoint_id === "string" ? c.checkpoint_id : null,
     checkpoint_ns: typeof c.checkpoint_ns === "string" ? c.checkpoint_ns : "",
     checkpoint_map: isRecord(c.checkpoint_map) ? c.checkpoint_map : null,
   };
@@ -150,7 +149,7 @@ function taskCheckpointFromState(
  */
 export function serializeThreadState(
   snapshot: StateSnapshot,
-  threadId: string
+  threadId: string,
 ): Record<string, unknown> {
   const configurable = configurableOf(snapshot.config);
   const checkpoint = runnableConfigToCheckpoint(snapshot.config, threadId) ?? {
@@ -187,8 +186,7 @@ export function serializeThreadState(
         record.state != null && isStateSnapshot(record.state)
           ? serializeThreadState(record.state, threadId)
           : null,
-      result:
-        record.result != null ? sanitizeForJson(record.result) : null,
+      result: record.result != null ? sanitizeForJson(record.result) : null,
     };
   });
 
@@ -229,7 +227,7 @@ function deriveTitle(values: unknown): string {
               .map((block) =>
                 isRecord(block) && typeof block.text === "string"
                   ? block.text
-                  : ""
+                  : "",
               )
               .join("")
           : "";
@@ -248,7 +246,7 @@ function deriveTitle(values: unknown): string {
  */
 export async function listThreads(
   graph: LocalProtocolGraph,
-  checkpointer: MemorySaver
+  checkpointer: MemorySaver,
 ): Promise<ThreadSummary[]> {
   const ids = Object.keys(checkpointer.storage);
   const summaries: ThreadSummary[] = [];
@@ -265,7 +263,9 @@ export async function listThreads(
       // Skip threads without a readable checkpoint.
     }
   }
-  summaries.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+  summaries.sort((a, b) =>
+    (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""),
+  );
   return summaries;
 }
 
@@ -276,7 +276,7 @@ export async function listThreads(
  */
 export async function getThreadState(
   graph: LocalProtocolGraph,
-  threadId: string
+  threadId: string,
 ): Promise<Record<string, unknown>> {
   const snapshot = await graph.getState(threadConfig(threadId));
   if (!threadHasCheckpoint(snapshot)) throw new ThreadNotFoundError(threadId);
@@ -288,7 +288,7 @@ export async function getThreadState(
  */
 function parseBeforeCursor(
   threadId: string,
-  before: unknown
+  before: unknown,
 ): RunnableConfig | undefined {
   if (before == null) return undefined;
   if (typeof before === "string") {
@@ -328,16 +328,19 @@ export async function getThreadHistory(
     before?: unknown;
     metadata?: Record<string, unknown>;
     checkpoint?: Record<string, unknown> | null;
-  } = {}
+  } = {},
 ): Promise<Record<string, unknown>[]> {
   await getThreadState(graph, threadId);
 
   const history: Record<string, unknown>[] = [];
-  const iterator = graph.getStateHistory(historyConfig(threadId, options.checkpoint), {
-    before: parseBeforeCursor(threadId, options.before),
-    limit: options.limit ?? 10,
-    ...(options.metadata ? { filter: options.metadata } : {}),
-  });
+  const iterator = graph.getStateHistory(
+    historyConfig(threadId, options.checkpoint),
+    {
+      before: parseBeforeCursor(threadId, options.before),
+      limit: options.limit ?? 10,
+      ...(options.metadata ? { filter: options.metadata } : {}),
+    },
+  );
   for await (const snapshot of iterator) {
     history.push(serializeThreadState(snapshot, threadId));
   }
@@ -373,7 +376,7 @@ export async function updateThreadState(
     values?: Record<string, unknown> | null;
     checkpoint?: Record<string, unknown> | null;
     asNode?: string;
-  } = {}
+  } = {},
 ): Promise<Record<string, unknown>> {
   let config = threadConfig(threadId);
   const checkpoint = options.checkpoint;

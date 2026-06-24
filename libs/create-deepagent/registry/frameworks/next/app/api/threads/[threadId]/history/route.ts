@@ -27,7 +27,7 @@ export async function POST(request: Request, { params }: Params) {
     if (error instanceof ThreadNotFoundError) {
       return Response.json(
         { error: "not_found", message: error.message },
-        { status: 404 }
+        { status: 404 },
       );
     }
     throw error;

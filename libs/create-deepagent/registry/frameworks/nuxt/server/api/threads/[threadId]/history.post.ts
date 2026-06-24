@@ -17,7 +17,9 @@ type HistoryBody = {
 
 export default defineEventHandler(async (event) => {
   const threadId = getRouterParam(event, "threadId") ?? "local";
-  const body = await readBody<HistoryBody>(event).catch(() => ({}) as HistoryBody);
+  const body = await readBody<HistoryBody>(event).catch(
+    () => ({}) as HistoryBody,
+  );
   try {
     return await getThreadHistory(getAgent().graph, threadId, {
       limit: typeof body.limit === "number" ? body.limit : 10,
