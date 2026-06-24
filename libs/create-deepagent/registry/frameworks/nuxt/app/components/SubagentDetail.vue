@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { computed, toRef } from "vue";
 import type { BaseMessage } from "@langchain/core/messages";
-import {
-  useMessages,
-  useStreamContext,
-  type SubagentDiscoverySnapshot,
-} from "@langchain/vue";
+import { useMessages, useStreamContext, type SubagentDiscoverySnapshot } from "@langchain/vue";
 
 import MessageBubbles from "./MessageBubbles.vue";
 import StreamingIndicator from "./StreamingIndicator.vue";
@@ -20,17 +16,17 @@ const messages = useMessages(stream, toRef(props, "snapshot"));
 
 function omitTaskHumanMessage(
   thread: BaseMessage[],
-  taskInput?: string,
+  taskInput?: string
 ): BaseMessage[] {
   const task = taskInput?.trim();
   if (!task) return thread;
   return thread.filter(
-    (message) => message.type !== "human" || message.text?.trim() !== task,
+    (message) => message.type !== "human" || message.text?.trim() !== task
   );
 }
 
 const visibleMessages = computed(() =>
-  omitTaskHumanMessage(messages.value, props.snapshot.taskInput),
+  omitTaskHumanMessage(messages.value, props.snapshot.taskInput)
 );
 </script>
 

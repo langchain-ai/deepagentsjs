@@ -20,7 +20,7 @@ export async function GET(_request: Request, { params }: Params) {
     if (error instanceof ThreadNotFoundError) {
       return Response.json(
         { error: "not_found", message: error.message },
-        { status: 404 },
+        { status: 404 }
       );
     }
     throw error;
@@ -45,7 +45,7 @@ export async function POST(request: Request, { params }: Params) {
   } catch (error) {
     return Response.json(
       { error: "invalid_state_update", message: String(error) },
-      { status: 422 },
+      { status: 422 }
     );
   }
 }

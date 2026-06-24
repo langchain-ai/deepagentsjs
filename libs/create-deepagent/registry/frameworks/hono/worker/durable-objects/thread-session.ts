@@ -43,7 +43,7 @@ function encodeSse(event: ProtocolEvent) {
   const id = eventId ?? (typeof event.seq === "number" ? `${event.seq}` : "");
   const idLine = id ? `id: ${id}\n` : "";
   return new TextEncoder().encode(
-    `${idLine}event: message\ndata: ${JSON.stringify(event)}\n\n`,
+    `${idLine}event: message\ndata: ${JSON.stringify(event)}\n\n`
   );
 }
 

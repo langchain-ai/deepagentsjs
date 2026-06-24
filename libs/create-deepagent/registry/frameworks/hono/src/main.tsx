@@ -7,5 +7,5 @@ import "@/styles/globals.css";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ChatApp />
-  </StrictMode>,
+  </StrictMode>
 );

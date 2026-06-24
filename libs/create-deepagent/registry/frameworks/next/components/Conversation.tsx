@@ -29,7 +29,7 @@ export function Conversation({
 
   const messages = useMemo(
     () => stream.messages.filter((message) => message != null),
-    [stream.messages],
+    [stream.messages]
   );
 
   const subagentsById = useMemo(() => {
@@ -42,7 +42,7 @@ export function Conversation({
 
   const showTypingIndicator = shouldShowTypingIndicator(
     messages,
-    stream.isLoading,
+    stream.isLoading
   );
 
   return (

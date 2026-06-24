@@ -61,7 +61,10 @@ api.get("/threads/:threadId/state", async (c) => {
     return c.json(state);
   } catch (error) {
     if (error instanceof ThreadNotFoundError) {
-      return c.json({ error: "not_found", message: error.message }, 404);
+      return c.json(
+        { error: "not_found", message: error.message },
+        404
+      );
     }
     throw error;
   }
@@ -84,7 +87,7 @@ api.post("/threads/:threadId/state", async (c) => {
   } catch (error) {
     return c.json(
       { error: "invalid_state_update", message: String(error) },
-      422,
+      422
     );
   }
 });
@@ -107,7 +110,10 @@ api.post("/threads/:threadId/history", async (c) => {
     return c.json(history);
   } catch (error) {
     if (error instanceof ThreadNotFoundError) {
-      return c.json({ error: "not_found", message: error.message }, 404);
+      return c.json(
+        { error: "not_found", message: error.message },
+        404
+      );
     }
     throw error;
   }
