@@ -1,4 +1,6 @@
 import type { ProviderConfig } from "./provider.js";
+import { createModelFile } from "./model.js";
+import { createEnvExampleFile } from "./env.js";
 
 export interface ProviderAwareFile {
   /** Path relative to project root, e.g. "worker/env.d.ts" */
@@ -31,5 +33,13 @@ export interface FrameworkConfig<T extends string = string> {
 export function createFramework<T extends string>(
   config: FrameworkConfig<T>,
 ): FrameworkConfig<T> {
-  return config;
+  const defaultFiles = [
+    createModelFile(config.agentPath),
+    createEnvExampleFile(),
+  ];
+
+  return {
+    ...config,
+    files: [...config.files, ...defaultFiles],
+  };
 }
