@@ -5,13 +5,14 @@ import { spinner } from "@clack/prompts";
 
 import { preflightCreate } from "./preflightCreate.js";
 import { runCreateConfig } from "./runCreateConfig.js";
-import {
-  frameworks,
-  type ProviderAwareFile,
-  providers,
-} from "../../registry/index.js";
+import { frameworks, providers } from "../../registry/index.js";
 import { handleError } from "../../utils/handleError.js";
-import { copyDir, writeFile, resolveTemplateDir } from "../../utils/fs.js";
+import {
+  copyDir,
+  writeFile,
+  resolveTemplateDir,
+} from "../../utils/fileUtils.js";
+import type { ProviderAwareFile } from "../../registry/provider.js";
 
 const cliOptionsSchema = z.object({
   name: z.string().optional(),
