@@ -21,12 +21,10 @@ export interface ProviderConfig<T extends string = string> {
   id: T;
   /** Shown in the "Select your provider" prompt */
   title: string;
-  /** Default model, e.g. "gpt-5.4" */
+  /** Default model, e.g. "openai:gpt-5.4-mini" */
   defaultModel: string;
   /** LangChain chat model package, e.g. "@langchain/openai" */
   dependency: string;
-  /** LangChain chat model class name, e.g. "ChatOpenAI" */
-  chatModelClass: string;
   /** Extra constructor args for the coordinator model as raw JS, e.g. `reasoning: { effort: "low", summary: "auto" }` */
   coordinatorModelConfig?: string;
   /** Credential vars to prompt for + write to the env file */
