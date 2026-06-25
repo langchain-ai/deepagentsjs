@@ -26,7 +26,7 @@ export const hono = createFramework({
     scheme: "github",
     owner: "aolsenjazz",
     repo: "deployment-cookbook",
-    subPath: "js-hono",
+    subPath: "js-cloudflare",
   },
   envFilePath: ".env",
   packageJsonPath: "package.json",
