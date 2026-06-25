@@ -614,6 +614,9 @@ importers:
       picocolors:
         specifier: ^1.1.1
         version: 1.1.1
+      tar:
+        specifier: ^7.5.16
+        version: 7.5.16
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -831,7 +834,7 @@ importers:
     dependencies:
       node-vfs-polyfill:
         specifier: github:vercel-labs/node-vfs-polyfill
-        version: https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/1227fb028a26eb0d65e565c11b0a28e7b49b990f
+        version: https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/ef76f903d052d915395336dbf3498e3f5311a852
     devDependencies:
       '@langchain/sandbox-standard-tests':
         specifier: workspace:*
@@ -3316,8 +3319,8 @@ packages:
     resolution: {integrity: sha512-+P72GAjVAbTxjjwUmwjVrqrdZROD4nf8KgpBoDxqXXTiYZZt/ud60dE5yvCSr9lRO8e8yv6kgJIC0K0PfZFVQw==}
     hasBin: true
 
-  node-vfs-polyfill@https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/1227fb028a26eb0d65e565c11b0a28e7b49b990f:
-    resolution: {tarball: https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/1227fb028a26eb0d65e565c11b0a28e7b49b990f}
+  node-vfs-polyfill@https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/ef76f903d052d915395336dbf3498e3f5311a852:
+    resolution: {tarball: https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/ef76f903d052d915395336dbf3498e3f5311a852}
     version: 1.0.0
     engines: {node: '>=22.0.0'}
 
@@ -6384,7 +6387,7 @@ snapshots:
       detect-libc: 2.1.2
     optional: true
 
-  node-vfs-polyfill@https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/1227fb028a26eb0d65e565c11b0a28e7b49b990f: {}
+  node-vfs-polyfill@https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/ef76f903d052d915395336dbf3498e3f5311a852: {}
 
   obug@2.1.3: {}
 

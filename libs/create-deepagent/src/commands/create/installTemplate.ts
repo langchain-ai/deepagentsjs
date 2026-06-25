@@ -1,11 +1,15 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
-import { execFile } from "node:child_process";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
+import { x as tarExtract } from "tar";
 
 import { copyDir } from "../../utils/fileUtils.js";
+import { dirExists, isDirEmpty, makeDir } from "../../utils/validate.js";
 import type { FrameworkConfig } from "../../registry/framework.js";
+import { Address } from "../../registry/address.js";
 
 export async function installTemplate(
   projectPath: string,
@@ -30,58 +34,57 @@ export async function installTemplate(
  * into the project directory.
  */
 async function downloadGithubTemplate(
-  address: { owner: string; repo: string; subPath?: string },
+  address: Extract<Address, { scheme: 'github' }>,
   dest: string,
 ): Promise<void> {
-  const execFileAsync = promisify(execFile);
   const tarballUrl = `https://codeload.github.com/${address.owner}/${address.repo}/tar.gz/HEAD`;
-  const response = await fetch(tarballUrl, {
-    headers: { "User-Agent": "create-deepagent" },
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      `Failed to download template from GitHub: ${response.status} ${response.statusText}`,
-    );
-  }
-
-  const tarball = await response.arrayBuffer();
-  const tmpDir = await fs.promises.mkdtemp(
-    path.join(os.tmpdir(), "create-deepagent-"),
-  );
+  let tmpDir;
 
   try {
-    const tarballPath = path.join(tmpDir, "template.tar.gz");
-    await fs.promises.writeFile(tarballPath, Buffer.from(tarball));
-
-    const extractDir = path.join(tmpDir, "extracted");
-    await fs.promises.mkdir(extractDir, { recursive: true });
-
-    await execFileAsync("tar", ["-xzf", tarballPath, "-C", extractDir]);
-
-    // GitHub tarballs extract to a top-level dir named `{repo}-{sha}/`
-    const extractedContents = await fs.promises.readdir(extractDir);
-    const rootDir = extractedContents.find((entry) =>
-      fs.statSync(path.join(extractDir, entry)).isDirectory(),
+    tmpDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), "create-deepagent"),
     );
 
-    if (!rootDir) {
-      throw new Error("Downloaded tarball did not contain a root directory.");
+    // 1. Fetch the repo tarball
+    const response = await fetch(tarballUrl);
+    if (!response.ok || !response.body) {
+      throw new Error(
+        `Failed to download template from GitHub: ${response.status} ${response.statusText}`,
+      );
     }
 
-    // If a subPath is specified, copy from that subdirectory; otherwise copy root
-    const sourceDir = address.subPath
-      ? path.join(extractDir, rootDir, address.subPath)
-      : path.join(extractDir, rootDir);
+    // 2. Extract and validate
+    const extractDir = path.join(tmpDir, "extracted");
+    await makeDir(extractDir);
 
-    if (address.subPath && !fs.existsSync(sourceDir)) {
+    await pipeline(
+      Readable.fromWeb(response.body as NodeReadableStream<Uint8Array>),
+      tarExtract({ cwd: extractDir, strip: 1 }),
+    );
+
+    if (await isDirEmpty(extractDir)) {
+      throw new Error(
+        `Downloaded tarball for ${address.owner}/${address.repo} was empty.`,
+      );
+    }
+
+    const sourceDir = address.subPath
+      ? path.join(extractDir, address.subPath)
+      : extractDir;
+
+    if (address.subPath && !(await dirExists(sourceDir))) {
       throw new Error(
         `Subdirectory "${address.subPath}" not found in ${address.owner}/${address.repo}.`,
       );
     }
 
+    // 3. Copy to dest
     await copyDir(sourceDir, dest);
+  } catch (e) {
+    throw new Error(
+      `Failed to install template from ${address.owner}/${address.repo}: ${e}`,
+    );
   } finally {
-    await fs.promises.rm(tmpDir, { recursive: true, force: true });
+    if (tmpDir) await fs.promises.rm(tmpDir, { recursive: true, force: true });
   }
 }
