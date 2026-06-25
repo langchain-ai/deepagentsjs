@@ -6,7 +6,7 @@ const baseProvider: ProviderConfig = {
   id: "openai",
   title: "OpenAI",
   defaultModel: "openai:gpt-5.4-mini",
-  dependency: "@langchain/openai",
+  package: "@langchain/openai",
   env: [{ name: "OPENAI_API_KEY", prompt: "OpenAI API key" }],
 };
 

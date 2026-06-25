@@ -89,7 +89,7 @@ async function runCreate(projectPath: string, options: RunCreateOptions) {
     const packageJsonpath = path.join(projectPath, framework.packageJsonPath);
     const packageJson = packageJsonSchema.parse(loadJsonSync(packageJsonpath));
     const providerDependencies = Object.values(providers).map(
-      (p) => p.dependency,
+      (p) => p.package,
     );
 
     const transformed = transformPackageJson(packageJson, {
