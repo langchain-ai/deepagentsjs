@@ -4,10 +4,6 @@ import type { ProviderAwareFile } from "../provider.js";
 /**
  * Create a ProviderAwareFile for `model.ts` that exports `coordinatorModel` and
  * `subagentModel`, instantiated via `initChatModel` with the selected provider.
-<<<<<<< HEAD
-
-=======
->>>>>>> c67fba7 (Update model file template to reflect initChatModel)
  *
  * @param agentPath - Path relative to project root, e.g. "lib/agent"
  */
