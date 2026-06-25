@@ -11,6 +11,39 @@ on:
     types: [opened, edited, synchronize]
 
 jobs:
+  pin-github-actions:
+    name: "validate action pins"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: "Require SHA-pinned GitHub Actions"
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          files=(.github/workflows/*.yml .github/workflows/*.yaml)
+          violations="$(
+            perl -ne '
+              if (/^\s*-?\s*uses:\s*([^#\s]+)/) {
+                my $use = $1;
+                next if $use =~ m{^\./|^docker://};
+                if ($use !~ /@[0-9a-fA-F]{40}$/) {
+                  print "$ARGV:$.: $use\n";
+                }
+              }
+              close ARGV if eof;
+            ' "${files[@]}"
+          )"
+
+          if [[ -n "$violations" ]]; then
+            echo "::error::GitHub Actions must be pinned by commit SHA."
+            echo "$violations"
+            exit 1
+          fi
+
   lint-pr-title:
     name: "validate format"
     runs-on: ubuntu-latest
