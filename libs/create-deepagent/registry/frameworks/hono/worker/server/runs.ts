@@ -42,7 +42,7 @@ export async function startAgentRun(
   env: Env,
   threadId: string,
   input: unknown,
-  runId: string,
+  runId: string
 ) {
   const stub = getSessionStub(env, threadId);
   const activeAgent = getAgent() as AnyReactAgent;
@@ -65,7 +65,7 @@ export async function startAgentRun(
         new Request("https://session/publish", {
           method: "POST",
           body: JSON.stringify(event),
-        }),
+        })
       );
     }
   } catch (error) {

@@ -26,7 +26,10 @@ export function getCheckpointer() {
 }
 
 /** Delete a thread: remove its checkpointed state and clear the replay buffer. */
-export async function deleteThread(env: Env, threadId: string): Promise<void> {
+export async function deleteThread(
+  env: Env,
+  threadId: string
+): Promise<void> {
   await checkpointer.deleteThread(threadId);
   const stub = getSessionStub(env, threadId);
   await stub.fetch(new Request("https://session/clear", { method: "POST" }));

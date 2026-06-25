@@ -12,9 +12,7 @@ const emit = defineEmits<{ openSubagent: [id: string] }>();
 const stream = useStreamContext();
 
 const messages = computed(() =>
-  stream.messages.value.filter(
-    (message): message is BaseMessage => message != null,
-  ),
+  stream.messages.value.filter((message): message is BaseMessage => message != null),
 );
 
 const subagents = computed(() => [...stream.subagents.value.values()]);
@@ -40,9 +38,7 @@ const showTypingIndicator = computed(() =>
   <StreamingIndicator v-if="showTypingIndicator" />
 
   <div
-    v-if="
-      messages.length === 0 && !stream.isLoading.value && stream.error.value
-    "
+    v-if="messages.length === 0 && !stream.isLoading.value && stream.error.value"
     class="error"
   >
     Could not reach the agent API. Make sure the dev server is running and

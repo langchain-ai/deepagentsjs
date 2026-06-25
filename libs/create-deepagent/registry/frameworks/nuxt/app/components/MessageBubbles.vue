@@ -148,9 +148,7 @@ const items = computed<Item[]>(() => {
       }
 
       chipCalls.forEach((call, callIndex) => {
-        const resultMessage = call.id
-          ? resultsByCallId.get(call.id)
-          : undefined;
+        const resultMessage = call.id ? resultsByCallId.get(call.id) : undefined;
         const errored =
           (resultMessage as { status?: string } | undefined)?.status ===
           "error";

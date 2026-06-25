@@ -61,7 +61,7 @@ function deriveTitle(values: unknown): string {
                 "text" in block &&
                 typeof (block as { text?: unknown }).text === "string"
                   ? (block as { text: string }).text
-                  : "",
+                  : ""
               )
               .join("")
           : "";

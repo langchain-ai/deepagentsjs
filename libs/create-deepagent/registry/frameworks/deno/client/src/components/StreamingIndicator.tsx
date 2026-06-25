@@ -2,7 +2,7 @@ import type { BaseMessage } from "@langchain/core/messages";
 
 export function shouldShowTypingIndicator(
   messages: BaseMessage[],
-  isLoading: boolean,
+  isLoading: boolean
 ) {
   if (!isLoading) return false;
 

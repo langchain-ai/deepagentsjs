@@ -64,7 +64,7 @@ export function ChatApp() {
     (id: string) => {
       if (id !== threadId) setThreadId(id);
     },
-    [threadId],
+    [threadId]
   );
 
   const handleCreate = useCallback(async () => {
@@ -87,7 +87,7 @@ export function ChatApp() {
         setThreadId(freshId);
       }
     },
-    [threadId],
+    [threadId]
   );
 
   const shellClassName = `app-shell ${theme === "light" ? "light" : ""}`;

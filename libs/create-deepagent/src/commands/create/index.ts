@@ -5,7 +5,10 @@ import { spinner } from "@clack/prompts";
 
 import { preflightCreate } from "./preflightCreate.js";
 import { runCreateConfig } from "./runCreateConfig.js";
-import { frameworks, providers } from "../../registry/index.js";
+import {
+  frameworks,
+  providers,
+} from "../../registry/index.js";
 import { handleError } from "../../utils/handleError.js";
 import {
   copyDir,

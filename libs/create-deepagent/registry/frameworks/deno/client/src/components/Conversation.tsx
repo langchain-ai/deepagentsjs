@@ -29,7 +29,7 @@ export function Conversation({
 
   const messages = useMemo(
     () => stream.messages.filter((message) => message != null),
-    [stream.messages],
+    [stream.messages]
   );
 
   const subagentsById = useMemo(() => {
@@ -42,7 +42,7 @@ export function Conversation({
 
   const showTypingIndicator = shouldShowTypingIndicator(
     messages,
-    stream.isLoading,
+    stream.isLoading
   );
 
   return (
@@ -81,8 +81,7 @@ export function Conversation({
 
       {messages.length === 0 && !stream.isLoading && stream.error ? (
         <div className="error">
-          Could not reach the agent API. Make sure the Deno server is running
-          and
+          Could not reach the agent API. Make sure the Deno server is running and
           <code>OPENAI_API_KEY</code> is set, then try again.
         </div>
       ) : null}
