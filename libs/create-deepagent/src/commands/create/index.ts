@@ -9,16 +9,12 @@ import { runCreateConfig } from "./runCreateConfig.js";
 import { frameworks, providers } from "../../registry/index.js";
 import { handleError } from "../../utils/handleError.js";
 import { logger } from "../../utils/logger.js";
-import {
-  copyDir,
-  writeFile,
-  resolveTemplateDir,
-  loadJsonSync,
-} from "../../utils/fileUtils.js";
+import { writeFile, loadJsonSync } from "../../utils/fileUtils.js";
 import { gitInit } from "../../utils/git.js";
 import type { ProviderAwareFile } from "../../registry/provider.js";
 import { packageJsonSchema } from "../../schema/packageJson.js";
 import { transformPackageJson } from "./transformPackageJson.js";
+import { installTemplate } from "./installTemplate.js";
 
 const cliOptionsSchema = z.object({
   name: z.string().optional(),
@@ -77,10 +73,9 @@ async function runCreate(projectPath: string, options: RunCreateOptions) {
   try {
     const { framework, provider, projectName } = options;
 
-    // 1. Copy the template project
-    const templateDir = resolveTemplateDir(framework.frameworkDir);
+    // 1. Install the template project
     s.start(`Copying ${framework.title} template...`);
-    await copyDir(templateDir, projectPath);
+    await installTemplate(projectPath, framework);
 
     // 2. Write files
     const envFile = createEnvFile(framework.envFilePath, options);

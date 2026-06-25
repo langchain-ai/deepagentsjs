@@ -6,7 +6,8 @@ import type { ProviderConfig } from "../../registry/provider.js";
 const mockProvider: ProviderConfig = {
   id: "openai",
   title: "OpenAI",
-  defaultModel: "openai:gpt-5.4-mini",
+  defaultModel: "gpt-5.4-mini",
+  chatModelClassName: "ChatOpenAI",
   dependency: "@langchain/openai",
   env: [{ name: "OPENAI_API_KEY" }],
 };
