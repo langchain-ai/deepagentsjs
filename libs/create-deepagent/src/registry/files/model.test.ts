@@ -5,8 +5,9 @@ import type { ProviderConfig } from "../provider.js";
 const baseProvider: ProviderConfig = {
   id: "openai",
   title: "OpenAI",
-  defaultModel: "openai:gpt-5.4-mini",
-  package: "@langchain/openai",
+  defaultModel: "gpt-5.4-mini",
+  dependency: "@langchain/openai",
+  chatModelClassName: "ChatOpenAI",
   env: [{ name: "OPENAI_API_KEY", prompt: "OpenAI API key" }],
 };
 
@@ -20,11 +21,15 @@ describe("createModelFile", () => {
     const file = createModelFile("lib/agent");
     const content = file.getContent({ providerConfig: baseProvider });
     expect(content).toMatchInlineSnapshot(`
-      "import { initChatModel } from "langchain/chat_models/universal";
+      "import { ChatOpenAI } from "@langchain/openai";
 
-      const coordinatorModel = await initChatModel("openai:gpt-5.4-mini");
+      const coordinatorModel = new ChatOpenAI({
+        model: 'gpt-5.4-mini'
+      });
 
-      const subagentModel = await initChatModel("openai:gpt-5.4-mini");
+      const subagentModel = new ChatOpenAI({
+        model: 'gpt-5.4-mini'
+      });
 
       export { coordinatorModel, subagentModel };
       "
@@ -41,9 +46,10 @@ describe("createModelFile", () => {
     };
     const content = file.getContent({ providerConfig: provider });
     expect(content).toMatchInlineSnapshot(`
-      "import { initChatModel } from "langchain/chat_models/universal";
+      "import { ChatOpenAI } from "@langchain/openai";
 
-      const coordinatorModel = await initChatModel("openai:gpt-5.4-mini", {
+      const coordinatorModel = new ChatOpenAI({
+        model: 'gpt-5.4-mini',
         a: {
           b: {
             c: {
@@ -53,7 +59,9 @@ describe("createModelFile", () => {
         }
       });
 
-      const subagentModel = await initChatModel("openai:gpt-5.4-mini");
+      const subagentModel = new ChatOpenAI({
+        model: 'gpt-5.4-mini'
+      });
 
       export { coordinatorModel, subagentModel };
       "
@@ -75,9 +83,10 @@ describe("createModelFile", () => {
     };
     const content = file.getContent({ providerConfig: provider });
     expect(content).toMatchInlineSnapshot(`
-      "import { initChatModel } from "langchain/chat_models/universal";
+      "import { ChatOpenAI } from "@langchain/openai";
 
-      const coordinatorModel = await initChatModel("openai:gpt-5.4-mini", {
+      const coordinatorModel = new ChatOpenAI({
+        model: 'gpt-5.4-mini',
         stringVal: 'hello',
         numberVal: 42,
         booleanVal: true,
@@ -92,7 +101,9 @@ describe("createModelFile", () => {
         }
       });
 
-      const subagentModel = await initChatModel("openai:gpt-5.4-mini");
+      const subagentModel = new ChatOpenAI({
+        model: 'gpt-5.4-mini'
+      });
 
       export { coordinatorModel, subagentModel };
       "

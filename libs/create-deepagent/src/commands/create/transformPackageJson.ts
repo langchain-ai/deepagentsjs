@@ -33,7 +33,7 @@ export function transformPackageJson(
   // 3. Inject the selected provider's dependency
   result.dependencies = {
     ...result.dependencies,
-    [config.provider.package]: "latest",
+    [config.provider.dependency]: "latest",
   };
 
   // 4. Remove the packageManager field if present
