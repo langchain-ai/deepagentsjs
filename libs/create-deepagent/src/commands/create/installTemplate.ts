@@ -34,7 +34,7 @@ export async function installTemplate(
  * into the project directory.
  */
 async function downloadGithubTemplate(
-  address: Extract<Address, { scheme: 'github' }>,
+  address: Extract<Address, { scheme: "github" }>,
   dest: string,
 ): Promise<void> {
   const tarballUrl = `https://codeload.github.com/${address.owner}/${address.repo}/tar.gz/HEAD`;
@@ -82,7 +82,7 @@ async function downloadGithubTemplate(
     await copyDir(sourceDir, dest);
   } catch (e) {
     throw new Error(
-      `Failed to install template from ${address.owner}/${address.repo}: ${e}`,
+      `Failed to install template from ${address.owner}/${address.repo}: ${e}`, { cause: e },
     );
   } finally {
     if (tmpDir) await fs.promises.rm(tmpDir, { recursive: true, force: true });

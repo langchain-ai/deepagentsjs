@@ -72,7 +72,7 @@ async function runCreate(projectPath: string, options: RunCreateOptions) {
 
   try {
     const { framework, provider, projectName } = options;
-    
+
     // 1. Install the template project
     s.start(`Copying ${framework.title} template...`);
     await installTemplate(projectPath, framework);
