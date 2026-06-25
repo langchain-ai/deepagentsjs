@@ -23,7 +23,7 @@ function makeTemplate(): PackageJson {
     name: "template-name",
     dependencies: {
       "@langchain/openai": "^1.0.0",
-      "react": "^19.0.0",
+      react: "^19.0.0",
       "react-dom": "^19.0.0",
     },
     packageManager: "pnpm@10.33.2",
@@ -52,7 +52,7 @@ describe("transformPackageJson", () => {
     expect(result.dependencies).not.toHaveProperty("@langchain/anthropic");
     expect(result.dependencies).not.toHaveProperty("@langchain/google-genai");
     expect(result.dependencies).not.toHaveProperty("@langchain/fireworks");
-    
+
     // Selected provider is re-injected as "latest" after stripping
     expect(result.dependencies).toHaveProperty("@langchain/openai");
   });

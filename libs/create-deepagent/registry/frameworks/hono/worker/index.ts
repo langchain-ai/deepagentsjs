@@ -1,5 +1,9 @@
 import { Hono } from "hono";
-import type { Command, CommandResponse, ErrorResponse } from "@langchain/protocol";
+import type {
+  Command,
+  CommandResponse,
+  ErrorResponse,
+} from "@langchain/protocol";
 
 import { ThreadSession } from "./durable-objects/thread-session";
 import {
@@ -66,7 +70,7 @@ app.post("/api/threads/:threadId/stream", async (c) => {
     new Request("https://session/stream", {
       method: "POST",
       body: JSON.stringify(params),
-    })
+    }),
   );
 });
 
@@ -77,10 +81,7 @@ app.get("/api/threads/:threadId/state", async (c) => {
     return c.json(state);
   } catch (error) {
     if (error instanceof ThreadNotFoundError) {
-      return c.json(
-        { error: "not_found", message: error.message },
-        404
-      );
+      return c.json({ error: "not_found", message: error.message }, 404);
     }
     throw error;
   }
@@ -103,7 +104,7 @@ app.post("/api/threads/:threadId/state", async (c) => {
   } catch (error) {
     return c.json(
       { error: "invalid_state_update", message: String(error) },
-      422
+      422,
     );
   }
 });
@@ -126,10 +127,7 @@ app.post("/api/threads/:threadId/history", async (c) => {
     return c.json(history);
   } catch (error) {
     if (error instanceof ThreadNotFoundError) {
-      return c.json(
-        { error: "not_found", message: error.message },
-        404
-      );
+      return c.json({ error: "not_found", message: error.message }, 404);
     }
     throw error;
   }

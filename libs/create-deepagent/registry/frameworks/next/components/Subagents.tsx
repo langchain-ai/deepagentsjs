@@ -32,12 +32,12 @@ function statusLabel(status: SubagentStatus) {
 /** The task prompt is shown separately; skip the matching human message. */
 function omitTaskHumanMessage(
   messages: BaseMessage[],
-  taskInput?: string
+  taskInput?: string,
 ): BaseMessage[] {
   const task = taskInput?.trim();
   if (!task) return messages;
   return messages.filter(
-    (message) => message.type !== "human" || message.text?.trim() !== task
+    (message) => message.type !== "human" || message.text?.trim() !== task,
   );
 }
 
@@ -95,7 +95,7 @@ export function SubagentDetail({
   const messages = useMessages(stream, snapshot);
   const visibleMessages = useMemo(
     () => omitTaskHumanMessage(messages, snapshot.taskInput),
-    [messages, snapshot.taskInput]
+    [messages, snapshot.taskInput],
   );
 
   return (

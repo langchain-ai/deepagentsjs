@@ -50,14 +50,18 @@ function statusLabel(status: ToolCallStatus) {
           stroke-width="1.6"
           viewBox="0 0 24 24"
         >
-          <path d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 1 5.4-5.4l-2.7 2.7-1.4-1.4 2.7-2.7a4 4 0 0 0-1.6.4z" />
+          <path
+            d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 1 5.4-5.4l-2.7 2.7-1.4-1.4 2.7-2.7a4 4 0 0 0-1.6.4z"
+          />
         </svg>
       </span>
       <span class="toolcall-name">{{ call.name }}</span>
       <span :class="['subagent-status', `status-${call.status}`]">
         {{ statusLabel(call.status) }}
       </span>
-      <span aria-hidden="true" class="toolcall-chevron">{{ open ? "▾" : "▸" }}</span>
+      <span aria-hidden="true" class="toolcall-chevron">{{
+        open ? "▾" : "▸"
+      }}</span>
     </button>
 
     <div v-if="open" class="toolcall-body">

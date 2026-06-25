@@ -29,7 +29,7 @@ export const searchWeb = tool(
     name: "search_web",
     description: "Search the web for information about a topic.",
     schema: z.object({ query: z.string().describe("Search query.") }),
-  }
+  },
 );
 
 /** Demo-only arithmetic evaluator restricted to numbers and basic operators. */
@@ -38,7 +38,7 @@ function evaluateExpression(expression: string): number {
     throw new Error("Only basic arithmetic is supported.");
   }
   const compute = new Function(
-    `"use strict"; return (${expression});`
+    `"use strict"; return (${expression});`,
   ) as () => unknown;
   const result = compute();
   if (typeof result !== "number" || !Number.isFinite(result)) {
@@ -62,5 +62,5 @@ export const calculator = tool(
     schema: z.object({
       expression: z.string().describe("Math expression to evaluate."),
     }),
-  }
+  },
 );

@@ -6,10 +6,7 @@ import { spinner } from "@clack/prompts";
 
 import { preflightCreate } from "./preflightCreate.js";
 import { runCreateConfig } from "./runCreateConfig.js";
-import {
-  frameworks,
-  providers,
-} from "../../registry/index.js";
+import { frameworks, providers } from "../../registry/index.js";
 import { handleError } from "../../utils/handleError.js";
 import { logger } from "../../utils/logger.js";
 import {
@@ -92,14 +89,19 @@ async function runCreate(projectPath: string, options: RunCreateOptions) {
   // 3. Transform package.json
   const packageJsonpath = path.join(projectPath, framework.packageJsonPath);
   const packageJson = await loadJsonSync<PackageJson>(packageJsonpath);
-  const providerDependencies = Object.values(providers).map((p) => p.dependency);
-  
+  const providerDependencies = Object.values(providers).map(
+    (p) => p.dependency,
+  );
+
   const transformed = transformPackageJson(packageJson, {
     projectName,
     provider,
     providerDependencies,
   });
-  fs.writeFileSync(packageJsonpath, JSON.stringify(transformed, null, 2) + "\n");
+  fs.writeFileSync(
+    packageJsonpath,
+    JSON.stringify(transformed, null, 2) + "\n",
+  );
 
   // 4. Git init
   gitInit(projectPath);
