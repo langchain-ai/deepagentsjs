@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import { spinner } from "@clack/prompts";
@@ -10,12 +11,17 @@ import {
   providers,
 } from "../../registry/index.js";
 import { handleError } from "../../utils/handleError.js";
+import { logger } from "../../utils/logger.js";
 import {
   copyDir,
   writeFile,
   resolveTemplateDir,
+  loadJsonSync,
 } from "../../utils/fileUtils.js";
+import { gitInit } from "../../utils/git.js";
 import type { ProviderAwareFile } from "../../registry/provider.js";
+import { PackageJson } from "../../schema/packageJson.js";
+import { transformPackageJson } from "./transformPackageJson.js";
 
 const cliOptionsSchema = z.object({
   name: z.string().optional(),
@@ -66,9 +72,8 @@ function mergeOptions(cliOptions: CLIOptions, tuiOptions: TUIOptions) {
 }
 
 type RunCreateOptions = ReturnType<typeof mergeOptions>;
-
 async function runCreate(projectPath: string, options: RunCreateOptions) {
-  const { framework, provider } = options;
+  const { framework, provider, projectName } = options;
   const s = spinner();
 
   // 1. Copy the template project
@@ -76,15 +81,38 @@ async function runCreate(projectPath: string, options: RunCreateOptions) {
   s.start(`Copying ${framework.title} template...`);
   await copyDir(templateDir, projectPath);
 
-  // 2. Write files
+  // 2. Write provider-aware files + env file
   const envFile = createEnvFile(framework.envFilePath, options);
-  const allFiles = [...framework.files, envFile];
+  const allFiles: ProviderAwareFile[] = [...framework.files, envFile];
   for (const file of allFiles) {
     const content = file.getContent({ providerConfig: provider });
     await writeFile(path.join(projectPath, file.path), content);
   }
 
+  // 3. Transform package.json
+  const packageJsonpath = path.join(projectPath, framework.packageJsonPath);
+  const packageJson = await loadJsonSync<PackageJson>(packageJsonpath);
+  const providerDependencies = Object.values(providers).map((p) => p.dependency);
+  
+  const transformed = transformPackageJson(packageJson, {
+    projectName,
+    provider,
+    providerDependencies,
+  });
+  fs.writeFileSync(packageJsonpath, JSON.stringify(transformed, null, 2) + "\n");
+
+  // 4. Git init
+  gitInit(projectPath);
+
   s.stop();
+  logger.break();
+  logger.success(`${framework.title} project created at ${projectName}`);
+  logger.break();
+
+  // 5. Post-init. Frameworks provide instructions on next steps
+  if (framework.postInit) {
+    framework.postInit({ projectPath });
+  }
 }
 
 /**
