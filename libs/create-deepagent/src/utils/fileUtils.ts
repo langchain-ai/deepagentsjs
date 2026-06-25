@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
  * package root. When running from the bundled dist, `import.meta.url` is
  * `dist/index.js`, so we go up one level to reach the package root.
  */
-export function resolveTemplateDir(frameworkDir: string): string {
+export function resolveFrameworkDir(frameworkDir: string): string {
   const distDir = path.dirname(fileURLToPath(import.meta.url));
   const packageRoot = path.resolve(distDir, "..");
   return path.join(packageRoot, "registry", "frameworks", frameworkDir);

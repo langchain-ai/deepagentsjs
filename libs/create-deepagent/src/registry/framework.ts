@@ -1,6 +1,7 @@
 import { createModelFile } from "./files/model.js";
 import { createEnvExampleFile } from "./files/envExample.js";
 import type { ProviderAwareFile } from "./provider.js";
+import type { Address } from "./address.js";
 
 export interface FrameworkConfig<T extends string = string> {
   /** Unique identifier. Probably the same as frameworkDir */
@@ -9,8 +10,8 @@ export interface FrameworkConfig<T extends string = string> {
   title: string;
   /** e.g. "next-deepagents" */
   defaultProjectName: string;
-  /** Template dir name, e.g. "next-js" */
-  frameworkDir: string;
+  /** Template project address, e.g. next-js or github.com/user/repo */
+  address: Address;
   /** Path to the env file, relative to project root */
   envFilePath: string;
   /** Path to package.json, relative to project root */

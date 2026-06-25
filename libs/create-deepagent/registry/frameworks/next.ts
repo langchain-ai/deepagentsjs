@@ -4,7 +4,12 @@ export const next = createFramework({
   id: "next",
   title: "Next.js",
   defaultProjectName: "next-deepagents",
-  frameworkDir: "next",
+  address: {
+    scheme: "github",
+    owner: "langchain-ai",
+    repo: "deployment-cookbook",
+    subPath: "js-next",
+  },
   envFilePath: ".env.local",
   packageJsonPath: "package.json",
   agentPath: "lib/agent",
