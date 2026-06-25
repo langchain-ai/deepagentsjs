@@ -88,9 +88,7 @@ async function runCreate(projectPath: string, options: RunCreateOptions) {
     // 3. Transform package.json
     const packageJsonpath = path.join(projectPath, framework.packageJsonPath);
     const packageJson = packageJsonSchema.parse(loadJsonSync(packageJsonpath));
-    const providerDependencies = Object.values(providers).map(
-      (p) => p.package,
-    );
+    const providerDependencies = Object.values(providers).map((p) => p.package);
 
     const transformed = transformPackageJson(packageJson, {
       projectName,

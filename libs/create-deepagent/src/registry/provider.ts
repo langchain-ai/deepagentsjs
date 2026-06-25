@@ -1,4 +1,4 @@
-import { MODEL_PROVIDER_CONFIG } from 'langchain/chat_models/universal'
+import { MODEL_PROVIDER_CONFIG } from "langchain/chat_models/universal";
 import { JSONValue } from "../types.js";
 
 export type ProviderAwareFile = {
@@ -36,10 +36,10 @@ export interface ProviderConfig<T extends ProviderKey = ProviderKey> {
 }
 
 export function createProvider<T extends ProviderKey>(
-  config: Omit<ProviderConfig<T>, 'package'>,
+  config: Omit<ProviderConfig<T>, "package">,
 ): ProviderConfig<T> {
   return {
     ...config,
-    package: MODEL_PROVIDER_CONFIG[config.id].package
-  }
+    package: MODEL_PROVIDER_CONFIG[config.id].package,
+  };
 }
