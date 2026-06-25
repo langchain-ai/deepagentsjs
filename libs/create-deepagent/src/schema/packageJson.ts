@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const packageJsonSchema = z.object({
+export const packageJsonSchema = z.looseObject({
   name: z.string(),
   dependencies: z.record(z.string(), z.string()),
   packageManager: z.string().optional(),
