@@ -96,7 +96,7 @@ async function collectEnvVars(
       message: `Enter ${spec.prompt ?? spec.name}${!spec.required && optionalSuffix}`,
       mask: "*",
       validate: (value) => {
-        if (typeof value !== 'string' && spec.required === true) {
+        if (typeof value !== "string" && spec.required === true) {
           return `${spec.name} must not be empty.`;
         }
 
@@ -105,8 +105,7 @@ async function collectEnvVars(
         }
 
         return undefined;
-      }
-
+      },
     })) as string;
     const resultString =
       typeof result === "string" && result.trim() ? result.trim() : undefined;
