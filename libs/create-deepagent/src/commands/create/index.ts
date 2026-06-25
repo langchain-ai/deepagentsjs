@@ -69,6 +69,7 @@ function mergeOptions(cliOptions: CLIOptions, tuiOptions: TUIOptions) {
 }
 
 type RunCreateOptions = ReturnType<typeof mergeOptions>;
+
 async function runCreate(projectPath: string, options: RunCreateOptions) {
   const { framework, provider, projectName } = options;
   const s = spinner();
@@ -78,9 +79,9 @@ async function runCreate(projectPath: string, options: RunCreateOptions) {
   s.start(`Copying ${framework.title} template...`);
   await copyDir(templateDir, projectPath);
 
-  // 2. Write provider-aware files + env file
+  // 2. Write files
   const envFile = createEnvFile(framework.envFilePath, options);
-  const allFiles: ProviderAwareFile[] = [...framework.files, envFile];
+  const allFiles = [...framework.files, envFile];
   for (const file of allFiles) {
     const content = file.getContent({ providerConfig: provider });
     await writeFile(path.join(projectPath, file.path), content);
