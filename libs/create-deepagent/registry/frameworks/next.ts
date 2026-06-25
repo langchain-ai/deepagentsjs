@@ -6,7 +6,7 @@ export const next = createFramework({
   defaultProjectName: "next-deepagents",
   address: {
     scheme: "github",
-    owner: "langchain-ai",
+    owner: "aolsenjazz",
     repo: "deployment-cookbook",
     subPath: "js-next",
   },

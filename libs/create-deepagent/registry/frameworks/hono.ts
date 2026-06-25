@@ -1,5 +1,4 @@
 import { createFramework } from "../../src/registry/framework.js";
-import { resolveFrameworkDir } from "../../src/utils/fileUtils.js";
 import type { ProviderAwareFile } from "../../src/registry/provider.js";
 
 const ENV_D_TS: ProviderAwareFile = {
@@ -23,7 +22,12 @@ export const hono = createFramework({
   id: "hono",
   title: "Hono",
   defaultProjectName: "hono-deepagents",
-  address: { scheme: "local", path: resolveFrameworkDir("hono") },
+  address: {
+    scheme: "github",
+    owner: "aolsenjazz",
+    repo: "deployment-cookbook",
+    subPath: "js-hono",
+  },
   envFilePath: ".env",
   packageJsonPath: "package.json",
   agentPath: "worker/agent",
