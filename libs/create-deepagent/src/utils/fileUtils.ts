@@ -25,9 +25,9 @@ export async function copyDir(src: string, dest: string): Promise<void> {
 }
 
 /** Loads a json file and asserts type. Performs no checks prior to read. */
-export async function loadJsonSync<T extends {}>(filePath: string): Promise<T> {
+export function loadJsonSync(filePath: string) {
   const raw = fs.readFileSync(filePath, "utf-8");
-  return JSON.parse(raw) as T;
+  return JSON.parse(raw);
 }
 
 /**

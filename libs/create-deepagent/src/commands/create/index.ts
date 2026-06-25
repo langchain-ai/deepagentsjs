@@ -17,7 +17,7 @@ import {
 } from "../../utils/fileUtils.js";
 import { gitInit } from "../../utils/git.js";
 import type { ProviderAwareFile } from "../../registry/provider.js";
-import { PackageJson } from "../../schema/packageJson.js";
+import { packageJsonSchema } from "../../schema/packageJson.js";
 import { transformPackageJson } from "./transformPackageJson.js";
 
 const cliOptionsSchema = z.object({
@@ -42,6 +42,7 @@ export const create = new Command()
       await runCreate(projectPath, options);
     } catch (e) {
       handleError(e);
+      process.exit(1);
     }
   });
 
@@ -71,50 +72,55 @@ function mergeOptions(cliOptions: CLIOptions, tuiOptions: TUIOptions) {
 type RunCreateOptions = ReturnType<typeof mergeOptions>;
 
 async function runCreate(projectPath: string, options: RunCreateOptions) {
-  const { framework, provider, projectName } = options;
   const s = spinner();
 
-  // 1. Copy the template project
-  const templateDir = resolveTemplateDir(framework.frameworkDir);
-  s.start(`Copying ${framework.title} template...`);
-  await copyDir(templateDir, projectPath);
+  try {
+    const { framework, provider, projectName } = options;
 
-  // 2. Write files
-  const envFile = createEnvFile(framework.envFilePath, options);
-  const allFiles = [...framework.files, envFile];
-  for (const file of allFiles) {
-    const content = file.getContent({ providerConfig: provider });
-    await writeFile(path.join(projectPath, file.path), content);
-  }
+    // 1. Copy the template project
+    const templateDir = resolveTemplateDir(framework.frameworkDir);
+    s.start(`Copying ${framework.title} template...`);
+    await copyDir(templateDir, projectPath);
 
-  // 3. Transform package.json
-  const packageJsonpath = path.join(projectPath, framework.packageJsonPath);
-  const packageJson = await loadJsonSync<PackageJson>(packageJsonpath);
-  const providerDependencies = Object.values(providers).map(
-    (p) => p.dependency,
-  );
+    // 2. Write files
+    const envFile = createEnvFile(framework.envFilePath, options);
+    const allFiles = [...framework.files, envFile];
+    for (const file of allFiles) {
+      const content = file.getContent({ providerConfig: provider });
+      await writeFile(path.join(projectPath, file.path), content);
+    }
 
-  const transformed = transformPackageJson(packageJson, {
-    projectName,
-    provider,
-    providerDependencies,
-  });
-  fs.writeFileSync(
-    packageJsonpath,
-    JSON.stringify(transformed, null, 2) + "\n",
-  );
+    // 3. Transform package.json
+    const packageJsonpath = path.join(projectPath, framework.packageJsonPath);
+    const packageJson = packageJsonSchema.parse(loadJsonSync(packageJsonpath));
+    const providerDependencies = Object.values(providers).map(
+      (p) => p.dependency,
+    );
 
-  // 4. Git init
-  gitInit(projectPath);
+    const transformed = transformPackageJson(packageJson, {
+      projectName,
+      provider,
+      providerDependencies,
+    });
+    fs.writeFileSync(
+      packageJsonpath,
+      JSON.stringify(transformed, null, 2) + "\n",
+    );
 
-  s.stop();
-  logger.break();
-  logger.success(`${framework.title} project created at ${projectName}`);
-  logger.break();
+    // 4. Git init
+    gitInit(projectPath);
 
-  // 5. Post-init. Frameworks provide instructions on next steps
-  if (framework.postInit) {
-    framework.postInit({ projectPath });
+    s.stop();
+    logger.break();
+    logger.success(`${framework.title} project created at ${projectName}`);
+    logger.break();
+
+    // 5. Post-init. Frameworks provide instructions on next steps
+    if (framework.postInit) {
+      framework.postInit({ projectPath });
+    }
+  } finally {
+    s.stop();
   }
 }
 
