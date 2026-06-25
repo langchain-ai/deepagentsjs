@@ -82,7 +82,8 @@ async function downloadGithubTemplate(
     await copyDir(sourceDir, dest);
   } catch (e) {
     throw new Error(
-      `Failed to install template from ${address.owner}/${address.repo}: ${e}`, { cause: e },
+      `Failed to install template from ${address.owner}/${address.repo}: ${e}`,
+      { cause: e },
     );
   } finally {
     if (tmpDir) await fs.promises.rm(tmpDir, { recursive: true, force: true });
