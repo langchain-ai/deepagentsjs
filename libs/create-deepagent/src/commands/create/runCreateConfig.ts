@@ -92,26 +92,35 @@ async function collectEnvVars(
     const optionalExitMessage = `Skipping ${spec.prompt}. You can add this later in ${framework.envFilePath}`;
     const optionalSuffix = " (press enter to skip)?";
 
-    if (!spec.required) {
-      const result = (await clack.password({
-        message: `Enter ${spec.prompt ?? spec.name}${optionalSuffix}`,
-        mask: "*",
-      })) as string;
-      const resultString =
-        typeof result === "string" && result.trim() ? result.trim() : undefined;
-
-      if (clack.isCancel(result) || resultString === undefined) {
-        if (spec.required) {
-          clack.cancel(PROCESSS_EXIT_MESSAGE);
-          process.exit(0);
+    const result = (await clack.password({
+      message: `Enter ${spec.prompt ?? spec.name}${!spec.required && optionalSuffix}`,
+      mask: "*",
+      validate: (value) => {
+        if (typeof value !== "string" && spec.required === true) {
+          return `${spec.name} must not be empty.`;
         }
 
-        clack.cancel(optionalExitMessage);
-        return;
+        if (value?.trim().length === 0) {
+          return `Invalid ${spec.name}. Try again.`;
+        }
+
+        return undefined;
+      },
+    })) as string;
+    const resultString =
+      typeof result === "string" && result.trim() ? result.trim() : undefined;
+
+    if (clack.isCancel(result) || resultString === undefined) {
+      if (spec.required) {
+        clack.cancel(PROCESSS_EXIT_MESSAGE);
+        process.exit(0);
       }
 
-      envVars[spec.name] = resultString;
+      clack.cancel(optionalExitMessage);
+      continue;
     }
+
+    envVars[spec.name] = resultString;
   }
   return envVars;
 }

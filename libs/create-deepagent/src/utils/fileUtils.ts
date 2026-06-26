@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
  * package root. When running from the bundled dist, `import.meta.url` is
  * `dist/index.js`, so we go up one level to reach the package root.
  */
-export function resolveTemplateDir(frameworkDir: string): string {
+export function resolveFrameworkDir(frameworkDir: string): string {
   const distDir = path.dirname(fileURLToPath(import.meta.url));
   const packageRoot = path.resolve(distDir, "..");
   return path.join(packageRoot, "registry", "frameworks", frameworkDir);
@@ -22,6 +22,12 @@ export async function copyDir(src: string, dest: string): Promise<void> {
     recursive: true,
     filter: (source) => !source.includes("node_modules"),
   });
+}
+
+/** Loads a json file and asserts type. Performs no checks prior to read. */
+export function loadJsonSync(filePath: string) {
+  const raw = fs.readFileSync(filePath, "utf-8");
+  return JSON.parse(raw);
 }
 
 /**

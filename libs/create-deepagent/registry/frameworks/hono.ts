@@ -22,7 +22,12 @@ export const hono = createFramework({
   id: "hono",
   title: "Hono",
   defaultProjectName: "hono-deepagents",
-  frameworkDir: "hono",
+  address: {
+    scheme: "github",
+    owner: "aolsenjazz",
+    repo: "deployment-cookbook",
+    subPath: "js-cloudflare",
+  },
   envFilePath: ".env",
   packageJsonPath: "package.json",
   agentPath: "worker/agent",

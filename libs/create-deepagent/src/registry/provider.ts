@@ -1,3 +1,4 @@
+import { MODEL_PROVIDER_CONFIG } from "langchain/chat_models/universal";
 import { JSONValue } from "../types.js";
 
 export type ProviderAwareFile = {
@@ -18,23 +19,32 @@ export type EnvVarSpec = {
   default?: string;
 };
 
-export interface ProviderConfig<T extends string = string> {
-  /** Unique id, e.g. "anthropic" */
+type ProviderKey = keyof typeof MODEL_PROVIDER_CONFIG;
+type ModelProviderConfig<T extends ProviderKey> =
+  (typeof MODEL_PROVIDER_CONFIG)[T];
+export interface ProviderConfig<T extends ProviderKey = ProviderKey> {
+  /** Unique ID, one of `keyof typeof MODEL_PROVIDER_CONFIG` from langchain/chat_models/universal */
   id: T;
   /** Shown in the "Select your provider" prompt */
   title: string;
   /** Default model, e.g. "openai:gpt-5.4-mini" */
   defaultModel: string;
   /** LangChain chat model package, e.g. "@langchain/openai" */
-  dependency: string;
+  dependency: ModelProviderConfig<T>["package"];
+  /** Name of the chat model, e.g. ChatAnthropic */
+  chatModelClassName: ModelProviderConfig<T>["className"];
   /** Extra constructor options for the coordinator model, e.g. `{ reasoning: { effort: "low", summary: "auto" } }` */
   coordinatorModelConfig?: Record<string, JSONValue>;
   /** Credential vars to prompt for + write to the env file */
   env: EnvVarSpec[];
 }
 
-export function createProvider<T extends string>(
-  config: ProviderConfig<T>,
+export function createProvider<T extends ProviderKey>(
+  config: Omit<ProviderConfig<T>, "dependency" | "chatModelClassName">,
 ): ProviderConfig<T> {
-  return config;
+  return {
+    ...config,
+    dependency: MODEL_PROVIDER_CONFIG[config.id].package,
+    chatModelClassName: MODEL_PROVIDER_CONFIG[config.id].className,
+  };
 }
