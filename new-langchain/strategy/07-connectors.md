@@ -2,29 +2,42 @@
 
 ## Motivation
 
-Managed Deep Agents need a way to use external tools without forcing developers to manually create MCP clients, load tools, wire them into the agent, manage connection lifecycle, or duplicate deployment configuration. For the POC, connectors should be narrowly scoped to **MCP servers** and should map closely to the existing `@langchain/mcp-adapters` configuration surface.
+Managed Deep Agents need a simple way to attach external tool surfaces without making every developer manually create MCP clients, load tools, wire them into the agent, and manage connection lifecycle.
 
-The goal is not to introduce a new third-party vendor SDK layer yet. APIs like `runtime.connections.get("linear")` may become useful later for typed vendor clients, OAuth ownership, and tenant-scoped credentials, but they are out of scope for the first version.
+For the first iteration, connectors should mean exactly one thing: **MCP servers**. MDA should load tools from declared MCP servers and add them to the agent automatically.
+
+Typed vendor clients such as:
+
+```ts
+const linear = await runtime.connections.get("linear", { scope: "tenant" });
+await linear.issues.create({ title, body });
+```
+
+are a separate, later concept: **managed connections**. They require credential ownership, OAuth or setup flows, typed SDK wrapping, authorization, and audit. That is out of scope for the MCP connector POC.
 
 ## Product Boundary
 
-For v0, a connector is:
+For v0, a connector is an MCP server declaration.
 
-- a declared MCP server
-- loaded by MDA at dev/deploy time
-- converted into LangChain tools using `@langchain/mcp-adapters`
-- automatically added to the Deep Agent's tool list
-- managed by the runtime for startup, teardown, errors, and tracing
+MDA is responsible for:
 
-A connector is not yet:
+- discovering `connectors/mcp.{ts,py}`
+- validating the MCP server config
+- resolving connector secrets
+- creating the MCP client using `@langchain/mcp-adapters`
+- loading MCP tools
+- adding those tools to the Deep Agent
+- closing clients and surfacing connection errors
 
-- a typed Linear/GitHub/Salesforce client
-- a general OAuth connection system
-- a custom tool runtime
-- an arbitrary integration marketplace
-- a replacement for normal user-authored tools
+MDA is not responsible for v0:
 
-Developers can still write ordinary tools in code. Connectors are for importing tool surfaces exposed by MCP servers.
+- typed SaaS clients like Linear, GitHub, Salesforce, or Slack
+- per-user or per-tenant OAuth consent flows
+- a connector marketplace
+- vendor-specific SDK abstractions
+- replacing normal authored tools
+
+If a developer needs vendor-specific code in v0, they should either expose that vendor through an MCP server or write a normal tool that uses managed secrets.
 
 ## Workspace Shape
 
@@ -37,20 +50,29 @@ my-agent/
     mcp.ts
 ```
 
-`connectors/mcp.ts` is the source of truth for MCP servers used by the agent.
+Python should use the same convention:
 
-## API
+```text
+my-agent/
+  agent.py
+  AGENTS.md
+  tools/
+  connectors/
+    mcp.py
+```
 
-The POC should expose a small helper that intentionally resembles `MultiServerMCPClient`:
+## TypeScript API
+
+`connectors/mcp.ts` should intentionally stay close to the current `@langchain/mcp-adapters` `MultiServerMCPClient` config:
 
 ```ts
 // connectors/mcp.ts
-import { defineMcpConnectors } from "managed-deepagents/connectors";
+import { defineMcpServers, secret } from "managed-deepagents/connectors";
 
-export const connectors = defineMcpConnectors({
+export const mcp = defineMcpServers({
   useStandardContentBlocks: true,
-  throwOnLoadError: true,
   prefixToolNameWithServerName: true,
+  throwOnLoadError: true,
 
   mcpServers: {
     math: {
@@ -68,28 +90,47 @@ export const connectors = defineMcpConnectors({
       transport: "http",
       url: "https://docs.example.com/mcp",
       headers: {
-        Authorization: secret("DOCS_MCP_TOKEN"),
+        Authorization: `Bearer ${secret("DOCS_MCP_TOKEN")}`,
       },
     },
   },
 });
 ```
 
-The shape should stay close enough to `MultiServerMCPClient` that developers can move between raw LangChain MCP usage and MDA with minimal translation.
+## Python API
+
+The Python API should mirror the same shape as closely as possible:
+
+```python
+# connectors/mcp.py
+from managed_deepagents.connectors import define_mcp_servers, secret
+
+mcp = define_mcp_servers(
+    use_standard_content_blocks=True,
+    prefix_tool_name_with_server_name=True,
+    throw_on_load_error=True,
+    mcp_servers={
+        "math": {
+            "transport": "stdio",
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-math"],
+        },
+        "docs": {
+            "transport": "http",
+            "url": "https://docs.example.com/mcp",
+            "headers": {
+                "Authorization": f"Bearer {secret('DOCS_MCP_TOKEN')}",
+            },
+        },
+    },
+)
+```
 
 ## Runtime Behavior
 
-On `deepagents dev` and `deepagents deploy`, MDA should:
+The agent author does not manually import the MCP client or call `getTools()`.
 
-1. discover `connectors/mcp.{ts,py}`
-2. validate the MCP server configuration
-3. resolve referenced secrets
-4. create a managed `MultiServerMCPClient`
-5. call `client.getTools()`
-6. add the resulting tools to the Deep Agent
-7. close the client when the runtime shuts down
-
-Agent code should not need to import the MCP client:
+Authored tools stay in the agent file:
 
 ```ts
 // agent.ts
@@ -104,17 +145,25 @@ export const agent = createDeepAgent({
 });
 ```
 
-At runtime, the agent receives both its authored tools and the MCP tools loaded from connectors.
+MDA compiles this into a runtime that includes:
+
+- authored tools from `agent.ts` / `agent.py`
+- MCP tools loaded from `connectors/mcp.{ts,py}`
+
+Conceptually:
+
+```ts
+const mcpTools = await managedMcpClient.getTools();
+
+createDeepAgent({
+  ...agentConfig,
+  tools: [...authoredTools, ...mcpTools],
+});
+```
 
 ## Naming
 
-MDA should default `prefixToolNameWithServerName` to `true` for managed connectors.
-
-This avoids collisions between:
-
-- authored tools
-- tools from multiple MCP servers
-- common MCP tool names like `search`, `read`, `write`, or `create`
+MDA should default `prefixToolNameWithServerName` to `true`.
 
 Example:
 
@@ -124,11 +173,13 @@ github__create_issue
 linear__list_issues
 ```
 
-Developers can opt out only if validation confirms there are no collisions.
+This avoids collisions between authored tools and common MCP tool names like `search`, `read`, `write`, or `create`.
+
+Developers can opt out only if MDA validates that no tool names collide.
 
 ## Secrets
 
-Connector credentials should use MDA secrets, not raw hard-coded tokens:
+Connector credentials should use MDA secrets:
 
 ```ts
 headers: {
@@ -149,39 +200,16 @@ Secrets used by connectors must be:
 - scoped to the connector that requested them
 - auditable when resolved
 
-For the POC, static deployment or tenant-scoped secrets are enough. Full OAuth-backed MCP auth can come later.
-
-## Identity
-
-Connectors should receive runtime identity only through explicit, managed mechanisms.
-
-For HTTP MCP servers that need request identity, MDA can support per-call header injection:
-
-```ts
-docs: {
-  transport: "http",
-  url: "https://docs.example.com/mcp",
-  headers: {
-    Authorization: secret("DOCS_MCP_TOKEN"),
-  },
-  runtimeHeaders: {
-    "X-Actor-Id": identity("actor.id"),
-    "X-Tenant-Id": identity("tenant.id"),
-  },
-}
-```
-
-MDA resolves `runtimeHeaders` on each tool call from the trusted `runtime.identity`. Agent code should not manually construct identity headers for connector tools.
-
-For the POC, this can be limited to HTTP/SSE transports. Stdio MCP servers do not support per-call headers.
+For the POC, static deployment-scoped secrets are sufficient. Tenant-scoped secrets can follow if needed, but per-user OAuth should wait for managed connections.
 
 ## Error Handling
 
-MDA should expose the same basic failure modes as `@langchain/mcp-adapters`:
+MDA should keep the MCP adapter's failure semantics visible:
 
 ```ts
-export const connectors = defineMcpConnectors({
+export const mcp = defineMcpServers({
   onConnectionError: "throw",
+  throwOnLoadError: true,
   mcpServers: {
     docs: {
       transport: "http",
@@ -198,7 +226,7 @@ Recommended defaults:
 - `useStandardContentBlocks: true`
 - `prefixToolNameWithServerName: true`
 
-If a connector is optional, the developer can mark it explicitly:
+Optional connectors can be marked explicitly:
 
 ```ts
 analytics: {
@@ -248,24 +276,36 @@ Required secrets:
 
 Removing a connector from `connectors/mcp.ts` removes it from the deployed agent on the next deploy.
 
-## Out of Scope for POC
+## Future: Managed Connections
 
-- `runtime.connections.get("linear")` typed vendor clients
-- managed OAuth consent flows for third-party SaaS vendors
-- connector marketplace
-- UI-based connector installation
-- per-user OAuth token brokering
-- automatic MCP server hosting
-- non-MCP connector protocols
-- custom connector code beyond normal MCP configuration
+After MCP connectors, MDA can introduce managed connections:
+
+```ts
+const linear = await runtime.connections.get("linear", {
+  scope: "tenant",
+});
+
+await linear.issues.create({ title, body });
+```
+
+This should be treated as a different layer with different responsibilities:
+
+- connection declarations
+- credential storage
+- tenant/user ownership
+- OAuth or setup flows
+- typed vendor clients
+- authorization and approval policies
+- audit records for external side effects
+
+This is valuable, but it should not complicate the MCP connector POC.
 
 ## Open Questions
 
-- Should Python use the same `connectors/mcp.py` convention in v0 or follow after TypeScript?
 - Should stdio MCP servers be allowed in managed deployments, or only local dev and trusted build/runtime environments?
-- Should connector tools be added to every run by default, or should agents be able to lazy-load connector tool groups?
 - How should connector tool calls appear in LangSmith traces: as ordinary tools, MCP tools with server metadata, or both?
+- Should tenant-scoped static secrets be included in v0, or should v0 only support deployment-scoped secrets?
 
 ## Takeaway
 
-For v0, connectors should be a managed MCP tool-loading convention, not a broad integration platform. Developers declare MCP servers using a config shape close to `@langchain/mcp-adapters`; MDA validates them, resolves secrets, loads tools, injects them into the Deep Agent, and owns lifecycle and observability.
+For v0, connectors should be a managed MCP tool-loading convention, not a broad integration platform. Developers define MCP servers in `connectors/mcp.{ts,py}` using a config shape close to `@langchain/mcp-adapters`; MDA validates the config, resolves secrets, loads tools, injects them into the Deep Agent, and owns lifecycle and observability.
