@@ -158,6 +158,17 @@ export function sanitizeToolCallId(toolCallId: string): string {
   return toolCallId.replace(/\./g, "_").replace(/\//g, "_").replace(/\\/g, "_");
 }
 
+// Keep a cut index from splitting a UTF-16 surrogate pair: a high surrogate
+// (0xD800-0xDBFF) at index max-1 would be orphaned by substring(.., max),
+// producing ill-formed UTF-16 that strict consumers (the Anthropic API) reject.
+function surrogateSafeCutIndex(text: string, max: number): number {
+  if (max <= 0 || max >= text.length) {
+    return max;
+  }
+  const before = text.charCodeAt(max - 1);
+  return before >= 0xd800 && before <= 0xdbff ? max - 1 : max;
+}
+
 /**
  * Format file content with line numbers (cat -n style).
  *
@@ -192,10 +203,10 @@ export function formatContentWithLineNumbers(
       );
     } else {
       // Split long line into chunks with continuation markers
-      const numChunks = Math.ceil(line.length / MAX_LINE_LENGTH);
-      for (let chunkIdx = 0; chunkIdx < numChunks; chunkIdx++) {
-        const start = chunkIdx * MAX_LINE_LENGTH;
-        const end = Math.min(start + MAX_LINE_LENGTH, line.length);
+      let start = 0;
+      let chunkIdx = 0;
+      while (start < line.length) {
+        const end = surrogateSafeCutIndex(line, start + MAX_LINE_LENGTH);
         const chunk = line.substring(start, end);
         if (chunkIdx === 0) {
           // First chunk: use normal line number
@@ -209,6 +220,8 @@ export function formatContentWithLineNumbers(
             `${continuationMarker.padStart(LINE_NUMBER_WIDTH)}\t${chunk}`,
           );
         }
+        start = end;
+        chunkIdx++;
       }
     }
   }
@@ -438,11 +451,8 @@ export function truncateIfTooLong(
   }
   // string
   if (result.length > TOOL_RESULT_TOKEN_LIMIT * 4) {
-    return (
-      result.substring(0, TOOL_RESULT_TOKEN_LIMIT * 4) +
-      "\n" +
-      TRUNCATION_GUIDANCE
-    );
+    const cut = surrogateSafeCutIndex(result, TOOL_RESULT_TOKEN_LIMIT * 4);
+    return result.substring(0, cut) + "\n" + TRUNCATION_GUIDANCE;
   }
   return result;
 }
