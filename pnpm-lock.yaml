@@ -681,7 +681,7 @@ importers:
 
   libs/providers/daytona:
     dependencies:
-      '@daytonaio/sdk':
+      '@daytona/sdk':
         specifier: ^0.184.0
         version: 0.184.0(ws@8.21.0)
     devDependencies:
@@ -1199,9 +1199,8 @@ packages:
   '@daytona/toolbox-api-client@0.184.0':
     resolution: {integrity: sha512-uuhJJF0uLAnK6nNM7sgjTErf7NKnrc+kd0AlYjdxsDk7Nad+v0FZeecQZ4GEE4GDSr/Hg3f9SxgHFVY/rGLrCQ==}
 
-  '@daytonaio/sdk@0.184.0':
-    resolution: {integrity: sha512-9dIzN1keoS10DVVXoI1f1WEz/FeJc0iTIv2z21Yg844j2gdCclsvQJVhV3rUHRxinRLSuyr312PIb9/xZEglDg==}
-    deprecated: 'Moved to @daytona/sdk, same API, no breaking changes. Please update: npm uninstall @daytonaio/sdk && npm i @daytona/sdk'
+  '@daytona/sdk@0.184.0':
+    resolution: {integrity: sha512-g5lepSxT2Q9L53LwKc7UnMsuTTAwkTVVlYz/0WpiBFPOzz733UUnM+ehlDELHBV+97FgfBwz8JlDXJe58+VY4A==}
 
   '@deno/sandbox@0.13.2':
     resolution: {integrity: sha512-hteIwQ/mqkJHLrxtcONSCntziOAEWZz0Q2m/Ps4E+HjimLaQxsqpBU0Xn6hin23yf2wOCls336PG9epbMliUOQ==}
@@ -4464,7 +4463,7 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  '@daytonaio/sdk@0.184.0(ws@8.21.0)':
+  '@daytona/sdk@0.184.0(ws@8.21.0)':
     dependencies:
       '@aws-sdk/client-s3': 3.1071.0
       '@aws-sdk/lib-storage': 3.1071.0(@aws-sdk/client-s3@3.1071.0)

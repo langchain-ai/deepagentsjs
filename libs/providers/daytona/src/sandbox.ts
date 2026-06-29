@@ -9,7 +9,7 @@
  * @packageDocumentation
  */
 
-import { Daytona, type Sandbox } from "@daytonaio/sdk";
+import { Daytona, type Sandbox } from "@daytona/sdk";
 import {
   BaseSandbox,
   type ExecuteResponse,

@@ -33,7 +33,7 @@ async function* asyncIterator<T>(items: T[]): AsyncIterableIterator<T> {
 }
 
 // Mock the Daytona SDK with a proper class
-vi.mock("@daytonaio/sdk", () => {
+vi.mock("@daytona/sdk", () => {
   return {
     Daytona: class MockDaytona {
       create = mockDaytonaInstance.create;
