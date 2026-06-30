@@ -693,8 +693,13 @@ function createReadFileTool(
       }
 
       const mimeType = readResult.mimeType ?? getMimeType(file_path);
+      const isInternalEvictedTextArtifact =
+        (file_path.startsWith("/large_tool_results/") ||
+          file_path.startsWith("/conversation_history/")) &&
+        mimeType === "application/octet-stream" &&
+        typeof readResult.content === "string";
 
-      if (!isTextMimeType(mimeType)) {
+      if (!isTextMimeType(mimeType) && !isInternalEvictedTextArtifact) {
         const binaryContent = readResult.content;
         if (!binaryContent) {
           return [
