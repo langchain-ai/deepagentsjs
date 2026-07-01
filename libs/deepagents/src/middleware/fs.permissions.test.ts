@@ -255,6 +255,45 @@ describe("fs tool permissions", () => {
       ).rejects.toThrow();
       expect(backend.edit).not.toHaveBeenCalled();
     });
+
+    it("reports an initial-content write (not '0 occurrence(s)') on the empty-file init path", async () => {
+      const backend = createMockBackend();
+      // Empty old_string on an empty file: performStringReplacement returns
+      // [newString, 0] — content IS written, occurrences is 0.
+      (backend.edit as any).mockResolvedValue({
+        error: null,
+        occurrences: 0,
+        filesUpdate: null,
+      });
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [],
+      });
+
+      const result = await getTool(middleware, "edit_file").invoke({
+        file_path: "/notes.md",
+        old_string: "",
+        new_string: "# Hello\n",
+      });
+      const text = JSON.stringify(result);
+      expect(text).toContain("initial content");
+      expect(text).not.toContain("0 occurrence");
+    });
+
+    it("reports the replacement count for a normal edit", async () => {
+      const backend = createMockBackend(); // edit mock → occurrences: 1
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [],
+      });
+
+      const result = await getTool(middleware, "edit_file").invoke({
+        file_path: "/notes.md",
+        old_string: "a",
+        new_string: "b",
+      });
+      expect(JSON.stringify(result)).toContain("replaced 1 occurrence(s)");
+    });
   });
 
   describe("ls", () => {
