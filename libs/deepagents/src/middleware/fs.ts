@@ -872,8 +872,15 @@ function createEditFileTool(
         return result.error;
       }
 
+      // occurrences === 0 on a non-error result is the empty-file init path
+      // (empty old_string sets initial content; see performStringReplacement).
+      // A genuine no-match returns an "Error: String not found" result above,
+      // so 0 here always means content was written, not a no-op replacement.
       const message = new ToolMessage({
-        content: `Successfully replaced ${result.occurrences} occurrence(s) in '${file_path}'`,
+        content:
+          result.occurrences === 0
+            ? `Successfully wrote initial content to '${file_path}'`
+            : `Successfully replaced ${result.occurrences} occurrence(s) in '${file_path}'`,
         tool_call_id: runtime.toolCall?.id as string,
         name: "edit_file",
         metadata: result.metadata,
