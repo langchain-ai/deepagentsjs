@@ -1,5 +1,31 @@
 # deepagents
 
+## 1.10.6
+
+### Patch Changes
+
+- [#608](https://github.com/langchain-ai/deepagentsjs/pull/608) [`d7ecab2`](https://github.com/langchain-ai/deepagentsjs/commit/d7ecab2d9f9d41321a043eed6edc3366a1381a67) Thanks [@aolsenjazz](https://github.com/aolsenjazz)! - fix(deepagents): forward subagent results as text
+
+  Fixed a 400 `invalid_request_error` that occurred when a subagent used an Anthropic server-side tool (web search, web fetch, or code execution): the subagent's `server_tool_use`/`*_tool_result` blocks were forwarded to the parent agent as `tool_result` content, which the API rejects. Subagent results are now passed back to the parent as their text content (matching the Python implementation), which resolves the error and also handles a trailing empty `end_turn` message.
+
+- [#611](https://github.com/langchain-ai/deepagentsjs/pull/611) [`42f34b6`](https://github.com/langchain-ai/deepagentsjs/commit/42f34b65ededf4a1fbf3cd4bbff486ddfeb320e9) Thanks [@aolsenjazz](https://github.com/aolsenjazz)! - feat(deepagents): add bedrockPromptCachingMiddleware to default stack
+
+  Add bedrockPromptCachingMiddleware to default middleware stack. This automatically opts-in to Bedrock prompt caching for Nova and Anthropic models
+
+- [#613](https://github.com/langchain-ai/deepagentsjs/pull/613) [`0ae10d7`](https://github.com/langchain-ai/deepagentsjs/commit/0ae10d7e26c84203a5273939c9ad7a9c8c8661c6) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): declare LangChain runtime packages as peer dependencies
+
+  Move `@langchain/core`, `@langchain/langgraph`, `@langchain/langgraph-sdk`, and
+  `langchain` from `dependencies` to `peerDependencies`, and also declare
+  `@langchain/langgraph-checkpoint` as a peer (its `BaseCheckpointSaver`/`BaseStore`
+  types are part of the public API), so they resolve to a single shared instance in
+  the consumer's tree. Previously they were bundled as regular
+  dependencies, which let a consumer end up with two copies of `@langchain/core`
+  (e.g. `1.2.0` vs `1.2.1`). Because these packages ship classes with private/
+  protected fields, the duplicate copies are treated as nominally distinct types,
+  producing errors like passing a `ChatOpenAI` model to `createDeepAgent` or a
+  compiled graph to the local protocol helpers. As peers, the app controls the
+  version and bumping `@langchain/core` no longer requires a `deepagents` release.
+
 ## 1.10.5
 
 ### Patch Changes
