@@ -325,6 +325,55 @@ describe("StoreBackend", () => {
       expect(readRes.content).toContain("Hello");
     });
 
+    it("round-trips binary content through a store that persists values as JSON", async () => {
+      // Stores backed by a JSON column (e.g. the Postgres store's JSONB
+      // values) round-trip every value through JSON serialization, which
+      // turns a raw Uint8Array into a numeric-keyed byte map and made any
+      // binary file written through such a store unreadable.
+      const inner = new InMemoryStore();
+      const jsonStore = {
+        put: (namespace: string[], key: string, value: any) =>
+          inner.put(namespace, key, JSON.parse(JSON.stringify(value))),
+        get: (namespace: string[], key: string) => inner.get(namespace, key),
+        search: (namespace: string[], options?: any) =>
+          inner.search(namespace, options),
+        delete: (namespace: string[], key: string) =>
+          inner.delete(namespace, key),
+      };
+      const runtime = {
+        state: { files: {}, messages: [] },
+        store: jsonStore as any,
+      };
+      const backend = new StoreBackend(runtime);
+
+      const pngBytes = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+      const upload = await backend.uploadFiles([["/image.png", pngBytes]]);
+      expect(upload[0].error).toBeNull();
+
+      const raw = await backend.readRaw("/image.png");
+      expect(raw.error).toBeUndefined();
+      expect(raw.data!.content).toBeInstanceOf(Uint8Array);
+      expect(Array.from(raw.data!.content as Uint8Array)).toEqual(
+        Array.from(pngBytes),
+      );
+
+      const download = await backend.downloadFiles(["/image.png"]);
+      expect(download[0].error).toBeNull();
+      expect(Array.from(download[0].content!)).toEqual(Array.from(pngBytes));
+
+      // Text files keep their plain-string store representation.
+      await backend.uploadFiles([
+        ["/note.txt", new TextEncoder().encode("plain text")],
+      ]);
+      const storedText = await inner.get(["filesystem"], "/note.txt");
+      expect(typeof storedText!.value.content).toBe("string");
+      expect(storedText!.value.encoding).toBeUndefined();
+      const readBack = await backend.read("/note.txt");
+      expect(readBack.content).toContain("plain text");
+    });
+
     it("should upload binary (image) files as Uint8Array", async () => {
       const { runtime } = makeConfig();
       const backend = new StoreBackend(runtime);
@@ -467,7 +516,7 @@ describe("StoreBackend", () => {
 
       const full = await backend.read("/img.png");
       const withOffsetLimit = await backend.read("/img.png", 5, 2);
-      expect(withOffsetLimit.content).toBe(full.content);
+      expect(withOffsetLimit.content).toStrictEqual(full.content);
     });
   });
 
