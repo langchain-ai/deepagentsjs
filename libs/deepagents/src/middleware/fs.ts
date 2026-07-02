@@ -658,7 +658,9 @@ function createLsTool(
           .string()
           .optional()
           .default("/")
-          .describe("Directory path to list (default: /)"),
+          .describe(
+            "Absolute path to the directory to list. Must be absolute, not relative.",
+          ),
       }),
     },
   );
@@ -775,17 +777,25 @@ function createReadFileTool(
       name: "read_file",
       description: customDescription || READ_FILE_TOOL_DESCRIPTION,
       schema: z.object({
-        file_path: z.string().describe("Absolute path to the file to read"),
+        file_path: z
+          .string()
+          .describe(
+            "Absolute path to the file to read. Must be absolute, not relative.",
+          ),
         offset: z.coerce
           .number()
           .optional()
           .default(DEFAULT_READ_LINE_OFFSET)
-          .describe("Line offset to start reading from (0-indexed)"),
+          .describe(
+            "Line number to start reading from (0-indexed). Use for pagination of large files.",
+          ),
         limit: z.coerce
           .number()
           .optional()
           .default(DEFAULT_READ_LINE_LIMIT)
-          .describe("Maximum number of lines to read"),
+          .describe(
+            "Maximum number of lines to read. Use for pagination of large files.",
+          ),
       }),
     },
   );
@@ -834,11 +844,17 @@ function createWriteFileTool(
       name: "write_file",
       description: customDescription || WRITE_FILE_TOOL_DESCRIPTION,
       schema: z.object({
-        file_path: z.string().describe("Absolute path to the file to write"),
+        file_path: z
+          .string()
+          .describe(
+            "Absolute path where the file should be created. Must be absolute, not relative.",
+          ),
         content: z
           .string()
           .default("")
-          .describe("Content to write to the file"),
+          .describe(
+            "The text content to write to the file. This parameter is required.",
+          ),
       }),
     },
   );
@@ -893,16 +909,28 @@ function createEditFileTool(
       name: "edit_file",
       description: customDescription || EDIT_FILE_TOOL_DESCRIPTION,
       schema: z.object({
-        file_path: z.string().describe("Absolute path to the file to edit"),
+        file_path: z
+          .string()
+          .describe(
+            "Absolute path to the file to edit. Must be absolute, not relative.",
+          ),
         old_string: z
           .string()
-          .describe("String to be replaced (must match exactly)"),
-        new_string: z.string().describe("String to replace with"),
+          .describe(
+            "The exact text to find and replace. Must be unique in the file unless replace_all is true.",
+          ),
+        new_string: z
+          .string()
+          .describe(
+            "The text to replace old_string with. Must be different from old_string.",
+          ),
         replace_all: z
           .boolean()
           .optional()
           .default(false)
-          .describe("Whether to replace all occurrences"),
+          .describe(
+            "If true, replace all occurrences of old_string. If false (default), old_string must be unique.",
+          ),
       }),
     },
   );
@@ -954,12 +982,16 @@ function createGlobTool(
       name: "glob",
       description: customDescription || GLOB_TOOL_DESCRIPTION,
       schema: z.object({
-        pattern: z.string().describe("Glob pattern (e.g., '*.py', '**/*.ts')"),
+        pattern: z
+          .string()
+          .describe(
+            "Glob pattern to match files (e.g., '**/*.py', '*.txt', '/subdir/**/*.md').",
+          ),
         path: z
           .string()
           .optional()
           .default("/")
-          .describe("Base path to search from (default: /)"),
+          .describe("Base directory to search from. Defaults to root '/'."),
       }),
     },
   );
@@ -1022,18 +1054,22 @@ function createGrepTool(
       name: "grep",
       description: customDescription || GREP_TOOL_DESCRIPTION,
       schema: z.object({
-        pattern: z.string().describe("Regex pattern to search for"),
+        pattern: z
+          .string()
+          .describe("Text pattern to search for (literal string, not regex)."),
         path: z
           .string()
           .optional()
           .default("/")
-          .describe("Base path to search from (default: /)"),
+          .describe("Base directory to search from. Defaults to root '/'."),
         glob: z
           .string()
           .optional()
           .nullable()
           .default(null)
-          .describe("Optional glob pattern to filter files (e.g., '*.py')"),
+          .describe(
+            "Glob pattern to filter which files to search (e.g., '*.py').",
+          ),
       }),
     },
   );
