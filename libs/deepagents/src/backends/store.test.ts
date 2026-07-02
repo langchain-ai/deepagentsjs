@@ -212,6 +212,20 @@ describe("StoreBackend", () => {
     expect(readAfter.content).not.toContain("foo");
   });
 
+  it("greps an exact file path, not only directory prefixes", async () => {
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
+
+    await backend.write("/data/rows.txt", '{"account":"acct-1"}');
+    await backend.write("/data/other.txt", "acct-1 elsewhere");
+
+    const res = await backend.grep("acct-1", "/data/rows.txt");
+    expect(res.error).toBeUndefined();
+    expect(res.matches).toEqual([
+      { path: "/data/rows.txt", line: 1, text: '{"account":"acct-1"}' },
+    ]);
+  });
+
   it("should handle grep with glob filter", async () => {
     const { runtime } = makeConfig();
     const backend = new StoreBackend(runtime);
