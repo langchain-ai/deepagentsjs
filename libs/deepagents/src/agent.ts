@@ -150,6 +150,8 @@ export function createDeepAgent<
   > = readonly [],
   TStateSchema extends AnyStateSchema | InteropZodObject | undefined =
     undefined,
+  const TGeneralPurposeSubagentMiddleware extends readonly AgentMiddleware[] =
+    readonly [],
 >(
   params: CreateDeepAgentParams<
     TResponse,
@@ -158,7 +160,8 @@ export function createDeepAgent<
     TSubagents,
     TTools,
     TStreamTransformers,
-    TStateSchema
+    TStateSchema,
+    TGeneralPurposeSubagentMiddleware
   > = {} as CreateDeepAgentParams<
     TResponse,
     ContextSchema,
@@ -166,7 +169,8 @@ export function createDeepAgent<
     TSubagents,
     TTools,
     TStreamTransformers,
-    TStateSchema
+    TStateSchema,
+    TGeneralPurposeSubagentMiddleware
   >,
 ) {
   const {
@@ -175,6 +179,7 @@ export function createDeepAgent<
     systemPrompt,
     stateSchema,
     middleware: customMiddleware = [],
+    generalPurposeSubagentMiddleware = [],
     subagents = [],
     responseFormat,
     contextSchema,
@@ -324,6 +329,7 @@ export function createDeepAgent<
       model,
       skills,
       tools: effectiveTools,
+      middleware: generalPurposeSubagentMiddleware,
     });
     inlineSubagents.unshift(generalPurposeSpec);
   }
@@ -492,6 +498,7 @@ export function createDeepAgent<
     ...typeof builtInMiddleware,
     ...TMiddleware,
     ...FlattenSubAgentMiddleware<TSubagents>,
+    ...TGeneralPurposeSubagentMiddleware,
   ];
 
   /**

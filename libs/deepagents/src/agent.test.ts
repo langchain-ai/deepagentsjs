@@ -1,8 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
+import { createMiddleware } from "langchain";
+import { fakeModel } from "@langchain/core/testing";
 import { createDeepAgent } from "./agent.js";
 import { isAnthropicModel } from "./utils.js";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
 import {
+  AIMessage,
   HumanMessage,
   SystemMessage,
   type BaseMessage,
@@ -10,7 +13,7 @@ import {
 import { MemorySaver, StateSchema } from "@langchain/langgraph";
 import { createFileData } from "./backends/utils.js";
 import { ConfigurationError } from "./errors.js";
-import { assertAllDeepAgentQualities } from "./testing/utils.js";
+import { assertAllDeepAgentQualities, sampleTool } from "./testing/utils.js";
 import { z } from "zod/v4";
 
 describe("isAnthropicModel", () => {
@@ -169,6 +172,60 @@ describe("Built-in tool name collision detection", () => {
     expect(() =>
       createDeepAgent({ model, tools: [makeTool("my_custom_tool")] }),
     ).not.toThrow();
+  });
+});
+
+describe("General-purpose subagent middleware", () => {
+  it("should apply configured middleware to the auto-created general-purpose subagent", async () => {
+    const wrappedToolNames: string[] = [];
+    const trackingMiddleware = createMiddleware({
+      name: "GeneralPurposeTrackingMiddleware",
+      wrapToolCall: async (request, handler) => {
+        const result = await handler(request);
+        if (request.toolCall?.name) {
+          wrappedToolNames.push(request.toolCall.name);
+        }
+        return result;
+      },
+    });
+
+    const model = fakeModel()
+      .respondWithTools([
+        {
+          name: "task",
+          id: "call_general_purpose",
+          args: {
+            subagent_type: "general-purpose",
+            description: "Call sample_tool with middleware-check.",
+          },
+        },
+      ])
+      .respondWithTools([
+        {
+          name: "sample_tool",
+          id: "call_sample_tool",
+          args: { sample_input: "middleware-check" },
+        },
+      ])
+      .respond(new AIMessage("Subagent finished."))
+      .respond(new AIMessage("Root finished."));
+
+    const agent = createDeepAgent({
+      model,
+      tools: [sampleTool],
+      generalPurposeSubagentMiddleware: [trackingMiddleware],
+    });
+
+    await agent.invoke(
+      {
+        messages: [
+          new HumanMessage("Delegate this to the general-purpose subagent."),
+        ],
+      },
+      { recursionLimit: 100 },
+    );
+
+    expect(wrappedToolNames).toEqual(["sample_tool"]);
   });
 });
 

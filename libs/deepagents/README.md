@@ -107,6 +107,16 @@ const agent = createDeepAgent({
 });
 ```
 
+To extend the built-in general-purpose subagent without replacing DeepAgents'
+default subagent setup, pass middleware through `generalPurposeSubagentMiddleware`:
+
+```typescript
+const agent = createDeepAgent({
+  tools: [myCustomTool],
+  generalPurposeSubagentMiddleware: [sanitizeToolResultsMiddleware],
+});
+```
+
 See the [JavaScript Deep Agents docs](https://docs.langchain.com/oss/javascript/deepagents/overview) for full configuration options.
 
 ## LangGraph Native

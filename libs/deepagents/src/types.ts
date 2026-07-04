@@ -514,6 +514,8 @@ export interface CreateDeepAgentParams<
     readonly [],
   TStateSchema extends AnyStateSchema | InteropZodObject | undefined =
     undefined,
+  TGeneralPurposeSubagentMiddleware extends readonly AgentMiddleware[] =
+    readonly [],
 > {
   /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
   model?: BaseLanguageModel | string;
@@ -551,6 +553,16 @@ export interface CreateDeepAgentParams<
   stateSchema?: TStateSchema;
   /** Custom middleware to apply after standard middleware */
   middleware?: TMiddleware;
+  /**
+   * Additional middleware to append to the automatically-created
+   * general-purpose subagent.
+   *
+   * This is useful when callers need the built-in general-purpose subagent to
+   * preserve DeepAgents' default setup while adding focused behavior such as
+   * tool-result sanitization. Custom subagents should continue to use their own
+   * `middleware` field.
+   */
+  generalPurposeSubagentMiddleware?: TGeneralPurposeSubagentMiddleware;
   /**
    * List of subagent specifications for task delegation.
    *
