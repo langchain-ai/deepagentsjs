@@ -12,6 +12,8 @@ import {
   isFileDataV1,
   migrateToFileDataV2,
   getMimeType,
+  inferMimeTypeFromContent,
+  isLikelyTextContent,
   isTextMimeType,
   adaptBackendProtocol,
   TOOL_RESULT_TOKEN_LIMIT,
@@ -486,6 +488,46 @@ describe("isTextMimeType", () => {
     expect(isTextMimeType("audio/flac")).toBe(false);
     expect(isTextMimeType("video/quicktime")).toBe(false);
     expect(isTextMimeType("application/vnd.ms-powerpoint")).toBe(false);
+  });
+});
+
+describe("isLikelyTextContent", () => {
+  it("should recognize UTF-8 text without an extension", () => {
+    const bytes = new TextEncoder().encode("FROM node:22\nRUN echo hello\n");
+    expect(isLikelyTextContent(bytes)).toBe(true);
+  });
+
+  it("should reject content with NUL bytes", () => {
+    const bytes = new Uint8Array([0x00, 0x01, 0x02, 0x03]);
+    expect(isLikelyTextContent(bytes)).toBe(false);
+  });
+
+  it("should reject invalid UTF-8 bytes", () => {
+    const bytes = new Uint8Array([0xff, 0xfe, 0xfd]);
+    expect(isLikelyTextContent(bytes)).toBe(false);
+  });
+});
+
+describe("inferMimeTypeFromContent", () => {
+  it("should promote unknown UTF-8 content to text/plain", () => {
+    const bytes = new TextEncoder().encode("root = true\n");
+    expect(inferMimeTypeFromContent("application/octet-stream", bytes)).toBe(
+      "text/plain",
+    );
+  });
+
+  it("should keep unknown binary content as application/octet-stream", () => {
+    const bytes = new Uint8Array([0x00, 0x01, 0x02, 0x03]);
+    expect(inferMimeTypeFromContent("application/octet-stream", bytes)).toBe(
+      "application/octet-stream",
+    );
+  });
+
+  it("should not override known binary MIME types", () => {
+    const bytes = new TextEncoder().encode("%PDF text-looking bytes");
+    expect(inferMimeTypeFromContent("application/pdf", bytes)).toBe(
+      "application/pdf",
+    );
   });
 });
 

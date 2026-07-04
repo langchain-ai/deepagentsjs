@@ -414,6 +414,41 @@ describe("FilesystemBackend", () => {
   });
 
   describe("binary file handling", () => {
+    it("should read extensionless UTF-8 files as text/plain", async () => {
+      const root = tmpDir;
+      const filePath = path.join(root, "Dockerfile");
+      await writeFile(filePath, "FROM node:22\nRUN echo hello\n");
+
+      const backend = new FilesystemBackend({
+        rootDir: root,
+        virtualMode: false,
+      });
+
+      const result = await backend.read(filePath);
+      expect(result.error).toBeUndefined();
+      expect(typeof result.content).toBe("string");
+      expect(result.content).toContain("FROM node:22");
+      expect(result.mimeType).toBe("text/plain");
+    });
+
+    it("should keep extensionless binary files as application/octet-stream", async () => {
+      const root = tmpDir;
+      const filePath = path.join(root, "binary");
+      const binaryData = Buffer.from([0x00, 0x01, 0x02, 0x03]);
+      await fs.writeFile(filePath, binaryData);
+
+      const backend = new FilesystemBackend({
+        rootDir: root,
+        virtualMode: false,
+      });
+
+      const result = await backend.read(filePath);
+      expect(result.error).toBeUndefined();
+      expect(result.content).toBeInstanceOf(Uint8Array);
+      expect(result.content).toEqual(new Uint8Array(binaryData));
+      expect(result.mimeType).toBe("application/octet-stream");
+    });
+
     it("should read binary files as Uint8Array", async () => {
       const root = tmpDir;
       // PNG header bytes
@@ -495,6 +530,26 @@ describe("FilesystemBackend", () => {
   });
 
   describe("readRaw", () => {
+    it("should return text/plain for extensionless UTF-8 files", async () => {
+      const root = tmpDir;
+      const filePath = path.join(root, "Dockerfile");
+      await writeFile(filePath, "FROM node:22\nRUN echo hello\n");
+
+      const backend = new FilesystemBackend({
+        rootDir: root,
+        virtualMode: false,
+      });
+
+      const result = await backend.readRaw(filePath);
+      expect(result.error).toBeUndefined();
+      expect(typeof result.data!.content).toBe("string");
+      expect(result.data!.content).toBe("FROM node:22\nRUN echo hello\n");
+      expect("mimeType" in result.data!).toBe(true);
+      expect((result.data! as { mimeType: string }).mimeType).toBe(
+        "text/plain",
+      );
+    });
+
     it("should return v2 format for text files", async () => {
       const root = tmpDir;
       const filePath = path.join(root, "test.txt");

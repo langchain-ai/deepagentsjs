@@ -32,6 +32,7 @@ import type {
 import {
   checkEmptyContent,
   getMimeType,
+  inferMimeTypeFromContent,
   isTextMimeType,
   performStringReplacement,
 } from "./utils.js";
@@ -61,6 +62,21 @@ export class FilesystemBackend implements BackendProtocolV2 {
     this.cwd = rootDir ? path.resolve(rootDir) : process.cwd();
     this.virtualMode = virtualMode;
     this.maxFileSizeBytes = maxFileSizeMb * 1024 * 1024;
+  }
+
+  private static normalizeReadContent(
+    buffer: Uint8Array,
+    mimeType: string,
+  ): { content: string | Uint8Array; mimeType: string } {
+    const inferredMimeType = inferMimeTypeFromContent(mimeType, buffer);
+    if (isTextMimeType(inferredMimeType)) {
+      return {
+        content: Buffer.from(buffer).toString("utf-8"),
+        mimeType: inferredMimeType,
+      };
+    }
+
+    return { content: new Uint8Array(buffer), mimeType: inferredMimeType };
   }
 
   /**
@@ -203,7 +219,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
     try {
       const resolvedPath = this.resolvePath(filePath);
 
-      const mimeType = getMimeType(filePath);
+      let mimeType = getMimeType(filePath);
       const isBinary = !isTextMimeType(mimeType);
 
       let content: string;
@@ -219,9 +235,18 @@ export class FilesystemBackend implements BackendProtocolV2 {
         try {
           if (isBinary) {
             const buffer = await fd.readFile();
-            return { content: new Uint8Array(buffer), mimeType };
+            const normalized = FilesystemBackend.normalizeReadContent(
+              buffer,
+              mimeType,
+            );
+            if (!isTextMimeType(normalized.mimeType)) {
+              return normalized;
+            }
+            content = normalized.content as string;
+            mimeType = normalized.mimeType;
+          } else {
+            content = await fd.readFile({ encoding: "utf-8" });
           }
-          content = await fd.readFile({ encoding: "utf-8" });
         } finally {
           await fd.close();
         }
@@ -235,9 +260,18 @@ export class FilesystemBackend implements BackendProtocolV2 {
         }
         if (isBinary) {
           const buffer = await fs.readFile(resolvedPath);
-          return { content: new Uint8Array(buffer), mimeType };
+          const normalized = FilesystemBackend.normalizeReadContent(
+            buffer,
+            mimeType,
+          );
+          if (!isTextMimeType(normalized.mimeType)) {
+            return normalized;
+          }
+          content = normalized.content as string;
+          mimeType = normalized.mimeType;
+        } else {
+          content = await fs.readFile(resolvedPath, "utf-8");
         }
-        content = await fs.readFile(resolvedPath, "utf-8");
       }
 
       const emptyMsg = checkEmptyContent(content);
@@ -271,7 +305,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
   async readRaw(filePath: string): Promise<ReadRawResult> {
     const resolvedPath = this.resolvePath(filePath);
 
-    const mimeType = getMimeType(filePath);
+    let mimeType = getMimeType(filePath);
     const isBinary = !isTextMimeType(mimeType);
 
     let content: string;
@@ -289,9 +323,14 @@ export class FilesystemBackend implements BackendProtocolV2 {
       try {
         if (isBinary) {
           const buffer = await fd.readFile();
+          const normalized = FilesystemBackend.normalizeReadContent(
+            buffer,
+            mimeType,
+          );
+          mimeType = normalized.mimeType;
           return {
             data: {
-              content: new Uint8Array(buffer),
+              content: normalized.content,
               mimeType,
               created_at: stat.ctime.toISOString(),
               modified_at: stat.mtime.toISOString(),
@@ -312,9 +351,14 @@ export class FilesystemBackend implements BackendProtocolV2 {
       }
       if (isBinary) {
         const buffer = await fs.readFile(resolvedPath);
+        const normalized = FilesystemBackend.normalizeReadContent(
+          buffer,
+          mimeType,
+        );
+        mimeType = normalized.mimeType;
         return {
           data: {
-            content: new Uint8Array(buffer),
+            content: normalized.content,
             mimeType,
             created_at: stat.ctime.toISOString(),
             modified_at: stat.mtime.toISOString(),
@@ -629,12 +673,6 @@ export class FilesystemBackend implements BackendProtocolV2 {
 
     for (const fp of files) {
       try {
-        // Skip binary files
-        const mimeType = getMimeType(fp);
-        if (!isTextMimeType(mimeType)) {
-          continue;
-        }
-
         // Filter by glob if provided
         if (
           includeGlob &&
@@ -650,7 +688,21 @@ export class FilesystemBackend implements BackendProtocolV2 {
         }
 
         // Read and search using literal substring matching
-        const content = await fs.readFile(fp, "utf-8");
+        const mimeType = getMimeType(fp);
+        let content: string;
+        if (isTextMimeType(mimeType)) {
+          content = await fs.readFile(fp, "utf-8");
+        } else {
+          const buffer = await fs.readFile(fp);
+          const normalized = FilesystemBackend.normalizeReadContent(
+            buffer,
+            mimeType,
+          );
+          if (!isTextMimeType(normalized.mimeType)) {
+            continue;
+          }
+          content = normalized.content as string;
+        }
         const lines = content.split("\n");
 
         for (let i = 0; i < lines.length; i++) {

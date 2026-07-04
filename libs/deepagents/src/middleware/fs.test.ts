@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import * as fs from "node:fs/promises";
+import * as fsSync from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import {
   fileDataReducer,
   type FilesRecord,
@@ -7,6 +11,7 @@ import {
   NUM_CHARS_PER_TOKEN,
   TOOLS_EXCLUDED_FROM_EVICTION,
 } from "./fs.js";
+import { FilesystemBackend } from "../backends/filesystem.js";
 import type { FileData, BackendProtocolV2 } from "../backends/protocol.js";
 import {
   SystemMessage,
@@ -1014,6 +1019,42 @@ describe("createFilesystemMiddleware", () => {
   });
 
   describe("tools", () => {
+    it("read_file should return text for extensionless UTF-8 files", async () => {
+      const tmpDir = fsSync.mkdtempSync(
+        path.join(os.tmpdir(), "deepagents-fs-tool-"),
+      );
+
+      try {
+        await fs.writeFile(
+          path.join(tmpDir, "Dockerfile"),
+          "FROM node:22\nRUN echo hello\n",
+          "utf-8",
+        );
+
+        const middleware = createFilesystemMiddleware({
+          backend: new FilesystemBackend({
+            rootDir: tmpDir,
+            virtualMode: true,
+          }),
+        });
+        const readFileTool = middleware.tools!.find(
+          (t: any) => t.name === "read_file",
+        ) as any;
+
+        const result = await readFileTool.invoke({
+          file_path: "/Dockerfile",
+        });
+
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({
+          type: "text",
+          text: expect.stringContaining("FROM node:22"),
+        });
+      } finally {
+        await fs.rm(tmpDir, { recursive: true, force: true });
+      }
+    });
+
     it("write_file schema should accept missing content and default to empty string", () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),

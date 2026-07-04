@@ -6,6 +6,7 @@
  * enable composition without fragile string parsing.
  */
 
+import { TextDecoder } from "node:util";
 import micromatch from "micromatch";
 import type {
   AnyBackendProtocol,
@@ -137,6 +138,9 @@ const MIME_TYPES: Record<string, string> = {
   ".editorconfig": "text/plain",
 };
 
+const UNKNOWN_BINARY_MIME_TYPE = "application/octet-stream";
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+
 function basename(filePath: string): string {
   const normalized = filePath.replace(/\\/g, "/");
   const slashIdx = normalized.lastIndexOf("/");
@@ -255,6 +259,56 @@ export function isFileDataBinary(
   data: FileData,
 ): data is FileDataV2 & { content: Uint8Array } {
   return ArrayBuffer.isView(data.content);
+}
+
+/**
+ * Check whether unknown binary-looking bytes are actually UTF-8 text.
+ *
+ * This is intentionally conservative: known binary MIME types stay binary, and
+ * only application/octet-stream content can be promoted to text/plain.
+ */
+export function isLikelyTextContent(content: Uint8Array): boolean {
+  if (content.length === 0) {
+    return true;
+  }
+
+  let decoded: string;
+  try {
+    decoded = utf8Decoder.decode(content);
+  } catch {
+    return false;
+  }
+
+  let suspiciousControlChars = 0;
+  for (let i = 0; i < decoded.length; i++) {
+    const charCode = decoded.charCodeAt(i);
+    const allowedControlChar =
+      charCode === 0x09 || // tab
+      charCode === 0x0a || // line feed
+      charCode === 0x0c || // form feed
+      charCode === 0x0d; // carriage return
+
+    if (charCode === 0 || (charCode < 0x20 && !allowedControlChar)) {
+      suspiciousControlChars += 1;
+    }
+  }
+
+  return suspiciousControlChars / decoded.length <= 0.01;
+}
+
+/**
+ * Promote unknown octet-stream content to text/plain when its bytes look like
+ * ordinary UTF-8 text. Known MIME types are left unchanged.
+ */
+export function inferMimeTypeFromContent(
+  mimeType: string,
+  content: Uint8Array,
+): string {
+  if (mimeType !== UNKNOWN_BINARY_MIME_TYPE) {
+    return mimeType;
+  }
+
+  return isLikelyTextContent(content) ? "text/plain" : mimeType;
 }
 
 /**
