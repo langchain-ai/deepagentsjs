@@ -16,7 +16,8 @@ import {
   StructuredTool,
   context,
 } from "langchain";
-import { Command, getCurrentTaskInput } from "@langchain/langgraph";
+import { Command, getCurrentTaskInput, getWriter } from "@langchain/langgraph";
+import { randomUUID } from "crypto";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
@@ -46,15 +47,17 @@ export const DEFAULT_SUBAGENT_PROMPT =
  *
  * When returning updates:
  * 1. The messages key is handled explicitly to ensure only the final message is included
- * 2. The todos and structuredResponse keys are excluded as they do not have a defined reducer
- *    and no clear meaning for returning them from a subagent to the main agent.
+ * 2. The structuredResponse key is excluded as it has no defined reducer and no clear meaning
+ *    for returning from a subagent to the main agent.
  * 3. The skillsMetadata and memoryContents keys are automatically excluded from subagent output
  *    to prevent parent state from leaking to child agents. Each agent loads its own skills/memory
  *    independently based on its middleware configuration.
+ *
+ * Note: todos flows through so subagents can mark their assigned parent todos as completed.
+ * The parent's todosReducer merges by id, so parallel subagent updates are safe.
  */
 const EXCLUDED_STATE_KEYS = [
   "messages",
-  "todos",
   "structuredResponse",
   "skillsMetadata",
   "memoryContents",
@@ -415,7 +418,10 @@ export const GENERAL_PURPOSE_SUBAGENT: Pick<
 } as const;
 
 /**
- * Filter state to exclude certain keys when passing to subagents
+ * Filter state to exclude certain keys when passing INTO subagents.
+ *
+ * The input path is a denylist: a subagent inherits the parent's context
+ * (jwt, ids, mode, …) minus the keys that must not leak down.
  */
 function filterStateForSubagent(
   state: Record<string, unknown>,
@@ -425,6 +431,36 @@ function filterStateForSubagent(
     if (!EXCLUDED_STATE_KEYS.includes(key as never)) {
       filtered[key] = value;
     }
+  }
+  return filtered;
+}
+
+/**
+ * Channels a subagent may write BACK to the parent on completion.
+ *
+ * The return path is an ALLOWLIST, not a denylist. A subagent's output is
+ * its final message (handled separately as a ToolMessage) plus the
+ * reducer-backed channels it legitimately accumulates into — `todos` (the
+ * parent's todosReducer merges by id) and `files` (fileDataReducer merges
+ * by path). Everything else it carries is inherited PARENT context (jwt,
+ * websiteId, mode, accountId, error, …); echoing those back means every one
+ * of N parallel coders writes the same channel in one superstep, and any
+ * plain LastValue channel throws "LastValue can only receive one value per
+ * step" (traces fe0786e3: `error`, fa4945ba: `jwt`). Allowlisting the
+ * mergeable channels stops the whole crash class at the source — no parent
+ * scalar is ever echoed, so future inherited fields can't reintroduce it.
+ */
+export const RETURN_STATE_ALLOWLIST = ["todos", "files"] as const;
+
+/**
+ * Filter a subagent's final state to only the channels it may write back.
+ */
+export function filterReturnState(
+  state: Record<string, unknown>,
+): Record<string, unknown> {
+  const filtered: Record<string, unknown> = {};
+  for (const key of RETURN_STATE_ALLOWLIST) {
+    if (key in state) filtered[key] = state[key];
   }
   return filtered;
 }
@@ -445,7 +481,7 @@ function returnCommandWithStateUpdate(
   result: Record<string, unknown>,
   toolCallId: string,
 ): Command {
-  const stateUpdate = filterStateForSubagent(result);
+  const stateUpdate = filterReturnState(result);
 
   let content: string | ContentBlock[];
 
@@ -631,6 +667,7 @@ function createTaskTool(options: {
   subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
   taskDescription: string | null;
+  subagentTypeDescription: string | null;
 }) {
   const {
     defaultModel,
@@ -641,6 +678,7 @@ function createTaskTool(options: {
     subagents,
     generalPurposeAgent,
     taskDescription,
+    subagentTypeDescription,
   } = options;
 
   const {
@@ -682,10 +720,10 @@ function createTaskTool(options: {
 
   return tool(
     async (
-      input: { description: string; subagent_type: string },
+      input: { description: string; subagent_type: string; todo_id?: string },
       config,
     ): Promise<Command | string> => {
-      const { description, subagent_type } = input;
+      const { description, subagent_type, todo_id } = input;
 
       if (!(subagent_type in subagentGraphs)) {
         const allowedTypes = Object.keys(subagentGraphs)
@@ -698,10 +736,35 @@ function createTaskTool(options: {
 
       const subagent = selectSubagent(subagent_type, config);
 
+      // Capture the stream writer BEFORE subagent.invoke() — the subagent's
+      // graph invocation replaces the AsyncLocalStorage context, so getWriter()
+      // returns undefined after invoke() completes.
+      let streamWriter: ((data: unknown) => void) | undefined;
+      try {
+        const w = getWriter(config) ?? getWriter();
+        if (typeof w === "function") {
+          streamWriter = w;
+        } else if (
+          w &&
+          typeof (w as { write?: unknown }).write === "function"
+        ) {
+          streamWriter = (data: unknown) =>
+            (w as { write: (d: unknown) => void }).write(data);
+        }
+      } catch {
+        // writer not available outside graph streaming context
+      }
+
       const currentState = getCurrentTaskInput<Record<string, unknown>>();
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
 
+      // callerId: a fresh per-dispatch identity (fork delta). Stock mints no
+      // stable per-sync-subagent id, so a shared backend can't tell parallel
+      // coders apart for optimistic-concurrency purposes. Stamping it here in
+      // configurable makes it ambient (readable via getConfig()) for the
+      // subagent's whole run — and each dispatch (incl. nested sub-coders)
+      // gets a distinct one, so per-caller read-shasum tracking works.
       const subagentConfig = {
         ...config,
         metadata: {
@@ -711,12 +774,40 @@ function createTaskTool(options: {
         configurable: {
           ...config.configurable,
           ls_agent_type: "subagent",
+          callerId: randomUUID(),
         },
       };
       const result = (await subagent.invoke(
         subagentState,
         subagentConfig,
       )) as Record<string, unknown>;
+
+      // Auto-mark the assigned parent todo as completed when the subagent finishes.
+      if (todo_id) {
+        const todos = (result.todos ?? currentState.todos) as
+          | Array<{ id: string; status: string; content: string }>
+          | undefined;
+        if (todos) {
+          result.todos = todos.map((t) =>
+            t.id === todo_id ? { ...t, status: "completed" } : t,
+          );
+
+          // Emit immediately via writer() — bypasses Promise.all batching so the
+          // frontend sees this todo flip to completed right away instead of all
+          // at once after every parallel subagent resolves.
+          if (streamWriter) {
+            try {
+              streamWriter({
+                id: randomUUID(),
+                event: "__state_patch__",
+                todos: result.todos,
+              });
+            } catch {
+              // emit failed — falls back to normal state update after Promise.all
+            }
+          }
+        }
+      }
 
       if (!config.toolCall?.id) {
         if (result.structuredResponse != null) {
@@ -754,7 +845,14 @@ function createTaskTool(options: {
         subagent_type: z
           .string()
           .describe(
-            `Name of the agent to use. Available: ${Object.keys(subagentGraphs).join(", ")}`,
+            subagentTypeDescription ??
+              `Name of the agent to use. Available: ${Object.keys(subagentGraphs).join(", ")}`,
+          ),
+        todo_id: z
+          .string()
+          .optional()
+          .describe(
+            "ID of the parent todo item to automatically mark as completed when this task finishes. Pass this to get real-time progress tracking.",
           ),
       }),
     },
@@ -786,6 +884,15 @@ export interface SubAgentMiddlewareOptions {
   generalPurposeAgent?: boolean;
   /** Custom description for the task tool */
   taskDescription?: string | null;
+  /**
+   * Override the `subagent_type` schema-field description. Defaults to
+   * `"Name of the agent to use. Available: <roster>"`. Pass a roster-free
+   * constant to keep the task tool's wire bytes identical across agents that
+   * register different subagent sets (cache-prefix stability); the dispatch
+   * roster can then be delivered out-of-band (e.g. a tail reminder). The name
+   * is still validated against the registered graphs at dispatch.
+   */
+  subagentTypeDescription?: string | null;
 }
 
 /**
@@ -802,6 +909,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     systemPrompt = TASK_SYSTEM_PROMPT,
     generalPurposeAgent = true,
     taskDescription = null,
+    subagentTypeDescription = null,
   } = options;
 
   const taskTool = createTaskTool({
@@ -813,6 +921,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     subagents,
     generalPurposeAgent,
     taskDescription,
+    subagentTypeDescription,
   });
 
   return createMiddleware({

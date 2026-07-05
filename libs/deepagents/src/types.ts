@@ -559,6 +559,23 @@ export interface CreateDeepAgentParams<
    * at runtime and wired to the async SubAgent middleware.
    */
   subagents?: TSubagents;
+  /**
+   * Override the `task` tool's top-level description (the prose shown to the
+   * model). When set, replaces the default roster-bearing description built by
+   * `getTaskToolDescription`. Forwarded to `createSubAgentMiddleware`. Use a
+   * roster-free constant to keep the task tool byte-identical across agents that
+   * register different subagent sets — the prompt-cache prefix then stays stable
+   * across tiers. Deliver the actual roster out-of-band (e.g. a tail reminder).
+   */
+  taskDescription?: string | null;
+  /**
+   * Override the `task` tool's `subagent_type` schema-field description. Without
+   * this, the field embeds `"Available: <roster>"`, which diverges per agent and
+   * re-breaks the shared cache prefix one field below `taskDescription`. Pair the
+   * two and carry the roster out-of-band. `subagent_type` is still validated at
+   * dispatch, so a roster-free description does not weaken correctness.
+   */
+  subagentTypeDescription?: string | null;
   /** Structured output response format for the agent (Zod schema or other format) */
   responseFormat?: TResponse;
   /** Optional schema for context (not persisted between invocations) */

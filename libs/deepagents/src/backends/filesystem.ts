@@ -119,6 +119,10 @@ export class FilesystemBackend implements BackendProtocolV2 {
         : this.cwd + path.sep;
 
       for (const entry of entries) {
+        // Hide node_modules from directory listings — the render pipeline may
+        // have a shared dependency baseline symlinked here (see glob()); it's
+        // infrastructure, not part of the agent's editable tree.
+        if (entry.name === "node_modules") continue;
         const fullPath = path.join(resolvedPath, entry.name);
 
         try {
@@ -619,12 +623,16 @@ export class FilesystemBackend implements BackendProtocolV2 {
     const stat = await fs.stat(baseFull);
     const root = stat.isDirectory() ? baseFull : path.dirname(baseFull);
 
-    // Use fast-glob to recursively find all files
+    // Use fast-glob to recursively find all files. node_modules is ignored
+    // for the same reason as glob(): a symlinked dependency baseline may be
+    // live in the workspace, and following it would sweep ~20k dep files
+    // into a literal search.
     const files = await fg("**/*", {
       cwd: root,
       absolute: true,
       onlyFiles: true,
       dot: true,
+      ignore: ["**/node_modules/**"],
     });
 
     for (const fp of files) {
@@ -709,12 +717,17 @@ export class FilesystemBackend implements BackendProtocolV2 {
     const results: FileInfo[] = [];
 
     try {
-      // Use fast-glob for pattern matching
+      // Use fast-glob for pattern matching.
+      // node_modules is ignored EXPLICITLY: the render pipeline symlinks a
+      // shared dependency baseline into the workspace for the life of a
+      // pooled dev server, and fast-glob follows symlinked directories — an
+      // unguarded broad glob would descend into ~20k dependency files.
       const matches = await fg(pattern, {
         cwd: resolvedSearchPath,
         absolute: true,
         onlyFiles: true,
         dot: true,
+        ignore: ["**/node_modules/**"],
       });
 
       for (const matchedPath of matches) {

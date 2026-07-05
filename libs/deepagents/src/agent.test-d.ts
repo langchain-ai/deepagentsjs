@@ -141,6 +141,7 @@ describe("createDeepAgent types", () => {
       expectTypeOf(result).toHaveProperty("todos");
       expectTypeOf(result.todos).toEqualTypeOf<
         {
+          id?: string;
           content: string;
           status: "pending" | "in_progress" | "completed";
         }[]

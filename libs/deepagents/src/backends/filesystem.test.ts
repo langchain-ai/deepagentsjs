@@ -42,6 +42,37 @@ describe("FilesystemBackend", () => {
     await removeDir(tmpDir);
   });
 
+  // A render pipeline may symlink a shared dependency baseline (node_modules)
+  // into the workspace for the life of a pooled dev server. fast-glob follows
+  // symlinked directories, so without an explicit ignore a broad glob would
+  // descend into ~20k dependency files — and ls would surface the link as an
+  // editable entry. Both must hide node_modules entirely.
+  it("hides node_modules (even a symlinked one) from glob, ls, and grep fallback", async () => {
+    const root = tmpDir;
+    await writeFile(path.join(root, "src", "app.ts"), "export const searchable = 1;");
+    // A "baseline" OUTSIDE the workspace, symlinked in as node_modules —
+    // exactly the render pool's shape.
+    const baseline = createTempDir();
+    await writeFile(path.join(baseline, "dep", "index.ts"), "export const searchable = 2;");
+    await fs.symlink(baseline, path.join(root, "node_modules"), "dir");
+    try {
+      const backend = new FilesystemBackend({ rootDir: root, virtualMode: true });
+
+      const globbed = await backend.glob("**/*.ts");
+      expect(globbed.files!.map((f) => f.path)).toEqual(["/src/app.ts"]);
+
+      const listed = await backend.ls("/");
+      expect(listed.files!.map((f) => f.path)).not.toContain("/node_modules/");
+      expect(listed.files!.some((f) => f.path.includes("node_modules"))).toBe(false);
+
+      const grepped = await backend.grep("searchable");
+      expect(grepped.matches!.every((m) => !m.path.includes("node_modules"))).toBe(true);
+      expect(grepped.matches!.some((m) => m.path === "/src/app.ts")).toBe(true);
+    } finally {
+      await removeDir(baseline);
+    }
+  });
+
   it("should work in normal mode with absolute paths", async () => {
     const root = tmpDir;
     const f1 = path.join(root, "a.txt");

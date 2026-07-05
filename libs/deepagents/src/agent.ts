@@ -4,12 +4,12 @@ import {
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
   bedrockPromptCachingMiddleware,
-  todoListMiddleware,
   SystemMessage,
   type AgentMiddleware,
   type AnyAgentMiddleware,
   context,
 } from "langchain";
+import { todoListMiddleware } from "./middleware/todos.js";
 import type {
   ClientTool,
   ServerTool,
@@ -176,6 +176,8 @@ export function createDeepAgent<
     stateSchema,
     middleware: customMiddleware = [],
     subagents = [],
+    taskDescription,
+    subagentTypeDescription,
     responseFormat,
     contextSchema,
     checkpointer,
@@ -348,6 +350,8 @@ export function createDeepAgent<
       defaultInterruptOn: interruptOn,
       subagents: inlineSubagents,
       generalPurposeAgent: false,
+      taskDescription,
+      subagentTypeDescription,
     }),
     // Automatically summarizes conversation history when token limits are approached.
     // Uses createSummarizationMiddleware (deepagents version) with backend support
