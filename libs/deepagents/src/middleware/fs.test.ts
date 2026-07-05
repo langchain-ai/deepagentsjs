@@ -1048,6 +1048,58 @@ describe("createFilesystemMiddleware", () => {
         }
       }
     });
+
+    it("read_file returns a text note for non-PDF binaries instead of an unsendable document block", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.read = vi.fn().mockResolvedValue({
+        content: Buffer.from([0x00, 0x01, 0x02, 0x03]),
+        mimeType: "application/octet-stream",
+      });
+      vi.mocked(getCurrentTaskInput).mockReturnValue({
+        messages: [],
+        files: {},
+      });
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+      const readFileTool = middleware.tools!.find(
+        (t: any) => t.name === "read_file",
+      ) as any;
+
+      const result = await readFileTool.invoke({ file_path: "/logo.bin" });
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result[0].type).toBe("text");
+      expect(result[0].text).toContain("/logo.bin");
+      expect(JSON.stringify(result)).not.toContain('"type":"file"');
+    });
+
+    it("read_file still returns a document block for application/pdf", async () => {
+      const pdf = Buffer.from("%PDF-1.4 fake pdf bytes");
+      const mockBackend = createMockBackend();
+      mockBackend.read = vi.fn().mockResolvedValue({
+        content: pdf,
+        mimeType: "application/pdf",
+      });
+      vi.mocked(getCurrentTaskInput).mockReturnValue({
+        messages: [],
+        files: {},
+      });
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+      const readFileTool = middleware.tools!.find(
+        (t: any) => t.name === "read_file",
+      ) as any;
+
+      const result = await readFileTool.invoke({ file_path: "/doc.pdf" });
+
+      expect(result[0].type).toBe("file");
+      expect(result[0].mimeType).toBe("application/pdf");
+      expect(result[0].data).toBe(pdf.toString("base64"));
+    });
   });
 
   describe("tool result truncation integration", () => {

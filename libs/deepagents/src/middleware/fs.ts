@@ -739,7 +739,18 @@ function createReadFileTool(
         if (mimeType.startsWith("video/")) {
           return [{ type: "video", mimeType, data: base64Data }];
         }
-        return [{ type: "file", mimeType, data: base64Data }];
+        // Providers only accept application/pdf for base64 document blocks;
+        // any other binary type is rejected (e.g. Anthropic 400s). Surface a
+        // note instead of emitting an unsendable block.
+        if (mimeType === "application/pdf") {
+          return [{ type: "file", mimeType, data: base64Data }];
+        }
+        return [
+          {
+            type: "text",
+            text: `Cannot read '${file_path}': unsupported binary file type (${mimeType}).`,
+          },
+        ];
       }
 
       let content =
