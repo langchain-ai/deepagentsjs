@@ -739,7 +739,30 @@ function createReadFileTool(
         if (mimeType.startsWith("video/")) {
           return [{ type: "video", mimeType, data: base64Data }];
         }
-        return [{ type: "file", mimeType, data: base64Data }];
+        // PDF is the only binary document type accepted as a `file`/document
+        // content block across the major providers: Anthropic requires
+        // media_type "application/pdf" for base64 document sources, and
+        // OpenAI/OpenRouter only accept PDF (and images) via `input_file`.
+        // Emitting a `file` block for any other binary (e.g. .docx/.pptx/.xlsx
+        // or application/octet-stream) produces a request the provider rejects
+        // — Anthropic, for instance, fails the whole turn with
+        // "messages.N...document.source.base64.media_type: Input should be
+        // 'application/pdf'". Degrade unsupported binaries to an informative
+        // text note so the agent can keep going instead of crashing the run.
+        if (mimeType === "application/pdf") {
+          return [{ type: "file", mimeType, data: base64Data }];
+        }
+        const sizeKb = Math.max(1, Math.round(sizeBytes / 1024));
+        return [
+          {
+            type: "text",
+            text:
+              `Note: '${file_path}' is a binary ${mimeType} file (~${sizeKb} KB). ` +
+              `Its bytes are not text and it is not a model-readable document type ` +
+              `(only PDF and images can be embedded), so its contents were not read. ` +
+              `Use shell/execute tools (e.g. \`unzip\`, \`file\`, \`strings\`) if you need to inspect it.`,
+          },
+        ];
       }
 
       let content =
