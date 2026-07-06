@@ -136,14 +136,11 @@ const MIME_TYPES: Record<string, string> = {
   ".dockerignore": "text/plain",
   ".editorconfig": "text/plain",
 
-  // ABAP / SAP (abapGit)
-  // path.extname() on compound names like "foo.clas.abap" returns only the
-  // last segment (.abap), so a single entry covers all ABAP source objects.
   ".abap": "text/plain",
-  ".asddls": "text/plain", // CDS view definitions
-  ".asdtmd": "text/plain", // CDS metadata extensions
-  ".ddls": "text/plain", // Data Definition Language (CDS alternative)
-  ".ddlx": "text/plain", // CDS access control extensions
+  ".asddls": "text/plain",
+  ".asdtmd": "text/plain",
+  ".ddls": "text/plain",
+  ".ddlx": "text/plain",
 };
 
 function basename(filePath: string): string {

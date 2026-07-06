@@ -465,13 +465,10 @@ describe("getMimeType", () => {
   });
 
   it("should return text/plain for ABAP/SAP extensions", () => {
-    // Simple .abap
     expect(getMimeType("/foo.abap")).toBe("text/plain");
-    // Compound abapGit names — extname() returns only the last segment
     expect(getMimeType("/ZCL_MY_CLASS.clas.abap")).toBe("text/plain");
     expect(getMimeType("/ZREPORT.prog.abap")).toBe("text/plain");
     expect(getMimeType("/ZFM_FUNC.fugr.abap")).toBe("text/plain");
-    // CDS and DDL extensions
     expect(getMimeType("/ZI_MYVIEW.asddls")).toBe("text/plain");
     expect(getMimeType("/ZI_MYVIEW.asdtmd")).toBe("text/plain");
     expect(getMimeType("/ZI_MYVIEW.ddls")).toBe("text/plain");
