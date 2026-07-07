@@ -446,6 +446,17 @@ describe("getMimeType", () => {
     expect(getMimeType("/page.html")).toBe("text/html");
   });
 
+  it("should return text/plain for known text filenames without normal extensions", () => {
+    expect(getMimeType("/.env.example")).toBe("text/plain");
+    expect(getMimeType("/.env.local")).toBe("text/plain");
+    expect(getMimeType("/.gitignore")).toBe("text/plain");
+    expect(getMimeType("/.dockerignore")).toBe("text/plain");
+    expect(getMimeType("/.editorconfig")).toBe("text/plain");
+    expect(getMimeType("/Dockerfile")).toBe("text/plain");
+    expect(getMimeType("/Makefile")).toBe("text/plain");
+    expect(getMimeType("/LICENSE")).toBe("text/plain");
+  });
+
   it("should return application/json for .json files", () => {
     expect(getMimeType("/data.json")).toBe("application/json");
   });
