@@ -1,0 +1,22 @@
+libs/deepagents/src/backends/utils.test.ts
+  s_1e69f89bde7929::t_ace0fd1d351560 457-468
+libs/deepagents/src/backends/utils.ts
+  s_1e69f89bde7929::t_5320749408f36e 822-829,832,836
+  s_1e69f89bde7929::t_d53ac81d488319 72-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e533052e56234abee8dff01a36433e87de817b0e",
+  "prompts": {},
+  "sessions": {
+    "s_1e69f89bde7929": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4120fcc0-a9c5-4dd0-a89e-38901f7d1370",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
