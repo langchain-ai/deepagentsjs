@@ -1,0 +1,21 @@
+libs/providers/modal/src/sandbox.ts
+  s_1e69f89bde7929::t_e505c955c8b793 12
+libs/providers/modal/src/sandbox.test.ts
+  s_1e69f89bde7929::t_e35b85284a323a 125,131,135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d186ce0dfad0fd8228ee20185b2a6f350d1f221e",
+  "prompts": {},
+  "sessions": {
+    "s_1e69f89bde7929": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4120fcc0-a9c5-4dd0-a89e-38901f7d1370",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
