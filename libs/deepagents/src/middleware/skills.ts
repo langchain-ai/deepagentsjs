@@ -304,7 +304,7 @@ const SKILLS_SYSTEM_PROMPT = context`
   User: "Can you research the latest developments in quantum computing?"
 
   1. Check available skills above → See "web-research" skill with its full path
-  2. Read the full skill file: \`read_file(path, limit=${DEFAULT_SKILL_READ_LINE_LIMIT})\`
+  2. Read the full skill file: \`read_file(file_path, limit=${DEFAULT_SKILL_READ_LINE_LIMIT})\`
   3. Follow the skill's research workflow (search → organize → synthesize)
   4. Use any helper scripts with absolute paths
 
