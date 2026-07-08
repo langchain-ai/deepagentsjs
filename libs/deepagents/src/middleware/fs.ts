@@ -793,19 +793,22 @@ function createReadFileTool(
     {
       name: "read_file",
       description: customDescription || READ_FILE_TOOL_DESCRIPTION,
-      schema: z.preprocess(normalizeFilePathInput, z.object({
-        file_path: z.string().describe("Absolute path to the file to read"),
-        offset: z.coerce
-          .number()
-          .optional()
-          .default(DEFAULT_READ_LINE_OFFSET)
-          .describe("Line offset to start reading from (0-indexed)"),
-        limit: z.coerce
-          .number()
-          .optional()
-          .default(DEFAULT_READ_LINE_LIMIT)
-          .describe("Maximum number of lines to read"),
-      })),
+      schema: z.preprocess(
+        normalizeFilePathInput,
+        z.object({
+          file_path: z.string().describe("Absolute path to the file to read"),
+          offset: z.coerce
+            .number()
+            .optional()
+            .default(DEFAULT_READ_LINE_OFFSET)
+            .describe("Line offset to start reading from (0-indexed)"),
+          limit: z.coerce
+            .number()
+            .optional()
+            .default(DEFAULT_READ_LINE_LIMIT)
+            .describe("Maximum number of lines to read"),
+        }),
+      ),
     },
   );
 }
@@ -852,13 +855,16 @@ function createWriteFileTool(
     {
       name: "write_file",
       description: customDescription || WRITE_FILE_TOOL_DESCRIPTION,
-      schema: z.preprocess(normalizeFilePathInput, z.object({
-        file_path: z.string().describe("Absolute path to the file to write"),
-        content: z
-          .string()
-          .default("")
-          .describe("Content to write to the file"),
-      })),
+      schema: z.preprocess(
+        normalizeFilePathInput,
+        z.object({
+          file_path: z.string().describe("Absolute path to the file to write"),
+          content: z
+            .string()
+            .default("")
+            .describe("Content to write to the file"),
+        }),
+      ),
     },
   );
 }
@@ -911,18 +917,21 @@ function createEditFileTool(
     {
       name: "edit_file",
       description: customDescription || EDIT_FILE_TOOL_DESCRIPTION,
-      schema: z.preprocess(normalizeFilePathInput, z.object({
-        file_path: z.string().describe("Absolute path to the file to edit"),
-        old_string: z
-          .string()
-          .describe("String to be replaced (must match exactly)"),
-        new_string: z.string().describe("String to replace with"),
-        replace_all: z
-          .boolean()
-          .optional()
-          .default(false)
-          .describe("Whether to replace all occurrences"),
-      })),
+      schema: z.preprocess(
+        normalizeFilePathInput,
+        z.object({
+          file_path: z.string().describe("Absolute path to the file to edit"),
+          old_string: z
+            .string()
+            .describe("String to be replaced (must match exactly)"),
+          new_string: z.string().describe("String to replace with"),
+          replace_all: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe("Whether to replace all occurrences"),
+        }),
+      ),
     },
   );
 }

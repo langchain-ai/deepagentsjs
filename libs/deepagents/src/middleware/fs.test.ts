@@ -1054,22 +1054,38 @@ describe("createFilesystemMiddleware", () => {
         backend: createMockBackend(),
       });
 
-      const readFileTool = middleware.tools!.find((t: any) => t.name === "read_file") as any;
-      const writeFileTool = middleware.tools!.find((t: any) => t.name === "write_file") as any;
-      const editFileTool = middleware.tools!.find((t: any) => t.name === "edit_file") as any;
+      const readFileTool = middleware.tools!.find(
+        (t: any) => t.name === "read_file",
+      ) as any;
+      const writeFileTool = middleware.tools!.find(
+        (t: any) => t.name === "write_file",
+      ) as any;
+      const editFileTool = middleware.tools!.find(
+        (t: any) => t.name === "edit_file",
+      ) as any;
 
       // Verify read_file normalization
-      const parsedRead = readFileTool.schema.parse({ path: "/foo/bar.txt", limit: 10 });
+      const parsedRead = readFileTool.schema.parse({
+        path: "/foo/bar.txt",
+        limit: 10,
+      });
       expect(parsedRead.file_path).toBe("/foo/bar.txt");
       expect(parsedRead.limit).toBe(10);
 
       // Verify write_file normalization
-      const parsedWrite = writeFileTool.schema.parse({ path: "/foo/bar.txt", content: "hello" });
+      const parsedWrite = writeFileTool.schema.parse({
+        path: "/foo/bar.txt",
+        content: "hello",
+      });
       expect(parsedWrite.file_path).toBe("/foo/bar.txt");
       expect(parsedWrite.content).toBe("hello");
 
       // Verify edit_file normalization
-      const parsedEdit = editFileTool.schema.parse({ path: "/foo/bar.txt", old_string: "a", new_string: "b" });
+      const parsedEdit = editFileTool.schema.parse({
+        path: "/foo/bar.txt",
+        old_string: "a",
+        new_string: "b",
+      });
       expect(parsedEdit.file_path).toBe("/foo/bar.txt");
       expect(parsedEdit.old_string).toBe("a");
       expect(parsedEdit.new_string).toBe("b");
