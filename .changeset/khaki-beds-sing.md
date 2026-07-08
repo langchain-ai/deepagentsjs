@@ -2,4 +2,4 @@
 "@langchain/modal": patch
 ---
 
-fix(modal): modal low level handle open `sandbox.open` has been removed
+fix(modal): modal low level handle api `sandbox.open` has been removed
