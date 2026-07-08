@@ -69,8 +69,9 @@ const MIME_TYPES: Record<string, string> = {
   ".pptx":
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 
-  // text / code — explicit entries so these don't fall through to the
-  // "application/octet-stream" default meant for truly unknown binaries.
+  // text / code — explicit entries give a specific MIME type (e.g.
+  // text/markdown, text/css, application/json) rather than the generic
+  // "text/plain" default that unknown extensions fall through to.
   ".txt": "text/plain",
   ".md": "text/markdown",
   ".markdown": "text/markdown",
@@ -818,17 +819,20 @@ export function formatGrepMatches(
 /**
  * Determine MIME type from a file path's extension.
  *
- * Returns "application/octet-stream" for unknown extensions so that
- * binary files are not accidentally treated as text (grep, read_file,
- * etc. rely on {@link isTextMimeType} which would return true for
- * "text/plain").
+ * Defaults to "text/plain" for unknown extensions. Only the known non-text
+ * formats above (images, audio, video, PDF/PPT) are treated as binary by
+ * {@link isTextMimeType}; everything else reads as text, including source files
+ * with uncommon extensions (.properties, .scss, .tf) and extension-less files
+ * (Dockerfile, mvnw). This avoids base64-encoding text into document blocks,
+ * which the model can't read and which the Anthropic provider rejects with a
+ * 400.
  *
  * @param filePath - File path to inspect
- * @returns MIME type string (e.g., "image/png", "application/octet-stream")
+ * @returns MIME type string (e.g., "image/png", "text/plain")
  */
 export function getMimeType(filePath: string): string {
   const ext = extname(filePath).toLocaleLowerCase();
-  return MIME_TYPES[ext] || "application/octet-stream";
+  return MIME_TYPES[ext] || "text/plain";
 }
 
 /**
