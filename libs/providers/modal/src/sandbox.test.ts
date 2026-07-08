@@ -94,6 +94,11 @@ vi.mock("./auth.js", () => ({
 
 // Mock the modal module with factory
 vi.mock("modal", () => {
+  // Mirror the typed not-found error thrown by the real `sandbox.filesystem`
+  // API. Its message is opaque server text (no "not found"/"enoent"), so
+  // `#mapError` must classify it by type.
+  class SandboxFilesystemNotFoundError extends Error {}
+
   /**
    * Mock Sandbox class that simulates the Modal SDK behavior.
    */
@@ -132,7 +137,9 @@ vi.mock("modal", () => {
         }
         const content = this.files.get(remotePath);
         if (content === undefined) {
-          throw new Error(`File not found: ${remotePath}`);
+          throw new SandboxFilesystemNotFoundError(
+            `path does not exist: ${remotePath}`,
+          );
         }
         return content;
       },
@@ -252,6 +259,7 @@ vi.mock("modal", () => {
 
   return {
     ModalClient: MockModalClient,
+    SandboxFilesystemNotFoundError,
   };
 });
 

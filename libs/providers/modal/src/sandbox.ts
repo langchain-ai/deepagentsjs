@@ -9,7 +9,7 @@
  * @packageDocumentation
  */
 
-import { ModalClient } from "modal";
+import { ModalClient, SandboxFilesystemNotFoundError } from "modal";
 import type { App, Sandbox, Image, SandboxCreateParams } from "modal";
 import {
   BaseSandbox,
@@ -563,6 +563,12 @@ export class ModalSandbox extends BaseSandbox {
    * @returns A standardized error code
    */
   #mapError(error: unknown): FileOperationError {
+    // The filesystem API's not-found error carries an opaque server-side
+    // message, so classify it by type rather than by message substring.
+    if (error instanceof SandboxFilesystemNotFoundError) {
+      return "file_not_found";
+    }
+
     if (error instanceof Error) {
       const msg = error.message.toLowerCase();
 
