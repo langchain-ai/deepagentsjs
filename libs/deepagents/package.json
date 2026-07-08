@@ -104,7 +104,7 @@
     "@langchain/langgraph-checkpoint": "^1.1.2",
     "@langchain/langgraph-sdk": "^1.9.23",
     "langchain": "^1.5.0",
-    "langsmith": "^0.7.1"
+    "langsmith": "^0.8.0"
   },
   "files": [
     "dist/**/*"
