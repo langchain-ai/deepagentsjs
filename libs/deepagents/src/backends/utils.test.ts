@@ -454,14 +454,18 @@ describe("getMimeType", () => {
     expect(getMimeType("/app.js")).toBe("application/javascript");
   });
 
-  it("should return application/octet-stream for unknown extensions", () => {
-    expect(getMimeType("/unknown.xyz")).toBe("application/octet-stream");
-    expect(getMimeType("/archive.zip")).toBe("application/octet-stream");
-    expect(getMimeType("/binary.exe")).toBe("application/octet-stream");
-    expect(getMimeType("/data.wasm")).toBe("application/octet-stream");
-    expect(getMimeType("/db.sqlite")).toBe("application/octet-stream");
-    expect(getMimeType("/compiled.pyc")).toBe("application/octet-stream");
-    expect(getMimeType("/package.jar")).toBe("application/octet-stream");
+  it("should default to text/plain for unknown extensions", () => {
+    // Matches Python deepagents, which classifies unrecognized extensions as
+    // text. Unknown extensions (including uncommon source files and genuine
+    // binaries with no explicit mapping) read as text rather than being
+    // base64-encoded into document blocks.
+    expect(getMimeType("/unknown.xyz")).toBe("text/plain");
+    expect(getMimeType("/config.properties")).toBe("text/plain");
+    expect(getMimeType("/style.scss")).toBe("text/plain");
+    expect(getMimeType("/main.hcl")).toBe("text/plain");
+    expect(getMimeType("/pnpm-lock.lock")).toBe("text/plain");
+    expect(getMimeType("/Dockerfile")).toBe("text/plain");
+    expect(getMimeType("/mvnw")).toBe("text/plain");
   });
 });
 
