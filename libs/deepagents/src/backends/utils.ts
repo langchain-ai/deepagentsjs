@@ -819,14 +819,13 @@ export function formatGrepMatches(
 /**
  * Determine MIME type from a file path's extension.
  *
- * Defaults to "text/plain" for unknown extensions, matching the Python
- * deepagents behavior where `_get_file_type` classifies unrecognized
- * extensions as text. Only the known non-text formats above (images, audio,
- * video, PDF/PPT) are treated as binary by {@link isTextMimeType}; everything
- * else — source files with uncommon extensions (.properties, .scss, .tf) and
- * extension-less files (Dockerfile, mvnw) — reads as text. This avoids
- * base64-encoding text into document blocks, which the model can't read and
- * which the Anthropic provider rejects with a 400.
+ * Defaults to "text/plain" for unknown extensions. Only the known non-text
+ * formats above (images, audio, video, PDF/PPT) are treated as binary by
+ * {@link isTextMimeType}; everything else reads as text, including source files
+ * with uncommon extensions (.properties, .scss, .tf) and extension-less files
+ * (Dockerfile, mvnw). This avoids base64-encoding text into document blocks,
+ * which the model can't read and which the Anthropic provider rejects with a
+ * 400.
  *
  * @param filePath - File path to inspect
  * @returns MIME type string (e.g., "image/png", "text/plain")
