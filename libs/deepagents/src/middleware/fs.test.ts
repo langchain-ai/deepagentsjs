@@ -1048,6 +1048,32 @@ describe("createFilesystemMiddleware", () => {
         }
       }
     });
+
+    it("read_file examples only reference argument names in its schema", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+      });
+
+      const readFileTool = middleware.tools!.find(
+        (t: any) => t.name === "read_file",
+      ) as any;
+      expect(readFileTool).toBeDefined();
+
+      // Argument names the tool actually accepts.
+      const schemaKeys = Object.keys(
+        readFileTool.schema.toJSONSchema().properties ?? {},
+      );
+      // Argument names the description teaches, e.g. read_file(file_path, ...).
+      const exampleArgs = [
+        ...String(readFileTool.description).matchAll(/read_file\(([a-z_]+)/g),
+      ].map((m) => m[1]);
+
+      // Guard against silently passing if the examples are ever removed.
+      expect(exampleArgs.length).toBeGreaterThan(0);
+      for (const arg of exampleArgs) {
+        expect(schemaKeys).toContain(arg);
+      }
+    });
   });
 
   describe("tool result truncation integration", () => {

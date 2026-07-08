@@ -487,10 +487,10 @@ export const READ_FILE_TOOL_DESCRIPTION = context`
   Usage:
   - By default, it reads up to ${DEFAULT_READ_LINE_LIMIT} lines starting from the beginning of the file
   - **IMPORTANT for large files and codebase exploration**: Use pagination with offset and limit parameters to avoid context overflow
-    - First scan: read_file(path, limit=${DEFAULT_READ_LINE_LIMIT}) to see file structure
-    - Read more sections: read_file(path, offset=${DEFAULT_READ_LINE_LIMIT}, limit=200) for next 200 lines
+    - First scan: read_file(file_path, limit=${DEFAULT_READ_LINE_LIMIT}) to see file structure
+    - Read more sections: read_file(file_path, offset=${DEFAULT_READ_LINE_LIMIT}, limit=200) for next 200 lines
     - Only omit limit (read full file) when necessary for editing
-  - Specify offset and limit: read_file(path, offset=0, limit=${DEFAULT_READ_LINE_LIMIT}) reads first ${DEFAULT_READ_LINE_LIMIT} lines
+  - Specify offset and limit: read_file(file_path, offset=0, limit=${DEFAULT_READ_LINE_LIMIT}) reads first ${DEFAULT_READ_LINE_LIMIT} lines
   - Results are returned using cat -n format, with line numbers starting at 1
 - Lines longer than ${INT_FORMATTER.format(MAX_LINE_LENGTH)} characters will be split into multiple lines with continuation markers (e.g., 5.1, 5.2, etc.). When you specify a limit, these continuation lines count towards the limit.
   - You have the capability to call multiple tools in a single response. It is always better to speculatively read multiple files as a batch that are potentially useful.
