@@ -9,7 +9,12 @@
  * @packageDocumentation
  */
 
-import { ModalClient } from "modal";
+import {
+  ModalClient,
+  SandboxFilesystemNotFoundError,
+  SandboxFilesystemIsADirectoryError,
+  SandboxFilesystemPermissionError,
+} from "modal";
 import type { App, Sandbox, Image, SandboxCreateParams } from "modal";
 import {
   BaseSandbox,
@@ -413,21 +418,9 @@ export class ModalSandbox extends BaseSandbox {
 
     for (const [path, content] of files) {
       try {
-        // Ensure parent directory exists
-        const parentDir = path.substring(0, path.lastIndexOf("/"));
-        if (parentDir) {
-          await sandbox
-            .exec(["mkdir", "-p", parentDir], {
-              stdout: "pipe",
-              stderr: "pipe",
-            })
-            .then((p) => p.wait());
-        }
-
-        // Write the file content using Modal's file API
-        const writeHandle = await sandbox.open(path, "w");
-        await writeHandle.write(content);
-        await writeHandle.close();
+        // Write the file content using Modal's filesystem API. `writeBytes`
+        // takes (data, remotePath) and creates parent directories as needed.
+        await sandbox.filesystem.writeBytes(content, path);
 
         results.push({ path, error: null });
       } catch (error) {
@@ -465,10 +458,8 @@ export class ModalSandbox extends BaseSandbox {
 
     for (const path of paths) {
       try {
-        // Read the file content using Modal's file API
-        const readHandle = await sandbox.open(path, "r");
-        const content = await readHandle.read();
-        await readHandle.close();
+        // Read the file content using Modal's filesystem API.
+        const content = await sandbox.filesystem.readBytes(path);
 
         results.push({
           path,
@@ -578,6 +569,18 @@ export class ModalSandbox extends BaseSandbox {
    * @returns A standardized error code
    */
   #mapError(error: unknown): FileOperationError {
+    // Prefer the typed errors thrown by the `sandbox.filesystem` API.
+    if (error instanceof SandboxFilesystemNotFoundError) {
+      return "file_not_found";
+    }
+    if (error instanceof SandboxFilesystemIsADirectoryError) {
+      return "is_directory";
+    }
+    if (error instanceof SandboxFilesystemPermissionError) {
+      return "permission_denied";
+    }
+
+    // Fall back to message heuristics for errors thrown by `exec` and others.
     if (error instanceof Error) {
       const msg = error.message.toLowerCase();
 

@@ -34,7 +34,10 @@ interface MockSandboxType {
     args: string[],
     options: { stdout: string; stderr: string },
   ) => Promise<MockProcessType>;
-  open: (path: string, mode: string) => Promise<MockFileHandleType>;
+  filesystem: {
+    writeBytes: (data: Uint8Array, remotePath: string) => Promise<void>;
+    readBytes: (remotePath: string) => Promise<Uint8Array>;
+  };
   terminate: () => Promise<void>;
   poll: () => Promise<number | null>;
   wait: () => Promise<number>;
@@ -44,12 +47,6 @@ interface MockProcessType {
   stdout: { readText: () => Promise<string> };
   stderr: { readText: () => Promise<string> };
   wait: () => Promise<number>;
-}
-
-interface MockFileHandleType {
-  read: () => Promise<Uint8Array>;
-  write: (data: Uint8Array) => Promise<void>;
-  close: () => Promise<void>;
 }
 
 interface MockClientType {
@@ -97,6 +94,13 @@ vi.mock("./auth.js", () => ({
 
 // Mock the modal module with factory
 vi.mock("modal", () => {
+  // Mirror the typed errors thrown by the real `sandbox.filesystem` API so
+  // `#mapError`'s instanceof checks resolve against these mock classes.
+  class SandboxFilesystemError extends Error {}
+  class SandboxFilesystemNotFoundError extends SandboxFilesystemError {}
+  class SandboxFilesystemIsADirectoryError extends SandboxFilesystemError {}
+  class SandboxFilesystemPermissionError extends SandboxFilesystemError {}
+
   /**
    * Mock Sandbox class that simulates the Modal SDK behavior.
    */
@@ -120,6 +124,27 @@ vi.mock("modal", () => {
     // Error simulation flags
     shouldFailOpen = false;
 
+    // Mock of the Modal SDK `sandbox.filesystem` API. Arrow functions capture
+    // `this` so they read the live `shouldFailOpen` flag and `files` map.
+    filesystem = {
+      writeBytes: async (data: Uint8Array, remotePath: string) => {
+        if (this.shouldFailOpen) {
+          throw new SandboxFilesystemPermissionError("permission denied");
+        }
+        this.files.set(remotePath, data);
+      },
+      readBytes: async (remotePath: string) => {
+        if (this.shouldFailOpen) {
+          throw new SandboxFilesystemPermissionError("permission denied");
+        }
+        const content = this.files.get(remotePath);
+        if (content === undefined) {
+          throw new SandboxFilesystemNotFoundError(`not found: ${remotePath}`);
+        }
+        return content;
+      },
+    };
+
     constructor(sandboxId: string = "sb-mock-123") {
       this.sandboxId = sandboxId;
     }
@@ -140,46 +165,15 @@ vi.mock("modal", () => {
 
     // SDK methods
     async exec(
-      args: string[],
+      _args: string[],
       _options: { stdout: string; stderr: string },
     ): Promise<MockProcessType> {
       const result = { ...this.nextCommandResult };
-
-      // Check if this is a mkdir command - always succeed
-      if (args[0] === "mkdir") {
-        return {
-          stdout: { readText: async () => "" },
-          stderr: { readText: async () => "" },
-          wait: async () => 0,
-        };
-      }
 
       return {
         stdout: { readText: async () => result.stdout },
         stderr: { readText: async () => result.stderr },
         wait: async () => result.exitCode,
-      };
-    }
-
-    async open(path: string, _mode: string): Promise<MockFileHandleType> {
-      if (this.shouldFailOpen) {
-        throw new Error("File operation failed: permission denied");
-      }
-
-      // Capture files reference for the returned object's methods
-      const files = this.files;
-      return {
-        read: async () => {
-          const content = files.get(path);
-          if (content === undefined) {
-            throw new Error(`File not found: ${path}`);
-          }
-          return content;
-        },
-        write: async (data: Uint8Array) => {
-          files.set(path, data);
-        },
-        close: async () => {},
       };
     }
 
@@ -264,6 +258,9 @@ vi.mock("modal", () => {
 
   return {
     ModalClient: MockModalClient,
+    SandboxFilesystemNotFoundError,
+    SandboxFilesystemIsADirectoryError,
+    SandboxFilesystemPermissionError,
   };
 });
 
@@ -572,7 +569,7 @@ describe("ModalSandbox", () => {
   // ==========================================================================
 
   describe("execute", () => {
-    it("should call SDK exec with bash -c", async () => {
+    it("should call SDK exec with sh -c", async () => {
       const sandbox = await ModalSandbox.create();
 
       // Spy on exec
@@ -580,7 +577,7 @@ describe("ModalSandbox", () => {
 
       await sandbox.execute("echo hello");
 
-      expect(execSpy).toHaveBeenCalledWith(["bash", "-c", "echo hello"], {
+      expect(execSpy).toHaveBeenCalledWith(["sh", "-c", "echo hello"], {
         stdout: "pipe",
         stderr: "pipe",
       });
@@ -645,13 +642,16 @@ describe("ModalSandbox", () => {
   describe("uploadFiles", () => {
     it("should write content to sandbox", async () => {
       const sandbox = await ModalSandbox.create();
-      const openSpy = vi.spyOn(mockState.sandboxInstance!, "open");
+      const writeSpy = vi.spyOn(
+        mockState.sandboxInstance!.filesystem,
+        "writeBytes",
+      );
 
       const content = new TextEncoder().encode("file content");
       await sandbox.uploadFiles([["test.txt", content]]);
 
-      // open is called for writing the file
-      expect(openSpy).toHaveBeenCalledWith("test.txt", "w");
+      // writeBytes is called with (data, remotePath) to write the file
+      expect(writeSpy).toHaveBeenCalledWith(content, "test.txt");
     });
 
     it("should upload multiple files", async () => {
