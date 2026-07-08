@@ -1,5 +1,11 @@
 # @langchain/daytona
 
+## 0.2.1
+
+### Patch Changes
+
+- [#614](https://github.com/langchain-ai/deepagentsjs/pull/614) [`5b462f2`](https://github.com/langchain-ai/deepagentsjs/commit/5b462f2ab2400fba52906e8f1485a500ec5b6e17) Thanks [@christian-bromann](https://github.com/christian-bromann)! - Replace deprecated `@daytonaio/sdk` dependency with `@daytona/sdk`.
+
 ## 0.2.0
 
 ## 0.2.0

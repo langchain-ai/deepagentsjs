@@ -1,5 +1,11 @@
 # @langchain/modal
 
+## 0.1.5
+
+### Patch Changes
+
+- [#657](https://github.com/langchain-ai/deepagentsjs/pull/657) [`5f93c11`](https://github.com/langchain-ai/deepagentsjs/commit/5f93c114759399002a3981a93e3df13981514b1d) Thanks [@colifran](https://github.com/colifran)! - fix(modal): modal low level file handle api `sandbox.open` has been removed
+
 ## 0.1.4
 
 ### Patch Changes
