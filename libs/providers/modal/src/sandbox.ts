@@ -9,7 +9,7 @@
  * @packageDocumentation
  */
 
-import { ModalClient } from "modal";
+import { ModalClient, SandboxFilesystemNotFoundError } from "modal";
 import type { App, Sandbox, Image, SandboxCreateParams } from "modal";
 import {
   BaseSandbox,
@@ -302,16 +302,11 @@ export class ModalSandbox extends BaseSandbox {
     const filesToUpload: Array<[string, Uint8Array]> = [];
 
     for (const [filePath, content] of Object.entries(files)) {
-      // Normalize the path - remove leading slash if present for consistency
-      const normalizedPath = filePath.startsWith("/")
-        ? filePath.slice(1)
-        : filePath;
-
       // Convert string content to Uint8Array
       const data =
         typeof content === "string" ? encoder.encode(content) : content;
 
-      filesToUpload.push([normalizedPath, data]);
+      filesToUpload.push([filePath, data]);
     }
 
     // Use the existing uploadFiles method
@@ -412,22 +407,12 @@ export class ModalSandbox extends BaseSandbox {
     const results: FileUploadResponse[] = [];
 
     for (const [path, content] of files) {
+      // `sandbox.filesystem` requires an absolute path.
+      const remotePath = path.startsWith("/") ? path : `/${path}`;
       try {
-        // Ensure parent directory exists
-        const parentDir = path.substring(0, path.lastIndexOf("/"));
-        if (parentDir) {
-          await sandbox
-            .exec(["mkdir", "-p", parentDir], {
-              stdout: "pipe",
-              stderr: "pipe",
-            })
-            .then((p) => p.wait());
-        }
-
-        // Write the file content using Modal's file API
-        const writeHandle = await sandbox.open(path, "w");
-        await writeHandle.write(content);
-        await writeHandle.close();
+        // Write the file content using Modal's filesystem API. `writeBytes`
+        // takes (data, remotePath) and creates parent directories as needed.
+        await sandbox.filesystem.writeBytes(content, remotePath);
 
         results.push({ path, error: null });
       } catch (error) {
@@ -464,11 +449,11 @@ export class ModalSandbox extends BaseSandbox {
     const results: FileDownloadResponse[] = [];
 
     for (const path of paths) {
+      // `sandbox.filesystem` requires an absolute path.
+      const remotePath = path.startsWith("/") ? path : `/${path}`;
       try {
-        // Read the file content using Modal's file API
-        const readHandle = await sandbox.open(path, "r");
-        const content = await readHandle.read();
-        await readHandle.close();
+        // Read the file content using Modal's filesystem API.
+        const content = await sandbox.filesystem.readBytes(remotePath);
 
         results.push({
           path,
@@ -578,6 +563,12 @@ export class ModalSandbox extends BaseSandbox {
    * @returns A standardized error code
    */
   #mapError(error: unknown): FileOperationError {
+    // The filesystem API's not-found error carries an opaque server-side
+    // message, so classify it by type rather than by message substring.
+    if (error instanceof SandboxFilesystemNotFoundError) {
+      return "file_not_found";
+    }
+
     if (error instanceof Error) {
       const msg = error.message.toLowerCase();
 
