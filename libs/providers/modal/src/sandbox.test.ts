@@ -94,13 +94,6 @@ vi.mock("./auth.js", () => ({
 
 // Mock the modal module with factory
 vi.mock("modal", () => {
-  // Mirror the typed errors thrown by the real `sandbox.filesystem` API so
-  // `#mapError`'s instanceof checks resolve against these mock classes.
-  class SandboxFilesystemError extends Error {}
-  class SandboxFilesystemNotFoundError extends SandboxFilesystemError {}
-  class SandboxFilesystemIsADirectoryError extends SandboxFilesystemError {}
-  class SandboxFilesystemPermissionError extends SandboxFilesystemError {}
-
   /**
    * Mock Sandbox class that simulates the Modal SDK behavior.
    */
@@ -129,17 +122,17 @@ vi.mock("modal", () => {
     filesystem = {
       writeBytes: async (data: Uint8Array, remotePath: string) => {
         if (this.shouldFailOpen) {
-          throw new SandboxFilesystemPermissionError("permission denied");
+          throw new Error("File operation failed: permission denied");
         }
         this.files.set(remotePath, data);
       },
       readBytes: async (remotePath: string) => {
         if (this.shouldFailOpen) {
-          throw new SandboxFilesystemPermissionError("permission denied");
+          throw new Error("File operation failed: permission denied");
         }
         const content = this.files.get(remotePath);
         if (content === undefined) {
-          throw new SandboxFilesystemNotFoundError(`not found: ${remotePath}`);
+          throw new Error(`File not found: ${remotePath}`);
         }
         return content;
       },
@@ -258,9 +251,6 @@ vi.mock("modal", () => {
 
   return {
     ModalClient: MockModalClient,
-    SandboxFilesystemNotFoundError,
-    SandboxFilesystemIsADirectoryError,
-    SandboxFilesystemPermissionError,
   };
 });
 

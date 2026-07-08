@@ -9,12 +9,7 @@
  * @packageDocumentation
  */
 
-import {
-  ModalClient,
-  SandboxFilesystemNotFoundError,
-  SandboxFilesystemIsADirectoryError,
-  SandboxFilesystemPermissionError,
-} from "modal";
+import { ModalClient } from "modal";
 import type { App, Sandbox, Image, SandboxCreateParams } from "modal";
 import {
   BaseSandbox,
@@ -569,18 +564,6 @@ export class ModalSandbox extends BaseSandbox {
    * @returns A standardized error code
    */
   #mapError(error: unknown): FileOperationError {
-    // Prefer the typed errors thrown by the `sandbox.filesystem` API.
-    if (error instanceof SandboxFilesystemNotFoundError) {
-      return "file_not_found";
-    }
-    if (error instanceof SandboxFilesystemIsADirectoryError) {
-      return "is_directory";
-    }
-    if (error instanceof SandboxFilesystemPermissionError) {
-      return "permission_denied";
-    }
-
-    // Fall back to message heuristics for errors thrown by `exec` and others.
     if (error instanceof Error) {
       const msg = error.message.toLowerCase();
 
