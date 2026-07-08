@@ -42,6 +42,25 @@ import {
 const INT_FORMATTER = new Intl.NumberFormat("en-US");
 
 /**
+ * Normalizes tool input so that models sending `path` instead of `file_path`
+ * still work. If the input has `path` but not `file_path`, copies `path` into
+ * `file_path`. This makes the filesystem tools resilient to parameter-name
+ * variations across models of different capability levels.
+ */
+function normalizeFilePathInput(input: unknown): unknown {
+  if (
+    typeof input === "object" &&
+    input !== null &&
+    "path" in input &&
+    !("file_path" in input)
+  ) {
+    const { path, ...rest } = input as Record<string, unknown>;
+    return { ...rest, file_path: path };
+  }
+  return input;
+}
+
+/**
  * Import langchain for type inference
  */
 import type * as _langchain from "langchain";
@@ -487,10 +506,10 @@ export const READ_FILE_TOOL_DESCRIPTION = context`
   Usage:
   - By default, it reads up to ${DEFAULT_READ_LINE_LIMIT} lines starting from the beginning of the file
   - **IMPORTANT for large files and codebase exploration**: Use pagination with offset and limit parameters to avoid context overflow
-    - First scan: read_file(path, limit=${DEFAULT_READ_LINE_LIMIT}) to see file structure
-    - Read more sections: read_file(path, offset=${DEFAULT_READ_LINE_LIMIT}, limit=200) for next 200 lines
+    - First scan: read_file(file_path, limit=${DEFAULT_READ_LINE_LIMIT}) to see file structure
+    - Read more sections: read_file(file_path, offset=${DEFAULT_READ_LINE_LIMIT}, limit=200) for next 200 lines
     - Only omit limit (read full file) when necessary for editing
-  - Specify offset and limit: read_file(path, offset=0, limit=${DEFAULT_READ_LINE_LIMIT}) reads first ${DEFAULT_READ_LINE_LIMIT} lines
+  - Specify offset and limit: read_file(file_path, offset=0, limit=${DEFAULT_READ_LINE_LIMIT}) reads first ${DEFAULT_READ_LINE_LIMIT} lines
   - Results are returned using cat -n format, with line numbers starting at 1
 - Lines longer than ${INT_FORMATTER.format(MAX_LINE_LENGTH)} characters will be split into multiple lines with continuation markers (e.g., 5.1, 5.2, etc.). When you specify a limit, these continuation lines count towards the limit.
   - You have the capability to call multiple tools in a single response. It is always better to speculatively read multiple files as a batch that are potentially useful.
@@ -774,7 +793,7 @@ function createReadFileTool(
     {
       name: "read_file",
       description: customDescription || READ_FILE_TOOL_DESCRIPTION,
-      schema: z.object({
+      schema: z.preprocess(normalizeFilePathInput, z.object({
         file_path: z.string().describe("Absolute path to the file to read"),
         offset: z.coerce
           .number()
@@ -786,7 +805,7 @@ function createReadFileTool(
           .optional()
           .default(DEFAULT_READ_LINE_LIMIT)
           .describe("Maximum number of lines to read"),
-      }),
+      })),
     },
   );
 }
@@ -833,13 +852,13 @@ function createWriteFileTool(
     {
       name: "write_file",
       description: customDescription || WRITE_FILE_TOOL_DESCRIPTION,
-      schema: z.object({
+      schema: z.preprocess(normalizeFilePathInput, z.object({
         file_path: z.string().describe("Absolute path to the file to write"),
         content: z
           .string()
           .default("")
           .describe("Content to write to the file"),
-      }),
+      })),
     },
   );
 }
@@ -892,7 +911,7 @@ function createEditFileTool(
     {
       name: "edit_file",
       description: customDescription || EDIT_FILE_TOOL_DESCRIPTION,
-      schema: z.object({
+      schema: z.preprocess(normalizeFilePathInput, z.object({
         file_path: z.string().describe("Absolute path to the file to edit"),
         old_string: z
           .string()
@@ -903,7 +922,7 @@ function createEditFileTool(
           .optional()
           .default(false)
           .describe("Whether to replace all occurrences"),
-      }),
+      })),
     },
   );
 }

@@ -1048,6 +1048,58 @@ describe("createFilesystemMiddleware", () => {
         }
       }
     });
+
+    it("filesystem schemas should normalize 'path' parameter to 'file_path'", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+      });
+
+      const readFileTool = middleware.tools!.find((t: any) => t.name === "read_file") as any;
+      const writeFileTool = middleware.tools!.find((t: any) => t.name === "write_file") as any;
+      const editFileTool = middleware.tools!.find((t: any) => t.name === "edit_file") as any;
+
+      // Verify read_file normalization
+      const parsedRead = readFileTool.schema.parse({ path: "/foo/bar.txt", limit: 10 });
+      expect(parsedRead.file_path).toBe("/foo/bar.txt");
+      expect(parsedRead.limit).toBe(10);
+
+      // Verify write_file normalization
+      const parsedWrite = writeFileTool.schema.parse({ path: "/foo/bar.txt", content: "hello" });
+      expect(parsedWrite.file_path).toBe("/foo/bar.txt");
+      expect(parsedWrite.content).toBe("hello");
+
+      // Verify edit_file normalization
+      const parsedEdit = editFileTool.schema.parse({ path: "/foo/bar.txt", old_string: "a", new_string: "b" });
+      expect(parsedEdit.file_path).toBe("/foo/bar.txt");
+      expect(parsedEdit.old_string).toBe("a");
+      expect(parsedEdit.new_string).toBe("b");
+    });
+
+    it("read_file examples only reference argument names in its schema", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+      });
+
+      const readFileTool = middleware.tools!.find(
+        (t: any) => t.name === "read_file",
+      ) as any;
+      expect(readFileTool).toBeDefined();
+
+      // Argument names the tool actually accepts.
+      const schemaKeys = Object.keys(
+        readFileTool.schema.toJSONSchema().properties ?? {},
+      );
+      // Argument names the description teaches, e.g. read_file(file_path, ...).
+      const exampleArgs = [
+        ...String(readFileTool.description).matchAll(/read_file\(([a-z_]+)/g),
+      ].map((m) => m[1]);
+
+      // Guard against silently passing if the examples are ever removed.
+      expect(exampleArgs.length).toBeGreaterThan(0);
+      for (const arg of exampleArgs) {
+        expect(schemaKeys).toContain(arg);
+      }
+    });
   });
 
   describe("tool result truncation integration", () => {
