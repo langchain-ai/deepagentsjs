@@ -302,16 +302,11 @@ export class ModalSandbox extends BaseSandbox {
     const filesToUpload: Array<[string, Uint8Array]> = [];
 
     for (const [filePath, content] of Object.entries(files)) {
-      // Normalize the path - remove leading slash if present for consistency
-      const normalizedPath = filePath.startsWith("/")
-        ? filePath.slice(1)
-        : filePath;
-
       // Convert string content to Uint8Array
       const data =
         typeof content === "string" ? encoder.encode(content) : content;
 
-      filesToUpload.push([normalizedPath, data]);
+      filesToUpload.push([filePath, data]);
     }
 
     // Use the existing uploadFiles method
@@ -412,10 +407,12 @@ export class ModalSandbox extends BaseSandbox {
     const results: FileUploadResponse[] = [];
 
     for (const [path, content] of files) {
+      // `sandbox.filesystem` requires an absolute path.
+      const remotePath = path.startsWith("/") ? path : `/${path}`;
       try {
         // Write the file content using Modal's filesystem API. `writeBytes`
         // takes (data, remotePath) and creates parent directories as needed.
-        await sandbox.filesystem.writeBytes(content, path);
+        await sandbox.filesystem.writeBytes(content, remotePath);
 
         results.push({ path, error: null });
       } catch (error) {
@@ -452,9 +449,11 @@ export class ModalSandbox extends BaseSandbox {
     const results: FileDownloadResponse[] = [];
 
     for (const path of paths) {
+      // `sandbox.filesystem` requires an absolute path.
+      const remotePath = path.startsWith("/") ? path : `/${path}`;
       try {
         // Read the file content using Modal's filesystem API.
-        const content = await sandbox.filesystem.readBytes(path);
+        const content = await sandbox.filesystem.readBytes(remotePath);
 
         results.push({
           path,

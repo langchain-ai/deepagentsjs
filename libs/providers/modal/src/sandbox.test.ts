@@ -151,9 +151,10 @@ vi.mock("modal", () => {
       };
     }
 
-    // Add file to mock filesystem
+    // Add file to mock filesystem. Keys are stored absolute to match the
+    // absolute paths the provider passes to `sandbox.filesystem`.
     addFile(path: string, content: Uint8Array) {
-      this.files.set(path, content);
+      this.files.set(path.startsWith("/") ? path : `/${path}`, content);
     }
 
     // SDK methods
@@ -375,18 +376,17 @@ describe("ModalSandbox", () => {
 
       await sandbox.initialize();
 
-      // Verify files were uploaded to the mock sandbox
-      // Note: paths are normalized (leading slash removed)
+      // Verify files were uploaded to the mock sandbox at absolute paths.
       const mockSb = mockState.sandboxInstance!;
-      expect(mockSb.files.has("test.txt")).toBe(true);
-      expect(mockSb.files.has("src/index.js")).toBe(true);
+      expect(mockSb.files.has("/test.txt")).toBe(true);
+      expect(mockSb.files.has("/src/index.js")).toBe(true);
 
       // Check content (should be Uint8Array)
       const encoder = new TextEncoder();
-      expect(mockSb.files.get("test.txt")).toEqual(
+      expect(mockSb.files.get("/test.txt")).toEqual(
         encoder.encode("Hello, World!"),
       );
-      expect(mockSb.files.get("src/index.js")).toEqual(
+      expect(mockSb.files.get("/src/index.js")).toEqual(
         encoder.encode("console.log('Hi')"),
       );
     });
@@ -403,10 +403,9 @@ describe("ModalSandbox", () => {
 
       await sandbox.initialize();
 
-      // Note: paths are normalized (leading slash removed)
       const mockSb = mockState.sandboxInstance!;
-      expect(mockSb.files.has("binary.dat")).toBe(true);
-      expect(mockSb.files.get("binary.dat")).toEqual(binaryContent);
+      expect(mockSb.files.has("/binary.dat")).toBe(true);
+      expect(mockSb.files.get("/binary.dat")).toEqual(binaryContent);
     });
 
     it("should handle initial files with mixed content types", async () => {
@@ -420,13 +419,12 @@ describe("ModalSandbox", () => {
 
       await sandbox.initialize();
 
-      // Note: paths are normalized (leading slash removed)
       const mockSb = mockState.sandboxInstance!;
-      expect(mockSb.files.has("text.txt")).toBe(true);
-      expect(mockSb.files.has("data.bin")).toBe(true);
+      expect(mockSb.files.has("/text.txt")).toBe(true);
+      expect(mockSb.files.has("/data.bin")).toBe(true);
     });
 
-    it("should normalize paths - remove leading slash", async () => {
+    it("should normalize relative paths to absolute", async () => {
       const sandbox = new ModalSandbox({
         initialFiles: {
           "/with-slash.txt": "content1",
@@ -437,9 +435,9 @@ describe("ModalSandbox", () => {
       await sandbox.initialize();
 
       const mockSb = mockState.sandboxInstance!;
-      // Both should be stored with paths (the mock stores normalized paths)
-      expect(mockSb.files.has("with-slash.txt")).toBe(true);
-      expect(mockSb.files.has("no-slash.txt")).toBe(true);
+      // Both are stored absolute; the relative key gains a leading slash.
+      expect(mockSb.files.has("/with-slash.txt")).toBe(true);
+      expect(mockSb.files.has("/no-slash.txt")).toBe(true);
     });
   });
 
@@ -512,10 +510,10 @@ describe("ModalSandbox", () => {
 
       expect(sandbox.isRunning).toBe(true);
 
-      // Verify files were uploaded
+      // Verify files were uploaded at absolute paths
       const mockSb = mockState.sandboxInstance!;
-      expect(mockSb.files.has("hello.txt")).toBe(true);
-      expect(mockSb.files.has("nested/file.js")).toBe(true);
+      expect(mockSb.files.has("/hello.txt")).toBe(true);
+      expect(mockSb.files.has("/nested/file.js")).toBe(true);
 
       // Verify content
       const results = await sandbox.downloadFiles([
@@ -640,8 +638,9 @@ describe("ModalSandbox", () => {
       const content = new TextEncoder().encode("file content");
       await sandbox.uploadFiles([["test.txt", content]]);
 
-      // writeBytes is called with (data, remotePath) to write the file
-      expect(writeSpy).toHaveBeenCalledWith(content, "test.txt");
+      // writeBytes is called with (data, remotePath); relative paths are
+      // normalized to absolute for the filesystem API.
+      expect(writeSpy).toHaveBeenCalledWith(content, "/test.txt");
     });
 
     it("should upload multiple files", async () => {
