@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.10.7
+
+### Patch Changes
+
+- [#659](https://github.com/langchain-ai/deepagentsjs/pull/659) [`8efde93`](https://github.com/langchain-ai/deepagentsjs/commit/8efde93792dfc324e70b441eacbb810532f347c4) Thanks [@Kowshik4593](https://github.com/Kowshik4593)! - Fix: Normalize `path` to `file_path` in filesystem tools (`read_file`, `write_file`, and `edit_file`) and align the prompt documentation examples to prevent validation schema failures on weaker/custom models.
+
 ## 1.10.6
 
 ### Patch Changes
