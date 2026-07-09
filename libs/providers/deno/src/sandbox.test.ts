@@ -517,10 +517,7 @@ describe("DenoSandbox", () => {
         stdout: "piped",
         stderr: "piped",
       });
-      expect(spawnSpy).not.toHaveBeenCalledWith(
-        "/bin/bash",
-        expect.anything(),
-      );
+      expect(spawnSpy).not.toHaveBeenCalledWith("/bin/bash", expect.anything());
     });
 
     it("should upload multiple files", async () => {
@@ -591,10 +588,7 @@ describe("DenoSandbox", () => {
         stdout: "piped",
         stderr: "piped",
       });
-      expect(spawnSpy).not.toHaveBeenCalledWith(
-        "/bin/bash",
-        expect.anything(),
-      );
+      expect(spawnSpy).not.toHaveBeenCalledWith("/bin/bash", expect.anything());
     });
 
     it("should handle file_not_found", async () => {
