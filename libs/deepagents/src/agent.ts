@@ -484,6 +484,17 @@ export function createDeepAgent<
     },
   });
 
+  // LangChain's internal `jumpTo` control channel is cleared by structured
+  // response retries and user afterModel middleware. Multiple clears in the
+  // same graph step are equivalent, so allow one of them instead of throwing
+  // an INVALID_CONCURRENT_GRAPH_UPDATE for `[null, null]`.
+  const jumpToChannel = agent.graph?.channels?.jumpTo as
+    | { guard?: boolean }
+    | undefined;
+  if (jumpToChannel) {
+    jumpToChannel.guard = false;
+  }
+
   /**
    * Combine custom middleware with flattened subagent middleware for complete type inference
    * This ensures InferMiddlewareStates captures state from both sources
