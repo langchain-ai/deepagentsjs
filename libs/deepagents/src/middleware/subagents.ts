@@ -452,19 +452,30 @@ function returnCommandWithStateUpdate(
   if (result.structuredResponse != null) {
     content = JSON.stringify(result.structuredResponse);
   } else {
-    // Walk back to the last AIMessage with non-empty text and forward only that
+    // Walk back to the last message with non-empty text and forward only that
     // text as a string. Anthropic sometimes emits a trailing empty `end_turn`
     // AIMessage after a final tool call, which would otherwise be forwarded as
     // an empty ToolMessage.
+    // Also check ToolMessage — when a sub-agent tool has returnDirect: true,
+    // the sub-agent graph terminates immediately after the ToolNode, so the
+    // last meaningful message is a ToolMessage, not an AIMessage.
     const messages = (result.messages as BaseMessage[]) ?? [];
     content = "Task completed";
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       const message = messages[i];
-      if (!message || !AIMessage.isInstance(message)) continue;
-      const text =
-        typeof message.content === "string"
-          ? message.content.trim()
-          : (message.text?.trim() ?? "");
+      if (!message) continue;
+      let text = "";
+      if (AIMessage.isInstance(message)) {
+        text =
+          typeof message.content === "string"
+            ? message.content.trim()
+            : (message.text?.trim() ?? "");
+      } else if (ToolMessage.isInstance(message)) {
+        text =
+          typeof message.content === "string" ? message.content.trim() : "";
+      } else {
+        continue;
+      }
       if (text) {
         content = text;
         break;
