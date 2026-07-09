@@ -76,11 +76,12 @@ export class FilesystemBackend implements BackendProtocolV2 {
    * @throws Error if path traversal detected or path outside root
    */
   private resolvePath(key: string): string {
+    if (key.includes("..") || key.startsWith("~")) {
+      throw new Error("Path traversal not allowed");
+    }
+
     if (this.virtualMode) {
       const vpath = key.startsWith("/") ? key : "/" + key;
-      if (vpath.includes("..") || vpath.startsWith("~")) {
-        throw new Error("Path traversal not allowed");
-      }
       const full = path.resolve(this.cwd, vpath.substring(1));
       const relative = path.relative(this.cwd, full);
       if (relative.startsWith("..") || path.isAbsolute(relative)) {
@@ -89,10 +90,12 @@ export class FilesystemBackend implements BackendProtocolV2 {
       return full;
     }
 
-    if (path.isAbsolute(key)) {
-      return key;
+    const full = path.isAbsolute(key) ? key : path.resolve(this.cwd, key);
+    const relative = path.relative(this.cwd, full);
+    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      throw new Error(`Path: ${full} outside root directory: ${this.cwd}`);
     }
-    return path.resolve(this.cwd, key);
+    return full;
   }
 
   /**
