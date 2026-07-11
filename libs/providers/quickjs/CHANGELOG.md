@@ -1,5 +1,11 @@
 # @langchain/quickjs
 
+## 0.6.0
+
+### Minor Changes
+
+- [#606](https://github.com/langchain-ai/deepagentsjs/pull/606) [`3c8f8b2`](https://github.com/langchain-ai/deepagentsjs/commit/3c8f8b2ea6f0204353c63bf49c3fdc6655bf1069) Thanks [@colifran](https://github.com/colifran)! - chore(quickjs): disallow task as a configurable ptc tool
+
 ## 0.5.1
 
 ### Patch Changes
