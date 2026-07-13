@@ -343,6 +343,7 @@ describe("createFilesystemMiddleware", () => {
         occurrences: 1,
         filesUpdate: null,
       }),
+      delete: vi.fn().mockResolvedValue({ path: "/deleted.txt", filesUpdate: null }),
       glob: vi.fn().mockResolvedValue({ files: [] }),
       grep: vi.fn().mockResolvedValue({ matches: [] }),
     } as unknown as BackendProtocolV2;
@@ -1165,6 +1166,44 @@ describe("createFilesystemMiddleware", () => {
         expect(result.content).toContain("Successfully wrote");
         expect(result.content).not.toContain("already exists");
       }
+    });
+
+    it("delete tool should delete through backend", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.delete = vi.fn().mockResolvedValue({
+        path: "/doc.txt",
+        filesUpdate: null,
+      });
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const deleteTool = middleware.tools!.find((tool) => tool.name === "delete");
+      expect(deleteTool).toBeDefined();
+      const result = await deleteTool!.invoke({ file_path: "/doc.txt" });
+
+      expect(mockBackend.delete).toHaveBeenCalledWith("/doc.txt");
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.name).toBe("delete");
+        expect(result.content).toContain("Deleted /doc.txt");
+      }
+    });
+
+    it("delete tool should deny recursive deletes overlapping write-deny rules", async () => {
+      const mockBackend = createMockBackend();
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        permissions: [
+          { operations: ["write"], paths: ["/work/secrets/**"], mode: "deny" },
+        ],
+      });
+
+      const deleteTool = middleware.tools!.find((tool) => tool.name === "delete");
+      expect(deleteTool).toBeDefined();
+      const result = await deleteTool!.invoke({ file_path: "/work" });
+
+      expect(mockBackend.delete).not.toHaveBeenCalled();
+      expect(String(result)).toContain("permission denied for write");
+      expect(String(result)).toContain("/work/secrets/**");
     });
 
     it("all tool schema properties should be included in the required array", () => {

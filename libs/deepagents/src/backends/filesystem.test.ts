@@ -422,6 +422,20 @@ describe("FilesystemBackend", () => {
     expect(readResult.error).toBeDefined();
   });
 
+  it("should delete directories recursively in virtual mode", async () => {
+    const root = tmpDir;
+    await writeFile(path.join(root, "work", "a.txt"), "a");
+    await writeFile(path.join(root, "work", "sub", "b.txt"), "b");
+    await writeFile(path.join(root, "keep.txt"), "keep");
+
+    const backend = new FilesystemBackend({ rootDir: root, virtualMode: true });
+    const result = await backend.delete("/work");
+
+    expect(result.error).toBeUndefined();
+    expect(fsSync.existsSync(path.join(root, "work"))).toBe(false);
+    expect(fsSync.existsSync(path.join(root, "keep.txt"))).toBe(true);
+  });
+
   it("should handle symlinks securely", async () => {
     const root = tmpDir;
     const targetFile = path.join(root, "target.txt");
@@ -446,6 +460,11 @@ describe("FilesystemBackend", () => {
     const writeResult = await backend.write(symlinkFile, "replacement");
     expect(writeResult.error).toBeDefined();
     expect(writeResult.error).toContain("symlink");
+    expect(await fs.readFile(targetFile, "utf-8")).toBe("target content");
+
+    const deleteResult = await backend.delete(symlinkFile);
+    expect(deleteResult.error).toBeUndefined();
+    expect(fsSync.existsSync(symlinkFile)).toBe(false);
     expect(await fs.readFile(targetFile, "utf-8")).toBe("target content");
   });
 

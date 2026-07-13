@@ -533,6 +533,22 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
   }
 
   /**
+   * Delete a file or directory from the sandbox via a server-side rm.
+   *
+   * Uses rm -rf so directories are removed recursively and missing paths are a
+   * successful no-op.
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    const result = await this.execute(`rm -rf ${shellQuote(filePath)}`);
+    if (result.exitCode === 0) {
+      return { path: filePath, filesUpdate: null };
+    }
+    return {
+      error: `Error deleting '${filePath}': ${result.output || `exit code ${result.exitCode}`}`,
+    };
+  }
+
+  /**
    * Edit a file by replacing string occurrences.
    *
    * Uses downloadFiles() to read, performs string replacement in TypeScript,

@@ -198,13 +198,13 @@ export class ContextHubBackend implements BackendProtocolV2 {
     return this.cache;
   }
 
-  private async commit(changes: Record<string, string | null>): Promise<void> {
+private async commit(changes: Record<string, string | null>): Promise<void> {
     if (Object.keys(changes).length === 0) {
       return;
     }
 
     const payload: Record<string, Entry | null> = {};
-    for (const [path, content] of Object.entries(changes)) {
+for (const [path, content] of Object.entries(changes)) {
       payload[path] = content === null ? null : { type: "file", content };
     }
 
@@ -219,7 +219,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
     }
 
     if (this.cache !== null) {
-      const deletions = new Set(
+const deletions = new Set(
         Object.entries(changes)
           .filter(([, content]) => content === null)
           .map(([path]) => path),
@@ -425,6 +425,32 @@ export class ContextHubBackend implements BackendProtocolV2 {
     }
 
     return { path: filePath, filesUpdate: null };
+  }
+
+  async delete(filePath: string): Promise<DeleteResult> {
+    const hubPath = ContextHubBackend.stripPrefix(filePath);
+
+    try {
+      const cache = await this.ensureCache();
+      const base = hubPath.replace(/\/+$/, "");
+      const prefix = base ? `${base}/` : "";
+      const paths = Object.keys(cache).filter(
+        (path) => base === "" || path === base || path.startsWith(prefix),
+      );
+
+      if (paths.length === 0) {
+        return { error: `Error: File '${filePath}' not found` };
+      }
+
+      await this.commit(Object.fromEntries(paths.map((path) => [path, null])));
+      return { path: filePath, filesUpdate: null };
+    } catch (error) {
+      if (isLangSmithError(error)) {
+        this.cache = null;
+        return { error: ContextHubBackend.toHubUnavailableError(error) };
+      }
+      throw error;
+    }
   }
 
   async edit(

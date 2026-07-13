@@ -118,6 +118,56 @@ export function filesSuite(runner: EvalRunner): void {
   );
 
   ls.test(
+    "delete file simple",
+    {
+      inputs: {
+        query: "Delete the file /foo.md, then reply with DONE only.",
+      },
+    },
+    async ({ inputs }) => {
+      const result = await runner.run({
+        query: inputs.query,
+        initialFiles: { "/foo.md": "delete me\n" },
+      });
+
+      expect(result.files["/foo.md"]).toBeUndefined();
+      expect(result).toHaveFinalTextContaining("DONE");
+      ls.logFeedback({
+        key: "agent_steps",
+        score: result.steps.length,
+      });
+    },
+  );
+
+  ls.test(
+    "delete directory recursively",
+    {
+      inputs: {
+        query: "Delete the directory /work, then reply with DONE only.",
+      },
+    },
+    async ({ inputs }) => {
+      const result = await runner.run({
+        query: inputs.query,
+        initialFiles: {
+          "/work/a.md": "a",
+          "/work/sub/b.md": "b",
+          "/keep.md": "keep",
+        },
+      });
+
+      expect(result.files["/work/a.md"]).toBeUndefined();
+      expect(result.files["/work/sub/b.md"]).toBeUndefined();
+      expect(result.files["/keep.md"]).toBe("keep");
+      expect(result).toHaveFinalTextContaining("DONE");
+      ls.logFeedback({
+        key: "agent_steps",
+        score: result.steps.length,
+      });
+    },
+  );
+
+  ls.test(
     "write file simple",
     {
       inputs: {

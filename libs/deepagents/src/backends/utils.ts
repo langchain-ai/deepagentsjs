@@ -969,7 +969,7 @@ export function adaptBackendProtocol(
     write: (filePath, content) => backend.write(filePath, content),
     edit: (filePath, oldString, newString, replaceAll) =>
       backend.edit(filePath, oldString, newString, replaceAll),
-    delete: backend.delete?.bind(backend),
+delete: backend.delete?.bind(backend),
     uploadFiles: backend.uploadFiles
       ? (files) => backend.uploadFiles!(files)
       : undefined,

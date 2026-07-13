@@ -113,10 +113,14 @@ export interface BackendProtocolV1 {
   ): MaybePromise<EditResult>;
 
   /**
-   * Delete a single file.
+* Delete a path, recursively removing anything nested under it.
    *
-   * @param filePath - Absolute path to the file to delete
-   * @returns DeleteResult with path on success or error on failure
+   * This method is optional. Backends that do not implement it should omit it;
+   * callers that need broad backend compatibility should check for support before
+   * calling.
+   *
+   * @param filePath - Absolute path to delete (a file, or a directory/prefix to remove recursively).
+   * @returns DeleteResult with path on success or error on failure.
    */
   delete?(filePath: string): MaybePromise<DeleteResult>;
 

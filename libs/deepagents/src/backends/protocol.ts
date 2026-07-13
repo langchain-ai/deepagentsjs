@@ -221,8 +221,15 @@ export interface EditResult {
 export interface DeleteResult {
   /** Error message on failure, undefined on success */
   error?: string;
-  /** File path of deleted file, undefined on failure */
+/** File path of deleted file or directory, undefined on failure */
   path?: string;
+  /**
+   * State update dict for checkpoint backends, null for external storage.
+   * Deletions are represented as null values keyed by removed path.
+   */
+  filesUpdate?: Record<string, null> | null;
+  /** Metadata for the delete operation, attached to the ToolMessage */
+  metadata?: Record<string, unknown>;
 }
 
 /**

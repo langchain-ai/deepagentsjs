@@ -355,6 +355,27 @@ export class CompositeBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Delete a file or directory, routing to appropriate backend.
+   *
+   * @param filePath - Absolute file path
+   * @returns DeleteResult with path or error
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    const [backend, strippedKey] = this.getBackendAndKey(filePath);
+    if (!backend.delete) {
+      return {
+        error: `Error: deletion is not supported for '${filePath}' (its backend does not implement delete).`,
+      };
+    }
+
+    const result = await backend.delete(strippedKey);
+    if (result.path) {
+      return { ...result, path: filePath };
+    }
+    return result;
+  }
+
+  /**
    * Edit a file, routing to appropriate backend.
    *
    * @param filePath - Absolute file path

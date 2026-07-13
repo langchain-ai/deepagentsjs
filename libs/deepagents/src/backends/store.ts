@@ -602,6 +602,41 @@ export class StoreBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Delete a file or directory from the store.
+   *
+   * Removes the exact key plus every nested key under it.
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    const store = this.getStore();
+    const namespace = this.getNamespace();
+    const items = await this.searchStorePaginated(store, namespace);
+    const base = filePath.replace(/\/+$/, "") || "/";
+    const prefix = base === "/" ? "/" : `${base}/`;
+    const keys = items
+      .map((item) => String(item.key))
+      .filter((key) => key === base || key.startsWith(prefix));
+
+    if (keys.length === 0) {
+      return { error: `Error: File '${filePath}' not found` };
+    }
+
+    const deletableStore = store as {
+      delete?: (namespace: string[], key: string) => Promise<void> | void;
+      put: (namespace: string[], key: string, value: unknown) => Promise<void>;
+    };
+
+    for (const key of keys) {
+      if (deletableStore.delete) {
+        await deletableStore.delete(namespace, key);
+      } else {
+        await deletableStore.put(namespace, key, null);
+      }
+    }
+
+    return { path: filePath, filesUpdate: null };
+  }
+
+  /**
    * Edit a file by replacing string occurrences.
    * Returns EditResult. External storage sets filesUpdate=null.
    */

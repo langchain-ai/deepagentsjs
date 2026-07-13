@@ -23,6 +23,7 @@ const expectedTools = [
   "read_file",
   "write_file",
   "edit_file",
+  "delete",
   "task",
 ];
 

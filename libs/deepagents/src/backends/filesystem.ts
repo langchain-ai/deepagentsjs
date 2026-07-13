@@ -451,6 +451,35 @@ export class FilesystemBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Delete a file or directory from the filesystem.
+   *
+   * Files are unlinked. Directories are removed recursively along with all of
+   * their contents. Symlinks are removed as links and never followed into their
+   * targets.
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    try {
+      const resolvedPath = this.resolvePath(filePath);
+      const stat = await fs.lstat(resolvedPath).catch(() => null);
+
+      if (!stat) {
+        return { error: `Error: '${filePath}' not found` };
+      }
+
+      if (stat.isDirectory() && !stat.isSymbolicLink()) {
+        await fs.rm(resolvedPath, { recursive: true, force: false });
+      } else {
+        await fs.unlink(resolvedPath);
+      }
+
+      return { path: filePath, filesUpdate: null };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { error: `Error deleting '${filePath}': ${message}` };
+    }
+  }
+
+  /**
    * Edit a file by replacing string occurrences.
    * Returns EditResult. External storage sets filesUpdate=null.
    */

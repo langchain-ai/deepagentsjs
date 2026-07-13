@@ -826,6 +826,32 @@ export class VfsBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Delete a file or directory recursively.
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    this.#ensureInitialized();
+
+    const resolvedPath = this.#resolvePath(filePath);
+    if (!resolvedPath) {
+      return { error: `Error deleting '${filePath}': invalid path` };
+    }
+
+    try {
+      if (!this.instance.existsSync(resolvedPath)) {
+        return { error: `Error: '${filePath}' not found` };
+      }
+      this.instance.rmSync(resolvedPath, { recursive: true, force: false });
+      return { path: filePath, filesUpdate: null };
+    } catch (error) {
+      return {
+        error: `Error deleting '${filePath}': ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
+  }
+
+  /**
    * Edit a file by replacing string occurrences.
    */
   async edit(

@@ -20,7 +20,7 @@ This makes you perfect for real coding tasks that need to persist on disk.
 
 - All files you create are written to the actual filesystem
 - Use the current working directory as your workspace
-- You can use standard filesystem tools (ls, read_file, write_file, edit_file)
+- You can use standard filesystem tools (ls, read_file, write_file, edit_file, delete)
 - Files persist after the conversation ends`;
 
 const workspaceDir = path.join(process.cwd(), "workspace");

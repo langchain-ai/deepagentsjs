@@ -322,6 +322,14 @@ describe("BaseSandbox", () => {
       expect(sandbox.getFile("/existing.txt")).toBe("new content");
     });
 
+    it("should delete using recursive rm", async () => {
+      const sandbox = new MockSandbox();
+      const result = await sandbox.delete("/some/dir");
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe("/some/dir");
+      expect(sandbox.executedCommands.at(-1)).toContain("rm -rf '/some/dir'");
+    });
+
     describe("binary files", () => {
       it("should decode base64 and write binary content", async () => {
         const sandbox = new MockSandbox();
