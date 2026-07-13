@@ -618,12 +618,8 @@ export class FilesystemBackend implements BackendProtocolV2 {
     const results: Record<string, Array<[number, string]>> = {};
     const stat = await fs.stat(baseFull);
     const root = stat.isDirectory() ? baseFull : path.dirname(baseFull);
-
-    // `followSymbolicLinks: false` avoids ELOOP on self-referential directory
-    // symlinks. `onlyFiles: false` keeps symlinks-to-files in the results
-    // (fast-glob's `onlyFiles` filter uses lstat and would drop them); the
-    // `stat().isFile()` guard in the loop follows each link and skips anything
-    // that is not a regular file.
+    
+    // Use fast-glob for pattern matching
     const files = await fg("**/*", {
       cwd: root,
       absolute: true,

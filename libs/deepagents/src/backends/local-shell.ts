@@ -302,12 +302,6 @@ export class LocalShellBackend
 
     const formatPath = (rel: string) => (this.virtualMode ? `/${rel}` : rel);
 
-    // `followSymbolicLinks: false` avoids ELOOP on self-referential directory
-    // symlinks. A single `onlyFiles: false` pass returns files, directories,
-    // and symlink entries without descending into symlinked dirs; `fs.stat`
-    // below follows each entry to classify it by its target, so symlinks-to-
-    // files are reported as files and symlinks-to-dirs as directories — matching
-    // the pre-fix behavior while no longer walking cycles.
     const matches = await fg(pattern, {
       cwd: resolvedSearchPath,
       absolute: false,
