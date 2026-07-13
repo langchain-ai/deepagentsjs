@@ -619,11 +619,15 @@ export class FilesystemBackend implements BackendProtocolV2 {
     const stat = await fs.stat(baseFull);
     const root = stat.isDirectory() ? baseFull : path.dirname(baseFull);
 
-    // Use fast-glob for pattern matching
+    // `onlyFiles: true` with `followSymbolicLinks: false` drops symlink entries
+    // at enumeration, so we never `readFile` a symlink target (which would
+    // bypass the O_NOFOLLOW protection used by read()/write()/edit() and escape
+    // the search root). This matches ripgrep's default no-follow behavior, so
+    // the fallback and primary grep paths return the same files.
     const files = await fg("**/*", {
       cwd: root,
       absolute: true,
-      onlyFiles: false,
+      onlyFiles: true,
       dot: true,
       followSymbolicLinks: false,
     });
@@ -644,12 +648,8 @@ export class FilesystemBackend implements BackendProtocolV2 {
           continue;
         }
 
-        // Check file size. `fs.stat` follows symlinks, so a symlink-to-file is
-        // searched while directories (real or symlinked) are skipped here.
+        // Check file size
         const stat = await fs.stat(fp);
-        if (!stat.isFile()) {
-          continue;
-        }
         if (stat.size > this.maxFileSizeBytes) {
           continue;
         }

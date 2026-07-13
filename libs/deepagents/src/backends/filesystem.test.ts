@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import * as path from "path";
@@ -615,6 +615,41 @@ describe("FilesystemBackend symlink cycle handling", () => {
       const paths = (result.matches ?? []).map((m) => m.path);
       expect(paths.some((p) => p.endsWith("inner.txt"))).toBe(true);
       expect(paths.some(followedCycle)).toBe(false);
+    },
+  );
+
+  it.skipIf(!CAN_SYMLINK)(
+    "grep fallback does not follow a symlink out of the search root",
+    async () => {
+      // A secret file OUTSIDE the workspace, reachable only via an in-tree
+      // symlink. Reading through the link would leak it past the root.
+      const outside = createTempDir();
+      try {
+        await writeFile(path.join(outside, "secret.txt"), "EXFIL_MARKER");
+        await writeFile(path.join(tmpDir, "normal.txt"), "nothing here");
+        await fs.symlink(
+          path.join(outside, "secret.txt"),
+          path.join(tmpDir, "alias.txt"),
+        );
+
+        const backend = new FilesystemBackend({
+          rootDir: tmpDir,
+          virtualMode: true,
+        });
+        // Force the non-ripgrep path; that fallback is what this guards.
+        vi.spyOn(
+          backend as unknown as { ripgrepSearch: () => Promise<null> },
+          "ripgrepSearch",
+        ).mockResolvedValue(null);
+
+        const result = await backend.grep("EXFIL_MARKER", "/");
+
+        // The marker exists only in the out-of-tree file; the fallback must not
+        // read it through the symlink.
+        expect(result.matches ?? []).toHaveLength(0);
+      } finally {
+        await removeDir(outside);
+      }
     },
   );
 });
