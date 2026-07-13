@@ -185,7 +185,7 @@ export function getToolCallKind(
   | "other" {
   const readTools = ["read_file", "ls"];
   const searchTools = ["grep", "glob"];
-  const editTools = ["write_file", "edit_file", "delete"];
+  const editTools = ["write_file", "edit_file"];
   const executeTools = ["execute", "shell", "terminal"];
   const thinkTools = ["write_todos"];
 
@@ -210,9 +210,7 @@ export function formatToolCallTitle(
     case "write_file":
       return `Writing ${args.path ?? "file"}`;
     case "edit_file":
-      return `Editing ${args.path ?? args.file_path ?? "file"}`;
-    case "delete":
-      return `Deleting ${args.path ?? args.file_path ?? "file"}`;
+      return `Editing ${args.path ?? "file"}`;
     case "ls":
       return `Listing ${args.path ?? "directory"}`;
     case "grep":
@@ -236,14 +234,13 @@ export function extractToolCallLocations(
   args: Record<string, unknown>,
   workspaceRoot?: string,
 ): Array<{ path: string; line?: number }> | undefined {
-  const filePath = (args.path ?? args.file_path) as string | undefined;
+  const filePath = args.path as string | undefined;
   if (!filePath) return undefined;
 
   const toolsWithPaths = [
     "read_file",
     "write_file",
     "edit_file",
-    "delete",
     "ls",
     "grep",
     "glob",

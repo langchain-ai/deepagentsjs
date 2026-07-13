@@ -429,7 +429,6 @@ describe("getToolCallKind", () => {
   it("should identify edit tools", () => {
     expect(getToolCallKind("write_file")).toBe("edit");
     expect(getToolCallKind("edit_file")).toBe("edit");
-    expect(getToolCallKind("delete")).toBe("edit");
   });
 
   it("should identify execute tools", () => {
@@ -462,11 +461,6 @@ describe("formatToolCallTitle", () => {
   it("should format edit_file title", () => {
     const result = formatToolCallTitle("edit_file", { path: "/config.json" });
     expect(result).toBe("Editing /config.json");
-  });
-
-  it("should format delete title", () => {
-    const result = formatToolCallTitle("delete", { file_path: "/tmp.txt" });
-    expect(result).toBe("Deleting /tmp.txt");
   });
 
   it("should format ls title", () => {
@@ -567,7 +561,6 @@ describe("extractToolCallLocations", () => {
       "read_file",
       "write_file",
       "edit_file",
-      "delete",
       "ls",
       "grep",
       "glob",

@@ -45,7 +45,6 @@ You can inspect and modify files safely inside this virtual workspace.
 - **read_file**: Read file contents
 - **write_file**: Create or fully replace files
 - **edit_file**: Modify existing files
-- **delete**: Delete files or directories recursively
 - **grep**: Search for patterns in files
 - **glob**: Find files matching patterns
 
