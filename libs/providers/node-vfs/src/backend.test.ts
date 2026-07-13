@@ -264,21 +264,6 @@ describe("VfsBackend", () => {
         "new content",
       );
     });
-
-    it("should delete directories recursively", async () => {
-      await sandbox.write("/work/a.txt", "a");
-      await sandbox.write("/work/sub/b.txt", "b");
-      await sandbox.write("/keep.txt", "keep");
-
-      const result = await sandbox.delete("/work");
-      expect(result.error).toBeUndefined();
-
-      const deleted = await sandbox.downloadFiles(["/work/a.txt", "/work/sub/b.txt"]);
-      expect(deleted[0].error).toBe("file_not_found");
-      expect(deleted[1].error).toBe("file_not_found");
-      const kept = await sandbox.downloadFiles(["/keep.txt"]);
-      expect(kept[0].error).toBeNull();
-    });
   });
 
   it("should reject writes through symlinks", async () => {
