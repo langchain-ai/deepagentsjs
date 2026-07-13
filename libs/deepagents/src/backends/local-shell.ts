@@ -302,18 +302,21 @@ export class LocalShellBackend
 
     const formatPath = (rel: string) => (this.virtualMode ? `/${rel}` : rel);
 
-    const globOpts = {
+    // `followSymbolicLinks: false` avoids ELOOP on self-referential directory
+    // symlinks. A single `onlyFiles: false` pass returns files, directories,
+    // and symlink entries without descending into symlinked dirs; `fs.stat`
+    // below follows each entry to classify it by its target, so symlinks-to-
+    // files are reported as files and symlinks-to-dirs as directories — matching
+    // the pre-fix behavior while no longer walking cycles.
+    const matches = await fg(pattern, {
       cwd: resolvedSearchPath,
       absolute: false,
       dot: true,
+      onlyFiles: false,
       followSymbolicLinks: false,
-    };
-    const [fileMatches, dirMatches] = await Promise.all([
-      fg(pattern, { ...globOpts, onlyFiles: true }),
-      fg(pattern, { ...globOpts, onlyDirectories: true }),
-    ]);
+    });
 
-    const statFile = async (match: string): Promise<FileInfo | null> => {
+    const classify = async (match: string): Promise<FileInfo | null> => {
       try {
         const entryStat = await fs.stat(path.join(resolvedSearchPath, match));
         if (entryStat.isFile()) {
@@ -324,15 +327,6 @@ export class LocalShellBackend
             modified_at: entryStat.mtime.toISOString(),
           };
         }
-      } catch {
-        /* skip unstatable entries */
-      }
-      return null;
-    };
-
-    const statDir = async (match: string): Promise<FileInfo | null> => {
-      try {
-        const entryStat = await fs.stat(path.join(resolvedSearchPath, match));
         if (entryStat.isDirectory()) {
           return {
             path: formatPath(match),
@@ -342,19 +336,13 @@ export class LocalShellBackend
           };
         }
       } catch {
-        /* skip unstatable entries */
+        /* skip unstatable entries (e.g. broken symlinks) */
       }
       return null;
     };
 
-    const [fileInfos, dirInfos] = await Promise.all([
-      Promise.all(fileMatches.map(statFile)),
-      Promise.all(dirMatches.map(statDir)),
-    ]);
-
-    const results = [...fileInfos, ...dirInfos].filter(
-      (info): info is FileInfo => info !== null,
-    );
+    const infos = await Promise.all(matches.map(classify));
+    const results = infos.filter((info): info is FileInfo => info !== null);
     results.sort((a, b) => a.path.localeCompare(b.path));
     return { files: results };
   }

@@ -563,12 +563,15 @@ describe("FilesystemBackend symlink cycle handling", () => {
   });
 
   /**
-   * Build a tree with a real file plus an `ln -s . sub/sub` cycle.
+   * Build a tree with real files, an `ln -s . sub/sub` cycle (must not be
+   * descended into), and a symlink-to-file `alias.txt -> real.txt` (must still
+   * be reported).
    */
   async function buildCycle(root: string) {
     await writeFile(path.join(root, "real.txt"), "needle-content");
     await writeFile(path.join(root, "sub", "inner.txt"), "needle-content");
     await fs.symlink(".", path.join(root, "sub", "sub"));
+    await fs.symlink(path.join(root, "real.txt"), path.join(root, "alias.txt"));
   }
 
   // A file reached by following the cycle looks like `.../sub/sub/inner.txt`;
@@ -590,6 +593,9 @@ describe("FilesystemBackend symlink cycle handling", () => {
       const paths = result.files!.map((f) => f.path);
       expect(paths.some((p) => p.endsWith("inner.txt"))).toBe(true);
       expect(paths.some((p) => p.endsWith("real.txt"))).toBe(true);
+      // A symlink pointing at a regular file must still be reported (not
+      // silently dropped by `onlyFiles` + `followSymbolicLinks: false`).
+      expect(paths.some((p) => p.endsWith("alias.txt"))).toBe(true);
       expect(paths.some(followedCycle)).toBe(false);
     },
   );

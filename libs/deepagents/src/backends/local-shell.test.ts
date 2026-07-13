@@ -434,20 +434,35 @@ describe("LocalShellBackend symlink cycle handling", () => {
     "glob does not descend into a directory symlink cycle",
     async () => {
       await fs.mkdir(path.join(tmpDir, "sub"), { recursive: true });
+      await fs.writeFile(path.join(tmpDir, "real.txt"), "x", "utf-8");
       await fs.writeFile(path.join(tmpDir, "sub", "inner.txt"), "x", "utf-8");
+      // symlink -> file (must be reported as a file)
+      await fs.symlink(
+        path.join(tmpDir, "real.txt"),
+        path.join(tmpDir, "alias.txt"),
+      );
+      // symlink -> dir (must be listed as a directory, but not descended into)
+      await fs.symlink(path.join(tmpDir, "sub"), path.join(tmpDir, "linkdir"));
+      // self-referential cycle (must not be descended into)
       await fs.symlink(".", path.join(tmpDir, "sub", "sub"));
 
       const backend = new LocalShellBackend({ rootDir: tmpDir });
       const result = await backend.glob("**/*", tmpDir);
 
       expect(result.error).toBeUndefined();
+      const files = result.files!;
+      const filePaths = files.filter((f) => !f.is_dir).map((f) => f.path);
+      const dirPaths = files.filter((f) => f.is_dir).map((f) => f.path);
 
-      const filePaths = result
-        .files!.filter((f) => !f.is_dir)
-        .map((f) => f.path);
-
+      // Real files and the symlink-to-file are all reported as files.
+      expect(filePaths.some((p) => p.endsWith("real.txt"))).toBe(true);
       expect(filePaths.some((p) => p.endsWith("inner.txt"))).toBe(true);
-      expect(filePaths.some((p) => /sub[\\/]sub/.test(p))).toBe(false);
+      expect(filePaths.some((p) => p.endsWith("alias.txt"))).toBe(true);
+      // The symlinked directory is listed...
+      expect(dirPaths.some((p) => p.endsWith("linkdir"))).toBe(true);
+      // ...but nothing is reached *through* it or through the cycle.
+      expect(filePaths.some((p) => /linkdir[\\/]/.test(p))).toBe(false);
+      expect(filePaths.some((p) => /sub[\\/]sub[\\/]/.test(p))).toBe(false);
     },
   );
 });

@@ -619,11 +619,15 @@ export class FilesystemBackend implements BackendProtocolV2 {
     const stat = await fs.stat(baseFull);
     const root = stat.isDirectory() ? baseFull : path.dirname(baseFull);
 
-    // Use fast-glob to recursively find all files
+    // `followSymbolicLinks: false` avoids ELOOP on self-referential directory
+    // symlinks. `onlyFiles: false` keeps symlinks-to-files in the results
+    // (fast-glob's `onlyFiles` filter uses lstat and would drop them); the
+    // `stat().isFile()` guard in the loop follows each link and skips anything
+    // that is not a regular file.
     const files = await fg("**/*", {
       cwd: root,
       absolute: true,
-      onlyFiles: true,
+      onlyFiles: false,
       dot: true,
       followSymbolicLinks: false,
     });
@@ -644,8 +648,12 @@ export class FilesystemBackend implements BackendProtocolV2 {
           continue;
         }
 
-        // Check file size
+        // Check file size. `fs.stat` follows symlinks, so a symlink-to-file is
+        // searched while directories (real or symlinked) are skipped here.
         const stat = await fs.stat(fp);
+        if (!stat.isFile()) {
+          continue;
+        }
         if (stat.size > this.maxFileSizeBytes) {
           continue;
         }
@@ -710,11 +718,18 @@ export class FilesystemBackend implements BackendProtocolV2 {
     const results: FileInfo[] = [];
 
     try {
-      // Use fast-glob for pattern matching
+      // `followSymbolicLinks: false` stops fast-glob from descending into
+      // symlinked directories, which otherwise loop forever on a self-
+      // referential symlink (e.g. `sub/sub -> .`) until the OS throws ELOOP.
+      // `onlyFiles: false` (rather than `true`) is deliberate: fast-glob's
+      // `onlyFiles` filter uses lstat and would drop symlinks-to-files entirely,
+      // regressing results like `alias.ts -> real.ts`. The `stat().isFile()`
+      // check below follows each link to re-include those files while excluding
+      // directories.
       const matches = await fg(pattern, {
         cwd: resolvedSearchPath,
         absolute: true,
-        onlyFiles: true,
+        onlyFiles: false,
         dot: true,
         followSymbolicLinks: false,
       });
