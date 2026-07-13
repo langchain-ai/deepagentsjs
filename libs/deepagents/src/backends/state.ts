@@ -3,6 +3,7 @@
  */
 
 import type {
+  DeleteResult,
   EditResult,
   FileData,
   FileDownloadResponse,
@@ -118,9 +119,10 @@ export class StateBackend implements BackendProtocolV2 {
    * In legacy mode, this is a no-op — the caller uses `filesUpdate`
    * from the return value instead.
    *
-   * @param update - Map of file paths to their updated {@link FileData}
+   * @param update - Map of file paths to their updated {@link FileData},
+   *   or null deletion markers.
    */
-  private sendFilesUpdate(update: Record<string, FileData>): void {
+  private sendFilesUpdate(update: Record<string, FileData | null>): void {
     if (this.isLegacy) {
       return;
     }
@@ -323,6 +325,27 @@ export class StateBackend implements BackendProtocolV2 {
       filesUpdate: { [filePath]: newFileData },
       occurrences: occurrences,
     };
+  }
+
+  /**
+   * Delete a file from state by sending a null deletion marker through Pregel.
+   */
+  delete(filePath: string): DeleteResult {
+    const files = this.files;
+
+    if (!(filePath in files)) {
+      return { error: `Error: File '${filePath}' not found` };
+    }
+
+    if (this.isLegacy) {
+      return {
+        error:
+          "StateBackend.delete requires a zero-argument StateBackend in a LangGraph execution context.",
+      };
+    }
+
+    this.sendFilesUpdate({ [filePath]: null });
+    return { path: filePath };
   }
 
   /**
