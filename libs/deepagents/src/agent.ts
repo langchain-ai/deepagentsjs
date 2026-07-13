@@ -270,7 +270,10 @@ export function createDeepAgent<
    * Only the general-purpose subagent inherits the main agent's skills.
    * If a custom subagent needs skills, it must specify its own `skills` array.
    */
-  const normalizeSubagentSpec = (input: SubAgent): SubAgent => {
+  const normalizeSubagentSpec = (
+    input: SubAgent,
+    parentDefaultOverrideCandidates: readonly AgentMiddleware[] = [],
+  ): SubAgent => {
     const effectivePermissions = input.permissions ?? permissions;
 
     // Middleware for custom subagents (does NOT include skills from main agent).
@@ -295,10 +298,11 @@ export function createDeepAgent<
         ? [createSkillsMiddleware({ backend, sources: input.skills })]
         : []),
     ];
-    const defaultMiddlewareOverrides = customMiddleware.filter((candidate) =>
-      subagentCoreMiddleware.some(
-        (middleware) => middleware.name === candidate.name,
-      ),
+    const defaultMiddlewareOverrides = parentDefaultOverrideCandidates.filter(
+      (candidate) =>
+        subagentCoreMiddleware.some(
+          (middleware) => middleware.name === candidate.name,
+        ),
     );
     const subagentDefaultsWithParentOverrides = mergeMiddleware(
       subagentCoreMiddleware,
@@ -355,15 +359,18 @@ export function createDeepAgent<
       gpConfig?.systemPrompt ??
       applyProfilePrompt(harnessProfile, GENERAL_PURPOSE_SUBAGENT.systemPrompt);
 
-    const generalPurposeSpec = normalizeSubagentSpec({
-      ...GENERAL_PURPOSE_SUBAGENT,
-      description:
-        gpConfig?.description ?? GENERAL_PURPOSE_SUBAGENT.description,
-      systemPrompt: gpSystemPrompt,
-      model,
-      skills,
-      tools: effectiveTools,
-    });
+    const generalPurposeSpec = normalizeSubagentSpec(
+      {
+        ...GENERAL_PURPOSE_SUBAGENT,
+        description:
+          gpConfig?.description ?? GENERAL_PURPOSE_SUBAGENT.description,
+        systemPrompt: gpSystemPrompt,
+        model,
+        skills,
+        tools: effectiveTools,
+      },
+      customMiddleware,
+    );
     inlineSubagents.unshift(generalPurposeSpec);
   }
 

@@ -1391,7 +1391,7 @@ describe("middleware override by name", () => {
     expect(middleware).not.toContain(custom);
   });
 
-  it("passes main-agent default overrides to declarative subagents", () => {
+  it("does not pass main-agent default overrides to declarative subagents", () => {
     const custom = createCustomSummarizationMiddleware();
 
     createDeepAgent({
@@ -1408,11 +1408,10 @@ describe("middleware override by name", () => {
     });
 
     const middleware = getMiddlewareStack("helper");
-    const summarization = middleware.filter(
-      (entry) => entry.name === "SummarizationMiddleware",
-    );
-    expect(summarization).toHaveLength(1);
-    expect(summarization[0]).toBe(custom);
+    expect(middleware).not.toContain(custom);
+    expect(
+      middleware.some((entry) => entry.name === "SummarizationMiddleware"),
+    ).toBe(true);
   });
 
   it("does not pass parent-only middleware to declarative subagents", () => {
