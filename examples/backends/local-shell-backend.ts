@@ -24,7 +24,7 @@ and running build tools, tests, or other CLI commands.
 - All files and commands operate directly on the host filesystem
 - Shell commands run with your user's permissions — use responsibly
 - Use the workspace directory as your working directory
-- You have access to filesystem tools (ls, read_file, write_file, edit_file) and shell execution`;
+- You have access to filesystem tools (ls, read_file, write_file, edit_file, delete) and shell execution`;
 
 const workspaceDir = path.join(process.cwd(), "workspace");
 

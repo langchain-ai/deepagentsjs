@@ -143,6 +143,28 @@ describe("CompositeBackend", () => {
     vi.clearAllMocks();
   });
 
+  it("should delete directories recursively within a route", async () => {
+    const { runtime } = makeConfig();
+    const composite = new CompositeBackend(new StateBackend(runtime), {
+      "/memories/": new StoreBackend(runtime),
+    });
+
+    await composite.write("/memories/work/a.txt", "a");
+    await composite.write("/memories/work/sub/b.txt", "b");
+    await composite.write("/memories/keep.txt", "keep");
+
+    const result = await composite.delete("/memories/work");
+    expect(result.error).toBeUndefined();
+    expect(result.path).toBe("/memories/work");
+    expect((await composite.read("/memories/work/a.txt")).error).toContain(
+      "not found",
+    );
+    expect((await composite.read("/memories/work/sub/b.txt")).error).toContain(
+      "not found",
+    );
+    expect((await composite.read("/memories/keep.txt")).error).toBeUndefined();
+  });
+
   it("should route operations between StateBackend and StoreBackend", async () => {
     const { state, runtime } = makeConfig();
 
