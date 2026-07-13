@@ -313,13 +313,13 @@ describe("BaseSandbox", () => {
       expect(sandbox.executedCommands.length).toBe(0);
     });
 
-    it("should return error if file already exists", async () => {
+    it("should overwrite existing files", async () => {
       const sandbox = new MockSandbox();
       sandbox.addFile("/existing.txt", "old content");
 
-      const result = await sandbox.write("/existing.txt", "content");
-      expect(result.error).toBeDefined();
-      expect(result.error).toContain("already exists");
+      const result = await sandbox.write("/existing.txt", "new content");
+      expect(result.error).toBeUndefined();
+      expect(sandbox.getFile("/existing.txt")).toBe("new content");
     });
 
     describe("binary files", () => {

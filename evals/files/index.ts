@@ -27,6 +27,75 @@ export function filesSuite(runner: EvalRunner): void {
   );
 
   ls.test(
+    "write file overwrites existing",
+    {
+      inputs: {
+        query:
+          'Rewrite /note.md so it contains only "new content". Reply with DONE only.',
+      },
+    },
+    async ({ inputs }) => {
+      const result = await runner.run({
+        query: inputs.query,
+        initialFiles: { "/note.md": "old content\n" },
+      });
+
+      expect(result.files["/note.md"]).toBe("new content");
+      expect(result).toHaveFinalTextContaining("DONE");
+      ls.logFeedback({
+        key: "agent_steps",
+        score: result.steps.length,
+      });
+    },
+  );
+
+  ls.test(
+    "write file overwrite drops old content",
+    {
+      inputs: {
+        query: 'Write "fresh line" to /log.txt. Reply with DONE only.',
+      },
+    },
+    async ({ inputs }) => {
+      const result = await runner.run({
+        query: inputs.query,
+        initialFiles: { "/log.txt": "stale line\n" },
+      });
+
+      expect(result.files["/log.txt"]).toContain("fresh line");
+      expect(result.files["/log.txt"]).not.toContain("stale");
+      expect(result).toHaveFinalTextContaining("DONE");
+      ls.logFeedback({
+        key: "agent_steps",
+        score: result.steps.length,
+      });
+    },
+  );
+
+  ls.test(
+    "write file prefers edit for targeted change",
+    {
+      inputs: {
+        query: "In /note.md, replace 'cat' with 'lion'. Reply with DONE only.",
+      },
+    },
+    async ({ inputs }) => {
+      const result = await runner.run({
+        query: inputs.query,
+        initialFiles: { "/note.md": "cat dog bird\n" },
+      });
+
+      expect(result.files["/note.md"]).toBe("lion dog bird\n");
+      expect(result.files["/note.md"]).not.toContain("cat");
+      expect(result).toHaveFinalTextContaining("DONE");
+      ls.logFeedback({
+        key: "agent_steps",
+        score: result.steps.length,
+      });
+    },
+  );
+
+  ls.test(
     "write file simple",
     {
       inputs: {

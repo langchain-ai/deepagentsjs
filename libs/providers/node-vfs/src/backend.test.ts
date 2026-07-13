@@ -203,6 +203,27 @@ describe("VfsBackend", () => {
     });
   });
 
+  describe("write", () => {
+    beforeEach(async () => {
+      sandbox = await VfsBackend.create({
+        initialFiles: {
+          "/existing.txt": "old content",
+        },
+      });
+    });
+
+    it("should overwrite existing files", async () => {
+      const result = await sandbox.write("/existing.txt", "new content");
+      expect(result.error).toBeUndefined();
+
+      const downloaded = await sandbox.downloadFiles(["/existing.txt"]);
+      expect(downloaded[0].error).toBeNull();
+      expect(new TextDecoder().decode(downloaded[0].content!)).toBe(
+        "new content",
+      );
+    });
+  });
+
   describe("readRaw", () => {
     beforeEach(async () => {
       sandbox = await VfsBackend.create({

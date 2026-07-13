@@ -121,9 +121,13 @@ describe("StateBackend", () => {
     expect(writeRes.filesUpdate).toBeDefined();
     Object.assign(state.files, writeRes.filesUpdate);
 
-    const dupErr = backend.write("/dup.txt", "y");
-    expect(dupErr.error).toBeDefined();
-    expect(dupErr.error).toContain("already exists");
+    const overwriteRes = backend.write("/dup.txt", "y");
+    expect(overwriteRes.error).toBeUndefined();
+    expect(overwriteRes.filesUpdate).toBeDefined();
+    Object.assign(state.files, overwriteRes.filesUpdate);
+
+    const readRes = backend.read("/dup.txt");
+    expect(readRes.content).toBe("y");
   });
 
   it("should list nested directories correctly", () => {

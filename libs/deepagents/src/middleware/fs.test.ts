@@ -1030,6 +1030,31 @@ describe("createFilesystemMiddleware", () => {
       expect(parsed.content).toBe("");
     });
 
+    it("write_file tool should return success for backend overwrites", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.write = vi.fn().mockResolvedValue({
+        path: "/doc.txt",
+        filesUpdate: null,
+      });
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const writeFileTool = middleware.tools!.find(
+        (tool) => tool.name === "write_file",
+      );
+      expect(writeFileTool).toBeDefined();
+      const result = await writeFileTool!.invoke({
+        file_path: "/doc.txt",
+        content: "new content",
+      });
+
+      expect(mockBackend.write).toHaveBeenCalledWith("/doc.txt", "new content");
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.content).toContain("Successfully wrote");
+        expect(result.content).not.toContain("already exists");
+      }
+    });
+
     it("all tool schema properties should be included in the required array", () => {
       const middleware = createFilesystemMiddleware({
         backend: () => createMockBackend(),

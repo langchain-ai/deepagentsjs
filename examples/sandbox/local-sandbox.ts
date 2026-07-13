@@ -235,7 +235,7 @@ You can execute shell commands to:
 - **execute**: Run any shell command and see the output
 - **ls**: List directory contents
 - **read_file**: Read file contents
-- **write_file**: Create new files
+- **write_file**: Create or fully replace files
 - **edit_file**: Modify existing files
 - **grep**: Search for patterns in files
 - **glob**: Find files matching patterns
@@ -246,7 +246,7 @@ You can execute shell commands to:
 2. Use the right tool for the job:
    - Use \`execute\` for complex commands, pipelines, and running programs
    - Use \`read_file\` for viewing file contents
-   - Use \`write_file\` for creating new files
+   - Use \`write_file\` for creating new files or replacing an entire file
 3. Chain commands when needed: \`execute("npm install && npm test")\`
 4. Check exit codes to verify success
 

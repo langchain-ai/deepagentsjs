@@ -445,7 +445,7 @@ describe("Filesystem Middleware Integration Tests", () => {
   );
 
   it.concurrent(
-    "should fail to write to existing store file",
+    "should overwrite existing store file",
     { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
@@ -487,7 +487,15 @@ describe("Filesystem Middleware Integration Tests", () => {
       );
 
       expect(writeMessage).toBeDefined();
-      expect(writeMessage!.content.toString()).toContain("already exists");
+      expect(writeMessage!.content.toString()).toContain("Successfully wrote");
+      expect(writeMessage!.content.toString()).not.toContain("already exists");
+
+      const overwritten = await store.get(["filesystem"], "/existing.txt");
+      expect(overwritten).toBeDefined();
+      const overwrittenContent = (overwritten!.value as { content?: unknown })
+        .content;
+      expect(overwrittenContent).toContain("new data");
+      expect(overwrittenContent).not.toContain("Already exists");
     },
   );
 
@@ -675,7 +683,7 @@ describe("Filesystem Middleware Integration Tests", () => {
   );
 
   it.concurrent(
-    "should fail to write to existing local file",
+    "should overwrite existing local file",
     { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
@@ -716,7 +724,12 @@ describe("Filesystem Middleware Integration Tests", () => {
       );
 
       expect(writeMessage).toBeDefined();
-      expect(writeMessage!.content.toString()).toContain("already exists");
+      expect(writeMessage!.content.toString()).toContain("Successfully wrote");
+      expect(writeMessage!.content.toString()).not.toContain("already exists");
+      expect(response.files?.["/existing.txt"]?.content).toContain("new content");
+      expect(response.files?.["/existing.txt"]?.content).not.toContain(
+        "Already exists",
+      );
     },
   );
 

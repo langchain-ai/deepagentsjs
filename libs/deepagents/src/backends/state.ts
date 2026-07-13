@@ -247,25 +247,17 @@ export class StateBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Create a new file with content.
+   * Write content to a file, creating it or overwriting it if it already exists.
    * Returns WriteResult with filesUpdate to update LangGraph state.
    */
   write(filePath: string, content: string): WriteResult {
     const files = this.files;
-
-    if (filePath in files) {
-      return {
-        error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
-      };
-    }
+    const existing = files[filePath];
 
     const mimeType = getMimeType(filePath);
-    const newFileData = createFileData(
-      content,
-      undefined,
-      this.fileFormat,
-      mimeType,
-    );
+    const newFileData = existing
+      ? updateFileData(existing, content)
+      : createFileData(content, undefined, this.fileFormat, mimeType);
 
     const update = { [filePath]: newFileData };
 

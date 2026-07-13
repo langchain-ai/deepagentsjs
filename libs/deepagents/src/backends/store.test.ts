@@ -173,9 +173,11 @@ describe("StoreBackend", () => {
     const writeRes = await backend.write("/dup.txt", "x");
     expect(writeRes.error).toBeUndefined();
 
-    const dupErr = await backend.write("/dup.txt", "y");
-    expect(dupErr.error).toBeDefined();
-    expect(dupErr.error).toContain("already exists");
+    const overwriteRes = await backend.write("/dup.txt", "y");
+    expect(overwriteRes.error).toBeUndefined();
+
+    const readRes = await backend.read("/dup.txt");
+    expect(readRes.content).toBe("y");
   });
 
   it("should handle read with offset and limit", async () => {

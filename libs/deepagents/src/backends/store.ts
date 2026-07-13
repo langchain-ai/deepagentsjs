@@ -576,29 +576,18 @@ export class StoreBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Create a new file with content.
+   * Write content to a file, creating it or overwriting it if it already exists.
    * Returns WriteResult. External storage sets filesUpdate=null.
    */
   async write(filePath: string, content: string): Promise<WriteResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
 
-    // Check if file exists
     const existing = await store.get(namespace, filePath);
-    if (existing) {
-      return {
-        error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
-      };
-    }
-
-    // Create new file
     const mimeType = getMimeType(filePath);
-    const fileData = createFileData(
-      content,
-      undefined,
-      this.fileFormat,
-      mimeType,
-    );
+    const fileData = existing
+      ? updateFileData(this.convertStoreItemToFileData(existing), content)
+      : createFileData(content, undefined, this.fileFormat, mimeType);
     const storeValue = this.convertFileDataToStoreValue(fileData);
     await store.put(namespace, filePath, storeValue);
     return { path: filePath, filesUpdate: null };

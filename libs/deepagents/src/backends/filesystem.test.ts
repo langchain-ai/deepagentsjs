@@ -86,6 +86,21 @@ describe("FilesystemBackend", () => {
     expect(globResults.files!.some((i) => i.path === f2)).toBe(true);
   });
 
+  it("should overwrite existing files in normal mode", async () => {
+    const root = tmpDir;
+    const filePath = path.join(root, "existing.txt");
+    await writeFile(filePath, "old content");
+
+    const backend = new FilesystemBackend({
+      rootDir: root,
+      virtualMode: false,
+    });
+
+    const result = await backend.write(filePath, "new content");
+    expect(result.error).toBeUndefined();
+    expect(await fs.readFile(filePath, "utf-8")).toBe("new content");
+  });
+
   it("should work in virtual mode with sandboxed paths", async () => {
     const root = tmpDir;
     const f1 = path.join(root, "a.txt");
@@ -133,6 +148,22 @@ describe("FilesystemBackend", () => {
     const traversalError = await backend.read("/../a.txt");
     expect(traversalError.error).toBeDefined();
     expect(traversalError.error).toContain("Path traversal not allowed");
+  });
+
+  it("should overwrite existing files in virtual mode", async () => {
+    const root = tmpDir;
+    await writeFile(path.join(root, "existing.txt"), "old content");
+
+    const backend = new FilesystemBackend({
+      rootDir: root,
+      virtualMode: true,
+    });
+
+    const result = await backend.write("/existing.txt", "new content");
+    expect(result.error).toBeUndefined();
+    expect(await fs.readFile(path.join(root, "existing.txt"), "utf-8")).toBe(
+      "new content",
+    );
   });
 
   it("should list nested directories correctly in virtual mode", async () => {
@@ -411,6 +442,11 @@ describe("FilesystemBackend", () => {
 
     const readResult = await backend.read(symlinkFile);
     expect(readResult.error).toBeDefined();
+
+    const writeResult = await backend.write(symlinkFile, "replacement");
+    expect(writeResult.error).toBeDefined();
+    expect(writeResult.error).toContain("symlink");
+    expect(await fs.readFile(targetFile, "utf-8")).toBe("target content");
   });
 
   describe("binary file handling", () => {

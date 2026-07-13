@@ -506,24 +506,11 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
   }
 
   /**
-   * Create a new file with content.
+   * Write content to a file, creating it or overwriting it if it already exists.
    *
-   * Uses downloadFiles() to check existence and uploadFiles() to write.
-   * No runtime needed on the sandbox host.
+   * Uses uploadFiles() to write. No runtime needed on the sandbox host.
    */
   async write(filePath: string, content: string): Promise<WriteResult> {
-    // Check if file already exists
-    try {
-      const existCheck = await this.downloadFiles([filePath]);
-      if (existCheck[0].content !== null && existCheck[0].error === null) {
-        return {
-          error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
-        };
-      }
-    } catch {
-      // File doesn't exist, which is what we want for write
-    }
-
     const mimeType = getMimeType(filePath);
     let fileContent: Uint8Array;
 

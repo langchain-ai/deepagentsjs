@@ -342,7 +342,7 @@ export class CompositeBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Create a new file, routing to appropriate backend.
+   * Write content to a file, routing to appropriate backend.
    *
    * @param filePath - Absolute file path
    * @param content - File content as string

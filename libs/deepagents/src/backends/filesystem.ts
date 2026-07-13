@@ -335,7 +335,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Create a new file with content.
+   * Write content to a file, creating it or overwriting it if it already exists.
    * Returns WriteResult. External storage sets filesUpdate=null.
    */
   async write(filePath: string, content: string): Promise<WriteResult> {
@@ -352,9 +352,6 @@ export class FilesystemBackend implements BackendProtocolV2 {
             error: `Cannot write to ${filePath} because it is a symlink. Symlinks are not allowed.`,
           };
         }
-        return {
-          error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
-        };
       } catch {
         // File doesn't exist, good to proceed
       }
