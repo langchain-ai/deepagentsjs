@@ -618,7 +618,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
     const results: Record<string, Array<[number, string]>> = {};
     const stat = await fs.stat(baseFull);
     const root = stat.isDirectory() ? baseFull : path.dirname(baseFull);
-    
+
     // Use fast-glob for pattern matching
     const files = await fg("**/*", {
       cwd: root,
