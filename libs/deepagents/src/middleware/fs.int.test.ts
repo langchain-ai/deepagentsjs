@@ -41,7 +41,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       },
     });
 
-    const agent = createDeepAgent({
+    const agent = createAgent({
       model: new FakeListChatModel({ responses: ["done"] }),
       middleware: [
         createFilesystemMiddleware({ tools: ["read_file", "ls"] }),
