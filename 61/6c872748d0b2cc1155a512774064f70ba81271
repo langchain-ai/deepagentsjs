@@ -1,0 +1,28 @@
+libs/deepagents/src/backends/local-shell.ts
+  s_1cbe0c2059dfe1::t_7e158a148a81e0 305-311,315,317,319,339,344-345
+libs/deepagents/src/backends/filesystem.ts
+  s_1cbe0c2059dfe1::t_fa1734f33ed556 622-626,630
+  s_1cbe0c2059dfe1::t_b700604535d1a2 651-652,654-656
+  s_1cbe0c2059dfe1::t_77b200cb7bc151 721-728,732
+libs/deepagents/src/backends/filesystem.test.ts
+  s_1cbe0c2059dfe1::t_6e8f0968e33995 566-568,574
+  s_1cbe0c2059dfe1::t_569b06a5ebff27 596-598
+libs/deepagents/src/backends/local-shell.test.ts
+  s_1cbe0c2059dfe1::t_0fbd6eba143f16 437,439-446,453-455,457-458,460-465
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "616c872748d0b2cc1155a512774064f70ba81271",
+  "prompts": {},
+  "sessions": {
+    "s_1cbe0c2059dfe1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "76f328c2-a36a-46ae-bb38-771e52c62f66",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
