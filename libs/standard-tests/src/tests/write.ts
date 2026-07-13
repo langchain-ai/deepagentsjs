@@ -1,7 +1,7 @@
 import type { AnySandboxInstance, StandardTestsConfig } from "../types.js";
 
 /**
- * Register detailed write() tests (new file, parent dirs, existing file,
+ * Register detailed write() tests (new file, parent dirs, existing file overwrite,
  * special chars, empty, spaces, unicode, slashes, long content, newlines).
  */
 export function registerWriteTests<T extends AnySandboxInstance>(
@@ -51,23 +51,19 @@ export function registerWriteTests<T extends AnySandboxInstance>(
     );
 
     it(
-      "should fail when writing to an existing file",
+      "should overwrite an existing file",
       async () => {
         const shared = getShared();
         const filePath = config.resolvePath("wt-existing.txt");
 
-        // Create file first
         await shared.write(filePath, "First content");
 
-        // Try to write again
         const result = await shared.write(filePath, "Second content");
 
-        expect(result.error).toBeDefined();
-        expect(result.error!.toLowerCase()).toContain("already exists");
+        expect(result.error).toBeUndefined();
 
-        // Verify original content unchanged
         const execResult = await shared.execute(`cat ${filePath}`);
-        expect(execResult.output.trim()).toBe("First content");
+        expect(execResult.output.trim()).toBe("Second content");
       },
       timeout,
     );
