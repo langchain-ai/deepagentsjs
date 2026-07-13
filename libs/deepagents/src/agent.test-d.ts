@@ -93,6 +93,23 @@ describe("createDeepAgent types", () => {
     });
   });
 
+  it("should allow default middleware system prompt overrides", () => {
+    createDeepAgent({
+      middlewareSystemPrompts: {
+        todoList: "Use todos sparingly.",
+        filesystem: "Use filesystem tools carefully.",
+        subagent: "Delegate independent work.",
+        asyncSubagent: "Launch async work only when requested.",
+      },
+    });
+
+    createDeepAgent({
+      middlewareSystemPrompts: {
+        subagent: null,
+      },
+    });
+  });
+
   describe("MergedDeepAgentState helper type", () => {
     it("should correctly merge middleware states", () => {
       type TestMiddleware = readonly [

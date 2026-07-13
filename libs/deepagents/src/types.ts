@@ -145,6 +145,20 @@ export type MergedDeepAgentState<
 export type SupportedResponseFormat = ResponseFormat | TypedToolStrategy<any>;
 
 /**
+ * Overrides for system prompts injected by createDeepAgent's default middleware.
+ */
+export interface DeepAgentMiddlewareSystemPrompts {
+  /** Prompt injected by the built-in todo list middleware. */
+  todoList?: string;
+  /** Prompt injected by the built-in filesystem middleware. */
+  filesystem?: string;
+  /** Prompt injected by the built-in subagent task middleware. Set to `null` to disable it. */
+  subagent?: string | null;
+  /** Prompt injected by the built-in async subagent middleware. */
+  asyncSubagent?: string;
+}
+
+/**
  * Utility type to extract the parsed response type from a ResponseFormat strategy.
  *
  * Maps `ToolStrategy<T>`, `ProviderStrategy<T>`, and `TypedToolStrategy<T>` to `T`
@@ -521,6 +535,8 @@ export interface CreateDeepAgentParams<
   tools?: TTools | StructuredTool[];
   /** Custom system prompt for the agent. This will be combined with the base agent prompt */
   systemPrompt?: string | SystemMessage;
+  /** Overrides for system prompts injected by createDeepAgent's default middleware. */
+  middlewareSystemPrompts?: DeepAgentMiddlewareSystemPrompts;
   /**
    * Optional schema for custom agent state. Allows you to define custom state properties
    * beyond built-in `messages`, `todos`, and `files`. These properties can be accessed
