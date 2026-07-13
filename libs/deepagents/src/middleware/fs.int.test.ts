@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { createAgent } from "langchain";
+import { createAgent, createMiddleware } from "langchain";
+import { FakeListChatModel } from "@langchain/core/utils/testing";
 import { HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 import { MemorySaver } from "@langchain/langgraph";
@@ -24,6 +25,53 @@ import {
 } from "../testing/utils.js";
 
 describe("Filesystem Middleware Integration Tests", () => {
+  it("should remove allowlisted-out tools from model request and system prompt", async () => {
+    const capturedToolNames: string[][] = [];
+    const capturedSystemPrompts: string[] = [];
+    const spyMiddleware = createMiddleware({
+      name: "FilesystemAllowlistSpyMiddleware",
+      wrapModelCall(request, handler) {
+        capturedToolNames.push(
+          request.tools.flatMap((tool) =>
+            typeof tool.name === "string" ? [tool.name] : [],
+          ),
+        );
+        capturedSystemPrompts.push(request.systemMessage.text);
+        return handler(request);
+      },
+    });
+
+    const agent = createDeepAgent({
+      model: new FakeListChatModel({ responses: ["done"] }),
+      middleware: [
+        createFilesystemMiddleware({ tools: ["read_file", "ls"] }),
+        spyMiddleware,
+      ],
+    });
+
+    await agent.invoke({ messages: [new HumanMessage("hi")] });
+
+    expect(capturedToolNames.length).toBeGreaterThan(0);
+    expect(capturedToolNames[0]).toContain("read_file");
+    expect(capturedToolNames[0]).toContain("ls");
+    for (const disabled of [
+      "write_file",
+      "edit_file",
+      "glob",
+      "grep",
+      "execute",
+    ]) {
+      expect(capturedToolNames[0]).not.toContain(disabled);
+    }
+
+    expect(capturedSystemPrompts.length).toBeGreaterThan(0);
+    expect(capturedSystemPrompts[0]).toContain("`read_file`");
+    expect(capturedSystemPrompts[0]).toContain("`ls`");
+    for (const disabled of ["write_file", "edit_file", "glob", "grep"]) {
+      expect(capturedSystemPrompts[0]).not.toContain(`\`${disabled}\``);
+    }
+  });
+
   it.concurrent.each([
     { useComposite: false, label: "StateBackend" },
     { useComposite: true, label: "CompositeBackend" },

@@ -1,6 +1,7 @@
 export {
   createFilesystemMiddleware,
   type FilesystemMiddlewareOptions,
+  type FsToolName,
   FILESYSTEM_TOOL_NAMES,
   // Eviction constants
   TOOLS_EXCLUDED_FROM_EVICTION,
