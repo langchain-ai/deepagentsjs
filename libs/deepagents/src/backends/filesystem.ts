@@ -619,12 +619,16 @@ export class FilesystemBackend implements BackendProtocolV2 {
     const stat = await fs.stat(baseFull);
     const root = stat.isDirectory() ? baseFull : path.dirname(baseFull);
 
-    // Use fast-glob to recursively find all files
+    // Use fast-glob to recursively find all files. `followSymbolicLinks: false`
+    // prevents descending into symlinked directories: fast-glob follows links
+    // by default, so a self-referential directory symlink (e.g. `sub/sub -> .`)
+    // would be walked recursively until the OS throws ELOOP.
     const files = await fg("**/*", {
       cwd: root,
       absolute: true,
       onlyFiles: true,
       dot: true,
+      followSymbolicLinks: false,
     });
 
     for (const fp of files) {
@@ -715,6 +719,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
         absolute: true,
         onlyFiles: true,
         dot: true,
+        followSymbolicLinks: false,
       });
 
       for (const matchedPath of matches) {

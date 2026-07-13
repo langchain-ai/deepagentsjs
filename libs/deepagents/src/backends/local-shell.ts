@@ -302,7 +302,12 @@ export class LocalShellBackend
 
     const formatPath = (rel: string) => (this.virtualMode ? `/${rel}` : rel);
 
-    const globOpts = { cwd: resolvedSearchPath, absolute: false, dot: true };
+    const globOpts = {
+      cwd: resolvedSearchPath,
+      absolute: false,
+      dot: true,
+      followSymbolicLinks: false,
+    };
     const [fileMatches, dirMatches] = await Promise.all([
       fg(pattern, { ...globOpts, onlyFiles: true }),
       fg(pattern, { ...globOpts, onlyDirectories: true }),

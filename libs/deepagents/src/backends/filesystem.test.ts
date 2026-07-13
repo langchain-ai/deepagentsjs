@@ -532,3 +532,83 @@ describe("FilesystemBackend", () => {
     });
   });
 });
+
+/**
+ * Returns true when the platform lets an unprivileged process create symlinks
+ */
+function symlinksSupported(): boolean {
+  const probe = fsSync.mkdtempSync(
+    path.join(os.tmpdir(), "deepagents-symlink-probe-"),
+  );
+  try {
+    fsSync.symlinkSync("target", path.join(probe, "link"));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    fsSync.rmSync(probe, { recursive: true, force: true });
+  }
+}
+const CAN_SYMLINK = symlinksSupported();
+
+describe("FilesystemBackend symlink cycle handling", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = createTempDir();
+  });
+
+  afterEach(async () => {
+    await removeDir(tmpDir);
+  });
+
+  /**
+   * Build a tree with a real file plus an `ln -s . sub/sub` cycle.
+   */
+  async function buildCycle(root: string) {
+    await writeFile(path.join(root, "real.txt"), "needle-content");
+    await writeFile(path.join(root, "sub", "inner.txt"), "needle-content");
+    await fs.symlink(".", path.join(root, "sub", "sub"));
+  }
+
+  // A file reached by following the cycle looks like `.../sub/sub/inner.txt`;
+  // the real file is only ever `.../sub/inner.txt`.
+  const followedCycle = (p: string) => /sub[\\/]sub/.test(p);
+
+  it.skipIf(!CAN_SYMLINK)(
+    "glob does not descend into a directory symlink cycle",
+    async () => {
+      await buildCycle(tmpDir);
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: false,
+      });
+
+      const result = await backend.glob("**/*", tmpDir);
+
+      expect(result.error).toBeUndefined();
+      const paths = result.files!.map((f) => f.path);
+      expect(paths.some((p) => p.endsWith("inner.txt"))).toBe(true);
+      expect(paths.some((p) => p.endsWith("real.txt"))).toBe(true);
+      expect(paths.some(followedCycle)).toBe(false);
+    },
+  );
+
+  it.skipIf(!CAN_SYMLINK)(
+    "grep does not descend into a directory symlink cycle",
+    async () => {
+      await buildCycle(tmpDir);
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: false,
+      });
+
+      const result = await backend.grep("needle-content", tmpDir);
+
+      expect(result.error).toBeUndefined();
+      const paths = (result.matches ?? []).map((m) => m.path);
+      expect(paths.some((p) => p.endsWith("inner.txt"))).toBe(true);
+      expect(paths.some(followedCycle)).toBe(false);
+    },
+  );
+});

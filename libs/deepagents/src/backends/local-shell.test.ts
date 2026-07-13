@@ -400,3 +400,54 @@ describe("LocalShellBackend", () => {
     });
   });
 });
+
+/**
+ * Returns true when the platform lets an unprivileged process create symlinks
+ */
+function symlinksSupported(): boolean {
+  const probe = fsSync.mkdtempSync(
+    path.join(os.tmpdir(), "deepagents-symlink-probe-"),
+  );
+  try {
+    fsSync.symlinkSync("target", path.join(probe, "link"));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    fsSync.rmSync(probe, { recursive: true, force: true });
+  }
+}
+const CAN_SYMLINK = symlinksSupported();
+
+describe("LocalShellBackend symlink cycle handling", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = createTempDir();
+  });
+
+  afterEach(async () => {
+    await removeDir(tmpDir);
+  });
+
+  it.skipIf(!CAN_SYMLINK)(
+    "glob does not descend into a directory symlink cycle",
+    async () => {
+      await fs.mkdir(path.join(tmpDir, "sub"), { recursive: true });
+      await fs.writeFile(path.join(tmpDir, "sub", "inner.txt"), "x", "utf-8");
+      await fs.symlink(".", path.join(tmpDir, "sub", "sub"));
+
+      const backend = new LocalShellBackend({ rootDir: tmpDir });
+      const result = await backend.glob("**/*", tmpDir);
+
+      expect(result.error).toBeUndefined();
+
+      const filePaths = result
+        .files!.filter((f) => !f.is_dir)
+        .map((f) => f.path);
+
+      expect(filePaths.some((p) => p.endsWith("inner.txt"))).toBe(true);
+      expect(filePaths.some((p) => /sub[\\/]sub/.test(p))).toBe(false);
+    },
+  );
+});
