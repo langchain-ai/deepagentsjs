@@ -270,16 +270,13 @@ export function createDeepAgent<
    * Only the general-purpose subagent inherits the main agent's skills.
    * If a custom subagent needs skills, it must specify its own `skills` array.
    */
-  const normalizeSubagentSpec = (
-    input: SubAgent,
-    parentDefaultOverrideCandidates: readonly AgentMiddleware[] = [],
-  ): SubAgent => {
+  const normalizeSubagentSpec = (input: SubAgent): SubAgent => {
     const effectivePermissions = input.permissions ?? permissions;
 
     // Middleware for custom subagents (does NOT include skills from main agent).
     // Uses createSummarizationMiddleware (deepagents version) with backend support
     // and auto-computed defaults from model profile.
-    const subagentCoreMiddleware = [
+    const subagentDefaultMiddleware = [
       // Provides todo list management capabilities for tracking tasks.
       todoListMiddleware(),
       // Enables filesystem operations and optional long-term memory storage.
@@ -298,21 +295,8 @@ export function createDeepAgent<
         ? [createSkillsMiddleware({ backend, sources: input.skills })]
         : []),
     ];
-    const defaultMiddlewareOverrides = parentDefaultOverrideCandidates.filter(
-      (candidate) =>
-        subagentCoreMiddleware.some(
-          (middleware) => middleware.name === candidate.name,
-        ),
-    );
-    const subagentDefaultsWithParentOverrides = mergeMiddleware(
-      subagentCoreMiddleware,
-      defaultMiddlewareOverrides,
-    );
     let subagentMiddleware = [
-      ...mergeMiddleware(
-        subagentDefaultsWithParentOverrides,
-        input.middleware ?? [],
-      ),
+      ...mergeMiddleware(subagentDefaultMiddleware, input.middleware ?? []),
       ...cacheMiddleware,
     ];
 
@@ -359,18 +343,25 @@ export function createDeepAgent<
       gpConfig?.systemPrompt ??
       applyProfilePrompt(harnessProfile, GENERAL_PURPOSE_SUBAGENT.systemPrompt);
 
-    const generalPurposeSpec = normalizeSubagentSpec(
-      {
-        ...GENERAL_PURPOSE_SUBAGENT,
-        description:
-          gpConfig?.description ?? GENERAL_PURPOSE_SUBAGENT.description,
-        systemPrompt: gpSystemPrompt,
-        model,
-        skills,
-        tools: effectiveTools,
-      },
-      customMiddleware,
-    );
+    const gpDefaultMiddlewareNames = new Set([
+      "todoListMiddleware",
+      "FilesystemMiddleware",
+      "SummarizationMiddleware",
+      "patchToolCallsMiddleware",
+      ...(skills != null && skills.length > 0 ? ["SkillsMiddleware"] : []),
+    ]);
+    const generalPurposeSpec = normalizeSubagentSpec({
+      ...GENERAL_PURPOSE_SUBAGENT,
+      description:
+        gpConfig?.description ?? GENERAL_PURPOSE_SUBAGENT.description,
+      systemPrompt: gpSystemPrompt,
+      model,
+      skills,
+      tools: effectiveTools,
+      middleware: customMiddleware.filter((middleware) =>
+        gpDefaultMiddlewareNames.has(middleware.name),
+      ),
+    });
     inlineSubagents.unshift(generalPurposeSpec);
   }
 
