@@ -1,13 +1,11 @@
 import {
   createAgent,
-  createMiddleware,
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
   bedrockPromptCachingMiddleware,
   todoListMiddleware,
   SystemMessage,
   type AgentMiddleware,
-  type AnyAgentMiddleware,
   context,
 } from "langchain";
 import type {
@@ -33,6 +31,7 @@ import { StateBackend } from "./backends/state.js";
 import { ConfigurationError } from "./errors.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
+import { createToolExclusionMiddleware } from "./middleware/tool_exclusion.js";
 import {
   GENERAL_PURPOSE_SUBAGENT,
   type CompiledSubAgent,
@@ -107,6 +106,27 @@ const BUILTIN_TOOL_NAMES: ReadonlySet<string> = new Set([
   "task",
   "write_todos",
 ]);
+
+/**
+ * Merge custom middleware into an assembled stack by `.name`.
+ *
+ * Matching custom middleware replaces the existing entry in place. New
+ * middleware is appended after the base stack in caller-provided order.
+ *
+ * @internal
+ */
+export function mergeMiddleware(
+  base: readonly AgentMiddleware[],
+  custom: readonly AgentMiddleware[],
+): AgentMiddleware[] {
+  const merged = new Map(
+    base.map((middleware) => [middleware.name, middleware]),
+  );
+  for (const middleware of custom) {
+    merged.set(middleware.name, middleware);
+  }
+  return [...merged.values()];
+}
 
 /**
  * Create a Deep Agent.
@@ -223,7 +243,7 @@ export function createDeepAgent<
 
   const anthropicModel = isAnthropicModel(model);
   const bedrockModel = isBedrockConverseModel(model);
-  let cacheMiddleware: AnyAgentMiddleware[] = [];
+  let cacheMiddleware: AgentMiddleware[] = [];
 
   if (anthropicModel) {
     cacheMiddleware = [
@@ -256,7 +276,7 @@ export function createDeepAgent<
     // Middleware for custom subagents (does NOT include skills from main agent).
     // Uses createSummarizationMiddleware (deepagents version) with backend support
     // and auto-computed defaults from model profile.
-    const subagentMiddleware = [
+    const subagentCoreMiddleware = [
       // Provides todo list management capabilities for tracking tasks.
       todoListMiddleware(),
       // Enables filesystem operations and optional long-term memory storage.
@@ -274,11 +294,30 @@ export function createDeepAgent<
       ...(input.skills != null && input.skills.length > 0
         ? [createSkillsMiddleware({ backend, sources: input.skills })]
         : []),
-      // Appends custom middleware from the subagent spec.
-      ...(input.middleware ?? []),
-      // Adds Anthropic cache controls when supported by the model.
+    ];
+    const defaultMiddlewareOverrides = customMiddleware.filter((candidate) =>
+      subagentCoreMiddleware.some(
+        (middleware) => middleware.name === candidate.name,
+      ),
+    );
+    const subagentDefaultsWithParentOverrides = mergeMiddleware(
+      subagentCoreMiddleware,
+      defaultMiddlewareOverrides,
+    );
+    let subagentMiddleware = [
+      ...mergeMiddleware(
+        subagentDefaultsWithParentOverrides,
+        input.middleware ?? [],
+      ),
       ...cacheMiddleware,
     ];
+
+    if (harnessProfile.excludedMiddleware.size > 0) {
+      subagentMiddleware = subagentMiddleware.filter(
+        (middleware) => !harnessProfile.excludedMiddleware.has(middleware.name),
+      );
+    }
+
     return {
       ...input,
       tools: input.tools ?? [],
@@ -365,9 +404,8 @@ export function createDeepAgent<
     patchToolCallsMiddleware,
   ] = builtInMiddleware;
 
-  // Runtime middleware array: combine built-in + optional middleware.
-  // Note: The full type is handled separately via AllMiddleware.
-  const middleware: AnyAgentMiddleware[] = [
+  // Runtime middleware array: combine core middleware, custom overrides, and tail middleware.
+  const coreMiddleware: AgentMiddleware[] = [
     // Built-in middleware with deterministic ordering.
     todoMiddleware,
     // Optional root-level skills.
@@ -380,8 +418,10 @@ export function createDeepAgent<
     ...(asyncSubAgents.length > 0
       ? [createAsyncSubAgentMiddleware({ asyncSubAgents })]
       : []),
-    // User-provided middleware.
-    ...customMiddleware,
+  ];
+  const tailMiddleware: AgentMiddleware[] = [
+    // Profile middleware runs before cache middleware so it participates in prompt caching.
+    ...resolveMiddleware(harnessProfile.extraMiddleware),
     // Optional Anthropic cache controls.
     ...cacheMiddleware,
     // Optional memory support.
@@ -398,44 +438,22 @@ export function createDeepAgent<
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
   ];
 
-  // Apply profile middleware additions. Inserted before cache middleware
-  // so profile-injected middleware participates in prompt caching.
-  const profileMiddleware = resolveMiddleware(harnessProfile.extraMiddleware);
-  if (profileMiddleware.length > 0) {
-    const cacheIdx = middleware.findIndex(
-      (m) => m.name === "AnthropicPromptCachingMiddleware",
-    );
-    if (cacheIdx !== -1) {
-      middleware.splice(cacheIdx, 0, ...profileMiddleware);
-    } else {
-      middleware.push(...profileMiddleware);
-    }
-  }
+  let middleware: AgentMiddleware[] = [
+    ...mergeMiddleware(coreMiddleware, customMiddleware),
+    ...tailMiddleware,
+  ];
 
-  // Apply profile middleware exclusions.
+  // Apply profile middleware exclusions after custom replacement so exclusions win.
   if (harnessProfile.excludedMiddleware.size > 0) {
     const excluded = harnessProfile.excludedMiddleware;
-    const filtered = middleware.filter((m) => !excluded.has(m.name));
-    middleware.length = 0;
-    middleware.push(...filtered);
+    middleware = middleware.filter((entry) => !excluded.has(entry.name));
   }
 
   // Apply profile tool exclusions via a filtering middleware that runs
   // after all tool-injecting middleware.
   if (harnessProfile.excludedTools.size > 0) {
-    const excludedTools = harnessProfile.excludedTools;
     middleware.push(
-      createMiddleware({
-        name: "_ToolExclusionMiddleware",
-        wrapModelCall: async (request: any, handler: any) => {
-          return handler({
-            ...request,
-            tools: request.tools?.filter(
-              (t: { name: string }) => !excludedTools.has(t.name),
-            ),
-          });
-        },
-      }),
+      createToolExclusionMiddleware(harnessProfile.excludedTools),
     );
   }
 
