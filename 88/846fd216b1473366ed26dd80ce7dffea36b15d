@@ -1,0 +1,14 @@
+libs/deepagents/src/backends/filesystem.ts
+  h_f78d33d4280f3f 622
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "88846fd216b1473366ed26dd80ce7dffea36b15d",
+  "prompts": {},
+  "humans": {
+    "h_f78d33d4280f3f": {
+      "author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
