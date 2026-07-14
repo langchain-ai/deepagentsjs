@@ -180,6 +180,36 @@ describe("StoreBackend", () => {
     expect(readRes.content).toBe("y");
   });
 
+  it("should overwrite existing binary files with decoded bytes", async () => {
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
+    const oldBytes = new Uint8Array([1, 2, 3]);
+    const newBytes = new Uint8Array([4, 5, 6]);
+
+    await backend.write("/image.png", Buffer.from(oldBytes).toString("base64"));
+    const result = await backend.write(
+      "/image.png",
+      Buffer.from(newBytes).toString("base64"),
+    );
+
+    expect(result.error).toBeUndefined();
+    const raw = await backend.readRaw("/image.png");
+    expect(raw.data).toBeDefined();
+    expect(raw.data!.content).toEqual(newBytes);
+  });
+
+  it("should replace malformed existing store values", async () => {
+    const { runtime, store } = makeConfig();
+    const backend = new StoreBackend(runtime);
+    await store.put(["filesystem"], "/bad.txt", { unexpected: "shape" });
+
+    const result = await backend.write("/bad.txt", "replacement");
+
+    expect(result.error).toBeUndefined();
+    const readRes = await backend.read("/bad.txt");
+    expect(readRes.content).toBe("replacement");
+  });
+
   it("should handle read with offset and limit", async () => {
     const { runtime } = makeConfig();
     const backend = new StoreBackend(runtime);

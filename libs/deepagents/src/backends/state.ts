@@ -20,6 +20,7 @@ import type {
 } from "./protocol.js";
 import {
   createFileData,
+  createWriteFileData,
   fileDataToString,
   getMimeType,
   globSearchFiles,
@@ -254,10 +255,12 @@ export class StateBackend implements BackendProtocolV2 {
     const files = this.files;
     const existing = files[filePath];
 
-    const mimeType = getMimeType(filePath);
-    const newFileData = existing
-      ? updateFileData(existing, content)
-      : createFileData(content, undefined, this.fileFormat, mimeType);
+    const newFileData = createWriteFileData(
+      filePath,
+      content,
+      this.fileFormat,
+      existing,
+    );
 
     const update = { [filePath]: newFileData };
 

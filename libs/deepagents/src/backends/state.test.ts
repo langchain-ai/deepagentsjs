@@ -130,6 +130,32 @@ describe("StateBackend", () => {
     expect(readRes.content).toBe("y");
   });
 
+  it("should overwrite existing binary files with decoded bytes", () => {
+    const oldBytes = new Uint8Array([1, 2, 3]);
+    const newBytes = new Uint8Array([4, 5, 6]);
+    const { state, runtime } = makeConfig({
+      "/image.png": {
+        content: oldBytes,
+        mimeType: "image/png",
+        created_at: "2024-01-01T00:00:00.000Z",
+        modified_at: "2024-01-01T00:00:00.000Z",
+      },
+    });
+    const backend = new StateBackend(runtime);
+
+    const result = backend.write(
+      "/image.png",
+      Buffer.from(newBytes).toString("base64"),
+    );
+
+    expect(result.error).toBeUndefined();
+    Object.assign(state.files, result.filesUpdate);
+    const raw = backend.readRaw("/image.png");
+    expect(raw.data).toBeDefined();
+    expect(raw.data!.content).toEqual(newBytes);
+    expect(raw.data!.created_at).toBe("2024-01-01T00:00:00.000Z");
+  });
+
   it("should list nested directories correctly", () => {
     const { state, runtime } = makeConfig();
     const backend = new StateBackend(runtime);

@@ -27,6 +27,7 @@ import type {
 } from "./protocol.js";
 import {
   createFileData,
+  createWriteFileData,
   fileDataToString,
   getMimeType,
   globSearchFiles,
@@ -584,10 +585,22 @@ export class StoreBackend implements BackendProtocolV2 {
     const namespace = this.getNamespace();
 
     const existing = await store.get(namespace, filePath);
-    const mimeType = getMimeType(filePath);
-    const fileData = existing
-      ? updateFileData(this.convertStoreItemToFileData(existing), content)
-      : createFileData(content, undefined, this.fileFormat, mimeType);
+    let existingFileData: FileData | undefined;
+    if (existing) {
+      try {
+        existingFileData = this.convertStoreItemToFileData(existing);
+      } catch {
+        // Treat invalid/corrupt existing values as replaceable.
+        existingFileData = undefined;
+      }
+    }
+
+    const fileData = createWriteFileData(
+      filePath,
+      content,
+      this.fileFormat,
+      existingFileData,
+    );
     const storeValue = this.convertFileDataToStoreValue(fileData);
     await store.put(namespace, filePath, storeValue);
     return { path: filePath, filesUpdate: null };
