@@ -483,8 +483,15 @@ const FILESYSTEM_TOOL_DESCRIPTION_LINES = {
   edit_file: "edit_file: edit a file in the filesystem",
   glob: 'glob: find files matching a pattern (e.g., "**/*.py")',
   grep: "grep: search for text within files",
-  execute: "execute: run a shell command in the sandbox",
-} as const satisfies Record<FsToolName, string>;
+} as const satisfies Record<Exclude<FsToolName, "execute">, string>;
+
+type FilesystemToolWithDescription = keyof typeof FILESYSTEM_TOOL_DESCRIPTION_LINES;
+
+function hasFilesystemToolDescription(
+  name: FsToolName,
+): name is FilesystemToolWithDescription {
+  return name in FILESYSTEM_TOOL_DESCRIPTION_LINES;
+}
 
 function buildFilesystemSystemPrompt(
   visibleTools: ReadonlySet<FsToolName>,
@@ -494,6 +501,7 @@ function buildFilesystemSystemPrompt(
   );
   const toolHeader = promptToolNames.map((name) => `\`${name}\``).join(", ");
   const toolDescriptions = promptToolNames
+    .filter(hasFilesystemToolDescription)
     .map((name) => `- ${FILESYSTEM_TOOL_DESCRIPTION_LINES[name]}`)
     .join("\n");
 
