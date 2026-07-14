@@ -117,6 +117,7 @@ export type {
   GlobResult,
   WriteResult,
   EditResult,
+  DeleteResult,
   StateAndStore,
   // Sandbox execution types
   ExecuteResponse,
