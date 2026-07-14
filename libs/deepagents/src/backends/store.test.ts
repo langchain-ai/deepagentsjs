@@ -180,6 +180,20 @@ describe("StoreBackend", () => {
     expect(readRes.content).toBe("y");
   });
 
+  it("should honor v1 format for binary-path writes", async () => {
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime, { fileFormat: "v1" });
+    const content = "AQID";
+
+    const result = await backend.write("/image.png", content);
+
+    expect(result.error).toBeUndefined();
+    const raw = await backend.readRaw("/image.png");
+    expect(raw.data).toBeDefined();
+    expect(raw.data!.content).toEqual([content]);
+    expect("mimeType" in raw.data!).toBe(false);
+  });
+
   it("should overwrite existing binary files with decoded bytes", async () => {
     const { runtime } = makeConfig();
     const backend = new StoreBackend(runtime);

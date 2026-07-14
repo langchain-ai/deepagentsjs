@@ -369,12 +369,14 @@ export function createWriteFileData(
   const createdAt = existing?.created_at;
 
   if (!isTextMimeType(mimeType)) {
-    return createFileData(
-      decodeBase64ToBytes(content),
-      createdAt,
-      "v2",
-      mimeType,
-    );
+    return fileFormat === "v1"
+      ? createFileData(content, createdAt, "v1", mimeType)
+      : createFileData(
+          decodeBase64ToBytes(content),
+          createdAt,
+          "v2",
+          mimeType,
+        );
   }
 
   return existing

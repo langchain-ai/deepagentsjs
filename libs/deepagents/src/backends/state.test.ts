@@ -130,6 +130,21 @@ describe("StateBackend", () => {
     expect(readRes.content).toBe("y");
   });
 
+  it("should honor v1 format for binary-path writes", () => {
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime, { fileFormat: "v1" });
+    const content = "AQID";
+
+    const result = backend.write("/image.png", content);
+
+    expect(result.error).toBeUndefined();
+    Object.assign(state.files, result.filesUpdate);
+    const raw = backend.readRaw("/image.png");
+    expect(raw.data).toBeDefined();
+    expect(raw.data!.content).toEqual([content]);
+    expect("mimeType" in raw.data!).toBe(false);
+  });
+
   it("should overwrite existing binary files with decoded bytes", () => {
     const oldBytes = new Uint8Array([1, 2, 3]);
     const newBytes = new Uint8Array([4, 5, 6]);
