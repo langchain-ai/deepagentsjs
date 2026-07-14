@@ -797,7 +797,7 @@ importers:
     dependencies:
       node-vfs-polyfill:
         specifier: github:vercel-labs/node-vfs-polyfill
-        version: git+https://git@github.com:vercel-labs/node-vfs-polyfill.git#ef76f903d052d915395336dbf3498e3f5311a852
+        version: https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/ef76f903d052d915395336dbf3498e3f5311a852
     devDependencies:
       '@langchain/sandbox-standard-tests':
         specifier: workspace:*
@@ -3203,8 +3203,8 @@ packages:
     resolution: {integrity: sha512-+P72GAjVAbTxjjwUmwjVrqrdZROD4nf8KgpBoDxqXXTiYZZt/ud60dE5yvCSr9lRO8e8yv6kgJIC0K0PfZFVQw==}
     hasBin: true
 
-  node-vfs-polyfill@git+https://git@github.com:vercel-labs/node-vfs-polyfill.git#ef76f903d052d915395336dbf3498e3f5311a852:
-    resolution: {commit: ef76f903d052d915395336dbf3498e3f5311a852, repo: git@github.com:vercel-labs/node-vfs-polyfill.git, type: git}
+  node-vfs-polyfill@https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/ef76f903d052d915395336dbf3498e3f5311a852:
+    resolution: {tarball: https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/ef76f903d052d915395336dbf3498e3f5311a852}
     version: 1.0.0
     engines: {node: '>=22.0.0'}
 
@@ -6114,7 +6114,7 @@ snapshots:
       detect-libc: 2.1.2
     optional: true
 
-  node-vfs-polyfill@git+https://git@github.com:vercel-labs/node-vfs-polyfill.git#ef76f903d052d915395336dbf3498e3f5311a852: {}
+  node-vfs-polyfill@https://codeload.github.com/vercel-labs/node-vfs-polyfill/tar.gz/ef76f903d052d915395336dbf3498e3f5311a852: {}
 
   obug@2.1.3: {}
 
