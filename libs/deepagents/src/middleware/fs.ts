@@ -103,6 +103,10 @@ export const FILESYSTEM_TOOL_NAMES = [
   "execute",
 ] as const;
 
+/**
+ * Built-in filesystem tool names accepted by
+ * {@link createFilesystemMiddleware}'s `tools` allowlist.
+ */
 export type FsToolName = (typeof FILESYSTEM_TOOL_NAMES)[number];
 
 function isFilesystemToolName(name: unknown): name is FsToolName {
@@ -1167,17 +1171,44 @@ function createExecuteTool(
 export interface FilesystemMiddlewareOptions {
   /** Backend instance or factory (default: StateBackend) */
   backend?: AnyBackendProtocol | BackendFactory;
-  /** Optional custom system prompt override */
+  /**
+   * Optional filesystem-specific system prompt override.
+   *
+   * When omitted, the middleware generates a prompt that reflects the tools
+   * visible for the current model request. Supplying a custom prompt replaces
+   * that generated filesystem prompt entirely.
+   */
   systemPrompt?: string | null;
-  /** Optional custom tool descriptions override */
+  /**
+   * Optional descriptions for built-in filesystem tools.
+   *
+   * Keys correspond to {@link FsToolName}. Descriptions for tools that are not
+   * enabled by the `tools` allowlist are ignored because those tools are not
+   * exposed to the model.
+   */
   customToolDescriptions?: Partial<Record<FsToolName, string>> | null;
   /**
    * Allowlist of built-in filesystem tools to expose to the model.
    *
-   * `undefined`, `null`, and `"all"` preserve default behavior and enable all
-   * filesystem tools subject to backend capability filtering. Passing an array
-   * restricts the middleware to only those tools. `read_file` must be included
-   * in every explicit array because it is required by FilesystemMiddleware.
+   * - `undefined`, `null`, and `"all"` preserve the default behavior: every
+   *   filesystem tool is registered, subject to backend capability filtering.
+   * - Passing an array restricts the middleware to only those tool names.
+   * - `read_file` must be included in every explicit array because it is used
+   *   by normal file-inspection flows and by large-result recovery guidance.
+   * - Backend capability checks still narrow the final visible tool set. For
+   *   example, `execute` is removed when the resolved backend does not support
+   *   command execution, even if it appears in this allowlist.
+   * - User-provided non-filesystem tools are not affected by this allowlist.
+   *
+   * The generated filesystem system prompt is based on the tools that remain
+   * visible after this allowlist and backend capability filtering are applied.
+   *
+   * @example Read/search-only filesystem access
+   * ```ts
+   * createFilesystemMiddleware({
+   *   tools: ["read_file", "ls", "glob", "grep"],
+   * });
+   * ```
    */
   tools?: readonly FsToolName[] | "all" | null;
   /** Optional token limit before evicting a tool result to the filesystem (default: 20000 tokens, ~80KB) */
@@ -1194,8 +1225,11 @@ export interface FilesystemMiddlewareOptions {
    * **Note on `execute`**: permissions are not enforced on `execute` because
    * shell commands can access any path regardless of path-based rules. Using
    * permissions with an execution-capable backend (one where `isSandboxBackend`
-   * returns `true`) throws a `ConfigurationError` unless the backend is a
-   * `CompositeBackend` and every permission path is scoped to a route prefix.
+   * returns `true`) throws a `ConfigurationError` unless either:
+   *
+   * - `execute` is disabled via `tools`, or
+   * - the backend is a `CompositeBackend` and every permission path is scoped to
+   *   a route prefix.
    *
    * When omitted or empty, all filesystem operations are permitted.
    */
@@ -1246,7 +1280,31 @@ function allPathsScopedToRoutes(
 }
 
 /**
- * Create filesystem middleware with all tools and features.
+ * Create middleware that provides built-in filesystem tools and filesystem-aware
+ * prompt guidance.
+ *
+ * By default, the middleware registers every built-in filesystem tool listed in
+ * {@link FILESYSTEM_TOOL_NAMES}. Use {@link FilesystemMiddlewareOptions.tools}
+ * to narrow that set for read-only, search-only, or otherwise restricted
+ * agents. The allowlist only controls built-in filesystem tools; custom tools
+ * from the agent or other middleware are left untouched.
+ *
+ * The middleware also filters tools whose backend capabilities are unavailable
+ * at request time. In particular, `execute` is only visible when the resolved
+ * backend supports command execution. The filesystem prompt is generated from
+ * the final visible filesystem tools so the model is not instructed to call
+ * tools it cannot see.
+ *
+ * @param options Filesystem middleware configuration.
+ * @returns Agent middleware that contributes filesystem state, tools, prompt
+ * guidance, permission checks, and large-result eviction.
+ *
+ * @example Read-only filesystem middleware
+ * ```ts
+ * const middleware = createFilesystemMiddleware({
+ *   tools: ["read_file", "ls", "glob", "grep"],
+ * });
+ * ```
  */
 export function createFilesystemMiddleware(
   options: FilesystemMiddlewareOptions = {},
