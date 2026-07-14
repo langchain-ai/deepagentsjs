@@ -118,6 +118,43 @@ export class FilesystemBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Resolve the concrete path to unlink for a virtual delete operation.
+   *
+   * Virtual-mode path containment is lexical in resolvePath(), so deleting via
+   * that path could follow a symlinked parent outside the virtual root. Resolve
+   * and validate the real parent, then unlink through that real parent path so a
+   * replacement of the original lexical parent cannot redirect the unlink.
+   */
+  private async resolveDeletePath(
+    resolvedPath: string,
+    filePath: string,
+  ): Promise<string> {
+    if (!this.virtualMode) {
+      return resolvedPath;
+    }
+
+    const relative = path.relative(this.cwd, resolvedPath);
+    const segments = relative.split(path.sep).filter(Boolean);
+    let current = this.cwd;
+    for (const segment of segments.slice(0, -1)) {
+      current = path.join(current, segment);
+      const stat = await fs.lstat(current);
+      if (stat.isSymbolicLink()) {
+        throw new Error(`Symlink parent not allowed: ${filePath}`);
+      }
+    }
+
+    const realRoot = await fs.realpath(this.cwd);
+    const realParent = await fs.realpath(path.dirname(resolvedPath));
+    const realRelative = path.relative(realRoot, realParent);
+    if (realRelative.startsWith("..") || path.isAbsolute(realRelative)) {
+      throw new Error(`Path '${filePath}' resolves outside root directory`);
+    }
+
+    return path.join(realParent, path.basename(resolvedPath));
+  }
+
+  /**
    * List files and directories in the specified directory (non-recursive).
    *
    * @param dirPath - Absolute directory path to list files from
@@ -507,12 +544,13 @@ export class FilesystemBackend implements BackendProtocolV2 {
     }
 
     try {
-      const stat = await fs.lstat(resolvedPath);
+      const deletePath = await this.resolveDeletePath(resolvedPath, filePath);
+      const stat = await fs.lstat(deletePath);
       if (stat.isDirectory()) {
         return { error: `Error: '${filePath}' is a directory, not a file` };
       }
 
-      await fs.unlink(resolvedPath);
+      await fs.unlink(deletePath);
       return { path: filePath };
     } catch (error: unknown) {
       if (hasErrorCode(error, "ENOENT")) {

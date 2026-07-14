@@ -484,6 +484,31 @@ describe("FilesystemBackend", () => {
       expect(result.path).toBeUndefined();
       expect(result.error).toContain("Path traversal not allowed");
     });
+
+    it("should reject symlinked parent directories in virtual mode", async () => {
+      const outsideDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), "deepagents-outside-"),
+      );
+      const outsideFile = path.join(outsideDir, "secret.txt");
+      await writeFile(outsideFile, "secret");
+      try {
+        await fs.symlink(outsideDir, path.join(tmpDir, "link"), "dir");
+      } catch {
+        await removeDir(outsideDir);
+        return;
+      }
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.delete("/link/secret.txt");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("Symlink parent not allowed");
+      await expect(fs.stat(outsideFile)).resolves.toBeDefined();
+      await removeDir(outsideDir);
+    });
   });
 
   describe("binary file handling", () => {
