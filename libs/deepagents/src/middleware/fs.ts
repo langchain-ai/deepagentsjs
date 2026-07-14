@@ -1252,6 +1252,8 @@ export function createFilesystemMiddleware(
     tools: filesystemTools = null,
   } = options;
   const enabledFilesystemTools = normalizeFilesystemTools(filesystemTools);
+  const executeToolEnabled =
+    enabledFilesystemTools == null || enabledFilesystemTools.has("execute");
 
   if (permissions.length > 0) {
     validatePermissionPaths(permissions);
@@ -1259,6 +1261,7 @@ export function createFilesystemMiddleware(
 
   if (
     permissions.length > 0 &&
+    executeToolEnabled &&
     typeof backend !== "function" &&
     isSandboxBackend(backend) &&
     !allPathsScopedToRoutes(permissions, backend)
