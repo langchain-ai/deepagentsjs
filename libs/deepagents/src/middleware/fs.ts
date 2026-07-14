@@ -485,7 +485,8 @@ const FILESYSTEM_TOOL_DESCRIPTION_LINES = {
   grep: "grep: search for text within files",
 } as const satisfies Record<Exclude<FsToolName, "execute">, string>;
 
-type FilesystemToolWithDescription = keyof typeof FILESYSTEM_TOOL_DESCRIPTION_LINES;
+type FilesystemToolWithDescription =
+  keyof typeof FILESYSTEM_TOOL_DESCRIPTION_LINES;
 
 function hasFilesystemToolDescription(
   name: FsToolName,
