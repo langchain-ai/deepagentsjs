@@ -10,7 +10,6 @@ import {
 import { MemorySaver, StateSchema } from "@langchain/langgraph";
 import { createFileData } from "./backends/utils.js";
 import { ConfigurationError } from "./errors.js";
-import { registerHarnessProfile } from "./profiles/index.js";
 import { assertAllDeepAgentQualities } from "./testing/utils.js";
 import { z } from "zod/v4";
 
@@ -125,7 +124,9 @@ describe("System prompt cache control breakpoints", () => {
 });
 
 describe("profile tool exclusions", () => {
-  it("removes excluded filesystem tools before agent construction", () => {
+  it("removes excluded filesystem tools before agent construction", async () => {
+    const { registerHarnessProfile } =
+      await import("./profiles/harness/index.js");
     registerHarnessProfile("fstoolstest", { excludedTools: ["execute"] });
 
     const agent = createDeepAgent({ model: "fstoolstest:model" });
