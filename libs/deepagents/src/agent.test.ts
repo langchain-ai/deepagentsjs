@@ -309,9 +309,7 @@ describe("System prompt cache control breakpoints", () => {
 });
 
 describe("profile tool exclusions", () => {
-  it("removes excluded filesystem tools before agent construction", async () => {
-    const { registerHarnessProfile } =
-      await import("./profiles/harness/index.js");
+  it("removes excluded filesystem tools before agent construction", () => {
     registerHarnessProfile("fstoolstest", { excludedTools: ["execute"] });
 
     const agent = createDeepAgent({ model: "fstoolstest:model" });
