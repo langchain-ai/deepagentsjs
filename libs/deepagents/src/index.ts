@@ -149,6 +149,7 @@ export {
   type ReadRawResult,
   type WriteResult,
   type EditResult,
+  type DeleteResult,
   // Sandbox execution types
   type ExecuteResponse,
   type FileData,

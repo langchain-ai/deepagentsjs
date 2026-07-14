@@ -7,6 +7,7 @@
  */
 
 import type {
+  DeleteResult,
   EditResult,
   ExecuteResponse,
   FileData,
@@ -110,6 +111,14 @@ export interface BackendProtocolV1 {
     newString: string,
     replaceAll?: boolean,
   ): MaybePromise<EditResult>;
+
+  /**
+   * Delete a single file.
+   *
+   * @param filePath - Absolute path to the file to delete
+   * @returns DeleteResult with path on success or error on failure
+   */
+  delete?(filePath: string): MaybePromise<DeleteResult>;
 
   /**
    * Upload multiple files.
