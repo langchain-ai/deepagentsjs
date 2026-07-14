@@ -789,6 +789,42 @@ describe("CompositeBackend", () => {
     });
   });
 
+  describe("delete", () => {
+    it("should route deletes to the correct backend and restore original paths", async () => {
+      const { runtime } = makeConfig();
+      const composite = new CompositeBackend(new StoreBackend(runtime), {
+        "/store/": new StoreBackend(runtime),
+      });
+
+      await composite.write("/local.txt", "local");
+      await composite.write("/store/remote.txt", "remote");
+
+      const localDelete = await composite.delete("/local.txt");
+      expect(localDelete.error).toBeUndefined();
+      expect(localDelete.path).toBe("/local.txt");
+      expect((await composite.read("/local.txt")).error).toContain("not found");
+
+      const routedDelete = await composite.delete("/store/remote.txt");
+      expect(routedDelete.error).toBeUndefined();
+      expect(routedDelete.path).toBe("/store/remote.txt");
+      expect((await composite.read("/store/remote.txt")).error).toContain(
+        "not found",
+      );
+    });
+
+    it("should return routed backend errors for missing files", async () => {
+      const { runtime } = makeConfig();
+      const composite = new CompositeBackend(new StoreBackend(runtime), {
+        "/store/": new StoreBackend(runtime),
+      });
+
+      const result = await composite.delete("/store/missing.txt");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("not found");
+    });
+  });
+
   describe("uploadFiles", () => {
     it("should route uploads to correct backend based on path", async () => {
       const { runtime } = makeConfig();

@@ -17,6 +17,7 @@ import type { Stats } from "node:fs";
 
 import {
   type BackendProtocolV2,
+  type DeleteResult,
   type EditResult,
   type FileDownloadResponse,
   type FileOperationError,
@@ -875,6 +876,34 @@ export class VfsBackend implements BackendProtocolV2 {
     } catch (error) {
       return {
         error: `Error editing file '${filePath}': ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
+  }
+
+  /**
+   * Delete a file.
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    this.#ensureInitialized();
+
+    const resolvedPath = this.#resolvePath(filePath);
+    if (!resolvedPath || !this.instance.existsSync(resolvedPath)) {
+      return { error: `Error: File '${filePath}' not found` };
+    }
+
+    try {
+      const stat = this.instance.statSync(resolvedPath);
+      if (!stat.isFile()) {
+        return { error: `Error: '${filePath}' is a directory, not a file` };
+      }
+
+      this.instance.unlinkSync(resolvedPath);
+      return { path: filePath };
+    } catch (error) {
+      return {
+        error: `Error deleting file '${filePath}': ${
           error instanceof Error ? error.message : String(error)
         }`,
       };
