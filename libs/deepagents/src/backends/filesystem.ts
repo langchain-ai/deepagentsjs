@@ -619,12 +619,17 @@ export class FilesystemBackend implements BackendProtocolV2 {
     const stat = await fs.stat(baseFull);
     const root = stat.isDirectory() ? baseFull : path.dirname(baseFull);
 
-    // Use fast-glob to recursively find all files
+    // `onlyFiles: true` with `followSymbolicLinks: false` drops symlink entries
+    // at enumeration, so we never `readFile` a symlink target (which would
+    // bypass the O_NOFOLLOW protection used by read()/write()/edit() and escape
+    // the search root). This matches ripgrep's default no-follow behavior, so
+    // the fallback and primary grep paths return the same files.
     const files = await fg("**/*", {
       cwd: root,
       absolute: true,
       onlyFiles: true,
       dot: true,
+      followSymbolicLinks: false,
     });
 
     for (const fp of files) {
@@ -709,12 +714,20 @@ export class FilesystemBackend implements BackendProtocolV2 {
     const results: FileInfo[] = [];
 
     try {
-      // Use fast-glob for pattern matching
+      // `followSymbolicLinks: false` stops fast-glob from descending into
+      // symlinked directories, which otherwise loop forever on a self-
+      // referential symlink (e.g. `sub/sub -> .`) until the OS throws ELOOP.
+      // `onlyFiles: false` (rather than `true`) is deliberate: fast-glob's
+      // `onlyFiles` filter uses lstat and would drop symlinks-to-files entirely,
+      // regressing results like `alias.ts -> real.ts`. The `stat().isFile()`
+      // check below follows each link to re-include those files while excluding
+      // directories.
       const matches = await fg(pattern, {
         cwd: resolvedSearchPath,
         absolute: true,
-        onlyFiles: true,
+        onlyFiles: false,
         dot: true,
+        followSymbolicLinks: false,
       });
 
       for (const matchedPath of matches) {

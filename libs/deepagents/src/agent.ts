@@ -47,6 +47,7 @@ import type {
   FlattenSubAgentMiddleware,
   InferStructuredResponse,
   SupportedResponseFormat,
+  SystemPromptConfig,
 } from "./types.js";
 /**
  * required for type inference
@@ -101,6 +102,52 @@ const BASE_AGENT_PROMPT = context`
 
   For longer tasks, provide brief progress updates at reasonable intervals — a concise sentence recapping what you've done and what's next.
 `;
+
+const PROMPT_SEPARATOR = "\n\n";
+
+type SystemPromptPart = string | SystemMessage;
+type SystemPromptContentBlock = SystemMessage["contentBlocks"][number];
+
+/** Normalize legacy system prompt values to the structured representation. */
+function normalizeSystemPrompt(
+  systemPrompt: SystemPromptPart | SystemPromptConfig | undefined,
+): SystemPromptConfig {
+  if (systemPrompt === undefined) {
+    return {};
+  }
+  if (
+    typeof systemPrompt === "string" ||
+    SystemMessage.isInstance(systemPrompt)
+  ) {
+    return { prefix: systemPrompt };
+  }
+  return systemPrompt;
+}
+
+/** Assemble prompt parts while preserving structured message content blocks. */
+function assemblePromptParts(
+  parts: readonly SystemPromptPart[],
+): string | SystemMessage {
+  if (parts.length === 0) {
+    return "";
+  }
+  if (parts.every((part) => typeof part === "string")) {
+    return parts.join(PROMPT_SEPARATOR);
+  }
+
+  const contentBlocks: SystemPromptContentBlock[] = [];
+  for (const [index, part] of parts.entries()) {
+    if (index > 0) {
+      contentBlocks.push({ type: "text", text: PROMPT_SEPARATOR });
+    }
+    if (SystemMessage.isInstance(part)) {
+      contentBlocks.push(...part.contentBlocks);
+    } else {
+      contentBlocks.push({ type: "text", text: part });
+    }
+  }
+  return new SystemMessage({ contentBlocks });
+}
 
 const BUILTIN_TOOL_NAMES: ReadonlySet<string> = new Set([
   ...FILESYSTEM_TOOL_NAMES,
@@ -454,30 +501,31 @@ export function createDeepAgent<
     );
   }
 
-  // Combine system prompt parameter with profile-aware base prompt.
-  const effectiveBasePrompt = applyProfilePrompt(
-    harnessProfile,
-    BASE_AGENT_PROMPT,
-  );
+  // Assemble the main-agent prompt in this order:
+  // caller prefix -> active base -> caller suffix -> profile suffix.
+  const promptConfig = normalizeSystemPrompt(systemPrompt);
+  const promptParts: SystemPromptPart[] = [];
 
-  const finalSystemPrompt =
-    typeof systemPrompt === "string"
-      ? new SystemMessage({
-          contentBlocks: [
-            { type: "text", text: systemPrompt },
-            { type: "text", text: effectiveBasePrompt },
-          ],
-        })
-      : SystemMessage.isInstance(systemPrompt)
-        ? new SystemMessage({
-            contentBlocks: [
-              ...systemPrompt.contentBlocks,
-              { type: "text", text: effectiveBasePrompt },
-            ],
-          })
-        : new SystemMessage({
-            contentBlocks: [{ type: "text", text: effectiveBasePrompt }],
-          });
+  if (promptConfig.prefix !== undefined && promptConfig.prefix !== null) {
+    promptParts.push(promptConfig.prefix);
+  }
+
+  const activeBasePrompt =
+    promptConfig.base !== undefined
+      ? promptConfig.base
+      : (harnessProfile.baseSystemPrompt ?? BASE_AGENT_PROMPT);
+  if (activeBasePrompt !== null) {
+    promptParts.push(activeBasePrompt);
+  }
+
+  if (promptConfig.suffix) {
+    promptParts.push(promptConfig.suffix);
+  }
+  if (harnessProfile.systemPromptSuffix) {
+    promptParts.push(harnessProfile.systemPromptSuffix);
+  }
+
+  const finalSystemPrompt = assemblePromptParts(promptParts);
 
   const agent = createAgent({
     model,

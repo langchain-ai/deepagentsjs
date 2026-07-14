@@ -216,6 +216,16 @@ export interface EditResult {
 }
 
 /**
+ * Result from backend delete operations.
+ */
+export interface DeleteResult {
+  /** Error message on failure, undefined on success */
+  error?: string;
+  /** File path of deleted file, undefined on failure */
+  path?: string;
+}
+
+/**
  * Result of code execution.
  * Simplified schema optimized for LLM consumption.
  */
