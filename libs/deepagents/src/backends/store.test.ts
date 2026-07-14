@@ -242,6 +242,62 @@ describe("StoreBackend", () => {
     expect(readRes.content).toBe("");
   });
 
+  it("should delete files by exact store key", async () => {
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
+
+    await backend.write("/docs/readme.md", "hello store");
+    const result = await backend.delete("/docs/readme.md");
+
+    expect(result.error).toBeUndefined();
+    expect(result.path).toBe("/docs/readme.md");
+    expect((await backend.read("/docs/readme.md")).error).toContain(
+      "not found",
+    );
+  });
+
+  it("should return an error when deleting a missing store key", async () => {
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
+
+    const result = await backend.delete("/missing.md");
+
+    expect(result.path).toBeUndefined();
+    expect(result.error).toContain("not found");
+  });
+
+  it("should treat wildcard-looking delete paths as literal store keys", async () => {
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
+
+    await backend.write("/a.md", "a");
+    await backend.write("/b.md", "b");
+    await backend.write("*", "literal star");
+
+    const result = await backend.delete("*");
+
+    expect(result.error).toBeUndefined();
+    expect(result.path).toBe("*");
+    expect((await backend.read("/a.md")).error).toBeUndefined();
+    expect((await backend.read("/b.md")).error).toBeUndefined();
+    expect((await backend.read("*")).error).toContain("not found");
+  });
+
+  it("should not expand wildcard-looking missing delete paths", async () => {
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
+
+    await backend.write("/a.md", "a");
+    await backend.write("/b.md", "b");
+
+    const result = await backend.delete("*");
+
+    expect(result.path).toBeUndefined();
+    expect(result.error).toContain("not found");
+    expect((await backend.read("/a.md")).error).toBeUndefined();
+    expect((await backend.read("/b.md")).error).toBeUndefined();
+  });
+
   it("should use assistantId-based namespace when no custom namespace provided", async () => {
     const { store } = makeConfig();
     const runtimeWithAssistant = {
