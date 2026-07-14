@@ -25,6 +25,7 @@ import {
   createSkillsMiddleware,
   FILESYSTEM_TOOL_NAMES,
   ASYNC_TASK_TOOL_NAMES,
+  type FsToolName,
   type SubAgent,
   createAsyncSubAgentMiddleware,
   isAsyncSubAgent,
@@ -209,6 +210,15 @@ export function createDeepAgent<
           identifierHint: getModelIdentifier(model),
         });
 
+  const filesystemTools = FILESYSTEM_TOOL_NAMES.filter(
+    (toolName) => !harnessProfile.excludedTools.has(toolName),
+  );
+  const profileFilesystemTools: readonly FsToolName[] | undefined =
+    filesystemTools.length === FILESYSTEM_TOOL_NAMES.length ||
+    !filesystemTools.includes("read_file")
+      ? undefined
+      : filesystemTools;
+
   const toolOverrides = harnessProfile.toolDescriptionOverrides;
   const effectiveTools: StructuredTool[] =
     Object.keys(toolOverrides).length > 0
@@ -263,6 +273,7 @@ export function createDeepAgent<
       createFilesystemMiddleware({
         backend,
         permissions: effectivePermissions,
+        tools: profileFilesystemTools,
       }),
       // Automatically summarizes conversation history when token limits are approached.
       // Uses createSummarizationMiddleware (deepagents version) with backend support
@@ -340,7 +351,11 @@ export function createDeepAgent<
     // Provides todo list management capabilities for tracking tasks.
     todoListMiddleware(),
     // Enables filesystem operations and optional long-term memory storage.
-    createFilesystemMiddleware({ backend, permissions }),
+    createFilesystemMiddleware({
+      backend,
+      permissions,
+      tools: profileFilesystemTools,
+    }),
     // Enables delegation to specialized subagents for complex tasks.
     createSubAgentMiddleware({
       defaultModel: model,

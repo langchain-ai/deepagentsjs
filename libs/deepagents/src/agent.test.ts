@@ -10,6 +10,7 @@ import {
 import { MemorySaver, StateSchema } from "@langchain/langgraph";
 import { createFileData } from "./backends/utils.js";
 import { ConfigurationError } from "./errors.js";
+import { registerHarnessProfile } from "./profiles/index.js";
 import { assertAllDeepAgentQualities } from "./testing/utils.js";
 import { z } from "zod/v4";
 
@@ -120,6 +121,19 @@ describe("System prompt cache control breakpoints", () => {
     expect(memoryBlock.text).toContain("<agent_memory>");
     expect(memoryBlock.text).toContain("Remember this.");
     invokeSpy.mockRestore();
+  });
+});
+
+describe("profile tool exclusions", () => {
+  it("removes excluded filesystem tools before agent construction", () => {
+    registerHarnessProfile("fstoolstest", { excludedTools: ["execute"] });
+
+    const agent = createDeepAgent({ model: "fstoolstest:model" });
+    const tools = (agent as any).graph?.nodes?.tools?.bound?.tools ?? [];
+    const toolNames = tools.map((tool: { name: string }) => tool.name);
+
+    expect(toolNames).toContain("read_file");
+    expect(toolNames).not.toContain("execute");
   });
 });
 
