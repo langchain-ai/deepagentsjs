@@ -103,14 +103,22 @@ export const FILESYSTEM_TOOL_NAMES = [
   "execute",
 ] as const;
 
-export const TOOLS_EXCLUDED_FROM_EVICTION = [
-  "ls",
-  "glob",
-  "grep",
-  "read_file",
-  "edit_file",
-  "write_file",
-] as const;
+/**
+ * Built-in filesystem tool names accepted by
+ * {@link createFilesystemMiddleware}'s `tools` allowlist.
+ */
+export type FsToolName = (typeof FILESYSTEM_TOOL_NAMES)[number];
+
+function isFilesystemToolName(name: unknown): name is FsToolName {
+  return (
+    typeof name === "string" &&
+    (FILESYSTEM_TOOL_NAMES as readonly string[]).includes(name)
+  );
+}
+
+export const TOOLS_EXCLUDED_FROM_EVICTION = FILESYSTEM_TOOL_NAMES.filter(
+  (name) => name !== "execute",
+);
 
 /**
  * Approximate number of characters per token for truncation calculations.
@@ -472,24 +480,50 @@ function filterByPermissions<T>(
 }
 
 // System prompts
-const FILESYSTEM_SYSTEM_PROMPT = context`
-  ## Following Conventions
+const FILESYSTEM_TOOL_DESCRIPTION_LINES = {
+  ls: "ls: list files in a directory (requires absolute path)",
+  read_file: "read_file: read a file from the filesystem",
+  write_file: "write_file: write to a file in the filesystem",
+  edit_file: "edit_file: edit a file in the filesystem",
+  glob: 'glob: find files matching a pattern (e.g., "**/*.py")',
+  grep: "grep: search for text within files",
+} as const satisfies Record<Exclude<FsToolName, "execute">, string>;
 
-  - Read files before editing — understand existing content before making changes
-  - Mimic existing style, naming conventions, and patterns
+type FilesystemToolWithDescription =
+  keyof typeof FILESYSTEM_TOOL_DESCRIPTION_LINES;
 
-  ## Filesystem Tools \`ls\`, \`read_file\`, \`write_file\`, \`edit_file\`, \`glob\`, \`grep\`
+function hasFilesystemToolDescription(
+  name: FsToolName,
+): name is FilesystemToolWithDescription {
+  return name in FILESYSTEM_TOOL_DESCRIPTION_LINES;
+}
 
-  You have access to a filesystem which you can interact with using these tools.
-  All file paths must start with a /.
+function buildFilesystemSystemPrompt(
+  visibleTools: ReadonlySet<FsToolName>,
+): string {
+  const promptToolNames = FILESYSTEM_TOOL_NAMES.filter((name) =>
+    visibleTools.has(name),
+  );
+  const toolHeader = promptToolNames.map((name) => `\`${name}\``).join(", ");
+  const toolDescriptions = promptToolNames
+    .filter(hasFilesystemToolDescription)
+    .map((name) => `- ${FILESYSTEM_TOOL_DESCRIPTION_LINES[name]}`)
+    .join("\n");
 
-  - ls: list files in a directory (requires absolute path)
-  - read_file: read a file from the filesystem
-  - write_file: write to a file in the filesystem
-  - edit_file: edit a file in the filesystem
-  - glob: find files matching a pattern (e.g., "**/*.py")
-  - grep: search for text within files
-`;
+  return context`
+    ## Following Conventions
+
+    - Read files before editing — understand existing content before making changes
+    - Mimic existing style, naming conventions, and patterns
+
+    ## Filesystem Tools ${toolHeader}
+
+    You have access to a filesystem which you can interact with using these tools.
+    All file paths must start with a /.
+
+    ${toolDescriptions}
+  `;
+}
 
 export const LS_TOOL_DESCRIPTION = context`
   Lists all files in a directory.
@@ -1137,10 +1171,46 @@ function createExecuteTool(
 export interface FilesystemMiddlewareOptions {
   /** Backend instance or factory (default: StateBackend) */
   backend?: AnyBackendProtocol | BackendFactory;
-  /** Optional custom system prompt override */
+  /**
+   * Optional filesystem-specific system prompt override.
+   *
+   * When omitted, the middleware generates a prompt that reflects the tools
+   * visible for the current model request. Supplying a custom prompt replaces
+   * that generated filesystem prompt entirely.
+   */
   systemPrompt?: string | null;
-  /** Optional custom tool descriptions override */
-  customToolDescriptions?: Record<string, string> | null;
+  /**
+   * Optional descriptions for built-in filesystem tools.
+   *
+   * Keys correspond to {@link FsToolName}. Descriptions for tools that are not
+   * enabled by the `tools` allowlist are ignored because those tools are not
+   * exposed to the model.
+   */
+  customToolDescriptions?: Partial<Record<FsToolName, string>> | null;
+  /**
+   * Allowlist of built-in filesystem tools to expose to the model.
+   *
+   * - `undefined`, `null`, and `"all"` preserve the default behavior: every
+   *   filesystem tool is registered, subject to backend capability filtering.
+   * - Passing an array restricts the middleware to only those tool names.
+   * - `read_file` must be included in every explicit array because it is used
+   *   by normal file-inspection flows and by large-result recovery guidance.
+   * - Backend capability checks still narrow the final visible tool set. For
+   *   example, `execute` is removed when the resolved backend does not support
+   *   command execution, even if it appears in this allowlist.
+   * - User-provided non-filesystem tools are not affected by this allowlist.
+   *
+   * The generated filesystem system prompt is based on the tools that remain
+   * visible after this allowlist and backend capability filtering are applied.
+   *
+   * @example Read/search-only filesystem access
+   * ```ts
+   * createFilesystemMiddleware({
+   *   tools: ["read_file", "ls", "glob", "grep"],
+   * });
+   * ```
+   */
+  tools?: readonly FsToolName[] | "all" | null;
   /** Optional token limit before evicting a tool result to the filesystem (default: 20000 tokens, ~80KB) */
   toolTokenLimitBeforeEvict?: number | null;
   /** Optional token limit before evicting a HumanMessage to the filesystem (default: 50000 tokens, ~200KB) */
@@ -1155,8 +1225,11 @@ export interface FilesystemMiddlewareOptions {
    * **Note on `execute`**: permissions are not enforced on `execute` because
    * shell commands can access any path regardless of path-based rules. Using
    * permissions with an execution-capable backend (one where `isSandboxBackend`
-   * returns `true`) throws a `ConfigurationError` unless the backend is a
-   * `CompositeBackend` and every permission path is scoped to a route prefix.
+   * returns `true`) throws a `ConfigurationError` unless either:
+   *
+   * - `execute` is disabled via `tools`, or
+   * - the backend is a `CompositeBackend` and every permission path is scoped to
+   *   a route prefix.
    *
    * When omitted or empty, all filesystem operations are permitted.
    */
@@ -1167,6 +1240,23 @@ export interface FilesystemMiddlewareOptions {
  * Returns true only when backend exposes route prefixes (CompositeBackend) and
  * every permission path is scoped under one of them.
  */
+function normalizeFilesystemTools(
+  tools: readonly FsToolName[] | "all" | null | undefined,
+): ReadonlySet<FsToolName> | null {
+  if (tools == null || tools === "all") {
+    return null;
+  }
+
+  const enabledTools = new Set(tools);
+  if (!enabledTools.has("read_file")) {
+    throw new Error(
+      "read_file must be included in tools; it is required by FilesystemMiddleware",
+    );
+  }
+
+  return enabledTools;
+}
+
 function allPathsScopedToRoutes(
   permissions: FilesystemPermission[],
   backend: AnyBackendProtocol,
@@ -1190,7 +1280,31 @@ function allPathsScopedToRoutes(
 }
 
 /**
- * Create filesystem middleware with all tools and features.
+ * Create middleware that provides built-in filesystem tools and filesystem-aware
+ * prompt guidance.
+ *
+ * By default, the middleware registers every built-in filesystem tool listed in
+ * {@link FILESYSTEM_TOOL_NAMES}. Use {@link FilesystemMiddlewareOptions.tools}
+ * to narrow that set for read-only, search-only, or otherwise restricted
+ * agents. The allowlist only controls built-in filesystem tools; custom tools
+ * from the agent or other middleware are left untouched.
+ *
+ * The middleware also filters tools whose backend capabilities are unavailable
+ * at request time. In particular, `execute` is only visible when the resolved
+ * backend supports command execution. The filesystem prompt is generated from
+ * the final visible filesystem tools so the model is not instructed to call
+ * tools it cannot see.
+ *
+ * @param options Filesystem middleware configuration.
+ * @returns Agent middleware that contributes filesystem state, tools, prompt
+ * guidance, permission checks, and large-result eviction.
+ *
+ * @example Read-only filesystem middleware
+ * ```ts
+ * const middleware = createFilesystemMiddleware({
+ *   tools: ["read_file", "ls", "glob", "grep"],
+ * });
+ * ```
  */
 export function createFilesystemMiddleware(
   options: FilesystemMiddlewareOptions = {},
@@ -1202,7 +1316,11 @@ export function createFilesystemMiddleware(
     toolTokenLimitBeforeEvict = 20000,
     humanMessageTokenLimitBeforeEvict = 50000,
     permissions = [],
+    tools: filesystemTools = null,
   } = options;
+  const enabledFilesystemTools = normalizeFilesystemTools(filesystemTools);
+  const executeToolEnabled =
+    enabledFilesystemTools == null || enabledFilesystemTools.has("execute");
 
   if (permissions.length > 0) {
     validatePermissionPaths(permissions);
@@ -1210,6 +1328,7 @@ export function createFilesystemMiddleware(
 
   if (
     permissions.length > 0 &&
+    executeToolEnabled &&
     typeof backend !== "function" &&
     isSandboxBackend(backend) &&
     !allPathsScopedToRoutes(permissions, backend)
@@ -1223,13 +1342,12 @@ export function createFilesystemMiddleware(
     );
   }
 
-  const baseSystemPrompt = customSystemPrompt || FILESYSTEM_SYSTEM_PROMPT;
+  const baseSystemPrompt = customSystemPrompt ?? null;
 
   /**
    * All tools including execute
    * (execute will be filtered at runtime if backend doesn't support it)
    */
-  type FilesystemToolName = (typeof FILESYSTEM_TOOL_NAMES)[number];
   const allToolsByName = {
     ls: createLsTool(backend, {
       customDescription: customToolDescriptions?.ls,
@@ -1260,8 +1378,11 @@ export function createFilesystemMiddleware(
       customDescription: customToolDescriptions?.execute,
       permissions,
     }),
-  } satisfies Record<FilesystemToolName, unknown>;
-  const allTools = Object.values(allToolsByName);
+  } satisfies Record<FsToolName, unknown>;
+  const allTools = FILESYSTEM_TOOL_NAMES.filter(
+    (name) =>
+      enabledFilesystemTools == null || enabledFilesystemTools.has(name),
+  ).map((name) => allToolsByName[name]);
 
   async function processToolMessage(
     msg: ToolMessage,
@@ -1396,9 +1517,22 @@ export function createFilesystemMiddleware(
         tools = tools.filter((t: { name: string }) => t.name !== "execute");
       }
 
+      const visibleFilesystemTools = new Set<FsToolName>();
+      for (const currentTool of tools) {
+        const toolName =
+          typeof currentTool.name === "string" ? currentTool.name : undefined;
+        if (isFilesystemToolName(toolName)) {
+          visibleFilesystemTools.add(toolName);
+        }
+      }
+
+      const executionActive =
+        supportsExecution && visibleFilesystemTools.has("execute");
+
       // Build system prompt - add execution instructions if available
-      let filesystemPrompt = baseSystemPrompt;
-      if (supportsExecution) {
+      let filesystemPrompt =
+        baseSystemPrompt ?? buildFilesystemSystemPrompt(visibleFilesystemTools);
+      if (executionActive) {
         filesystemPrompt = `${filesystemPrompt}\n\n${EXECUTION_SYSTEM_PROMPT}`;
       }
 

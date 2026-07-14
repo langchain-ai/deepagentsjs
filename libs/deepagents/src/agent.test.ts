@@ -308,6 +308,19 @@ describe("System prompt cache control breakpoints", () => {
   });
 });
 
+describe("profile tool exclusions", () => {
+  it("removes excluded filesystem tools before agent construction", () => {
+    registerHarnessProfile("fstoolstest", { excludedTools: ["execute"] });
+
+    const agent = createDeepAgent({ model: "fstoolstest:model" });
+    const tools = (agent as any).graph?.nodes?.tools?.bound?.tools ?? [];
+    const toolNames = tools.map((tool: { name: string }) => tool.name);
+
+    expect(toolNames).toContain("read_file");
+    expect(toolNames).not.toContain("execute");
+  });
+});
+
 describe("Built-in tool name collision detection", () => {
   const model = new FakeListChatModel({ responses: ["Done"] });
 

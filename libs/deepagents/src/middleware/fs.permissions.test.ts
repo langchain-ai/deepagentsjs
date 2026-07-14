@@ -402,6 +402,16 @@ describe("fs tool permissions", () => {
       );
     });
 
+    it("does not throw when permissions are used with a sandbox backend and execute is disabled", () => {
+      expect(() =>
+        createFilesystemMiddleware({
+          backend: createSandboxBackend(),
+          permissions: [deny(["/secrets/**"])],
+          tools: ["read_file"],
+        }),
+      ).not.toThrow();
+    });
+
     it("does not throw when permissions is empty with a sandbox backend", () => {
       expect(() =>
         createFilesystemMiddleware({ backend: createSandboxBackend() }),

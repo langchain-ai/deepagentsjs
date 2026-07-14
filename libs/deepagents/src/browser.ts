@@ -87,6 +87,7 @@ export {
   type CompletionCallbackOptions,
   // Other middleware types
   type FilesystemMiddlewareOptions,
+  type FsToolName,
   type SubAgentMiddlewareOptions,
   type MemoryMiddlewareOptions,
   type SubAgent,
