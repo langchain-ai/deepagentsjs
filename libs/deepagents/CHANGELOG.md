@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.10.8
+
+### Patch Changes
+
+- [#668](https://github.com/langchain-ai/deepagentsjs/pull/668) [`7c8a770`](https://github.com/langchain-ai/deepagentsjs/commit/7c8a770fac90fd50dfe08af67a0ce073a33e4ef7) Thanks [@colifran](https://github.com/colifran)! - fix(deepagents): fast-glob follows directory symlink cycles leading to ELOOP crashes
+
 ## 1.10.7
 
 ### Patch Changes

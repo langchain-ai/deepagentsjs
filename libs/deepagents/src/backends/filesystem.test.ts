@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import * as path from "path";
@@ -531,4 +531,125 @@ describe("FilesystemBackend", () => {
       expect(result.data!.content).toEqual(new Uint8Array(pngHeader));
     });
   });
+});
+
+/**
+ * Returns true when the platform lets an unprivileged process create symlinks
+ */
+function symlinksSupported(): boolean {
+  const probe = fsSync.mkdtempSync(
+    path.join(os.tmpdir(), "deepagents-symlink-probe-"),
+  );
+  try {
+    fsSync.symlinkSync("target", path.join(probe, "link"));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    fsSync.rmSync(probe, { recursive: true, force: true });
+  }
+}
+const CAN_SYMLINK = symlinksSupported();
+
+describe("FilesystemBackend symlink cycle handling", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = createTempDir();
+  });
+
+  afterEach(async () => {
+    await removeDir(tmpDir);
+  });
+
+  /**
+   * Build a tree with real files, an `ln -s . sub/sub` cycle (must not be
+   * descended into), and a symlink-to-file `alias.txt -> real.txt` (must still
+   * be reported).
+   */
+  async function buildCycle(root: string) {
+    await writeFile(path.join(root, "real.txt"), "needle-content");
+    await writeFile(path.join(root, "sub", "inner.txt"), "needle-content");
+    await fs.symlink(".", path.join(root, "sub", "sub"));
+    await fs.symlink(path.join(root, "real.txt"), path.join(root, "alias.txt"));
+  }
+
+  // A file reached by following the cycle looks like `.../sub/sub/inner.txt`;
+  // the real file is only ever `.../sub/inner.txt`.
+  const followedCycle = (p: string) => /sub[\\/]sub/.test(p);
+
+  it.skipIf(!CAN_SYMLINK)(
+    "glob does not descend into a directory symlink cycle",
+    async () => {
+      await buildCycle(tmpDir);
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: false,
+      });
+
+      const result = await backend.glob("**/*", tmpDir);
+
+      expect(result.error).toBeUndefined();
+      const paths = result.files!.map((f) => f.path);
+      expect(paths.some((p) => p.endsWith("inner.txt"))).toBe(true);
+      expect(paths.some((p) => p.endsWith("real.txt"))).toBe(true);
+      // A symlink pointing at a regular file must still be reported (not
+      // silently dropped by `onlyFiles` + `followSymbolicLinks: false`).
+      expect(paths.some((p) => p.endsWith("alias.txt"))).toBe(true);
+      expect(paths.some(followedCycle)).toBe(false);
+    },
+  );
+
+  it.skipIf(!CAN_SYMLINK)(
+    "grep does not descend into a directory symlink cycle",
+    async () => {
+      await buildCycle(tmpDir);
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: false,
+      });
+
+      const result = await backend.grep("needle-content", tmpDir);
+
+      expect(result.error).toBeUndefined();
+      const paths = (result.matches ?? []).map((m) => m.path);
+      expect(paths.some((p) => p.endsWith("inner.txt"))).toBe(true);
+      expect(paths.some(followedCycle)).toBe(false);
+    },
+  );
+
+  it.skipIf(!CAN_SYMLINK)(
+    "grep fallback does not follow a symlink out of the search root",
+    async () => {
+      // A secret file OUTSIDE the workspace, reachable only via an in-tree
+      // symlink. Reading through the link would leak it past the root.
+      const outside = createTempDir();
+      try {
+        await writeFile(path.join(outside, "secret.txt"), "EXFIL_MARKER");
+        await writeFile(path.join(tmpDir, "normal.txt"), "nothing here");
+        await fs.symlink(
+          path.join(outside, "secret.txt"),
+          path.join(tmpDir, "alias.txt"),
+        );
+
+        const backend = new FilesystemBackend({
+          rootDir: tmpDir,
+          virtualMode: true,
+        });
+        // Force the non-ripgrep path; that fallback is what this guards.
+        vi.spyOn(
+          backend as unknown as { ripgrepSearch: () => Promise<null> },
+          "ripgrepSearch",
+        ).mockResolvedValue(null);
+
+        const result = await backend.grep("EXFIL_MARKER", "/");
+
+        // The marker exists only in the out-of-tree file; the fallback must not
+        // read it through the symlink.
+        expect(result.matches ?? []).toHaveLength(0);
+      } finally {
+        await removeDir(outside);
+      }
+    },
+  );
 });
