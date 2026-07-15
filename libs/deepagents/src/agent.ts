@@ -32,6 +32,7 @@ import { ConfigurationError } from "./errors.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
 import { createToolExclusionMiddleware } from "./middleware/tool_exclusion.js";
+import { mergeMiddlewareStack } from "./middleware/utils.js";
 import {
   GENERAL_PURPOSE_SUBAGENT,
   type CompiledSubAgent,
@@ -106,70 +107,6 @@ const BUILTIN_TOOL_NAMES: ReadonlySet<string> = new Set([
   "task",
   "write_todos",
 ]);
-
-/**
- * Merge custom middleware into an assembled stack by `.name`.
- *
- * Matching custom middleware replaces the existing entry in place. New
- * middleware is appended after the base stack in caller-provided order.
- *
- * @internal
- */
-export function mergeMiddleware(
-  base: readonly AgentMiddleware[],
-  custom: readonly AgentMiddleware[],
-): AgentMiddleware[] {
-  const merged = new Map(
-    base.map((middleware) => [middleware.name, middleware]),
-  );
-  for (const middleware of custom) {
-    merged.set(middleware.name, middleware);
-  }
-  return [...merged.values()];
-}
-
-function middlewareNames(middleware: readonly AgentMiddleware[]): Set<string> {
-  return new Set(middleware.map((entry) => entry.name));
-}
-
-function matchingMiddleware(
-  middleware: readonly AgentMiddleware[],
-  names: ReadonlySet<string>,
-): AgentMiddleware[] {
-  return middleware.filter((entry) => names.has(entry.name));
-}
-
-function mergeMiddlewareStack(
-  defaultMiddleware: readonly AgentMiddleware[],
-  customMiddleware: readonly AgentMiddleware[],
-  tailMiddleware: readonly AgentMiddleware[] = [],
-  options: { appendNew?: boolean } = {},
-): AgentMiddleware[] {
-  const defaultMiddlewareNames = middlewareNames(defaultMiddleware);
-  const tailMiddlewareNames = middlewareNames(tailMiddleware);
-  const knownMiddlewareNames = new Set([
-    ...defaultMiddlewareNames,
-    ...tailMiddlewareNames,
-  ]);
-  const novelMiddleware =
-    options.appendNew === false
-      ? []
-      : customMiddleware.filter(
-          (entry) => !knownMiddlewareNames.has(entry.name),
-        );
-
-  return [
-    ...mergeMiddleware(
-      defaultMiddleware,
-      matchingMiddleware(customMiddleware, defaultMiddlewareNames),
-    ),
-    ...novelMiddleware,
-    ...mergeMiddleware(
-      tailMiddleware,
-      matchingMiddleware(customMiddleware, tailMiddlewareNames),
-    ),
-  ];
-}
 
 /**
  * Create a Deep Agent.

@@ -27,10 +27,11 @@ import type { LangSmithTracingClientInterface } from "langsmith";
 import type { Serialized } from "@langchain/core/load/serializable";
 import type { ChainValues } from "@langchain/core/utils/types";
 
-import { mergeMiddleware, createDeepAgent } from "../agent.js";
+import { createDeepAgent } from "../agent.js";
 import { StateBackend } from "../backends/state.js";
 import { createSkillsMiddleware } from "./skills.js";
 import { createSummarizationMiddleware } from "./summarization.js";
+import { mergeMiddleware } from "./utils.js";
 import { createFileData } from "../backends/utils.js";
 import { createMockBackend } from "./test.js";
 import { createSubAgent } from "./subagents.js";
