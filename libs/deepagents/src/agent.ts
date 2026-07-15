@@ -270,13 +270,15 @@ export function createDeepAgent<
    * Only the general-purpose subagent inherits the main agent's skills.
    * If a custom subagent needs skills, it must specify its own `skills` array.
    */
-  const normalizeSubagentSpec = (input: SubAgent): SubAgent => {
+  const createSubagentDefaultMiddleware = (
+    input: SubAgent,
+  ): AgentMiddleware[] => {
     const effectivePermissions = input.permissions ?? permissions;
 
     // Middleware for custom subagents (does NOT include skills from main agent).
     // Uses createSummarizationMiddleware (deepagents version) with backend support
     // and auto-computed defaults from model profile.
-    const subagentDefaultMiddleware = [
+    return [
       // Provides todo list management capabilities for tracking tasks.
       todoListMiddleware(),
       // Enables filesystem operations and optional long-term memory storage.
@@ -295,6 +297,10 @@ export function createDeepAgent<
         ? [createSkillsMiddleware({ backend, sources: input.skills })]
         : []),
     ];
+  };
+
+  const normalizeSubagentSpec = (input: SubAgent): SubAgent => {
+    const subagentDefaultMiddleware = createSubagentDefaultMiddleware(input);
     let subagentMiddleware = [
       ...mergeMiddleware(subagentDefaultMiddleware, input.middleware ?? []),
       ...cacheMiddleware,
@@ -343,14 +349,7 @@ export function createDeepAgent<
       gpConfig?.systemPrompt ??
       applyProfilePrompt(harnessProfile, GENERAL_PURPOSE_SUBAGENT.systemPrompt);
 
-    const gpDefaultMiddlewareNames = new Set([
-      "todoListMiddleware",
-      "FilesystemMiddleware",
-      "SummarizationMiddleware",
-      "patchToolCallsMiddleware",
-      ...(skills != null && skills.length > 0 ? ["SkillsMiddleware"] : []),
-    ]);
-    const generalPurposeSpec = normalizeSubagentSpec({
+    const generalPurposeInput: SubAgent = {
       ...GENERAL_PURPOSE_SUBAGENT,
       description:
         gpConfig?.description ?? GENERAL_PURPOSE_SUBAGENT.description,
@@ -358,6 +357,14 @@ export function createDeepAgent<
       model,
       skills,
       tools: effectiveTools,
+    };
+    const gpDefaultMiddlewareNames = new Set(
+      createSubagentDefaultMiddleware(generalPurposeInput).map(
+        (middleware) => middleware.name,
+      ),
+    );
+    const generalPurposeSpec = normalizeSubagentSpec({
+      ...generalPurposeInput,
       middleware: customMiddleware.filter((middleware) =>
         gpDefaultMiddlewareNames.has(middleware.name),
       ),
