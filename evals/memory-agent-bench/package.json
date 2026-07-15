@@ -9,7 +9,7 @@
     "@deepagents/evals": "workspace:*",
     "@langchain/langgraph": "^1.2.9",
     "deepagents": "workspace:*",
-    "langsmith": "^0.7.4",
+    "langsmith": "^0.8.2",
     "vitest": "^4.0.18"
   }
 }

@@ -37,7 +37,7 @@
   },
   "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
   "dependencies": {
-    "@daytona/sdk": "^0.192.0"
+    "@daytona/sdk": "^0.197.0"
   },
   "peerDependencies": {
     "deepagents": ">=1.9.0-alpha.0"
