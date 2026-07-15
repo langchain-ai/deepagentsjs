@@ -413,6 +413,104 @@ describe("FilesystemBackend", () => {
     expect(readResult.error).toBeDefined();
   });
 
+  describe("delete", () => {
+    it("should delete an existing file", async () => {
+      const root = tmpDir;
+      const filePath = path.join(root, "drop.txt");
+      await writeFile(filePath, "drop");
+      const backend = new FilesystemBackend({
+        rootDir: root,
+        virtualMode: false,
+      });
+
+      const result = await backend.delete(filePath);
+
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe(filePath);
+      await expect(fs.stat(filePath)).rejects.toThrow();
+    });
+
+    it("should return an error for missing files", async () => {
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.delete("/missing.txt");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("not found");
+    });
+
+    it("should reject directories", async () => {
+      await fs.mkdir(path.join(tmpDir, "sub"));
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.delete("/sub");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("directory");
+      await expect(fs.stat(path.join(tmpDir, "sub"))).resolves.toBeDefined();
+    });
+
+    it("should only remove the target file", async () => {
+      await writeFile(path.join(tmpDir, "keep.txt"), "keep");
+      await writeFile(path.join(tmpDir, "drop.txt"), "drop");
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.delete("/drop.txt");
+
+      expect(result.error).toBeUndefined();
+      await expect(fs.stat(path.join(tmpDir, "drop.txt"))).rejects.toThrow();
+      await expect(
+        fs.stat(path.join(tmpDir, "keep.txt")),
+      ).resolves.toBeDefined();
+    });
+
+    it("should reject virtual-mode path traversal", async () => {
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.delete("/../outside.txt");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("Path traversal not allowed");
+    });
+
+    it("should reject symlinked parent directories in virtual mode", async () => {
+      const outsideDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), "deepagents-outside-"),
+      );
+      const outsideFile = path.join(outsideDir, "secret.txt");
+      await writeFile(outsideFile, "secret");
+      try {
+        await fs.symlink(outsideDir, path.join(tmpDir, "link"), "dir");
+      } catch {
+        await removeDir(outsideDir);
+        return;
+      }
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.delete("/link/secret.txt");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("Symlink parent not allowed");
+      await expect(fs.stat(outsideFile)).resolves.toBeDefined();
+      await removeDir(outsideDir);
+    });
+  });
+
   describe("binary file handling", () => {
     it("should read binary files as Uint8Array", async () => {
       const root = tmpDir;

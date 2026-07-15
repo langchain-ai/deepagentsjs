@@ -12,6 +12,7 @@ import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import type {
   BackendOptions,
   BackendProtocolV2,
+  DeleteResult,
   EditResult,
   FileData,
   FileDownloadResponse,
@@ -647,6 +648,25 @@ export class StoreBackend implements BackendProtocolV2 {
     } catch (e: any) {
       return { error: `Error: ${e.message}` };
     }
+  }
+
+  /**
+   * Delete a file from the store.
+   *
+   * The file path is used as an exact store key. Wildcards are treated
+   * literally and do not expand to multiple entries.
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    const store = this.getStore();
+    const namespace = this.getNamespace();
+
+    const existing = await store.get(namespace, filePath);
+    if (!existing) {
+      return { error: `Error: File '${filePath}' not found` };
+    }
+
+    await store.delete(namespace, filePath);
+    return { path: filePath };
   }
 
   /**

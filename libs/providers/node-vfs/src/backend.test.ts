@@ -143,6 +143,48 @@ describe("VfsBackend", () => {
     });
   });
 
+  describe("delete", () => {
+    beforeEach(async () => {
+      sandbox = await VfsBackend.create({
+        initialFiles: {
+          "/keep.txt": "keep",
+          "/drop.txt": "drop",
+          "/dir/nested.txt": "nested",
+        },
+      });
+    });
+
+    it("should delete an existing file", async () => {
+      const result = await sandbox.delete("/drop.txt");
+
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe("/drop.txt");
+      const downloaded = await sandbox.downloadFiles(["/drop.txt"]);
+      expect(downloaded[0].error).toBe("file_not_found");
+    });
+
+    it("should return an error for missing files", async () => {
+      const result = await sandbox.delete("/missing.txt");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("not found");
+    });
+
+    it("should reject directories", async () => {
+      const result = await sandbox.delete("/dir");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("directory");
+    });
+
+    it("should only delete the target file", async () => {
+      await sandbox.delete("/drop.txt");
+
+      const downloaded = await sandbox.downloadFiles(["/keep.txt"]);
+      expect(downloaded[0].error).toBeNull();
+    });
+  });
+
   describe("downloadFiles", () => {
     beforeEach(async () => {
       sandbox = await VfsBackend.create({
