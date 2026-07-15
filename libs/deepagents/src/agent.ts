@@ -349,7 +349,7 @@ export function createDeepAgent<
       gpConfig?.systemPrompt ??
       applyProfilePrompt(harnessProfile, GENERAL_PURPOSE_SUBAGENT.systemPrompt);
 
-    const generalPurposeInput: SubAgent = {
+    const generalPurposeSpec = normalizeSubagentSpec({
       ...GENERAL_PURPOSE_SUBAGENT,
       description:
         gpConfig?.description ?? GENERAL_PURPOSE_SUBAGENT.description,
@@ -357,18 +357,18 @@ export function createDeepAgent<
       model,
       skills,
       tools: effectiveTools,
-    };
-    const gpDefaultMiddlewareNames = new Set(
-      createSubagentDefaultMiddleware(generalPurposeInput).map(
+    });
+    const gpMiddlewareNames = new Set(
+      (generalPurposeSpec.middleware ?? []).map(
         (middleware) => middleware.name,
       ),
     );
-    const generalPurposeSpec = normalizeSubagentSpec({
-      ...generalPurposeInput,
-      middleware: customMiddleware.filter((middleware) =>
-        gpDefaultMiddlewareNames.has(middleware.name),
+    generalPurposeSpec.middleware = mergeMiddleware(
+      generalPurposeSpec.middleware ?? [],
+      customMiddleware.filter((middleware) =>
+        gpMiddlewareNames.has(middleware.name),
       ),
-    });
+    );
     inlineSubagents.unshift(generalPurposeSpec);
   }
 
