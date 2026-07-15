@@ -139,6 +139,38 @@ function matchingMiddleware(
   return middleware.filter((entry) => names.has(entry.name));
 }
 
+function mergeMiddlewareStack(
+  defaultMiddleware: readonly AgentMiddleware[],
+  customMiddleware: readonly AgentMiddleware[],
+  tailMiddleware: readonly AgentMiddleware[] = [],
+  options: { appendNew?: boolean } = {},
+): AgentMiddleware[] {
+  const defaultMiddlewareNames = middlewareNames(defaultMiddleware);
+  const tailMiddlewareNames = middlewareNames(tailMiddleware);
+  const knownMiddlewareNames = new Set([
+    ...defaultMiddlewareNames,
+    ...tailMiddlewareNames,
+  ]);
+  const novelMiddleware =
+    options.appendNew === false
+      ? []
+      : customMiddleware.filter(
+          (entry) => !knownMiddlewareNames.has(entry.name),
+        );
+
+  return [
+    ...mergeMiddleware(
+      defaultMiddleware,
+      matchingMiddleware(customMiddleware, defaultMiddlewareNames),
+    ),
+    ...novelMiddleware,
+    ...mergeMiddleware(
+      tailMiddleware,
+      matchingMiddleware(customMiddleware, tailMiddlewareNames),
+    ),
+  ];
+}
+
 /**
  * Create a Deep Agent.
  *
@@ -312,10 +344,11 @@ export function createDeepAgent<
 
   const normalizeSubagentSpec = (input: SubAgent): SubAgent => {
     const subagentDefaultMiddleware = createSubagentDefaultMiddleware(input);
-    let subagentMiddleware = [
-      ...mergeMiddleware(subagentDefaultMiddleware, input.middleware ?? []),
-      ...cacheMiddleware,
-    ];
+    let subagentMiddleware = mergeMiddlewareStack(
+      subagentDefaultMiddleware,
+      input.middleware ?? [],
+      cacheMiddleware,
+    );
 
     if (harnessProfile.excludedMiddleware.size > 0) {
       subagentMiddleware = subagentMiddleware.filter(
@@ -369,16 +402,11 @@ export function createDeepAgent<
       skills,
       tools: effectiveTools,
     });
-    const gpMiddlewareNames = new Set(
-      (generalPurposeSpec.middleware ?? []).map(
-        (middleware) => middleware.name,
-      ),
-    );
-    generalPurposeSpec.middleware = mergeMiddleware(
+    generalPurposeSpec.middleware = mergeMiddlewareStack(
       generalPurposeSpec.middleware ?? [],
-      customMiddleware.filter((middleware) =>
-        gpMiddlewareNames.has(middleware.name),
-      ),
+      customMiddleware,
+      [],
+      { appendNew: false },
     );
     inlineSubagents.unshift(generalPurposeSpec);
   }
@@ -454,26 +482,11 @@ export function createDeepAgent<
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
   ];
 
-  const coreMiddlewareNames = middlewareNames(coreMiddleware);
-  const tailMiddlewareNames = middlewareNames(tailMiddleware);
-  const defaultMiddlewareNames = new Set([
-    ...coreMiddlewareNames,
-    ...tailMiddlewareNames,
-  ]);
-
-  let middleware: AgentMiddleware[] = [
-    ...mergeMiddleware(
-      coreMiddleware,
-      matchingMiddleware(customMiddleware, coreMiddlewareNames),
-    ),
-    ...customMiddleware.filter(
-      (entry) => !defaultMiddlewareNames.has(entry.name),
-    ),
-    ...mergeMiddleware(
-      tailMiddleware,
-      matchingMiddleware(customMiddleware, tailMiddlewareNames),
-    ),
-  ];
+  let middleware: AgentMiddleware[] = mergeMiddlewareStack(
+    coreMiddleware,
+    customMiddleware,
+    tailMiddleware,
+  );
 
   // Apply profile middleware exclusions after custom replacement so exclusions win.
   if (harnessProfile.excludedMiddleware.size > 0) {
