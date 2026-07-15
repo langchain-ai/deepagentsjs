@@ -128,6 +128,17 @@ export function mergeMiddleware(
   return [...merged.values()];
 }
 
+function middlewareNames(middleware: readonly AgentMiddleware[]): Set<string> {
+  return new Set(middleware.map((entry) => entry.name));
+}
+
+function matchingMiddleware(
+  middleware: readonly AgentMiddleware[],
+  names: ReadonlySet<string>,
+): AgentMiddleware[] {
+  return middleware.filter((entry) => names.has(entry.name));
+}
+
 /**
  * Create a Deep Agent.
  *
@@ -443,33 +454,24 @@ export function createDeepAgent<
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
   ];
 
-  const coreMiddlewareNames = new Set(
-    coreMiddleware.map((middleware) => middleware.name),
-  );
-  const tailMiddlewareNames = new Set(
-    tailMiddleware.map((middleware) => middleware.name),
-  );
+  const coreMiddlewareNames = middlewareNames(coreMiddleware);
+  const tailMiddlewareNames = middlewareNames(tailMiddleware);
   const defaultMiddlewareNames = new Set([
     ...coreMiddlewareNames,
     ...tailMiddlewareNames,
   ]);
-  const novelMiddleware = customMiddleware.filter(
-    (middleware) => !defaultMiddlewareNames.has(middleware.name),
-  );
 
   let middleware: AgentMiddleware[] = [
     ...mergeMiddleware(
       coreMiddleware,
-      customMiddleware.filter((middleware) =>
-        coreMiddlewareNames.has(middleware.name),
-      ),
+      matchingMiddleware(customMiddleware, coreMiddlewareNames),
     ),
-    ...novelMiddleware,
+    ...customMiddleware.filter(
+      (entry) => !defaultMiddlewareNames.has(entry.name),
+    ),
     ...mergeMiddleware(
       tailMiddleware,
-      customMiddleware.filter((middleware) =>
-        tailMiddlewareNames.has(middleware.name),
-      ),
+      matchingMiddleware(customMiddleware, tailMiddlewareNames),
     ),
   ];
 
