@@ -1333,6 +1333,27 @@ describe("middleware override by name", () => {
     expect(customIndex).toBeLessThan(cacheIndex);
   });
 
+  it("replaces prompt cache defaults in both main and general-purpose stacks", () => {
+    const anthropicModel = new FakeListChatModel({ responses: ["hello"] });
+    vi.spyOn(anthropicModel, "getName").mockReturnValue("ChatAnthropic");
+    const custom = namedMiddleware("CacheBreakpointMiddleware");
+
+    createDeepAgent({
+      model: anthropicModel,
+      name: "main",
+      middleware: [custom],
+    });
+
+    for (const agentName of ["main", "general-purpose"]) {
+      const middleware = getMiddlewareStack(agentName);
+      const cacheEntries = middleware.filter(
+        (entry) => entry.name === "CacheBreakpointMiddleware",
+      );
+      expect(cacheEntries).toHaveLength(1);
+      expect(cacheEntries[0]).toBe(custom);
+    }
+  });
+
   it("lets profile middleware exclusions win over custom replacements", () => {
     registerHarnessProfile("override-test:model", {
       excludedMiddleware: ["SummarizationMiddleware"],

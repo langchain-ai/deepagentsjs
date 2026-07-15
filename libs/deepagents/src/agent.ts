@@ -443,9 +443,34 @@ export function createDeepAgent<
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
   ];
 
+  const coreMiddlewareNames = new Set(
+    coreMiddleware.map((middleware) => middleware.name),
+  );
+  const tailMiddlewareNames = new Set(
+    tailMiddleware.map((middleware) => middleware.name),
+  );
+  const defaultMiddlewareNames = new Set([
+    ...coreMiddlewareNames,
+    ...tailMiddlewareNames,
+  ]);
+  const novelMiddleware = customMiddleware.filter(
+    (middleware) => !defaultMiddlewareNames.has(middleware.name),
+  );
+
   let middleware: AgentMiddleware[] = [
-    ...mergeMiddleware(coreMiddleware, customMiddleware),
-    ...tailMiddleware,
+    ...mergeMiddleware(
+      coreMiddleware,
+      customMiddleware.filter((middleware) =>
+        coreMiddlewareNames.has(middleware.name),
+      ),
+    ),
+    ...novelMiddleware,
+    ...mergeMiddleware(
+      tailMiddleware,
+      customMiddleware.filter((middleware) =>
+        tailMiddlewareNames.has(middleware.name),
+      ),
+    ),
   ];
 
   // Apply profile middleware exclusions after custom replacement so exclusions win.
