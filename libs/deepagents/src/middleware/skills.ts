@@ -438,9 +438,14 @@ export function parseSkillMetadataFromContent(
     return null;
   }
 
+  // Normalize common text-file variants before matching and parsing frontmatter.
+  const normalizedContent = content
+    .replace(/^\uFEFF/, "")
+    .replace(/\r\n?/g, "\n");
+
   // Match YAML frontmatter between --- delimiters
   const frontmatterPattern = /^---\s*\n([\s\S]*?)\n---\s*\n/;
-  const match = content.match(frontmatterPattern);
+  const match = normalizedContent.match(frontmatterPattern);
 
   if (!match) {
     console.warn(`Skipping ${skillPath}: no valid YAML frontmatter found`);
