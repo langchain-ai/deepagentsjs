@@ -1,5 +1,23 @@
 # deepagents
 
+## 1.11.0
+
+### Minor Changes
+
+- [#671](https://github.com/langchain-ai/deepagentsjs/pull/671) [`6ae9d1e`](https://github.com/langchain-ai/deepagentsjs/commit/6ae9d1eab92131ea9cfd7bef024cf1ab343641ea) Thanks [@hntrl](https://github.com/hntrl)! - feat(filesystem): add allowlist for filesystem middleware tools
+
+- [#669](https://github.com/langchain-ai/deepagentsjs/pull/669) [`4643148`](https://github.com/langchain-ai/deepagentsjs/commit/4643148e8b64c796d3144210bac3ad1c6f5b2091) Thanks [@hntrl](https://github.com/hntrl)! - feat(deepagents): add structured system prompt configuration
+
+- [#673](https://github.com/langchain-ai/deepagentsjs/pull/673) [`eb18c70`](https://github.com/langchain-ai/deepagentsjs/commit/eb18c70d8d0871bc72aeb8be6581a98506829c6f) Thanks [@hntrl](https://github.com/hntrl)! - feat(backends): add delete protocol support
+
+  Adds a `DeleteResult` type and optional backend `delete` method, preserves delete through backend protocol adaptation, and implements file deletion across the built-in state, store, filesystem, composite, context hub, sandbox, and node-vfs backends.
+
+### Patch Changes
+
+- [#691](https://github.com/langchain-ai/deepagentsjs/pull/691) [`39a7049`](https://github.com/langchain-ai/deepagentsjs/commit/39a7049e4dbf99a31223c4e31cf79a2ed5115634) Thanks [@colifran](https://github.com/colifran)! - fix(deepagents): backend adapter drops route prefixes
+
+- [#672](https://github.com/langchain-ai/deepagentsjs/pull/672) [`cc26c41`](https://github.com/langchain-ai/deepagentsjs/commit/cc26c41df2851acacc86a743878b5c847a8f5d59) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): allow custom middleware to replace defaults by name
+
 ## 1.10.8
 
 ### Patch Changes
