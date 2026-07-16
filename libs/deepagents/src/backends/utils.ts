@@ -952,6 +952,18 @@ export function adaptBackendProtocol(
     },
   };
 
+  // Preserve `routePrefixes` so `CompositeBackend.isInstance` still detects
+  // composites after adaptation and the execute-tool permission guard stays
+  // correct; without it, scoped filesystem permissions wrongly disable execute.
+  const routePrefixes = (backend as { routePrefixes?: unknown }).routePrefixes;
+  if (Array.isArray(routePrefixes)) {
+    Object.defineProperty(adapted, "routePrefixes", {
+      get: () => (backend as { routePrefixes: string[] }).routePrefixes,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
   return adapted;
 }
 
