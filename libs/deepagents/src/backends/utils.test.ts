@@ -645,6 +645,33 @@ describe("adaptBackendProtocol", () => {
     });
   });
 
+  describe("routePrefixes preservation", () => {
+    it("should forward routePrefixes from a composite-like backend", () => {
+      const v2 = createV2Backend() as any;
+      v2.routePrefixes = ["/skills/"];
+      const adapted = adaptBackendProtocol(v2) as any;
+      expect(adapted.routePrefixes).toEqual(["/skills/"]);
+    });
+
+    it("should preserve routePrefixes through adaptSandboxProtocol", () => {
+      const v2 = createV2Backend() as any;
+      v2.execute = (cmd: string) => ({
+        output: cmd,
+        exitCode: 0,
+        truncated: false,
+      });
+      Object.defineProperty(v2, "id", { value: "sb", enumerable: true });
+      v2.routePrefixes = ["/skills/", "/mnt/"];
+      const adapted = adaptSandboxProtocol(v2) as any;
+      expect(adapted.routePrefixes).toEqual(["/skills/", "/mnt/"]);
+    });
+
+    it("should not add routePrefixes for a non-composite backend", () => {
+      const adapted = adaptBackendProtocol(createV2Backend()) as any;
+      expect(adapted.routePrefixes).toBeUndefined();
+    });
+  });
+
   describe("optional methods", () => {
     it("should preserve uploadFiles when present", () => {
       const v1 = createV1Backend();
