@@ -958,7 +958,7 @@ export function adaptBackendProtocol(
   const routePrefixes = (backend as { routePrefixes?: unknown }).routePrefixes;
   if (Array.isArray(routePrefixes)) {
     Object.defineProperty(adapted, "routePrefixes", {
-      get: () => (backend as { routePrefixes: string[] }).routePrefixes,
+      value: routePrefixes,
       enumerable: true,
       configurable: true,
     });
