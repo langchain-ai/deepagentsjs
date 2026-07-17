@@ -1,0 +1,52 @@
+libs/deepagents/src/middleware/subagents.permissions.test.ts
+  s_8fb447fde72b26::t_673b5c847701d4 138-143
+  s_8fb447fde72b26::t_d729b571c2ee88 178-183
+  s_8fb447fde72b26::t_c4561155d0814c 49-53
+libs/deepagents/src/middleware/fs.ts
+  h_f78d33d4280f3f 439-440
+  s_8fb447fde72b26::t_f66a3cb518631d 444-456
+  s_8fb447fde72b26::t_5a53c094dc6a30 694-701
+  s_8fb447fde72b26::t_090e4fc786b48c 904-911
+  s_8fb447fde72b26::t_641bb15dcd6836 1105-1112
+  s_8fb447fde72b26::t_95522c562a6e24 427,429-438,457,461,463,466-469,471,474,476-477
+  s_8fb447fde72b26::t_8524abff922a08 470
+  s_8fb447fde72b26::t_43e9e7b69ade4e 1041-1048
+  s_8fb447fde72b26::t_ea6a2e6235362f 768-775
+  s_8fb447fde72b26::t_f6421e954245a7 967-974
+libs/deepagents/src/middleware/fs.permissions.test.ts
+  s_8fb447fde72b26::t_e5b35647a83437 291,297-302,314-319
+  s_8fb447fde72b26::t_db61722eab5f9f 325,331-336
+  s_8fb447fde72b26::t_f8058b93b6c607 129-188,191,193
+  s_8fb447fde72b26::t_c223cb2f29538f 29-37
+  s_8fb447fde72b26::t_988203cd462495 414,420-426
+  s_8fb447fde72b26::t_e4079f9ad45217 375,381-387
+  s_8fb447fde72b26::t_18ba29f1e7dd46 198,204-209,219-222
+  s_8fb447fde72b26::t_428a2d675b1884 245,251-255,267-271
+.changeset/permission-crash-recoverable.md
+  s_8fb447fde72b26::t_87f2c9e1d68a3d 1-5
+libs/deepagents/src/permissions/agent.permissions.test.ts
+  s_8fb447fde72b26::t_3d0969ea23431f 35-39
+  s_8fb447fde72b26::t_0d6bca82a1555c 56-61
+  s_8fb447fde72b26::t_616da140ceb0c2 100-104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "7a889eae095a1546dd5055794960929f66d78c83",
+  "prompts": {},
+  "humans": {
+    "h_f78d33d4280f3f": {
+      "author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  },
+  "sessions": {
+    "s_8fb447fde72b26": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0d03c489-5158-4869-a367-e12fd350515b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
