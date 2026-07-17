@@ -137,9 +137,6 @@ describe("fs tool permissions", () => {
   });
 
   describe("malformed model paths do not crash the run", () => {
-    // Regression: a model-supplied `~`/relative/`..` path used to throw out of
-    // the tool and kill the entire agent run (a MiddlewareError through
-    // langgraph). It must instead return a recoverable error to the model.
     const badPaths = [
       { label: "tilde home path", path: "~/.openwiki/wiki/quickstart.md" },
       { label: "relative path", path: "quickstart.md" },

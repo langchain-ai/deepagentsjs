@@ -423,24 +423,6 @@ const FilesystemStateSchema = new StateSchema({
   ),
 });
 
-/**
- * Check whether `path` is permitted under `rules` for `operation`.
- *
- * Returns `undefined` when the operation is allowed (including the permissive
- * empty-rules default). Otherwise returns a human-readable error string that
- * the calling tool returns to the model as a recoverable tool result:
- *
- * - A model-supplied path that fails `validatePath` (non-absolute, or
- *   containing `..` or `~`) yields the validation message. The path is
- *   rejected, not normalized, so it can never bypass a deny rule or reach the
- *   backend.
- * - A path denied by the rules yields a permission-denied message.
- *
- * Crucially this never throws. Insteadm an invalid path from the model is an
- * expected, recoverable condition, not a fatal run-ending error.
- *
- * @internal
- */
 /** Extract a message string from an unknown thrown value without `instanceof`. */
 function getErrorMessage(error: unknown): string {
   if (
@@ -454,6 +436,17 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+/**
+ * Check whether `path` is permitted under `rules` for `operation`, returning an
+ * error string to surface to the model (or `undefined` when allowed).
+ *
+ * Never throws: an invalid path (non-absolute, or containing `..` or `~`) or a
+ * denied path is a recoverable tool error, not a fatal run-ending one. Such
+ * paths are rejected, never normalized, so they cannot bypass a deny rule or
+ * reach the backend.
+ *
+ * @internal
+ */
 function checkPermission(
   rules: FilesystemPermission[],
   operation: FilesystemOperation,
