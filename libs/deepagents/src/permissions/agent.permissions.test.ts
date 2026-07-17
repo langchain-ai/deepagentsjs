@@ -32,9 +32,14 @@ function getTool(
   return t;
 }
 
-/** Normalize a tool result (string, or read_file's content-block array) to text. */
+/** Normalize a tool result (string, or a ToolMessage's content) to text. */
 function resultText(result: unknown): string {
-  return typeof result === "string" ? result : JSON.stringify(result);
+  if (typeof result === "string") return result;
+  if (result && typeof result === "object" && "content" in result) {
+    const { content } = result as { content: unknown };
+    return typeof content === "string" ? content : JSON.stringify(content);
+  }
+  return JSON.stringify(result);
 }
 
 // ─── permissions flow to createFilesystemMiddleware ───────────────────────────

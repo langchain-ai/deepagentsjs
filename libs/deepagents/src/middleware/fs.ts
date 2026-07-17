@@ -471,6 +471,26 @@ function checkPermission(
 }
 
 /**
+ * Build an error {@link ToolMessage} for a rejected or denied path. Returning a
+ * bare string would be wrapped as a `status: "success"` message whose content
+ * merely starts with "Error:"; marking `status: "error"` reports the failure
+ * accurately (matching the Python implementation) so callers and the model can
+ * distinguish a real failure from a successful result.
+ */
+function toolError(
+  runtime: ToolRuntime,
+  toolName: string,
+  message: string,
+): ToolMessage {
+  return new ToolMessage({
+    content: message,
+    name: toolName,
+    tool_call_id: runtime.toolCall?.id as string,
+    status: "error",
+  });
+}
+
+/**
  * Filter a list of filesystem entries to those the rules permit.
  *
  * `getPath` extracts the absolute path from each entry. Entries with
@@ -690,7 +710,7 @@ function createLsTool(
         input.path ?? "/",
       );
       if (permissionError !== undefined) {
-        return permissionError;
+        return toolError(runtime, "ls", permissionError);
       }
 
       const resolvedBackend = await resolveBackend(backend, runtime);
@@ -764,7 +784,7 @@ function createReadFileTool(
         input.file_path,
       );
       if (permissionError !== undefined) {
-        return [{ type: "text", text: permissionError }];
+        return toolError(runtime, "read_file", permissionError);
       }
 
       const resolvedBackend = await resolveBackend(backend, runtime);
@@ -900,7 +920,7 @@ function createWriteFileTool(
         input.file_path,
       );
       if (permissionError !== undefined) {
-        return permissionError;
+        return toolError(runtime, "write_file", permissionError);
       }
 
       const resolvedBackend = await resolveBackend(backend, runtime);
@@ -963,7 +983,7 @@ function createEditFileTool(
         input.file_path,
       );
       if (permissionError !== undefined) {
-        return permissionError;
+        return toolError(runtime, "edit_file", permissionError);
       }
 
       const resolvedBackend = await resolveBackend(backend, runtime);
@@ -1037,7 +1057,7 @@ function createGlobTool(
         input.path ?? "/",
       );
       if (permissionError !== undefined) {
-        return permissionError;
+        return toolError(runtime, "glob", permissionError);
       }
 
       const resolvedBackend = await resolveBackend(backend, runtime);
@@ -1101,7 +1121,7 @@ function createGrepTool(
         input.path ?? "/",
       );
       if (permissionError !== undefined) {
-        return permissionError;
+        return toolError(runtime, "grep", permissionError);
       }
 
       const resolvedBackend = await resolveBackend(backend, runtime);

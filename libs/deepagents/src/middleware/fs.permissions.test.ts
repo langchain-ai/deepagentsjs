@@ -27,12 +27,24 @@ function getTool(
 }
 
 /**
- * Normalize a tool result to searchable text. Tools return a plain string
- * (ls/write/edit/glob/grep) or an array of content blocks (read_file), so
- * assertions can match against either shape.
+ * Normalize a tool result to searchable text. Errors come back as a ToolMessage
+ * (content string); successful reads may be a plain string or content-block
+ * array, so assertions can match against any shape.
  */
 function resultText(result: unknown): string {
-  return typeof result === "string" ? result : JSON.stringify(result);
+  if (typeof result === "string") return result;
+  if (result && typeof result === "object" && "content" in result) {
+    const { content } = result as { content: unknown };
+    return typeof content === "string" ? content : JSON.stringify(content);
+  }
+  return JSON.stringify(result);
+}
+
+/** Read the ToolMessage status of a tool result, if present. */
+function resultStatus(result: unknown): string | undefined {
+  return result && typeof result === "object" && "status" in result
+    ? (result as { status?: string }).status
+    : undefined;
 }
 
 const deny = (paths: string[]) => ({
@@ -155,6 +167,7 @@ describe("fs tool permissions", () => {
           file_path: path,
         });
         expect(resultText(result)).toMatch(/error/i);
+        expect(resultStatus(result)).toBe("error");
         expect(backend.read).not.toHaveBeenCalled();
       });
 
@@ -204,6 +217,7 @@ describe("fs tool permissions", () => {
       expect(resultText(result)).toMatch(
         /permission denied for read on \/secrets\/key\.txt/,
       );
+      expect(resultStatus(result)).toBe("error");
     });
 
     it("does not call backend when path is denied", async () => {
@@ -252,6 +266,7 @@ describe("fs tool permissions", () => {
       expect(resultText(result)).toMatch(
         /permission denied for write on \/readonly\/config\.json/,
       );
+      expect(resultStatus(result)).toBe("error");
     });
 
     it("does not call backend when path is denied", async () => {
