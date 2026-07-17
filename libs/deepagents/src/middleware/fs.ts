@@ -474,8 +474,8 @@ function checkPermission(
  * Build an error {@link ToolMessage} for a rejected or denied path. Returning a
  * bare string would be wrapped as a `status: "success"` message whose content
  * merely starts with "Error:"; marking `status: "error"` reports the failure
- * accurately (matching the Python implementation) so callers and the model can
- * distinguish a real failure from a successful result.
+ * accurately so callers and the model can distinguish a real failure from a
+ * successful result.
  */
 function toolError(
   runtime: ToolRuntime,
