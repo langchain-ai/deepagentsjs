@@ -46,6 +46,11 @@ function getTool(
   return t;
 }
 
+/** Normalize a tool result (string, or read_file's content-block array) to text. */
+function resultText(result: unknown): string {
+  return typeof result === "string" ? result : JSON.stringify(result);
+}
+
 /** Mirrors the expression in normalizeSubagentSpec. */
 function resolvePermissions(
   subagentPermissions: FilesystemPermission[] | undefined,
@@ -130,11 +135,12 @@ describe("createFilesystemMiddleware with effective permissions", () => {
       permissions: effective,
     });
 
-    await expect(
-      getTool(middleware, "read_file").invoke({
-        file_path: "/secrets/key.txt",
-      }),
-    ).rejects.toThrow(/permission denied for read on \/secrets\/key\.txt/);
+    const result = await getTool(middleware, "read_file").invoke({
+      file_path: "/secrets/key.txt",
+    });
+    expect(resultText(result)).toMatch(
+      /permission denied for read on \/secrets\/key\.txt/,
+    );
   });
 
   it("empty override allows reads that parent would have denied", async () => {
@@ -169,11 +175,12 @@ describe("createFilesystemMiddleware with effective permissions", () => {
       permissions: effective,
     });
 
-    await expect(
-      getTool(middleware, "read_file").invoke({
-        file_path: "/restricted/data.txt",
-      }),
-    ).rejects.toThrow(/permission denied for read on \/restricted\/data\.txt/);
+    const result = await getTool(middleware, "read_file").invoke({
+      file_path: "/restricted/data.txt",
+    });
+    expect(resultText(result)).toMatch(
+      /permission denied for read on \/restricted\/data\.txt/,
+    );
   });
 
   it("subagent-specific deny rule does not affect parent-allowed paths", async () => {
