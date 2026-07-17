@@ -1,0 +1,14 @@
+libs/deepagents/src/middleware/fs.ts
+  h_f78d33d4280f3f 477-478
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "42fa2036fe67908d45cff091b888c39d0391f639",
+  "prompts": {},
+  "humans": {
+    "h_f78d33d4280f3f": {
+      "author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
