@@ -26,6 +26,27 @@ function getTool(
   return tool;
 }
 
+/**
+ * Normalize a tool result to searchable text. Errors come back as a ToolMessage
+ * (content string); successful reads may be a plain string or content-block
+ * array, so assertions can match against any shape.
+ */
+function resultText(result: unknown): string {
+  if (typeof result === "string") return result;
+  if (result && typeof result === "object" && "content" in result) {
+    const { content } = result as { content: unknown };
+    return typeof content === "string" ? content : JSON.stringify(content);
+  }
+  return JSON.stringify(result);
+}
+
+/** Read the ToolMessage status of a tool result, if present. */
+function resultStatus(result: unknown): string | undefined {
+  return result && typeof result === "object" && "status" in result
+    ? (result as { status?: string }).status
+    : undefined;
+}
+
 const deny = (paths: string[]) => ({
   operations: ["read", "write"] as const,
   paths,
@@ -117,27 +138,86 @@ describe("fs tool permissions", () => {
         permissions: [denyRead(["/secrets/**"])],
       });
 
-      await expect(
-        getTool(middleware, "read_file").invoke({
-          file_path: "secrets/key.txt",
-        }),
-      ).rejects.toThrow(/path must be absolute/i);
+      // A malformed path must not reach the backend, but it is a recoverable
+      // tool error the model can correct — never a run-ending throw.
+      const result = await getTool(middleware, "read_file").invoke({
+        file_path: "secrets/key.txt",
+      });
+      expect(resultText(result)).toMatch(/path must be absolute/i);
       expect(backend.read).not.toHaveBeenCalled();
     });
   });
 
+  describe("malformed model paths do not crash the run", () => {
+    const badPaths = [
+      { label: "tilde home path", path: "~/.openwiki/wiki/quickstart.md" },
+      { label: "relative path", path: "quickstart.md" },
+      { label: "parent traversal", path: "/workspace/../etc/passwd" },
+    ];
+
+    for (const { label, path } of badPaths) {
+      it(`read_file returns an error (not a throw) for a ${label}`, async () => {
+        const backend = createMockBackend();
+        const middleware = createFilesystemMiddleware({
+          backend,
+          permissions: [denyRead(["/secrets/**"])],
+        });
+
+        const result = await getTool(middleware, "read_file").invoke({
+          file_path: path,
+        });
+        expect(resultText(result)).toMatch(/error/i);
+        expect(resultStatus(result)).toBe("error");
+        expect(backend.read).not.toHaveBeenCalled();
+      });
+
+      it(`write_file returns an error (not a throw) for a ${label}`, async () => {
+        const backend = createMockBackend();
+        const middleware = createFilesystemMiddleware({
+          backend,
+          permissions: [denyWrite(["/readonly/**"])],
+        });
+
+        const result = await getTool(middleware, "write_file").invoke({
+          file_path: path,
+          content: "data",
+        });
+        expect(resultText(result)).toMatch(/error/i);
+        expect(backend.write).not.toHaveBeenCalled();
+      });
+    }
+
+    it("does not crash when no permissions are configured either", async () => {
+      // With empty rules the permission check is skipped entirely, so the
+      // backend receives the raw path and reports its own (recoverable) error.
+      const backend = createMockBackend();
+      backend.read = vi
+        .fn()
+        .mockResolvedValue({ error: "invalid path", content: null });
+      const middleware = createFilesystemMiddleware({ backend });
+
+      await expect(
+        getTool(middleware, "read_file").invoke({
+          file_path: "~/.openwiki/wiki/quickstart.md",
+        }),
+      ).resolves.toBeDefined();
+    });
+  });
+
   describe("read_file", () => {
-    it("throws on a denied path", async () => {
+    it("returns an error on a denied path", async () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
         permissions: [denyRead(["/secrets/**"])],
       });
 
-      await expect(
-        getTool(middleware, "read_file").invoke({
-          file_path: "/secrets/key.txt",
-        }),
-      ).rejects.toThrow(/permission denied for read on \/secrets\/key\.txt/);
+      const result = await getTool(middleware, "read_file").invoke({
+        file_path: "/secrets/key.txt",
+      });
+      expect(resultText(result)).toMatch(
+        /permission denied for read on \/secrets\/key\.txt/,
+      );
+      expect(resultStatus(result)).toBe("error");
     });
 
     it("does not call backend when path is denied", async () => {
@@ -147,11 +227,10 @@ describe("fs tool permissions", () => {
         permissions: [denyRead(["/secrets/**"])],
       });
 
-      await expect(
-        getTool(middleware, "read_file").invoke({
-          file_path: "/secrets/key.txt",
-        }),
-      ).rejects.toThrow();
+      const result = await getTool(middleware, "read_file").invoke({
+        file_path: "/secrets/key.txt",
+      });
+      expect(resultText(result)).toMatch(/permission denied/);
       expect(backend.read).not.toHaveBeenCalled();
     });
 
@@ -174,20 +253,20 @@ describe("fs tool permissions", () => {
   });
 
   describe("write_file", () => {
-    it("throws on a denied path", async () => {
+    it("returns an error on a denied path", async () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
         permissions: [denyWrite(["/readonly/**"])],
       });
 
-      await expect(
-        getTool(middleware, "write_file").invoke({
-          file_path: "/readonly/config.json",
-          content: "data",
-        }),
-      ).rejects.toThrow(
+      const result = await getTool(middleware, "write_file").invoke({
+        file_path: "/readonly/config.json",
+        content: "data",
+      });
+      expect(resultText(result)).toMatch(
         /permission denied for write on \/readonly\/config\.json/,
       );
+      expect(resultStatus(result)).toBe("error");
     });
 
     it("does not call backend when path is denied", async () => {
@@ -197,12 +276,11 @@ describe("fs tool permissions", () => {
         permissions: [denyWrite(["/readonly/**"])],
       });
 
-      await expect(
-        getTool(middleware, "write_file").invoke({
-          file_path: "/readonly/config.json",
-          content: "data",
-        }),
-      ).rejects.toThrow();
+      const result = await getTool(middleware, "write_file").invoke({
+        file_path: "/readonly/config.json",
+        content: "data",
+      });
+      expect(resultText(result)).toMatch(/permission denied/);
       expect(backend.write).not.toHaveBeenCalled();
     });
 
@@ -222,19 +300,18 @@ describe("fs tool permissions", () => {
   });
 
   describe("edit_file", () => {
-    it("throws on a denied path", async () => {
+    it("returns an error on a denied path", async () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
         permissions: [denyWrite(["/readonly/**"])],
       });
 
-      await expect(
-        getTool(middleware, "edit_file").invoke({
-          file_path: "/readonly/config.json",
-          old_string: "a",
-          new_string: "b",
-        }),
-      ).rejects.toThrow(
+      const result = await getTool(middleware, "edit_file").invoke({
+        file_path: "/readonly/config.json",
+        old_string: "a",
+        new_string: "b",
+      });
+      expect(resultText(result)).toMatch(
         /permission denied for write on \/readonly\/config\.json/,
       );
     });
@@ -246,27 +323,29 @@ describe("fs tool permissions", () => {
         permissions: [denyWrite(["/readonly/**"])],
       });
 
-      await expect(
-        getTool(middleware, "edit_file").invoke({
-          file_path: "/readonly/config.json",
-          old_string: "a",
-          new_string: "b",
-        }),
-      ).rejects.toThrow();
+      const result = await getTool(middleware, "edit_file").invoke({
+        file_path: "/readonly/config.json",
+        old_string: "a",
+        new_string: "b",
+      });
+      expect(resultText(result)).toMatch(/permission denied/);
       expect(backend.edit).not.toHaveBeenCalled();
     });
   });
 
   describe("ls", () => {
-    it("throws when base path is denied", async () => {
+    it("returns an error when base path is denied", async () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
         permissions: [denyRead(["/secrets/**", "/secrets"])],
       });
 
-      await expect(
-        getTool(middleware, "ls").invoke({ path: "/secrets" }),
-      ).rejects.toThrow(/permission denied for read on \/secrets/);
+      const result = await getTool(middleware, "ls").invoke({
+        path: "/secrets",
+      });
+      expect(resultText(result)).toMatch(
+        /permission denied for read on \/secrets/,
+      );
     });
 
     it("post-filters denied entries from results", async () => {
@@ -305,18 +384,19 @@ describe("fs tool permissions", () => {
   });
 
   describe("glob", () => {
-    it("throws when base path is denied", async () => {
+    it("returns an error when base path is denied", async () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
         permissions: [denyRead(["/secrets/**", "/secrets"])],
       });
 
-      await expect(
-        getTool(middleware, "glob").invoke({
-          pattern: "**/*.txt",
-          path: "/secrets",
-        }),
-      ).rejects.toThrow(/permission denied for read on \/secrets/);
+      const result = await getTool(middleware, "glob").invoke({
+        pattern: "**/*.txt",
+        path: "/secrets",
+      });
+      expect(resultText(result)).toMatch(
+        /permission denied for read on \/secrets/,
+      );
     });
 
     it("post-filters denied paths from results", async () => {
@@ -343,18 +423,19 @@ describe("fs tool permissions", () => {
   });
 
   describe("grep", () => {
-    it("throws when base path is denied", async () => {
+    it("returns an error when base path is denied", async () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
         permissions: [denyRead(["/secrets/**", "/secrets"])],
       });
 
-      await expect(
-        getTool(middleware, "grep").invoke({
-          pattern: "password",
-          path: "/secrets",
-        }),
-      ).rejects.toThrow(/permission denied for read on \/secrets/);
+      const result = await getTool(middleware, "grep").invoke({
+        pattern: "password",
+        path: "/secrets",
+      });
+      expect(resultText(result)).toMatch(
+        /permission denied for read on \/secrets/,
+      );
     });
 
     it("post-filters denied matches from results", async () => {

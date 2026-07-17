@@ -423,31 +423,71 @@ const FilesystemStateSchema = new StateSchema({
   ),
 });
 
+/** Extract a message string from an unknown thrown value without `instanceof`. */
+function getErrorMessage(error: unknown): string {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    return (error as { message: string }).message;
+  }
+  return String(error);
+}
+
 /**
- * Throw a permission-denied error if `path` is denied under `rules`.
+ * Check whether `path` is permitted under `rules` for `operation`, returning an
+ * error string to surface to the model (or `undefined` when allowed).
  *
- * No-op when `rules` is empty (permissive default). Paths that fail
- * `validatePath` are silently skipped — the tool's own input validation
- * will surface a better error.
+ * Never throws: an invalid path (non-absolute, or containing `..` or `~`) or a
+ * denied path is a recoverable tool error, not a fatal run-ending one. Such
+ * paths are rejected, never normalized, so they cannot bypass a deny rule or
+ * reach the backend.
  *
  * @internal
  */
-function enforcePermission(
+function checkPermission(
   rules: FilesystemPermission[],
   operation: FilesystemOperation,
   path: string,
-): void {
+): string | undefined {
   if (rules.length === 0) {
-    return;
+    return undefined;
   }
 
-  const canonical = validatePath(path);
+  let canonical: string;
+  try {
+    canonical = validatePath(path);
+  } catch (error) {
+    return `Error: ${getErrorMessage(error)}`;
+  }
 
   if (decidePathAccess(rules, operation, canonical) === "deny") {
-    throw new Error(
-      `Error: permission denied for ${operation} on ${canonical}`,
-    );
+    return `Error: permission denied for ${operation} on ${canonical}`;
   }
+
+  return undefined;
+}
+
+/**
+ * Build an error {@link ToolMessage} for a rejected or denied path. Returning a
+ * bare string would be wrapped as a `status: "success"` message whose content
+ * merely starts with "Error:"; marking `status: "error"` reports the failure
+ * accurately so callers and the model can distinguish a real failure from a
+ * successful result.
+ */
+function toolError(
+  runtime: ToolRuntime,
+  toolName: string,
+  message: string,
+): ToolMessage {
+  return new ToolMessage({
+    content: message,
+    name: toolName,
+    tool_call_id: runtime.toolCall?.id as string,
+    status: "error",
+  });
 }
 
 /**
@@ -664,7 +704,14 @@ function createLsTool(
   const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
-      enforcePermission(permissions, "read", input.path ?? "/");
+      const permissionError = checkPermission(
+        permissions,
+        "read",
+        input.path ?? "/",
+      );
+      if (permissionError !== undefined) {
+        return toolError(runtime, "ls", permissionError);
+      }
 
       const resolvedBackend = await resolveBackend(backend, runtime);
       const path = input.path || "/";
@@ -731,7 +778,14 @@ function createReadFileTool(
   const { customDescription, toolTokenLimitBeforeEvict, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
-      enforcePermission(permissions, "read", input.file_path);
+      const permissionError = checkPermission(
+        permissions,
+        "read",
+        input.file_path,
+      );
+      if (permissionError !== undefined) {
+        return toolError(runtime, "read_file", permissionError);
+      }
 
       const resolvedBackend = await resolveBackend(backend, runtime);
       const {
@@ -860,7 +914,14 @@ function createWriteFileTool(
   const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
-      enforcePermission(permissions, "write", input.file_path);
+      const permissionError = checkPermission(
+        permissions,
+        "write",
+        input.file_path,
+      );
+      if (permissionError !== undefined) {
+        return toolError(runtime, "write_file", permissionError);
+      }
 
       const resolvedBackend = await resolveBackend(backend, runtime);
       const { file_path, content } = input;
@@ -916,7 +977,14 @@ function createEditFileTool(
   const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
-      enforcePermission(permissions, "write", input.file_path);
+      const permissionError = checkPermission(
+        permissions,
+        "write",
+        input.file_path,
+      );
+      if (permissionError !== undefined) {
+        return toolError(runtime, "edit_file", permissionError);
+      }
 
       const resolvedBackend = await resolveBackend(backend, runtime);
       const { file_path, old_string, new_string, replace_all = false } = input;
@@ -983,7 +1051,14 @@ function createGlobTool(
   const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
-      enforcePermission(permissions, "read", input.path ?? "/");
+      const permissionError = checkPermission(
+        permissions,
+        "read",
+        input.path ?? "/",
+      );
+      if (permissionError !== undefined) {
+        return toolError(runtime, "glob", permissionError);
+      }
 
       const resolvedBackend = await resolveBackend(backend, runtime);
       const { pattern, path = "/" } = input;
@@ -1040,7 +1115,14 @@ function createGrepTool(
   const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
-      enforcePermission(permissions, "read", input.path ?? "/");
+      const permissionError = checkPermission(
+        permissions,
+        "read",
+        input.path ?? "/",
+      );
+      if (permissionError !== undefined) {
+        return toolError(runtime, "grep", permissionError);
+      }
 
       const resolvedBackend = await resolveBackend(backend, runtime);
       const { pattern, path = "/", glob = null } = input;
