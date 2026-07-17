@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.11.1
+
+### Patch Changes
+
+- [#693](https://github.com/langchain-ai/deepagentsjs/pull/693) [`2ebb178`](https://github.com/langchain-ai/deepagentsjs/commit/2ebb1785e4625ecf82635582e17fe41fbfbac603) Thanks [@colifran](https://github.com/colifran)! - fix(deepagents): return recoverable errors for invalid/denied filesystem tool paths instead of throwing
+
 ## 1.11.0
 
 ### Minor Changes
