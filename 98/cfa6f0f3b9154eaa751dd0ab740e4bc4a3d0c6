@@ -1,0 +1,35 @@
+libs/deepagents/src/permissions/agent.permissions.test.ts
+  s_8fb447fde72b26::t_7a8f6618a5edd9 35,37-42
+libs/deepagents/src/middleware/fs.ts
+  s_8fb447fde72b26::t_0dfd311e6f35f6 474-492
+  s_8fb447fde72b26::t_133bdf7a0ee92c 1060
+  s_8fb447fde72b26::t_182511cc12c777 713
+  s_8fb447fde72b26::t_d35145ca9fbcc6 923
+  s_8fb447fde72b26::t_cf09bf5c6c241f 1124
+  s_8fb447fde72b26::t_cc32ebc9bee74b 986
+  s_8fb447fde72b26::t_df757fcc8c6fab 787
+  s_8fb447fde72b26::t_b0dd39c301e239 473
+libs/deepagents/src/middleware/subagents.permissions.test.ts
+  s_8fb447fde72b26::t_dcaef85722134a 49,51-56
+libs/deepagents/src/middleware/fs.permissions.test.ts
+  s_8fb447fde72b26::t_4b185c176e441d 170
+  s_8fb447fde72b26::t_4f44b135f40bad 269
+  s_8fb447fde72b26::t_c298ec1dbb84d8 30-32,35-47
+  s_8fb447fde72b26::t_36f4fda258893b 220
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "98cfa6f0f3b9154eaa751dd0ab740e4bc4a3d0c6",
+  "prompts": {},
+  "sessions": {
+    "s_8fb447fde72b26": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0d03c489-5158-4869-a367-e12fd350515b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
