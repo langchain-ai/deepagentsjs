@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import * as path from "path";
@@ -413,6 +413,104 @@ describe("FilesystemBackend", () => {
     expect(readResult.error).toBeDefined();
   });
 
+  describe("delete", () => {
+    it("should delete an existing file", async () => {
+      const root = tmpDir;
+      const filePath = path.join(root, "drop.txt");
+      await writeFile(filePath, "drop");
+      const backend = new FilesystemBackend({
+        rootDir: root,
+        virtualMode: false,
+      });
+
+      const result = await backend.delete(filePath);
+
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe(filePath);
+      await expect(fs.stat(filePath)).rejects.toThrow();
+    });
+
+    it("should return an error for missing files", async () => {
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.delete("/missing.txt");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("not found");
+    });
+
+    it("should reject directories", async () => {
+      await fs.mkdir(path.join(tmpDir, "sub"));
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.delete("/sub");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("directory");
+      await expect(fs.stat(path.join(tmpDir, "sub"))).resolves.toBeDefined();
+    });
+
+    it("should only remove the target file", async () => {
+      await writeFile(path.join(tmpDir, "keep.txt"), "keep");
+      await writeFile(path.join(tmpDir, "drop.txt"), "drop");
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.delete("/drop.txt");
+
+      expect(result.error).toBeUndefined();
+      await expect(fs.stat(path.join(tmpDir, "drop.txt"))).rejects.toThrow();
+      await expect(
+        fs.stat(path.join(tmpDir, "keep.txt")),
+      ).resolves.toBeDefined();
+    });
+
+    it("should reject virtual-mode path traversal", async () => {
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.delete("/../outside.txt");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("Path traversal not allowed");
+    });
+
+    it("should reject symlinked parent directories in virtual mode", async () => {
+      const outsideDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), "deepagents-outside-"),
+      );
+      const outsideFile = path.join(outsideDir, "secret.txt");
+      await writeFile(outsideFile, "secret");
+      try {
+        await fs.symlink(outsideDir, path.join(tmpDir, "link"), "dir");
+      } catch {
+        await removeDir(outsideDir);
+        return;
+      }
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.delete("/link/secret.txt");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("Symlink parent not allowed");
+      await expect(fs.stat(outsideFile)).resolves.toBeDefined();
+      await removeDir(outsideDir);
+    });
+  });
+
   describe("binary file handling", () => {
     it("should read binary files as Uint8Array", async () => {
       const root = tmpDir;
@@ -531,4 +629,125 @@ describe("FilesystemBackend", () => {
       expect(result.data!.content).toEqual(new Uint8Array(pngHeader));
     });
   });
+});
+
+/**
+ * Returns true when the platform lets an unprivileged process create symlinks
+ */
+function symlinksSupported(): boolean {
+  const probe = fsSync.mkdtempSync(
+    path.join(os.tmpdir(), "deepagents-symlink-probe-"),
+  );
+  try {
+    fsSync.symlinkSync("target", path.join(probe, "link"));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    fsSync.rmSync(probe, { recursive: true, force: true });
+  }
+}
+const CAN_SYMLINK = symlinksSupported();
+
+describe("FilesystemBackend symlink cycle handling", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = createTempDir();
+  });
+
+  afterEach(async () => {
+    await removeDir(tmpDir);
+  });
+
+  /**
+   * Build a tree with real files, an `ln -s . sub/sub` cycle (must not be
+   * descended into), and a symlink-to-file `alias.txt -> real.txt` (must still
+   * be reported).
+   */
+  async function buildCycle(root: string) {
+    await writeFile(path.join(root, "real.txt"), "needle-content");
+    await writeFile(path.join(root, "sub", "inner.txt"), "needle-content");
+    await fs.symlink(".", path.join(root, "sub", "sub"));
+    await fs.symlink(path.join(root, "real.txt"), path.join(root, "alias.txt"));
+  }
+
+  // A file reached by following the cycle looks like `.../sub/sub/inner.txt`;
+  // the real file is only ever `.../sub/inner.txt`.
+  const followedCycle = (p: string) => /sub[\\/]sub/.test(p);
+
+  it.skipIf(!CAN_SYMLINK)(
+    "glob does not descend into a directory symlink cycle",
+    async () => {
+      await buildCycle(tmpDir);
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: false,
+      });
+
+      const result = await backend.glob("**/*", tmpDir);
+
+      expect(result.error).toBeUndefined();
+      const paths = result.files!.map((f) => f.path);
+      expect(paths.some((p) => p.endsWith("inner.txt"))).toBe(true);
+      expect(paths.some((p) => p.endsWith("real.txt"))).toBe(true);
+      // A symlink pointing at a regular file must still be reported (not
+      // silently dropped by `onlyFiles` + `followSymbolicLinks: false`).
+      expect(paths.some((p) => p.endsWith("alias.txt"))).toBe(true);
+      expect(paths.some(followedCycle)).toBe(false);
+    },
+  );
+
+  it.skipIf(!CAN_SYMLINK)(
+    "grep does not descend into a directory symlink cycle",
+    async () => {
+      await buildCycle(tmpDir);
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: false,
+      });
+
+      const result = await backend.grep("needle-content", tmpDir);
+
+      expect(result.error).toBeUndefined();
+      const paths = (result.matches ?? []).map((m) => m.path);
+      expect(paths.some((p) => p.endsWith("inner.txt"))).toBe(true);
+      expect(paths.some(followedCycle)).toBe(false);
+    },
+  );
+
+  it.skipIf(!CAN_SYMLINK)(
+    "grep fallback does not follow a symlink out of the search root",
+    async () => {
+      // A secret file OUTSIDE the workspace, reachable only via an in-tree
+      // symlink. Reading through the link would leak it past the root.
+      const outside = createTempDir();
+      try {
+        await writeFile(path.join(outside, "secret.txt"), "EXFIL_MARKER");
+        await writeFile(path.join(tmpDir, "normal.txt"), "nothing here");
+        await fs.symlink(
+          path.join(outside, "secret.txt"),
+          path.join(tmpDir, "alias.txt"),
+        );
+
+        const backend = new FilesystemBackend({
+          rootDir: tmpDir,
+          virtualMode: true,
+        });
+        // Force the non-ripgrep path; that fallback is what this guards.
+        vi.spyOn(
+          backend as unknown as { ripgrepSearch: () => Promise<null> },
+          "ripgrepSearch",
+        ).mockResolvedValue(null);
+
+        const result = await backend.grep("EXFIL_MARKER", "/");
+
+        // The marker exists only in the out-of-tree file; the fallback must not
+        // read it through the symlink.
+        expect(result.matches ?? []).toHaveLength(0);
+      } finally {
+        await removeDir(outside);
+      }
+    },
+  );
 });

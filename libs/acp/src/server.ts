@@ -849,6 +849,43 @@ export class DeepAgentsServer {
       await this.sendToolCall(session.id, conn, toolCall);
       activeToolCalls.set(toolCall.id, toolCall);
 
+      const decision = await this.requestToolPermission(
+        session,
+        conn,
+        toolCall,
+      );
+
+      if (decision === "reject") {
+        this.log("Tool call rejected by user:", {
+          sessionId: session.id,
+          toolId: toolCall.id,
+          tool: toolCall.name,
+        });
+        toolCall.status = "failed";
+        toolCall.result = "Tool call rejected by user.";
+        await this.sendToolCallUpdate(session.id, conn, toolCall);
+        activeToolCalls.delete(toolCall.id);
+        if (this.currentPromptAbortController) {
+          this.currentPromptAbortController.abort();
+        }
+        continue;
+      }
+
+      if (decision === "cancelled") {
+        this.log("Tool call permission cancelled:", {
+          sessionId: session.id,
+          toolId: toolCall.id,
+          tool: toolCall.name,
+        });
+        toolCall.status = "cancelled";
+        await this.sendToolCallUpdate(session.id, conn, toolCall);
+        activeToolCalls.delete(toolCall.id);
+        if (this.currentPromptAbortController) {
+          this.currentPromptAbortController.abort();
+        }
+        continue;
+      }
+
       // Update to in_progress
       toolCall.status = "in_progress";
       await this.sendToolCallUpdate(session.id, conn, toolCall);

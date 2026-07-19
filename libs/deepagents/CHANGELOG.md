@@ -1,5 +1,69 @@
 # deepagents
 
+## 1.11.1
+
+### Patch Changes
+
+- [#693](https://github.com/langchain-ai/deepagentsjs/pull/693) [`2ebb178`](https://github.com/langchain-ai/deepagentsjs/commit/2ebb1785e4625ecf82635582e17fe41fbfbac603) Thanks [@colifran](https://github.com/colifran)! - fix(deepagents): return recoverable errors for invalid/denied filesystem tool paths instead of throwing
+
+## 1.11.0
+
+### Minor Changes
+
+- [#671](https://github.com/langchain-ai/deepagentsjs/pull/671) [`6ae9d1e`](https://github.com/langchain-ai/deepagentsjs/commit/6ae9d1eab92131ea9cfd7bef024cf1ab343641ea) Thanks [@hntrl](https://github.com/hntrl)! - feat(filesystem): add allowlist for filesystem middleware tools
+
+- [#669](https://github.com/langchain-ai/deepagentsjs/pull/669) [`4643148`](https://github.com/langchain-ai/deepagentsjs/commit/4643148e8b64c796d3144210bac3ad1c6f5b2091) Thanks [@hntrl](https://github.com/hntrl)! - feat(deepagents): add structured system prompt configuration
+
+- [#673](https://github.com/langchain-ai/deepagentsjs/pull/673) [`eb18c70`](https://github.com/langchain-ai/deepagentsjs/commit/eb18c70d8d0871bc72aeb8be6581a98506829c6f) Thanks [@hntrl](https://github.com/hntrl)! - feat(backends): add delete protocol support
+
+  Adds a `DeleteResult` type and optional backend `delete` method, preserves delete through backend protocol adaptation, and implements file deletion across the built-in state, store, filesystem, composite, context hub, sandbox, and node-vfs backends.
+
+### Patch Changes
+
+- [#691](https://github.com/langchain-ai/deepagentsjs/pull/691) [`39a7049`](https://github.com/langchain-ai/deepagentsjs/commit/39a7049e4dbf99a31223c4e31cf79a2ed5115634) Thanks [@colifran](https://github.com/colifran)! - fix(deepagents): backend adapter drops route prefixes
+
+- [#672](https://github.com/langchain-ai/deepagentsjs/pull/672) [`cc26c41`](https://github.com/langchain-ai/deepagentsjs/commit/cc26c41df2851acacc86a743878b5c847a8f5d59) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): allow custom middleware to replace defaults by name
+
+## 1.10.8
+
+### Patch Changes
+
+- [#668](https://github.com/langchain-ai/deepagentsjs/pull/668) [`7c8a770`](https://github.com/langchain-ai/deepagentsjs/commit/7c8a770fac90fd50dfe08af67a0ce073a33e4ef7) Thanks [@colifran](https://github.com/colifran)! - fix(deepagents): fast-glob follows directory symlink cycles leading to ELOOP crashes
+
+## 1.10.7
+
+### Patch Changes
+
+- [#659](https://github.com/langchain-ai/deepagentsjs/pull/659) [`8efde93`](https://github.com/langchain-ai/deepagentsjs/commit/8efde93792dfc324e70b441eacbb810532f347c4) Thanks [@Kowshik4593](https://github.com/Kowshik4593)! - Fix: Normalize `path` to `file_path` in filesystem tools (`read_file`, `write_file`, and `edit_file`) and align the prompt documentation examples to prevent validation schema failures on weaker/custom models.
+
+## 1.10.6
+
+### Patch Changes
+
+- [#608](https://github.com/langchain-ai/deepagentsjs/pull/608) [`d7ecab2`](https://github.com/langchain-ai/deepagentsjs/commit/d7ecab2d9f9d41321a043eed6edc3366a1381a67) Thanks [@aolsenjazz](https://github.com/aolsenjazz)! - fix(deepagents): forward subagent results as text
+
+  Fixed a 400 `invalid_request_error` that occurred when a subagent used an Anthropic server-side tool (web search, web fetch, or code execution): the subagent's `server_tool_use`/`*_tool_result` blocks were forwarded to the parent agent as `tool_result` content, which the API rejects. Subagent results are now passed back to the parent as their text content (matching the Python implementation), which resolves the error and also handles a trailing empty `end_turn` message.
+
+- [#656](https://github.com/langchain-ai/deepagentsjs/pull/656) [`1a2b2df`](https://github.com/langchain-ai/deepagentsjs/commit/1a2b2df5528f0f61870b054fff8291355f6a2a0b) Thanks [@colifran](https://github.com/colifran)! - fix(deepagents): default unknown file extensions to text/plain
+
+- [#611](https://github.com/langchain-ai/deepagentsjs/pull/611) [`42f34b6`](https://github.com/langchain-ai/deepagentsjs/commit/42f34b65ededf4a1fbf3cd4bbff486ddfeb320e9) Thanks [@aolsenjazz](https://github.com/aolsenjazz)! - feat(deepagents): add bedrockPromptCachingMiddleware to default stack
+
+  Add bedrockPromptCachingMiddleware to default middleware stack. This automatically opts-in to Bedrock prompt caching for Nova and Anthropic models
+
+- [#613](https://github.com/langchain-ai/deepagentsjs/pull/613) [`0ae10d7`](https://github.com/langchain-ai/deepagentsjs/commit/0ae10d7e26c84203a5273939c9ad7a9c8c8661c6) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): declare LangChain runtime packages as peer dependencies
+
+  Move `@langchain/core`, `@langchain/langgraph`, `@langchain/langgraph-sdk`, and
+  `langchain` from `dependencies` to `peerDependencies`, and also declare
+  `@langchain/langgraph-checkpoint` as a peer (its `BaseCheckpointSaver`/`BaseStore`
+  types are part of the public API), so they resolve to a single shared instance in
+  the consumer's tree. Previously they were bundled as regular
+  dependencies, which let a consumer end up with two copies of `@langchain/core`
+  (e.g. `1.2.0` vs `1.2.1`). Because these packages ship classes with private/
+  protected fields, the duplicate copies are treated as nominally distinct types,
+  producing errors like passing a `ChatOpenAI` model to `createDeepAgent` or a
+  compiled graph to the local protocol helpers. As peers, the app controls the
+  version and bumping `@langchain/core` no longer requires a `deepagents` release.
+
 ## 1.10.5
 
 ### Patch Changes

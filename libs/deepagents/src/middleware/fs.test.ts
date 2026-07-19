@@ -361,6 +361,65 @@ describe("createFilesystemMiddleware", () => {
     } as unknown as BackendProtocolV2;
   }
 
+  function middlewareToolNames(
+    middleware: ReturnType<typeof createFilesystemMiddleware>,
+  ): string[] {
+    return (middleware.tools ?? []).map((tool) => tool.name);
+  }
+
+  describe("tools allowlist", () => {
+    it("should keep all filesystem tools by default", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockSandboxBackend(),
+      });
+
+      expect(middlewareToolNames(middleware)).toEqual([
+        "ls",
+        "read_file",
+        "write_file",
+        "edit_file",
+        "glob",
+        "grep",
+        "execute",
+      ]);
+    });
+
+    it("should keep all filesystem tools when tools is all", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockSandboxBackend(),
+        tools: "all",
+      });
+
+      expect(middlewareToolNames(middleware)).toEqual([
+        "ls",
+        "read_file",
+        "write_file",
+        "edit_file",
+        "glob",
+        "grep",
+        "execute",
+      ]);
+    });
+
+    it("should only register allowlisted filesystem tools", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        tools: ["read_file", "ls"],
+      });
+
+      expect(middlewareToolNames(middleware)).toEqual(["ls", "read_file"]);
+    });
+
+    it("should reject an allowlist without read_file", () => {
+      expect(() =>
+        createFilesystemMiddleware({
+          backend: createMockBackend(),
+          tools: ["ls"],
+        }),
+      ).toThrow(/read_file must be included in tools/);
+    });
+  });
+
   describe("wrapModelCall", () => {
     it("should add filesystem system prompt to model call", async () => {
       const middleware = createFilesystemMiddleware({
@@ -434,6 +493,83 @@ describe("createFilesystemMiddleware", () => {
       // Should NOT include execute tool in tools array
       const toolNames = modifiedRequest.tools.map((t: any) => t.name);
       expect(toolNames).not.toContain("execute");
+    });
+
+    it("should keep execute allowlisted but filter it when backend does not support execution", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        tools: ["read_file", "execute"],
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: middleware.tools || [],
+      };
+
+      await middleware.wrapModelCall!(request as any, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      const toolNames = modifiedRequest.tools.map(
+        (tool: { name: string }) => tool.name,
+      );
+      expect(toolNames).toEqual(["read_file"]);
+      expect(modifiedRequest.systemMessage.text).not.toContain("Execute Tool");
+    });
+
+    it("should list only visible filesystem tools in the system prompt", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        tools: ["read_file", "ls"],
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: middleware.tools || [],
+      };
+
+      await middleware.wrapModelCall!(request as any, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      const prompt = modifiedRequest.systemMessage.text;
+      expect(prompt).toContain("`ls`");
+      expect(prompt).toContain("`read_file`");
+      expect(prompt).not.toContain("`write_file`");
+      expect(prompt).not.toContain("`edit_file`");
+      expect(prompt).not.toContain("`glob`");
+      expect(prompt).not.toContain("`grep`");
+    });
+
+    it("should not filter user-provided non-filesystem tools", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        tools: ["read_file", "ls"],
+      });
+      const customTool = { name: "search" };
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: [...(middleware.tools || []), customTool],
+      };
+
+      await middleware.wrapModelCall!(request as any, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      const toolNames = modifiedRequest.tools.map(
+        (tool: { name: string }) => tool.name,
+      );
+      expect(toolNames).toContain("search");
+      expect(toolNames).toContain("read_file");
+      expect(toolNames).toContain("ls");
+      expect(toolNames).not.toContain("write_file");
     });
 
     it("should use custom system prompt when provided", async () => {
@@ -1046,6 +1182,74 @@ describe("createFilesystemMiddleware", () => {
             `tool "${(t as any).name}" is missing "${prop}" in required`,
           ).toContain(prop);
         }
+      }
+    });
+
+    it("filesystem schemas should normalize 'path' parameter to 'file_path'", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+      });
+
+      const readFileTool = middleware.tools!.find(
+        (t: any) => t.name === "read_file",
+      ) as any;
+      const writeFileTool = middleware.tools!.find(
+        (t: any) => t.name === "write_file",
+      ) as any;
+      const editFileTool = middleware.tools!.find(
+        (t: any) => t.name === "edit_file",
+      ) as any;
+
+      // Verify read_file normalization
+      const parsedRead = readFileTool.schema.parse({
+        path: "/foo/bar.txt",
+        limit: 10,
+      });
+      expect(parsedRead.file_path).toBe("/foo/bar.txt");
+      expect(parsedRead.limit).toBe(10);
+
+      // Verify write_file normalization
+      const parsedWrite = writeFileTool.schema.parse({
+        path: "/foo/bar.txt",
+        content: "hello",
+      });
+      expect(parsedWrite.file_path).toBe("/foo/bar.txt");
+      expect(parsedWrite.content).toBe("hello");
+
+      // Verify edit_file normalization
+      const parsedEdit = editFileTool.schema.parse({
+        path: "/foo/bar.txt",
+        old_string: "a",
+        new_string: "b",
+      });
+      expect(parsedEdit.file_path).toBe("/foo/bar.txt");
+      expect(parsedEdit.old_string).toBe("a");
+      expect(parsedEdit.new_string).toBe("b");
+    });
+
+    it("read_file examples only reference argument names in its schema", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+      });
+
+      const readFileTool = middleware.tools!.find(
+        (t: any) => t.name === "read_file",
+      ) as any;
+      expect(readFileTool).toBeDefined();
+
+      // Argument names the tool actually accepts.
+      const schemaKeys = Object.keys(
+        readFileTool.schema.toJSONSchema().properties ?? {},
+      );
+      // Argument names the description teaches, e.g. read_file(file_path, ...).
+      const exampleArgs = [
+        ...String(readFileTool.description).matchAll(/read_file\(([a-z_]+)/g),
+      ].map((m) => m[1]);
+
+      // Guard against silently passing if the examples are ever removed.
+      expect(exampleArgs.length).toBeGreaterThan(0);
+      for (const arg of exampleArgs) {
+        expect(schemaKeys).toContain(arg);
       }
     });
   });

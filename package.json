@@ -46,7 +46,7 @@
     "globals": "^17.3.0",
     "jiti": "^2.6.1",
     "lint-staged": "^17.0.7",
-    "oxfmt": "^0.53.0",
+    "oxfmt": "^0.57.0",
     "oxlint": "^1.57.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2"
@@ -66,9 +66,22 @@
       "picomatch@<2.3.2": "2.3.2",
       "picomatch@>=4.0.0 <4.0.4": "4.0.4",
       "flatted@<3.4.2": "3.4.2",
-      "protobufjs@<7.5.5": "7.5.5",
-      "axios@<1.15.0": "1.15.1",
-      "follow-redirects@<1.16.0": "1.16.0"
+      "protobufjs@<8.0.0": "7.6.3",
+      "protobufjs@>=8.0.0 <8.6.0": "8.6.0",
+      "axios@<1.16.0": "1.16.0",
+      "@opentelemetry/core@<2.8.0": "2.8.0",
+      "js-yaml@<3.15.0": "3.15.0",
+      "follow-redirects@<1.16.0": "1.16.0",
+      "es-define-property": "npm:@socketregistry/es-define-property@^1",
+      "es-set-tostringtag": "npm:@socketregistry/es-set-tostringtag@^1",
+      "function-bind": "npm:@socketregistry/function-bind@^1",
+      "gopd": "npm:@socketregistry/gopd@^1",
+      "has-symbols": "npm:@socketregistry/has-symbols@^1",
+      "has-tostringtag": "npm:@socketregistry/has-tostringtag@^1",
+      "hasown": "npm:@socketregistry/hasown@^1",
+      "safe-buffer": "npm:@socketregistry/safe-buffer@^1",
+      "safer-buffer": "npm:@socketregistry/safer-buffer@^1",
+      "shell-quote": "npm:shell-quote@^1"
     }
   }
 }

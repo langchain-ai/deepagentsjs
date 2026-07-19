@@ -1,13 +1,11 @@
 import {
   createAgent,
-  createMiddleware,
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
   bedrockPromptCachingMiddleware,
   todoListMiddleware,
   SystemMessage,
   type AgentMiddleware,
-  type AnyAgentMiddleware,
   context,
 } from "langchain";
 import type {
@@ -25,6 +23,7 @@ import {
   createSkillsMiddleware,
   FILESYSTEM_TOOL_NAMES,
   ASYNC_TASK_TOOL_NAMES,
+  type FsToolName,
   type SubAgent,
   createAsyncSubAgentMiddleware,
   isAsyncSubAgent,
@@ -33,6 +32,8 @@ import { StateBackend } from "./backends/state.js";
 import { ConfigurationError } from "./errors.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
+import { createToolExclusionMiddleware } from "./middleware/tool_exclusion.js";
+import { mergeMiddlewareStack } from "./middleware/utils.js";
 import {
   GENERAL_PURPOSE_SUBAGENT,
   type CompiledSubAgent,
@@ -46,6 +47,7 @@ import type {
   FlattenSubAgentMiddleware,
   InferStructuredResponse,
   SupportedResponseFormat,
+  SystemPromptConfig,
 } from "./types.js";
 /**
  * required for type inference
@@ -100,6 +102,52 @@ const BASE_AGENT_PROMPT = context`
 
   For longer tasks, provide brief progress updates at reasonable intervals — a concise sentence recapping what you've done and what's next.
 `;
+
+const PROMPT_SEPARATOR = "\n\n";
+
+type SystemPromptPart = string | SystemMessage;
+type SystemPromptContentBlock = SystemMessage["contentBlocks"][number];
+
+/** Normalize legacy system prompt values to the structured representation. */
+function normalizeSystemPrompt(
+  systemPrompt: SystemPromptPart | SystemPromptConfig | undefined,
+): SystemPromptConfig {
+  if (systemPrompt === undefined) {
+    return {};
+  }
+  if (
+    typeof systemPrompt === "string" ||
+    SystemMessage.isInstance(systemPrompt)
+  ) {
+    return { prefix: systemPrompt };
+  }
+  return systemPrompt;
+}
+
+/** Assemble prompt parts while preserving structured message content blocks. */
+function assemblePromptParts(
+  parts: readonly SystemPromptPart[],
+): string | SystemMessage {
+  if (parts.length === 0) {
+    return "";
+  }
+  if (parts.every((part) => typeof part === "string")) {
+    return parts.join(PROMPT_SEPARATOR);
+  }
+
+  const contentBlocks: SystemPromptContentBlock[] = [];
+  for (const [index, part] of parts.entries()) {
+    if (index > 0) {
+      contentBlocks.push({ type: "text", text: PROMPT_SEPARATOR });
+    }
+    if (SystemMessage.isInstance(part)) {
+      contentBlocks.push(...part.contentBlocks);
+    } else {
+      contentBlocks.push({ type: "text", text: part });
+    }
+  }
+  return new SystemMessage({ contentBlocks });
+}
 
 const BUILTIN_TOOL_NAMES: ReadonlySet<string> = new Set([
   ...FILESYSTEM_TOOL_NAMES,
@@ -209,6 +257,15 @@ export function createDeepAgent<
           identifierHint: getModelIdentifier(model),
         });
 
+  const filesystemTools = FILESYSTEM_TOOL_NAMES.filter(
+    (toolName) => !harnessProfile.excludedTools.has(toolName),
+  );
+  const profileFilesystemTools: readonly FsToolName[] | undefined =
+    filesystemTools.length === FILESYSTEM_TOOL_NAMES.length ||
+    !filesystemTools.includes("read_file")
+      ? undefined
+      : filesystemTools;
+
   const toolOverrides = harnessProfile.toolDescriptionOverrides;
   const effectiveTools: StructuredTool[] =
     Object.keys(toolOverrides).length > 0
@@ -223,7 +280,7 @@ export function createDeepAgent<
 
   const anthropicModel = isAnthropicModel(model);
   const bedrockModel = isBedrockConverseModel(model);
-  let cacheMiddleware: AnyAgentMiddleware[] = [];
+  let cacheMiddleware: AgentMiddleware[] = [];
 
   if (anthropicModel) {
     cacheMiddleware = [
@@ -250,19 +307,22 @@ export function createDeepAgent<
    * Only the general-purpose subagent inherits the main agent's skills.
    * If a custom subagent needs skills, it must specify its own `skills` array.
    */
-  const normalizeSubagentSpec = (input: SubAgent): SubAgent => {
+  const createSubagentDefaultMiddleware = (
+    input: SubAgent,
+  ): AgentMiddleware[] => {
     const effectivePermissions = input.permissions ?? permissions;
 
     // Middleware for custom subagents (does NOT include skills from main agent).
     // Uses createSummarizationMiddleware (deepagents version) with backend support
     // and auto-computed defaults from model profile.
-    const subagentMiddleware = [
+    return [
       // Provides todo list management capabilities for tracking tasks.
       todoListMiddleware(),
       // Enables filesystem operations and optional long-term memory storage.
       createFilesystemMiddleware({
         backend,
         permissions: effectivePermissions,
+        tools: profileFilesystemTools,
       }),
       // Automatically summarizes conversation history when token limits are approached.
       // Uses createSummarizationMiddleware (deepagents version) with backend support
@@ -274,11 +334,23 @@ export function createDeepAgent<
       ...(input.skills != null && input.skills.length > 0
         ? [createSkillsMiddleware({ backend, sources: input.skills })]
         : []),
-      // Appends custom middleware from the subagent spec.
-      ...(input.middleware ?? []),
-      // Adds Anthropic cache controls when supported by the model.
-      ...cacheMiddleware,
     ];
+  };
+
+  const normalizeSubagentSpec = (input: SubAgent): SubAgent => {
+    const subagentDefaultMiddleware = createSubagentDefaultMiddleware(input);
+    let subagentMiddleware = mergeMiddlewareStack(
+      subagentDefaultMiddleware,
+      input.middleware ?? [],
+      cacheMiddleware,
+    );
+
+    if (harnessProfile.excludedMiddleware.size > 0) {
+      subagentMiddleware = subagentMiddleware.filter(
+        (middleware) => !harnessProfile.excludedMiddleware.has(middleware.name),
+      );
+    }
+
     return {
       ...input,
       tools: input.tools ?? [],
@@ -325,6 +397,12 @@ export function createDeepAgent<
       skills,
       tools: effectiveTools,
     });
+    generalPurposeSpec.middleware = mergeMiddlewareStack(
+      generalPurposeSpec.middleware ?? [],
+      customMiddleware,
+      [],
+      { appendNew: false },
+    );
     inlineSubagents.unshift(generalPurposeSpec);
   }
 
@@ -340,7 +418,11 @@ export function createDeepAgent<
     // Provides todo list management capabilities for tracking tasks.
     todoListMiddleware(),
     // Enables filesystem operations and optional long-term memory storage.
-    createFilesystemMiddleware({ backend, permissions }),
+    createFilesystemMiddleware({
+      backend,
+      permissions,
+      tools: profileFilesystemTools,
+    }),
     // Enables delegation to specialized subagents for complex tasks.
     createSubAgentMiddleware({
       defaultModel: model,
@@ -365,9 +447,8 @@ export function createDeepAgent<
     patchToolCallsMiddleware,
   ] = builtInMiddleware;
 
-  // Runtime middleware array: combine built-in + optional middleware.
-  // Note: The full type is handled separately via AllMiddleware.
-  const middleware: AnyAgentMiddleware[] = [
+  // Runtime middleware array: combine core middleware, custom overrides, and tail middleware.
+  const coreMiddleware: AgentMiddleware[] = [
     // Built-in middleware with deterministic ordering.
     todoMiddleware,
     // Optional root-level skills.
@@ -380,8 +461,10 @@ export function createDeepAgent<
     ...(asyncSubAgents.length > 0
       ? [createAsyncSubAgentMiddleware({ asyncSubAgents })]
       : []),
-    // User-provided middleware.
-    ...customMiddleware,
+  ];
+  const tailMiddleware: AgentMiddleware[] = [
+    // Profile middleware runs before cache middleware so it participates in prompt caching.
+    ...resolveMiddleware(harnessProfile.extraMiddleware),
     // Optional Anthropic cache controls.
     ...cacheMiddleware,
     // Optional memory support.
@@ -398,71 +481,51 @@ export function createDeepAgent<
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
   ];
 
-  // Apply profile middleware additions. Inserted before cache middleware
-  // so profile-injected middleware participates in prompt caching.
-  const profileMiddleware = resolveMiddleware(harnessProfile.extraMiddleware);
-  if (profileMiddleware.length > 0) {
-    const cacheIdx = middleware.findIndex(
-      (m) => m.name === "AnthropicPromptCachingMiddleware",
-    );
-    if (cacheIdx !== -1) {
-      middleware.splice(cacheIdx, 0, ...profileMiddleware);
-    } else {
-      middleware.push(...profileMiddleware);
-    }
-  }
+  let middleware: AgentMiddleware[] = mergeMiddlewareStack(
+    coreMiddleware,
+    customMiddleware,
+    tailMiddleware,
+  );
 
-  // Apply profile middleware exclusions.
+  // Apply profile middleware exclusions after custom replacement so exclusions win.
   if (harnessProfile.excludedMiddleware.size > 0) {
     const excluded = harnessProfile.excludedMiddleware;
-    const filtered = middleware.filter((m) => !excluded.has(m.name));
-    middleware.length = 0;
-    middleware.push(...filtered);
+    middleware = middleware.filter((entry) => !excluded.has(entry.name));
   }
 
   // Apply profile tool exclusions via a filtering middleware that runs
   // after all tool-injecting middleware.
   if (harnessProfile.excludedTools.size > 0) {
-    const excludedTools = harnessProfile.excludedTools;
     middleware.push(
-      createMiddleware({
-        name: "_ToolExclusionMiddleware",
-        wrapModelCall: async (request: any, handler: any) => {
-          return handler({
-            ...request,
-            tools: request.tools?.filter(
-              (t: { name: string }) => !excludedTools.has(t.name),
-            ),
-          });
-        },
-      }),
+      createToolExclusionMiddleware(harnessProfile.excludedTools),
     );
   }
 
-  // Combine system prompt parameter with profile-aware base prompt.
-  const effectiveBasePrompt = applyProfilePrompt(
-    harnessProfile,
-    BASE_AGENT_PROMPT,
-  );
+  // Assemble the main-agent prompt in this order:
+  // caller prefix -> active base -> caller suffix -> profile suffix.
+  const promptConfig = normalizeSystemPrompt(systemPrompt);
+  const promptParts: SystemPromptPart[] = [];
 
-  const finalSystemPrompt =
-    typeof systemPrompt === "string"
-      ? new SystemMessage({
-          contentBlocks: [
-            { type: "text", text: systemPrompt },
-            { type: "text", text: effectiveBasePrompt },
-          ],
-        })
-      : SystemMessage.isInstance(systemPrompt)
-        ? new SystemMessage({
-            contentBlocks: [
-              ...systemPrompt.contentBlocks,
-              { type: "text", text: effectiveBasePrompt },
-            ],
-          })
-        : new SystemMessage({
-            contentBlocks: [{ type: "text", text: effectiveBasePrompt }],
-          });
+  if (promptConfig.prefix !== undefined && promptConfig.prefix !== null) {
+    promptParts.push(promptConfig.prefix);
+  }
+
+  const activeBasePrompt =
+    promptConfig.base !== undefined
+      ? promptConfig.base
+      : (harnessProfile.baseSystemPrompt ?? BASE_AGENT_PROMPT);
+  if (activeBasePrompt !== null) {
+    promptParts.push(activeBasePrompt);
+  }
+
+  if (promptConfig.suffix) {
+    promptParts.push(promptConfig.suffix);
+  }
+  if (harnessProfile.systemPromptSuffix) {
+    promptParts.push(harnessProfile.systemPromptSuffix);
+  }
+
+  const finalSystemPrompt = assemblePromptParts(promptParts);
 
   const agent = createAgent({
     model,

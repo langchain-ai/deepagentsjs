@@ -28,10 +28,14 @@ import type { Serialized } from "@langchain/core/load/serializable";
 import type { ChainValues } from "@langchain/core/utils/types";
 
 import { createDeepAgent } from "../agent.js";
+import { StateBackend } from "../backends/state.js";
 import { createSkillsMiddleware } from "./skills.js";
+import { createSummarizationMiddleware } from "./summarization.js";
+import { mergeMiddleware } from "./utils.js";
 import { createFileData } from "../backends/utils.js";
 import { createMockBackend } from "./test.js";
 import { createSubAgent } from "./subagents.js";
+import { registerHarnessProfile } from "../profiles/index.js";
 
 const createAgentMock = vi.mocked(createAgent);
 
@@ -1227,5 +1231,252 @@ describe("createSubAgent", () => {
 
     const call = createAgentMock.mock.calls[0][0];
     expect(call.responseFormat).toBeUndefined();
+  });
+});
+
+describe("middleware override by name", () => {
+  const fakeModel = new FakeListChatModel({ responses: ["hello"] });
+
+  function namedMiddleware(name: string): AgentMiddleware {
+    return { name } as AgentMiddleware;
+  }
+
+  function createCustomSummarizationMiddleware(): AgentMiddleware {
+    return createSummarizationMiddleware({ backend: new StateBackend() });
+  }
+
+  function getCreateAgentCall(name: string) {
+    const call = createAgentMock.mock.calls
+      .map(([params]) => params)
+      .find((params) => params.name === name);
+    if (call == null) {
+      throw new Error(
+        `Expected createAgent call for ${name}; saw ${createAgentMock.mock.calls
+          .map(([params]) => params.name ?? "<unnamed>")
+          .join(", ")}`,
+      );
+    }
+    return call;
+  }
+
+  function getMiddlewareStack(name: string): AgentMiddleware[] {
+    return getCreateAgentCall(name).middleware as AgentMiddleware[];
+  }
+
+  beforeEach(() => {
+    createAgentMock.mockClear();
+  });
+
+  it("replaces matching middleware by name in place", () => {
+    const first = namedMiddleware("first");
+    const original = namedMiddleware("target");
+    const last = namedMiddleware("last");
+    const replacement = namedMiddleware("target");
+
+    const merged = mergeMiddleware([first, original, last], [replacement]);
+
+    expect(merged).toEqual([first, replacement, last]);
+  });
+
+  it("appends novel middleware after the base stack", () => {
+    const core = namedMiddleware("core");
+    const customA = namedMiddleware("customA");
+    const customB = namedMiddleware("customB");
+
+    const merged = mergeMiddleware([core], [customA, customB]);
+
+    expect(merged).toEqual([core, customA, customB]);
+  });
+
+  it("uses the last same-name custom middleware as the replacement", () => {
+    const original = namedMiddleware("target");
+    const first = namedMiddleware("target");
+    const second = namedMiddleware("target");
+
+    const merged = mergeMiddleware([original], [first, second]);
+
+    expect(merged).toEqual([second]);
+  });
+
+  it("replaces default main-agent middleware with same-name custom middleware", () => {
+    const custom = createCustomSummarizationMiddleware();
+
+    createDeepAgent({ model: fakeModel, name: "main", middleware: [custom] });
+
+    const middleware = getMiddlewareStack("main");
+    const summarization = middleware.filter(
+      (entry) => entry.name === "SummarizationMiddleware",
+    );
+    expect(summarization).toHaveLength(1);
+    expect(summarization[0]).toBe(custom);
+  });
+
+  it("keeps novel main-agent middleware before prompt caching", () => {
+    const anthropicModel = new FakeListChatModel({ responses: ["hello"] });
+    vi.spyOn(anthropicModel, "getName").mockReturnValue("ChatAnthropic");
+    const custom = namedMiddleware("CustomPromptMiddleware");
+
+    createDeepAgent({
+      model: anthropicModel,
+      name: "main",
+      middleware: [custom],
+    });
+
+    const middleware = getMiddlewareStack("main");
+    const customIndex = middleware.indexOf(custom);
+    const cacheIndex = middleware.findIndex(
+      (entry) =>
+        entry.name === "AnthropicPromptCachingMiddleware" ||
+        entry.name === "CacheBreakpointMiddleware",
+    );
+    expect(customIndex).toBeGreaterThanOrEqual(0);
+    expect(cacheIndex).toBeGreaterThanOrEqual(0);
+    expect(customIndex).toBeLessThan(cacheIndex);
+  });
+
+  it("replaces prompt cache defaults in both main and general-purpose stacks", () => {
+    const anthropicModel = new FakeListChatModel({ responses: ["hello"] });
+    vi.spyOn(anthropicModel, "getName").mockReturnValue("ChatAnthropic");
+    const custom = namedMiddleware("CacheBreakpointMiddleware");
+
+    createDeepAgent({
+      model: anthropicModel,
+      name: "main",
+      middleware: [custom],
+    });
+
+    for (const agentName of ["main", "general-purpose"]) {
+      const middleware = getMiddlewareStack(agentName);
+      const cacheEntries = middleware.filter(
+        (entry) => entry.name === "CacheBreakpointMiddleware",
+      );
+      expect(cacheEntries).toHaveLength(1);
+      expect(cacheEntries[0]).toBe(custom);
+    }
+  });
+
+  it("lets profile middleware exclusions win over custom replacements", () => {
+    registerHarnessProfile("override-test:model", {
+      excludedMiddleware: ["SummarizationMiddleware"],
+    });
+    const custom = createCustomSummarizationMiddleware();
+
+    createDeepAgent({
+      model: "override-test:model",
+      name: "main",
+      middleware: [custom],
+    });
+
+    const middleware = getMiddlewareStack("main");
+    expect(
+      middleware.some((entry) => entry.name === "SummarizationMiddleware"),
+    ).toBe(false);
+  });
+
+  it("keeps tool exclusion middleware last", () => {
+    registerHarnessProfile("tool-exclusion-test:model", {
+      excludedTools: ["write_file"],
+    });
+    const custom = namedMiddleware("CustomToolMiddleware");
+
+    createDeepAgent({
+      model: "tool-exclusion-test:model",
+      name: "main",
+      middleware: [custom],
+    });
+
+    const middleware = getMiddlewareStack("main");
+    expect(middleware[middleware.length - 1]?.name).toBe(
+      "_ToolExclusionMiddleware",
+    );
+  });
+
+  it("passes main-agent default overrides to the general-purpose subagent", () => {
+    const custom = createCustomSummarizationMiddleware();
+
+    createDeepAgent({ model: fakeModel, name: "main", middleware: [custom] });
+
+    const middleware = getMiddlewareStack("general-purpose");
+    const summarization = middleware.filter(
+      (entry) => entry.name === "SummarizationMiddleware",
+    );
+    expect(summarization).toHaveLength(1);
+    expect(summarization[0]).toBe(custom);
+  });
+
+  it("does not pass parent-only middleware to the general-purpose subagent", () => {
+    const custom = namedMiddleware("ParentOnlyMiddleware");
+
+    createDeepAgent({ model: fakeModel, name: "main", middleware: [custom] });
+
+    const middleware = getMiddlewareStack("general-purpose");
+    expect(middleware).not.toContain(custom);
+  });
+
+  it("does not pass main-agent default overrides to declarative subagents", () => {
+    const custom = createCustomSummarizationMiddleware();
+
+    createDeepAgent({
+      model: fakeModel,
+      name: "main",
+      middleware: [custom],
+      subagents: [
+        {
+          name: "helper",
+          description: "Helps with work",
+          systemPrompt: "Help.",
+        },
+      ],
+    });
+
+    const middleware = getMiddlewareStack("helper");
+    expect(middleware).not.toContain(custom);
+    expect(
+      middleware.some((entry) => entry.name === "SummarizationMiddleware"),
+    ).toBe(true);
+  });
+
+  it("does not pass parent-only middleware to declarative subagents", () => {
+    const custom = namedMiddleware("ParentOnlyMiddleware");
+
+    createDeepAgent({
+      model: fakeModel,
+      name: "main",
+      middleware: [custom],
+      subagents: [
+        {
+          name: "helper",
+          description: "Helps with work",
+          systemPrompt: "Help.",
+        },
+      ],
+    });
+
+    const middleware = getMiddlewareStack("helper");
+    expect(middleware).not.toContain(custom);
+  });
+
+  it("replaces declarative subagent defaults with same-name spec middleware", () => {
+    const custom = createCustomSummarizationMiddleware();
+
+    createDeepAgent({
+      model: fakeModel,
+      name: "main",
+      subagents: [
+        {
+          name: "helper",
+          description: "Helps with work",
+          systemPrompt: "Help.",
+          middleware: [custom],
+        },
+      ],
+    });
+
+    const middleware = getMiddlewareStack("helper");
+    const summarization = middleware.filter(
+      (entry) => entry.name === "SummarizationMiddleware",
+    );
+    expect(summarization).toHaveLength(1);
+    expect(summarization[0]).toBe(custom);
   });
 });

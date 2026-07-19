@@ -485,14 +485,18 @@ describe("getMimeType", () => {
     expect(getMimeType("/app.js")).toBe("application/javascript");
   });
 
-  it("should return application/octet-stream for unknown extensions", () => {
-    expect(getMimeType("/unknown.xyz")).toBe("application/octet-stream");
-    expect(getMimeType("/archive.zip")).toBe("application/octet-stream");
-    expect(getMimeType("/binary.exe")).toBe("application/octet-stream");
-    expect(getMimeType("/data.wasm")).toBe("application/octet-stream");
-    expect(getMimeType("/db.sqlite")).toBe("application/octet-stream");
-    expect(getMimeType("/compiled.pyc")).toBe("application/octet-stream");
-    expect(getMimeType("/package.jar")).toBe("application/octet-stream");
+  it("should default to text/plain for unknown extensions", () => {
+    // Matches Python deepagents, which classifies unrecognized extensions as
+    // text. Unknown extensions (including uncommon source files and genuine
+    // binaries with no explicit mapping) read as text rather than being
+    // base64-encoded into document blocks.
+    expect(getMimeType("/unknown.xyz")).toBe("text/plain");
+    expect(getMimeType("/config.properties")).toBe("text/plain");
+    expect(getMimeType("/style.scss")).toBe("text/plain");
+    expect(getMimeType("/main.hcl")).toBe("text/plain");
+    expect(getMimeType("/pnpm-lock.lock")).toBe("text/plain");
+    expect(getMimeType("/Dockerfile")).toBe("text/plain");
+    expect(getMimeType("/mvnw")).toBe("text/plain");
   });
 });
 
@@ -669,6 +673,33 @@ describe("adaptBackendProtocol", () => {
     it("should not add sandbox properties to non-sandbox backends", () => {
       const adapted = adaptBackendProtocol(createV1Backend());
       expect(isSandboxBackend(adapted)).toBe(false);
+    });
+  });
+
+  describe("routePrefixes preservation", () => {
+    it("should forward routePrefixes from a composite-like backend", () => {
+      const v2 = createV2Backend() as any;
+      v2.routePrefixes = ["/skills/"];
+      const adapted = adaptBackendProtocol(v2) as any;
+      expect(adapted.routePrefixes).toEqual(["/skills/"]);
+    });
+
+    it("should preserve routePrefixes through adaptSandboxProtocol", () => {
+      const v2 = createV2Backend() as any;
+      v2.execute = (cmd: string) => ({
+        output: cmd,
+        exitCode: 0,
+        truncated: false,
+      });
+      Object.defineProperty(v2, "id", { value: "sb", enumerable: true });
+      v2.routePrefixes = ["/skills/", "/mnt/"];
+      const adapted = adaptSandboxProtocol(v2) as any;
+      expect(adapted.routePrefixes).toEqual(["/skills/", "/mnt/"]);
+    });
+
+    it("should not add routePrefixes for a non-composite backend", () => {
+      const adapted = adaptBackendProtocol(createV2Backend()) as any;
+      expect(adapted.routePrefixes).toBeUndefined();
     });
   });
 

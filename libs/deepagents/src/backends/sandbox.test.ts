@@ -734,6 +734,51 @@ describe("BaseSandbox", () => {
     });
   });
 
+  describe("delete", () => {
+    it("should delete with rm -f and report success on exit 0", async () => {
+      const sandbox = new MockSandbox();
+
+      const result = await sandbox.delete("/file.txt");
+
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe("/file.txt");
+      expect(sandbox.executedCommands[0]).toContain("rm -f");
+      expect(sandbox.executedCommands[0]).toContain("'/file.txt'");
+    });
+
+    it("should treat missing files as success when rm -f exits 0", async () => {
+      const sandbox = new MockSandbox();
+
+      const result = await sandbox.delete("/missing.txt");
+
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe("/missing.txt");
+    });
+
+    it("should report stderr on non-zero rm exit", async () => {
+      const sandbox = new MockSandbox();
+      sandbox.execute = vi.fn().mockResolvedValue({
+        output: "rm: cannot remove '/some/dir': Is a directory",
+        exitCode: 1,
+        truncated: false,
+      });
+
+      const result = await sandbox.delete("/some/dir");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("Error deleting file");
+      expect(result.error).toContain("Is a directory");
+    });
+
+    it("should shell-quote paths", async () => {
+      const sandbox = new MockSandbox();
+
+      await sandbox.delete("/file's.txt");
+
+      expect(sandbox.executedCommands[0]).toContain("'/file'\\''s.txt'");
+    });
+  });
+
   describe("uploadFiles", () => {
     it("should upload files successfully", async () => {
       const sandbox = new MockSandbox();

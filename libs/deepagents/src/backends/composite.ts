@@ -5,6 +5,7 @@
 import type {
   AnyBackendProtocol,
   BackendProtocolV2,
+  DeleteResult,
   EditResult,
   ExecuteResponse,
   FileDownloadResponse,
@@ -370,6 +371,22 @@ export class CompositeBackend implements BackendProtocolV2 {
   ): Promise<EditResult> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
     return await backend.edit(strippedKey, oldString, newString, replaceAll);
+  }
+
+  /**
+   * Delete a file, routing to the appropriate backend.
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    const [backend, strippedKey] = this.getBackendAndKey(filePath);
+    if (!backend.delete) {
+      return { error: "Backend does not support delete" };
+    }
+
+    const result = await backend.delete(strippedKey);
+    if (result.path !== undefined) {
+      return { ...result, path: filePath };
+    }
+    return result;
   }
 
   /**
