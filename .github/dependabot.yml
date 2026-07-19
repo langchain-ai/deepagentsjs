@@ -43,3 +43,25 @@ updates:
           - "*"
         update-types:
           - "major"
+
+  - package-ecosystem: docker
+    directory: "/examples/async-subagent-server"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 10
+    groups:
+      patch-deps-updates-docker:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+      minor-deps-updates-docker:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+      major-deps-updates-docker:
+        patterns:
+          - "*"
+        update-types:
+          - "major"

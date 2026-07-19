@@ -17,6 +17,7 @@ import fg from "fast-glob";
 import micromatch from "micromatch";
 import type {
   BackendProtocolV2,
+  DeleteResult,
   EditResult,
   FileDownloadResponse,
   FileInfo,
@@ -37,6 +38,27 @@ import {
 } from "./utils.js";
 
 const SUPPORTS_NOFOLLOW = fsSync.constants.O_NOFOLLOW !== undefined;
+
+function getErrorMessage(error: unknown): string {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    return (error as { message: string }).message;
+  }
+  return String(error);
+}
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === code
+  );
+}
 
 function hasTraversalSegment(key: string): boolean {
   return key.split(/[\\/]+/).includes("..");
@@ -107,6 +129,43 @@ export class FilesystemBackend implements BackendProtocolV2 {
       throw new Error(`Path: ${full} outside root directory: ${this.cwd}`);
     }
     return full;
+  }
+
+  /**
+   * Resolve the concrete path to unlink for a virtual delete operation.
+   *
+   * Virtual-mode path containment is lexical in resolvePath(), so deleting via
+   * that path could follow a symlinked parent outside the virtual root. Resolve
+   * and validate the real parent, then unlink through that real parent path so a
+   * replacement of the original lexical parent cannot redirect the unlink.
+   */
+  private async resolveDeletePath(
+    resolvedPath: string,
+    filePath: string,
+  ): Promise<string> {
+    if (!this.virtualMode) {
+      return resolvedPath;
+    }
+
+    const relative = path.relative(this.cwd, resolvedPath);
+    const segments = relative.split(path.sep).filter(Boolean);
+    let current = this.cwd;
+    for (const segment of segments.slice(0, -1)) {
+      current = path.join(current, segment);
+      const stat = await fs.lstat(current);
+      if (stat.isSymbolicLink()) {
+        throw new Error(`Symlink parent not allowed: ${filePath}`);
+      }
+    }
+
+    const realRoot = await fs.realpath(this.cwd);
+    const realParent = await fs.realpath(path.dirname(resolvedPath));
+    const realRelative = path.relative(realRoot, realParent);
+    if (realRelative.startsWith("..") || path.isAbsolute(realRelative)) {
+      throw new Error(`Path '${filePath}' resolves outside root directory`);
+    }
+
+    return path.join(realParent, path.basename(resolvedPath));
   }
 
   /**
@@ -486,6 +545,38 @@ export class FilesystemBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Delete a file from the filesystem.
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    let resolvedPath: string;
+    try {
+      resolvedPath = this.resolvePath(filePath);
+    } catch (error: unknown) {
+      return {
+        error: `Error deleting file '${filePath}': ${getErrorMessage(error)}`,
+      };
+    }
+
+    try {
+      const deletePath = await this.resolveDeletePath(resolvedPath, filePath);
+      const stat = await fs.lstat(deletePath);
+      if (stat.isDirectory()) {
+        return { error: `Error: '${filePath}' is a directory, not a file` };
+      }
+
+      await fs.unlink(deletePath);
+      return { path: filePath };
+    } catch (error: unknown) {
+      if (hasErrorCode(error, "ENOENT")) {
+        return { error: `Error: File '${filePath}' not found` };
+      }
+      return {
+        error: `Error deleting file '${filePath}': ${getErrorMessage(error)}`,
+      };
+    }
+  }
+
+  /**
    * Search for a literal text pattern in files.
    *
    * Uses ripgrep if available, falling back to substring search.
@@ -633,12 +724,17 @@ export class FilesystemBackend implements BackendProtocolV2 {
     const stat = await fs.stat(baseFull);
     const root = stat.isDirectory() ? baseFull : path.dirname(baseFull);
 
-    // Use fast-glob to recursively find all files
+    // `onlyFiles: true` with `followSymbolicLinks: false` drops symlink entries
+    // at enumeration, so we never `readFile` a symlink target (which would
+    // bypass the O_NOFOLLOW protection used by read()/write()/edit() and escape
+    // the search root). This matches ripgrep's default no-follow behavior, so
+    // the fallback and primary grep paths return the same files.
     const files = await fg("**/*", {
       cwd: root,
       absolute: true,
       onlyFiles: true,
       dot: true,
+      followSymbolicLinks: false,
     });
 
     for (const fp of files) {
@@ -723,12 +819,20 @@ export class FilesystemBackend implements BackendProtocolV2 {
     const results: FileInfo[] = [];
 
     try {
-      // Use fast-glob for pattern matching
+      // `followSymbolicLinks: false` stops fast-glob from descending into
+      // symlinked directories, which otherwise loop forever on a self-
+      // referential symlink (e.g. `sub/sub -> .`) until the OS throws ELOOP.
+      // `onlyFiles: false` (rather than `true`) is deliberate: fast-glob's
+      // `onlyFiles` filter uses lstat and would drop symlinks-to-files entirely,
+      // regressing results like `alias.ts -> real.ts`. The `stat().isFile()`
+      // check below follows each link to re-include those files while excluding
+      // directories.
       const matches = await fg(pattern, {
         cwd: resolvedSearchPath,
         absolute: true,
-        onlyFiles: true,
+        onlyFiles: false,
         dot: true,
+        followSymbolicLinks: false,
       });
 
       for (const matchedPath of matches) {

@@ -309,13 +309,15 @@ export class LocalShellBackend
 
     const formatPath = (rel: string) => (this.virtualMode ? `/${rel}` : rel);
 
-    const globOpts = { cwd: resolvedSearchPath, absolute: false, dot: true };
-    const [fileMatches, dirMatches] = await Promise.all([
-      fg(pattern, { ...globOpts, onlyFiles: true }),
-      fg(pattern, { ...globOpts, onlyDirectories: true }),
-    ]);
+    const matches = await fg(pattern, {
+      cwd: resolvedSearchPath,
+      absolute: false,
+      dot: true,
+      onlyFiles: false,
+      followSymbolicLinks: false,
+    });
 
-    const statFile = async (match: string): Promise<FileInfo | null> => {
+    const classify = async (match: string): Promise<FileInfo | null> => {
       try {
         const entryStat = await fs.stat(path.join(resolvedSearchPath, match));
         if (entryStat.isFile()) {
@@ -326,15 +328,6 @@ export class LocalShellBackend
             modified_at: entryStat.mtime.toISOString(),
           };
         }
-      } catch {
-        /* skip unstatable entries */
-      }
-      return null;
-    };
-
-    const statDir = async (match: string): Promise<FileInfo | null> => {
-      try {
-        const entryStat = await fs.stat(path.join(resolvedSearchPath, match));
         if (entryStat.isDirectory()) {
           return {
             path: formatPath(match),
@@ -344,19 +337,13 @@ export class LocalShellBackend
           };
         }
       } catch {
-        /* skip unstatable entries */
+        /* skip unstatable entries (e.g. broken symlinks) */
       }
       return null;
     };
 
-    const [fileInfos, dirInfos] = await Promise.all([
-      Promise.all(fileMatches.map(statFile)),
-      Promise.all(dirMatches.map(statDir)),
-    ]);
-
-    const results = [...fileInfos, ...dirInfos].filter(
-      (info): info is FileInfo => info !== null,
-    );
+    const infos = await Promise.all(matches.map(classify));
+    const results = infos.filter((info): info is FileInfo => info !== null);
     results.sort((a, b) => a.path.localeCompare(b.path));
     return { files: results };
   }

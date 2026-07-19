@@ -14,6 +14,7 @@
  */
 
 import type {
+  DeleteResult,
   EditResult,
   ExecuteResponse,
   FileDownloadResponse,
@@ -662,5 +663,26 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     }
 
     return { path: filePath, filesUpdate: null, occurrences: count };
+  }
+
+  /**
+   * Delete a file from the sandbox via a server-side rm.
+   *
+   * Uses rm -f, so deleting a path that does not exist succeeds silently.
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    // shellQuote passes the path as a single literal shell argument. It is not
+    // a sandbox boundary: whatever the sandbox shell can reach, this can delete.
+    const result = await this.execute(`rm -f ${shellQuote(filePath)}`);
+
+    if (result.exitCode === 0) {
+      return { path: filePath };
+    }
+
+    return {
+      error: `Error deleting file '${filePath}': ${
+        result.output.trim() || "unknown error"
+      }`,
+    };
   }
 }

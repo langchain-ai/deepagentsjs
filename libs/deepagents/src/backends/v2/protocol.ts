@@ -7,6 +7,7 @@
 
 import type { BackendProtocolV1 } from "../v1/protocol.js";
 import type {
+  DeleteResult,
   ExecuteResponse,
   GlobResult,
   GrepResult,
@@ -93,6 +94,15 @@ export interface BackendProtocolV2 extends Omit<
    * @returns GlobResult with list of FileInfo objects matching the pattern on success or error on failure
    */
   glob(pattern: string, path?: string): MaybePromise<GlobResult>;
+
+  /**
+   * Delete a single file.
+   * Optional - backends that don't support file deletion can omit this.
+   *
+   * @param filePath - Absolute path to the file to delete
+   * @returns DeleteResult with path on success or error on failure
+   */
+  delete?(filePath: string): MaybePromise<DeleteResult>;
 }
 
 /**

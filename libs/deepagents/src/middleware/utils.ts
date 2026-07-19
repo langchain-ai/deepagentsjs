@@ -5,6 +5,76 @@
  */
 
 import { SystemMessage } from "@langchain/core/messages";
+import type { AgentMiddleware } from "langchain";
+
+/**
+ * Merge custom middleware into an assembled stack by `.name`.
+ *
+ * Matching custom middleware replaces the existing entry in place. New
+ * middleware is appended after the base stack in caller-provided order.
+ */
+export function mergeMiddleware(
+  base: readonly AgentMiddleware[],
+  custom: readonly AgentMiddleware[],
+): AgentMiddleware[] {
+  const merged = new Map(
+    base.map((middleware) => [middleware.name, middleware]),
+  );
+  for (const middleware of custom) {
+    merged.set(middleware.name, middleware);
+  }
+  return [...merged.values()];
+}
+
+function middlewareNames(middleware: readonly AgentMiddleware[]): Set<string> {
+  return new Set(middleware.map((entry) => entry.name));
+}
+
+function matchingMiddleware(
+  middleware: readonly AgentMiddleware[],
+  names: ReadonlySet<string>,
+): AgentMiddleware[] {
+  return middleware.filter((entry) => names.has(entry.name));
+}
+
+/**
+ * Merge custom middleware into default and tail middleware segments.
+ *
+ * Same-name custom entries replace matching defaults in either segment. Novel
+ * custom entries are inserted between the default and tail segments unless
+ * `appendNew` is false.
+ */
+export function mergeMiddlewareStack(
+  defaultMiddleware: readonly AgentMiddleware[],
+  customMiddleware: readonly AgentMiddleware[],
+  tailMiddleware: readonly AgentMiddleware[] = [],
+  options: { appendNew?: boolean } = {},
+): AgentMiddleware[] {
+  const defaultMiddlewareNames = middlewareNames(defaultMiddleware);
+  const tailMiddlewareNames = middlewareNames(tailMiddleware);
+  const knownMiddlewareNames = new Set([
+    ...defaultMiddlewareNames,
+    ...tailMiddlewareNames,
+  ]);
+  const novelMiddleware =
+    options.appendNew === false
+      ? []
+      : customMiddleware.filter(
+          (entry) => !knownMiddlewareNames.has(entry.name),
+        );
+
+  return [
+    ...mergeMiddleware(
+      defaultMiddleware,
+      matchingMiddleware(customMiddleware, defaultMiddlewareNames),
+    ),
+    ...novelMiddleware,
+    ...mergeMiddleware(
+      tailMiddleware,
+      matchingMiddleware(customMiddleware, tailMiddlewareNames),
+    ),
+  ];
+}
 
 /**
  * Append text to a system message.

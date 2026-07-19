@@ -32,6 +32,7 @@ export type { DeepAgentRunStream, SubagentRunStream } from "./stream.js";
 export type {
   AnySubAgent,
   CreateDeepAgentParams,
+  SystemPromptConfig,
   MergedDeepAgentState,
   // DeepAgent type bag and helper types
   DeepAgent,
@@ -86,6 +87,7 @@ export {
   type CompletionCallbackOptions,
   // Other middleware types
   type FilesystemMiddlewareOptions,
+  type FsToolName,
   type SubAgentMiddlewareOptions,
   type MemoryMiddlewareOptions,
   type SubAgent,
@@ -117,6 +119,7 @@ export type {
   GlobResult,
   WriteResult,
   EditResult,
+  DeleteResult,
   StateAndStore,
   // Sandbox execution types
   ExecuteResponse,
