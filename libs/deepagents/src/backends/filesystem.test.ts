@@ -86,6 +86,43 @@ describe("FilesystemBackend", () => {
     expect(globResults.files!.some((i) => i.path === f2)).toBe(true);
   });
 
+  it("should reject absolute paths outside root in normal mode", async () => {
+    const root = tmpDir;
+    const outsidePath = path.join(
+      os.tmpdir(),
+      `deepagents-filesystem-outside-${Date.now()}.txt`,
+    );
+    const backend = new FilesystemBackend({
+      rootDir: root,
+      virtualMode: false,
+    });
+
+    try {
+      const writeResult = await backend.write(outsidePath, "outside");
+      expect(writeResult.error).toBeDefined();
+      expect(writeResult.error).toContain("outside root directory");
+      expect(fsSync.existsSync(outsidePath)).toBe(false);
+    } finally {
+      await fs.rm(outsidePath, { force: true });
+    }
+  });
+
+  it("should allow in-root paths with dot-prefixed names", async () => {
+    const root = tmpDir;
+    const dotDir = path.join(root, "...notes");
+    const filePath = path.join(dotDir, "file.txt");
+    await writeFile(filePath, "dot content");
+
+    const backend = new FilesystemBackend({
+      rootDir: root,
+      virtualMode: false,
+    });
+
+    const result = await backend.read(filePath);
+    expect(result.error).toBeUndefined();
+    expect(result.content).toContain("dot content");
+  });
+
   it("should work in virtual mode with sandboxed paths", async () => {
     const root = tmpDir;
     const f1 = path.join(root, "a.txt");
