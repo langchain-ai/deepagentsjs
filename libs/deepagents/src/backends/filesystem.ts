@@ -60,6 +60,20 @@ function hasErrorCode(error: unknown, code: string): boolean {
   );
 }
 
+function hasTraversalSegment(key: string): boolean {
+  return key.split(/[\\/]+/).includes("..");
+}
+
+function isOutsideRoot(root: string, target: string): boolean {
+  const relative = path.relative(root, target);
+  return (
+    relative !== "" &&
+    (relative === ".." ||
+      relative.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relative))
+  );
+}
+
 /**
  * Backend that reads and writes files directly from the filesystem.
  *
@@ -89,32 +103,32 @@ export class FilesystemBackend implements BackendProtocolV2 {
    * Resolve a file path with security checks.
    *
    * When virtualMode=true, treat incoming paths as virtual absolute paths under
-   * this.cwd, disallow traversal (.., ~) and ensure resolved path stays within root.
-   * When virtualMode=false, preserve legacy behavior: absolute paths are allowed
-   * as-is; relative paths resolve under cwd.
+   * this.cwd. In both modes, disallow traversal (.., ~) and ensure the resolved
+   * path stays within this.cwd.
    *
    * @param key - File path (absolute, relative, or virtual when virtualMode=true)
    * @returns Resolved absolute path string
    * @throws Error if path traversal detected or path outside root
    */
-  private resolvePath(key: string): string {
+  protected resolvePath(key: string): string {
+    if (hasTraversalSegment(key) || key.startsWith("~")) {
+      throw new Error("Path traversal not allowed");
+    }
+
     if (this.virtualMode) {
       const vpath = key.startsWith("/") ? key : "/" + key;
-      if (vpath.includes("..") || vpath.startsWith("~")) {
-        throw new Error("Path traversal not allowed");
-      }
       const full = path.resolve(this.cwd, vpath.substring(1));
-      const relative = path.relative(this.cwd, full);
-      if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      if (isOutsideRoot(this.cwd, full)) {
         throw new Error(`Path: ${full} outside root directory: ${this.cwd}`);
       }
       return full;
     }
 
-    if (path.isAbsolute(key)) {
-      return key;
+    const full = path.isAbsolute(key) ? key : path.resolve(this.cwd, key);
+    if (isOutsideRoot(this.cwd, full)) {
+      throw new Error(`Path: ${full} outside root directory: ${this.cwd}`);
     }
-    return path.resolve(this.cwd, key);
+    return full;
   }
 
   /**

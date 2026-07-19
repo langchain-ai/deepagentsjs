@@ -90,6 +90,23 @@ describe("ACPFilesystemBackend", () => {
       expect(result.content).toContain("local file content");
     });
 
+    it("should reject reads outside root before calling ACP", async () => {
+      const outsidePath = path.join(
+        os.tmpdir(),
+        `acp-backend-outside-${Date.now()}.txt`,
+      );
+      const backend = new ACPFilesystemBackend({
+        conn: mockConn,
+        rootDir: tmpDir,
+      });
+      backend.setSessionId("sess_123");
+
+      const result = await backend.read(outsidePath);
+
+      expect(mockConn.readTextFile).not.toHaveBeenCalled();
+      expect(result.error).toContain("outside root directory");
+    });
+
     it("should handle offset and limit when reading via ACP", async () => {
       mockConn.readTextFile.mockResolvedValue({
         text: "line0\nline1\nline2\nline3\nline4",
@@ -161,6 +178,28 @@ describe("ACPFilesystemBackend", () => {
 
       expect(mockConn.writeTextFile).not.toHaveBeenCalled();
       expect(fs.readFileSync(targetPath, "utf-8")).toBe("written locally");
+    });
+
+    it("should reject writes outside root before calling ACP", async () => {
+      const outsidePath = path.join(
+        os.tmpdir(),
+        `acp-backend-write-outside-${Date.now()}.txt`,
+      );
+      const backend = new ACPFilesystemBackend({
+        conn: mockConn,
+        rootDir: tmpDir,
+      });
+      backend.setSessionId("sess_123");
+
+      try {
+        const result = await backend.write(outsidePath, "outside");
+
+        expect(mockConn.writeTextFile).not.toHaveBeenCalled();
+        expect(result.error).toContain("outside root directory");
+        expect(fs.existsSync(outsidePath)).toBe(false);
+      } finally {
+        fs.rmSync(outsidePath, { force: true });
+      }
     });
 
     it("should fall back to local FS when ACP write fails", async () => {

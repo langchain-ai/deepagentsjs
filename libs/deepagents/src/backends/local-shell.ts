@@ -174,6 +174,13 @@ export class LocalShellBackend
     }
   }
 
+  protected override resolvePath(key: string): string {
+    if (this.virtualMode) {
+      return super.resolvePath(key);
+    }
+    return path.isAbsolute(key) ? key : path.resolve(this.cwd, key);
+  }
+
   /** Unique identifier for this backend instance (format: "local-{random_hex}"). */
   get id(): string {
     return this.#sandboxId;

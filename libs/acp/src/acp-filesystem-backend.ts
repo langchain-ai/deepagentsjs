@@ -12,7 +12,6 @@ import {
   type WriteResult,
   type ReadResult,
 } from "deepagents";
-import path from "node:path";
 
 /**
  * Backend that proxies read/write through ACP client while using local
@@ -31,11 +30,6 @@ export class ACPFilesystemBackend extends FilesystemBackend {
     this.currentSessionId = sessionId;
   }
 
-  private resolveAbsPath(filePath: string): string {
-    if (path.isAbsolute(filePath)) return filePath;
-    return path.resolve(this.cwd, filePath);
-  }
-
   /**
    * Read file via ACP client (gets unsaved editor buffers).
    * Falls back to local filesystem if ACP read fails.
@@ -49,8 +43,8 @@ export class ACPFilesystemBackend extends FilesystemBackend {
       return super.read(filePath, offset, limit);
     }
 
-    const absPath = this.resolveAbsPath(filePath);
     try {
+      const absPath = this.resolvePath(filePath);
       const result = await this.conn.readTextFile({
         sessionId: this.currentSessionId,
         path: absPath,
@@ -80,8 +74,8 @@ export class ACPFilesystemBackend extends FilesystemBackend {
       return super.write(filePath, content);
     }
 
-    const absPath = this.resolveAbsPath(filePath);
     try {
+      const absPath = this.resolvePath(filePath);
       await this.conn.writeTextFile({
         sessionId: this.currentSessionId,
         path: absPath,
