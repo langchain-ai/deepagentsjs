@@ -160,6 +160,10 @@ jobs:
       - name: Run Integration Tests
         run: pnpm test:int
         env:
+          # LLM calls are routed through LangSmith LLM Gateway when this is set
+          # (see scripts/vitest-setup-langsmith-gateway.ts).
+          LANGSMITH_GATEWAY_KEY: ${{ secrets.LANGSMITH_GATEWAY_KEY }}
+          # Fallback for local/provider-direct runs if gateway secret is unset.
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           DENO_DEPLOY_TOKEN: ${{ secrets.DENO_DEPLOY_TOKEN }}

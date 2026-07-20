@@ -1,8 +1,14 @@
+import path from "node:path";
 import {
   configDefaults,
   defineConfig,
   type ViteUserConfigExport,
 } from "vitest/config";
+
+const gatewaySetup = path.resolve(
+  __dirname,
+  "../../../scripts/vitest-setup-langsmith-gateway.ts",
+);
 
 export default defineConfig((env) => {
   const common: ViteUserConfigExport = {
@@ -28,6 +34,7 @@ export default defineConfig((env) => {
         include: ["**/*.int.test.ts"],
         name: "int",
         sequence: { concurrent: false },
+        setupFiles: ["dotenv/config", gatewaySetup],
       },
     } satisfies ViteUserConfigExport;
   }

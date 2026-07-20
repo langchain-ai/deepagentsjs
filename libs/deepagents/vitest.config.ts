@@ -4,10 +4,11 @@ import {
   defineConfig,
   type ViteUserConfigExport,
 } from "vitest/config";
-import dotenv from "dotenv";
 
-// Load .env from workspace root (two levels up from libs/deepagents)
-dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+const gatewaySetup = path.resolve(
+  __dirname,
+  "../../scripts/vitest-setup-langsmith-gateway.ts",
+);
 
 export default defineConfig((env) => {
   const common: ViteUserConfigExport = {
@@ -34,6 +35,7 @@ export default defineConfig((env) => {
         exclude: configDefaults.exclude,
         include: ["**/*.int.test.ts"],
         name: "int",
+        setupFiles: [gatewaySetup],
       },
     } satisfies ViteUserConfigExport;
   }
