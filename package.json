@@ -42,6 +42,7 @@
     "@changesets/changelog-github": "^0.7.0",
     "@changesets/cli": "^2.29.8",
     "@tsconfig/recommended": "^1.0.13",
+    "dotenv": "^17.4.2",
     "eslint-plugin-no-instanceof": "^1.0.1",
     "globals": "^17.3.0",
     "jiti": "^2.6.1",

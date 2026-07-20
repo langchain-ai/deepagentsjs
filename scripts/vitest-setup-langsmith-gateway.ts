@@ -9,62 +9,25 @@
  * @see https://docs.langchain.com/langsmith/llm-gateway-quickstart
  */
 
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 
 const DEFAULT_GATEWAY_BASE_URL = "https://gateway.smith.langchain.com";
 
-/** Load repo-root `.env` without overriding vars already present in the process. */
-function loadRootEnv(): void {
-  const rootEnv = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    "../.env",
-  );
-  if (!fs.existsSync(rootEnv)) {
-    return;
-  }
-
-  for (const rawLine of fs.readFileSync(rootEnv, "utf8").split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) {
-      continue;
-    }
-    const eq = line.indexOf("=");
-    if (eq <= 0) {
-      continue;
-    }
-    const key = line.slice(0, eq).trim();
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
-      continue;
-    }
-    if (process.env[key] !== undefined) {
-      continue;
-    }
-    let value = line.slice(eq + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    process.env[key] = value;
-  }
-}
+dotenv.config({
+  path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.env"),
+});
 
 /**
  * Configure process.env so Anthropic/OpenAI/Gemini/etc. clients use the gateway.
  * No-op when no gateway key is present (keeps direct-provider local/CI fallbacks).
  */
-export function configureLangSmithGateway(): boolean {
-  const gatewayKey =
-    process.env.LANGSMITH_GATEWAY_KEY?.trim() ||
-    process.env.LC_GATEWAY_KEY?.trim();
+const gatewayKey =
+  process.env.LANGSMITH_GATEWAY_KEY?.trim() ||
+  process.env.LC_GATEWAY_KEY?.trim();
 
-  if (!gatewayKey) {
-    return false;
-  }
-
+if (gatewayKey) {
   const baseUrl = (
     process.env.LANGSMITH_GATEWAY_BASE_URL?.trim() || DEFAULT_GATEWAY_BASE_URL
   ).replace(/\/+$/, "");
@@ -85,9 +48,4 @@ export function configureLangSmithGateway(): boolean {
 
   // Anthropic SDK also honors this for proxy setups (matches org MDM/Kandji env).
   process.env.ANTHROPIC_CUSTOM_HEADERS = `X-Api-Key: ${gatewayKey}`;
-
-  return true;
 }
-
-loadRootEnv();
-configureLangSmithGateway();
