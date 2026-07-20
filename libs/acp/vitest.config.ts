@@ -4,10 +4,6 @@ import {
   defineConfig,
   type ViteUserConfigExport,
 } from "vitest/config";
-import { configureLangSmithGateway } from "../../scripts/vitest-setup-langsmith-gateway.js";
-
-// Side-effect import already loads root .env + gateway; call again is idempotent.
-configureLangSmithGateway();
 
 const gatewaySetup = path.resolve(
   __dirname,

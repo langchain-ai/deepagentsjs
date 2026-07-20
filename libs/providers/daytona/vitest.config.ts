@@ -4,9 +4,6 @@ import {
   defineConfig,
   type ViteUserConfigExport,
 } from "vitest/config";
-import { configureLangSmithGateway } from "../../../scripts/vitest-setup-langsmith-gateway.js";
-
-configureLangSmithGateway();
 
 const gatewaySetup = path.resolve(
   __dirname,

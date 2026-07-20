@@ -4,10 +4,6 @@ import {
   defineConfig,
   type ViteUserConfigExport,
 } from "vitest/config";
-import { configureLangSmithGateway } from "../../scripts/vitest-setup-langsmith-gateway.js";
-
-// Loads repo-root .env and remaps provider keys onto the LangSmith LLM Gateway.
-configureLangSmithGateway();
 
 const gatewaySetup = path.resolve(
   __dirname,
@@ -39,7 +35,6 @@ export default defineConfig((env) => {
         exclude: configDefaults.exclude,
         include: ["**/*.int.test.ts"],
         name: "int",
-        // Re-apply after worker dotenv so provider keys stay on the gateway.
         setupFiles: [gatewaySetup],
       },
     } satisfies ViteUserConfigExport;
