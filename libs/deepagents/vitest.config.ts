@@ -4,10 +4,15 @@ import {
   defineConfig,
   type ViteUserConfigExport,
 } from "vitest/config";
-import dotenv from "dotenv";
+import { configureLangSmithGateway } from "../../scripts/vitest-setup-langsmith-gateway.js";
 
-// Load .env from workspace root (two levels up from libs/deepagents)
-dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+// Loads repo-root .env and remaps provider keys onto the LangSmith LLM Gateway.
+configureLangSmithGateway();
+
+const gatewaySetup = path.resolve(
+  __dirname,
+  "../../scripts/vitest-setup-langsmith-gateway.ts",
+);
 
 export default defineConfig((env) => {
   const common: ViteUserConfigExport = {
@@ -34,6 +39,8 @@ export default defineConfig((env) => {
         exclude: configDefaults.exclude,
         include: ["**/*.int.test.ts"],
         name: "int",
+        // Re-apply after worker dotenv so provider keys stay on the gateway.
+        setupFiles: [gatewaySetup],
       },
     } satisfies ViteUserConfigExport;
   }

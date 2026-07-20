@@ -1,4 +1,13 @@
+import path from "node:path";
 import { defineConfig } from "vitest/config";
+import { configureLangSmithGateway } from "../../../scripts/vitest-setup-langsmith-gateway.js";
+
+configureLangSmithGateway();
+
+const gatewaySetup = path.resolve(
+  __dirname,
+  "../../../scripts/vitest-setup-langsmith-gateway.ts",
+);
 
 export default defineConfig(({ mode }) => ({
   test: {
@@ -6,6 +15,7 @@ export default defineConfig(({ mode }) => ({
     environment: "node",
     include: mode === "int" ? ["src/**/*.int.test.ts"] : ["src/**/*.test.ts"],
     exclude: mode === "int" ? [] : ["src/**/*.int.test.ts"],
+    setupFiles: mode === "int" ? [gatewaySetup] : undefined,
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

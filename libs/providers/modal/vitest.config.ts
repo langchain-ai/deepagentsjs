@@ -1,8 +1,17 @@
+import path from "node:path";
 import {
   configDefaults,
   defineConfig,
   type ViteUserConfigExport,
 } from "vitest/config";
+import { configureLangSmithGateway } from "../../../scripts/vitest-setup-langsmith-gateway.js";
+
+configureLangSmithGateway();
+
+const gatewaySetup = path.resolve(
+  __dirname,
+  "../../../scripts/vitest-setup-langsmith-gateway.ts",
+);
 
 export default defineConfig((env) => {
   const common: ViteUserConfigExport = {
@@ -14,7 +23,7 @@ export default defineConfig((env) => {
       hookTimeout: 60_000,
       teardownTimeout: 60_000,
       exclude: ["**/*.int.test.ts", ...configDefaults.exclude],
-      setupFiles: ["dotenv/config"],
+      setupFiles: ["dotenv/config", gatewaySetup],
     },
   };
 
@@ -28,6 +37,7 @@ export default defineConfig((env) => {
         include: ["**/*.int.test.ts"],
         name: "int",
         sequence: { concurrent: false },
+        setupFiles: ["dotenv/config", gatewaySetup],
       },
     } satisfies ViteUserConfigExport;
   }
