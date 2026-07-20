@@ -846,7 +846,15 @@ function createReadFileTool(
         if (mimeType.startsWith("video/")) {
           return [{ type: "video", mimeType, data: base64Data }];
         }
-        return [{ type: "file", mimeType, data: base64Data }];
+        // Some OpenAI-compatible providers (e.g. DeepSeek) do not support the
+        // non-standard `type: "file"` content block and reject the request.
+        // Fallback to a text placeholder that preserves the file metadata.
+        return [
+          {
+            type: "text",
+            text: `[Binary file of type ${mimeType} (${sizeBytes} bytes), base64 data omitted because the provider does not support file content blocks]`,
+          },
+        ];
       }
 
       let content =

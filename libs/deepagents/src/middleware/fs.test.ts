@@ -1166,6 +1166,60 @@ describe("createFilesystemMiddleware", () => {
       expect(parsed.content).toBe("");
     });
 
+    it("should return a text placeholder for non-media binary files", async () => {
+      const mockBackend = createMockBackend();
+      const pdfBytes = new TextEncoder().encode("%PDF-1.4 fake pdf content");
+      mockBackend.read = vi.fn().mockResolvedValue({
+        content: pdfBytes,
+        mimeType: "application/pdf",
+      });
+
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+      });
+
+      const readFileTool = middleware.tools!.find(
+        (t: any) => t.name === "read_file",
+      ) as any;
+
+      const result = await readFileTool.invoke({
+        file_path: "/docs/report.pdf",
+      });
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toHaveLength(1);
+      expect(result[0].type).toBe("text");
+      expect(result[0].text).toContain("Binary file of type application/pdf");
+      expect(result[0].text).toContain(
+        "base64 data omitted because the provider does not support file content blocks",
+      );
+    });
+
+    it("should still return image blocks for image files", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.read = vi.fn().mockResolvedValue({
+        content: new TextEncoder().encode("fake png bytes"),
+        mimeType: "image/png",
+      });
+
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+      });
+
+      const readFileTool = middleware.tools!.find(
+        (t: any) => t.name === "read_file",
+      ) as any;
+
+      const result = await readFileTool.invoke({
+        file_path: "/assets/diagram.png",
+      });
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toHaveLength(1);
+      expect(result[0].type).toBe("image");
+      expect(result[0].mimeType).toBe("image/png");
+    });
+
     it("all tool schema properties should be included in the required array", () => {
       const middleware = createFilesystemMiddleware({
         backend: () => createMockBackend(),
