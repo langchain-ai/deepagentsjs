@@ -1159,11 +1159,42 @@ describe("createFilesystemMiddleware", () => {
         (t: any) => t.name === "write_file",
       ) as any;
       expect(writeFileTool).toBeDefined();
+      expect(writeFileTool!.description).toContain(
+        "Creates the file if it does not exist; replaces it entirely if it does.",
+      );
 
       // Parse with only file_path, no content — simulates the model omitting it
       const parsed = writeFileTool.schema.parse({ file_path: "/app/test.c" });
       expect(parsed.file_path).toBe("/app/test.c");
       expect(parsed.content).toBe("");
+    });
+
+    it("write_file tool should return success for backend overwrites", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.write = vi.fn().mockResolvedValue({
+        path: "/doc.txt",
+        filesUpdate: null,
+      });
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const writeFileTool = middleware.tools!.find(
+        (tool) => tool.name === "write_file",
+      );
+      expect(writeFileTool).toBeDefined();
+      expect(writeFileTool!.description).toContain(
+        "Creates the file if it does not exist; replaces it entirely if it does.",
+      );
+      const result = await writeFileTool!.invoke({
+        file_path: "/doc.txt",
+        content: "new content",
+      });
+
+      expect(mockBackend.write).toHaveBeenCalledWith("/doc.txt", "new content");
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.content).toContain("Successfully wrote");
+        expect(result.content).not.toContain("already exists");
+      }
     });
 
     it("all tool schema properties should be included in the required array", () => {

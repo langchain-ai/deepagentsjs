@@ -781,7 +781,7 @@ export class VfsBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Create a new file with content.
+   * Write content to a file, creating it or overwriting it if it already exists.
    */
   async write(filePath: string, content: string): Promise<WriteResult> {
     this.#ensureInitialized();
@@ -792,9 +792,12 @@ export class VfsBackend implements BackendProtocolV2 {
     }
 
     try {
-      if (this.instance.existsSync(resolvedPath)) {
+      if (
+        this.instance.existsSync(resolvedPath) &&
+        this.instance.lstatSync(resolvedPath).isSymbolicLink()
+      ) {
         return {
-          error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
+          error: `Cannot write to ${filePath} because it is a symlink. Symlinks are not allowed.`,
         };
       }
 

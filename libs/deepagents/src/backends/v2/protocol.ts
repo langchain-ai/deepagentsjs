@@ -15,6 +15,7 @@ import type {
   MaybePromise,
   ReadRawResult,
   ReadResult,
+  WriteResult,
 } from "../protocol.js";
 
 /**
@@ -69,6 +70,15 @@ export interface BackendProtocolV2 extends Omit<
    * @returns ReadRawResult with raw file data on success or error on failure
    */
   readRaw(filePath: string): MaybePromise<ReadRawResult>;
+
+  /**
+   * Write content to a file, creating it or overwriting it if it already exists.
+   *
+   * @param filePath - Absolute file path
+   * @param content - File content as string
+   * @returns WriteResult with error populated on failure
+   */
+  write(filePath: string, content: string): MaybePromise<WriteResult>;
 
   /**
    * Search file contents for a literal text pattern.

@@ -245,6 +245,42 @@ describe("VfsBackend", () => {
     });
   });
 
+  describe("write", () => {
+    beforeEach(async () => {
+      sandbox = await VfsBackend.create({
+        initialFiles: {
+          "/existing.txt": "old content",
+        },
+      });
+    });
+
+    it("should overwrite existing text files", async () => {
+      const result = await sandbox.write("/existing.txt", "new content");
+      expect(result.error).toBeUndefined();
+
+      const downloaded = await sandbox.downloadFiles(["/existing.txt"]);
+      expect(downloaded[0].error).toBeNull();
+      expect(new TextDecoder().decode(downloaded[0].content!)).toBe(
+        "new content",
+      );
+    });
+  });
+
+  it("should reject writes through symlinks", async () => {
+    sandbox = await VfsBackend.create();
+    sandbox.instance.writeFileSync("/workspace/target.txt", "original");
+    sandbox.instance.symlinkSync(
+      "/workspace/target.txt",
+      "/workspace/link.txt",
+    );
+
+    const result = await sandbox.write("/link.txt", "replacement");
+
+    expect(result.error).toContain("is a symlink");
+    const target = await sandbox.downloadFiles(["/target.txt"]);
+    expect(new TextDecoder().decode(target[0].content!)).toBe("original");
+  });
+
   describe("readRaw", () => {
     beforeEach(async () => {
       sandbox = await VfsBackend.create({

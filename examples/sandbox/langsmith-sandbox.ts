@@ -48,7 +48,7 @@ You can execute shell commands to:
 - **execute**: Run any shell command and see the output
 - **ls**: List directory contents
 - **read_file**: Read file contents
-- **write_file**: Create new files
+- **write_file**: Create or fully replace files
 - **edit_file**: Modify existing files
 - **grep**: Search for patterns in files
 - **glob**: Find files matching patterns

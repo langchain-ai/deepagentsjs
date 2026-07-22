@@ -88,7 +88,7 @@ export interface BackendProtocolV1 {
   globInfo(pattern: string, path?: string): MaybePromise<FileInfo[]>;
 
   /**
-   * Create a new file.
+   * Write content to a file, creating it or overwriting it if it already exists.
    *
    * @param filePath - Absolute file path
    * @param content - File content as string

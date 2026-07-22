@@ -182,9 +182,54 @@ describe("StateBackend", () => {
     expect(writeRes.filesUpdate).toBeDefined();
     Object.assign(state.files, writeRes.filesUpdate);
 
-    const dupErr = backend.write("/dup.txt", "y");
-    expect(dupErr.error).toBeDefined();
-    expect(dupErr.error).toContain("already exists");
+    const overwriteRes = backend.write("/dup.txt", "y");
+    expect(overwriteRes.error).toBeUndefined();
+    expect(overwriteRes.filesUpdate).toBeDefined();
+    Object.assign(state.files, overwriteRes.filesUpdate);
+
+    const readRes = backend.read("/dup.txt");
+    expect(readRes.content).toBe("y");
+  });
+
+  it("should honor v1 format for binary-path writes", () => {
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime, { fileFormat: "v1" });
+    const content = "AQID";
+
+    const result = backend.write("/image.png", content);
+
+    expect(result.error).toBeUndefined();
+    Object.assign(state.files, result.filesUpdate);
+    const raw = backend.readRaw("/image.png");
+    expect(raw.data).toBeDefined();
+    expect(raw.data!.content).toEqual([content]);
+    expect("mimeType" in raw.data!).toBe(false);
+  });
+
+  it("should overwrite existing binary files with decoded bytes", () => {
+    const oldBytes = new Uint8Array([1, 2, 3]);
+    const newBytes = new Uint8Array([4, 5, 6]);
+    const { state, runtime } = makeConfig({
+      "/image.png": {
+        content: oldBytes,
+        mimeType: "image/png",
+        created_at: "2024-01-01T00:00:00.000Z",
+        modified_at: "2024-01-01T00:00:00.000Z",
+      },
+    });
+    const backend = new StateBackend(runtime);
+
+    const result = backend.write(
+      "/image.png",
+      Buffer.from(newBytes).toString("base64"),
+    );
+
+    expect(result.error).toBeUndefined();
+    Object.assign(state.files, result.filesUpdate);
+    const raw = backend.readRaw("/image.png");
+    expect(raw.data).toBeDefined();
+    expect(raw.data!.content).toEqual(newBytes);
+    expect(raw.data!.created_at).toBe("2024-01-01T00:00:00.000Z");
   });
 
   it("should list nested directories correctly", () => {

@@ -592,10 +592,10 @@ export const READ_FILE_TOOL_DESCRIPTION = context`
 `;
 
 export const WRITE_FILE_TOOL_DESCRIPTION = context`
-  Writes to a new file in the filesystem.
+  Writes content to a file. Creates the file if it does not exist; replaces it entirely if it does.
 
   Usage:
-  - The write_file tool will create a new file.
+  - Use this tool when you intend to create a new file or replace the whole file. You do not need to read the file first.
   - Prefer to edit existing files (with the edit_file tool) over creating new ones when possible.
 `;
 
@@ -953,11 +953,17 @@ function createWriteFileTool(
       schema: z.preprocess(
         normalizeFilePathInput,
         z.object({
-          file_path: z.string().describe("Absolute path to the file to write"),
+          file_path: z
+            .string()
+            .describe(
+              "Absolute path where the file should be written. Must be absolute, not relative.",
+            ),
           content: z
             .string()
             .default("")
-            .describe("Content to write to the file"),
+            .describe(
+              "The text content to write to the file. Defaults to empty.",
+            ),
         }),
       ),
     },

@@ -21,6 +21,7 @@ import type {
 } from "./protocol.js";
 import {
   createFileData,
+  createWriteFileData,
   fileDataToString,
   getMimeType,
   globSearchFiles,
@@ -249,24 +250,18 @@ export class StateBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Create a new file with content.
+   * Write content to a file, creating it or overwriting it if it already exists.
    * Returns WriteResult with filesUpdate to update LangGraph state.
    */
   write(filePath: string, content: string): WriteResult {
     const files = this.files;
+    const existing = files[filePath];
 
-    if (filePath in files) {
-      return {
-        error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
-      };
-    }
-
-    const mimeType = getMimeType(filePath);
-    const newFileData = createFileData(
+    const newFileData = createWriteFileData(
+      filePath,
       content,
-      undefined,
       this.fileFormat,
-      mimeType,
+      existing,
     );
 
     const update = { [filePath]: newFileData };

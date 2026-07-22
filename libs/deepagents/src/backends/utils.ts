@@ -341,6 +341,45 @@ export function updateFileData(fileData: FileData, content: string): FileData {
 }
 
 /**
+ * Build FileData for write semantics.
+ *
+ * Text writes preserve an existing file's creation timestamp. Binary writes
+ * accept base64 text input and store decoded bytes with the path's MIME type.
+ */
+function decodeBase64ToBytes(base64: string): Uint8Array {
+  const trimmed = base64.trim();
+  const payload = trimmed.startsWith("data:")
+    ? trimmed.slice(trimmed.indexOf(",") + 1)
+    : trimmed;
+  const binary = atob(payload.replace(/\s/g, ""));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+export function createWriteFileData(
+  filePath: string,
+  content: string,
+  fileFormat: "v1" | "v2" = "v2",
+  existing?: FileData,
+): FileData {
+  const mimeType = getMimeType(filePath);
+  const createdAt = existing?.created_at;
+
+  if (!isTextMimeType(mimeType)) {
+    return fileFormat === "v1"
+      ? createFileData(content, createdAt, "v1", mimeType)
+      : createFileData(decodeBase64ToBytes(content), createdAt, "v2", mimeType);
+  }
+
+  return existing
+    ? updateFileData(existing, content)
+    : createFileData(content, undefined, fileFormat, mimeType);
+}
+
+/**
  * Format file data for read response with line numbers.
  *
  * @param fileData - FileData object
