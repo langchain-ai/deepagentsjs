@@ -726,7 +726,9 @@ describe("Filesystem Middleware Integration Tests", () => {
       expect(writeMessage).toBeDefined();
       expect(writeMessage!.content.toString()).toContain("Successfully wrote");
       expect(writeMessage!.content.toString()).not.toContain("already exists");
-      expect(response.files?.["/existing.txt"]?.content).toContain("new content");
+      expect(response.files?.["/existing.txt"]?.content).toContain(
+        "new content",
+      );
       expect(response.files?.["/existing.txt"]?.content).not.toContain(
         "Already exists",
       );
