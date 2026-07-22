@@ -867,7 +867,7 @@ function createWriteFileTool(
             .string()
             .default("")
             .describe(
-              "The text content to write to the file. This parameter is required.",
+              "The text content to write to the file. Defaults to empty.",
             ),
         }),
       ),

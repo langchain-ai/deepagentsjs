@@ -40,6 +40,12 @@ export function filesSuite(runner: EvalRunner): void {
         initialFiles: { "/note.md": "old content\n" },
       });
 
+      expect(result).toHaveAgentSteps(2);
+      expect(result).toHaveToolCallRequests(1);
+      expect(result).toHaveToolCallInStep(1, {
+        name: "write_file",
+        argsContains: { file_path: "/note.md", content: "new content" },
+      });
       expect(result.files["/note.md"]).toBe("new content");
       expect(result).toHaveFinalTextContaining("DONE");
       ls.logFeedback({
@@ -62,6 +68,12 @@ export function filesSuite(runner: EvalRunner): void {
         initialFiles: { "/log.txt": "stale line\n" },
       });
 
+      expect(result).toHaveAgentSteps(2);
+      expect(result).toHaveToolCallRequests(1);
+      expect(result).toHaveToolCallInStep(1, {
+        name: "write_file",
+        argsContains: { file_path: "/log.txt", content: "fresh line" },
+      });
       expect(result.files["/log.txt"]).toContain("fresh line");
       expect(result.files["/log.txt"]).not.toContain("stale");
       expect(result).toHaveFinalTextContaining("DONE");
@@ -85,6 +97,16 @@ export function filesSuite(runner: EvalRunner): void {
         initialFiles: { "/note.md": "cat dog bird\n" },
       });
 
+      expect(result).toHaveAgentSteps(2);
+      expect(result).toHaveToolCallRequests(1);
+      expect(result).toHaveToolCallInStep(1, {
+        name: "edit_file",
+        argsContains: {
+          file_path: "/note.md",
+          old_string: "cat",
+          new_string: "lion",
+        },
+      });
       expect(result.files["/note.md"]).toBe("lion dog bird\n");
       expect(result.files["/note.md"]).not.toContain("cat");
       expect(result).toHaveFinalTextContaining("DONE");

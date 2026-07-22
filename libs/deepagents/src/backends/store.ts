@@ -585,15 +585,9 @@ export class StoreBackend implements BackendProtocolV2 {
     const namespace = this.getNamespace();
 
     const existing = await store.get(namespace, filePath);
-    let existingFileData: FileData | undefined;
-    if (existing) {
-      try {
-        existingFileData = this.convertStoreItemToFileData(existing);
-      } catch {
-        // Treat invalid/corrupt existing values as replaceable.
-        existingFileData = undefined;
-      }
-    }
+    const existingFileData = existing
+      ? this.convertStoreItemToFileData(existing)
+      : undefined;
 
     const fileData = createWriteFileData(
       filePath,

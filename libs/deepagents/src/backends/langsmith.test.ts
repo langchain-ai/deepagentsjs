@@ -546,14 +546,15 @@ describe("LangSmithSandbox", () => {
       expect(cmd).toContain("find");
     });
 
-    it("write() delegates to uploadFiles() (not execute)", async () => {
+    it("write() uploads replacements without a download preflight", async () => {
       const sandbox = makeSandbox();
-      // write() first checks if file exists via downloadFiles, then uploads
-      // For a non-existent file: downloadFiles returns file_not_found, then uploadFiles is called
-      mockRead.mockRejectedValue(new MockLangSmithResourceNotFoundError());
+      // write() uploads directly, so replacing an existing path requires no download.
+
       mockWrite.mockResolvedValue(undefined);
 
-      await sandbox.write("/tmp/new.txt", "content");
+      await sandbox.write("/tmp/existing.txt", "replacement");
+
+      expect(mockRead).not.toHaveBeenCalled();
 
       expect(mockWrite).toHaveBeenCalledOnce();
       expect(mockRun).not.toHaveBeenCalled();

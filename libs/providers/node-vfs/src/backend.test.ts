@@ -212,7 +212,7 @@ describe("VfsBackend", () => {
       });
     });
 
-    it("should overwrite existing files", async () => {
+    it("should overwrite existing text files", async () => {
       const result = await sandbox.write("/existing.txt", "new content");
       expect(result.error).toBeUndefined();
 
@@ -222,6 +222,21 @@ describe("VfsBackend", () => {
         "new content",
       );
     });
+  });
+
+  it("should reject writes through symlinks", async () => {
+    sandbox = await VfsBackend.create();
+    sandbox.instance.writeFileSync("/workspace/target.txt", "original");
+    sandbox.instance.symlinkSync(
+      "/workspace/target.txt",
+      "/workspace/link.txt",
+    );
+
+    const result = await sandbox.write("/link.txt", "replacement");
+
+    expect(result.error).toContain("is a symlink");
+    const target = await sandbox.downloadFiles(["/target.txt"]);
+    expect(new TextDecoder().decode(target[0].content!)).toBe("original");
   });
 
   describe("readRaw", () => {

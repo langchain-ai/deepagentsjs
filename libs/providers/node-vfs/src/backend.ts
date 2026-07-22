@@ -791,6 +791,15 @@ export class VfsBackend implements BackendProtocolV2 {
     }
 
     try {
+      if (
+        this.instance.existsSync(resolvedPath) &&
+        this.instance.lstatSync(resolvedPath).isSymbolicLink()
+      ) {
+        return {
+          error: `Cannot write to ${filePath} because it is a symlink. Symlinks are not allowed.`,
+        };
+      }
+
       this.instance.mkdirSync(path.posix.dirname(resolvedPath), {
         recursive: true,
       });

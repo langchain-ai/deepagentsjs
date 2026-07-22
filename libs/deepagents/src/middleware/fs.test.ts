@@ -1023,6 +1023,9 @@ describe("createFilesystemMiddleware", () => {
         (t: any) => t.name === "write_file",
       ) as any;
       expect(writeFileTool).toBeDefined();
+      expect(writeFileTool!.description).toContain(
+        "Creates the file if it does not exist; replaces it entirely if it does.",
+      );
 
       // Parse with only file_path, no content — simulates the model omitting it
       const parsed = writeFileTool.schema.parse({ file_path: "/app/test.c" });
@@ -1042,6 +1045,9 @@ describe("createFilesystemMiddleware", () => {
         (tool) => tool.name === "write_file",
       );
       expect(writeFileTool).toBeDefined();
+      expect(writeFileTool!.description).toContain(
+        "Creates the file if it does not exist; replaces it entirely if it does.",
+      );
       const result = await writeFileTool!.invoke({
         file_path: "/doc.txt",
         content: "new content",

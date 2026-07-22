@@ -212,16 +212,16 @@ describe("StoreBackend", () => {
     expect(raw.data!.content).toEqual(newBytes);
   });
 
-  it("should replace malformed existing store values", async () => {
+  it("should preserve conversion errors for malformed existing store values", async () => {
     const { runtime, store } = makeConfig();
     const backend = new StoreBackend(runtime);
     await store.put(["filesystem"], "/bad.txt", { unexpected: "shape" });
 
-    const result = await backend.write("/bad.txt", "replacement");
+    await expect(backend.write("/bad.txt", "replacement")).rejects.toThrow();
 
-    expect(result.error).toBeUndefined();
-    const readRes = await backend.read("/bad.txt");
-    expect(readRes.content).toBe("replacement");
+    const stored = await store.get(["filesystem"], "/bad.txt");
+
+    expect(stored?.value).toEqual({ unexpected: "shape" });
   });
 
   it("should handle read with offset and limit", async () => {
