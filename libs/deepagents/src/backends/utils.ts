@@ -870,6 +870,21 @@ export function formatGrepMatches(
  * @returns MIME type string (e.g., "image/png", "text/plain")
  */
 export function getMimeType(filePath: string): string {
+  const name = basename(filePath).toLocaleLowerCase();
+  const nameMimeType = MIME_TYPES[name];
+  if (nameMimeType) {
+    return nameMimeType;
+  }
+
+  if (
+    /^\.env(?:[.-].*)?$/.test(name) ||
+    name === "dockerfile" ||
+    name === "makefile" ||
+    name === "license"
+  ) {
+    return "text/plain";
+  }
+
   const ext = extname(filePath).toLocaleLowerCase();
   return MIME_TYPES[ext] || "text/plain";
 }
