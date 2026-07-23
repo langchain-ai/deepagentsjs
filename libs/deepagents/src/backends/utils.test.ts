@@ -467,6 +467,23 @@ describe("getMimeType", () => {
     expect(getMimeType("/Dockerfile")).toBe("text/plain");
     expect(getMimeType("/mvnw")).toBe("text/plain");
   });
+
+  it("should return text/plain for ABAP/SAP extensions", () => {
+    expect(getMimeType("/foo.abap")).toBe("text/plain");
+    expect(getMimeType("/ZCL_MY_CLASS.clas.abap")).toBe("text/plain");
+    expect(getMimeType("/ZREPORT.prog.abap")).toBe("text/plain");
+    expect(getMimeType("/ZFM_FUNC.fugr.abap")).toBe("text/plain");
+    expect(getMimeType("/ZI_MYVIEW.asddls")).toBe("text/plain");
+    expect(getMimeType("/ZI_MYVIEW.asdtmd")).toBe("text/plain");
+    expect(getMimeType("/ZI_MYVIEW.ddls")).toBe("text/plain");
+    expect(getMimeType("/ZI_MYVIEW.ddlx")).toBe("text/plain");
+  });
+
+  it("isTextMimeType should return true for ABAP files via getMimeType", () => {
+    expect(isTextMimeType(getMimeType("teste.clas.abap"))).toBe(true);
+    expect(isTextMimeType(getMimeType("teste.prog.abap"))).toBe(true);
+    expect(isTextMimeType(getMimeType("ZI_VIEW.asddls"))).toBe(true);
+  });
 });
 
 describe("isTextMimeType", () => {
