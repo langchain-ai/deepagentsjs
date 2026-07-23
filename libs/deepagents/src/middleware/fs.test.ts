@@ -1285,6 +1285,81 @@ describe("createFilesystemMiddleware", () => {
     });
   });
 
+  describe("read_file binary handling", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    function makeReadFileTool(readResult: unknown) {
+      const mockBackend = createMockBackend();
+      mockBackend.read = vi.fn().mockResolvedValue(readResult);
+      vi.mocked(getCurrentTaskInput).mockReturnValue({
+        messages: [],
+        files: {},
+      });
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+      return middleware.tools!.find((t: any) => t.name === "read_file") as any;
+    }
+
+    it("degrades an unsupported binary (office doc) to a text note, not a file block", async () => {
+      // Office docs (.pptx/.docx/.xlsx) are zips; their mime type is not
+      // application/pdf, so they cannot be sent as a base64 document to
+      // Anthropic (400) nor as input_file to OpenAI/OpenRouter.
+      const readFileTool = makeReadFileTool({
+        content: new Uint8Array([0x50, 0x4b, 0x03, 0x04]), // "PK.." zip header
+      });
+
+      const result = await readFileTool.invoke({ file_path: "/deck.pptx" });
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toHaveLength(1);
+      expect(result[0].type).toBe("text");
+      expect(result[0].text).toContain("deck.pptx");
+      expect(result[0].text).toContain("presentationml");
+      // The whole point: no `file` block that would 400 the provider.
+      expect(result.some((block: any) => block.type === "file")).toBe(false);
+    });
+
+    it("degrades an unknown binary (octet-stream) to a text note", async () => {
+      const readFileTool = makeReadFileTool({
+        content: new Uint8Array([0x00, 0x01, 0x02, 0x03]),
+      });
+
+      const result = await readFileTool.invoke({ file_path: "/blob.bin" });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].type).toBe("text");
+      expect(result[0].text).toContain("application/octet-stream");
+    });
+
+    it("still returns a file block for PDFs, which providers accept", async () => {
+      const readFileTool = makeReadFileTool({
+        content: new Uint8Array([0x25, 0x50, 0x44, 0x46]), // "%PDF"
+      });
+
+      const result = await readFileTool.invoke({ file_path: "/manual.pdf" });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].type).toBe("file");
+      expect(result[0].mimeType).toBe("application/pdf");
+      expect(typeof result[0].data).toBe("string");
+    });
+
+    it("still returns an image block for images", async () => {
+      const readFileTool = makeReadFileTool({
+        content: new Uint8Array([0x89, 0x50, 0x4e, 0x47]), // PNG magic
+      });
+
+      const result = await readFileTool.invoke({ file_path: "/logo.png" });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].type).toBe("image");
+      expect(result[0].mimeType).toBe("image/png");
+    });
+  });
+
   describe("tool result truncation integration", () => {
     beforeEach(() => {
       vi.clearAllMocks();
