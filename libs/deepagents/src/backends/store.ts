@@ -361,11 +361,18 @@ export class StoreBackend implements BackendProtocolV2 {
   private convertStoreItemToFileData(storeItem: Item): FileData {
     const value = storeItem.value as any;
 
+    // Reverse the base64 encoding applied by convertFileDataToStoreValue for
+    // binary content (see the comment there).
+    const content: FileData["content"] =
+      value.encoding === "base64" && typeof value.content === "string"
+        ? new Uint8Array(Buffer.from(value.content, "base64"))
+        : value.content;
+
     const hasValidContent =
-      value.content !== undefined &&
-      (Array.isArray(value.content) ||
-        typeof value.content === "string" ||
-        ArrayBuffer.isView(value.content));
+      content !== undefined &&
+      (Array.isArray(content) ||
+        typeof content === "string" ||
+        ArrayBuffer.isView(content));
 
     if (
       !hasValidContent ||
@@ -378,20 +385,43 @@ export class StoreBackend implements BackendProtocolV2 {
     }
 
     return {
-      content: value.content,
+      content,
       ...(value.mimeType ? { mimeType: value.mimeType } : {}),
       created_at: value.created_at,
       modified_at: value.modified_at,
-    };
+    } as FileData;
   }
 
   /**
    * Convert FileData to a value suitable for store.put().
    *
+   * Binary content is base64-encoded with an `encoding: "base64"` marker:
+   * BaseStore implementations that persist values as JSON (e.g. the Postgres
+   * store's JSONB column) cannot represent a raw Uint8Array — JSON
+   * serialization turns it into a numeric-keyed byte map
+   * ({"0":123,"1":34,...}) that fails FileData validation on read, so any
+   * binary file written through such a store was stored unreadable.
+   * convertStoreItemToFileData reverses the encoding; in-memory stores that
+   * return the raw Uint8Array untouched are unaffected.
+   *
    * @param fileData - The FileData to convert
    * @returns Object with content, mimeType, created_at, and modified_at fields
    */
   private convertFileDataToStoreValue(fileData: FileData): Record<string, any> {
+    if (ArrayBuffer.isView(fileData.content)) {
+      const bytes = fileData.content as Uint8Array;
+      return {
+        content: Buffer.from(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength,
+        ).toString("base64"),
+        encoding: "base64",
+        ...("mimeType" in fileData ? { mimeType: fileData.mimeType } : {}),
+        created_at: fileData.created_at,
+        modified_at: fileData.modified_at,
+      };
+    }
     return {
       content: fileData.content,
       ...("mimeType" in fileData ? { mimeType: fileData.mimeType } : {}),
