@@ -15,6 +15,7 @@ import {
   isTextMimeType,
   adaptBackendProtocol,
   TOOL_RESULT_TOKEN_LIMIT,
+  MAX_LINE_LENGTH,
   createFileData,
   adaptSandboxProtocol,
 } from "./utils.js";
@@ -181,6 +182,27 @@ describe("formatContentWithLineNumbers", () => {
     const result = formatContentWithLineNumbers("line1\nline2\n");
     const lines = result.split("\n");
     expect(lines.length).toBe(2);
+  });
+
+  it("should not split a surrogate pair across a chunk boundary", () => {
+    // The emoji 🔴 is the surrogate pair U+D83D U+DD34. With its high surrogate
+    // at the last code unit before MAX_LINE_LENGTH, a fixed-stride substring
+    // split the pair, leaving a lone surrogate at the chunk boundary.
+    // encodeURIComponent throws on lone surrogates, just as Anthropic's
+    // request-body parser rejects them ("no low surrogate in string").
+    const line = `${"a".repeat(MAX_LINE_LENGTH - 1)}🔴/`;
+    const result = formatContentWithLineNumbers(line);
+    expect(() => encodeURIComponent(result)).not.toThrow();
+    // The emoji survives intact, moved whole into the continuation chunk.
+    expect(result).toContain("🔴");
+  });
+
+  it("should keep chunks well-formed across many boundaries", () => {
+    // A leading char misaligns the 2-code-unit emoji with every
+    // MAX_LINE_LENGTH boundary, so a pair would split at chunk 1, 2, 3, ...
+    const line = `a${"🔴".repeat(MAX_LINE_LENGTH)}`;
+    const result = formatContentWithLineNumbers(line);
+    expect(() => encodeURIComponent(result)).not.toThrow();
   });
 });
 
@@ -354,6 +376,15 @@ describe("truncateIfTooLong", () => {
     const result = truncateIfTooLong(input) as string[];
     expect(result.length).toBeLessThan(input.length);
     expect(result[result.length - 1]).toContain("truncated");
+  });
+
+  it("should not leave a lone surrogate when the cut splits a pair", () => {
+    // 🔴 straddles the TOOL_RESULT_TOKEN_LIMIT * 4 cut point; a naive substring
+    // kept its high surrogate alone, leaving ill-formed UTF-16.
+    const filler = "a".repeat(TOOL_RESULT_TOKEN_LIMIT * 4 - 1);
+    const result = truncateIfTooLong(`${filler}🔴${"b".repeat(100)}`) as string;
+    expect(() => encodeURIComponent(result)).not.toThrow();
+    expect(result).toContain("truncated");
   });
 });
 
