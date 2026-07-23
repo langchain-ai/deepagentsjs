@@ -777,6 +777,11 @@ export function grepSearchFiles(
  *
  * Performs literal text search (not regex). Binary files are skipped.
  * Returns an empty array when no matches are found or on invalid input.
+ *
+ * `path` may be a directory (its subtree is searched) or an exact file
+ * path. validatePath normalizes with a trailing slash, so without the
+ * exact-key check a file path could never match its own key and grepping
+ * a single file silently returned no matches.
  */
 export function grepMatchesFromFiles(
   files: Record<string, FileData>,
@@ -792,7 +797,9 @@ export function grepMatchesFromFiles(
   }
 
   let filtered = Object.fromEntries(
-    Object.entries(files).filter(([fp]) => fp.startsWith(normalizedPath)),
+    Object.entries(files).filter(
+      ([fp]) => fp.startsWith(normalizedPath) || `${fp}/` === normalizedPath,
+    ),
   );
 
   if (glob) {

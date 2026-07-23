@@ -17,6 +17,7 @@ import {
   TOOL_RESULT_TOKEN_LIMIT,
   createFileData,
   adaptSandboxProtocol,
+  grepMatchesFromFiles,
 } from "./utils.js";
 import type {
   BackendProtocol,
@@ -26,6 +27,57 @@ import type {
   SandboxBackendProtocolV2,
 } from "./protocol.js";
 import { isSandboxBackend } from "./protocol.js";
+
+describe("grepMatchesFromFiles", () => {
+  const files = {
+    "/data/rows.jsonl": createFileData(
+      '{"account":"acct-1"}',
+      undefined,
+      "v2",
+      "text/plain",
+    ),
+    "/data/other.txt": createFileData(
+      "acct-1 appears here too",
+      undefined,
+      "v2",
+      "text/plain",
+    ),
+    "/notes.md": createFileData(
+      "no accounts here",
+      undefined,
+      "v2",
+      "text/markdown",
+    ),
+  };
+
+  it("searches a directory subtree", () => {
+    const matches = grepMatchesFromFiles(files, "acct-1", "/data");
+    expect(matches.map((m) => m.path).sort()).toEqual([
+      "/data/other.txt",
+      "/data/rows.jsonl",
+    ]);
+  });
+
+  it("matches an exact file path (not just directory prefixes)", () => {
+    const matches = grepMatchesFromFiles(files, "acct-1", "/data/rows.jsonl");
+    expect(matches).toEqual([
+      { path: "/data/rows.jsonl", line: 1, text: '{"account":"acct-1"}' },
+    ]);
+  });
+
+  it("returns no matches for a file path whose content lacks the pattern", () => {
+    expect(grepMatchesFromFiles(files, "acct-1", "/notes.md")).toEqual([]);
+  });
+
+  it("applies the glob filter to an exact file path", () => {
+    expect(
+      grepMatchesFromFiles(files, "acct-1", "/data/rows.jsonl", "*.txt"),
+    ).toEqual([]);
+    expect(
+      grepMatchesFromFiles(files, "acct-1", "/data/rows.jsonl", "*.jsonl"),
+    ).toHaveLength(1);
+  });
+});
 
 describe("validatePath", () => {
   it("should add leading slash if missing", () => {
