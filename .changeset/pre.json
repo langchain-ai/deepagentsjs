@@ -1,0 +1,15 @@
+{
+  "mode": "pre",
+  "tag": "rc",
+  "initialVersions": {
+    "deepagents-acp": "0.1.20",
+    "deepagents": "1.11.1",
+    "@langchain/daytona": "0.2.1",
+    "@langchain/deno": "0.2.2",
+    "@langchain/modal": "0.1.5",
+    "@langchain/node-vfs": "0.2.1",
+    "@langchain/quickjs": "0.6.0",
+    "@langchain/sandbox-standard-tests": "1.0.0"
+  },
+  "changesets": []
+}
