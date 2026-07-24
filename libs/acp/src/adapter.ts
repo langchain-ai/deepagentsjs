@@ -7,6 +7,7 @@
 
 import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
 import type { ContentBlock } from "@agentclientprotocol/sdk";
+import path from "node:path";
 
 import type { ToolCallInfo, PlanEntry } from "./types.js";
 
@@ -227,7 +228,11 @@ export function formatToolCallTitle(
 }
 
 /**
- * Extract file locations from tool call arguments for ACP follow-along
+ * Extract file locations from tool call arguments for ACP follow-along.
+ *
+ * The backend runs in virtual mode, so tool paths are virtual paths rooted at
+ * the workspace (e.g. "/src/index.ts"). ACP clients expect real filesystem
+ * paths, so resolve them under workspaceRoot.
  */
 export function extractToolCallLocations(
   toolName: string,
@@ -247,9 +252,10 @@ export function extractToolCallLocations(
   ];
   if (!toolsWithPaths.includes(toolName)) return undefined;
 
-  const absPath = filePath.startsWith("/")
-    ? filePath
-    : `${workspaceRoot ?? ""}/${filePath}`;
+  // Virtual paths are rooted at the workspace; join under workspaceRoot to
+  // produce the real path ACP clients expect. posix.join also normalizes a
+  // leading "/" on the virtual path, so no regex stripping is needed.
+  const absPath = path.posix.join(workspaceRoot ?? "/", filePath);
 
   const line = (args.line ?? args.startLine) as number | undefined;
   return [{ path: absPath, ...(line != null ? { line } : {}) }];
