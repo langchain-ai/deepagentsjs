@@ -892,13 +892,13 @@ export class VfsBackend implements BackendProtocolV2 {
     this.#ensureInitialized();
 
     const resolvedPath = this.#resolvePath(filePath);
-    if (!resolvedPath || !this.instance.existsSync(resolvedPath)) {
+    if (!resolvedPath) {
       return { error: `Error: File '${filePath}' not found` };
     }
 
     try {
-      const stat = this.instance.statSync(resolvedPath);
-      if (!stat.isFile()) {
+      const stat = this.instance.lstatSync(resolvedPath);
+      if (stat.isDirectory()) {
         const removeDirectory = (directoryPath: string): void => {
           for (const entry of this.instance.readdirSync(directoryPath)) {
             const childPath = path.posix.join(directoryPath, entry);
@@ -918,6 +918,9 @@ export class VfsBackend implements BackendProtocolV2 {
       this.instance.unlinkSync(resolvedPath);
       return { path: filePath };
     } catch (error) {
+      if (this.#mapError(error) === "file_not_found") {
+        return { error: `Error: File '${filePath}' not found` };
+      }
       return {
         error: `Error deleting '${filePath}': ${
           error instanceof Error ? error.message : String(error)

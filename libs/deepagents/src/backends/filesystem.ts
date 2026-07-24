@@ -439,6 +439,21 @@ export class FilesystemBackend implements BackendProtocolV2 {
   async delete(filePath: string): Promise<DeleteResult> {
     try {
       const resolvedPath = this.resolvePath(filePath);
+
+      if (this.virtualMode && resolvedPath === this.cwd) {
+        const realRoot = await fs.realpath(this.cwd);
+        const entries = await fs.readdir(realRoot, { withFileTypes: true });
+        await Promise.all(
+          entries.map((entry) =>
+            fs.rm(path.join(realRoot, entry.name), {
+              recursive: true,
+              force: false,
+            }),
+          ),
+        );
+        return { path: filePath, filesUpdate: null };
+      }
+
       const deletePath = await this.resolveDeletePath(resolvedPath, filePath);
       const stat = await fs.lstat(deletePath).catch(() => null);
 

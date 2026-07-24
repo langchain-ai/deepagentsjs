@@ -1672,6 +1672,7 @@ export function createFilesystemMiddleware(
     (name) =>
       enabledFilesystemTools == null || enabledFilesystemTools.has(name),
   ).map((name) => allToolsByName[name]);
+  const builtInDeleteTool = allToolsByName.delete;
 
   async function processToolMessage(
     msg: ToolMessage,
@@ -1807,7 +1808,7 @@ export function createFilesystemMiddleware(
         tools = tools.filter(
           (t: { name: string }) =>
             (supportsExecution || t.name !== "execute") &&
-            (backendSupportsDelete || t.name !== "delete"),
+            (backendSupportsDelete || t !== builtInDeleteTool),
         );
       }
 
