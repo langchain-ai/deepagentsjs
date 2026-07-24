@@ -151,9 +151,7 @@ describe("applyProfilePrompt", () => {
       baseSystemPrompt: "",
       systemPromptSuffix: "Suffix only.",
     });
-    expect(applyProfilePrompt(profile, "Default prompt.")).toBe(
-      "Suffix only.",
-    );
+    expect(applyProfilePrompt(profile, "Default prompt.")).toBe("Suffix only.");
   });
 });
 
