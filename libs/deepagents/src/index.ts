@@ -6,6 +6,12 @@
  */
 
 export { createDeepAgent } from "./agent.js";
+export {
+  BASE_AGENT_PROMPT,
+  TASK_SYSTEM_PROMPT,
+  ASYNC_TASK_SYSTEM_PROMPT,
+  EXECUTION_SYSTEM_PROMPT,
+} from "./compat.js";
 export { ConfigurationError, type ConfigurationErrorCode } from "./errors.js";
 
 // Export harness profiles
