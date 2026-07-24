@@ -88,9 +88,9 @@ describe("Legacy system prompt assembly", () => {
       });
       await agent.invoke({ messages: [new HumanMessage("Hello")] });
 
-      expect(getLastSystemMessage(invokeSpy).text.trim()).toBe(
-        "__prefix__\n\n__base__\n\n__suffix__",
-      );
+      expect(
+        getLastSystemMessage(invokeSpy).text.replaceAll("\u200B", "").trim(),
+      ).toBe("__prefix__\n\n__base__\n\n__suffix__");
     } finally {
       invokeSpy.mockRestore();
     }
@@ -107,7 +107,7 @@ describe("Legacy system prompt assembly", () => {
       await agent.invoke({ messages: [new HumanMessage("Hello")] });
 
       const prompt = getLastSystemMessage(invokeSpy).text;
-      expect(prompt.trim()).toBe("__custom_prompt__");
+      expect(prompt.replaceAll("\u200B", "").trim()).toBe("__custom_prompt__");
     } finally {
       invokeSpy.mockRestore();
     }
@@ -120,9 +120,9 @@ describe("Legacy system prompt assembly", () => {
         model: new FakeListChatModel({ responses: ["Done"] }),
       });
       await agent.invoke({ messages: [new HumanMessage("Hello")] });
-      expect(getLastSystemMessage(invokeSpy).text).not.toContain(
-        "You are a Deep Agent",
-      );
+      const systemPrompt = getLastSystemMessage(invokeSpy).text;
+      expect(systemPrompt).toContain("\u200B");
+      expect(systemPrompt.replaceAll("\u200B", "").trim()).toBe("");
     } finally {
       invokeSpy.mockRestore();
     }

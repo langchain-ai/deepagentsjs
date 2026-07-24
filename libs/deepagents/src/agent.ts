@@ -271,7 +271,7 @@ export function createDeepAgent<
     // and auto-computed defaults from model profile.
     return [
       // Provides todo list management capabilities for tracking tasks.
-      todoListMiddleware({ systemPrompt: "" }),
+      todoListMiddleware({ systemPrompt: "\u200B" }),
       // Enables filesystem operations and optional long-term memory storage.
       createFilesystemMiddleware({
         backend,
@@ -370,7 +370,7 @@ export function createDeepAgent<
   // Optional middleware (skills, memory, HITL, async) are appended at runtime.
   const builtInMiddleware = [
     // Provides todo list management capabilities for tracking tasks.
-    todoListMiddleware({ systemPrompt: "" }),
+    todoListMiddleware({ systemPrompt: "\u200B" }),
     // Enables filesystem operations and optional long-term memory storage.
     createFilesystemMiddleware({
       backend,
@@ -470,7 +470,7 @@ export function createDeepAgent<
 
   const agent = createAgent({
     model,
-    systemPrompt: finalSystemPrompt,
+    ...(finalSystemPrompt !== "" && { systemPrompt: finalSystemPrompt }),
     stateSchema,
     tools: effectiveTools,
     middleware,
