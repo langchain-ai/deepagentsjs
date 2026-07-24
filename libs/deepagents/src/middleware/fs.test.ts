@@ -343,7 +343,9 @@ describe("createFilesystemMiddleware", () => {
         occurrences: 1,
         filesUpdate: null,
       }),
-      delete: vi.fn().mockResolvedValue({ path: "/deleted.txt", filesUpdate: null }),
+      delete: vi
+        .fn()
+        .mockResolvedValue({ path: "/deleted.txt", filesUpdate: null }),
       glob: vi.fn().mockResolvedValue({ files: [] }),
       grep: vi.fn().mockResolvedValue({ matches: [] }),
     } as unknown as BackendProtocolV2;
@@ -379,6 +381,7 @@ describe("createFilesystemMiddleware", () => {
         "read_file",
         "write_file",
         "edit_file",
+        "delete",
         "glob",
         "grep",
         "execute",
@@ -396,6 +399,7 @@ describe("createFilesystemMiddleware", () => {
         "read_file",
         "write_file",
         "edit_file",
+        "delete",
         "glob",
         "grep",
         "execute",
@@ -1176,7 +1180,9 @@ describe("createFilesystemMiddleware", () => {
       });
       const middleware = createFilesystemMiddleware({ backend: mockBackend });
 
-      const deleteTool = middleware.tools!.find((tool) => tool.name === "delete");
+      const deleteTool = middleware.tools!.find(
+        (tool) => tool.name === "delete",
+      );
       expect(deleteTool).toBeDefined();
       const result = await deleteTool!.invoke({ file_path: "/doc.txt" });
 
@@ -1188,6 +1194,21 @@ describe("createFilesystemMiddleware", () => {
       }
     });
 
+    it("delete tool should use an implementation-agnostic unsupported error", async () => {
+      const mockBackend = createMockBackend();
+      delete (mockBackend as { delete?: unknown }).delete;
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const deleteTool = middleware.tools!.find(
+        (tool) => tool.name === "delete",
+      );
+      expect(deleteTool).toBeDefined();
+      const result = await deleteTool!.invoke({ file_path: "/doc.txt" });
+
+      expect(String(result)).toContain("deletion is not available");
+      expect(String(result)).not.toContain("backend");
+    });
+
     it("delete tool should deny recursive deletes overlapping write-deny rules", async () => {
       const mockBackend = createMockBackend();
       const middleware = createFilesystemMiddleware({
@@ -1197,7 +1218,9 @@ describe("createFilesystemMiddleware", () => {
         ],
       });
 
-      const deleteTool = middleware.tools!.find((tool) => tool.name === "delete");
+      const deleteTool = middleware.tools!.find(
+        (tool) => tool.name === "delete",
+      );
       expect(deleteTool).toBeDefined();
       const result = await deleteTool!.invoke({ file_path: "/work" });
 

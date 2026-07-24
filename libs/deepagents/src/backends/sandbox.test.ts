@@ -743,14 +743,14 @@ describe("BaseSandbox", () => {
   });
 
   describe("delete", () => {
-    it("should delete with rm -f and report success on exit 0", async () => {
+    it("should delete with recursive rm and report success on exit 0", async () => {
       const sandbox = new MockSandbox();
 
       const result = await sandbox.delete("/file.txt");
 
       expect(result.error).toBeUndefined();
       expect(result.path).toBe("/file.txt");
-      expect(sandbox.executedCommands[0]).toContain("rm -f");
+      expect(sandbox.executedCommands[0]).toContain("rm -rf");
       expect(sandbox.executedCommands[0]).toContain("'/file.txt'");
     });
 
@@ -774,7 +774,7 @@ describe("BaseSandbox", () => {
       const result = await sandbox.delete("/some/dir");
 
       expect(result.path).toBeUndefined();
-      expect(result.error).toContain("Error deleting file");
+      expect(result.error).toContain("Error deleting '/some/dir'");
       expect(result.error).toContain("Is a directory");
     });
 
