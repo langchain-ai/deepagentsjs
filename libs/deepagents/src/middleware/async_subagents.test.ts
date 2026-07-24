@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { Command } from "@langchain/langgraph";
 import { Client } from "@langchain/langgraph-sdk";
-import { ToolMessage } from "@langchain/core/messages";
+import { SystemMessage, ToolMessage } from "@langchain/core/messages";
 import type { ToolRuntime } from "langchain";
 
 import {
@@ -14,7 +14,6 @@ import {
   createAsyncSubAgentMiddleware,
   extractCallbackContext,
   ClientCache,
-  ASYNC_TASK_SYSTEM_PROMPT,
   TERMINAL_STATUSES,
   type AsyncSubAgent,
   type AsyncTask,
@@ -146,26 +145,6 @@ describe("TERMINAL_STATUSES", () => {
       expect(TERMINAL_STATUSES.has(status)).toBe(false);
     },
   );
-});
-
-// ─── ASYNC_TASK_SYSTEM_PROMPT ───
-
-describe("ASYNC_TASK_SYSTEM_PROMPT", () => {
-  it("should mention all five tool names", () => {
-    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("start_async_task");
-    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("check_async_task");
-    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("update_async_task");
-    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("cancel_async_task");
-    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("list_async_tasks");
-  });
-
-  it("should include critical behavioral rules", () => {
-    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain(
-      "Never auto-check after launching",
-    );
-    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("Never poll");
-    expect(ASYNC_TASK_SYSTEM_PROMPT).toContain("ALWAYS stale");
-  });
 });
 
 // ─── Type instantiation (compile-time checks) ───
@@ -1514,6 +1493,22 @@ describe("createAsyncSubAgentMiddleware", () => {
     expect(launchTool?.description).toContain("researcher");
     expect(launchTool?.description).toContain("analyst");
     expect(launchTool?.description).toContain("writer");
+  });
+
+  it("does not inject a default system prompt", async () => {
+    const middleware = createAsyncSubAgentMiddleware({
+      asyncSubAgents: [makeAgent()],
+    });
+    const handler = vi.fn().mockResolvedValue({ response: "ok" });
+    const request = {
+      systemMessage: new SystemMessage("Base prompt"),
+      state: {},
+      config: {},
+      tools: middleware.tools ?? [],
+    };
+
+    await middleware.wrapModelCall!(request as any, handler);
+    expect(handler.mock.calls[0][0].systemMessage.text).toBe("Base prompt");
   });
 
   it("should accept a custom system prompt", () => {

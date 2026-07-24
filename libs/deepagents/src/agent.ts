@@ -6,7 +6,6 @@ import {
   todoListMiddleware,
   SystemMessage,
   type AgentMiddleware,
-  context,
 } from "langchain";
 import type {
   ClientTool,
@@ -65,42 +64,6 @@ import {
   getModelIdentifier,
   isBedrockConverseModel,
 } from "./utils.js";
-
-const BASE_AGENT_PROMPT = context`
-  You are a Deep Agent, an AI assistant that helps users accomplish tasks using tools. You respond with text and tool calls. The user can see your responses and tool outputs in real time.
-
-  ## Core Behavior
-
-  - Be concise and direct. Don't over-explain unless asked.
-  - NEVER add unnecessary preamble (\"Sure!\", \"Great question!\", \"I'll now...\").
-  - Don't say \"I'll now do X\" — just do it.
-  - If the request is ambiguous, ask questions before acting.
-  - If asked how to approach something, explain first, then act.
-
-  ## Professional Objectivity
-
-  - Prioritize accuracy over validating the user's beliefs
-  - Disagree respectfully when the user is incorrect
-  - Avoid unnecessary superlatives, praise, or emotional validation
-
-  ## Doing Tasks
-
-  When the user asks you to do something:
-
-  1. **Understand first** — read relevant files, check existing patterns. Quick but thorough — gather enough evidence to start, then iterate.
-  2. **Act** — implement the solution. Work quickly but accurately.
-  3. **Verify** — check your work against what was asked, not against your own output. Your first attempt is rarely correct — iterate.
-
-  Keep working until the task is fully complete. Don't stop partway and explain what you would do — just do it. Only yield back to the user when the task is done or you're genuinely blocked.
-
-  **When things go wrong:**
-  - If something fails repeatedly, stop and analyze *why* — don't keep retrying the same approach.
-  - If you're blocked, tell the user what's wrong and ask for guidance.
-
-  ## Progress Updates
-
-  For longer tasks, provide brief progress updates at reasonable intervals — a concise sentence recapping what you've done and what's next.
-`;
 
 const BUILTIN_TOOL_NAMES: ReadonlySet<string> = new Set([
   ...FILESYSTEM_TOOL_NAMES,
@@ -270,7 +233,7 @@ export function createDeepAgent<
     // and auto-computed defaults from model profile.
     return [
       // Provides todo list management capabilities for tracking tasks.
-      todoListMiddleware(),
+      todoListMiddleware({ systemPrompt: "" }),
       // Enables filesystem operations and optional long-term memory storage.
       createFilesystemMiddleware({
         backend,
@@ -369,7 +332,7 @@ export function createDeepAgent<
   // Optional middleware (skills, memory, HITL, async) are appended at runtime.
   const builtInMiddleware = [
     // Provides todo list management capabilities for tracking tasks.
-    todoListMiddleware(),
+    todoListMiddleware({ systemPrompt: "" }),
     // Enables filesystem operations and optional long-term memory storage.
     createFilesystemMiddleware({
       backend,
@@ -455,10 +418,7 @@ export function createDeepAgent<
   }
 
   // Combine system prompt parameter with profile-aware base prompt.
-  const effectiveBasePrompt = applyProfilePrompt(
-    harnessProfile,
-    BASE_AGENT_PROMPT,
-  );
+  const effectiveBasePrompt = applyProfilePrompt(harnessProfile, "");
 
   const basePromptBlocks = effectiveBasePrompt
     ? ([
