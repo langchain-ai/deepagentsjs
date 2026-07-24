@@ -497,7 +497,7 @@ describe("FilesystemBackend", () => {
       expect(result.error).toContain("not found");
     });
 
-    it("should reject directories", async () => {
+    it("should delete directories recursively", async () => {
       await fs.mkdir(path.join(tmpDir, "sub"));
       const backend = new FilesystemBackend({
         rootDir: tmpDir,
@@ -506,9 +506,9 @@ describe("FilesystemBackend", () => {
 
       const result = await backend.delete("/sub");
 
-      expect(result.path).toBeUndefined();
-      expect(result.error).toContain("directory");
-      await expect(fs.stat(path.join(tmpDir, "sub"))).resolves.toBeDefined();
+      expect(result.path).toBe("/sub");
+      expect(result.error).toBeUndefined();
+      await expect(fs.stat(path.join(tmpDir, "sub"))).rejects.toThrow();
     });
 
     it("should only remove the target file", async () => {

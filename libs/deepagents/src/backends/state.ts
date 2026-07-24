@@ -352,27 +352,6 @@ export class StateBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Delete a file from state by sending a null deletion marker through Pregel.
-   */
-  delete(filePath: string): DeleteResult {
-    const files = this.files;
-
-    if (!(filePath in files)) {
-      return { error: `Error: File '${filePath}' not found` };
-    }
-
-    if (this.isLegacy) {
-      return {
-        error:
-          "StateBackend.delete requires a zero-argument StateBackend in a LangGraph execution context.",
-      };
-    }
-
-    this.sendFilesUpdate({ [filePath]: null });
-    return { path: filePath };
-  }
-
-  /**
    * Search file contents for a literal text pattern.
    * Binary files are skipped.
    */

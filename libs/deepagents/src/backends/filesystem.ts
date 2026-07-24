@@ -39,27 +39,6 @@ import {
 
 const SUPPORTS_NOFOLLOW = fsSync.constants.O_NOFOLLOW !== undefined;
 
-function getErrorMessage(error: unknown): string {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof (error as { message?: unknown }).message === "string"
-  ) {
-    return (error as { message: string }).message;
-  }
-  return String(error);
-}
-
-function hasErrorCode(error: unknown, code: string): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === code
-  );
-}
-
 /**
  * Backend that reads and writes files directly from the filesystem.
  *
@@ -460,21 +439,28 @@ export class FilesystemBackend implements BackendProtocolV2 {
   async delete(filePath: string): Promise<DeleteResult> {
     try {
       const resolvedPath = this.resolvePath(filePath);
-      const stat = await fs.lstat(resolvedPath).catch(() => null);
+      const deletePath = await this.resolveDeletePath(resolvedPath, filePath);
+      const stat = await fs.lstat(deletePath).catch(() => null);
 
       if (!stat) {
         return { error: `Error: '${filePath}' not found` };
       }
 
       if (stat.isDirectory() && !stat.isSymbolicLink()) {
-        await fs.rm(resolvedPath, { recursive: true, force: false });
+        await fs.rm(deletePath, { recursive: true, force: false });
       } else {
-        await fs.unlink(resolvedPath);
+        await fs.unlink(deletePath);
       }
 
       return { path: filePath, filesUpdate: null };
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message =
+        typeof error === "object" &&
+        error !== null &&
+        "message" in error &&
+        typeof error.message === "string"
+          ? error.message
+          : String(error);
       return { error: `Error deleting '${filePath}': ${message}` };
     }
   }
@@ -553,38 +539,6 @@ export class FilesystemBackend implements BackendProtocolV2 {
       return { path: filePath, filesUpdate: null, occurrences: occurrences };
     } catch (e: any) {
       return { error: `Error editing file '${filePath}': ${e.message}` };
-    }
-  }
-
-  /**
-   * Delete a file from the filesystem.
-   */
-  async delete(filePath: string): Promise<DeleteResult> {
-    let resolvedPath: string;
-    try {
-      resolvedPath = this.resolvePath(filePath);
-    } catch (error: unknown) {
-      return {
-        error: `Error deleting file '${filePath}': ${getErrorMessage(error)}`,
-      };
-    }
-
-    try {
-      const deletePath = await this.resolveDeletePath(resolvedPath, filePath);
-      const stat = await fs.lstat(deletePath);
-      if (stat.isDirectory()) {
-        return { error: `Error: '${filePath}' is a directory, not a file` };
-      }
-
-      await fs.unlink(deletePath);
-      return { path: filePath };
-    } catch (error: unknown) {
-      if (hasErrorCode(error, "ENOENT")) {
-        return { error: `Error: File '${filePath}' not found` };
-      }
-      return {
-        error: `Error deleting file '${filePath}': ${getErrorMessage(error)}`,
-      };
     }
   }
 
