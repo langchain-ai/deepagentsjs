@@ -1,5 +1,12 @@
 # @langchain/modal
 
+## 1.0.0-rc.0
+
+### Patch Changes
+
+- Updated dependencies [[`d25097f`](https://github.com/langchain-ai/deepagentsjs/commit/d25097f78d0e66741da34e1d74551f3c19991126), [`dd142fe`](https://github.com/langchain-ai/deepagentsjs/commit/dd142fe4fc54c986d5bcf51211d9a839a427e931)]:
+  - deepagents@1.12.0-rc.0
+
 ## 0.1.5
 
 ### Patch Changes

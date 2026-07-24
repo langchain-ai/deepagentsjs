@@ -9,7 +9,13 @@
     "@langchain/modal": "0.1.5",
     "@langchain/node-vfs": "0.2.1",
     "@langchain/quickjs": "0.6.0",
-    "@langchain/sandbox-standard-tests": "1.0.0"
+    "@langchain/sandbox-standard-tests": "1.0.0",
+    "@examples/async-subagents-parallel-research": null,
+    "@deepagents/evals": "0.0.19"
   },
-  "changesets": []
+  "changesets": [
+    "lean-agent-prompts",
+    "node-vfs-write-overwrite",
+    "write-file-overwrites"
+  ]
 }
