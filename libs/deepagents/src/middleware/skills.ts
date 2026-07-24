@@ -533,6 +533,20 @@ export function parseSkillMetadataFromContent(
   };
 }
 
+async function readFileFromBackendByRead(
+  backend: BackendProtocolV2,
+  filePath: string,
+): Promise<string | null> {
+  const readResult = await backend.read(filePath);
+  if (readResult.error) {
+    return null;
+  }
+  if (typeof readResult.content !== "string") {
+    return null;
+  }
+  return readResult.content;
+}
+
 /**
  * Read a single file from the backend, returning its content as a string or
  * null if the file does not exist or cannot be read.
@@ -547,19 +561,18 @@ async function readFileFromBackend(
       return null;
     }
     const response = results[0];
-    if (response.error != null || response.content == null) {
+    if (response.error != null) {
+      if (response.error === "not_support_downloadFiles") {
+        return readFileFromBackendByRead(backend, filePath);
+      }
+      return null;
+    }
+    if (response.content == null) {
       return null;
     }
     return new TextDecoder().decode(response.content);
   }
-  const readResult = await backend.read(filePath);
-  if (readResult.error) {
-    return null;
-  }
-  if (typeof readResult.content !== "string") {
-    return null;
-  }
-  return readResult.content;
+  return readFileFromBackendByRead(backend, filePath);
 }
 
 /**

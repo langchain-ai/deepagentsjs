@@ -485,7 +485,14 @@ export class CompositeBackend implements BackendProtocolV2 {
 
     for (const [backend, batch] of batchesByBackend) {
       if (!backend.downloadFiles) {
-        throw new Error("Backend does not support downloadFiles");
+        // throw new Error("not_support_downloadFiles");
+        return [
+          {
+            path: "",
+            content: null,
+            error: "not_support_downloadFiles",
+          },
+        ];
       }
 
       const batchPaths = batch.map((b) => b.path);
