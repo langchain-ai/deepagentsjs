@@ -1383,7 +1383,10 @@ export function createFilesystemMiddleware(
     grep: createGrepTool(backend, {
       customDescription: customToolDescriptions?.grep,
       permissions,
-      includeExecution: configuredToolNames.has("execute"),
+      includeExecution:
+        configuredToolNames.has("execute") &&
+        typeof backend !== "function" &&
+        isSandboxBackend(backend),
     }),
     execute: createExecuteTool(backend, {
       customDescription: customToolDescriptions?.execute,
