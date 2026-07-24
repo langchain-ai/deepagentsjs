@@ -902,7 +902,7 @@ export class VfsBackend implements BackendProtocolV2 {
         const removeDirectory = (directoryPath: string): void => {
           for (const entry of this.instance.readdirSync(directoryPath)) {
             const childPath = path.posix.join(directoryPath, entry);
-            const childStat = this.instance.statSync(childPath);
+            const childStat = this.instance.lstatSync(childPath);
             if (childStat.isDirectory()) {
               removeDirectory(childPath);
             } else {

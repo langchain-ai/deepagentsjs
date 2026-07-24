@@ -95,7 +95,7 @@ export class CompositeBackend implements BackendProtocolV2 {
   private getBackendAndKey(key: string): [BackendProtocolV2, string] {
     // Check routes in order of length (longest first)
     for (const [prefix, backend] of this.sortedRoutes) {
-      if (key.startsWith(prefix)) {
+      if (key === prefix.slice(0, -1) || key.startsWith(prefix)) {
         // Strip full prefix and ensure a leading slash remains
         // e.g., "/memories/notes.txt" → "/notes.txt"; "/memories/" → "/"
         const suffix = key.substring(prefix.length);

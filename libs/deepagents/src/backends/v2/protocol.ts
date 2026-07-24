@@ -106,7 +106,7 @@ export interface BackendProtocolV2 extends Omit<
   glob(pattern: string, path?: string): MaybePromise<GlobResult>;
 
   /**
-   * Delete a single file.
+   * Delete a file or directory recursively.
    * Optional - backends that don't support file deletion can omit this.
    *
    * @param filePath - Absolute path to the file to delete

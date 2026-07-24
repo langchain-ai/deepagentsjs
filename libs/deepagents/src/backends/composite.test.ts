@@ -165,6 +165,25 @@ describe("CompositeBackend", () => {
     expect((await composite.read("/memories/keep.txt")).error).toBeUndefined();
   });
 
+  it("should delete a mounted route root", async () => {
+    const { runtime } = makeConfig();
+    const composite = new CompositeBackend(new StateBackend(runtime), {
+      "/memories/": new StoreBackend(runtime),
+    });
+
+    await composite.write("/memories/a.txt", "a");
+    await composite.write("/memories/sub/b.txt", "b");
+    const result = await composite.delete("/memories");
+
+    expect(result).toEqual({ path: "/memories", filesUpdate: null });
+    expect((await composite.read("/memories/a.txt")).error).toContain(
+      "not found",
+    );
+    expect((await composite.read("/memories/sub/b.txt")).error).toContain(
+      "not found",
+    );
+  });
+
   it("should route operations between StateBackend and StoreBackend", async () => {
     const { state, runtime } = makeConfig();
 
