@@ -1,3 +1,5 @@
+import { todoListMiddleware, type AgentMiddleware } from "langchain";
+
 import { createHarnessProfile } from "../create.js";
 import { registerHarnessProfileImpl } from "../registry.js";
 
@@ -40,6 +42,10 @@ without seeing a prior result.
 Mark each as done, blocked (with a one-sentence reason), or cancelled. Do not \
 finish with pending items.`;
 
+function createExtraMiddleware(): AgentMiddleware[] {
+  return [todoListMiddleware()];
+}
+
 /**
  * Register the built-in Codex harness profiles.
  *
@@ -52,6 +58,7 @@ finish with pending items.`;
 export function register(): void {
   const profile = createHarnessProfile({
     systemPromptSuffix: SYSTEM_PROMPT_SUFFIX,
+    extraMiddleware: createExtraMiddleware,
   });
   for (const spec of CODEX_MODEL_SPECS) {
     registerHarnessProfileImpl(spec, profile);

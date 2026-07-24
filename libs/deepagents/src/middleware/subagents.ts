@@ -107,8 +107,8 @@ export interface CompiledSubAgent<
  * Specification for a subagent that can be dynamically created.
  *
  * When using `createDeepAgent`, subagents automatically receive a default middleware
- * stack (todoListMiddleware, filesystemMiddleware, summarizationMiddleware, etc.) before
- * any custom `middleware` specified in this spec.
+ * stack (filesystemMiddleware, summarizationMiddleware, etc.) before any custom
+ * `middleware` specified in this spec. Add `todoListMiddleware` explicitly to opt in.
  *
  * Required fields:
  * - `name`: Identifier used to select this subagent in the task tool

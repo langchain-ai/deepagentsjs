@@ -10,7 +10,12 @@ vi.mock("langchain", async (importOriginal) => {
 
 import { MemorySaver } from "@langchain/langgraph-checkpoint";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
-import { createAgent, tool, type AgentMiddleware } from "langchain";
+import {
+  createAgent,
+  todoListMiddleware,
+  tool,
+  type AgentMiddleware,
+} from "langchain";
 import {
   AIMessage,
   BaseMessage,
@@ -1446,6 +1451,81 @@ describe("middleware override by name", () => {
 
     const middleware = getMiddlewareStack("helper");
     expect(middleware).not.toContain(custom);
+  });
+
+  it("does not add todo middleware to default main or general-purpose stacks", () => {
+    createDeepAgent({ model: fakeModel, name: "main" });
+
+    for (const agentName of ["main", "general-purpose"]) {
+      expect(
+        getMiddlewareStack(agentName).some(
+          (entry) => entry.name === "todoListMiddleware",
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it("keeps a main-agent todo opt-in off the general-purpose subagent", () => {
+    const todo = todoListMiddleware();
+    createDeepAgent({ model: fakeModel, name: "main", middleware: [todo] });
+
+    expect(getMiddlewareStack("main")).toContain(todo);
+    expect(
+      getMiddlewareStack("general-purpose").some(
+        (entry) => entry.name === "todoListMiddleware",
+      ),
+    ).toBe(false);
+  });
+
+  it("lets declarative subagents opt into todo middleware independently", () => {
+    const todo = todoListMiddleware();
+    createDeepAgent({
+      model: fakeModel,
+      name: "main",
+      middleware: [todoListMiddleware()],
+      subagents: [
+        {
+          name: "helper",
+          description: "Helps with work",
+          systemPrompt: "Help.",
+          middleware: [todo],
+        },
+      ],
+    });
+
+    expect(getMiddlewareStack("helper")).toContain(todo);
+  });
+
+  it("adds fresh profile todo middleware to main and subagent stacks", () => {
+    registerHarnessProfile("todo-profile:model", {
+      extraMiddleware: () => [todoListMiddleware()],
+    });
+    createDeepAgent({
+      model: "todo-profile:model",
+      name: "main",
+      subagents: [
+        {
+          name: "helper",
+          description: "Helps with work",
+          systemPrompt: "Help.",
+        },
+      ],
+    });
+
+    const mainTodo = getMiddlewareStack("main").find(
+      (entry) => entry.name === "todoListMiddleware",
+    );
+    const generalPurposeTodo = getMiddlewareStack("general-purpose").find(
+      (entry) => entry.name === "todoListMiddleware",
+    );
+    const helperTodo = getMiddlewareStack("helper").find(
+      (entry) => entry.name === "todoListMiddleware",
+    );
+    expect(mainTodo).toBeDefined();
+    expect(generalPurposeTodo).toBeDefined();
+    expect(helperTodo).toBeDefined();
+    expect(mainTodo).not.toBe(generalPurposeTodo);
+    expect(mainTodo).not.toBe(helperTodo);
   });
 
   it("replaces declarative subagent defaults with same-name spec middleware", () => {

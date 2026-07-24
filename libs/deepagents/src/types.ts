@@ -45,14 +45,13 @@ import type { FilesystemPermission } from "./permissions/index.js";
 type AnyAnnotationRoot = AnnotationRoot<any>;
 
 /**
- * Literal union of all built-in deep agent tool names.
- * These are always present on the agent regardless of user-provided tools.
+ * Literal union of deep agent tool names that are always present regardless of
+ * user-provided tools.
  */
 type DeepAgentBuiltinToolName =
   | (typeof FILESYSTEM_TOOL_NAMES)[number]
   | (typeof ASYNC_TASK_TOOL_NAMES)[number]
-  | "task"
-  | "write_todos";
+  | "task";
 
 /**
  * A placeholder StructuredTool type with a literal `name` for each
@@ -527,8 +526,8 @@ export interface CreateDeepAgentParams<
   systemPrompt?: string | SystemMessage | SystemPromptConfig;
   /**
    * Optional schema for custom agent state. Allows you to define custom state properties
-   * beyond built-in `messages`, `todos`, and `files`. These properties can be accessed
-   * in hooks, middleware, and throughout the agent's execution.
+   * beyond built-in `messages` and `files`. The optional todo middleware adds `todos`.
+   * These properties can be accessed in hooks, middleware, and throughout the agent's execution.
    *
    * Unlike `contextSchema` the state is persisted between agent invocations when using a
    * checkpointer, making it suitable for maintaining conversation history, user preferences,
