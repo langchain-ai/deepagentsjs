@@ -11,6 +11,7 @@ import { MemorySaver, StateSchema } from "@langchain/langgraph";
 import { createFileData } from "./backends/utils.js";
 import { ConfigurationError } from "./errors.js";
 import { assertAllDeepAgentQualities } from "./testing/utils.js";
+import { registerHarnessProfile } from "./profiles/harness/index.js";
 import { z } from "zod/v4";
 
 describe("isAnthropicModel", () => {
@@ -56,6 +57,81 @@ describe("isAnthropicModel", () => {
     vi.spyOn(model, "getName").mockReturnValue("ConfigurableModel");
     (model as any)._defaultConfig = { modelProvider: "openai" };
     expect(isAnthropicModel(model)).toBe(false);
+  });
+});
+
+describe("Legacy system prompt assembly", () => {
+  function getLastSystemMessage(
+    invokeSpy: ReturnType<typeof vi.spyOn>,
+  ): SystemMessage {
+    const lastCall = invokeSpy.mock.calls[invokeSpy.mock.calls.length - 1];
+    const messages = lastCall?.[0] as BaseMessage[] | undefined;
+    const systemMessage = messages?.find(SystemMessage.isInstance);
+    if (!SystemMessage.isInstance(systemMessage)) {
+      throw new Error(
+        "Expected the model invocation to include a system message",
+      );
+    }
+    return systemMessage;
+  }
+
+  it("separates a string system prompt from the base prompt", async () => {
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+
+    try {
+      const agent = createDeepAgent({
+        model: new FakeListChatModel({ responses: ["Done"] }),
+        systemPrompt: "__custom_prompt__",
+      });
+      await agent.invoke({ messages: [new HumanMessage("Hello")] });
+
+      const prompt = getLastSystemMessage(invokeSpy).text;
+      expect(prompt).toContain("__custom_prompt__\n\nYou are a Deep Agent");
+    } finally {
+      invokeSpy.mockRestore();
+    }
+  });
+
+  it("preserves SystemMessage content blocks before the base prompt", async () => {
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    const customPrompt = new SystemMessage({
+      content: [
+        {
+          type: "text",
+          text: "__cached_custom_prompt__",
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+    });
+
+    try {
+      const agent = createDeepAgent({
+        model: new FakeListChatModel({ responses: ["Done"] }),
+        systemPrompt: customPrompt,
+      });
+      await agent.invoke({ messages: [new HumanMessage("Hello")] });
+
+      const blocks = getLastSystemMessage(invokeSpy).contentBlocks;
+      const customIndex = blocks.findIndex(
+        (block) =>
+          block.type === "text" && block.text === "__cached_custom_prompt__",
+      );
+      const separatorIndex = blocks.findIndex(
+        (block) => block.type === "text" && block.text === "\n\n",
+      );
+      const baseIndex = blocks.findIndex(
+        (block) =>
+          block.type === "text" && block.text.includes("You are a Deep Agent"),
+      );
+
+      expect(blocks[customIndex]?.cache_control).toEqual({
+        type: "ephemeral",
+      });
+      expect(customIndex).toBeLessThan(separatorIndex);
+      expect(separatorIndex).toBeLessThan(baseIndex);
+    } finally {
+      invokeSpy.mockRestore();
+    }
   });
 });
 

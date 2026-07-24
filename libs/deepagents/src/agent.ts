@@ -460,23 +460,29 @@ export function createDeepAgent<
     BASE_AGENT_PROMPT,
   );
 
+  const basePromptBlocks = effectiveBasePrompt
+    ? ([
+        { type: "text" as const, text: "\n\n" },
+        { type: "text" as const, text: effectiveBasePrompt },
+      ] as const)
+    : [];
+
   const finalSystemPrompt =
     typeof systemPrompt === "string"
       ? new SystemMessage({
           contentBlocks: [
             { type: "text", text: systemPrompt },
-            { type: "text", text: effectiveBasePrompt },
+            ...basePromptBlocks,
           ],
         })
       : SystemMessage.isInstance(systemPrompt)
         ? new SystemMessage({
-            contentBlocks: [
-              ...systemPrompt.contentBlocks,
-              { type: "text", text: effectiveBasePrompt },
-            ],
+            contentBlocks: [...systemPrompt.contentBlocks, ...basePromptBlocks],
           })
         : new SystemMessage({
-            contentBlocks: [{ type: "text", text: effectiveBasePrompt }],
+            contentBlocks: effectiveBasePrompt
+              ? [{ type: "text", text: effectiveBasePrompt }]
+              : [],
           });
 
   const agent = createAgent({

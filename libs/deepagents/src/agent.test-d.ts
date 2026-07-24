@@ -91,6 +91,10 @@ describe("createDeepAgent types", () => {
         ],
       }),
     });
+    createDeepAgent({
+      // @ts-expect-error systemPrompt does not accept structured configurations
+      systemPrompt: { base: null },
+    });
   });
 
   describe("MergedDeepAgentState helper type", () => {
