@@ -537,7 +537,7 @@ async function readFileFromBackendByRead(
   backend: BackendProtocolV2,
   filePath: string,
 ): Promise<string | null> {
-    const readResult = await backend.read(filePath);
+  const readResult = await backend.read(filePath);
   if (readResult.error) {
     return null;
   }
@@ -562,7 +562,7 @@ async function readFileFromBackend(
     }
     const response = results[0];
     if (response.error != null) {
-      if (response.error === 'not_support_downloadFiles') {
+      if (response.error === "not_support_downloadFiles") {
         return readFileFromBackendByRead(backend, filePath);
       }
       return null;

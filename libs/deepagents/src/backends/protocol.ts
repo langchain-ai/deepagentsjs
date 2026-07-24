@@ -246,7 +246,7 @@ export type FileOperationError =
   | "permission_denied"
   | "is_directory"
   | "invalid_path"
-  | 'not_support_downloadFiles';
+  | "not_support_downloadFiles";
 
 /**
  * Result of a single file download operation.

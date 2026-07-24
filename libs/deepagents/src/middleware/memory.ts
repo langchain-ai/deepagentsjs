@@ -240,7 +240,7 @@ async function loadMemoryFromBackend(
 
   // Use downloadFiles if available, otherwise fall back to read
   if (!adaptedBackend.downloadFiles) {
-    return loadMemoryFromBackendByRead(adaptedBackend, path)
+    return loadMemoryFromBackendByRead(adaptedBackend, path);
   }
 
   const results = await adaptedBackend.downloadFiles([path]);
@@ -260,8 +260,8 @@ async function loadMemoryFromBackend(
       return null;
     }
 
-    if (response.error === 'not_support_downloadFiles') {
-      return loadMemoryFromBackendByRead(adaptedBackend, path)
+    if (response.error === "not_support_downloadFiles") {
+      return loadMemoryFromBackendByRead(adaptedBackend, path);
     }
     // Other errors should be raised
     throw new Error(`Failed to download ${path}: ${response.error}`);
