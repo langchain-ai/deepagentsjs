@@ -1459,7 +1459,7 @@ describe("middleware override by name", () => {
     for (const agentName of ["main", "general-purpose"]) {
       expect(
         getMiddlewareStack(agentName).some(
-          (entry) => entry.name === "TodoListMiddleware",
+          (entry) => entry.name === "todoListMiddleware",
         ),
       ).toBe(false);
     }
@@ -1472,7 +1472,7 @@ describe("middleware override by name", () => {
     expect(getMiddlewareStack("main")).toContain(todo);
     expect(
       getMiddlewareStack("general-purpose").some(
-        (entry) => entry.name === "TodoListMiddleware",
+        (entry) => entry.name === "todoListMiddleware",
       ),
     ).toBe(false);
   });
@@ -1513,13 +1513,13 @@ describe("middleware override by name", () => {
     });
 
     const mainTodo = getMiddlewareStack("main").find(
-      (entry) => entry.name === "TodoListMiddleware",
+      (entry) => entry.name === "todoListMiddleware",
     );
     const generalPurposeTodo = getMiddlewareStack("general-purpose").find(
-      (entry) => entry.name === "TodoListMiddleware",
+      (entry) => entry.name === "todoListMiddleware",
     );
     const helperTodo = getMiddlewareStack("helper").find(
-      (entry) => entry.name === "TodoListMiddleware",
+      (entry) => entry.name === "todoListMiddleware",
     );
     expect(mainTodo).toBeDefined();
     expect(generalPurposeTodo).toBeDefined();
