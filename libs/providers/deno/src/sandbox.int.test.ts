@@ -104,10 +104,13 @@ describe
           // Deno's close() terminates the deployment, even for a
           // duration-based sandbox. Connect a second client while the
           // original remains active to verify reconnect support.
+          // Sandbox.connect() can return 404 until the deployment is visible
+          // to a second WebSocket connection. Allow Deno Deploy's eventual
+          // consistency window before treating the sandbox as unavailable.
           const reconnectedSandbox = await withRetry(
             () => DenoSandbox.fromId(sandboxId),
-            5,
-            1_000,
+            12,
+            2_000,
           );
 
           try {
