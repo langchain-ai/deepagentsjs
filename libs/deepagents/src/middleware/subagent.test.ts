@@ -139,12 +139,9 @@ describe("Subagent skills isolation", () => {
     const systemPrompts = getAllSystemPromptsFromSpy(invokeSpy);
 
     // Main agent should have skills
-    const mainAgentPrompts = systemPrompts.filter((p) =>
-      p.includes("`task` (subagent spawner)"),
-    );
-    expect(mainAgentPrompts.length).toBeGreaterThan(0);
-    expect(mainAgentPrompts[0]).toContain("Skills System");
-    expect(mainAgentPrompts[0]).toContain("test-skill");
+    const mainAgentPrompt = systemPrompts[0];
+    expect(mainAgentPrompt).toContain("Skills System");
+    expect(mainAgentPrompt).toContain("test-skill");
 
     // Custom subagent should have been invoked
     const customSubagentPrompts = systemPrompts.filter((p) =>
@@ -214,18 +211,13 @@ describe("Subagent skills isolation", () => {
     const systemPrompts = getAllSystemPromptsFromSpy(invokeSpy);
 
     // Main agent should have skills
-    const mainAgentPrompts = systemPrompts.filter(
-      (p) =>
-        p.includes("test-skill") && p.includes("`task` (subagent spawner)"),
-    );
-    expect(mainAgentPrompts.length).toBeGreaterThan(0);
-    expect(mainAgentPrompts[0]).toContain("Skills System");
+    const mainAgentPrompt = systemPrompts[0];
+    expect(mainAgentPrompt).toContain("Skills System");
 
-    // GP subagent should also have skills (no `task` tool in prompt)
-    const gpSubagentPrompts = systemPrompts.filter(
-      (p) =>
-        p.includes("test-skill") && !p.includes("`task` (subagent spawner)"),
-    );
+    // GP subagent should also have skills.
+    const gpSubagentPrompts = systemPrompts
+      .slice(1)
+      .filter((p) => p.includes("test-skill"));
     expect(gpSubagentPrompts.length).toBeGreaterThan(0);
     expect(gpSubagentPrompts[0]).toContain("Skills System");
     expect(gpSubagentPrompts[0]).toContain("test-skill");

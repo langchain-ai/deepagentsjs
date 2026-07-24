@@ -200,52 +200,6 @@ Available async agent types:
 5. The subagent runs on a remote server, so it has its own tools and capabilities.`;
 
 /**
- * Default system prompt appended to the main agent's system message when
- * async subagent middleware is active.
- *
- * Provides the agent with instructions on how to use the five async subagent
- * tools (launch, check, update, cancel, list) including workflow ordering,
- * critical rules about polling behavior, and guidance on when to use async
- * subagents vs. synchronous delegation.
- */
-export const ASYNC_TASK_SYSTEM_PROMPT = `## Async subagents (remote servers)
-
-You have access to async subagent tools that launch background tasks on remote servers.
-
-### Tools:
-- \`start_async_task\`: Start a new background task. Returns a task ID immediately.
-- \`check_async_task\`: Check the status of a running task. Returns status and result if complete.
-- \`update_async_task\`: Send an update or new instructions to a running task.
-- \`cancel_async_task\`: Cancel a running task that is no longer needed.
-- \`list_async_tasks\`: List all tracked tasks with live statuses. Use this to check all tasks at once.
-
-### Workflow:
-1. **Launch** — Use \`start_async_task\` to start a task. Report the task ID to the user and stop.
-   Do NOT immediately check the status — the task runs in the background while you and the user continue other work.
-2. **Check (on request)** — Only use \`check_async_task\` when the user explicitly asks for a status update or
-   result. If the status is "running", report that and stop — do not poll in a loop.
-3. **Update** (optional) — Use \`update_async_task\` to send new instructions to a running task. This interrupts
-   the current run and starts a fresh one on the same thread. The task_id stays the same.
-4. **Cancel** (optional) — Use \`cancel_async_task\` to stop a task that is no longer needed.
-5. **Collect** — When \`check_async_task\` returns status "success", the result is included in the response.
-6. **List** — Use \`list_async_tasks\` to see live statuses for all tasks at once, or to recall task IDs after context compaction.
-
-### Critical rules:
-- After launching, ALWAYS return control to the user immediately. Never auto-check after launching.
-- Never poll \`check_async_task\` in a loop. Check once per user request, then stop.
-- If a check returns "running", tell the user and wait for them to ask again.
-- Task statuses in conversation history are ALWAYS stale — a task that was "running" may now be done.
-  NEVER report a status from a previous tool result. ALWAYS call a tool to get the current status:
-  use \`list_async_tasks\` when the user asks about multiple tasks or "all tasks",
-  use \`check_async_task\` when the user asks about a specific task.
-- Always show the full task_id — never truncate or abbreviate it.
-
-### When to use async subagents:
-- Long-running tasks that would block the main agent
-- Tasks that benefit from running on specialized remote deployments
-- When you want to run multiple tasks concurrently and collect results later`;
-
-/**
  * Task statuses that will never change.
  *
  * When listing tasks, live-status fetches are skipped for tasks whose
@@ -609,7 +563,7 @@ export function buildCheckTool(clients: ClientCache) {
     {
       name: "check_async_task",
       description:
-        "Check the status of an async subagent task. Returns the current status and, if complete, the result.",
+        "Check the status of an async subagent task. Returns the current status and, if complete, the result. Statuses shown earlier in the conversation are always stale, so call this to get the current status rather than reporting a status from a previous tool result.",
       schema: z.object({
         taskId: z
           .string()
@@ -818,7 +772,7 @@ export function buildListTool(clients: ClientCache) {
     {
       name: "list_async_tasks",
       description:
-        "List tracked async subagent tasks with their current live statuses. Be default shows all tasks. Use `statusFilter` to narrow by status (e.g., 'running', 'success', 'error', 'cancelled'). Use `check_async_task` to get the full result of a specific completed task.",
+        "List tracked async subagent tasks with their current live statuses. By default shows all tasks. Use `statusFilter` to narrow by status (e.g., 'running', 'success', 'error', 'cancelled'). Use `check_async_task` to get the full result of a specific completed task. Statuses shown earlier in the conversation are always stale, so call this to read current statuses rather than reporting one from a previous tool result.",
       schema: z.object({
         statusFilter: z
           .string()
@@ -837,8 +791,8 @@ export function buildListTool(clients: ClientCache) {
 export interface AsyncSubAgentMiddlewareOptions {
   /** List of async subagent specifications. Must have at least one. */
   asyncSubAgents: AsyncSubAgent[];
-  /** System prompt override. Set to `null` to disable. Defaults to {@link ASYNC_TASK_SYSTEM_PROMPT}. */
-  systemPrompt?: string;
+  /** Optional system prompt override. Tool schemas provide the built-in guidance. */
+  systemPrompt?: string | null;
 }
 
 /**
@@ -882,7 +836,7 @@ export function isAsyncSubAgent(
 export function createAsyncSubAgentMiddleware(
   options: AsyncSubAgentMiddlewareOptions,
 ) {
-  const { asyncSubAgents, systemPrompt = ASYNC_TASK_SYSTEM_PROMPT } = options;
+  const { asyncSubAgents, systemPrompt = null } = options;
 
   if (!asyncSubAgents || asyncSubAgents.length === 0) {
     throw new Error("At least one async subagent must be specified");

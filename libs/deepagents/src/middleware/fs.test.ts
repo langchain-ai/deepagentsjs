@@ -421,7 +421,7 @@ describe("createFilesystemMiddleware", () => {
   });
 
   describe("wrapModelCall", () => {
-    it("should add filesystem system prompt to model call", async () => {
+    it("should not add redundant filesystem guidance by default", async () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
       });
@@ -438,11 +438,10 @@ describe("createFilesystemMiddleware", () => {
 
       expect(mockHandler).toHaveBeenCalled();
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      expect(modifiedRequest.systemMessage.text).toContain("Filesystem Tools");
-      expect(modifiedRequest.systemMessage.text).toContain("Base prompt");
+      expect(modifiedRequest.systemMessage.text).toBe("Base prompt");
     });
 
-    it("should include execute tool and execution prompt when backend supports execution", async () => {
+    it("should include execute tool without adding redundant guidance", async () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockSandboxBackend(),
       });
@@ -460,9 +459,7 @@ describe("createFilesystemMiddleware", () => {
       expect(mockHandler).toHaveBeenCalled();
       const modifiedRequest = mockHandler.mock.calls[0][0];
 
-      // Should include execution system prompt
-      expect(modifiedRequest.systemMessage.text).toContain("Execute Tool");
-      expect(modifiedRequest.systemMessage.text).toContain("Base prompt");
+      expect(modifiedRequest.systemMessage.text).toBe("Base prompt");
 
       // Should include execute tool in tools array
       const toolNames = modifiedRequest.tools.map((t: any) => t.name);
@@ -487,8 +484,7 @@ describe("createFilesystemMiddleware", () => {
       expect(mockHandler).toHaveBeenCalled();
       const modifiedRequest = mockHandler.mock.calls[0][0];
 
-      // Should NOT include execution system prompt
-      expect(modifiedRequest.systemMessage.text).not.toContain("Execute Tool");
+      expect(modifiedRequest.systemMessage.text).toBe("Base prompt");
 
       // Should NOT include execute tool in tools array
       const toolNames = modifiedRequest.tools.map((t: any) => t.name);
@@ -516,33 +512,7 @@ describe("createFilesystemMiddleware", () => {
         (tool: { name: string }) => tool.name,
       );
       expect(toolNames).toEqual(["read_file"]);
-      expect(modifiedRequest.systemMessage.text).not.toContain("Execute Tool");
-    });
-
-    it("should list only visible filesystem tools in the system prompt", async () => {
-      const middleware = createFilesystemMiddleware({
-        backend: createMockBackend(),
-        tools: ["read_file", "ls"],
-      });
-
-      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
-      const request = {
-        systemMessage: new SystemMessage("Base prompt"),
-        state: {},
-        config: {},
-        tools: middleware.tools || [],
-      };
-
-      await middleware.wrapModelCall!(request as any, mockHandler);
-
-      const modifiedRequest = mockHandler.mock.calls[0][0];
-      const prompt = modifiedRequest.systemMessage.text;
-      expect(prompt).toContain("`ls`");
-      expect(prompt).toContain("`read_file`");
-      expect(prompt).not.toContain("`write_file`");
-      expect(prompt).not.toContain("`edit_file`");
-      expect(prompt).not.toContain("`glob`");
-      expect(prompt).not.toContain("`grep`");
+      expect(modifiedRequest.systemMessage.text).toBe("Base prompt");
     });
 
     it("should not filter user-provided non-filesystem tools", async () => {
@@ -1208,6 +1178,9 @@ describe("createFilesystemMiddleware", () => {
         const required = jsonSchema.required ?? [];
 
         for (const prop of properties) {
+          if ((t as any).name === "glob" && prop === "path") {
+            continue;
+          }
           expect(
             required,
             `tool "${(t as any).name}" is missing "${prop}" in required`,
@@ -1258,30 +1231,15 @@ describe("createFilesystemMiddleware", () => {
       expect(parsedEdit.new_string).toBe("b");
     });
 
-    it("read_file examples only reference argument names in its schema", () => {
+    it("read_file guidance does not advertise unsupported call syntax", () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
       });
-
       const readFileTool = middleware.tools!.find(
         (t: any) => t.name === "read_file",
       ) as any;
-      expect(readFileTool).toBeDefined();
 
-      // Argument names the tool actually accepts.
-      const schemaKeys = Object.keys(
-        readFileTool.schema.toJSONSchema().properties ?? {},
-      );
-      // Argument names the description teaches, e.g. read_file(file_path, ...).
-      const exampleArgs = [
-        ...String(readFileTool.description).matchAll(/read_file\(([a-z_]+)/g),
-      ].map((m) => m[1]);
-
-      // Guard against silently passing if the examples are ever removed.
-      expect(exampleArgs.length).toBeGreaterThan(0);
-      for (const arg of exampleArgs) {
-        expect(schemaKeys).toContain(arg);
-      }
+      expect(readFileTool.description).not.toContain("read_file(");
     });
   });
 
