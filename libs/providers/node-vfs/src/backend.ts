@@ -905,7 +905,7 @@ export class VfsBackend implements BackendProtocolV2 {
       return { path: filePath };
     } catch (error) {
       return {
-        error: `Error deleting file '${filePath}': ${
+        error: `Error deleting '${filePath}': ${
           error instanceof Error ? error.message : String(error)
         }`,
       };
