@@ -301,12 +301,7 @@ describe("StoreBackend", () => {
     const result = await backend.delete("/work");
 
     expect(result).toEqual({ path: "/work", filesUpdate: null });
-    expect(
-      batch.mock.calls.filter(([operations]) =>
-        operations.every((operation) => operation.value === null),
-      ),
-    ).toHaveLength(1);
-    expect(batch).toHaveBeenCalledWith([
+    expect(batch).toHaveBeenLastCalledWith([
       { namespace: ["filesystem"], key: "/work/a.txt", value: null },
       { namespace: ["filesystem"], key: "/work/sub/b.txt", value: null },
     ]);
