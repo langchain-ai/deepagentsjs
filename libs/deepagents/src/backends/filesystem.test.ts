@@ -511,6 +511,22 @@ describe("FilesystemBackend", () => {
       await expect(fs.stat(path.join(tmpDir, "sub"))).rejects.toThrow();
     });
 
+    it("should clear virtual root contents without deleting the root", async () => {
+      await writeFile(path.join(tmpDir, "root.txt"), "root");
+      await writeFile(path.join(tmpDir, "nested", "child.txt"), "child");
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.delete("/");
+
+      expect(result.path).toBe("/");
+      expect(result.error).toBeUndefined();
+      await expect(fs.stat(tmpDir)).resolves.toMatchObject({});
+      await expect(fs.readdir(tmpDir)).resolves.toEqual([]);
+    });
+
     it("should only remove the target file", async () => {
       await writeFile(path.join(tmpDir, "keep.txt"), "keep");
       await writeFile(path.join(tmpDir, "drop.txt"), "drop");

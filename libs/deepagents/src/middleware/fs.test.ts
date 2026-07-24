@@ -547,6 +547,29 @@ describe("createFilesystemMiddleware", () => {
       expect(toolNames).not.toContain("write_file");
     });
 
+    it("should retain custom delete tools when the backend lacks delete support", async () => {
+      const mockBackend = createMockBackend();
+      delete (mockBackend as { delete?: unknown }).delete;
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+      const builtInDeleteTool = middleware.tools!.find(
+        (tool) => tool.name === "delete",
+      );
+      const customDeleteTool = { name: "delete" };
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: [...(middleware.tools || []), customDeleteTool],
+      };
+
+      await middleware.wrapModelCall!(request as any, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      expect(modifiedRequest.tools).not.toContain(builtInDeleteTool);
+      expect(modifiedRequest.tools).toContain(customDeleteTool);
+    });
+
     it("should use custom system prompt when provided", async () => {
       const customPrompt = "Custom filesystem instructions";
       const middleware = createFilesystemMiddleware({
