@@ -462,8 +462,10 @@ export function createDeepAgent<
 
   const basePromptBlocks = effectiveBasePrompt
     ? ([
-        { type: "text" as const, text: "\n\n" },
-        { type: "text" as const, text: effectiveBasePrompt },
+        {
+          type: "text" as const,
+          text: `\n\n${effectiveBasePrompt}`,
+        },
       ] as const)
     : [];
 

@@ -116,9 +116,6 @@ describe("Legacy system prompt assembly", () => {
         (block) =>
           block.type === "text" && block.text === "__cached_custom_prompt__",
       );
-      const separatorIndex = blocks.findIndex(
-        (block) => block.type === "text" && block.text === "\n\n",
-      );
       const baseIndex = blocks.findIndex(
         (block) =>
           block.type === "text" && block.text.includes("You are a Deep Agent"),
@@ -127,8 +124,8 @@ describe("Legacy system prompt assembly", () => {
       expect(blocks[customIndex]?.cache_control).toEqual({
         type: "ephemeral",
       });
-      expect(customIndex).toBeLessThan(separatorIndex);
-      expect(separatorIndex).toBeLessThan(baseIndex);
+      expect(customIndex).toBeLessThan(baseIndex);
+      expect(blocks[baseIndex]?.text.startsWith("\n\n")).toBe(true);
     } finally {
       invokeSpy.mockRestore();
     }
