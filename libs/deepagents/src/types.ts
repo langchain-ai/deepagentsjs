@@ -489,28 +489,6 @@ export type InferSubagentReactAgentType<
     : never;
 
 /**
- * Structured system prompt configuration for {@link createDeepAgent}.
- *
- * Prompt parts are assembled in the order `prefix` → `base` → `suffix`,
- * followed by any model-specific harness profile suffix.
- */
-export interface SystemPromptConfig {
-  /** Content placed before the base prompt. */
-  prefix?: string | SystemMessage | null;
-
-  /**
-   * Replacement for the active base prompt.
-   *
-   * Omit this field to retain the harness profile base or built-in base prompt.
-   * Set it to `null` to omit the base prompt entirely.
-   */
-  base?: string | SystemMessage | null;
-
-  /** Content placed after the base prompt and before any harness profile suffix. */
-  suffix?: string | SystemMessage | null;
-}
-
-/**
  * Configuration parameters for creating a Deep Agent
  * Matches Python's create_deep_agent parameters
  *
@@ -541,14 +519,8 @@ export interface CreateDeepAgentParams<
   model?: BaseLanguageModel | string;
   /** Tools the agent should have access to */
   tools?: TTools | StructuredTool[];
-  /**
-   * Custom system instructions for the agent.
-   *
-   * A string or {@link SystemMessage} is placed before the active base prompt.
-   * For more control, provide a {@link SystemPromptConfig} to replace or remove
-   * the base prompt and add content after it.
-   */
-  systemPrompt?: string | SystemMessage | SystemPromptConfig;
+  /** Custom system prompt for the agent. This will be combined with the base agent prompt */
+  systemPrompt?: string | SystemMessage;
   /**
    * Optional schema for custom agent state. Allows you to define custom state properties
    * beyond built-in `messages`, `todos`, and `files`. These properties can be accessed

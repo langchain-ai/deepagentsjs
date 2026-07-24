@@ -301,7 +301,9 @@ export function applyProfilePrompt(
       ? profile.baseSystemPrompt
       : basePrompt;
   if (profile.systemPromptSuffix !== undefined) {
-    return `${prompt}\n\n${profile.systemPromptSuffix}`;
+    return prompt
+      ? `${prompt}\n\n${profile.systemPromptSuffix}`
+      : profile.systemPromptSuffix;
   }
   return prompt;
 }
