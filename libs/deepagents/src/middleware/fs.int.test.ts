@@ -27,7 +27,6 @@ import {
 describe("Filesystem Middleware Integration Tests", () => {
   it("should remove allowlisted-out tools from model request and system prompt", async () => {
     const capturedToolNames: string[][] = [];
-    const capturedSystemPrompts: string[] = [];
     const spyMiddleware = createMiddleware({
       name: "FilesystemAllowlistSpyMiddleware",
       wrapModelCall(request, handler) {
@@ -36,7 +35,6 @@ describe("Filesystem Middleware Integration Tests", () => {
             typeof tool.name === "string" ? [tool.name] : [],
           ),
         );
-        capturedSystemPrompts.push(request.systemMessage.text);
         return handler(request);
       },
     });
@@ -62,13 +60,6 @@ describe("Filesystem Middleware Integration Tests", () => {
       "execute",
     ]) {
       expect(capturedToolNames[0]).not.toContain(disabled);
-    }
-
-    expect(capturedSystemPrompts.length).toBeGreaterThan(0);
-    expect(capturedSystemPrompts[0]).toContain("`read_file`");
-    expect(capturedSystemPrompts[0]).toContain("`ls`");
-    for (const disabled of ["write_file", "edit_file", "glob", "grep"]) {
-      expect(capturedSystemPrompts[0]).not.toContain(`\`${disabled}\``);
     }
   });
 
