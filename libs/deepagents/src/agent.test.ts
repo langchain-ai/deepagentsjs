@@ -125,7 +125,12 @@ describe("Legacy system prompt assembly", () => {
         type: "ephemeral",
       });
       expect(customIndex).toBeLessThan(baseIndex);
-      expect(blocks[baseIndex]?.text.startsWith("\n\n")).toBe(true);
+      expect(blocks[baseIndex]).toEqual(
+        expect.objectContaining({
+          type: "text",
+          text: expect.stringMatching(/^\n\n/),
+        }),
+      );
     } finally {
       invokeSpy.mockRestore();
     }
