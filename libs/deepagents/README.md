@@ -107,23 +107,6 @@ const agent = createDeepAgent({
 });
 ```
 
-A string is placed before the built-in Deep Agent prompt. For full control over
-prompt assembly, provide a structured configuration:
-
-```typescript
-const agent = createDeepAgent({
-  systemPrompt: {
-    prefix: "You are the support assistant for Acme.",
-    base: null, // Remove the built-in Deep Agent prompt.
-    suffix: "Follow Acme's escalation policy.",
-  },
-});
-```
-
-Structured prompts are assembled as `prefix` → `base` → `suffix`, followed by
-any model-specific harness profile suffix. Omit `base` to retain the active
-base prompt, or set it to `null` to remove the base entirely.
-
 See the [JavaScript Deep Agents docs](https://docs.langchain.com/oss/javascript/deepagents/overview) for full configuration options.
 
 ## LangGraph Native

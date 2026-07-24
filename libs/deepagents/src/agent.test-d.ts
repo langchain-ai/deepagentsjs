@@ -21,7 +21,6 @@ import {
 import { StateSchema } from "@langchain/langgraph";
 import { z } from "zod/v4";
 import { createDeepAgent } from "./agent.js";
-import type { SystemPromptConfig } from "./index.js";
 import type {
   MergedDeepAgentState,
   InferSubagentByName,
@@ -78,50 +77,19 @@ const MemoryMiddleware = createMiddleware({
 });
 
 describe("createDeepAgent types", () => {
-  it("should allow legacy and structured system prompts", () => {
+  it("should allow systemPrompt to be a string or SystemMessage", () => {
     createDeepAgent({
       systemPrompt: "Hello, world!",
     });
-    const message = new SystemMessage({
-      content: [
-        {
-          type: "text",
-          text: "Hello, world!",
-        },
-      ],
-    });
-    createDeepAgent({ systemPrompt: message });
-    createDeepAgent({ systemPrompt: {} });
     createDeepAgent({
-      systemPrompt: {
-        prefix: message,
-        base: null,
-        suffix: "Follow the policy.",
-      },
-    });
-
-    const config: SystemPromptConfig = {
-      prefix: null,
-      base: message,
-      suffix: null,
-    };
-    createDeepAgent({ systemPrompt: config });
-
-    createDeepAgent({
-      // @ts-expect-error systemPrompt does not accept numbers
-      systemPrompt: 42,
-    });
-    createDeepAgent({
-      systemPrompt: {
-        // @ts-expect-error prompt parts do not accept numbers
-        prefix: 42,
-      },
-    });
-    createDeepAgent({
-      systemPrompt: {
-        // @ts-expect-error unknown structured prompt field
-        unknownField: "value",
-      },
+      systemPrompt: new SystemMessage({
+        content: [
+          {
+            type: "text",
+            text: "Hello, world!",
+          },
+        ],
+      }),
     });
   });
 
