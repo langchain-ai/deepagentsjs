@@ -29,6 +29,7 @@ import {
 } from "./middleware/index.js";
 import { StateBackend } from "./backends/state.js";
 import { ConfigurationError } from "./errors.js";
+import type { SystemPromptConfig } from "./compat.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
 import { createToolExclusionMiddleware } from "./middleware/tool_exclusion.js";
@@ -64,6 +65,43 @@ import {
   getModelIdentifier,
   isBedrockConverseModel,
 } from "./utils.js";
+
+type SystemPromptPart = string | SystemMessage;
+
+function normalizeSystemPrompt(
+  systemPrompt: SystemPromptPart | SystemPromptConfig | undefined,
+): SystemPromptConfig {
+  if (systemPrompt === undefined) return {};
+  if (
+    typeof systemPrompt === "string" ||
+    SystemMessage.isInstance(systemPrompt)
+  ) {
+    return { prefix: systemPrompt };
+  }
+  return systemPrompt;
+}
+
+function assemblePromptParts(
+  parts: readonly (SystemPromptPart | null | undefined)[],
+): string | SystemMessage {
+  const nonEmptyParts = parts.filter(
+    (part): part is SystemPromptPart =>
+      part != null && (typeof part !== "string" || part.length > 0),
+  );
+  if (nonEmptyParts.length === 0) return "";
+  if (nonEmptyParts.every((part) => typeof part === "string")) {
+    return nonEmptyParts.join("\n\n");
+  }
+
+  const contentBlocks: SystemMessage["contentBlocks"] = [];
+  for (const [index, part] of nonEmptyParts.entries()) {
+    if (index > 0) contentBlocks.push({ type: "text", text: "\n\n" });
+    if (SystemMessage.isInstance(part))
+      contentBlocks.push(...part.contentBlocks);
+    else contentBlocks.push({ type: "text", text: part });
+  }
+  return new SystemMessage({ contentBlocks });
+}
 
 const BUILTIN_TOOL_NAMES: ReadonlySet<string> = new Set([
   ...FILESYSTEM_TOOL_NAMES,
@@ -417,35 +455,18 @@ export function createDeepAgent<
     );
   }
 
-  // Combine system prompt parameter with profile-aware base prompt.
-  const effectiveBasePrompt = applyProfilePrompt(harnessProfile, "");
-
-  const basePromptBlocks = effectiveBasePrompt
-    ? ([
-        {
-          type: "text" as const,
-          text: `\n\n${effectiveBasePrompt}`,
-        },
-      ] as const)
-    : [];
-
-  const finalSystemPrompt =
-    typeof systemPrompt === "string"
-      ? new SystemMessage({
-          contentBlocks: [
-            { type: "text", text: systemPrompt },
-            ...basePromptBlocks,
-          ],
-        })
-      : SystemMessage.isInstance(systemPrompt)
-        ? new SystemMessage({
-            contentBlocks: [...systemPrompt.contentBlocks, ...basePromptBlocks],
-          })
-        : new SystemMessage({
-            contentBlocks: effectiveBasePrompt
-              ? [{ type: "text", text: effectiveBasePrompt }]
-              : [],
-          });
+  // Compatibility assembly: prefix -> profile base -> suffix -> profile suffix.
+  const promptConfig = normalizeSystemPrompt(systemPrompt);
+  const activeBasePrompt =
+    promptConfig.base !== undefined
+      ? promptConfig.base
+      : harnessProfile.baseSystemPrompt;
+  const finalSystemPrompt = assemblePromptParts([
+    promptConfig.prefix,
+    activeBasePrompt,
+    promptConfig.suffix,
+    harnessProfile.systemPromptSuffix,
+  ]);
 
   const agent = createAgent({
     model,

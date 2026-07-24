@@ -6,7 +6,22 @@
  * middleware guidance by default. Do not use these in new code; they will be
  * removed in the next major release.
  */
-import { context } from "langchain";
+import { context, type SystemMessage } from "langchain";
+
+/**
+ * @deprecated Compatibility type for the former structured `systemPrompt` API.
+ * Existing callers may continue using it, but new code should pass a string or
+ * `SystemMessage` directly. This type and its compatibility behavior will be
+ * removed in the next major release.
+ */
+export interface SystemPromptConfig {
+  /** Content placed before the profile base prompt. */
+  prefix?: string | SystemMessage | null;
+  /** Replacement for the profile base prompt; `null` omits that base. */
+  base?: string | SystemMessage | null;
+  /** Content placed after the base prompt and before the profile suffix. */
+  suffix?: string | SystemMessage | null;
+}
 
 /**
  * @deprecated Retained for compatibility only. This prompt is not injected by

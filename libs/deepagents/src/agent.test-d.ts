@@ -21,6 +21,7 @@ import {
 import { StateSchema } from "@langchain/langgraph";
 import { z } from "zod/v4";
 import { createDeepAgent } from "./agent.js";
+import type { SystemPromptConfig } from "./index.js";
 import type {
   MergedDeepAgentState,
   InferSubagentByName,
@@ -91,10 +92,8 @@ describe("createDeepAgent types", () => {
         ],
       }),
     });
-    createDeepAgent({
-      // @ts-expect-error systemPrompt does not accept structured configurations
-      systemPrompt: { base: null },
-    });
+    const config: SystemPromptConfig = { base: null };
+    createDeepAgent({ systemPrompt: config });
   });
 
   describe("MergedDeepAgentState helper type", () => {

@@ -1,5 +1,5 @@
 ---
-"deepagents": patch
+"deepagents": minor
 ---
 
 feat(deepagents): adopt more minimal prompting

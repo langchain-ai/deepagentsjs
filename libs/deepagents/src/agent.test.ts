@@ -75,6 +75,27 @@ describe("Legacy system prompt assembly", () => {
     return systemMessage;
   }
 
+  it("supports deprecated structured system prompt configuration", async () => {
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    try {
+      const agent = createDeepAgent({
+        model: new FakeListChatModel({ responses: ["Done"] }),
+        systemPrompt: {
+          prefix: "__prefix__",
+          base: "__base__",
+          suffix: "__suffix__",
+        },
+      });
+      await agent.invoke({ messages: [new HumanMessage("Hello")] });
+
+      expect(getLastSystemMessage(invokeSpy).text.trim()).toBe(
+        "__prefix__\n\n__base__\n\n__suffix__",
+      );
+    } finally {
+      invokeSpy.mockRestore();
+    }
+  });
+
   it("does not append an authored base prompt", async () => {
     const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
 

@@ -23,6 +23,7 @@ import type {
 } from "@langchain/langgraph-checkpoint";
 
 import type { AnyBackendProtocol } from "./backends/protocol.js";
+import type { SystemPromptConfig } from "./compat.js";
 import type { AsyncSubAgent, SubAgent } from "./middleware/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type {
@@ -519,8 +520,11 @@ export interface CreateDeepAgentParams<
   model?: BaseLanguageModel | string;
   /** Tools the agent should have access to */
   tools?: TTools | StructuredTool[];
-  /** Custom system prompt for the agent. This will be combined with the base agent prompt */
-  systemPrompt?: string | SystemMessage;
+  /**
+   * Custom system instructions. Structured configuration is deprecated and
+   * retained only for source compatibility.
+   */
+  systemPrompt?: string | SystemMessage | SystemPromptConfig;
   /**
    * Optional schema for custom agent state. Allows you to define custom state properties
    * beyond built-in `messages`, `todos`, and `files`. These properties can be accessed
