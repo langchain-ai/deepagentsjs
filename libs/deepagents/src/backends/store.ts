@@ -8,7 +8,7 @@ import {
   getCurrentTaskInput,
   getStore as getLangGraphStore,
 } from "@langchain/langgraph";
-import type { BaseStore } from "@langchain/langgraph-checkpoint";
+import type { BaseStore, PutOperation } from "@langchain/langgraph-checkpoint";
 import type {
   BackendOptions,
   BackendProtocolV2,
@@ -620,17 +620,23 @@ export class StoreBackend implements BackendProtocolV2 {
       return { error: `Error: File '${filePath}' not found` };
     }
 
-    const deletableStore = store as {
-      delete?: (namespace: string[], key: string) => Promise<void> | void;
-      put: (namespace: string[], key: string, value: unknown) => Promise<void>;
-    };
+    const deleteOperations: PutOperation[] = keys.map((key) => ({
+      namespace,
+      key,
+      value: null,
+    }));
 
-    for (const key of keys) {
-      if (deletableStore.delete) {
-        await deletableStore.delete(namespace, key);
-      } else {
-        await deletableStore.put(namespace, key, null);
-      }
+    try {
+      await store.batch(deleteOperations);
+    } catch (error) {
+      const message =
+        typeof error === "object" &&
+        error !== null &&
+        "message" in error &&
+        typeof error.message === "string"
+          ? error.message
+          : String(error);
+      return { error: `Error deleting '${filePath}': ${message}` };
     }
 
     return { path: filePath, filesUpdate: null };

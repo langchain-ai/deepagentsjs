@@ -1125,7 +1125,7 @@ describe("createFilesystemMiddleware", () => {
   });
 
   describe("tools", () => {
-    it("write_file schema should accept missing content and default to empty string", () => {
+    it("write_file schema should require content", () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
       });
@@ -1139,9 +1139,11 @@ describe("createFilesystemMiddleware", () => {
       );
 
       // Parse with only file_path, no content — simulates the model omitting it
-      const parsed = writeFileTool.schema.parse({ file_path: "/app/test.c" });
-      expect(parsed.file_path).toBe("/app/test.c");
-      expect(parsed.content).toBe("");
+      const parsed = writeFileTool.schema.safeParse({
+        file_path: "/app/test.c",
+      });
+      expect(parsed.success).toBe(false);
+      // Content is required to avoid an accidental empty overwrite.
     });
 
     it("write_file tool should return success for backend overwrites", async () => {
@@ -1205,8 +1207,14 @@ describe("createFilesystemMiddleware", () => {
       expect(deleteTool).toBeDefined();
       const result = await deleteTool!.invoke({ file_path: "/doc.txt" });
 
-      expect(String(result)).toContain("deletion is not available");
-      expect(String(result)).not.toContain("backend");
+      expect((result as ToolMessage).content).toContain(
+        "deletion is not available",
+      );
+      expect((result as ToolMessage).content).not.toContain("backend");
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.status).toBe("error");
+      }
     });
 
     it("delete tool should deny recursive deletes overlapping write-deny rules", async () => {
@@ -1225,8 +1233,10 @@ describe("createFilesystemMiddleware", () => {
       const result = await deleteTool!.invoke({ file_path: "/work" });
 
       expect(mockBackend.delete).not.toHaveBeenCalled();
-      expect(String(result)).toContain("permission denied for write");
-      expect(String(result)).toContain("/work/secrets/**");
+      expect((result as ToolMessage).content).toContain(
+        "permission denied for write",
+      );
+      expect((result as ToolMessage).content).toContain("/work/secrets/**");
     });
 
     it("all tool schema properties should be included in the required array", () => {

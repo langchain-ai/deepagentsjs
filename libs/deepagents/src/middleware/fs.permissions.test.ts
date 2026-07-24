@@ -398,8 +398,8 @@ describe("fs tool permissions", () => {
         file_path: "/work",
       });
 
-      expect(String(result)).toContain("permission denied for write");
-      expect(String(result)).toContain("/work/secrets/**");
+      expect(resultText(result)).toContain("permission denied for write");
+      expect(resultText(result)).toContain("/work/secrets/**");
       expect(backend.delete).not.toHaveBeenCalled();
     });
 
@@ -454,6 +454,21 @@ describe("fs tool permissions", () => {
 
       const result = await getTool(middleware, "delete").invoke({
         file_path: "/work",
+      });
+
+      expect(resultText(result)).toContain("permission denied for write");
+      expect(backend.delete).not.toHaveBeenCalled();
+    });
+
+    it("denies deleting a nested subtree that could contain a glob match", async () => {
+      const backend = createMockBackend();
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [denyWrite(["/work/**/secrets"])],
+      });
+
+      const result = await getTool(middleware, "delete").invoke({
+        file_path: "/work/foo",
       });
 
       expect(resultText(result)).toContain("permission denied for write");
