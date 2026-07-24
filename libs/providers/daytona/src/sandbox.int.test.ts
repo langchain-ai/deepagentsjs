@@ -156,6 +156,7 @@ console.log(\`User: \${user.name}, Age: \${user.age}\`);
       DaytonaSandbox.create({
         language: "typescript",
         autoStopInterval: 5,
+        autoDeleteInterval: 15,
         labels: { ...CI_LABELS, purpose: "integration-test-typescript" },
         initialFiles: {
           "main.ts": tsCode,
