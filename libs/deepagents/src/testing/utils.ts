@@ -17,13 +17,7 @@ import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
 import type * as _tools from "@langchain/core/tools";
 
-const expectedTools = [
-  "ls",
-  "read_file",
-  "write_file",
-  "edit_file",
-  "task",
-];
+const expectedTools = ["ls", "read_file", "write_file", "edit_file", "task"];
 
 /**
  * Assert that an agent has all the expected deep agent qualities
