@@ -114,16 +114,17 @@ describe("Legacy system prompt assembly", () => {
     }
   });
 
-  it("does not inject an authored prompt by default", async () => {
+  it("does not inject a system prompt by default", async () => {
     const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
     try {
       const agent = createDeepAgent({
         model: new FakeListChatModel({ responses: ["Done"] }),
       });
       await agent.invoke({ messages: [new HumanMessage("Hello")] });
-      const systemPrompt = getLastSystemMessage(invokeSpy).text;
-      expect(systemPrompt).toContain("\u200B");
-      expect(systemPrompt.replaceAll("\u200B", "").trim()).toBe("");
+
+      const lastCall = invokeSpy.mock.calls[invokeSpy.mock.calls.length - 1];
+      const messages = lastCall?.[0] as BaseMessage[] | undefined;
+      expect(messages?.some(SystemMessage.isInstance)).toBe(false);
     } finally {
       invokeSpy.mockRestore();
     }
@@ -175,7 +176,7 @@ describe("System prompt cache control breakpoints", () => {
     return messages.find(SystemMessage.isInstance);
   }
 
-  it("should have separate cache_control breakpoints for system prompt and memory", async () => {
+  it("should cache the system prompt and memory independently", async () => {
     const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
     const model = new FakeListChatModel({ responses: ["Done"] });
     // Mock getName so isAnthropicModel detects this as an Anthropic model
@@ -207,20 +208,16 @@ describe("System prompt cache control breakpoints", () => {
     const blocks = systemMessage!.contentBlocks;
     expect(Array.isArray(blocks)).toBe(true);
 
-    // Should have at least 3 blocks: system prompt + static middleware blocks + memory
-    expect(blocks.length).toBeGreaterThanOrEqual(3);
+    // Default agents no longer add the todo middleware's static prompt block.
+    expect(blocks).toHaveLength(2);
 
-    // System prompt block (first) should NOT have cache_control — the breakpoint
-    // is placed on the last static block by createCacheBreakpointMiddleware
+    // The system prompt is now the final static block, so the cache breakpoint
+    // is attached directly to it.
     const systemBlock = blocks[0];
-    expect(systemBlock.cache_control).toBeUndefined();
+    expect(systemBlock.cache_control).toEqual({ type: "ephemeral" });
     expect(systemBlock.text).toContain("You are a helpful assistant.");
 
-    // Second-to-last block is the last static block — has cache_control
-    const lastStaticBlock = blocks[blocks.length - 2];
-    expect(lastStaticBlock.cache_control).toEqual({ type: "ephemeral" });
-
-    // Memory block (last) should have its own cache_control (set by memory middleware)
+    // Memory block (last) has its own cache control (set by memory middleware)
     const memoryBlock = blocks[blocks.length - 1];
     expect(memoryBlock.cache_control).toEqual({ type: "ephemeral" });
     expect(memoryBlock.text).toContain("<agent_memory>");
