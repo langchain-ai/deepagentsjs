@@ -170,11 +170,15 @@ describe("VfsBackend", () => {
       expect(result.error).toContain("not found");
     });
 
-    it("should reject directories", async () => {
+    it("should delete directories recursively", async () => {
       const result = await sandbox.delete("/dir");
 
-      expect(result.path).toBeUndefined();
-      expect(result.error).toContain("directory");
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe("/dir");
+      const nested = await sandbox.downloadFiles(["/dir/nested.txt"]);
+      expect(nested[0].error).toBe("file_not_found");
+      const kept = await sandbox.downloadFiles(["/keep.txt"]);
+      expect(kept[0].error).toBeNull();
     });
 
     it("should only delete the target file", async () => {
@@ -182,6 +186,35 @@ describe("VfsBackend", () => {
 
       const downloaded = await sandbox.downloadFiles(["/keep.txt"]);
       expect(downloaded[0].error).toBeNull();
+    });
+
+    it("should unlink a directory symlink without deleting its target", async () => {
+      sandbox.instance.symlinkSync(
+        `${sandbox.workingDirectory}/dir`,
+        `${sandbox.workingDirectory}/dir-link`,
+      );
+
+      const result = await sandbox.delete("/dir-link");
+
+      expect(result).toEqual({ path: "/dir-link" });
+      expect(
+        sandbox.instance.existsSync(`${sandbox.workingDirectory}/dir-link`),
+      ).toBe(false);
+      const target = await sandbox.downloadFiles(["/dir/nested.txt"]);
+      expect(target[0].error).toBeNull();
+    });
+
+    it("should unlink a dangling symlink", async () => {
+      const linkPath = `${sandbox.workingDirectory}/dangling-link`;
+      sandbox.instance.symlinkSync(
+        `${sandbox.workingDirectory}/missing-target`,
+        linkPath,
+      );
+
+      const result = await sandbox.delete("/dangling-link");
+
+      expect(result).toEqual({ path: "/dangling-link" });
+      expect(() => sandbox.instance.lstatSync(linkPath)).toThrow();
     });
   });
 

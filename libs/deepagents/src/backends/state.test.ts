@@ -157,7 +157,7 @@ describe("StateBackend", () => {
     expect(result.error).toContain("not found");
   });
 
-  it("should return an explicit error for delete in legacy mode", () => {
+  it("should return a deletion update in legacy mode", () => {
     const { state, runtime } = makeConfig();
     const backend = new StateBackend(runtime);
     const writeRes = backend.write("/drop.txt", "bye");
@@ -165,8 +165,9 @@ describe("StateBackend", () => {
 
     const result = backend.delete("/drop.txt");
 
-    expect(result.path).toBeUndefined();
-    expect(result.error).toContain("zero-argument StateBackend");
+    expect(result.path).toBe("/drop.txt");
+    expect(result.error).toBeUndefined();
+    expect(result.filesUpdate).toEqual({ "/drop.txt": null });
     expect(backend.read("/drop.txt").error).toBeUndefined();
   });
 

@@ -215,10 +215,11 @@ export function createDeepAgent<
     (toolName) => !harnessProfile.excludedTools.has(toolName),
   );
   const profileFilesystemTools: readonly FsToolName[] | undefined =
-    filesystemTools.length === FILESYSTEM_TOOL_NAMES.length ||
-    !filesystemTools.includes("read_file")
+    filesystemTools.length === FILESYSTEM_TOOL_NAMES.length
       ? undefined
-      : filesystemTools;
+      : filesystemTools.includes("read_file")
+        ? filesystemTools
+        : ["read_file", ...filesystemTools];
 
   const toolOverrides = harnessProfile.toolDescriptionOverrides;
   const effectiveTools: StructuredTool[] =

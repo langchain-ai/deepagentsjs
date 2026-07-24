@@ -35,6 +35,12 @@ import {
 } from "./utils.js";
 import { getConfig } from "@langchain/langgraph";
 
+function trimTrailingSlashes(path: string): string {
+  let end = path.length;
+  while (end > 1 && path[end - 1] === "/") end--;
+  return path.slice(0, end);
+}
+
 const PREGEL_SEND_KEY = "__pregel_send";
 const PREGEL_READ_KEY = "__pregel_read";
 
@@ -278,6 +284,35 @@ export class StateBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Delete a file or directory from state.
+   *
+   * Removes the exact file path plus every nested key under it.
+   */
+  delete(filePath: string): DeleteResult {
+    const files = this.files;
+    const base = trimTrailingSlashes(filePath) || "/";
+    const prefix = base === "/" ? "/" : `${base}/`;
+    const paths = Object.keys(files).filter(
+      (path) => path === base || path.startsWith(prefix),
+    );
+
+    if (paths.length === 0) {
+      return { error: `Error: File '${filePath}' not found` };
+    }
+
+    const update: Record<string, null> = Object.fromEntries(
+      paths.map((path) => [path, null]),
+    );
+
+    if (!this.isLegacy) {
+      this.sendFilesUpdate(update);
+      return { path: filePath };
+    }
+
+    return { path: filePath, filesUpdate: update };
+  }
+
+  /**
    * Edit a file by replacing string occurrences.
    * Returns EditResult with filesUpdate and occurrences.
    */
@@ -320,27 +355,6 @@ export class StateBackend implements BackendProtocolV2 {
       filesUpdate: { [filePath]: newFileData },
       occurrences: occurrences,
     };
-  }
-
-  /**
-   * Delete a file from state by sending a null deletion marker through Pregel.
-   */
-  delete(filePath: string): DeleteResult {
-    const files = this.files;
-
-    if (!(filePath in files)) {
-      return { error: `Error: File '${filePath}' not found` };
-    }
-
-    if (this.isLegacy) {
-      return {
-        error:
-          "StateBackend.delete requires a zero-argument StateBackend in a LangGraph execution context.",
-      };
-    }
-
-    this.sendFilesUpdate({ [filePath]: null });
-    return { path: filePath };
   }
 
   /**

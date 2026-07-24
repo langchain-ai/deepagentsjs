@@ -12,6 +12,9 @@ function createMockBackend(): BackendProtocolV2 {
     edit: vi
       .fn()
       .mockResolvedValue({ error: null, occurrences: 1, filesUpdate: null }),
+    delete: vi
+      .fn()
+      .mockResolvedValue({ path: "/deleted.txt", filesUpdate: null }),
     glob: vi.fn().mockResolvedValue({ files: [] }),
     grep: vi.fn().mockResolvedValue({ matches: [] }),
   } as unknown as BackendProtocolV2;
@@ -380,6 +383,96 @@ describe("fs tool permissions", () => {
 
       const result = await getTool(middleware, "ls").invoke({ path: "/" });
       expect(result).toMatch(/no files found/i);
+    });
+  });
+
+  describe("delete", () => {
+    it("returns an error and does not call backend when recursive target overlaps denied path", async () => {
+      const backend = createMockBackend();
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [denyWrite(["/work/secrets/**"])],
+      });
+
+      const result = await getTool(middleware, "delete").invoke({
+        file_path: "/work",
+      });
+
+      expect(resultText(result)).toContain("permission denied for write");
+      expect(resultText(result)).toContain("/work/secrets/**");
+      expect(backend.delete).not.toHaveBeenCalled();
+    });
+
+    it("succeeds on an allowed path", async () => {
+      const backend = createMockBackend();
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [denyWrite(["/readonly/**"])],
+      });
+
+      await getTool(middleware, "delete").invoke({
+        file_path: "/workspace/tmp",
+      });
+      expect(backend.delete).toHaveBeenCalledWith("/workspace/tmp");
+    });
+
+    it("allows deleting a sibling that cannot match a wildcard deny rule", async () => {
+      const backend = createMockBackend();
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [denyWrite(["/work/*.log"])],
+      });
+
+      await getTool(middleware, "delete").invoke({
+        file_path: "/work/notes.txt",
+      });
+
+      expect(backend.delete).toHaveBeenCalledWith("/work/notes.txt");
+    });
+
+    it("denies deleting a path that matches a wildcard deny rule", async () => {
+      const backend = createMockBackend();
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [denyWrite(["/work/*.log"])],
+      });
+
+      const result = await getTool(middleware, "delete").invoke({
+        file_path: "/work/error.log",
+      });
+
+      expect(resultText(result)).toContain("permission denied for write");
+      expect(backend.delete).not.toHaveBeenCalled();
+    });
+
+    it("denies deleting a parent that could recursively remove wildcard matches", async () => {
+      const backend = createMockBackend();
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [denyWrite(["/work/*.log"])],
+      });
+
+      const result = await getTool(middleware, "delete").invoke({
+        file_path: "/work",
+      });
+
+      expect(resultText(result)).toContain("permission denied for write");
+      expect(backend.delete).not.toHaveBeenCalled();
+    });
+
+    it("denies deleting a nested subtree that could contain a glob match", async () => {
+      const backend = createMockBackend();
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [denyWrite(["/work/**/secrets"])],
+      });
+
+      const result = await getTool(middleware, "delete").invoke({
+        file_path: "/work/foo",
+      });
+
+      expect(resultText(result)).toContain("permission denied for write");
+      expect(backend.delete).not.toHaveBeenCalled();
     });
   });
 

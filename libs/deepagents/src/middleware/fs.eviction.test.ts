@@ -28,6 +28,7 @@ describe("TOOLS_EXCLUDED_FROM_EVICTION", () => {
     expect(TOOLS_EXCLUDED_FROM_EVICTION).toContain("read_file");
     expect(TOOLS_EXCLUDED_FROM_EVICTION).toContain("edit_file");
     expect(TOOLS_EXCLUDED_FROM_EVICTION).toContain("write_file");
+    expect(TOOLS_EXCLUDED_FROM_EVICTION).toContain("delete");
   });
 
   it("should not contain execute tool", () => {
@@ -37,7 +38,7 @@ describe("TOOLS_EXCLUDED_FROM_EVICTION", () => {
   it("should be a readonly array", () => {
     // This is a type-level check, but we can verify it's an array
     expect(Array.isArray(TOOLS_EXCLUDED_FROM_EVICTION)).toBe(true);
-    expect(TOOLS_EXCLUDED_FROM_EVICTION.length).toBe(6);
+    expect(TOOLS_EXCLUDED_FROM_EVICTION.length).toBe(7);
   });
 });
 

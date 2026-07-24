@@ -343,6 +343,9 @@ describe("createFilesystemMiddleware", () => {
         occurrences: 1,
         filesUpdate: null,
       }),
+      delete: vi
+        .fn()
+        .mockResolvedValue({ path: "/deleted.txt", filesUpdate: null }),
       glob: vi.fn().mockResolvedValue({ files: [] }),
       grep: vi.fn().mockResolvedValue({ matches: [] }),
     } as unknown as BackendProtocolV2;
@@ -378,6 +381,7 @@ describe("createFilesystemMiddleware", () => {
         "read_file",
         "write_file",
         "edit_file",
+        "delete",
         "glob",
         "grep",
         "execute",
@@ -395,6 +399,7 @@ describe("createFilesystemMiddleware", () => {
         "read_file",
         "write_file",
         "edit_file",
+        "delete",
         "glob",
         "grep",
         "execute",
@@ -540,6 +545,29 @@ describe("createFilesystemMiddleware", () => {
       expect(toolNames).toContain("read_file");
       expect(toolNames).toContain("ls");
       expect(toolNames).not.toContain("write_file");
+    });
+
+    it("should retain custom delete tools when the backend lacks delete support", async () => {
+      const mockBackend = createMockBackend();
+      delete (mockBackend as { delete?: unknown }).delete;
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+      const builtInDeleteTool = middleware.tools!.find(
+        (tool) => tool.name === "delete",
+      );
+      const customDeleteTool = { name: "delete" };
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: [...(middleware.tools || []), customDeleteTool],
+      };
+
+      await middleware.wrapModelCall!(request as any, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      expect(modifiedRequest.tools).not.toContain(builtInDeleteTool);
+      expect(modifiedRequest.tools).toContain(customDeleteTool);
     });
 
     it("should use custom system prompt when provided", async () => {
@@ -1120,7 +1148,7 @@ describe("createFilesystemMiddleware", () => {
   });
 
   describe("tools", () => {
-    it("write_file schema should accept missing content and default to empty string", () => {
+    it("write_file schema should require content", () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
       });
@@ -1134,9 +1162,11 @@ describe("createFilesystemMiddleware", () => {
       );
 
       // Parse with only file_path, no content — simulates the model omitting it
-      const parsed = writeFileTool.schema.parse({ file_path: "/app/test.c" });
-      expect(parsed.file_path).toBe("/app/test.c");
-      expect(parsed.content).toBe("");
+      const parsed = writeFileTool.schema.safeParse({
+        file_path: "/app/test.c",
+      });
+      expect(parsed.success).toBe(false);
+      // Content is required to avoid an accidental empty overwrite.
     });
 
     it("write_file tool should return success for backend overwrites", async () => {
@@ -1165,6 +1195,71 @@ describe("createFilesystemMiddleware", () => {
         expect(result.content).toContain("Successfully wrote");
         expect(result.content).not.toContain("already exists");
       }
+    });
+
+    it("delete tool should delete through backend", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.delete = vi.fn().mockResolvedValue({
+        path: "/doc.txt",
+        filesUpdate: null,
+      });
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const deleteTool = middleware.tools!.find(
+        (tool) => tool.name === "delete",
+      );
+      expect(deleteTool).toBeDefined();
+      const result = await deleteTool!.invoke({ file_path: "/doc.txt" });
+
+      expect(mockBackend.delete).toHaveBeenCalledWith("/doc.txt");
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.name).toBe("delete");
+        expect(result.content).toContain("Deleted /doc.txt");
+      }
+    });
+
+    it("delete tool should use an implementation-agnostic unsupported error", async () => {
+      const mockBackend = createMockBackend();
+      delete (mockBackend as { delete?: unknown }).delete;
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const deleteTool = middleware.tools!.find(
+        (tool) => tool.name === "delete",
+      );
+      expect(deleteTool).toBeDefined();
+      const result = await deleteTool!.invoke({ file_path: "/doc.txt" });
+
+      expect((result as ToolMessage).content).toContain(
+        "deletion is not available",
+      );
+      expect((result as ToolMessage).content).not.toContain("backend");
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.status).toBe("error");
+      }
+    });
+
+    it("delete tool should deny recursive deletes overlapping write-deny rules", async () => {
+      const mockBackend = createMockBackend();
+      const middleware = createFilesystemMiddleware({
+        backend: mockBackend,
+        permissions: [
+          { operations: ["write"], paths: ["/work/secrets/**"], mode: "deny" },
+        ],
+      });
+
+      const deleteTool = middleware.tools!.find(
+        (tool) => tool.name === "delete",
+      );
+      expect(deleteTool).toBeDefined();
+      const result = await deleteTool!.invoke({ file_path: "/work" });
+
+      expect(mockBackend.delete).not.toHaveBeenCalled();
+      expect((result as ToolMessage).content).toContain(
+        "permission denied for write",
+      );
+      expect((result as ToolMessage).content).toContain("/work/secrets/**");
     });
 
     it("all tool schema properties should be included in the required array", () => {

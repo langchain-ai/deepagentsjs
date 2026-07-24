@@ -27,6 +27,12 @@ const URL_COMMIT_SUFFIX_RE = /:([0-9a-f]{8,64})$/i;
 const TEXT_MIME_TYPE = "text/plain";
 const FNMATCH_OPTIONS = { bash: true };
 
+function trimTrailingSlashes(path: string): string {
+  let end = path.length;
+  while (end > 1 && path[end - 1] === "/") end--;
+  return path.slice(0, end);
+}
+
 function getErrorMessage(error: unknown): string {
   if (typeof error === "string") {
     return error;
@@ -255,7 +261,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
   }
 
   async ls(path: string = "/"): Promise<LsResult> {
-    const hubPrefix = ContextHubBackend.stripPrefix(path).replace(/\/+$/, "");
+    const hubPrefix = trimTrailingSlashes(ContextHubBackend.stripPrefix(path));
 
     let cache: Record<string, string>;
     try {
@@ -362,7 +368,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
     }
 
     const prefix = path
-      ? ContextHubBackend.stripPrefix(path).replace(/\/+$/, "")
+      ? trimTrailingSlashes(ContextHubBackend.stripPrefix(path))
       : "";
 
     const matches: GrepMatch[] = [];
@@ -427,6 +433,32 @@ export class ContextHubBackend implements BackendProtocolV2 {
     return { path: filePath, filesUpdate: null };
   }
 
+  async delete(filePath: string): Promise<DeleteResult> {
+    const hubPath = ContextHubBackend.stripPrefix(filePath);
+
+    try {
+      const cache = await this.ensureCache();
+      const base = trimTrailingSlashes(hubPath);
+      const prefix = base ? `${base}/` : "";
+      const paths = Object.keys(cache).filter(
+        (path) => base === "" || path === base || path.startsWith(prefix),
+      );
+
+      if (paths.length === 0) {
+        return { error: `Error: File '${filePath}' not found` };
+      }
+
+      await this.commit(Object.fromEntries(paths.map((path) => [path, null])));
+      return { path: filePath, filesUpdate: null };
+    } catch (error) {
+      if (isLangSmithError(error)) {
+        this.cache = null;
+        return { error: ContextHubBackend.toHubUnavailableError(error) };
+      }
+      throw error;
+    }
+  }
+
   async edit(
     filePath: string,
     oldString: string,
@@ -459,26 +491,6 @@ export class ContextHubBackend implements BackendProtocolV2 {
         filesUpdate: null,
         occurrences,
       };
-    } catch (error) {
-      if (isLangSmithError(error)) {
-        this.cache = null;
-        return { error: ContextHubBackend.toHubUnavailableError(error) };
-      }
-      throw error;
-    }
-  }
-
-  async delete(filePath: string): Promise<DeleteResult> {
-    const hubPath = ContextHubBackend.stripPrefix(filePath);
-
-    try {
-      const cache = await this.ensureCache();
-      if (!(hubPath in cache)) {
-        return { error: `Error: File '${filePath}' not found` };
-      }
-
-      await this.commit({ [hubPath]: null });
-      return { path: filePath };
     } catch (error) {
       if (isLangSmithError(error)) {
         this.cache = null;

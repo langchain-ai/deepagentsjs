@@ -95,7 +95,7 @@ export class CompositeBackend implements BackendProtocolV2 {
   private getBackendAndKey(key: string): [BackendProtocolV2, string] {
     // Check routes in order of length (longest first)
     for (const [prefix, backend] of this.sortedRoutes) {
-      if (key.startsWith(prefix)) {
+      if (key === prefix.slice(0, -1) || key.startsWith(prefix)) {
         // Strip full prefix and ensure a leading slash remains
         // e.g., "/memories/notes.txt" → "/notes.txt"; "/memories/" → "/"
         const suffix = key.substring(prefix.length);
@@ -355,6 +355,151 @@ export class CompositeBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Add a route prefix back to state deletion updates.
+   */
+  private prefixDeleteFilesUpdate(
+    filesUpdate: Record<string, null>,
+    routePrefix: string,
+  ): Record<string, null> {
+    const routeRoot = routePrefix.slice(0, -1);
+    return Object.fromEntries(
+      Object.keys(filesUpdate).map((path) => [routeRoot + path, null]),
+    );
+  }
+
+  /**
+   * Restore composite paths in a deletion result from a single backend.
+   */
+  private restoreDeleteResult(
+    result: DeleteResult,
+    filePath: string,
+    routePrefix?: string,
+  ): DeleteResult {
+    const restored = { ...result };
+    if (result.path !== undefined) {
+      restored.path = filePath;
+    }
+    if (routePrefix && result.filesUpdate) {
+      restored.filesUpdate = this.prefixDeleteFilesUpdate(
+        result.filesUpdate,
+        routePrefix,
+      );
+    }
+    return restored;
+  }
+
+  /**
+   * Delete a file or directory, routing to appropriate backend.
+   *
+   * Parent and root deletions run sequentially across the base backend and any
+   * mounted routes below the requested path. A failure stops the fan-out so
+   * later backends are left untouched, but earlier deletions cannot be rolled
+   * back and are reported as potentially partial.
+   *
+   * @param filePath - Absolute file path
+   * @returns DeleteResult with path or error
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    const [baseBackend, baseKey] = this.getBackendAndKey(filePath);
+    const baseRoute = this.sortedRoutes.find(([routePrefix]) =>
+      this.isPathWithinRoute(filePath, routePrefix),
+    )?.[0];
+    const targets: Array<{
+      backend: BackendProtocolV2;
+      key: string;
+      routePrefix?: string;
+    }> = [{ backend: baseBackend, key: baseKey, routePrefix: baseRoute }];
+
+    for (const [routePrefix, backend] of this.sortedRoutes) {
+      if (
+        routePrefix !== baseRoute &&
+        this.isRouteUnderPath(routePrefix, filePath)
+      ) {
+        targets.push({ backend, key: "/", routePrefix });
+      }
+    }
+
+    for (const target of targets) {
+      if (!target.backend.delete) {
+        const location = target.routePrefix
+          ? `mounted route '${target.routePrefix}'`
+          : "default backend";
+        return {
+          error: `Error: deletion is not available for '${filePath}' on ${location}.`,
+        };
+      }
+    }
+
+    if (targets.length === 1) {
+      const target = targets[0];
+      const result = await target.backend.delete!(target.key);
+      return this.restoreDeleteResult(result, filePath, target.routePrefix);
+    }
+
+    const filesUpdate: Record<string, null> = {};
+    let hasFilesUpdate = false;
+    let hasNullFilesUpdate = false;
+    let completed = 0;
+    let firstNotFound: DeleteResult | undefined;
+
+    for (const target of targets) {
+      let result: DeleteResult;
+      try {
+        result = await target.backend.delete!(target.key);
+      } catch (error) {
+        const message =
+          typeof error === "object" &&
+          error !== null &&
+          "message" in error &&
+          typeof error.message === "string"
+            ? error.message
+            : String(error);
+        return {
+          error: `Error deleting '${filePath}': ${message}. Deletion may be partial; ${completed} earlier backend(s) completed and remaining backends were not attempted.`,
+        };
+      }
+
+      if (result.error) {
+        if (/not found/i.test(result.error)) {
+          firstNotFound ??= result;
+          continue;
+        }
+        return {
+          error: `Error deleting '${filePath}': ${result.error}. Deletion may be partial; ${completed} earlier backend(s) completed and remaining backends were not attempted.`,
+        };
+      }
+
+      completed += 1;
+      if (result.filesUpdate === null) {
+        hasNullFilesUpdate = true;
+      } else if (result.filesUpdate) {
+        hasFilesUpdate = true;
+        Object.assign(
+          filesUpdate,
+          target.routePrefix
+            ? this.prefixDeleteFilesUpdate(
+                result.filesUpdate,
+                target.routePrefix,
+              )
+            : result.filesUpdate,
+        );
+      }
+    }
+
+    if (completed === 0) {
+      return firstNotFound ?? { error: `Error: File '${filePath}' not found` };
+    }
+
+    if (hasFilesUpdate) {
+      return { path: filePath, filesUpdate };
+    }
+    if (hasNullFilesUpdate) {
+      return { path: filePath, filesUpdate: null };
+    }
+    return { path: filePath };
+  }
+
+  /**
    * Edit a file, routing to appropriate backend.
    *
    * @param filePath - Absolute file path
@@ -371,22 +516,6 @@ export class CompositeBackend implements BackendProtocolV2 {
   ): Promise<EditResult> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
     return await backend.edit(strippedKey, oldString, newString, replaceAll);
-  }
-
-  /**
-   * Delete a file, routing to the appropriate backend.
-   */
-  async delete(filePath: string): Promise<DeleteResult> {
-    const [backend, strippedKey] = this.getBackendAndKey(filePath);
-    if (!backend.delete) {
-      return { error: "Backend does not support delete" };
-    }
-
-    const result = await backend.delete(strippedKey);
-    if (result.path !== undefined) {
-      return { ...result, path: filePath };
-    }
-    return result;
   }
 
   /**

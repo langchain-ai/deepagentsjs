@@ -886,27 +886,43 @@ export class VfsBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Delete a file.
+   * Delete a file or directory recursively.
    */
   async delete(filePath: string): Promise<DeleteResult> {
     this.#ensureInitialized();
 
     const resolvedPath = this.#resolvePath(filePath);
-    if (!resolvedPath || !this.instance.existsSync(resolvedPath)) {
+    if (!resolvedPath) {
       return { error: `Error: File '${filePath}' not found` };
     }
 
     try {
-      const stat = this.instance.statSync(resolvedPath);
-      if (!stat.isFile()) {
-        return { error: `Error: '${filePath}' is a directory, not a file` };
+      const stat = this.instance.lstatSync(resolvedPath);
+      if (stat.isDirectory()) {
+        const removeDirectory = (directoryPath: string): void => {
+          for (const entry of this.instance.readdirSync(directoryPath)) {
+            const childPath = path.posix.join(directoryPath, entry);
+            const childStat = this.instance.lstatSync(childPath);
+            if (childStat.isDirectory()) {
+              removeDirectory(childPath);
+            } else {
+              this.instance.unlinkSync(childPath);
+            }
+          }
+          this.instance.rmdirSync(directoryPath);
+        };
+        removeDirectory(resolvedPath);
+        return { path: filePath };
       }
 
       this.instance.unlinkSync(resolvedPath);
       return { path: filePath };
     } catch (error) {
+      if (this.#mapError(error) === "file_not_found") {
+        return { error: `Error: File '${filePath}' not found` };
+      }
       return {
-        error: `Error deleting file '${filePath}': ${
+        error: `Error deleting '${filePath}': ${
           error instanceof Error ? error.message : String(error)
         }`,
       };
