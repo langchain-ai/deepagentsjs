@@ -3,7 +3,6 @@ import {
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
   bedrockPromptCachingMiddleware,
-  todoListMiddleware,
   SystemMessage,
   type AgentMiddleware,
 } from "langchain";
@@ -107,7 +106,6 @@ const BUILTIN_TOOL_NAMES: ReadonlySet<string> = new Set([
   ...FILESYSTEM_TOOL_NAMES,
   ...ASYNC_TASK_TOOL_NAMES,
   "task",
-  "write_todos",
 ]);
 
 /**
@@ -270,8 +268,6 @@ export function createDeepAgent<
     // Uses createSummarizationMiddleware (deepagents version) with backend support
     // and auto-computed defaults from model profile.
     return [
-      // Provides todo list management capabilities for tracking tasks.
-      todoListMiddleware({ systemPrompt: "\u200B" }),
       // Enables filesystem operations and optional long-term memory storage.
       createFilesystemMiddleware({
         backend,
@@ -296,7 +292,11 @@ export function createDeepAgent<
     let subagentMiddleware = mergeMiddlewareStack(
       subagentDefaultMiddleware,
       input.middleware ?? [],
-      cacheMiddleware,
+      [
+        // Resolve profile middleware per stack so factories create fresh instances.
+        ...resolveMiddleware(harnessProfile.extraMiddleware),
+        ...cacheMiddleware,
+      ],
     );
 
     if (harnessProfile.excludedMiddleware.size > 0) {
@@ -369,8 +369,6 @@ export function createDeepAgent<
   // This tuple is typed without conditional spreads to preserve tuple inference.
   // Optional middleware (skills, memory, HITL, async) are appended at runtime.
   const builtInMiddleware = [
-    // Provides todo list management capabilities for tracking tasks.
-    todoListMiddleware({ systemPrompt: "\u200B" }),
     // Enables filesystem operations and optional long-term memory storage.
     createFilesystemMiddleware({
       backend,
@@ -394,7 +392,6 @@ export function createDeepAgent<
   ] as const;
 
   const [
-    todoMiddleware,
     fsMiddleware,
     subagentMiddleware,
     summarizationMiddleware,
@@ -403,8 +400,6 @@ export function createDeepAgent<
 
   // Runtime middleware array: combine core middleware, custom overrides, and tail middleware.
   const coreMiddleware: AgentMiddleware[] = [
-    // Built-in middleware with deterministic ordering.
-    todoMiddleware,
     // Optional root-level skills.
     ...skillsMiddleware,
     fsMiddleware,

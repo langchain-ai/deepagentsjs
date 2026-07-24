@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { createDeepAgent } from "./agent.js";
 import { isAnthropicModel } from "./utils.js";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
+import { todoListMiddleware } from "langchain";
 import {
   HumanMessage,
   SystemMessage,
@@ -241,6 +242,32 @@ describe("profile tool exclusions", () => {
   });
 });
 
+describe("Todo list middleware", () => {
+  function getToolNames(agent: unknown): string[] {
+    const tools = (agent as any).graph?.nodes?.tools?.bound?.tools ?? [];
+    return tools.map((tool: { name: string }) => tool.name);
+  }
+
+  it("does not include todos by default", () => {
+    const agent = createDeepAgent({
+      model: new FakeListChatModel({ responses: ["Done"] }),
+    });
+
+    expect(getToolNames(agent)).not.toContain("write_todos");
+    expect(Object.keys(agent.graph?.channels ?? {})).not.toContain("todos");
+  });
+
+  it("adds todos when explicitly opted in", () => {
+    const agent = createDeepAgent({
+      model: new FakeListChatModel({ responses: ["Done"] }),
+      middleware: [todoListMiddleware()],
+    });
+
+    expect(getToolNames(agent)).toContain("write_todos");
+    expect(Object.keys(agent.graph?.channels ?? {})).toContain("todos");
+  });
+});
+
 describe("Built-in tool name collision detection", () => {
   const model = new FakeListChatModel({ responses: ["Done"] });
 
@@ -274,13 +301,19 @@ describe("Built-in tool name collision detection", () => {
     ).toThrow(ConfigurationError);
   });
 
-  it("should throw when colliding with subagent or todo tool names", () => {
+  it("should throw when colliding with the subagent tool name", () => {
     expect(() =>
       createDeepAgent({
         model,
-        tools: [makeTool("task"), makeTool("write_todos")],
+        tools: [makeTool("task")],
       }),
     ).toThrow(ConfigurationError);
+  });
+
+  it("allows a custom write_todos tool without todo middleware", () => {
+    expect(() =>
+      createDeepAgent({ model, tools: [makeTool("write_todos")] }),
+    ).not.toThrow();
   });
 
   it("should not throw when tool names do not collide", () => {
