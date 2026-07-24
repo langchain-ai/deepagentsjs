@@ -1490,6 +1490,59 @@ Content
     expect(result?.description).toBe("A test skill");
   });
 
+  it("should parse quoted frontmatter with CRLF line endings", () => {
+    const content = [
+      "---",
+      "name: test-skill",
+      'description: "A quoted test skill"',
+      "---",
+      "",
+      "Content",
+    ].join("\r\n");
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+
+    expect(result?.description).toBe("A quoted test skill");
+  });
+
+  it("should parse quoted frontmatter with CR line endings", () => {
+    const content = [
+      "---",
+      "name: test-skill",
+      "description: 'A quoted test skill'",
+      "---",
+      "",
+      "Content",
+    ].join("\r");
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+
+    expect(result?.description).toBe("A quoted test skill");
+  });
+
+  it("should parse frontmatter after a UTF-8 BOM", () => {
+    const content = `\uFEFF---
+name: test-skill
+description: "A quoted test skill"
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+
+    expect(result?.description).toBe("A quoted test skill");
+  });
+
   it("should reject whitespace-only description", () => {
     const content = `---
 name: test-skill
