@@ -17,6 +17,7 @@ import type { Stats } from "node:fs";
 
 import {
   type BackendProtocolV2,
+  type DeleteResult,
   type EditResult,
   type FileDownloadResponse,
   type FileOperationError,
@@ -885,7 +886,7 @@ export class VfsBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Delete a file.
+   * Delete a file or directory recursively.
    */
   async delete(filePath: string): Promise<DeleteResult> {
     this.#ensureInitialized();
@@ -898,7 +899,20 @@ export class VfsBackend implements BackendProtocolV2 {
     try {
       const stat = this.instance.statSync(resolvedPath);
       if (!stat.isFile()) {
-        return { error: `Error: '${filePath}' is a directory, not a file` };
+        const removeDirectory = (directoryPath: string): void => {
+          for (const entry of this.instance.readdirSync(directoryPath)) {
+            const childPath = path.posix.join(directoryPath, entry);
+            const childStat = this.instance.statSync(childPath);
+            if (childStat.isDirectory()) {
+              removeDirectory(childPath);
+            } else {
+              this.instance.unlinkSync(childPath);
+            }
+          }
+          this.instance.rmdirSync(directoryPath);
+        };
+        removeDirectory(resolvedPath);
+        return { path: filePath };
       }
 
       this.instance.unlinkSync(resolvedPath);
