@@ -32,11 +32,7 @@ const CI_LABELS: Record<string, string> = {
   run: TEST_RUN_ID,
 };
 
-/** Remove any sandboxes left behind earlier in this test execution. */
-beforeAll(async () => {
-  await DaytonaSandbox.deleteAll(CI_LABELS);
-}, TEST_TIMEOUT);
-
+/** Remove any sandboxes left behind by this test execution. */
 afterAll(async () => {
   await DaytonaSandbox.deleteAll(CI_LABELS);
 }, TEST_TIMEOUT);
@@ -47,7 +43,10 @@ sandboxStandardTests({
   createSandbox: async (options) =>
     DaytonaSandbox.create({
       language: "typescript",
+      // A cancelled test process never reaches afterAll; delete its stopped
+      // sandboxes within 20 minutes (5-minute auto-stop + 15-minute TTL).
       autoStopInterval: 5,
+      autoDeleteInterval: 15,
       labels: CI_LABELS,
       ...options,
     }),
@@ -63,6 +62,7 @@ describe("DaytonaSandbox Provider-Specific Tests", () => {
       DaytonaSandbox.create({
         language: "typescript",
         autoStopInterval: 5,
+        autoDeleteInterval: 15,
         labels: CI_LABELS,
       }),
     );
