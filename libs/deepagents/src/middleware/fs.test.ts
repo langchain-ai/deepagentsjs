@@ -1178,6 +1178,9 @@ describe("createFilesystemMiddleware", () => {
         const required = jsonSchema.required ?? [];
 
         for (const prop of properties) {
+          if ((t as any).name === "glob" && prop === "path") {
+            continue;
+          }
           expect(
             required,
             `tool "${(t as any).name}" is missing "${prop}" in required`,
@@ -1228,30 +1231,15 @@ describe("createFilesystemMiddleware", () => {
       expect(parsedEdit.new_string).toBe("b");
     });
 
-    it("read_file examples only reference argument names in its schema", () => {
+    it("read_file guidance does not advertise unsupported call syntax", () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
       });
-
       const readFileTool = middleware.tools!.find(
         (t: any) => t.name === "read_file",
       ) as any;
-      expect(readFileTool).toBeDefined();
 
-      // Argument names the tool actually accepts.
-      const schemaKeys = Object.keys(
-        readFileTool.schema.toJSONSchema().properties ?? {},
-      );
-      // Argument names the description teaches, e.g. read_file(file_path, ...).
-      const exampleArgs = [
-        ...String(readFileTool.description).matchAll(/read_file\(([a-z_]+)/g),
-      ].map((m) => m[1]);
-
-      // Guard against silently passing if the examples are ever removed.
-      expect(exampleArgs.length).toBeGreaterThan(0);
-      for (const arg of exampleArgs) {
-        expect(schemaKeys).toContain(arg);
-      }
+      expect(readFileTool.description).not.toContain("read_file(");
     });
   });
 

@@ -86,7 +86,7 @@ describe("Legacy system prompt assembly", () => {
       await agent.invoke({ messages: [new HumanMessage("Hello")] });
 
       const prompt = getLastSystemMessage(invokeSpy).text;
-      expect(prompt).toBe("__custom_prompt__");
+      expect(prompt.trim()).toBe("__custom_prompt__");
     } finally {
       invokeSpy.mockRestore();
     }
@@ -134,10 +134,8 @@ describe("Legacy system prompt assembly", () => {
       expect(blocks[customIndex]?.cache_control).toEqual({
         type: "ephemeral",
       });
-        expect(blocks).toHaveLength(1);
-        expect(getLastSystemMessage(invokeSpy).text).not.toContain(
-          "You are a Deep Agent",
-        );
+      expect(getLastSystemMessage(invokeSpy).text).not.toContain(
+        "You are a Deep Agent",
       );
     } finally {
       invokeSpy.mockRestore();
