@@ -288,6 +288,35 @@ describe("StoreBackend", () => {
     expect(readRes.content).toBe("");
   });
 
+  it("should delete a subtree in one batch while preserving siblings", async () => {
+    const { runtime, store } = makeConfig();
+    const backend = new StoreBackend(runtime);
+
+    await backend.write("/work/a.txt", "a");
+    await backend.write("/work/sub/b.txt", "b");
+    await backend.write("/keep.txt", "keep");
+
+    const batch = vi.spyOn(store, "batch");
+    batch.mockClear();
+    const result = await backend.delete("/work");
+
+    expect(result).toEqual({ path: "/work", filesUpdate: null });
+    expect(
+      batch.mock.calls.filter(([operations]) =>
+        operations.every((operation) => operation.value === null),
+      ),
+    ).toHaveLength(1);
+    expect(batch).toHaveBeenCalledWith([
+      { namespace: ["filesystem"], key: "/work/a.txt", value: null },
+      { namespace: ["filesystem"], key: "/work/sub/b.txt", value: null },
+    ]);
+    expect((await backend.read("/work/a.txt")).error).toContain("not found");
+    expect((await backend.read("/work/sub/b.txt")).error).toContain(
+      "not found",
+    );
+    expect((await backend.read("/keep.txt")).error).toBeUndefined();
+  });
+
   it("should delete files by exact store key", async () => {
     const { runtime } = makeConfig();
     const backend = new StoreBackend(runtime);

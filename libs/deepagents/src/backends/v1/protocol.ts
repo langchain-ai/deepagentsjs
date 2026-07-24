@@ -113,7 +113,7 @@ export interface BackendProtocolV1 {
   ): MaybePromise<EditResult>;
 
   /**
-* Delete a path, recursively removing anything nested under it.
+   * Delete a path, recursively removing anything nested under it.
    *
    * This method is optional. Backends that do not implement it should omit it;
    * callers that need broad backend compatibility should check for support before
