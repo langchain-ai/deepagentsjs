@@ -16,20 +16,28 @@ import { DaytonaSandbox } from "./index.js";
 
 const TEST_TIMEOUT = 120_000; // 2 minutes
 
-/** Labels that uniquely identify sandboxes created by this CI job. */
+/**
+ * Identify sandboxes created by this test execution. GitHub run ID and attempt
+ * prevent cleanup in one CI run from deleting sandboxes owned by another.
+ */
+const TEST_RUN_ID = process.env.GITHUB_RUN_ID
+  ? `${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}`
+  : `local-${process.pid}-${Date.now()}`;
+
 const CI_LABELS: Record<string, string> = {
   purpose: "integration-test",
   package: "@langchain/daytona",
   node: process.version,
   os: os.platform(),
+  run: TEST_RUN_ID,
 };
 
-/**
- * Clean up stale integration-test sandboxes before running tests.
- * Only deletes sandboxes matching this specific Node version + OS combination
- * so parallel CI pipelines don't interfere with each other.
- */
+/** Remove any sandboxes left behind earlier in this test execution. */
 beforeAll(async () => {
+  await DaytonaSandbox.deleteAll(CI_LABELS);
+}, TEST_TIMEOUT);
+
+afterAll(async () => {
   await DaytonaSandbox.deleteAll(CI_LABELS);
 }, TEST_TIMEOUT);
 
