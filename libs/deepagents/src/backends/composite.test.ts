@@ -864,6 +864,122 @@ describe("CompositeBackend", () => {
       expect(result.path).toBeUndefined();
       expect(result.error).toContain("not found");
     });
+
+    it("should delete mounted routes beneath a parent path", async () => {
+      const defaultConfig = makeConfig();
+      const memoriesConfig = makeConfig();
+      const skillsConfig = makeConfig();
+      const composite = new CompositeBackend(
+        new StateBackend(defaultConfig.runtime),
+        {
+          "/workspace/memories/": new StoreBackend(memoriesConfig.runtime),
+          "/skills/": new StoreBackend(skillsConfig.runtime),
+        },
+      );
+
+      await composite.write("/workspace/memories/note.md", "memory");
+      await composite.write("/skills/keep.md", "skill");
+
+      const result = await composite.delete("/workspace");
+
+      expect(result).toEqual({ path: "/workspace", filesUpdate: null });
+      expect(
+        (await composite.read("/workspace/memories/note.md")).error,
+      ).toContain("not found");
+      expect((await composite.read("/skills/keep.md")).error).toBeUndefined();
+    });
+
+    it("should delete the default backend and all mounted routes at root", async () => {
+      const defaultConfig = makeConfig();
+      const memoriesConfig = makeConfig();
+      const skillsConfig = makeConfig();
+      const composite = new CompositeBackend(
+        new StateBackend(defaultConfig.runtime),
+        {
+          "/memories/": new StoreBackend(memoriesConfig.runtime),
+          "/skills/": new StoreBackend(skillsConfig.runtime),
+        },
+      );
+
+      const defaultWrite = await composite.write("/local.txt", "local");
+      Object.assign(defaultConfig.state.files, defaultWrite.filesUpdate);
+      await composite.write("/memories/note.md", "memory");
+      await composite.write("/skills/tool.md", "skill");
+
+      const result = await composite.delete("/");
+
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe("/");
+      expect(result.filesUpdate).toEqual({ "/local.txt": null });
+      Object.assign(defaultConfig.state.files, result.filesUpdate);
+      expect((await composite.read("/local.txt")).error).toContain("not found");
+      expect((await composite.read("/memories/note.md")).error).toContain(
+        "not found",
+      );
+      expect((await composite.read("/skills/tool.md")).error).toContain(
+        "not found",
+      );
+    });
+
+    it("should re-prefix filesUpdate keys from routed state backends", async () => {
+      const defaultConfig = makeConfig();
+      const routeConfig = makeConfig();
+      const routedState = new StateBackend(routeConfig.runtime);
+      const composite = new CompositeBackend(
+        new StoreBackend(defaultConfig.runtime),
+        { "/state/": routedState },
+      );
+
+      const firstWrite = await routedState.write("/work/a.txt", "a");
+      const secondWrite = await routedState.write("/work/b.txt", "b");
+      Object.assign(
+        routeConfig.state.files,
+        firstWrite.filesUpdate,
+        secondWrite.filesUpdate,
+      );
+
+      const result = await composite.delete("/state/work");
+
+      expect(result).toEqual({
+        path: "/state/work",
+        filesUpdate: {
+          "/state/work/a.txt": null,
+          "/state/work/b.txt": null,
+        },
+      });
+    });
+
+    it("should stop sequential fan-out and report possible partial deletion", async () => {
+      const defaultConfig = makeConfig();
+      const failingConfig = makeConfig();
+      const laterConfig = makeConfig();
+      const defaultBackend = new StoreBackend(defaultConfig.runtime);
+      const failingBackend = new StoreBackend(failingConfig.runtime);
+      const laterBackend = new StoreBackend(laterConfig.runtime);
+      const failingDelete = vi
+        .spyOn(failingBackend, "delete")
+        .mockResolvedValue({ error: "injected failure" });
+      const laterDelete = vi.spyOn(laterBackend, "delete");
+      const composite = new CompositeBackend(defaultBackend, {
+        "/failing/": failingBackend,
+        "/later/": laterBackend,
+      });
+
+      await composite.write("/local.txt", "local");
+      await composite.write("/failing/a.txt", "failing");
+      await composite.write("/later/b.txt", "later");
+
+      const result = await composite.delete("/");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("injected failure");
+      expect(result.error).toContain("may be partial");
+      expect(failingDelete).toHaveBeenCalledWith("/");
+      expect(laterDelete).not.toHaveBeenCalled();
+      expect((await composite.read("/local.txt")).error).toContain("not found");
+      expect((await composite.read("/failing/a.txt")).error).toBeUndefined();
+      expect((await composite.read("/later/b.txt")).error).toBeUndefined();
+    });
   });
 
   describe("uploadFiles", () => {

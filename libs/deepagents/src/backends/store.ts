@@ -43,6 +43,12 @@ import {
 
 const NAMESPACE_COMPONENT_RE = /^[A-Za-z0-9\-_.@+:~]+$/;
 
+function trimTrailingSlashes(path: string): string {
+  let end = path.length;
+  while (end > 1 && path[end - 1] === "/") end--;
+  return path.slice(0, end);
+}
+
 function getObjectRecord(value: unknown): Record<string, unknown> | undefined {
   return value != null && typeof value === "object"
     ? (value as Record<string, unknown>)
@@ -610,7 +616,7 @@ export class StoreBackend implements BackendProtocolV2 {
     const store = this.getStore();
     const namespace = this.getNamespace();
     const items = await this.searchStorePaginated(store, namespace);
-    const base = filePath.replace(/\/+$/, "") || "/";
+    const base = trimTrailingSlashes(filePath) || "/";
     const prefix = base === "/" ? "/" : `${base}/`;
     const keys = items
       .map((item) => String(item.key))

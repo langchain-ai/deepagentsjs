@@ -1174,6 +1174,15 @@ function createDeleteTool(
         return toolError(runtime, "delete", `Error: ${message}`);
       }
 
+      const permissionError = checkPermission(
+        permissions,
+        "write",
+        validatedPath,
+      );
+      if (permissionError !== undefined) {
+        return toolError(runtime, "delete", permissionError);
+      }
+
       const denyingPatterns = findDeleteDenyPatterns(
         permissions,
         validatedPath,

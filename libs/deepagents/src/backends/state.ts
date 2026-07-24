@@ -35,6 +35,12 @@ import {
 } from "./utils.js";
 import { getConfig } from "@langchain/langgraph";
 
+function trimTrailingSlashes(path: string): string {
+  let end = path.length;
+  while (end > 1 && path[end - 1] === "/") end--;
+  return path.slice(0, end);
+}
+
 const PREGEL_SEND_KEY = "__pregel_send";
 const PREGEL_READ_KEY = "__pregel_read";
 
@@ -284,7 +290,7 @@ export class StateBackend implements BackendProtocolV2 {
    */
   delete(filePath: string): DeleteResult {
     const files = this.files;
-    const base = filePath.replace(/\/+$/, "") || "/";
+    const base = trimTrailingSlashes(filePath) || "/";
     const prefix = base === "/" ? "/" : `${base}/`;
     const paths = Object.keys(files).filter(
       (path) => path === base || path.startsWith(prefix),
