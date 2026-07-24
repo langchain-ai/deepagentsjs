@@ -75,7 +75,7 @@ describe("Legacy system prompt assembly", () => {
     return systemMessage;
   }
 
-  it("separates a string system prompt from the base prompt", async () => {
+  it("does not append an authored base prompt", async () => {
     const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
 
     try {
@@ -86,13 +86,28 @@ describe("Legacy system prompt assembly", () => {
       await agent.invoke({ messages: [new HumanMessage("Hello")] });
 
       const prompt = getLastSystemMessage(invokeSpy).text;
-      expect(prompt).toContain("__custom_prompt__\n\nYou are a Deep Agent");
+      expect(prompt).toBe("__custom_prompt__");
     } finally {
       invokeSpy.mockRestore();
     }
   });
 
-  it("preserves SystemMessage content blocks before the base prompt", async () => {
+  it("does not inject an authored prompt by default", async () => {
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    try {
+      const agent = createDeepAgent({
+        model: new FakeListChatModel({ responses: ["Done"] }),
+      });
+      await agent.invoke({ messages: [new HumanMessage("Hello")] });
+      expect(getLastSystemMessage(invokeSpy).text).not.toContain(
+        "You are a Deep Agent",
+      );
+    } finally {
+      invokeSpy.mockRestore();
+    }
+  });
+
+  it("preserves SystemMessage content blocks without appending an authored base", async () => {
     const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
     const customPrompt = new SystemMessage({
       content: [
@@ -116,20 +131,13 @@ describe("Legacy system prompt assembly", () => {
         (block) =>
           block.type === "text" && block.text === "__cached_custom_prompt__",
       );
-      const baseIndex = blocks.findIndex(
-        (block) =>
-          block.type === "text" && block.text.includes("You are a Deep Agent"),
-      );
-
       expect(blocks[customIndex]?.cache_control).toEqual({
         type: "ephemeral",
       });
-      expect(customIndex).toBeLessThan(baseIndex);
-      expect(blocks[baseIndex]).toEqual(
-        expect.objectContaining({
-          type: "text",
-          text: expect.stringMatching(/^\n\n/),
-        }),
+        expect(blocks).toHaveLength(1);
+        expect(getLastSystemMessage(invokeSpy).text).not.toContain(
+          "You are a Deep Agent",
+        );
       );
     } finally {
       invokeSpy.mockRestore();

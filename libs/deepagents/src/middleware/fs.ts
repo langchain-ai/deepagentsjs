@@ -109,13 +109,6 @@ export const FILESYSTEM_TOOL_NAMES = [
  */
 export type FsToolName = (typeof FILESYSTEM_TOOL_NAMES)[number];
 
-function isFilesystemToolName(name: unknown): name is FsToolName {
-  return (
-    typeof name === "string" &&
-    (FILESYSTEM_TOOL_NAMES as readonly string[]).includes(name)
-  );
-}
-
 export const TOOLS_EXCLUDED_FROM_EVICTION = FILESYSTEM_TOOL_NAMES.filter(
   (name) => name !== "execute",
 );
@@ -519,52 +512,6 @@ function filterByPermissions<T>(
   });
 }
 
-// System prompts
-const FILESYSTEM_TOOL_DESCRIPTION_LINES = {
-  ls: "ls: list files in a directory (requires absolute path)",
-  read_file: "read_file: read a file from the filesystem",
-  write_file: "write_file: write to a file in the filesystem",
-  edit_file: "edit_file: edit a file in the filesystem",
-  glob: 'glob: find files matching a pattern (e.g., "**/*.py")',
-  grep: "grep: search for text within files",
-} as const satisfies Record<Exclude<FsToolName, "execute">, string>;
-
-type FilesystemToolWithDescription =
-  keyof typeof FILESYSTEM_TOOL_DESCRIPTION_LINES;
-
-function hasFilesystemToolDescription(
-  name: FsToolName,
-): name is FilesystemToolWithDescription {
-  return name in FILESYSTEM_TOOL_DESCRIPTION_LINES;
-}
-
-function buildFilesystemSystemPrompt(
-  visibleTools: ReadonlySet<FsToolName>,
-): string {
-  const promptToolNames = FILESYSTEM_TOOL_NAMES.filter((name) =>
-    visibleTools.has(name),
-  );
-  const toolHeader = promptToolNames.map((name) => `\`${name}\``).join(", ");
-  const toolDescriptions = promptToolNames
-    .filter(hasFilesystemToolDescription)
-    .map((name) => `- ${FILESYSTEM_TOOL_DESCRIPTION_LINES[name]}`)
-    .join("\n");
-
-  return context`
-    ## Following Conventions
-
-    - Read files before editing — understand existing content before making changes
-    - Mimic existing style, naming conventions, and patterns
-
-    ## Filesystem Tools ${toolHeader}
-
-    You have access to a filesystem which you can interact with using these tools.
-    All file paths must start with a /.
-
-    ${toolDescriptions}
-  `;
-}
-
 export const LS_TOOL_DESCRIPTION = context`
   Lists all files in a directory.
 
@@ -573,22 +520,18 @@ export const LS_TOOL_DESCRIPTION = context`
 `;
 
 export const READ_FILE_TOOL_DESCRIPTION = context`
-  Reads a file from the filesystem.
-
-  Assume this tool is able to read all files. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
+  Reads a file from the filesystem. Assume any path the user provides is valid; reading a missing file returns an error.
 
   Usage:
-  - By default, it reads up to ${DEFAULT_READ_LINE_LIMIT} lines starting from the beginning of the file
-  - **IMPORTANT for large files and codebase exploration**: Use pagination with offset and limit parameters to avoid context overflow
-    - First scan: read_file(file_path, limit=${DEFAULT_READ_LINE_LIMIT}) to see file structure
-    - Read more sections: read_file(file_path, offset=${DEFAULT_READ_LINE_LIMIT}, limit=200) for next 200 lines
-    - Only omit limit (read full file) when necessary for editing
-  - Specify offset and limit: read_file(file_path, offset=0, limit=${DEFAULT_READ_LINE_LIMIT}) reads first ${DEFAULT_READ_LINE_LIMIT} lines
-  - Results are returned using cat -n format, with line numbers starting at 1
-- Lines longer than ${INT_FORMATTER.format(MAX_LINE_LENGTH)} characters will be split into multiple lines with continuation markers (e.g., 5.1, 5.2, etc.). When you specify a limit, these continuation lines count towards the limit.
-  - You have the capability to call multiple tools in a single response. It is always better to speculatively read multiple files as a batch that are potentially useful.
-  - If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents.
-  - You should ALWAYS make sure a file has been read before editing it.
+  - By default, it reads up to ${DEFAULT_READ_LINE_LIMIT} lines starting from the beginning of the file. Use \`offset\`/\`limit\` to page through large files instead of reading them whole.
+  - Results are returned with line numbers starting at \`offset\` + 1 (1 by default), then two spaces, then the source line. Never include these line-number prefixes when editing.
+  - Lines over ${INT_FORMATTER.format(MAX_LINE_LENGTH)} characters are split with continuation markers (e.g. 5.1, 5.2); \`limit\` counts source lines, so continuation rows do not consume the budget.
+  - Speculatively batch multiple \`read_file\` calls in one response when several files may be useful.
+  - An empty file returns a system-reminder warning in place of contents.
+  - Large tool results may be offloaded to a file; the tool message gives the path. Read that path here, paging with \`offset\`/\`limit\`.
+  - Images (\`.png\`, \`.jpg\`, etc.), audio, video, and PDFs return multimodal content blocks (https://docs.langchain.com/javascript/python/langchain/messages#multimodal).
+  - For images and PDFs, pagination via \`offset\`/\`limit\` is text-only - supply \`file_path\` only.
+  - Always read a file before editing it.
 `;
 
 export const WRITE_FILE_TOOL_DESCRIPTION = context`
@@ -603,93 +546,68 @@ export const EDIT_FILE_TOOL_DESCRIPTION = context`
   Performs exact string replacements in files.
 
   Usage:
-  - You must read the file before editing. This tool will error if you attempt an edit without reading the file first.
-  - When editing, preserve the exact indentation (tabs/spaces) from the read output. Never include line number prefixes in old_string or new_string.
-  - ALWAYS prefer editing existing files over creating new ones.
+  - You must read the file before editing; this tool errors otherwise.
+  - Preserve the exact indentation from the read output, and never include line-number prefixes in old_string or new_string.
+  - Prefer editing an existing file over creating a new one.
   - Only use emojis if the user explicitly requests it.
 `;
 
 export const GLOB_TOOL_DESCRIPTION = context`
-  Find files matching a glob pattern.
+  Find files matching a glob pattern, returning absolute paths.
 
-  Supports standard glob patterns: \`*\` (any characters), \`**\` (any directories), \`?\` (single character).
-  Returns a list of absolute file paths that match the pattern.
-
-  Examples:
-  - \`**/*.py\` - Find all Python files
-  - \`*.txt\` - Find all text files in root
-  - \`/subdir/**/*.md\` - Find all markdown files under /subdir
+  Supports \`*\` (any characters), \`**\` (any directories), \`?\` (single character), e.g. \`**/*.py\`, \`*.txt\`, \`/subdir/**/*.md\`.
 `;
 
-export const GREP_TOOL_DESCRIPTION = context`
-  Search for a text pattern across files.
+const GREP_REGEX_EXECUTE_FALLBACK =
+  "\n- If you genuinely need regex, use the execute tool with `rg '<regex>'` instead.";
 
-  Searches for literal text (not regex) and returns matching files or content based on output_mode.
-  Special characters like parentheses, brackets, pipes, etc. are treated as literal characters, not regex operators.
+function getGrepToolDescription(includeExecution: boolean): string {
+  const executeFallback = includeExecution ? GREP_REGEX_EXECUTE_FALLBACK : "";
+  return context`
+    Search for a LITERAL text pattern across files (NOT regex).
 
-  Examples:
-  - Search all files: \`grep(pattern="TODO")\`
-  - Search Python files only: \`grep(pattern="import", glob="*.py")\`
-  - Show matching lines: \`grep(pattern="error", output_mode="content")\`
-  - Search for code with special chars: \`grep(pattern="def __init__(self):")\`
-`;
+    The pattern is matched verbatim: regex metacharacters are ordinary characters, not operators. To match any of several strings, run a separate grep for each; \`grep(pattern="foo|bar")\` searches for the literal text "foo|bar", and \`.*\` or \`\\.\` match those characters literally.${executeFallback}
 
-export const EXECUTE_TOOL_DESCRIPTION = context`
-  Executes a shell command in an isolated sandbox environment.
+    Returns matching files or content per \`output_mode\`. Offloaded large tool results live under the artifacts root (\`/large_tool_results/\` by default); grep that directory to search them when you do not know the exact path.
+  `;
+}
 
-  Usage:
-  Executes a given command in the sandbox environment with proper handling and security measures.
-  Before executing the command, please follow these steps:
+const EXECUTE_SEARCH_GUIDANCE = {
+  both: "You MUST avoid using search commands like find and grep. Instead use the grep, glob tools to search. ",
+  grep: "You MUST avoid using shell grep for searches. Instead use the grep tool to search text. ",
+  glob: "You MUST avoid using shell find for searches. Instead use the glob tool to find files. ",
+  none: "",
+} as const;
 
-  1. Directory Verification:
-    - If the command will create new directories or files, first use the ls tool to verify the parent directory exists and is the correct location
-    - For example, before running "mkdir foo/bar", first use ls to check that "foo" exists and is the intended parent directory
+function getExecuteToolDescription(hasGrep: boolean, hasGlob: boolean): string {
+  const searchGuidance = hasGrep
+    ? hasGlob
+      ? EXECUTE_SEARCH_GUIDANCE.both
+      : EXECUTE_SEARCH_GUIDANCE.grep
+    : hasGlob
+      ? EXECUTE_SEARCH_GUIDANCE.glob
+      : EXECUTE_SEARCH_GUIDANCE.none;
+  const examples = [
+    hasGlob
+      ? "- execute(command=\"find . -name '*.py'\") # Use glob tool instead"
+      : "",
+    hasGrep
+      ? "- execute(command=\"grep -r 'pattern' .\") # Use grep tool instead"
+      : "",
+  ].filter(Boolean);
 
-  2. Command Execution:
-    - Always quote file paths that contain spaces with double quotes (e.g., cd "path with spaces/file.txt")
-    - Examples of proper quoting:
-      - cd "/Users/name/My Documents" (correct)
-      - cd /Users/name/My Documents (incorrect - will fail)
-      - python "/path/with spaces/script.py" (correct)
-      - python /path/with spaces/script.py (incorrect - will fail)
-    - After ensuring proper quoting, execute the command
-    - Capture the output of the command
+  return context`
+    Executes a shell command in an isolated sandbox and returns combined stdout/stderr with the exit code (truncated if very large).
 
-  Usage notes:
-    - Commands run in an isolated sandbox environment
-    - Returns combined stdout/stderr output with exit code
-    - If the output is very large, it may be truncated
-    - VERY IMPORTANT: You MUST avoid using search commands like find and grep. Instead use the grep, glob tools to search. You MUST avoid read tools like cat, head, tail, and use read_file to read files.
-    - When issuing multiple commands, use the ';' or '&&' operator to separate them. DO NOT use newlines (newlines are ok in quoted strings)
-      - Use '&&' when commands depend on each other (e.g., "mkdir dir && cd dir")
-      - Use ';' only when you need to run commands sequentially but don't care if earlier commands fail
-    - Try to maintain your current working directory throughout the session by using absolute paths and avoiding usage of cd
+    Usage:
+    - Quote paths containing spaces (e.g. cd "/path/with spaces").
+    - Chain commands with ';' or '&&' (use '&&' when a command depends on the previous); do not use newlines except inside quoted strings.
+    - Use absolute paths and avoid \`cd\` so the working directory stays stable.
+    - ${searchGuidance}Use read_file rather than cat/head/tail.${examples.length ? `\n${examples.join("\n")}` : ""}
 
-  Examples:
-    Good examples:
-      - execute(command="pytest /foo/bar/tests")
-      - execute(command="python /path/to/script.py")
-      - execute(command="npm install && npm test")
-
-    Bad examples (avoid these):
-      - execute(command="cd /foo/bar && pytest tests")  # Use absolute path instead
-      - execute(command="cat file.txt")  # Use read_file tool instead
-      - execute(command="find . -name '*.py'")  # Use glob tool instead
-      - execute(command="grep -r 'pattern' .")  # Use grep tool instead
-
-  Note: This tool is only available if the backend supports execution (SandboxBackendProtocol).
-  If execution is not supported, the tool will return an error message.
-`;
-
-// System prompt for execution capability
-export const EXECUTION_SYSTEM_PROMPT = context`
-  ## Execute Tool \`execute\`
-
-  You have access to an \`execute\` tool for running shell commands in a sandboxed environment.
-  Use this tool to run commands, scripts, tests, builds, and other shell operations.
-
-  - execute: run a shell command in the sandbox (returns output and exit code)
-`;
+    Only available on backends implementing SandboxBackendProtocol; otherwise it returns an error.
+  `;
+}
 
 /**
  * Create ls tool using backend.
@@ -1067,7 +985,7 @@ function createGlobTool(
       }
 
       const resolvedBackend = await resolveBackend(backend, runtime);
-      const { pattern, path = "/" } = input;
+      const { pattern, path } = input;
       const globResult = await resolvedBackend.glob(pattern, path);
 
       if (globResult.error) {
@@ -1097,12 +1015,17 @@ function createGlobTool(
       name: "glob",
       description: customDescription || GLOB_TOOL_DESCRIPTION,
       schema: z.object({
-        pattern: z.string().describe("Glob pattern (e.g., '*.py', '**/*.ts')"),
+        pattern: z
+          .string()
+          .describe(
+            "Glob pattern to match files (e.g., '**/*.py', '*.txt', '/subdir/**/*.md')",
+          ),
         path: z
           .string()
           .optional()
-          .default("/")
-          .describe("Base path to search from (default: /)"),
+          .describe(
+            "Base directory to search from. Defaults to the backend's default root.",
+          ),
       }),
     },
   );
@@ -1116,9 +1039,10 @@ function createGrepTool(
   options: {
     customDescription: string | undefined;
     permissions: FilesystemPermission[];
+    includeExecution: boolean;
   },
 ) {
-  const { customDescription, permissions } = options;
+  const { customDescription, permissions, includeExecution } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
       const permissionError = checkPermission(
@@ -1170,9 +1094,12 @@ function createGrepTool(
     },
     {
       name: "grep",
-      description: customDescription || GREP_TOOL_DESCRIPTION,
+      description:
+        customDescription || getGrepToolDescription(includeExecution),
       schema: z.object({
-        pattern: z.string().describe("Regex pattern to search for"),
+        pattern: z
+          .string()
+          .describe("Literal text pattern to search for (not regex)"),
         path: z
           .string()
           .optional()
@@ -1197,9 +1124,11 @@ function createExecuteTool(
   options: {
     customDescription: string | undefined;
     permissions: FilesystemPermission[];
+    hasGrep: boolean;
+    hasGlob: boolean;
   },
 ) {
-  const { customDescription, permissions } = options;
+  const { customDescription, permissions, hasGrep, hasGlob } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
       const resolvedBackend = await resolveBackend(backend, runtime);
@@ -1245,7 +1174,8 @@ function createExecuteTool(
     },
     {
       name: "execute",
-      description: customDescription || EXECUTE_TOOL_DESCRIPTION,
+      description:
+        customDescription || getExecuteToolDescription(hasGrep, hasGlob),
       schema: z.object({
         command: z.string().describe("The shell command to execute"),
       }),
@@ -1259,13 +1189,7 @@ function createExecuteTool(
 export interface FilesystemMiddlewareOptions {
   /** Backend instance or factory (default: StateBackend) */
   backend?: AnyBackendProtocol | BackendFactory;
-  /**
-   * Optional filesystem-specific system prompt override.
-   *
-   * When omitted, the middleware generates a prompt that reflects the tools
-   * visible for the current model request. Supplying a custom prompt replaces
-   * that generated filesystem prompt entirely.
-   */
+  /** Optional filesystem-specific usage guidance. Omitted by default because tool schemas provide it. */
   systemPrompt?: string | null;
   /**
    * Optional descriptions for built-in filesystem tools.
@@ -1288,8 +1212,6 @@ export interface FilesystemMiddlewareOptions {
    *   command execution, even if it appears in this allowlist.
    * - User-provided non-filesystem tools are not affected by this allowlist.
    *
-   * The generated filesystem system prompt is based on the tools that remain
-   * visible after this allowlist and backend capability filtering are applied.
    *
    * @example Read/search-only filesystem access
    * ```ts
@@ -1368,7 +1290,7 @@ function allPathsScopedToRoutes(
 }
 
 /**
- * Create middleware that provides built-in filesystem tools and filesystem-aware
+ * Create middleware that provides built-in filesystem tools and optional custom
  * prompt guidance.
  *
  * By default, the middleware registers every built-in filesystem tool listed in
@@ -1379,9 +1301,7 @@ function allPathsScopedToRoutes(
  *
  * The middleware also filters tools whose backend capabilities are unavailable
  * at request time. In particular, `execute` is only visible when the resolved
- * backend supports command execution. The filesystem prompt is generated from
- * the final visible filesystem tools so the model is not instructed to call
- * tools it cannot see.
+ * backend supports command execution.
  *
  * @param options Filesystem middleware configuration.
  * @returns Agent middleware that contributes filesystem state, tools, prompt
@@ -1431,6 +1351,8 @@ export function createFilesystemMiddleware(
   }
 
   const baseSystemPrompt = customSystemPrompt ?? null;
+  const configuredToolNames =
+    enabledFilesystemTools ?? new Set<FsToolName>(FILESYSTEM_TOOL_NAMES);
 
   /**
    * All tools including execute
@@ -1461,10 +1383,13 @@ export function createFilesystemMiddleware(
     grep: createGrepTool(backend, {
       customDescription: customToolDescriptions?.grep,
       permissions,
+      includeExecution: configuredToolNames.has("execute"),
     }),
     execute: createExecuteTool(backend, {
       customDescription: customToolDescriptions?.execute,
       permissions,
+      hasGrep: configuredToolNames.has("grep"),
+      hasGlob: configuredToolNames.has("glob"),
     }),
   } satisfies Record<FsToolName, unknown>;
   const allTools = FILESYSTEM_TOOL_NAMES.filter(
@@ -1605,27 +1530,11 @@ export function createFilesystemMiddleware(
         tools = tools.filter((t: { name: string }) => t.name !== "execute");
       }
 
-      const visibleFilesystemTools = new Set<FsToolName>();
-      for (const currentTool of tools) {
-        const toolName =
-          typeof currentTool.name === "string" ? currentTool.name : undefined;
-        if (isFilesystemToolName(toolName)) {
-          visibleFilesystemTools.add(toolName);
-        }
-      }
-
-      const executionActive =
-        supportsExecution && visibleFilesystemTools.has("execute");
-
-      // Build system prompt - add execution instructions if available
-      let filesystemPrompt =
-        baseSystemPrompt ?? buildFilesystemSystemPrompt(visibleFilesystemTools);
-      if (executionActive) {
-        filesystemPrompt = `${filesystemPrompt}\n\n${EXECUTION_SYSTEM_PROMPT}`;
-      }
-
-      // Combine with existing system message
-      const newSystemMessage = request.systemMessage.concat(filesystemPrompt);
+      // Tool schemas carry the built-in usage guidance. Preserve only explicit
+      // caller guidance, rather than adding a redundant filesystem prompt.
+      const newSystemMessage = baseSystemPrompt
+        ? request.systemMessage.concat(baseSystemPrompt)
+        : request.systemMessage;
 
       let messages = request.messages;
       if (humanMessageTokenLimitBeforeEvict && messages) {
