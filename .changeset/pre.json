@@ -16,6 +16,7 @@
   "changesets": [
     "lean-agent-prompts",
     "node-vfs-write-overwrite",
+    "todo-middleware-opt-in",
     "write-file-overwrites"
   ]
 }
