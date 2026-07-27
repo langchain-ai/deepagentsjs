@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.12.0-rc.1
+
+### Minor Changes
+
+- [#708](https://github.com/langchain-ai/deepagentsjs/pull/708) [`1225a7f`](https://github.com/langchain-ai/deepagentsjs/commit/1225a7ff8673686c2a3c0411636a9511b7d8d0d0) Thanks [@hntrl](https://github.com/hntrl)! - feat(deepagents): make todo middleware opt-in
+
 ## 1.12.0-rc.0
 
 ### Minor Changes
