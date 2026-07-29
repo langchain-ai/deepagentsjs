@@ -1,5 +1,11 @@
 # @langchain/node-vfs
 
+## 1.0.0
+
+### Patch Changes
+
+- [#674](https://github.com/langchain-ai/deepagentsjs/pull/674) [`dd142fe`](https://github.com/langchain-ai/deepagentsjs/commit/dd142fe4fc54c986d5bcf51211d9a839a427e931) Thanks [@hntrl](https://github.com/hntrl)! - fix: allow `VfsBackend.write` to overwrite existing files while continuing to reject symlinks
+
 ## 1.0.0-rc.0
 
 ### Patch Changes
