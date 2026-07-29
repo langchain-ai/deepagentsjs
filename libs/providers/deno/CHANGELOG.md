@@ -1,5 +1,7 @@
 # @langchain/deno
 
+## 1.0.0
+
 ## 1.0.0-rc.0
 
 ### Patch Changes

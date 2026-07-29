@@ -1,5 +1,17 @@
 # deepagents
 
+## 1.12.0
+
+### Minor Changes
+
+- [#703](https://github.com/langchain-ai/deepagentsjs/pull/703) [`d25097f`](https://github.com/langchain-ai/deepagentsjs/commit/d25097f78d0e66741da34e1d74551f3c19991126) Thanks [@hntrl](https://github.com/hntrl)! - feat(deepagents): adopt more minimal prompting
+
+  We've observed that current models don't need as verbose of prompting guidance, so we're reducing the amount of perscriptive guidance that deepagents has. This is reflected in the generic system prompt (which is now blank), and in the tool descriptions (which have been simplified).
+
+- [#708](https://github.com/langchain-ai/deepagentsjs/pull/708) [`1225a7f`](https://github.com/langchain-ai/deepagentsjs/commit/1225a7ff8673686c2a3c0411636a9511b7d8d0d0) Thanks [@hntrl](https://github.com/hntrl)! - feat(deepagents): make todo middleware opt-in
+
+- [#674](https://github.com/langchain-ai/deepagentsjs/pull/674) [`dd142fe`](https://github.com/langchain-ai/deepagentsjs/commit/dd142fe4fc54c986d5bcf51211d9a839a427e931) Thanks [@hntrl](https://github.com/hntrl)! - feat(filesystem): allow `write_file` to create missing files or completely replace existing files
+
 ## 1.12.0-rc.1
 
 ### Minor Changes
