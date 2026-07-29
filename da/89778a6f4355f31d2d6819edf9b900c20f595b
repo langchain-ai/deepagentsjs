@@ -1,0 +1,30 @@
+.changeset/grep-glob-exact-file-path.md
+  s_c1db6a4b086818::t_671e4274f20a4e 1-4
+  s_c1db6a4b086818::t_4e2df45d2745cd 5
+libs/deepagents/src/backends/utils.test.ts
+  s_c1db6a4b086818::t_f0a46bf1bf2d06 391-446
+  s_c1db6a4b086818::t_bc3cacaa933342 20-21,26
+libs/deepagents/src/backends/utils.ts
+  s_c1db6a4b086818::t_411c8b8d8ccc56 733-734
+  s_c1db6a4b086818::t_c37ccda33bb167 601-628,634-635,651-652,655
+  s_c1db6a4b086818::t_d1c0b1f487f1c3 808-809
+  s_c1db6a4b086818::t_cd3cc9815374cf 799
+  s_c1db6a4b086818::t_9cd0f7236bed6b 753-754
+  s_c1db6a4b086818::t_56c335c82e5311 600
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "da89778a6f4355f31d2d6819edf9b900c20f595b",
+  "prompts": {},
+  "sessions": {
+    "s_c1db6a4b086818": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cf814f82-d0e2-4115-8776-81c9e27aaa6c",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "gdibben <gethin.dibben@langchain.dev>"
+    }
+  }
+}
