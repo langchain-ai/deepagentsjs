@@ -39,7 +39,7 @@ import { createSummarizationMiddleware } from "./summarization.js";
 import { mergeMiddleware } from "./utils.js";
 import { createFileData } from "../backends/utils.js";
 import { createMockBackend } from "./test.js";
-import { createSubAgent } from "./subagents.js";
+import { createSubAgent, createSubAgentMiddleware } from "./subagents.js";
 import { registerHarnessProfile } from "../profiles/index.js";
 
 const createAgentMock = vi.mocked(createAgent);
@@ -71,6 +71,58 @@ description: A test skill for subagent isolation tests
 
 Instructions for the test skill.
 `;
+
+describe("Browser-compatible subagent state propagation", () => {
+  it("reads parent state from the task tool config without AsyncLocalStorage", async () => {
+    let receivedState: Record<string, unknown> | undefined;
+    const worker = RunnableLambda.from(
+      async (state: Record<string, unknown>) => {
+        receivedState = state;
+        return { messages: [new AIMessage("browser child complete")] };
+      },
+    );
+    const middleware = createSubAgentMiddleware({
+      defaultModel: new FakeListChatModel({ responses: ["unused"] }),
+      defaultTools: [],
+      subagents: [
+        {
+          name: "browser-worker",
+          description: "A worker invoked directly from a browser tool config.",
+          runnable: worker,
+        },
+      ],
+      generalPurposeAgent: false,
+    });
+    const taskTool = middleware.tools?.find(
+      (candidate) => candidate.name === "task",
+    );
+    expect(taskTool).toBeDefined();
+
+    const result = await taskTool!.invoke(
+      {
+        description: "Do the isolated browser task.",
+        subagent_type: "browser-worker",
+      },
+      {
+        configurable: {
+          thread_id: "browser-task-config",
+          __pregel_scratchpad: {
+            currentTaskInput: {
+              messages: [new HumanMessage("parent message")],
+              browserContext: "preserved",
+            },
+          },
+        },
+      },
+    );
+
+    expect(result).toBe("browser child complete");
+    expect(receivedState).toMatchObject({ browserContext: "preserved" });
+    expect((receivedState!.messages as BaseMessage[])[0].text).toBe(
+      "Do the isolated browser task.",
+    );
+  });
+});
 
 /**
  * Subagent skills isolation tests.

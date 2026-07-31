@@ -26,6 +26,7 @@ import type {
   QuickJSAsyncWASMModule,
 } from "quickjs-emscripten-core";
 import type { StructuredToolInterface } from "@langchain/core/tools";
+import type { RunnableConfig } from "@langchain/core/runnables";
 
 import { PTCCallBudgetExceededError } from "./errors.js";
 import type {
@@ -230,6 +231,7 @@ export class ReplSession {
   private options: ReplSessionOptions;
   private readonly maxPtcCalls: number | null;
   private ptcCallsRemaining: number | null = null;
+  private toolConfig: RunnableConfig | undefined;
   private subagentQueue: PQueue | null = null;
   private bridgeDispatchRef: {
     current: SubagentBridgeOptions["dispatch"];
@@ -480,6 +482,7 @@ export class ReplSession {
       };
     } finally {
       this.ptcCallsRemaining = null;
+      this.toolConfig = undefined;
     }
   }
 
@@ -516,6 +519,15 @@ export class ReplSession {
       session.dispose();
     }
     ReplSession.sessions.clear();
+  }
+
+  /**
+   * Store the active LangGraph config for programmatic tool calls made by the
+   * current eval. Browser runtimes cannot recover this context through
+   * AsyncLocalStorage, so the middleware must pass it explicitly.
+   */
+  setToolConfig(config?: RunnableConfig): void {
+    this.toolConfig = config;
   }
 
   private setupConsole(): void {
@@ -563,7 +575,7 @@ export class ReplSession {
               this.consumePtcBudget(camelName);
               const rawInput =
                 typeof input === "object" && input !== null ? input : {};
-              const result = await t.invoke(rawInput);
+              const result = await t.invoke(rawInput, this.toolConfig);
               let text = extractToolText(result);
               if (t.name === "read_file") {
                 text = stripLineNumbers(text);
