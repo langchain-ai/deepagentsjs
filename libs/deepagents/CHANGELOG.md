@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.12.1
+
+### Patch Changes
+
+- [#713](https://github.com/langchain-ai/deepagentsjs/pull/713) [`ffec5de`](https://github.com/langchain-ai/deepagentsjs/commit/ffec5de0e66ed5ab64bc4c6bee2ff90effb4bfa1) Thanks [@gethin-langchain](https://github.com/gethin-langchain)! - fix(deepagents): grep/glob match when `path` points directly at a file
+
 ## 1.12.0
 
 ### Minor Changes
