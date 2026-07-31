@@ -598,11 +598,41 @@ export function validateFilePath(
 }
 
 /**
+ * Resolve the files under `path` for grep/glob search.
+ *
+ * If `path` exactly names a file that exists in `files`, only that file is
+ * returned (exact match) — this lets grep/glob target a specific file
+ * directly instead of only matching directories. Otherwise `path` is treated
+ * as a directory and files are filtered by the normalized directory prefix.
+ *
+ * @returns Filtered files map, or null if `path` is invalid (e.g. whitespace-only).
+ */
+function filterFilesByPath(
+  files: Record<string, FileData>,
+  path: string | null | undefined,
+): Record<string, FileData> | null {
+  const exactPath = path ? (path.startsWith("/") ? path : "/" + path) : "/";
+  if (Object.prototype.hasOwnProperty.call(files, exactPath)) {
+    return { [exactPath]: files[exactPath] };
+  }
+
+  try {
+    const normalizedPath = validatePath(path);
+    return Object.fromEntries(
+      Object.entries(files).filter(([fp]) => fp.startsWith(normalizedPath)),
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Search files dict for paths matching glob pattern.
  *
  * @param files - Dictionary of file paths to FileData
  * @param pattern - Glob pattern (e.g., `*.py`, `**\/*.ts`)
- * @param path - Base path to search from
+ * @param path - Base path to search from. If `path` names an exact file, only
+ *               that file is considered.
  * @returns Newline-separated file paths, sorted by modification time (most recent first).
  *          Returns "No files found" if no matches.
  *
@@ -618,16 +648,11 @@ export function globSearchFiles(
   pattern: string,
   path: string = "/",
 ): string {
-  let normalizedPath: string;
-  try {
-    normalizedPath = validatePath(path);
-  } catch {
+  const filtered = filterFilesByPath(files, path);
+  if (filtered === null) {
     return "No files found";
   }
-
-  const filtered = Object.fromEntries(
-    Object.entries(files).filter(([fp]) => fp.startsWith(normalizedPath)),
-  );
+  const normalizedPath = validatePath(path);
 
   // Respect standard glob semantics:
   // - Patterns without path separators (e.g., "*.py") match only in the current
@@ -705,7 +730,8 @@ export function formatGrepResults(
  *
  * @param files - Dictionary of file paths to FileData
  * @param pattern - Literal text to search for
- * @param path - Base path to search from
+ * @param path - Base path to search from. If `path` names an exact file, only
+ *               that file is considered.
  * @param glob - Optional glob pattern to filter files (e.g., "*.py")
  * @param outputMode - Output format - "files_with_matches", "content", or "count"
  * @returns Formatted search results. Returns "No matches found" if no results.
@@ -724,16 +750,10 @@ export function grepSearchFiles(
   glob: string | null = null,
   outputMode: "files_with_matches" | "content" | "count" = "files_with_matches",
 ): string {
-  let normalizedPath: string;
-  try {
-    normalizedPath = validatePath(path);
-  } catch {
+  let filtered = filterFilesByPath(files, path);
+  if (filtered === null) {
     return "No matches found";
   }
-
-  let filtered = Object.fromEntries(
-    Object.entries(files).filter(([fp]) => fp.startsWith(normalizedPath)),
-  );
 
   if (glob) {
     filtered = Object.fromEntries(
@@ -776,6 +796,7 @@ export function grepSearchFiles(
  * Return structured grep matches from an in-memory files mapping.
  *
  * Performs literal text search (not regex). Binary files are skipped.
+ * If `path` names an exact file, only that file is considered.
  * Returns an empty array when no matches are found or on invalid input.
  */
 export function grepMatchesFromFiles(
@@ -784,16 +805,10 @@ export function grepMatchesFromFiles(
   path: string | null = null,
   glob: string | null = null,
 ): GrepMatch[] {
-  let normalizedPath: string;
-  try {
-    normalizedPath = validatePath(path);
-  } catch {
+  let filtered = filterFilesByPath(files, path);
+  if (filtered === null) {
     return [];
   }
-
-  let filtered = Object.fromEntries(
-    Object.entries(files).filter(([fp]) => fp.startsWith(normalizedPath)),
-  );
 
   if (glob) {
     filtered = Object.fromEntries(

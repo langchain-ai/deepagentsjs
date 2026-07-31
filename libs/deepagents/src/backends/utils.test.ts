@@ -17,10 +17,13 @@ import {
   TOOL_RESULT_TOKEN_LIMIT,
   createFileData,
   adaptSandboxProtocol,
+  grepMatchesFromFiles,
+  globSearchFiles,
 } from "./utils.js";
 import type {
   BackendProtocol,
   BackendProtocolV2,
+  FileData,
   GrepMatch,
   SandboxBackendProtocol,
   SandboxBackendProtocolV2,
@@ -382,6 +385,62 @@ describe("migrateToFileDataV2", () => {
   it("should return v2 data unchanged", () => {
     const v2 = createFileData("hello");
     expect(migrateToFileDataV2(v2, "/test.txt")).toBe(v2);
+  });
+});
+
+describe("grepMatchesFromFiles", () => {
+  function makeFiles(): Record<string, FileData> {
+    return {
+      "/catalog/some_file.txt": createFileData(
+        "line one\nSlack integration here\nline three\n",
+      ),
+      "/catalog/other_file.txt": createFileData("nothing interesting here\n"),
+    };
+  }
+
+  it("finds matches when path is an exact existing file with no glob", () => {
+    const files = makeFiles();
+    const matches = grepMatchesFromFiles(
+      files,
+      "Slack",
+      "/catalog/some_file.txt",
+      null,
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0].path).toBe("/catalog/some_file.txt");
+  });
+
+  it("still finds matches when path is a directory and glob narrows to the filename", () => {
+    const files = makeFiles();
+    const matches = grepMatchesFromFiles(
+      files,
+      "Slack",
+      "/catalog",
+      "some_file.txt",
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0].path).toBe("/catalog/some_file.txt");
+  });
+});
+
+describe("globSearchFiles", () => {
+  function makeFiles(): Record<string, FileData> {
+    return {
+      "/catalog/some_file.txt": createFileData("hello"),
+      "/catalog/other_file.md": createFileData("hello"),
+    };
+  }
+
+  it("matches an exact file when path names it directly", () => {
+    const files = makeFiles();
+    const result = globSearchFiles(files, "*.txt", "/catalog/some_file.txt");
+    expect(result).toBe("/catalog/some_file.txt");
+  });
+
+  it("still matches via directory path + filename pattern (regression guard)", () => {
+    const files = makeFiles();
+    const result = globSearchFiles(files, "some_file.txt", "/catalog");
+    expect(result).toBe("/catalog/some_file.txt");
   });
 });
 
