@@ -64,11 +64,7 @@ class MockSandbox extends BaseSandbox {
             truncated: false,
           };
         }
-        const lines = content.split("\n");
-        const output = lines
-          .map((line, i) => `     ${i + 1}\t${line}`)
-          .join("\n");
-        return { output, exitCode: 0, truncated: false };
+        return { output: content, exitCode: 0, truncated: false };
       }
     }
 
@@ -209,8 +205,7 @@ describe("BaseSandbox", () => {
 
       const result = await sandbox.read("/test.txt");
       expect(result.error).toBeUndefined();
-      expect(result.content).toContain("line1");
-      expect(result.content).toContain("line2");
+      expect(result.content).toBe("line1\nline2\nline3");
     });
 
     it("should return error for non-existent file", async () => {
@@ -229,6 +224,8 @@ describe("BaseSandbox", () => {
       // text files should go through execute with awk
       expect(sandbox.executedCommands.length).toBe(1);
       expect(sandbox.executedCommands[0]).toContain("awk");
+      expect(sandbox.executedCommands[0]).toContain('printf "%s\\n"');
+      expect(sandbox.executedCommands[0]).not.toContain('printf "%6d\\t%s\\n"');
     });
 
     describe("binary files", () => {

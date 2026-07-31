@@ -209,8 +209,8 @@ function buildFindCommand(searchPath: string): string {
 }
 
 /**
- * Pure POSIX shell command for reading files with line numbers.
- * Uses awk for line numbering with offset/limit — works on any Linux including Alpine.
+ * Pure POSIX shell command for reading file contents.
+ * Uses awk for offset/limit selection — works on any Linux including Alpine.
  */
 function buildReadCommand(
   filePath: string,
@@ -232,7 +232,7 @@ function buildReadCommand(
   return [
     `if [ ! -f ${quotedPath} ]; then echo "Error: File not found"; exit 1; fi`,
     `if [ ! -s ${quotedPath} ]; then echo "System reminder: File exists but has empty contents"; exit 0; fi`,
-    `awk 'NR >= ${start} && NR <= ${end} { printf "%6d\\t%s\\n", NR, $0 }' ${quotedPath}`,
+    `awk 'NR >= ${start} && NR <= ${end} { printf "%s\\n", $0 }' ${quotedPath}`,
   ].join("; ");
 }
 
@@ -331,7 +331,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
   }
 
   /**
-   * Read file content with line numbers.
+   * Read file content without presentation formatting.
    *
    * Uses pure POSIX shell (awk) via execute() — only the requested slice
    * is returned over the wire, making this efficient for large files.
@@ -340,7 +340,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
    * @param filePath - Absolute file path
    * @param offset - Line offset to start reading from (0-indexed)
    * @param limit - Maximum number of lines to read
-   * @returns Formatted file content with line numbers, or error message
+   * @returns Raw file content, or error message
    */
   async read(
     filePath: string,
