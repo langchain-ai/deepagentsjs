@@ -42,7 +42,7 @@ class MockSandbox extends BaseSandbox {
       return { output, exitCode: 0, truncated: false };
     }
 
-    // Simulate read command (awk-based)
+    // Simulate read command (awk-based, without line numbers)
     if (command.includes("awk") && command.includes("printf")) {
       // Extract file path from the shell-quoted path at end of command
       const pathMatch = command.match(/'([^']+)'\s*$/);
@@ -64,9 +64,14 @@ class MockSandbox extends BaseSandbox {
             truncated: false,
           };
         }
-        const lines = content.split("\n");
-        const output = lines
-          .map((line, i) => `     ${i + 1}\t${line}`)
+        const startMatch = command.match(/NR >= (\d+) && NR <= (\d+)/);
+        const start = startMatch ? Number(startMatch[1]) : 1;
+        const end = startMatch
+          ? Number(startMatch[2])
+          : Number.MAX_SAFE_INTEGER;
+        const output = content
+          .split("\n")
+          .slice(start - 1, end)
           .join("\n");
         return { output, exitCode: 0, truncated: false };
       }
@@ -209,8 +214,7 @@ describe("BaseSandbox", () => {
 
       const result = await sandbox.read("/test.txt");
       expect(result.error).toBeUndefined();
-      expect(result.content).toContain("line1");
-      expect(result.content).toContain("line2");
+      expect(result.content).toBe("line1\nline2\nline3");
     });
 
     it("should return error for non-existent file", async () => {
