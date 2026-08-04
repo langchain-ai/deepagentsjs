@@ -142,6 +142,20 @@ const READ_FILE_TRUNCATION_MSG = `
 [Output was truncated due to size limits. The file content is very large. Consider reformatting the file to make it easier to navigate. For example, if this is JSON, use execute(command='jq . {file_path}') to pretty-print it with line breaks. For other formats, you can use appropriate formatting tools to split long lines.]`;
 
 /**
+ * Note appended to grep results that were cut short by the match-count cap.
+ */
+export const GREP_TRUNCATION_NOTE =
+  "Note: the search stopped early because it hit the maximum match count. " +
+  "The matches above are valid but incomplete. Narrow the search (a more " +
+  "specific pattern or a narrower path), or raise max_count, to see the rest.";
+
+/**
+ * Default cap on the number of matches the grep tool returns.
+ * Set to null to disable the cap.
+ */
+export const DEFAULT_GREP_MAX_COUNT = 1000;
+
+/**
  * Message template for evicted tool results.
  */
 const TOO_LARGE_TOOL_MSG = context`
@@ -1040,9 +1054,11 @@ function createGrepTool(
     customDescription: string | undefined;
     permissions: FilesystemPermission[];
     includeExecution: boolean;
+    grepMaxCount: number | null;
   },
 ) {
-  const { customDescription, permissions, includeExecution } = options;
+  const { customDescription, permissions, includeExecution, grepMaxCount } =
+    options;
   return tool(
     async (input, runtime: ToolRuntime) => {
       const permissionError = checkPermission(
@@ -1056,7 +1072,9 @@ function createGrepTool(
 
       const resolvedBackend = await resolveBackend(backend, runtime);
       const { pattern, path = "/", glob = null } = input;
-      const result = await resolvedBackend.grep(pattern, path, glob);
+      // A per-call max_count overrides the configured middleware default.
+      const maxCount = input.max_count ?? grepMaxCount;
+      const result = await resolvedBackend.grep(pattern, path, glob, maxCount);
 
       // If string, it's an error
       if (result.error) {
@@ -1086,11 +1104,12 @@ function createGrepTool(
       }
 
       const truncated = truncateIfTooLong(lines);
+      let content = Array.isArray(truncated) ? truncated.join("\n") : truncated;
 
-      if (Array.isArray(truncated)) {
-        return truncated.join("\n");
+      if (result.truncated) {
+        content += `\n\n${GREP_TRUNCATION_NOTE}`;
       }
-      return truncated;
+      return content;
     },
     {
       name: "grep",
@@ -1111,6 +1130,18 @@ function createGrepTool(
           .nullable()
           .default(null)
           .describe("Optional glob pattern to filter files (e.g., '*.py')"),
+        max_count: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .nullable()
+          .default(null)
+          .describe(
+            "Optional cap on the total number of matches returned across all files. " +
+              "Leave unset to use the configured default. When the cap is hit, results " +
+              "are truncated and a note says so; narrow the pattern or path to see the rest.",
+          ),
       }),
     },
   );
@@ -1244,6 +1275,14 @@ export interface FilesystemMiddlewareOptions {
    * When omitted or empty, all filesystem operations are permitted.
    */
   permissions?: FilesystemPermission[];
+  /**
+   * Default cap on the number of matches the grep tool returns (default: 1000).
+   *
+   * When the cap is hit, the returned matches are flagged as truncated and a
+   * note tells the model to narrow the search. A per-call `max_count` tool
+   * argument overrides this default. Set to `null` to disable the cap.
+   */
+  grepMaxCount?: number | null;
 }
 
 /**
@@ -1325,6 +1364,7 @@ export function createFilesystemMiddleware(
     humanMessageTokenLimitBeforeEvict = 50000,
     permissions = [],
     tools: filesystemTools = null,
+    grepMaxCount = DEFAULT_GREP_MAX_COUNT,
   } = options;
   const enabledFilesystemTools = normalizeFilesystemTools(filesystemTools);
   const executeToolEnabled =
@@ -1387,6 +1427,7 @@ export function createFilesystemMiddleware(
         configuredToolNames.has("execute") &&
         typeof backend !== "function" &&
         isSandboxBackend(backend),
+      grepMaxCount,
     }),
     execute: createExecuteTool(backend, {
       customDescription: customToolDescriptions?.execute,

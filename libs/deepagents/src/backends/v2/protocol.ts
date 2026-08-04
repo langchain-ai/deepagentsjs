@@ -88,12 +88,15 @@ export interface BackendProtocolV2 extends Omit<
    * @param pattern - Literal text pattern to search for
    * @param path - Base path to search from (default: null)
    * @param glob - Optional glob pattern to filter files (e.g., "*.py")
+   * @param maxCount - Optional cap on the total number of matches returned.
+   *                   When the cap is hit, results are flagged `truncated: true`.
    * @returns GrepResult with matches on success or error on failure
    */
   grep(
     pattern: string,
     path?: string | null,
     glob?: string | null,
+    maxCount?: number | null,
   ): MaybePromise<GrepResult>;
 
   /**

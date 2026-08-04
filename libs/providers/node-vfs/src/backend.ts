@@ -29,6 +29,7 @@ import {
   type ReadResult,
   type BackendFactory,
   type WriteResult,
+  applyGrepMaxCount,
 } from "deepagents";
 
 import { VirtualFileSystem } from "node-vfs-polyfill";
@@ -968,6 +969,7 @@ export class VfsBackend implements BackendProtocolV2 {
     pattern: string,
     searchPath: string = "/",
     glob: string | null = null,
+    maxCount: number | null = null,
   ): Promise<GrepResult> {
     this.#ensureInitialized();
 
@@ -1037,7 +1039,7 @@ export class VfsBackend implements BackendProtocolV2 {
       scanFile(resolvedPath);
     }
 
-    return { matches };
+    return applyGrepMaxCount({ matches }, maxCount);
   }
 
   /**

@@ -19,8 +19,28 @@ import type {
   ReadResult,
   WriteResult,
 } from "./protocol.js";
-import { isSandboxBackend, isSandboxProtocol } from "./protocol.js";
+import {
+  applyGrepMaxCount,
+  isSandboxBackend,
+  isSandboxProtocol,
+} from "./protocol.js";
 import { adaptBackendProtocol, adaptSandboxProtocol } from "./utils.js";
+
+/**
+ * Remaining match budget for the next routed grep, or null when uncapped.
+ *
+ * Returns 0 once the cap is already met so callers can short-circuit
+ * remaining routes.
+ */
+function remainingGrepBudget(
+  maxCount: number | null | undefined,
+  collected: number,
+): number | null {
+  if (maxCount == null) {
+    return null;
+  }
+  return Math.max(maxCount - collected, 0);
+}
 
 /**
  * Backend that routes file operations to different backends based on path prefix.
@@ -179,7 +199,11 @@ export class CompositeBackend implements BackendProtocolV2 {
         return defaultResult;
       }
 
-      results.push(...(defaultResult.files || []));
+      // Loop instead of spread: push(...files) passes each entry as a
+      // separate argument and overflows the call stack on huge listings.
+      for (const fi of defaultResult.files || []) {
+        results.push(fi);
+      }
 
       // Add the route itself as a directory (e.g., /memories/)
       for (const [routePrefix] of this.sortedRoutes) {
@@ -229,11 +253,16 @@ export class CompositeBackend implements BackendProtocolV2 {
 
   /**
    * Structured search results or error string for invalid input.
+   *
+   * @param maxCount - Optional total cap on returned matches across all routed
+   *                   backends. When the cap is reached, remaining routes are
+   *                   short-circuited and the result is flagged `truncated: true`.
    */
   async grep(
     pattern: string,
     path: string | null = "/",
     glob: string | null = null,
+    maxCount: number | null = null,
   ): Promise<GrepResult> {
     const searchPath = path || "/";
 
@@ -241,7 +270,12 @@ export class CompositeBackend implements BackendProtocolV2 {
     for (const [routePrefix, backend] of this.sortedRoutes) {
       if (this.isPathWithinRoute(searchPath, routePrefix)) {
         const routeSearchPath = searchPath.substring(routePrefix.length - 1);
-        const raw = await backend.grep(pattern, routeSearchPath || "/", glob);
+        const raw = await backend.grep(
+          pattern,
+          routeSearchPath || "/",
+          glob,
+          maxCount,
+        );
 
         if (raw.error) {
           return raw;
@@ -252,19 +286,33 @@ export class CompositeBackend implements BackendProtocolV2 {
           ...m,
           path: routePrefix.slice(0, -1) + m.path,
         }));
-        return { matches };
+        return applyGrepMaxCount(
+          { matches, truncated: raw.truncated },
+          maxCount,
+        );
       }
     }
 
     // Otherwise, search default and routed backends mounted inside this path
     const allMatches: GrepMatch[] = [];
-    const rawDefault = await this.default.grep(pattern, searchPath, glob);
+    let truncated = false;
+    const rawDefault = await this.default.grep(
+      pattern,
+      searchPath,
+      glob,
+      maxCount,
+    );
 
     if (rawDefault.error) {
       return rawDefault;
     }
 
-    allMatches.push(...(rawDefault.matches || []));
+    // Loop instead of spread: push(...matches) passes each entry as a
+    // separate argument and overflows the call stack on huge result sets.
+    for (const m of rawDefault.matches || []) {
+      allMatches.push(m);
+    }
+    truncated = truncated || rawDefault.truncated === true;
 
     // Search only routes that are descendants of the requested path
     for (const [routePrefix, backend] of Object.entries(this.routes)) {
@@ -272,21 +320,27 @@ export class CompositeBackend implements BackendProtocolV2 {
         continue;
       }
 
-      const raw = await backend.grep(pattern, "/", glob);
+      const remaining = remainingGrepBudget(maxCount, allMatches.length);
+      if (remaining === 0) {
+        // Cap already met by earlier backends; skip the rest.
+        truncated = true;
+        break;
+      }
+
+      const raw = await backend.grep(pattern, "/", glob, remaining);
 
       if (raw.error) {
         return raw;
       }
 
       // Add route prefix back
-      const matches = (raw.matches || []).map((m) => ({
-        ...m,
-        path: routePrefix.slice(0, -1) + m.path,
-      }));
-      allMatches.push(...matches);
+      for (const m of raw.matches || []) {
+        allMatches.push({ ...m, path: routePrefix.slice(0, -1) + m.path });
+      }
+      truncated = truncated || raw.truncated === true;
     }
 
-    return { matches: allMatches };
+    return applyGrepMaxCount({ matches: allMatches, truncated }, maxCount);
   }
 
   /**
@@ -310,16 +364,22 @@ export class CompositeBackend implements BackendProtocolV2 {
           ...fi,
           path: routePrefix.slice(0, -1) + fi.path,
         }));
-        return { files };
+        return { files, truncated: result.truncated };
       }
     }
 
     // Path doesn't match any specific route - search default and route descendants
+    let truncated = false;
     const defaultResult = await this.default.glob(pattern, path);
     if (defaultResult.error) {
       return defaultResult;
     }
-    results.push(...(defaultResult.files || []));
+    // Loop instead of spread: push(...files) passes each entry as a
+    // separate argument and overflows the call stack on huge result sets.
+    for (const fi of defaultResult.files || []) {
+      results.push(fi);
+    }
+    truncated = truncated || defaultResult.truncated === true;
 
     for (const [routePrefix, backend] of Object.entries(this.routes)) {
       if (!this.isRouteUnderPath(routePrefix, path)) {
@@ -330,16 +390,15 @@ export class CompositeBackend implements BackendProtocolV2 {
       if (result.error) {
         continue; // Skip backends that error
       }
-      const files = (result.files || []).map((fi) => ({
-        ...fi,
-        path: routePrefix.slice(0, -1) + fi.path,
-      }));
-      results.push(...files);
+      for (const fi of result.files || []) {
+        results.push({ ...fi, path: routePrefix.slice(0, -1) + fi.path });
+      }
+      truncated = truncated || result.truncated === true;
     }
 
     // Deterministic ordering
     results.sort((a, b) => a.path.localeCompare(b.path));
-    return { files: results };
+    return { files: results, truncated };
   }
 
   /**

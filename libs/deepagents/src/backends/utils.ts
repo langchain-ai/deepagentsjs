@@ -996,9 +996,9 @@ export function adaptBackendProtocol(
       if (typeof result === "string") return { content: result };
       return result as ReadResult;
     },
-    async grep(pattern, path, glob): Promise<GrepResult> {
+    async grep(pattern, path, glob, maxCount): Promise<GrepResult> {
       const result = await ("grep" in backend
-        ? (backend as BackendProtocolV2).grep(pattern, path, glob)
+        ? (backend as BackendProtocolV2).grep(pattern, path, glob, maxCount)
         : (backend as BackendProtocolV1).grepRaw(pattern, path, glob));
       if (Array.isArray(result)) return { matches: result };
       if (typeof result === "string") return { error: result };

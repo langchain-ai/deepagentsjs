@@ -19,6 +19,7 @@ import type {
   BackendProtocolV2,
   BackendOptions,
 } from "./protocol.js";
+import { applyGrepMaxCount } from "./protocol.js";
 import {
   createFileData,
   createWriteFileData,
@@ -351,10 +352,11 @@ export class StateBackend implements BackendProtocolV2 {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
+    maxCount: number | null = null,
   ): GrepResult {
     const files = this.files;
     const result = grepMatchesFromFiles(files, pattern, path, glob);
-    return { matches: result };
+    return applyGrepMaxCount({ matches: result }, maxCount);
   }
 
   /**

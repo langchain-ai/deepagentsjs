@@ -21,6 +21,7 @@ import type {
   ReadResult,
   WriteResult,
 } from "./protocol.js";
+import { applyGrepMaxCount } from "./protocol.js";
 import { performStringReplacement } from "./utils.js";
 
 const URL_COMMIT_SUFFIX_RE = /:([0-9a-f]{8,64})$/i;
@@ -350,6 +351,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
     pattern: string,
     path: string | null = null,
     glob: string | null = null,
+    maxCount: number | null = null,
   ): Promise<GrepResult> {
     let cache: Record<string, string>;
     try {
@@ -383,7 +385,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
       }
     }
 
-    return { matches };
+    return applyGrepMaxCount({ matches }, maxCount);
   }
 
   async glob(pattern: string, _path: string = "/"): Promise<GlobResult> {
