@@ -145,6 +145,7 @@ export {
   type BackendProtocolV2,
   type BackendFactory,
   type BackendRuntime,
+  applyGrepMaxCount,
   resolveBackend,
   type FileInfo,
   type GrepMatch,

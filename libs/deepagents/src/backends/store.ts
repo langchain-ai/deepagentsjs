@@ -26,6 +26,7 @@ import type {
   WriteResult,
   StateAndStore,
 } from "./protocol.js";
+import { applyGrepMaxCount } from "./protocol.js";
 import {
   createFileData,
   createWriteFileData,
@@ -673,6 +674,7 @@ export class StoreBackend implements BackendProtocolV2 {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
+    maxCount: number | null = null,
   ): Promise<GrepResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
@@ -689,7 +691,7 @@ export class StoreBackend implements BackendProtocolV2 {
     }
 
     const matches = grepMatchesFromFiles(files, pattern, path, glob);
-    return { matches };
+    return applyGrepMaxCount({ result: { matches }, maxCount });
   }
 
   /**

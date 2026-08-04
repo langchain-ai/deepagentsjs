@@ -1449,6 +1449,112 @@ describe("createFilesystemMiddleware", () => {
       expect(typeof result).toBe("string");
       expect(result).toContain("No matches found");
     });
+
+    it("grep tool passes the configured grepMaxCount to the backend", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.grep = vi.fn().mockResolvedValue({ matches: [] });
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+        grepMaxCount: 25,
+      });
+
+      const grepTool = middleware.tools!.find(
+        (t: any) => t.name === "grep",
+      ) as any;
+      await grepTool.invoke({ pattern: "needle", path: "/" });
+
+      expect(mockBackend.grep).toHaveBeenCalledWith("needle", "/", null, 25);
+    });
+
+    it("grep tool defaults grepMaxCount to 1000", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.grep = vi.fn().mockResolvedValue({ matches: [] });
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+
+      const grepTool = middleware.tools!.find(
+        (t: any) => t.name === "grep",
+      ) as any;
+      await grepTool.invoke({ pattern: "needle", path: "/" });
+
+      expect(mockBackend.grep).toHaveBeenCalledWith("needle", "/", null, 1000);
+    });
+
+    it("grep tool max_count arg overrides the configured default", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.grep = vi.fn().mockResolvedValue({ matches: [] });
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+        grepMaxCount: 25,
+      });
+
+      const grepTool = middleware.tools!.find(
+        (t: any) => t.name === "grep",
+      ) as any;
+      await grepTool.invoke({ pattern: "needle", path: "/", max_count: 5 });
+
+      expect(mockBackend.grep).toHaveBeenCalledWith("needle", "/", null, 5);
+    });
+
+    it("grep tool appends the truncation note when the backend flags truncated", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.grep = vi.fn().mockResolvedValue({
+        matches: [{ path: "/a.ts", line: 1, text: "needle" }],
+        truncated: true,
+      });
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+
+      const grepTool = middleware.tools!.find(
+        (t: any) => t.name === "grep",
+      ) as any;
+      const result = await grepTool.invoke({ pattern: "needle", path: "/" });
+
+      expect(result).toContain("/a.ts");
+      expect(result).toContain("maximum match count");
+      expect(result).toContain("valid but incomplete");
+    });
+
+    it("grep tool omits the truncation note when the backend result is complete", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.grep = vi.fn().mockResolvedValue({
+        matches: [{ path: "/a.ts", line: 1, text: "needle" }],
+        truncated: false,
+      });
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+
+      const grepTool = middleware.tools!.find(
+        (t: any) => t.name === "grep",
+      ) as any;
+      const result = await grepTool.invoke({ pattern: "needle", path: "/" });
+
+      expect(result).toContain("/a.ts");
+      expect(result).not.toContain("maximum match count");
+    });
   });
 
   describe("beforeAgent - large HumanMessage eviction", () => {

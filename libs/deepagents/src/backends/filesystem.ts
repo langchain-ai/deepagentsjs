@@ -30,6 +30,7 @@ import type {
   ReadResult,
   WriteResult,
 } from "./protocol.js";
+import { applyGrepMaxCount } from "./protocol.js";
 import {
   checkEmptyContent,
   getMimeType,
@@ -567,12 +568,15 @@ export class FilesystemBackend implements BackendProtocolV2 {
    * @param pattern - Literal string to search for (NOT regex).
    * @param dirPath - Directory or file path to search in. Defaults to current directory.
    * @param glob - Optional glob pattern to filter which files to search.
+   * @param maxCount - Optional cap on the total number of matches returned.
+   *                   When the cap is hit, results are flagged `truncated: true`.
    * @returns List of GrepMatch dicts containing path, line number, and matched text.
    */
   async grep(
     pattern: string,
     dirPath: string = "/",
     glob: string | null = null,
+    maxCount: number | null = null,
   ): Promise<GrepResult> {
     // Resolve base path
     let baseFull: string;
@@ -600,7 +604,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
         matches.push({ path: fpath, line: lineNum, text: lineText });
       }
     }
-    return { matches };
+    return applyGrepMaxCount({ result: { matches }, maxCount });
   }
 
   /**

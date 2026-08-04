@@ -30,6 +30,7 @@ import type {
   SandboxBackendProtocolV2,
   WriteResult,
 } from "./protocol.js";
+import { applyGrepMaxCount } from "./protocol.js";
 import { getMimeType, isTextMimeType } from "./utils.js";
 
 /**
@@ -424,6 +425,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
+    maxCount: number | null = null,
   ): Promise<GrepResult> {
     const command = buildGrepCommand(pattern, path, glob);
     const result = await this.execute(command);
@@ -457,7 +459,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
       }
     }
 
-    return { matches };
+    return applyGrepMaxCount({ result: { matches }, maxCount });
   }
 
   /**

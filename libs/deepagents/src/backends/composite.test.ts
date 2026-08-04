@@ -366,7 +366,7 @@ describe("CompositeBackend", () => {
     expect(paths).toContain("/workspace/index.ts");
     expect(paths).toContain("/workspace/memories/note.md");
     expect(outsideSpy).not.toHaveBeenCalled();
-    expect(insideSpy).toHaveBeenCalledWith("index", "/", "**/*");
+    expect(insideSpy).toHaveBeenCalledWith("index", "/", "**/*", null);
   });
 
   it("glob should only fan out to routed backends mounted under the search path", async () => {
@@ -933,6 +933,155 @@ describe("CompositeBackend", () => {
       expect(result[0].error).toBeNull();
       expect(result[1].error).toBe("file_not_found");
       expect(result[2].error).toBe("file_not_found");
+    });
+  });
+
+  describe("large result sets", () => {
+    /**
+     * Backend stub returning a large fixed result set, used to exercise the
+     * composite merge paths without a real filesystem walk.
+     */
+    function makeLargeBackend(fileCount: number, matchCount: number) {
+      const files = Array.from({ length: fileCount }, (_, i) => ({
+        path: `/f${i}.txt`,
+        is_dir: false,
+      }));
+      const matches = Array.from({ length: matchCount }, (_, i) => ({
+        path: `/f${i}.txt`,
+        line: 1,
+        text: "hit",
+      }));
+      return {
+        ls: vi.fn().mockResolvedValue({ files }),
+        read: vi.fn().mockResolvedValue({ content: "" }),
+        readRaw: vi.fn().mockResolvedValue({ data: {} }),
+        write: vi.fn().mockResolvedValue({ path: "" }),
+        edit: vi.fn().mockResolvedValue({ path: "" }),
+        grep: vi.fn().mockResolvedValue({ matches }),
+        glob: vi.fn().mockResolvedValue({ files }),
+      };
+    }
+
+    it("glob does not overflow the call stack on a huge default-backend result", async () => {
+      // 200k entries comfortably exceeds V8's argument-spread limit
+      // (~65k-125k), which `results.push(...files)` would hit.
+      const composite = new CompositeBackend(makeLargeBackend(200_000, 0), {});
+
+      const result = await composite.glob("**/*", "/");
+
+      expect(result.error).toBeUndefined();
+      expect(result.files).toHaveLength(200_000);
+    });
+
+    it("grep does not overflow the call stack on a huge default-backend result", async () => {
+      const composite = new CompositeBackend(makeLargeBackend(0, 200_000), {});
+
+      const result = await composite.grep("hit", "/");
+
+      expect(result.error).toBeUndefined();
+      expect(result.matches).toHaveLength(200_000);
+    });
+
+    it("glob does not overflow when merging a huge routed-backend result", async () => {
+      const composite = new CompositeBackend(makeLargeBackend(0, 0), {
+        "/big/": makeLargeBackend(200_000, 0),
+      });
+
+      const result = await composite.glob("**/*", "/");
+
+      expect(result.error).toBeUndefined();
+      expect(result.files).toHaveLength(200_000);
+    });
+  });
+
+  describe("grep maxCount", () => {
+    function makeGrepBackend(matches: GrepResult["matches"]) {
+      return {
+        ls: vi.fn().mockResolvedValue({ files: [] }),
+        read: vi.fn().mockResolvedValue({ content: "" }),
+        readRaw: vi.fn().mockResolvedValue({ data: {} }),
+        write: vi.fn().mockResolvedValue({ path: "" }),
+        edit: vi.fn().mockResolvedValue({ path: "" }),
+        grep: vi.fn().mockResolvedValue({ matches }),
+        glob: vi.fn().mockResolvedValue({ files: [] }),
+      };
+    }
+
+    it("caps matches and flags truncated when the default backend exceeds maxCount", async () => {
+      const matches = Array.from({ length: 10 }, (_, i) => ({
+        path: `/f${i}.txt`,
+        line: 1,
+        text: "hit",
+      }));
+      const composite = new CompositeBackend(makeGrepBackend(matches), {});
+
+      const result = await composite.grep("hit", "/", null, 5);
+
+      expect(result.matches).toHaveLength(5);
+      expect(result.truncated).toBe(true);
+    });
+
+    it("splits the maxCount budget across default and routed backends", async () => {
+      const defaultMatches = Array.from({ length: 4 }, (_, i) => ({
+        path: `/d${i}.txt`,
+        line: 1,
+        text: "hit",
+      }));
+      const routedMatches = Array.from({ length: 4 }, (_, i) => ({
+        path: `/r${i}.txt`,
+        line: 1,
+        text: "hit",
+      }));
+      const defaultBackend = makeGrepBackend(defaultMatches);
+      const routedBackend = makeGrepBackend(routedMatches);
+      const composite = new CompositeBackend(defaultBackend, {
+        "/memories/": routedBackend,
+      });
+
+      const result = await composite.grep("hit", "/", null, 5);
+
+      // Default fills 4 of the 5 budget; the route gets the remaining 1.
+      expect(defaultBackend.grep).toHaveBeenCalledWith("hit", "/", null, 5);
+      expect(routedBackend.grep).toHaveBeenCalledWith("hit", "/", null, 1);
+      expect(result.matches).toHaveLength(5);
+      expect(result.truncated).toBe(true);
+      expect(result.matches!.some((m) => m.path === "/memories/r0.txt")).toBe(
+        true,
+      );
+    });
+
+    it("short-circuits remaining routes once the budget is exhausted", async () => {
+      const defaultMatches = Array.from({ length: 5 }, (_, i) => ({
+        path: `/d${i}.txt`,
+        line: 1,
+        text: "hit",
+      }));
+      const defaultBackend = makeGrepBackend(defaultMatches);
+      const routedBackend = makeGrepBackend([
+        { path: "/r0.txt", line: 1, text: "hit" },
+      ]);
+      const composite = new CompositeBackend(defaultBackend, {
+        "/memories/": routedBackend,
+      });
+
+      const result = await composite.grep("hit", "/", null, 5);
+
+      expect(routedBackend.grep).not.toHaveBeenCalled();
+      expect(result.matches).toHaveLength(5);
+      expect(result.truncated).toBe(true);
+    });
+
+    it("returns all matches untruncated when under the cap", async () => {
+      const matches = [
+        { path: "/a.txt", line: 1, text: "hit" },
+        { path: "/b.txt", line: 2, text: "hit" },
+      ];
+      const composite = new CompositeBackend(makeGrepBackend(matches), {});
+
+      const result = await composite.grep("hit", "/", null, 1000);
+
+      expect(result.matches).toHaveLength(2);
+      expect(result.truncated).toBe(false);
     });
   });
 });
