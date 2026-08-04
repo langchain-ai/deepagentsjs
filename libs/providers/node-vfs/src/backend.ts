@@ -1039,7 +1039,7 @@ export class VfsBackend implements BackendProtocolV2 {
       scanFile(resolvedPath);
     }
 
-    return applyGrepMaxCount({ matches }, maxCount);
+    return applyGrepMaxCount({ result: { matches }, maxCount });
   }
 
   /**

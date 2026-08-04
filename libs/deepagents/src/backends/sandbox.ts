@@ -459,7 +459,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
       }
     }
 
-    return applyGrepMaxCount({ matches }, maxCount);
+    return applyGrepMaxCount({ result: { matches }, maxCount });
   }
 
   /**

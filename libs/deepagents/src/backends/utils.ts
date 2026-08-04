@@ -7,9 +7,10 @@
  */
 
 import micromatch from "micromatch";
-import type {
+import {
   AnyBackendProtocol,
   AnySandboxProtocol,
+  applyGrepMaxCount,
   BackendProtocolV1,
   BackendProtocolV2,
   FileData,
@@ -1000,7 +1001,9 @@ export function adaptBackendProtocol(
       const result = await ("grep" in backend
         ? (backend as BackendProtocolV2).grep(pattern, path, glob, maxCount)
         : (backend as BackendProtocolV1).grepRaw(pattern, path, glob));
-      if (Array.isArray(result)) return { matches: result };
+      if (Array.isArray(result)) {
+        return applyGrepMaxCount({ result: { matches: result }, maxCount });
+      }
       if (typeof result === "string") return { error: result };
       return result as GrepResult;
     },

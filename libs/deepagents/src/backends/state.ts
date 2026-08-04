@@ -356,7 +356,7 @@ export class StateBackend implements BackendProtocolV2 {
   ): GrepResult {
     const files = this.files;
     const result = grepMatchesFromFiles(files, pattern, path, glob);
-    return applyGrepMaxCount({ matches: result }, maxCount);
+    return applyGrepMaxCount({ result: { matches: result }, maxCount });
   }
 
   /**

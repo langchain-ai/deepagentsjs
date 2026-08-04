@@ -90,10 +90,11 @@ export interface GrepResult {
  * When `maxCount` is set and the result exceeds it, the matches are sliced
  * to the cap and the result is flagged `truncated: true`.
  */
-export function applyGrepMaxCount(
-  result: GrepResult,
-  maxCount: number | null | undefined,
-): GrepResult {
+export function applyGrepMaxCount(params: {
+  result: GrepResult;
+  maxCount: number | null | undefined;
+}): GrepResult {
+  const { result, maxCount } = params;
   if (
     maxCount == null ||
     result.matches == null ||

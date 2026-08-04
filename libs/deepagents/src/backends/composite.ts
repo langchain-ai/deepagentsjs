@@ -27,22 +27,6 @@ import {
 import { adaptBackendProtocol, adaptSandboxProtocol } from "./utils.js";
 
 /**
- * Remaining match budget for the next routed grep, or null when uncapped.
- *
- * Returns 0 once the cap is already met so callers can short-circuit
- * remaining routes.
- */
-function remainingGrepBudget(
-  maxCount: number | null | undefined,
-  collected: number,
-): number | null {
-  if (maxCount == null) {
-    return null;
-  }
-  return Math.max(maxCount - collected, 0);
-}
-
-/**
  * Backend that routes file operations to different backends based on path prefix.
  *
  * This enables hybrid storage strategies like:
@@ -286,10 +270,10 @@ export class CompositeBackend implements BackendProtocolV2 {
           ...m,
           path: routePrefix.slice(0, -1) + m.path,
         }));
-        return applyGrepMaxCount(
-          { matches, truncated: raw.truncated },
+        return applyGrepMaxCount({
+          result: { matches, truncated: raw.truncated },
           maxCount,
-        );
+        });
       }
     }
 
@@ -307,8 +291,6 @@ export class CompositeBackend implements BackendProtocolV2 {
       return rawDefault;
     }
 
-    // Loop instead of spread: push(...matches) passes each entry as a
-    // separate argument and overflows the call stack on huge result sets.
     for (const m of rawDefault.matches || []) {
       allMatches.push(m);
     }
@@ -320,9 +302,9 @@ export class CompositeBackend implements BackendProtocolV2 {
         continue;
       }
 
-      const remaining = remainingGrepBudget(maxCount, allMatches.length);
+      const remaining =
+        maxCount == null ? null : Math.max(maxCount - allMatches.length, 0);
       if (remaining === 0) {
-        // Cap already met by earlier backends; skip the rest.
         truncated = true;
         break;
       }
@@ -340,7 +322,10 @@ export class CompositeBackend implements BackendProtocolV2 {
       truncated = truncated || raw.truncated === true;
     }
 
-    return applyGrepMaxCount({ matches: allMatches, truncated }, maxCount);
+    return applyGrepMaxCount({
+      result: { matches: allMatches, truncated },
+      maxCount,
+    });
   }
 
   /**
@@ -369,17 +354,15 @@ export class CompositeBackend implements BackendProtocolV2 {
     }
 
     // Path doesn't match any specific route - search default and route descendants
-    let truncated = false;
     const defaultResult = await this.default.glob(pattern, path);
     if (defaultResult.error) {
       return defaultResult;
     }
-    // Loop instead of spread: push(...files) passes each entry as a
-    // separate argument and overflows the call stack on huge result sets.
+
     for (const fi of defaultResult.files || []) {
       results.push(fi);
     }
-    truncated = truncated || defaultResult.truncated === true;
+    let truncated = defaultResult.truncated === true;
 
     for (const [routePrefix, backend] of Object.entries(this.routes)) {
       if (!this.isRouteUnderPath(routePrefix, path)) {

@@ -691,7 +691,7 @@ export class StoreBackend implements BackendProtocolV2 {
     }
 
     const matches = grepMatchesFromFiles(files, pattern, path, glob);
-    return applyGrepMaxCount({ matches }, maxCount);
+    return applyGrepMaxCount({ result: { matches }, maxCount });
   }
 
   /**

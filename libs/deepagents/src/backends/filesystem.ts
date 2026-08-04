@@ -604,7 +604,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
         matches.push({ path: fpath, line: lineNum, text: lineText });
       }
     }
-    return applyGrepMaxCount({ matches }, maxCount);
+    return applyGrepMaxCount({ result: { matches }, maxCount });
   }
 
   /**

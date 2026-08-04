@@ -385,7 +385,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
       }
     }
 
-    return applyGrepMaxCount({ matches }, maxCount);
+    return applyGrepMaxCount({ result: { matches }, maxCount });
   }
 
   async glob(pattern: string, _path: string = "/"): Promise<GlobResult> {
