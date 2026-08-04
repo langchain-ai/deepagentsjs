@@ -1,6 +1,8 @@
 # @langchain/daytona
 
-## 1.0.0
+## 0.2.2
+
+- The 1.0.0 release was published by mistake and has been deprecated. Please use 0.2.2 instead.
 
 ## 1.0.0-rc.0
 

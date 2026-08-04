@@ -1,6 +1,6 @@
 {
   "name": "@langchain/daytona",
-  "version": "1.0.0",
+  "version": "0.2.2",
   "description": "Daytona Sandbox backend for deepagents",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
