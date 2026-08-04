@@ -33,6 +33,7 @@ import { StateBackend } from "../backends/state.js";
 import {
   sanitizeToolCallId,
   formatContentWithLineNumbers,
+  formatGrepMatches,
   truncateIfTooLong,
   getMimeType,
   isTextMimeType,
@@ -1071,7 +1072,8 @@ function createGrepTool(
       }
 
       const resolvedBackend = await resolveBackend(backend, runtime);
-      const { pattern, path = "/", glob = null } = input;
+      const { pattern, path = "/", glob = null, output_mode = "content" } =
+        input;
       // A per-call max_count overrides the configured middleware default.
       const maxCount = input.max_count ?? grepMaxCount;
       const result = await resolvedBackend.grep(pattern, path, glob, maxCount);
@@ -1092,19 +1094,9 @@ function createGrepTool(
         return `No matches found for pattern '${pattern}'`;
       }
 
-      // Format output: group by file
-      const lines: string[] = [];
-      let currentFile: string | null = null;
-      for (const match of matches) {
-        if (match.path !== currentFile) {
-          currentFile = match.path;
-          lines.push(`\n${currentFile}:`);
-        }
-        lines.push(`  ${match.line}: ${match.text}`);
-      }
-
-      const truncated = truncateIfTooLong(lines);
-      let content = Array.isArray(truncated) ? truncated.join("\n") : truncated;
+      const formatted = formatGrepMatches(matches, output_mode);
+      const truncated = truncateIfTooLong(formatted);
+      let content = typeof truncated === "string" ? truncated : truncated.join("\n");
 
       if (result.truncated) {
         content += `\n\n${GREP_TRUNCATION_NOTE}`;
@@ -1141,6 +1133,13 @@ function createGrepTool(
             "Optional cap on the total number of matches returned across all files. " +
               "Leave unset to use the configured default. When the cap is hit, results " +
               "are truncated and a note says so; narrow the pattern or path to see the rest.",
+          ),
+        output_mode: z
+          .enum(["files_with_matches", "content", "count"])
+          .optional()
+          .default("content")
+          .describe(
+            "Output format: 'files_with_matches' lists matching file paths, 'content' shows matching lines (default), 'count' shows match counts per file",
           ),
       }),
     },
