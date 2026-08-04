@@ -2,8 +2,6 @@
 
 ## 0.1.6
 
-- The 1.0.0 release was published by mistake and has been deprecated. Please use 0.1.6 instead.
-
 ## 1.0.0-rc.0
 
 ### Patch Changes

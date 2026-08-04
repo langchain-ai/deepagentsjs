@@ -2,8 +2,6 @@
 
 ## 0.2.2
 
-- The 1.0.0 release was published by mistake and has been deprecated. Please use 0.2.2 instead.
-
 ### Patch Changes
 
 - [#674](https://github.com/langchain-ai/deepagentsjs/pull/674) [`dd142fe`](https://github.com/langchain-ai/deepagentsjs/commit/dd142fe4fc54c986d5bcf51211d9a839a427e931) Thanks [@hntrl](https://github.com/hntrl)! - fix: allow `VfsBackend.write` to overwrite existing files while continuing to reject symlinks
