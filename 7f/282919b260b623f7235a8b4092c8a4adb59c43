@@ -1,0 +1,24 @@
+libs/deepagents/src/middleware/fs.ts
+  s_c1db6a4b086818::t_d2701cc6b368f5 36
+  s_c1db6a4b086818::t_5dc711f133282d 1075-1076,1097-1098,1137-1143
+.changeset/grep-output-mode.md
+  s_c1db6a4b086818::t_c910c9f180c04a 1-5
+libs/deepagents/src/middleware/fs.test.ts
+  s_c1db6a4b086818::t_77591ac13c59f2 1452,1559-1593
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "7f282919b260b623f7235a8b4092c8a4adb59c43",
+  "prompts": {},
+  "sessions": {
+    "s_c1db6a4b086818": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cf814f82-d0e2-4115-8776-81c9e27aaa6c",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "gdibben <gethin.dibben@langchain.dev>"
+    }
+  }
+}

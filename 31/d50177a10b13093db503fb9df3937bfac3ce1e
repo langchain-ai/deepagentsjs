@@ -1,0 +1,19 @@
+.changeset/grep-output-mode.md
+  s_c1db6a4b086818::t_5cd49ed8db48ab 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "31d50177a10b13093db503fb9df3937bfac3ce1e",
+  "prompts": {},
+  "sessions": {
+    "s_c1db6a4b086818": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cf814f82-d0e2-4115-8776-81c9e27aaa6c",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "gdibben <gethin.dibben@langchain.dev>"
+    }
+  }
+}
