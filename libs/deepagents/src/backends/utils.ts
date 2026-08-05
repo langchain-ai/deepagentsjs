@@ -137,6 +137,12 @@ const MIME_TYPES: Record<string, string> = {
   ".gitignore": "text/plain",
   ".dockerignore": "text/plain",
   ".editorconfig": "text/plain",
+
+  ".abap": "text/plain",
+  ".asddls": "text/plain",
+  ".asdtmd": "text/plain",
+  ".ddls": "text/plain",
+  ".ddlx": "text/plain",
 };
 
 function basename(filePath: string): string {
