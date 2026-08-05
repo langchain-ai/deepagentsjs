@@ -475,6 +475,36 @@ describe("createSummarizationMiddleware", () => {
     });
   });
 
+  describe("summary input trimming", () => {
+    it("does not trim an oversized summary input by default", async () => {
+      const invoke = vi.fn(async (_messages: BaseMessage[]) => ({
+        content: "Summary of the conversation.",
+      }));
+      const middleware = createSummarizationMiddleware({
+        model: {
+          profile: { maxInputTokens: 128_000 },
+          invoke,
+        } as any,
+        backend: createMockBackend(),
+        trigger: { type: "messages", value: 2 },
+        keep: { type: "messages", value: 1 },
+      });
+      const oversizedContent = `important tool result: ${"x".repeat(20_000)}`;
+
+      const { result } = await callWrapModelCall(middleware, {
+        messages: [
+          new HumanMessage({ content: oversizedContent }),
+          new HumanMessage({ content: "Continue with the task." }),
+        ],
+      });
+
+      expect(isCommand(result)).toBe(true);
+      expect(invoke).toHaveBeenCalledOnce();
+      const summaryRequest = invoke.mock.calls[0][0] as BaseMessage[];
+      expect(summaryRequest[0].content).toContain(oversizedContent);
+    });
+  });
+
   describe("argument truncation", () => {
     it("should count tokens once when nothing is truncated or summarized", async () => {
       const middleware = createSummarizationMiddleware({
