@@ -1072,8 +1072,12 @@ function createGrepTool(
       }
 
       const resolvedBackend = await resolveBackend(backend, runtime);
-      const { pattern, path = "/", glob = null, output_mode = "content" } =
-        input;
+      const {
+        pattern,
+        path = "/",
+        glob = null,
+        output_mode = "content",
+      } = input;
       // A per-call max_count overrides the configured middleware default.
       const maxCount = input.max_count ?? grepMaxCount;
       const result = await resolvedBackend.grep(pattern, path, glob, maxCount);
@@ -1096,7 +1100,8 @@ function createGrepTool(
 
       const formatted = formatGrepMatches(matches, output_mode);
       const truncated = truncateIfTooLong(formatted);
-      let content = typeof truncated === "string" ? truncated : truncated.join("\n");
+      let content =
+        typeof truncated === "string" ? truncated : truncated.join("\n");
 
       if (result.truncated) {
         content += `\n\n${GREP_TRUNCATION_NOTE}`;
