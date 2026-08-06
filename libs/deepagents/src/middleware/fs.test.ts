@@ -1555,6 +1555,42 @@ describe("createFilesystemMiddleware", () => {
       expect(result).toContain("/a.ts");
       expect(result).not.toContain("maximum match count");
     });
+
+    it("grep tool should support output_mode files_with_matches and count", async () => {
+      const matches = [
+        { path: "/src/file1.ts", line: 10, text: "const pattern = 'test'" },
+        { path: "/src/file1.ts", line: 20, text: "another pattern here" },
+        { path: "/src/file2.ts", line: 5, text: "pattern.match(/test/)" },
+      ];
+
+      const mockBackend = createMockBackend();
+      mockBackend.grep = vi.fn().mockResolvedValue({ matches });
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+
+      const grepTool = middleware.tools!.find(
+        (t: any) => t.name === "grep",
+      ) as any;
+
+      const filesResult = await grepTool.invoke({
+        pattern: "pattern",
+        path: "/",
+        output_mode: "files_with_matches",
+      });
+      expect(filesResult).toBe("/src/file1.ts\n/src/file2.ts");
+
+      const countResult = await grepTool.invoke({
+        pattern: "pattern",
+        path: "/",
+        output_mode: "count",
+      });
+      expect(countResult).toBe("/src/file1.ts: 2\n/src/file2.ts: 1");
+    });
   });
 
   describe("beforeAgent - large HumanMessage eviction", () => {
