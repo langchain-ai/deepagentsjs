@@ -229,6 +229,49 @@ describe("createCodeInterpreterMiddleware", () => {
       );
       expect(req.systemMessage.text).not.toContain("pure computation");
     });
+
+    it("should forward the eval config to PTC tools", async () => {
+      const capturedConfigs: unknown[] = [];
+      const configAwareTool = tool(
+        async (_input, config) => {
+          capturedConfigs.push(config);
+          return "config received";
+        },
+        {
+          name: "config_aware",
+          description: "Captures the runnable config.",
+          schema: z.object({}),
+        },
+      );
+      const middleware = createCodeInterpreterMiddleware({
+        ptc: [configAwareTool],
+      });
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: { configurable: { thread_id: "ptc-config" } },
+          tools: [],
+        } as any,
+        mockHandler,
+      );
+      const evalConfig = {
+        configurable: {
+          thread_id: "ptc-config",
+          task_id: "browser-task",
+        },
+      };
+      const evalTool = middleware.tools!.find(
+        (candidate) => candidate.name === "eval",
+      );
+
+      await expect(
+        evalTool!.invoke({ code: "await tools.configAware({})" }, evalConfig),
+      ).resolves.toContain("config received");
+      expect(capturedConfigs).toHaveLength(1);
+      expect(capturedConfigs[0]).toMatchObject(evalConfig);
+    });
   });
 
   describe("generatePtcPrompt", () => {

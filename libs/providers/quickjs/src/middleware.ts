@@ -500,6 +500,7 @@ export function createCodeInterpreterMiddleware(
         session.updateBridgeDispatch(createBridgeDispatch(taskTool, config));
       }
 
+      session.setToolConfig(config);
       const result = await session.eval(input.code, executionTimeoutMs);
       return formatReplResult(result);
     },
