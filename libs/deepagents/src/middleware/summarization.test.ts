@@ -451,6 +451,49 @@ describe("createSummarizationMiddleware", () => {
       expect(summaryMessage.content).toContain("saved to");
     });
 
+    it("should extract only text from content blocks (e.g. thinking models)", async () => {
+      const mockBackend = createMockBackend();
+      const blockModel = {
+        async invoke(_messages: any) {
+          return new AIMessage({
+            content: [
+              {
+                type: "reasoning",
+                reasoning: "internal deliberation",
+                signature: "OPAQUE_SIGNATURE",
+              },
+              { type: "text", text: "This is a summary" },
+              { type: "text", text: " of the conversation." },
+            ] as any,
+          });
+        },
+        profile: { maxInputTokens: 128000 },
+      };
+      const middleware = createSummarizationMiddleware({
+        model: blockModel as any,
+        backend: mockBackend,
+        trigger: { type: "messages", value: 5 },
+        keep: { type: "messages", value: 2 },
+      });
+
+      const messages = Array.from(
+        { length: 10 },
+        (_, i) => new HumanMessage({ content: `Message ${i}` }),
+      );
+
+      const { capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
+
+      expect(capturedRequest).not.toBeNull();
+      const summaryMessage = capturedRequest!.messages[0];
+      expect(summaryMessage.content).toContain(
+        "This is a summary of the conversation.",
+      );
+      expect(summaryMessage.content).not.toContain("OPAQUE_SIGNATURE");
+      expect(summaryMessage.content).not.toContain('"type":"reasoning"');
+    });
+
     it("should mark summary message with lc_source", async () => {
       const mockBackend = createMockBackend();
       const middleware = createSummarizationMiddleware({
