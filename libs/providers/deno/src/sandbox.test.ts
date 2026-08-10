@@ -159,7 +159,7 @@ vi.mock("@deno/sandbox", () => {
 
     // SDK methods
     async spawn(
-      _cmd: string,
+      cmd: string,
       options: { args: string[]; stdout: string; stderr: string },
     ): Promise<{
       output: () => Promise<{
@@ -169,14 +169,8 @@ vi.mock("@deno/sandbox", () => {
       }>;
       status: Promise<{ success: boolean; code: number }>;
     }> {
-      // Extract the command from args (bash -c "command")
-      const command = options.args?.[1] || "";
-
-      // Handle cat commands for file reading
-      if (command.startsWith("cat ")) {
-        // Extract file path from 'cat "path"' or 'cat path'
-        const match = command.match(/^cat\s+"?([^"]+)"?$/);
-        const filePath = match ? match[1] : command.substring(4).trim();
+      if (cmd === "/bin/cat") {
+        const filePath = options.args[0];
         const content = this.files.get(filePath);
 
         if (content !== undefined) {
@@ -188,20 +182,19 @@ vi.mock("@deno/sandbox", () => {
             }),
             status: Promise.resolve({ success: true, code: 0 }),
           };
-        } else {
-          return {
-            output: async () => ({
-              status: { success: false, code: 1 },
-              stdoutText: "",
-              stderrText: "cat: file not found",
-            }),
-            status: Promise.resolve({ success: false, code: 1 }),
-          };
         }
+
+        return {
+          output: async () => ({
+            status: { success: false, code: 1 },
+            stdoutText: "",
+            stderrText: "cat: file not found",
+          }),
+          status: Promise.resolve({ success: false, code: 1 }),
+        };
       }
 
-      // Handle mkdir commands (always succeed)
-      if (command.startsWith("mkdir ")) {
+      if (cmd === "/bin/mkdir") {
         return {
           output: async () => ({
             status: { success: true, code: 0 },
@@ -212,7 +205,7 @@ vi.mock("@deno/sandbox", () => {
         };
       }
 
-      // Default behavior for other commands
+      // Default behavior for shell commands and other commands
       const result = { ...this.nextCommandResult };
 
       return {
@@ -511,6 +504,22 @@ describe("DenoSandbox", () => {
       expect(writeFileSpy).toHaveBeenCalledWith("test.txt", "file content");
     });
 
+    it("should create parent directories without shell interpretation", async () => {
+      const sandbox = await DenoSandbox.create();
+      const spawnSpy = vi.spyOn(mockState.sandboxInstance!, "spawn");
+      const maliciousParentDir = "src/$(touch /tmp/pwned)";
+
+      const content = new TextEncoder().encode("file content");
+      await sandbox.uploadFiles([[`${maliciousParentDir}/file.txt`, content]]);
+
+      expect(spawnSpy).toHaveBeenCalledWith("/bin/mkdir", {
+        args: ["-p", maliciousParentDir],
+        stdout: "piped",
+        stderr: "piped",
+      });
+      expect(spawnSpy).not.toHaveBeenCalledWith("/bin/bash", expect.anything());
+    });
+
     it("should upload multiple files", async () => {
       const sandbox = await DenoSandbox.create();
 
@@ -560,6 +569,26 @@ describe("DenoSandbox", () => {
 
       const content = new TextDecoder().decode(results[0].content!);
       expect(content).toBe("file content");
+    });
+
+    it("should read files without shell interpretation", async () => {
+      const sandbox = await DenoSandbox.create();
+      const spawnSpy = vi.spyOn(mockState.sandboxInstance!, "spawn");
+      const maliciousPath = "$(touch /tmp/pwned).txt";
+      mockState.sandboxInstance!.addFile(maliciousPath, "literal content");
+
+      const results = await sandbox.downloadFiles([maliciousPath]);
+
+      expect(results[0].error).toBeNull();
+      expect(new TextDecoder().decode(results[0].content!)).toBe(
+        "literal content",
+      );
+      expect(spawnSpy).toHaveBeenCalledWith("/bin/cat", {
+        args: [maliciousPath],
+        stdout: "piped",
+        stderr: "piped",
+      });
+      expect(spawnSpy).not.toHaveBeenCalledWith("/bin/bash", expect.anything());
     });
 
     it("should handle file_not_found", async () => {

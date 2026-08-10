@@ -69,6 +69,7 @@ import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import { filesValue } from "../values.js";
 import { StateSchema } from "@langchain/langgraph";
 import { adaptBackendProtocol } from "../backends/utils.js";
+import { isAnthropicModel } from "../utils.js";
 
 /**
  * Import @langchain/langgraph for type inference
@@ -333,13 +334,22 @@ export function createMemoryMiddleware(options: MemoryMiddlewareOptions) {
             ? existingContent
             : [];
 
+      // `cache_control` is Anthropic-specific. Gate on the per-call model so
+      // a fallback swap to a non-Anthropic provider (e.g. via
+      // modelFallbackMiddleware) does not leak the marker — OpenAI/Vertex
+      // reject the request with `400 Unknown parameter: 'cache_control'`.
+      // `addCacheControl` remains the opt-in switch; the per-call model
+      // check is an additional safety net.
+      const writeCacheControl =
+        addCacheControl && isAnthropicModel(request.model);
+
       const newSystemMessage = new SystemMessage({
         content: [
           ...existingBlocks,
           {
             type: "text" as const,
             text: memorySection,
-            ...(addCacheControl && {
+            ...(writeCacheControl && {
               cache_control: { type: "ephemeral" as const },
             }),
           },

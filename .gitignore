@@ -26,6 +26,8 @@
 # misc
 .DS_Store
 *.pem
+*.key
+*.crt
 .idea
 
 # debug
@@ -34,6 +36,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
+.env.*
 .env*.local
 .env
 
@@ -59,3 +62,5 @@ agent-os
 sandbox-workspace/
 coverage
 workspace/
+__pycache__/
+.venv/

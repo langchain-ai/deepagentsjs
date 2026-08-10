@@ -22,6 +22,7 @@ export type {
   GlobResult,
   WriteResult,
   EditResult,
+  DeleteResult,
   StateAndStore,
   // Sandbox execution types
   ExecuteResponse,
@@ -44,6 +45,7 @@ export type {
 
 // Export type guard and error class
 export {
+  applyGrepMaxCount,
   isSandboxBackend,
   isSandboxProtocol,
   SandboxError,
@@ -51,9 +53,15 @@ export {
 } from "./protocol.js";
 
 export { StateBackend } from "./state.js";
-export { StoreBackend, type StoreBackendOptions } from "./store.js";
+export {
+  StoreBackend,
+  type StoreBackendContext,
+  type StoreBackendNamespaceFactory,
+  type StoreBackendOptions,
+} from "./store.js";
 export { FilesystemBackend } from "./filesystem.js";
 export { CompositeBackend } from "./composite.js";
+export { ContextHubBackend } from "./context-hub.js";
 export {
   LocalShellBackend,
   type LocalShellBackendOptions,
@@ -68,6 +76,13 @@ export {
   type LangSmithSandboxOptions,
   type LangSmithSandboxCreateOptions,
 } from "./langsmith.js";
+
+// Re-export upstream sandbox types used by LangSmithSandbox public API
+export type {
+  Snapshot as LangSmithSnapshot,
+  CaptureSnapshotOptions as LangSmithCaptureSnapshotOptions,
+  StartSandboxOptions as LangSmithStartSandboxOptions,
+} from "langsmith/experimental/sandbox";
 
 // Re-export utils for convenience
 export * from "./utils.js";

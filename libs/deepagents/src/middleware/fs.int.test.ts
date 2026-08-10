@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { createAgent } from "langchain";
+import { createAgent, createMiddleware } from "langchain";
+import { FakeListChatModel } from "@langchain/core/utils/testing";
 import { HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 import { MemorySaver } from "@langchain/langgraph";
@@ -24,6 +25,44 @@ import {
 } from "../testing/utils.js";
 
 describe("Filesystem Middleware Integration Tests", () => {
+  it("should remove allowlisted-out tools from model request and system prompt", async () => {
+    const capturedToolNames: string[][] = [];
+    const spyMiddleware = createMiddleware({
+      name: "FilesystemAllowlistSpyMiddleware",
+      wrapModelCall(request, handler) {
+        capturedToolNames.push(
+          request.tools.flatMap((tool) =>
+            typeof tool.name === "string" ? [tool.name] : [],
+          ),
+        );
+        return handler(request);
+      },
+    });
+
+    const agent = createAgent({
+      model: new FakeListChatModel({ responses: ["done"] }),
+      middleware: [
+        createFilesystemMiddleware({ tools: ["read_file", "ls"] }),
+        spyMiddleware,
+      ],
+    });
+
+    await agent.invoke({ messages: [new HumanMessage("hi")] });
+
+    expect(capturedToolNames.length).toBeGreaterThan(0);
+    expect(capturedToolNames[0]).toContain("read_file");
+    expect(capturedToolNames[0]).toContain("ls");
+    for (const disabled of [
+      "write_file",
+      "edit_file",
+      "glob",
+      "grep",
+      "execute",
+    ]) {
+      expect(capturedToolNames[0]).not.toContain(disabled);
+    }
+  });
+
   it.concurrent.each([
     { useComposite: false, label: "StateBackend" },
     { useComposite: true, label: "CompositeBackend" },
@@ -445,7 +484,7 @@ describe("Filesystem Middleware Integration Tests", () => {
   );
 
   it.concurrent(
-    "should fail to write to existing store file",
+    "should overwrite existing store file",
     { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
@@ -487,7 +526,15 @@ describe("Filesystem Middleware Integration Tests", () => {
       );
 
       expect(writeMessage).toBeDefined();
-      expect(writeMessage!.content.toString()).toContain("already exists");
+      expect(writeMessage!.content.toString()).toContain("Successfully wrote");
+      expect(writeMessage!.content.toString()).not.toContain("already exists");
+
+      const overwritten = await store.get(["filesystem"], "/existing.txt");
+      expect(overwritten).toBeDefined();
+      const overwrittenContent = (overwritten!.value as { content?: unknown })
+        .content;
+      expect(overwrittenContent).toContain("new data");
+      expect(overwrittenContent).not.toContain("Already exists");
     },
   );
 
@@ -675,7 +722,7 @@ describe("Filesystem Middleware Integration Tests", () => {
   );
 
   it.concurrent(
-    "should fail to write to existing local file",
+    "should overwrite existing local file",
     { timeout: 90 * 1000 }, // 90s
     async () => {
       const checkpointer = new MemorySaver();
@@ -716,7 +763,14 @@ describe("Filesystem Middleware Integration Tests", () => {
       );
 
       expect(writeMessage).toBeDefined();
-      expect(writeMessage!.content.toString()).toContain("already exists");
+      expect(writeMessage!.content.toString()).toContain("Successfully wrote");
+      expect(writeMessage!.content.toString()).not.toContain("already exists");
+      expect(response.files?.["/existing.txt"]?.content).toContain(
+        "new content",
+      );
+      expect(response.files?.["/existing.txt"]?.content).not.toContain(
+        "Already exists",
+      );
     },
   );
 

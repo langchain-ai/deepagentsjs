@@ -7,10 +7,10 @@
  */
 
 import micromatch from "micromatch";
-import path, { basename } from "path";
-import type {
+import {
   AnyBackendProtocol,
   AnySandboxProtocol,
+  applyGrepMaxCount,
   BackendProtocolV1,
   BackendProtocolV2,
   FileData,
@@ -69,7 +69,87 @@ const MIME_TYPES: Record<string, string> = {
   ".ppt": "application/vnd.ms-powerpoint",
   ".pptx":
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+
+  // text / code — explicit entries give a specific MIME type (e.g.
+  // text/markdown, text/css, application/json) rather than the generic
+  // "text/plain" default that unknown extensions fall through to.
+  ".txt": "text/plain",
+  ".md": "text/markdown",
+  ".markdown": "text/markdown",
+  ".html": "text/html",
+  ".htm": "text/html",
+  ".css": "text/css",
+  ".csv": "text/csv",
+  ".xml": "text/xml",
+  ".json": "application/json",
+  ".js": "application/javascript",
+  ".mjs": "application/javascript",
+  ".cjs": "application/javascript",
+  ".ts": "text/plain",
+  ".tsx": "text/plain",
+  ".jsx": "text/plain",
+  ".py": "text/plain",
+  ".rb": "text/plain",
+  ".java": "text/plain",
+  ".c": "text/plain",
+  ".cpp": "text/plain",
+  ".h": "text/plain",
+  ".hpp": "text/plain",
+  ".go": "text/plain",
+  ".rs": "text/plain",
+  ".sh": "text/plain",
+  ".bash": "text/plain",
+  ".zsh": "text/plain",
+  ".yaml": "text/plain",
+  ".yml": "text/plain",
+  ".toml": "text/plain",
+  ".ini": "text/plain",
+  ".cfg": "text/plain",
+  ".conf": "text/plain",
+  ".env": "text/plain",
+  ".log": "text/plain",
+  ".sql": "text/plain",
+  ".graphql": "text/plain",
+  ".proto": "text/plain",
+  ".r": "text/plain",
+  ".swift": "text/plain",
+  ".kt": "text/plain",
+  ".kts": "text/plain",
+  ".scala": "text/plain",
+  ".dart": "text/plain",
+  ".lua": "text/plain",
+  ".pl": "text/plain",
+  ".pm": "text/plain",
+  ".php": "text/plain",
+  ".ex": "text/plain",
+  ".exs": "text/plain",
+  ".erl": "text/plain",
+  ".hs": "text/plain",
+  ".ml": "text/plain",
+  ".mli": "text/plain",
+  ".vue": "text/plain",
+  ".svelte": "text/plain",
+  ".astro": "text/plain",
+  ".tf": "text/plain",
+  ".cmake": "text/plain",
+  ".makefile": "text/plain",
+  ".dockerfile": "text/plain",
+  ".gitignore": "text/plain",
+  ".dockerignore": "text/plain",
+  ".editorconfig": "text/plain",
 };
+
+function basename(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, "/");
+  const slashIdx = normalized.lastIndexOf("/");
+  return slashIdx === -1 ? normalized : normalized.slice(slashIdx + 1);
+}
+
+function extname(filePath: string): string {
+  const name = basename(filePath);
+  const dotIdx = name.lastIndexOf(".");
+  return dotIdx <= 0 ? "" : name.slice(dotIdx);
+}
 
 /**
  * Sanitize tool_call_id to prevent path traversal and separator issues.
@@ -259,6 +339,45 @@ export function updateFileData(fileData: FileData, content: string): FileData {
     created_at: fileData.created_at,
     modified_at: now,
   };
+}
+
+/**
+ * Build FileData for write semantics.
+ *
+ * Text writes preserve an existing file's creation timestamp. Binary writes
+ * accept base64 text input and store decoded bytes with the path's MIME type.
+ */
+function decodeBase64ToBytes(base64: string): Uint8Array {
+  const trimmed = base64.trim();
+  const payload = trimmed.startsWith("data:")
+    ? trimmed.slice(trimmed.indexOf(",") + 1)
+    : trimmed;
+  const binary = atob(payload.replace(/\s/g, ""));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+export function createWriteFileData(
+  filePath: string,
+  content: string,
+  fileFormat: "v1" | "v2" = "v2",
+  existing?: FileData,
+): FileData {
+  const mimeType = getMimeType(filePath);
+  const createdAt = existing?.created_at;
+
+  if (!isTextMimeType(mimeType)) {
+    return fileFormat === "v1"
+      ? createFileData(content, createdAt, "v1", mimeType)
+      : createFileData(decodeBase64ToBytes(content), createdAt, "v2", mimeType);
+  }
+
+  return existing
+    ? updateFileData(existing, content)
+    : createFileData(content, undefined, fileFormat, mimeType);
 }
 
 /**
@@ -480,11 +599,41 @@ export function validateFilePath(
 }
 
 /**
+ * Resolve the files under `path` for grep/glob search.
+ *
+ * If `path` exactly names a file that exists in `files`, only that file is
+ * returned (exact match) — this lets grep/glob target a specific file
+ * directly instead of only matching directories. Otherwise `path` is treated
+ * as a directory and files are filtered by the normalized directory prefix.
+ *
+ * @returns Filtered files map, or null if `path` is invalid (e.g. whitespace-only).
+ */
+function filterFilesByPath(
+  files: Record<string, FileData>,
+  path: string | null | undefined,
+): Record<string, FileData> | null {
+  const exactPath = path ? (path.startsWith("/") ? path : "/" + path) : "/";
+  if (Object.prototype.hasOwnProperty.call(files, exactPath)) {
+    return { [exactPath]: files[exactPath] };
+  }
+
+  try {
+    const normalizedPath = validatePath(path);
+    return Object.fromEntries(
+      Object.entries(files).filter(([fp]) => fp.startsWith(normalizedPath)),
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Search files dict for paths matching glob pattern.
  *
  * @param files - Dictionary of file paths to FileData
  * @param pattern - Glob pattern (e.g., `*.py`, `**\/*.ts`)
- * @param path - Base path to search from
+ * @param path - Base path to search from. If `path` names an exact file, only
+ *               that file is considered.
  * @returns Newline-separated file paths, sorted by modification time (most recent first).
  *          Returns "No files found" if no matches.
  *
@@ -500,16 +649,11 @@ export function globSearchFiles(
   pattern: string,
   path: string = "/",
 ): string {
-  let normalizedPath: string;
-  try {
-    normalizedPath = validatePath(path);
-  } catch {
+  const filtered = filterFilesByPath(files, path);
+  if (filtered === null) {
     return "No files found";
   }
-
-  const filtered = Object.fromEntries(
-    Object.entries(files).filter(([fp]) => fp.startsWith(normalizedPath)),
-  );
+  const normalizedPath = validatePath(path);
 
   // Respect standard glob semantics:
   // - Patterns without path separators (e.g., "*.py") match only in the current
@@ -587,7 +731,8 @@ export function formatGrepResults(
  *
  * @param files - Dictionary of file paths to FileData
  * @param pattern - Literal text to search for
- * @param path - Base path to search from
+ * @param path - Base path to search from. If `path` names an exact file, only
+ *               that file is considered.
  * @param glob - Optional glob pattern to filter files (e.g., "*.py")
  * @param outputMode - Output format - "files_with_matches", "content", or "count"
  * @returns Formatted search results. Returns "No matches found" if no results.
@@ -606,16 +751,10 @@ export function grepSearchFiles(
   glob: string | null = null,
   outputMode: "files_with_matches" | "content" | "count" = "files_with_matches",
 ): string {
-  let normalizedPath: string;
-  try {
-    normalizedPath = validatePath(path);
-  } catch {
+  let filtered = filterFilesByPath(files, path);
+  if (filtered === null) {
     return "No matches found";
   }
-
-  let filtered = Object.fromEntries(
-    Object.entries(files).filter(([fp]) => fp.startsWith(normalizedPath)),
-  );
 
   if (glob) {
     filtered = Object.fromEntries(
@@ -658,6 +797,7 @@ export function grepSearchFiles(
  * Return structured grep matches from an in-memory files mapping.
  *
  * Performs literal text search (not regex). Binary files are skipped.
+ * If `path` names an exact file, only that file is considered.
  * Returns an empty array when no matches are found or on invalid input.
  */
 export function grepMatchesFromFiles(
@@ -666,16 +806,10 @@ export function grepMatchesFromFiles(
   path: string | null = null,
   glob: string | null = null,
 ): GrepMatch[] {
-  let normalizedPath: string;
-  try {
-    normalizedPath = validatePath(path);
-  } catch {
+  let filtered = filterFilesByPath(files, path);
+  if (filtered === null) {
     return [];
   }
-
-  let filtered = Object.fromEntries(
-    Object.entries(files).filter(([fp]) => fp.startsWith(normalizedPath)),
-  );
 
   if (glob) {
     filtered = Object.fromEntries(
@@ -740,13 +874,19 @@ export function formatGrepMatches(
 /**
  * Determine MIME type from a file path's extension.
  *
- * Returns "text/plain" for unknown extensions.
+ * Defaults to "text/plain" for unknown extensions. Only the known non-text
+ * formats above (images, audio, video, PDF/PPT) are treated as binary by
+ * {@link isTextMimeType}; everything else reads as text, including source files
+ * with uncommon extensions (.properties, .scss, .tf) and extension-less files
+ * (Dockerfile, mvnw). This avoids base64-encoding text into document blocks,
+ * which the model can't read and which the Anthropic provider rejects with a
+ * 400.
  *
  * @param filePath - File path to inspect
  * @returns MIME type string (e.g., "image/png", "text/plain")
  */
 export function getMimeType(filePath: string): string {
-  const ext = path.extname(filePath).toLocaleLowerCase();
+  const ext = extname(filePath).toLocaleLowerCase();
   return MIME_TYPES[ext] || "text/plain";
 }
 
@@ -845,6 +985,7 @@ export function adaptBackendProtocol(
     write: (filePath, content) => backend.write(filePath, content),
     edit: (filePath, oldString, newString, replaceAll) =>
       backend.edit(filePath, oldString, newString, replaceAll),
+    delete: backend.delete?.bind(backend),
     uploadFiles: backend.uploadFiles
       ? (files) => backend.uploadFiles!(files)
       : undefined,
@@ -856,15 +997,29 @@ export function adaptBackendProtocol(
       if (typeof result === "string") return { content: result };
       return result as ReadResult;
     },
-    async grep(pattern, path, glob): Promise<GrepResult> {
+    async grep(pattern, path, glob, maxCount): Promise<GrepResult> {
       const result = await ("grep" in backend
-        ? (backend as BackendProtocolV2).grep(pattern, path, glob)
+        ? (backend as BackendProtocolV2).grep(pattern, path, glob, maxCount)
         : (backend as BackendProtocolV1).grepRaw(pattern, path, glob));
-      if (Array.isArray(result)) return { matches: result };
+      if (Array.isArray(result)) {
+        return applyGrepMaxCount({ result: { matches: result }, maxCount });
+      }
       if (typeof result === "string") return { error: result };
       return result as GrepResult;
     },
   };
+
+  // Preserve `routePrefixes` so `CompositeBackend.isInstance` still detects
+  // composites after adaptation and the execute-tool permission guard stays
+  // correct; without it, scoped filesystem permissions wrongly disable execute.
+  const routePrefixes = (backend as { routePrefixes?: unknown }).routePrefixes;
+  if (Array.isArray(routePrefixes)) {
+    Object.defineProperty(adapted, "routePrefixes", {
+      value: routePrefixes,
+      enumerable: true,
+      configurable: true,
+    });
+  }
 
   return adapted;
 }

@@ -6,7 +6,33 @@
  */
 
 export { createDeepAgent } from "./agent.js";
+export {
+  BASE_AGENT_PROMPT,
+  TASK_SYSTEM_PROMPT,
+  ASYNC_TASK_SYSTEM_PROMPT,
+  EXECUTION_SYSTEM_PROMPT,
+} from "./compat.js";
 export { ConfigurationError, type ConfigurationErrorCode } from "./errors.js";
+
+// Export harness profiles
+export {
+  type HarnessProfile,
+  type HarnessProfileOptions,
+  type HarnessProfileConfigData,
+  type GeneralPurposeSubagentConfig,
+  createHarnessProfile,
+  serializeProfile,
+  parseHarnessProfileConfig,
+  registerHarnessProfile,
+  getHarnessProfile,
+  harnessProfileConfigSchema,
+  generalPurposeSubagentConfigSchema,
+  EMPTY_HARNESS_PROFILE,
+  REQUIRED_MIDDLEWARE_NAMES,
+} from "./profiles/index.js";
+
+export type { DeepAgentRunStream, SubagentRunStream } from "./stream.js";
+export type { SystemPromptConfig } from "./compat.js";
 export type {
   AnySubAgent,
   CreateDeepAgentParams,
@@ -37,6 +63,13 @@ export {
   type SettingsOptions,
 } from "./config.js";
 
+// Export permissions
+export {
+  type FilesystemPermission,
+  type FilesystemOperation,
+  type PermissionMode,
+} from "./permissions/index.js";
+
 // Export middleware (matches Python's interface)
 export {
   createFilesystemMiddleware,
@@ -59,12 +92,12 @@ export {
   GENERAL_PURPOSE_SUBAGENT,
   DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
   DEFAULT_SUBAGENT_PROMPT,
-  TASK_SYSTEM_PROMPT,
   // Completion callback middleware for async subagents
   createCompletionCallbackMiddleware,
   type CompletionCallbackOptions,
   // Other middleware types
   type FilesystemMiddlewareOptions,
+  type FsToolName,
   type SubAgentMiddlewareOptions,
   type MemoryMiddlewareOptions,
   type SubAgent,
@@ -96,9 +129,12 @@ export {
 export {
   StateBackend,
   StoreBackend,
+  type StoreBackendContext,
+  type StoreBackendNamespaceFactory,
   type StoreBackendOptions,
   FilesystemBackend,
   CompositeBackend,
+  ContextHubBackend,
   BaseSandbox,
   isSandboxBackend,
   isSandboxProtocol,
@@ -109,6 +145,7 @@ export {
   type BackendProtocolV2,
   type BackendFactory,
   type BackendRuntime,
+  applyGrepMaxCount,
   resolveBackend,
   type FileInfo,
   type GrepMatch,
@@ -119,6 +156,7 @@ export {
   type ReadRawResult,
   type WriteResult,
   type EditResult,
+  type DeleteResult,
   // Sandbox execution types
   type ExecuteResponse,
   type FileData,
@@ -139,6 +177,10 @@ export {
   // LangSmith sandbox backend
   LangSmithSandbox,
   type LangSmithSandboxOptions,
+  type LangSmithSandboxCreateOptions,
+  type LangSmithSnapshot,
+  type LangSmithCaptureSnapshotOptions,
+  type LangSmithStartSandboxOptions,
   // Sandbox error types
   type SandboxErrorCode,
   // Local shell backend
@@ -148,3 +190,8 @@ export {
   adaptBackendProtocol,
   adaptSandboxProtocol,
 } from "./backends/index.js";
+
+export {
+  SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY,
+  createSubAgent,
+} from "./middleware/subagents.js";

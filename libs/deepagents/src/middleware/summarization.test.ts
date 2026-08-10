@@ -14,6 +14,20 @@ import type {
 } from "../backends/protocol.js";
 import { createMockBackend } from "./test.js";
 
+const mockCountTokensApproximately = vi.hoisted(() => vi.fn());
+
+vi.mock("langchain", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("langchain")>();
+  mockCountTokensApproximately.mockImplementation(
+    actual.countTokensApproximately,
+  );
+
+  return {
+    ...actual,
+    countTokensApproximately: mockCountTokensApproximately,
+  };
+});
+
 // Mock the initChatModel function from langchain/chat_models/universal
 vi.mock("langchain/chat_models/universal", () => {
   return {
@@ -67,7 +81,7 @@ async function callWrapModelCall(
   const request: any = {
     messages,
     state,
-    model: {},
+    model: undefined,
     systemPrompt: "",
     systemMessage: {},
     tools: [],
@@ -461,7 +475,62 @@ describe("createSummarizationMiddleware", () => {
     });
   });
 
+  describe("summary input trimming", () => {
+    it("does not trim an oversized summary input by default", async () => {
+      const invoke = vi.fn(async (_messages: BaseMessage[]) => ({
+        content: "Summary of the conversation.",
+      }));
+      const middleware = createSummarizationMiddleware({
+        model: {
+          profile: { maxInputTokens: 128_000 },
+          invoke,
+        } as any,
+        backend: createMockBackend(),
+        trigger: { type: "messages", value: 2 },
+        keep: { type: "messages", value: 1 },
+      });
+      const oversizedContent = `important tool result: ${"x".repeat(20_000)}`;
+
+      const { result } = await callWrapModelCall(middleware, {
+        messages: [
+          new HumanMessage({ content: oversizedContent }),
+          new HumanMessage({ content: "Continue with the task." }),
+        ],
+      });
+
+      expect(isCommand(result)).toBe(true);
+      expect(invoke).toHaveBeenCalledOnce();
+      const summaryRequest = invoke.mock.calls[0][0] as BaseMessage[];
+      expect(summaryRequest[0].content).toContain(oversizedContent);
+    });
+  });
+
   describe("argument truncation", () => {
+    it("should count tokens once when nothing is truncated or summarized", async () => {
+      const middleware = createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: createMockBackend(),
+        trigger: { type: "messages", value: 10 },
+        truncateArgsSettings: {
+          trigger: { type: "tokens", value: 1_000_000 },
+          keep: { type: "messages", value: 1 },
+        },
+      });
+
+      const messages = [
+        new HumanMessage({ content: "Hello" }),
+        new AIMessage({ content: "Hi there!" }),
+      ];
+
+      const { result, capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
+
+      expect(AIMessage.isInstance(result)).toBe(true);
+      expect(capturedRequest?.messages).toEqual(messages);
+      expect(mockCountTokensApproximately).toHaveBeenCalledTimes(1);
+    });
+
     it("should truncate large tool call arguments", async () => {
       const mockBackend = createMockBackend();
       const middleware = createSummarizationMiddleware({
@@ -1231,6 +1300,58 @@ describe("createSummarizationMiddleware", () => {
           expect(msg.content).toContain("...(result truncated)");
         }
       }
+    });
+  });
+
+  describe("runtime model/provider routing", () => {
+    it("should use request.model when creating summaries", async () => {
+      const mockBackend = createMockBackend();
+
+      const invoke = vi.fn(async (_messages: any) => {
+        return { content: "Summary from runtime-selected provider." };
+      });
+
+      const requestModel = {
+        profile: { maxInputTokens: 128000 },
+        invoke,
+      };
+
+      const middleware = createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: mockBackend,
+        trigger: { type: "messages", value: 3 },
+        keep: { type: "messages", value: 1 },
+      });
+
+      const messages = Array.from(
+        { length: 5 },
+        (_, i) => new HumanMessage({ content: `Message ${i}` }),
+      );
+
+      let capturedRequest: {
+        messages: BaseMessage[];
+        [key: string]: any;
+      } | null = null;
+
+      const request: any = {
+        messages,
+        state: { messages },
+        model: requestModel,
+        systemPrompt: "",
+        systemMessage: {},
+        tools: [],
+        runtime: {},
+      };
+
+      const result = await middleware.wrapModelCall!(request, (req: any) => {
+        capturedRequest = req;
+        return new AIMessage({ content: "Mock response" });
+      });
+
+      expect(isCommand(result)).toBe(true);
+      expect(capturedRequest).not.toBeNull();
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(invoke).toHaveBeenCalledWith(expect.any(Array));
     });
   });
 });

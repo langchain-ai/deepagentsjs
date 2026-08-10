@@ -123,8 +123,9 @@ export interface SummarizationMiddlewareOptions {
   /**
    * The language model to use for generating summaries.
    * Can be a model string (e.g., "gpt-4o-mini") or a language model instance.
+   * If omitted, middleware will use the active request model.
    */
-  model: string | BaseChatModel | BaseLanguageModel;
+  model?: string | BaseChatModel | BaseLanguageModel;
 
   /**
    * Backend instance or factory for persisting conversation history.
@@ -152,8 +153,8 @@ export interface SummarizationMiddlewareOptions {
   summaryPrompt?: string;
 
   /**
-   * Max tokens to include when generating summary.
-   * Defaults to 4000.
+   * Max tokens to include when generating a summary.
+   * If omitted, the complete selected conversation is provided to the summarizer.
    */
   trimTokensToSummarize?: number;
 
@@ -172,7 +173,6 @@ export interface SummarizationMiddlewareOptions {
 
 // Default values
 const DEFAULT_MESSAGES_TO_KEEP = 20;
-const DEFAULT_TRIM_TOKEN_LIMIT = 4000;
 
 // Fallback defaults when model has no profile (matches Python's fallback)
 const FALLBACK_TRIGGER: ContextSize = { type: "tokens", value: 170_000 };
@@ -300,7 +300,7 @@ export function createSummarizationMiddleware(
     model,
     backend,
     summaryPrompt = DEFAULT_SUMMARY_PROMPT,
-    trimTokensToSummarize = DEFAULT_TRIM_TOKEN_LIMIT,
+    trimTokensToSummarize,
     historyPathPrefix = "/conversation_history",
   } = options;
 
@@ -399,6 +399,12 @@ export function createSummarizationMiddleware(
   async function getChatModel(): Promise<BaseChatModel> {
     if (cachedModel) {
       return cachedModel;
+    }
+
+    if (!model) {
+      throw new Error(
+        "Summarization middleware could not resolve a model. Provide `options.model` or ensure `request.model` is present.",
+      );
     }
 
     if (typeof model === "string") {
@@ -751,8 +757,10 @@ export function createSummarizationMiddleware(
     maxInputTokens?: number,
     systemMessage?: SystemMessage | unknown,
     tools?: (ServerTool | ClientTool)[] | unknown[],
+    options?: { totalTokens?: number },
   ): { messages: BaseMessage[]; modified: boolean } {
-    const totalTokens = countTotalTokens(messages, systemMessage, tools);
+    const totalTokens =
+      options?.totalTokens ?? countTotalTokens(messages, systemMessage, tools);
     if (!shouldTruncateArgs(messages, totalTokens, maxInputTokens)) {
       return { messages, modified: false };
     }
@@ -914,7 +922,7 @@ export function createSummarizationMiddleware(
     // Trim messages if too long
     let messagesToSummarize = messages;
     const tokens = countTokensApproximately(messages);
-    if (tokens > trimTokensToSummarize) {
+    if (trimTokensToSummarize !== undefined && tokens > trimTokensToSummarize) {
       // Keep only recent messages that fit
       let kept = 0;
       const trimmedMessages: BaseMessage[] = [];
@@ -1189,37 +1197,48 @@ export function createSummarizationMiddleware(
         return handler(request);
       }
 
+      const requestModel = request.model as BaseChatModel | undefined;
+
       /**
        * Resolve the chat model and get max input tokens from its profile.
        */
-      const resolvedModel = await getChatModel();
+      const resolvedModel = requestModel ?? (await getChatModel());
       const maxInputTokens = getMaxInputTokens(resolvedModel);
       applyModelDefaults(resolvedModel);
+
+      const totalTokens = countTotalTokens(
+        effectiveMessages,
+        request.systemMessage,
+        request.tools,
+      );
 
       /**
        * Step 1: Truncate args if configured
        */
-      const { messages: truncatedMessages } = truncateArgs(
-        effectiveMessages,
-        maxInputTokens,
-        request.systemMessage,
-        request.tools,
-      );
+      const { messages: truncatedMessages, modified: truncateModified } =
+        truncateArgs(
+          effectiveMessages,
+          maxInputTokens,
+          request.systemMessage,
+          request.tools,
+          { totalTokens },
+        );
 
       /**
        * Step 2: Check if summarization should happen.
-       * Count tokens including system message and tools to match what's
-       * actually sent to the model (matching Python implementation).
+       * Recount only if truncation changed messages.
        */
-      const totalTokens = countTotalTokens(
-        truncatedMessages,
-        request.systemMessage,
-        request.tools,
-      );
+      const tokensForSummary = truncateModified
+        ? countTotalTokens(
+            truncatedMessages,
+            request.systemMessage,
+            request.tools,
+          )
+        : totalTokens;
 
       const shouldDoSummarization = shouldSummarize(
         truncatedMessages,
-        totalTokens,
+        tokensForSummary,
         maxInputTokens,
       );
 
@@ -1239,8 +1258,8 @@ export function createSummarizationMiddleware(
             throw err;
           }
 
-          if (maxInputTokens && totalTokens > 0) {
-            const observedRatio = maxInputTokens / totalTokens;
+          if (maxInputTokens && tokensForSummary > 0) {
+            const observedRatio = maxInputTokens / tokensForSummary;
             if (observedRatio > tokenEstimationMultiplier) {
               tokenEstimationMultiplier = observedRatio * 1.1;
             }

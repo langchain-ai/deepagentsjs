@@ -16,7 +16,7 @@ import dedent from "dedent";
 import { HumanMessage } from "@langchain/core/messages";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { createDeepAgent } from "deepagents";
-import { createQuickJSMiddleware } from "@langchain/quickjs";
+import { createREPLMiddleware } from "@langchain/quickjs";
 
 const model = new ChatAnthropic({
   model: "claude-sonnet-4-5",
@@ -26,11 +26,11 @@ const model = new ChatAnthropic({
 const agent = createDeepAgent({
   model,
   systemPrompt: dedent`
-    You are a data analyst. Use the js_eval REPL to perform calculations
+    You are a data analyst. Use the eval REPL to perform calculations
     and data transformations. Always show your work in code — never guess
     at arithmetic or statistics.
   `,
-  middleware: [createQuickJSMiddleware()],
+  middleware: [createREPLMiddleware()],
 });
 
 const result = await agent.invoke({

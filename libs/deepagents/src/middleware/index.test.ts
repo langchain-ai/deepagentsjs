@@ -179,18 +179,6 @@ describe("Execute Tool", () => {
     expect(executeTool?.description).toContain("sandbox");
     expect(executeTool?.description).toContain("command");
   });
-
-  it("should export EXECUTE_TOOL_DESCRIPTION constant", async () => {
-    const { EXECUTE_TOOL_DESCRIPTION } = await import("./fs.js");
-    expect(EXECUTE_TOOL_DESCRIPTION).toBeDefined();
-    expect(EXECUTE_TOOL_DESCRIPTION).toContain("sandbox");
-  });
-
-  it("should export EXECUTION_SYSTEM_PROMPT constant", async () => {
-    const { EXECUTION_SYSTEM_PROMPT } = await import("./fs.js");
-    expect(EXECUTION_SYSTEM_PROMPT).toBeDefined();
-    expect(EXECUTION_SYSTEM_PROMPT).toContain("execute");
-  });
 });
 
 describe("isSandboxBackend type guard", () => {

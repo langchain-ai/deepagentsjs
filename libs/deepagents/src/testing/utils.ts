@@ -17,14 +17,7 @@ import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
 import type * as _tools from "@langchain/core/tools";
 
-const expectedTools = [
-  "write_todos",
-  "ls",
-  "read_file",
-  "write_file",
-  "edit_file",
-  "task",
-];
+const expectedTools = ["ls", "read_file", "write_file", "edit_file", "task"];
 
 /**
  * Assert that an agent has all the expected deep agent qualities
@@ -35,11 +28,6 @@ export function assertAllDeepAgentQualities(agent: {
 }) {
   // Check state channels
   const channels = Object.keys(agent.graph?.channels || {});
-  if (!channels.includes("todos")) {
-    throw new Error(
-      `Expected agent to have 'todos' channel, got: ${channels.join(", ")}`,
-    );
-  }
   if (!channels.includes("files")) {
     throw new Error(
       `Expected agent to have 'files' channel, got: ${channels.join(", ")}`,
@@ -275,4 +263,17 @@ export function extractToolsFromAgent(agent: {
   return Object.fromEntries(
     (toolsNode.tools ?? []).map((tool) => [tool.name, tool]),
   );
+}
+
+export async function collectWithTimeout<T>(
+  iterable: AsyncIterable<T>,
+  timeoutMs = 5_000,
+): Promise<T[]> {
+  const items: T[] = [];
+  const timeout = AbortSignal.timeout(timeoutMs);
+  for await (const item of iterable) {
+    items.push(item);
+    if (timeout.aborted) break;
+  }
+  return items;
 }

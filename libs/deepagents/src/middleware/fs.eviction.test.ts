@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getCurrentTaskInput } from "@langchain/langgraph";
-import type { StructuredTool } from "langchain";
+import { getCurrentTaskInput, isCommand } from "@langchain/langgraph";
+import { ToolMessage, type StructuredTool } from "langchain";
 
 import {
   createContentPreview,
@@ -556,5 +556,60 @@ describe("read_file multimodal content blocks", () => {
     expect(Array.isArray(result)).toBe(true);
     expect(result[0].type).toBe("text");
     expect(result[0].text).toContain("not found");
+  });
+});
+
+describe("evicted tool result readback", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should save large plain-text tool results with a text extension", async () => {
+    const state: { messages: unknown[]; files: Record<string, FileData> } = {
+      messages: [],
+      files: {},
+    };
+    const stateAndStore = { state, store: undefined };
+    vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+    const middleware = createFilesystemMiddleware({
+      backend: () => new StateBackend(stateAndStore),
+      toolTokenLimitBeforeEvict: 100,
+    });
+
+    const largeContent = "large plain text result\n".repeat(500);
+    const toolMessage = new ToolMessage({
+      content: largeContent,
+      tool_call_id: "call_extensionless",
+      name: "external_tool",
+    });
+
+    const wrapped = await (middleware as any).wrapToolCall(
+      {
+        toolCall: { id: "call_extensionless", name: "external_tool", args: {} },
+        state,
+        runtime: {},
+      },
+      async () => toolMessage,
+    );
+
+    expect(isCommand(wrapped)).toBe(true);
+    const filesUpdate = (wrapped as any).update.files;
+    const evictedPath = "/large_tool_results/call_extensionless.txt";
+    expect(filesUpdate[evictedPath]).toBeDefined();
+    expect(filesUpdate[evictedPath].mimeType).toBe("text/plain");
+    Object.assign(state.files, filesUpdate);
+
+    const readFileTool = (middleware as any).tools.find(
+      (t: any) => t.name === "read_file",
+    );
+    const readResult = await readFileTool.invoke(
+      { file_path: evictedPath, limit: 5 },
+      { store: undefined },
+    );
+
+    expect(Array.isArray(readResult)).toBe(true);
+    expect(readResult[0].type).toBe("text");
+    expect(readResult[0].text).toContain("large plain text result");
   });
 });

@@ -34,7 +34,10 @@ interface MockSandboxType {
     args: string[],
     options: { stdout: string; stderr: string },
   ) => Promise<MockProcessType>;
-  open: (path: string, mode: string) => Promise<MockFileHandleType>;
+  filesystem: {
+    writeBytes: (data: Uint8Array, remotePath: string) => Promise<void>;
+    readBytes: (remotePath: string) => Promise<Uint8Array>;
+  };
   terminate: () => Promise<void>;
   poll: () => Promise<number | null>;
   wait: () => Promise<number>;
@@ -44,12 +47,6 @@ interface MockProcessType {
   stdout: { readText: () => Promise<string> };
   stderr: { readText: () => Promise<string> };
   wait: () => Promise<number>;
-}
-
-interface MockFileHandleType {
-  read: () => Promise<Uint8Array>;
-  write: (data: Uint8Array) => Promise<void>;
-  close: () => Promise<void>;
 }
 
 interface MockClientType {
@@ -97,6 +94,11 @@ vi.mock("./auth.js", () => ({
 
 // Mock the modal module with factory
 vi.mock("modal", () => {
+  // Mirror the typed not-found error thrown by the real `sandbox.filesystem`
+  // API. Its message is opaque server text (no "not found"/"enoent"), so
+  // `#mapError` must classify it by type.
+  class SandboxFilesystemNotFoundError extends Error {}
+
   /**
    * Mock Sandbox class that simulates the Modal SDK behavior.
    */
@@ -120,6 +122,29 @@ vi.mock("modal", () => {
     // Error simulation flags
     shouldFailOpen = false;
 
+    // Mock of the Modal SDK `sandbox.filesystem` API. Arrow functions capture
+    // `this` so they read the live `shouldFailOpen` flag and `files` map.
+    filesystem = {
+      writeBytes: async (data: Uint8Array, remotePath: string) => {
+        if (this.shouldFailOpen) {
+          throw new Error("File operation failed: permission denied");
+        }
+        this.files.set(remotePath, data);
+      },
+      readBytes: async (remotePath: string) => {
+        if (this.shouldFailOpen) {
+          throw new Error("File operation failed: permission denied");
+        }
+        const content = this.files.get(remotePath);
+        if (content === undefined) {
+          throw new SandboxFilesystemNotFoundError(
+            `path does not exist: ${remotePath}`,
+          );
+        }
+        return content;
+      },
+    };
+
     constructor(sandboxId: string = "sb-mock-123") {
       this.sandboxId = sandboxId;
     }
@@ -133,53 +158,23 @@ vi.mock("modal", () => {
       };
     }
 
-    // Add file to mock filesystem
+    // Add file to mock filesystem. Keys are stored absolute to match the
+    // absolute paths the provider passes to `sandbox.filesystem`.
     addFile(path: string, content: Uint8Array) {
-      this.files.set(path, content);
+      this.files.set(path.startsWith("/") ? path : `/${path}`, content);
     }
 
     // SDK methods
     async exec(
-      args: string[],
+      _args: string[],
       _options: { stdout: string; stderr: string },
     ): Promise<MockProcessType> {
       const result = { ...this.nextCommandResult };
-
-      // Check if this is a mkdir command - always succeed
-      if (args[0] === "mkdir") {
-        return {
-          stdout: { readText: async () => "" },
-          stderr: { readText: async () => "" },
-          wait: async () => 0,
-        };
-      }
 
       return {
         stdout: { readText: async () => result.stdout },
         stderr: { readText: async () => result.stderr },
         wait: async () => result.exitCode,
-      };
-    }
-
-    async open(path: string, _mode: string): Promise<MockFileHandleType> {
-      if (this.shouldFailOpen) {
-        throw new Error("File operation failed: permission denied");
-      }
-
-      // Capture files reference for the returned object's methods
-      const files = this.files;
-      return {
-        read: async () => {
-          const content = files.get(path);
-          if (content === undefined) {
-            throw new Error(`File not found: ${path}`);
-          }
-          return content;
-        },
-        write: async (data: Uint8Array) => {
-          files.set(path, data);
-        },
-        close: async () => {},
       };
     }
 
@@ -264,6 +259,7 @@ vi.mock("modal", () => {
 
   return {
     ModalClient: MockModalClient,
+    SandboxFilesystemNotFoundError,
   };
 });
 
@@ -388,18 +384,17 @@ describe("ModalSandbox", () => {
 
       await sandbox.initialize();
 
-      // Verify files were uploaded to the mock sandbox
-      // Note: paths are normalized (leading slash removed)
+      // Verify files were uploaded to the mock sandbox at absolute paths.
       const mockSb = mockState.sandboxInstance!;
-      expect(mockSb.files.has("test.txt")).toBe(true);
-      expect(mockSb.files.has("src/index.js")).toBe(true);
+      expect(mockSb.files.has("/test.txt")).toBe(true);
+      expect(mockSb.files.has("/src/index.js")).toBe(true);
 
       // Check content (should be Uint8Array)
       const encoder = new TextEncoder();
-      expect(mockSb.files.get("test.txt")).toEqual(
+      expect(mockSb.files.get("/test.txt")).toEqual(
         encoder.encode("Hello, World!"),
       );
-      expect(mockSb.files.get("src/index.js")).toEqual(
+      expect(mockSb.files.get("/src/index.js")).toEqual(
         encoder.encode("console.log('Hi')"),
       );
     });
@@ -416,10 +411,9 @@ describe("ModalSandbox", () => {
 
       await sandbox.initialize();
 
-      // Note: paths are normalized (leading slash removed)
       const mockSb = mockState.sandboxInstance!;
-      expect(mockSb.files.has("binary.dat")).toBe(true);
-      expect(mockSb.files.get("binary.dat")).toEqual(binaryContent);
+      expect(mockSb.files.has("/binary.dat")).toBe(true);
+      expect(mockSb.files.get("/binary.dat")).toEqual(binaryContent);
     });
 
     it("should handle initial files with mixed content types", async () => {
@@ -433,13 +427,12 @@ describe("ModalSandbox", () => {
 
       await sandbox.initialize();
 
-      // Note: paths are normalized (leading slash removed)
       const mockSb = mockState.sandboxInstance!;
-      expect(mockSb.files.has("text.txt")).toBe(true);
-      expect(mockSb.files.has("data.bin")).toBe(true);
+      expect(mockSb.files.has("/text.txt")).toBe(true);
+      expect(mockSb.files.has("/data.bin")).toBe(true);
     });
 
-    it("should normalize paths - remove leading slash", async () => {
+    it("should normalize relative paths to absolute", async () => {
       const sandbox = new ModalSandbox({
         initialFiles: {
           "/with-slash.txt": "content1",
@@ -450,9 +443,9 @@ describe("ModalSandbox", () => {
       await sandbox.initialize();
 
       const mockSb = mockState.sandboxInstance!;
-      // Both should be stored with paths (the mock stores normalized paths)
-      expect(mockSb.files.has("with-slash.txt")).toBe(true);
-      expect(mockSb.files.has("no-slash.txt")).toBe(true);
+      // Both are stored absolute; the relative key gains a leading slash.
+      expect(mockSb.files.has("/with-slash.txt")).toBe(true);
+      expect(mockSb.files.has("/no-slash.txt")).toBe(true);
     });
   });
 
@@ -525,10 +518,10 @@ describe("ModalSandbox", () => {
 
       expect(sandbox.isRunning).toBe(true);
 
-      // Verify files were uploaded
+      // Verify files were uploaded at absolute paths
       const mockSb = mockState.sandboxInstance!;
-      expect(mockSb.files.has("hello.txt")).toBe(true);
-      expect(mockSb.files.has("nested/file.js")).toBe(true);
+      expect(mockSb.files.has("/hello.txt")).toBe(true);
+      expect(mockSb.files.has("/nested/file.js")).toBe(true);
 
       // Verify content
       const results = await sandbox.downloadFiles([
@@ -572,7 +565,7 @@ describe("ModalSandbox", () => {
   // ==========================================================================
 
   describe("execute", () => {
-    it("should call SDK exec with bash -c", async () => {
+    it("should call SDK exec with sh -c", async () => {
       const sandbox = await ModalSandbox.create();
 
       // Spy on exec
@@ -580,7 +573,7 @@ describe("ModalSandbox", () => {
 
       await sandbox.execute("echo hello");
 
-      expect(execSpy).toHaveBeenCalledWith(["bash", "-c", "echo hello"], {
+      expect(execSpy).toHaveBeenCalledWith(["sh", "-c", "echo hello"], {
         stdout: "pipe",
         stderr: "pipe",
       });
@@ -645,13 +638,17 @@ describe("ModalSandbox", () => {
   describe("uploadFiles", () => {
     it("should write content to sandbox", async () => {
       const sandbox = await ModalSandbox.create();
-      const openSpy = vi.spyOn(mockState.sandboxInstance!, "open");
+      const writeSpy = vi.spyOn(
+        mockState.sandboxInstance!.filesystem,
+        "writeBytes",
+      );
 
       const content = new TextEncoder().encode("file content");
       await sandbox.uploadFiles([["test.txt", content]]);
 
-      // open is called for writing the file
-      expect(openSpy).toHaveBeenCalledWith("test.txt", "w");
+      // writeBytes is called with (data, remotePath); relative paths are
+      // normalized to absolute for the filesystem API.
+      expect(writeSpy).toHaveBeenCalledWith(content, "/test.txt");
     });
 
     it("should upload multiple files", async () => {

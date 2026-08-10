@@ -12,6 +12,7 @@ import {
   skillsMetadataReducer,
   MAX_SKILL_COMPATIBILITY_LENGTH,
   validateSkillName,
+  validateModulePath,
   parseSkillMetadataFromContent,
   validateMetadata,
   formatSkillAnnotations,
@@ -419,10 +420,16 @@ description: A skill with very large content
       const result1 = await middleware.beforeAgent?.({});
       expect(result1?.skillsMetadata).toHaveLength(1);
 
-      // Second call - should return undefined (already loaded in closure)
+      // Second call with empty state - should re-emit skills to state
+      // (new thread scenario: closure has skills but state doesn't)
       // @ts-expect-error - typing issue in LangChain
       const result2 = await middleware.beforeAgent?.({});
-      expect(result2).toBeUndefined();
+      expect(result2?.skillsMetadata).toHaveLength(1);
+
+      // Third call with skills in state - should skip (both closure and state have skills)
+      // @ts-expect-error - typing issue in LangChain
+      const result3 = await middleware.beforeAgent?.(result2);
+      expect(result3).toBeUndefined();
     });
 
     it("should skip reload when skillsMetadata exists in checkpoint state", async () => {
@@ -736,6 +743,229 @@ description: [invalid yaml syntax: unclosed bracket
       expect(result?.skillsMetadata[0].path).toBe(
         "C:\\skills\\user\\web-research\\SKILL.md",
       );
+    });
+
+    describe("direct skill path mode", () => {
+      it("should load a skill when source is a direct skill directory", async () => {
+        const mockBackend = createMockBackend({
+          files: {
+            "/skills/web-research/SKILL.md": VALID_SKILL_CONTENT,
+          },
+          directories: {
+            // Source points directly at the skill dir; SKILL.md is a file entry
+            "/skills/web-research/": [{ name: "SKILL.md", type: "file" }],
+          },
+        });
+
+        const middleware = createSkillsMiddleware({
+          backend: mockBackend,
+          sources: ["/skills/web-research/"],
+        });
+
+        // @ts-expect-error - typing issue in LangChain
+        const result = await middleware.beforeAgent?.({});
+
+        expect(result?.skillsMetadata).toHaveLength(1);
+        expect(result?.skillsMetadata[0].name).toBe("web-research");
+        expect(result?.skillsMetadata[0].description).toBe(
+          "Structured approach to conducting thorough web research",
+        );
+        expect(result?.skillsMetadata[0].path).toBe(
+          "/skills/web-research/SKILL.md",
+        );
+      });
+
+      it("should load multiple skills from a list of direct skill paths", async () => {
+        const mockBackend = createMockBackend({
+          files: {
+            "/skills/web-research/SKILL.md": VALID_SKILL_CONTENT,
+            "/skills/code-review/SKILL.md": VALID_SKILL_CONTENT_2,
+          },
+          directories: {
+            "/skills/web-research/": [{ name: "SKILL.md", type: "file" }],
+            "/skills/code-review/": [{ name: "SKILL.md", type: "file" }],
+          },
+        });
+
+        const middleware = createSkillsMiddleware({
+          backend: mockBackend,
+          sources: ["/skills/web-research/", "/skills/code-review/"],
+        });
+
+        // @ts-expect-error - typing issue in LangChain
+        const result = await middleware.beforeAgent?.({});
+
+        expect(result?.skillsMetadata).toHaveLength(2);
+        expect(result?.skillsMetadata.map((s: any) => s.name).sort()).toEqual([
+          "code-review",
+          "web-research",
+        ]);
+      });
+
+      it("should mix direct skill paths and parent directory sources", async () => {
+        const mockBackend = createMockBackend({
+          files: {
+            "/skills/web-research/SKILL.md": VALID_SKILL_CONTENT,
+            "/skills/shared/code-review/SKILL.md": VALID_SKILL_CONTENT_2,
+          },
+          directories: {
+            "/skills/web-research/": [{ name: "SKILL.md", type: "file" }],
+            "/skills/shared/": [{ name: "code-review", type: "directory" }],
+          },
+        });
+
+        const middleware = createSkillsMiddleware({
+          backend: mockBackend,
+          sources: ["/skills/shared/", "/skills/web-research/"],
+        });
+
+        // @ts-expect-error - typing issue in LangChain
+        const result = await middleware.beforeAgent?.({});
+
+        expect(result?.skillsMetadata).toHaveLength(2);
+        expect(result?.skillsMetadata.map((s: any) => s.name).sort()).toEqual([
+          "code-review",
+          "web-research",
+        ]);
+      });
+
+      it("should use directory name as skill name (for spec validation)", async () => {
+        const mockBackend = createMockBackend({
+          files: {
+            "/skills/web-research/SKILL.md": VALID_SKILL_CONTENT,
+          },
+          directories: {
+            "/skills/web-research/": [{ name: "SKILL.md", type: "file" }],
+          },
+        });
+
+        const middleware = createSkillsMiddleware({
+          backend: mockBackend,
+          sources: ["/skills/web-research/"],
+        });
+
+        // @ts-expect-error - typing issue in LangChain
+        const result = await middleware.beforeAgent?.({});
+
+        // directoryName extracted from source path must match the skill name
+        expect(result?.skillsMetadata[0].name).toBe("web-research");
+      });
+
+      it("should skip direct skill path when SKILL.md content is invalid", async () => {
+        const invalidContent = `# No YAML frontmatter here`;
+
+        const mockBackend = createMockBackend({
+          files: {
+            "/skills/bad-skill/SKILL.md": invalidContent,
+          },
+          directories: {
+            "/skills/bad-skill/": [{ name: "SKILL.md", type: "file" }],
+          },
+        });
+
+        const middleware = createSkillsMiddleware({
+          backend: mockBackend,
+          sources: ["/skills/bad-skill/"],
+        });
+
+        const consoleWarnSpy = vi
+          .spyOn(console, "warn")
+          .mockImplementation(() => {});
+
+        // @ts-expect-error - typing issue in LangChain
+        const result = await middleware.beforeAgent?.({});
+
+        expect(result?.skillsMetadata).toEqual([]);
+        consoleWarnSpy.mockRestore();
+      });
+
+      it("should normalize direct skill path without trailing slash", async () => {
+        const mockBackend = createMockBackend({
+          files: {
+            "/skills/web-research/SKILL.md": VALID_SKILL_CONTENT,
+          },
+          directories: {
+            "/skills/web-research/": [{ name: "SKILL.md", type: "file" }],
+          },
+        });
+
+        const middleware = createSkillsMiddleware({
+          backend: mockBackend,
+          sources: ["/skills/web-research"], // no trailing slash
+        });
+
+        // @ts-expect-error - typing issue in LangChain
+        const result = await middleware.beforeAgent?.({});
+
+        expect(result?.skillsMetadata).toHaveLength(1);
+        expect(result?.skillsMetadata[0].name).toBe("web-research");
+      });
+
+      it("should use read() fallback when downloadFiles is not available (direct path)", async () => {
+        const mockBackend = {
+          async lsInfo(dirPath: string) {
+            if (dirPath === "/skills/web-research/") {
+              return [{ path: "SKILL.md", is_dir: false }];
+            }
+            return [];
+          },
+          async read(path: string) {
+            if (path === "/skills/web-research/SKILL.md") {
+              return VALID_SKILL_CONTENT;
+            }
+            return "Error: file not found";
+          },
+          // downloadFiles is NOT defined
+          readFiles: vi.fn(),
+          write: vi.fn(),
+          edit: vi.fn(),
+          grep: vi.fn(),
+        } as unknown as BackendProtocol;
+
+        const middleware = createSkillsMiddleware({
+          backend: mockBackend,
+          sources: ["/skills/web-research/"],
+        });
+
+        // @ts-expect-error - typing issue in LangChain
+        const result = await middleware.beforeAgent?.({});
+
+        expect(result?.skillsMetadata).toHaveLength(1);
+        expect(result?.skillsMetadata[0].name).toBe("web-research");
+      });
+
+      it("should apply last-wins override when direct and parent-dir sources define the same skill", async () => {
+        const overriddenContent = `---
+name: web-research
+description: Overridden version of web research
+---
+# Overridden`;
+
+        const mockBackend = createMockBackend({
+          files: {
+            "/skills/shared/web-research/SKILL.md": VALID_SKILL_CONTENT,
+            "/skills/web-research/SKILL.md": overriddenContent,
+          },
+          directories: {
+            "/skills/shared/": [{ name: "web-research", type: "directory" }],
+            "/skills/web-research/": [{ name: "SKILL.md", type: "file" }],
+          },
+        });
+
+        const middleware = createSkillsMiddleware({
+          backend: mockBackend,
+          // direct path is listed last → should win
+          sources: ["/skills/shared/", "/skills/web-research/"],
+        });
+
+        // @ts-expect-error - typing issue in LangChain
+        const result = await middleware.beforeAgent?.({});
+
+        expect(result?.skillsMetadata).toHaveLength(1);
+        expect(result?.skillsMetadata[0].description).toBe(
+          "Overridden version of web research",
+        );
+      });
     });
   });
 
@@ -1424,6 +1654,28 @@ Content
     expect(result).not.toBeNull();
     expect(result?.metadata).toEqual({ count: "42", active: "true" });
   });
+
+  it("should preserve required-ptc-tools in metadata without promoting it", () => {
+    const content = `---
+name: test-skill
+description: A test skill
+metadata:
+  required-ptc-tools: task read_file write_file glob
+---
+
+Content
+`;
+    const result = parseSkillMetadataFromContent(
+      content,
+      "/skills/test-skill/SKILL.md",
+      "test-skill",
+    );
+    expect(result).not.toBeNull();
+    expect(result).not.toHaveProperty("requiredPtcTools");
+    expect(result?.metadata?.["required-ptc-tools"]).toBe(
+      "task read_file write_file glob",
+    );
+  });
 });
 
 describe("validateMetadata", () => {
@@ -1592,6 +1844,326 @@ describe("formatSkillsList with annotations", () => {
     expect(result).toContain("- **plain-skill**: A plain skill\n");
     expect(result).not.toContain("License");
     expect(result).not.toContain("Compatibility");
+  });
+});
+
+describe("formatSkillsList module import hint", () => {
+  it("includes the import hint for a skill with module set", () => {
+    const skills: SkillMetadata[] = [
+      {
+        name: "pdf-extract",
+        description: "Extracts text from PDFs",
+        path: "/skills/pdf-extract/SKILL.md",
+        license: null,
+        compatibility: null,
+        metadata: {},
+        module: "index.ts",
+      },
+    ];
+
+    const result = formatSkillsList(skills, ["/skills/"]);
+    expect(result).toContain(
+      '  → Import: `await import("@/skills/pdf-extract")`',
+    );
+  });
+
+  it("omits the import hint for a skill without module", () => {
+    const skills: SkillMetadata[] = [
+      {
+        name: "prose-skill",
+        description: "Prose only",
+        path: "/skills/prose-skill/SKILL.md",
+        license: null,
+        compatibility: null,
+        metadata: {},
+      },
+    ];
+
+    const result = formatSkillsList(skills, ["/skills/"]);
+    expect(result).not.toContain("Import:");
+    expect(result).not.toContain("@/skills/");
+  });
+
+  it("import hint appears after the read line", () => {
+    const skills: SkillMetadata[] = [
+      {
+        name: "my-skill",
+        description: "Does things",
+        path: "/skills/my-skill/SKILL.md",
+        license: null,
+        compatibility: null,
+        metadata: {},
+        module: "index.ts",
+      },
+    ];
+
+    const result = formatSkillsList(skills, ["/skills/"]);
+    const readIdx = result.indexOf("→ Read");
+    const importIdx = result.indexOf("→ Import:");
+    expect(readIdx).toBeGreaterThan(-1);
+    expect(importIdx).toBeGreaterThan(readIdx);
+  });
+
+  it("import hint appears after allowed tools line when both are present", () => {
+    const skills: SkillMetadata[] = [
+      {
+        name: "rich-skill",
+        description: "Has tools and a module",
+        path: "/skills/rich-skill/SKILL.md",
+        license: null,
+        compatibility: null,
+        metadata: {},
+        allowedTools: ["read_file"],
+        module: "index.ts",
+      },
+    ];
+
+    const result = formatSkillsList(skills, ["/skills/"]);
+    const toolsIdx = result.indexOf("→ Allowed tools:");
+    const importIdx = result.indexOf("→ Import:");
+    expect(toolsIdx).toBeGreaterThan(-1);
+    expect(importIdx).toBeGreaterThan(toolsIdx);
+  });
+
+  it("only the skill with module gets the import hint when mixed", () => {
+    const skills: SkillMetadata[] = [
+      {
+        name: "with-module",
+        description: "Has a module",
+        path: "/skills/with-module/SKILL.md",
+        license: null,
+        compatibility: null,
+        metadata: {},
+        module: "index.ts",
+      },
+      {
+        name: "prose-only",
+        description: "No module",
+        path: "/skills/prose-only/SKILL.md",
+        license: null,
+        compatibility: null,
+        metadata: {},
+      },
+    ];
+
+    const result = formatSkillsList(skills, ["/skills/"]);
+    expect(result).toContain('`await import("@/skills/with-module")`');
+    expect(result).not.toContain("@/skills/prose-only");
+  });
+});
+
+describe("validateModulePath", () => {
+  describe("absent / empty values", () => {
+    it("returns undefined for null", () => {
+      expect(validateModulePath(null)).toBeUndefined();
+    });
+
+    it("returns undefined for undefined", () => {
+      expect(validateModulePath(undefined)).toBeUndefined();
+    });
+
+    it("returns undefined for empty string", () => {
+      expect(validateModulePath("")).toBeUndefined();
+    });
+
+    it("returns undefined for whitespace-only string", () => {
+      expect(validateModulePath("   ")).toBeUndefined();
+    });
+  });
+
+  describe("non-string values", () => {
+    it("returns undefined for number", () => {
+      expect(validateModulePath(42)).toBeUndefined();
+    });
+
+    it("returns undefined for boolean", () => {
+      expect(validateModulePath(true)).toBeUndefined();
+    });
+
+    it("returns undefined for object", () => {
+      expect(validateModulePath({ path: "index.ts" })).toBeUndefined();
+    });
+
+    it("returns undefined for array", () => {
+      expect(validateModulePath(["index.ts"])).toBeUndefined();
+    });
+  });
+
+  describe("valid paths", () => {
+    it("returns 'index.ts' for 'index.ts'", () => {
+      expect(validateModulePath("index.ts")).toBe("index.ts");
+    });
+
+    it("strips leading ./ from './entry.ts'", () => {
+      expect(validateModulePath("./entry.ts")).toBe("entry.ts");
+    });
+
+    it("strips leading ./ from './lib/util.js'", () => {
+      expect(validateModulePath("./lib/util.js")).toBe("lib/util.js");
+    });
+
+    it("passes through a path without ./ prefix", () => {
+      expect(validateModulePath("lib/entry.js")).toBe("lib/entry.js");
+    });
+
+    it("accepts .mjs extension", () => {
+      expect(validateModulePath("index.mjs")).toBe("index.mjs");
+    });
+
+    it("accepts .cjs extension", () => {
+      expect(validateModulePath("index.cjs")).toBe("index.cjs");
+    });
+
+    it("accepts .jsx extension", () => {
+      expect(validateModulePath("ui.jsx")).toBe("ui.jsx");
+    });
+
+    it("accepts .tsx extension", () => {
+      expect(validateModulePath("component.tsx")).toBe("component.tsx");
+    });
+
+    it("accepts .mts extension", () => {
+      expect(validateModulePath("index.mts")).toBe("index.mts");
+    });
+
+    it("accepts .cts extension", () => {
+      expect(validateModulePath("index.cts")).toBe("index.cts");
+    });
+
+    it("trims surrounding whitespace before validating", () => {
+      expect(validateModulePath("  index.ts  ")).toBe("index.ts");
+    });
+  });
+
+  describe("absolute paths", () => {
+    it("returns undefined for '/foo.ts'", () => {
+      expect(validateModulePath("/foo.ts")).toBeUndefined();
+    });
+
+    it("returns undefined for '/absolute/path/index.ts'", () => {
+      expect(validateModulePath("/absolute/path/index.ts")).toBeUndefined();
+    });
+
+    it("returns undefined for './' that normalizes to an absolute after stripping", () => {
+      expect(validateModulePath("/./index.ts")).toBeUndefined();
+    });
+  });
+
+  describe("path traversal", () => {
+    it("returns undefined for '..'", () => {
+      expect(validateModulePath("..")).toBeUndefined();
+    });
+
+    it("returns undefined for '../foo.ts'", () => {
+      expect(validateModulePath("../foo.ts")).toBeUndefined();
+    });
+
+    it("returns undefined for 'lib/../foo.ts'", () => {
+      expect(validateModulePath("lib/../foo.ts")).toBeUndefined();
+    });
+
+    it("returns undefined for 'a/b/../../foo.ts'", () => {
+      expect(validateModulePath("a/b/../../foo.ts")).toBeUndefined();
+    });
+
+    it("returns undefined for 'foo/..' (trailing traversal without extension)", () => {
+      expect(validateModulePath("foo/..")).toBeUndefined();
+    });
+
+    it("returns undefined for './../../escape.ts'", () => {
+      expect(validateModulePath("./../../escape.ts")).toBeUndefined();
+    });
+  });
+
+  describe("bad extensions", () => {
+    it("returns undefined for '.json'", () => {
+      expect(validateModulePath("data.json")).toBeUndefined();
+    });
+
+    it("returns undefined for '.md'", () => {
+      expect(validateModulePath("README.md")).toBeUndefined();
+    });
+
+    it("returns undefined for no extension", () => {
+      expect(validateModulePath("index")).toBeUndefined();
+    });
+
+    it("returns undefined for '.py'", () => {
+      expect(validateModulePath("script.py")).toBeUndefined();
+    });
+
+    it("returns undefined for '.d.ts' (type declaration only)", () => {
+      expect(validateModulePath("index.d.ts")).toBeUndefined();
+    });
+  });
+});
+
+describe("parseSkillMetadataFromContent module field", () => {
+  function makeContent(extra = ""): string {
+    return `---\nname: my-skill\ndescription: A skill\n${extra}---\n\nContent\n`;
+  }
+
+  it("sets module when a valid path is provided", () => {
+    const result = parseSkillMetadataFromContent(
+      makeContent("module: index.ts\n"),
+      "/skills/my-skill/SKILL.md",
+      "my-skill",
+    );
+    expect(result?.module).toBe("index.ts");
+  });
+
+  it("strips leading ./ from module path", () => {
+    const result = parseSkillMetadataFromContent(
+      makeContent("module: ./src/entry.ts\n"),
+      "/skills/my-skill/SKILL.md",
+      "my-skill",
+    );
+    expect(result?.module).toBe("src/entry.ts");
+  });
+
+  it("sets module to undefined when module key is absent", () => {
+    const result = parseSkillMetadataFromContent(
+      makeContent(),
+      "/skills/my-skill/SKILL.md",
+      "my-skill",
+    );
+    expect(result?.module).toBeUndefined();
+  });
+
+  it("sets module to undefined for a non-string value", () => {
+    const result = parseSkillMetadataFromContent(
+      makeContent("module: 42\n"),
+      "/skills/my-skill/SKILL.md",
+      "my-skill",
+    );
+    expect(result?.module).toBeUndefined();
+  });
+
+  it("sets module to undefined for an unsupported extension", () => {
+    const result = parseSkillMetadataFromContent(
+      makeContent("module: index.py\n"),
+      "/skills/my-skill/SKILL.md",
+      "my-skill",
+    );
+    expect(result?.module).toBeUndefined();
+  });
+
+  it("sets module to undefined for a traversal path", () => {
+    const result = parseSkillMetadataFromContent(
+      makeContent("module: ../escape.ts\n"),
+      "/skills/my-skill/SKILL.md",
+      "my-skill",
+    );
+    expect(result?.module).toBeUndefined();
+  });
+
+  it("sets module to undefined for an empty string", () => {
+    const result = parseSkillMetadataFromContent(
+      makeContent('module: ""\n'),
+      "/skills/my-skill/SKILL.md",
+      "my-skill",
+    );
+    expect(result?.module).toBeUndefined();
   });
 });
 
@@ -1814,6 +2386,40 @@ description: Project-level skill for team collaboration
     expect(systemPrompt).toContain("/skills/test-skill/SKILL.md");
     // Verify progressive disclosure instructions are present
     expect(systemPrompt).toContain("Progressive Disclosure");
+    invokeSpy.mockRestore();
+  });
+
+  it("should load a skill when source is a direct skill path (StateBackend)", async () => {
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    const model = new FakeListChatModel({ responses: ["Done"] });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model: model as any,
+      // Direct skill path: source points at the skill directory itself
+      skills: ["/skills/test-skill/"],
+      checkpointer,
+    });
+
+    await agent.invoke(
+      {
+        messages: [new HumanMessage("What skills are available?")],
+        files: {
+          "/skills/test-skill/SKILL.md": createFileData(VALID_SKILL_MD),
+        },
+      } as any,
+      {
+        configurable: { thread_id: `test-direct-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    expect(invokeSpy).toHaveBeenCalled();
+    const systemPrompt = getSystemPromptFromSpy(invokeSpy);
+
+    expect(systemPrompt).toContain("test-skill");
+    expect(systemPrompt).toContain("A test skill for StateBackend integration");
+    expect(systemPrompt).toContain("/skills/test-skill/SKILL.md");
     invokeSpy.mockRestore();
   });
 

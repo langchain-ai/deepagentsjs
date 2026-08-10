@@ -8,10 +8,10 @@
   "dependencies": {
     "@deepagents/evals": "workspace:*",
     "deepagents": "workspace:*",
-    "langsmith": "^0.5.4",
+    "langsmith": "^0.8.7",
     "vitest": "^4.0.18"
   },
   "devDependencies": {
-    "@types/node": "^25.5.0"
+    "@types/node": "^26.1.0"
   }
 }

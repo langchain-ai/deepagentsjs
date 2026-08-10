@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
+import { fakeModel } from "@langchain/core/testing";
 import { toolStrategy, providerStrategy } from "langchain";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { z } from "zod/v4";
@@ -606,13 +607,26 @@ describe("DeepAgents Integration Tests", () => {
     { timeout: 120 * 1000 },
     async () => {
       const agent = createDeepAgent({
-        model: new ChatAnthropic({ model: "claude-haiku-4-5" }),
+        model: fakeModel()
+          .respondWithTools([
+            {
+              name: "task",
+              id: "call_foo_response_format",
+              args: {
+                description:
+                  "Tell me how confident you are that pineapple belongs on pizza",
+                subagent_type: "foo",
+              },
+            },
+          ])
+          .respond(new AIMessage("Done")),
         systemPrompt:
           "You are an orchestrator. Always delegate tasks to the appropriate subagent via the task tool.",
         subagents: [
           {
             name: "foo",
             description: "Call this when the user says 'foo'",
+            model: new ChatAnthropic({ model: "claude-haiku-4-5" }),
             systemPrompt: "You are a foo agent",
             responseFormat: toolStrategy(
               z.object({

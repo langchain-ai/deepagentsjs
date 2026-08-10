@@ -1,5 +1,88 @@
 # @langchain/quickjs
 
+## 0.6.1
+
+## 1.0.0-rc.0
+
+### Patch Changes
+
+- Updated dependencies [[`d25097f`](https://github.com/langchain-ai/deepagentsjs/commit/d25097f78d0e66741da34e1d74551f3c19991126), [`dd142fe`](https://github.com/langchain-ai/deepagentsjs/commit/dd142fe4fc54c986d5bcf51211d9a839a427e931)]:
+  - deepagents@1.12.0-rc.0
+
+## 0.6.0
+
+### Minor Changes
+
+- [#606](https://github.com/langchain-ai/deepagentsjs/pull/606) [`3c8f8b2`](https://github.com/langchain-ai/deepagentsjs/commit/3c8f8b2ea6f0204353c63bf49c3fdc6655bf1069) Thanks [@colifran](https://github.com/colifran)! - chore(quickjs): disallow task as a configurable ptc tool
+
+## 0.5.1
+
+### Patch Changes
+
+- [#602](https://github.com/langchain-ai/deepagentsjs/pull/602) [`204cb27`](https://github.com/langchain-ai/deepagentsjs/commit/204cb27414c82c34a0c681c7e5a5336e1834f058) Thanks [@colifran](https://github.com/colifran)! - chore(quickjs): refine dynamic subagent prompt to trigger on workflow keyword and to improve iterative eval behavior
+
+- [#604](https://github.com/langchain-ai/deepagentsjs/pull/604) [`0971007`](https://github.com/langchain-ai/deepagentsjs/commit/0971007ab2491e73eb1a78c5426ab934470d5620) Thanks [@colifran](https://github.com/colifran)! - fix(quickjs): unwrap Command/ToolMessage envelopes from tool and subagent results
+
+## 0.5.0
+
+### Minor Changes
+
+- [#590](https://github.com/langchain-ai/deepagentsjs/pull/590) [`7ee3feb`](https://github.com/langchain-ai/deepagentsjs/commit/7ee3feb674c361305b2a031db9132253e3d0543b) Thanks [@colifran](https://github.com/colifran)! - chore(quickjs): remove skills backend and associated plumbing
+
+- [#592](https://github.com/langchain-ai/deepagentsjs/pull/592) [`72cfb0c`](https://github.com/langchain-ai/deepagentsjs/commit/72cfb0c0384b30059b5e8028139a2e167c1be882) Thanks [@colifran](https://github.com/colifran)! - feat(quickjs): implement default subagent primitive in code interpreter for programmatic subagent calling
+
+### Patch Changes
+
+- [#594](https://github.com/langchain-ai/deepagentsjs/pull/594) [`61db938`](https://github.com/langchain-ai/deepagentsjs/commit/61db9381494f61b4548cd80b715e5af72fdde381) Thanks [@colifran](https://github.com/colifran)! - chore(quickjs): remove configurable concurrency and add subagents option with true default
+
+- [#546](https://github.com/langchain-ai/deepagentsjs/pull/546) [`b7a5f26`](https://github.com/langchain-ai/deepagentsjs/commit/b7a5f26fd9cba992b11e1a4cf18607d64533503b) Thanks [@open-swe](https://github.com/apps/open-swe)! - fix(quickjs): scope `CodeInterpreterMiddleware` REPL prompt sandbox bullet to the runtime
+
+## 0.4.1
+
+### Patch Changes
+
+- [#545](https://github.com/langchain-ai/deepagentsjs/pull/545) [`b3f0d6e`](https://github.com/langchain-ai/deepagentsjs/commit/b3f0d6e8fa2980652123e0053c116fc9945720ac) Thanks [@colifran](https://github.com/colifran)! - chore(quickjs): update swarm task tool to use withStructuredOutput
+
+- [#500](https://github.com/langchain-ai/deepagentsjs/pull/500) [`bfb6eec`](https://github.com/langchain-ai/deepagentsjs/commit/bfb6eecdfe617645b3bdebf9a60d4b08e575cef7) Thanks [@colifran](https://github.com/colifran)! - feat(quickjs): add swarm task tool
+
+- [#549](https://github.com/langchain-ai/deepagentsjs/pull/549) [`9221c8a`](https://github.com/langchain-ai/deepagentsjs/commit/9221c8a2b5236954f674e30f3ef0e2962f54fb56) Thanks [@colifran](https://github.com/colifran)! - chore(deepagents): move required ptc tools to metadata
+
+## 0.4.0
+
+### Minor Changes
+
+- [#531](https://github.com/langchain-ai/deepagentsjs/pull/531) [`a76b7df`](https://github.com/langchain-ai/deepagentsjs/commit/a76b7df62310e7f2dd49bb1ea5f1b3ee6c8590b6) Thanks [@colifran](https://github.com/colifran)! - chore(quickjs): update `REPLMiddleware` to be named `CodeInterpreterMiddleware`
+
+### Patch Changes
+
+- [#524](https://github.com/langchain-ai/deepagentsjs/pull/524) [`2cbd524`](https://github.com/langchain-ai/deepagentsjs/commit/2cbd5245a43fb1ba97fa532c1942a8903e090cfa) Thanks [@colifran](https://github.com/colifran)! - fix(quickjs): individual repl sessions use individual wasm module causing inefficient memory usage
+
+## 0.3.0
+
+### Minor Changes
+
+- [#520](https://github.com/langchain-ai/deepagentsjs/pull/520) [`2548954`](https://github.com/langchain-ai/deepagentsjs/commit/254895457fce2de7df4547ebcf825d60868bacce) Thanks [@colifran](https://github.com/colifran)! - chore(quickjs): rename to REPLMiddleware and adjust defaults
+
+## 0.2.6
+
+### Patch Changes
+
+- [#501](https://github.com/langchain-ai/deepagentsjs/pull/501) [`5b0eaea`](https://github.com/langchain-ai/deepagentsjs/commit/5b0eaea7b20461414983b71ba08d26d078b49214) Thanks [@sukhmanghotraa](https://github.com/sukhmanghotraa)! - fix: bump @langchain/core to ^1.1.42 across all workspace packages
+
+- [#496](https://github.com/langchain-ai/deepagentsjs/pull/496) [`8fd575f`](https://github.com/langchain-ai/deepagentsjs/commit/8fd575f06ca27cb0bef1a649aa34124a2c04ddd3) Thanks [@colifran](https://github.com/colifran)! - feat(deepagents): implement functional skills for quickjs middleware
+
+- [#486](https://github.com/langchain-ai/deepagentsjs/pull/486) [`998d772`](https://github.com/langchain-ai/deepagentsjs/commit/998d772a07acc76fcc0d419e65b3c74a64d9ac52) Thanks [@colifran](https://github.com/colifran)! - feat(quickjs): remove built-in VFS globals, add PTC instance injection and StateBackend read-your-writes
+
+- [#498](https://github.com/langchain-ai/deepagentsjs/pull/498) [`192bbd7`](https://github.com/langchain-ai/deepagentsjs/commit/192bbd7109817a826aa6bd982e16b54b5a5c8cb5) Thanks [@colifran](https://github.com/colifran)! - fix(quickjs): bound console buffering at capture time
+
+- [#497](https://github.com/langchain-ai/deepagentsjs/pull/497) [`79dcf9a`](https://github.com/langchain-ai/deepagentsjs/commit/79dcf9ae4567fcce71ea7e529f332baf6a3d6dcd) Thanks [@colifran](https://github.com/colifran)! - feat(quickjs): add maxPtcCallsbudget for ptc calls
+
+- [#492](https://github.com/langchain-ai/deepagentsjs/pull/492) [`43cd121`](https://github.com/langchain-ai/deepagentsjs/commit/43cd121133562abf0dee76c6db01f2bde0eb3fd3) Thanks [@colifran](https://github.com/colifran)! - implement file system permissions for fs middleware tools
+
+- [#494](https://github.com/langchain-ai/deepagentsjs/pull/494) [`e64c7e3`](https://github.com/langchain-ai/deepagentsjs/commit/e64c7e31a7e62929d5d2a9048ad7df3315a546cd) Thanks [@colifran](https://github.com/colifran)! - feat(quickjs): implement delete session in after agent hook to clean up completed repl sessions
+
+- [#499](https://github.com/langchain-ai/deepagentsjs/pull/499) [`352e487`](https://github.com/langchain-ai/deepagentsjs/commit/352e4876679fb708d9690ffeab82363ba02677dc) Thanks [@hntrl](https://github.com/hntrl)! - fix(quickjs): add ls_code_input_language metadata to js_eval tool
+
 ## 0.2.5
 
 ### Patch Changes

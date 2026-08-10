@@ -101,19 +101,29 @@ describe
             'echo "Reconnect test" > /home/app/reconnect.txt',
           );
 
-          // Close the connection (but sandbox keeps running due to duration lifetime)
-          await originalSandbox.close();
-
-          // Reconnect using DenoSandbox.fromId()
-          const reconnectedSandbox = await DenoSandbox.fromId(sandboxId);
-
-          expect(reconnectedSandbox.id).toBe(sandboxId);
-          expect(reconnectedSandbox.isRunning).toBe(true);
-
-          const result = await reconnectedSandbox.execute(
-            "cat /home/app/reconnect.txt",
+          // Deno's close() terminates the deployment, even for a
+          // duration-based sandbox. Connect a second client while the
+          // original remains active to verify reconnect support.
+          // Sandbox.connect() can return 404 until the deployment is visible
+          // to a second WebSocket connection. Allow Deno Deploy's eventual
+          // consistency window before treating the sandbox as unavailable.
+          const reconnectedSandbox = await withRetry(
+            () => DenoSandbox.fromId(sandboxId),
+            12,
+            2_000,
           );
-          expect(result.output.trim()).toBe("Reconnect test");
+
+          try {
+            expect(reconnectedSandbox.id).toBe(sandboxId);
+            expect(reconnectedSandbox.isRunning).toBe(true);
+
+            const result = await reconnectedSandbox.execute(
+              "cat /home/app/reconnect.txt",
+            );
+            expect(result.output.trim()).toBe("Reconnect test");
+          } finally {
+            await reconnectedSandbox.close();
+          }
         },
         TEST_TIMEOUT * 2,
       );

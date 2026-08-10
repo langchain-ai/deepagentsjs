@@ -17,9 +17,12 @@ import {
   SystemMessage,
   toolStrategy,
   providerStrategy,
+  todoListMiddleware,
 } from "langchain";
+import { StateSchema } from "@langchain/langgraph";
 import { z } from "zod/v4";
 import { createDeepAgent } from "./agent.js";
+import type { SystemPromptConfig } from "./index.js";
 import type {
   MergedDeepAgentState,
   InferSubagentByName,
@@ -90,6 +93,8 @@ describe("createDeepAgent types", () => {
         ],
       }),
     });
+    const config: SystemPromptConfig = { base: null };
+    createDeepAgent({ systemPrompt: config });
   });
 
   describe("MergedDeepAgentState helper type", () => {
@@ -115,7 +120,7 @@ describe("createDeepAgent types", () => {
   describe("createDeepAgent return type using actual invoke", () => {
     it("should infer state from custom middleware and subagents middleware", async () => {
       const agent = createDeepAgent({
-        middleware: [ResearchMiddleware],
+        middleware: [ResearchMiddleware, todoListMiddleware()],
         subagents: [
           {
             name: "Subagent1",
@@ -316,6 +321,43 @@ describe("createDeepAgent types", () => {
       expectTypeOf(result.structuredResponse).toEqualTypeOf<
         z.infer<typeof schema1> | z.infer<typeof schema2>
       >();
+    });
+  });
+
+  describe("stateSchema parameter", () => {
+    it("should expose StateSchema fields on the invoke result, typed", async () => {
+      const agent = createDeepAgent({
+        stateSchema: new StateSchema({
+          author: z.string(),
+        }),
+      });
+      const result = await agent.invoke({ messages: [] });
+
+      expectTypeOf(result).toHaveProperty("author");
+      expectTypeOf(result.author).toEqualTypeOf<string>();
+      expectTypeOf(result.author).not.toBeAny();
+    });
+
+    it("should expose zod object schema fields on the invoke result, typed", async () => {
+      const agent = createDeepAgent({
+        stateSchema: z.object({ author: z.string().default("") }),
+      });
+      const result = await agent.invoke({ messages: [] });
+
+      expectTypeOf(result).toHaveProperty("author");
+      expectTypeOf(result.author).toEqualTypeOf<string>();
+      expectTypeOf(result.author).not.toBeAny();
+    });
+
+    it("should merge stateSchema fields with middleware-derived state", async () => {
+      const agent = createDeepAgent({
+        middleware: [ResearchMiddleware],
+        stateSchema: new StateSchema({ author: z.string() }),
+      });
+      const result = await agent.invoke({ messages: [] });
+
+      expectTypeOf(result.author).toEqualTypeOf<string>();
+      expectTypeOf(result.research).toEqualTypeOf<string>();
     });
   });
 });

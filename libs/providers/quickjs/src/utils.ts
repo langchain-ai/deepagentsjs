@@ -35,7 +35,11 @@ export function formatReplResult(result: ReplResult): string {
   const parts: string[] = [];
 
   if (result.logs.length > 0) {
-    parts.push(result.logs.join("\n"));
+    let logsText = result.logs.join("\n");
+    if (result.logsDroppedChars > 0) {
+      logsText += `\n[truncated ${result.logsDroppedChars} chars]`;
+    }
+    parts.push(logsText);
   }
 
   if (result.ok) {

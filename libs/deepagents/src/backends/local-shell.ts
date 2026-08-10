@@ -32,6 +32,8 @@ import { SandboxError } from "./protocol.js";
 export interface LocalShellBackendOptions {
   /**
    * Working directory for both filesystem operations and shell commands.
+   * When set with `virtualMode: false` (default), absolute paths and `..` can
+   * bypass rootDir for filesystem operations.
    * @defaultValue `process.cwd()`
    */
   rootDir?: string;
@@ -39,6 +41,7 @@ export interface LocalShellBackendOptions {
   /**
    * Enable virtual path mode for filesystem operations.
    * When true, treats rootDir as a virtual root filesystem.
+   * When false (default), preserves legacy path behavior.
    * Does NOT restrict shell commands.
    * @defaultValue `false`
    */
@@ -112,6 +115,7 @@ export interface LocalShellBackendOptions {
  * // Create backend with explicit environment
  * const backend = new LocalShellBackend({
  *   rootDir: "/home/user/project",
+ *   virtualMode: true,
  *   env: { PATH: "/usr/bin:/bin" },
  * });
  *
@@ -127,6 +131,7 @@ export interface LocalShellBackendOptions {
  * // Inherit all environment variables
  * const backend2 = new LocalShellBackend({
  *   rootDir: "/home/user/project",
+ *   virtualMode: true,
  *   inheritEnv: true,
  * });
  * ```
@@ -297,13 +302,15 @@ export class LocalShellBackend
 
     const formatPath = (rel: string) => (this.virtualMode ? `/${rel}` : rel);
 
-    const globOpts = { cwd: resolvedSearchPath, absolute: false, dot: true };
-    const [fileMatches, dirMatches] = await Promise.all([
-      fg(pattern, { ...globOpts, onlyFiles: true }),
-      fg(pattern, { ...globOpts, onlyDirectories: true }),
-    ]);
+    const matches = await fg(pattern, {
+      cwd: resolvedSearchPath,
+      absolute: false,
+      dot: true,
+      onlyFiles: false,
+      followSymbolicLinks: false,
+    });
 
-    const statFile = async (match: string): Promise<FileInfo | null> => {
+    const classify = async (match: string): Promise<FileInfo | null> => {
       try {
         const entryStat = await fs.stat(path.join(resolvedSearchPath, match));
         if (entryStat.isFile()) {
@@ -314,15 +321,6 @@ export class LocalShellBackend
             modified_at: entryStat.mtime.toISOString(),
           };
         }
-      } catch {
-        /* skip unstatable entries */
-      }
-      return null;
-    };
-
-    const statDir = async (match: string): Promise<FileInfo | null> => {
-      try {
-        const entryStat = await fs.stat(path.join(resolvedSearchPath, match));
         if (entryStat.isDirectory()) {
           return {
             path: formatPath(match),
@@ -332,19 +330,13 @@ export class LocalShellBackend
           };
         }
       } catch {
-        /* skip unstatable entries */
+        /* skip unstatable entries (e.g. broken symlinks) */
       }
       return null;
     };
 
-    const [fileInfos, dirInfos] = await Promise.all([
-      Promise.all(fileMatches.map(statFile)),
-      Promise.all(dirMatches.map(statDir)),
-    ]);
-
-    const results = [...fileInfos, ...dirInfos].filter(
-      (info): info is FileInfo => info !== null,
-    );
+    const infos = await Promise.all(matches.map(classify));
+    const results = infos.filter((info): info is FileInfo => info !== null);
     results.sort((a, b) => a.path.localeCompare(b.path));
     return { files: results };
   }

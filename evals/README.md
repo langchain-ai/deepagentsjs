@@ -12,11 +12,20 @@ so you can compare runs across models and track regressions over time.
 | Suite                                                | Description                                                                      |
 | ---------------------------------------------------- | -------------------------------------------------------------------------------- |
 | [`basic/`](./basic/)                                 | System prompt adherence, simple reasoning, avoiding unnecessary tool calls       |
+| [`all/`](./all/)                                     | Aggregated run that executes all eval suites in a single Vitest + LangSmith session |
 | [`files/`](./files/)                                 | File operations — read, write, edit, ls, grep, glob, parallel I/O, deep nesting  |
+| [`followup-quality/`](./followup-quality/)           | Clarifying question quality for underspecified user requests                        |
 | [`hitl/`](./hitl/)                                   | Human-in-the-loop interrupt behavior, review configs, resume after approval      |
+| [`external-benchmarks/`](./external-benchmarks/)     | Curated hard-set from FRAMES, Nexus, and BFCL v3 benchmark samples               |
 | [`memory/`](./memory/)                               | AGENTS.md memory injection — recall, guided behavior, multiple sources, graceful fallback |
+| [`memory-agent-bench/`](./memory-agent-bench/)       | MemoryAgentBench-style long-context memorization and retrieval scenarios          |
+| [`memory-multiturn/`](./memory-multiturn/)           | Multi-turn memory persistence: implicit preferences, explicit instructions, transient filtering |
 | [`skills/`](./skills/)                               | Skill file discovery, reading, selection, combination, and editing via skill source paths |
 | [`subagents/`](./subagents/)                         | Subagent delegation — `task` tool routing to named and general-purpose subagents |
+| [`summarization/`](./summarization/)                 | Summarization middleware behavior and conversation-history offloading             |
+| [`tau2-airline/`](./tau2-airline/)                   | Tau2-airline inspired policy-grounded airline support tasks                       |
+| [`todos/`](./todos/)                                 | Sequential `write_todos` state updates and completion behavior                     |
+| [`tool-selection/`](./tool-selection/)               | Direct/indirect tool routing and multi-step chaining across mock integrations      |
 | [`tool-usage-relational/`](./tool-usage-relational/) | Multi-step tool chaining with relational data lookups (users, locations, foods)  |
 
 ## Running evals
@@ -34,6 +43,9 @@ EVAL_RUNNER=sonnet-4-5 pnpm test:eval
 
 # Run a single suite
 EVAL_RUNNER=sonnet-4-5 pnpm --filter @deepagents/eval-basic test:eval
+
+# Run every suite in one execution (single reporter session)
+EVAL_RUNNER=sonnet-4-5 pnpm --filter @deepagents/eval-all test:eval
 
 # Run with a different model
 EVAL_RUNNER=gpt-4.1 pnpm --filter @deepagents/eval-files test:eval
@@ -81,7 +93,7 @@ EVAL_RUNNER=gpt-4.1 pnpm --filter @deepagents/eval-files test:eval
    });
    ```
 
-4. Write your test in `index.test.ts`:
+4. Write your test in `eval.test.ts`:
 
    ```ts
    import * as ls from "langsmith/vitest";
@@ -89,9 +101,10 @@ EVAL_RUNNER=gpt-4.1 pnpm --filter @deepagents/eval-files test:eval
    import { getDefaultRunner } from "@deepagents/evals";
 
    const runner = getDefaultRunner();
+   const evalName = "deepagents-js-my-eval";
 
    ls.describe(
-     runner.name,
+     evalName,
      () => {
        ls.test(
          "my test case",
@@ -102,7 +115,7 @@ EVAL_RUNNER=gpt-4.1 pnpm --filter @deepagents/eval-files test:eval
          },
        );
      },
-     { projectName: "deepagents-js-my-eval", upsert: true },
+     { projectName: runner.name, upsert: true },
    );
    ```
 

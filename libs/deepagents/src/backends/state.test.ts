@@ -1,38 +1,80 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { StateBackend } from "./state.js";
 import type { FileData, FileDataV1 } from "./protocol.js";
-import { getCurrentTaskInput, getConfig, Command } from "@langchain/langgraph";
+import { getConfig, Command } from "@langchain/langgraph";
 import { ToolMessage } from "@langchain/core/messages";
 
 vi.mock("@langchain/langgraph", async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...(actual as any),
-    getCurrentTaskInput: vi.fn(),
     getConfig: vi.fn(),
   };
 });
 
-/**
- * Helper to create a mock config with state
- */
 function makeConfig(files: Record<string, FileData> = {}) {
-  const state = {
-    messages: [],
-    files,
-  };
-  const sendSpy = vi.fn();
-  vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+  const state = { messages: [], files: { ...files } };
+  const pendingFilesSends: Record<string, FileData | null>[] = [];
+
+  const sendSpy = vi
+    .fn()
+    .mockImplementation(
+      (sends: [string, Record<string, FileData | null>][]) => {
+        for (const [channel, update] of sends) {
+          if (channel === "files") pendingFilesSends.push(update);
+        }
+      },
+    );
+
+  const readSpy = vi
+    .fn()
+    .mockImplementation((channel: string, fresh?: boolean) => {
+      if (channel !== "files") return undefined;
+      if (!fresh || pendingFilesSends.length === 0) return state.files;
+      const merged = { ...state.files };
+      for (const update of pendingFilesSends) {
+        for (const [path, fileData] of Object.entries(update)) {
+          if (fileData === null) {
+            delete merged[path];
+          } else {
+            merged[path] = fileData;
+          }
+        }
+      }
+      return merged;
+    });
+
   vi.mocked(getConfig).mockReturnValue({
-    configurable: {
-      __pregel_send: sendSpy,
-    },
+    configurable: { __pregel_send: sendSpy, __pregel_read: readSpy },
   } as any);
+
+  // Simulate Pregel committing task.writes to state and clearing the buffer.
+  function commitSends() {
+    for (const update of pendingFilesSends) {
+      for (const [path, fileData] of Object.entries(update)) {
+        if (fileData === null) {
+          delete state.files[path];
+        } else {
+          state.files[path] = fileData;
+        }
+      }
+    }
+    pendingFilesSends.length = 0;
+  }
+
+  // Simulate Pregel discarding task.writes without committing (e.g., node rollback).
+  function clearPending() {
+    pendingFilesSends.length = 0;
+  }
+
   return {
     state,
     runtime: { state, store: undefined },
     config: {},
     sendSpy,
+    readSpy,
+    commitSends,
+    clearPending,
   };
 }
 
@@ -85,6 +127,49 @@ describe("StateBackend", () => {
     expect(infos.files!.some((i) => i.path === "/notes.txt")).toBe(true);
   });
 
+  it("should delete files through Pregel send in zero-arg mode", () => {
+    const { sendSpy, commitSends } = makeConfig();
+    const backend = new StateBackend();
+
+    const writeRes = backend.write("/drop.txt", "bye");
+    expect(writeRes.error).toBeUndefined();
+    commitSends();
+    expect(backend.read("/drop.txt").error).toBeUndefined();
+
+    const deleteRes = backend.delete("/drop.txt");
+    expect(deleteRes.error).toBeUndefined();
+    expect(deleteRes.path).toBe("/drop.txt");
+    expect(sendSpy).toHaveBeenLastCalledWith([
+      ["files", { "/drop.txt": null }],
+    ]);
+
+    commitSends();
+    expect(backend.read("/drop.txt").error).toContain("not found");
+  });
+
+  it("should return an error when deleting a missing file", () => {
+    makeConfig();
+    const backend = new StateBackend();
+
+    const result = backend.delete("/missing.txt");
+
+    expect(result.path).toBeUndefined();
+    expect(result.error).toContain("not found");
+  });
+
+  it("should return an explicit error for delete in legacy mode", () => {
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime);
+    const writeRes = backend.write("/drop.txt", "bye");
+    Object.assign(state.files, writeRes.filesUpdate);
+
+    const result = backend.delete("/drop.txt");
+
+    expect(result.path).toBeUndefined();
+    expect(result.error).toContain("zero-argument StateBackend");
+    expect(backend.read("/drop.txt").error).toBeUndefined();
+  });
+
   it("should handle errors correctly", () => {
     const { state, runtime } = makeConfig();
     const backend = new StateBackend(runtime);
@@ -97,9 +182,54 @@ describe("StateBackend", () => {
     expect(writeRes.filesUpdate).toBeDefined();
     Object.assign(state.files, writeRes.filesUpdate);
 
-    const dupErr = backend.write("/dup.txt", "y");
-    expect(dupErr.error).toBeDefined();
-    expect(dupErr.error).toContain("already exists");
+    const overwriteRes = backend.write("/dup.txt", "y");
+    expect(overwriteRes.error).toBeUndefined();
+    expect(overwriteRes.filesUpdate).toBeDefined();
+    Object.assign(state.files, overwriteRes.filesUpdate);
+
+    const readRes = backend.read("/dup.txt");
+    expect(readRes.content).toBe("y");
+  });
+
+  it("should honor v1 format for binary-path writes", () => {
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime, { fileFormat: "v1" });
+    const content = "AQID";
+
+    const result = backend.write("/image.png", content);
+
+    expect(result.error).toBeUndefined();
+    Object.assign(state.files, result.filesUpdate);
+    const raw = backend.readRaw("/image.png");
+    expect(raw.data).toBeDefined();
+    expect(raw.data!.content).toEqual([content]);
+    expect("mimeType" in raw.data!).toBe(false);
+  });
+
+  it("should overwrite existing binary files with decoded bytes", () => {
+    const oldBytes = new Uint8Array([1, 2, 3]);
+    const newBytes = new Uint8Array([4, 5, 6]);
+    const { state, runtime } = makeConfig({
+      "/image.png": {
+        content: oldBytes,
+        mimeType: "image/png",
+        created_at: "2024-01-01T00:00:00.000Z",
+        modified_at: "2024-01-01T00:00:00.000Z",
+      },
+    });
+    const backend = new StateBackend(runtime);
+
+    const result = backend.write(
+      "/image.png",
+      Buffer.from(newBytes).toString("base64"),
+    );
+
+    expect(result.error).toBeUndefined();
+    Object.assign(state.files, result.filesUpdate);
+    const raw = backend.readRaw("/image.png");
+    expect(raw.data).toBeDefined();
+    expect(raw.data!.content).toEqual(newBytes);
+    expect(raw.data!.created_at).toBe("2024-01-01T00:00:00.000Z");
   });
 
   it("should list nested directories correctly", () => {
@@ -523,17 +653,19 @@ describe("StateBackend", () => {
 
     expect(result).toBeInstanceOf(Command);
     expect(result.update.files).toBeDefined();
-    expect(result.update.files["/large_tool_results/test_123"]).toBeDefined();
-    expect(result.update.files["/large_tool_results/test_123"].content).toBe(
-      largeContent,
-    );
+    expect(
+      result.update.files["/large_tool_results/test_123.txt"],
+    ).toBeDefined();
+    expect(
+      result.update.files["/large_tool_results/test_123.txt"].content,
+    ).toBe(largeContent);
 
     expect(result.update.messages).toHaveLength(1);
     expect(result.update.messages[0].content).toContain(
       "Tool result too large",
     );
     expect(result.update.messages[0].content).toContain(
-      "/large_tool_results/test_123",
+      "/large_tool_results/test_123.txt",
     );
   });
 
@@ -688,19 +820,6 @@ describe("StateBackend", () => {
   });
 
   describe("zero-arg constructor", () => {
-    /**
-     * Helper to apply a __pregel_send update to the mocked state.
-     * Extracts the files update from the sendSpy call and merges it.
-     */
-    function applySendUpdate(
-      state: { files: Record<string, FileData> },
-      sendSpy: ReturnType<typeof vi.fn>,
-      callIndex = 0,
-    ) {
-      const sent = sendSpy.mock.calls[callIndex][0];
-      Object.assign(state.files, sent[0][1]);
-    }
-
     it("write sends update via __pregel_send and returns no filesUpdate", () => {
       const { sendSpy } = makeConfig();
       const backend = new StateBackend();
@@ -718,11 +837,10 @@ describe("StateBackend", () => {
     });
 
     it("edit sends update via __pregel_send and returns no filesUpdate", () => {
-      const { state, sendSpy } = makeConfig();
+      const { sendSpy } = makeConfig();
       const backend = new StateBackend();
 
       backend.write("/notes.txt", "hello world");
-      applySendUpdate(state, sendSpy);
       sendSpy.mockClear();
 
       const result = backend.edit("/notes.txt", "hello", "hi");
@@ -753,36 +871,25 @@ describe("StateBackend", () => {
     });
 
     it("full CRUD cycle: write, read, edit, read, ls, grep, glob", () => {
-      const { state, sendSpy } = makeConfig();
+      makeConfig();
       const backend = new StateBackend();
 
-      // Write
       backend.write("/notes.txt", "hello world");
-      applySendUpdate(state, sendSpy);
-      sendSpy.mockClear();
 
-      // Read
       const readRes = backend.read("/notes.txt");
       expect(readRes.content).toContain("hello world");
 
-      // Edit
       backend.edit("/notes.txt", "hello", "hi");
-      applySendUpdate(state, sendSpy);
-      sendSpy.mockClear();
 
-      // Read after edit
       const readRes2 = backend.read("/notes.txt");
       expect(readRes2.content).toContain("hi world");
 
-      // Ls
       const listing = backend.ls("/");
       expect(listing.files!.some((fi) => fi.path === "/notes.txt")).toBe(true);
 
-      // Grep
       const grepRes = backend.grep("hi", "/");
       expect(grepRes.matches!.some((m) => m.path === "/notes.txt")).toBe(true);
 
-      // Glob
       const globRes = backend.glob("*.txt", "/");
       expect(globRes.files!.some((i) => i.path === "/notes.txt")).toBe(true);
     });

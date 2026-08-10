@@ -241,6 +241,13 @@ describe("createMemoryMiddleware", () => {
   });
 
   describe("cache control breakpoints", () => {
+    // Per-call provider gate (#550): cache_control is written only when
+    // `addCacheControl` is true AND `request.model` is Anthropic at call
+    // time. These existing tests pass an Anthropic stub to exercise the
+    // write path; the new test below covers the fallback case.
+    const fakeAnthropicModel = { getName: () => "ChatAnthropic" };
+    const fakeOpenAIModel = { getName: () => "ChatOpenAI" };
+
     it("should add cache_control to the memory content block when addCacheControl is true", () => {
       const middleware = createMemoryMiddleware({
         backend: createMockBackend({}),
@@ -250,6 +257,7 @@ describe("createMemoryMiddleware", () => {
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       const request = {
+        model: fakeAnthropicModel,
         systemMessage: new SystemMessage("Base prompt"),
         state: {
           memoryContents: {
@@ -268,6 +276,37 @@ describe("createMemoryMiddleware", () => {
       expect(blocks[1].cache_control).toEqual({ type: "ephemeral" });
     });
 
+    it("should NOT add cache_control when request.model is non-Anthropic (fallback swap)", () => {
+      // Regression for #550: modelFallbackMiddleware can swap request.model
+      // from Anthropic to OpenAI/Vertex/etc. The cache_control marker is
+      // Anthropic-specific and must not leak — non-Anthropic providers
+      // 400 on the unknown parameter.
+      const middleware = createMemoryMiddleware({
+        backend: createMockBackend({}),
+        sources: ["~/.deepagents/AGENTS.md"],
+        addCacheControl: true,
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        model: fakeOpenAIModel,
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {
+          memoryContents: {
+            "~/.deepagents/AGENTS.md": "User memory content",
+          },
+        },
+      };
+
+      middleware.wrapModelCall!(request as any, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      const blocks = modifiedRequest.systemMessage.contentBlocks;
+      expect(blocks).toHaveLength(2);
+      expect(blocks[1].text).toContain("<agent_memory>");
+      expect(blocks[1].cache_control).toBeUndefined();
+    });
+
     it("should preserve existing cache_control on system prompt blocks", () => {
       const middleware = createMemoryMiddleware({
         backend: createMockBackend({}),
@@ -277,6 +316,7 @@ describe("createMemoryMiddleware", () => {
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       const request = {
+        model: fakeAnthropicModel,
         systemMessage: new SystemMessage({
           content: [
             {
@@ -371,6 +411,7 @@ describe("createMemoryMiddleware", () => {
 
       const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
       const request = {
+        model: fakeAnthropicModel,
         systemMessage: new SystemMessage({
           content: [
             { type: "text", text: "Block 1" },

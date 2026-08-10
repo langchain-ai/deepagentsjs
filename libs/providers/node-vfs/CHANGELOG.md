@@ -1,5 +1,38 @@
 # @langchain/node-vfs
 
+## 0.2.2
+
+### Patch Changes
+
+- [#674](https://github.com/langchain-ai/deepagentsjs/pull/674) [`dd142fe`](https://github.com/langchain-ai/deepagentsjs/commit/dd142fe4fc54c986d5bcf51211d9a839a427e931) Thanks [@hntrl](https://github.com/hntrl)! - fix: allow `VfsBackend.write` to overwrite existing files while continuing to reject symlinks
+
+## 1.0.0-rc.0
+
+### Patch Changes
+
+- [#674](https://github.com/langchain-ai/deepagentsjs/pull/674) [`dd142fe`](https://github.com/langchain-ai/deepagentsjs/commit/dd142fe4fc54c986d5bcf51211d9a839a427e931) Thanks [@hntrl](https://github.com/hntrl)! - fix: allow `VfsBackend.write` to overwrite existing files while continuing to reject symlinks
+
+- Updated dependencies [[`d25097f`](https://github.com/langchain-ai/deepagentsjs/commit/d25097f78d0e66741da34e1d74551f3c19991126), [`dd142fe`](https://github.com/langchain-ai/deepagentsjs/commit/dd142fe4fc54c986d5bcf51211d9a839a427e931)]:
+  - deepagents@1.12.0-rc.0
+
+## 0.2.1
+
+### Patch Changes
+
+- [#673](https://github.com/langchain-ai/deepagentsjs/pull/673) [`eb18c70`](https://github.com/langchain-ai/deepagentsjs/commit/eb18c70d8d0871bc72aeb8be6581a98506829c6f) Thanks [@hntrl](https://github.com/hntrl)! - feat(backends): add delete protocol support
+
+  Adds a `DeleteResult` type and optional backend `delete` method, preserves delete through backend protocol adaptation, and implements file deletion across the built-in state, store, filesystem, composite, context hub, sandbox, and node-vfs backends.
+
+## 0.2.0
+
+### Minor Changes
+
+- [#575](https://github.com/langchain-ai/deepagentsjs/pull/575) [`5d266a2`](https://github.com/langchain-ai/deepagentsjs/commit/5d266a213d8d3d15c2281e2e00ab71ee30ca3ffe) Thanks [@hntrl](https://github.com/hntrl)! - BREAKING: remove shell execution from the VFS provider
+
+  `VfsBackend` now operates as a filesystem-only `BackendProtocolV2` implementation and no longer exposes command execution.
+
+  The provider now implements `read`, `ls`, `grep`, and `glob` directly against the in-memory VFS, path resolution is confined to the virtual workspace root, and legacy `VfsSandbox` / `createVfsSandboxFactory*` aliases are removed.
+
 ## 0.1.4
 
 ### Patch Changes

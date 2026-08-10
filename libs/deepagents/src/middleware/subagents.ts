@@ -19,9 +19,19 @@ import {
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
-import { HumanMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import { FilesystemPermission } from "../permissions/types.js";
 
 export type { AgentMiddleware };
+
+/**
+ * Config key used by task-tool callers to request dynamic response format.
+ *
+ * When set in `config.configurable`, the task tool recompiles the target
+ * subagent with this response format instead of using the pre-compiled graph.
+ */
+export const SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY =
+  "__deepagents_subagent_response_format";
 
 /**
  * Default system prompt for subagents.
@@ -57,163 +67,22 @@ const EXCLUDED_STATE_KEYS = [
 export const DEFAULT_GENERAL_PURPOSE_DESCRIPTION =
   "General-purpose agent for researching complex questions, searching for files and content, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you. This agent has access to all tools as the main agent.";
 
-// Comprehensive task tool description from Python
 function getTaskToolDescription(subagentDescriptions: string[]): string {
   return context`
-    Launch an ephemeral subagent to handle complex, multi-step independent tasks with isolated context windows.
+    Launch an ephemeral subagent to handle a complex, multi-step task in an isolated context window.
 
     Available agent types and the tools they have access to:
     ${subagentDescriptions.join("\n")}
 
-    When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
-
-    ## Usage notes:
-    1. Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses
-    2. When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.
-    3. Each agent invocation is stateless. You will not be able to send additional messages to the agent, nor will the agent be able to communicate with you outside of its final report. Therefore, your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.
-    4. The agent's outputs should generally be trusted
-    5. Clearly tell the agent whether you expect it to create content, perform analysis, or just do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent
-    6. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
-    7. When only the general-purpose agent is provided, you should use it for all tasks. It is great for isolating context and token usage, and completing specific, complex tasks, as it has all the same capabilities as the main agent.
-
-    ### Example usage of the general-purpose agent:
-
-    <example_agent_descriptions>
-    "general-purpose": use this agent for general purpose tasks, it has access to all tools as the main agent.
-    </example_agent_descriptions>
-
-    <example>
-    User: "I want to conduct research on the accomplishments of Lebron James, Michael Jordan, and Kobe Bryant, and then compare them."
-    Assistant: *Uses the task tool in parallel to conduct isolated research on each of the three players*
-    Assistant: *Synthesizes the results of the three isolated research tasks and responds to the User*
-    <commentary>
-    Research is a complex, multi-step task in it of itself.
-    The research of each individual player is not dependent on the research of the other players.
-    The assistant uses the task tool to break down the complex objective into three isolated tasks.
-    Each research task only needs to worry about context and tokens about one player, then returns synthesized information about each player as the Tool Result.
-    This means each research task can dive deep and spend tokens and context deeply researching each player, but the final result is synthesized information, and saves us tokens in the long run when comparing the players to each other.
-    </commentary>
-    </example>
-
-    <example>
-    User: "Analyze a single large code repository for security vulnerabilities and generate a report."
-    Assistant: *Launches a single \`task\` subagent for the repository analysis*
-    Assistant: *Receives report and integrates results into final summary*
-    <commentary>
-    Subagent is used to isolate a large, context-heavy task, even though there is only one. This prevents the main thread from being overloaded with details.
-    If the user then asks followup questions, we have a concise report to reference instead of the entire history of analysis and tool calls, which is good and saves us time and money.
-    </commentary>
-    </example>
-
-    <example>
-    User: "Schedule two meetings for me and prepare agendas for each."
-    Assistant: *Calls the task tool in parallel to launch two \`task\` subagents (one per meeting) to prepare agendas*
-    Assistant: *Returns final schedules and agendas*
-    <commentary>
-    Tasks are simple individually, but subagents help silo agenda preparation.
-    Each subagent only needs to worry about the agenda for one meeting.
-    </commentary>
-    </example>
-
-    <example>
-    User: "I want to order a pizza from Dominos, order a burger from McDonald's, and order a salad from Subway."
-    Assistant: *Calls tools directly in parallel to order a pizza from Dominos, a burger from McDonald's, and a salad from Subway*
-    <commentary>
-    The assistant did not use the task tool because the objective is super simple and clear and only requires a few trivial tool calls.
-    It is better to just complete the task directly and NOT use the \`task\`tool.
-    </commentary>
-    </example>
-
-    ### Example usage with custom agents:
-
-    <example_agent_descriptions>
-    "content-reviewer": use this agent after you are done creating significant content or documents
-    "greeting-responder": use this agent when to respond to user greetings with a friendly joke
-    "research-analyst": use this agent to conduct thorough research on complex topics
-    </example_agent_description>
-
-    <example>
-    user: "Please write a function that checks if a number is prime"
-    assistant: Sure let me write a function that checks if a number is prime
-    assistant: First let me use the Write tool to write a function that checks if a number is prime
-    assistant: I'm going to use the Write tool to write the following code:
-    <code>
-    function isPrime(n) {{
-      if (n <= 1) return false
-      for (let i = 2; i * i <= n; i++) {{
-        if (n % i === 0) return false
-      }}
-      return true
-    }}
-    </code>
-    <commentary>
-    Since significant content was created and the task was completed, now use the content-reviewer agent to review the work
-    </commentary>
-    assistant: Now let me use the content-reviewer agent to review the code
-    assistant: Uses the Task tool to launch with the content-reviewer agent
-    </example>
-
-    <example>
-    user: "Can you help me research the environmental impact of different renewable energy sources and create a comprehensive report?"
-    <commentary>
-    This is a complex research task that would benefit from using the research-analyst agent to conduct thorough analysis
-    </commentary>
-    assistant: I'll help you research the environmental impact of renewable energy sources. Let me use the research-analyst agent to conduct comprehensive research on this topic.
-    assistant: Uses the Task tool to launch with the research-analyst agent, providing detailed instructions about what research to conduct and what format the report should take
-    </example>
-
-    <example>
-    user: "Hello"
-    <commentary>
-    Since the user is greeting, use the greeting-responder agent to respond with a friendly joke
-    </commentary>
-    assistant: "I'm going to use the Task tool to launch with the greeting-responder agent"
-    </example>
+    Specify subagent_type to select the agent. Usage notes:
+    - Launch multiple agents concurrently when their tasks are independent, using a single message with multiple tool calls.
+    - Each invocation is stateless: the agent sees only the prompt you give it and returns a single final report. Put full detail in the prompt and state exactly what it should return.
+    - The agent's report is not shown to the user; relay a summary yourself.
+    - Tell the agent whether to create content, analyze, or only research, since it cannot see the user's intent.
+    - If an agent's description says to use it proactively, do so without waiting to be asked.
+    - When only general-purpose is available, use it for any complex, context-heavy task; it has the same capabilities as the main agent.
   `;
 }
-
-/**
- * System prompt section that explains how to use the task tool for spawning subagents.
- *
- * This prompt is automatically appended to the main agent's system prompt when
- * using `createSubAgentMiddleware`. It provides guidance on:
- * - When to use the task tool
- * - Subagent lifecycle (spawn → run → return → reconcile)
- * - When NOT to use the task tool
- * - Best practices for parallel task execution
- *
- * You can provide a custom `systemPrompt` to `createSubAgentMiddleware` to override
- * or extend this default.
- */
-export const TASK_SYSTEM_PROMPT = context`
-  ## \`task\` (subagent spawner)
-
-  You have access to a \`task\` tool to launch short-lived subagents that handle isolated tasks. These agents are ephemeral — they live only for the duration of the task and return a single result.
-
-  When to use the task tool:
-  - When a task is complex and multi-step, and can be fully delegated in isolation
-  - When a task is independent of other tasks and can run in parallel
-  - When a task requires focused reasoning or heavy token/context usage that would bloat the orchestrator thread
-  - When sandboxing improves reliability (e.g. code execution, structured searches, data formatting)
-  - When you only care about the output of the subagent, and not the intermediate steps (ex. performing a lot of research and then returned a synthesized report, performing a series of computations or lookups to achieve a concise, relevant answer.)
-
-  Subagent lifecycle:
-  1. **Spawn** → Provide clear role, instructions, and expected output
-  2. **Run** → The subagent completes the task autonomously
-  3. **Return** → The subagent provides a single structured result
-  4. **Reconcile** → Incorporate or synthesize the result into the main thread
-
-  When NOT to use the task tool:
-  - If you need to see the intermediate reasoning or steps after the subagent has completed (the task tool hides them)
-  - If the task is trivial (a few tool calls or simple lookup)
-  - If delegating does not reduce token usage, complexity, or context switching
-  - If splitting would add latency without benefit
-
-  ## Important Task Tool Usage Notes to Remember
-  - Whenever possible, parallelize the work that you do. This is true for both tool_calls, and for tasks. Whenever you have independent steps to complete - make tool_calls, or kick off tasks (subagents) in parallel to accomplish them faster. This saves time for the user, which is incredibly important.
-  - Remember to use the \`task\` tool to silo independent tasks within a multi-part objective.
-  - You should use the \`task\` tool whenever you have a complex task that will take multiple steps, and is independent from other tasks that the agent needs to complete. These agents are highly competent and efficient.
-`;
 
 /**
  * Type definitions for pre-compiled agents.
@@ -238,8 +107,8 @@ export interface CompiledSubAgent<
  * Specification for a subagent that can be dynamically created.
  *
  * When using `createDeepAgent`, subagents automatically receive a default middleware
- * stack (todoListMiddleware, filesystemMiddleware, summarizationMiddleware, etc.) before
- * any custom `middleware` specified in this spec.
+ * stack (filesystemMiddleware, summarizationMiddleware, etc.) before any custom
+ * `middleware` specified in this spec. Add `todoListMiddleware` explicitly to opt in.
  *
  * Required fields:
  * - `name`: Identifier used to select this subagent in the task tool
@@ -334,6 +203,28 @@ export interface SubAgent {
    * ```
    */
   responseFormat?: CreateAgentParams["responseFormat"];
+
+  /**
+   * Filesystem permission rules for this subagent.
+   *
+   * When specified, these rules **replace** the parent agent's permissions
+   * for all tool calls made by this subagent. When omitted, the subagent
+   * inherits the parent agent's permissions.
+   *
+   * Subagent permissions are a full replacement, not a merge.
+   *
+   * @example
+   * ```ts
+   * // Parent denies /restricted/**; this subagent can read it.
+   * const reader: SubAgent = {
+   *   name: "reader",
+   *   permissions: [
+   *     { operations: ["read"], paths: ["/restricted/**"] },
+   *   ],
+   * };
+   * ```
+   */
+  permissions?: FilesystemPermission[];
 }
 
 /**
@@ -420,16 +311,22 @@ function returnCommandWithStateUpdate(
   if (result.structuredResponse != null) {
     content = JSON.stringify(result.structuredResponse);
   } else {
-    const messages = result.messages as BaseMessage[];
-    const lastMessage = messages?.[messages.length - 1];
-
-    content = lastMessage?.content || "Task completed";
-    if (Array.isArray(content)) {
-      content = content.filter(
-        (block) => !INVALID_TOOL_MESSAGE_BLOCK_TYPES.includes(block.type),
-      );
-      if (content.length === 0) {
-        content = "Task completed";
+    // Walk back to the last AIMessage with non-empty text and forward only that
+    // text as a string. Anthropic sometimes emits a trailing empty `end_turn`
+    // AIMessage after a final tool call, which would otherwise be forwarded as
+    // an empty ToolMessage.
+    const messages = (result.messages as BaseMessage[]) ?? [];
+    content = "Task completed";
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      if (!message || !AIMessage.isInstance(message)) continue;
+      const text =
+        typeof message.content === "string"
+          ? message.content.trim()
+          : (message.text?.trim() ?? "");
+      if (text) {
+        content = text;
+        break;
       }
     }
   }
@@ -449,19 +346,68 @@ function returnCommandWithStateUpdate(
 }
 
 /**
- * Create subagent instances from specifications
+ * Create a runnable agent from a declarative `SubAgent` spec.
+ *
+ * This is the shared entrypoint for compiling a `SubAgent` into a
+ * `ReactAgent`. Pre-compiled `CompiledSubAgent` runnables bypass this
+ * function entirely.
+ *
+ * The spec must have `model` and `tools` set — the caller is responsible
+ * for coalescing any defaults before calling this function.
+ *
+ * @param spec - Declarative subagent specification. Must specify `model` and `tools`.
+ * @returns A compiled `ReactAgent` ready for task-tool invocation.
+ */
+export function createSubAgent(
+  spec: SubAgent,
+  options?: { responseFormat?: CreateAgentParams["responseFormat"] },
+): ReactAgent {
+  if (!spec.model) {
+    throw new Error(`SubAgent '${spec.name}' must specify 'model'`);
+  }
+  if (!spec.tools) {
+    throw new Error(`SubAgent '${spec.name}' must specify 'tools'`);
+  }
+
+  const middleware: AgentMiddleware[] = [...(spec.middleware ?? [])];
+
+  if (spec.interruptOn) {
+    middleware.push(
+      humanInTheLoopMiddleware({ interruptOn: spec.interruptOn }),
+    );
+  }
+
+  const selectedResponseFormat = options?.responseFormat ?? spec.responseFormat;
+
+  return createAgent({
+    model: spec.model,
+    systemPrompt: spec.systemPrompt,
+    tools: spec.tools,
+    middleware,
+    name: spec.name,
+    ...(selectedResponseFormat != null && {
+      responseFormat: selectedResponseFormat,
+    }),
+  });
+}
+
+/**
+ * Create subagent instances from specifications.
+ *
+ * Returns compiled agents, raw specs keyed by name (for on-demand
+ * recompilation with dynamic response formats), and descriptions.
  */
 function getSubagents(options: {
   defaultModel: LanguageModelLike | string;
   defaultTools: StructuredTool[];
   defaultMiddleware: AgentMiddleware[] | null;
-  /** Middleware specifically for the general-purpose subagent (includes skills from main agent) */
   generalPurposeMiddleware: AgentMiddleware[] | null;
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
   subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
 }): {
   agents: Record<string, ReactAgent | Runnable>;
+  specsByName: Record<string, SubAgent | CompiledSubAgent>;
   descriptions: string[];
 } {
   const {
@@ -475,13 +421,12 @@ function getSubagents(options: {
   } = options;
 
   const defaultSubagentMiddleware = defaultMiddleware || [];
-  // General-purpose middleware includes skills from main agent, falls back to default
   const generalPurposeMiddlewareBase =
     gpMiddleware || defaultSubagentMiddleware;
   const agents: Record<string, ReactAgent | Runnable> = {};
+  const specsByName: Record<string, SubAgent | CompiledSubAgent> = {};
   const subagentDescriptions: string[] = [];
 
-  // Create general-purpose agent if enabled
   if (generalPurposeAgent) {
     const generalPurposeMiddleware = [...generalPurposeMiddlewareBase];
     if (defaultInterruptOn) {
@@ -490,21 +435,22 @@ function getSubagents(options: {
       );
     }
 
-    const generalPurposeSubagent = createAgent({
+    const gpSpec: SubAgent = {
+      name: "general-purpose",
+      description: DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
       model: defaultModel,
       systemPrompt: DEFAULT_SUBAGENT_PROMPT,
       tools: defaultTools as any,
       middleware: generalPurposeMiddleware,
-      name: "general-purpose",
-    });
+    };
 
-    agents["general-purpose"] = generalPurposeSubagent;
+    agents["general-purpose"] = createSubAgent(gpSpec);
+    specsByName["general-purpose"] = gpSpec;
     subagentDescriptions.push(
       `- general-purpose: ${DEFAULT_GENERAL_PURPOSE_DESCRIPTION}`,
     );
   }
 
-  // Process custom subagents (use defaultMiddleware WITHOUT skills)
   for (const agentParams of subagents) {
     subagentDescriptions.push(
       `- ${agentParams.name}: ${agentParams.description}`,
@@ -512,29 +458,24 @@ function getSubagents(options: {
 
     if ("runnable" in agentParams) {
       agents[agentParams.name] = agentParams.runnable;
+      specsByName[agentParams.name] = agentParams;
     } else {
-      const middleware = agentParams.middleware
-        ? [...defaultSubagentMiddleware, ...agentParams.middleware]
-        : [...defaultSubagentMiddleware];
-
-      const interruptOn = agentParams.interruptOn || defaultInterruptOn;
-      if (interruptOn)
-        middleware.push(humanInTheLoopMiddleware({ interruptOn }));
-
-      agents[agentParams.name] = createAgent({
+      const resolvedSpec: SubAgent = {
+        ...agentParams,
         model: agentParams.model ?? defaultModel,
-        systemPrompt: agentParams.systemPrompt,
         tools: agentParams.tools ?? defaultTools,
-        middleware,
-        name: agentParams.name,
-        ...(agentParams.responseFormat != null && {
-          responseFormat: agentParams.responseFormat,
-        }),
-      });
+        middleware: [
+          ...defaultSubagentMiddleware,
+          ...(agentParams.middleware ?? []),
+        ],
+        interruptOn: agentParams.interruptOn ?? defaultInterruptOn ?? undefined,
+      };
+      agents[agentParams.name] = createSubAgent(resolvedSpec);
+      specsByName[agentParams.name] = resolvedSpec;
     }
   }
 
-  return { agents, descriptions: subagentDescriptions };
+  return { agents, specsByName, descriptions: subagentDescriptions };
 }
 
 /**
@@ -544,7 +485,6 @@ function createTaskTool(options: {
   defaultModel: LanguageModelLike | string;
   defaultTools: StructuredTool[];
   defaultMiddleware: AgentMiddleware[] | null;
-  /** Middleware specifically for the general-purpose subagent (includes skills from main agent) */
   generalPurposeMiddleware: AgentMiddleware[] | null;
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
   subagents: (SubAgent | CompiledSubAgent)[];
@@ -562,16 +502,38 @@ function createTaskTool(options: {
     taskDescription,
   } = options;
 
-  const { agents: subagentGraphs, descriptions: subagentDescriptions } =
-    getSubagents({
-      defaultModel,
-      defaultTools,
-      defaultMiddleware,
-      generalPurposeMiddleware,
-      defaultInterruptOn,
-      subagents,
-      generalPurposeAgent,
-    });
+  const {
+    agents: subagentGraphs,
+    specsByName,
+    descriptions: subagentDescriptions,
+  } = getSubagents({
+    defaultModel,
+    defaultTools,
+    defaultMiddleware,
+    generalPurposeMiddleware,
+    defaultInterruptOn,
+    subagents,
+    generalPurposeAgent,
+  });
+
+  function selectSubagent(
+    subagentType: string,
+    config: Record<string, any>,
+  ): Runnable {
+    const responseFormat =
+      config.configurable?.[SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY];
+    if (responseFormat != null) {
+      const spec = specsByName[subagentType];
+      if ("runnable" in spec) {
+        throw new Error(
+          `responseSchema cannot be used with compiled subagent "${spec.name}"; ` +
+            "dynamic schemas require a declarative SubAgent spec.",
+        );
+      }
+      return createSubAgent(spec, { responseFormat }) as unknown as Runnable;
+    }
+    return subagentGraphs[subagentType] as Runnable;
+  }
 
   const finalTaskDescription = taskDescription
     ? taskDescription
@@ -584,7 +546,6 @@ function createTaskTool(options: {
     ): Promise<Command | string> => {
       const { description, subagent_type } = input;
 
-      // Validate subagent type
       if (!(subagent_type in subagentGraphs)) {
         const allowedTypes = Object.keys(subagentGraphs)
           .map((k) => `\`${k}\``)
@@ -594,18 +555,27 @@ function createTaskTool(options: {
         );
       }
 
-      const subagent = subagentGraphs[subagent_type];
+      const subagent = selectSubagent(subagent_type, config);
 
-      // Get current state and filter it for subagent
       const currentState = getCurrentTaskInput<Record<string, unknown>>();
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
 
-      // Invoke the subagent
-      const result = (await subagent.invoke(subagentState, config)) as Record<
-        string,
-        unknown
-      >;
+      const subagentConfig = {
+        ...config,
+        metadata: {
+          ...config.metadata,
+          lc_agent_name: subagent_type,
+        },
+        configurable: {
+          ...config.configurable,
+          ls_agent_type: "subagent",
+        },
+      };
+      const result = (await subagent.invoke(
+        subagentState,
+        subagentConfig,
+      )) as Record<string, unknown>;
 
       if (!config.toolCall?.id) {
         if (result.structuredResponse != null) {
@@ -688,7 +658,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     generalPurposeMiddleware = null,
     defaultInterruptOn = null,
     subagents = [],
-    systemPrompt = TASK_SYSTEM_PROMPT,
+    systemPrompt = null,
     generalPurposeAgent = true,
     taskDescription = null,
   } = options;

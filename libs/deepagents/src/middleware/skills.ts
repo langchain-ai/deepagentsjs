@@ -22,8 +22,9 @@
  * const middleware = createSkillsMiddleware({
  *   backend: new FilesystemBackend({ rootDir: "/" }),
  *   sources: [
- *     "/skills/user/",
- *     "/skills/project/",
+ *     "/skills/user/",      // parent dir: every subdir with SKILL.md is loaded
+ *     "/skills/project/",   // parent dir: every subdir with SKILL.md is loaded
+ *     "/skills/my-skill/",  // direct path: SKILL.md lives at the root of this dir
  *   ],
  * });
  *
@@ -34,7 +35,7 @@
  *
  * ```typescript
  * const agent = createDeepAgent({
- *   skills: ["/skills/user/", "/skills/project/"],
+ *   skills: ["/skills/user/", "/skills/project/", "/skills/my-skill/"],
  * });
  * ```
  */
@@ -42,6 +43,7 @@
 import { z } from "zod";
 import yaml from "yaml";
 import {
+  context,
   createMiddleware,
   /**
    * required for type inference
@@ -53,20 +55,38 @@ import { StateSchema, ReducedValue } from "@langchain/langgraph";
 import type {
   AnyBackendProtocol,
   BackendFactory,
+  BackendProtocolV2,
 } from "../backends/protocol.js";
 import { resolveBackend } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import { filesValue } from "../values.js";
 import { adaptBackendProtocol } from "../backends/utils.js";
+import { DEFAULT_READ_LINE_LIMIT } from "./fs.js";
 
 // Security: Maximum size for SKILL.md files to prevent DoS attacks (10MB)
 export const MAX_SKILL_FILE_SIZE = 10 * 1024 * 1024;
+
+export const DEFAULT_SKILL_READ_LINE_LIMIT = 1000;
 
 // Agent Skills specification constraints (https://agentskills.io/specification)
 export const MAX_SKILL_NAME_LENGTH = 64;
 export const MAX_SKILL_DESCRIPTION_LENGTH = 1024;
 export const MAX_SKILL_COMPATIBILITY_LENGTH = 500;
+
+/**
+ * File extensions a skill module entrypoint may use.
+ */
+export const SKILL_MODULE_EXTENSIONS = [
+  ".js",
+  ".mjs",
+  ".cjs",
+  ".ts",
+  ".mts",
+  ".cts",
+  ".jsx",
+  ".tsx",
+];
 
 /**
  * Metadata for a skill per Agent Skills specification.
@@ -132,6 +152,12 @@ export interface SkillMetadata {
    * - Space-delimited list of tool names
    */
   allowedTools?: string[];
+
+  /**
+   * Path to a JS/TS entrypoint file for a QuickJS REPL module, relative to the skill
+   * directory.
+   */
+  module?: string;
 }
 
 /**
@@ -148,9 +174,27 @@ export interface SkillsMiddlewareOptions {
     | ((config: { state: unknown; store?: BaseStore }) => StateBackend);
 
   /**
-   * List of skill source paths to load (e.g., ["/skills/user/", "/skills/project/"]).
+   * List of skill source paths to load.
    * Paths must use POSIX conventions (forward slashes).
    * Later sources override earlier ones for skills with the same name (last one wins).
+   *
+   * Two formats are accepted for each entry:
+   *
+   * - **Parent directory** (e.g. `"/skills/"`, `"/skills/user/"`): the directory
+   *   is scanned and every subdirectory that contains a `SKILL.md` is loaded as
+   *   a separate skill.
+   *
+   * - **Direct skill path** (e.g. `"/skills/my-skill/"`): the path points to a
+   *   single skill directory whose `SKILL.md` lives at its root. Detected
+   *   automatically when the directory listing contains a `SKILL.md` file.
+   *
+   * Both formats can be mixed in the same array:
+   * ```typescript
+   * sources: [
+   *   "/skills/",                         // loads all skills in the directory
+   *   "/skills/my-skill/",                // loads a single skill by path
+   * ]
+   * ```
    */
   sources: string[];
 }
@@ -166,6 +210,7 @@ export const SkillMetadataEntrySchema = z.object({
   compatibility: z.string().nullable().optional(),
   metadata: z.record(z.string(), z.string()).optional(),
   allowedTools: z.array(z.string()).optional(),
+  module: z.string().optional(),
 });
 
 /**
@@ -222,48 +267,48 @@ const SkillsStateSchema = new StateSchema({
 /**
  * Skills System Documentation prompt template.
  */
-const SKILLS_SYSTEM_PROMPT = `
-## Skills System
+const SKILLS_SYSTEM_PROMPT = context`
+  ## Skills System
 
-You have access to a skills library that provides specialized capabilities and domain knowledge.
+  You have access to a skills library that provides specialized capabilities and domain knowledge.
 
-{skills_locations}
+  {skills_locations}
 
-**Available Skills:**
+  **Available Skills:**
 
-{skills_list}
+  {skills_list}
 
-**How to Use Skills (Progressive Disclosure):**
+  **How to Use Skills (Progressive Disclosure):**
 
-Skills follow a **progressive disclosure** pattern - you know they exist (name + description above), but you only read the full instructions when needed:
+  Skills follow a **progressive disclosure** pattern - you know they exist (name + description above), but you only read the full instructions when needed:
 
-1. **Recognize when a skill applies**: Check if the user's task matches any skill's description
-2. **Read the skill's full instructions**: The skill list above shows the exact path to use with read_file
-3. **Follow the skill's instructions**: SKILL.md contains step-by-step workflows, best practices, and examples
-4. **Access supporting files**: Skills may include scripts, configs, or reference docs - use absolute paths
+  1. **Recognize when a skill applies**: Check if the user's task matches any skill's description
+  2. **Read the skill's full instructions**: Use \`read_file\` on the path shown in the skill list above.
+     Pass \`limit=${DEFAULT_SKILL_READ_LINE_LIMIT}\` since the default of ${DEFAULT_READ_LINE_LIMIT} lines is too small for most skill files.
+  3. **Follow the skill's instructions**: SKILL.md contains step-by-step workflows, best practices, and examples
+  4. **Access supporting files**: Skills may include scripts, configs, or reference docs - use absolute paths
 
-**When to Use Skills:**
-- When the user's request matches a skill's domain (e.g., "research X" → web-research skill)
-- When you need specialized knowledge or structured workflows
-- When a skill provides proven patterns for complex tasks
+  **When to Use Skills:**
+  - When the user's request matches a skill's domain (e.g., "research X" → web-research skill)
+  - When you need specialized knowledge or structured workflows
+  - When a skill provides proven patterns for complex tasks
+  **Skills are Self-Documenting:**
+  - Each SKILL.md tells you exactly what the skill does and how to use it
+  - The skill list above shows the full path for each skill's SKILL.md file
 
-**Skills are Self-Documenting:**
-- Each SKILL.md tells you exactly what the skill does and how to use it
-- The skill list above shows the full path for each skill's SKILL.md file
+  **Executing Skill Scripts:**
+  Skills may contain scripts or other executable files. Always use absolute paths from the skill list.
 
-**Executing Skill Scripts:**
-Skills may contain scripts or other executable files. Always use absolute paths from the skill list.
+  **Example Workflow:**
 
-**Example Workflow:**
+  User: "Can you research the latest developments in quantum computing?"
 
-User: "Can you research the latest developments in quantum computing?"
+  1. Check available skills above → See "web-research" skill with its full path
+  2. Read the full skill file: \`read_file(file_path, limit=${DEFAULT_SKILL_READ_LINE_LIMIT})\`
+  3. Follow the skill's research workflow (search → organize → synthesize)
+  4. Use any helper scripts with absolute paths
 
-1. Check available skills above → See "web-research" skill with its full path
-2. Read the skill using the path shown in the list
-3. Follow the skill's research workflow (search → organize → synthesize)
-4. Use any helper scripts with absolute paths
-
-Remember: Skills are tools to make you more capable and consistent. When in doubt, check if a skill exists for the task!
+  Remember: Skills are tools to make you more capable and consistent. When in doubt, check if a skill exists for the task!
 `;
 
 /**
@@ -484,11 +529,51 @@ export function parseSkillMetadataFromContent(
     license: String(frontmatterData.license ?? "").trim() || null,
     compatibility: compatibilityStr,
     allowedTools,
+    module: validateModulePath(frontmatterData.module),
   };
 }
 
 /**
+ * Read a single file from the backend, returning its content as a string or
+ * null if the file does not exist or cannot be read.
+ */
+async function readFileFromBackend(
+  backend: BackendProtocolV2,
+  filePath: string,
+): Promise<string | null> {
+  if (backend.downloadFiles) {
+    const results = await backend.downloadFiles([filePath]);
+    if (results.length !== 1) {
+      return null;
+    }
+    const response = results[0];
+    if (response.error != null || response.content == null) {
+      return null;
+    }
+    return new TextDecoder().decode(response.content);
+  }
+  const readResult = await backend.read(filePath);
+  if (readResult.error) {
+    return null;
+  }
+  if (typeof readResult.content !== "string") {
+    return null;
+  }
+  return readResult.content;
+}
+
+/**
  * List all skills from a backend source.
+ *
+ * Supports two source formats:
+ *
+ * - **Parent directory** (e.g. `"/skills/"`): the directory is scanned for
+ *   subdirectories, each of which must contain a `SKILL.md` file. This is the
+ *   standard pattern for hosting a collection of skills in one place.
+ *
+ * - **Direct skill path** (e.g. `"/skills/my-skill/"`): the path points to a
+ *   single skill directory that contains `SKILL.md` directly. Detected
+ *   automatically when the directory listing includes a `SKILL.md` file entry.
  */
 async function listSkillsFromBackend(
   backend: AnyBackendProtocol,
@@ -506,7 +591,7 @@ async function listSkillsFromBackend(
       ? sourcePath
       : `${sourcePath}${pathSep}`;
 
-  // List directories in the source path using ls
+  // List entries in the source directory (files and subdirectories) via ls
   let fileInfos: { path: string; is_dir?: boolean }[];
   try {
     const lsResult = await adaptedBackend.ls(normalizedPath);
@@ -531,40 +616,41 @@ async function listSkillsFromBackend(
     type: (info.is_dir ? "directory" : "file") as "file" | "directory",
   }));
 
-  // Look for subdirectories containing SKILL.md
+  // Direct skill path: SKILL.md lives immediately inside the source directory.
+  // The source path itself is the skill — no subdirectory scan needed.
+  if (entries.some((e) => e.type === "file" && e.name === "SKILL.md")) {
+    const directoryName =
+      normalizedPath
+        .replace(/[/\\]$/, "")
+        .split(/[/\\]/)
+        .pop() || "";
+    const skillMdPath = `${normalizedPath}SKILL.md`;
+    const content = await readFileFromBackend(adaptedBackend, skillMdPath);
+    if (content !== null) {
+      const metadata = parseSkillMetadataFromContent(
+        content,
+        skillMdPath,
+        directoryName,
+      );
+      if (metadata) {
+        skills.push(metadata);
+      }
+    }
+    return skills;
+  }
+
+  // Parent directory: scan subdirectories, each expected to contain SKILL.md.
   for (const entry of entries) {
     if (entry.type !== "directory") {
       continue;
     }
 
     const skillMdPath = `${normalizedPath}${entry.name}${pathSep}SKILL.md`;
-
-    // Try to download the SKILL.md file
-    let content: string;
-    if (adaptedBackend.downloadFiles) {
-      const results = await adaptedBackend.downloadFiles([skillMdPath]);
-      if (results.length !== 1) {
-        continue;
-      }
-
-      const response = results[0];
-      if (response.error != null || response.content == null) {
-        continue;
-      }
-
-      // Decode content
-      content = new TextDecoder().decode(response.content);
-    } else {
-      // Fall back to read if downloadFiles is not available
-      const readResult = await adaptedBackend.read(skillMdPath);
-      if (readResult.error) {
-        continue;
-      }
-      if (typeof readResult.content !== "string") {
-        continue;
-      }
-      content = readResult.content;
+    const content = await readFileFromBackend(adaptedBackend, skillMdPath);
+    if (content === null) {
+      continue;
     }
+
     const metadata = parseSkillMetadataFromContent(
       content,
       skillMdPath,
@@ -631,9 +717,79 @@ export function formatSkillsList(
       lines.push(`  → Allowed tools: ${skill.allowedTools.join(", ")}`);
     }
     lines.push(`  → Read \`${skill.path}\` for full instructions`);
+    if (skill.module !== undefined) {
+      lines.push(`  → Import: \`await import("@/skills/${skill.name}")\``);
+    }
   }
 
   return lines.join("\n");
+}
+
+/**
+ * Returns true when `value` ends with a recognized skill module extension.
+ */
+function endsWithModuleExtension(value: string): boolean {
+  for (const ext of SKILL_MODULE_EXTENSIONS) {
+    if (value.endsWith(ext)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Validate and normalize the `module` frontmatter key from a `SKILL.md`.
+ *
+ * Returns the normalized path (e.g. `"index.ts"`, `"lib/entry.js"`) or
+ * `undefined` when the key is absent, empty, non-string, absolute, contains
+ * path traversal, or uses an unsupported extension. Invalid values silently
+ * degrade the skill to prose-only.
+ */
+export function validateModulePath(raw: unknown): string | undefined {
+  if (raw === null || raw === undefined) {
+    return;
+  }
+
+  if (typeof raw !== "string") {
+    return;
+  }
+
+  const stripped = raw.trim();
+  if (stripped === "") {
+    return;
+  }
+
+  // Normalize "./x" → "x" so the value lines up with the keys the loader
+  // uses inside the installed module scope. Leaves "lib/util.js" untouched.
+  const normalized = stripped.startsWith("./") ? stripped.slice(2) : stripped;
+
+  if (normalized.startsWith("/")) {
+    return;
+  }
+
+  if (
+    normalized === ".." ||
+    normalized.startsWith("../") ||
+    normalized.includes("/../") ||
+    normalized.endsWith("/..")
+  ) {
+    return;
+  }
+
+  // Declaration files are type-only stubs with no runtime exports.
+  if (
+    normalized.endsWith(".d.ts") ||
+    normalized.endsWith(".d.mts") ||
+    normalized.endsWith(".d.cts")
+  ) {
+    return;
+  }
+
+  if (!endsWithModuleExtension(normalized)) {
+    return;
+  }
+
+  return normalized;
 }
 
 /**
@@ -667,16 +823,19 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
     stateSchema: SkillsStateSchema,
 
     async beforeAgent(state) {
-      // Skip if already loaded (check both closure and state)
-      if (loadedSkills.length > 0) {
-        return undefined;
-      }
-      // Check if skills were restored from checkpoint (non-empty array in state)
-      if (
+      const stateHasSkills =
         "skillsMetadata" in state &&
         Array.isArray(state.skillsMetadata) &&
-        state.skillsMetadata.length > 0
-      ) {
+        state.skillsMetadata.length > 0;
+
+      if (loadedSkills.length > 0) {
+        // Closure has skills from a prior thread — push to state if missing
+        // so getCurrentTaskInput() sees them in the tool node.
+        return stateHasSkills ? undefined : { skillsMetadata: loadedSkills };
+      }
+
+      // Check if skills were restored from checkpoint (non-empty array in state)
+      if (stateHasSkills) {
         // Restore from state (e.g., after checkpoint restore)
         loadedSkills = state.skillsMetadata as SkillMetadata[];
         return undefined;

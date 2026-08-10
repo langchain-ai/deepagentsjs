@@ -1,11 +1,12 @@
 import { defineConfig } from "tsdown";
 
-// Mark all node_modules as external since this is a library
-const external = [/^[^./]/];
+// Mark only npm packages as external, excluding relative and absolute (Windows/Unix) paths
+const external = (id: string) =>
+  !id.startsWith(".") && !id.startsWith("/") && !/^[A-Za-z]:[\\/]/.test(id);
 
 export default defineConfig([
   {
-    entry: ["./src/index.ts"],
+    entry: ["./src/index.ts", "./src/browser.ts", "./src/node.ts"],
     format: ["esm"],
     dts: true,
     clean: true,
@@ -15,7 +16,7 @@ export default defineConfig([
     external,
   },
   {
-    entry: ["./src/index.ts"],
+    entry: ["./src/index.ts", "./src/browser.ts", "./src/node.ts"],
     format: ["cjs"],
     dts: true,
     clean: true,

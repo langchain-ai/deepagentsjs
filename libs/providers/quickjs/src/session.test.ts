@@ -1,7 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { tool } from "langchain";
 import { z } from "zod/v4";
-import type { BackendProtocolV2, ReadRawResult, WriteResult } from "deepagents";
 import { ReplSession } from "./session.js";
 
 const TIMEOUT = 5000;
@@ -11,39 +10,34 @@ function uniqueThreadId() {
   return `test-${++nextId}-${Date.now()}`;
 }
 
-function createMockBackend(
-  files: Record<string, string> = {},
-): BackendProtocolV2 & { written: Record<string, string> } {
-  const store = { ...files };
-  const written: Record<string, string> = {};
-
-  return {
-    written,
-    ls: async () => ({ files: [] }),
-    read: async (filePath: string) => ({ content: store[filePath] ?? "" }),
-    readRaw: async (filePath: string): Promise<ReadRawResult> => {
-      if (!(filePath in store)) {
-        return { error: `ENOENT: ${filePath}` };
+function createInMemoryFileTools() {
+  const store = new Map<string, string>();
+  const readTool = tool(
+    async (input: { path: string }) => {
+      const content = store.get(input.path);
+      if (content === undefined) {
+        throw new Error(`ENOENT: no such file or directory '${input.path}'`);
       }
-      const now = new Date().toISOString();
-      return {
-        data: {
-          content: store[filePath],
-          mimeType: "text/plain",
-          created_at: now,
-          modified_at: now,
-        },
-      };
+      return content;
     },
-    grep: async () => ({ matches: [] }),
-    glob: async () => ({ files: [] }),
-    write: async (filePath: string, content: string): Promise<WriteResult> => {
-      store[filePath] = content;
-      written[filePath] = content;
-      return { path: filePath };
+    {
+      name: "read_file",
+      description: "Read a file",
+      schema: z.object({ path: z.string() }),
     },
-    edit: async () => ({ error: "not implemented" }),
-  };
+  );
+  const writeTool = tool(
+    async (input: { path: string; content: string }) => {
+      store.set(input.path, input.content);
+      return "ok";
+    },
+    {
+      name: "write_file",
+      description: "Write a file",
+      schema: z.object({ path: z.string(), content: z.string() }),
+    },
+  );
+  return { readTool, writeTool, store };
 }
 
 describe("REPL Engine", () => {
@@ -252,6 +246,51 @@ describe("REPL Engine", () => {
     });
   });
 
+  describe("console buffer", () => {
+    it("caps output at maxResultChars and reports dropped chars", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        maxResultChars: 10,
+      });
+      const result = await session.eval(
+        'console.log("hello world this is too long")',
+        TIMEOUT,
+      );
+      expect(result.logsDroppedChars).toBeGreaterThan(0);
+      expect(result.logs.join("\n").length).toBeLessThanOrEqual(10);
+    });
+
+    it("preserves early output when overflow occurs", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        maxResultChars: 5,
+      });
+      const result = await session.eval('console.log("abcdefghij")', TIMEOUT);
+      expect(result.logs.join("")).toMatch(/^abcde/);
+      expect(result.logsDroppedChars).toBeGreaterThan(0);
+    });
+
+    it("resets truncation state between evaluations", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        maxResultChars: 10,
+      });
+      await session.eval(
+        'console.log("overflow: this is way too long")',
+        TIMEOUT,
+      );
+      const result = await session.eval('console.log("hi")', TIMEOUT);
+      expect(result.logsDroppedChars).toBe(0);
+      expect(result.logs.join("")).toContain("hi");
+    });
+
+    it("drops everything with a zero-char budget", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        maxResultChars: 0,
+      });
+      const result = await session.eval('console.log("anything")', TIMEOUT);
+      expect(result.logs).toHaveLength(0);
+      expect(result.logsDroppedChars).toBeGreaterThan(0);
+    });
+  });
+
   describe("execution limits", () => {
     it("should timeout on infinite loops", async () => {
       session = ReplSession.getOrCreate(uniqueThreadId());
@@ -292,52 +331,199 @@ describe("REPL Engine", () => {
     });
   });
 
-  describe("backend VFS", () => {
-    it("should read files from the backend", async () => {
+  describe("sandbox globals", () => {
+    it("should not expose readFile as a global", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result = await session.eval("typeof readFile", TIMEOUT);
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("undefined");
+    });
+
+    it("should not expose writeFile as a global", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result = await session.eval("typeof writeFile", TIMEOUT);
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("undefined");
+    });
+  });
+
+  describe("PTC file tools", () => {
+    it("should read files via PTC tool", async () => {
+      const { readTool, writeTool, store } = createInMemoryFileTools();
+      store.set("/data.json", '{"n":42}');
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend({ "/data.json": '{"n": 42}' }),
+        tools: [readTool, writeTool],
       });
 
       const result = await session.eval(
-        'const raw = await readFile("/data.json"); JSON.parse(raw).n',
+        'const raw = await tools.readFile({ path: "/data.json" }); JSON.parse(raw).n',
         TIMEOUT,
       );
+      expect(result.ok).toBe(true);
       expect(result.value).toBe(42);
     });
 
-    it("should error on missing files", async () => {
+    it("should error on missing files via PTC tool", async () => {
+      const { readTool, writeTool } = createInMemoryFileTools();
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
+        tools: [readTool, writeTool],
       });
 
       const result = await session.eval(
-        'var msg; try { await readFile("/missing") } catch(e) { msg = e.message }\nmsg',
+        'var msg; try { await tools.readFile({ path: "/missing" }) } catch(e) { msg = e.message }\nmsg',
         TIMEOUT,
       );
       expect(result.ok).toBe(true);
       expect(result.value).toContain("ENOENT");
     });
 
-    it("should buffer writes and flush to the backend", async () => {
-      const backend = createMockBackend();
-      session = ReplSession.getOrCreate(uniqueThreadId(), { backend });
+    it("should write and read back in the same eval", async () => {
+      const { readTool, writeTool } = createInMemoryFileTools();
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [readTool, writeTool],
+      });
 
-      await session.eval('await writeFile("/out.txt", "hello")', TIMEOUT);
-      expect(backend.written["/out.txt"]).toBeUndefined();
-      expect(session.pendingWrites).toHaveLength(1);
-      await session.flushWrites(backend);
-      expect(backend.written["/out.txt"]).toBe("hello");
-      expect(session.pendingWrites).toHaveLength(0);
+      const result = await session.eval(
+        `await tools.writeFile({ path: "/f.txt", content: "hello" });
+         await tools.readFile({ path: "/f.txt" })`,
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("hello");
     });
 
-    it("should read back written files after flush", async () => {
-      const backend = createMockBackend();
-      session = ReplSession.getOrCreate(uniqueThreadId(), { backend });
+    it("should write in one eval and read in the next", async () => {
+      const { readTool, writeTool } = createInMemoryFileTools();
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [readTool, writeTool],
+      });
 
-      await session.eval('await writeFile("/f.txt", "content")', TIMEOUT);
-      await session.flushWrites(backend);
-      const result = await session.eval('await readFile("/f.txt")', TIMEOUT);
-      expect(result.value).toBe("content");
+      await session.eval(
+        'await tools.writeFile({ path: "/out.txt", content: "persisted" })',
+        TIMEOUT,
+      );
+      const result = await session.eval(
+        'await tools.readFile({ path: "/out.txt" })',
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("persisted");
+    });
+  });
+
+  describe("PTC call budget", () => {
+    const greetTool = tool(
+      async (input: { name: string }) => `hello ${input.name}`,
+      {
+        name: "greet",
+        description: "Greet someone",
+        schema: z.object({ name: z.string() }),
+      },
+    );
+
+    it("should reject on the call that exceeds the budget", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: 1,
+      });
+
+      const result = await session.eval(
+        `await tools.greet({ name: "a" });
+         await tools.greet({ name: "b" });`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("PTC call budget");
+    });
+
+    it("should succeed when calls stay within the budget", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: 2,
+      });
+
+      const result = await session.eval(
+        `const a = await tools.greet({ name: "a" });
+         const b = await tools.greet({ name: "b" });
+         a + " " + b`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("hello a hello b");
+    });
+
+    it("should reset the budget between evals", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: 1,
+      });
+
+      const first = await session.eval(
+        `await tools.greet({ name: "a" })`,
+        TIMEOUT,
+      );
+      const second = await session.eval(
+        `await tools.greet({ name: "b" })`,
+        TIMEOUT,
+      );
+
+      expect(first.ok).toBe(true);
+      expect(second.ok).toBe(true);
+    });
+
+    it("should allow unlimited calls when maxPtcCalls is null", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: null,
+      });
+
+      // Build a string that makes more calls than DEFAULT_MAX_PTC_CALLS
+      const calls = Array.from(
+        { length: 300 },
+        (_, i) => `await tools.greet({ name: "${i}" })`,
+      ).join(";\n");
+
+      const result = await session.eval(calls, TIMEOUT * 6);
+
+      expect(result.ok).toBe(true);
+    });
+
+    it("should surface budget message via JS try/catch", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: 1,
+      });
+
+      const result = await session.eval(
+        `var msg;
+         await tools.greet({ name: "a" });
+         try { await tools.greet({ name: "b" }) } catch (e) { msg = e.message }
+         msg`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toContain("PTC call budget");
+    });
+
+    it("should reject Promise.all when any call exceeds the budget", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [greetTool],
+        maxPtcCalls: 1,
+      });
+
+      const result = await session.eval(
+        `await Promise.all([
+           tools.greet({ name: "a" }),
+           tools.greet({ name: "b" }),
+         ])`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("PTC call budget");
     });
   });
 
@@ -350,7 +536,6 @@ describe("REPL Engine", () => {
       });
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [addTool],
       });
 
@@ -370,7 +555,6 @@ describe("REPL Engine", () => {
       });
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [addTool],
       });
 
@@ -392,7 +576,6 @@ describe("REPL Engine", () => {
       });
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [upperTool, lowerTool],
       });
 
@@ -420,7 +603,6 @@ describe("REPL Engine", () => {
       );
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [webSearchTool],
       });
 
@@ -440,7 +622,6 @@ describe("REPL Engine", () => {
       });
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [echoTool],
       });
 
@@ -470,7 +651,6 @@ describe("REPL Engine", () => {
       );
 
       session = ReplSession.getOrCreate(uniqueThreadId(), {
-        backend: createMockBackend(),
         tools: [failingTool],
       });
 
@@ -541,6 +721,232 @@ describe("REPL Engine", () => {
       const restored = ReplSession.fromJSON(JSON.parse(serialized));
       const result = await restored.eval("msg", TIMEOUT);
       expect(result.value).toBe("hello");
+    });
+  });
+
+  describe("session deletion", () => {
+    it("should dispose and remove an existing session", () => {
+      const session = ReplSession.getOrCreate("test-key");
+      expect(ReplSession.get("test-key")).toBe(session);
+      ReplSession.deleteSession("test-key");
+      expect(ReplSession.get("test-key")).toBeNull();
+    });
+
+    it("should no-op for a key that does not exist", () => {
+      expect(() => ReplSession.deleteSession("nonexistent")).not.toThrow();
+    });
+  });
+
+  describe("subagent bridge", () => {
+    function createSubagentSession(
+      dispatch: (input: {
+        description: string;
+        subagentType: string;
+        responseSchema?: Record<string, unknown>;
+      }) => Promise<unknown>,
+      maxConcurrency = 16,
+    ) {
+      return ReplSession.getOrCreate(uniqueThreadId(), {
+        subagentBridge: { dispatch, maxConcurrency },
+      });
+    }
+
+    it("should invoke dispatch with correct arguments", async () => {
+      const dispatch = vi.fn().mockResolvedValue("done");
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `await task({ description: "find bugs", subagentType: "researcher" })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("done");
+      expect(dispatch).toHaveBeenCalledWith({
+        description: "find bugs",
+        subagentType: "researcher",
+      });
+    });
+
+    it("should pass responseSchema to dispatch", async () => {
+      const dispatch = vi.fn().mockResolvedValue({ bugs: [] });
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `await task({
+          description: "analyze",
+          subagentType: "coder",
+          responseSchema: { type: "object", properties: { bugs: { type: "array" } } },
+        })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toEqual({ bugs: [] });
+      expect(dispatch).toHaveBeenCalledWith({
+        description: "analyze",
+        subagentType: "coder",
+        responseSchema: {
+          type: "object",
+          properties: { bugs: { type: "array" } },
+        },
+      });
+    });
+
+    it("should return structured objects as native JS values", async () => {
+      const structured = { items: [{ name: "a" }, { name: "b" }], count: 2 };
+      const dispatch = vi.fn().mockResolvedValue(structured);
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `const r = await task({ description: "list", subagentType: "worker" });
+         r.items[1].name + ":" + r.count`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("b:2");
+    });
+
+    it("should reject when description is missing", async () => {
+      const dispatch = vi.fn();
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `await task({ subagentType: "researcher" })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("description");
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    it("should reject when subagentType is missing", async () => {
+      const dispatch = vi.fn();
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `await task({ description: "do something" })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("subagentType");
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    it("should reject unknown keys", async () => {
+      const dispatch = vi.fn();
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `await task({ description: "x", subagentType: "y", badKey: true })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("unknown keys");
+      expect(result.error?.message).toContain("badKey");
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    it("should reject non-object argument", async () => {
+      const dispatch = vi.fn();
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(`await task("not an object")`, TIMEOUT);
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("expected an object");
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    it("should reject non-object responseSchema", async () => {
+      const dispatch = vi.fn();
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `await task({ description: "x", subagentType: "y", responseSchema: "bad" })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("responseSchema");
+      expect(dispatch).not.toHaveBeenCalled();
+    });
+
+    it("should propagate dispatch errors to guest code", async () => {
+      const dispatch = vi.fn().mockRejectedValue(new Error("subagent crashed"));
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `let caught = "none";
+         try {
+           await task({ description: "x", subagentType: "y" });
+         } catch (e) {
+           caught = e.message;
+         }
+         caught`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("subagent crashed");
+    });
+
+    it("should be frozen and non-writable on globalThis", async () => {
+      const dispatch = vi.fn().mockResolvedValue("ok");
+      session = createSubagentSession(dispatch);
+
+      const result = await session.eval(
+        `const frozen = Object.isFrozen(task);
+         const desc = Object.getOwnPropertyDescriptor(globalThis, "task");
+         ({ frozen, writable: desc.writable, configurable: desc.configurable })`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toEqual({
+        frozen: true,
+        writable: false,
+        configurable: false,
+      });
+    });
+
+    it("should gate concurrency via queue", async () => {
+      let concurrentCalls = 0;
+      let maxConcurrentCalls = 0;
+      const dispatch = vi.fn().mockImplementation(async () => {
+        concurrentCalls++;
+        maxConcurrentCalls = Math.max(maxConcurrentCalls, concurrentCalls);
+        await new Promise((r) => setTimeout(r, 50));
+        concurrentCalls--;
+        return "done";
+      });
+      session = createSubagentSession(dispatch, 2);
+
+      const result = await session.eval(
+        `await Promise.all([
+          task({ description: "a", subagentType: "w" }),
+          task({ description: "b", subagentType: "w" }),
+          task({ description: "c", subagentType: "w" }),
+        ])`,
+        TIMEOUT,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(dispatch).toHaveBeenCalledTimes(3);
+      expect(maxConcurrentCalls).toBeLessThanOrEqual(2);
+    });
+
+    it("should not install task when bridge is not configured", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+
+      const result = await session.eval(`typeof globalThis.task`, TIMEOUT);
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("undefined");
     });
   });
 });

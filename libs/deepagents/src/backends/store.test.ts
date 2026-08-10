@@ -2,12 +2,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { StoreBackend } from "./store.js";
 import type { BackendRuntime } from "./protocol.js";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
-import { getStore as getLangGraphStore } from "@langchain/langgraph";
+import {
+  getConfig,
+  getCurrentTaskInput,
+  getStore as getLangGraphStore,
+} from "@langchain/langgraph";
 
 vi.mock("@langchain/langgraph", async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...(actual as any),
+    getConfig: vi.fn(),
+    getCurrentTaskInput: vi.fn(),
     getStore: vi.fn(),
   };
 });
@@ -32,6 +38,8 @@ function makeConfig() {
 describe("StoreBackend", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getConfig).mockReturnValue({} as any);
+    vi.mocked(getCurrentTaskInput).mockReturnValue(undefined as any);
   });
 
   it("should handle CRUD and search operations", async () => {
@@ -165,9 +173,55 @@ describe("StoreBackend", () => {
     const writeRes = await backend.write("/dup.txt", "x");
     expect(writeRes.error).toBeUndefined();
 
-    const dupErr = await backend.write("/dup.txt", "y");
-    expect(dupErr.error).toBeDefined();
-    expect(dupErr.error).toContain("already exists");
+    const overwriteRes = await backend.write("/dup.txt", "y");
+    expect(overwriteRes.error).toBeUndefined();
+
+    const readRes = await backend.read("/dup.txt");
+    expect(readRes.content).toBe("y");
+  });
+
+  it("should honor v1 format for binary-path writes", async () => {
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime, { fileFormat: "v1" });
+    const content = "AQID";
+
+    const result = await backend.write("/image.png", content);
+
+    expect(result.error).toBeUndefined();
+    const raw = await backend.readRaw("/image.png");
+    expect(raw.data).toBeDefined();
+    expect(raw.data!.content).toEqual([content]);
+    expect("mimeType" in raw.data!).toBe(false);
+  });
+
+  it("should overwrite existing binary files with decoded bytes", async () => {
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
+    const oldBytes = new Uint8Array([1, 2, 3]);
+    const newBytes = new Uint8Array([4, 5, 6]);
+
+    await backend.write("/image.png", Buffer.from(oldBytes).toString("base64"));
+    const result = await backend.write(
+      "/image.png",
+      Buffer.from(newBytes).toString("base64"),
+    );
+
+    expect(result.error).toBeUndefined();
+    const raw = await backend.readRaw("/image.png");
+    expect(raw.data).toBeDefined();
+    expect(raw.data!.content).toEqual(newBytes);
+  });
+
+  it("should preserve conversion errors for malformed existing store values", async () => {
+    const { runtime, store } = makeConfig();
+    const backend = new StoreBackend(runtime);
+    await store.put(["filesystem"], "/bad.txt", { unexpected: "shape" });
+
+    await expect(backend.write("/bad.txt", "replacement")).rejects.toThrow();
+
+    const stored = await store.get(["filesystem"], "/bad.txt");
+
+    expect(stored?.value).toEqual({ unexpected: "shape" });
   });
 
   it("should handle read with offset and limit", async () => {
@@ -234,6 +288,62 @@ describe("StoreBackend", () => {
     expect(readRes.content).toBe("");
   });
 
+  it("should delete files by exact store key", async () => {
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
+
+    await backend.write("/docs/readme.md", "hello store");
+    const result = await backend.delete("/docs/readme.md");
+
+    expect(result.error).toBeUndefined();
+    expect(result.path).toBe("/docs/readme.md");
+    expect((await backend.read("/docs/readme.md")).error).toContain(
+      "not found",
+    );
+  });
+
+  it("should return an error when deleting a missing store key", async () => {
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
+
+    const result = await backend.delete("/missing.md");
+
+    expect(result.path).toBeUndefined();
+    expect(result.error).toContain("not found");
+  });
+
+  it("should treat wildcard-looking delete paths as literal store keys", async () => {
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
+
+    await backend.write("/a.md", "a");
+    await backend.write("/b.md", "b");
+    await backend.write("*", "literal star");
+
+    const result = await backend.delete("*");
+
+    expect(result.error).toBeUndefined();
+    expect(result.path).toBe("*");
+    expect((await backend.read("/a.md")).error).toBeUndefined();
+    expect((await backend.read("/b.md")).error).toBeUndefined();
+    expect((await backend.read("*")).error).toContain("not found");
+  });
+
+  it("should not expand wildcard-looking missing delete paths", async () => {
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
+
+    await backend.write("/a.md", "a");
+    await backend.write("/b.md", "b");
+
+    const result = await backend.delete("*");
+
+    expect(result.path).toBeUndefined();
+    expect(result.error).toContain("not found");
+    expect((await backend.read("/a.md")).error).toBeUndefined();
+    expect((await backend.read("/b.md")).error).toBeUndefined();
+  });
+
   it("should use assistantId-based namespace when no custom namespace provided", async () => {
     const { store } = makeConfig();
     const runtimeWithAssistant = {
@@ -251,6 +361,30 @@ describe("StoreBackend", () => {
 
     const defaultItems = await store.search(["filesystem"]);
     expect(defaultItems.some((item) => item.key === "/test.txt")).toBe(false);
+  });
+
+  it("should prefer assistant_id from runtime config metadata", async () => {
+    const { store } = makeConfig();
+    const runtimeWithConfig = {
+      state: { files: {}, messages: [] },
+      store,
+      assistantId: "legacy-assistant",
+      config: {
+        metadata: {
+          assistant_id: "config-assistant",
+        },
+      },
+    };
+
+    const backend = new StoreBackend(runtimeWithConfig);
+
+    await backend.write("/test.txt", "content");
+
+    const configItems = await store.search(["config-assistant", "filesystem"]);
+    expect(configItems.some((item) => item.key === "/test.txt")).toBe(true);
+
+    const legacyItems = await store.search(["legacy-assistant", "filesystem"]);
+    expect(legacyItems.some((item) => item.key === "/test.txt")).toBe(false);
   });
 
   describe("uploadFiles", () => {
@@ -532,6 +666,27 @@ describe("StoreBackend", () => {
     expect(items.some((item) => item.key === "/test.txt")).toBe(true);
   });
 
+  it("should resolve namespace from a factory in legacy mode", async () => {
+    const { store } = makeConfig();
+    const runtime = {
+      state: { files: {}, messages: [], userId: "legacy-user" },
+      store,
+    };
+
+    const backend = new StoreBackend(runtime, {
+      namespace: ({ state }) => [
+        "memories",
+        (state as { userId: string }).userId,
+        "filesystem",
+      ],
+    });
+
+    await backend.write("/test.txt", "context-derived namespace");
+
+    const items = await store.search(["memories", "legacy-user", "filesystem"]);
+    expect(items.some((item) => item.key === "/test.txt")).toBe(true);
+  });
+
   it("should handle large tool result interception via middleware", async () => {
     const { store } = makeConfig();
     const { createFilesystemMiddleware } = await import("../middleware/fs.js");
@@ -563,11 +718,11 @@ describe("StoreBackend", () => {
 
     expect(result).toBeInstanceOf(ToolMessage);
     expect(result.content).toContain("Tool result too large");
-    expect(result.content).toContain("/large_tool_results/test_456");
+    expect(result.content).toContain("/large_tool_results/test_456.txt");
 
     const storedContent = await store.get(
       ["filesystem"],
-      "/large_tool_results/test_456",
+      "/large_tool_results/test_456.txt",
     );
     expect(storedContent).toBeDefined();
     expect((storedContent!.value as any).content).toBe(largeContent);
@@ -706,9 +861,14 @@ describe("StoreBackend", () => {
     /**
      * Helper to set up a zero-arg StoreBackend with a mocked getStore.
      */
-    function makeZeroArgConfig() {
+    function makeZeroArgConfig(options?: {
+      state?: unknown;
+      config?: Record<string, unknown>;
+    }) {
       const store = new InMemoryStore();
       vi.mocked(getLangGraphStore).mockReturnValue(store);
+      vi.mocked(getCurrentTaskInput).mockReturnValue(options?.state as any);
+      vi.mocked(getConfig).mockReturnValue((options?.config ?? {}) as any);
       return { store };
     }
 
@@ -769,6 +929,21 @@ describe("StoreBackend", () => {
       expect(defaultItems.some((item) => item.key === "/test.txt")).toBe(false);
     });
 
+    it("uses an explicit store passed in constructor options", async () => {
+      const store = new InMemoryStore();
+      vi.mocked(getLangGraphStore).mockReturnValue(undefined as any);
+
+      const backend = new StoreBackend({
+        store,
+        namespace: ["test", "filesystem"],
+      });
+
+      await backend.write("/test.txt", "explicit store");
+
+      const items = await store.search(["test", "filesystem"]);
+      expect(items.some((item) => item.key === "/test.txt")).toBe(true);
+    });
+
     it("falls back to ['filesystem'] namespace without explicit namespace", async () => {
       makeZeroArgConfig();
       const backend = new StoreBackend();
@@ -777,6 +952,48 @@ describe("StoreBackend", () => {
 
       const readRes = await backend.read("/test.txt");
       expect(readRes.content).toContain("default ns");
+    });
+
+    it("uses assistant_id from LangGraph config metadata", async () => {
+      const { store } = makeZeroArgConfig({
+        config: {
+          metadata: {
+            assistant_id: "zero-arg-assistant",
+          },
+        },
+      });
+      const backend = new StoreBackend();
+
+      await backend.write("/test.txt", "default ns");
+
+      const items = await store.search(["zero-arg-assistant", "filesystem"]);
+      expect(items.some((item) => item.key === "/test.txt")).toBe(true);
+    });
+
+    it("uses namespace factory with current task state", async () => {
+      const { store } = makeZeroArgConfig({
+        state: {
+          files: {},
+          messages: [],
+          userId: "zero-arg-user",
+        },
+      });
+      const backend = new StoreBackend({
+        namespace: ({ state }) => [
+          "memories",
+          (state as { userId: string }).userId,
+          "filesystem",
+        ],
+      });
+
+      await backend.write("/test.txt", "namespaced content");
+
+      const items = await store.search([
+        "memories",
+        "zero-arg-user",
+        "filesystem",
+      ]);
+      expect(items.some((item) => item.key === "/test.txt")).toBe(true);
     });
 
     it("throws when no store is available in execution context", () => {

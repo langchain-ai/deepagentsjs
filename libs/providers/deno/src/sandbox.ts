@@ -322,8 +322,8 @@ export class DenoSandbox extends BaseSandbox {
         // Ensure parent directory exists using spawn (more reliable than sh template)
         const parentDir = path.substring(0, path.lastIndexOf("/"));
         if (parentDir) {
-          const mkdirChild = await sandbox.spawn("/bin/bash", {
-            args: ["-c", `mkdir -p "${parentDir}"`],
+          const mkdirChild = await sandbox.spawn("/bin/mkdir", {
+            args: ["-p", parentDir],
             stdout: "piped",
             stderr: "piped",
           });
@@ -369,9 +369,8 @@ export class DenoSandbox extends BaseSandbox {
 
     for (const path of paths) {
       try {
-        // Use spawn with bash to read file content (same approach as execute())
-        const child = await sandbox.spawn("/bin/bash", {
-          args: ["-c", `cat "${path}"`],
+        const child = await sandbox.spawn("/bin/cat", {
+          args: [path],
           stdout: "piped",
           stderr: "piped",
         });

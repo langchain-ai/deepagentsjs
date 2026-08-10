@@ -3,6 +3,7 @@
  */
 
 import type {
+  DeleteResult,
   EditResult,
   FileData,
   FileDownloadResponse,
@@ -18,8 +19,10 @@ import type {
   BackendProtocolV2,
   BackendOptions,
 } from "./protocol.js";
+import { applyGrepMaxCount } from "./protocol.js";
 import {
   createFileData,
+  createWriteFileData,
   fileDataToString,
   getMimeType,
   globSearchFiles,
@@ -31,9 +34,10 @@ import {
   performStringReplacement,
   updateFileData,
 } from "./utils.js";
-import { getConfig, getCurrentTaskInput } from "@langchain/langgraph";
+import { getConfig } from "@langchain/langgraph";
 
 const PREGEL_SEND_KEY = "__pregel_send";
+const PREGEL_READ_KEY = "__pregel_read";
 
 /**
  * Backend that stores files in agent state (ephemeral).
@@ -89,17 +93,24 @@ export class StateBackend implements BackendProtocolV2 {
    * Get files from current state.
    *
    * In legacy mode, reads from the injected {@link BackendRuntime}.
-   * In zero-arg mode, reads from the LangGraph execution context via
-   * {@link getCurrentTaskInput}.
+   * In zero-arg mode, reads via {@link PREGEL_READ_KEY} with fresh=true,
+   * which applies any pending task writes through the reducer before returning.
    */
-  private getFiles(): Record<string, FileData> {
+  private get files(): Record<string, FileData> {
     if (this.runtime) {
-      const state = this.runtime.state as { files?: Record<string, FileData> };
-      return state.files || {};
+      return (
+        (this.runtime.state as { files?: Record<string, FileData> }).files ?? {}
+      );
     }
 
-    const state = getCurrentTaskInput<{ files?: Record<string, FileData> }>();
-    return state?.files || {};
+    const read = getConfig().configurable?.[PREGEL_READ_KEY] as
+      | ((
+          channel: string,
+          fresh: boolean,
+        ) => Record<string, FileData> | undefined)
+      | undefined;
+
+    return read?.("files", true) ?? {};
   }
 
   /**
@@ -110,9 +121,10 @@ export class StateBackend implements BackendProtocolV2 {
    * In legacy mode, this is a no-op — the caller uses `filesUpdate`
    * from the return value instead.
    *
-   * @param update - Map of file paths to their updated {@link FileData}
+   * @param update - Map of file paths to their updated {@link FileData},
+   *   or null deletion markers.
    */
-  private sendFilesUpdate(update: Record<string, FileData>): void {
+  private sendFilesUpdate(update: Record<string, FileData | null>): void {
     if (this.isLegacy) {
       return;
     }
@@ -133,7 +145,7 @@ export class StateBackend implements BackendProtocolV2 {
    *          Directories have a trailing / in their path and is_dir=true.
    */
   ls(path: string): LsResult {
-    const files = this.getFiles();
+    const files = this.files;
     const infos: FileInfo[] = [];
     const subdirs = new Set<string>();
 
@@ -197,7 +209,7 @@ export class StateBackend implements BackendProtocolV2 {
    * @returns ReadResult with content on success or error on failure
    */
   read(filePath: string, offset: number = 0, limit: number = 500): ReadResult {
-    const files = this.getFiles();
+    const files = this.files;
     const fileData = files[filePath];
 
     if (!fileData) {
@@ -229,7 +241,7 @@ export class StateBackend implements BackendProtocolV2 {
    * @returns ReadRawResult with raw file data on success or error on failure
    */
   readRaw(filePath: string): ReadRawResult {
-    const files = this.getFiles();
+    const files = this.files;
     const fileData = files[filePath];
 
     if (!fileData) {
@@ -239,25 +251,20 @@ export class StateBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Create a new file with content.
+   * Write content to a file, creating it or overwriting it if it already exists.
    * Returns WriteResult with filesUpdate to update LangGraph state.
    */
   write(filePath: string, content: string): WriteResult {
-    const files = this.getFiles();
+    const files = this.files;
+    const existing = files[filePath];
 
-    if (filePath in files) {
-      return {
-        error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
-      };
-    }
-
-    const mimeType = getMimeType(filePath);
-    const newFileData = createFileData(
+    const newFileData = createWriteFileData(
+      filePath,
       content,
-      undefined,
       this.fileFormat,
-      mimeType,
+      existing,
     );
+
     const update = { [filePath]: newFileData };
 
     if (!this.isLegacy) {
@@ -281,7 +288,7 @@ export class StateBackend implements BackendProtocolV2 {
     newString: string,
     replaceAll: boolean = false,
   ): EditResult {
-    const files = this.getFiles();
+    const files = this.files;
     const fileData = files[filePath];
 
     if (!fileData) {
@@ -317,6 +324,27 @@ export class StateBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Delete a file from state by sending a null deletion marker through Pregel.
+   */
+  delete(filePath: string): DeleteResult {
+    const files = this.files;
+
+    if (!(filePath in files)) {
+      return { error: `Error: File '${filePath}' not found` };
+    }
+
+    if (this.isLegacy) {
+      return {
+        error:
+          "StateBackend.delete requires a zero-argument StateBackend in a LangGraph execution context.",
+      };
+    }
+
+    this.sendFilesUpdate({ [filePath]: null });
+    return { path: filePath };
+  }
+
+  /**
    * Search file contents for a literal text pattern.
    * Binary files are skipped.
    */
@@ -324,17 +352,18 @@ export class StateBackend implements BackendProtocolV2 {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
+    maxCount: number | null = null,
   ): GrepResult {
-    const files = this.getFiles();
+    const files = this.files;
     const result = grepMatchesFromFiles(files, pattern, path, glob);
-    return { matches: result };
+    return applyGrepMaxCount({ result: { matches: result }, maxCount });
   }
 
   /**
    * Structured glob matching returning FileInfo objects.
    */
   glob(pattern: string, path: string = "/"): GlobResult {
-    const files = this.getFiles();
+    const files = this.files;
     const result = globSearchFiles(files, pattern, path);
 
     if (result === "No files found") {
@@ -424,7 +453,7 @@ export class StateBackend implements BackendProtocolV2 {
    * @returns List of FileDownloadResponse objects, one per input path
    */
   downloadFiles(paths: string[]): FileDownloadResponse[] {
-    const files = this.getFiles();
+    const files = this.files;
     const responses: FileDownloadResponse[] = [];
 
     for (const path of paths) {
