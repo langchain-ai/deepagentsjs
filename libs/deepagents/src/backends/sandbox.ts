@@ -29,9 +29,9 @@ import type {
   ReadResult,
   SandboxBackendProtocolV2,
   WriteResult,
-} from './protocol.js';
-import { applyGrepMaxCount } from './protocol.js';
-import { getMimeType, isTextMimeType } from './utils.js';
+} from "./protocol.js";
+import { applyGrepMaxCount } from "./protocol.js";
+import { getMimeType, isTextMimeType } from "./utils.js";
 
 /**
  * Shell-quote a string using single quotes (POSIX).
@@ -51,49 +51,49 @@ function shellQuote(s: string): string {
  * - `[...]` character classes
  */
 function globToPathRegex(pattern: string): RegExp {
-  let regex = '^';
+  let regex = "^";
   let i = 0;
 
   while (i < pattern.length) {
     const c = pattern[i];
 
-    if (c === '*') {
-      if (i + 1 < pattern.length && pattern[i + 1] === '*') {
+    if (c === "*") {
+      if (i + 1 < pattern.length && pattern[i + 1] === "*") {
         // ** (globstar) matches everything including /
         i += 2;
-        if (i < pattern.length && pattern[i] === '/') {
+        if (i < pattern.length && pattern[i] === "/") {
           // **/ matches zero or more directory segments
-          regex += '(.*/)?';
+          regex += "(.*/)?";
           i++;
         } else {
           // ** at end matches anything
-          regex += '.*';
+          regex += ".*";
         }
       } else {
         // * matches anything except /
-        regex += '[^/]*';
+        regex += "[^/]*";
         i++;
       }
-    } else if (c === '?') {
-      regex += '[^/]';
+    } else if (c === "?") {
+      regex += "[^/]";
       i++;
-    } else if (c === '[') {
+    } else if (c === "[") {
       // Character class — find closing bracket
       let j = i + 1;
-      while (j < pattern.length && pattern[j] !== ']') j++;
+      while (j < pattern.length && pattern[j] !== "]") j++;
       regex += pattern.slice(i, j + 1);
       i = j + 1;
     } else if (
-      c === '.' ||
-      c === '+' ||
-      c === '^' ||
-      c === '$' ||
-      c === '{' ||
-      c === '}' ||
-      c === '(' ||
-      c === ')' ||
-      c === '|' ||
-      c === '\\'
+      c === "." ||
+      c === "+" ||
+      c === "^" ||
+      c === "$" ||
+      c === "{" ||
+      c === "}" ||
+      c === "(" ||
+      c === ")" ||
+      c === "|" ||
+      c === "\\"
     ) {
       regex += `\\${c}`;
       i++;
@@ -103,7 +103,7 @@ function globToPathRegex(pattern: string): RegExp {
     }
   }
 
-  regex += '$';
+  regex += "$";
   return new RegExp(regex);
 }
 
@@ -121,14 +121,16 @@ function globToPathRegex(pattern: string): RegExp {
  * The mtime field may be a float (GNU find %T@ → "1234567890.0000000000")
  * or an integer (BSD stat %m → "1234567890"); parseInt handles both.
  */
-function parseStatLine(line: string): { size: number; mtime: number; isDir: boolean; fullPath: string } | null {
-  const firstTab = line.indexOf('\t');
+function parseStatLine(
+  line: string,
+): { size: number; mtime: number; isDir: boolean; fullPath: string } | null {
+  const firstTab = line.indexOf("\t");
   if (firstTab === -1) return null;
 
-  const secondTab = line.indexOf('\t', firstTab + 1);
+  const secondTab = line.indexOf("\t", firstTab + 1);
   if (secondTab === -1) return null;
 
-  const thirdTab = line.indexOf('\t', secondTab + 1);
+  const thirdTab = line.indexOf("\t", secondTab + 1);
   if (thirdTab === -1) return null;
 
   const size = parseInt(line.slice(0, firstTab), 10);
@@ -142,7 +144,8 @@ function parseStatLine(line: string): { size: number; mtime: number; isDir: bool
     size,
     mtime,
     // GNU find %y outputs "d"; BSD stat %Sp outputs "drwxr-xr-x"
-    isDir: fileType === 'd' || fileType === 'directory' || fileType.startsWith('d'),
+    isDir:
+      fileType === "d" || fileType === "directory" || fileType.startsWith("d"),
     fullPath,
   };
 }
@@ -155,12 +158,12 @@ function parseStatLine(line: string): { size: number; mtime: number; isDir: bool
  * printf handles tab-delimited output formatting.
  */
 const STAT_C_SCRIPT =
-  'for f; do ' +
+  "for f; do " +
   'if [ -d "$f" ]; then t=d; elif [ -L "$f" ]; then t=l; else t=f; fi; ' +
   'sz=$(stat -c %s "$f" 2>/dev/null) || continue; ' +
   'mt=$(stat -c %Y "$f" 2>/dev/null) || continue; ' +
   'printf "%s\\t%s\\t%s\\t%s\\n" "$sz" "$mt" "$t" "$f"; ' +
-  'done';
+  "done";
 
 /**
  * Shell command for listing directory contents with metadata.
@@ -211,11 +214,19 @@ function buildFindCommand(searchPath: string): string {
  * Uses awk for offset/limit — only the requested lines are read over the wire.
  * Returns raw lines (no line numbers); the read_file tool adds cat-n formatting.
  */
-function buildReadCommand(filePath: string, offset: number, limit: number): string {
+function buildReadCommand(
+  filePath: string,
+  offset: number,
+  limit: number,
+): string {
   const quotedPath = shellQuote(filePath);
   // Coerce offset and limit to safe non-negative integers.
-  const safeOffset = Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0;
-  const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(Math.floor(limit), 999_999_999) : 999_999_999;
+  const safeOffset =
+    Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0;
+  const safeLimit =
+    Number.isFinite(limit) && limit > 0
+      ? Math.min(Math.floor(limit), 999_999_999)
+      : 999_999_999;
   // awk NR is 1-based, our offset is 0-based
   const start = safeOffset + 1;
   const end = safeOffset + safeLimit;
@@ -224,7 +235,7 @@ function buildReadCommand(filePath: string, offset: number, limit: number): stri
     `if [ ! -f ${quotedPath} ]; then echo "Error: File not found"; exit 1; fi`,
     `if [ ! -s ${quotedPath} ]; then echo "System reminder: File exists but has empty contents"; exit 0; fi`,
     `awk 'NR >= ${start} && NR <= ${end} { print }' ${quotedPath}`,
-  ].join('; ');
+  ].join("; ");
 }
 
 /**
@@ -238,7 +249,11 @@ function buildReadCommand(filePath: string, offset: number, limit: number): stri
  * @param searchPath - Base path to search in.
  * @param globPattern - Optional glob pattern to filter files.
  */
-function buildGrepCommand(pattern: string, searchPath: string, globPattern: string | null): string {
+function buildGrepCommand(
+  pattern: string,
+  searchPath: string,
+  globPattern: string | null,
+): string {
   const patternEscaped = shellQuote(pattern);
   const searchPathQuoted = shellQuote(searchPath);
 
@@ -276,7 +291,9 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
    * Upload multiple files to the sandbox.
    * Implementations must support partial success.
    */
-  abstract uploadFiles(files: Array<[string, Uint8Array]>): MaybePromise<FileUploadResponse[]>;
+  abstract uploadFiles(
+    files: Array<[string, Uint8Array]>,
+  ): MaybePromise<FileUploadResponse[]>;
 
   /**
    * Download multiple files from the sandbox.
@@ -298,14 +315,14 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     const result = await this.execute(command);
 
     const infos: FileInfo[] = [];
-    const lines = result.output.trim().split('\n').filter(Boolean);
+    const lines = result.output.trim().split("\n").filter(Boolean);
 
     for (const line of lines) {
       const parsed = parseStatLine(line);
       if (!parsed) continue;
 
       infos.push({
-        path: parsed.isDir ? parsed.fullPath + '/' : parsed.fullPath,
+        path: parsed.isDir ? parsed.fullPath + "/" : parsed.fullPath,
         is_dir: parsed.isDir,
         size: parsed.size,
         modified_at: new Date(parsed.mtime * 1000).toISOString(),
@@ -328,7 +345,11 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
    * @param limit - Maximum number of lines to read
    * @returns Raw line slice for text, or error message
    */
-  async read(filePath: string, offset: number = 0, limit: number = 500): Promise<ReadResult> {
+  async read(
+    filePath: string,
+    offset: number = 0,
+    limit: number = 500,
+  ): Promise<ReadResult> {
     const mimeType = getMimeType(filePath);
 
     // for binary, download full file and return as Uint8Array
@@ -342,7 +363,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     }
 
     // limit=0 means return nothing
-    if (limit === 0) return { content: '', mimeType };
+    if (limit === 0) return { content: "", mimeType };
 
     const command = buildReadCommand(filePath, offset, limit);
     const result = await this.execute(command);
@@ -404,7 +425,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
    */
   async grep(
     pattern: string,
-    path: string = '/',
+    path: string = "/",
     glob: string | null = null,
     maxCount: number | null = null,
   ): Promise<GrepResult> {
@@ -418,8 +439,8 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
 
     // Parse grep output format: path:line_number:text
     const matches: GrepMatch[] = [];
-    for (const line of output.split('\n')) {
-      const parts = line.split(':');
+    for (const line of output.split("\n")) {
+      const parts = line.split(":");
       if (parts.length >= 3) {
         const filePath = parts[0];
 
@@ -434,7 +455,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
           matches.push({
             path: filePath,
             line: lineNum,
-            text: parts.slice(2).join(':'),
+            text: parts.slice(2).join(":"),
           });
         }
       }
@@ -456,23 +477,23 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
    * - `?`  matches a single character except `/`
    * - `[...]` character classes
    */
-  async glob(pattern: string, path: string = '/'): Promise<GlobResult> {
+  async glob(pattern: string, path: string = "/"): Promise<GlobResult> {
     const command = buildFindCommand(path);
     const result = await this.execute(command);
 
     const regex = globToPathRegex(pattern);
     const infos: FileInfo[] = [];
-    const lines = result.output.trim().split('\n').filter(Boolean);
+    const lines = result.output.trim().split("\n").filter(Boolean);
 
     // Normalise base path (strip trailing /)
-    const basePath = path.endsWith('/') ? path.slice(0, -1) : path;
+    const basePath = path.endsWith("/") ? path.slice(0, -1) : path;
 
     for (const line of lines) {
       const parsed = parseStatLine(line);
       if (!parsed) continue;
 
       // Compute path relative to the search base
-      const relPath = parsed.fullPath.startsWith(basePath + '/')
+      const relPath = parsed.fullPath.startsWith(basePath + "/")
         ? parsed.fullPath.slice(basePath.length + 1)
         : parsed.fullPath;
 
@@ -501,7 +522,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     if (isTextMimeType(mimeType)) {
       fileContent = new TextEncoder().encode(content);
     } else {
-      fileContent = Buffer.from(content, 'base64');
+      fileContent = Buffer.from(content, "base64");
     }
 
     const results = await this.uploadFiles([[filePath, fileContent]]);
@@ -524,7 +545,12 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
    * Memory-conscious: releases intermediate references early so the GC can
    * reclaim buffers before the next large allocation is made.
    */
-  async edit(filePath: string, oldString: string, newString: string, replaceAll: boolean = false): Promise<EditResult> {
+  async edit(
+    filePath: string,
+    oldString: string,
+    newString: string,
+    replaceAll: boolean = false,
+  ): Promise<EditResult> {
     const results = await this.downloadFiles([filePath]);
     if (results[0].error || !results[0].content) {
       return { error: `Error: File '${filePath}' not found` };
@@ -542,7 +568,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
        */
       if (text.length !== 0) {
         return {
-          error: 'oldString must not be empty unless the file is empty',
+          error: "oldString must not be empty unless the file is empty",
         };
       }
       /**
@@ -612,7 +638,10 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
       /**
        * Build result from the known index — avoids a redundant search by .replace()
        */
-      newText = text.slice(0, firstIdx) + newString + text.slice(firstIdx + oldString.length);
+      newText =
+        text.slice(0, firstIdx) +
+        newString +
+        text.slice(firstIdx + oldString.length);
     }
 
     const encoded = new TextEncoder().encode(newText);

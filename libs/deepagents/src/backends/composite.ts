@@ -18,13 +18,13 @@ import type {
   ReadRawResult,
   ReadResult,
   WriteResult,
-} from './protocol.js';
+} from "./protocol.js";
 import {
   applyGrepMaxCount,
   isSandboxBackend,
   isSandboxProtocol,
-} from './protocol.js';
-import { adaptBackendProtocol, adaptSandboxProtocol } from './utils.js';
+} from "./protocol.js";
+import { adaptBackendProtocol, adaptSandboxProtocol } from "./utils.js";
 
 /**
  * Backend that routes file operations to different backends based on path prefix.
@@ -40,7 +40,10 @@ export class CompositeBackend implements BackendProtocolV2 {
   private routes: Record<string, BackendProtocolV2>;
   private sortedRoutes: Array<[string, BackendProtocolV2]>;
 
-  constructor(defaultBackend: AnyBackendProtocol, routes: Record<string, AnyBackendProtocol>) {
+  constructor(
+    defaultBackend: AnyBackendProtocol,
+    routes: Record<string, AnyBackendProtocol>,
+  ) {
     // Check if default backend is a sandbox and adapt accordingly
     this.default = isSandboxProtocol(defaultBackend)
       ? adaptSandboxProtocol(defaultBackend)
@@ -50,17 +53,21 @@ export class CompositeBackend implements BackendProtocolV2 {
     this.routes = Object.fromEntries(
       Object.entries(routes).map(([k, v]) => [
         k,
-        isSandboxProtocol(v) ? adaptSandboxProtocol(v) : adaptBackendProtocol(v),
+        isSandboxProtocol(v)
+          ? adaptSandboxProtocol(v)
+          : adaptBackendProtocol(v),
       ]),
     );
 
     // Sort routes by length (longest first) for correct prefix matching
-    this.sortedRoutes = Object.entries(this.routes).sort((a, b) => b[0].length - a[0].length);
+    this.sortedRoutes = Object.entries(this.routes).sort(
+      (a, b) => b[0].length - a[0].length,
+    );
   }
 
   /** Delegates to default backend's id if it is a sandbox, otherwise empty string. */
   get id(): string {
-    return isSandboxBackend(this.default) ? this.default.id : '';
+    return isSandboxBackend(this.default) ? this.default.id : "";
   }
 
   /** Route prefixes registered on this backend (e.g. `["/workspace"]`). */
@@ -96,7 +103,7 @@ export class CompositeBackend implements BackendProtocolV2 {
         // Strip full prefix and ensure a leading slash remains
         // e.g., "/memories/notes.txt" → "/notes.txt"; "/memories/" → "/"
         const suffix = key.substring(prefix.length);
-        const strippedKey = suffix ? '/' + suffix : '/';
+        const strippedKey = suffix ? "/" + suffix : "/";
         return [backend, strippedKey];
       }
     }
@@ -148,7 +155,7 @@ export class CompositeBackend implements BackendProtocolV2 {
       if (this.isPathWithinRoute(path, routePrefix)) {
         // Query only the matching routed backend
         const suffix = path.substring(routePrefix.length);
-        const searchPath = suffix ? '/' + suffix : '/';
+        const searchPath = suffix ? "/" + suffix : "/";
         const result = await backend.ls(searchPath);
 
         if (result.error) {
@@ -168,7 +175,7 @@ export class CompositeBackend implements BackendProtocolV2 {
     }
 
     // At root, aggregate default and all routed backends
-    if (path === '/') {
+    if (path === "/") {
       const results: FileInfo[] = [];
       const defaultResult = await this.default.ls(path);
 
@@ -188,7 +195,7 @@ export class CompositeBackend implements BackendProtocolV2 {
           path: routePrefix,
           is_dir: true,
           size: 0,
-          modified_at: '',
+          modified_at: "",
         });
       }
 
@@ -208,7 +215,11 @@ export class CompositeBackend implements BackendProtocolV2 {
    * @param limit - Maximum number of lines to read
    * @returns Raw line slice for text, or error message
    */
-  async read(filePath: string, offset: number = 0, limit: number = 500): Promise<ReadResult> {
+  async read(
+    filePath: string,
+    offset: number = 0,
+    limit: number = 500,
+  ): Promise<ReadResult> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
     return await backend.read(strippedKey, offset, limit);
   }
@@ -233,11 +244,11 @@ export class CompositeBackend implements BackendProtocolV2 {
    */
   async grep(
     pattern: string,
-    path: string | null = '/',
+    path: string | null = "/",
     glob: string | null = null,
     maxCount: number | null = null,
   ): Promise<GrepResult> {
-    const searchPath = path || '/';
+    const searchPath = path || "/";
 
     // If path targets a specific route, search only that backend
     for (const [routePrefix, backend] of this.sortedRoutes) {
@@ -245,7 +256,7 @@ export class CompositeBackend implements BackendProtocolV2 {
         const routeSearchPath = searchPath.substring(routePrefix.length - 1);
         const raw = await backend.grep(
           pattern,
-          routeSearchPath || '/',
+          routeSearchPath || "/",
           glob,
           maxCount,
         );
@@ -298,7 +309,7 @@ export class CompositeBackend implements BackendProtocolV2 {
         break;
       }
 
-      const raw = await backend.grep(pattern, '/', glob, remaining);
+      const raw = await backend.grep(pattern, "/", glob, remaining);
 
       if (raw.error) {
         return raw;
@@ -320,14 +331,14 @@ export class CompositeBackend implements BackendProtocolV2 {
   /**
    * Structured glob matching returning FileInfo objects.
    */
-  async glob(pattern: string, path: string = '/'): Promise<GlobResult> {
+  async glob(pattern: string, path: string = "/"): Promise<GlobResult> {
     const results: FileInfo[] = [];
 
     // Route based on path, not pattern
     for (const [routePrefix, backend] of this.sortedRoutes) {
       if (this.isPathWithinRoute(path, routePrefix)) {
         const searchPath = path.substring(routePrefix.length - 1);
-        const result = await backend.glob(pattern, searchPath || '/');
+        const result = await backend.glob(pattern, searchPath || "/");
 
         if (result.error) {
           return result;
@@ -358,7 +369,7 @@ export class CompositeBackend implements BackendProtocolV2 {
         continue;
       }
 
-      const result = await backend.glob(pattern, '/');
+      const result = await backend.glob(pattern, "/");
       if (result.error) {
         continue; // Skip backends that error
       }
@@ -394,7 +405,12 @@ export class CompositeBackend implements BackendProtocolV2 {
    * @param replaceAll - If true, replace all occurrences
    * @returns EditResult with path, occurrences, or error
    */
-  async edit(filePath: string, oldString: string, newString: string, replaceAll: boolean = false): Promise<EditResult> {
+  async edit(
+    filePath: string,
+    oldString: string,
+    newString: string,
+    replaceAll: boolean = false,
+  ): Promise<EditResult> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
     return await backend.edit(strippedKey, oldString, newString, replaceAll);
   }
@@ -427,7 +443,7 @@ export class CompositeBackend implements BackendProtocolV2 {
     if (!isSandboxBackend(this.default)) {
       throw new Error(
         "Default backend doesn't support command execution (SandboxBackendProtocol). " +
-          'To enable execution, provide a default backend that implements SandboxBackendProtocol.',
+          "To enable execution, provide a default backend that implements SandboxBackendProtocol.",
       );
     }
     return Promise.resolve(this.default.execute(command));
@@ -439,9 +455,17 @@ export class CompositeBackend implements BackendProtocolV2 {
    * @param files - List of [path, content] tuples to upload
    * @returns List of FileUploadResponse objects, one per input file
    */
-  async uploadFiles(files: Array<[string, Uint8Array]>): Promise<FileUploadResponse[]> {
-    const results: Array<FileUploadResponse | null> = Array.from({ length: files.length }, () => null);
-    const batchesByBackend = new Map<BackendProtocolV2, Array<{ idx: number; path: string; content: Uint8Array }>>();
+  async uploadFiles(
+    files: Array<[string, Uint8Array]>,
+  ): Promise<FileUploadResponse[]> {
+    const results: Array<FileUploadResponse | null> = Array.from(
+      { length: files.length },
+      () => null,
+    );
+    const batchesByBackend = new Map<
+      BackendProtocolV2,
+      Array<{ idx: number; path: string; content: Uint8Array }>
+    >();
 
     for (let idx = 0; idx < files.length; idx++) {
       const [path, content] = files[idx];
@@ -455,10 +479,12 @@ export class CompositeBackend implements BackendProtocolV2 {
 
     for (const [backend, batch] of batchesByBackend) {
       if (!backend.uploadFiles) {
-        throw new Error('Backend does not support uploadFiles');
+        throw new Error("Backend does not support uploadFiles");
       }
 
-      const batchFiles = batch.map((b) => [b.path, b.content] as [string, Uint8Array]);
+      const batchFiles = batch.map(
+        (b) => [b.path, b.content] as [string, Uint8Array],
+      );
       const batchResponses = await backend.uploadFiles(batchFiles);
 
       for (let i = 0; i < batch.length; i++) {
@@ -480,8 +506,14 @@ export class CompositeBackend implements BackendProtocolV2 {
    * @returns List of FileDownloadResponse objects, one per input path
    */
   async downloadFiles(paths: string[]): Promise<FileDownloadResponse[]> {
-    const results: Array<FileDownloadResponse | null> = Array.from({ length: paths.length }, () => null);
-    const batchesByBackend = new Map<BackendProtocolV2, Array<{ idx: number; path: string }>>();
+    const results: Array<FileDownloadResponse | null> = Array.from(
+      { length: paths.length },
+      () => null,
+    );
+    const batchesByBackend = new Map<
+      BackendProtocolV2,
+      Array<{ idx: number; path: string }>
+    >();
 
     for (let idx = 0; idx < paths.length; idx++) {
       const path = paths[idx];
@@ -495,7 +527,7 @@ export class CompositeBackend implements BackendProtocolV2 {
 
     for (const [backend, batch] of batchesByBackend) {
       if (!backend.downloadFiles) {
-        throw new Error('Backend does not support downloadFiles');
+        throw new Error("Backend does not support downloadFiles");
       }
 
       const batchPaths = batch.map((b) => b.path);
