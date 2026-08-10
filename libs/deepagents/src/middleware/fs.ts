@@ -444,6 +444,19 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+/** Extract a useful stack trace from an unknown thrown value when available. */
+function getToolErrorMessage(error: unknown): string {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "stack" in error &&
+    typeof (error as { stack?: unknown }).stack === "string"
+  ) {
+    return (error as { stack: string }).stack;
+  }
+  return getErrorMessage(error);
+}
+
 /**
  * Check whether `path` is permitted under `rules` for `operation`, returning an
  * error string to surface to the model (or `undefined` when allowed).
@@ -486,14 +499,15 @@ function checkPermission(
  * successful result.
  */
 function toolError(
-  runtime: ToolRuntime,
+  runtime: ToolRuntime | undefined,
   toolName: string,
   message: string,
+  toolCallId?: string,
 ): ToolMessage {
   return new ToolMessage({
     content: message,
     name: toolName,
-    tool_call_id: runtime.toolCall?.id as string,
+    tool_call_id: toolCallId ?? (runtime?.toolCall?.id as string),
     status: "error",
   });
 }
@@ -1615,23 +1629,36 @@ export function createFilesystemMiddleware(
       });
     },
     wrapToolCall: async (request, handler) => {
+      const toolName = request.toolCall?.name;
+      const handleToolCall = async () => {
+        try {
+          return await handler(request);
+        } catch (error) {
+          return toolError(
+            undefined,
+            toolName ?? "unknown",
+            getToolErrorMessage(error),
+            request.toolCall?.id,
+          );
+        }
+      };
+
       // Return early if eviction is disabled
       if (!toolTokenLimitBeforeEvict) {
-        return handler(request);
+        return handleToolCall();
       }
 
       // Check if this tool is excluded from eviction
-      const toolName = request.toolCall?.name;
       if (
         toolName &&
         TOOLS_EXCLUDED_FROM_EVICTION.includes(
           toolName as (typeof TOOLS_EXCLUDED_FROM_EVICTION)[number],
         )
       ) {
-        return handler(request);
+        return handleToolCall();
       }
 
-      const result = await handler(request);
+      const result = await handleToolCall();
 
       if (ToolMessage.isInstance(result)) {
         const processed = await processToolMessage(

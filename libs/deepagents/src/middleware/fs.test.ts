@@ -599,6 +599,38 @@ describe("createFilesystemMiddleware", () => {
       expect(result).toBe(mockMessage);
     });
 
+    it.each([null, 100])(
+      "should convert thrown tool errors into error ToolMessages (limit: %s)",
+      async (toolTokenLimitBeforeEvict) => {
+        const middleware = createFilesystemMiddleware({
+          backend: createMockBackend(),
+          toolTokenLimitBeforeEvict,
+        });
+        const mockHandler = vi
+          .fn()
+          .mockRejectedValue(new Error("permission denied"));
+        const request = {
+          toolCall: { id: "test-id", name: "test_tool" },
+          runtime: { toolCall: { id: "test-id", name: "test_tool" } },
+          state: {},
+          config: {},
+        };
+
+        const result = await middleware.wrapToolCall!(
+          request as any,
+          mockHandler,
+        );
+
+        expect(ToolMessage.isInstance(result)).toBe(true);
+        if (ToolMessage.isInstance(result)) {
+          expect(result.status).toBe("error");
+          expect(result.name).toBe("test_tool");
+          expect(result.tool_call_id).toBe("test-id");
+          expect(result.content).toContain("Error: permission denied");
+        }
+      },
+    );
+
     it("should not evict tools in TOOLS_EXCLUDED_FROM_EVICTION even with large results", async () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
