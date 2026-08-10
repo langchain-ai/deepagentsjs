@@ -4,5 +4,5 @@
   "graphs": {
     "summarization-serde": "./src/testing/summarization-serde-deployment.ts:graph"
   },
-  "base_image": "langchain/langgraphjs-api:0.12.2-node22@sha256:6feae9d60f533c9b604437e6c154b6ed6ea3aeea779428ed9ec540417df2bdd4"
+  "base_image": "langchain/langgraphjs-api:0.12.2-node22"
 }
