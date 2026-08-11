@@ -944,12 +944,7 @@ export function createSummarizationMiddleware(
       new HumanMessage({ content: prompt }),
     ]);
 
-    // When the model responds with content blocks (e.g. reasoning/thinking
-    // enabled, or chunk aggregation from an internal streaming path), extract
-    // only the text instead of stringifying raw blocks into the summary.
-    return typeof response.content === "string"
-      ? response.content
-      : response.text;
+    return response.text;
   }
 
   /**
