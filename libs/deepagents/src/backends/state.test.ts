@@ -14,15 +14,17 @@ vi.mock("@langchain/langgraph", async (importOriginal) => {
 
 function makeConfig(files: Record<string, FileData> = {}) {
   const state = { messages: [], files: { ...files } };
-  const pendingFilesSends: Record<string, FileData>[] = [];
+  const pendingFilesSends: Record<string, FileData | null>[] = [];
 
   const sendSpy = vi
     .fn()
-    .mockImplementation((sends: [string, Record<string, FileData>][]) => {
-      for (const [channel, update] of sends) {
-        if (channel === "files") pendingFilesSends.push(update);
-      }
-    });
+    .mockImplementation(
+      (sends: [string, Record<string, FileData | null>][]) => {
+        for (const [channel, update] of sends) {
+          if (channel === "files") pendingFilesSends.push(update);
+        }
+      },
+    );
 
   const readSpy = vi
     .fn()
@@ -30,7 +32,15 @@ function makeConfig(files: Record<string, FileData> = {}) {
       if (channel !== "files") return undefined;
       if (!fresh || pendingFilesSends.length === 0) return state.files;
       const merged = { ...state.files };
-      for (const update of pendingFilesSends) Object.assign(merged, update);
+      for (const update of pendingFilesSends) {
+        for (const [path, fileData] of Object.entries(update)) {
+          if (fileData === null) {
+            delete merged[path];
+          } else {
+            merged[path] = fileData;
+          }
+        }
+      }
       return merged;
     });
 
@@ -40,7 +50,15 @@ function makeConfig(files: Record<string, FileData> = {}) {
 
   // Simulate Pregel committing task.writes to state and clearing the buffer.
   function commitSends() {
-    for (const update of pendingFilesSends) Object.assign(state.files, update);
+    for (const update of pendingFilesSends) {
+      for (const [path, fileData] of Object.entries(update)) {
+        if (fileData === null) {
+          delete state.files[path];
+        } else {
+          state.files[path] = fileData;
+        }
+      }
+    }
     pendingFilesSends.length = 0;
   }
 
@@ -109,6 +127,49 @@ describe("StateBackend", () => {
     expect(infos.files!.some((i) => i.path === "/notes.txt")).toBe(true);
   });
 
+  it("should delete files through Pregel send in zero-arg mode", () => {
+    const { sendSpy, commitSends } = makeConfig();
+    const backend = new StateBackend();
+
+    const writeRes = backend.write("/drop.txt", "bye");
+    expect(writeRes.error).toBeUndefined();
+    commitSends();
+    expect(backend.read("/drop.txt").error).toBeUndefined();
+
+    const deleteRes = backend.delete("/drop.txt");
+    expect(deleteRes.error).toBeUndefined();
+    expect(deleteRes.path).toBe("/drop.txt");
+    expect(sendSpy).toHaveBeenLastCalledWith([
+      ["files", { "/drop.txt": null }],
+    ]);
+
+    commitSends();
+    expect(backend.read("/drop.txt").error).toContain("not found");
+  });
+
+  it("should return an error when deleting a missing file", () => {
+    makeConfig();
+    const backend = new StateBackend();
+
+    const result = backend.delete("/missing.txt");
+
+    expect(result.path).toBeUndefined();
+    expect(result.error).toContain("not found");
+  });
+
+  it("should return an explicit error for delete in legacy mode", () => {
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime);
+    const writeRes = backend.write("/drop.txt", "bye");
+    Object.assign(state.files, writeRes.filesUpdate);
+
+    const result = backend.delete("/drop.txt");
+
+    expect(result.path).toBeUndefined();
+    expect(result.error).toContain("zero-argument StateBackend");
+    expect(backend.read("/drop.txt").error).toBeUndefined();
+  });
+
   it("should handle errors correctly", () => {
     const { state, runtime } = makeConfig();
     const backend = new StateBackend(runtime);
@@ -121,9 +182,54 @@ describe("StateBackend", () => {
     expect(writeRes.filesUpdate).toBeDefined();
     Object.assign(state.files, writeRes.filesUpdate);
 
-    const dupErr = backend.write("/dup.txt", "y");
-    expect(dupErr.error).toBeDefined();
-    expect(dupErr.error).toContain("already exists");
+    const overwriteRes = backend.write("/dup.txt", "y");
+    expect(overwriteRes.error).toBeUndefined();
+    expect(overwriteRes.filesUpdate).toBeDefined();
+    Object.assign(state.files, overwriteRes.filesUpdate);
+
+    const readRes = backend.read("/dup.txt");
+    expect(readRes.content).toBe("y");
+  });
+
+  it("should honor v1 format for binary-path writes", () => {
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime, { fileFormat: "v1" });
+    const content = "AQID";
+
+    const result = backend.write("/image.png", content);
+
+    expect(result.error).toBeUndefined();
+    Object.assign(state.files, result.filesUpdate);
+    const raw = backend.readRaw("/image.png");
+    expect(raw.data).toBeDefined();
+    expect(raw.data!.content).toEqual([content]);
+    expect("mimeType" in raw.data!).toBe(false);
+  });
+
+  it("should overwrite existing binary files with decoded bytes", () => {
+    const oldBytes = new Uint8Array([1, 2, 3]);
+    const newBytes = new Uint8Array([4, 5, 6]);
+    const { state, runtime } = makeConfig({
+      "/image.png": {
+        content: oldBytes,
+        mimeType: "image/png",
+        created_at: "2024-01-01T00:00:00.000Z",
+        modified_at: "2024-01-01T00:00:00.000Z",
+      },
+    });
+    const backend = new StateBackend(runtime);
+
+    const result = backend.write(
+      "/image.png",
+      Buffer.from(newBytes).toString("base64"),
+    );
+
+    expect(result.error).toBeUndefined();
+    Object.assign(state.files, result.filesUpdate);
+    const raw = backend.readRaw("/image.png");
+    expect(raw.data).toBeDefined();
+    expect(raw.data!.content).toEqual(newBytes);
+    expect(raw.data!.created_at).toBe("2024-01-01T00:00:00.000Z");
   });
 
   it("should list nested directories correctly", () => {

@@ -60,13 +60,13 @@ export interface GeneralPurposeSubagentConfig {
  */
 export interface HarnessProfileOptions {
   /**
-   * Replaces the default `BASE_AGENT_PROMPT` when set.
+   * Replaces the default empty base prompt when set.
    *
    * Use this when a model requires a fundamentally different base
    * prompt rather than an additive suffix. Most profiles should prefer
    * `systemPromptSuffix` instead.
    *
-   * @default undefined (keeps the default base prompt)
+   * @default undefined (keeps the default empty base prompt)
    */
   baseSystemPrompt?: string;
 
@@ -151,7 +151,7 @@ export interface HarnessProfileOptions {
  */
 export interface HarnessProfile {
   /**
-   * Replaces the default `BASE_AGENT_PROMPT` when set.
+   * Replaces the default empty base prompt when set.
    *
    * Use this when a model requires a fundamentally different base
    * prompt rather than an additive suffix. Most profiles should prefer

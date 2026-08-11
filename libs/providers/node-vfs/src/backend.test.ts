@@ -143,6 +143,48 @@ describe("VfsBackend", () => {
     });
   });
 
+  describe("delete", () => {
+    beforeEach(async () => {
+      sandbox = await VfsBackend.create({
+        initialFiles: {
+          "/keep.txt": "keep",
+          "/drop.txt": "drop",
+          "/dir/nested.txt": "nested",
+        },
+      });
+    });
+
+    it("should delete an existing file", async () => {
+      const result = await sandbox.delete("/drop.txt");
+
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe("/drop.txt");
+      const downloaded = await sandbox.downloadFiles(["/drop.txt"]);
+      expect(downloaded[0].error).toBe("file_not_found");
+    });
+
+    it("should return an error for missing files", async () => {
+      const result = await sandbox.delete("/missing.txt");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("not found");
+    });
+
+    it("should reject directories", async () => {
+      const result = await sandbox.delete("/dir");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("directory");
+    });
+
+    it("should only delete the target file", async () => {
+      await sandbox.delete("/drop.txt");
+
+      const downloaded = await sandbox.downloadFiles(["/keep.txt"]);
+      expect(downloaded[0].error).toBeNull();
+    });
+  });
+
   describe("downloadFiles", () => {
     beforeEach(async () => {
       sandbox = await VfsBackend.create({
@@ -201,6 +243,42 @@ describe("VfsBackend", () => {
       expect(results[0].error).toBeNull();
       expect(results[1].error).toBe("file_not_found");
     });
+  });
+
+  describe("write", () => {
+    beforeEach(async () => {
+      sandbox = await VfsBackend.create({
+        initialFiles: {
+          "/existing.txt": "old content",
+        },
+      });
+    });
+
+    it("should overwrite existing text files", async () => {
+      const result = await sandbox.write("/existing.txt", "new content");
+      expect(result.error).toBeUndefined();
+
+      const downloaded = await sandbox.downloadFiles(["/existing.txt"]);
+      expect(downloaded[0].error).toBeNull();
+      expect(new TextDecoder().decode(downloaded[0].content!)).toBe(
+        "new content",
+      );
+    });
+  });
+
+  it("should reject writes through symlinks", async () => {
+    sandbox = await VfsBackend.create();
+    sandbox.instance.writeFileSync("/workspace/target.txt", "original");
+    sandbox.instance.symlinkSync(
+      "/workspace/target.txt",
+      "/workspace/link.txt",
+    );
+
+    const result = await sandbox.write("/link.txt", "replacement");
+
+    expect(result.error).toContain("is a symlink");
+    const target = await sandbox.downloadFiles(["/target.txt"]);
+    expect(new TextDecoder().decode(target[0].content!)).toBe("original");
   });
 
   describe("readRaw", () => {

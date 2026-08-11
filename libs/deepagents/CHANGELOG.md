@@ -1,5 +1,79 @@
 # deepagents
 
+## 1.12.2
+
+### Patch Changes
+
+- [#723](https://github.com/langchain-ai/deepagentsjs/pull/723) [`590c2a5`](https://github.com/langchain-ai/deepagentsjs/commit/590c2a5042473f096d5fac5ddbb4be96e2ace0f2) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - fix(deepagents): prevent stack overflow in CompositeBackend grep/glob on huge result sets, and add a grep match-count cap
+
+  `CompositeBackend` accumulated merged `ls`/`grep`/`glob` results with `push(...entries)`, which passes every entry as a separate function argument and overflows the call stack (RangeError: Maximum call stack size exceeded) when a broad search over a large tree returns hundreds of thousands of entries. Results are now accumulated with a plain loop, so no result-set size can overflow the stack.
+
+  `grep` also gains an optional `maxCount` (backend) / `max_count` (tool) cap, mirroring the Python SDK. When the cap is hit, results are flagged `truncated: true` on `GrepResult`/`GlobResult` and the grep tool appends a note telling the model to narrow the search. The cap defaults to 1000 via the `grepMaxCount` middleware option (set to `null` to disable). `CompositeBackend` splits the budget across routed backends and OR-propagates the `truncated` flag on merged results.
+
+## 1.12.1
+
+### Patch Changes
+
+- [#713](https://github.com/langchain-ai/deepagentsjs/pull/713) [`ffec5de`](https://github.com/langchain-ai/deepagentsjs/commit/ffec5de0e66ed5ab64bc4c6bee2ff90effb4bfa1) Thanks [@gethin-langchain](https://github.com/gethin-langchain)! - fix(deepagents): grep/glob match when `path` points directly at a file
+
+## 1.12.0
+
+### Minor Changes
+
+- [#703](https://github.com/langchain-ai/deepagentsjs/pull/703) [`d25097f`](https://github.com/langchain-ai/deepagentsjs/commit/d25097f78d0e66741da34e1d74551f3c19991126) Thanks [@hntrl](https://github.com/hntrl)! - feat(deepagents): adopt more minimal prompting
+
+  We've observed that current models don't need as verbose of prompting guidance, so we're reducing the amount of perscriptive guidance that deepagents has. This is reflected in the generic system prompt (which is now blank), and in the tool descriptions (which have been simplified).
+
+- [#708](https://github.com/langchain-ai/deepagentsjs/pull/708) [`1225a7f`](https://github.com/langchain-ai/deepagentsjs/commit/1225a7ff8673686c2a3c0411636a9511b7d8d0d0) Thanks [@hntrl](https://github.com/hntrl)! - feat(deepagents): make todo middleware opt-in
+
+- [#674](https://github.com/langchain-ai/deepagentsjs/pull/674) [`dd142fe`](https://github.com/langchain-ai/deepagentsjs/commit/dd142fe4fc54c986d5bcf51211d9a839a427e931) Thanks [@hntrl](https://github.com/hntrl)! - feat(filesystem): allow `write_file` to create missing files or completely replace existing files
+
+## 1.12.0-rc.1
+
+### Minor Changes
+
+- [#708](https://github.com/langchain-ai/deepagentsjs/pull/708) [`1225a7f`](https://github.com/langchain-ai/deepagentsjs/commit/1225a7ff8673686c2a3c0411636a9511b7d8d0d0) Thanks [@hntrl](https://github.com/hntrl)! - feat(deepagents): make todo middleware opt-in
+
+## 1.12.0-rc.0
+
+### Minor Changes
+
+- [#703](https://github.com/langchain-ai/deepagentsjs/pull/703) [`d25097f`](https://github.com/langchain-ai/deepagentsjs/commit/d25097f78d0e66741da34e1d74551f3c19991126) Thanks [@hntrl](https://github.com/hntrl)! - feat(deepagents): adopt more minimal prompting
+
+  We've observed that current models don't need as verbose of prompting guidance, so we're reducing the amount of perscriptive guidance that deepagents has. This is reflected in the generic system prompt (which is now blank), and in the tool descriptions (which have been simplified).
+
+- [#674](https://github.com/langchain-ai/deepagentsjs/pull/674) [`dd142fe`](https://github.com/langchain-ai/deepagentsjs/commit/dd142fe4fc54c986d5bcf51211d9a839a427e931) Thanks [@hntrl](https://github.com/hntrl)! - feat(filesystem): allow `write_file` to create missing files or completely replace existing files
+
+## 1.11.1
+
+### Patch Changes
+
+- [#693](https://github.com/langchain-ai/deepagentsjs/pull/693) [`2ebb178`](https://github.com/langchain-ai/deepagentsjs/commit/2ebb1785e4625ecf82635582e17fe41fbfbac603) Thanks [@colifran](https://github.com/colifran)! - fix(deepagents): return recoverable errors for invalid/denied filesystem tool paths instead of throwing
+
+## 1.11.0
+
+### Minor Changes
+
+- [#671](https://github.com/langchain-ai/deepagentsjs/pull/671) [`6ae9d1e`](https://github.com/langchain-ai/deepagentsjs/commit/6ae9d1eab92131ea9cfd7bef024cf1ab343641ea) Thanks [@hntrl](https://github.com/hntrl)! - feat(filesystem): add allowlist for filesystem middleware tools
+
+- [#669](https://github.com/langchain-ai/deepagentsjs/pull/669) [`4643148`](https://github.com/langchain-ai/deepagentsjs/commit/4643148e8b64c796d3144210bac3ad1c6f5b2091) Thanks [@hntrl](https://github.com/hntrl)! - feat(deepagents): add structured system prompt configuration
+
+- [#673](https://github.com/langchain-ai/deepagentsjs/pull/673) [`eb18c70`](https://github.com/langchain-ai/deepagentsjs/commit/eb18c70d8d0871bc72aeb8be6581a98506829c6f) Thanks [@hntrl](https://github.com/hntrl)! - feat(backends): add delete protocol support
+
+  Adds a `DeleteResult` type and optional backend `delete` method, preserves delete through backend protocol adaptation, and implements file deletion across the built-in state, store, filesystem, composite, context hub, sandbox, and node-vfs backends.
+
+### Patch Changes
+
+- [#691](https://github.com/langchain-ai/deepagentsjs/pull/691) [`39a7049`](https://github.com/langchain-ai/deepagentsjs/commit/39a7049e4dbf99a31223c4e31cf79a2ed5115634) Thanks [@colifran](https://github.com/colifran)! - fix(deepagents): backend adapter drops route prefixes
+
+- [#672](https://github.com/langchain-ai/deepagentsjs/pull/672) [`cc26c41`](https://github.com/langchain-ai/deepagentsjs/commit/cc26c41df2851acacc86a743878b5c847a8f5d59) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): allow custom middleware to replace defaults by name
+
+## 1.10.8
+
+### Patch Changes
+
+- [#668](https://github.com/langchain-ai/deepagentsjs/pull/668) [`7c8a770`](https://github.com/langchain-ai/deepagentsjs/commit/7c8a770fac90fd50dfe08af67a0ce073a33e4ef7) Thanks [@colifran](https://github.com/colifran)! - fix(deepagents): fast-glob follows directory symlink cycles leading to ELOOP crashes
+
 ## 1.10.7
 
 ### Patch Changes

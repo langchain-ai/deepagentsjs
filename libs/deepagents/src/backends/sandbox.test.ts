@@ -313,13 +313,13 @@ describe("BaseSandbox", () => {
       expect(sandbox.executedCommands.length).toBe(0);
     });
 
-    it("should return error if file already exists", async () => {
+    it("should overwrite existing files", async () => {
       const sandbox = new MockSandbox();
       sandbox.addFile("/existing.txt", "old content");
 
-      const result = await sandbox.write("/existing.txt", "content");
-      expect(result.error).toBeDefined();
-      expect(result.error).toContain("already exists");
+      const result = await sandbox.write("/existing.txt", "new content");
+      expect(result.error).toBeUndefined();
+      expect(sandbox.getFile("/existing.txt")).toBe("new content");
     });
 
     describe("binary files", () => {
@@ -731,6 +731,51 @@ describe("BaseSandbox", () => {
       const result = await sandbox.glob("*.nonexistent", "/");
       expect(result.error).toBeUndefined();
       expect(result.files).toEqual([]);
+    });
+  });
+
+  describe("delete", () => {
+    it("should delete with rm -f and report success on exit 0", async () => {
+      const sandbox = new MockSandbox();
+
+      const result = await sandbox.delete("/file.txt");
+
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe("/file.txt");
+      expect(sandbox.executedCommands[0]).toContain("rm -f");
+      expect(sandbox.executedCommands[0]).toContain("'/file.txt'");
+    });
+
+    it("should treat missing files as success when rm -f exits 0", async () => {
+      const sandbox = new MockSandbox();
+
+      const result = await sandbox.delete("/missing.txt");
+
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe("/missing.txt");
+    });
+
+    it("should report stderr on non-zero rm exit", async () => {
+      const sandbox = new MockSandbox();
+      sandbox.execute = vi.fn().mockResolvedValue({
+        output: "rm: cannot remove '/some/dir': Is a directory",
+        exitCode: 1,
+        truncated: false,
+      });
+
+      const result = await sandbox.delete("/some/dir");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("Error deleting file");
+      expect(result.error).toContain("Is a directory");
+    });
+
+    it("should shell-quote paths", async () => {
+      const sandbox = new MockSandbox();
+
+      await sandbox.delete("/file's.txt");
+
+      expect(sandbox.executedCommands[0]).toContain("'/file'\\''s.txt'");
     });
   });
 

@@ -7,6 +7,7 @@
 
 import type { BackendProtocolV1 } from "../v1/protocol.js";
 import type {
+  DeleteResult,
   ExecuteResponse,
   GlobResult,
   GrepResult,
@@ -14,6 +15,7 @@ import type {
   MaybePromise,
   ReadRawResult,
   ReadResult,
+  WriteResult,
 } from "../protocol.js";
 
 /**
@@ -70,6 +72,15 @@ export interface BackendProtocolV2 extends Omit<
   readRaw(filePath: string): MaybePromise<ReadRawResult>;
 
   /**
+   * Write content to a file, creating it or overwriting it if it already exists.
+   *
+   * @param filePath - Absolute file path
+   * @param content - File content as string
+   * @returns WriteResult with error populated on failure
+   */
+  write(filePath: string, content: string): MaybePromise<WriteResult>;
+
+  /**
    * Search file contents for a literal text pattern.
    *
    * Binary files (determined by MIME type) are skipped.
@@ -77,12 +88,15 @@ export interface BackendProtocolV2 extends Omit<
    * @param pattern - Literal text pattern to search for
    * @param path - Base path to search from (default: null)
    * @param glob - Optional glob pattern to filter files (e.g., "*.py")
+   * @param maxCount - Optional cap on the total number of matches returned.
+   *                   When the cap is hit, results are flagged `truncated: true`.
    * @returns GrepResult with matches on success or error on failure
    */
   grep(
     pattern: string,
     path?: string | null,
     glob?: string | null,
+    maxCount?: number | null,
   ): MaybePromise<GrepResult>;
 
   /**
@@ -93,6 +107,15 @@ export interface BackendProtocolV2 extends Omit<
    * @returns GlobResult with list of FileInfo objects matching the pattern on success or error on failure
    */
   glob(pattern: string, path?: string): MaybePromise<GlobResult>;
+
+  /**
+   * Delete a single file.
+   * Optional - backends that don't support file deletion can omit this.
+   *
+   * @param filePath - Absolute path to the file to delete
+   * @returns DeleteResult with path on success or error on failure
+   */
+  delete?(filePath: string): MaybePromise<DeleteResult>;
 }
 
 /**

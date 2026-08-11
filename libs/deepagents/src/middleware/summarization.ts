@@ -153,8 +153,8 @@ export interface SummarizationMiddlewareOptions {
   summaryPrompt?: string;
 
   /**
-   * Max tokens to include when generating summary.
-   * Defaults to 4000.
+   * Max tokens to include when generating a summary.
+   * If omitted, the complete selected conversation is provided to the summarizer.
    */
   trimTokensToSummarize?: number;
 
@@ -173,7 +173,6 @@ export interface SummarizationMiddlewareOptions {
 
 // Default values
 const DEFAULT_MESSAGES_TO_KEEP = 20;
-const DEFAULT_TRIM_TOKEN_LIMIT = 4000;
 
 // Fallback defaults when model has no profile (matches Python's fallback)
 const FALLBACK_TRIGGER: ContextSize = { type: "tokens", value: 170_000 };
@@ -301,7 +300,7 @@ export function createSummarizationMiddleware(
     model,
     backend,
     summaryPrompt = DEFAULT_SUMMARY_PROMPT,
-    trimTokensToSummarize = DEFAULT_TRIM_TOKEN_LIMIT,
+    trimTokensToSummarize,
     historyPathPrefix = "/conversation_history",
   } = options;
 
@@ -923,7 +922,7 @@ export function createSummarizationMiddleware(
     // Trim messages if too long
     let messagesToSummarize = messages;
     const tokens = countTokensApproximately(messages);
-    if (tokens > trimTokensToSummarize) {
+    if (trimTokensToSummarize !== undefined && tokens > trimTokensToSummarize) {
       // Keep only recent messages that fit
       let kept = 0;
       const trimmedMessages: BaseMessage[] = [];
@@ -945,9 +944,7 @@ export function createSummarizationMiddleware(
       new HumanMessage({ content: prompt }),
     ]);
 
-    return typeof response.content === "string"
-      ? response.content
-      : JSON.stringify(response.content);
+    return response.text;
   }
 
   /**

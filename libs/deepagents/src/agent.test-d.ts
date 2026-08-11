@@ -17,10 +17,12 @@ import {
   SystemMessage,
   toolStrategy,
   providerStrategy,
+  todoListMiddleware,
 } from "langchain";
 import { StateSchema } from "@langchain/langgraph";
 import { z } from "zod/v4";
 import { createDeepAgent } from "./agent.js";
+import type { SystemPromptConfig } from "./index.js";
 import type {
   MergedDeepAgentState,
   InferSubagentByName,
@@ -91,6 +93,8 @@ describe("createDeepAgent types", () => {
         ],
       }),
     });
+    const config: SystemPromptConfig = { base: null };
+    createDeepAgent({ systemPrompt: config });
   });
 
   describe("MergedDeepAgentState helper type", () => {
@@ -116,7 +120,7 @@ describe("createDeepAgent types", () => {
   describe("createDeepAgent return type using actual invoke", () => {
     it("should infer state from custom middleware and subagents middleware", async () => {
       const agent = createDeepAgent({
-        middleware: [ResearchMiddleware],
+        middleware: [ResearchMiddleware, todoListMiddleware()],
         subagents: [
           {
             name: "Subagent1",

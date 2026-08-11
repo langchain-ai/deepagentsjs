@@ -1,6 +1,7 @@
 export {
   createFilesystemMiddleware,
   type FilesystemMiddlewareOptions,
+  type FsToolName,
   FILESYSTEM_TOOL_NAMES,
   // Eviction constants
   TOOLS_EXCLUDED_FROM_EVICTION,
@@ -16,7 +17,6 @@ export {
   GENERAL_PURPOSE_SUBAGENT,
   DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
   DEFAULT_SUBAGENT_PROMPT,
-  TASK_SYSTEM_PROMPT,
 } from "./subagents.js";
 export {
   createPatchToolCallsMiddleware,
@@ -68,6 +68,5 @@ export {
   type AsyncSubAgent,
   type AsyncTask,
   type AsyncTaskStatus,
-  ASYNC_TASK_SYSTEM_PROMPT,
   ASYNC_TASK_TOOL_NAMES,
 } from "./async_subagents.js";

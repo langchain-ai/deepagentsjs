@@ -6,6 +6,12 @@
  */
 
 export { createDeepAgent } from "./agent.js";
+export {
+  BASE_AGENT_PROMPT,
+  TASK_SYSTEM_PROMPT,
+  ASYNC_TASK_SYSTEM_PROMPT,
+  EXECUTION_SYSTEM_PROMPT,
+} from "./compat.js";
 export { ConfigurationError, type ConfigurationErrorCode } from "./errors.js";
 
 // Export harness profiles
@@ -26,6 +32,7 @@ export {
 } from "./profiles/index.js";
 
 export type { DeepAgentRunStream, SubagentRunStream } from "./stream.js";
+export type { SystemPromptConfig } from "./compat.js";
 export type {
   AnySubAgent,
   CreateDeepAgentParams,
@@ -85,12 +92,12 @@ export {
   GENERAL_PURPOSE_SUBAGENT,
   DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
   DEFAULT_SUBAGENT_PROMPT,
-  TASK_SYSTEM_PROMPT,
   // Completion callback middleware for async subagents
   createCompletionCallbackMiddleware,
   type CompletionCallbackOptions,
   // Other middleware types
   type FilesystemMiddlewareOptions,
+  type FsToolName,
   type SubAgentMiddlewareOptions,
   type MemoryMiddlewareOptions,
   type SubAgent,
@@ -138,6 +145,7 @@ export {
   type BackendProtocolV2,
   type BackendFactory,
   type BackendRuntime,
+  applyGrepMaxCount,
   resolveBackend,
   type FileInfo,
   type GrepMatch,
@@ -148,6 +156,7 @@ export {
   type ReadRawResult,
   type WriteResult,
   type EditResult,
+  type DeleteResult,
   // Sandbox execution types
   type ExecuteResponse,
   type FileData,

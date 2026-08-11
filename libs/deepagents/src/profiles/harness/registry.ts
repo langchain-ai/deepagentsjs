@@ -289,7 +289,7 @@ export function hasUserRegisteredProfiles(): boolean {
  * auto-added general-purpose subagent.
  *
  * @param profile - The harness profile to apply.
- * @param basePrompt - The default base prompt (e.g., `BASE_AGENT_PROMPT`).
+ * @param basePrompt - The active base prompt (empty by default).
  * @returns The assembled prompt string.
  */
 export function applyProfilePrompt(
@@ -301,7 +301,9 @@ export function applyProfilePrompt(
       ? profile.baseSystemPrompt
       : basePrompt;
   if (profile.systemPromptSuffix !== undefined) {
-    return `${prompt}\n\n${profile.systemPromptSuffix}`;
+    return prompt
+      ? `${prompt}\n\n${profile.systemPromptSuffix}`
+      : profile.systemPromptSuffix;
   }
   return prompt;
 }

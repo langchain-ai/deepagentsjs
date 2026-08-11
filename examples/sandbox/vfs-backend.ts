@@ -43,7 +43,7 @@ You can inspect and modify files safely inside this virtual workspace.
 
 - **ls**: List directory contents
 - **read_file**: Read file contents
-- **write_file**: Create new files
+- **write_file**: Create or fully replace files
 - **edit_file**: Modify existing files
 - **grep**: Search for patterns in files
 - **glob**: Find files matching patterns
@@ -53,7 +53,7 @@ You can inspect and modify files safely inside this virtual workspace.
 1. Start by exploring the workspace: \`ls\`
 2. Use the right tool for the job:
    - Use \`read_file\` for viewing file contents
-   - Use \`write_file\` for creating new files
+   - Use \`write_file\` for creating new files or replacing an entire file
 3. Prefer focused file edits and verification steps
 
 You're working in an isolated in-memory file system, so feel free to experiment.

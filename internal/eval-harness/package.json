@@ -1,6 +1,6 @@
 {
   "name": "@deepagents/evals",
-  "version": "0.0.16",
+  "version": "0.0.22",
   "private": true,
   "description": "Eval harness — runner interface, profile registry, and trajectory matchers",
   "main": "./dist/index.cjs",
@@ -39,7 +39,7 @@
     "@langchain/core": "^1.1.42",
     "@langchain/openai": "^1.4.1",
     "deepagents": "workspace:*",
-    "langsmith": "^0.7.4",
+    "langsmith": "^0.8.7",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
@@ -47,7 +47,7 @@
     "@types/node": "^26.1.0",
     "@types/uuid": "^11.0.0",
     "tsdown": "^0.22.1",
-    "typescript": "^6.0.2",
+    "typescript": "^7.0.2",
     "vitest": "^4.0.18"
   }
 }

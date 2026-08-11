@@ -3,6 +3,7 @@
  */
 
 import type {
+  DeleteResult,
   EditResult,
   FileData,
   FileDownloadResponse,
@@ -18,8 +19,10 @@ import type {
   BackendProtocolV2,
   BackendOptions,
 } from "./protocol.js";
+import { applyGrepMaxCount } from "./protocol.js";
 import {
   createFileData,
+  createWriteFileData,
   fileDataToString,
   getMimeType,
   globSearchFiles,
@@ -118,9 +121,10 @@ export class StateBackend implements BackendProtocolV2 {
    * In legacy mode, this is a no-op — the caller uses `filesUpdate`
    * from the return value instead.
    *
-   * @param update - Map of file paths to their updated {@link FileData}
+   * @param update - Map of file paths to their updated {@link FileData},
+   *   or null deletion markers.
    */
-  private sendFilesUpdate(update: Record<string, FileData>): void {
+  private sendFilesUpdate(update: Record<string, FileData | null>): void {
     if (this.isLegacy) {
       return;
     }
@@ -247,24 +251,18 @@ export class StateBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Create a new file with content.
+   * Write content to a file, creating it or overwriting it if it already exists.
    * Returns WriteResult with filesUpdate to update LangGraph state.
    */
   write(filePath: string, content: string): WriteResult {
     const files = this.files;
+    const existing = files[filePath];
 
-    if (filePath in files) {
-      return {
-        error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
-      };
-    }
-
-    const mimeType = getMimeType(filePath);
-    const newFileData = createFileData(
+    const newFileData = createWriteFileData(
+      filePath,
       content,
-      undefined,
       this.fileFormat,
-      mimeType,
+      existing,
     );
 
     const update = { [filePath]: newFileData };
@@ -326,6 +324,27 @@ export class StateBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Delete a file from state by sending a null deletion marker through Pregel.
+   */
+  delete(filePath: string): DeleteResult {
+    const files = this.files;
+
+    if (!(filePath in files)) {
+      return { error: `Error: File '${filePath}' not found` };
+    }
+
+    if (this.isLegacy) {
+      return {
+        error:
+          "StateBackend.delete requires a zero-argument StateBackend in a LangGraph execution context.",
+      };
+    }
+
+    this.sendFilesUpdate({ [filePath]: null });
+    return { path: filePath };
+  }
+
+  /**
    * Search file contents for a literal text pattern.
    * Binary files are skipped.
    */
@@ -333,10 +352,11 @@ export class StateBackend implements BackendProtocolV2 {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
+    maxCount: number | null = null,
   ): GrepResult {
     const files = this.files;
     const result = grepMatchesFromFiles(files, pattern, path, glob);
-    return { matches: result };
+    return applyGrepMaxCount({ result: { matches: result }, maxCount });
   }
 
   /**

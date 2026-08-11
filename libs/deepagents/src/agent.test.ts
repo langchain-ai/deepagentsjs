@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { createDeepAgent } from "./agent.js";
 import { isAnthropicModel } from "./utils.js";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
+import { todoListMiddleware } from "langchain";
 import {
   HumanMessage,
   SystemMessage,
@@ -11,6 +12,7 @@ import { MemorySaver, StateSchema } from "@langchain/langgraph";
 import { createFileData } from "./backends/utils.js";
 import { ConfigurationError } from "./errors.js";
 import { assertAllDeepAgentQualities } from "./testing/utils.js";
+import { registerHarnessProfile } from "./profiles/harness/index.js";
 import { z } from "zod/v4";
 
 describe("isAnthropicModel", () => {
@@ -59,6 +61,111 @@ describe("isAnthropicModel", () => {
   });
 });
 
+describe("Legacy system prompt assembly", () => {
+  function getLastSystemMessage(
+    invokeSpy: ReturnType<typeof vi.spyOn>,
+  ): SystemMessage {
+    const lastCall = invokeSpy.mock.calls[invokeSpy.mock.calls.length - 1];
+    const messages = lastCall?.[0] as BaseMessage[] | undefined;
+    const systemMessage = messages?.find(SystemMessage.isInstance);
+    if (!SystemMessage.isInstance(systemMessage)) {
+      throw new Error(
+        "Expected the model invocation to include a system message",
+      );
+    }
+    return systemMessage;
+  }
+
+  it("supports deprecated structured system prompt configuration", async () => {
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    try {
+      const agent = createDeepAgent({
+        model: new FakeListChatModel({ responses: ["Done"] }),
+        systemPrompt: {
+          prefix: "__prefix__",
+          base: "__base__",
+          suffix: "__suffix__",
+        },
+      });
+      await agent.invoke({ messages: [new HumanMessage("Hello")] });
+
+      expect(
+        getLastSystemMessage(invokeSpy).text.replaceAll("\u200B", "").trim(),
+      ).toBe("__prefix__\n\n__base__\n\n__suffix__");
+    } finally {
+      invokeSpy.mockRestore();
+    }
+  });
+
+  it("does not append an authored base prompt", async () => {
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+
+    try {
+      const agent = createDeepAgent({
+        model: new FakeListChatModel({ responses: ["Done"] }),
+        systemPrompt: "__custom_prompt__",
+      });
+      await agent.invoke({ messages: [new HumanMessage("Hello")] });
+
+      const prompt = getLastSystemMessage(invokeSpy).text;
+      expect(prompt.replaceAll("\u200B", "").trim()).toBe("__custom_prompt__");
+    } finally {
+      invokeSpy.mockRestore();
+    }
+  });
+
+  it("does not inject a system prompt by default", async () => {
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    try {
+      const agent = createDeepAgent({
+        model: new FakeListChatModel({ responses: ["Done"] }),
+      });
+      await agent.invoke({ messages: [new HumanMessage("Hello")] });
+
+      const lastCall = invokeSpy.mock.calls[invokeSpy.mock.calls.length - 1];
+      const messages = lastCall?.[0] as BaseMessage[] | undefined;
+      expect(messages?.some(SystemMessage.isInstance)).toBe(false);
+    } finally {
+      invokeSpy.mockRestore();
+    }
+  });
+
+  it("preserves SystemMessage content blocks without appending an authored base", async () => {
+    const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+    const customPrompt = new SystemMessage({
+      content: [
+        {
+          type: "text",
+          text: "__cached_custom_prompt__",
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+    });
+
+    try {
+      const agent = createDeepAgent({
+        model: new FakeListChatModel({ responses: ["Done"] }),
+        systemPrompt: customPrompt,
+      });
+      await agent.invoke({ messages: [new HumanMessage("Hello")] });
+
+      const blocks = getLastSystemMessage(invokeSpy).contentBlocks;
+      const customIndex = blocks.findIndex(
+        (block) =>
+          block.type === "text" && block.text === "__cached_custom_prompt__",
+      );
+      expect(blocks[customIndex]?.cache_control).toEqual({
+        type: "ephemeral",
+      });
+      expect(getLastSystemMessage(invokeSpy).text).not.toContain(
+        "You are a Deep Agent",
+      );
+    } finally {
+      invokeSpy.mockRestore();
+    }
+  });
+});
+
 describe("System prompt cache control breakpoints", () => {
   function getSystemMessageFromSpy(
     invokeSpy: ReturnType<typeof vi.spyOn>,
@@ -69,7 +176,7 @@ describe("System prompt cache control breakpoints", () => {
     return messages.find(SystemMessage.isInstance);
   }
 
-  it("should have separate cache_control breakpoints for system prompt and memory", async () => {
+  it("should cache the system prompt and memory independently", async () => {
     const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
     const model = new FakeListChatModel({ responses: ["Done"] });
     // Mock getName so isAnthropicModel detects this as an Anthropic model
@@ -101,25 +208,60 @@ describe("System prompt cache control breakpoints", () => {
     const blocks = systemMessage!.contentBlocks;
     expect(Array.isArray(blocks)).toBe(true);
 
-    // Should have at least 3 blocks: system prompt + static middleware blocks + memory
-    expect(blocks.length).toBeGreaterThanOrEqual(3);
+    // Default agents no longer add the todo middleware's static prompt block.
+    expect(blocks).toHaveLength(2);
 
-    // System prompt block (first) should NOT have cache_control — the breakpoint
-    // is placed on the last static block by createCacheBreakpointMiddleware
+    // The system prompt is now the final static block, so the cache breakpoint
+    // is attached directly to it.
     const systemBlock = blocks[0];
-    expect(systemBlock.cache_control).toBeUndefined();
+    expect(systemBlock.cache_control).toEqual({ type: "ephemeral" });
     expect(systemBlock.text).toContain("You are a helpful assistant.");
 
-    // Second-to-last block is the last static block — has cache_control
-    const lastStaticBlock = blocks[blocks.length - 2];
-    expect(lastStaticBlock.cache_control).toEqual({ type: "ephemeral" });
-
-    // Memory block (last) should have its own cache_control (set by memory middleware)
+    // Memory block (last) has its own cache control (set by memory middleware)
     const memoryBlock = blocks[blocks.length - 1];
     expect(memoryBlock.cache_control).toEqual({ type: "ephemeral" });
     expect(memoryBlock.text).toContain("<agent_memory>");
     expect(memoryBlock.text).toContain("Remember this.");
     invokeSpy.mockRestore();
+  });
+});
+
+describe("profile tool exclusions", () => {
+  it("removes excluded filesystem tools before agent construction", () => {
+    registerHarnessProfile("fstoolstest", { excludedTools: ["execute"] });
+
+    const agent = createDeepAgent({ model: "fstoolstest:model" });
+    const tools = (agent as any).graph?.nodes?.tools?.bound?.tools ?? [];
+    const toolNames = tools.map((tool: { name: string }) => tool.name);
+
+    expect(toolNames).toContain("read_file");
+    expect(toolNames).not.toContain("execute");
+  });
+});
+
+describe("Todo list middleware", () => {
+  function getToolNames(agent: unknown): string[] {
+    const tools = (agent as any).graph?.nodes?.tools?.bound?.tools ?? [];
+    return tools.map((tool: { name: string }) => tool.name);
+  }
+
+  it("does not include todos by default", () => {
+    const agent = createDeepAgent({
+      model: new FakeListChatModel({ responses: ["Done"] }),
+    });
+
+    expect(getToolNames(agent)).not.toContain("write_todos");
+    expect(Object.keys(agent.graph?.channels ?? {})).not.toContain("todos");
+  });
+
+  it("adds todos when explicitly opted in", () => {
+    const agent = createDeepAgent({
+      model: new FakeListChatModel({ responses: ["Done"] }),
+      middleware: [todoListMiddleware()],
+    });
+
+    expect(getToolNames(agent)).toContain("write_todos");
+    expect(Object.keys(agent.graph?.channels ?? {})).toContain("todos");
   });
 });
 
@@ -156,13 +298,19 @@ describe("Built-in tool name collision detection", () => {
     ).toThrow(ConfigurationError);
   });
 
-  it("should throw when colliding with subagent or todo tool names", () => {
+  it("should throw when colliding with the subagent tool name", () => {
     expect(() =>
       createDeepAgent({
         model,
-        tools: [makeTool("task"), makeTool("write_todos")],
+        tools: [makeTool("task")],
       }),
     ).toThrow(ConfigurationError);
+  });
+
+  it("allows a custom write_todos tool without todo middleware", () => {
+    expect(() =>
+      createDeepAgent({ model, tools: [makeTool("write_todos")] }),
+    ).not.toThrow();
   });
 
   it("should not throw when tool names do not collide", () => {

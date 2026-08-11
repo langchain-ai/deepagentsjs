@@ -17,7 +17,7 @@
  * - Sandbox lifecycle (create, isRunning, close, two-step initialization)
  * - Command execution (echo, exit codes, multiline output, stderr, env vars)
  * - File operations (upload, download, read, write, edit, multiple files)
- * - write() (new file, parent dirs, existing file, special chars, unicode, long content)
+ * - write() (new file, parent dirs, existing file overwrite, special chars, unicode, long content)
  * - read() (basic, nonexistent, offset, limit, offset+limit, unicode, chunked)
  * - edit() (single/multi occurrence, replaceAll, not found, special chars, multiline, unicode)
  * - ls() (basic listing, empty dir, hidden files, large dir, absolute paths)

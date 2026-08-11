@@ -261,6 +261,58 @@ describe("ContextHubBackend", () => {
     expect(client.pullAgent).toHaveBeenCalledTimes(2);
   });
 
+  it("delete commits a null entry", async () => {
+    const { backend, client } = makeBackend({
+      "a.md": { type: "file", content: "bye" },
+    });
+
+    const result = await backend.delete("/a.md");
+
+    expect(result.error).toBeUndefined();
+    expect(result.path).toBe("/a.md");
+    expect(client.pushAgent).toHaveBeenCalledTimes(1);
+    const [, options] = client.pushAgent.mock.calls[0];
+    expect(options.files).toHaveProperty("a.md");
+    expect(options.files["a.md"]).toBeNull();
+    expect(options.parentCommit).toBe(COMMIT_HASH);
+  });
+
+  it("delete returns not found without committing when target file is missing", async () => {
+    const { backend, client } = makeBackend();
+
+    const result = await backend.delete("/ghost.md");
+
+    expect(result.path).toBeUndefined();
+    expect(result.error).toContain("not found");
+    expect(client.pushAgent).not.toHaveBeenCalled();
+  });
+
+  it("delete updates cache after commit", async () => {
+    const { backend } = makeBackend({
+      "a.md": { type: "file", content: "bye" },
+    });
+
+    expect((await backend.read("/a.md")).error).toBeUndefined();
+    await backend.delete("/a.md");
+
+    expect((await backend.read("/a.md")).error).toContain("not found");
+  });
+
+  it("delete failures invalidate cache and re-pull on next read", async () => {
+    const { backend, client } = makeBackend({
+      "a.md": { type: "file", content: "a" },
+    });
+    client.pushAgent.mockRejectedValue(
+      makeLangSmithError("500", { name: "LangSmithAPIError", status: 500 }),
+    );
+
+    const result = await backend.delete("/a.md");
+    expect(result.error).toContain("Hub unavailable");
+
+    await backend.read("/a.md");
+    expect(client.pullAgent).toHaveBeenCalledTimes(2);
+  });
+
   it("edit replaces a single occurrence", async () => {
     const { backend, client } = makeBackend({
       "a.md": { type: "file", content: "hello world" },

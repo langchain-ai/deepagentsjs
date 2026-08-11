@@ -17,6 +17,7 @@ import type { Stats } from "node:fs";
 
 import {
   type BackendProtocolV2,
+  type DeleteResult,
   type EditResult,
   type FileDownloadResponse,
   type FileOperationError,
@@ -28,6 +29,7 @@ import {
   type ReadResult,
   type BackendFactory,
   type WriteResult,
+  applyGrepMaxCount,
 } from "deepagents";
 
 import { VirtualFileSystem } from "node-vfs-polyfill";
@@ -780,7 +782,7 @@ export class VfsBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Create a new file with content.
+   * Write content to a file, creating it or overwriting it if it already exists.
    */
   async write(filePath: string, content: string): Promise<WriteResult> {
     this.#ensureInitialized();
@@ -791,9 +793,12 @@ export class VfsBackend implements BackendProtocolV2 {
     }
 
     try {
-      if (this.instance.existsSync(resolvedPath)) {
+      if (
+        this.instance.existsSync(resolvedPath) &&
+        this.instance.lstatSync(resolvedPath).isSymbolicLink()
+      ) {
         return {
-          error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
+          error: `Cannot write to ${filePath} because it is a symlink. Symlinks are not allowed.`,
         };
       }
 
@@ -882,6 +887,34 @@ export class VfsBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Delete a file.
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    this.#ensureInitialized();
+
+    const resolvedPath = this.#resolvePath(filePath);
+    if (!resolvedPath || !this.instance.existsSync(resolvedPath)) {
+      return { error: `Error: File '${filePath}' not found` };
+    }
+
+    try {
+      const stat = this.instance.statSync(resolvedPath);
+      if (!stat.isFile()) {
+        return { error: `Error: '${filePath}' is a directory, not a file` };
+      }
+
+      this.instance.unlinkSync(resolvedPath);
+      return { path: filePath };
+    } catch (error) {
+      return {
+        error: `Error deleting file '${filePath}': ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
+  }
+
+  /**
    * List files and directories in the specified directory.
    */
   async ls(dirPath: string): Promise<LsResult> {
@@ -936,6 +969,7 @@ export class VfsBackend implements BackendProtocolV2 {
     pattern: string,
     searchPath: string = "/",
     glob: string | null = null,
+    maxCount: number | null = null,
   ): Promise<GrepResult> {
     this.#ensureInitialized();
 
@@ -1005,7 +1039,7 @@ export class VfsBackend implements BackendProtocolV2 {
       scanFile(resolvedPath);
     }
 
-    return { matches };
+    return applyGrepMaxCount({ result: { matches }, maxCount });
   }
 
   /**

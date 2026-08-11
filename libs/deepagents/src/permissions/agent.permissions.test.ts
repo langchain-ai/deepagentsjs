@@ -32,6 +32,16 @@ function getTool(
   return t;
 }
 
+/** Normalize a tool result (string, or a ToolMessage's content) to text. */
+function resultText(result: unknown): string {
+  if (typeof result === "string") return result;
+  if (result && typeof result === "object" && "content" in result) {
+    const { content } = result as { content: unknown };
+    return typeof content === "string" ? content : JSON.stringify(content);
+  }
+  return JSON.stringify(result);
+}
+
 // ─── permissions flow to createFilesystemMiddleware ───────────────────────────
 
 describe("permissions wired to filesystem middleware", () => {
@@ -48,11 +58,12 @@ describe("permissions wired to filesystem middleware", () => {
       ],
     });
 
-    await expect(
-      getTool(middleware, "read_file").invoke({
-        file_path: "/secrets/key.txt",
-      }),
-    ).rejects.toThrow(/permission denied for read on \/secrets\/key\.txt/);
+    const result = await getTool(middleware, "read_file").invoke({
+      file_path: "/secrets/key.txt",
+    });
+    expect(resultText(result)).toMatch(
+      /permission denied for read on \/secrets\/key\.txt/,
+    );
   });
 
   it("empty permissions array allows all operations", async () => {
@@ -91,12 +102,11 @@ describe("permissions wired to filesystem middleware", () => {
       ],
     });
 
-    await expect(
-      getTool(middleware, "write_file").invoke({
-        file_path: "/readonly/config.json",
-        content: "data",
-      }),
-    ).rejects.toThrow(
+    const writeResult = await getTool(middleware, "write_file").invoke({
+      file_path: "/readonly/config.json",
+      content: "data",
+    });
+    expect(resultText(writeResult)).toMatch(
       /permission denied for write on \/readonly\/config\.json/,
     );
 

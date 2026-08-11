@@ -361,8 +361,67 @@ describe("createFilesystemMiddleware", () => {
     } as unknown as BackendProtocolV2;
   }
 
+  function middlewareToolNames(
+    middleware: ReturnType<typeof createFilesystemMiddleware>,
+  ): string[] {
+    return (middleware.tools ?? []).map((tool) => tool.name);
+  }
+
+  describe("tools allowlist", () => {
+    it("should keep all filesystem tools by default", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockSandboxBackend(),
+      });
+
+      expect(middlewareToolNames(middleware)).toEqual([
+        "ls",
+        "read_file",
+        "write_file",
+        "edit_file",
+        "glob",
+        "grep",
+        "execute",
+      ]);
+    });
+
+    it("should keep all filesystem tools when tools is all", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockSandboxBackend(),
+        tools: "all",
+      });
+
+      expect(middlewareToolNames(middleware)).toEqual([
+        "ls",
+        "read_file",
+        "write_file",
+        "edit_file",
+        "glob",
+        "grep",
+        "execute",
+      ]);
+    });
+
+    it("should only register allowlisted filesystem tools", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        tools: ["read_file", "ls"],
+      });
+
+      expect(middlewareToolNames(middleware)).toEqual(["ls", "read_file"]);
+    });
+
+    it("should reject an allowlist without read_file", () => {
+      expect(() =>
+        createFilesystemMiddleware({
+          backend: createMockBackend(),
+          tools: ["ls"],
+        }),
+      ).toThrow(/read_file must be included in tools/);
+    });
+  });
+
   describe("wrapModelCall", () => {
-    it("should add filesystem system prompt to model call", async () => {
+    it("should not add redundant filesystem guidance by default", async () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
       });
@@ -379,11 +438,10 @@ describe("createFilesystemMiddleware", () => {
 
       expect(mockHandler).toHaveBeenCalled();
       const modifiedRequest = mockHandler.mock.calls[0][0];
-      expect(modifiedRequest.systemMessage.text).toContain("Filesystem Tools");
-      expect(modifiedRequest.systemMessage.text).toContain("Base prompt");
+      expect(modifiedRequest.systemMessage.text).toBe("Base prompt");
     });
 
-    it("should include execute tool and execution prompt when backend supports execution", async () => {
+    it("should include execute tool without adding redundant guidance", async () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockSandboxBackend(),
       });
@@ -401,9 +459,7 @@ describe("createFilesystemMiddleware", () => {
       expect(mockHandler).toHaveBeenCalled();
       const modifiedRequest = mockHandler.mock.calls[0][0];
 
-      // Should include execution system prompt
-      expect(modifiedRequest.systemMessage.text).toContain("Execute Tool");
-      expect(modifiedRequest.systemMessage.text).toContain("Base prompt");
+      expect(modifiedRequest.systemMessage.text).toBe("Base prompt");
 
       // Should include execute tool in tools array
       const toolNames = modifiedRequest.tools.map((t: any) => t.name);
@@ -428,12 +484,62 @@ describe("createFilesystemMiddleware", () => {
       expect(mockHandler).toHaveBeenCalled();
       const modifiedRequest = mockHandler.mock.calls[0][0];
 
-      // Should NOT include execution system prompt
-      expect(modifiedRequest.systemMessage.text).not.toContain("Execute Tool");
+      expect(modifiedRequest.systemMessage.text).toBe("Base prompt");
 
       // Should NOT include execute tool in tools array
       const toolNames = modifiedRequest.tools.map((t: any) => t.name);
       expect(toolNames).not.toContain("execute");
+    });
+
+    it("should keep execute allowlisted but filter it when backend does not support execution", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        tools: ["read_file", "execute"],
+      });
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: middleware.tools || [],
+      };
+
+      await middleware.wrapModelCall!(request as any, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      const toolNames = modifiedRequest.tools.map(
+        (tool: { name: string }) => tool.name,
+      );
+      expect(toolNames).toEqual(["read_file"]);
+      expect(modifiedRequest.systemMessage.text).toBe("Base prompt");
+    });
+
+    it("should not filter user-provided non-filesystem tools", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+        tools: ["read_file", "ls"],
+      });
+      const customTool = { name: "search" };
+
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        state: {},
+        config: {},
+        tools: [...(middleware.tools || []), customTool],
+      };
+
+      await middleware.wrapModelCall!(request as any, mockHandler);
+
+      const modifiedRequest = mockHandler.mock.calls[0][0];
+      const toolNames = modifiedRequest.tools.map(
+        (tool: { name: string }) => tool.name,
+      );
+      expect(toolNames).toContain("search");
+      expect(toolNames).toContain("read_file");
+      expect(toolNames).toContain("ls");
+      expect(toolNames).not.toContain("write_file");
     });
 
     it("should use custom system prompt when provided", async () => {
@@ -1023,11 +1129,42 @@ describe("createFilesystemMiddleware", () => {
         (t: any) => t.name === "write_file",
       ) as any;
       expect(writeFileTool).toBeDefined();
+      expect(writeFileTool!.description).toContain(
+        "Creates the file if it does not exist; replaces it entirely if it does.",
+      );
 
       // Parse with only file_path, no content — simulates the model omitting it
       const parsed = writeFileTool.schema.parse({ file_path: "/app/test.c" });
       expect(parsed.file_path).toBe("/app/test.c");
       expect(parsed.content).toBe("");
+    });
+
+    it("write_file tool should return success for backend overwrites", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.write = vi.fn().mockResolvedValue({
+        path: "/doc.txt",
+        filesUpdate: null,
+      });
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const writeFileTool = middleware.tools!.find(
+        (tool) => tool.name === "write_file",
+      );
+      expect(writeFileTool).toBeDefined();
+      expect(writeFileTool!.description).toContain(
+        "Creates the file if it does not exist; replaces it entirely if it does.",
+      );
+      const result = await writeFileTool!.invoke({
+        file_path: "/doc.txt",
+        content: "new content",
+      });
+
+      expect(mockBackend.write).toHaveBeenCalledWith("/doc.txt", "new content");
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.content).toContain("Successfully wrote");
+        expect(result.content).not.toContain("already exists");
+      }
     });
 
     it("all tool schema properties should be included in the required array", () => {
@@ -1041,6 +1178,9 @@ describe("createFilesystemMiddleware", () => {
         const required = jsonSchema.required ?? [];
 
         for (const prop of properties) {
+          if ((t as any).name === "glob" && prop === "path") {
+            continue;
+          }
           expect(
             required,
             `tool "${(t as any).name}" is missing "${prop}" in required`,
@@ -1091,30 +1231,15 @@ describe("createFilesystemMiddleware", () => {
       expect(parsedEdit.new_string).toBe("b");
     });
 
-    it("read_file examples only reference argument names in its schema", () => {
+    it("read_file guidance does not advertise unsupported call syntax", () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
       });
-
       const readFileTool = middleware.tools!.find(
         (t: any) => t.name === "read_file",
       ) as any;
-      expect(readFileTool).toBeDefined();
 
-      // Argument names the tool actually accepts.
-      const schemaKeys = Object.keys(
-        readFileTool.schema.toJSONSchema().properties ?? {},
-      );
-      // Argument names the description teaches, e.g. read_file(file_path, ...).
-      const exampleArgs = [
-        ...String(readFileTool.description).matchAll(/read_file\(([a-z_]+)/g),
-      ].map((m) => m[1]);
-
-      // Guard against silently passing if the examples are ever removed.
-      expect(exampleArgs.length).toBeGreaterThan(0);
-      for (const arg of exampleArgs) {
-        expect(schemaKeys).toContain(arg);
-      }
+      expect(readFileTool.description).not.toContain("read_file(");
     });
   });
 
@@ -1323,6 +1448,148 @@ describe("createFilesystemMiddleware", () => {
 
       expect(typeof result).toBe("string");
       expect(result).toContain("No matches found");
+    });
+
+    it("grep tool passes the configured grepMaxCount to the backend", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.grep = vi.fn().mockResolvedValue({ matches: [] });
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+        grepMaxCount: 25,
+      });
+
+      const grepTool = middleware.tools!.find(
+        (t: any) => t.name === "grep",
+      ) as any;
+      await grepTool.invoke({ pattern: "needle", path: "/" });
+
+      expect(mockBackend.grep).toHaveBeenCalledWith("needle", "/", null, 25);
+    });
+
+    it("grep tool defaults grepMaxCount to 1000", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.grep = vi.fn().mockResolvedValue({ matches: [] });
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+
+      const grepTool = middleware.tools!.find(
+        (t: any) => t.name === "grep",
+      ) as any;
+      await grepTool.invoke({ pattern: "needle", path: "/" });
+
+      expect(mockBackend.grep).toHaveBeenCalledWith("needle", "/", null, 1000);
+    });
+
+    it("grep tool max_count arg overrides the configured default", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.grep = vi.fn().mockResolvedValue({ matches: [] });
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+        grepMaxCount: 25,
+      });
+
+      const grepTool = middleware.tools!.find(
+        (t: any) => t.name === "grep",
+      ) as any;
+      await grepTool.invoke({ pattern: "needle", path: "/", max_count: 5 });
+
+      expect(mockBackend.grep).toHaveBeenCalledWith("needle", "/", null, 5);
+    });
+
+    it("grep tool appends the truncation note when the backend flags truncated", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.grep = vi.fn().mockResolvedValue({
+        matches: [{ path: "/a.ts", line: 1, text: "needle" }],
+        truncated: true,
+      });
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+
+      const grepTool = middleware.tools!.find(
+        (t: any) => t.name === "grep",
+      ) as any;
+      const result = await grepTool.invoke({ pattern: "needle", path: "/" });
+
+      expect(result).toContain("/a.ts");
+      expect(result).toContain("maximum match count");
+      expect(result).toContain("valid but incomplete");
+    });
+
+    it("grep tool omits the truncation note when the backend result is complete", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.grep = vi.fn().mockResolvedValue({
+        matches: [{ path: "/a.ts", line: 1, text: "needle" }],
+        truncated: false,
+      });
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+
+      const grepTool = middleware.tools!.find(
+        (t: any) => t.name === "grep",
+      ) as any;
+      const result = await grepTool.invoke({ pattern: "needle", path: "/" });
+
+      expect(result).toContain("/a.ts");
+      expect(result).not.toContain("maximum match count");
+    });
+
+    it("grep tool should support output_mode files_with_matches and count", async () => {
+      const matches = [
+        { path: "/src/file1.ts", line: 10, text: "const pattern = 'test'" },
+        { path: "/src/file1.ts", line: 20, text: "another pattern here" },
+        { path: "/src/file2.ts", line: 5, text: "pattern.match(/test/)" },
+      ];
+
+      const mockBackend = createMockBackend();
+      mockBackend.grep = vi.fn().mockResolvedValue({ matches });
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+
+      const grepTool = middleware.tools!.find(
+        (t: any) => t.name === "grep",
+      ) as any;
+
+      const filesResult = await grepTool.invoke({
+        pattern: "pattern",
+        path: "/",
+        output_mode: "files_with_matches",
+      });
+      expect(filesResult).toBe("/src/file1.ts\n/src/file2.ts");
+
+      const countResult = await grepTool.invoke({
+        pattern: "pattern",
+        path: "/",
+        output_mode: "count",
+      });
+      expect(countResult).toBe("/src/file1.ts: 2\n/src/file2.ts: 1");
     });
   });
 

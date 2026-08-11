@@ -1,6 +1,6 @@
 {
   "name": "deepagents-acp",
-  "version": "0.1.17",
+  "version": "0.1.23",
   "description": "ACP (Agent Client Protocol) server for DeepAgents - enables IDE integration with Zed, JetBrains, and other ACP clients",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -56,9 +56,10 @@
     "@types/node": "^26.1.0",
     "@vitest/coverage-v8": "^4.0.18",
     "@vitest/ui": "^4.0.18",
+    "dotenv": "^17.2.4",
     "tsdown": "^0.22.1",
     "tsx": "^4.21.0",
-    "typescript": "^6.0.2",
+    "typescript": "^7.0.2",
     "vitest": "^4.0.18"
   },
   "peerDependencies": {

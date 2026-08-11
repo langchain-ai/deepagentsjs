@@ -14,6 +14,7 @@
  */
 
 import type {
+  DeleteResult,
   EditResult,
   ExecuteResponse,
   FileDownloadResponse,
@@ -29,6 +30,7 @@ import type {
   SandboxBackendProtocolV2,
   WriteResult,
 } from "./protocol.js";
+import { applyGrepMaxCount } from "./protocol.js";
 import { getMimeType, isTextMimeType } from "./utils.js";
 
 /**
@@ -423,6 +425,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
+    maxCount: number | null = null,
   ): Promise<GrepResult> {
     const command = buildGrepCommand(pattern, path, glob);
     const result = await this.execute(command);
@@ -456,7 +459,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
       }
     }
 
-    return { matches };
+    return applyGrepMaxCount({ result: { matches }, maxCount });
   }
 
   /**
@@ -506,24 +509,11 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
   }
 
   /**
-   * Create a new file with content.
+   * Write content to a file, creating it or overwriting it if it already exists.
    *
-   * Uses downloadFiles() to check existence and uploadFiles() to write.
-   * No runtime needed on the sandbox host.
+   * Uses uploadFiles() to write. No runtime needed on the sandbox host.
    */
   async write(filePath: string, content: string): Promise<WriteResult> {
-    // Check if file already exists
-    try {
-      const existCheck = await this.downloadFiles([filePath]);
-      if (existCheck[0].content !== null && existCheck[0].error === null) {
-        return {
-          error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
-        };
-      }
-    } catch {
-      // File doesn't exist, which is what we want for write
-    }
-
     const mimeType = getMimeType(filePath);
     let fileContent: Uint8Array;
 
@@ -662,5 +652,26 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     }
 
     return { path: filePath, filesUpdate: null, occurrences: count };
+  }
+
+  /**
+   * Delete a file from the sandbox via a server-side rm.
+   *
+   * Uses rm -f, so deleting a path that does not exist succeeds silently.
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    // shellQuote passes the path as a single literal shell argument. It is not
+    // a sandbox boundary: whatever the sandbox shell can reach, this can delete.
+    const result = await this.execute(`rm -f ${shellQuote(filePath)}`);
+
+    if (result.exitCode === 0) {
+      return { path: filePath };
+    }
+
+    return {
+      error: `Error deleting file '${filePath}': ${
+        result.output.trim() || "unknown error"
+      }`,
+    };
   }
 }

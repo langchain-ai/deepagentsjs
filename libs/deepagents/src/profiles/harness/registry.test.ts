@@ -145,6 +145,14 @@ describe("applyProfilePrompt", () => {
       "New base.\n\nAnd a suffix.",
     );
   });
+
+  it("uses a suffix without a leading separator when the base is empty", () => {
+    const profile = createHarnessProfile({
+      baseSystemPrompt: "",
+      systemPromptSuffix: "Suffix only.",
+    });
+    expect(applyProfilePrompt(profile, "Default prompt.")).toBe("Suffix only.");
+  });
 });
 
 describe("resolveHarnessProfile", () => {

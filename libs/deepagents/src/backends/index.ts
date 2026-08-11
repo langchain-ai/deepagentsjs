@@ -22,6 +22,7 @@ export type {
   GlobResult,
   WriteResult,
   EditResult,
+  DeleteResult,
   StateAndStore,
   // Sandbox execution types
   ExecuteResponse,
@@ -44,6 +45,7 @@ export type {
 
 // Export type guard and error class
 export {
+  applyGrepMaxCount,
   isSandboxBackend,
   isSandboxProtocol,
   SandboxError,

@@ -12,6 +12,7 @@ import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import type {
   BackendOptions,
   BackendProtocolV2,
+  DeleteResult,
   EditResult,
   FileData,
   FileDownloadResponse,
@@ -25,8 +26,10 @@ import type {
   WriteResult,
   StateAndStore,
 } from "./protocol.js";
+import { applyGrepMaxCount } from "./protocol.js";
 import {
   createFileData,
+  createWriteFileData,
   fileDataToString,
   getMimeType,
   globSearchFiles,
@@ -576,28 +579,23 @@ export class StoreBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Create a new file with content.
+   * Write content to a file, creating it or overwriting it if it already exists.
    * Returns WriteResult. External storage sets filesUpdate=null.
    */
   async write(filePath: string, content: string): Promise<WriteResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
 
-    // Check if file exists
     const existing = await store.get(namespace, filePath);
-    if (existing) {
-      return {
-        error: `Cannot write to ${filePath} because it already exists. Read and then make an edit, or write to a new path.`,
-      };
-    }
+    const existingFileData = existing
+      ? this.convertStoreItemToFileData(existing)
+      : undefined;
 
-    // Create new file
-    const mimeType = getMimeType(filePath);
-    const fileData = createFileData(
+    const fileData = createWriteFileData(
+      filePath,
       content,
-      undefined,
       this.fileFormat,
-      mimeType,
+      existingFileData,
     );
     const storeValue = this.convertFileDataToStoreValue(fileData);
     await store.put(namespace, filePath, storeValue);
@@ -650,6 +648,25 @@ export class StoreBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Delete a file from the store.
+   *
+   * The file path is used as an exact store key. Wildcards are treated
+   * literally and do not expand to multiple entries.
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    const store = this.getStore();
+    const namespace = this.getNamespace();
+
+    const existing = await store.get(namespace, filePath);
+    if (!existing) {
+      return { error: `Error: File '${filePath}' not found` };
+    }
+
+    await store.delete(namespace, filePath);
+    return { path: filePath };
+  }
+
+  /**
    * Search file contents for a literal text pattern.
    * Binary files are skipped.
    */
@@ -657,6 +674,7 @@ export class StoreBackend implements BackendProtocolV2 {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
+    maxCount: number | null = null,
   ): Promise<GrepResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
@@ -673,7 +691,7 @@ export class StoreBackend implements BackendProtocolV2 {
     }
 
     const matches = grepMatchesFromFiles(files, pattern, path, glob);
-    return { matches };
+    return applyGrepMaxCount({ result: { matches }, maxCount });
   }
 
   /**

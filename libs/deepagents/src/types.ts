@@ -23,6 +23,7 @@ import type {
 } from "@langchain/langgraph-checkpoint";
 
 import type { AnyBackendProtocol } from "./backends/protocol.js";
+import type { SystemPromptConfig } from "./compat.js";
 import type { AsyncSubAgent, SubAgent } from "./middleware/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type {
@@ -44,14 +45,13 @@ import type { FilesystemPermission } from "./permissions/index.js";
 type AnyAnnotationRoot = AnnotationRoot<any>;
 
 /**
- * Literal union of all built-in deep agent tool names.
- * These are always present on the agent regardless of user-provided tools.
+ * Literal union of deep agent tool names that are always present regardless of
+ * user-provided tools.
  */
 type DeepAgentBuiltinToolName =
   | (typeof FILESYSTEM_TOOL_NAMES)[number]
   | (typeof ASYNC_TASK_TOOL_NAMES)[number]
-  | "task"
-  | "write_todos";
+  | "task";
 
 /**
  * A placeholder StructuredTool type with a literal `name` for each
@@ -519,12 +519,15 @@ export interface CreateDeepAgentParams<
   model?: BaseLanguageModel | string;
   /** Tools the agent should have access to */
   tools?: TTools | StructuredTool[];
-  /** Custom system prompt for the agent. This will be combined with the base agent prompt */
-  systemPrompt?: string | SystemMessage;
+  /**
+   * Custom system instructions. Structured configuration is deprecated and
+   * retained only for source compatibility.
+   */
+  systemPrompt?: string | SystemMessage | SystemPromptConfig;
   /**
    * Optional schema for custom agent state. Allows you to define custom state properties
-   * beyond built-in `messages`, `todos`, and `files`. These properties can be accessed
-   * in hooks, middleware, and throughout the agent's execution.
+   * beyond built-in `messages` and `files`. The optional todo middleware adds `todos`.
+   * These properties can be accessed in hooks, middleware, and throughout the agent's execution.
    *
    * Unlike `contextSchema` the state is persisted between agent invocations when using a
    * checkpointer, making it suitable for maintaining conversation history, user preferences,

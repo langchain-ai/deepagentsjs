@@ -17,10 +17,13 @@ import {
   TOOL_RESULT_TOKEN_LIMIT,
   createFileData,
   adaptSandboxProtocol,
+  grepMatchesFromFiles,
+  globSearchFiles,
 } from "./utils.js";
 import type {
   BackendProtocol,
   BackendProtocolV2,
+  FileData,
   GrepMatch,
   SandboxBackendProtocol,
   SandboxBackendProtocolV2,
@@ -385,6 +388,62 @@ describe("migrateToFileDataV2", () => {
   });
 });
 
+describe("grepMatchesFromFiles", () => {
+  function makeFiles(): Record<string, FileData> {
+    return {
+      "/catalog/some_file.txt": createFileData(
+        "line one\nSlack integration here\nline three\n",
+      ),
+      "/catalog/other_file.txt": createFileData("nothing interesting here\n"),
+    };
+  }
+
+  it("finds matches when path is an exact existing file with no glob", () => {
+    const files = makeFiles();
+    const matches = grepMatchesFromFiles(
+      files,
+      "Slack",
+      "/catalog/some_file.txt",
+      null,
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0].path).toBe("/catalog/some_file.txt");
+  });
+
+  it("still finds matches when path is a directory and glob narrows to the filename", () => {
+    const files = makeFiles();
+    const matches = grepMatchesFromFiles(
+      files,
+      "Slack",
+      "/catalog",
+      "some_file.txt",
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0].path).toBe("/catalog/some_file.txt");
+  });
+});
+
+describe("globSearchFiles", () => {
+  function makeFiles(): Record<string, FileData> {
+    return {
+      "/catalog/some_file.txt": createFileData("hello"),
+      "/catalog/other_file.md": createFileData("hello"),
+    };
+  }
+
+  it("matches an exact file when path names it directly", () => {
+    const files = makeFiles();
+    const result = globSearchFiles(files, "*.txt", "/catalog/some_file.txt");
+    expect(result).toBe("/catalog/some_file.txt");
+  });
+
+  it("still matches via directory path + filename pattern (regression guard)", () => {
+    const files = makeFiles();
+    const result = globSearchFiles(files, "some_file.txt", "/catalog");
+    expect(result).toBe("/catalog/some_file.txt");
+  });
+});
+
 describe("getMimeType", () => {
   it("should return correct MIME type for known extensions", () => {
     expect(getMimeType("/image.png")).toBe("image/png");
@@ -642,6 +701,33 @@ describe("adaptBackendProtocol", () => {
     it("should not add sandbox properties to non-sandbox backends", () => {
       const adapted = adaptBackendProtocol(createV1Backend());
       expect(isSandboxBackend(adapted)).toBe(false);
+    });
+  });
+
+  describe("routePrefixes preservation", () => {
+    it("should forward routePrefixes from a composite-like backend", () => {
+      const v2 = createV2Backend() as any;
+      v2.routePrefixes = ["/skills/"];
+      const adapted = adaptBackendProtocol(v2) as any;
+      expect(adapted.routePrefixes).toEqual(["/skills/"]);
+    });
+
+    it("should preserve routePrefixes through adaptSandboxProtocol", () => {
+      const v2 = createV2Backend() as any;
+      v2.execute = (cmd: string) => ({
+        output: cmd,
+        exitCode: 0,
+        truncated: false,
+      });
+      Object.defineProperty(v2, "id", { value: "sb", enumerable: true });
+      v2.routePrefixes = ["/skills/", "/mnt/"];
+      const adapted = adaptSandboxProtocol(v2) as any;
+      expect(adapted.routePrefixes).toEqual(["/skills/", "/mnt/"]);
+    });
+
+    it("should not add routePrefixes for a non-composite backend", () => {
+      const adapted = adaptBackendProtocol(createV2Backend()) as any;
+      expect(adapted.routePrefixes).toBeUndefined();
     });
   });
 
