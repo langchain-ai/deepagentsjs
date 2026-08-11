@@ -944,9 +944,7 @@ export function createSummarizationMiddleware(
       new HumanMessage({ content: prompt }),
     ]);
 
-    return typeof response.content === "string"
-      ? response.content
-      : JSON.stringify(response.content);
+    return response.text;
   }
 
   /**
