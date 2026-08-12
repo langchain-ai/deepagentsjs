@@ -16,8 +16,10 @@ vi.mock("deepagents", () => {
   // Define MockFilesystemBackend inside the factory to avoid hoisting issues
   class MockFilesystemBackend {
     rootDir: string;
-    constructor(options: { rootDir: string }) {
+    virtualMode: boolean;
+    constructor(options: { rootDir: string; virtualMode?: boolean }) {
       this.rootDir = options.rootDir;
+      this.virtualMode = options.virtualMode ?? false;
     }
     ls = vi.fn();
     read = vi.fn();
@@ -125,6 +127,37 @@ describe("DeepAgentsServer", () => {
 
       const server = new DeepAgentsServer(options);
       expect(server).toBeInstanceOf(DeepAgentsServer);
+    });
+  });
+
+  describe("backend creation", () => {
+    it("enables virtual mode for ACP and local filesystem backends", () => {
+      const server = new DeepAgentsServer({
+        agents: { name: "test-agent" },
+        workspaceRoot: "/workspace",
+      });
+      const serverAny = server as unknown as {
+        clientCapabilities: {
+          fsReadTextFile?: boolean;
+          fsWriteTextFile?: boolean;
+        };
+        connection: unknown;
+        createBackend: (config: DeepAgentConfig) => {
+          virtualMode: boolean;
+        };
+      };
+      const config: DeepAgentConfig = { name: "test-agent" };
+
+      serverAny.clientCapabilities = {
+        fsReadTextFile: true,
+        fsWriteTextFile: true,
+      };
+      serverAny.connection = {};
+      expect(serverAny.createBackend(config).virtualMode).toBe(true);
+
+      serverAny.clientCapabilities = {};
+      serverAny.connection = null;
+      expect(serverAny.createBackend(config).virtualMode).toBe(true);
     });
   });
 
