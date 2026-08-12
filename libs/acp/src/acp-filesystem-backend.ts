@@ -12,7 +12,6 @@ import {
   type WriteResult,
   type ReadResult,
 } from "deepagents";
-import path from "node:path";
 
 /**
  * Backend that proxies read/write through ACP client while using local
@@ -22,8 +21,15 @@ export class ACPFilesystemBackend extends FilesystemBackend {
   private conn: AgentSideConnection;
   private currentSessionId: string | null = null;
 
-  constructor(options: { conn: AgentSideConnection; rootDir: string }) {
-    super({ rootDir: options.rootDir });
+  constructor(options: {
+    conn: AgentSideConnection;
+    rootDir: string;
+    virtualMode?: boolean;
+  }) {
+    super({
+      rootDir: options.rootDir,
+      virtualMode: options.virtualMode ?? true,
+    });
     this.conn = options.conn;
   }
 
@@ -32,8 +38,7 @@ export class ACPFilesystemBackend extends FilesystemBackend {
   }
 
   private resolveAbsPath(filePath: string): string {
-    if (path.isAbsolute(filePath)) return filePath;
-    return path.resolve(this.cwd, filePath);
+    return this.resolvePath(filePath);
   }
 
   /**

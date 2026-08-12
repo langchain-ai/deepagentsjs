@@ -64,6 +64,32 @@ describe("ACPFilesystemBackend", () => {
       expect(callArgs.path).toContain("local.txt");
     });
 
+    it("should keep absolute virtual paths inside the workspace root", async () => {
+      const backend = new ACPFilesystemBackend({
+        conn: mockConn,
+        rootDir: tmpDir,
+      });
+      backend.setSessionId("sess_123");
+
+      await backend.read("/outside.txt");
+
+      const callArgs = mockConn.readTextFile.mock.calls[0][0];
+      expect(callArgs.path).toBe(path.join(tmpDir, "outside.txt"));
+    });
+
+    it("should keep absolute virtual write paths inside the workspace root", async () => {
+      const backend = new ACPFilesystemBackend({
+        conn: mockConn,
+        rootDir: tmpDir,
+      });
+      backend.setSessionId("sess_123");
+
+      await backend.write("/outside.txt", "content");
+
+      const callArgs = mockConn.writeTextFile.mock.calls[0][0];
+      expect(callArgs.path).toBe(path.join(tmpDir, "outside.txt"));
+    });
+
     it("should fall back to local FS when no session is set", async () => {
       const backend = new ACPFilesystemBackend({
         conn: mockConn,

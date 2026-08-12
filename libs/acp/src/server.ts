@@ -1360,6 +1360,7 @@ export class DeepAgentsServer {
       const backend = new ACPFilesystemBackend({
         conn: this.connection,
         rootDir: this.workspaceRoot,
+        virtualMode: true,
       });
       this.acpBackends.set(config.name, backend);
       return backend;
@@ -1368,6 +1369,7 @@ export class DeepAgentsServer {
     this.log("Creating FilesystemBackend:", { rootDir: this.workspaceRoot });
     return new FilesystemBackend({
       rootDir: this.workspaceRoot,
+      virtualMode: true,
     });
   }
 
