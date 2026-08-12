@@ -940,9 +940,10 @@ export function createSummarizationMiddleware(
     const conversation = getBufferString(messagesToSummarize);
     const prompt = summaryPrompt.replace("{conversation}", conversation);
 
-    const response = await chatModel.invoke([
-      new HumanMessage({ content: prompt }),
-    ]);
+    const response = await chatModel.invoke(
+      [new HumanMessage({ content: prompt })],
+      { callbacks: [] },
+    );
 
     return response.text;
   }
