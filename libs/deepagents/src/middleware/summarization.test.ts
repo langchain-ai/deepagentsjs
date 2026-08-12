@@ -516,6 +516,43 @@ describe("createSummarizationMiddleware", () => {
       const summaryMessage = capturedRequest!.messages[0];
       expect(summaryMessage.additional_kwargs?.lc_source).toBe("summarization");
     });
+
+    it("should not inherit callbacks for internal summary model calls", async () => {
+      const mockBackend = createMockBackend();
+      const leakedCallback = vi.fn();
+      const invoke = vi.fn(
+        async (
+          _messages: BaseMessage[],
+          config?: { callbacks?: Array<() => void> },
+        ) => {
+          for (const callback of config?.callbacks ?? [leakedCallback]) {
+            callback();
+          }
+          return new AIMessage({ content: "Summary of the conversation." });
+        },
+      );
+      const middleware = createSummarizationMiddleware({
+        model: {
+          profile: { maxInputTokens: 128_000 },
+          invoke,
+        } as any,
+        backend: mockBackend,
+        trigger: { type: "messages", value: 5 },
+        keep: { type: "messages", value: 2 },
+      });
+
+      const messages = Array.from(
+        { length: 10 },
+        (_, i) => new HumanMessage({ content: `Message ${i}` }),
+      );
+
+      await callWrapModelCall(middleware, { messages });
+
+      expect(invoke).toHaveBeenCalledWith(expect.any(Array), {
+        callbacks: [],
+      });
+      expect(leakedCallback).not.toHaveBeenCalled();
+    });
   });
 
   describe("summary input trimming", () => {
@@ -1394,7 +1431,9 @@ describe("createSummarizationMiddleware", () => {
       expect(isCommand(result)).toBe(true);
       expect(capturedRequest).not.toBeNull();
       expect(invoke).toHaveBeenCalledTimes(1);
-      expect(invoke).toHaveBeenCalledWith(expect.any(Array));
+      expect(invoke).toHaveBeenCalledWith(expect.any(Array), {
+        callbacks: [],
+      });
     });
   });
 });
