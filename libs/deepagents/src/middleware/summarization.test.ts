@@ -9,9 +9,11 @@ import {
 } from "./summarization.js";
 import type {
   BackendProtocol,
+  BackendRuntime,
   FileDownloadResponse,
   WriteResult,
 } from "../backends/protocol.js";
+import { StateBackend } from "../backends/state.js";
 import { createMockBackend } from "./test.js";
 
 const mockCountTokensApproximately = vi.hoisted(() => vi.fn());
@@ -705,6 +707,30 @@ describe("createSummarizationMiddleware", () => {
       await callWrapModelCall(middleware, { messages });
 
       expect(writtenPath).toContain("/custom/history/");
+    });
+  });
+
+  describe("state-backed history offload", () => {
+    it("includes legacy StateBackend filesUpdate in the summarization command", async () => {
+      const middleware = createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: (runtime: BackendRuntime) => new StateBackend(runtime),
+        trigger: { type: "messages", value: 5 },
+        keep: { type: "messages", value: 2 },
+      });
+
+      const messages = Array.from(
+        { length: 10 },
+        (_, i) => new HumanMessage({ content: `Message ${i}` }),
+      );
+
+      const { result } = await callWrapModelCall(middleware, { messages });
+
+      expect(isCommand(result)).toBe(true);
+      const files = (result as any).update.files as Record<string, any>;
+      const [filePath] = Object.keys(files);
+      expect(filePath).toMatch(/^\/conversation_history\//);
+      expect(files[filePath].content).toContain("Message 0");
     });
   });
 
