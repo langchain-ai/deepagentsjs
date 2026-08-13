@@ -34,6 +34,11 @@ const FNMATCH_OPTIONS = { bash: true };
 
 type FileChanges = Record<string, string | null>;
 
+/**
+ * The logical operation a caller requested. `changes` operations are absolute
+ * file updates, while `edit` retains the replacement instruction so it can be
+ * replayed against a freshly pulled tree after a parent-commit conflict.
+ */
 type MutationIntent =
   | { kind: "changes"; changes: FileChanges }
   | {
@@ -45,11 +50,21 @@ type MutationIntent =
       updateOccurrences: (occurrences: number) => void;
     };
 
+/**
+ * A caller waiting for one logical mutation to become durable. Completion is
+ * settled only after the batch push succeeds, or rejected if the worker can no
+ * longer commit the caller's batch.
+ */
 interface MutationWaiter {
   intent: MutationIntent;
   completion: Deferred<void>;
 }
 
+/**
+ * A coalesced group of mutations. `changes` is the current materialization of
+ * the ordered waiter intents and is used both for the Hub payload and the
+ * optimistic read overlay. A later conflict refresh may rebuild it.
+ */
 interface MutationBatch {
   changes: FileChanges;
   waiters: MutationWaiter[];
@@ -62,6 +77,7 @@ interface MutationAcceptance<T> {
   completion?: Promise<void>;
 }
 
+/** The last authoritative Context Hub tree and its parent commit hash. */
 interface TreeSnapshot {
   cache: Record<string, string>;
   linkedEntries: Record<string, string>;
@@ -239,17 +255,48 @@ function mapHubFileOperationError(error: unknown): FileOperationError {
 /**
  * Backend that stores files in a LangSmith Hub agent repo (persistent).
  */
+/**
+ * Backend that stores files in a LangSmith Hub agent repository.
+ *
+ * ## Mutation model
+ *
+ * Mutations are accepted in call order, coalesced for a short window, and
+ * pushed by one worker. Only one batch is in flight at a time; mutations that
+ * arrive during a push form the next batch. This serializes one backend
+ * instance's writes while still reducing the number of Hub commits.
+ *
+ * Reads use an optimistic view: the last durable cache overlaid with the
+ * in-flight batch and then the pending batch. A read can therefore observe an
+ * accepted mutation before it is durable; a failed push invalidates that view
+ * and the next operation reloads from Hub.
+ *
+ * A `409` parent conflict triggers an authoritative pull and rematerializes
+ * the in-flight batch over the fetched tree before retrying. Edits replay their
+ * original replacement intent; absolute writes, deletes, and uploads replay as
+ * absolute changes. Retries are bounded by `MAX_CONFLICT_RETRIES`.
+ */
 export class ContextHubBackend implements BackendProtocolV2 {
   private identifier: string;
   private client: Client;
+  /** Last durable Hub file state; `null` means the next access must load it. */
   private cache: Record<string, string> | null = null;
   private linkedEntries: Record<string, string> = {};
+  /** Parent hash for the durable cache, used for optimistic-concurrency pushes. */
   private commitHash: string | null = null;
+  /** Shared cold-load promise so concurrent first operations perform one pull. */
   private loadPromise: Promise<void> | null = null;
+  /** Promise chain serializing mutation acceptance and optimistic projections. */
   private mutationOrder = Promise.resolve();
+  /** Mutations accepted for the next coalesced push. */
   private pendingBatch: MutationBatch | null = null;
+  /** The batch currently submitted to Hub and visible to optimistic reads. */
   private inFlightBatch: MutationBatch | null = null;
+  /** The single queue-draining worker, when active. */
   private workerPromise: Promise<void> | null = null;
+  /**
+   * Blocks cache consumers while a successful push without a parseable commit
+   * hash is being confirmed by an authoritative pull.
+   */
   private snapshotPublication: Deferred<void> | null = null;
 
   constructor(
@@ -368,6 +415,10 @@ export class ContextHubBackend implements BackendProtocolV2 {
     return next;
   }
 
+  /**
+   * Build the read-your-writes view without publishing speculative data as the
+   * durable cache. Later batches overlay earlier ones, matching worker order.
+   */
   private visibleCache(): Record<string, string> {
     let visible = { ...(this.cache ?? {}) };
     if (this.inFlightBatch !== null) {
@@ -402,6 +453,11 @@ export class ContextHubBackend implements BackendProtocolV2 {
     return release;
   }
 
+  /**
+   * Serialize validation and enqueueing so each operation is evaluated against
+   * a stable optimistic projection. Cache loading begins before acquiring the
+   * turn, allowing concurrent cold-start callers to share the same pull.
+   */
   private async acceptMutation<T>(
     operation: (cache: Record<string, string>) => MutationAcceptance<T>,
   ): Promise<MutationAcceptance<T>> {
@@ -425,6 +481,11 @@ export class ContextHubBackend implements BackendProtocolV2 {
     }
   }
 
+  /**
+   * Start a batch's coalescing window. The worker waits for this signal before
+   * detaching the batch; cancellation resolves it immediately so failures do
+   * not leave the worker waiting on a timer.
+   */
   private createMutationBatch(): MutationBatch {
     const batch: MutationBatch = {
       changes: {},
@@ -468,6 +529,11 @@ export class ContextHubBackend implements BackendProtocolV2 {
     return completion.promise;
   }
 
+  /**
+   * Replay ordered intents over an authoritative base after a conflict. This
+   * rebuilds the push payload and optimistic overlay. An edit that no longer
+   * applies throws the supplied conflict error; absolute changes are reapplied.
+   */
   private rematerializeBatch(
     batch: MutationBatch,
     base: Record<string, string>,
@@ -571,6 +637,11 @@ export class ContextHubBackend implements BackendProtocolV2 {
     this.workerPromise = worker;
   }
 
+  /**
+   * Drain coalesced batches sequentially. A completed batch publishes durable
+   * state before settling its callers; a failed batch invalidates local state
+   * and rejects both in-flight and queued callers so the next mutation reloads.
+   */
   private async drainMutationQueue(): Promise<void> {
     while (this.pendingBatch !== null) {
       const batch = this.pendingBatch;
@@ -643,6 +714,12 @@ export class ContextHubBackend implements BackendProtocolV2 {
     this.failPendingBatch(error);
   }
 
+  /**
+   * Push a materialized batch with the durable commit as its parent. On a 409,
+   * refresh Hub state, replay the batch, and retry with the new parent. A push
+   * response without a trustworthy hash is confirmed by a pull before callers
+   * are allowed to observe it as durable.
+   */
   private async pushBatch(batch: MutationBatch): Promise<PushBatchResult> {
     for (let attempt = 0; ; attempt += 1) {
       const payload: Record<string, Entry | null> = {};

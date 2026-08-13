@@ -26,7 +26,18 @@ export function isAnthropicModel(
   return model.getName() === "ChatAnthropic";
 }
 
-/** A one-shot promise whose settlement is controlled externally. */
+/**
+ * A one-shot promise whose settlement is controlled externally.
+ *
+ * Use this when one part of a workflow must wait for an event that is owned
+ * elsewhere—for example, a queued mutation waiting for the worker that will
+ * push it. `Deferred` is awaitable because it implements `PromiseLike`, and
+ * `.promise` is available when a concrete `Promise` is required.
+ *
+ * The first call to `resolve` or `reject` wins; later calls are ignored. This
+ * class deliberately does not provide cancellation, reset, or notification
+ * semantics. It models exactly one eventual outcome.
+ */
 export class Deferred<T = void> implements PromiseLike<T> {
   readonly promise: Promise<T>;
 
