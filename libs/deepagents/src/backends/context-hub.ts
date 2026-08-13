@@ -33,7 +33,19 @@ const FNMATCH_OPTIONS = { bash: true };
 
 type FileChanges = Record<string, string | null>;
 
+type MutationIntent =
+  | { kind: "changes"; changes: FileChanges }
+  | {
+      kind: "edit";
+      path: string;
+      oldString: string;
+      newString: string;
+      replaceAll: boolean;
+      updateOccurrences: (occurrences: number) => void;
+    };
+
 interface MutationWaiter {
+  intent: MutationIntent;
   resolve: () => void;
   reject: (error: unknown) => void;
 }
@@ -208,6 +220,15 @@ function getLangSmithStatus(error: unknown): number | undefined {
   }
 
   return undefined;
+}
+
+function createLangSmithConflictError(message: string): Error & {
+  status: number;
+} {
+  const error = new Error(message) as Error & { status: number };
+  error.name = "LangSmithConflictError";
+  error.status = 409;
+  return error;
 }
 
 function mapHubFileOperationError(error: unknown): FileOperationError {
@@ -444,7 +465,10 @@ export class ContextHubBackend implements BackendProtocolV2 {
     batch.markReady();
   }
 
-  private enqueueCommit(changes: FileChanges): Promise<void> {
+  private enqueueCommit(
+    changes: FileChanges,
+    intent: MutationIntent = { kind: "changes", changes: { ...changes } },
+  ): Promise<void> {
     if (Object.keys(changes).length === 0) {
       return Promise.resolve();
     }
@@ -457,10 +481,81 @@ export class ContextHubBackend implements BackendProtocolV2 {
     Object.assign(batch.changes, changes);
 
     const completion = new Promise<void>((resolve, reject) => {
-      batch.waiters.push({ resolve, reject });
+      batch.waiters.push({ intent, resolve, reject });
     });
     this.startWorker();
     return completion;
+  }
+
+  private rematerializeBatch(
+    batch: MutationBatch,
+    base: Record<string, string>,
+    conflictError: unknown,
+  ): Record<string, string> {
+    let cache = { ...base };
+    const changes: FileChanges = {};
+
+    for (const waiter of batch.waiters) {
+      const { intent } = waiter;
+      if (intent.kind === "changes") {
+        Object.assign(changes, intent.changes);
+        cache = ContextHubBackend.applyChanges(cache, intent.changes);
+        continue;
+      }
+
+      const current = cache[intent.path];
+      if (current === undefined) {
+        throw conflictError;
+      }
+      const replacementResult = performStringReplacement(
+        current,
+        intent.oldString,
+        intent.newString,
+        intent.replaceAll,
+      );
+      if (typeof replacementResult === "string") {
+        throw conflictError;
+      }
+
+      const [newContent, occurrences] = replacementResult;
+      const editChanges = { [intent.path]: newContent };
+      Object.assign(changes, editChanges);
+      cache = ContextHubBackend.applyChanges(cache, editChanges);
+      intent.updateOccurrences(occurrences);
+    }
+
+    batch.changes = changes;
+    return cache;
+  }
+
+  private rematerializeAfterConflict(
+    batch: MutationBatch,
+    snapshot: TreeSnapshot,
+    conflictError: unknown,
+  ): void {
+    const cache = this.rematerializeBatch(batch, snapshot.cache, conflictError);
+    if (this.pendingBatch !== null) {
+      this.rematerializeBatch(this.pendingBatch, cache, conflictError);
+    }
+    this.publishSnapshot(snapshot);
+  }
+
+  private rematerializePendingBatch(snapshot: TreeSnapshot): Error | null {
+    if (this.pendingBatch === null) {
+      return null;
+    }
+    const conflictError = createLangSmithConflictError(
+      "Pending Context Hub mutation conflicts with authoritative state",
+    );
+    try {
+      this.rematerializeBatch(this.pendingBatch, snapshot.cache, conflictError);
+      return null;
+    } catch (error) {
+      if (error !== conflictError) {
+        throw error;
+      }
+      return conflictError;
+    }
   }
 
   private startWorker(): void {
@@ -493,9 +588,11 @@ export class ContextHubBackend implements BackendProtocolV2 {
 
       this.pendingBatch = null;
       this.inFlightBatch = batch;
+      let pendingReplayError: Error | null = null;
       try {
-        const result = await this.pushBatch(batch.changes);
+        const result = await this.pushBatch(batch);
         if (result.kind === "snapshot") {
+          pendingReplayError = this.rematerializePendingBatch(result.snapshot);
           this.publishSnapshot(result.snapshot);
         } else {
           this.cache = ContextHubBackend.applyChanges(
@@ -519,6 +616,10 @@ export class ContextHubBackend implements BackendProtocolV2 {
       this.finishSnapshotPublication();
       for (const waiter of batch.waiters) {
         waiter.resolve();
+      }
+      if (pendingReplayError !== null) {
+        this.failPendingBatch(pendingReplayError);
+        return;
       }
     }
   }
@@ -549,13 +650,13 @@ export class ContextHubBackend implements BackendProtocolV2 {
     this.failPendingBatch(error);
   }
 
-  private async pushBatch(changes: FileChanges): Promise<PushBatchResult> {
-    const payload: Record<string, Entry | null> = {};
-    for (const [path, content] of Object.entries(changes)) {
-      payload[path] = content === null ? null : { type: "file", content };
-    }
-
+  private async pushBatch(batch: MutationBatch): Promise<PushBatchResult> {
     for (let attempt = 0; ; attempt += 1) {
+      const payload: Record<string, Entry | null> = {};
+      for (const [path, content] of Object.entries(batch.changes)) {
+        payload[path] = content === null ? null : { type: "file", content };
+      }
+
       let url: string;
       try {
         url = await this.client.pushAgent(this.identifier, {
@@ -569,7 +670,8 @@ export class ContextHubBackend implements BackendProtocolV2 {
         ) {
           throw error;
         }
-        await this.loadTree();
+        const snapshot = await this.fetchTree();
+        this.rematerializeAfterConflict(batch, snapshot, error);
         continue;
       }
 
@@ -812,13 +914,26 @@ export class ContextHubBackend implements BackendProtocolV2 {
         }
 
         const [newContent, occurrences] = replacementResult;
+        const result: EditResult = {
+          path: filePath,
+          filesUpdate: null,
+          occurrences,
+        };
         return {
-          result: {
-            path: filePath,
-            filesUpdate: null,
-            occurrences,
-          },
-          completion: this.enqueueCommit({ [hubPath]: newContent }),
+          result,
+          completion: this.enqueueCommit(
+            { [hubPath]: newContent },
+            {
+              kind: "edit",
+              path: hubPath,
+              oldString,
+              newString,
+              replaceAll,
+              updateOccurrences: (replayedOccurrences) => {
+                result.occurrences = replayedOccurrences;
+              },
+            },
+          ),
         };
       });
       await accepted.completion;

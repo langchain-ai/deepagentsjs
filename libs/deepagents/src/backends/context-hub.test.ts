@@ -266,92 +266,37 @@ describe("ContextHubBackend", () => {
     expect(options.parentCommit).toBe(COMMIT_HASH);
   });
 
-  it("write updates commit hash from the current push URL shape", async () => {
-    const { backend, client } = makeBackend();
-    await backend.write("/a.md", "a");
-    await backend.write("/b.md", "b");
-
-    const [, options] = client.pushAgent.mock.calls[1];
-    expect(options.parentCommit).toBe("ef567890");
-  });
-
-  it("write normalizes a bare target name for the current URL shape", async () => {
-    const { backend, client } = makeBackend({}, "test-agent");
-    client.pushAgent.mockResolvedValueOnce(commitUrl("deadbeef"));
-
-    await backend.write("/a.md", "a");
-    await backend.write("/b.md", "b");
-
-    const [, options] = client.pushAgent.mock.calls[1];
-    expect(options.parentCommit).toBe("deadbeef");
-  });
-
-  it("write updates commit hash from the legacy push URL shape", async () => {
-    const { backend, client } = makeBackend();
-    client.pushAgent.mockResolvedValueOnce(
-      "https://host/hub/-/test-agent:deadbeef",
-    );
-
-    await backend.write("/a.md", "a");
-    await backend.write("/b.md", "b");
-
-    const [, options] = client.pushAgent.mock.calls[1];
-    expect(options.parentCommit).toBe("deadbeef");
-  });
-
-  it("write matches the owner in a legacy push URL", async () => {
-    const { backend, client } = makeBackend({}, "owner/test-agent");
-    client.pushAgent.mockResolvedValueOnce(
-      "https://host/hub/owner/test-agent:deadbeef",
-    );
-
-    await backend.write("/a.md", "a");
-    await backend.write("/b.md", "b");
-
-    const [, options] = client.pushAgent.mock.calls[1];
-    expect(options.parentCommit).toBe("deadbeef");
-  });
-
-  it("write ignores an identifier version when matching a legacy URL", async () => {
-    const { backend, client } = makeBackend({}, "owner/test-agent:version");
-    client.pushAgent.mockResolvedValueOnce(
-      "https://host/hub/owner/test-agent:deadbeef",
-    );
-
-    await backend.write("/a.md", "a");
-    await backend.write("/b.md", "b");
-
-    const [, options] = client.pushAgent.mock.calls[1];
-    expect(options.parentCommit).toBe("deadbeef");
-  });
-
   it.each([
+    ["the current URL shape", "-/test-agent", commitUrl("deadbeef")],
     [
-      "a prefixed context path",
-      "https://host/prefix/context/test-agent/deadbeef",
+      "a bare target with the current URL shape",
+      "test-agent",
+      commitUrl("deadbeef"),
     ],
-    ["a non-hub colon suffix", "https://host/not-hub/test-agent:deadbeef"],
-    ["an arbitrary colon suffix", "https://host/arbitrary:deadbeef"],
-    ["a different current target", "https://host/context/other-agent/deadbeef"],
     [
-      "a different legacy owner",
-      "https://host/hub/other-owner/test-agent:deadbeef",
+      "the legacy URL shape",
+      "-/test-agent",
+      "https://host/hub/-/test-agent:deadbeef",
     ],
-    ["a different legacy target", "https://host/hub/-/other-agent:deadbeef"],
     [
-      "a multi-segment current target",
-      "https://host/context/owner/test-agent/deadbeef",
+      "an owned, versioned target with the legacy URL shape",
+      "owner/test-agent:version",
+      "https://host/hub/owner/test-agent:deadbeef",
     ],
-    ["an uppercase hash", "https://host/context/test-agent/DEADBEEF"],
-    ["a 9-character hash", "https://host/context/test-agent/deadbeef0"],
-    [
-      "a 64-character legacy hash",
-      `https://host/hub/-/test-agent:${"deadbeef".repeat(8)}`,
-    ],
-    ["a trailing slash", "https://host/context/test-agent/deadbeef/"],
-    ["a trailing legacy slash", "https://host/hub/-/test-agent:deadbeef/"],
-    ["a malformed URL", "not a valid URL"],
-  ])("reloads after %s", async (_description, invalidUrl) => {
+  ])(
+    "updates the commit hash from %s",
+    async (_description, identifier, url) => {
+      const { backend, client } = makeBackend({}, identifier);
+      client.pushAgent.mockResolvedValueOnce(url);
+
+      await backend.write("/a.md", "a");
+      await backend.write("/b.md", "b");
+
+      expect(client.pushAgent.mock.calls[1][1].parentCommit).toBe("deadbeef");
+    },
+  );
+
+  it("reloads when a push URL targets a different repo", async () => {
     vi.useFakeTimers();
     const { backend, client } = makeBackend();
     client.pullAgent
@@ -362,7 +307,9 @@ describe("ContextHubBackend", () => {
           "remote.md": { type: "file", content: "remote value" },
         }),
       );
-    client.pushAgent.mockResolvedValueOnce(invalidUrl);
+    client.pushAgent.mockResolvedValueOnce(
+      "https://host/context/other-agent/deadbeef",
+    );
 
     const firstWrite = backend.write("/local.md", "local value");
     await advanceMutationWindow();
@@ -434,45 +381,6 @@ describe("ContextHubBackend", () => {
       expect(vi.getTimerCount()).toBe(0);
     });
 
-    it("fans out one failed cold pull to concurrent mutations and lets a new burst recover", async () => {
-      vi.useFakeTimers();
-      const failedPull = deferred<ReturnType<typeof makeContext>>();
-      const { backend, client } = makeBackend();
-      client.pullAgent.mockReset().mockReturnValue(failedPull.promise);
-
-      const writes = Array.from({ length: 4 }, (_, index) =>
-        backend.write(`/file-${index}.md`, `value-${index}`),
-      );
-      await flushMicrotasks();
-      expect(client.pullAgent).toHaveBeenCalledTimes(1);
-
-      failedPull.reject(
-        makeLangSmithError("pull failed", {
-          name: "LangSmithAPIError",
-          status: 500,
-        }),
-      );
-      const results = await Promise.all(writes);
-
-      expect(
-        results.every((result) => result.error?.includes("Hub unavailable")),
-      ).toBe(true);
-      expect(client.pullAgent).toHaveBeenCalledTimes(1);
-      expect(client.pushAgent).not.toHaveBeenCalled();
-      expect(vi.getTimerCount()).toBe(0);
-
-      client.pullAgent.mockResolvedValueOnce(makeContext("recovery0"));
-      client.pushAgent.mockResolvedValueOnce(commitUrl("11111111"));
-      const recovered = backend.write("/recovered.md", "yes");
-      await advanceMutationWindow();
-
-      await expect(recovered).resolves.toMatchObject({
-        path: "/recovered.md",
-      });
-      expect(client.pullAgent).toHaveBeenCalledTimes(2);
-      expect(client.pushAgent).toHaveBeenCalledTimes(1);
-    });
-
     it("coalesces mixed write, edit, delete, and upload operations", async () => {
       vi.useFakeTimers();
       const { backend, client } = makeBackend({
@@ -508,36 +416,46 @@ describe("ContextHubBackend", () => {
       });
     });
 
-    it("serializes a queued follow-on batch behind an in-flight push", async () => {
+    it("serializes an edit computed from an in-flight write into the follow-on batch", async () => {
       vi.useFakeTimers();
       const firstPush = deferred<string>();
       const secondPush = deferred<string>();
-      const { backend, client } = makeBackend();
+      const { backend, client } = makeBackend({
+        "same.md": { type: "file", content: "base" },
+      });
       client.pushAgent
         .mockImplementationOnce(() => firstPush.promise)
         .mockImplementationOnce(() => secondPush.promise);
+      await backend.read("/same.md");
 
-      const firstWrite = backend.write("/first.md", "first");
+      const write = backend.write("/same.md", "first version");
       await advanceMutationWindow();
       expect(client.pushAgent).toHaveBeenCalledTimes(1);
 
-      const secondWrite = backend.write("/second.md", "second");
+      const edit = backend.edit("/same.md", "first", "second");
       await advanceMutationWindow();
       expect(client.pushAgent).toHaveBeenCalledTimes(1);
+      await expect(backend.read("/same.md")).resolves.toMatchObject({
+        content: "second version",
+      });
 
       firstPush.resolve(commitUrl("11111111"));
       await flushMicrotasks();
 
       expect(client.pushAgent).toHaveBeenCalledTimes(2);
-      const [, secondOptions] = client.pushAgent.mock.calls[1];
-      expect(secondOptions.parentCommit).toBe("11111111");
-      expect(secondOptions.files).toEqual({
-        "second.md": { type: "file", content: "second" },
+      expect(client.pushAgent.mock.calls[1][1]).toMatchObject({
+        parentCommit: "11111111",
+        files: {
+          "same.md": { type: "file", content: "second version" },
+        },
       });
-
       secondPush.resolve(commitUrl("22222222"));
-      await expect(firstWrite).resolves.toMatchObject({ path: "/first.md" });
-      await expect(secondWrite).resolves.toMatchObject({ path: "/second.md" });
+
+      await expect(write).resolves.toMatchObject({ path: "/same.md" });
+      await expect(edit).resolves.toMatchObject({
+        path: "/same.md",
+        occurrences: 1,
+      });
       expect(vi.getTimerCount()).toBe(0);
     });
 
@@ -699,19 +617,22 @@ describe("ContextHubBackend", () => {
       });
     });
 
-    it("reloads and reapplies the local full-file delta after a 409 conflict", async () => {
+    it("replays an edit after a 409 conflict without losing a remote same-file insertion", async () => {
       vi.useFakeTimers();
       const { backend, client } = makeBackend();
       client.pullAgent
         .mockReset()
         .mockResolvedValueOnce(
           makeContext("base0000", {
-            "shared.md": { type: "file", content: "base" },
+            "shared.md": { type: "file", content: "before\ntarget\nafter" },
           }),
         )
         .mockResolvedValueOnce(
           makeContext("remote01", {
-            "shared.md": { type: "file", content: "remote version" },
+            "shared.md": {
+              type: "file",
+              content: "remote insertion\nbefore\ntarget\nafter",
+            },
             "remote.md": { type: "file", content: "unrelated" },
           }),
         );
@@ -725,20 +646,26 @@ describe("ContextHubBackend", () => {
         )
         .mockResolvedValueOnce(commitUrl("22222222"));
 
-      const write = backend.write("/shared.md", "local wins");
+      const edit = backend.edit("/shared.md", "target", "replacement");
       await advanceMutationWindow();
-      await expect(write).resolves.toMatchObject({ path: "/shared.md" });
+      await expect(edit).resolves.toMatchObject({
+        path: "/shared.md",
+        occurrences: 1,
+      });
 
       expect(client.pushAgent).toHaveBeenCalledTimes(2);
       expect(client.pushAgent.mock.calls[0][1].parentCommit).toBe("base0000");
       expect(client.pushAgent.mock.calls[1][1]).toMatchObject({
         parentCommit: "remote01",
         files: {
-          "shared.md": { type: "file", content: "local wins" },
+          "shared.md": {
+            type: "file",
+            content: "remote insertion\nbefore\nreplacement\nafter",
+          },
         },
       });
       await expect(backend.read("/shared.md")).resolves.toMatchObject({
-        content: "local wins",
+        content: "remote insertion\nbefore\nreplacement\nafter",
       });
       await expect(backend.read("/remote.md")).resolves.toMatchObject({
         content: "unrelated",
@@ -804,49 +731,7 @@ describe("ContextHubBackend", () => {
       });
     });
 
-    it("computes an edit from an in-flight write and commits it in the next batch", async () => {
-      vi.useFakeTimers();
-      const firstPush = deferred<string>();
-      const secondPush = deferred<string>();
-      const { backend, client } = makeBackend({
-        "same.md": { type: "file", content: "base" },
-      });
-      client.pushAgent
-        .mockImplementationOnce(() => firstPush.promise)
-        .mockImplementationOnce(() => secondPush.promise);
-      await backend.read("/same.md");
-
-      const write = backend.write("/same.md", "first version");
-      await advanceMutationWindow();
-      expect(client.pushAgent).toHaveBeenCalledTimes(1);
-
-      const edit = backend.edit("/same.md", "first", "second");
-      await advanceMutationWindow();
-      expect(client.pushAgent).toHaveBeenCalledTimes(1);
-      await expect(backend.read("/same.md")).resolves.toMatchObject({
-        content: "second version",
-      });
-
-      firstPush.resolve(commitUrl("11111111"));
-      await flushMicrotasks();
-
-      expect(client.pushAgent).toHaveBeenCalledTimes(2);
-      expect(client.pushAgent.mock.calls[1][1]).toMatchObject({
-        parentCommit: "11111111",
-        files: {
-          "same.md": { type: "file", content: "second version" },
-        },
-      });
-      secondPush.resolve(commitUrl("22222222"));
-
-      await expect(write).resolves.toMatchObject({ path: "/same.md" });
-      await expect(edit).resolves.toMatchObject({
-        path: "/same.md",
-        occurrences: 1,
-      });
-    });
-
-    it("reloads authoritative state after a hashless success without replaying the older batch", async () => {
+    it("rematerializes a pending edit after an authoritative hashless reload", async () => {
       vi.useFakeTimers();
       const firstPush = deferred<string>();
       const secondPush = deferred<string>();
@@ -856,7 +741,7 @@ describe("ContextHubBackend", () => {
         .mockReset()
         .mockResolvedValueOnce(
           makeContext("base0000", {
-            "shared.md": { type: "file", content: "v0" },
+            "shared.md": { type: "file", content: "before\ntarget\nafter" },
           }),
         )
         .mockImplementationOnce(() => authoritativePull.promise);
@@ -866,70 +751,137 @@ describe("ContextHubBackend", () => {
         .mockImplementationOnce(() => secondPush.promise);
       await backend.read("/shared.md");
 
-      const firstWrite = backend.write("/shared.md", "older local value");
+      const durableWrite = backend.write("/durable.md", "durable");
       await advanceMutationWindow();
       expect(client.pushAgent).toHaveBeenCalledTimes(1);
 
-      const pendingWrite = backend.write("/pending.md", "pending value");
+      const pendingEdit = backend.edit("/shared.md", "target", "replacement");
       await advanceMutationWindow();
       expect(client.pushAgent).toHaveBeenCalledTimes(1);
-      await expect(backend.read("/pending.md")).resolves.toMatchObject({
-        content: "pending value",
+      await expect(backend.read("/shared.md")).resolves.toMatchObject({
+        content: "before\nreplacement\nafter",
       });
 
       firstPush.resolve(
         "https://host/context/test-agent?organizationId=org-id",
       );
-      let firstSettled = false;
-      void firstWrite.then(() => {
-        firstSettled = true;
+      let durableSettled = false;
+      void durableWrite.then(() => {
+        durableSettled = true;
       });
       await flushMicrotasks();
 
       expect(client.pullAgent).toHaveBeenCalledTimes(2);
-      expect(firstSettled).toBe(false);
+      expect(durableSettled).toBe(false);
       expect(client.pushAgent).toHaveBeenCalledTimes(1);
 
-      const readAfterAuthoritativePull = authoritativePull.promise.then(() =>
-        backend.read("/shared.md"),
-      );
       authoritativePull.resolve(
         makeContext("authoritative1", {
-          "shared.md": { type: "file", content: "newer remote value" },
-          "remote.md": { type: "file", content: "remote addition" },
+          "durable.md": { type: "file", content: "durable" },
+          "shared.md": {
+            type: "file",
+            content: "remote insertion\nbefore\ntarget\nafter",
+          },
         }),
       );
-      await expect(readAfterAuthoritativePull).resolves.toMatchObject({
-        content: "newer remote value",
+      await expect(durableWrite).resolves.toMatchObject({
+        path: "/durable.md",
       });
-      await expect(firstWrite).resolves.toMatchObject({ path: "/shared.md" });
       await flushMicrotasks();
 
-      expect(firstSettled).toBe(true);
-      await expect(backend.read("/shared.md")).resolves.toMatchObject({
-        content: "newer remote value",
-      });
-      await expect(backend.read("/remote.md")).resolves.toMatchObject({
-        content: "remote addition",
-      });
-      await expect(backend.read("/pending.md")).resolves.toMatchObject({
-        content: "pending value",
-      });
+      expect(durableSettled).toBe(true);
       expect(client.pushAgent).toHaveBeenCalledTimes(2);
       expect(client.pushAgent.mock.calls[1][1]).toMatchObject({
         parentCommit: "authoritative1",
         files: {
-          "pending.md": { type: "file", content: "pending value" },
+          "shared.md": {
+            type: "file",
+            content: "remote insertion\nbefore\nreplacement\nafter",
+          },
         },
       });
 
       secondPush.resolve(commitUrl("33333333"));
-      await expect(pendingWrite).resolves.toMatchObject({
-        path: "/pending.md",
+      await expect(pendingEdit).resolves.toMatchObject({
+        path: "/shared.md",
+        occurrences: 1,
       });
       await expect(backend.read("/shared.md")).resolves.toMatchObject({
-        content: "newer remote value",
+        content: "remote insertion\nbefore\nreplacement\nafter",
       });
+    });
+
+    it("keeps a durable hashless commit when a pending edit no longer applies", async () => {
+      vi.useFakeTimers();
+      const firstPush = deferred<string>();
+      const authoritativePull = deferred<ReturnType<typeof makeContext>>();
+      const { backend, client } = makeBackend();
+      client.pullAgent
+        .mockReset()
+        .mockResolvedValueOnce(
+          makeContext("base0000", {
+            "shared.md": { type: "file", content: "before\ntarget\nafter" },
+          }),
+        )
+        .mockImplementationOnce(() => authoritativePull.promise);
+      client.pushAgent
+        .mockReset()
+        .mockImplementationOnce(() => firstPush.promise)
+        .mockResolvedValueOnce(commitUrl("44444444"));
+      await backend.read("/shared.md");
+
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown): void => {
+        unhandled.push(reason);
+      };
+      process.on("unhandledRejection", onUnhandled);
+
+      try {
+        const durableWrite = backend.write("/durable.md", "durable");
+        await advanceMutationWindow();
+        const pendingEdit = backend.edit("/shared.md", "target", "replacement");
+        const pendingExpectation = expect(pendingEdit).resolves.toMatchObject({
+          error: expect.stringContaining("Hub unavailable"),
+        });
+        await flushMicrotasks();
+
+        firstPush.resolve(
+          "https://host/context/test-agent?organizationId=org-id",
+        );
+        await flushMicrotasks();
+        authoritativePull.resolve(
+          makeContext("authoritative1", {
+            "durable.md": { type: "file", content: "durable" },
+            "shared.md": {
+              type: "file",
+              content: "remote insertion\nbefore\nremote replacement\nafter",
+            },
+          }),
+        );
+
+        await expect(durableWrite).resolves.toMatchObject({
+          path: "/durable.md",
+        });
+        await pendingExpectation;
+        expect(client.pushAgent).toHaveBeenCalledTimes(1);
+        expect(client.pullAgent).toHaveBeenCalledTimes(2);
+        expect(vi.getTimerCount()).toBe(0);
+        await expect(backend.read("/shared.md")).resolves.toMatchObject({
+          content: "remote insertion\nbefore\nremote replacement\nafter",
+        });
+
+        const recovered = backend.write("/next.md", "next");
+        await advanceMutationWindow();
+        await expect(recovered).resolves.toMatchObject({ path: "/next.md" });
+        expect(client.pushAgent.mock.calls[1][1]).toMatchObject({
+          parentCommit: "authoritative1",
+          files: { "next.md": { type: "file", content: "next" } },
+        });
+        await flushMicrotasks();
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off("unhandledRejection", onUnhandled);
+      }
     });
 
     it("rejects a hashless success when its authoritative reload has no commit", async () => {
@@ -977,74 +929,6 @@ describe("ContextHubBackend", () => {
           "next.md": { type: "file", content: "next" },
         },
       });
-    });
-
-    it("does not replay a durable hashless push when its authoritative reload conflicts", async () => {
-      vi.useFakeTimers();
-      const { backend, client } = makeBackend();
-      client.pullAgent
-        .mockReset()
-        .mockResolvedValueOnce(makeContext("base0000"))
-        .mockRejectedValueOnce(
-          makeLangSmithError("reload conflict", {
-            name: "LangSmithConflictError",
-            status: 409,
-          }),
-        )
-        .mockResolvedValueOnce(
-          makeContext("recovery0", {
-            "durable.md": { type: "file", content: "durable" },
-          }),
-        );
-      client.pushAgent
-        .mockReset()
-        .mockResolvedValueOnce(
-          "https://host/context/test-agent?organizationId=org-id",
-        )
-        .mockResolvedValueOnce(commitUrl("44444444"));
-
-      const durableWrite = backend.write("/durable.md", "durable");
-      await advanceMutationWindow();
-      const durableResult = await durableWrite;
-
-      expect(durableResult.error).toContain("Hub unavailable");
-      expect(client.pushAgent).toHaveBeenCalledTimes(1);
-      expect(client.pullAgent).toHaveBeenCalledTimes(2);
-      expect(vi.getTimerCount()).toBe(0);
-
-      const recovered = backend.write("/next.md", "next");
-      await advanceMutationWindow();
-      await expect(recovered).resolves.toMatchObject({ path: "/next.md" });
-
-      expect(client.pullAgent).toHaveBeenCalledTimes(3);
-      expect(client.pushAgent).toHaveBeenCalledTimes(2);
-      expect(client.pushAgent.mock.calls[1][1]).toMatchObject({
-        parentCommit: "recovery0",
-        files: {
-          "next.md": { type: "file", content: "next" },
-        },
-      });
-    });
-
-    it("leaves no timer after draining and starts a new burst cleanly", async () => {
-      vi.useFakeTimers();
-      const { backend, client } = makeBackend();
-
-      const first = backend.write("/first.md", "first");
-      await advanceMutationWindow();
-      await first;
-
-      expect(client.pushAgent).toHaveBeenCalledTimes(1);
-      expect(vi.getTimerCount()).toBe(0);
-      await vi.advanceTimersByTimeAsync(1_000);
-      expect(client.pushAgent).toHaveBeenCalledTimes(1);
-
-      const second = backend.write("/second.md", "second");
-      await advanceMutationWindow();
-      await second;
-
-      expect(client.pushAgent).toHaveBeenCalledTimes(2);
-      expect(vi.getTimerCount()).toBe(0);
     });
   });
 

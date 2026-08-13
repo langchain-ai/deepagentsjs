@@ -170,7 +170,7 @@ describeWithLangSmith(
       }
     });
 
-    it("recovers parent-commit conflicts on stale writers", async () => {
+    it("replays stale edits without losing non-overlapping changes", async () => {
       const identifier = makeIdentifier();
       const backend = new ContextHubBackend(identifier, {
         client: new Client(),
@@ -178,19 +178,33 @@ describeWithLangSmith(
       const staleClient = new Client();
       const pushSpy = vi.spyOn(staleClient, "pushAgent");
       try {
-        expect((await backend.write("/prime.md", "v0")).error).toBeUndefined();
+        expect(
+          (await backend.write("/shared.md", "before\ntarget\nafter")).error,
+        ).toBeUndefined();
 
         const stale = new ContextHubBackend(identifier, {
           client: staleClient,
         });
-        expect(await stale.read("/prime.md")).toMatchObject({ content: "v0" });
+        expect(await stale.read("/shared.md")).toMatchObject({
+          content: "before\ntarget\nafter",
+        });
 
         expect(
-          (await backend.write("/unrelated.md", "v1")).error,
+          (
+            await backend.edit(
+              "/shared.md",
+              "before",
+              "remote insertion\nbefore",
+            )
+          ).error,
         ).toBeUndefined();
 
-        const staleWrite = await stale.write("/local.md", "recovered");
-        expect(staleWrite.error).toBeUndefined();
+        const staleEdit = await stale.edit(
+          "/shared.md",
+          "target",
+          "replacement",
+        );
+        expect(staleEdit.error).toBeUndefined();
         expect(pushSpy).toHaveBeenCalledTimes(2);
         const firstParent = pushSpy.mock.calls[0][1].parentCommit;
         const secondParent = pushSpy.mock.calls[1][1].parentCommit;
@@ -201,11 +215,8 @@ describeWithLangSmith(
         const fresh = new ContextHubBackend(identifier, {
           client: new Client(),
         });
-        expect(await fresh.read("/unrelated.md")).toMatchObject({
-          content: "v1",
-        });
-        expect(await fresh.read("/local.md")).toMatchObject({
-          content: "recovered",
+        expect(await fresh.read("/shared.md")).toMatchObject({
+          content: "remote insertion\nbefore\nreplacement\nafter",
         });
       } finally {
         pushSpy.mockRestore();
