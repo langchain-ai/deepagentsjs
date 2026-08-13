@@ -26,6 +26,45 @@ export function isAnthropicModel(
   return model.getName() === "ChatAnthropic";
 }
 
+/** A one-shot promise whose settlement is controlled externally. */
+export class Deferred<T = void> implements PromiseLike<T> {
+  readonly promise: Promise<T>;
+
+  private settled = false;
+  private resolvePromise!: (value: T | PromiseLike<T>) => void;
+  private rejectPromise!: (reason?: unknown) => void;
+
+  constructor() {
+    this.promise = new Promise<T>((resolve, reject) => {
+      this.resolvePromise = resolve;
+      this.rejectPromise = reject;
+    });
+  }
+
+  resolve(value: T | PromiseLike<T>): void {
+    if (this.settled) {
+      return;
+    }
+    this.settled = true;
+    this.resolvePromise(value);
+  }
+
+  reject(reason?: unknown): void {
+    if (this.settled) {
+      return;
+    }
+    this.settled = true;
+    this.rejectPromise(reason);
+  }
+
+  then<TResult1 = T, TResult2 = never>(
+    onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.promise.then(onfulfilled, onrejected);
+  }
+}
+
 /**
  * Detect whether a model is an AWS Bedrock Converse model.
  *

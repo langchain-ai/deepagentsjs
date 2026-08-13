@@ -5,6 +5,7 @@
 import micromatch from "micromatch";
 import { Client } from "langsmith";
 import type { AgentContext, Entry } from "langsmith/schemas";
+import { Deferred } from "../utils.js";
 import type {
   BackendProtocolV2,
   DeleteResult,
@@ -46,15 +47,13 @@ type MutationIntent =
 
 interface MutationWaiter {
   intent: MutationIntent;
-  resolve: () => void;
-  reject: (error: unknown) => void;
+  completion: Deferred<void>;
 }
 
 interface MutationBatch {
   changes: FileChanges;
   waiters: MutationWaiter[];
-  ready: Promise<void>;
-  markReady: () => void;
+  ready: Deferred<void>;
   timer: ReturnType<typeof setTimeout> | null;
 }
 
@@ -72,11 +71,6 @@ interface TreeSnapshot {
 type PushBatchResult =
   | { kind: "commit"; commitHash: string }
   | { kind: "snapshot"; snapshot: TreeSnapshot };
-
-interface SnapshotPublication {
-  promise: Promise<void>;
-  complete: () => void;
-}
 
 function parseHubTargetIdentifier(
   identifier: string,
@@ -256,7 +250,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
   private pendingBatch: MutationBatch | null = null;
   private inFlightBatch: MutationBatch | null = null;
   private workerPromise: Promise<void> | null = null;
-  private snapshotPublication: SnapshotPublication | null = null;
+  private snapshotPublication: Deferred<void> | null = null;
 
   constructor(
     identifier: string,
@@ -319,26 +313,19 @@ export class ContextHubBackend implements BackendProtocolV2 {
       throw new Error("Context Hub snapshot publication is already pending");
     }
 
-    let complete!: () => void;
-    const promise = new Promise<void>((resolve) => {
-      complete = resolve;
-    });
-    this.snapshotPublication = { promise, complete };
+    this.snapshotPublication = new Deferred<void>();
   }
 
   private finishSnapshotPublication(): void {
     const publication = this.snapshotPublication;
-    if (publication === null) {
-      return;
-    }
     this.snapshotPublication = null;
-    publication.complete();
+    publication?.resolve();
   }
 
   private async ensureCacheLoaded(): Promise<void> {
     // Publish a hashless-push snapshot only after its old in-flight overlay can be removed.
     while (this.snapshotPublication !== null) {
-      await this.snapshotPublication.promise;
+      await this.snapshotPublication;
     }
 
     if (this.cache === null) {
@@ -439,20 +426,15 @@ export class ContextHubBackend implements BackendProtocolV2 {
   }
 
   private createMutationBatch(): MutationBatch {
-    let markReady!: () => void;
-    const ready = new Promise<void>((resolve) => {
-      markReady = resolve;
-    });
     const batch: MutationBatch = {
       changes: {},
       waiters: [],
-      ready,
-      markReady,
+      ready: new Deferred<void>(),
       timer: null,
     };
     batch.timer = setTimeout(() => {
       batch.timer = null;
-      batch.markReady();
+      batch.ready.resolve();
     }, MUTATION_COALESCE_MS);
     return batch;
   }
@@ -462,7 +444,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
       clearTimeout(batch.timer);
       batch.timer = null;
     }
-    batch.markReady();
+    batch.ready.resolve();
   }
 
   private enqueueCommit(
@@ -480,11 +462,10 @@ export class ContextHubBackend implements BackendProtocolV2 {
     }
     Object.assign(batch.changes, changes);
 
-    const completion = new Promise<void>((resolve, reject) => {
-      batch.waiters.push({ intent, resolve, reject });
-    });
+    const completion = new Deferred<void>();
+    batch.waiters.push({ intent, completion });
     this.startWorker();
-    return completion;
+    return completion.promise;
   }
 
   private rematerializeBatch(
@@ -618,7 +599,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
         this.invalidateCache();
         this.finishSnapshotPublication();
         for (const waiter of batch.waiters) {
-          waiter.reject(error);
+          waiter.completion.reject(error);
         }
         this.failPendingBatch(error);
         return;
@@ -627,7 +608,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
       this.inFlightBatch = null;
       this.finishSnapshotPublication();
       for (const waiter of batch.waiters) {
-        waiter.resolve();
+        waiter.completion.resolve();
       }
       if (pendingReplayError !== null) {
         this.failPendingBatch(pendingReplayError);
@@ -644,7 +625,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
     this.pendingBatch = null;
     this.cancelBatchTimer(pending);
     for (const waiter of pending.waiters) {
-      waiter.reject(error);
+      waiter.completion.reject(error);
     }
   }
 
@@ -656,7 +637,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
     if (inFlight !== null) {
       this.cancelBatchTimer(inFlight);
       for (const waiter of inFlight.waiters) {
-        waiter.reject(error);
+        waiter.completion.reject(error);
       }
     }
     this.failPendingBatch(error);

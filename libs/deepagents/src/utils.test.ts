@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
-import { isBedrockConverseModel } from "./utils.js";
+import { Deferred, isBedrockConverseModel } from "./utils.js";
 
 describe("isBedrockConverseModel", () => {
   describe("string inputs", () => {
@@ -82,5 +82,32 @@ describe("isBedrockConverseModel", () => {
       vi.spyOn(model, "getName").mockReturnValue("ConfigurableModel");
       expect(isBedrockConverseModel(model)).toBe(false);
     });
+  });
+});
+
+describe("Deferred", () => {
+  it("resolves through both its promise and PromiseLike interface", async () => {
+    const deferred = new Deferred<number>();
+    deferred.resolve(42);
+
+    await expect(deferred.promise).resolves.toBe(42);
+    await expect(deferred).resolves.toBe(42);
+  });
+
+  it("rejects with the supplied reason", async () => {
+    const deferred = new Deferred<void>();
+    const error = new Error("failed");
+    deferred.reject(error);
+
+    await expect(deferred.promise).rejects.toBe(error);
+  });
+
+  it("settles only once", async () => {
+    const deferred = new Deferred<string>();
+    deferred.resolve("first");
+    deferred.resolve("second");
+    deferred.reject(new Error("ignored"));
+
+    await expect(deferred).resolves.toBe("first");
   });
 });
