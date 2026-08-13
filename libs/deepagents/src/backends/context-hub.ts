@@ -534,10 +534,22 @@ export class ContextHubBackend implements BackendProtocolV2 {
     conflictError: unknown,
   ): void {
     const cache = this.rematerializeBatch(batch, snapshot.cache, conflictError);
+    let pendingReplayError: unknown = null;
     if (this.pendingBatch !== null) {
-      this.rematerializeBatch(this.pendingBatch, cache, conflictError);
+      try {
+        this.rematerializeBatch(this.pendingBatch, cache, conflictError);
+      } catch (error) {
+        if (error !== conflictError) {
+          throw error;
+        }
+        pendingReplayError = error;
+      }
     }
     this.publishSnapshot(snapshot);
+    if (pendingReplayError !== null) {
+      // A queued replay failure must not abort the valid in-flight retry.
+      this.failPendingBatch(pendingReplayError);
+    }
   }
 
   private rematerializePendingBatch(snapshot: TreeSnapshot): Error | null {

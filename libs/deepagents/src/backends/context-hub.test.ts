@@ -617,14 +617,16 @@ describe("ContextHubBackend", () => {
       });
     });
 
-    it("replays an edit after a 409 conflict without losing a remote same-file insertion", async () => {
+    it("continues a valid 409 retry when a queued edit no longer applies", async () => {
       vi.useFakeTimers();
+      const firstPush = deferred<string>();
       const { backend, client } = makeBackend();
       client.pullAgent
         .mockReset()
         .mockResolvedValueOnce(
           makeContext("base0000", {
             "shared.md": { type: "file", content: "before\ntarget\nafter" },
+            "queued.md": { type: "file", content: "before\ntarget\nafter" },
           }),
         )
         .mockResolvedValueOnce(
@@ -633,25 +635,44 @@ describe("ContextHubBackend", () => {
               type: "file",
               content: "remote insertion\nbefore\ntarget\nafter",
             },
+            "queued.md": {
+              type: "file",
+              content: "before\nremote replacement\nafter",
+            },
             "remote.md": { type: "file", content: "unrelated" },
           }),
         );
       client.pushAgent
         .mockReset()
-        .mockRejectedValueOnce(
-          makeLangSmithError("conflict", {
-            name: "LangSmithConflictError",
-            status: 409,
-          }),
-        )
+        .mockImplementationOnce(() => firstPush.promise)
         .mockResolvedValueOnce(commitUrl("22222222"));
 
       const edit = backend.edit("/shared.md", "target", "replacement");
       await advanceMutationWindow();
+      expect(client.pushAgent).toHaveBeenCalledTimes(1);
+
+      const queuedEdit = backend.edit(
+        "/queued.md",
+        "target",
+        "local replacement",
+      );
+      const queuedExpectation = expect(queuedEdit).resolves.toMatchObject({
+        error: expect.stringContaining("Hub unavailable"),
+      });
+      await flushMicrotasks();
+      expect(client.pushAgent).toHaveBeenCalledTimes(1);
+
+      firstPush.reject(
+        makeLangSmithError("conflict", {
+          name: "LangSmithConflictError",
+          status: 409,
+        }),
+      );
       await expect(edit).resolves.toMatchObject({
         path: "/shared.md",
         occurrences: 1,
       });
+      await queuedExpectation;
 
       expect(client.pushAgent).toHaveBeenCalledTimes(2);
       expect(client.pushAgent.mock.calls[0][1].parentCommit).toBe("base0000");
@@ -667,9 +688,13 @@ describe("ContextHubBackend", () => {
       await expect(backend.read("/shared.md")).resolves.toMatchObject({
         content: "remote insertion\nbefore\nreplacement\nafter",
       });
+      await expect(backend.read("/queued.md")).resolves.toMatchObject({
+        content: "before\nremote replacement\nafter",
+      });
       await expect(backend.read("/remote.md")).resolves.toMatchObject({
         content: "unrelated",
       });
+      expect(vi.getTimerCount()).toBe(0);
     });
 
     it("stops after four conflicting pushes and allows the next burst to recover", async () => {
