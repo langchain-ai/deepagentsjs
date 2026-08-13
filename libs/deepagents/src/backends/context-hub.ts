@@ -24,9 +24,99 @@ import type {
 import { applyGrepMaxCount } from "./protocol.js";
 import { performStringReplacement } from "./utils.js";
 
-const URL_COMMIT_SUFFIX_RE = /:([0-9a-f]{8,64})$/i;
+const CONTEXT_URL_COMMIT_PATH_RE = /^\/context\/([^/]+)\/([0-9a-f]{8})$/;
+const LEGACY_URL_COMMIT_PATH_RE = /^\/hub\/([^/]+)\/([^/:]+):([0-9a-f]{8})$/;
+const MUTATION_COALESCE_MS = 50;
+const MAX_CONFLICT_RETRIES = 3;
 const TEXT_MIME_TYPE = "text/plain";
 const FNMATCH_OPTIONS = { bash: true };
+
+type FileChanges = Record<string, string | null>;
+
+interface MutationWaiter {
+  resolve: () => void;
+  reject: (error: unknown) => void;
+}
+
+interface MutationBatch {
+  changes: FileChanges;
+  waiters: MutationWaiter[];
+  ready: Promise<void>;
+  markReady: () => void;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
+interface MutationAcceptance<T> {
+  result: T;
+  completion?: Promise<void>;
+}
+
+interface TreeSnapshot {
+  cache: Record<string, string>;
+  linkedEntries: Record<string, string>;
+  commitHash: string | null;
+}
+
+type PushBatchResult =
+  | { kind: "commit"; commitHash: string }
+  | { kind: "snapshot"; snapshot: TreeSnapshot };
+
+interface SnapshotPublication {
+  promise: Promise<void>;
+  complete: () => void;
+}
+
+function parseHubTargetIdentifier(
+  identifier: string,
+): [owner: string, name: string] | null {
+  if (
+    !identifier ||
+    identifier.split("/").length > 2 ||
+    identifier.startsWith("/") ||
+    identifier.endsWith("/") ||
+    identifier.split(":").length > 2
+  ) {
+    return null;
+  }
+
+  const [ownerNamePart] = identifier.split(":");
+  if (ownerNamePart.includes("/")) {
+    const [owner, name] = ownerNamePart.split("/", 2);
+    return owner && name ? [owner, name] : null;
+  }
+  return ownerNamePart ? ["-", ownerNamePart] : null;
+}
+
+function parseCommitHashFromUrl(
+  url: string,
+  identifier: string,
+): string | null {
+  try {
+    const pathname = decodeURIComponent(new URL(url).pathname);
+    const target = parseHubTargetIdentifier(identifier);
+    if (target === null) {
+      return null;
+    }
+    const [targetOwner, targetName] = target;
+
+    const contextMatch = CONTEXT_URL_COMMIT_PATH_RE.exec(pathname);
+    if (contextMatch !== null && contextMatch[1] === targetName) {
+      return contextMatch[2];
+    }
+
+    const legacyMatch = LEGACY_URL_COMMIT_PATH_RE.exec(pathname);
+    if (
+      legacyMatch !== null &&
+      legacyMatch[1] === targetOwner &&
+      legacyMatch[2] === targetName
+    ) {
+      return legacyMatch[3];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 function getErrorMessage(error: unknown): string {
   if (typeof error === "string") {
@@ -140,6 +230,12 @@ export class ContextHubBackend implements BackendProtocolV2 {
   private cache: Record<string, string> | null = null;
   private linkedEntries: Record<string, string> = {};
   private commitHash: string | null = null;
+  private loadPromise: Promise<void> | null = null;
+  private mutationOrder = Promise.resolve();
+  private pendingBatch: MutationBatch | null = null;
+  private inFlightBatch: MutationBatch | null = null;
+  private workerPromise: Promise<void> | null = null;
+  private snapshotPublication: SnapshotPublication | null = null;
 
   constructor(
     identifier: string,
@@ -159,83 +255,339 @@ export class ContextHubBackend implements BackendProtocolV2 {
     return `Hub unavailable: ${getErrorMessage(error)}`;
   }
 
-  private async loadTree(): Promise<void> {
+  private async fetchTree(): Promise<TreeSnapshot> {
     let context: AgentContext;
     try {
       context = await this.client.pullAgent(this.identifier);
     } catch (error) {
       if (isLangSmithNotFoundError(error)) {
-        this.cache = {};
-        this.linkedEntries = {};
-        this.commitHash = null;
-        return;
+        return { cache: {}, linkedEntries: {}, commitHash: null };
       }
       throw error;
     }
 
-    this.commitHash = context.commit_hash;
-    this.cache = {};
-    this.linkedEntries = {};
+    const cache: Record<string, string> = {};
+    const linkedEntries: Record<string, string> = {};
 
     for (const [path, entry] of Object.entries(context.files)) {
       if (entry.type === "file") {
-        this.cache[path] = entry.content;
+        cache[path] = entry.content;
       } else if (
         (entry.type === "agent" || entry.type === "skill") &&
         typeof entry.repo_handle === "string"
       ) {
-        this.linkedEntries[path] = entry.repo_handle;
+        linkedEntries[path] = entry.repo_handle;
       }
     }
+
+    return { cache, linkedEntries, commitHash: context.commit_hash };
   }
 
-  private async ensureCache(): Promise<Record<string, string>> {
+  private publishSnapshot(snapshot: TreeSnapshot): void {
+    this.cache = snapshot.cache;
+    this.linkedEntries = snapshot.linkedEntries;
+    this.commitHash = snapshot.commitHash;
+  }
+
+  private async loadTree(): Promise<void> {
+    this.publishSnapshot(await this.fetchTree());
+  }
+
+  private beginSnapshotPublication(): void {
+    if (this.snapshotPublication !== null) {
+      throw new Error("Context Hub snapshot publication is already pending");
+    }
+
+    let complete!: () => void;
+    const promise = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+    this.snapshotPublication = { promise, complete };
+  }
+
+  private finishSnapshotPublication(): void {
+    const publication = this.snapshotPublication;
+    if (publication === null) {
+      return;
+    }
+    this.snapshotPublication = null;
+    publication.complete();
+  }
+
+  private async ensureCacheLoaded(): Promise<void> {
+    // Publish a hashless-push snapshot only after its old in-flight overlay can be removed.
+    while (this.snapshotPublication !== null) {
+      await this.snapshotPublication.promise;
+    }
+
     if (this.cache === null) {
-      await this.loadTree();
+      let loadPromise = this.loadPromise;
+      if (loadPromise === null) {
+        loadPromise = this.loadTree();
+        this.loadPromise = loadPromise;
+      }
+
+      try {
+        await loadPromise;
+      } finally {
+        if (this.loadPromise === loadPromise) {
+          this.loadPromise = null;
+        }
+      }
     }
     if (this.cache === null) {
       throw new Error("Context Hub cache failed to initialize");
     }
-    return this.cache;
   }
 
-  private async commit(changes: Record<string, string | null>): Promise<void> {
+  private async ensureCache(): Promise<Record<string, string>> {
+    await this.ensureCacheLoaded();
+    return this.visibleCache();
+  }
+
+  private static applyChanges(
+    cache: Record<string, string>,
+    changes: FileChanges,
+  ): Record<string, string> {
+    const next = { ...cache };
+    for (const [path, content] of Object.entries(changes)) {
+      if (content === null) {
+        delete next[path];
+      } else {
+        next[path] = content;
+      }
+    }
+    return next;
+  }
+
+  private visibleCache(): Record<string, string> {
+    let visible = { ...(this.cache ?? {}) };
+    if (this.inFlightBatch !== null) {
+      visible = ContextHubBackend.applyChanges(
+        visible,
+        this.inFlightBatch.changes,
+      );
+    }
+    if (this.pendingBatch !== null) {
+      visible = ContextHubBackend.applyChanges(
+        visible,
+        this.pendingBatch.changes,
+      );
+    }
+    return visible;
+  }
+
+  private invalidateCache(): void {
+    this.cache = null;
+    this.linkedEntries = {};
+    this.commitHash = null;
+    this.loadPromise = null;
+  }
+
+  private async acquireMutationTurn(): Promise<() => void> {
+    let release!: () => void;
+    const previous = this.mutationOrder;
+    this.mutationOrder = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    return release;
+  }
+
+  private async acceptMutation<T>(
+    operation: (cache: Record<string, string>) => MutationAcceptance<T>,
+  ): Promise<MutationAcceptance<T>> {
+    const turn = this.acquireMutationTurn();
+    const cacheOutcome = this.ensureCacheLoaded().then(
+      () => ({ loaded: true }) as const,
+      (error: unknown) => ({ loaded: false, error }) as const,
+    );
+    const release = await turn;
+    try {
+      const outcome = await cacheOutcome;
+      if (!outcome.loaded) {
+        throw outcome.error;
+      }
+      while (this.cache === null) {
+        await this.ensureCacheLoaded();
+      }
+      return operation(this.visibleCache());
+    } finally {
+      release();
+    }
+  }
+
+  private createMutationBatch(): MutationBatch {
+    let markReady!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      markReady = resolve;
+    });
+    const batch: MutationBatch = {
+      changes: {},
+      waiters: [],
+      ready,
+      markReady,
+      timer: null,
+    };
+    batch.timer = setTimeout(() => {
+      batch.timer = null;
+      batch.markReady();
+    }, MUTATION_COALESCE_MS);
+    return batch;
+  }
+
+  private cancelBatchTimer(batch: MutationBatch): void {
+    if (batch.timer !== null) {
+      clearTimeout(batch.timer);
+      batch.timer = null;
+    }
+    batch.markReady();
+  }
+
+  private enqueueCommit(changes: FileChanges): Promise<void> {
     if (Object.keys(changes).length === 0) {
+      return Promise.resolve();
+    }
+
+    let batch = this.pendingBatch;
+    if (batch === null) {
+      batch = this.createMutationBatch();
+      this.pendingBatch = batch;
+    }
+    Object.assign(batch.changes, changes);
+
+    const completion = new Promise<void>((resolve, reject) => {
+      batch.waiters.push({ resolve, reject });
+    });
+    this.startWorker();
+    return completion;
+  }
+
+  private startWorker(): void {
+    if (this.workerPromise !== null) {
       return;
     }
 
+    const worker = this.drainMutationQueue()
+      .catch((error: unknown) => {
+        this.failAllBatches(error);
+      })
+      .finally(() => {
+        if (this.workerPromise === worker) {
+          this.workerPromise = null;
+          if (this.pendingBatch !== null) {
+            this.startWorker();
+          }
+        }
+      });
+    this.workerPromise = worker;
+  }
+
+  private async drainMutationQueue(): Promise<void> {
+    while (this.pendingBatch !== null) {
+      const batch = this.pendingBatch;
+      await batch.ready;
+      if (this.pendingBatch !== batch) {
+        continue;
+      }
+
+      this.pendingBatch = null;
+      this.inFlightBatch = batch;
+      try {
+        const result = await this.pushBatch(batch.changes);
+        if (result.kind === "snapshot") {
+          this.publishSnapshot(result.snapshot);
+        } else {
+          this.cache = ContextHubBackend.applyChanges(
+            this.cache ?? {},
+            batch.changes,
+          );
+          this.commitHash = result.commitHash;
+        }
+      } catch (error) {
+        this.inFlightBatch = null;
+        this.invalidateCache();
+        this.finishSnapshotPublication();
+        for (const waiter of batch.waiters) {
+          waiter.reject(error);
+        }
+        this.failPendingBatch(error);
+        return;
+      }
+
+      this.inFlightBatch = null;
+      this.finishSnapshotPublication();
+      for (const waiter of batch.waiters) {
+        waiter.resolve();
+      }
+    }
+  }
+
+  private failPendingBatch(error: unknown): void {
+    const pending = this.pendingBatch;
+    if (pending === null) {
+      return;
+    }
+    this.pendingBatch = null;
+    this.cancelBatchTimer(pending);
+    for (const waiter of pending.waiters) {
+      waiter.reject(error);
+    }
+  }
+
+  private failAllBatches(error: unknown): void {
+    const inFlight = this.inFlightBatch;
+    this.inFlightBatch = null;
+    this.invalidateCache();
+    this.finishSnapshotPublication();
+    if (inFlight !== null) {
+      this.cancelBatchTimer(inFlight);
+      for (const waiter of inFlight.waiters) {
+        waiter.reject(error);
+      }
+    }
+    this.failPendingBatch(error);
+  }
+
+  private async pushBatch(changes: FileChanges): Promise<PushBatchResult> {
     const payload: Record<string, Entry | null> = {};
     for (const [path, content] of Object.entries(changes)) {
       payload[path] = content === null ? null : { type: "file", content };
     }
 
-    const url = await this.client.pushAgent(this.identifier, {
-      files: payload,
-      ...(this.commitHash ? { parentCommit: this.commitHash } : {}),
-    });
+    for (let attempt = 0; ; attempt += 1) {
+      let url: string;
+      try {
+        url = await this.client.pushAgent(this.identifier, {
+          files: payload,
+          ...(this.commitHash ? { parentCommit: this.commitHash } : {}),
+        });
+      } catch (error) {
+        if (
+          getLangSmithStatus(error) !== 409 ||
+          attempt >= MAX_CONFLICT_RETRIES
+        ) {
+          throw error;
+        }
+        await this.loadTree();
+        continue;
+      }
 
-    const match = URL_COMMIT_SUFFIX_RE.exec(url);
-    if (match) {
-      this.commitHash = match[1];
-    }
-
-    if (this.cache !== null) {
-      const deletions = new Set(
-        Object.entries(changes)
-          .filter(([, content]) => content === null)
-          .map(([path]) => path),
-      );
-      const updates = Object.fromEntries(
-        Object.entries(changes).filter(
-          (entry): entry is [string, string] => entry[1] !== null,
-        ),
-      );
-      this.cache = {
-        ...Object.fromEntries(
-          Object.entries(this.cache).filter(([path]) => !deletions.has(path)),
-        ),
-        ...updates,
-      };
+      const pushedCommitHash = parseCommitHashFromUrl(url, this.identifier);
+      if (pushedCommitHash === null) {
+        this.beginSnapshotPublication();
+        const snapshot = await this.fetchTree();
+        if (snapshot.commitHash === null) {
+          throw new Error(
+            "Context Hub commit succeeded but its hash could not be resolved",
+          );
+        }
+        return {
+          kind: "snapshot",
+          snapshot,
+        };
+      }
+      return { kind: "commit", commitHash: pushedCommitHash };
     }
   }
 
@@ -416,17 +768,20 @@ export class ContextHubBackend implements BackendProtocolV2 {
     const hubPath = ContextHubBackend.stripPrefix(filePath);
 
     try {
-      await this.ensureCache();
-      await this.commit({ [hubPath]: content });
+      const accepted = await this.acceptMutation<WriteResult>(() => {
+        return {
+          result: { path: filePath, filesUpdate: null },
+          completion: this.enqueueCommit({ [hubPath]: content }),
+        };
+      });
+      await accepted.completion;
+      return accepted.result;
     } catch (error) {
       if (isLangSmithError(error)) {
-        this.cache = null;
         return { error: ContextHubBackend.toHubUnavailableError(error) };
       }
       throw error;
     }
-
-    return { path: filePath, filesUpdate: null };
   }
 
   async edit(
@@ -438,32 +793,38 @@ export class ContextHubBackend implements BackendProtocolV2 {
     const hubPath = ContextHubBackend.stripPrefix(filePath);
 
     try {
-      const cache = await this.ensureCache();
-      const current = cache[hubPath];
-      if (current === undefined) {
-        return { error: `Error: File '${filePath}' not found` };
-      }
+      const accepted = await this.acceptMutation<EditResult>((cache) => {
+        const current = cache[hubPath];
+        if (current === undefined) {
+          return {
+            result: { error: `Error: File '${filePath}' not found` },
+          };
+        }
 
-      const replacementResult = performStringReplacement(
-        current,
-        oldString,
-        newString,
-        replaceAll,
-      );
-      if (typeof replacementResult === "string") {
-        return { error: replacementResult };
-      }
+        const replacementResult = performStringReplacement(
+          current,
+          oldString,
+          newString,
+          replaceAll,
+        );
+        if (typeof replacementResult === "string") {
+          return { result: { error: replacementResult } };
+        }
 
-      const [newContent, occurrences] = replacementResult;
-      await this.commit({ [hubPath]: newContent });
-      return {
-        path: filePath,
-        filesUpdate: null,
-        occurrences,
-      };
+        const [newContent, occurrences] = replacementResult;
+        return {
+          result: {
+            path: filePath,
+            filesUpdate: null,
+            occurrences,
+          },
+          completion: this.enqueueCommit({ [hubPath]: newContent }),
+        };
+      });
+      await accepted.completion;
+      return accepted.result;
     } catch (error) {
       if (isLangSmithError(error)) {
-        this.cache = null;
         return { error: ContextHubBackend.toHubUnavailableError(error) };
       }
       throw error;
@@ -474,16 +835,22 @@ export class ContextHubBackend implements BackendProtocolV2 {
     const hubPath = ContextHubBackend.stripPrefix(filePath);
 
     try {
-      const cache = await this.ensureCache();
-      if (!(hubPath in cache)) {
-        return { error: `Error: File '${filePath}' not found` };
-      }
+      const accepted = await this.acceptMutation<DeleteResult>((cache) => {
+        if (!(hubPath in cache)) {
+          return {
+            result: { error: `Error: File '${filePath}' not found` },
+          };
+        }
 
-      await this.commit({ [hubPath]: null });
-      return { path: filePath };
+        return {
+          result: { path: filePath },
+          completion: this.enqueueCommit({ [hubPath]: null }),
+        };
+      });
+      await accepted.completion;
+      return accepted.result;
     } catch (error) {
       if (isLangSmithError(error)) {
-        this.cache = null;
         return { error: ContextHubBackend.toHubUnavailableError(error) };
       }
       throw error;
@@ -510,11 +877,15 @@ export class ContextHubBackend implements BackendProtocolV2 {
     let commitError: FileOperationError | null = null;
     if (Object.keys(validFiles).length > 0) {
       try {
-        await this.ensureCache();
-        await this.commit(validFiles);
+        const accepted = await this.acceptMutation<null>(() => {
+          return {
+            result: null,
+            completion: this.enqueueCommit(validFiles),
+          };
+        });
+        await accepted.completion;
       } catch (error) {
         if (isLangSmithError(error)) {
-          this.cache = null;
           commitError = mapHubFileOperationError(error);
         } else {
           throw error;
