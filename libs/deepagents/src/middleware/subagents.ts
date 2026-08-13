@@ -555,6 +555,7 @@ function createTaskTool(options: {
       const currentState = getCurrentTaskInput<Record<string, unknown>>();
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
+      subagentState._summarizationSessionId = `session_${crypto.randomUUID().substring(0, 8)}`;
 
       const subagentConfig = {
         ...config,
