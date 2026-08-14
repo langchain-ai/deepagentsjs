@@ -1127,7 +1127,7 @@ function createGrepTool(
           .nullable()
           .default(null)
           .describe("Optional glob pattern to filter files (e.g., '*.py')"),
-        max_count: z
+        max_count: z.coerce
           .number()
           .int()
           .positive()
