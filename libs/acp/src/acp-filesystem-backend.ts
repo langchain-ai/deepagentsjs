@@ -12,7 +12,6 @@ import {
   type WriteResult,
   type ReadResult,
 } from "deepagents";
-import path from "node:path";
 
 /**
  * Backend that proxies read/write through ACP client while using local
@@ -23,7 +22,12 @@ export class ACPFilesystemBackend extends FilesystemBackend {
   private currentSessionId: string | null = null;
 
   constructor(options: { conn: AgentSideConnection; rootDir: string }) {
-    super({ rootDir: options.rootDir });
+    // virtualMode confines all path resolution to rootDir: tool paths are
+    // treated as virtual paths under the workspace and traversal (.., ~) is
+    // blocked, so searches can never escape to the host filesystem. This
+    // matches the Python deepagents-acp server, which constructs its backend
+    // as FilesystemBackend(root_dir=cwd, virtual_mode=True).
+    super({ rootDir: options.rootDir, virtualMode: true });
     this.conn = options.conn;
   }
 
@@ -31,9 +35,10 @@ export class ACPFilesystemBackend extends FilesystemBackend {
     this.currentSessionId = sessionId;
   }
 
+  // Map an incoming (virtual) tool path to the real absolute path the ACP
+  // client expects, reusing the backend's virtual-aware resolution.
   private resolveAbsPath(filePath: string): string {
-    if (path.isAbsolute(filePath)) return filePath;
-    return path.resolve(this.cwd, filePath);
+    return this.resolvePath(filePath);
   }
 
   /**
