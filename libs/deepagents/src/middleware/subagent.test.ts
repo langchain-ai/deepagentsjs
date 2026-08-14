@@ -39,7 +39,7 @@ import { createSummarizationMiddleware } from "./summarization.js";
 import { mergeMiddleware } from "./utils.js";
 import { createFileData } from "../backends/utils.js";
 import { createMockBackend } from "./test.js";
-import { createSubAgent } from "./subagents.js";
+import { createSubAgent, filterStateForSubagent } from "./subagents.js";
 import { registerHarnessProfile } from "../profiles/index.js";
 
 const createAgentMock = vi.mocked(createAgent);
@@ -294,6 +294,46 @@ description: A skill for the subagent
     // Verify skillsMetadata is NOT in the parent agent's final state
     // This confirms EXCLUDED_STATE_KEYS is working correctly
     expect(result).not.toHaveProperty("skillsMetadata");
+  });
+});
+
+describe("Subagent summarization state isolation", () => {
+  const summarizationEvent = {
+    cutoffIndex: 40,
+    summaryMessage: new HumanMessage({ content: "STALE_PARENT_SUMMARY" }),
+    filePath: null,
+  };
+
+  it("should exclude _summarizationEvent and _summarizationSessionId from subagent input", () => {
+    const parentState = {
+      messages: [new HumanMessage("irrelevant")],
+      files: { "/foo.txt": "data" },
+      _summarizationEvent: summarizationEvent,
+      _summarizationSessionId: "thread-abc",
+    };
+
+    const filtered = filterStateForSubagent(parentState);
+
+    expect(filtered).not.toHaveProperty("_summarizationEvent");
+    expect(filtered).not.toHaveProperty("_summarizationSessionId");
+    expect(filtered.files).toEqual(parentState.files);
+  });
+
+  it("should exclude a subagent's own _summarizationEvent from its return update", () => {
+    const subagentResult = {
+      messages: [new AIMessage({ content: "Subagent done" })],
+      _summarizationEvent: {
+        cutoffIndex: 99,
+        summaryMessage: new HumanMessage({ content: "SUBAGENT_SUMMARY" }),
+        filePath: null,
+      },
+      _summarizationSessionId: "subagent-thread-xyz",
+    };
+
+    const filtered = filterStateForSubagent(subagentResult);
+
+    expect(filtered).not.toHaveProperty("_summarizationEvent");
+    expect(filtered).not.toHaveProperty("_summarizationSessionId");
   });
 });
 

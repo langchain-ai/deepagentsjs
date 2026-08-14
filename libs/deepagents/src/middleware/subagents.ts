@@ -41,16 +41,9 @@ export const DEFAULT_SUBAGENT_PROMPT =
   "In order to complete the objective that the user asks of you, you have access to a number of standard tools.";
 
 /**
- * State keys that are excluded when passing state to subagents and when returning
- * updates from subagents.
- *
- * When returning updates:
- * 1. The messages key is handled explicitly to ensure only the final message is included
- * 2. The todos and structuredResponse keys are excluded as they do not have a defined reducer
- *    and no clear meaning for returning them from a subagent to the main agent.
- * 3. The skillsMetadata and memoryContents keys are automatically excluded from subagent output
- *    to prevent parent state from leaking to child agents. Each agent loads its own skills/memory
- *    independently based on its middleware configuration.
+ * State keys excluded when passing state to subagents and when returning
+ * updates from subagents. Summarization keys are excluded because their
+ * cutoffIndex is only valid against the message list it was computed from.
  */
 const EXCLUDED_STATE_KEYS = [
   "messages",
@@ -58,6 +51,8 @@ const EXCLUDED_STATE_KEYS = [
   "structuredResponse",
   "skillsMetadata",
   "memoryContents",
+  "_summarizationEvent",
+  "_summarizationSessionId",
 ] as const;
 
 /**
@@ -276,7 +271,7 @@ export const GENERAL_PURPOSE_SUBAGENT: Pick<
 /**
  * Filter state to exclude certain keys when passing to subagents
  */
-function filterStateForSubagent(
+export function filterStateForSubagent(
   state: Record<string, unknown>,
 ): Record<string, unknown> {
   const filtered: Record<string, unknown> = {};
@@ -560,6 +555,7 @@ function createTaskTool(options: {
       const currentState = getCurrentTaskInput<Record<string, unknown>>();
       const subagentState = filterStateForSubagent(currentState);
       subagentState.messages = [new HumanMessage({ content: description })];
+      subagentState._summarizationSessionId = `session_${crypto.randomUUID().substring(0, 8)}`;
 
       const subagentConfig = {
         ...config,
