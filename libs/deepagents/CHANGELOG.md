@@ -1,5 +1,15 @@
 # deepagents
 
+## 1.12.4
+
+### Patch Changes
+
+- [#747](https://github.com/langchain-ai/deepagentsjs/pull/747) [`b2afb8d`](https://github.com/langchain-ai/deepagentsjs/commit/b2afb8d600570b633fd97d4d2f8fd8bdb229ce35) Thanks [@casparb](https://github.com/casparb)! - fix(deepagents): batch concurrent Context Hub mutations
+
+- [#751](https://github.com/langchain-ai/deepagentsjs/pull/751) [`68337fc`](https://github.com/langchain-ai/deepagentsjs/commit/68337fcca19a6d7cc18e8917d575ea9ca3aebcbe) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - fix(deepagents): coerce grep tool's max_count to a number
+
+- [#749](https://github.com/langchain-ai/deepagentsjs/pull/749) [`7550c65`](https://github.com/langchain-ai/deepagentsjs/commit/7550c65204bdd9141a88b9b42d46899e05c7bc43) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - fix(deepagents): exclude summarization state from subagent input/output
+
 ## 1.12.3
 
 ### Patch Changes
