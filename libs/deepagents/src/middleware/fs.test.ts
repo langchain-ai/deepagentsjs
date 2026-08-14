@@ -1509,6 +1509,25 @@ describe("createFilesystemMiddleware", () => {
       expect(mockBackend.grep).toHaveBeenCalledWith("needle", "/", null, 5);
     });
 
+    it("grep tool coerces a stringified max_count arg to a number", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.grep = vi.fn().mockResolvedValue({ matches: [] });
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+
+      const grepTool = middleware.tools!.find(
+        (t: any) => t.name === "grep",
+      ) as any;
+      await grepTool.invoke({ pattern: "needle", path: "/", max_count: "5" });
+
+      expect(mockBackend.grep).toHaveBeenCalledWith("needle", "/", null, 5);
+    });
+
     it("grep tool appends the truncation note when the backend flags truncated", async () => {
       const mockBackend = createMockBackend();
       mockBackend.grep = vi.fn().mockResolvedValue({
