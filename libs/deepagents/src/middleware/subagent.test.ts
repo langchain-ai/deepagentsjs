@@ -603,6 +603,59 @@ describe("Subagent mode: fork/dynamic", () => {
     expect(systemMessage?.text).toContain("PARENT_ROOT_PROMPT_MARKER");
   });
 
+  it("does NOT throw on duplicate middleware names when a dynamic spec forks with a custom SummarizationMiddleware", async () => {
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: `call_${Date.now()}`,
+              name: "task",
+              args: {
+                description: "UNIQUE_TASK_MARKER",
+                subagent_type: "worker",
+                mode: "fork",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Worker done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      systemPrompt: "PARENT_ROOT_PROMPT_MARKER",
+      checkpointer,
+      middleware: [
+        createSummarizationMiddleware({ backend: new StateBackend() }),
+      ],
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          systemPrompt: "You are a specialized worker.",
+          mode: "dynamic",
+        },
+      ],
+    });
+
+    await expect(
+      agent.invoke(
+        { messages: priorHistory },
+        {
+          configurable: {
+            thread_id: `test-mode-dynamic-fork-dup-middleware-${Date.now()}`,
+          },
+          recursionLimit: 50,
+        },
+      ),
+    ).resolves.toBeDefined();
+  });
+
   it("mode: dynamic stays isolated when the model omits mode on the call", async () => {
     const model = new FakeListChatModel({
       responses: [

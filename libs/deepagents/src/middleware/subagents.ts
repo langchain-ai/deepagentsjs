@@ -22,6 +22,7 @@ import type { Runnable } from "@langchain/core/runnables";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { FilesystemPermission } from "../permissions/types.js";
 import type { SummarizationEvent } from "./summarization.js";
+import { mergeMiddleware } from "./utils.js";
 
 export type { AgentMiddleware };
 
@@ -414,10 +415,10 @@ export function createSubAgent(
     throw new Error(`SubAgent '${spec.name}' must specify 'tools'`);
   }
 
-  const middleware: AgentMiddleware[] = [
-    ...(spec.middleware ?? []),
-    ...(options?.extraMiddleware ?? []),
-  ];
+  const middleware: AgentMiddleware[] = mergeMiddleware(
+    spec.middleware ?? [],
+    options?.extraMiddleware ?? [],
+  );
 
   if (spec.interruptOn) {
     middleware.push(
