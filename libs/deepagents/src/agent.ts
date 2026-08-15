@@ -301,26 +301,37 @@ export function createDeepAgent<
     ];
   };
 
+  // Fresh memory middleware for a cache-aligned fork spec.
+  const buildMirrorMemoryMiddleware = (): AgentMiddleware[] =>
+    memory && memory.length > 0
+      ? [
+          createMemoryMiddleware({
+            backend,
+            sources: memory,
+            addCacheControl: anthropicModel,
+          }),
+        ]
+      : [];
+
+  // Mirror middleware for a "dynamic" spec's per-call recompile.
+  const buildMirrorMiddleware = (): AgentMiddleware[] => [
+    ...customMiddleware,
+    ...buildMirrorMemoryMiddleware(),
+  ];
+
   const normalizeSubagentSpec = (input: SubAgent): SubAgent => {
     const subagentDefaultMiddleware = createSubagentDefaultMiddleware(input);
 
-    const cacheAligned = isCacheAlignedForkSpec(
-      input.mode,
-      input.model,
-      model,
-      finalSystemPrompt,
-    );
-    const mirroredCustomMiddleware = cacheAligned ? customMiddleware : [];
-    const mirroredMemoryMiddleware =
-      cacheAligned && memory && memory.length > 0
-        ? [
-            createMemoryMiddleware({
-              backend,
-              sources: memory,
-              addCacheControl: anthropicModel,
-            }),
-          ]
-        : [];
+    // Only "fork" bakes mirrored middleware in statically; "dynamic" gets it at recompile time.
+    const shouldMirrorStatically =
+      input.mode === "fork" &&
+      isCacheAlignedForkSpec(input.mode, input.model, model, finalSystemPrompt);
+    const mirroredCustomMiddleware = shouldMirrorStatically
+      ? customMiddleware
+      : [];
+    const mirroredMemoryMiddleware = shouldMirrorStatically
+      ? buildMirrorMemoryMiddleware()
+      : [];
 
     let subagentMiddleware = mergeMiddlewareStack(
       subagentDefaultMiddleware,
@@ -417,6 +428,7 @@ export function createDeepAgent<
       subagents: inlineSubagents,
       generalPurposeAgent: false,
       parentSystemPrompt: finalSystemPrompt,
+      parentMirrorMiddleware: buildMirrorMiddleware,
     }),
     // Automatically summarizes conversation history when token limits are approached.
     // Uses createSummarizationMiddleware (deepagents version) with backend support

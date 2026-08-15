@@ -1903,6 +1903,30 @@ describe("middleware override by name", () => {
     );
   });
 
+  it("does NOT bake mirrored middleware into a dynamic-mode subagent's cached graph, even when cache-aligned", () => {
+    const custom = namedMiddleware("MarkerMiddleware");
+
+    createDeepAgent({
+      model: fakeModel,
+      name: "main",
+      systemPrompt: "PARENT_PROMPT",
+      middleware: [custom],
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          systemPrompt: "You are a worker.",
+          mode: "dynamic",
+        },
+      ],
+    });
+
+    const middleware = getMiddlewareStack("worker");
+    expect(middleware.some((entry) => entry.name === "MarkerMiddleware")).toBe(
+      false,
+    );
+  });
+
   it("replaces default main-agent middleware with same-name custom middleware", () => {
     const custom = createCustomSummarizationMiddleware();
 

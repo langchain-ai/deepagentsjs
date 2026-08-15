@@ -404,6 +404,7 @@ export function createSubAgent(
   options?: {
     responseFormat?: CreateAgentParams["responseFormat"];
     systemPromptOverride?: string | SystemMessage;
+    extraMiddleware?: AgentMiddleware[];
   },
 ): ReactAgent {
   if (!spec.model) {
@@ -413,7 +414,10 @@ export function createSubAgent(
     throw new Error(`SubAgent '${spec.name}' must specify 'tools'`);
   }
 
-  const middleware: AgentMiddleware[] = [...(spec.middleware ?? [])];
+  const middleware: AgentMiddleware[] = [
+    ...(spec.middleware ?? []),
+    ...(options?.extraMiddleware ?? []),
+  ];
 
   if (spec.interruptOn) {
     middleware.push(
@@ -561,6 +565,7 @@ function createTaskTool(options: {
   generalPurposeAgent: boolean;
   taskDescription: string | null;
   parentSystemPrompt?: string | SystemMessage | null;
+  parentMirrorMiddleware?: (() => AgentMiddleware[]) | null;
 }) {
   const {
     defaultModel,
@@ -572,6 +577,7 @@ function createTaskTool(options: {
     generalPurposeAgent,
     taskDescription,
     parentSystemPrompt = null,
+    parentMirrorMiddleware = null,
   } = options;
 
   const {
@@ -599,28 +605,38 @@ function createTaskTool(options: {
 
     const responseFormat =
       config.configurable?.[SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY];
-    if (responseFormat != null) {
-      if ("runnable" in spec) {
-        throw new Error(
-          `responseSchema cannot be used with compiled subagent "${spec.name}"; ` +
-            "dynamic schemas require a declarative SubAgent spec.",
-        );
-      }
-      return createSubAgent(spec, { responseFormat }) as unknown as Runnable;
+    if (responseFormat != null && "runnable" in spec) {
+      throw new Error(
+        `responseSchema cannot be used with compiled subagent "${spec.name}"; ` +
+          "dynamic schemas require a declarative SubAgent spec.",
+      );
+    }
+    if ("runnable" in spec) {
+      return subagentGraphs[subagentType] as Runnable;
     }
 
-    const isDynamicForkingCall =
-      shouldFork &&
-      !("runnable" in spec) &&
-      spec.mode === "dynamic" &&
-      subagentSystemPrompts[subagentType] != null;
-    if (isDynamicForkingCall) {
-      return createSubAgent(spec, {
+    // "dynamic" only recompiles when this call actually forks; "fork" only
+    // recompiles when something else (responseFormat) forces it anyway.
+    const isForkingThisCall =
+      shouldFork && subagentSystemPrompts[subagentType] != null;
+    const needsRecompile =
+      responseFormat != null || (isForkingThisCall && spec.mode === "dynamic");
+    if (!needsRecompile) {
+      return subagentGraphs[subagentType] as Runnable;
+    }
+
+    return createSubAgent(spec, {
+      ...(responseFormat != null && { responseFormat }),
+      ...(isForkingThisCall && {
         systemPromptOverride: parentSystemPrompt ?? undefined,
-      }) as unknown as Runnable;
-    }
-
-    return subagentGraphs[subagentType] as Runnable;
+      }),
+      ...(isForkingThisCall &&
+        spec.mode === "dynamic" && {
+          extraMiddleware: parentMirrorMiddleware
+            ? parentMirrorMiddleware()
+            : [],
+        }),
+    }) as unknown as Runnable;
   }
 
   const finalTaskDescription = taskDescription
@@ -671,9 +687,7 @@ function createTaskTool(options: {
           ? `${ownSystemPrompt}\n\n${description}`
           : description;
         subagentState.messages = [...effective, new HumanMessage({ content })];
-        if (event) {
-          subagentState._summarizationEvent = event;
-        }
+        // Not re-adding _summarizationEvent: cutoffIndex already applied above.
         subagentState._summarizationSessionId =
           (currentState._summarizationSessionId as string | undefined) ??
           `session_${crypto.randomUUID().substring(0, 8)}`;
@@ -774,6 +788,8 @@ export interface SubAgentMiddlewareOptions {
   taskDescription?: string | null;
   /** Reused by `mode: "fork"`/`"dynamic"` subagents for cache alignment */
   parentSystemPrompt?: string | SystemMessage | null;
+  /** Builds fresh mirrored middleware for a `"dynamic"` spec's per-call fork recompile */
+  parentMirrorMiddleware?: (() => AgentMiddleware[]) | null;
 }
 
 /**
@@ -791,6 +807,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     generalPurposeAgent = true,
     taskDescription = null,
     parentSystemPrompt = null,
+    parentMirrorMiddleware = null,
   } = options;
 
   const taskTool = createTaskTool({
@@ -802,6 +819,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     subagents,
     generalPurposeAgent,
     taskDescription,
+    parentMirrorMiddleware,
     parentSystemPrompt,
   });
 
