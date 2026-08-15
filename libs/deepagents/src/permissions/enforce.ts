@@ -24,7 +24,7 @@ export function validatePermissionPaths(
  *
  * Throws for:
  * - Empty or non-string input
- * - Non-absolute paths (must start with `/`)
+ * - Non-absolute paths (must start with `/` or a Windows drive letter)
  * - Paths containing `..`
  * - Paths containing `~`
  */
@@ -33,11 +33,18 @@ export function validatePath(raw: string): string {
     throw new Error("path must be a non-empty string");
   }
 
-  if (!raw.startsWith("/")) {
+  // Permission matching always uses a POSIX-style canonical form, while the
+  // backend keeps the original platform-native path for filesystem access.
+  const matchingPath = raw.replaceAll("\\", "/");
+  const normalized = /^[A-Za-z]:\//.test(matchingPath)
+    ? `/${matchingPath}`
+    : matchingPath;
+
+  if (!normalized.startsWith("/")) {
     throw new Error(`path must be absolute: ${JSON.stringify(raw)}`);
   }
 
-  const segments = raw.split("/").filter((s) => s.length > 0);
+  const segments = normalized.split("/").filter((s) => s.length > 0);
   if (segments.includes("..")) {
     throw new Error(`path must not contain "..": ${JSON.stringify(raw)}`);
   }
@@ -76,12 +83,17 @@ export function decidePathAccess(
   operation: FilesystemOperation,
   path: string,
 ): PermissionMode {
+  const canonicalPath = validatePath(path);
   for (const rule of rules) {
     if (!rule.operations.includes(operation)) {
       continue;
     }
 
-    if (rule.paths.some((pattern) => globMatch(path, pattern))) {
+    if (
+      rule.paths.some((pattern) =>
+        globMatch(canonicalPath, validatePath(pattern)),
+      )
+    ) {
       return rule.mode ?? "allow";
     }
   }

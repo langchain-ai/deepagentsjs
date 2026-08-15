@@ -18,6 +18,10 @@ describe("validatePath", () => {
     expect(validatePath("/")).toBe("/");
   });
 
+  it("canonicalizes Windows absolute paths for permission matching", () => {
+    expect(validatePath("D:\\work\\src\\file.ts")).toBe("/D:/work/src/file.ts");
+  });
+
   it("throws on empty string", () => {
     expect(() => validatePath("")).toThrow(/non-empty/);
   });
@@ -99,6 +103,19 @@ describe("decidePathAccess", () => {
       },
     ];
     expect(decidePathAccess(rules, "read", "/secrets/key.txt")).toBe("deny");
+  });
+
+  it("matches Windows absolute paths against Windows permission globs", () => {
+    const rules = [
+      {
+        operations: ["read"] as const,
+        paths: ["D:\\work\\**"],
+        mode: "deny" as const,
+      },
+    ];
+    expect(decidePathAccess(rules, "read", "D:\\work\\src\\file.ts")).toBe(
+      "deny",
+    );
   });
 
   it("first-match-wins: allow before deny", () => {
