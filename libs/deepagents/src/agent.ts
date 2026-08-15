@@ -35,6 +35,7 @@ import { createToolExclusionMiddleware } from "./middleware/tool_exclusion.js";
 import { mergeMiddlewareStack } from "./middleware/utils.js";
 import {
   GENERAL_PURPOSE_SUBAGENT,
+  isCacheAlignedForkSpec,
   type CompiledSubAgent,
 } from "./middleware/subagents.js";
 import type { AsyncSubAgent } from "./middleware/async_subagents.js";
@@ -252,6 +253,19 @@ export function createDeepAgent<
     ];
   }
 
+  // Hoisted above subagent construction so fork-mode specs can reuse this string.
+  const promptConfig = normalizeSystemPrompt(systemPrompt);
+  const activeBasePrompt =
+    promptConfig.base !== undefined
+      ? promptConfig.base
+      : harnessProfile.baseSystemPrompt;
+  const finalSystemPrompt = assemblePromptParts([
+    promptConfig.prefix,
+    activeBasePrompt,
+    promptConfig.suffix,
+    harnessProfile.systemPromptSuffix,
+  ]);
+
   /**
    * Process subagents to add SkillsMiddleware for those with their own skills.
    *
@@ -289,13 +303,33 @@ export function createDeepAgent<
 
   const normalizeSubagentSpec = (input: SubAgent): SubAgent => {
     const subagentDefaultMiddleware = createSubagentDefaultMiddleware(input);
+
+    const cacheAligned = isCacheAlignedForkSpec(
+      input.mode,
+      input.model,
+      model,
+      finalSystemPrompt,
+    );
+    const mirroredCustomMiddleware = cacheAligned ? customMiddleware : [];
+    const mirroredMemoryMiddleware =
+      cacheAligned && memory && memory.length > 0
+        ? [
+            createMemoryMiddleware({
+              backend,
+              sources: memory,
+              addCacheControl: anthropicModel,
+            }),
+          ]
+        : [];
+
     let subagentMiddleware = mergeMiddlewareStack(
       subagentDefaultMiddleware,
-      input.middleware ?? [],
+      [...(input.middleware ?? []), ...mirroredCustomMiddleware],
       [
         // Resolve profile middleware per stack so factories create fresh instances.
         ...resolveMiddleware(harnessProfile.extraMiddleware),
         ...cacheMiddleware,
+        ...mirroredMemoryMiddleware,
       ],
     );
 
@@ -382,6 +416,7 @@ export function createDeepAgent<
       defaultInterruptOn: interruptOn,
       subagents: inlineSubagents,
       generalPurposeAgent: false,
+      parentSystemPrompt: finalSystemPrompt,
     }),
     // Automatically summarizes conversation history when token limits are approached.
     // Uses createSummarizationMiddleware (deepagents version) with backend support
@@ -449,19 +484,6 @@ export function createDeepAgent<
       createToolExclusionMiddleware(harnessProfile.excludedTools),
     );
   }
-
-  // Compatibility assembly: prefix -> profile base -> suffix -> profile suffix.
-  const promptConfig = normalizeSystemPrompt(systemPrompt);
-  const activeBasePrompt =
-    promptConfig.base !== undefined
-      ? promptConfig.base
-      : harnessProfile.baseSystemPrompt;
-  const finalSystemPrompt = assemblePromptParts([
-    promptConfig.prefix,
-    activeBasePrompt,
-    promptConfig.suffix,
-    harnessProfile.systemPromptSuffix,
-  ]);
 
   const agent = createAgent({
     model,
