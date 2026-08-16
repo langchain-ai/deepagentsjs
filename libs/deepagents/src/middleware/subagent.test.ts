@@ -1592,3 +1592,160 @@ describe("middleware override by name", () => {
     expect(summarization[0]).toBe(custom);
   });
 });
+
+describe("per-subagent recursionLimit", () => {
+  it("should override parent recursionLimit when set on SubAgent spec", async () => {
+    let capturedRecursionLimit: number | undefined;
+
+    const captureConfig = tool(
+      (_input, config) => {
+        capturedRecursionLimit = config.recursionLimit as number | undefined;
+        return "captured";
+      },
+      {
+        name: "capture_config",
+        description: "Captures the recursionLimit from the invoke config",
+        schema: z.object({}),
+      },
+    );
+
+    const subagentModel = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "capture_call",
+              name: "capture_config",
+              args: {},
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+
+    const parentModel = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "task_call",
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "bounded",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+
+    const agent = createDeepAgent({
+      model: parentModel,
+      name: "main-agent",
+      subagents: [
+        {
+          name: "bounded",
+          description: "A bounded subagent",
+          systemPrompt: "Use capture_config then finish.",
+          tools: [captureConfig],
+          model: subagentModel,
+          recursionLimit: 42,
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: {
+          thread_id: `test-recursion-limit-override-${Date.now()}`,
+        },
+        recursionLimit: 200,
+      },
+    );
+
+    expect(capturedRecursionLimit).toBe(42);
+  });
+
+  it("should inherit parent recursionLimit when not set on SubAgent spec", async () => {
+    let capturedRecursionLimit: number | undefined;
+
+    const captureConfig = tool(
+      (_input, config) => {
+        capturedRecursionLimit = config.recursionLimit as number | undefined;
+        return "captured";
+      },
+      {
+        name: "capture_config",
+        description: "Captures the recursionLimit from the invoke config",
+        schema: z.object({}),
+      },
+    );
+
+    const subagentModel = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "capture_call",
+              name: "capture_config",
+              args: {},
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+
+    const parentModel = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "task_call",
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "unbounded",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+
+    const agent = createDeepAgent({
+      model: parentModel,
+      name: "main-agent",
+      subagents: [
+        {
+          name: "unbounded",
+          description: "A subagent without recursionLimit override",
+          systemPrompt: "Use capture_config then finish.",
+          tools: [captureConfig],
+          model: subagentModel,
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: {
+          thread_id: `test-recursion-limit-inherit-${Date.now()}`,
+        },
+        recursionLimit: 200,
+      },
+    );
+
+    expect(capturedRecursionLimit).toBe(200);
+  });
+});

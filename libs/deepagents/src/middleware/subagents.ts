@@ -220,6 +220,30 @@ export interface SubAgent {
    * ```
    */
   permissions?: FilesystemPermission[];
+
+  /**
+   * Recursion limit for this subagent's own graph invocation.
+   *
+   * When set, overrides the parent agent's ambient `recursionLimit` for this
+   * subagent only. Useful for bounding expensive delegation or giving a
+   * research-heavy subagent more headroom than the default.
+   *
+   * Only applies to declarative `SubAgent` specs. Pre-compiled
+   * `CompiledSubAgent` runnables should use `.withConfig()` directly.
+   *
+   * @default undefined (inherits from parent config)
+   *
+   * @example
+   * ```ts
+   * const bounded: SubAgent = {
+   *   name: "bounded",
+   *   description: "Short-lived helper with a tight step ceiling",
+   *   systemPrompt: "You are a focused helper.",
+   *   recursionLimit: 50,
+   * };
+   * ```
+   */
+  recursionLimit?: number;
 }
 
 /**
@@ -557,8 +581,15 @@ function createTaskTool(options: {
       subagentState.messages = [new HumanMessage({ content: description })];
       subagentState._summarizationSessionId = `session_${crypto.randomUUID().substring(0, 8)}`;
 
+      const spec = specsByName[subagent_type];
+      const perSubagentRecursionLimit =
+        spec && !("runnable" in spec) ? spec.recursionLimit : undefined;
+
       const subagentConfig = {
         ...config,
+        ...(perSubagentRecursionLimit != null && {
+          recursionLimit: perSubagentRecursionLimit,
+        }),
         metadata: {
           ...config.metadata,
           lc_agent_name: subagent_type,
