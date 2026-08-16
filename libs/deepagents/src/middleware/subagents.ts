@@ -116,6 +116,9 @@ export interface CompiledSubAgent<
  * - `middleware`: Additional middleware appended after defaults
  * - `interruptOn`: Human-in-the-loop configuration for specific tools
  * - `skills`: Skill source paths for SkillsMiddleware (e.g., `["/skills/user/", "/skills/project/"]`)
+ * - `responseFormat`: Structured output schema for the subagent
+ * - `permissions`: Filesystem permission rules (replaces parent's)
+ * - `recursionLimit`: Override the parent's recursion limit for this subagent
  *
  * @example
  * ```typescript
@@ -583,7 +586,9 @@ function createTaskTool(options: {
 
       const spec = specsByName[subagent_type];
       const perSubagentRecursionLimit =
-        spec && !("runnable" in spec) ? spec.recursionLimit : undefined;
+        !("runnable" in spec) && spec.recursionLimit && spec.recursionLimit > 0
+          ? spec.recursionLimit
+          : undefined;
 
       const subagentConfig = {
         ...config,
