@@ -313,19 +313,15 @@ export function createDeepAgent<
         ]
       : [];
 
-  // Mirror middleware for a "dynamic" spec's per-call recompile.
-  const buildMirrorMiddleware = (): AgentMiddleware[] => [
-    ...customMiddleware,
-    ...buildMirrorMemoryMiddleware(),
-  ];
-
   const normalizeSubagentSpec = (input: SubAgent): SubAgent => {
     const subagentDefaultMiddleware = createSubagentDefaultMiddleware(input);
 
-    // Only "fork" bakes mirrored middleware in statically; "dynamic" gets it at recompile time.
-    const shouldMirrorStatically =
-      input.mode === "fork" &&
-      isCacheAlignedForkSpec(input.mode, input.model, model, finalSystemPrompt);
+    const shouldMirrorStatically = isCacheAlignedForkSpec({
+      mode: input.mode,
+      specModel: input.model,
+      parentModel: model,
+      parentSystemPrompt: finalSystemPrompt,
+    });
     const mirroredCustomMiddleware = shouldMirrorStatically
       ? customMiddleware
       : [];
@@ -428,7 +424,6 @@ export function createDeepAgent<
       subagents: inlineSubagents,
       generalPurposeAgent: false,
       parentSystemPrompt: finalSystemPrompt,
-      parentMirrorMiddleware: buildMirrorMiddleware,
     }),
     // Automatically summarizes conversation history when token limits are approached.
     // Uses createSummarizationMiddleware (deepagents version) with backend support

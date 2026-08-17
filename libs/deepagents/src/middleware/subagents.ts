@@ -22,7 +22,6 @@ import type { Runnable } from "@langchain/core/runnables";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { FilesystemPermission } from "../permissions/types.js";
 import type { SummarizationEvent } from "./summarization.js";
-import { mergeMiddleware } from "./utils.js";
 
 export type { AgentMiddleware };
 
@@ -102,10 +101,9 @@ export interface CompiledSubAgent<
   /**
    * Context mode. `"fork"` inherits the parent's conversation history
    * (but not its system prompt — that's baked into the runnable).
-   * `"dynamic"` lets the model choose per call via the task tool's
-   * `mode` argument. `"handoff"` (default) is fully isolated.
+   * `"handoff"` (default) is fully isolated.
    */
-  mode?: "handoff" | "fork" | "dynamic";
+  mode?: "handoff" | "fork";
 }
 
 /**
@@ -233,29 +231,35 @@ export interface SubAgent {
 
   /**
    * Context mode. `"fork"` inherits the parent's conversation history
-   * and system prompt. `"dynamic"` lets the model choose per call via
-   * the task tool's `mode` argument. `"handoff"` (default) is fully isolated.
+   * and system prompt. `"handoff"` (default) is fully isolated.
    */
-  mode?: "handoff" | "fork" | "dynamic";
+  mode?: "handoff" | "fork";
+}
+
+export interface CacheAlignedForkSpecOptions {
+  mode: "handoff" | "fork" | undefined;
+  specModel: LanguageModelLike | string | undefined;
+  parentModel: LanguageModelLike | string;
+  parentSystemPrompt: string | SystemMessage | null | undefined;
 }
 
 /**
- * Whether a fork/dynamic spec qualifies for cache-aligned treatment
- * (system prompt swap, mirrored middleware). Shared by `agent.ts` and
- * `getSubagents()` so the two can't drift apart.
+ * Whether a fork spec qualifies for cache-aligned treatment (system prompt
+ * swap, mirrored middleware). Shared by `agent.ts` and `getSubagents()` so
+ * the two can't drift apart.
  */
-export function isCacheAlignedForkSpec(
-  mode: "handoff" | "fork" | "dynamic" | undefined,
-  specModel: LanguageModelLike | string | undefined,
-  parentModel: LanguageModelLike | string,
-  parentSystemPrompt: string | SystemMessage | null | undefined,
-): boolean {
-  const isForkable = mode === "fork" || mode === "dynamic";
-  const modelMatchesParent =
-    specModel === undefined || specModel === parentModel;
-  const hasParentSystemPrompt =
-    parentSystemPrompt != null && parentSystemPrompt !== "";
-  return isForkable && modelMatchesParent && hasParentSystemPrompt;
+export function isCacheAlignedForkSpec({
+  mode,
+  specModel,
+  parentModel,
+  parentSystemPrompt,
+}: CacheAlignedForkSpecOptions): boolean {
+  return (
+    mode === "fork" &&
+    (specModel === undefined || specModel === parentModel) &&
+    parentSystemPrompt != null &&
+    parentSystemPrompt !== ""
+  );
 }
 
 /**
@@ -378,12 +382,9 @@ function returnCommandWithStateUpdate(
 
 /** Drop the trailing in-flight AIMessage with unresolved tool_calls. */
 function stripInFlightAIMessage(messages: BaseMessage[]): BaseMessage[] {
-  const last = messages[messages.length - 1];
+  const last = messages.at(-1);
   const hasPendingToolCalls =
-    last != null &&
-    AIMessage.isInstance(last) &&
-    Array.isArray(last.tool_calls) &&
-    last.tool_calls.length > 0;
+    AIMessage.isInstance(last) && (last.tool_calls?.length ?? 0) > 0;
   return hasPendingToolCalls ? messages.slice(0, -1) : messages;
 }
 
@@ -398,6 +399,7 @@ function stripInFlightAIMessage(messages: BaseMessage[]): BaseMessage[] {
  * for coalescing any defaults before calling this function.
  *
  * @param spec - Declarative subagent specification. Must specify `model` and `tools`.
+ * @param options.systemPromptOverride - Replaces the spec's own system prompt — used for fork's system-prompt swap.
  * @returns A compiled `ReactAgent` ready for task-tool invocation.
  */
 export function createSubAgent(
@@ -405,7 +407,6 @@ export function createSubAgent(
   options?: {
     responseFormat?: CreateAgentParams["responseFormat"];
     systemPromptOverride?: string | SystemMessage;
-    extraMiddleware?: AgentMiddleware[];
   },
 ): ReactAgent {
   if (!spec.model) {
@@ -415,10 +416,7 @@ export function createSubAgent(
     throw new Error(`SubAgent '${spec.name}' must specify 'tools'`);
   }
 
-  const middleware: AgentMiddleware[] = mergeMiddleware(
-    spec.middleware ?? [],
-    options?.extraMiddleware ?? [],
-  );
+  const middleware: AgentMiddleware[] = [...(spec.middleware ?? [])];
 
   if (spec.interruptOn) {
     middleware.push(
@@ -505,6 +503,16 @@ function getSubagents(options: {
   }
 
   for (const agentParams of subagents) {
+    if (
+      agentParams.mode != null &&
+      agentParams.mode !== "handoff" &&
+      agentParams.mode !== "fork"
+    ) {
+      throw new Error(
+        `SubAgent '${agentParams.name}' has invalid mode '${agentParams.mode}' — must be "handoff" or "fork".`,
+      );
+    }
+
     subagentDescriptions.push(
       `- ${agentParams.name}: ${agentParams.description}`,
     );
@@ -524,19 +532,18 @@ function getSubagents(options: {
         interruptOn: agentParams.interruptOn ?? defaultInterruptOn ?? undefined,
       };
 
-      const cacheAligned = isCacheAlignedForkSpec(
-        resolvedSpec.mode,
-        agentParams.model,
-        defaultModel,
+      const cacheAligned = isCacheAlignedForkSpec({
+        mode: resolvedSpec.mode,
+        specModel: agentParams.model,
+        parentModel: defaultModel,
         parentSystemPrompt,
-      );
+      });
       if (cacheAligned) {
         subagentSystemPrompts[resolvedSpec.name] = resolvedSpec.systemPrompt;
       }
-      const systemPromptOverride =
-        resolvedSpec.mode === "fork" && cacheAligned
-          ? (parentSystemPrompt ?? undefined)
-          : undefined;
+      const systemPromptOverride = cacheAligned
+        ? (parentSystemPrompt ?? undefined)
+        : undefined;
 
       agents[agentParams.name] = createSubAgent(resolvedSpec, {
         systemPromptOverride,
@@ -566,7 +573,6 @@ function createTaskTool(options: {
   generalPurposeAgent: boolean;
   taskDescription: string | null;
   parentSystemPrompt?: string | SystemMessage | null;
-  parentMirrorMiddleware?: (() => AgentMiddleware[]) | null;
 }) {
   const {
     defaultModel,
@@ -578,7 +584,6 @@ function createTaskTool(options: {
     generalPurposeAgent,
     taskDescription,
     parentSystemPrompt = null,
-    parentMirrorMiddleware = null,
   } = options;
 
   const {
@@ -600,7 +605,6 @@ function createTaskTool(options: {
   function selectSubagent(
     subagentType: string,
     config: Record<string, any>,
-    shouldFork: boolean,
   ): Runnable {
     const spec = specsByName[subagentType];
 
@@ -615,29 +619,11 @@ function createTaskTool(options: {
     if ("runnable" in spec) {
       return subagentGraphs[subagentType] as Runnable;
     }
-
-    // "dynamic" only recompiles when this call actually forks; "fork" only
-    // recompiles when something else (responseFormat) forces it anyway.
-    const isForkingThisCall =
-      shouldFork && subagentSystemPrompts[subagentType] != null;
-    const needsRecompile =
-      responseFormat != null || (isForkingThisCall && spec.mode === "dynamic");
-    if (!needsRecompile) {
+    if (responseFormat == null) {
       return subagentGraphs[subagentType] as Runnable;
     }
 
-    return createSubAgent(spec, {
-      ...(responseFormat != null && { responseFormat }),
-      ...(isForkingThisCall && {
-        systemPromptOverride: parentSystemPrompt ?? undefined,
-      }),
-      ...(isForkingThisCall &&
-        spec.mode === "dynamic" && {
-          extraMiddleware: parentMirrorMiddleware
-            ? parentMirrorMiddleware()
-            : [],
-        }),
-    }) as unknown as Runnable;
+    return createSubAgent(spec, { responseFormat }) as unknown as Runnable;
   }
 
   const finalTaskDescription = taskDescription
@@ -649,7 +635,6 @@ function createTaskTool(options: {
       input: {
         description: string;
         subagent_type: string;
-        mode?: "handoff" | "fork";
       },
       config,
     ): Promise<Command | string> => {
@@ -665,11 +650,9 @@ function createTaskTool(options: {
       }
 
       const spec = specsByName[subagent_type];
-      const shouldFork =
-        spec.mode === "fork" ||
-        (spec.mode === "dynamic" && input.mode === "fork");
+      const shouldFork = spec.mode === "fork";
 
-      const subagent = selectSubagent(subagent_type, config, shouldFork);
+      const subagent = selectSubagent(subagent_type, config);
 
       const currentState = getCurrentTaskInput<Record<string, unknown>>();
       const subagentState = filterStateForSubagent(currentState);
@@ -751,12 +734,6 @@ function createTaskTool(options: {
           .describe(
             `Name of the agent to use. Available: ${Object.keys(subagentGraphs).join(", ")}`,
           ),
-        mode: z
-          .enum(["handoff", "fork"])
-          .optional()
-          .describe(
-            'Only meaningful for fork-capable agents: "fork" inherits the full conversation history, "handoff" (default) sends only the task description. Ignored for agents that aren\'t fork-capable.',
-          ),
       }),
     },
   );
@@ -787,10 +764,8 @@ export interface SubAgentMiddlewareOptions {
   generalPurposeAgent?: boolean;
   /** Custom description for the task tool */
   taskDescription?: string | null;
-  /** Reused by `mode: "fork"`/`"dynamic"` subagents for cache alignment */
+  /** Reused by `mode: "fork"` subagents for cache alignment */
   parentSystemPrompt?: string | SystemMessage | null;
-  /** Builds fresh mirrored middleware for a `"dynamic"` spec's per-call fork recompile */
-  parentMirrorMiddleware?: (() => AgentMiddleware[]) | null;
 }
 
 /**
@@ -808,7 +783,6 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     generalPurposeAgent = true,
     taskDescription = null,
     parentSystemPrompt = null,
-    parentMirrorMiddleware = null,
   } = options;
 
   const taskTool = createTaskTool({
@@ -820,7 +794,6 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     subagents,
     generalPurposeAgent,
     taskDescription,
-    parentMirrorMiddleware,
     parentSystemPrompt,
   });
 
