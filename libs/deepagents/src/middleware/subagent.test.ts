@@ -337,7 +337,7 @@ describe("Subagent summarization state isolation", () => {
   });
 });
 
-describe("Subagent mode: fork/dynamic", () => {
+describe("Subagent mode: fork", () => {
   let invokeSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
@@ -372,6 +372,22 @@ describe("Subagent mode: fork/dynamic", () => {
     new AIMessage("Got it, remembering BANANA42."),
     new HumanMessage("Now delegate to the worker"),
   ];
+
+  it("throws at construction for an invalid mode value", () => {
+    expect(() =>
+      createDeepAgent({
+        model: new FakeListChatModel({ responses: ["Done"] }),
+        subagents: [
+          {
+            name: "worker",
+            description: "A worker agent",
+            systemPrompt: "You are a worker.",
+            mode: "dynamic" as unknown as "fork",
+          },
+        ],
+      }),
+    ).toThrow(/invalid mode 'dynamic'/);
+  });
 
   it("should NOT include prior history for the default handoff mode", async () => {
     const model = new FakeListChatModel({
@@ -546,224 +562,6 @@ describe("Subagent mode: fork/dynamic", () => {
       .join("\n");
     expect(text).not.toContain("PARALLEL_CALL_TEXT_SHOULD_NOT_LEAK");
     expect(text).not.toContain("get_weather");
-  });
-
-  it('mode: dynamic forks only when the model passes mode: "fork" on the call', async () => {
-    const model = new FakeListChatModel({
-      responses: [
-        new AIMessage({
-          content: "",
-          tool_calls: [
-            {
-              id: `call_${Date.now()}`,
-              name: "task",
-              args: {
-                description: "UNIQUE_TASK_MARKER",
-                subagent_type: "worker",
-                mode: "fork",
-              },
-            },
-          ],
-        }) as unknown as string,
-        "Worker done",
-        "Done",
-      ],
-    });
-
-    const checkpointer = new MemorySaver();
-    const agent = createDeepAgent({
-      model,
-      systemPrompt: "PARENT_ROOT_PROMPT_MARKER",
-      checkpointer,
-      subagents: [
-        {
-          name: "worker",
-          description: "A worker agent",
-          systemPrompt: "You are a specialized worker.",
-          mode: "dynamic",
-        },
-      ],
-    });
-
-    await agent.invoke(
-      { messages: priorHistory },
-      {
-        configurable: { thread_id: `test-mode-dynamic-fork-${Date.now()}` },
-        recursionLimit: 50,
-      },
-    );
-
-    const workerCall = findCallContaining(invokeSpy, "UNIQUE_TASK_MARKER");
-    expect(workerCall).toBeDefined();
-    const text = workerCall!
-      .map((m) => (typeof m.content === "string" ? m.content : ""))
-      .join("\n");
-    expect(text).toContain("BANANA42");
-    const systemMessage = workerCall!.find(SystemMessage.isInstance);
-    expect(systemMessage?.text).toContain("PARENT_ROOT_PROMPT_MARKER");
-  });
-
-  it("does NOT throw on duplicate middleware names when a dynamic spec forks with a custom SummarizationMiddleware", async () => {
-    const model = new FakeListChatModel({
-      responses: [
-        new AIMessage({
-          content: "",
-          tool_calls: [
-            {
-              id: `call_${Date.now()}`,
-              name: "task",
-              args: {
-                description: "UNIQUE_TASK_MARKER",
-                subagent_type: "worker",
-                mode: "fork",
-              },
-            },
-          ],
-        }) as unknown as string,
-        "Worker done",
-        "Done",
-      ],
-    });
-
-    const checkpointer = new MemorySaver();
-    const agent = createDeepAgent({
-      model,
-      systemPrompt: "PARENT_ROOT_PROMPT_MARKER",
-      checkpointer,
-      middleware: [
-        createSummarizationMiddleware({ backend: new StateBackend() }),
-      ],
-      subagents: [
-        {
-          name: "worker",
-          description: "A worker agent",
-          systemPrompt: "You are a specialized worker.",
-          mode: "dynamic",
-        },
-      ],
-    });
-
-    await expect(
-      agent.invoke(
-        { messages: priorHistory },
-        {
-          configurable: {
-            thread_id: `test-mode-dynamic-fork-dup-middleware-${Date.now()}`,
-          },
-          recursionLimit: 50,
-        },
-      ),
-    ).resolves.toBeDefined();
-  });
-
-  it("mode: dynamic stays isolated when the model omits mode on the call", async () => {
-    const model = new FakeListChatModel({
-      responses: [
-        new AIMessage({
-          content: "",
-          tool_calls: [
-            {
-              id: `call_${Date.now()}`,
-              name: "task",
-              args: {
-                description: "UNIQUE_TASK_MARKER",
-                subagent_type: "worker",
-              },
-            },
-          ],
-        }) as unknown as string,
-        "Worker done",
-        "Done",
-      ],
-    });
-
-    const checkpointer = new MemorySaver();
-    const agent = createDeepAgent({
-      model,
-      systemPrompt: "PARENT_ROOT_PROMPT_MARKER",
-      checkpointer,
-      subagents: [
-        {
-          name: "worker",
-          description: "A worker agent",
-          systemPrompt: "You are a specialized worker.",
-          mode: "dynamic",
-        },
-      ],
-    });
-
-    await agent.invoke(
-      { messages: priorHistory },
-      {
-        configurable: { thread_id: `test-mode-dynamic-handoff-${Date.now()}` },
-        recursionLimit: 50,
-      },
-    );
-
-    const workerCall = findCallContaining(invokeSpy, "UNIQUE_TASK_MARKER");
-    expect(workerCall).toBeDefined();
-    const text = workerCall!
-      .map((m) => (typeof m.content === "string" ? m.content : ""))
-      .join("\n");
-    expect(text).not.toContain("BANANA42");
-    const systemMessage = workerCall!.find(SystemMessage.isInstance);
-    expect(systemMessage?.text).toContain("You are a specialized worker");
-    expect(systemMessage?.text).not.toContain("PARENT_ROOT_PROMPT_MARKER");
-  });
-
-  it("mode: fork ignores a model-supplied mode argument — dev setting always wins", async () => {
-    const model = new FakeListChatModel({
-      responses: [
-        new AIMessage({
-          content: "",
-          tool_calls: [
-            {
-              id: `call_${Date.now()}`,
-              name: "task",
-              args: {
-                description: "UNIQUE_TASK_MARKER",
-                subagent_type: "worker",
-                mode: "handoff",
-              },
-            },
-          ],
-        }) as unknown as string,
-        "Worker done",
-        "Done",
-      ],
-    });
-
-    const checkpointer = new MemorySaver();
-    const agent = createDeepAgent({
-      model,
-      systemPrompt: "PARENT_ROOT_PROMPT_MARKER",
-      checkpointer,
-      subagents: [
-        {
-          name: "worker",
-          description: "A worker agent",
-          systemPrompt: "You are a specialized worker.",
-          mode: "fork",
-        },
-      ],
-    });
-
-    await agent.invoke(
-      { messages: priorHistory },
-      {
-        configurable: {
-          thread_id: `test-mode-fork-dev-override-${Date.now()}`,
-        },
-        recursionLimit: 50,
-      },
-    );
-
-    const workerCall = findCallContaining(invokeSpy, "UNIQUE_TASK_MARKER");
-    expect(workerCall).toBeDefined();
-    const text = workerCall!
-      .map((m) => (typeof m.content === "string" ? m.content : ""))
-      .join("\n");
-    expect(text).toContain("BANANA42");
   });
 
   it("should NOT swap the system prompt when the fork spec's model differs from the parent's", async () => {
@@ -1946,30 +1744,6 @@ describe("middleware override by name", () => {
           description: "A worker agent",
           systemPrompt: "You are a worker.",
           mode: "fork",
-        },
-      ],
-    });
-
-    const middleware = getMiddlewareStack("worker");
-    expect(middleware.some((entry) => entry.name === "MarkerMiddleware")).toBe(
-      false,
-    );
-  });
-
-  it("does NOT bake mirrored middleware into a dynamic-mode subagent's cached graph, even when cache-aligned", () => {
-    const custom = namedMiddleware("MarkerMiddleware");
-
-    createDeepAgent({
-      model: fakeModel,
-      name: "main",
-      systemPrompt: "PARENT_PROMPT",
-      middleware: [custom],
-      subagents: [
-        {
-          name: "worker",
-          description: "A worker agent",
-          systemPrompt: "You are a worker.",
-          mode: "dynamic",
         },
       ],
     });
