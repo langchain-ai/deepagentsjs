@@ -21,6 +21,7 @@ import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { FilesystemPermission } from "../permissions/types.js";
+import type { SummarizationEvent } from "./summarization.js";
 
 export type { AgentMiddleware };
 
@@ -42,8 +43,8 @@ export const DEFAULT_SUBAGENT_PROMPT =
 
 /**
  * State keys excluded when passing state to subagents and when returning
- * updates from subagents. Summarization keys are excluded because their
- * cutoffIndex is only valid against the message list it was computed from.
+ * updates from subagents. Fork-mode subagents re-inject summarization keys
+ * after reconstructing the effective message view.
  */
 const EXCLUDED_STATE_KEYS = [
   "messages",
@@ -96,6 +97,13 @@ export interface CompiledSubAgent<
   description: string;
   /** The agent instance */
   runnable: TRunnable;
+
+  /**
+   * Context mode. `"fork"` inherits the parent's conversation history
+   * (but not its system prompt — that's baked into the runnable).
+   * `"handoff"` (default) is fully isolated.
+   */
+  mode?: "handoff" | "fork";
 }
 
 /**
@@ -220,6 +228,38 @@ export interface SubAgent {
    * ```
    */
   permissions?: FilesystemPermission[];
+
+  /**
+   * Context mode. `"fork"` inherits the parent's conversation history
+   * and system prompt. `"handoff"` (default) is fully isolated.
+   */
+  mode?: "handoff" | "fork";
+}
+
+export interface CacheAlignedForkSpecOptions {
+  mode: "handoff" | "fork" | undefined;
+  specModel: LanguageModelLike | string | undefined;
+  parentModel: LanguageModelLike | string;
+  parentSystemPrompt: string | SystemMessage | null | undefined;
+}
+
+/**
+ * Whether a fork spec qualifies for cache-aligned treatment (system prompt
+ * swap, mirrored middleware). Shared by `agent.ts` and `getSubagents()` so
+ * the two can't drift apart.
+ */
+export function isCacheAlignedForkSpec({
+  mode,
+  specModel,
+  parentModel,
+  parentSystemPrompt,
+}: CacheAlignedForkSpecOptions): boolean {
+  return (
+    mode === "fork" &&
+    (specModel === undefined || specModel === parentModel) &&
+    parentSystemPrompt != null &&
+    parentSystemPrompt !== ""
+  );
 }
 
 /**
@@ -340,6 +380,14 @@ function returnCommandWithStateUpdate(
   });
 }
 
+/** Drop the trailing in-flight AIMessage with unresolved tool_calls. */
+function stripInFlightAIMessage(messages: BaseMessage[]): BaseMessage[] {
+  const last = messages.at(-1);
+  const hasPendingToolCalls =
+    AIMessage.isInstance(last) && (last.tool_calls?.length ?? 0) > 0;
+  return hasPendingToolCalls ? messages.slice(0, -1) : messages;
+}
+
 /**
  * Create a runnable agent from a declarative `SubAgent` spec.
  *
@@ -351,11 +399,15 @@ function returnCommandWithStateUpdate(
  * for coalescing any defaults before calling this function.
  *
  * @param spec - Declarative subagent specification. Must specify `model` and `tools`.
+ * @param options.systemPromptOverride - Replaces the spec's own system prompt — used for fork's system-prompt swap.
  * @returns A compiled `ReactAgent` ready for task-tool invocation.
  */
 export function createSubAgent(
   spec: SubAgent,
-  options?: { responseFormat?: CreateAgentParams["responseFormat"] },
+  options?: {
+    responseFormat?: CreateAgentParams["responseFormat"];
+    systemPromptOverride?: string | SystemMessage;
+  },
 ): ReactAgent {
   if (!spec.model) {
     throw new Error(`SubAgent '${spec.name}' must specify 'model'`);
@@ -376,7 +428,7 @@ export function createSubAgent(
 
   return createAgent({
     model: spec.model,
-    systemPrompt: spec.systemPrompt,
+    systemPrompt: options?.systemPromptOverride ?? spec.systemPrompt,
     tools: spec.tools,
     middleware,
     name: spec.name,
@@ -400,10 +452,12 @@ function getSubagents(options: {
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
   subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
+  parentSystemPrompt?: string | SystemMessage | null;
 }): {
   agents: Record<string, ReactAgent | Runnable>;
   specsByName: Record<string, SubAgent | CompiledSubAgent>;
   descriptions: string[];
+  subagentSystemPrompts: Record<string, string>;
 } {
   const {
     defaultModel,
@@ -413,6 +467,7 @@ function getSubagents(options: {
     defaultInterruptOn,
     subagents,
     generalPurposeAgent,
+    parentSystemPrompt = null,
   } = options;
 
   const defaultSubagentMiddleware = defaultMiddleware || [];
@@ -421,6 +476,7 @@ function getSubagents(options: {
   const agents: Record<string, ReactAgent | Runnable> = {};
   const specsByName: Record<string, SubAgent | CompiledSubAgent> = {};
   const subagentDescriptions: string[] = [];
+  const subagentSystemPrompts: Record<string, string> = {};
 
   if (generalPurposeAgent) {
     const generalPurposeMiddleware = [...generalPurposeMiddlewareBase];
@@ -447,6 +503,16 @@ function getSubagents(options: {
   }
 
   for (const agentParams of subagents) {
+    if (
+      agentParams.mode != null &&
+      agentParams.mode !== "handoff" &&
+      agentParams.mode !== "fork"
+    ) {
+      throw new Error(
+        `SubAgent '${agentParams.name}' has invalid mode '${agentParams.mode}' — must be "handoff" or "fork".`,
+      );
+    }
+
     subagentDescriptions.push(
       `- ${agentParams.name}: ${agentParams.description}`,
     );
@@ -465,12 +531,32 @@ function getSubagents(options: {
         ],
         interruptOn: agentParams.interruptOn ?? defaultInterruptOn ?? undefined,
       };
-      agents[agentParams.name] = createSubAgent(resolvedSpec);
+
+      const systemPromptOverride = isCacheAlignedForkSpec({
+        mode: resolvedSpec.mode,
+        specModel: agentParams.model,
+        parentModel: defaultModel,
+        parentSystemPrompt,
+      })
+        ? (parentSystemPrompt ?? undefined)
+        : undefined;
+      if (systemPromptOverride != null) {
+        subagentSystemPrompts[resolvedSpec.name] = resolvedSpec.systemPrompt;
+      }
+
+      agents[agentParams.name] = createSubAgent(resolvedSpec, {
+        systemPromptOverride,
+      });
       specsByName[agentParams.name] = resolvedSpec;
     }
   }
 
-  return { agents, specsByName, descriptions: subagentDescriptions };
+  return {
+    agents,
+    specsByName,
+    descriptions: subagentDescriptions,
+    subagentSystemPrompts,
+  };
 }
 
 /**
@@ -485,6 +571,7 @@ function createTaskTool(options: {
   subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
   taskDescription: string | null;
+  parentSystemPrompt?: string | SystemMessage | null;
 }) {
   const {
     defaultModel,
@@ -495,12 +582,14 @@ function createTaskTool(options: {
     subagents,
     generalPurposeAgent,
     taskDescription,
+    parentSystemPrompt = null,
   } = options;
 
   const {
     agents: subagentGraphs,
     specsByName,
     descriptions: subagentDescriptions,
+    subagentSystemPrompts,
   } = getSubagents({
     defaultModel,
     defaultTools,
@@ -509,25 +598,28 @@ function createTaskTool(options: {
     defaultInterruptOn,
     subagents,
     generalPurposeAgent,
+    parentSystemPrompt,
   });
 
   function selectSubagent(
     subagentType: string,
     config: Record<string, any>,
   ): Runnable {
+    const spec = specsByName[subagentType];
+
     const responseFormat =
       config.configurable?.[SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY];
-    if (responseFormat != null) {
-      const spec = specsByName[subagentType];
-      if ("runnable" in spec) {
-        throw new Error(
-          `responseSchema cannot be used with compiled subagent "${spec.name}"; ` +
-            "dynamic schemas require a declarative SubAgent spec.",
-        );
-      }
-      return createSubAgent(spec, { responseFormat }) as unknown as Runnable;
+    if (responseFormat != null && "runnable" in spec) {
+      throw new Error(
+        `responseSchema cannot be used with compiled subagent "${spec.name}"; ` +
+          "dynamic schemas require a declarative SubAgent spec.",
+      );
     }
-    return subagentGraphs[subagentType] as Runnable;
+    if ("runnable" in spec || responseFormat == null) {
+      return subagentGraphs[subagentType] as Runnable;
+    }
+
+    return createSubAgent(spec, { responseFormat }) as unknown as Runnable;
   }
 
   const finalTaskDescription = taskDescription
@@ -536,7 +628,10 @@ function createTaskTool(options: {
 
   return tool(
     async (
-      input: { description: string; subagent_type: string },
+      input: {
+        description: string;
+        subagent_type: string;
+      },
       config,
     ): Promise<Command | string> => {
       const { description, subagent_type } = input;
@@ -550,12 +645,37 @@ function createTaskTool(options: {
         );
       }
 
+      const spec = specsByName[subagent_type];
+      const shouldFork = spec.mode === "fork";
+
       const subagent = selectSubagent(subagent_type, config);
 
       const currentState = getCurrentTaskInput<Record<string, unknown>>();
       const subagentState = filterStateForSubagent(currentState);
-      subagentState.messages = [new HumanMessage({ content: description })];
-      subagentState._summarizationSessionId = `session_${crypto.randomUUID().substring(0, 8)}`;
+
+      if (shouldFork) {
+        const trimmed = stripInFlightAIMessage(
+          (currentState.messages as BaseMessage[]) ?? [],
+        );
+        const event = currentState._summarizationEvent as
+          | SummarizationEvent
+          | undefined;
+        const effective = event
+          ? [event.summaryMessage, ...trimmed.slice(event.cutoffIndex)]
+          : trimmed;
+        const ownSystemPrompt = subagentSystemPrompts[subagent_type];
+        const content = ownSystemPrompt
+          ? `${ownSystemPrompt}\n\n${description}`
+          : description;
+        subagentState.messages = [...effective, new HumanMessage({ content })];
+        // Not re-adding _summarizationEvent: cutoffIndex already applied above.
+        subagentState._summarizationSessionId =
+          (currentState._summarizationSessionId as string | undefined) ??
+          `session_${crypto.randomUUID().substring(0, 8)}`;
+      } else {
+        subagentState.messages = [new HumanMessage({ content: description })];
+        subagentState._summarizationSessionId = `session_${crypto.randomUUID().substring(0, 8)}`;
+      }
 
       const subagentConfig = {
         ...config,
@@ -641,6 +761,8 @@ export interface SubAgentMiddlewareOptions {
   generalPurposeAgent?: boolean;
   /** Custom description for the task tool */
   taskDescription?: string | null;
+  /** Reused by `mode: "fork"` subagents for cache alignment */
+  parentSystemPrompt?: string | SystemMessage | null;
 }
 
 /**
@@ -657,6 +779,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     systemPrompt = null,
     generalPurposeAgent = true,
     taskDescription = null,
+    parentSystemPrompt = null,
   } = options;
 
   const taskTool = createTaskTool({
@@ -668,6 +791,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
     subagents,
     generalPurposeAgent,
     taskDescription,
+    parentSystemPrompt,
   });
 
   return createMiddleware({
