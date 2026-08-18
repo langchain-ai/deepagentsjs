@@ -190,23 +190,46 @@ function buildLsCommand(dirPath: string): string {
 }
 
 /**
+ * Soft cap on recursive find lines for sandbox glob.
+ *
+ * Glob currently lists every path under the search root via `find`, then filters
+ * in-process. Without a bound, a root-path recursive glob can stream the whole
+ * container rootfs (and, with `-L`, loop through proc pid root symlinks) into
+ * the host heap and OOM the runtime. Cap the listing; callers mark truncated
+ * when the cap is hit.
+ */
+const MAX_GLOB_FIND_LINES = 50_000;
+
+/**
  * Shell command for listing files recursively with metadata.
  * Same three-way detection as buildLsCommand (GNU -printf / stat -c / BSD stat -f).
+ *
+ * Prunes virtual filesystems (`/proc`, `/sys`, `/dev`, `/run`) so `find -L`
+ * cannot follow proc pid root symlinks back into `/` and loop forever. Caps
+ * stdout so the host process that buffers `execute()` never materializes an
+ * unbounded listing.
  *
  * Output format per line: size\tmtime\ttype\tpath
  */
 function buildFindCommand(searchPath: string): string {
   const quotedPath = shellQuote(searchPath);
-  const findBase = `find -L ${quotedPath} -not -path ${quotedPath}`;
-  return (
+  // Absolute + search-relative prunes: -L can leave the search tree via
+  // symlinks into /proc before the relative prune would apply.
+  const prune =
+    `\\( -path /proc -o -path /sys -o -path /dev -o -path /run ` +
+    `-o -path ${quotedPath}/proc -o -path ${quotedPath}/sys ` +
+    `-o -path ${quotedPath}/dev -o -path ${quotedPath}/run \\) -prune`;
+  const findBase = `find -L ${quotedPath} ${prune} -o -not -path ${quotedPath}`;
+  const listing =
     `if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then ` +
     `${findBase} -printf '%s\\t%T@\\t%y\\t%p\\n' 2>/dev/null; ` +
     `elif stat -c %s /dev/null >/dev/null 2>&1; then ` +
     `${findBase} -exec sh -c '${STAT_C_SCRIPT}' _ {} +; ` +
     `else ` +
     `${findBase} -exec stat -f '%z\t%m\t%Sp\t%N' {} + 2>/dev/null; ` +
-    `fi || true`
-  );
+    `fi || true`;
+  // Request one past the soft cap so glob() can detect truncation.
+  return `{ ${listing}; } | head -n ${MAX_GLOB_FIND_LINES + 1}`;
 }
 
 /**
@@ -482,11 +505,13 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     const regex = globToPathRegex(pattern);
     const infos: FileInfo[] = [];
     const lines = result.output.trim().split("\n").filter(Boolean);
+    const truncated = lines.length > MAX_GLOB_FIND_LINES;
+    const limited = truncated ? lines.slice(0, MAX_GLOB_FIND_LINES) : lines;
 
     // Normalise base path (strip trailing /)
     const basePath = path.endsWith("/") ? path.slice(0, -1) : path;
 
-    for (const line of lines) {
+    for (const line of limited) {
       const parsed = parseStatLine(line);
       if (!parsed) continue;
 
@@ -505,7 +530,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
       }
     }
 
-    return { files: infos };
+    return { files: infos, truncated };
   }
 
   /**

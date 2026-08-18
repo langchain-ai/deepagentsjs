@@ -33,7 +33,11 @@ class MockSandbox extends BaseSandbox {
     }
 
     // Simulate find command for glob (find + stat, recursive — no -maxdepth 1)
-    if (command.includes("stat -c") && !command.includes("-maxdepth 1")) {
+    if (
+      command.includes("stat -c") &&
+      !command.includes("-maxdepth 1") &&
+      command.includes("head -n")
+    ) {
       const files = Array.from(this.files.keys());
       const now = Math.floor(Date.now() / 1000);
       const output = files
@@ -726,6 +730,40 @@ describe("BaseSandbox", () => {
 
       await sandbox.glob("*.py", "/");
       expect(sandbox.executedCommands[0]).toMatch(/find\s+-L\s+/);
+    });
+
+    it("should prune virtual filesystems and cap find output", async () => {
+      const sandbox = new MockSandbox();
+      sandbox.addFile("/test.py", "print('hello')");
+
+      await sandbox.glob("*.py", "/");
+      const command = sandbox.executedCommands[0];
+      expect(command).toContain("-path /proc");
+      expect(command).toContain("-path /sys");
+      expect(command).toContain("-path /dev");
+      expect(command).toContain("-path /run");
+      expect(command).toContain("-prune");
+      expect(command).toMatch(/head -n 50001/);
+    });
+
+    it("should mark truncated when find output exceeds the soft cap", async () => {
+      const sandbox = new MockSandbox();
+      const now = Math.floor(Date.now() / 1000);
+      // Soft cap is 50_000; one past that signals truncation.
+      const lines = Array.from(
+        { length: 50_001 },
+        (_, i) => `1\t${now}\tregular file\t/f${i}.txt`,
+      );
+      sandbox.execute = vi.fn().mockResolvedValue({
+        output: lines.join("\n"),
+        exitCode: 0,
+        truncated: false,
+      });
+
+      const result = await sandbox.glob("*.txt", "/");
+      expect(result.error).toBeUndefined();
+      expect(result.truncated).toBe(true);
+      expect(result.files!.length).toBe(50_000);
     });
 
     it("should return empty array for no matches", async () => {
