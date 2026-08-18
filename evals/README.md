@@ -22,6 +22,7 @@ so you can compare runs across models and track regressions over time.
 | [`memory-multiturn/`](./memory-multiturn/)           | Multi-turn memory persistence: implicit preferences, explicit instructions, transient filtering |
 | [`skills/`](./skills/)                               | Skill file discovery, reading, selection, combination, and editing via skill source paths |
 | [`subagents/`](./subagents/)                         | Subagent delegation — `task` tool routing to named and general-purpose subagents |
+| [`subagent-forking/`](./subagent-forking/)           | `mode: "fork"` vs `"handoff"` — accuracy, latency, cost, and cache-hit comparison |
 | [`summarization/`](./summarization/)                 | Summarization middleware behavior and conversation-history offloading             |
 | [`tau2-airline/`](./tau2-airline/)                   | Tau2-airline inspired policy-grounded airline support tasks                       |
 | [`todos/`](./todos/)                                 | Sequential `write_todos` state updates and completion behavior                     |

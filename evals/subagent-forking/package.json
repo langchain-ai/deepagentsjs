@@ -1,0 +1,17 @@
+{
+  "name": "@deepagents/eval-subagent-forking",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:eval": "vitest run"
+  },
+  "dependencies": {
+    "@deepagents/evals": "workspace:*",
+    "@langchain/core": "^1.1.42",
+    "deepagents": "workspace:*",
+    "langchain": "^1.3.1",
+    "langsmith": "^0.8.7",
+    "vitest": "^4.0.18",
+    "zod": "^4.3.6"
+  }
+}

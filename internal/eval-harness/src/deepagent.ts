@@ -52,7 +52,10 @@ export class DeepAgentEvalRunner implements EvalRunner {
     }
 
     const threadId = uuidv4();
-    const config = { configurable: { thread_id: threadId } };
+    const config = {
+      configurable: { thread_id: threadId },
+      callbacks: params.callbacks,
+    };
 
     const result = await this.agent.invoke(inputs, config);
 

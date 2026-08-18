@@ -1,5 +1,6 @@
 import { expect } from "vitest";
 import { AIMessage, ToolMessage } from "@langchain/core/messages";
+import type { BaseCallbackHandler } from "@langchain/core/callbacks/base";
 import * as ls from "langsmith/vitest";
 
 /**
@@ -38,6 +39,8 @@ export interface RunAgentParams {
   query: string;
   /** Optional seed files to pre-populate the agent's file system. */
   initialFiles?: Record<string, string>;
+  /** Optional callbacks (e.g. usage/telemetry collectors) for this invocation. */
+  callbacks?: BaseCallbackHandler[];
 }
 
 /**
