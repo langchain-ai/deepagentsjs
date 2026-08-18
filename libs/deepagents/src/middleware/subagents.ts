@@ -532,18 +532,17 @@ function getSubagents(options: {
         interruptOn: agentParams.interruptOn ?? defaultInterruptOn ?? undefined,
       };
 
-      const cacheAligned = isCacheAlignedForkSpec({
+      const systemPromptOverride = isCacheAlignedForkSpec({
         mode: resolvedSpec.mode,
         specModel: agentParams.model,
         parentModel: defaultModel,
         parentSystemPrompt,
-      });
-      if (cacheAligned) {
-        subagentSystemPrompts[resolvedSpec.name] = resolvedSpec.systemPrompt;
-      }
-      const systemPromptOverride = cacheAligned
+      })
         ? (parentSystemPrompt ?? undefined)
         : undefined;
+      if (systemPromptOverride != null) {
+        subagentSystemPrompts[resolvedSpec.name] = resolvedSpec.systemPrompt;
+      }
 
       agents[agentParams.name] = createSubAgent(resolvedSpec, {
         systemPromptOverride,
@@ -616,10 +615,7 @@ function createTaskTool(options: {
           "dynamic schemas require a declarative SubAgent spec.",
       );
     }
-    if ("runnable" in spec) {
-      return subagentGraphs[subagentType] as Runnable;
-    }
-    if (responseFormat == null) {
+    if ("runnable" in spec || responseFormat == null) {
       return subagentGraphs[subagentType] as Runnable;
     }
 
@@ -658,8 +654,9 @@ function createTaskTool(options: {
       const subagentState = filterStateForSubagent(currentState);
 
       if (shouldFork) {
-        const rawMessages = (currentState.messages as BaseMessage[]) ?? [];
-        const trimmed = stripInFlightAIMessage(rawMessages);
+        const trimmed = stripInFlightAIMessage(
+          (currentState.messages as BaseMessage[]) ?? [],
+        );
         const event = currentState._summarizationEvent as
           | SummarizationEvent
           | undefined;
