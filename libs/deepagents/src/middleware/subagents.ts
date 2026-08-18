@@ -668,14 +668,10 @@ function createTaskTool(options: {
           ? `${ownSystemPrompt}\n\n${description}`
           : description;
         subagentState.messages = [...effective, new HumanMessage({ content })];
-        // Not re-adding _summarizationEvent: cutoffIndex already applied above.
-        subagentState._summarizationSessionId =
-          (currentState._summarizationSessionId as string | undefined) ??
-          `session_${crypto.randomUUID().substring(0, 8)}`;
       } else {
         subagentState.messages = [new HumanMessage({ content: description })];
-        subagentState._summarizationSessionId = `session_${crypto.randomUUID().substring(0, 8)}`;
       }
+      subagentState._summarizationSessionId = `session_${crypto.randomUUID().substring(0, 8)}`;
 
       const subagentConfig = {
         ...config,
