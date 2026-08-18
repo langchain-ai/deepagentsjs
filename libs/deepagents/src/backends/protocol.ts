@@ -269,6 +269,14 @@ export interface DeleteResult {
   /**
    * State update dict for checkpoint backends, null for external storage.
    * Deletions are represented as null values keyed by removed path.
+   *
+   * @deprecated Only the deprecated legacy (runtime-injected) `StateBackend`
+   * still populates this field. A modern zero-argument `StateBackend` publishes
+   * its own deletion markers through LangGraph's `__pregel_send` channel and
+   * returns only `path`, so callers no longer need to apply a `Command` from
+   * this value. The delete tool and `CompositeBackend` continue to honor it
+   * while the legacy `StateBackend` constructor remains supported; it will be
+   * removed alongside that constructor.
    */
   filesUpdate?: Record<string, null> | null;
   /** Metadata for the delete operation, attached to the ToolMessage */
