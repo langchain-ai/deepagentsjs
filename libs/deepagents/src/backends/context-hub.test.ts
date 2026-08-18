@@ -1009,6 +1009,90 @@ describe("ContextHubBackend", () => {
     expect((await backend.read("/a.md")).error).toContain("not found");
   });
 
+  it("delete removes a directory prefix and all nested entries", async () => {
+    const { backend, client } = makeBackend({
+      "work/a.md": { type: "file", content: "a" },
+      "work/nested/b.md": { type: "file", content: "b" },
+      "keep.md": { type: "file", content: "keep" },
+    });
+
+    const result = await backend.delete("/work");
+
+    expect(result.error).toBeUndefined();
+    expect(result.path).toBe("/work");
+    expect(client.pushAgent).toHaveBeenCalledTimes(1);
+    const [, options] = client.pushAgent.mock.calls[0];
+    expect(options.files["work/a.md"]).toBeNull();
+    expect(options.files["work/nested/b.md"]).toBeNull();
+    expect(options.files).not.toHaveProperty("keep.md");
+
+    expect((await backend.read("/work/a.md")).error).toContain("not found");
+    expect((await backend.read("/work/nested/b.md")).error).toContain(
+      "not found",
+    );
+    expect((await backend.read("/keep.md")).error).toBeUndefined();
+  });
+
+  it("delete of a directory reports not found when nothing is stored under it", async () => {
+    const { backend, client } = makeBackend({
+      "other/a.md": { type: "file", content: "a" },
+    });
+
+    const result = await backend.delete("/work");
+
+    expect(result.path).toBeUndefined();
+    expect(result.error).toContain("not found");
+    expect(client.pushAgent).not.toHaveBeenCalled();
+  });
+
+  it("delete re-selects descendants added concurrently on 409 conflict replay", async () => {
+    vi.useFakeTimers();
+    const firstPush = deferred<string>();
+    const { backend, client } = makeBackend();
+    client.pullAgent
+      .mockReset()
+      .mockResolvedValueOnce(
+        makeContext("base0000", {
+          "work/a.md": { type: "file", content: "a" },
+        }),
+      )
+      // Authoritative reload after the conflict reveals a new descendant that
+      // was committed by someone else before our delete replays.
+      .mockResolvedValueOnce(
+        makeContext("remote01", {
+          "work/a.md": { type: "file", content: "a" },
+          "work/new.md": { type: "file", content: "new" },
+          "unrelated.md": { type: "file", content: "keep" },
+        }),
+      );
+    client.pushAgent
+      .mockReset()
+      .mockImplementationOnce(() => firstPush.promise)
+      .mockResolvedValueOnce(commitUrl("22222222"));
+
+    const deletion = backend.delete("/work");
+    await advanceMutationWindow();
+    expect(client.pushAgent).toHaveBeenCalledTimes(1);
+
+    firstPush.reject(
+      makeLangSmithError("conflict", {
+        name: "LangSmithConflictError",
+        status: 409,
+      }),
+    );
+
+    await expect(deletion).resolves.toMatchObject({ path: "/work" });
+
+    expect(client.pushAgent).toHaveBeenCalledTimes(2);
+    const replayFiles = client.pushAgent.mock.calls[1][1].files;
+    // The recursive delete intent recomputed against the refreshed tree, so the
+    // concurrently-added descendant is included in the retried removal.
+    expect(replayFiles["work/a.md"]).toBeNull();
+    expect(replayFiles["work/new.md"]).toBeNull();
+    expect(replayFiles).not.toHaveProperty("unrelated.md");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("delete failures invalidate cache and re-pull on next read", async () => {
     const { backend, client } = makeBackend({
       "a.md": { type: "file", content: "a" },

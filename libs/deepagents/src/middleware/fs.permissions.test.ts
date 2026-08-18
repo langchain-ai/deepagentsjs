@@ -474,6 +474,99 @@ describe("fs tool permissions", () => {
       expect(resultText(result)).toContain("permission denied for write");
       expect(backend.delete).not.toHaveBeenCalled();
     });
+
+    // Parity with Python `_find_delete_deny_patterns`: when the backend
+    // confirms the target is a plain file (leaf), permission is resolved with
+    // first-match-wins — an earlier allow rule beats a later deny.
+    it("allows deleting a confirmed leaf when an earlier allow precedes a later deny", async () => {
+      const backend = createMockBackend();
+      // ls(target) reports "not a directory" -> confirmed leaf.
+      backend.ls = vi.fn().mockResolvedValue({
+        error: "Error: '/work/app.txt' is not a directory",
+      });
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [
+          {
+            operations: ["write"] as const,
+            paths: ["/work/**"],
+            mode: "allow" as const,
+          },
+          denyWrite(["/work/app.txt"]),
+        ],
+      });
+
+      await getTool(middleware, "delete").invoke({
+        file_path: "/work/app.txt",
+      });
+
+      expect(backend.delete).toHaveBeenCalledWith("/work/app.txt");
+    });
+
+    // The same rules against a possible-subtree target must block regardless of
+    // rule order, because a recursive delete could remove the denied path.
+    it("denies deleting a directory whose subtree contains a later-denied path", async () => {
+      const backend = createMockBackend();
+      // ls(target) returns entries -> may have descendants (subtree).
+      backend.ls = vi.fn().mockResolvedValue({
+        files: [{ path: "/work/app.txt", is_dir: false }],
+      });
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [
+          {
+            operations: ["write"] as const,
+            paths: ["/work/**"],
+            mode: "allow" as const,
+          },
+          denyWrite(["/work/app.txt"]),
+        ],
+      });
+
+      const result = await getTool(middleware, "delete").invoke({
+        file_path: "/work",
+      });
+
+      expect(resultText(result)).toContain("permission denied for write");
+      expect(resultText(result)).toContain("/work/app.txt");
+      expect(backend.delete).not.toHaveBeenCalled();
+    });
+
+    // Parity with Python `_wildcard_delete_overlap`'s ancestor analysis:
+    // deleting `/work/app/child` under a deny on `/work/*` mutates the denied
+    // `/work/app`, so it must be blocked even though the target itself does not
+    // directly match the glob.
+    it("denies deleting inside a directory whose ancestor matches a single-segment wildcard deny", async () => {
+      const backend = createMockBackend();
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [denyWrite(["/work/*"])],
+      });
+
+      const result = await getTool(middleware, "delete").invoke({
+        file_path: "/work/app/child",
+      });
+
+      expect(resultText(result)).toContain("permission denied for write");
+      expect(resultText(result)).toContain("/work/*");
+      expect(backend.delete).not.toHaveBeenCalled();
+    });
+
+    // A sibling-file glob still cannot match anything under an unrelated
+    // sibling directory, so the delete proceeds.
+    it("allows deleting inside a sibling directory a file glob cannot reach", async () => {
+      const backend = createMockBackend();
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [denyWrite(["/work/*.log"])],
+      });
+
+      await getTool(middleware, "delete").invoke({
+        file_path: "/work/notes/today.txt",
+      });
+
+      expect(backend.delete).toHaveBeenCalledWith("/work/notes/today.txt");
+    });
   });
 
   describe("glob", () => {

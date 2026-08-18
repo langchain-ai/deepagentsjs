@@ -25,9 +25,11 @@ import { z } from "zod/v4";
 import type {
   AnyBackendProtocol,
   BackendFactory,
+  BackendProtocolV2,
   BackendRuntime,
   DeleteResult,
   FileData,
+  LsResult,
 } from "../backends/protocol.js";
 import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
@@ -501,70 +503,170 @@ function toolError(
   });
 }
 
-const GLOB_META_CHARACTERS = ["*", "?", "{", "["];
+const GLOB_WILDCARD_CHARACTERS = ["*", "?", "{", "["];
 
 function hasGlobMetaCharacter(pattern: string): boolean {
-  return GLOB_META_CHARACTERS.some((character) => pattern.includes(character));
-}
-
-function globAnchor(pattern: string): string {
-  const wildcardIndex = pattern
-    .split("")
-    .findIndex((character) => GLOB_META_CHARACTERS.includes(character));
-  const prefix =
-    wildcardIndex === -1 ? pattern : pattern.slice(0, wildcardIndex);
-  const slashIndex = prefix.lastIndexOf("/");
-  const anchor = slashIndex <= 0 ? "/" : prefix.slice(0, slashIndex);
-  return validatePath(anchor);
-}
-
-function globMayMatchDescendants(pattern: string): boolean {
-  const wildcardIndex = pattern
-    .split("")
-    .findIndex((character) => GLOB_META_CHARACTERS.includes(character));
-  return wildcardIndex !== -1 && pattern.slice(wildcardIndex).includes("/");
-}
-
-function pathsOverlap(left: string, right: string): boolean {
-  const lhs = validatePath(left);
-  const rhs = validatePath(right);
-  if (lhs === "/" || rhs === "/") {
-    return true;
-  }
-  return lhs === rhs || lhs.startsWith(`${rhs}/`) || rhs.startsWith(`${lhs}/`);
-}
-
-function deleteTargetMatchesDenyPattern(
-  target: string,
-  pattern: string,
-): boolean {
-  if (!hasGlobMetaCharacter(pattern)) {
-    return pathsOverlap(target, pattern);
-  }
-
-  const anchor = globAnchor(pattern);
-  const targetContainsAnchor =
-    anchor === "/" || target === anchor || anchor.startsWith(`${target}/`);
-  const targetIsInsideAnchor =
-    anchor !== "/" && target.startsWith(`${anchor}/`);
-
-  // A nested glob can match a protected descendant within the delete target.
-  // Be conservative because the backend removes the entire subtree atomically.
-  return (
-    globMatch(target, pattern) ||
-    targetContainsAnchor ||
-    (targetIsInsideAnchor && globMayMatchDescendants(pattern))
+  return GLOB_WILDCARD_CHARACTERS.some((character) =>
+    pattern.includes(character),
   );
 }
 
-function findDeleteDenyPatterns(
-  rules: FilesystemPermission[],
+/**
+ * Split an absolute POSIX path into its components (excluding the leading "/").
+ * `posixParts("/a/b")` -> `["a", "b"]`; `posixParts("/")` -> `[]`.
+ */
+function posixParts(path: string): string[] {
+  return path.split("/").filter(Boolean);
+}
+
+/**
+ * Whether `child` is `ancestor` or lives (component-wise) beneath it. The root
+ * `/` contains everything. `/secret` is NOT relative to `/secrets`.
+ */
+function isRelativeTo(child: string, ancestor: string): boolean {
+  if (ancestor === "/") {
+    return true;
+  }
+  return child === ancestor || child.startsWith(`${ancestor}/`);
+}
+
+/**
+ * Return the longest leading directory of `pattern` with no wildcards.
+ *
+ * For a `**` suffix it returns the wildcard-free prefix, and a pattern whose
+ * wildcard sits at or near the root falls back to `/`. Mirrors
+ * Python's `_glob_anchor`, splitting on whole path
+ * components rather than the first wildcard character so a literal component
+ * that merely contains a metacharacter is handled the same way.
+ */
+function globAnchor(pattern: string): string {
+  const safe: string[] = [];
+  for (const part of posixParts(pattern)) {
+    if (
+      GLOB_WILDCARD_CHARACTERS.some((character) => part.includes(character))
+    ) {
+      break;
+    }
+    safe.push(part);
+  }
+  if (safe.length === 0) {
+    return "/";
+  }
+  return `/${safe.join("/")}`;
+}
+
+/**
+ * Whether the subtree at `callPath` intersects the subtree at `ruleAnchor`.
+ * Two subtrees overlap when one is a (component-wise) prefix of the other, or
+ * they are equal. The root `/` overlaps everything. Mirrors Python's
+ * `_paths_overlap`.
+ */
+function pathsOverlap(callPath: string, ruleAnchor: string): boolean {
+  const a = validatePath(callPath);
+  const b = validatePath(ruleAnchor);
+  return a === b || isRelativeTo(a, b) || isRelativeTo(b, a);
+}
+
+/**
+ * Whether a wildcard deny `pattern` overlaps a recursive delete of `target`.
+ *
+ * Mirrors Python's `_wildcard_delete_overlap`, including the ancestor-match
+ * analysis: deleting `/work/app/child` when `/work/*` is denied mutates the
+ * denied `/work/app`, so it must be blocked, while `/work/*.log` can never
+ * match anything under `/work/notes.txt` and stays allowed.
+ */
+function wildcardDeleteOverlap(
+  pattern: string,
+  anchor: string,
+  target: string,
+): boolean {
+  // Root anchor ("/**/x"): pattern can match anywhere, block all.
+  if (anchor === "/") {
+    return true;
+  }
+  // Target directly matches the glob: block.
+  if (globMatch(target, pattern)) {
+    return true;
+  }
+  // Anchor is inside the delete subtree: a recursive delete would remove
+  // matching descendants — block.
+  if (isRelativeTo(anchor, target)) {
+    return true;
+  }
+  // Target is below the anchor: safe to allow ONLY when the pattern suffix is a
+  // single, non-** component (fixed depth) AND no ancestor of the target
+  // matches the glob. Directory wildcards ("/work/*/secrets") could match
+  // descendants of the target, so fail closed for those.
+  if (!isRelativeTo(target, anchor)) {
+    return false;
+  }
+  const anchorParts = posixParts(anchor);
+  const patternParts = posixParts(pattern);
+  const suffix = patternParts.slice(anchorParts.length);
+  if (suffix.length !== 1 || suffix[0].includes("**")) {
+    return true;
+  }
+  // Block when any ancestor of the target (between anchor and target) matches
+  // the glob — the target is then inside a denied directory's subtree.
+  const targetParts = posixParts(target);
+  for (let depth = anchorParts.length; depth < targetParts.length; depth += 1) {
+    const ancestor = `/${targetParts.slice(0, depth).join("/")}`;
+    if (globMatch(ancestor, pattern)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Resolve delete permission for a confirmed plain file: first matching write
+ * rule wins, mirroring `decidePathAccess`'s ordering, but returning the matched
+ * deny pattern(s) so the delete tool's error can cite them. An earlier allow
+ * rule short-circuits and returns no denials. Mirrors Python's
+ * `_find_delete_deny_patterns_for_leaf`.
+ */
+function findDeleteDenyPatternsForLeaf(
+  rules: readonly FilesystemPermission[],
   target: string,
 ): string[] {
-  const denying: string[] = [];
-  const seen = new Set<string>();
+  for (const rule of rules) {
+    if (!rule.operations.includes("write")) {
+      continue;
+    }
+    const matched = rule.paths.filter((pattern) => globMatch(target, pattern));
+    if (matched.length === 0) {
+      continue;
+    }
+    return (rule.mode ?? "allow") === "deny" ? matched : [];
+  }
+  return [];
+}
+
+/**
+ * Return the deny-write patterns that block deleting `target`.
+ *
+ * When `hasDescendants` is `true` (the target may be a directory), a recursive
+ * delete removes the whole subtree, so any deny-write pattern that could match
+ * `target` or anything nested under it blocks the operation regardless of rule
+ * order — an earlier allow can't guarantee every descendant is safe. When
+ * `hasDescendants` is `false` (a backend-confirmed plain file), the target is
+ * resolved exactly like `write_file`/`edit_file`: first matching rule wins.
+ *
+ * Mirrors Python's `_find_delete_deny_patterns`.
+ */
+function findDeleteDenyPatterns(
+  rules: readonly FilesystemPermission[],
+  target: string,
+  hasDescendants: boolean = true,
+): string[] {
   const canonicalTarget = validatePath(target);
 
+  if (!hasDescendants) {
+    return findDeleteDenyPatternsForLeaf(rules, canonicalTarget);
+  }
+
+  const denying: string[] = [];
+  const seen = new Set<string>();
   for (const rule of rules) {
     if (rule.mode !== "deny" || !rule.operations.includes("write")) {
       continue;
@@ -573,14 +675,91 @@ function findDeleteDenyPatterns(
       if (seen.has(pattern)) {
         continue;
       }
-      if (deleteTargetMatchesDenyPattern(canonicalTarget, pattern)) {
+      const anchor = globAnchor(pattern);
+      const overlaps = hasGlobMetaCharacter(pattern)
+        ? wildcardDeleteOverlap(pattern, anchor, canonicalTarget)
+        : // Literal (wildcard-free) pattern: a deny on "/work" blocks deleting
+          // "/work/sub" and blocks deleting an ancestor that contains it.
+          pathsOverlap(canonicalTarget, anchor);
+      if (overlaps) {
         seen.add(pattern);
         denying.push(pattern);
       }
     }
   }
-
   return denying;
+}
+
+/**
+ * Whether `delete` should use the conservative recursive permission check.
+ *
+ * Falls back to the conservative check (returns `true`) when no permission
+ * rules are configured, the backend cannot list, or the listing is ambiguous.
+ * A non-empty `ls(target)` indicates descendants; a "not a directory"-style
+ * error confirms a plain file. An empty, error-free listing is disambiguated
+ * via the parent listing's `is_dir` flag. Mirrors Python's
+ * `_delete_target_may_have_descendants`.
+ */
+async function deleteTargetMayHaveDescendants(
+  backend: BackendProtocolV2,
+  target: string,
+  permissionsConfigured: boolean,
+): Promise<boolean> {
+  if (!permissionsConfigured) {
+    return false;
+  }
+  if (typeof backend.ls !== "function") {
+    return true;
+  }
+
+  let lsResult: LsResult;
+  try {
+    lsResult = await backend.ls(target);
+  } catch {
+    return true;
+  }
+  if (lsResult.error) {
+    return !lsResult.error.includes("not a directory");
+  }
+  if (lsResult.files && lsResult.files.length > 0) {
+    return true;
+  }
+
+  // Empty, error-free listing: an exact file and an empty directory look
+  // identical on flat/virtual backends. Use the parent listing's is_dir flag
+  // for the target, which is consistent across backends.
+  const parent = parentPath(target);
+  let parentResult: LsResult;
+  try {
+    parentResult = await backend.ls(parent);
+  } catch {
+    return true;
+  }
+  if (parentResult.error) {
+    return true;
+  }
+  const targetNorm = trimTrailingSlashesFs(target);
+  const matches = (parentResult.files ?? []).filter(
+    (entry) => trimTrailingSlashesFs(entry.path) === targetNorm,
+  );
+  if (matches.length === 0) {
+    return true;
+  }
+  return matches.some((entry) => entry.is_dir === true);
+}
+
+function trimTrailingSlashesFs(path: string): string {
+  let end = path.length;
+  while (end > 1 && path[end - 1] === "/") end -= 1;
+  return path.slice(0, end);
+}
+
+function parentPath(path: string): string {
+  const parts = posixParts(path);
+  if (parts.length <= 1) {
+    return "/";
+  }
+  return `/${parts.slice(0, -1).join("/")}`;
 }
 
 function supportsDelete(backend: { delete?: unknown }): backend is {
@@ -1097,21 +1276,25 @@ function createDeleteTool(
         return toolError(runtime, "delete", `Error: ${getErrorMessage(error)}`);
       }
 
-      const permissionError = checkPermission(
-        permissions,
-        "write",
-        validatedPath,
-      );
-      if (permissionError !== undefined) {
-        return toolError(runtime, "delete", permissionError);
-      }
+      const resolvedBackend = await resolveBackend(backend, runtime);
 
-      // Additional safeguard for recursive deletes: a deny rule protecting any
-      // descendant of the target must block the whole-subtree removal, even
-      // though checkPermission only evaluates the target path itself.
+      // A recursive delete removes the target and everything under it, so
+      // permission is evaluated as a whole-subtree write. Probe the backend to
+      // learn whether the target is a plain file (leaf) or may have
+      // descendants; a confirmed leaf is resolved with first-match-wins
+      // semantics (an earlier allow beats a later deny), while a possible
+      // subtree blocks on any overlapping deny-write pattern regardless of
+      // rule order. This drives all delete permission gating — write_file's
+      // single-path checkPermission is insufficient for a recursive removal.
+      const hasDescendants = await deleteTargetMayHaveDescendants(
+        resolvedBackend,
+        validatedPath,
+        permissions.length > 0,
+      );
       const denyingPatterns = findDeleteDenyPatterns(
         permissions,
         validatedPath,
+        hasDescendants,
       );
       if (denyingPatterns.length > 0) {
         return toolError(
@@ -1121,7 +1304,6 @@ function createDeleteTool(
         );
       }
 
-      const resolvedBackend = await resolveBackend(backend, runtime);
       if (!supportsDelete(resolvedBackend)) {
         return toolError(
           runtime,
