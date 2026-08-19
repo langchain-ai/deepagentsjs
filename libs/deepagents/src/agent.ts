@@ -35,8 +35,8 @@ import { createToolExclusionMiddleware } from "./middleware/tool_exclusion.js";
 import { mergeMiddlewareStack } from "./middleware/utils.js";
 import {
   GENERAL_PURPOSE_SUBAGENT,
-  isCacheAlignedForkSpec,
   type CompiledSubAgent,
+  type ForkedSubAgent,
 } from "./middleware/subagents.js";
 import type { AsyncSubAgent } from "./middleware/async_subagents.js";
 import type {
@@ -274,7 +274,7 @@ export function createDeepAgent<
    * If a custom subagent needs skills, it must specify its own `skills` array.
    */
   const createSubagentDefaultMiddleware = (
-    input: SubAgent,
+    input: SubAgent | ForkedSubAgent,
   ): AgentMiddleware[] => {
     const effectivePermissions = input.permissions ?? permissions;
 
@@ -313,19 +313,20 @@ export function createDeepAgent<
         ]
       : [];
 
-  const normalizeSubagentSpec = (input: SubAgent): SubAgent => {
+  const buildSubagentMiddleware = (
+    input: SubAgent | ForkedSubAgent,
+    isForkable: boolean,
+  ): AgentMiddleware[] => {
     const subagentDefaultMiddleware = createSubagentDefaultMiddleware(input);
 
-    const shouldMirrorStatically = isCacheAlignedForkSpec({
-      mode: input.mode,
-      specModel: input.model,
-      parentModel: model,
-      parentSystemPrompt: finalSystemPrompt,
-    });
-    const mirroredCustomMiddleware = shouldMirrorStatically
-      ? customMiddleware
-      : [];
-    const mirroredMemoryMiddleware = shouldMirrorStatically
+    const shouldMirror =
+      isForkable &&
+      (input.model === undefined || input.model === model) &&
+      finalSystemPrompt != null &&
+      finalSystemPrompt !== "";
+
+    const mirroredCustomMiddleware = shouldMirror ? customMiddleware : [];
+    const mirroredMemoryMiddleware = shouldMirror
       ? buildMirrorMemoryMiddleware()
       : [];
 
@@ -346,12 +347,22 @@ export function createDeepAgent<
       );
     }
 
-    return {
-      ...input,
-      tools: input.tools ?? [],
-      middleware: subagentMiddleware,
-    };
+    return subagentMiddleware;
   };
+
+  const normalizeSubagentSpec = (input: SubAgent): SubAgent => ({
+    ...input,
+    tools: input.tools ?? [],
+    middleware: buildSubagentMiddleware(input, /* isForkable */ false),
+  });
+
+  const normalizeForkedSubagentSpec = (
+    input: ForkedSubAgent,
+  ): ForkedSubAgent => ({
+    ...input,
+    tools: input.tools ?? [],
+    middleware: buildSubagentMiddleware(input, /* isForkable */ true),
+  });
 
   const allSubagents = subagents as readonly AnySubAgent[];
 
@@ -364,11 +375,19 @@ export function createDeepAgent<
   // Process sync subagents:
   // - CompiledSubAgent: use as-is (already has its own middleware baked in)
   // - SubAgent: apply the default deep-agent subagent middleware stack
+  // - ForkedSubAgent: same stack, plus model-matched mirrored middleware
   const inlineSubagents = allSubagents
     .filter(
-      (item): item is SubAgent | CompiledSubAgent => !isAsyncSubAgent(item),
+      (item): item is SubAgent | CompiledSubAgent | ForkedSubAgent =>
+        !isAsyncSubAgent(item),
     )
-    .map((item) => ("runnable" in item ? item : normalizeSubagentSpec(item)));
+    .map((item) =>
+      "runnable" in item
+        ? item
+        : "systemPrompt" in item
+          ? normalizeSubagentSpec(item)
+          : normalizeForkedSubagentSpec(item),
+    );
 
   const gpConfig = harnessProfile.generalPurposeSubagent;
   const gpDisabled = gpConfig?.enabled === false;

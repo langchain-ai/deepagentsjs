@@ -43,8 +43,8 @@ export const DEFAULT_SUBAGENT_PROMPT =
 
 /**
  * State keys excluded when passing state to subagents and when returning
- * updates from subagents. Fork-mode subagents re-inject summarization keys
- * after reconstructing the effective message view.
+ * updates from subagents. Summarization keys are excluded because their
+ * cutoffIndex is only valid against the message list it was computed from.
  */
 const EXCLUDED_STATE_KEYS = [
   "messages",
@@ -107,16 +107,11 @@ export interface CompiledSubAgent<
 }
 
 /**
- * Specification for a subagent that can be dynamically created.
- *
- * When using `createDeepAgent`, subagents automatically receive a default middleware
- * stack (filesystemMiddleware, summarizationMiddleware, etc.) before any custom
- * `middleware` specified in this spec. Add `todoListMiddleware` explicitly to opt in.
+ * Fields shared by both {@link SubAgent} and {@link ForkedSubAgent}.
  *
  * Required fields:
  * - `name`: Identifier used to select this subagent in the task tool
  * - `description`: Shown to the model for subagent selection
- * - `systemPrompt`: The system prompt for the subagent
  *
  * Optional fields:
  * - `model`: Override the default model for this subagent
@@ -124,27 +119,13 @@ export interface CompiledSubAgent<
  * - `middleware`: Additional middleware appended after defaults
  * - `interruptOn`: Human-in-the-loop configuration for specific tools
  * - `skills`: Skill source paths for SkillsMiddleware (e.g., `["/skills/user/", "/skills/project/"]`)
- *
- * @example
- * ```typescript
- * const researcher: SubAgent = {
- *   name: "researcher",
- *   description: "Research assistant for complex topics",
- *   systemPrompt: "You are a research assistant.",
- *   tools: [webSearchTool],
- *   skills: ["/skills/research/"],
- * };
- * ```
  */
-export interface SubAgent {
+interface SubAgentBase {
   /** Identifier used to select this subagent in the task tool */
   name: string;
 
   /** Description shown to the model for subagent selection */
   description: string;
-
-  /** The system prompt to use for the agent */
-  systemPrompt: string;
 
   /** The tools to use for the agent (tool instances, not names). Defaults to defaultTools */
   tools?: StructuredTool[];
@@ -228,39 +209,57 @@ export interface SubAgent {
    * ```
    */
   permissions?: FilesystemPermission[];
-
-  /**
-   * Context mode. `"fork"` inherits the parent's conversation history
-   * and system prompt. `"handoff"` (default) is fully isolated.
-   */
-  mode?: "handoff" | "fork";
-}
-
-export interface CacheAlignedForkSpecOptions {
-  mode: "handoff" | "fork" | undefined;
-  specModel: LanguageModelLike | string | undefined;
-  parentModel: LanguageModelLike | string;
-  parentSystemPrompt: string | SystemMessage | null | undefined;
 }
 
 /**
- * Whether a fork spec qualifies for cache-aligned treatment (system prompt
- * swap, mirrored middleware). Shared by `agent.ts` and `getSubagents()` so
- * the two can't drift apart.
+ * Specification for a subagent that can be dynamically created.
+ *
+ * When using `createDeepAgent`, subagents automatically receive a default middleware
+ * stack (filesystemMiddleware, summarizationMiddleware, etc.) before any custom
+ * `middleware` specified in this spec. Add `todoListMiddleware` explicitly to opt in.
+ *
+ * Always fully isolated — this subagent only ever sees the task description,
+ * never the parent's conversation. Use {@link ForkedSubAgent} to inherit the
+ * parent's history and system prompt instead.
+ *
+ * @example
+ * ```typescript
+ * const researcher: SubAgent = {
+ *   name: "researcher",
+ *   description: "Research assistant for complex topics",
+ *   systemPrompt: "You are a research assistant.",
+ *   tools: [webSearchTool],
+ *   skills: ["/skills/research/"],
+ * };
+ * ```
  */
-export function isCacheAlignedForkSpec({
-  mode,
-  specModel,
-  parentModel,
-  parentSystemPrompt,
-}: CacheAlignedForkSpecOptions): boolean {
-  return (
-    mode === "fork" &&
-    (specModel === undefined || specModel === parentModel) &&
-    parentSystemPrompt != null &&
-    parentSystemPrompt !== ""
-  );
+export interface SubAgent extends SubAgentBase {
+  /** The system prompt to use for the agent */
+  systemPrompt: string | SystemMessage;
 }
+
+/**
+ * Specification for a subagent that inherits the parent's conversation
+ * instead of starting from just the task description.
+ *
+ * Always forks: it inherits the parent's full message history and its exact
+ * system prompt (there's no own prompt to fall back to). Mirrored middleware
+ * is only added when its model matches the parent's, since that's the only
+ * case with a cache benefit to protect. Deliberately has no `systemPrompt`
+ * of its own: since its system slot always carries the parent's prompt,
+ * there's nothing of its own to put there. If you need a subagent with a
+ * distinguishing system prompt, use {@link SubAgent} without forking instead.
+ *
+ * @example
+ * ```typescript
+ * const researcher: ForkedSubAgent = {
+ *   name: "researcher",
+ *   description: "Continues the current investigation with full context",
+ *   tools: [webSearchTool],
+ * };
+ * ```
+ */
+export interface ForkedSubAgent extends SubAgentBase {}
 
 /**
  * Base specification for the general-purpose subagent.
@@ -299,10 +298,11 @@ export function isCacheAlignedForkSpec({
  * });
  * ```
  */
-export const GENERAL_PURPOSE_SUBAGENT: Pick<
-  SubAgent,
-  "name" | "description" | "systemPrompt"
-> = {
+export const GENERAL_PURPOSE_SUBAGENT: {
+  name: string;
+  description: string;
+  systemPrompt: string;
+} = {
   name: "general-purpose",
   description: DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
   systemPrompt: DEFAULT_SUBAGENT_PROMPT,
@@ -399,14 +399,12 @@ function stripInFlightAIMessage(messages: BaseMessage[]): BaseMessage[] {
  * for coalescing any defaults before calling this function.
  *
  * @param spec - Declarative subagent specification. Must specify `model` and `tools`.
- * @param options.systemPromptOverride - Replaces the spec's own system prompt — used for fork's system-prompt swap.
  * @returns A compiled `ReactAgent` ready for task-tool invocation.
  */
 export function createSubAgent(
   spec: SubAgent,
   options?: {
     responseFormat?: CreateAgentParams["responseFormat"];
-    systemPromptOverride?: string | SystemMessage;
   },
 ): ReactAgent {
   if (!spec.model) {
@@ -428,7 +426,7 @@ export function createSubAgent(
 
   return createAgent({
     model: spec.model,
-    systemPrompt: options?.systemPromptOverride ?? spec.systemPrompt,
+    systemPrompt: spec.systemPrompt,
     tools: spec.tools,
     middleware,
     name: spec.name,
@@ -442,7 +440,8 @@ export function createSubAgent(
  * Create subagent instances from specifications.
  *
  * Returns compiled agents, raw specs keyed by name (for on-demand
- * recompilation with dynamic response formats), and descriptions.
+ * recompilation with dynamic response formats), descriptions, and the set
+ * of names that should fork the parent's conversation.
  */
 function getSubagents(options: {
   defaultModel: LanguageModelLike | string;
@@ -450,14 +449,14 @@ function getSubagents(options: {
   defaultMiddleware: AgentMiddleware[] | null;
   generalPurposeMiddleware: AgentMiddleware[] | null;
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
-  subagents: (SubAgent | CompiledSubAgent)[];
+  subagents: (SubAgent | CompiledSubAgent | ForkedSubAgent)[];
   generalPurposeAgent: boolean;
   parentSystemPrompt?: string | SystemMessage | null;
 }): {
   agents: Record<string, ReactAgent | Runnable>;
   specsByName: Record<string, SubAgent | CompiledSubAgent>;
   descriptions: string[];
-  subagentSystemPrompts: Record<string, string>;
+  forkModeNames: Set<string>;
 } {
   const {
     defaultModel,
@@ -476,7 +475,7 @@ function getSubagents(options: {
   const agents: Record<string, ReactAgent | Runnable> = {};
   const specsByName: Record<string, SubAgent | CompiledSubAgent> = {};
   const subagentDescriptions: string[] = [];
-  const subagentSystemPrompts: Record<string, string> = {};
+  const forkModeNames = new Set<string>();
 
   if (generalPurposeAgent) {
     const generalPurposeMiddleware = [...generalPurposeMiddlewareBase];
@@ -503,13 +502,10 @@ function getSubagents(options: {
   }
 
   for (const agentParams of subagents) {
-    if (
-      agentParams.mode != null &&
-      agentParams.mode !== "handoff" &&
-      agentParams.mode !== "fork"
-    ) {
+    const rawMode = (agentParams as { mode?: unknown }).mode;
+    if (rawMode != null && rawMode !== "handoff" && rawMode !== "fork") {
       throw new Error(
-        `SubAgent '${agentParams.name}' has invalid mode '${agentParams.mode}' — must be "handoff" or "fork".`,
+        `SubAgent '${agentParams.name}' has invalid mode '${rawMode}' — must be "handoff" or "fork".`,
       );
     }
 
@@ -520,7 +516,9 @@ function getSubagents(options: {
     if ("runnable" in agentParams) {
       agents[agentParams.name] = agentParams.runnable;
       specsByName[agentParams.name] = agentParams;
-    } else {
+      if (agentParams.mode === "fork") forkModeNames.add(agentParams.name);
+    } else if ("systemPrompt" in agentParams) {
+      // Plain SubAgent — never forks, keeps its own prompt untouched.
       const resolvedSpec: SubAgent = {
         ...agentParams,
         model: agentParams.model ?? defaultModel,
@@ -531,23 +529,25 @@ function getSubagents(options: {
         ],
         interruptOn: agentParams.interruptOn ?? defaultInterruptOn ?? undefined,
       };
-
-      const systemPromptOverride = isCacheAlignedForkSpec({
-        mode: resolvedSpec.mode,
-        specModel: agentParams.model,
-        parentModel: defaultModel,
-        parentSystemPrompt,
-      })
-        ? (parentSystemPrompt ?? undefined)
-        : undefined;
-      if (systemPromptOverride != null) {
-        subagentSystemPrompts[resolvedSpec.name] = resolvedSpec.systemPrompt;
-      }
-
-      agents[agentParams.name] = createSubAgent(resolvedSpec, {
-        systemPromptOverride,
-      });
+      agents[agentParams.name] = createSubAgent(resolvedSpec);
       specsByName[agentParams.name] = resolvedSpec;
+    } else {
+      // ForkedSubAgent — always forks, always inherits the parent's exact
+      // system prompt directly; there's no own prompt to fall back to.
+      const resolvedSpec: SubAgent = {
+        ...agentParams,
+        systemPrompt: parentSystemPrompt ?? "",
+        model: agentParams.model ?? defaultModel,
+        tools: agentParams.tools ?? defaultTools,
+        middleware: [
+          ...defaultSubagentMiddleware,
+          ...(agentParams.middleware ?? []),
+        ],
+        interruptOn: agentParams.interruptOn ?? defaultInterruptOn ?? undefined,
+      };
+      agents[agentParams.name] = createSubAgent(resolvedSpec);
+      specsByName[agentParams.name] = resolvedSpec;
+      forkModeNames.add(agentParams.name);
     }
   }
 
@@ -555,7 +555,7 @@ function getSubagents(options: {
     agents,
     specsByName,
     descriptions: subagentDescriptions,
-    subagentSystemPrompts,
+    forkModeNames,
   };
 }
 
@@ -568,7 +568,7 @@ function createTaskTool(options: {
   defaultMiddleware: AgentMiddleware[] | null;
   generalPurposeMiddleware: AgentMiddleware[] | null;
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
-  subagents: (SubAgent | CompiledSubAgent)[];
+  subagents: (SubAgent | CompiledSubAgent | ForkedSubAgent)[];
   generalPurposeAgent: boolean;
   taskDescription: string | null;
   parentSystemPrompt?: string | SystemMessage | null;
@@ -589,7 +589,7 @@ function createTaskTool(options: {
     agents: subagentGraphs,
     specsByName,
     descriptions: subagentDescriptions,
-    subagentSystemPrompts,
+    forkModeNames,
   } = getSubagents({
     defaultModel,
     defaultTools,
@@ -645,8 +645,7 @@ function createTaskTool(options: {
         );
       }
 
-      const spec = specsByName[subagent_type];
-      const shouldFork = spec.mode === "fork";
+      const shouldFork = forkModeNames.has(subagent_type);
 
       const subagent = selectSubagent(subagent_type, config);
 
@@ -663,11 +662,10 @@ function createTaskTool(options: {
         const effective = event
           ? [event.summaryMessage, ...trimmed.slice(event.cutoffIndex)]
           : trimmed;
-        const ownSystemPrompt = subagentSystemPrompts[subagent_type];
-        const content = ownSystemPrompt
-          ? `${ownSystemPrompt}\n\n${description}`
-          : description;
-        subagentState.messages = [...effective, new HumanMessage({ content })];
+        subagentState.messages = [
+          ...effective,
+          new HumanMessage({ content: description }),
+        ];
       } else {
         subagentState.messages = [new HumanMessage({ content: description })];
       }
@@ -750,14 +748,14 @@ export interface SubAgentMiddlewareOptions {
   /** The tool configs for the default general-purpose subagent */
   defaultInterruptOn?: Record<string, boolean | InterruptOnConfig> | null;
   /** A list of additional subagents to provide to the agent */
-  subagents?: (SubAgent | CompiledSubAgent)[];
+  subagents?: (SubAgent | CompiledSubAgent | ForkedSubAgent)[];
   /** Full system prompt override */
   systemPrompt?: string | null;
   /** Whether to include the general-purpose agent */
   generalPurposeAgent?: boolean;
   /** Custom description for the task tool */
   taskDescription?: string | null;
-  /** Reused by `mode: "fork"` subagents for cache alignment */
+  /** Inherited by `ForkedSubAgent`s and `mode: "fork"` compiled subagents */
   parentSystemPrompt?: string | SystemMessage | null;
 }
 
