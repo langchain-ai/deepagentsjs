@@ -31,13 +31,31 @@ function createInMemoryBackend(initialPaths: string[]): BackendProtocolV2 {
   const trim = (p: string) =>
     p.length > 1 && p.endsWith("/") ? p.slice(0, -1) : p;
   return {
+    // Real backends (Store/State) list only immediate children: files as
+    // is_dir:false and subdirectories as is_dir:true (with a trailing slash),
+    // never the directory itself. Model that so the delete tool's leaf-vs-
+    // subtree probe behaves the same as against a real backend.
     ls: vi.fn(async (dir = "/") => {
       const base = trim(dir);
       const prefix = base === "/" ? "/" : `${base}/`;
-      const entries = [...files]
-        .filter((f) => f === base || f.startsWith(prefix))
-        .map((f) => ({ path: f, is_dir: false }));
-      return { files: entries };
+      const fileEntries: Array<{ path: string; is_dir: boolean }> = [];
+      const subdirs = new Set<string>();
+      for (const f of files) {
+        if (!f.startsWith(prefix)) continue;
+        const relative = f.slice(prefix.length);
+        if (relative.length === 0) continue;
+        if (relative.includes("/")) {
+          subdirs.add(`${prefix}${relative.split("/")[0]}/`);
+        } else {
+          fileEntries.push({ path: f, is_dir: false });
+        }
+      }
+      return {
+        files: [
+          ...fileEntries,
+          ...[...subdirs].map((d) => ({ path: d, is_dir: true })),
+        ],
+      };
     }),
     read: vi.fn(async () => ({ content: "", mimeType: "text/plain" })),
     write: vi.fn(async () => ({ path: "/x", filesUpdate: null })),
@@ -674,6 +692,106 @@ describe("fs tool permissions", () => {
       expect(text).toContain("/work/secrets/**");
       expect(text).toContain("/work/logs/**");
       expect(backend.__files.has("/work/a.txt")).toBe(true);
+    });
+
+    // Flat backend: an exact key IS the delete target but a nested descendant
+    // also exists, so the probe must classify it as a subtree and the denied
+    // descendant blocks the delete (mirrors Python's
+    // test_flat_backend_exact_key_with_nested_descendant_still_blocked).
+    it("blocks an exact-key delete when a nested descendant is denied on a flat backend", async () => {
+      const backend = createInMemoryBackend([
+        "/work/item",
+        "/work/item/secrets/key",
+      ]) as BackendProtocolV2 & { __files: Set<string> };
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [
+          {
+            operations: ["read", "write"] as const,
+            paths: ["/work/item"],
+            mode: "allow" as const,
+          },
+          {
+            operations: ["read", "write"] as const,
+            paths: ["/work/item/secrets/**"],
+            mode: "deny" as const,
+          },
+        ],
+      });
+
+      const result = await getTool(middleware, "delete").invoke({
+        file_path: "/work/item",
+      });
+
+      expect(resultText(result)).toContain("permission denied for write");
+      expect(backend.delete).not.toHaveBeenCalled();
+    });
+
+    // Flat backend leaf detection: a confirmed plain file (no children in the
+    // listing) is resolved via first-match-wins, so allow-before-deny permits
+    // it (mirrors Python's
+    // test_exact_file_delete_allowed_under_workspace_isolation_on_flat_backend).
+    it("allows an exact-file delete under workspace isolation on a flat backend", async () => {
+      const backend = createInMemoryBackend([
+        "/work/a.txt",
+      ]) as BackendProtocolV2 & { __files: Set<string> };
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [
+          {
+            operations: ["write"] as const,
+            paths: ["/work/**"],
+            mode: "allow" as const,
+          },
+          {
+            operations: ["write"] as const,
+            paths: ["/**"],
+            mode: "deny" as const,
+          },
+        ],
+      });
+
+      const result = await getTool(middleware, "delete").invoke({
+        file_path: "/work/a.txt",
+      });
+
+      expect(resultText(result)).toContain("Deleted");
+      expect(backend.__files.has("/work/a.txt")).toBe(false);
+    });
+
+    // An empty directory has no children to list, so the probe cannot confirm
+    // it is a leaf and must fall back to the conservative subtree check — a
+    // catch-all deny then blocks it (mirrors Python's
+    // test_empty_directory_delete_still_uses_conservative_ancestor_check).
+    it("uses the conservative subtree check for an empty directory", async () => {
+      // The empty directory is represented by a marker key ending in "/"; ls of
+      // the target yields no children, and the parent listing shows it as a
+      // subdirectory (is_dir), so it is treated as a possible subtree.
+      const backend = createInMemoryBackend([
+        "/work/empty/",
+      ]) as BackendProtocolV2 & { __files: Set<string> };
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [
+          {
+            operations: ["read", "write"] as const,
+            paths: ["/work/**"],
+            mode: "allow" as const,
+          },
+          {
+            operations: ["read", "write"] as const,
+            paths: ["/**"],
+            mode: "deny" as const,
+          },
+        ],
+      });
+
+      const result = await getTool(middleware, "delete").invoke({
+        file_path: "/work/empty",
+      });
+
+      expect(resultText(result)).toContain("permission denied for write");
+      expect(backend.delete).not.toHaveBeenCalled();
     });
   });
 
