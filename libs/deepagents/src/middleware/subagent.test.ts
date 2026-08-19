@@ -35,7 +35,10 @@ import type { ChainValues } from "@langchain/core/utils/types";
 import { createDeepAgent } from "../agent.js";
 import { StateBackend } from "../backends/state.js";
 import { createSkillsMiddleware } from "./skills.js";
-import { createSummarizationMiddleware } from "./summarization.js";
+import {
+  createSummarizationMiddleware,
+  getEffectiveMessages,
+} from "./summarization.js";
 import { mergeMiddleware } from "./utils.js";
 import { createFileData } from "../backends/utils.js";
 import { createMockBackend } from "./test.js";
@@ -382,7 +385,7 @@ describe("ForkedSubAgent", () => {
             name: "worker",
             description: "A worker agent",
             systemPrompt: "You are a worker.",
-            mode: "dynamic" as unknown as "fork",
+            mode: "dynamic" as unknown as "handoff",
           },
         ],
       }),
@@ -715,12 +718,10 @@ describe("ForkedSubAgent", () => {
     ];
     const event = { cutoffIndex: 2, summaryMessage, filePath: null };
 
-    // Mirrors the executor's own reconstruction logic.
     const trimmed = rawMessages.slice(0, -1);
-    const effective = [
-      event.summaryMessage,
-      ...trimmed.slice(event.cutoffIndex),
-    ];
+    const effective = getEffectiveMessages(trimmed, {
+      _summarizationEvent: event,
+    });
 
     expect(effective).toEqual([summaryMessage, rawMessages[2], rawMessages[3]]);
   });

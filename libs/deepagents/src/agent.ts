@@ -384,7 +384,7 @@ export function createDeepAgent<
     .map((item) =>
       "runnable" in item
         ? item
-        : "systemPrompt" in item
+        : item.systemPrompt != null
           ? normalizeSubagentSpec(item)
           : normalizeForkedSubagentSpec(item),
     );

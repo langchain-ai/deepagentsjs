@@ -21,7 +21,7 @@ import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { FilesystemPermission } from "../permissions/types.js";
-import type { SummarizationEvent } from "./summarization.js";
+import { getEffectiveMessages } from "./summarization.js";
 
 export type { AgentMiddleware };
 
@@ -109,6 +109,10 @@ export interface CompiledSubAgent<
 /**
  * Fields shared by both {@link SubAgent} and {@link ForkedSubAgent}.
  *
+ * Declared here (rather than only on one subtype) so both `systemPrompt` and
+ * `mode` stay visible to anyone adding a new subagent variant — each subtype
+ * narrows both to what it actually allows.
+ *
  * Required fields:
  * - `name`: Identifier used to select this subagent in the task tool
  * - `description`: Shown to the model for subagent selection
@@ -126,6 +130,20 @@ interface SubAgentBase {
 
   /** Description shown to the model for subagent selection */
   description: string;
+
+  /**
+   * The system prompt for the agent. Required on {@link SubAgent}; forbidden
+   * on {@link ForkedSubAgent}, which always inherits the parent's instead.
+   */
+  systemPrompt?: string | SystemMessage;
+
+  /**
+   * Context mode. `"handoff"` (default) is fully isolated — only
+   * {@link SubAgent} allows this. `"fork"` inherits the parent's
+   * conversation history and system prompt — only {@link ForkedSubAgent}
+   * allows this.
+   */
+  mode?: "handoff" | "fork";
 
   /** The tools to use for the agent (tool instances, not names). Defaults to defaultTools */
   tools?: StructuredTool[];
@@ -236,6 +254,9 @@ interface SubAgentBase {
 export interface SubAgent extends SubAgentBase {
   /** The system prompt to use for the agent */
   systemPrompt: string | SystemMessage;
+
+  /** Always isolated. Defaults to `"handoff"` if omitted. */
+  mode?: "handoff";
 }
 
 /**
@@ -259,7 +280,13 @@ export interface SubAgent extends SubAgentBase {
  * };
  * ```
  */
-export interface ForkedSubAgent extends SubAgentBase {}
+export interface ForkedSubAgent extends SubAgentBase {
+  /** A ForkedSubAgent never has its own system prompt — always the parent's. */
+  systemPrompt?: undefined;
+
+  /** Always forks. Defaults to `"fork"` if omitted. */
+  mode?: "fork";
+}
 
 /**
  * Base specification for the general-purpose subagent.
@@ -502,7 +529,7 @@ function getSubagents(options: {
   }
 
   for (const agentParams of subagents) {
-    const rawMode = (agentParams as { mode?: unknown }).mode;
+    const rawMode = agentParams.mode;
     if (rawMode != null && rawMode !== "handoff" && rawMode !== "fork") {
       throw new Error(
         `SubAgent '${agentParams.name}' has invalid mode '${rawMode}' — must be "handoff" or "fork".`,
@@ -517,10 +544,11 @@ function getSubagents(options: {
       agents[agentParams.name] = agentParams.runnable;
       specsByName[agentParams.name] = agentParams;
       if (agentParams.mode === "fork") forkModeNames.add(agentParams.name);
-    } else if ("systemPrompt" in agentParams) {
+    } else if (agentParams.systemPrompt != null) {
       // Plain SubAgent — never forks, keeps its own prompt untouched.
       const resolvedSpec: SubAgent = {
         ...agentParams,
+        mode: "handoff",
         model: agentParams.model ?? defaultModel,
         tools: agentParams.tools ?? defaultTools,
         middleware: [
@@ -534,9 +562,12 @@ function getSubagents(options: {
     } else {
       // ForkedSubAgent — always forks, always inherits the parent's exact
       // system prompt directly; there's no own prompt to fall back to.
+      // `mode` is omitted here (not "handoff"): the real fork signal is
+      // forkModeNames below — SubAgent's own `mode` type can't hold "fork".
       const resolvedSpec: SubAgent = {
         ...agentParams,
         systemPrompt: parentSystemPrompt ?? "",
+        mode: undefined,
         model: agentParams.model ?? defaultModel,
         tools: agentParams.tools ?? defaultTools,
         middleware: [
@@ -656,12 +687,7 @@ function createTaskTool(options: {
         const trimmed = stripInFlightAIMessage(
           (currentState.messages as BaseMessage[]) ?? [],
         );
-        const event = currentState._summarizationEvent as
-          | SummarizationEvent
-          | undefined;
-        const effective = event
-          ? [event.summaryMessage, ...trimmed.slice(event.cutoffIndex)]
-          : trimmed;
+        const effective = getEffectiveMessages(trimmed, currentState);
         subagentState.messages = [
           ...effective,
           new HumanMessage({ content: description }),
