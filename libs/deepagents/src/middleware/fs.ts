@@ -534,10 +534,7 @@ function isRelativeTo(child: string, ancestor: string): boolean {
  * Return the longest leading directory of `pattern` with no wildcards.
  *
  * For a `**` suffix it returns the wildcard-free prefix, and a pattern whose
- * wildcard sits at or near the root falls back to `/`. Mirrors
- * Python's `_glob_anchor`, splitting on whole path
- * components rather than the first wildcard character so a literal component
- * that merely contains a metacharacter is handled the same way.
+ * wildcard sits at or near the root falls back to `/`.
  */
 function globAnchor(pattern: string): string {
   const safe: string[] = [];
@@ -558,8 +555,7 @@ function globAnchor(pattern: string): string {
 /**
  * Whether the subtree at `callPath` intersects the subtree at `ruleAnchor`.
  * Two subtrees overlap when one is a (component-wise) prefix of the other, or
- * they are equal. The root `/` overlaps everything. Mirrors Python's
- * `_paths_overlap`.
+ * they are equal. The root `/` overlaps everything.
  */
 function pathsOverlap(callPath: string, ruleAnchor: string): boolean {
   const a = validatePath(callPath);
@@ -570,8 +566,7 @@ function pathsOverlap(callPath: string, ruleAnchor: string): boolean {
 /**
  * Whether a wildcard deny `pattern` overlaps a recursive delete of `target`.
  *
- * Mirrors Python's `_wildcard_delete_overlap`, including the ancestor-match
- * analysis: deleting `/work/app/child` when `/work/*` is denied mutates the
+ * Deleting `/work/app/child` when `/work/*` is denied mutates the
  * denied `/work/app`, so it must be blocked, while `/work/*.log` can never
  * match anything under `/work/notes.txt` and stays allowed.
  */
@@ -622,8 +617,7 @@ function wildcardDeleteOverlap(
  * Resolve delete permission for a confirmed plain file: first matching write
  * rule wins, mirroring `decidePathAccess`'s ordering, but returning the matched
  * deny pattern(s) so the delete tool's error can cite them. An earlier allow
- * rule short-circuits and returns no denials. Mirrors Python's
- * `_find_delete_deny_patterns_for_leaf`.
+ * rule short-circuits and returns no denials.
  */
 function findDeleteDenyPatternsForLeaf(
   rules: readonly FilesystemPermission[],
@@ -651,8 +645,6 @@ function findDeleteDenyPatternsForLeaf(
  * order — an earlier allow can't guarantee every descendant is safe. When
  * `hasDescendants` is `false` (a backend-confirmed plain file), the target is
  * resolved exactly like `write_file`/`edit_file`: first matching rule wins.
- *
- * Mirrors Python's `_find_delete_deny_patterns`.
  *
  * @internal Exported for unit testing the delete permission overlap geometry.
  */
@@ -699,8 +691,7 @@ export function findDeleteDenyPatterns(
  * rules are configured, the backend cannot list, or the listing is ambiguous.
  * A non-empty `ls(target)` indicates descendants; a "not a directory"-style
  * error confirms a plain file. An empty, error-free listing is disambiguated
- * via the parent listing's `is_dir` flag. Mirrors Python's
- * `_delete_target_may_have_descendants`.
+ * via the parent listing's `is_dir` flag.
  */
 async function deleteTargetMayHaveDescendants(
   backend: BackendProtocolV2,
@@ -816,7 +807,7 @@ export const READ_FILE_TOOL_DESCRIPTION = context`
   - Speculatively batch multiple \`read_file\` calls in one response when several files may be useful.
   - An empty file returns a system-reminder warning in place of contents.
   - Large tool results may be offloaded to a file; the tool message gives the path. Read that path here, paging with \`offset\`/\`limit\`.
-  - Images (\`.png\`, \`.jpg\`, etc.), audio, video, and PDFs return multimodal content blocks (https://docs.langchain.com/javascript/python/langchain/messages#multimodal).
+  - Images (\`.png\`, \`.jpg\`, etc.), audio, video, and PDFs return multimodal content blocks (https://docs.langchain.com/javascript/langchain/messages#multimodal).
   - For images and PDFs, pagination via \`offset\`/\`limit\` is text-only - supply \`file_path\` only.
   - Always read a file before editing it.
 `;
