@@ -20,6 +20,51 @@ function createMockBackend(): BackendProtocolV2 {
   } as unknown as BackendProtocolV2;
 }
 
+/**
+ * A minimal stateful backend for integration-style delete tests: it actually
+ * stores paths and removes the target subtree, so tests can assert real file
+ * removal (or preservation on denial) through the delete tool, exercising the
+ * full probe -> permission -> backend.delete path rather than a call spy.
+ */
+function createInMemoryBackend(initialPaths: string[]): BackendProtocolV2 {
+  const files = new Set(initialPaths);
+  const trim = (p: string) =>
+    p.length > 1 && p.endsWith("/") ? p.slice(0, -1) : p;
+  return {
+    ls: vi.fn(async (dir = "/") => {
+      const base = trim(dir);
+      const prefix = base === "/" ? "/" : `${base}/`;
+      const entries = [...files]
+        .filter((f) => f === base || f.startsWith(prefix))
+        .map((f) => ({ path: f, is_dir: false }));
+      return { files: entries };
+    }),
+    read: vi.fn(async () => ({ content: "", mimeType: "text/plain" })),
+    write: vi.fn(async () => ({ path: "/x", filesUpdate: null })),
+    edit: vi.fn(async () => ({
+      path: "/x",
+      filesUpdate: null,
+      occurrences: 0,
+    })),
+    delete: vi.fn(async (target: string) => {
+      const base = trim(target);
+      const prefix = base === "/" ? "/" : `${base}/`;
+      const removed = [...files].filter(
+        (f) => base === "/" || f === base || f.startsWith(prefix),
+      );
+      if (removed.length === 0) {
+        return { error: `Error: File '${target}' not found` };
+      }
+      for (const f of removed) files.delete(f);
+      return { path: target, filesUpdate: null };
+    }),
+    glob: vi.fn(async () => ({ files: [] })),
+    grep: vi.fn(async () => ({ matches: [] })),
+    // Expose the live set for assertions.
+    __files: files,
+  } as unknown as BackendProtocolV2 & { __files: Set<string> };
+}
+
 function getTool(
   middleware: ReturnType<typeof createFilesystemMiddleware>,
   name: string,
@@ -566,6 +611,69 @@ describe("fs tool permissions", () => {
       });
 
       expect(backend.delete).toHaveBeenCalledWith("/work/notes/today.txt");
+    });
+
+    // Integration: exercise the whole probe -> permission -> backend.delete path
+    // against a real stateful backend and assert files are actually removed or
+    // preserved (mirrors Python's TestRecursiveDeletePermissions, which uses a
+    // real FilesystemBackend).
+    it("recursively deletes and removes all nested files when only an unrelated subtree is denied", async () => {
+      const backend = createInMemoryBackend([
+        "/work/a.txt",
+        "/work/sub/b.txt",
+      ]) as BackendProtocolV2 & { __files: Set<string> };
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [denyWrite(["/other/**"])],
+      });
+
+      const result = await getTool(middleware, "delete").invoke({
+        file_path: "/work",
+      });
+
+      expect(resultText(result)).toContain("Deleted");
+      expect(backend.__files.has("/work/a.txt")).toBe(false);
+      expect(backend.__files.has("/work/sub/b.txt")).toBe(false);
+    });
+
+    it("blocks the delete and preserves files when a descendant is denied", async () => {
+      const backend = createInMemoryBackend([
+        "/work/a.txt",
+        "/work/secrets/key.txt",
+      ]) as BackendProtocolV2 & { __files: Set<string> };
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [denyWrite(["/work/secrets/**"])],
+      });
+
+      const result = await getTool(middleware, "delete").invoke({
+        file_path: "/work",
+      });
+
+      expect(resultText(result)).toContain("permission denied for write");
+      // Nothing was removed — both files survive the denied recursive delete.
+      expect(backend.__files.has("/work/a.txt")).toBe(true);
+      expect(backend.__files.has("/work/secrets/key.txt")).toBe(true);
+    });
+
+    it("reports every overlapping deny pattern in the error message", async () => {
+      const backend = createInMemoryBackend([
+        "/work/a.txt",
+      ]) as BackendProtocolV2 & { __files: Set<string> };
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [denyWrite(["/work/secrets/**", "/work/logs/**"])],
+      });
+
+      const result = await getTool(middleware, "delete").invoke({
+        file_path: "/work",
+      });
+
+      const text = resultText(result);
+      expect(text).toContain("permission denied for write");
+      expect(text).toContain("/work/secrets/**");
+      expect(text).toContain("/work/logs/**");
+      expect(backend.__files.has("/work/a.txt")).toBe(true);
     });
   });
 

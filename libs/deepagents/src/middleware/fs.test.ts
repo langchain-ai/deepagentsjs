@@ -1219,6 +1219,27 @@ describe("createFilesystemMiddleware", () => {
       }
     });
 
+    it("delete tool should return an error for an invalid path without calling the backend", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.delete = vi.fn();
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const deleteTool = middleware.tools!.find(
+        (tool) => tool.name === "delete",
+      );
+      // A path-traversal segment is rejected by validatePath before any backend
+      // call (mirrors Python's test_delete_invalid_path_returns_error; JS uses
+      // its own validator wording rather than the literal word "traversal").
+      const result = await deleteTool!.invoke({ file_path: "/../etc/passwd" });
+
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.status).toBe("error");
+        expect(result.content).toContain("..");
+      }
+      expect(mockBackend.delete).not.toHaveBeenCalled();
+    });
+
     it("delete tool should use an implementation-agnostic unsupported error", async () => {
       const mockBackend = createMockBackend();
       delete (mockBackend as { delete?: unknown }).delete;
