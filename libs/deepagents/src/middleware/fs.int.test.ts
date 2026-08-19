@@ -1461,7 +1461,7 @@ describe("Filesystem Middleware Integration Tests", () => {
           "/keep.txt": fileData("bye"),
           "/other.txt": fileData("stay"),
         },
-      } as never);
+      } as any);
 
       const deletes = deleteMessages(result.messages);
       expect(deletes).toHaveLength(1);
@@ -1480,7 +1480,7 @@ describe("Filesystem Middleware Integration Tests", () => {
           "/work/sub/b.txt": fileData("b"),
           "/keep.txt": fileData("stay"),
         },
-      } as never);
+      } as any);
 
       const deletes = deleteMessages(result.messages);
       expect(deletes[0].status).not.toBe("error");
@@ -1493,7 +1493,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       const result = await agent.invoke({
         messages: [new HumanMessage("delete nope")],
         files: { "/keep.txt": fileData("stay") },
-      } as never);
+      } as any);
 
       const deletes = deleteMessages(result.messages);
       expect(deletes).toHaveLength(1);
@@ -1513,7 +1513,7 @@ describe("Filesystem Middleware Integration Tests", () => {
       const result = await agent.invoke({
         messages: [new HumanMessage("delete secret")],
         files: { "/secrets/key.txt": fileData("data") },
-      } as never);
+      } as any);
 
       const deletes = deleteMessages(result.messages);
       expect(deletes).toHaveLength(1);
