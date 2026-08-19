@@ -580,6 +580,83 @@ describe("FilesystemBackend", () => {
       await expect(fs.stat(outsideFile)).resolves.toBeDefined();
       await removeDir(outsideDir);
     });
+
+    it("should delete an empty directory", async () => {
+      await fs.mkdir(path.join(tmpDir, "empty"));
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.delete("/empty");
+
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe("/empty");
+      await expect(fs.stat(path.join(tmpDir, "empty"))).rejects.toThrow();
+    });
+
+    it("should delete a directory recursively while leaving siblings", async () => {
+      await writeFile(path.join(tmpDir, "sub", "b.txt"), "b");
+      await writeFile(path.join(tmpDir, "sub", "deep", "d.txt"), "d");
+      await writeFile(path.join(tmpDir, "keep.txt"), "keep");
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.delete("/sub");
+
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe("/sub");
+      await expect(fs.stat(path.join(tmpDir, "sub"))).rejects.toThrow();
+      await expect(
+        fs.stat(path.join(tmpDir, "keep.txt")),
+      ).resolves.toBeDefined();
+    });
+
+    it("should unlink a directory symlink without following it (non-virtual)", async () => {
+      const targetDir = path.join(tmpDir, "target");
+      await writeFile(path.join(targetDir, "keep.txt"), "keep");
+      const linkPath = path.join(tmpDir, "link");
+      try {
+        await fs.symlink(targetDir, linkPath, "dir");
+      } catch {
+        return; // symlinks unsupported on this platform
+      }
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: false,
+      });
+
+      const result = await backend.delete(linkPath);
+
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe(linkPath);
+      // The link is gone but its target's contents survive.
+      await expect(fs.lstat(linkPath)).rejects.toThrow();
+      await expect(
+        fs.stat(path.join(targetDir, "keep.txt")),
+      ).resolves.toBeDefined();
+    });
+
+    it("should return an error instead of throwing when removal fails", async () => {
+      // A regular file used as a parent directory makes the OS reject the
+      // removal (ENOTDIR), exercising the catch-all error path without mocking
+      // the fs module (whose ESM exports are not spy-able here).
+      const filePath = path.join(tmpDir, "a.txt");
+      await writeFile(filePath, "a");
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: false,
+      });
+
+      const result = await backend.delete(path.join(filePath, "child.txt"));
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toBeDefined();
+      // The file itself must survive a failed delete of a bogus child path.
+      await expect(fs.stat(filePath)).resolves.toBeDefined();
+    });
   });
 
   describe("binary file handling", () => {

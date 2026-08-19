@@ -20,6 +20,7 @@ import type {
   LsResult,
   ReadRawResult,
   SandboxBackendProtocolV2,
+  BackendProtocolV2,
   GrepResult,
   ReadResult,
   WriteResult,
@@ -979,6 +980,29 @@ describe("CompositeBackend", () => {
       expect((await composite.read("/local.txt")).error).toContain("not found");
       expect((await composite.read("/failing/a.txt")).error).toBeUndefined();
       expect((await composite.read("/later/b.txt")).error).toBeUndefined();
+    });
+
+    it("should return an error when a routed backend does not support delete", async () => {
+      const { runtime } = makeConfig();
+      const defaultBackend = new StateBackend(runtime);
+      // A backend that omits delete() — capability probing must surface an
+      // error rather than throwing.
+      const noDeleteBackend = {
+        ls: async () => ({ files: [] }),
+        read: async () => ({ content: "", mimeType: "text/plain" }),
+        write: async () => ({ path: "/x", filesUpdate: null }),
+        edit: async () => ({ path: "/x", filesUpdate: null, occurrences: 0 }),
+        glob: async () => ({ files: [] }),
+        grep: async () => ({ matches: [] }),
+      } as unknown as BackendProtocolV2;
+      const composite = new CompositeBackend(defaultBackend, {
+        "/nodelete/": noDeleteBackend,
+      });
+
+      const result = await composite.delete("/nodelete/x.txt");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("deletion is not");
     });
   });
 

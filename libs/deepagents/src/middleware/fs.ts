@@ -653,8 +653,10 @@ function findDeleteDenyPatternsForLeaf(
  * resolved exactly like `write_file`/`edit_file`: first matching rule wins.
  *
  * Mirrors Python's `_find_delete_deny_patterns`.
+ *
+ * @internal Exported for unit testing the delete permission overlap geometry.
  */
-function findDeleteDenyPatterns(
+export function findDeleteDenyPatterns(
   rules: readonly FilesystemPermission[],
   target: string,
   hasDescendants: boolean = true,

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createFilesystemMiddleware } from "./fs.js";
+import { createFilesystemMiddleware, findDeleteDenyPatterns } from "./fs.js";
 import type { BackendProtocolV2 } from "../backends/protocol.js";
 
 function createMockBackend(): BackendProtocolV2 {
@@ -763,6 +763,345 @@ describe("fs tool permissions", () => {
       ).toThrow(
         /permissions cannot be used with a backend that supports command execution/i,
       );
+    });
+  });
+});
+
+// Direct unit coverage of the pure delete permission helper, mirroring
+// Python's TestFindDeleteDenyPatterns / TestFindDeleteDenyPatternsExactFile.
+// findDeleteDenyPatterns returns every deny-write pattern whose glob overlaps
+// the delete subtree (target + descendants); an empty result means allowed.
+describe("findDeleteDenyPatterns", () => {
+  const deny = (...paths: string[]) => ({
+    operations: ["write"] as const,
+    paths,
+    mode: "deny" as const,
+  });
+
+  describe("overlap geometry (single deny pattern vs target)", () => {
+    const cases: Array<{
+      name: string;
+      pattern: string;
+      target: string;
+      expected: string[];
+    }> = [
+      // no overlap -> permitted (empty result)
+      {
+        name: "unrelated subtree",
+        pattern: "/other/**",
+        target: "/work",
+        expected: [],
+      },
+      {
+        name: "sibling prefix glob",
+        pattern: "/workshop/**",
+        target: "/work",
+        expected: [],
+      },
+      {
+        name: "sibling prefix literal",
+        pattern: "/work2",
+        target: "/work",
+        expected: [],
+      },
+      {
+        name: "sibling leaf",
+        pattern: "/work/secrets",
+        target: "/work/logs",
+        expected: [],
+      },
+      {
+        name: "file glob does not block non-matching sibling",
+        pattern: "/work/*.log",
+        target: "/work/notes.txt",
+        expected: [],
+      },
+      // single-component wildcard: an ancestor that matches the glob blocks
+      // deleting its descendants (wildcard-denied dirs get the same protection
+      // as literal-denied dirs)
+      {
+        name: "wildcard ancestor blocks descendant delete",
+        pattern: "/work/*",
+        target: "/work/app/child",
+        expected: ["/work/*"],
+      },
+      {
+        name: "file glob ancestor blocks descendant delete",
+        pattern: "/work/*.log",
+        target: "/work/app.log/child",
+        expected: ["/work/*.log"],
+      },
+      {
+        name: "wildcard ancestor blocks deep descendant delete",
+        pattern: "/work/*",
+        target: "/work/app/deep/nested",
+        expected: ["/work/*"],
+      },
+      // directory wildcard after anchor: target below anchor fails closed
+      {
+        name: "dir wildcard blocks ancestor target",
+        pattern: "/work/*/secrets",
+        target: "/work/app",
+        expected: ["/work/*/secrets"],
+      },
+      {
+        name: "globstar wildcard blocks ancestor target",
+        pattern: "/work/**/secrets",
+        target: "/work/app",
+        expected: ["/work/**/secrets"],
+      },
+      {
+        name: "recursive glob blocks descendant that contains match",
+        pattern: "/work/**/*.log",
+        target: "/work/sub",
+        expected: ["/work/**/*.log"],
+      },
+      // glob that matches the target itself -> blocked (linchpin for the
+      // "allow non-matching sibling" path)
+      {
+        name: "file glob blocks matching target",
+        pattern: "/work/*.log",
+        target: "/work/app.log",
+        expected: ["/work/*.log"],
+      },
+      {
+        name: "single wildcard blocks matching child",
+        pattern: "/work/*",
+        target: "/work/app",
+        expected: ["/work/*"],
+      },
+      {
+        name: "brace glob blocks matching",
+        pattern: "/work/{secrets,keys}",
+        target: "/work/secrets",
+        expected: ["/work/{secrets,keys}"],
+      },
+      {
+        name: "charclass glob blocks matching",
+        pattern: "/work/[ab].txt",
+        target: "/work/a.txt",
+        expected: ["/work/[ab].txt"],
+      },
+      {
+        name: "question glob non-matching sibling allowed",
+        pattern: "/work/f?le.txt",
+        target: "/work/other.txt",
+        expected: [],
+      },
+      // overlap in either direction -> blocked
+      {
+        name: "exact file",
+        pattern: "/work/a.txt",
+        target: "/work/a.txt",
+        expected: ["/work/a.txt"],
+      },
+      {
+        name: "exact dir literal",
+        pattern: "/work",
+        target: "/work",
+        expected: ["/work"],
+      },
+      {
+        name: "descendant pattern blocks ancestor target",
+        pattern: "/work/secrets/**",
+        target: "/work",
+        expected: ["/work/secrets/**"],
+      },
+      {
+        name: "ancestor glob blocks descendant target",
+        pattern: "/work/**",
+        target: "/work/logs",
+        expected: ["/work/**"],
+      },
+      {
+        name: "ancestor literal blocks descendant target",
+        pattern: "/work",
+        target: "/work/sub/deep",
+        expected: ["/work"],
+      },
+      {
+        name: "bare directory pattern",
+        pattern: "/work/secrets",
+        target: "/work",
+        expected: ["/work/secrets"],
+      },
+      // wildcard / root anchors
+      {
+        name: "root target blocked by any rule",
+        pattern: "/anything/**",
+        target: "/",
+        expected: ["/anything/**"],
+      },
+      {
+        name: "leading wildcard anchor is root",
+        pattern: "/**/secrets",
+        target: "/work",
+        expected: ["/**/secrets"],
+      },
+      // trailing-slash normalization (both sides)
+      {
+        name: "target trailing slash",
+        pattern: "/work/**",
+        target: "/work/",
+        expected: ["/work/**"],
+      },
+      {
+        name: "pattern trailing slash",
+        pattern: "/work/",
+        target: "/work/sub",
+        expected: ["/work/"],
+      },
+      {
+        name: "both trailing slash",
+        pattern: "/work/",
+        target: "/work/",
+        expected: ["/work/"],
+      },
+    ];
+
+    it.each(cases)("$name", ({ pattern, target, expected }) => {
+      expect(findDeleteDenyPatterns([deny(pattern)], target)).toEqual(expected);
+    });
+  });
+
+  describe("mode and operation filtering (only deny+write count)", () => {
+    // The target always overlaps the pattern; only the rule's mode/operations
+    // decide the outcome. JS permissions have no "interrupt" mode (unlike
+    // Python), so that case is intentionally omitted.
+    const cases: Array<{
+      name: string;
+      operations: readonly ("read" | "write")[];
+      mode: "allow" | "deny";
+      expected: string[];
+    }> = [
+      {
+        name: "write deny blocks",
+        operations: ["write"],
+        mode: "deny",
+        expected: ["/work/**"],
+      },
+      {
+        name: "read+write deny blocks",
+        operations: ["read", "write"],
+        mode: "deny",
+        expected: ["/work/**"],
+      },
+      {
+        name: "allow ignored",
+        operations: ["write"],
+        mode: "allow",
+        expected: [],
+      },
+      {
+        name: "read-only deny ignored",
+        operations: ["read"],
+        mode: "deny",
+        expected: [],
+      },
+    ];
+
+    it.each(cases)("$name", ({ operations, mode, expected }) => {
+      expect(
+        findDeleteDenyPatterns(
+          [{ operations, paths: ["/work/**"], mode }],
+          "/work",
+        ),
+      ).toEqual(expected);
+    });
+  });
+
+  describe("multiple rule aggregation", () => {
+    it("returns [] with no permissions", () => {
+      expect(findDeleteDenyPatterns([], "/work")).toEqual([]);
+    });
+
+    it("collects overlapping patterns across multiple rules in order", () => {
+      expect(
+        findDeleteDenyPatterns(
+          [deny("/work/a/**"), deny("/work/b/**")],
+          "/work",
+        ),
+      ).toEqual(["/work/a/**", "/work/b/**"]);
+    });
+
+    it("filters non-overlapping paths within a single rule", () => {
+      expect(
+        findDeleteDenyPatterns(
+          [deny("/work/a/**", "/work/b/**", "/other/**")],
+          "/work",
+        ),
+      ).toEqual(["/work/a/**", "/work/b/**"]);
+    });
+
+    it("returns all overlapping patterns with no cap", () => {
+      const paths = Array.from({ length: 8 }, (_, i) => `/work/d${i}/**`);
+      expect(
+        findDeleteDenyPatterns(
+          paths.map((p) => deny(p)),
+          "/work",
+        ),
+      ).toEqual(paths);
+    });
+
+    it("deduplicates patterns in first-seen order", () => {
+      expect(
+        findDeleteDenyPatterns(
+          [deny("/work/x/**"), deny("/work/x/**", "/work/y/**")],
+          "/work",
+        ),
+      ).toEqual(["/work/x/**", "/work/y/**"]);
+    });
+
+    it("returns only overlapping patterns", () => {
+      expect(
+        findDeleteDenyPatterns(
+          [deny("/other/**"), deny("/work/x/**"), deny("/elsewhere/**")],
+          "/work",
+        ),
+      ).toEqual(["/work/x/**"]);
+    });
+  });
+
+  describe("confirmed leaf resolves via first-match-wins (hasDescendants=false)", () => {
+    const allowThenDeny = [
+      {
+        operations: ["write"] as const,
+        paths: ["/work/**"],
+        mode: "allow" as const,
+      },
+      { operations: ["write"] as const, paths: ["/**"], mode: "deny" as const },
+    ];
+    const denyThenAllow = [
+      { operations: ["write"] as const, paths: ["/**"], mode: "deny" as const },
+      {
+        operations: ["write"] as const,
+        paths: ["/work/**"],
+        mode: "allow" as const,
+      },
+    ];
+
+    it("earlier allow wins over a later catch-all deny", () => {
+      expect(
+        findDeleteDenyPatterns(allowThenDeny, "/work/a.txt", false),
+      ).toEqual([]);
+    });
+
+    it("deny still blocks when it matches first", () => {
+      expect(
+        findDeleteDenyPatterns(denyThenAllow, "/work/a.txt", false),
+      ).toEqual(["/**"]);
+    });
+
+    it("defaults to the conservative subtree check without hasDescendants", () => {
+      expect(findDeleteDenyPatterns(allowThenDeny, "/work/a.txt")).toEqual([
+        "/**",
+      ]);
+    });
+
+    it("allows a non-matching deny rule", () => {
+      expect(
+        findDeleteDenyPatterns([deny("/other/**")], "/work/a.txt", false),
+      ).toEqual([]);
     });
   });
 });
