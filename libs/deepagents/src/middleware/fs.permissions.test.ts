@@ -979,6 +979,34 @@ describe("fs tool permissions", () => {
       );
     });
 
+    it("does not throw when a permission path exactly equals a file-mount route", () => {
+      const compositeWithSandbox = {
+        ...createSandboxBackend(),
+        routePrefixes: ["/instructions.md"],
+      } as unknown as BackendProtocolV2;
+
+      expect(() =>
+        createFilesystemMiddleware({
+          backend: compositeWithSandbox,
+          permissions: [deny(["/instructions.md"])],
+        }),
+      ).not.toThrow();
+    });
+
+    it("does not throw when a permission path exactly equals a directory route root", () => {
+      const compositeWithSandbox = {
+        ...createSandboxBackend(),
+        routePrefixes: ["/workspace/"],
+      } as unknown as BackendProtocolV2;
+
+      expect(() =>
+        createFilesystemMiddleware({
+          backend: compositeWithSandbox,
+          permissions: [deny(["/workspace"])],
+        }),
+      ).not.toThrow();
+    });
+
     it("throws when a permission path shares a prefix with but is outside a route (no trailing slash confusion)", () => {
       const compositeWithSandbox = {
         ...createSandboxBackend(),
