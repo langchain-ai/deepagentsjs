@@ -64,15 +64,9 @@ class MockSandbox extends BaseSandbox {
             truncated: false,
           };
         }
-        // Mirror awk's printf format so a gutter added back to the command
-        // shows up here rather than being silently normalized away.
-        const numbered = command.includes("%6d");
-        const output = content
-          .split("\n")
-          .map((line, i) =>
-            numbered ? `${String(i + 1).padStart(6)}\t${line}` : line,
-          )
-          .join("\n");
+        // Always return the page as raw lines. Numbering belongs to the
+        // read_file tool; this mock mirrors the BaseSandbox contract.
+        const output = content.split("\n").join("\n");
         return { output, exitCode: 0, truncated: false };
       }
     }
@@ -229,13 +223,17 @@ describe("BaseSandbox", () => {
       expect(result.content).toBe("line1\nline2\nline3");
     });
 
-    it("does not number lines in the shell command", () => {
+    it("does not number lines in the shell command", async () => {
       const sandbox = new MockSandbox();
       sandbox.addFile("/test.txt", "line1");
 
-      void sandbox.read("/test.txt");
+      await sandbox.read("/test.txt");
 
-      expect(sandbox.executedCommands[0]).not.toContain("%6d");
+      const cmd = sandbox.executedCommands[0];
+      // Pagination may still filter on NR, but printf must emit only the line
+      // body — no width-N line-number field that would double with the tool.
+      expect(cmd).toMatch(/printf "%s\\n"/);
+      expect(cmd).not.toMatch(/printf "[^"]*%\d*d/);
     });
 
     it("should return error for non-existent file", async () => {
