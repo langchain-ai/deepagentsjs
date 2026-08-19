@@ -1690,9 +1690,11 @@ function allPathsScopedToRoutes(
 
   return permissions.every((rule) =>
     rule.paths.every((path) =>
-      prefixes.some((prefix) =>
-        path.startsWith(prefix.endsWith("/") ? prefix : `${prefix}/`),
-      ),
+      prefixes.some((prefix) => {
+        const normalizedRoute = prefix.endsWith("/") ? prefix : `${prefix}/`;
+        const routeRoot = normalizedRoute.slice(0, -1);
+        return path === routeRoot || path.startsWith(normalizedRoute);
+      }),
     ),
   );
 }
