@@ -1,7 +1,7 @@
 /**
  * Middleware for providing filesystem tools to an agent.
  *
- * Provides ls, read_file, write_file, edit_file, glob, and grep tools with support for:
+ * Provides ls, read_file, write_file, edit_file, delete, glob, and grep tools with support for:
  * - Pluggable backends (StateBackend, StoreBackend, FilesystemBackend, CompositeBackend)
  * - Tool result eviction for large outputs
  */
@@ -25,8 +25,11 @@ import { z } from "zod/v4";
 import type {
   AnyBackendProtocol,
   BackendFactory,
+  BackendProtocolV2,
   BackendRuntime,
+  DeleteResult,
   FileData,
+  LsResult,
 } from "../backends/protocol.js";
 import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
@@ -85,7 +88,7 @@ import type * as _langchain from "langchain";
  *    truncate the result of read_file, the agent may then attempt to re-read the
  *    truncated file using read_file again, which won't help.
  *
- * 3. Tools that never exceed limits (edit_file, write_file):
+ * 3. Tools that never exceed limits (edit_file, write_file, delete):
  *    These tools return minimal confirmation messages and are never expected to produce
  *    output large enough to exceed token limits, so checking them would be unnecessary.
  */
@@ -99,6 +102,7 @@ export const FILESYSTEM_TOOL_NAMES = [
   "read_file",
   "write_file",
   "edit_file",
+  "delete",
   "glob",
   "grep",
   "execute",
@@ -330,6 +334,7 @@ import {
 } from "../permissions/types.js";
 import {
   decidePathAccess,
+  globMatch,
   validatePath,
   validatePermissionPaths,
 } from "../permissions/enforce.js";
@@ -498,6 +503,264 @@ function toolError(
   });
 }
 
+const GLOB_WILDCARD_CHARACTERS = ["*", "?", "{", "["];
+
+function hasGlobMetaCharacter(pattern: string): boolean {
+  return GLOB_WILDCARD_CHARACTERS.some((character) =>
+    pattern.includes(character),
+  );
+}
+
+/**
+ * Split an absolute POSIX path into its components (excluding the leading "/").
+ * `posixParts("/a/b")` -> `["a", "b"]`; `posixParts("/")` -> `[]`.
+ */
+function posixParts(path: string): string[] {
+  return path.split("/").filter(Boolean);
+}
+
+/**
+ * Whether `child` is `ancestor` or lives (component-wise) beneath it. The root
+ * `/` contains everything. `/secret` is NOT relative to `/secrets`.
+ */
+function isRelativeTo(child: string, ancestor: string): boolean {
+  if (ancestor === "/") {
+    return true;
+  }
+  return child === ancestor || child.startsWith(`${ancestor}/`);
+}
+
+/**
+ * Return the longest leading directory of `pattern` with no wildcards.
+ *
+ * For a `**` suffix it returns the wildcard-free prefix, and a pattern whose
+ * wildcard sits at or near the root falls back to `/`.
+ */
+function globAnchor(pattern: string): string {
+  const safe: string[] = [];
+  for (const part of posixParts(pattern)) {
+    if (
+      GLOB_WILDCARD_CHARACTERS.some((character) => part.includes(character))
+    ) {
+      break;
+    }
+    safe.push(part);
+  }
+  if (safe.length === 0) {
+    return "/";
+  }
+  return `/${safe.join("/")}`;
+}
+
+/**
+ * Whether the subtree at `callPath` intersects the subtree at `ruleAnchor`.
+ * Two subtrees overlap when one is a (component-wise) prefix of the other, or
+ * they are equal. The root `/` overlaps everything.
+ */
+function pathsOverlap(callPath: string, ruleAnchor: string): boolean {
+  const a = validatePath(callPath);
+  const b = validatePath(ruleAnchor);
+  return a === b || isRelativeTo(a, b) || isRelativeTo(b, a);
+}
+
+/**
+ * Whether a wildcard deny `pattern` overlaps a recursive delete of `target`.
+ *
+ * Deleting `/work/app/child` when `/work/*` is denied mutates the
+ * denied `/work/app`, so it must be blocked, while `/work/*.log` can never
+ * match anything under `/work/notes.txt` and stays allowed.
+ */
+function wildcardDeleteOverlap(
+  pattern: string,
+  anchor: string,
+  target: string,
+): boolean {
+  // Root anchor ("/**/x"): pattern can match anywhere, block all.
+  if (anchor === "/") {
+    return true;
+  }
+  // Target directly matches the glob: block.
+  if (globMatch(target, pattern)) {
+    return true;
+  }
+  // Anchor is inside the delete subtree: a recursive delete would remove
+  // matching descendants — block.
+  if (isRelativeTo(anchor, target)) {
+    return true;
+  }
+  // Target is below the anchor: safe to allow ONLY when the pattern suffix is a
+  // single, non-** component (fixed depth) AND no ancestor of the target
+  // matches the glob. Directory wildcards ("/work/*/secrets") could match
+  // descendants of the target, so fail closed for those.
+  if (!isRelativeTo(target, anchor)) {
+    return false;
+  }
+  const anchorParts = posixParts(anchor);
+  const patternParts = posixParts(pattern);
+  const suffix = patternParts.slice(anchorParts.length);
+  if (suffix.length !== 1 || suffix[0].includes("**")) {
+    return true;
+  }
+  // Block when any ancestor of the target (between anchor and target) matches
+  // the glob — the target is then inside a denied directory's subtree.
+  const targetParts = posixParts(target);
+  for (let depth = anchorParts.length; depth < targetParts.length; depth += 1) {
+    const ancestor = `/${targetParts.slice(0, depth).join("/")}`;
+    if (globMatch(ancestor, pattern)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Resolve delete permission for a confirmed plain file: first matching write
+ * rule wins, mirroring `decidePathAccess`'s ordering, but returning the matched
+ * deny pattern(s) so the delete tool's error can cite them. An earlier allow
+ * rule short-circuits and returns no denials.
+ */
+function findDeleteDenyPatternsForLeaf(
+  rules: readonly FilesystemPermission[],
+  target: string,
+): string[] {
+  for (const rule of rules) {
+    if (!rule.operations.includes("write")) {
+      continue;
+    }
+    const matched = rule.paths.filter((pattern) => globMatch(target, pattern));
+    if (matched.length === 0) {
+      continue;
+    }
+    return (rule.mode ?? "allow") === "deny" ? matched : [];
+  }
+  return [];
+}
+
+/**
+ * Return the deny-write patterns that block deleting `target`.
+ *
+ * When `hasDescendants` is `true` (the target may be a directory), a recursive
+ * delete removes the whole subtree, so any deny-write pattern that could match
+ * `target` or anything nested under it blocks the operation regardless of rule
+ * order — an earlier allow can't guarantee every descendant is safe. When
+ * `hasDescendants` is `false` (a backend-confirmed plain file), the target is
+ * resolved exactly like `write_file`/`edit_file`: first matching rule wins.
+ *
+ * @internal Exported for unit testing the delete permission overlap geometry.
+ */
+export function findDeleteDenyPatterns(
+  rules: readonly FilesystemPermission[],
+  target: string,
+  hasDescendants: boolean = true,
+): string[] {
+  const canonicalTarget = validatePath(target);
+
+  if (!hasDescendants) {
+    return findDeleteDenyPatternsForLeaf(rules, canonicalTarget);
+  }
+
+  const denying: string[] = [];
+  const seen = new Set<string>();
+  for (const rule of rules) {
+    if (rule.mode !== "deny" || !rule.operations.includes("write")) {
+      continue;
+    }
+    for (const pattern of rule.paths) {
+      if (seen.has(pattern)) {
+        continue;
+      }
+      const anchor = globAnchor(pattern);
+      const overlaps = hasGlobMetaCharacter(pattern)
+        ? wildcardDeleteOverlap(pattern, anchor, canonicalTarget)
+        : // Literal (wildcard-free) pattern: a deny on "/work" blocks deleting
+          // "/work/sub" and blocks deleting an ancestor that contains it.
+          pathsOverlap(canonicalTarget, anchor);
+      if (overlaps) {
+        seen.add(pattern);
+        denying.push(pattern);
+      }
+    }
+  }
+  return denying;
+}
+
+/**
+ * Whether `delete` should use the conservative recursive permission check.
+ *
+ * Falls back to the conservative check (returns `true`) when no permission
+ * rules are configured, the backend cannot list, or the listing is ambiguous.
+ * A non-empty `ls(target)` indicates descendants; a "not a directory"-style
+ * error confirms a plain file. An empty, error-free listing is disambiguated
+ * via the parent listing's `is_dir` flag.
+ */
+async function deleteTargetMayHaveDescendants(
+  backend: BackendProtocolV2,
+  target: string,
+  permissionsConfigured: boolean,
+): Promise<boolean> {
+  if (!permissionsConfigured) {
+    return false;
+  }
+  if (typeof backend.ls !== "function") {
+    return true;
+  }
+
+  let lsResult: LsResult;
+  try {
+    lsResult = await backend.ls(target);
+  } catch {
+    return true;
+  }
+  if (lsResult.error) {
+    return !lsResult.error.includes("not a directory");
+  }
+  if (lsResult.files && lsResult.files.length > 0) {
+    return true;
+  }
+
+  // Empty, error-free listing: an exact file and an empty directory look
+  // identical on flat/virtual backends. Use the parent listing's is_dir flag
+  // for the target, which is consistent across backends.
+  const parent = parentPath(target);
+  let parentResult: LsResult;
+  try {
+    parentResult = await backend.ls(parent);
+  } catch {
+    return true;
+  }
+  if (parentResult.error) {
+    return true;
+  }
+  const targetNorm = trimTrailingSlashesFs(target);
+  const matches = (parentResult.files ?? []).filter(
+    (entry) => trimTrailingSlashesFs(entry.path) === targetNorm,
+  );
+  if (matches.length === 0) {
+    return true;
+  }
+  return matches.some((entry) => entry.is_dir === true);
+}
+
+function trimTrailingSlashesFs(path: string): string {
+  let end = path.length;
+  while (end > 1 && path[end - 1] === "/") end -= 1;
+  return path.slice(0, end);
+}
+
+function parentPath(path: string): string {
+  const parts = posixParts(path);
+  if (parts.length <= 1) {
+    return "/";
+  }
+  return `/${parts.slice(0, -1).join("/")}`;
+}
+
+function supportsDelete(backend: { delete?: unknown }): backend is {
+  delete: (filePath: string) => DeleteResult | Promise<DeleteResult>;
+} {
+  return typeof backend.delete === "function";
+}
+
 /**
  * Filter a list of filesystem entries to those the rules permit.
  *
@@ -544,7 +807,7 @@ export const READ_FILE_TOOL_DESCRIPTION = context`
   - Speculatively batch multiple \`read_file\` calls in one response when several files may be useful.
   - An empty file returns a system-reminder warning in place of contents.
   - Large tool results may be offloaded to a file; the tool message gives the path. Read that path here, paging with \`offset\`/\`limit\`.
-  - Images (\`.png\`, \`.jpg\`, etc.), audio, video, and PDFs return multimodal content blocks (https://docs.langchain.com/javascript/python/langchain/messages#multimodal).
+  - Images (\`.png\`, \`.jpg\`, etc.), audio, video, and PDFs return multimodal content blocks (https://docs.langchain.com/javascript/langchain/messages#multimodal).
   - For images and PDFs, pagination via \`offset\`/\`limit\` is text-only - supply \`file_path\` only.
   - Always read a file before editing it.
 `;
@@ -565,6 +828,16 @@ export const EDIT_FILE_TOOL_DESCRIPTION = context`
   - Preserve the exact indentation from the read output, and never include line-number prefixes in old_string or new_string.
   - Prefer editing an existing file over creating a new one.
   - Only use emojis if the user explicitly requests it.
+`;
+
+export const DELETE_TOOL_DESCRIPTION = context`
+  Deletes a file or directory from the filesystem.
+
+  Usage:
+  - Permanently removes the file or directory at the given absolute path.
+  - Deleting a directory removes it and everything inside it, recursively. Prefer
+    deleting a directory in one call over deleting each file individually.
+  - This cannot be undone, so only delete paths you are sure are no longer needed.
 `;
 
 export const GLOB_TOOL_DESCRIPTION = context`
@@ -893,9 +1166,8 @@ function createWriteFileTool(
             ),
           content: z
             .string()
-            .default("")
             .describe(
-              "The text content to write to the file. Defaults to empty.",
+              "The text content to write to the file. This parameter is required.",
             ),
         }),
       ),
@@ -971,6 +1243,99 @@ function createEditFileTool(
             .optional()
             .default(false)
             .describe("Whether to replace all occurrences"),
+        }),
+      ),
+    },
+  );
+}
+
+/**
+ * Create delete tool using backend.
+ */
+function createDeleteTool(
+  backend: AnyBackendProtocol | BackendFactory,
+  options: {
+    customDescription: string | undefined;
+    permissions: FilesystemPermission[];
+  },
+) {
+  const { customDescription, permissions } = options;
+  return tool(
+    async (input, runtime: ToolRuntime) => {
+      let validatedPath: string;
+      try {
+        validatedPath = validatePath(input.file_path);
+      } catch (error) {
+        return toolError(runtime, "delete", `Error: ${getErrorMessage(error)}`);
+      }
+
+      const resolvedBackend = await resolveBackend(backend, runtime);
+
+      // A recursive delete removes the target and everything under it, so
+      // permission is evaluated as a whole-subtree write. Probe the backend to
+      // learn whether the target is a plain file (leaf) or may have
+      // descendants; a confirmed leaf is resolved with first-match-wins
+      // semantics (an earlier allow beats a later deny), while a possible
+      // subtree blocks on any overlapping deny-write pattern regardless of
+      // rule order. This drives all delete permission gating — write_file's
+      // single-path checkPermission is insufficient for a recursive removal.
+      const hasDescendants = await deleteTargetMayHaveDescendants(
+        resolvedBackend,
+        validatedPath,
+        permissions.length > 0,
+      );
+      const denyingPatterns = findDeleteDenyPatterns(
+        permissions,
+        validatedPath,
+        hasDescendants,
+      );
+      if (denyingPatterns.length > 0) {
+        return toolError(
+          runtime,
+          "delete",
+          `Error: permission denied for write on ${validatedPath} (matches deny rule(s): ${denyingPatterns.join(", ")})`,
+        );
+      }
+
+      if (!supportsDelete(resolvedBackend)) {
+        return toolError(
+          runtime,
+          "delete",
+          `Error: deletion is not available for '${validatedPath}'.`,
+        );
+      }
+
+      const result: DeleteResult = await resolvedBackend.delete(validatedPath);
+      if (result.error) {
+        return toolError(runtime, "delete", result.error);
+      }
+
+      const message = new ToolMessage({
+        content: `Deleted ${result.path ?? validatedPath}`,
+        tool_call_id: runtime.toolCall?.id as string,
+        name: "delete",
+        metadata: result.metadata,
+      });
+
+      if (result.filesUpdate) {
+        return new Command({
+          update: { files: result.filesUpdate, messages: [message] },
+        });
+      }
+
+      return message;
+    },
+    {
+      name: "delete",
+      description: customDescription || DELETE_TOOL_DESCRIPTION,
+      schema: z.preprocess(
+        normalizeFilePathInput,
+        z.object({
+          file_path: z
+            .string()
+            .describe(
+              "Absolute path to the file to delete. Must be absolute, not relative.",
+            ),
         }),
       ),
     },
@@ -1420,6 +1785,10 @@ export function createFilesystemMiddleware(
       customDescription: customToolDescriptions?.edit_file,
       permissions,
     }),
+    delete: createDeleteTool(backend, {
+      customDescription: customToolDescriptions?.delete,
+      permissions,
+    }),
     glob: createGlobTool(backend, {
       customDescription: customToolDescriptions?.glob,
       permissions,
@@ -1444,6 +1813,10 @@ export function createFilesystemMiddleware(
     (name) =>
       enabledFilesystemTools == null || enabledFilesystemTools.has(name),
   ).map((name) => allToolsByName[name]);
+  // Retain the built-in delete tool instance so backend-capability filtering
+  // removes only this middleware's own tool, never an unrelated caller-supplied
+  // tool that happens to be named "delete".
+  const builtInDeleteTool = allToolsByName.delete;
 
   async function processToolMessage(
     msg: ToolMessage,
@@ -1571,11 +1944,19 @@ export function createFilesystemMiddleware(
         state: request.state,
       });
       const supportsExecution = isSandboxBackend(resolvedBackend);
+      const backendSupportsDelete = supportsDelete(resolvedBackend);
 
-      // Filter tools based on backend capabilities
+      // Filter tools based on backend capabilities. Execution is filtered by
+      // name, but delete is filtered by instance identity so that only this
+      // middleware's built-in delete tool is removed when the backend cannot
+      // delete — an unrelated caller-supplied tool named "delete" is untouched.
       let tools = request.tools;
-      if (!supportsExecution) {
-        tools = tools.filter((t: { name: string }) => t.name !== "execute");
+      if (!supportsExecution || !backendSupportsDelete) {
+        tools = tools.filter(
+          (t: { name: string }) =>
+            (supportsExecution || t.name !== "execute") &&
+            (backendSupportsDelete || t !== builtInDeleteTool),
+        );
       }
 
       // Tool schemas carry the built-in usage guidance. Preserve only explicit

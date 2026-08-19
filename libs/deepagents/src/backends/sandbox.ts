@@ -535,6 +535,44 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
   }
 
   /**
+   * Delete a file or directory from the sandbox via a server-side `rm`.
+   *
+   * Runs `test -e || test -L` first: a path that does not exist (and is not a
+   * broken symlink) returns a not-found error, matching the contract of
+   * `FilesystemBackend` and `StateBackend`. Because a shell `test` has no error
+   * channel, a non-zero probe conflates "absent" with "unstattable" (e.g. an
+   * unsearchable parent directory); an unknown exit code is not treated as
+   * absent and falls through to the delete.
+   *
+   * Uses `rm -rf`, so directories are removed recursively along with their
+   * contents. A non-zero `rm` exit (e.g. a permission error) is reported as a
+   * failure.
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    // shellQuote only neutralizes shell metacharacters so the path is passed to
+    // `rm` as a single literal argument. It is NOT a security boundary: it does
+    // not confine the deletion to any sandbox root. Whatever the sandbox shell
+    // can reach, this can delete.
+    const quoted = shellQuote(filePath);
+    const exists = await this.execute(`test -e ${quoted} || test -L ${quoted}`);
+    // Only a definite non-zero probe means the path is absent. A null/unknown
+    // exit code is not treated as not-found — fall through to `rm`.
+    if (exists.exitCode !== null && exists.exitCode !== 0) {
+      return { error: `Error: '${filePath}' not found` };
+    }
+
+    const result = await this.execute(`rm -rf ${quoted}`);
+    if (result.exitCode === 0) {
+      return { path: filePath, filesUpdate: null };
+    }
+    return {
+      error: `Error deleting file '${filePath}': ${
+        result.output.trim() || "unknown error"
+      }`,
+    };
+  }
+
+  /**
    * Edit a file by replacing string occurrences.
    *
    * Uses downloadFiles() to read, performs string replacement in TypeScript,
@@ -652,26 +690,5 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     }
 
     return { path: filePath, filesUpdate: null, occurrences: count };
-  }
-
-  /**
-   * Delete a file from the sandbox via a server-side rm.
-   *
-   * Uses rm -f, so deleting a path that does not exist succeeds silently.
-   */
-  async delete(filePath: string): Promise<DeleteResult> {
-    // shellQuote passes the path as a single literal shell argument. It is not
-    // a sandbox boundary: whatever the sandbox shell can reach, this can delete.
-    const result = await this.execute(`rm -f ${shellQuote(filePath)}`);
-
-    if (result.exitCode === 0) {
-      return { path: filePath };
-    }
-
-    return {
-      error: `Error deleting file '${filePath}': ${
-        result.output.trim() || "unknown error"
-      }`,
-    };
   }
 }
