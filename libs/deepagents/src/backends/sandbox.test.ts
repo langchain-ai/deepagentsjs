@@ -64,9 +64,14 @@ class MockSandbox extends BaseSandbox {
             truncated: false,
           };
         }
-        const lines = content.split("\n");
-        const output = lines
-          .map((line, i) => `     ${i + 1}\t${line}`)
+        // Mirror awk's printf format so a gutter added back to the command
+        // shows up here rather than being silently normalized away.
+        const numbered = command.includes("%6d");
+        const output = content
+          .split("\n")
+          .map((line, i) =>
+            numbered ? `${String(i + 1).padStart(6)}\t${line}` : line,
+          )
           .join("\n");
         return { output, exitCode: 0, truncated: false };
       }
@@ -211,6 +216,26 @@ describe("BaseSandbox", () => {
       expect(result.error).toBeUndefined();
       expect(result.content).toContain("line1");
       expect(result.content).toContain("line2");
+    });
+
+    it("returns raw content, leaving the gutter to the read_file tool", async () => {
+      const sandbox = new MockSandbox();
+      sandbox.addFile("/test.txt", "line1\nline2\nline3");
+
+      const result = await sandbox.read("/test.txt");
+
+      // A gutter here would be doubled by formatContentWithLineNumbers in the
+      // read_file tool, which numbers every backend's content.
+      expect(result.content).toBe("line1\nline2\nline3");
+    });
+
+    it("does not number lines in the shell command", () => {
+      const sandbox = new MockSandbox();
+      sandbox.addFile("/test.txt", "line1");
+
+      void sandbox.read("/test.txt");
+
+      expect(sandbox.executedCommands[0]).not.toContain("%6d");
     });
 
     it("should return error for non-existent file", async () => {
