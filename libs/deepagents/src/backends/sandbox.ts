@@ -505,8 +505,11 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     const regex = globToPathRegex(pattern);
     const infos: FileInfo[] = [];
     const lines = result.output.trim().split("\n").filter(Boolean);
-    const truncated = lines.length > MAX_GLOB_FIND_LINES;
-    const limited = truncated ? lines.slice(0, MAX_GLOB_FIND_LINES) : lines;
+    // execute() can cut output before the shell reaches the soft cap, so the
+    // backend's own flag has to be folded in or a partial listing looks complete.
+    const overCap = lines.length > MAX_GLOB_FIND_LINES;
+    const truncated = overCap || result.truncated === true;
+    const limited = overCap ? lines.slice(0, MAX_GLOB_FIND_LINES) : lines;
 
     // Normalise base path (strip trailing /)
     const basePath = path.endsWith("/") ? path.slice(0, -1) : path;

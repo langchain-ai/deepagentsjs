@@ -766,6 +766,21 @@ describe("BaseSandbox", () => {
       expect(result.files!.length).toBe(50_000);
     });
 
+    it("should mark truncated when the backend truncated output below the cap", async () => {
+      const sandbox = new MockSandbox();
+      const now = Math.floor(Date.now() / 1000);
+      sandbox.execute = vi.fn().mockResolvedValue({
+        output: `1\t${now}\tregular file\t/f0.txt`,
+        exitCode: 0,
+        truncated: true,
+      });
+
+      const result = await sandbox.glob("*.txt", "/");
+      expect(result.error).toBeUndefined();
+      expect(result.truncated).toBe(true);
+      expect(result.files!.length).toBe(1);
+    });
+
     it("should return empty array for no matches", async () => {
       const sandbox = new MockSandbox();
       sandbox.execute = vi.fn().mockResolvedValue({
