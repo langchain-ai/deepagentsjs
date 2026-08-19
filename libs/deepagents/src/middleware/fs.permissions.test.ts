@@ -1,6 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createFilesystemMiddleware, findDeleteDenyPatterns } from "./fs.js";
 import type { BackendProtocolV2 } from "../backends/protocol.js";
+import { FilesystemBackend } from "../backends/filesystem.js";
+import * as fs from "node:fs/promises";
+import * as fsSync from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
 function createMockBackend(): BackendProtocolV2 {
   return {
@@ -1329,5 +1334,65 @@ describe("findDeleteDenyPatterns", () => {
         findDeleteDenyPatterns([deny("/other/**")], "/work/a.txt", false),
       ).toEqual([]);
     });
+  });
+});
+
+// Guard the leaf-vs-subtree ls-probe against a REAL FilesystemBackend (the
+// parametrized suites above use an in-memory fake). This exercises the actual
+// contract between deleteTargetMayHaveDescendants and FilesystemBackend.ls,
+// which the fake cannot catch if the real ls shape/wording drifts.
+describe("delete permissions against a real FilesystemBackend", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = fsSync.mkdtempSync(path.join(os.tmpdir(), "deepagents-del-perm-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  const workspaceIsolation = [
+    {
+      operations: ["write"] as const,
+      paths: ["/work/**"],
+      mode: "allow" as const,
+    },
+    { operations: ["write"] as const, paths: ["/**"], mode: "deny" as const },
+  ];
+
+  it("permits deleting a confirmed leaf file under workspace isolation", async () => {
+    await fs.mkdir(path.join(root, "work"), { recursive: true });
+    await fs.writeFile(path.join(root, "work", "a.txt"), "a");
+    const middleware = createFilesystemMiddleware({
+      backend: new FilesystemBackend({ rootDir: root, virtualMode: true }),
+      permissions: workspaceIsolation,
+    });
+
+    const result = await getTool(middleware, "delete").invoke({
+      file_path: "/work/a.txt",
+    });
+
+    expect(resultText(result)).toContain("Deleted");
+    await expect(fs.stat(path.join(root, "work", "a.txt"))).rejects.toThrow();
+  });
+
+  it("blocks deleting a directory under the same rules (conservative subtree)", async () => {
+    await fs.mkdir(path.join(root, "work", "sub"), { recursive: true });
+    await fs.writeFile(path.join(root, "work", "sub", "b.txt"), "b");
+    const middleware = createFilesystemMiddleware({
+      backend: new FilesystemBackend({ rootDir: root, virtualMode: true }),
+      permissions: workspaceIsolation,
+    });
+
+    const result = await getTool(middleware, "delete").invoke({
+      file_path: "/work",
+    });
+
+    expect(resultText(result)).toContain("permission denied for write");
+    // Nothing removed.
+    await expect(
+      fs.stat(path.join(root, "work", "sub", "b.txt")),
+    ).resolves.toBeDefined();
   });
 });
