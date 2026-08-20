@@ -35,7 +35,9 @@ import { createToolExclusionMiddleware } from "./middleware/tool_exclusion.js";
 import { mergeMiddlewareStack } from "./middleware/utils.js";
 import {
   GENERAL_PURPOSE_SUBAGENT,
+  isForkedSubAgent,
   type CompiledSubAgent,
+  type ForkedSubAgent,
 } from "./middleware/subagents.js";
 import type { AsyncSubAgent } from "./middleware/async_subagents.js";
 import type {
@@ -253,6 +255,30 @@ export function createDeepAgent<
     ];
   }
 
+  let memoryMiddleware: AgentMiddleware[] = [];
+  if (memory && memory.length > 0) {
+    memoryMiddleware = [
+      createMemoryMiddleware({
+        backend,
+        sources: memory,
+        addCacheControl: anthropicModel,
+      }),
+    ];
+  }
+
+  // Hoisted above subagent construction so fork-mode specs can reuse this string.
+  const promptConfig = normalizeSystemPrompt(systemPrompt);
+  const activeBasePrompt =
+    promptConfig.base !== undefined
+      ? promptConfig.base
+      : harnessProfile.baseSystemPrompt;
+  const finalSystemPrompt = assemblePromptParts([
+    promptConfig.prefix,
+    activeBasePrompt,
+    promptConfig.suffix,
+    harnessProfile.systemPromptSuffix,
+  ]);
+
   /**
    * Process subagents to add SkillsMiddleware for those with their own skills.
    *
@@ -261,7 +287,7 @@ export function createDeepAgent<
    * If a custom subagent needs skills, it must specify its own `skills` array.
    */
   const createSubagentDefaultMiddleware = (
-    input: SubAgent,
+    input: SubAgent | ForkedSubAgent,
   ): AgentMiddleware[] => {
     const effectivePermissions = input.permissions ?? permissions;
 
@@ -288,8 +314,12 @@ export function createDeepAgent<
     ];
   };
 
-  const normalizeSubagentSpec = (input: SubAgent): SubAgent => {
+  const buildSubagentMiddleware = (
+    input: SubAgent | ForkedSubAgent,
+    isForkable: boolean,
+  ): AgentMiddleware[] => {
     const subagentDefaultMiddleware = createSubagentDefaultMiddleware(input);
+
     let subagentMiddleware = mergeMiddlewareStack(
       subagentDefaultMiddleware,
       input.middleware ?? [],
@@ -297,6 +327,7 @@ export function createDeepAgent<
         // Resolve profile middleware per stack so factories create fresh instances.
         ...resolveMiddleware(harnessProfile.extraMiddleware),
         ...cacheMiddleware,
+        ...(isForkable ? memoryMiddleware : []),
       ],
     );
 
@@ -306,12 +337,22 @@ export function createDeepAgent<
       );
     }
 
-    return {
-      ...input,
-      tools: input.tools ?? [],
-      middleware: subagentMiddleware,
-    };
+    return subagentMiddleware;
   };
+
+  const normalizeSubagentSpec = (input: SubAgent): SubAgent => ({
+    ...input,
+    tools: input.tools ?? [],
+    middleware: buildSubagentMiddleware(input, /* isForkable */ false),
+  });
+
+  const normalizeForkedSubagentSpec = (
+    input: ForkedSubAgent,
+  ): ForkedSubAgent => ({
+    ...input,
+    tools: input.tools ?? [],
+    middleware: buildSubagentMiddleware(input, /* isForkable */ true),
+  });
 
   const allSubagents = subagents as readonly AnySubAgent[];
 
@@ -324,11 +365,19 @@ export function createDeepAgent<
   // Process sync subagents:
   // - CompiledSubAgent: use as-is (already has its own middleware baked in)
   // - SubAgent: apply the default deep-agent subagent middleware stack
+  // - ForkedSubAgent: same stack, plus model-matched mirrored middleware
   const inlineSubagents = allSubagents
     .filter(
-      (item): item is SubAgent | CompiledSubAgent => !isAsyncSubAgent(item),
+      (item): item is SubAgent | CompiledSubAgent | ForkedSubAgent =>
+        !isAsyncSubAgent(item),
     )
-    .map((item) => ("runnable" in item ? item : normalizeSubagentSpec(item)));
+    .map((item) =>
+      "runnable" in item
+        ? item
+        : isForkedSubAgent(item)
+          ? normalizeForkedSubagentSpec(item)
+          : normalizeSubagentSpec(item),
+    );
 
   const gpConfig = harnessProfile.generalPurposeSubagent;
   const gpDisabled = gpConfig?.enabled === false;
@@ -383,6 +432,7 @@ export function createDeepAgent<
       defaultInterruptOn: interruptOn,
       subagents: inlineSubagents,
       generalPurposeAgent: false,
+      parentSystemPrompt: finalSystemPrompt,
     }),
     // Automatically summarizes conversation history when token limits are approached.
     // Uses createSummarizationMiddleware (deepagents version) with backend support
@@ -418,15 +468,7 @@ export function createDeepAgent<
     // Optional Anthropic cache controls.
     ...cacheMiddleware,
     // Optional memory support.
-    ...(memory && memory.length > 0
-      ? [
-          createMemoryMiddleware({
-            backend,
-            sources: memory,
-            addCacheControl: anthropicModel,
-          }),
-        ]
-      : []),
+    ...memoryMiddleware,
     // Optional human-in-the-loop tool interrupts.
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
   ];
@@ -450,19 +492,6 @@ export function createDeepAgent<
       createToolExclusionMiddleware(harnessProfile.excludedTools),
     );
   }
-
-  // Compatibility assembly: prefix -> profile base -> suffix -> profile suffix.
-  const promptConfig = normalizeSystemPrompt(systemPrompt);
-  const activeBasePrompt =
-    promptConfig.base !== undefined
-      ? promptConfig.base
-      : harnessProfile.baseSystemPrompt;
-  const finalSystemPrompt = assemblePromptParts([
-    promptConfig.prefix,
-    activeBasePrompt,
-    promptConfig.suffix,
-    harnessProfile.systemPromptSuffix,
-  ]);
 
   const agent = createAgent({
     model,
