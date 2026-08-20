@@ -454,6 +454,7 @@ describe("ForkedSubAgent", () => {
               args: {
                 description: "UNIQUE_TASK_MARKER",
                 subagent_type: "worker",
+                mode: "fork",
               },
             },
           ],
@@ -472,6 +473,7 @@ describe("ForkedSubAgent", () => {
         {
           name: "worker",
           description: "A worker agent",
+          mode: "fork",
         },
       ],
     });
@@ -574,6 +576,7 @@ describe("ForkedSubAgent", () => {
               args: {
                 description: "UNIQUE_TASK_MARKER",
                 subagent_type: "worker",
+                mode: "fork",
               },
             },
           ],
@@ -593,6 +596,7 @@ describe("ForkedSubAgent", () => {
           name: "worker",
           description: "A worker agent",
           model: workerModel,
+          mode: "fork",
         },
       ],
     });
@@ -1736,6 +1740,7 @@ describe("middleware override by name", () => {
         {
           name: "worker",
           description: "A worker agent",
+          mode: "fork",
         },
       ],
     });
@@ -1760,6 +1765,7 @@ describe("middleware override by name", () => {
           name: "worker",
           description: "A worker agent",
           model: workerModel,
+          mode: "fork",
         },
       ],
     });

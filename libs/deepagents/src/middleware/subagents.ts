@@ -283,8 +283,8 @@ export interface ForkedSubAgent extends SubAgentBase {
 
 export function isForkedSubAgent(value: unknown): value is ForkedSubAgent {
   if (typeof value !== "object" || value == null) return false;
-  if ("mode" in value && value.mode !== "fork") return false;
-  if ("systemPrompt" in value && value.systemPrompt !== undefined) return false;
+  if (!("mode" in value)) return false;
+  if (value.mode !== "fork") return false;
   return true;
 }
 
