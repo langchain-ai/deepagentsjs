@@ -237,8 +237,12 @@ interface SubAgentBase {
  * ```
  */
 export interface SubAgent extends SubAgentBase {
+  // This cannot be optional. A plain subagent without a systemPrompt would
+  // have the same shape as a ForkedSubAgent, since mode is already optional
+  // on both. That ambiguity is what silently misrouted subagents between
+  // forking and non-forking behavior — see isForkedSubAgent below.
   /** The system prompt to use for the agent */
-  systemPrompt?: string | SystemMessage;
+  systemPrompt: string | SystemMessage;
 
   /**
    * Context mode. `"handoff"` (default) is fully isolated. `"fork"` inherits
@@ -281,11 +285,13 @@ export interface ForkedSubAgent extends SubAgentBase {
   mode?: "fork";
 }
 
-export function isForkedSubAgent(value: unknown): value is ForkedSubAgent {
-  if (typeof value !== "object" || value == null) return false;
-  if (!("mode" in value)) return false;
-  if (value.mode !== "fork") return false;
-  return true;
+// Was mode === "fork" before, but mode defaults to omitted on both types.
+// A ForkedSubAgent that omits mode (the documented default) failed that
+// check and fell through to the plain-SubAgent branch — no fork, no prompt.
+export function isForkedSubAgent(
+  spec: SubAgent | ForkedSubAgent,
+): spec is ForkedSubAgent {
+  return spec.systemPrompt == null;
 }
 
 /**
@@ -540,7 +546,9 @@ function getSubagents(options: {
     if ("runnable" in agentParams) {
       agents[agentParams.name] = agentParams.runnable;
       specsByName[agentParams.name] = agentParams;
-      if (isForkedSubAgent(agentParams)) forkModeNames.add(agentParams.name);
+      // CompiledSubAgent has no systemPrompt field at all, so isForkedSubAgent's
+      // signal doesn't apply here — its own mode field is the only fork signal it has.
+      if (agentParams.mode === "fork") forkModeNames.add(agentParams.name);
     } else if (isForkedSubAgent(agentParams)) {
       // ForkedSubAgent — always forks, always inherits the parent's exact
       // system prompt directly; there's no own prompt to fall back to.
