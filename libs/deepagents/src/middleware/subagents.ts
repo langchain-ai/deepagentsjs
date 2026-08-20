@@ -119,8 +119,9 @@ interface SubAgentBase {
   description: string;
 
   /**
-   * The system prompt for the agent. Required on {@link SubAgent}; forbidden
-   * on {@link ForkedSubAgent}, which always inherits the parent's instead.
+   * The system prompt for the agent. Optional on {@link SubAgent} (falls
+   * back to an empty prompt if omitted); forbidden on {@link ForkedSubAgent},
+   * which always inherits the parent's instead.
    */
   systemPrompt?: string | SystemMessage;
 
@@ -264,6 +265,7 @@ export interface SubAgent extends SubAgentBase {
  * const researcher: ForkedSubAgent = {
  *   name: "researcher",
  *   description: "Continues the current investigation with full context",
+ *   mode: "fork",
  *   tools: [webSearchTool],
  * };
  * ```
@@ -275,10 +277,10 @@ export interface ForkedSubAgent extends SubAgentBase {
   systemPrompt?: undefined;
 
   /**
-   * Context mode. `"handoff"` (default) is fully isolated. `"fork"` inherits
-   * the parent's conversation history and system prompt.
+   * Always `"fork"`. Required (not defaulted) so this can't structurally
+   * collapse into a plain `SubAgent` — see `isForkedSubAgent` below.
    */
-  mode?: "fork";
+  mode: "fork";
 }
 
 export function isForkedSubAgent(value: unknown): value is ForkedSubAgent {
