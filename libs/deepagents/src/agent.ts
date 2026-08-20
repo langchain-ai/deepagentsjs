@@ -35,6 +35,7 @@ import { createToolExclusionMiddleware } from "./middleware/tool_exclusion.js";
 import { mergeMiddlewareStack } from "./middleware/utils.js";
 import {
   GENERAL_PURPOSE_SUBAGENT,
+  isForkedSubAgent,
   type CompiledSubAgent,
   type ForkedSubAgent,
 } from "./middleware/subagents.js";
@@ -253,6 +254,17 @@ export function createDeepAgent<
     ];
   }
 
+  let memoryMiddleware: AgentMiddleware[] = [];
+  if (memory && memory.length > 0) {
+    memoryMiddleware = [
+      createMemoryMiddleware({
+        backend,
+        sources: memory,
+        addCacheControl: anthropicModel,
+      }),
+    ];
+  }
+
   // Hoisted above subagent construction so fork-mode specs can reuse this string.
   const promptConfig = normalizeSystemPrompt(systemPrompt);
   const activeBasePrompt =
@@ -301,43 +313,20 @@ export function createDeepAgent<
     ];
   };
 
-  // Fresh memory middleware for a cache-aligned fork spec.
-  const buildMirrorMemoryMiddleware = (): AgentMiddleware[] =>
-    memory && memory.length > 0
-      ? [
-          createMemoryMiddleware({
-            backend,
-            sources: memory,
-            addCacheControl: anthropicModel,
-          }),
-        ]
-      : [];
-
   const buildSubagentMiddleware = (
     input: SubAgent | ForkedSubAgent,
     isForkable: boolean,
   ): AgentMiddleware[] => {
     const subagentDefaultMiddleware = createSubagentDefaultMiddleware(input);
 
-    const shouldMirror =
-      isForkable &&
-      (input.model === undefined || input.model === model) &&
-      finalSystemPrompt != null &&
-      finalSystemPrompt !== "";
-
-    const mirroredCustomMiddleware = shouldMirror ? customMiddleware : [];
-    const mirroredMemoryMiddleware = shouldMirror
-      ? buildMirrorMemoryMiddleware()
-      : [];
-
     let subagentMiddleware = mergeMiddlewareStack(
       subagentDefaultMiddleware,
-      [...(input.middleware ?? []), ...mirroredCustomMiddleware],
+      [...(input.middleware ?? []), ...memoryMiddleware],
       [
         // Resolve profile middleware per stack so factories create fresh instances.
         ...resolveMiddleware(harnessProfile.extraMiddleware),
         ...cacheMiddleware,
-        ...mirroredMemoryMiddleware,
+        ...(isForkable ? memoryMiddleware : []),
       ],
     );
 
@@ -384,9 +373,9 @@ export function createDeepAgent<
     .map((item) =>
       "runnable" in item
         ? item
-        : item.systemPrompt != null
-          ? normalizeSubagentSpec(item)
-          : normalizeForkedSubagentSpec(item),
+        : isForkedSubAgent(item)
+          ? normalizeForkedSubagentSpec(item)
+          : normalizeSubagentSpec(item),
     );
 
   const gpConfig = harnessProfile.generalPurposeSubagent;
@@ -478,15 +467,7 @@ export function createDeepAgent<
     // Optional Anthropic cache controls.
     ...cacheMiddleware,
     // Optional memory support.
-    ...(memory && memory.length > 0
-      ? [
-          createMemoryMiddleware({
-            backend,
-            sources: memory,
-            addCacheControl: anthropicModel,
-          }),
-        ]
-      : []),
+    ...memoryMiddleware,
     // Optional human-in-the-loop tool interrupts.
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
   ];

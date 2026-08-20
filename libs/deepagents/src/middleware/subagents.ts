@@ -109,20 +109,7 @@ export interface CompiledSubAgent<
 /**
  * Fields shared by both {@link SubAgent} and {@link ForkedSubAgent}.
  *
- * Declared here (rather than only on one subtype) so both `systemPrompt` and
- * `mode` stay visible to anyone adding a new subagent variant — each subtype
- * narrows both to what it actually allows.
- *
- * Required fields:
- * - `name`: Identifier used to select this subagent in the task tool
- * - `description`: Shown to the model for subagent selection
- *
- * Optional fields:
- * - `model`: Override the default model for this subagent
- * - `tools`: Override the default tools for this subagent
- * - `middleware`: Additional middleware appended after defaults
- * - `interruptOn`: Human-in-the-loop configuration for specific tools
- * - `skills`: Skill source paths for SkillsMiddleware (e.g., `["/skills/user/", "/skills/project/"]`)
+ * @internal
  */
 interface SubAgentBase {
   /** Identifier used to select this subagent in the task tool */
@@ -138,10 +125,8 @@ interface SubAgentBase {
   systemPrompt?: string | SystemMessage;
 
   /**
-   * Context mode. `"handoff"` (default) is fully isolated — only
-   * {@link SubAgent} allows this. `"fork"` inherits the parent's
-   * conversation history and system prompt — only {@link ForkedSubAgent}
-   * allows this.
+   * Context mode. `"handoff"` (default) is fully isolated. `"fork"` inherits
+   * the parent's conversation history and system prompt.
    */
   mode?: "handoff" | "fork";
 
@@ -253,9 +238,12 @@ interface SubAgentBase {
  */
 export interface SubAgent extends SubAgentBase {
   /** The system prompt to use for the agent */
-  systemPrompt: string | SystemMessage;
+  systemPrompt?: string | SystemMessage;
 
-  /** Always isolated. Defaults to `"handoff"` if omitted. */
+  /**
+   * Context mode. `"handoff"` (default) is fully isolated. `"fork"` inherits
+   * the parent's conversation history and system prompt.
+   */
   mode?: "handoff";
 }
 
@@ -279,13 +267,25 @@ export interface SubAgent extends SubAgentBase {
  *   tools: [webSearchTool],
  * };
  * ```
+ *
+ * @experimental Forking subagents is experimental and subject to change
  */
 export interface ForkedSubAgent extends SubAgentBase {
   /** A ForkedSubAgent never has its own system prompt — always the parent's. */
   systemPrompt?: undefined;
 
-  /** Always forks. Defaults to `"fork"` if omitted. */
+  /**
+   * Context mode. `"handoff"` (default) is fully isolated. `"fork"` inherits
+   * the parent's conversation history and system prompt.
+   */
   mode?: "fork";
+}
+
+export function isForkedSubAgent(value: unknown): value is ForkedSubAgent {
+  if (typeof value !== "object" || value == null) return false;
+  if ("mode" in value && value.mode !== "fork") return false;
+  if ("systemPrompt" in value && value.systemPrompt !== undefined) return false;
+  return true;
 }
 
 /**
@@ -325,14 +325,11 @@ export interface ForkedSubAgent extends SubAgentBase {
  * });
  * ```
  */
-export const GENERAL_PURPOSE_SUBAGENT: {
-  name: string;
-  description: string;
-  systemPrompt: string;
-} = {
+export const GENERAL_PURPOSE_SUBAGENT = {
   name: "general-purpose",
   description: DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
   systemPrompt: DEFAULT_SUBAGENT_PROMPT,
+  mode: "handoff",
 } as const;
 
 /**
@@ -543,23 +540,8 @@ function getSubagents(options: {
     if ("runnable" in agentParams) {
       agents[agentParams.name] = agentParams.runnable;
       specsByName[agentParams.name] = agentParams;
-      if (agentParams.mode === "fork") forkModeNames.add(agentParams.name);
-    } else if (agentParams.systemPrompt != null) {
-      // Plain SubAgent — never forks, keeps its own prompt untouched.
-      const resolvedSpec: SubAgent = {
-        ...agentParams,
-        mode: "handoff",
-        model: agentParams.model ?? defaultModel,
-        tools: agentParams.tools ?? defaultTools,
-        middleware: [
-          ...defaultSubagentMiddleware,
-          ...(agentParams.middleware ?? []),
-        ],
-        interruptOn: agentParams.interruptOn ?? defaultInterruptOn ?? undefined,
-      };
-      agents[agentParams.name] = createSubAgent(resolvedSpec);
-      specsByName[agentParams.name] = resolvedSpec;
-    } else {
+      if (isForkedSubAgent(agentParams)) forkModeNames.add(agentParams.name);
+    } else if (isForkedSubAgent(agentParams)) {
       // ForkedSubAgent — always forks, always inherits the parent's exact
       // system prompt directly; there's no own prompt to fall back to.
       // `mode` is omitted here (not "handoff"): the real fork signal is
@@ -579,6 +561,21 @@ function getSubagents(options: {
       agents[agentParams.name] = createSubAgent(resolvedSpec);
       specsByName[agentParams.name] = resolvedSpec;
       forkModeNames.add(agentParams.name);
+    } else {
+      // Plain SubAgent — never forks, keeps its own prompt untouched.
+      const resolvedSpec: SubAgent = {
+        ...agentParams,
+        mode: "handoff",
+        model: agentParams.model ?? defaultModel,
+        tools: agentParams.tools ?? defaultTools,
+        middleware: [
+          ...defaultSubagentMiddleware,
+          ...(agentParams.middleware ?? []),
+        ],
+        interruptOn: agentParams.interruptOn ?? defaultInterruptOn ?? undefined,
+      };
+      agents[agentParams.name] = createSubAgent(resolvedSpec);
+      specsByName[agentParams.name] = resolvedSpec;
     }
   }
 
@@ -658,13 +655,7 @@ function createTaskTool(options: {
     : getTaskToolDescription(subagentDescriptions);
 
   return tool(
-    async (
-      input: {
-        description: string;
-        subagent_type: string;
-      },
-      config,
-    ): Promise<Command | string> => {
+    async (input, config): Promise<Command | string> => {
       const { description, subagent_type } = input;
 
       if (!(subagent_type in subagentGraphs)) {

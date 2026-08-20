@@ -1770,28 +1770,6 @@ describe("middleware override by name", () => {
     );
   });
 
-  it("mirrors custom middleware into a ForkedSubAgent when its model matches the parent's", () => {
-    const custom = namedMiddleware("MarkerMiddleware");
-
-    createDeepAgent({
-      model: fakeModel,
-      name: "main",
-      systemPrompt: "PARENT_PROMPT",
-      middleware: [custom],
-      subagents: [
-        {
-          name: "worker",
-          description: "A worker agent",
-        },
-      ],
-    });
-
-    const middleware = getMiddlewareStack("worker");
-    expect(middleware.some((entry) => entry.name === "MarkerMiddleware")).toBe(
-      true,
-    );
-  });
-
   it("replaces default main-agent middleware with same-name custom middleware", () => {
     const custom = createCustomSummarizationMiddleware();
 
