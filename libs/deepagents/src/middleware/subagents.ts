@@ -119,8 +119,9 @@ interface SubAgentBase {
   description: string;
 
   /**
-   * The system prompt for the agent. Required on {@link SubAgent}; forbidden
-   * on {@link ForkedSubAgent}, which always inherits the parent's instead.
+   * The system prompt for the agent. Optional on {@link SubAgent} (falls
+   * back to an empty prompt if omitted); forbidden on {@link ForkedSubAgent},
+   * which always inherits the parent's instead.
    */
   systemPrompt?: string | SystemMessage;
 
@@ -237,12 +238,8 @@ interface SubAgentBase {
  * ```
  */
 export interface SubAgent extends SubAgentBase {
-  // This cannot be optional. A plain subagent without a systemPrompt would
-  // have the same shape as a ForkedSubAgent, since mode is already optional
-  // on both. That ambiguity is what silently misrouted subagents between
-  // forking and non-forking behavior — see isForkedSubAgent below.
   /** The system prompt to use for the agent */
-  systemPrompt: string | SystemMessage;
+  systemPrompt?: string | SystemMessage;
 
   /**
    * Context mode. `"handoff"` (default) is fully isolated. `"fork"` inherits
@@ -268,6 +265,7 @@ export interface SubAgent extends SubAgentBase {
  * const researcher: ForkedSubAgent = {
  *   name: "researcher",
  *   description: "Continues the current investigation with full context",
+ *   mode: "fork",
  *   tools: [webSearchTool],
  * };
  * ```
@@ -279,19 +277,17 @@ export interface ForkedSubAgent extends SubAgentBase {
   systemPrompt?: undefined;
 
   /**
-   * Context mode. `"handoff"` (default) is fully isolated. `"fork"` inherits
-   * the parent's conversation history and system prompt.
+   * Always `"fork"`. Required (not defaulted) so this can't structurally
+   * collapse into a plain `SubAgent` — see `isForkedSubAgent` below.
    */
-  mode?: "fork";
+  mode: "fork";
 }
 
-// Was mode === "fork" before, but mode defaults to omitted on both types.
-// A ForkedSubAgent that omits mode (the documented default) failed that
-// check and fell through to the plain-SubAgent branch — no fork, no prompt.
-export function isForkedSubAgent(
-  spec: SubAgent | ForkedSubAgent,
-): spec is ForkedSubAgent {
-  return spec.systemPrompt == null;
+export function isForkedSubAgent(value: unknown): value is ForkedSubAgent {
+  if (typeof value !== "object" || value == null) return false;
+  if (!("mode" in value)) return false;
+  if (value.mode !== "fork") return false;
+  return true;
 }
 
 /**
@@ -546,9 +542,7 @@ function getSubagents(options: {
     if ("runnable" in agentParams) {
       agents[agentParams.name] = agentParams.runnable;
       specsByName[agentParams.name] = agentParams;
-      // CompiledSubAgent has no systemPrompt field at all, so isForkedSubAgent's
-      // signal doesn't apply here — its own mode field is the only fork signal it has.
-      if (agentParams.mode === "fork") forkModeNames.add(agentParams.name);
+      if (isForkedSubAgent(agentParams)) forkModeNames.add(agentParams.name);
     } else if (isForkedSubAgent(agentParams)) {
       // ForkedSubAgent — always forks, always inherits the parent's exact
       // system prompt directly; there's no own prompt to fall back to.
