@@ -321,7 +321,7 @@ export function createDeepAgent<
 
     let subagentMiddleware = mergeMiddlewareStack(
       subagentDefaultMiddleware,
-      [...(input.middleware ?? []), ...memoryMiddleware],
+      input.middleware ?? [],
       [
         // Resolve profile middleware per stack so factories create fresh instances.
         ...resolveMiddleware(harnessProfile.extraMiddleware),
