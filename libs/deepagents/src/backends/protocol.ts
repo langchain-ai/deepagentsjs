@@ -264,8 +264,23 @@ export interface EditResult {
 export interface DeleteResult {
   /** Error message on failure, undefined on success */
   error?: string;
-  /** File path of deleted file, undefined on failure */
+  /** File path of deleted file or directory, undefined on failure */
   path?: string;
+  /**
+   * State update dict for checkpoint backends, null for external storage.
+   * Deletions are represented as null values keyed by removed path.
+   *
+   * @deprecated Only the deprecated legacy (runtime-injected) `StateBackend`
+   * still populates this field. A modern zero-argument `StateBackend` publishes
+   * its own deletion markers through LangGraph's `__pregel_send` channel and
+   * returns only `path`, so callers no longer need to apply a `Command` from
+   * this value. The delete tool and `CompositeBackend` continue to honor it
+   * while the legacy `StateBackend` constructor remains supported; it will be
+   * removed alongside that constructor.
+   */
+  filesUpdate?: Record<string, null> | null;
+  /** Metadata for the delete operation, attached to the ToolMessage */
+  metadata?: Record<string, unknown>;
 }
 
 /**

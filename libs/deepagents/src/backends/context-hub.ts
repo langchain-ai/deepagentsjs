@@ -48,7 +48,8 @@ type MutationIntent =
       newString: string;
       replaceAll: boolean;
       updateOccurrences: (occurrences: number) => void;
-    };
+    }
+  | { kind: "delete"; base: string };
 
 /**
  * A caller waiting for one logical mutation to become durable. Completion is
@@ -138,6 +139,12 @@ function parseCommitHashFromUrl(
   } catch {
     return null;
   }
+}
+
+function trimTrailingSlashes(path: string): string {
+  let end = path.length;
+  while (end > 0 && path[end - 1] === "/") end -= 1;
+  return path.slice(0, end);
 }
 
 function getErrorMessage(error: unknown): string {
@@ -416,6 +423,26 @@ export class ContextHubBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Select the exact key at `base` plus every key nested under `base + "/"`
+   * and map each to `null` (a deletion marker). Returns an empty object when
+   * nothing is stored at or under `base`. Recomputing this against the current
+   * cache is what makes a recursive delete correct under conflict replay.
+   */
+  private static collectDeleteChanges(
+    cache: Record<string, string>,
+    base: string,
+  ): FileChanges {
+    const prefix = base === "" ? "" : `${base}/`;
+    const changes: FileChanges = {};
+    for (const key of Object.keys(cache)) {
+      if (base === "" || key === base || key.startsWith(prefix)) {
+        changes[key] = null;
+      }
+    }
+    return changes;
+  }
+
+  /**
    * Build the read-your-writes view without publishing speculative data as the
    * durable cache. Later batches overlay earlier ones, matching worker order.
    */
@@ -547,6 +574,18 @@ export class ContextHubBackend implements BackendProtocolV2 {
       if (intent.kind === "changes") {
         Object.assign(changes, intent.changes);
         cache = ContextHubBackend.applyChanges(cache, intent.changes);
+        continue;
+      }
+
+      if (intent.kind === "delete") {
+        // Recompute the recursive delete against the refreshed cache so
+        // descendants added concurrently before replay are also removed.
+        const deleteChanges = ContextHubBackend.collectDeleteChanges(
+          cache,
+          intent.base,
+        );
+        Object.assign(changes, deleteChanges);
+        cache = ContextHubBackend.applyChanges(cache, deleteChanges);
         continue;
       }
 
@@ -1021,7 +1060,16 @@ export class ContextHubBackend implements BackendProtocolV2 {
 
     try {
       const accepted = await this.acceptMutation<DeleteResult>((cache) => {
-        if (!(hubPath in cache)) {
+        // Delete the exact key plus every entry nested under it, so a directory
+        // (represented only by descendant keys) is removed recursively. A
+        // dedicated delete intent lets conflict replay re-select descendants
+        // discovered after the initial materialization.
+        const base = trimTrailingSlashes(hubPath);
+        const deleteChanges = ContextHubBackend.collectDeleteChanges(
+          cache,
+          base,
+        );
+        if (Object.keys(deleteChanges).length === 0) {
           return {
             result: { error: `Error: File '${filePath}' not found` },
           };
@@ -1029,7 +1077,10 @@ export class ContextHubBackend implements BackendProtocolV2 {
 
         return {
           result: { path: filePath },
-          completion: this.enqueueCommit({ [hubPath]: null }),
+          completion: this.enqueueCommit(deleteChanges, {
+            kind: "delete",
+            base,
+          }),
         };
       });
       await accepted.completion;
