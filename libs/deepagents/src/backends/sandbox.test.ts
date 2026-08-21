@@ -68,10 +68,9 @@ class MockSandbox extends BaseSandbox {
             truncated: false,
           };
         }
-        const lines = content.split("\n");
-        const output = lines
-          .map((line, i) => `     ${i + 1}\t${line}`)
-          .join("\n");
+        // Always return the page as raw lines. Numbering belongs to the
+        // read_file tool; this mock mirrors the BaseSandbox contract.
+        const output = content.split("\n").join("\n");
         return { output, exitCode: 0, truncated: false };
       }
     }
@@ -215,6 +214,30 @@ describe("BaseSandbox", () => {
       expect(result.error).toBeUndefined();
       expect(result.content).toContain("line1");
       expect(result.content).toContain("line2");
+    });
+
+    it("returns raw content, leaving the gutter to the read_file tool", async () => {
+      const sandbox = new MockSandbox();
+      sandbox.addFile("/test.txt", "line1\nline2\nline3");
+
+      const result = await sandbox.read("/test.txt");
+
+      // A gutter here would be doubled by formatContentWithLineNumbers in the
+      // read_file tool, which numbers every backend's content.
+      expect(result.content).toBe("line1\nline2\nline3");
+    });
+
+    it("does not number lines in the shell command", async () => {
+      const sandbox = new MockSandbox();
+      sandbox.addFile("/test.txt", "line1");
+
+      await sandbox.read("/test.txt");
+
+      const cmd = sandbox.executedCommands[0];
+      // Pagination may still filter on NR, but printf must emit only the line
+      // body — no width-N line-number field that would double with the tool.
+      expect(cmd).toMatch(/printf "%s\\n"/);
+      expect(cmd).not.toMatch(/printf "[^"]*%\d*d/);
     });
 
     it("should return error for non-existent file", async () => {

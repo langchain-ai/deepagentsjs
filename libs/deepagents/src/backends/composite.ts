@@ -213,7 +213,7 @@ export class CompositeBackend implements BackendProtocolV2 {
    * @param filePath - Absolute file path
    * @param offset - Line offset to start reading from (0-indexed)
    * @param limit - Maximum number of lines to read
-   * @returns Formatted file content with line numbers, or error message
+   * @returns ReadResult with raw content on success or error on failure
    */
   async read(
     filePath: string,

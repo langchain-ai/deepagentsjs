@@ -497,7 +497,7 @@ describe("LangSmithSandbox", () => {
     it("read() delegates to execute() via a shell command", async () => {
       const sandbox = makeSandbox();
       mockRun.mockResolvedValue({
-        stdout: "     1\thello",
+        stdout: "hello",
         stderr: "",
         exit_code: 0,
       });

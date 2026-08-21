@@ -1148,6 +1148,25 @@ describe("createFilesystemMiddleware", () => {
   });
 
   describe("tools", () => {
+    it("read_file tool numbers backend content exactly once", async () => {
+      // Backends return raw content and this tool owns the gutter. A backend
+      // that numbers lines itself (the sandbox awk command used to) produced a
+      // doubled gutter like "     1\t     1\t{".
+      const mockBackend = createMockSandboxBackend();
+      mockBackend.read = vi
+        .fn()
+        .mockResolvedValue({ content: "line1\nline2", mimeType: "text/plain" });
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const readFileTool = middleware.tools!.find(
+        (tool) => tool.name === "read_file",
+      ) as any;
+      const result = await readFileTool.invoke({ file_path: "/doc.txt" });
+
+      const text = Array.isArray(result) ? result[0].text : result;
+      expect(text).toBe("     1\tline1\n     2\tline2");
+    });
+
     it("write_file schema should require content", () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
