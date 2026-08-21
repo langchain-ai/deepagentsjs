@@ -66,6 +66,10 @@ describe("globMatch", () => {
   it("returns false for non-matching path", () => {
     expect(globMatch("/other/bar.ts", "/foo/**")).toBe(false);
   });
+
+  it("keeps POSIX paths case-sensitive", () => {
+    expect(globMatch("/Secrets/key.txt", "/secrets/**")).toBe(false);
+  });
 });
 
 describe("decidePathAccess", () => {
