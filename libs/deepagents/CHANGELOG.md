@@ -1,5 +1,17 @@
 # deepagents
 
+## 1.13.1
+
+### Patch Changes
+
+- [#771](https://github.com/langchain-ai/deepagentsjs/pull/771) [`bcc2f5d`](https://github.com/langchain-ai/deepagentsjs/commit/bcc2f5d0a8ac22898b716fc00b425fee208c8b86) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - fix(deepagents): require `mode: "fork"` on `ForkedSubAgent`
+
+  `ForkedSubAgent.mode` was optional, defaulting to being omitted per its own documented example. Since `SubAgent.systemPrompt` is also optional, a `ForkedSubAgent` that omitted `mode` had the same shape as a plain `SubAgent` and silently misrouted between forking and non-forking behavior. `mode: "fork"` is now required on `ForkedSubAgent`, closing the ambiguity.
+
+- [#776](https://github.com/langchain-ai/deepagentsjs/pull/776) [`95afe3e`](https://github.com/langchain-ai/deepagentsjs/commit/95afe3e2682622067a263d2d24129985535b0f3b) Thanks [@baskaryan](https://github.com/baskaryan)! - chore(deepagents): widen the `langsmith` peer range to `>=0.7.1 <0.10.0`
+
+  The upper bound stops below 0.10.0 rather than 1.0.0 because langsmith is pre-1.0 and ships breaking changes in minor bumps, so a new minor should be adopted deliberately instead of pre-authorized.
+
 ## 1.13.0
 
 ### Minor Changes
