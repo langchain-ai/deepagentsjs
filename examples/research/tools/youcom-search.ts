@@ -100,8 +100,8 @@ ${formattedResults}`;
 
       return summary;
     } catch (error) {
-      if (error instanceof Error) {
-        return `Search error: ${error.message}`;
+      if (error && typeof error === 'object' && 'message' in error) {
+        return `Search error: ${(error as Error).message}`;
       }
       return `Search error: An unexpected error occurred while searching.`;
     }

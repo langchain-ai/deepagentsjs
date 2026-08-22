@@ -192,14 +192,13 @@ Format the report in clear markdown with proper structure and include source ref
 
 You have access to a few tools.
 
-## `internet_search`
+## internet_search
 
 Use this to run an internet search for a given query using Tavily. You can specify the number of results, the topic, and whether raw content should be included.
 
-## `youcom_search`
+## youcom_search
 
-Use this to run an internet search for a given query using You.com's search API. Provides high-quality search results with source citations. You can specify the number of results. Requires YDC_API_KEY environment variable for authenticated access, but also works without it in keyless mode.`;
-`;
+Use this to run an internet search for a given query using You.com's search API. Provides high-quality search results with source citations. You can specify the number of results. Requires YDC_API_KEY environment variable for authenticated access, but also works without it in keyless mode.\`;
 
 // Create the agent
 export const agent = createDeepAgent({
