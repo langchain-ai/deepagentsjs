@@ -157,7 +157,31 @@ describe("StateBackend", () => {
     expect(result.error).toContain("not found");
   });
 
-  it("should return an explicit error for delete in legacy mode", () => {
+  it("should delete a directory recursively while preserving siblings", () => {
+    const { sendSpy, commitSends } = makeConfig();
+    const backend = new StateBackend();
+
+    backend.write("/work/a.txt", "a");
+    backend.write("/work/sub/b.txt", "b");
+    backend.write("/keep.txt", "keep");
+    commitSends();
+
+    const result = backend.delete("/work");
+
+    expect(result.error).toBeUndefined();
+    expect(result.path).toBe("/work");
+    // A single send carries null markers for every nested key, none for the sibling.
+    expect(sendSpy).toHaveBeenLastCalledWith([
+      ["files", { "/work/a.txt": null, "/work/sub/b.txt": null }],
+    ]);
+
+    commitSends();
+    expect(backend.read("/work/a.txt").error).toContain("not found");
+    expect(backend.read("/work/sub/b.txt").error).toContain("not found");
+    expect(backend.read("/keep.txt").error).toBeUndefined();
+  });
+
+  it("should return a deletion update in legacy mode", () => {
     const { state, runtime } = makeConfig();
     const backend = new StateBackend(runtime);
     const writeRes = backend.write("/drop.txt", "bye");
@@ -165,8 +189,9 @@ describe("StateBackend", () => {
 
     const result = backend.delete("/drop.txt");
 
-    expect(result.path).toBeUndefined();
-    expect(result.error).toContain("zero-argument StateBackend");
+    expect(result.path).toBe("/drop.txt");
+    expect(result.error).toBeUndefined();
+    expect(result.filesUpdate).toEqual({ "/drop.txt": null });
     expect(backend.read("/drop.txt").error).toBeUndefined();
   });
 

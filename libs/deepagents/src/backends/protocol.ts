@@ -71,8 +71,42 @@ export interface GrepMatch {
 export interface GrepResult {
   /** Error message on failure, undefined on success */
   error?: string;
-  /** Structured grep match entries, undefined on failure */
+  /**
+   * Structured grep match entries. Populated on success and, when the
+   * search was cut short, with whatever was found before stopping.
+   * Undefined only on a hard failure.
+   */
   matches?: GrepMatch[];
+  /**
+   * True when the search stopped early (e.g. hit a match-count cap) and
+   * `matches` is therefore incomplete but still valid.
+   */
+  truncated?: boolean;
+}
+
+/**
+ * Enforce a match cap after a backend grep has completed.
+ *
+ * When `maxCount` is set and the result exceeds it, the matches are sliced
+ * to the cap and the result is flagged `truncated: true`.
+ */
+export function applyGrepMaxCount(params: {
+  result: GrepResult;
+  maxCount: number | null | undefined;
+}): GrepResult {
+  const { result, maxCount } = params;
+  if (
+    maxCount == null ||
+    result.matches == null ||
+    result.matches.length <= maxCount
+  ) {
+    return result;
+  }
+  return {
+    error: result.error,
+    matches: result.matches.slice(0, maxCount),
+    truncated: true,
+  };
 }
 
 /**
@@ -161,8 +195,17 @@ export interface LsResult {
 export interface GlobResult {
   /** Error message on failure, undefined on success */
   error?: string;
-  /** List of FileInfo objects matching the pattern, undefined on failure */
+  /**
+   * List of FileInfo objects matching the pattern. Populated on success and,
+   * when the walk was cut short, with whatever was found before stopping.
+   * Undefined only on a hard failure.
+   */
   files?: FileInfo[];
+  /**
+   * True when the walk stopped early (e.g. hit a time or count limit) and
+   * `files` is therefore incomplete but still valid.
+   */
+  truncated?: boolean;
 }
 
 /**
@@ -221,8 +264,23 @@ export interface EditResult {
 export interface DeleteResult {
   /** Error message on failure, undefined on success */
   error?: string;
-  /** File path of deleted file, undefined on failure */
+  /** File path of deleted file or directory, undefined on failure */
   path?: string;
+  /**
+   * State update dict for checkpoint backends, null for external storage.
+   * Deletions are represented as null values keyed by removed path.
+   *
+   * @deprecated Only the deprecated legacy (runtime-injected) `StateBackend`
+   * still populates this field. A modern zero-argument `StateBackend` publishes
+   * its own deletion markers through LangGraph's `__pregel_send` channel and
+   * returns only `path`, so callers no longer need to apply a `Command` from
+   * this value. The delete tool and `CompositeBackend` continue to honor it
+   * while the legacy `StateBackend` constructor remains supported; it will be
+   * removed alongside that constructor.
+   */
+  filesUpdate?: Record<string, null> | null;
+  /** Metadata for the delete operation, attached to the ToolMessage */
+  metadata?: Record<string, unknown>;
 }
 
 /**

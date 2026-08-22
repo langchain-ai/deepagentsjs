@@ -27,6 +27,56 @@ export function isAnthropicModel(
 }
 
 /**
+ * A one-shot promise whose settlement is controlled externally.
+ *
+ * Use this when one part of a workflow must wait for an event that is owned
+ * elsewhere—for example, a queued mutation waiting for the worker that will
+ * push it. `Deferred` is awaitable because it implements `PromiseLike`, and
+ * `.promise` is available when a concrete `Promise` is required.
+ *
+ * The first call to `resolve` or `reject` wins; later calls are ignored. This
+ * class deliberately does not provide cancellation, reset, or notification
+ * semantics. It models exactly one eventual outcome.
+ */
+export class Deferred<T = void> implements PromiseLike<T> {
+  readonly promise: Promise<T>;
+
+  private settled = false;
+  private resolvePromise!: (value: T | PromiseLike<T>) => void;
+  private rejectPromise!: (reason?: unknown) => void;
+
+  constructor() {
+    this.promise = new Promise<T>((resolve, reject) => {
+      this.resolvePromise = resolve;
+      this.rejectPromise = reject;
+    });
+  }
+
+  resolve(value: T | PromiseLike<T>): void {
+    if (this.settled) {
+      return;
+    }
+    this.settled = true;
+    this.resolvePromise(value);
+  }
+
+  reject(reason?: unknown): void {
+    if (this.settled) {
+      return;
+    }
+    this.settled = true;
+    this.rejectPromise(reason);
+  }
+
+  then<TResult1 = T, TResult2 = never>(
+    onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.promise.then(onfulfilled, onrejected);
+  }
+}
+
+/**
  * Detect whether a model is an AWS Bedrock Converse model.
  *
  * Accepts the wider `RunnableInterface` shape (the type of `request.model`

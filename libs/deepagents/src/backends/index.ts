@@ -45,6 +45,7 @@ export type {
 
 // Export type guard and error class
 export {
+  applyGrepMaxCount,
   isSandboxBackend,
   isSandboxProtocol,
   SandboxError,

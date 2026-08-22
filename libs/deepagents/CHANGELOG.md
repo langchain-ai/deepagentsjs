@@ -1,5 +1,71 @@
 # deepagents
 
+## 1.13.1
+
+### Patch Changes
+
+- [#771](https://github.com/langchain-ai/deepagentsjs/pull/771) [`bcc2f5d`](https://github.com/langchain-ai/deepagentsjs/commit/bcc2f5d0a8ac22898b716fc00b425fee208c8b86) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - fix(deepagents): require `mode: "fork"` on `ForkedSubAgent`
+
+  `ForkedSubAgent.mode` was optional, defaulting to being omitted per its own documented example. Since `SubAgent.systemPrompt` is also optional, a `ForkedSubAgent` that omitted `mode` had the same shape as a plain `SubAgent` and silently misrouted between forking and non-forking behavior. `mode: "fork"` is now required on `ForkedSubAgent`, closing the ambiguity.
+
+- [#776](https://github.com/langchain-ai/deepagentsjs/pull/776) [`95afe3e`](https://github.com/langchain-ai/deepagentsjs/commit/95afe3e2682622067a263d2d24129985535b0f3b) Thanks [@baskaryan](https://github.com/baskaryan)! - chore(deepagents): widen the `langsmith` peer range to `>=0.7.1 <0.10.0`
+
+  The upper bound stops below 0.10.0 rather than 1.0.0 because langsmith is pre-1.0 and ships breaking changes in minor bumps, so a new minor should be adopted deliberately instead of pre-authorized.
+
+## 1.13.0
+
+### Minor Changes
+
+- [#675](https://github.com/langchain-ai/deepagentsjs/pull/675) [`ba8d4aa`](https://github.com/langchain-ai/deepagentsjs/commit/ba8d4aa71664c23027e57eee0fcaa2701d60408f) Thanks [@hntrl](https://github.com/hntrl)! - feat(filesystem): add recursive delete tool
+
+- [#752](https://github.com/langchain-ai/deepagentsjs/pull/752) [`b20d6ad`](https://github.com/langchain-ai/deepagentsjs/commit/b20d6adc3dc7caf01281832548a17f381561318c) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - feat(deepagents): add `ForkedSubAgent` for subagent conversation forking
+
+  Lets a subagent inherit the parent's conversation history instead of only seeing the task description.
+
+### Patch Changes
+
+- [#759](https://github.com/langchain-ai/deepagentsjs/pull/759) [`85a55e1`](https://github.com/langchain-ai/deepagentsjs/commit/85a55e14da6cb19877ddd81d898d78d6ededfe74) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): cap sandbox glob find so root searches cannot OOM the host
+
+  Recursive glob listed every path under the search root (and with `-L` could loop through `/proc/*/root`). Prune virtual filesystems and soft-cap find output so a `glob("**/x", "/")` cannot exhaust the runtime heap.
+
+- [#768](https://github.com/langchain-ai/deepagentsjs/pull/768) [`f124127`](https://github.com/langchain-ai/deepagentsjs/commit/f124127255fbd4e4b03eb84a4b39c70421a07e35) Thanks [@casparb](https://github.com/casparb)! - fix(deepagents): accept permission paths that exactly equal a composite route
+
+  A permission path equal to a single-file mount (e.g. `/instructions.md`) was rejected when the backend supported execution, forcing users to write `/instructions.md/**`. The route-scoping check now also accepts the route root itself. Sibling prefixes such as `/workspace2/**` for route `/workspace` remain rejected.
+
+- [#769](https://github.com/langchain-ai/deepagentsjs/pull/769) [`d4045de`](https://github.com/langchain-ai/deepagentsjs/commit/d4045de67715bf3cd6198b0d516d176c0e4b75d0) Thanks [@hntrl](https://github.com/hntrl)! - chore(deps): update langgraph deps to track serialization fix
+
+## 1.12.4
+
+### Patch Changes
+
+- [#747](https://github.com/langchain-ai/deepagentsjs/pull/747) [`b2afb8d`](https://github.com/langchain-ai/deepagentsjs/commit/b2afb8d600570b633fd97d4d2f8fd8bdb229ce35) Thanks [@casparb](https://github.com/casparb)! - fix(deepagents): batch concurrent Context Hub mutations
+
+- [#751](https://github.com/langchain-ai/deepagentsjs/pull/751) [`68337fc`](https://github.com/langchain-ai/deepagentsjs/commit/68337fcca19a6d7cc18e8917d575ea9ca3aebcbe) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - fix(deepagents): coerce grep tool's max_count to a number
+
+- [#749](https://github.com/langchain-ai/deepagentsjs/pull/749) [`7550c65`](https://github.com/langchain-ai/deepagentsjs/commit/7550c65204bdd9141a88b9b42d46899e05c7bc43) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - fix(deepagents): exclude summarization state from subagent input/output
+
+## 1.12.3
+
+### Patch Changes
+
+- [#724](https://github.com/langchain-ai/deepagentsjs/pull/724) [`77e104f`](https://github.com/langchain-ai/deepagentsjs/commit/77e104f26a62ae34afbb1393edf191009d37280c) Thanks [@gethin-langchain](https://github.com/gethin-langchain)! - feat(deepagents): add `output_mode` parameter to the `grep` tool (`files_with_matches` / `content` / `count`)
+
+- [#732](https://github.com/langchain-ai/deepagentsjs/pull/732) [`239be7e`](https://github.com/langchain-ai/deepagentsjs/commit/239be7e883227e463504652bc00272ec947a21a6) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): disable summary-input trimming by default
+
+  Match Python DeepAgents by providing the full selected conversation to the summarizer unless `trimTokensToSummarize` is explicitly configured. This prevents oversized tool results from producing context-empty summaries under the default configuration.
+
+- [#739](https://github.com/langchain-ai/deepagentsjs/pull/739) [`1439bbf`](https://github.com/langchain-ai/deepagentsjs/commit/1439bbfb267e92b7a19ce0924399591495976c21) Thanks [@taoche](https://github.com/taoche)! - fix(deepagents): extract text from content blocks when building the summary
+
+## 1.12.2
+
+### Patch Changes
+
+- [#723](https://github.com/langchain-ai/deepagentsjs/pull/723) [`590c2a5`](https://github.com/langchain-ai/deepagentsjs/commit/590c2a5042473f096d5fac5ddbb4be96e2ace0f2) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - fix(deepagents): prevent stack overflow in CompositeBackend grep/glob on huge result sets, and add a grep match-count cap
+
+  `CompositeBackend` accumulated merged `ls`/`grep`/`glob` results with `push(...entries)`, which passes every entry as a separate function argument and overflows the call stack (RangeError: Maximum call stack size exceeded) when a broad search over a large tree returns hundreds of thousands of entries. Results are now accumulated with a plain loop, so no result-set size can overflow the stack.
+
+  `grep` also gains an optional `maxCount` (backend) / `max_count` (tool) cap, mirroring the Python SDK. When the cap is hit, results are flagged `truncated: true` on `GrepResult`/`GlobResult` and the grep tool appends a note telling the model to narrow the search. The cap defaults to 1000 via the `grepMaxCount` middleware option (set to `null` to disable). `CompositeBackend` splits the budget across routed backends and OR-propagates the `truncated` flag on merged results.
+
 ## 1.12.1
 
 ### Patch Changes

@@ -19,7 +19,11 @@ import type {
   ReadResult,
   WriteResult,
 } from "./protocol.js";
-import { isSandboxBackend, isSandboxProtocol } from "./protocol.js";
+import {
+  applyGrepMaxCount,
+  isSandboxBackend,
+  isSandboxProtocol,
+} from "./protocol.js";
 import { adaptBackendProtocol, adaptSandboxProtocol } from "./utils.js";
 
 /**
@@ -95,7 +99,7 @@ export class CompositeBackend implements BackendProtocolV2 {
   private getBackendAndKey(key: string): [BackendProtocolV2, string] {
     // Check routes in order of length (longest first)
     for (const [prefix, backend] of this.sortedRoutes) {
-      if (key.startsWith(prefix)) {
+      if (key === prefix.slice(0, -1) || key.startsWith(prefix)) {
         // Strip full prefix and ensure a leading slash remains
         // e.g., "/memories/notes.txt" → "/notes.txt"; "/memories/" → "/"
         const suffix = key.substring(prefix.length);
@@ -179,7 +183,11 @@ export class CompositeBackend implements BackendProtocolV2 {
         return defaultResult;
       }
 
-      results.push(...(defaultResult.files || []));
+      // Loop instead of spread: push(...files) passes each entry as a
+      // separate argument and overflows the call stack on huge listings.
+      for (const fi of defaultResult.files || []) {
+        results.push(fi);
+      }
 
       // Add the route itself as a directory (e.g., /memories/)
       for (const [routePrefix] of this.sortedRoutes) {
@@ -229,11 +237,16 @@ export class CompositeBackend implements BackendProtocolV2 {
 
   /**
    * Structured search results or error string for invalid input.
+   *
+   * @param maxCount - Optional total cap on returned matches across all routed
+   *                   backends. When the cap is reached, remaining routes are
+   *                   short-circuited and the result is flagged `truncated: true`.
    */
   async grep(
     pattern: string,
     path: string | null = "/",
     glob: string | null = null,
+    maxCount: number | null = null,
   ): Promise<GrepResult> {
     const searchPath = path || "/";
 
@@ -241,7 +254,12 @@ export class CompositeBackend implements BackendProtocolV2 {
     for (const [routePrefix, backend] of this.sortedRoutes) {
       if (this.isPathWithinRoute(searchPath, routePrefix)) {
         const routeSearchPath = searchPath.substring(routePrefix.length - 1);
-        const raw = await backend.grep(pattern, routeSearchPath || "/", glob);
+        const raw = await backend.grep(
+          pattern,
+          routeSearchPath || "/",
+          glob,
+          maxCount,
+        );
 
         if (raw.error) {
           return raw;
@@ -252,19 +270,31 @@ export class CompositeBackend implements BackendProtocolV2 {
           ...m,
           path: routePrefix.slice(0, -1) + m.path,
         }));
-        return { matches };
+        return applyGrepMaxCount({
+          result: { matches, truncated: raw.truncated },
+          maxCount,
+        });
       }
     }
 
     // Otherwise, search default and routed backends mounted inside this path
     const allMatches: GrepMatch[] = [];
-    const rawDefault = await this.default.grep(pattern, searchPath, glob);
+    let truncated = false;
+    const rawDefault = await this.default.grep(
+      pattern,
+      searchPath,
+      glob,
+      maxCount,
+    );
 
     if (rawDefault.error) {
       return rawDefault;
     }
 
-    allMatches.push(...(rawDefault.matches || []));
+    for (const m of rawDefault.matches || []) {
+      allMatches.push(m);
+    }
+    truncated = truncated || rawDefault.truncated === true;
 
     // Search only routes that are descendants of the requested path
     for (const [routePrefix, backend] of Object.entries(this.routes)) {
@@ -272,21 +302,30 @@ export class CompositeBackend implements BackendProtocolV2 {
         continue;
       }
 
-      const raw = await backend.grep(pattern, "/", glob);
+      const remaining =
+        maxCount == null ? null : Math.max(maxCount - allMatches.length, 0);
+      if (remaining === 0) {
+        truncated = true;
+        break;
+      }
+
+      const raw = await backend.grep(pattern, "/", glob, remaining);
 
       if (raw.error) {
         return raw;
       }
 
       // Add route prefix back
-      const matches = (raw.matches || []).map((m) => ({
-        ...m,
-        path: routePrefix.slice(0, -1) + m.path,
-      }));
-      allMatches.push(...matches);
+      for (const m of raw.matches || []) {
+        allMatches.push({ ...m, path: routePrefix.slice(0, -1) + m.path });
+      }
+      truncated = truncated || raw.truncated === true;
     }
 
-    return { matches: allMatches };
+    return applyGrepMaxCount({
+      result: { matches: allMatches, truncated },
+      maxCount,
+    });
   }
 
   /**
@@ -310,7 +349,7 @@ export class CompositeBackend implements BackendProtocolV2 {
           ...fi,
           path: routePrefix.slice(0, -1) + fi.path,
         }));
-        return { files };
+        return { files, truncated: result.truncated };
       }
     }
 
@@ -319,7 +358,11 @@ export class CompositeBackend implements BackendProtocolV2 {
     if (defaultResult.error) {
       return defaultResult;
     }
-    results.push(...(defaultResult.files || []));
+
+    for (const fi of defaultResult.files || []) {
+      results.push(fi);
+    }
+    let truncated = defaultResult.truncated === true;
 
     for (const [routePrefix, backend] of Object.entries(this.routes)) {
       if (!this.isRouteUnderPath(routePrefix, path)) {
@@ -330,16 +373,15 @@ export class CompositeBackend implements BackendProtocolV2 {
       if (result.error) {
         continue; // Skip backends that error
       }
-      const files = (result.files || []).map((fi) => ({
-        ...fi,
-        path: routePrefix.slice(0, -1) + fi.path,
-      }));
-      results.push(...files);
+      for (const fi of result.files || []) {
+        results.push({ ...fi, path: routePrefix.slice(0, -1) + fi.path });
+      }
+      truncated = truncated || result.truncated === true;
     }
 
     // Deterministic ordering
     results.sort((a, b) => a.path.localeCompare(b.path));
-    return { files: results };
+    return { files: results, truncated };
   }
 
   /**
@@ -352,6 +394,151 @@ export class CompositeBackend implements BackendProtocolV2 {
   async write(filePath: string, content: string): Promise<WriteResult> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
     return await backend.write(strippedKey, content);
+  }
+
+  /**
+   * Add a route prefix back to state deletion updates.
+   */
+  private prefixDeleteFilesUpdate(
+    filesUpdate: Record<string, null>,
+    routePrefix: string,
+  ): Record<string, null> {
+    const routeRoot = routePrefix.slice(0, -1);
+    return Object.fromEntries(
+      Object.keys(filesUpdate).map((path) => [routeRoot + path, null]),
+    );
+  }
+
+  /**
+   * Restore composite paths in a deletion result from a single backend.
+   */
+  private restoreDeleteResult(
+    result: DeleteResult,
+    filePath: string,
+    routePrefix?: string,
+  ): DeleteResult {
+    const restored = { ...result };
+    if (result.path !== undefined) {
+      restored.path = filePath;
+    }
+    if (routePrefix && result.filesUpdate) {
+      restored.filesUpdate = this.prefixDeleteFilesUpdate(
+        result.filesUpdate,
+        routePrefix,
+      );
+    }
+    return restored;
+  }
+
+  /**
+   * Delete a file or directory, routing to appropriate backend.
+   *
+   * Parent and root deletions run sequentially across the base backend and any
+   * mounted routes below the requested path. A failure stops the fan-out so
+   * later backends are left untouched, but earlier deletions cannot be rolled
+   * back and are reported as potentially partial.
+   *
+   * @param filePath - Absolute file path
+   * @returns DeleteResult with path or error
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    const [baseBackend, baseKey] = this.getBackendAndKey(filePath);
+    const baseRoute = this.sortedRoutes.find(([routePrefix]) =>
+      this.isPathWithinRoute(filePath, routePrefix),
+    )?.[0];
+    const targets: Array<{
+      backend: BackendProtocolV2;
+      key: string;
+      routePrefix?: string;
+    }> = [{ backend: baseBackend, key: baseKey, routePrefix: baseRoute }];
+
+    for (const [routePrefix, backend] of this.sortedRoutes) {
+      if (
+        routePrefix !== baseRoute &&
+        this.isRouteUnderPath(routePrefix, filePath)
+      ) {
+        targets.push({ backend, key: "/", routePrefix });
+      }
+    }
+
+    for (const target of targets) {
+      if (!target.backend.delete) {
+        const location = target.routePrefix
+          ? `mounted route '${target.routePrefix}'`
+          : "default backend";
+        return {
+          error: `Error: deletion is not available for '${filePath}' on ${location}.`,
+        };
+      }
+    }
+
+    if (targets.length === 1) {
+      const target = targets[0];
+      const result = await target.backend.delete!(target.key);
+      return this.restoreDeleteResult(result, filePath, target.routePrefix);
+    }
+
+    const filesUpdate: Record<string, null> = {};
+    let hasFilesUpdate = false;
+    let hasNullFilesUpdate = false;
+    let completed = 0;
+    let firstNotFound: DeleteResult | undefined;
+
+    for (const target of targets) {
+      let result: DeleteResult;
+      try {
+        result = await target.backend.delete!(target.key);
+      } catch (error) {
+        const message =
+          typeof error === "object" &&
+          error !== null &&
+          "message" in error &&
+          typeof error.message === "string"
+            ? error.message
+            : String(error);
+        return {
+          error: `Error deleting '${filePath}': ${message}. Deletion may be partial; ${completed} earlier backend(s) completed and remaining backends were not attempted.`,
+        };
+      }
+
+      if (result.error) {
+        if (/not found/i.test(result.error)) {
+          firstNotFound ??= result;
+          continue;
+        }
+        return {
+          error: `Error deleting '${filePath}': ${result.error}. Deletion may be partial; ${completed} earlier backend(s) completed and remaining backends were not attempted.`,
+        };
+      }
+
+      completed += 1;
+      if (result.filesUpdate === null) {
+        hasNullFilesUpdate = true;
+      } else if (result.filesUpdate) {
+        hasFilesUpdate = true;
+        Object.assign(
+          filesUpdate,
+          target.routePrefix
+            ? this.prefixDeleteFilesUpdate(
+                result.filesUpdate,
+                target.routePrefix,
+              )
+            : result.filesUpdate,
+        );
+      }
+    }
+
+    if (completed === 0) {
+      return firstNotFound ?? { error: `Error: File '${filePath}' not found` };
+    }
+
+    if (hasFilesUpdate) {
+      return { path: filePath, filesUpdate };
+    }
+    if (hasNullFilesUpdate) {
+      return { path: filePath, filesUpdate: null };
+    }
+    return { path: filePath };
   }
 
   /**
@@ -371,22 +558,6 @@ export class CompositeBackend implements BackendProtocolV2 {
   ): Promise<EditResult> {
     const [backend, strippedKey] = this.getBackendAndKey(filePath);
     return await backend.edit(strippedKey, oldString, newString, replaceAll);
-  }
-
-  /**
-   * Delete a file, routing to the appropriate backend.
-   */
-  async delete(filePath: string): Promise<DeleteResult> {
-    const [backend, strippedKey] = this.getBackendAndKey(filePath);
-    if (!backend.delete) {
-      return { error: "Backend does not support delete" };
-    }
-
-    const result = await backend.delete(strippedKey);
-    if (result.path !== undefined) {
-      return { ...result, path: filePath };
-    }
-    return result;
   }
 
   /**

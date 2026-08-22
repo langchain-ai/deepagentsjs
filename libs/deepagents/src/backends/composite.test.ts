@@ -20,6 +20,7 @@ import type {
   LsResult,
   ReadRawResult,
   SandboxBackendProtocolV2,
+  BackendProtocolV2,
   GrepResult,
   ReadResult,
   WriteResult,
@@ -141,6 +142,47 @@ function makeConfig() {
 describe("CompositeBackend", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("should delete directories recursively within a route", async () => {
+    const { runtime } = makeConfig();
+    const composite = new CompositeBackend(new StateBackend(runtime), {
+      "/memories/": new StoreBackend(runtime),
+    });
+
+    await composite.write("/memories/work/a.txt", "a");
+    await composite.write("/memories/work/sub/b.txt", "b");
+    await composite.write("/memories/keep.txt", "keep");
+
+    const result = await composite.delete("/memories/work");
+    expect(result.error).toBeUndefined();
+    expect(result.path).toBe("/memories/work");
+    expect((await composite.read("/memories/work/a.txt")).error).toContain(
+      "not found",
+    );
+    expect((await composite.read("/memories/work/sub/b.txt")).error).toContain(
+      "not found",
+    );
+    expect((await composite.read("/memories/keep.txt")).error).toBeUndefined();
+  });
+
+  it("should delete a mounted route root", async () => {
+    const { runtime } = makeConfig();
+    const composite = new CompositeBackend(new StateBackend(runtime), {
+      "/memories/": new StoreBackend(runtime),
+    });
+
+    await composite.write("/memories/a.txt", "a");
+    await composite.write("/memories/sub/b.txt", "b");
+    const result = await composite.delete("/memories");
+
+    expect(result).toEqual({ path: "/memories", filesUpdate: null });
+    expect((await composite.read("/memories/a.txt")).error).toContain(
+      "not found",
+    );
+    expect((await composite.read("/memories/sub/b.txt")).error).toContain(
+      "not found",
+    );
   });
 
   it("should route operations between StateBackend and StoreBackend", async () => {
@@ -366,7 +408,7 @@ describe("CompositeBackend", () => {
     expect(paths).toContain("/workspace/index.ts");
     expect(paths).toContain("/workspace/memories/note.md");
     expect(outsideSpy).not.toHaveBeenCalled();
-    expect(insideSpy).toHaveBeenCalledWith("index", "/", "**/*");
+    expect(insideSpy).toHaveBeenCalledWith("index", "/", "**/*", null);
   });
 
   it("glob should only fan out to routed backends mounted under the search path", async () => {
@@ -823,6 +865,145 @@ describe("CompositeBackend", () => {
       expect(result.path).toBeUndefined();
       expect(result.error).toContain("not found");
     });
+
+    it("should delete mounted routes beneath a parent path", async () => {
+      const defaultConfig = makeConfig();
+      const memoriesConfig = makeConfig();
+      const skillsConfig = makeConfig();
+      const composite = new CompositeBackend(
+        new StateBackend(defaultConfig.runtime),
+        {
+          "/workspace/memories/": new StoreBackend(memoriesConfig.runtime),
+          "/skills/": new StoreBackend(skillsConfig.runtime),
+        },
+      );
+
+      await composite.write("/workspace/memories/note.md", "memory");
+      await composite.write("/skills/keep.md", "skill");
+
+      const result = await composite.delete("/workspace");
+
+      expect(result).toEqual({ path: "/workspace", filesUpdate: null });
+      expect(
+        (await composite.read("/workspace/memories/note.md")).error,
+      ).toContain("not found");
+      expect((await composite.read("/skills/keep.md")).error).toBeUndefined();
+    });
+
+    it("should delete the default backend and all mounted routes at root", async () => {
+      const defaultConfig = makeConfig();
+      const memoriesConfig = makeConfig();
+      const skillsConfig = makeConfig();
+      const composite = new CompositeBackend(
+        new StateBackend(defaultConfig.runtime),
+        {
+          "/memories/": new StoreBackend(memoriesConfig.runtime),
+          "/skills/": new StoreBackend(skillsConfig.runtime),
+        },
+      );
+
+      const defaultWrite = await composite.write("/local.txt", "local");
+      Object.assign(defaultConfig.state.files, defaultWrite.filesUpdate);
+      await composite.write("/memories/note.md", "memory");
+      await composite.write("/skills/tool.md", "skill");
+
+      const result = await composite.delete("/");
+
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe("/");
+      expect(result.filesUpdate).toEqual({ "/local.txt": null });
+      Object.assign(defaultConfig.state.files, result.filesUpdate);
+      expect((await composite.read("/local.txt")).error).toContain("not found");
+      expect((await composite.read("/memories/note.md")).error).toContain(
+        "not found",
+      );
+      expect((await composite.read("/skills/tool.md")).error).toContain(
+        "not found",
+      );
+    });
+
+    it("should re-prefix filesUpdate keys from routed state backends", async () => {
+      const defaultConfig = makeConfig();
+      const routeConfig = makeConfig();
+      const routedState = new StateBackend(routeConfig.runtime);
+      const composite = new CompositeBackend(
+        new StoreBackend(defaultConfig.runtime),
+        { "/state/": routedState },
+      );
+
+      const firstWrite = await routedState.write("/work/a.txt", "a");
+      const secondWrite = await routedState.write("/work/b.txt", "b");
+      Object.assign(
+        routeConfig.state.files,
+        firstWrite.filesUpdate,
+        secondWrite.filesUpdate,
+      );
+
+      const result = await composite.delete("/state/work");
+
+      expect(result).toEqual({
+        path: "/state/work",
+        filesUpdate: {
+          "/state/work/a.txt": null,
+          "/state/work/b.txt": null,
+        },
+      });
+    });
+
+    it("should stop sequential fan-out and report possible partial deletion", async () => {
+      const defaultConfig = makeConfig();
+      const failingConfig = makeConfig();
+      const laterConfig = makeConfig();
+      const defaultBackend = new StoreBackend(defaultConfig.runtime);
+      const failingBackend = new StoreBackend(failingConfig.runtime);
+      const laterBackend = new StoreBackend(laterConfig.runtime);
+      const failingDelete = vi
+        .spyOn(failingBackend, "delete")
+        .mockResolvedValue({ error: "injected failure" });
+      const laterDelete = vi.spyOn(laterBackend, "delete");
+      const composite = new CompositeBackend(defaultBackend, {
+        "/failing/": failingBackend,
+        "/later/": laterBackend,
+      });
+
+      await composite.write("/local.txt", "local");
+      await composite.write("/failing/a.txt", "failing");
+      await composite.write("/later/b.txt", "later");
+
+      const result = await composite.delete("/");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("injected failure");
+      expect(result.error).toContain("may be partial");
+      expect(failingDelete).toHaveBeenCalledWith("/");
+      expect(laterDelete).not.toHaveBeenCalled();
+      expect((await composite.read("/local.txt")).error).toContain("not found");
+      expect((await composite.read("/failing/a.txt")).error).toBeUndefined();
+      expect((await composite.read("/later/b.txt")).error).toBeUndefined();
+    });
+
+    it("should return an error when a routed backend does not support delete", async () => {
+      const { runtime } = makeConfig();
+      const defaultBackend = new StateBackend(runtime);
+      // A backend that omits delete() — capability probing must surface an
+      // error rather than throwing.
+      const noDeleteBackend = {
+        ls: async () => ({ files: [] }),
+        read: async () => ({ content: "", mimeType: "text/plain" }),
+        write: async () => ({ path: "/x", filesUpdate: null }),
+        edit: async () => ({ path: "/x", filesUpdate: null, occurrences: 0 }),
+        glob: async () => ({ files: [] }),
+        grep: async () => ({ matches: [] }),
+      } as unknown as BackendProtocolV2;
+      const composite = new CompositeBackend(defaultBackend, {
+        "/nodelete/": noDeleteBackend,
+      });
+
+      const result = await composite.delete("/nodelete/x.txt");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("deletion is not");
+    });
   });
 
   describe("uploadFiles", () => {
@@ -933,6 +1114,155 @@ describe("CompositeBackend", () => {
       expect(result[0].error).toBeNull();
       expect(result[1].error).toBe("file_not_found");
       expect(result[2].error).toBe("file_not_found");
+    });
+  });
+
+  describe("large result sets", () => {
+    /**
+     * Backend stub returning a large fixed result set, used to exercise the
+     * composite merge paths without a real filesystem walk.
+     */
+    function makeLargeBackend(fileCount: number, matchCount: number) {
+      const files = Array.from({ length: fileCount }, (_, i) => ({
+        path: `/f${i}.txt`,
+        is_dir: false,
+      }));
+      const matches = Array.from({ length: matchCount }, (_, i) => ({
+        path: `/f${i}.txt`,
+        line: 1,
+        text: "hit",
+      }));
+      return {
+        ls: vi.fn().mockResolvedValue({ files }),
+        read: vi.fn().mockResolvedValue({ content: "" }),
+        readRaw: vi.fn().mockResolvedValue({ data: {} }),
+        write: vi.fn().mockResolvedValue({ path: "" }),
+        edit: vi.fn().mockResolvedValue({ path: "" }),
+        grep: vi.fn().mockResolvedValue({ matches }),
+        glob: vi.fn().mockResolvedValue({ files }),
+      };
+    }
+
+    it("glob does not overflow the call stack on a huge default-backend result", async () => {
+      // 200k entries comfortably exceeds V8's argument-spread limit
+      // (~65k-125k), which `results.push(...files)` would hit.
+      const composite = new CompositeBackend(makeLargeBackend(200_000, 0), {});
+
+      const result = await composite.glob("**/*", "/");
+
+      expect(result.error).toBeUndefined();
+      expect(result.files).toHaveLength(200_000);
+    });
+
+    it("grep does not overflow the call stack on a huge default-backend result", async () => {
+      const composite = new CompositeBackend(makeLargeBackend(0, 200_000), {});
+
+      const result = await composite.grep("hit", "/");
+
+      expect(result.error).toBeUndefined();
+      expect(result.matches).toHaveLength(200_000);
+    });
+
+    it("glob does not overflow when merging a huge routed-backend result", async () => {
+      const composite = new CompositeBackend(makeLargeBackend(0, 0), {
+        "/big/": makeLargeBackend(200_000, 0),
+      });
+
+      const result = await composite.glob("**/*", "/");
+
+      expect(result.error).toBeUndefined();
+      expect(result.files).toHaveLength(200_000);
+    });
+  });
+
+  describe("grep maxCount", () => {
+    function makeGrepBackend(matches: GrepResult["matches"]) {
+      return {
+        ls: vi.fn().mockResolvedValue({ files: [] }),
+        read: vi.fn().mockResolvedValue({ content: "" }),
+        readRaw: vi.fn().mockResolvedValue({ data: {} }),
+        write: vi.fn().mockResolvedValue({ path: "" }),
+        edit: vi.fn().mockResolvedValue({ path: "" }),
+        grep: vi.fn().mockResolvedValue({ matches }),
+        glob: vi.fn().mockResolvedValue({ files: [] }),
+      };
+    }
+
+    it("caps matches and flags truncated when the default backend exceeds maxCount", async () => {
+      const matches = Array.from({ length: 10 }, (_, i) => ({
+        path: `/f${i}.txt`,
+        line: 1,
+        text: "hit",
+      }));
+      const composite = new CompositeBackend(makeGrepBackend(matches), {});
+
+      const result = await composite.grep("hit", "/", null, 5);
+
+      expect(result.matches).toHaveLength(5);
+      expect(result.truncated).toBe(true);
+    });
+
+    it("splits the maxCount budget across default and routed backends", async () => {
+      const defaultMatches = Array.from({ length: 4 }, (_, i) => ({
+        path: `/d${i}.txt`,
+        line: 1,
+        text: "hit",
+      }));
+      const routedMatches = Array.from({ length: 4 }, (_, i) => ({
+        path: `/r${i}.txt`,
+        line: 1,
+        text: "hit",
+      }));
+      const defaultBackend = makeGrepBackend(defaultMatches);
+      const routedBackend = makeGrepBackend(routedMatches);
+      const composite = new CompositeBackend(defaultBackend, {
+        "/memories/": routedBackend,
+      });
+
+      const result = await composite.grep("hit", "/", null, 5);
+
+      // Default fills 4 of the 5 budget; the route gets the remaining 1.
+      expect(defaultBackend.grep).toHaveBeenCalledWith("hit", "/", null, 5);
+      expect(routedBackend.grep).toHaveBeenCalledWith("hit", "/", null, 1);
+      expect(result.matches).toHaveLength(5);
+      expect(result.truncated).toBe(true);
+      expect(result.matches!.some((m) => m.path === "/memories/r0.txt")).toBe(
+        true,
+      );
+    });
+
+    it("short-circuits remaining routes once the budget is exhausted", async () => {
+      const defaultMatches = Array.from({ length: 5 }, (_, i) => ({
+        path: `/d${i}.txt`,
+        line: 1,
+        text: "hit",
+      }));
+      const defaultBackend = makeGrepBackend(defaultMatches);
+      const routedBackend = makeGrepBackend([
+        { path: "/r0.txt", line: 1, text: "hit" },
+      ]);
+      const composite = new CompositeBackend(defaultBackend, {
+        "/memories/": routedBackend,
+      });
+
+      const result = await composite.grep("hit", "/", null, 5);
+
+      expect(routedBackend.grep).not.toHaveBeenCalled();
+      expect(result.matches).toHaveLength(5);
+      expect(result.truncated).toBe(true);
+    });
+
+    it("returns all matches untruncated when under the cap", async () => {
+      const matches = [
+        { path: "/a.txt", line: 1, text: "hit" },
+        { path: "/b.txt", line: 2, text: "hit" },
+      ];
+      const composite = new CompositeBackend(makeGrepBackend(matches), {});
+
+      const result = await composite.grep("hit", "/", null, 1000);
+
+      expect(result.matches).toHaveLength(2);
+      expect(result.truncated).toBe(false);
     });
   });
 });

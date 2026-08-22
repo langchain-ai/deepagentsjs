@@ -37,6 +37,7 @@ describe("Middleware Integration", () => {
     expect(toolNames).toContain("read_file");
     expect(toolNames).toContain("write_file");
     expect(toolNames).toContain("edit_file");
+    expect(toolNames).toContain("delete");
   });
 
   it("should add subagent middleware to agent", () => {
@@ -80,6 +81,7 @@ describe("Middleware Integration", () => {
     expect(toolNames).toContain("read_file");
     expect(toolNames).toContain("write_file");
     expect(toolNames).toContain("edit_file");
+    expect(toolNames).toContain("delete");
     expect(toolNames).toContain("task");
   });
 });
@@ -90,11 +92,12 @@ describe("FilesystemMiddleware", () => {
     expect(middleware).toBeDefined();
     expect(middleware.name).toBe("FilesystemMiddleware");
     const tools = middleware.tools || [];
-    expect(tools.length).toBeGreaterThanOrEqual(6); // ls, read, write, edit, glob, grep
+    expect(tools.length).toBeGreaterThanOrEqual(7); // ls, read, write, edit, delete, glob, grep
     expect(tools.map((t) => t.name)).toContain("ls");
     expect(tools.map((t) => t.name)).toContain("read_file");
     expect(tools.map((t) => t.name)).toContain("write_file");
     expect(tools.map((t) => t.name)).toContain("edit_file");
+    expect(tools.map((t) => t.name)).toContain("delete");
     expect(tools.map((t) => t.name)).toContain("glob");
     expect(tools.map((t) => t.name)).toContain("grep");
   });

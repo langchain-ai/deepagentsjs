@@ -30,6 +30,7 @@ import type {
   ReadResult,
   WriteResult,
 } from "./protocol.js";
+import { applyGrepMaxCount } from "./protocol.js";
 import {
   checkEmptyContent,
   getMimeType,
@@ -38,27 +39,6 @@ import {
 } from "./utils.js";
 
 const SUPPORTS_NOFOLLOW = fsSync.constants.O_NOFOLLOW !== undefined;
-
-function getErrorMessage(error: unknown): string {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof (error as { message?: unknown }).message === "string"
-  ) {
-    return (error as { message: string }).message;
-  }
-  return String(error);
-}
-
-function hasErrorCode(error: unknown, code: string): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === code
-  );
-}
 
 /**
  * Backend that reads and writes files directly from the filesystem.
@@ -451,6 +431,57 @@ export class FilesystemBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Delete a file or directory from the filesystem.
+   *
+   * Files are unlinked. Directories are removed recursively along with all of
+   * their contents. Symlinks are removed as links and never followed into their
+   * targets.
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    try {
+      const resolvedPath = this.resolvePath(filePath);
+
+      if (this.virtualMode && resolvedPath === this.cwd) {
+        const realRoot = await fs.realpath(this.cwd);
+        const entries = await fs.readdir(realRoot, { withFileTypes: true });
+        await Promise.all(
+          entries.map((entry) =>
+            fs.rm(path.join(realRoot, entry.name), {
+              recursive: true,
+              force: false,
+            }),
+          ),
+        );
+        return { path: filePath, filesUpdate: null };
+      }
+
+      const deletePath = await this.resolveDeletePath(resolvedPath, filePath);
+      const stat = await fs.lstat(deletePath).catch(() => null);
+
+      if (!stat) {
+        return { error: `Error: '${filePath}' not found` };
+      }
+
+      if (stat.isDirectory() && !stat.isSymbolicLink()) {
+        await fs.rm(deletePath, { recursive: true, force: false });
+      } else {
+        await fs.unlink(deletePath);
+      }
+
+      return { path: filePath, filesUpdate: null };
+    } catch (error: unknown) {
+      const message =
+        typeof error === "object" &&
+        error !== null &&
+        "message" in error &&
+        typeof error.message === "string"
+          ? error.message
+          : String(error);
+      return { error: `Error deleting '${filePath}': ${message}` };
+    }
+  }
+
+  /**
    * Edit a file by replacing string occurrences.
    * Returns EditResult. External storage sets filesUpdate=null.
    */
@@ -528,38 +559,6 @@ export class FilesystemBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Delete a file from the filesystem.
-   */
-  async delete(filePath: string): Promise<DeleteResult> {
-    let resolvedPath: string;
-    try {
-      resolvedPath = this.resolvePath(filePath);
-    } catch (error: unknown) {
-      return {
-        error: `Error deleting file '${filePath}': ${getErrorMessage(error)}`,
-      };
-    }
-
-    try {
-      const deletePath = await this.resolveDeletePath(resolvedPath, filePath);
-      const stat = await fs.lstat(deletePath);
-      if (stat.isDirectory()) {
-        return { error: `Error: '${filePath}' is a directory, not a file` };
-      }
-
-      await fs.unlink(deletePath);
-      return { path: filePath };
-    } catch (error: unknown) {
-      if (hasErrorCode(error, "ENOENT")) {
-        return { error: `Error: File '${filePath}' not found` };
-      }
-      return {
-        error: `Error deleting file '${filePath}': ${getErrorMessage(error)}`,
-      };
-    }
-  }
-
-  /**
    * Search for a literal text pattern in files.
    *
    * Uses ripgrep if available, falling back to substring search.
@@ -567,12 +566,15 @@ export class FilesystemBackend implements BackendProtocolV2 {
    * @param pattern - Literal string to search for (NOT regex).
    * @param dirPath - Directory or file path to search in. Defaults to current directory.
    * @param glob - Optional glob pattern to filter which files to search.
+   * @param maxCount - Optional cap on the total number of matches returned.
+   *                   When the cap is hit, results are flagged `truncated: true`.
    * @returns List of GrepMatch dicts containing path, line number, and matched text.
    */
   async grep(
     pattern: string,
     dirPath: string = "/",
     glob: string | null = null,
+    maxCount: number | null = null,
   ): Promise<GrepResult> {
     // Resolve base path
     let baseFull: string;
@@ -600,7 +602,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
         matches.push({ path: fpath, line: lineNum, text: lineText });
       }
     }
-    return { matches };
+    return applyGrepMaxCount({ result: { matches }, maxCount });
   }
 
   /**

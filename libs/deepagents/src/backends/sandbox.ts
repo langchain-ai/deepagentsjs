@@ -30,6 +30,7 @@ import type {
   SandboxBackendProtocolV2,
   WriteResult,
 } from "./protocol.js";
+import { applyGrepMaxCount } from "./protocol.js";
 import { getMimeType, isTextMimeType } from "./utils.js";
 
 /**
@@ -189,23 +190,46 @@ function buildLsCommand(dirPath: string): string {
 }
 
 /**
+ * Soft cap on recursive find lines for sandbox glob.
+ *
+ * Glob currently lists every path under the search root via `find`, then filters
+ * in-process. Without a bound, a root-path recursive glob can stream the whole
+ * container rootfs (and, with `-L`, loop through proc pid root symlinks) into
+ * the host heap and OOM the runtime. Cap the listing; callers mark truncated
+ * when the cap is hit.
+ */
+const MAX_GLOB_FIND_LINES = 50_000;
+
+/**
  * Shell command for listing files recursively with metadata.
  * Same three-way detection as buildLsCommand (GNU -printf / stat -c / BSD stat -f).
+ *
+ * Prunes virtual filesystems (`/proc`, `/sys`, `/dev`, `/run`) so `find -L`
+ * cannot follow proc pid root symlinks back into `/` and loop forever. Caps
+ * stdout so the host process that buffers `execute()` never materializes an
+ * unbounded listing.
  *
  * Output format per line: size\tmtime\ttype\tpath
  */
 function buildFindCommand(searchPath: string): string {
   const quotedPath = shellQuote(searchPath);
-  const findBase = `find -L ${quotedPath} -not -path ${quotedPath}`;
-  return (
+  // Absolute + search-relative prunes: -L can leave the search tree via
+  // symlinks into /proc before the relative prune would apply.
+  const prune =
+    `\\( -path /proc -o -path /sys -o -path /dev -o -path /run ` +
+    `-o -path ${quotedPath}/proc -o -path ${quotedPath}/sys ` +
+    `-o -path ${quotedPath}/dev -o -path ${quotedPath}/run \\) -prune`;
+  const findBase = `find -L ${quotedPath} ${prune} -o -not -path ${quotedPath}`;
+  const listing =
     `if find /dev/null -maxdepth 0 -printf '' 2>/dev/null; then ` +
     `${findBase} -printf '%s\\t%T@\\t%y\\t%p\\n' 2>/dev/null; ` +
     `elif stat -c %s /dev/null >/dev/null 2>&1; then ` +
     `${findBase} -exec sh -c '${STAT_C_SCRIPT}' _ {} +; ` +
     `else ` +
     `${findBase} -exec stat -f '%z\t%m\t%Sp\t%N' {} + 2>/dev/null; ` +
-    `fi || true`
-  );
+    `fi || true`;
+  // Request one past the soft cap so glob() can detect truncation.
+  return `{ ${listing}; } | head -n ${MAX_GLOB_FIND_LINES + 1}`;
 }
 
 /**
@@ -425,6 +449,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
+    maxCount: number | null = null,
   ): Promise<GrepResult> {
     const command = buildGrepCommand(pattern, path, glob);
     const result = await this.execute(command);
@@ -458,7 +483,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
       }
     }
 
-    return { matches };
+    return applyGrepMaxCount({ result: { matches }, maxCount });
   }
 
   /**
@@ -481,11 +506,16 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     const regex = globToPathRegex(pattern);
     const infos: FileInfo[] = [];
     const lines = result.output.trim().split("\n").filter(Boolean);
+    // execute() can cut output before the shell reaches the soft cap, so the
+    // backend's own flag has to be folded in or a partial listing looks complete.
+    const overCap = lines.length > MAX_GLOB_FIND_LINES;
+    const truncated = overCap || result.truncated === true;
+    const limited = overCap ? lines.slice(0, MAX_GLOB_FIND_LINES) : lines;
 
     // Normalise base path (strip trailing /)
     const basePath = path.endsWith("/") ? path.slice(0, -1) : path;
 
-    for (const line of lines) {
+    for (const line of limited) {
       const parsed = parseStatLine(line);
       if (!parsed) continue;
 
@@ -504,7 +534,7 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
       }
     }
 
-    return { files: infos };
+    return { files: infos, truncated };
   }
 
   /**
@@ -531,6 +561,44 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     }
 
     return { path: filePath, filesUpdate: null };
+  }
+
+  /**
+   * Delete a file or directory from the sandbox via a server-side `rm`.
+   *
+   * Runs `test -e || test -L` first: a path that does not exist (and is not a
+   * broken symlink) returns a not-found error, matching the contract of
+   * `FilesystemBackend` and `StateBackend`. Because a shell `test` has no error
+   * channel, a non-zero probe conflates "absent" with "unstattable" (e.g. an
+   * unsearchable parent directory); an unknown exit code is not treated as
+   * absent and falls through to the delete.
+   *
+   * Uses `rm -rf`, so directories are removed recursively along with their
+   * contents. A non-zero `rm` exit (e.g. a permission error) is reported as a
+   * failure.
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    // shellQuote only neutralizes shell metacharacters so the path is passed to
+    // `rm` as a single literal argument. It is NOT a security boundary: it does
+    // not confine the deletion to any sandbox root. Whatever the sandbox shell
+    // can reach, this can delete.
+    const quoted = shellQuote(filePath);
+    const exists = await this.execute(`test -e ${quoted} || test -L ${quoted}`);
+    // Only a definite non-zero probe means the path is absent. A null/unknown
+    // exit code is not treated as not-found — fall through to `rm`.
+    if (exists.exitCode !== null && exists.exitCode !== 0) {
+      return { error: `Error: '${filePath}' not found` };
+    }
+
+    const result = await this.execute(`rm -rf ${quoted}`);
+    if (result.exitCode === 0) {
+      return { path: filePath, filesUpdate: null };
+    }
+    return {
+      error: `Error deleting file '${filePath}': ${
+        result.output.trim() || "unknown error"
+      }`,
+    };
   }
 
   /**
@@ -651,26 +719,5 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
     }
 
     return { path: filePath, filesUpdate: null, occurrences: count };
-  }
-
-  /**
-   * Delete a file from the sandbox via a server-side rm.
-   *
-   * Uses rm -f, so deleting a path that does not exist succeeds silently.
-   */
-  async delete(filePath: string): Promise<DeleteResult> {
-    // shellQuote passes the path as a single literal shell argument. It is not
-    // a sandbox boundary: whatever the sandbox shell can reach, this can delete.
-    const result = await this.execute(`rm -f ${shellQuote(filePath)}`);
-
-    if (result.exitCode === 0) {
-      return { path: filePath };
-    }
-
-    return {
-      error: `Error deleting file '${filePath}': ${
-        result.output.trim() || "unknown error"
-      }`,
-    };
   }
 }

@@ -8,7 +8,7 @@ import {
   getCurrentTaskInput,
   getStore as getLangGraphStore,
 } from "@langchain/langgraph";
-import type { BaseStore } from "@langchain/langgraph-checkpoint";
+import type { BaseStore, PutOperation } from "@langchain/langgraph-checkpoint";
 import type {
   BackendOptions,
   BackendProtocolV2,
@@ -26,6 +26,7 @@ import type {
   WriteResult,
   StateAndStore,
 } from "./protocol.js";
+import { applyGrepMaxCount } from "./protocol.js";
 import {
   createFileData,
   createWriteFileData,
@@ -42,6 +43,12 @@ import {
 } from "./utils.js";
 
 const NAMESPACE_COMPONENT_RE = /^[A-Za-z0-9\-_.@+:~]+$/;
+
+function trimTrailingSlashes(path: string): string {
+  let end = path.length;
+  while (end > 1 && path[end - 1] === "/") end--;
+  return path.slice(0, end);
+}
 
 function getObjectRecord(value: unknown): Record<string, unknown> | undefined {
   return value != null && typeof value === "object"
@@ -602,6 +609,47 @@ export class StoreBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Delete a file or directory from the store.
+   *
+   * Removes the exact key plus every nested key under it.
+   */
+  async delete(filePath: string): Promise<DeleteResult> {
+    const store = this.getStore();
+    const namespace = this.getNamespace();
+    const items = await this.searchStorePaginated(store, namespace);
+    const base = trimTrailingSlashes(filePath) || "/";
+    const prefix = base === "/" ? "/" : `${base}/`;
+    const keys = items
+      .map((item) => String(item.key))
+      .filter((key) => key === base || key.startsWith(prefix));
+
+    if (keys.length === 0) {
+      return { error: `Error: File '${filePath}' not found` };
+    }
+
+    const deleteOperations: PutOperation[] = keys.map((key) => ({
+      namespace,
+      key,
+      value: null,
+    }));
+
+    try {
+      await store.batch(deleteOperations);
+    } catch (error) {
+      const message =
+        typeof error === "object" &&
+        error !== null &&
+        "message" in error &&
+        typeof error.message === "string"
+          ? error.message
+          : String(error);
+      return { error: `Error deleting '${filePath}': ${message}` };
+    }
+
+    return { path: filePath, filesUpdate: null };
+  }
+
+  /**
    * Edit a file by replacing string occurrences.
    * Returns EditResult. External storage sets filesUpdate=null.
    */
@@ -647,25 +695,6 @@ export class StoreBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Delete a file from the store.
-   *
-   * The file path is used as an exact store key. Wildcards are treated
-   * literally and do not expand to multiple entries.
-   */
-  async delete(filePath: string): Promise<DeleteResult> {
-    const store = this.getStore();
-    const namespace = this.getNamespace();
-
-    const existing = await store.get(namespace, filePath);
-    if (!existing) {
-      return { error: `Error: File '${filePath}' not found` };
-    }
-
-    await store.delete(namespace, filePath);
-    return { path: filePath };
-  }
-
-  /**
    * Search file contents for a literal text pattern.
    * Binary files are skipped.
    */
@@ -673,6 +702,7 @@ export class StoreBackend implements BackendProtocolV2 {
     pattern: string,
     path: string = "/",
     glob: string | null = null,
+    maxCount: number | null = null,
   ): Promise<GrepResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
@@ -689,7 +719,7 @@ export class StoreBackend implements BackendProtocolV2 {
     }
 
     const matches = grepMatchesFromFiles(files, pattern, path, glob);
-    return { matches };
+    return applyGrepMaxCount({ result: { matches }, maxCount });
   }
 
   /**
