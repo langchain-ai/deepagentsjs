@@ -86,6 +86,30 @@ describe("StoreBackend", () => {
     expect(glob2.files!.some((i) => i.path === "/docs/readme.md")).toBe(true);
   });
 
+  it("should isolate sibling namespaces for listing and content search", async () => {
+    const { store } = makeConfig();
+    const acme = new StoreBackend({
+      store,
+      namespace: ["tenant", "acme"],
+    });
+    const acmeCorp = new StoreBackend({
+      store,
+      namespace: ["tenant", "acme-corp"],
+    });
+
+    await acme.write("/own.md", "acme's own file");
+    await acmeCorp.write("/secret.md", "CONFIDENTIAL revenue figures");
+
+    expect((await acme.ls("/")).files?.map((file) => file.path)).toEqual([
+      "/own.md",
+    ]);
+    expect(
+      (await acme.glob("**/*", "/")).files?.map((file) => file.path),
+    ).toEqual(["/own.md"]);
+    expect((await acme.grep("CONFIDENTIAL", "/")).matches).toEqual([]);
+    expect((await acme.read("/secret.md")).error).toContain("not found");
+  });
+
   it("should list nested directories correctly", async () => {
     const { runtime } = makeConfig();
     const backend = new StoreBackend(runtime);
