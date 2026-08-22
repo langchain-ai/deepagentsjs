@@ -64,6 +64,7 @@ import type {
   AnyBackendProtocol,
   BackendFactory,
   BackendProtocolV2,
+  FileData,
 } from "../backends/protocol.js";
 import { resolveBackend } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
@@ -269,6 +270,12 @@ const SummarizationStateSchema = z.object({
   /** Most recent summarization event (private state, not visible to agent) */
   _summarizationEvent: SummarizationEventSchema.optional(),
 });
+
+type FilesUpdate = Record<string, FileData>;
+
+type UploadResultsWithFilesUpdate = Array<{ error?: string }> & {
+  filesUpdate?: FilesUpdate | null;
+};
 
 /**
  * Check if a message is a previous summarization message.
@@ -864,7 +871,7 @@ export function createSummarizationMiddleware(
     resolvedBackend: BackendProtocolV2,
     messages: BaseMessage[],
     state: Record<string, unknown>,
-  ): Promise<string | null> {
+  ): Promise<{ filePath: string; filesUpdate?: FilesUpdate } | null> {
     const filePath = getHistoryPath(state);
     const filteredMessages = filterSummaryMessages(messages);
 
@@ -890,7 +897,11 @@ export function createSummarizationMiddleware(
         }
       }
 
-      let result: { error?: string; path?: string };
+      let result: {
+        error?: string;
+        path?: string;
+        filesUpdate?: FilesUpdate | null;
+      };
       if (existingBytes && resolvedBackend.uploadFiles) {
         // Append: concatenate raw bytes and upload directly
         const combined = new Uint8Array(
@@ -899,12 +910,15 @@ export function createSummarizationMiddleware(
         combined.set(existingBytes, 0);
         combined.set(sectionBytes, existingBytes.byteLength);
 
-        const uploadResults = await resolvedBackend.uploadFiles([
+        const uploadResults = (await resolvedBackend.uploadFiles([
           [filePath, combined],
-        ]);
+        ])) as UploadResultsWithFilesUpdate;
         result = uploadResults[0].error
           ? { error: uploadResults[0].error }
-          : { path: filePath };
+          : {
+              path: filePath,
+              filesUpdate: uploadResults.filesUpdate ?? undefined,
+            };
       } else if (!existingBytes) {
         result = await resolvedBackend.write(filePath, newSection);
       } else {
@@ -925,7 +939,7 @@ export function createSummarizationMiddleware(
         return null;
       }
 
-      return filePath;
+      return { filePath, filesUpdate: result.filesUpdate ?? undefined };
     } catch (e) {
       // oxlint-disable-next-line no-console
       console.warn(
@@ -1015,14 +1029,16 @@ export function createSummarizationMiddleware(
   ): Promise<{
     summaryMessage: HumanMessage;
     filePath: string | null;
+    filesUpdate?: FilesUpdate;
     stateCutoffIndex: number;
   }> {
     const resolvedBackend = await resolveBackend(backend, { state });
-    const filePath = await offloadToBackend(
+    const offloadResult = await offloadToBackend(
       resolvedBackend,
       messagesToSummarize,
       state,
     );
+    const filePath = offloadResult?.filePath ?? null;
 
     if (filePath === null) {
       // oxlint-disable-next-line no-console
@@ -1039,7 +1055,12 @@ export function createSummarizationMiddleware(
         ? previousCutoffIndex + cutoffIndex - 1
         : cutoffIndex;
 
-    return { summaryMessage, filePath, stateCutoffIndex };
+    return {
+      summaryMessage,
+      filePath,
+      filesUpdate: offloadResult?.filesUpdate,
+      stateCutoffIndex,
+    };
   }
 
   /**
@@ -1116,7 +1137,7 @@ export function createSummarizationMiddleware(
         ? (previousEvent as SummarizationEvent).cutoffIndex
         : undefined;
 
-    const { summaryMessage, filePath, stateCutoffIndex } =
+    const { summaryMessage, filePath, filesUpdate, stateCutoffIndex } =
       await summarizeMessages(
         messagesToSummarize,
         resolvedModel,
@@ -1135,6 +1156,7 @@ export function createSummarizationMiddleware(
     let finalStateCutoffIndex = stateCutoffIndex;
     let finalSummaryMessage = summaryMessage;
     let finalFilePath = filePath;
+    let finalFilesUpdate = filesUpdate;
 
     try {
       await handler({ ...request, messages: modifiedMessages });
@@ -1162,6 +1184,7 @@ export function createSummarizationMiddleware(
       finalSummaryMessage = reSumResult.summaryMessage;
       finalFilePath = reSumResult.filePath;
       finalStateCutoffIndex = reSumResult.stateCutoffIndex;
+      finalFilesUpdate = reSumResult.filesUpdate;
 
       modifiedMessages = [reSumResult.summaryMessage];
 
@@ -1170,6 +1193,7 @@ export function createSummarizationMiddleware(
 
     return new Command({
       update: {
+        ...(finalFilesUpdate ? { files: finalFilesUpdate } : {}),
         _summarizationEvent: {
           cutoffIndex: finalStateCutoffIndex,
           summaryMessage: finalSummaryMessage,
