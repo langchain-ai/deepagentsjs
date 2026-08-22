@@ -423,7 +423,7 @@ export class StoreBackend implements BackendProtocolV2 {
     let offset = 0;
 
     while (true) {
-      const pageItems = await store.search(namespace, {
+      const pageItems: Item[] = await store.search(namespace, {
         query,
         filter,
         limit: pageSize,
@@ -434,7 +434,18 @@ export class StoreBackend implements BackendProtocolV2 {
         break;
       }
 
-      allItems.push(...pageItems);
+      // BaseStore.search uses prefix matching, so a namespace such as
+      // ["tenant", "acme"] can also return items from ["tenant", "acme-corp"].
+      // StoreBackend is pinned to one exact namespace; keep the raw page size
+      // for pagination so filtering does not truncate later matching items.
+      allItems.push(
+        ...pageItems.filter(
+          (item) =>
+            item.namespace.every(
+              (component, index) => component === namespace[index],
+            ) && item.namespace.length === namespace.length,
+        ),
+      );
 
       if (pageItems.length < pageSize) {
         break;
