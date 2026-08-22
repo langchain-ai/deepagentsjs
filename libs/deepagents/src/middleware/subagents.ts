@@ -54,6 +54,11 @@ const EXCLUDED_STATE_KEYS = [
   "memoryContents",
   "_summarizationEvent",
   "_summarizationSessionId",
+  // Model-call counters belong to each agent graph. Passing them into or
+  // returning them from parallel subagents would write multiple values to the
+  // parent's LastValue channels in the same step.
+  "threadModelCallCount",
+  "runModelCallCount",
 ] as const;
 
 /**
