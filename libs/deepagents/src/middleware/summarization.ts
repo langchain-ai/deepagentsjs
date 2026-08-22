@@ -282,6 +282,30 @@ function isSummaryMessage(msg: BaseMessage): boolean {
 }
 
 /**
+ * Reconstruct the effective message list based on any previous summarization event.
+ *
+ * After summarization, instead of using all messages from state, we use the summary
+ * message plus messages after the cutoff index. This avoids full state rewrites.
+ */
+export function getEffectiveMessages(
+  messages: BaseMessage[],
+  state: Record<string, unknown>,
+): BaseMessage[] {
+  const event = state._summarizationEvent as SummarizationEvent | undefined;
+
+  // If no summarization event, return all messages as-is
+  if (!event) {
+    return messages;
+  }
+
+  // Build effective messages: summary message, then messages from cutoff onward
+  const result: BaseMessage[] = [event.summaryMessage];
+  result.push(...messages.slice(event.cutoffIndex));
+
+  return result;
+}
+
+/**
  * Create summarization middleware with backend support for conversation history offloading.
  *
  * This middleware:
@@ -975,30 +999,6 @@ export function createSummarizationMiddleware(
       content,
       additional_kwargs: { lc_source: "summarization" },
     });
-  }
-
-  /**
-   * Reconstruct the effective message list based on any previous summarization event.
-   *
-   * After summarization, instead of using all messages from state, we use the summary
-   * message plus messages after the cutoff index. This avoids full state rewrites.
-   */
-  function getEffectiveMessages(
-    messages: BaseMessage[],
-    state: Record<string, unknown>,
-  ): BaseMessage[] {
-    const event = state._summarizationEvent as SummarizationEvent | undefined;
-
-    // If no summarization event, return all messages as-is
-    if (!event) {
-      return messages;
-    }
-
-    // Build effective messages: summary message, then messages from cutoff onward
-    const result: BaseMessage[] = [event.summaryMessage];
-    result.push(...messages.slice(event.cutoffIndex));
-
-    return result;
   }
 
   /**

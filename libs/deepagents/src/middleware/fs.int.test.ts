@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createAgent, createMiddleware } from "langchain";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
-import { HumanMessage, ToolMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 import { MemorySaver } from "@langchain/langgraph";
 import { createDeepAgent } from "../index.js";
@@ -1419,4 +1419,108 @@ describe("Filesystem Middleware Integration Tests", () => {
       );
     },
   );
+
+  // Deterministic end-to-end delete-tool coverage. Unlike the live-model cases
+  // above, these drive the agent with a FakeListChatModel that emits a single
+  // `delete` tool call, mirroring Python's TestDeleteFileTool. Kept here so the
+  // full graph path (model -> tool node -> filesystem middleware -> backend ->
+  // state reducer) is exercised without a real model.
+  describe("delete tool", () => {
+    const fileData = (content: string): FileData =>
+      ({
+        content: [content],
+        created_at: "2021-01-01",
+        modified_at: "2021-01-01",
+      }) as FileData;
+
+    const deletingModel = (filePath: string): FakeListChatModel =>
+      new FakeListChatModel({
+        responses: [
+          new AIMessage({
+            content: "",
+            tool_calls: [
+              { id: "call_1", name: "delete", args: { file_path: filePath } },
+            ],
+          }) as unknown as string,
+          "Done.",
+        ],
+      });
+
+    const deleteMessages = (messages: unknown[]): ToolMessage[] =>
+      messages.filter(
+        (m): m is ToolMessage =>
+          ToolMessage.isInstance(m) && m.name === "delete",
+      );
+
+    it("removes an existing file and reports success", async () => {
+      const agent = createDeepAgent({ model: deletingModel("/keep.txt") });
+
+      const result = await agent.invoke({
+        messages: [new HumanMessage("delete keep")],
+        files: {
+          "/keep.txt": fileData("bye"),
+          "/other.txt": fileData("stay"),
+        },
+      } as any);
+
+      const deletes = deleteMessages(result.messages);
+      expect(deletes).toHaveLength(1);
+      expect(deletes[0].status).not.toBe("error");
+      expect(deletes[0].content.toString()).toContain("Deleted /keep.txt");
+      expect(Object.keys(result.files ?? {})).toEqual(["/other.txt"]);
+    });
+
+    it("recursively removes a directory's nested files", async () => {
+      const agent = createDeepAgent({ model: deletingModel("/work") });
+
+      const result = await agent.invoke({
+        messages: [new HumanMessage("delete the work dir")],
+        files: {
+          "/work/a.txt": fileData("a"),
+          "/work/sub/b.txt": fileData("b"),
+          "/keep.txt": fileData("stay"),
+        },
+      } as any);
+
+      const deletes = deleteMessages(result.messages);
+      expect(deletes[0].status).not.toBe("error");
+      expect(Object.keys(result.files ?? {})).toEqual(["/keep.txt"]);
+    });
+
+    it("returns an error tool message for a missing path", async () => {
+      const agent = createDeepAgent({ model: deletingModel("/nope.txt") });
+
+      const result = await agent.invoke({
+        messages: [new HumanMessage("delete nope")],
+        files: { "/keep.txt": fileData("stay") },
+      } as any);
+
+      const deletes = deleteMessages(result.messages);
+      expect(deletes).toHaveLength(1);
+      expect(deletes[0].status).toBe("error");
+      expect(deletes[0].content.toString()).toContain("not found");
+      expect(result.files?.["/keep.txt"]).toBeDefined();
+    });
+
+    it("blocks a denied delete and preserves the file in state", async () => {
+      const agent = createDeepAgent({
+        model: deletingModel("/secrets/key.txt"),
+        permissions: [
+          { operations: ["write"], paths: ["/secrets/**"], mode: "deny" },
+        ],
+      });
+
+      const result = await agent.invoke({
+        messages: [new HumanMessage("delete secret")],
+        files: { "/secrets/key.txt": fileData("data") },
+      } as any);
+
+      const deletes = deleteMessages(result.messages);
+      expect(deletes).toHaveLength(1);
+      expect(deletes[0].status).toBe("error");
+      expect(deletes[0].content.toString()).toContain("permission denied");
+      expect(deletes[0].content.toString()).toContain("write");
+      expect(result.files?.["/secrets/key.txt"]).toBeDefined();
+    });
+  });
 });
