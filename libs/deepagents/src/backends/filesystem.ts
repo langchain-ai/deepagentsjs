@@ -227,12 +227,12 @@ export class FilesystemBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Read file content with line numbers.
+   * Read a slice of text file content as raw lines.
    *
    * @param filePath - Absolute or relative file path
    * @param offset - Line offset to start reading from (0-indexed)
    * @param limit - Maximum number of lines to read
-   * @returns Formatted file content with line numbers, or error message
+   * @returns Raw line slice for text, or error message
    */
   async read(
     filePath: string,

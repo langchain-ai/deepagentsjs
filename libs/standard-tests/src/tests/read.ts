@@ -14,7 +14,7 @@ export function registerReadTests<T extends AnySandboxInstance>(
 
   describe("read", () => {
     it(
-      "should read a file with line numbers",
+      "should read a text file (raw lines from backend.read)",
       async () => {
         const shared = adaptSandboxInstance(getShared());
         const filePath = config.resolvePath("rd-basic.txt");

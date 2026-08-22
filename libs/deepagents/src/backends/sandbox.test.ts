@@ -1,10 +1,26 @@
 import { describe, it, expect, vi } from "vitest";
+import type { StructuredTool } from "langchain";
+import { createFilesystemMiddleware } from "../middleware/fs.js";
 import { BaseSandbox } from "./sandbox.js";
 import type {
   ExecuteResponse,
   FileDownloadResponse,
   FileUploadResponse,
 } from "./protocol.js";
+
+/** Each formatted line must be exactly: line-number column + tab + body (cat-n style from read_file). */
+function assertSingleLineNumberColumnPerLine(formattedText: string) {
+  const lines = formattedText.split("\n").filter((l) => l.length > 0);
+  expect(lines.length).toBeGreaterThan(0);
+  for (const line of lines) {
+    const parts = line.split("\t");
+    expect(
+      parts.length,
+      `Expected one tab separator (line number + content), got ${parts.length} segments in: ${JSON.stringify(line)}`,
+    ).toBe(2);
+    expect(parts[0].trim()).toMatch(/^\d+(\.\d+)?$/);
+  }
+}
 
 /**
  * Mock implementation of BaseSandbox for testing.
@@ -46,12 +62,14 @@ class MockSandbox extends BaseSandbox {
       return { output, exitCode: 0, truncated: false };
     }
 
-    // Simulate read command (awk-based)
-    if (command.includes("awk") && command.includes("printf")) {
-      // Extract file path from the shell-quoted path at end of command
+    // Simulate read command (awk-based; matches buildReadCommand)
+    if (command.includes("awk") && command.includes("NR >=")) {
+      const rangeMatch = command.match(/NR >= (\d+) && NR <= (\d+)/);
       const pathMatch = command.match(/'([^']+)'\s*$/);
-      if (pathMatch) {
+      if (rangeMatch && pathMatch) {
         const filePath = pathMatch[1];
+        const start = Number.parseInt(rangeMatch[1], 10);
+        const end = Number.parseInt(rangeMatch[2], 10);
         const bytes = this.files.get(filePath);
         if (!bytes) {
           return {
@@ -69,10 +87,12 @@ class MockSandbox extends BaseSandbox {
           };
         }
         const lines = content.split("\n");
-        const output = lines
-          .map((line, i) => `     ${i + 1}\t${line}`)
-          .join("\n");
-        return { output, exitCode: 0, truncated: false };
+        const slice = lines.slice(start - 1, end);
+        return {
+          output: slice.join("\n"),
+          exitCode: 0,
+          truncated: false,
+        };
       }
     }
 
@@ -233,6 +253,7 @@ describe("BaseSandbox", () => {
       // text files should go through execute with awk
       expect(sandbox.executedCommands.length).toBe(1);
       expect(sandbox.executedCommands[0]).toContain("awk");
+      expect(sandbox.executedCommands[0]).toContain("{ print }");
     });
 
     describe("binary files", () => {
@@ -907,6 +928,33 @@ describe("BaseSandbox", () => {
       expect(result[0].error).toBeNull();
       expect(result[1].path).toBe("/file2.txt");
       expect(result[1].error).toBeNull();
+    });
+  });
+
+  describe("read_file tool with sandbox backend", () => {
+    it("should surface exactly one line-number column per line (backend read is raw; tool adds numbering once)", async () => {
+      const sandbox = new MockSandbox();
+      sandbox.addFile("/doc.json", '{\n  "name": "x",\n}');
+
+      const middleware = createFilesystemMiddleware({
+        backend: sandbox,
+        toolTokenLimitBeforeEvict: null,
+      });
+
+      const readFileTool = (
+        middleware as { tools: StructuredTool[] }
+      ).tools.find((t) => t.name === "read_file");
+      expect(readFileTool).toBeDefined();
+
+      const result = await readFileTool!.invoke({
+        file_path: "/doc.json",
+        offset: 0,
+        limit: 10,
+      });
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(result[0].type).toBe("text");
+      assertSingleLineNumberColumnPerLine((result[0] as { text: string }).text);
     });
   });
 
