@@ -307,7 +307,10 @@ async function main(): Promise<void> {
         name: options.name,
         description: options.description,
         model: options.model,
-        backend: new FilesystemBackend({ rootDir: workspaceRoot }),
+        backend: new FilesystemBackend({
+          rootDir: workspaceRoot,
+          virtualMode: true,
+        }),
         skills,
         memory,
       },
