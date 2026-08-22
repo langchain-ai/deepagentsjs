@@ -1,6 +1,12 @@
 # @langchain/quickjs
 
-## 1.0.0
+## 0.6.2
+
+### Patch Changes
+
+- [#769](https://github.com/langchain-ai/deepagentsjs/pull/769) [`d4045de`](https://github.com/langchain-ai/deepagentsjs/commit/d4045de67715bf3cd6198b0d516d176c0e4b75d0) Thanks [@hntrl](https://github.com/hntrl)! - chore(deps): update langgraph deps to track serialization fix
+
+## 0.6.1
 
 ## 1.0.0-rc.0
 

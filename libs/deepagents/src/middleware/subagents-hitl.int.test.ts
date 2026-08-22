@@ -289,13 +289,23 @@ describe("Subagent HITL Integration Tests - interrupt() primitive", () => {
         {
           messages: [
             new HumanMessage(
-              "Use the task tool to launch the document-reviewer sub-agent. " +
-                "Pass it the document 'Q4 Financial Report'.",
+              "Your only job is to call the `task` tool exactly once right now. " +
+                "Set subagent_type to 'document-reviewer' and set description to " +
+                "the document 'Q4 Financial Report'. Do not answer directly, do not " +
+                "explain, and do not ask any questions first — emit the task tool call immediately.",
             ),
           ],
         },
         config,
       );
+
+      // Sanity check: the parent model must have delegated via the task tool.
+      // If it answers directly the sub-agent never runs and no interrupt fires.
+      const taskToolCalled = result.messages
+        .filter(AIMessage.isInstance)
+        .flatMap((msg) => msg.tool_calls || [])
+        .some((tc) => tc.name === "task");
+      expect(taskToolCalled).toBe(true);
 
       // Step 2: Check for interrupt
       expect(result.__interrupt__).toBeDefined();

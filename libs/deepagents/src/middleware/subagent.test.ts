@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("langchain", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
@@ -35,11 +35,14 @@ import type { ChainValues } from "@langchain/core/utils/types";
 import { createDeepAgent } from "../agent.js";
 import { StateBackend } from "../backends/state.js";
 import { createSkillsMiddleware } from "./skills.js";
-import { createSummarizationMiddleware } from "./summarization.js";
+import {
+  createSummarizationMiddleware,
+  getEffectiveMessages,
+} from "./summarization.js";
 import { mergeMiddleware } from "./utils.js";
 import { createFileData } from "../backends/utils.js";
 import { createMockBackend } from "./test.js";
-import { createSubAgent } from "./subagents.js";
+import { createSubAgent, filterStateForSubagent } from "./subagents.js";
 import { registerHarnessProfile } from "../profiles/index.js";
 
 const createAgentMock = vi.mocked(createAgent);
@@ -294,6 +297,437 @@ description: A skill for the subagent
     // Verify skillsMetadata is NOT in the parent agent's final state
     // This confirms EXCLUDED_STATE_KEYS is working correctly
     expect(result).not.toHaveProperty("skillsMetadata");
+  });
+});
+
+describe("Subagent summarization state isolation", () => {
+  const summarizationEvent = {
+    cutoffIndex: 40,
+    summaryMessage: new HumanMessage({ content: "STALE_PARENT_SUMMARY" }),
+    filePath: null,
+  };
+
+  it("should exclude _summarizationEvent and _summarizationSessionId from subagent input", () => {
+    const parentState = {
+      messages: [new HumanMessage("irrelevant")],
+      files: { "/foo.txt": "data" },
+      _summarizationEvent: summarizationEvent,
+      _summarizationSessionId: "thread-abc",
+    };
+
+    const filtered = filterStateForSubagent(parentState);
+
+    expect(filtered).not.toHaveProperty("_summarizationEvent");
+    expect(filtered).not.toHaveProperty("_summarizationSessionId");
+    expect(filtered.files).toEqual(parentState.files);
+  });
+
+  it("should exclude a subagent's own _summarizationEvent from its return update", () => {
+    const subagentResult = {
+      messages: [new AIMessage({ content: "Subagent done" })],
+      _summarizationEvent: {
+        cutoffIndex: 99,
+        summaryMessage: new HumanMessage({ content: "SUBAGENT_SUMMARY" }),
+        filePath: null,
+      },
+      _summarizationSessionId: "subagent-thread-xyz",
+    };
+
+    const filtered = filterStateForSubagent(subagentResult);
+
+    expect(filtered).not.toHaveProperty("_summarizationEvent");
+    expect(filtered).not.toHaveProperty("_summarizationSessionId");
+  });
+});
+
+describe("ForkedSubAgent", () => {
+  let invokeSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+  });
+
+  afterEach(() => {
+    invokeSpy.mockRestore();
+  });
+
+  function findCallContaining(
+    spy: ReturnType<typeof vi.spyOn>,
+    marker: string,
+  ): BaseMessage[] | undefined {
+    for (const call of spy.mock.calls) {
+      const messages = call[0] as BaseMessage[] | undefined;
+      if (!messages) continue;
+      const text = messages
+        .map((m) => (typeof m.content === "string" ? m.content : ""))
+        .join("\n");
+      if (text.includes(marker)) return messages;
+    }
+    return undefined;
+  }
+
+  // Seeded directly as the initial `messages` array (single invoke() call)
+  // rather than built up across two separate invoke() calls — FakeListChatModel's
+  // response-cycling counter isn't guaranteed to survive across separate
+  // top-level invoke() calls sharing one model instance.
+  const priorHistory = [
+    new HumanMessage("Remember the passphrase: BANANA42"),
+    new AIMessage("Got it, remembering BANANA42."),
+    new HumanMessage("Now delegate to the worker"),
+  ];
+
+  it("throws at construction for an invalid mode value", () => {
+    expect(() =>
+      createDeepAgent({
+        model: new FakeListChatModel({ responses: ["Done"] }),
+        subagents: [
+          {
+            name: "worker",
+            description: "A worker agent",
+            systemPrompt: "You are a worker.",
+            mode: "dynamic" as unknown as "handoff",
+          },
+        ],
+      }),
+    ).toThrow(/invalid mode 'dynamic'/);
+  });
+
+  it("should NOT include prior history for the default handoff mode", async () => {
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: `call_${Date.now()}`,
+              name: "task",
+              args: {
+                description: "UNIQUE_TASK_MARKER",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Worker done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          systemPrompt: "You are a specialized worker.",
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: priorHistory },
+      {
+        configurable: { thread_id: `test-mode-handoff-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    const workerCall = findCallContaining(invokeSpy, "UNIQUE_TASK_MARKER");
+    expect(workerCall).toBeDefined();
+    const text = workerCall!
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    expect(text).not.toContain("BANANA42");
+  });
+
+  it("should include prior history and the parent's exact system prompt for a ForkedSubAgent", async () => {
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: `call_${Date.now()}`,
+              name: "task",
+              args: {
+                description: "UNIQUE_TASK_MARKER",
+                subagent_type: "worker",
+                mode: "fork",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Worker done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      systemPrompt: "PARENT_ROOT_PROMPT_MARKER",
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          mode: "fork",
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: priorHistory },
+      {
+        configurable: { thread_id: `test-mode-fork-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    const workerCall = findCallContaining(invokeSpy, "UNIQUE_TASK_MARKER");
+    expect(workerCall).toBeDefined();
+
+    const text = workerCall!
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    expect(text).toContain("BANANA42");
+
+    const systemMessage = workerCall!.find(SystemMessage.isInstance);
+    expect(systemMessage?.text).toContain("PARENT_ROOT_PROMPT_MARKER");
+
+    // No own systemPrompt to relocate — the trailing message is bare.
+    const lastMessage = workerCall![workerCall!.length - 1];
+    expect(lastMessage.content).toBe("UNIQUE_TASK_MARKER");
+  });
+
+  it("should exclude the in-flight AIMessage, including a parallel sibling tool call", async () => {
+    const echoTool = tool(async () => "sunny", {
+      name: "get_weather",
+      description: "Get the weather",
+      schema: z.object({}),
+    });
+
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "PARALLEL_CALL_TEXT_SHOULD_NOT_LEAK",
+          tool_calls: [
+            {
+              id: `call_task_${Date.now()}`,
+              name: "task",
+              args: {
+                description: "UNIQUE_TASK_MARKER",
+                subagent_type: "worker",
+              },
+            },
+            {
+              id: `call_weather_${Date.now()}`,
+              name: "get_weather",
+              args: {},
+            },
+          ],
+        }) as unknown as string,
+        "Worker done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      tools: [echoTool],
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: { thread_id: `test-mode-fork-parallel-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    const workerCall = findCallContaining(invokeSpy, "UNIQUE_TASK_MARKER");
+    expect(workerCall).toBeDefined();
+    const text = workerCall!
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    expect(text).not.toContain("PARALLEL_CALL_TEXT_SHOULD_NOT_LEAK");
+    expect(text).not.toContain("get_weather");
+  });
+
+  it("should still inherit the parent's system prompt for a ForkedSubAgent even when its model differs", async () => {
+    const mainModel = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: `call_${Date.now()}`,
+              name: "task",
+              args: {
+                description: "UNIQUE_TASK_MARKER",
+                subagent_type: "worker",
+                mode: "fork",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+    const workerModel = new FakeListChatModel({ responses: ["Worker done"] });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model: mainModel,
+      systemPrompt: "PARENT_ROOT_PROMPT_MARKER",
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          model: workerModel,
+          mode: "fork",
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: priorHistory },
+      {
+        configurable: {
+          thread_id: `test-mode-fork-model-mismatch-${Date.now()}`,
+        },
+        recursionLimit: 50,
+      },
+    );
+
+    const workerCall = findCallContaining(invokeSpy, "UNIQUE_TASK_MARKER");
+    expect(workerCall).toBeDefined();
+
+    // History still forks (context inheritance is model-independent)...
+    const text = workerCall!
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    expect(text).toContain("BANANA42");
+
+    // ...and the system prompt is still the parent's — a ForkedSubAgent has
+    // no own prompt to fall back to, so model mismatch only means no cache
+    // benefit, not a different prompt.
+    const systemMessage = workerCall!.find(SystemMessage.isInstance);
+    expect(systemMessage?.text).toContain("PARENT_ROOT_PROMPT_MARKER");
+  });
+
+  it("should fork message history into a CompiledSubAgent without throwing or touching its system prompt", async () => {
+    let capturedMessages: BaseMessage[] | undefined;
+    const compiledWorkerModel = new FakeListChatModel({
+      responses: ["Worker done"],
+    });
+    const compiledWorker = createAgent({
+      model: compiledWorkerModel,
+      systemPrompt: "You are a compiled worker.",
+    });
+    const originalInvoke = compiledWorker.invoke.bind(compiledWorker);
+    compiledWorker.invoke = (async (state: any, config: any) => {
+      capturedMessages = state.messages;
+      return originalInvoke(state, config);
+    }) as typeof compiledWorker.invoke;
+
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: `call_${Date.now()}`,
+              name: "task",
+              args: {
+                description: "UNIQUE_TASK_MARKER",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    expect(() =>
+      createDeepAgent({
+        model,
+        checkpointer,
+        subagents: [
+          {
+            name: "worker",
+            description: "A compiled worker agent",
+            runnable: compiledWorker,
+            mode: "fork",
+          },
+        ],
+      }),
+    ).not.toThrow();
+
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "A compiled worker agent",
+          runnable: compiledWorker,
+          mode: "fork",
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: priorHistory },
+      {
+        configurable: { thread_id: `test-compiled-fork-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    expect(capturedMessages).toBeDefined();
+    const text = capturedMessages!
+      .map((m) => (typeof m.content === "string" ? m.content : ""))
+      .join("\n");
+    expect(text).toContain("BANANA42");
+    expect(text).toContain("UNIQUE_TASK_MARKER");
+  });
+
+  it("should reconstruct the already-summarized effective view, not raw history, when forking", () => {
+    const summaryMessage = new HumanMessage({
+      content: "Here is a summary of the conversation to date: earlier stuff",
+    });
+    const rawMessages: BaseMessage[] = [
+      new HumanMessage("msg0"),
+      new HumanMessage("msg1"),
+      new HumanMessage("msg2"),
+      new HumanMessage("msg3"),
+      new AIMessage({
+        content: "",
+        tool_calls: [{ id: "call_1", name: "task", args: {} }],
+      }),
+    ];
+    const event = { cutoffIndex: 2, summaryMessage, filePath: null };
+
+    const trimmed = rawMessages.slice(0, -1);
+    const effective = getEffectiveMessages(trimmed, {
+      _summarizationEvent: event,
+    });
+
+    expect(effective).toEqual([summaryMessage, rawMessages[2], rawMessages[3]]);
   });
 });
 
@@ -1293,6 +1727,53 @@ describe("middleware override by name", () => {
     const merged = mergeMiddleware([original], [first, second]);
 
     expect(merged).toEqual([second]);
+  });
+
+  it("does NOT mirror custom middleware into a ForkedSubAgent when the parent has no system prompt", () => {
+    const custom = namedMiddleware("MarkerMiddleware");
+
+    createDeepAgent({
+      model: fakeModel,
+      name: "main",
+      middleware: [custom],
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          mode: "fork",
+        },
+      ],
+    });
+
+    const middleware = getMiddlewareStack("worker");
+    expect(middleware.some((entry) => entry.name === "MarkerMiddleware")).toBe(
+      false,
+    );
+  });
+
+  it("does NOT mirror custom middleware into a ForkedSubAgent when its model differs from the parent's", () => {
+    const custom = namedMiddleware("MarkerMiddleware");
+    const workerModel = new FakeListChatModel({ responses: ["hello"] });
+
+    createDeepAgent({
+      model: fakeModel,
+      name: "main",
+      systemPrompt: "PARENT_PROMPT",
+      middleware: [custom],
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          model: workerModel,
+          mode: "fork",
+        },
+      ],
+    });
+
+    const middleware = getMiddlewareStack("worker");
+    expect(middleware.some((entry) => entry.name === "MarkerMiddleware")).toBe(
+      false,
+    );
   });
 
   it("replaces default main-agent middleware with same-name custom middleware", () => {

@@ -33,7 +33,11 @@ class MockSandbox extends BaseSandbox {
     }
 
     // Simulate find command for glob (find + stat, recursive — no -maxdepth 1)
-    if (command.includes("stat -c") && !command.includes("-maxdepth 1")) {
+    if (
+      command.includes("stat -c") &&
+      !command.includes("-maxdepth 1") &&
+      command.includes("head -n")
+    ) {
       const files = Array.from(this.files.keys());
       const now = Math.floor(Date.now() / 1000);
       const output = files
@@ -317,6 +321,14 @@ describe("BaseSandbox", () => {
       const result = await sandbox.write("/existing.txt", "new content");
       expect(result.error).toBeUndefined();
       expect(sandbox.getFile("/existing.txt")).toBe("new content");
+    });
+
+    it("should delete using recursive rm", async () => {
+      const sandbox = new MockSandbox();
+      const result = await sandbox.delete("/some/dir");
+      expect(result.error).toBeUndefined();
+      expect(result.path).toBe("/some/dir");
+      expect(sandbox.executedCommands.at(-1)).toContain("rm -rf '/some/dir'");
     });
 
     describe("binary files", () => {
@@ -717,6 +729,55 @@ describe("BaseSandbox", () => {
       expect(sandbox.executedCommands[0]).toMatch(/find\s+-L\s+/);
     });
 
+    it("should prune virtual filesystems and cap find output", async () => {
+      const sandbox = new MockSandbox();
+      sandbox.addFile("/test.py", "print('hello')");
+
+      await sandbox.glob("*.py", "/");
+      const command = sandbox.executedCommands[0];
+      expect(command).toContain("-path /proc");
+      expect(command).toContain("-path /sys");
+      expect(command).toContain("-path /dev");
+      expect(command).toContain("-path /run");
+      expect(command).toContain("-prune");
+      expect(command).toMatch(/head -n 50001/);
+    });
+
+    it("should mark truncated when find output exceeds the soft cap", async () => {
+      const sandbox = new MockSandbox();
+      const now = Math.floor(Date.now() / 1000);
+      // Soft cap is 50_000; one past that signals truncation.
+      const lines = Array.from(
+        { length: 50_001 },
+        (_, i) => `1\t${now}\tregular file\t/f${i}.txt`,
+      );
+      sandbox.execute = vi.fn().mockResolvedValue({
+        output: lines.join("\n"),
+        exitCode: 0,
+        truncated: false,
+      });
+
+      const result = await sandbox.glob("*.txt", "/");
+      expect(result.error).toBeUndefined();
+      expect(result.truncated).toBe(true);
+      expect(result.files!.length).toBe(50_000);
+    });
+
+    it("should mark truncated when the backend truncated output below the cap", async () => {
+      const sandbox = new MockSandbox();
+      const now = Math.floor(Date.now() / 1000);
+      sandbox.execute = vi.fn().mockResolvedValue({
+        output: `1\t${now}\tregular file\t/f0.txt`,
+        exitCode: 0,
+        truncated: true,
+      });
+
+      const result = await sandbox.glob("*.txt", "/");
+      expect(result.error).toBeUndefined();
+      expect(result.truncated).toBe(true);
+      expect(result.files!.length).toBe(1);
+    });
+
     it("should return empty array for no matches", async () => {
       const sandbox = new MockSandbox();
       sandbox.execute = vi.fn().mockResolvedValue({
@@ -732,39 +793,91 @@ describe("BaseSandbox", () => {
   });
 
   describe("delete", () => {
-    it("should delete with rm -f and report success on exit 0", async () => {
+    it("should probe existence then delete with recursive rm on exit 0", async () => {
       const sandbox = new MockSandbox();
 
       const result = await sandbox.delete("/file.txt");
 
       expect(result.error).toBeUndefined();
       expect(result.path).toBe("/file.txt");
-      expect(sandbox.executedCommands[0]).toContain("rm -f");
-      expect(sandbox.executedCommands[0]).toContain("'/file.txt'");
+      // First command probes existence; second performs the recursive delete.
+      expect(sandbox.executedCommands[0]).toContain("test -e '/file.txt'");
+      expect(sandbox.executedCommands[0]).toContain("test -L '/file.txt'");
+      expect(sandbox.executedCommands[1]).toContain("rm -rf");
+      expect(sandbox.executedCommands[1]).toContain("'/file.txt'");
     });
 
-    it("should treat missing files as success when rm -f exits 0", async () => {
+    it("should return not-found when the existence probe exits non-zero", async () => {
       const sandbox = new MockSandbox();
+      sandbox.execute = vi.fn().mockImplementation((command: string) => {
+        if (command.startsWith("test -e")) {
+          return Promise.resolve({ output: "", exitCode: 1, truncated: false });
+        }
+        return Promise.resolve({ output: "", exitCode: 0, truncated: false });
+      });
 
       const result = await sandbox.delete("/missing.txt");
 
+      expect(result.path).toBeUndefined();
+      expect(result.error).toBe("Error: '/missing.txt' not found");
+      // The delete must not run once the path is known to be absent.
+      expect(sandbox.execute).toHaveBeenCalledTimes(1);
+    });
+
+    it("should fall through to rm when the probe status is unknown (null exit)", async () => {
+      const sandbox = new MockSandbox();
+      sandbox.execute = vi.fn().mockImplementation((command: string) => {
+        if (command.startsWith("test -e")) {
+          return Promise.resolve({
+            output: "",
+            exitCode: null,
+            truncated: false,
+          });
+        }
+        return Promise.resolve({ output: "", exitCode: 0, truncated: false });
+      });
+
+      const result = await sandbox.delete("/maybe.txt");
+
       expect(result.error).toBeUndefined();
-      expect(result.path).toBe("/missing.txt");
+      expect(result.path).toBe("/maybe.txt");
+      expect(sandbox.execute).toHaveBeenCalledTimes(2);
     });
 
     it("should report stderr on non-zero rm exit", async () => {
       const sandbox = new MockSandbox();
-      sandbox.execute = vi.fn().mockResolvedValue({
-        output: "rm: cannot remove '/some/dir': Is a directory",
-        exitCode: 1,
-        truncated: false,
+      sandbox.execute = vi.fn().mockImplementation((command: string) => {
+        if (command.startsWith("test -e")) {
+          return Promise.resolve({ output: "", exitCode: 0, truncated: false });
+        }
+        return Promise.resolve({
+          output: "rm: cannot remove '/some/dir': Is a directory",
+          exitCode: 1,
+          truncated: false,
+        });
       });
 
       const result = await sandbox.delete("/some/dir");
 
       expect(result.path).toBeUndefined();
-      expect(result.error).toContain("Error deleting file");
+      expect(result.error).toContain("Error deleting file '/some/dir'");
       expect(result.error).toContain("Is a directory");
+    });
+
+    it("should report 'unknown error' when rm fails without output", async () => {
+      const sandbox = new MockSandbox();
+      sandbox.execute = vi.fn().mockImplementation((command: string) => {
+        if (command.startsWith("test -e")) {
+          return Promise.resolve({ output: "", exitCode: 0, truncated: false });
+        }
+        return Promise.resolve({ output: "", exitCode: 1, truncated: false });
+      });
+
+      const result = await sandbox.delete("/some/dir");
+
+      expect(result.error).toBe(
+        "Error deleting file '/some/dir': unknown error",
+      );
     });
 
     it("should shell-quote paths", async () => {
@@ -773,6 +886,7 @@ describe("BaseSandbox", () => {
       await sandbox.delete("/file's.txt");
 
       expect(sandbox.executedCommands[0]).toContain("'/file'\\''s.txt'");
+      expect(sandbox.executedCommands[1]).toContain("'/file'\\''s.txt'");
     });
   });
 
