@@ -1,6 +1,6 @@
 {
   "name": "deepagents",
-  "version": "1.12.4",
+  "version": "1.13.1",
   "description": "Deep Agents - a library for building controllable AI agents with LangGraph",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -45,9 +45,9 @@
   },
   "devDependencies": {
     "@langchain/anthropic": "^1.5.0",
-    "@langchain/core": "^1.2.0",
-    "@langchain/langgraph": "^1.4.4",
-    "@langchain/langgraph-checkpoint": "^1.1.2",
+    "@langchain/core": "^1.2.9",
+    "@langchain/langgraph": "^1.4.10",
+    "@langchain/langgraph-checkpoint": "^1.1.5",
     "@langchain/langgraph-sdk": "^1.9.23",
     "@langchain/openai": "^1.5.1",
     "@langchain/sandbox-standard-tests": "workspace:*",
@@ -58,7 +58,7 @@
     "@vitest/coverage-v8": "^4.0.18",
     "@vitest/ui": "^4.0.18",
     "dotenv": "^17.2.4",
-    "langchain": "^1.5.0",
+    "langchain": "^1.5.10",
     "tsdown": "^0.22.1",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
@@ -99,12 +99,12 @@
     "./package.json": "./package.json"
   },
   "peerDependencies": {
-    "@langchain/core": "^1.2.0",
-    "@langchain/langgraph": "^1.4.4",
-    "@langchain/langgraph-checkpoint": "^1.1.2",
+    "@langchain/core": "^1.2.9",
+    "@langchain/langgraph": "^1.4.10",
+    "@langchain/langgraph-checkpoint": "^1.1.5",
     "@langchain/langgraph-sdk": "^1.9.23",
-    "langchain": "^1.5.0",
-    "langsmith": "^0.7.1"
+    "langchain": "^1.5.10",
+    "langsmith": ">=0.7.1 <0.10.0"
   },
   "files": [
     "dist/**/*"

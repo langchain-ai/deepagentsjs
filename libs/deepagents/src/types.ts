@@ -32,7 +32,10 @@ import type {
   StateDefinitionInit,
   StreamTransformer,
 } from "@langchain/langgraph";
-import type { CompiledSubAgent } from "./middleware/subagents.js";
+import type {
+  CompiledSubAgent,
+  ForkedSubAgent,
+} from "./middleware/subagents.js";
 import type {
   ASYNC_TASK_TOOL_NAMES,
   FILESYSTEM_TOOL_NAMES,
@@ -82,8 +85,12 @@ type InferDeepAgentStreamExtensions<
     ? P & InferDeepAgentStreamExtensions<Rest>
     : Record<string, unknown>;
 
-/** Any subagent specification — sync, compiled, or async. */
-export type AnySubAgent = SubAgent | CompiledSubAgent | AsyncSubAgent;
+/** Any subagent specification — sync, compiled, forked, or async. */
+export type AnySubAgent =
+  | SubAgent
+  | CompiledSubAgent
+  | ForkedSubAgent
+  | AsyncSubAgent;
 
 // TODO: import TypedToolStrategy from "langchain" once exported from the top-level entry point
 // (currently only available via "langchain/dist/agents/responses.js")
@@ -473,10 +480,10 @@ export type InferSubagentByName<T, TName extends string> =
  * ```
  */
 export type InferSubagentReactAgentType<
-  TSubagent extends SubAgent | CompiledSubAgent,
+  TSubagent extends SubAgent | CompiledSubAgent | ForkedSubAgent,
 > = TSubagent extends CompiledSubAgent
   ? TSubagent["runnable"]
-  : TSubagent extends SubAgent
+  : TSubagent extends SubAgent | ForkedSubAgent
     ? ReactAgent<
         AgentTypeConfig<
           ResponseFormatUndefined,

@@ -1,5 +1,39 @@
 # deepagents
 
+## 1.13.1
+
+### Patch Changes
+
+- [#771](https://github.com/langchain-ai/deepagentsjs/pull/771) [`bcc2f5d`](https://github.com/langchain-ai/deepagentsjs/commit/bcc2f5d0a8ac22898b716fc00b425fee208c8b86) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - fix(deepagents): require `mode: "fork"` on `ForkedSubAgent`
+
+  `ForkedSubAgent.mode` was optional, defaulting to being omitted per its own documented example. Since `SubAgent.systemPrompt` is also optional, a `ForkedSubAgent` that omitted `mode` had the same shape as a plain `SubAgent` and silently misrouted between forking and non-forking behavior. `mode: "fork"` is now required on `ForkedSubAgent`, closing the ambiguity.
+
+- [#776](https://github.com/langchain-ai/deepagentsjs/pull/776) [`95afe3e`](https://github.com/langchain-ai/deepagentsjs/commit/95afe3e2682622067a263d2d24129985535b0f3b) Thanks [@baskaryan](https://github.com/baskaryan)! - chore(deepagents): widen the `langsmith` peer range to `>=0.7.1 <0.10.0`
+
+  The upper bound stops below 0.10.0 rather than 1.0.0 because langsmith is pre-1.0 and ships breaking changes in minor bumps, so a new minor should be adopted deliberately instead of pre-authorized.
+
+## 1.13.0
+
+### Minor Changes
+
+- [#675](https://github.com/langchain-ai/deepagentsjs/pull/675) [`ba8d4aa`](https://github.com/langchain-ai/deepagentsjs/commit/ba8d4aa71664c23027e57eee0fcaa2701d60408f) Thanks [@hntrl](https://github.com/hntrl)! - feat(filesystem): add recursive delete tool
+
+- [#752](https://github.com/langchain-ai/deepagentsjs/pull/752) [`b20d6ad`](https://github.com/langchain-ai/deepagentsjs/commit/b20d6adc3dc7caf01281832548a17f381561318c) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - feat(deepagents): add `ForkedSubAgent` for subagent conversation forking
+
+  Lets a subagent inherit the parent's conversation history instead of only seeing the task description.
+
+### Patch Changes
+
+- [#759](https://github.com/langchain-ai/deepagentsjs/pull/759) [`85a55e1`](https://github.com/langchain-ai/deepagentsjs/commit/85a55e14da6cb19877ddd81d898d78d6ededfe74) Thanks [@christian-bromann](https://github.com/christian-bromann)! - fix(deepagents): cap sandbox glob find so root searches cannot OOM the host
+
+  Recursive glob listed every path under the search root (and with `-L` could loop through `/proc/*/root`). Prune virtual filesystems and soft-cap find output so a `glob("**/x", "/")` cannot exhaust the runtime heap.
+
+- [#768](https://github.com/langchain-ai/deepagentsjs/pull/768) [`f124127`](https://github.com/langchain-ai/deepagentsjs/commit/f124127255fbd4e4b03eb84a4b39c70421a07e35) Thanks [@casparb](https://github.com/casparb)! - fix(deepagents): accept permission paths that exactly equal a composite route
+
+  A permission path equal to a single-file mount (e.g. `/instructions.md`) was rejected when the backend supported execution, forcing users to write `/instructions.md/**`. The route-scoping check now also accepts the route root itself. Sibling prefixes such as `/workspace2/**` for route `/workspace` remain rejected.
+
+- [#769](https://github.com/langchain-ai/deepagentsjs/pull/769) [`d4045de`](https://github.com/langchain-ai/deepagentsjs/commit/d4045de67715bf3cd6198b0d516d176c0e4b75d0) Thanks [@hntrl](https://github.com/hntrl)! - chore(deps): update langgraph deps to track serialization fix
+
 ## 1.12.4
 
 ### Patch Changes
