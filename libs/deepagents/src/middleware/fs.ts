@@ -627,7 +627,9 @@ function findDeleteDenyPatternsForLeaf(
     if (!rule.operations.includes("write")) {
       continue;
     }
-    const matched = rule.paths.filter((pattern) => globMatch(target, pattern));
+    const matched = rule.paths.filter((pattern) =>
+      globMatch(target, validatePath(pattern)),
+    );
     if (matched.length === 0) {
       continue;
     }
@@ -669,9 +671,10 @@ export function findDeleteDenyPatterns(
       if (seen.has(pattern)) {
         continue;
       }
-      const anchor = globAnchor(pattern);
-      const overlaps = hasGlobMetaCharacter(pattern)
-        ? wildcardDeleteOverlap(pattern, anchor, canonicalTarget)
+      const canonicalPattern = validatePath(pattern);
+      const anchor = globAnchor(canonicalPattern);
+      const overlaps = hasGlobMetaCharacter(canonicalPattern)
+        ? wildcardDeleteOverlap(canonicalPattern, anchor, canonicalTarget)
         : // Literal (wildcard-free) pattern: a deny on "/work" blocks deleting
           // "/work/sub" and blocks deleting an ancestor that contains it.
           pathsOverlap(canonicalTarget, anchor);
