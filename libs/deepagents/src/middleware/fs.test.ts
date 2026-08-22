@@ -1197,6 +1197,29 @@ describe("createFilesystemMiddleware", () => {
       }
     });
 
+    it("formats sandbox read results with line numbers exactly once", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.read = vi.fn().mockResolvedValue({
+        content: "line1\nline2",
+      });
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const readFileTool = middleware.tools!.find(
+        (tool) => tool.name === "read_file",
+      );
+      expect(readFileTool).toBeDefined();
+
+      const result = await readFileTool!.invoke({
+        file_path: "/doc.txt",
+        offset: 0,
+        limit: 200,
+      });
+
+      expect(result).toEqual([
+        { type: "text", text: "     1\tline1\n     2\tline2" },
+      ]);
+    });
+
     it("delete tool should delete through backend", async () => {
       const mockBackend = createMockBackend();
       mockBackend.delete = vi.fn().mockResolvedValue({
