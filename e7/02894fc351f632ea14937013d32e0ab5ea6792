@@ -1,0 +1,23 @@
+.changeset/widen-langsmith-peer-range.md
+  s_b5b61c6a6c7e15::t_e41d637a2dde3c 1-9
+libs/deepagents/package.json
+  s_b5b61c6a6c7e15::t_b7384c2c21ab5a 107
+pnpm-lock.yaml
+  s_b5b61c6a6c7e15::t_0062a6425bf5d4 635-636
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "e702894fc351f632ea14937013d32e0ab5ea6792",
+  "prompts": {},
+  "sessions": {
+    "s_b5b61c6a6c7e15": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dbe84125-38eb-4df6-84a9-e491fa64c161",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Bagatur Askaryan <baskaryan@gmail.com>"
+    }
+  }
+}
