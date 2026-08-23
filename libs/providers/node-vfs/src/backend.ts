@@ -30,6 +30,7 @@ import {
   type BackendFactory,
   type WriteResult,
   applyGrepMaxCount,
+  normalizeReadPagination,
 } from "deepagents";
 
 import { VirtualFileSystem } from "node-vfs-polyfill";
@@ -712,7 +713,9 @@ export class VfsBackend implements BackendProtocolV2 {
       return { content: new Uint8Array(content), mimeType };
     }
 
-    if (limit === 0) {
+    const { offset: normalizedOffset, limit: normalizedLimit } =
+      normalizeReadPagination(offset, limit);
+    if (normalizedLimit === 0) {
       return { content: "", mimeType };
     }
 
@@ -720,14 +723,25 @@ export class VfsBackend implements BackendProtocolV2 {
       encoding: "utf-8",
     }) as string;
     const lines = content.split("\n");
-    const start = Math.max(0, offset);
-    const end = Math.max(start, start + Math.max(0, limit));
+    const totalLines =
+      lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
+    const start = normalizedOffset;
+    const end = start + normalizedLimit;
 
-    if (start >= lines.length) {
+    if (start >= totalLines) {
       return { content: "", mimeType };
     }
 
-    return { content: lines.slice(start, end).join("\n"), mimeType };
+    const selectedEnd = Math.min(end, lines.length);
+    const logicalEnd = Math.min(end, totalLines);
+    return {
+      content: lines.slice(start, selectedEnd).join("\n"),
+      mimeType,
+      totalLines,
+      startLine: start + 1,
+      endLine: logicalEnd,
+      nextOffset: logicalEnd < totalLines ? logicalEnd : undefined,
+    };
   }
 
   /**
