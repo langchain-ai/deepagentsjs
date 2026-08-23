@@ -198,7 +198,7 @@ Use this to run an internet search for a given query using Tavily. You can speci
 
 ## youcom_search
 
-Use this to run an internet search for a given query using You.com's search API. Provides high-quality search results with source citations. You can specify the number of results. Requires YDC_API_KEY environment variable for authenticated access, but also works without it in keyless mode.\`;
+Use this to run an internet search for a given query using You.com's search API. Provides high-quality search results with source citations. You can specify the number of results. Requires YDC_API_KEY environment variable for authenticated access, but also works without it in keyless mode.`;
 
 // Create the agent
 export const agent = createDeepAgent({
@@ -223,16 +223,16 @@ export const agent = createDeepAgent({
 
 //   console.log("🎉 Finished!");
 //   console.log(
-//     `\n\nAgent ToDo List:\n${result.todos.map((todo) => ` - ${todo.content} (${todo.status})`).join("\n")}`
+//     "\\n\\nAgent ToDo List:\\n" + result.todos.map((todo) => " - " + todo.content + " (" + todo.status + ")").join("\\n")
 //   );
 //   console.log(
-//     `\n\nAgent Files:\n${Object.entries(result.files)
-//       .map(([key, value]) => ` - ${key}: ${value}`)
-//       .join("\n")}`
+//     "\\n\\nAgent Files:\\n" + Object.entries(result.files)
+//       .map(([key, value]) => " - " + key + ": " + value)
+//       .join("\\n")
 //   );
 // }
 
 // // Run if this file is executed directly
-// if (import.meta.url === `file://${process.argv[1]}`) {
+// if (import.meta.url === "file://" + process.argv[1]) {
 //   main();
 // }
