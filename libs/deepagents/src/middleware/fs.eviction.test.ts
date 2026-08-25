@@ -281,6 +281,53 @@ describe("read_file character-based truncation", () => {
     // Should NOT contain lines beyond the limit
     expect(result[0].text).not.toContain("line51");
     expect(result[0].text).not.toContain("line200");
+    expect(result[0].text).toContain(
+      "[Read 50 lines (lines 1-50 of 200 total). 150 lines remaining from offset 50.]",
+    );
+  });
+
+  it("should report the default 100-line partial window", async () => {
+    const files = {
+      "/default.txt": createFileData(
+        Array.from({ length: 145 }, (_, index) => `line${index + 1}`).join(
+          "\n",
+        ),
+      ),
+    };
+    const { runtime } = setupStateWithFiles(files);
+    const middleware = createFilesystemMiddleware({
+      backend: () => new StateBackend(runtime),
+    });
+    const readFileTool = (middleware as any).tools.find(
+      (tool: StructuredTool) => tool.name === "read_file",
+    );
+
+    const result = await readFileTool.invoke(
+      { file_path: "/default.txt" },
+      { store: undefined },
+    );
+
+    expect(result[0].text).toContain(
+      "[Read 100 lines (lines 1-100 of 145 total). 45 lines remaining from offset 100.]",
+    );
+  });
+
+  it("should omit pagination notice when the full file is read", async () => {
+    const files = { "/small.txt": createFileData("one\ntwo\nthree") };
+    const { runtime } = setupStateWithFiles(files);
+    const middleware = createFilesystemMiddleware({
+      backend: () => new StateBackend(runtime),
+    });
+    const readFileTool = (middleware as any).tools.find(
+      (tool: StructuredTool) => tool.name === "read_file",
+    );
+
+    const result = await readFileTool.invoke(
+      { file_path: "/small.txt" },
+      { store: undefined },
+    );
+
+    expect(result[0].text).not.toContain("remaining from offset");
   });
 
   it("should not truncate when toolTokenLimitBeforeEvict is null", async () => {

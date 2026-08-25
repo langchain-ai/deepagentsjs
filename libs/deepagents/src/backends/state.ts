@@ -32,6 +32,7 @@ import {
   isTextMimeType,
   migrateToFileDataV2,
   performStringReplacement,
+  sliceReadContent,
   updateFileData,
 } from "./utils.js";
 import { getConfig } from "@langchain/langgraph";
@@ -235,9 +236,10 @@ export class StateBackend implements BackendProtocolV2 {
         error: `File '${filePath}' has binary content but text MIME type`,
       };
     }
-    const lines = fileDataV2.content.split("\n");
-    const selected = lines.slice(offset, offset + limit);
-    return { content: selected.join("\n"), mimeType: fileDataV2.mimeType };
+    return {
+      ...sliceReadContent(fileDataV2.content, offset, limit),
+      mimeType: fileDataV2.mimeType,
+    };
   }
 
   /**

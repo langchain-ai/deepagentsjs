@@ -123,7 +123,13 @@ describe("ContextHubBackend", () => {
 
     const result = await backend.read("/a.md", 1, 2);
     expect(result.error).toBeUndefined();
-    expect(result.content).toBe("2\n3\n");
+    expect(result).toMatchObject({
+      content: "2\n3\n",
+      totalLines: 5,
+      startLine: 2,
+      endLine: 3,
+      nextOffset: 3,
+    });
   });
 
   it("read offset beyond file length returns an error", async () => {

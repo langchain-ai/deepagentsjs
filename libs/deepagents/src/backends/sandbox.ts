@@ -256,7 +256,9 @@ function buildReadCommand(
   return [
     `if [ ! -f ${quotedPath} ]; then echo "Error: File not found"; exit 1; fi`,
     `if [ ! -s ${quotedPath} ]; then echo "System reminder: File exists but has empty contents"; exit 0; fi`,
-    `awk 'NR >= ${start} && NR <= ${end} { printf "%6d\\t%s\\n", NR, $0 }' ${quotedPath}`,
+    `total=$(awk 'END { print NR }' ${quotedPath})`,
+    `printf '__DEEPAGENTS_READ_METADATA__\\t%s\\n' "$total"`,
+    `awk 'NR >= ${start} && NR <= ${end} { print }' ${quotedPath}`,
   ].join("; ");
 }
 
@@ -393,7 +395,34 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
       return { error: `File '${filePath}' not found` };
     }
 
-    return { content: result.output, mimeType };
+    const metadataMatch = result.output.match(
+      /^__DEEPAGENTS_READ_METADATA__\t(\d+)\n?/,
+    );
+    if (!metadataMatch) {
+      return { content: result.output, mimeType };
+    }
+
+    const totalLines = Number(metadataMatch[1]);
+    const normalizedOffset = Math.max(Math.trunc(offset), 0);
+    if (normalizedOffset >= totalLines) {
+      return {
+        error: `Line offset ${offset} exceeds file length (${totalLines} lines)`,
+      };
+    }
+
+    const content = result.output.slice(metadataMatch[0].length);
+    const startLine = normalizedOffset + 1;
+    const returnedLines =
+      content.match(/.*(?:\n|$)/g)?.filter(Boolean).length ?? 0;
+    const endLine = startLine + returnedLines - 1;
+    return {
+      content,
+      mimeType,
+      totalLines,
+      startLine,
+      endLine,
+      nextOffset: endLine < totalLines ? endLine : undefined,
+    };
   }
 
   /**

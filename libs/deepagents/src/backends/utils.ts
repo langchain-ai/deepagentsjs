@@ -231,6 +231,49 @@ export function checkEmptyContent(content: string): string | null {
   return null;
 }
 
+/** Slice text to a line window and include pagination metadata. */
+export function sliceReadContent(
+  content: string,
+  offset: number,
+  limit: number,
+  preserveLineEndings: boolean = false,
+): ReadResult {
+  if (!content || content.trim() === "") {
+    return { content };
+  }
+
+  const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines = normalized.match(/.*(?:\n|$)/g)?.filter(Boolean) ?? [];
+  const startIndex = Math.max(Math.trunc(offset), 0);
+  const endIndex = Math.min(
+    startIndex + Math.max(Math.trunc(limit), 0),
+    lines.length,
+  );
+
+  if (startIndex >= lines.length) {
+    return {
+      error: `Line offset ${offset} exceeds file length (${lines.length} lines)`,
+    };
+  }
+
+  if (endIndex === startIndex) {
+    return { content: "" };
+  }
+
+  let selected = lines.slice(startIndex, endIndex).join("");
+  if (!preserveLineEndings && selected.endsWith("\n")) {
+    selected = selected.slice(0, -1);
+  }
+
+  return {
+    content: selected,
+    totalLines: lines.length,
+    startLine: startIndex + 1,
+    endLine: endIndex,
+    nextOffset: endIndex < lines.length ? endIndex : undefined,
+  };
+}
+
 /**
  * Convert FileData to plain string content.
  *

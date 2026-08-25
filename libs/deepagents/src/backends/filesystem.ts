@@ -36,6 +36,7 @@ import {
   getMimeType,
   isTextMimeType,
   performStringReplacement,
+  sliceReadContent,
 } from "./utils.js";
 
 const SUPPORTS_NOFOLLOW = fsSync.constants.O_NOFOLLOW !== undefined;
@@ -284,18 +285,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
         return { content: emptyMsg, mimeType };
       }
 
-      const lines = content.split("\n");
-      const startIdx = offset;
-      const endIdx = Math.min(startIdx + limit, lines.length);
-
-      if (startIdx >= lines.length) {
-        return {
-          error: `Line offset ${offset} exceeds file length (${lines.length} lines)`,
-        };
-      }
-
-      const selectedLines = lines.slice(startIdx, endIdx);
-      return { content: selectedLines.join("\n"), mimeType };
+      return { ...sliceReadContent(content, offset, limit), mimeType };
     } catch (e: any) {
       return { error: `Error reading file '${filePath}': ${e.message}` };
     }

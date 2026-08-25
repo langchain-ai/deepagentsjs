@@ -47,9 +47,8 @@ class MockSandbox extends BaseSandbox {
     }
 
     // Simulate read command (awk-based)
-    if (command.includes("awk") && command.includes("printf")) {
-      // Extract file path from the shell-quoted path at end of command
-      const pathMatch = command.match(/'([^']+)'\s*$/);
+    if (command.includes("__DEEPAGENTS_READ_METADATA__")) {
+      const pathMatch = command.match(/if \[ ! -f '([^']+)' \]/);
       if (pathMatch) {
         const filePath = pathMatch[1];
         const bytes = this.files.get(filePath);
@@ -69,9 +68,11 @@ class MockSandbox extends BaseSandbox {
           };
         }
         const lines = content.split("\n");
-        const output = lines
-          .map((line, i) => `     ${i + 1}\t${line}`)
-          .join("\n");
+        const rangeMatch = command.match(/NR >= (\d+) && NR <= (\d+)/);
+        const start = Number(rangeMatch?.[1] ?? 1) - 1;
+        const end = Number(rangeMatch?.[2] ?? lines.length);
+        const page = lines.slice(start, end).join("\n");
+        const output = `__DEEPAGENTS_READ_METADATA__\t${lines.length}\n${page}`;
         return { output, exitCode: 0, truncated: false };
       }
     }
@@ -211,10 +212,25 @@ describe("BaseSandbox", () => {
       const sandbox = new MockSandbox();
       sandbox.addFile("/test.txt", "line1\nline2\nline3");
 
-      const result = await sandbox.read("/test.txt");
+      const result = await sandbox.read("/test.txt", 0, 2);
       expect(result.error).toBeUndefined();
       expect(result.content).toContain("line1");
       expect(result.content).toContain("line2");
+      expect(result).toMatchObject({
+        totalLines: 3,
+        startLine: 1,
+        endLine: 2,
+        nextOffset: 2,
+      });
+    });
+
+    it("should return error when offset exceeds file length", async () => {
+      const sandbox = new MockSandbox();
+      sandbox.addFile("/test.txt", "line1\nline2");
+
+      const result = await sandbox.read("/test.txt", 3, 1);
+
+      expect(result.error).toBe("Line offset 3 exceeds file length (2 lines)");
     });
 
     it("should return error for non-existent file", async () => {

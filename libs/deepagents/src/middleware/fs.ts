@@ -30,6 +30,7 @@ import type {
   DeleteResult,
   FileData,
   LsResult,
+  ReadResult,
 } from "../backends/protocol.js";
 import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
@@ -131,6 +132,30 @@ export const NUM_CHARS_PER_TOKEN = 4;
 export const DEFAULT_READ_LINE_OFFSET = 0;
 export const DEFAULT_READ_LINE_LIMIT = 100;
 
+function remainingLinesNotice(readResult: ReadResult): string {
+  const { totalLines, startLine, endLine, nextOffset } = readResult;
+  if (
+    startLine === undefined ||
+    endLine === undefined ||
+    nextOffset === undefined
+  ) {
+    return "";
+  }
+
+  const readCount = endLine - startLine + 1;
+  const readUnit = readCount === 1 ? "line" : "lines";
+  if (totalLines === undefined) {
+    return `\n\n[Read ${readCount} ${readUnit} (lines ${startLine}-${endLine}). More lines remain from offset ${nextOffset}.]`;
+  }
+  if (endLine >= totalLines) {
+    return "";
+  }
+
+  const remaining = totalLines - endLine;
+  const remainingUnit = remaining === 1 ? "line" : "lines";
+  return `\n\n[Read ${readCount} ${readUnit} (lines ${startLine}-${endLine} of ${totalLines} total). ${remaining} ${remainingUnit} remaining from offset ${nextOffset}.]`;
+}
+
 /**
  * Maximum size for binary (non-text) files read via read_file, in bytes.
  * Base64-encoded content is ~33% larger, so 10MB raw ≈ 13.3MB in context.
@@ -145,6 +170,71 @@ export const MAX_BINARY_READ_SIZE_BYTES = 10 * 1024 * 1024;
 const READ_FILE_TRUNCATION_MSG = `
 
 [Output was truncated due to size limits. The file content is very large. Consider reformatting the file to make it easier to navigate. For example, if this is JSON, use execute(command='jq . {file_path}') to pretty-print it with line breaks. For other formats, you can use appropriate formatting tools to split long lines.]`;
+
+function truncatePaginatedRead(
+  content: string,
+  filePath: string,
+  readResult: ReadResult,
+  tokenLimit: number | null,
+): string {
+  const notice = remainingLinesNotice(readResult);
+  if (
+    !tokenLimit ||
+    content.length + notice.length < NUM_CHARS_PER_TOKEN * tokenLimit
+  ) {
+    return content + notice;
+  }
+
+  const truncationMsg = READ_FILE_TRUNCATION_MSG.replace(
+    "{file_path}",
+    filePath,
+  );
+  const threshold = NUM_CHARS_PER_TOKEN * tokenLimit;
+  if (readResult.startLine !== undefined && readResult.endLine !== undefined) {
+    const rows = content.split("\n");
+    const boundaries: Array<[number, number]> = [];
+    let position = 0;
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      position += row.length;
+      const sourceLine = Number(
+        row.trimStart().split("\t", 1)[0].split(".", 1)[0],
+      );
+      if (!Number.isFinite(sourceLine) || sourceLine > readResult.endLine) {
+        break;
+      }
+
+      const nextRow = rows[index + 1];
+      const nextSourceLine = nextRow
+        ? Number(nextRow.trimStart().split("\t", 1)[0].split(".", 1)[0])
+        : undefined;
+      if (nextSourceLine !== sourceLine) {
+        boundaries.push([position, sourceLine]);
+      }
+      position += 1;
+    }
+
+    for (const [boundary, endLine] of boundaries.reverse()) {
+      const adjustedNotice = remainingLinesNotice({
+        totalLines: readResult.totalLines,
+        startLine: readResult.startLine,
+        endLine,
+        nextOffset: endLine,
+      });
+      if (
+        boundary + truncationMsg.length + adjustedNotice.length <=
+        threshold
+      ) {
+        return content.slice(0, boundary) + truncationMsg + adjustedNotice;
+      }
+    }
+  }
+
+  return (
+    content.slice(0, Math.max(0, threshold - truncationMsg.length)) +
+    truncationMsg
+  );
+}
 
 /**
  * Note appended to grep results that were cut short by the match-count cap.
@@ -1064,25 +1154,22 @@ function createReadFileTool(
         content = lines.slice(0, limit).join("\n");
       }
 
-      let formatted = formatContentWithLineNumbers(content, offset + 1);
+      const formatted = formatContentWithLineNumbers(
+        content,
+        readResult.startLine ?? offset + 1,
+      );
 
-      // Check if result exceeds token threshold and truncate if necessary
-      if (
-        toolTokenLimitBeforeEvict &&
-        formatted.length >= NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict
-      ) {
-        // Calculate truncation message length to ensure final result stays under threshold
-        const truncationMsg = READ_FILE_TRUNCATION_MSG.replace(
-          "{file_path}",
-          file_path,
-        );
-        const maxContentLength =
-          NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict -
-          truncationMsg.length;
-        formatted = formatted.substring(0, maxContentLength) + truncationMsg;
-      }
-
-      return [{ type: "text", text: formatted }];
+      return [
+        {
+          type: "text",
+          text: truncatePaginatedRead(
+            formatted,
+            file_path,
+            readResult,
+            toolTokenLimitBeforeEvict,
+          ),
+        },
+      ];
     },
     {
       name: "read_file",

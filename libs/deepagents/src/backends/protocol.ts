@@ -167,6 +167,14 @@ export interface ReadResult {
   content?: string | Uint8Array;
   /** MIME type of the file, when available */
   mimeType?: string;
+  /** Total number of source lines, when available */
+  totalLines?: number;
+  /** 1-indexed first source line returned */
+  startLine?: number;
+  /** 1-indexed last source line returned */
+  endLine?: number;
+  /** 0-indexed offset for the next unread source line */
+  nextOffset?: number;
 }
 
 /**

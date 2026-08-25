@@ -23,7 +23,7 @@ import type {
   WriteResult,
 } from "./protocol.js";
 import { applyGrepMaxCount } from "./protocol.js";
-import { performStringReplacement } from "./utils.js";
+import { performStringReplacement, sliceReadContent } from "./utils.js";
 
 const CONTEXT_URL_COMMIT_PATH_RE = /^\/context\/([^/]+)\/([0-9a-f]{8})$/;
 const LEGACY_URL_COMMIT_PATH_RE = /^\/hub\/([^/]+)\/([^/:]+):([0-9a-f]{8})$/;
@@ -160,46 +160,6 @@ function getErrorMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
-}
-
-function splitLinesKeepEnds(content: string): string[] {
-  const lines: string[] = [];
-  let lineStart = 0;
-  for (let index = 0; index < content.length; index += 1) {
-    if (content[index] === "\n") {
-      lines.push(content.slice(lineStart, index + 1));
-      lineStart = index + 1;
-    }
-  }
-
-  if (lineStart < content.length) {
-    lines.push(content.slice(lineStart));
-  }
-
-  return lines;
-}
-
-function sliceReadContent(
-  content: string,
-  offset: number,
-  limit: number,
-): { content?: string; error?: string } {
-  if (!content || content.trim() === "") {
-    return { content };
-  }
-
-  const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const lines = splitLinesKeepEnds(normalized);
-  const startIndex = offset;
-  const endIndex = Math.min(startIndex + limit, lines.length);
-
-  if (startIndex >= lines.length) {
-    return {
-      error: `Line offset ${offset} exceeds file length (${lines.length} lines)`,
-    };
-  }
-
-  return { content: lines.slice(startIndex, endIndex).join("") };
 }
 
 function isLangSmithNotFoundError(error: unknown): boolean {
@@ -885,12 +845,12 @@ export class ContextHubBackend implements BackendProtocolV2 {
       return { error: `File '${filePath}' not found` };
     }
 
-    const sliced = sliceReadContent(content, offset, limit);
+    const sliced = sliceReadContent(content, offset, limit, true);
     if (sliced.error) {
       return { error: sliced.error };
     }
 
-    return { content: sliced.content ?? "", mimeType: TEXT_MIME_TYPE };
+    return { ...sliced, mimeType: TEXT_MIME_TYPE };
   }
 
   async readRaw(filePath: string): Promise<ReadRawResult> {

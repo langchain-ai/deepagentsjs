@@ -322,10 +322,25 @@ describe("FilesystemBackend", () => {
       virtualMode: false,
     });
 
-    const txt = await backend.read(filePath);
+    const txt = await backend.read(filePath, 0, 2);
     expect(txt.content).toContain("line1");
     expect(txt.content).toContain("line2");
-    expect(txt.content).toContain("line3");
+    expect(txt.content).not.toContain("line3");
+    expect(txt).toMatchObject({
+      totalLines: 3,
+      startLine: 1,
+      endLine: 2,
+      nextOffset: 2,
+    });
+
+    const finalPage = await backend.read(filePath, 2, 2);
+    expect(finalPage).toMatchObject({
+      content: "line3",
+      totalLines: 3,
+      startLine: 3,
+      endLine: 3,
+    });
+    expect(finalPage.nextOffset).toBeUndefined();
   });
 
   it("should handle empty files", async () => {
