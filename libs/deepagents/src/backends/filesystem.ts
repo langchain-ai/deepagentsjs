@@ -79,6 +79,15 @@ export class FilesystemBackend implements BackendProtocolV2 {
    */
   protected resolvePath(key: string): string {
     if (this.virtualMode) {
+      if (path.isAbsolute(key)) {
+        const relative = path.relative(this.cwd, key);
+        if (
+          relative === "" ||
+          (!relative.startsWith("..") && !path.isAbsolute(relative))
+        ) {
+          return key;
+        }
+      }
       const vpath = key.startsWith("/") ? key : "/" + key;
       if (vpath.includes("..") || vpath.startsWith("~")) {
         throw new Error("Path traversal not allowed");
