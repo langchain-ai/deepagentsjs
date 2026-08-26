@@ -2,10 +2,12 @@ import { describe, it, expect, vi } from "vitest";
 import { createDeepAgent } from "./agent.js";
 import { isAnthropicModel } from "./utils.js";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
-import { todoListMiddleware } from "langchain";
+import { todoListMiddleware, tool } from "langchain";
 import {
+  AIMessage,
   HumanMessage,
   SystemMessage,
+  ToolMessage,
   type BaseMessage,
 } from "@langchain/core/messages";
 import { MemorySaver, StateSchema } from "@langchain/langgraph";
@@ -236,6 +238,60 @@ describe("profile tool exclusions", () => {
 
     expect(toolNames).toContain("read_file");
     expect(toolNames).not.toContain("execute");
+  });
+
+  it("rejects excluded calls while executing allowed calls", async () => {
+    registerHarnessProfile("executiontest", {
+      excludedTools: ["excluded_tool"],
+    });
+    const excludedHandler = vi.fn(() => "excluded");
+    const excludedTool = tool(excludedHandler, {
+      name: "excluded_tool",
+      description: "Excluded tool",
+      schema: z.object({}),
+    });
+    const allowedHandler = vi.fn(() => "allowed");
+    const allowedTool = tool(allowedHandler, {
+      name: "allowed_tool",
+      description: "Allowed tool",
+      schema: z.object({}),
+    });
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            { name: "excluded_tool", args: {}, id: "excluded_call" },
+            { name: "allowed_tool", args: {}, id: "allowed_call" },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+    vi.spyOn(model, "getName").mockReturnValue("ConfigurableModel");
+    (model as any)._defaultConfig = {
+      modelProvider: "executiontest",
+      model: "model",
+    };
+
+    const result = await createDeepAgent({
+      model,
+      tools: [excludedTool, allowedTool],
+    }).invoke({ messages: [new HumanMessage("Run the tools")] });
+    const toolMessages = result.messages.filter(ToolMessage.isInstance);
+
+    expect(excludedHandler).not.toHaveBeenCalled();
+    expect(allowedHandler).toHaveBeenCalledOnce();
+    expect(toolMessages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "excluded_tool",
+          status: "error",
+          content: "Error: excluded_tool is not available.",
+        }),
+        expect.objectContaining({ name: "allowed_tool", content: "allowed" }),
+      ]),
+    );
   });
 });
 
