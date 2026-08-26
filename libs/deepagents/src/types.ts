@@ -524,10 +524,7 @@ export interface CreateDeepAgentParams<
 > {
   /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
   model?: BaseLanguageModel | string;
-  /**
-   * Additional tools for the agent. To stop offering a built-in tool to a
-   * model, register a harness profile with `excludedTools`.
-   */
+  /** Tools the agent should have access to */
   tools?: TTools | StructuredTool[];
   /**
    * Custom system instructions. Structured configuration is deprecated and
