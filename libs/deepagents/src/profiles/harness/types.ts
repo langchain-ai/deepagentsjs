@@ -98,8 +98,9 @@ export interface HarnessProfileOptions {
    * tool-call boundary.
    *
    * Applied via middleware after all tool-injecting middleware have run, so it
-   * catches both user-provided and middleware-provided tools. Exclusions are
-   * model-facing calibration resolved per model, not a security boundary.
+   * catches both user-provided and middleware-provided tools. Each declarative
+   * subagent uses the profile resolved for its own model. Exclusions are
+   * model-facing calibration, not a security boundary.
    *
    * @default [] (no tools excluded)
    */
@@ -184,8 +185,9 @@ export interface HarnessProfile {
    * tool-call boundary.
    *
    * Applied via middleware after all tool-injecting middleware have run, so it
-   * catches both user-provided and middleware-provided tools. Exclusions are
-   * model-facing calibration resolved per model, not a security boundary.
+   * catches both user-provided and middleware-provided tools. Each declarative
+   * subagent uses the profile resolved for its own model. Exclusions are
+   * model-facing calibration, not a security boundary.
    */
   excludedTools: Set<string>;
 
