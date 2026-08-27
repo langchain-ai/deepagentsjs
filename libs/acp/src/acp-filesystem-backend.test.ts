@@ -129,6 +129,12 @@ describe("ACPFilesystemBackend", () => {
       const result = await backend.read(path.join(tmpDir, "local.txt"), 1, 2);
 
       expect(result.content).toBe("line1\nline2");
+      expect(result).toMatchObject({
+        totalLines: 5,
+        startLine: 2,
+        endLine: 3,
+        nextOffset: 3,
+      });
     });
 
     it("should pass sessionId in readTextFile call", async () => {

@@ -35,6 +35,7 @@ import {
   checkEmptyContent,
   getMimeType,
   isTextMimeType,
+  normalizeReadPagination,
   performStringReplacement,
 } from "./utils.js";
 
@@ -293,18 +294,35 @@ export class FilesystemBackend implements BackendProtocolV2 {
         return { content: emptyMsg, mimeType };
       }
 
+      const { offset: normalizedOffset, limit: normalizedLimit } =
+        normalizeReadPagination(offset, limit);
       const lines = content.split("\n");
-      const startIdx = offset;
-      const endIdx = Math.min(startIdx + limit, lines.length);
+      const totalLines =
+        lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
+      const sliceEndIdx = Math.min(
+        normalizedOffset + normalizedLimit,
+        lines.length,
+      );
+      const endIdx = Math.min(normalizedOffset + normalizedLimit, totalLines);
 
-      if (startIdx >= lines.length) {
+      if (normalizedOffset >= totalLines) {
         return {
-          error: `Line offset ${offset} exceeds file length (${lines.length} lines)`,
+          error: `Line offset ${normalizedOffset} exceeds file length (${totalLines} lines)`,
         };
       }
 
-      const selectedLines = lines.slice(startIdx, endIdx);
-      return { content: selectedLines.join("\n"), mimeType };
+      const selectedLines = lines.slice(normalizedOffset, sliceEndIdx);
+      if (selectedLines.length === 0 || normalizedLimit === 0) {
+        return { content: selectedLines.join("\n"), mimeType };
+      }
+      return {
+        content: selectedLines.join("\n"),
+        mimeType,
+        totalLines,
+        startLine: normalizedOffset + 1,
+        endLine: endIdx,
+        nextOffset: endIdx < totalLines ? endIdx : undefined,
+      };
     } catch (e: any) {
       return { error: `Error reading file '${filePath}': ${e.message}` };
     }

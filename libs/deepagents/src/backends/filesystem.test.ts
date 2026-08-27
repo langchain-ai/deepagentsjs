@@ -328,6 +328,25 @@ describe("FilesystemBackend", () => {
     expect(txt.content).toContain("line3");
   });
 
+  it("should return pagination metadata for partial text reads", async () => {
+    const filePath = path.join(tmpDir, "paginated.txt");
+    await writeFile(filePath, "line1\nline2\nline3\nline4");
+    const backend = new FilesystemBackend({
+      rootDir: tmpDir,
+      virtualMode: false,
+    });
+
+    const result = await backend.read(filePath, 1, 2);
+
+    expect(result.content).toBe("line2\nline3");
+    expect(result).toMatchObject({
+      totalLines: 4,
+      startLine: 2,
+      endLine: 3,
+      nextOffset: 3,
+    });
+  });
+
   it("should handle empty files", async () => {
     const root = tmpDir;
     const filePath = path.join(root, "empty.txt");
@@ -391,6 +410,9 @@ describe("FilesystemBackend", () => {
     const txt = await backend.read(filePath);
     expect(txt.content).toContain("line1");
     expect(txt.content).toContain("line2");
+    expect(txt.totalLines).toBe(2);
+    expect(txt.endLine).toBe(2);
+    expect(txt.nextOffset).toBeUndefined();
   });
 
   it("should handle unicode content", async () => {

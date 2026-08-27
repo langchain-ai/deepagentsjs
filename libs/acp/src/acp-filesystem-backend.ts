@@ -9,6 +9,7 @@
 import type { AgentSideConnection } from "@agentclientprotocol/sdk";
 import {
   FilesystemBackend,
+  normalizeReadPagination,
   type WriteResult,
   type ReadResult,
 } from "deepagents";
@@ -65,9 +66,32 @@ export class ACPFilesystemBackend extends FilesystemBackend {
 
       if (offset != null || limit != null) {
         const lines = text.split("\n");
-        const start = offset ?? 0;
-        const end = limit != null ? start + limit : lines.length;
-        text = lines.slice(start, end).join("\n");
+        const totalLines =
+          lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
+        const normalized = normalizeReadPagination(
+          offset ?? 0,
+          limit ?? lines.length,
+        );
+        const start = normalized.offset;
+        const readLimit = normalized.limit;
+        const sliceEnd = Math.min(start + readLimit, lines.length);
+        const end = Math.min(sliceEnd, totalLines);
+        const selected = lines.slice(start, sliceEnd);
+        text = selected.join("\n");
+        if (
+          selected.length > 0 &&
+          start >= 0 &&
+          start < totalLines &&
+          readLimit > 0
+        ) {
+          return {
+            content: text,
+            totalLines,
+            startLine: start + 1,
+            endLine: end,
+            nextOffset: end < totalLines ? end : undefined,
+          };
+        }
       }
 
       return { content: text };
