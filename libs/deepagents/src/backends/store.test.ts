@@ -1067,3 +1067,35 @@ describe("StoreBackend", () => {
     });
   });
 });
+
+describe("StoreBackend namespace isolation", () => {
+  it("ls/glob/grep only see the backend's exact namespace, not sibling prefixes (#772)", async () => {
+    const { runtime } = makeConfig();
+    const acme = new StoreBackend(runtime, { namespace: ["tenant", "acme"] });
+    const acmeCorp = new StoreBackend(runtime, {
+      namespace: ["tenant", "acme-corp"],
+    });
+
+    await acme.write("/own.md", "acme's own file");
+    await acmeCorp.write("/secret.md", "acme-corp CONFIDENTIAL revenue figures");
+
+    const ls = await acme.ls("/");
+    const lsPaths = ls.files!.map((f) => f.path);
+    expect(lsPaths).toContain("/own.md");
+    expect(lsPaths).not.toContain("/secret.md");
+
+    const glob = await acme.glob("**/*", "/");
+    const globPaths = glob.files!.map((f) => f.path);
+    expect(globPaths).toContain("/own.md");
+    expect(globPaths).not.toContain("/secret.md");
+
+    const grep = await acme.grep("CONFIDENTIAL", "/");
+    expect(grep.matches ?? []).toHaveLength(0);
+
+    // sibling still sees its own file (sanity)
+    const corp = await acmeCorp.ls("/");
+    const corpPaths = corp.files!.map((f) => f.path);
+    expect(corpPaths).toContain("/secret.md");
+    expect(corpPaths).not.toContain("/own.md");
+  });
+});

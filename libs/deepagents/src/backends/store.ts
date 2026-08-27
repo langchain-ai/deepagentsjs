@@ -186,6 +186,14 @@ export interface StoreBackendOptions<StateT = unknown> extends BackendOptions {
  * isolation patterns (user-scoped, org-scoped, etc.), or falls back
  * to legacy assistant_id-based isolation.
  */
+/**
+ * Deep-equality check for two store namespaces.
+ */
+function namespacesEqual(a: string[] | undefined, b: string[]): boolean {
+  if (!a || a.length !== b.length) return false;
+  return a.every((part, i) => part === b[i]);
+}
+
 export class StoreBackend implements BackendProtocolV2 {
   private stateAndStore: StateAndStore | undefined;
   private storeOverride: BaseStore | undefined;
@@ -441,7 +449,15 @@ export class StoreBackend implements BackendProtocolV2 {
         break;
       }
 
-      allItems.push(...pageItems);
+      // Only accumulate items in *exactly* this backend's namespace. store.search()
+      // matches by namespace prefix, so sibling namespaces sharing a leading string
+      // (e.g. ["tenant","acme"] vs ["tenant","acme-corp"]) would otherwise leak into
+      // ls/glob/grep. read/write use exact get/put and are unaffected.
+      allItems.push(
+        ...pageItems.filter((item: Item) =>
+          namespacesEqual(item.namespace, namespace),
+        ),
+      );
 
       if (pageItems.length < pageSize) {
         break;
