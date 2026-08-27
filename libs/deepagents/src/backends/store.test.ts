@@ -1077,7 +1077,10 @@ describe("StoreBackend namespace isolation", () => {
     });
 
     await acme.write("/own.md", "acme's own file");
-    await acmeCorp.write("/secret.md", "acme-corp CONFIDENTIAL revenue figures");
+    await acmeCorp.write(
+      "/secret.md",
+      "acme-corp CONFIDENTIAL revenue figures",
+    );
 
     const ls = await acme.ls("/");
     const lsPaths = ls.files!.map((f) => f.path);
