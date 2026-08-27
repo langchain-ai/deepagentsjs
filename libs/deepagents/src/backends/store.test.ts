@@ -261,6 +261,12 @@ describe("StoreBackend", () => {
     expect(readWithOffset.content).toContain("line4");
     expect(readWithOffset.content).not.toContain("line1");
     expect(readWithOffset.content).not.toContain("line5");
+    expect(readWithOffset).toMatchObject({
+      totalLines: 5,
+      startLine: 3,
+      endLine: 4,
+      nextOffset: 4,
+    });
   });
 
   it("should handle edit with replace_all", async () => {

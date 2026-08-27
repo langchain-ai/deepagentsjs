@@ -167,6 +167,23 @@ export interface ReadResult {
   content?: string | Uint8Array;
   /** MIME type of the file, when available */
   mimeType?: string;
+  /**
+   * Total number of logical source lines for a text read, when known.
+   * Omitted for binary reads and for backends that cannot determine it.
+   */
+  totalLines?: number;
+  /**
+   * 1-indexed first source line represented by `content`.
+   * Text pagination fields are optional so older/custom backends remain valid.
+   */
+  startLine?: number;
+  /** 1-indexed last source line represented by `content`. */
+  endLine?: number;
+  /**
+   * 0-indexed offset of the next unread source line.
+   * Omitted when the returned text reaches EOF.
+   */
+  nextOffset?: number;
 }
 
 /**

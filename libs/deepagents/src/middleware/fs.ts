@@ -30,17 +30,21 @@ import type {
   DeleteResult,
   FileData,
   LsResult,
+  ReadResult,
 } from "../backends/protocol.js";
 import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
 import {
   sanitizeToolCallId,
   formatContentWithLineNumbers,
+  formatContentWithLineNumbersAndBoundaries,
+  type FormattedContentWithLineNumbers,
   formatGrepMatches,
   truncateIfTooLong,
   getMimeType,
   isTextMimeType,
   MAX_LINE_LENGTH,
+  normalizeReadPagination,
 } from "../backends/utils.js";
 
 const INT_FORMATTER = new Intl.NumberFormat("en-US");
@@ -145,6 +149,125 @@ export const MAX_BINARY_READ_SIZE_BYTES = 10 * 1024 * 1024;
 const READ_FILE_TRUNCATION_MSG = `
 
 [Output was truncated due to size limits. The file content is very large. Consider reformatting the file to make it easier to navigate. For example, if this is JSON, use execute(command='jq . {file_path}') to pretty-print it with line breaks. For other formats, you can use appropriate formatting tools to split long lines.]`;
+
+/**
+ * Render backend pagination metadata as guidance for the model.
+ *
+ * Backends own source-level pagination because only they know how much of the
+ * file was read. The middleware owns presentation: it line-numbers the text
+ * and turns optional metadata into a human-readable footer. Keeping the fields
+ * optional preserves compatibility with custom backends that predate this
+ * contract; those reads simply receive no pagination footer.
+ *
+ * `nextOffset` is the signal that the read is partial. A result at EOF omits it,
+ * so complete reads retain their previous output shape.
+ */
+function remainingLinesNotice(readResult: ReadResult): string {
+  const { startLine, endLine, nextOffset, totalLines } = readResult;
+  if (
+    startLine === undefined ||
+    endLine === undefined ||
+    nextOffset === undefined ||
+    !Number.isSafeInteger(startLine) ||
+    !Number.isSafeInteger(endLine) ||
+    !Number.isSafeInteger(nextOffset) ||
+    startLine < 1 ||
+    endLine < startLine ||
+    nextOffset !== endLine ||
+    (totalLines !== undefined &&
+      (!Number.isSafeInteger(totalLines) || totalLines < endLine))
+  ) {
+    return "";
+  }
+
+  const readCount = endLine - startLine + 1;
+  const readUnit = readCount === 1 ? "line" : "lines";
+  if (totalLines === undefined) {
+    return `\n\n[Read ${readCount} ${readUnit} (lines ${startLine}-${endLine}). More lines remain from offset ${nextOffset}.]`;
+  }
+  if (endLine >= totalLines) {
+    return "";
+  }
+
+  const remaining = totalLines - endLine;
+  const remainingUnit = remaining === 1 ? "line" : "lines";
+  return `\n\n[Read ${readCount} ${readUnit} (lines ${startLine}-${endLine} of ${totalLines} total). ${remaining} ${remainingUnit} remaining from offset ${nextOffset}.]`;
+}
+
+/**
+ * Fit a line-numbered read into the middleware's output budget without
+ * publishing a resume offset that skips content the model did not see.
+ *
+ * There are two independent forms of limiting:
+ *
+ * 1. The backend paginates the source file with `offset` and `limit`.
+ * 2. The middleware may further shorten that page to fit its token budget.
+ *
+ * If the backend returned lines 1-100 but the middleware only displayed lines
+ * 1-30, forwarding the backend's original `nextOffset: 100` would silently skip
+ * lines 31-100 on the next read. This function therefore truncates only after a
+ * complete source line and rebuilds the remaining-lines notice using the last
+ * line actually displayed.
+ *
+ * Long source lines may occupy several formatted rows (`12`, `12.1`, ...). The
+ * formatter records a structured boundary only after the final chunk, so this
+ * function does not need to inspect or understand the gutter representation.
+ * If no complete source line can fit beside the truncation message, the function
+ * falls back to character truncation and omits pagination guidance rather than
+ * advertising an unsafe offset.
+ */
+function truncatePaginatedRead(
+  formatted: FormattedContentWithLineNumbers,
+  filePath: string,
+  readResult: ReadResult,
+  tokenLimit: number | null,
+): string {
+  const content = formatted.text;
+  const notice = remainingLinesNotice(readResult);
+  if (
+    !tokenLimit ||
+    content.length + notice.length < NUM_CHARS_PER_TOKEN * tokenLimit
+  ) {
+    return content + notice;
+  }
+
+  const truncationMsg = READ_FILE_TRUNCATION_MSG.replace(
+    "{file_path}",
+    filePath,
+  );
+  const threshold = NUM_CHARS_PER_TOKEN * tokenLimit;
+  if (readResult.startLine !== undefined && readResult.endLine !== undefined) {
+    const finalSourceLine = readResult.endLine;
+    const boundaries = formatted.sourceLineBoundaries.filter(
+      (boundary) => boundary.sourceLine <= finalSourceLine,
+    );
+
+    // Prefer the latest complete source line that leaves room for both notices.
+    for (let index = boundaries.length - 1; index >= 0; index -= 1) {
+      const boundary = boundaries[index];
+      const adjustedResult: ReadResult = {
+        totalLines: readResult.totalLines,
+        startLine: readResult.startLine,
+        endLine: boundary.sourceLine,
+        nextOffset: boundary.sourceLine,
+      };
+      const adjustedNotice = remainingLinesNotice(adjustedResult);
+      if (
+        boundary.endOffset + truncationMsg.length + adjustedNotice.length <=
+        threshold
+      ) {
+        return (
+          content.slice(0, boundary.endOffset) + truncationMsg + adjustedNotice
+        );
+      }
+    }
+  }
+
+  // Without a complete safe boundary, preserve the historical character-level
+  // truncation behavior but omit a pagination footer: guessing would risk skips.
+  const maxContentLength = Math.max(0, threshold - truncationMsg.length);
+  return content.substring(0, maxContentLength) + truncationMsg;
+}
 
 /**
  * Note appended to grep results that were cut short by the match-count cap.
@@ -996,9 +1119,13 @@ function createReadFileTool(
       const resolvedBackend = await resolveBackend(backend, runtime);
       const {
         file_path,
-        offset = DEFAULT_READ_LINE_OFFSET,
-        limit = DEFAULT_READ_LINE_LIMIT,
+        offset: requestedOffset = DEFAULT_READ_LINE_OFFSET,
+        limit: requestedLimit = DEFAULT_READ_LINE_LIMIT,
       } = input;
+      const { offset, limit } = normalizeReadPagination(
+        requestedOffset,
+        requestedLimit,
+      );
 
       const readResult = await resolvedBackend.read(file_path, offset, limit);
       if (readResult.error) {
@@ -1060,29 +1187,39 @@ function createReadFileTool(
 
       // Enforce line limit on result (in case backend returns more)
       const lines = content.split("\n");
+      let paginationResult = readResult;
       if (lines.length > limit) {
         content = lines.slice(0, limit).join("\n");
+        if (
+          limit > 0 &&
+          readResult.startLine !== undefined &&
+          readResult.endLine !== undefined
+        ) {
+          const endLine = Math.min(
+            readResult.startLine + limit - 1,
+            readResult.endLine,
+            readResult.totalLines ?? Number.POSITIVE_INFINITY,
+          );
+          paginationResult = {
+            ...readResult,
+            endLine,
+            nextOffset: endLine,
+          };
+        }
       }
 
-      let formatted = formatContentWithLineNumbers(content, offset + 1);
+      const formatted = formatContentWithLineNumbersAndBoundaries(
+        content,
+        paginationResult.startLine ?? offset + 1,
+      );
+      const output = truncatePaginatedRead(
+        formatted,
+        file_path,
+        paginationResult,
+        toolTokenLimitBeforeEvict,
+      );
 
-      // Check if result exceeds token threshold and truncate if necessary
-      if (
-        toolTokenLimitBeforeEvict &&
-        formatted.length >= NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict
-      ) {
-        // Calculate truncation message length to ensure final result stays under threshold
-        const truncationMsg = READ_FILE_TRUNCATION_MSG.replace(
-          "{file_path}",
-          file_path,
-        );
-        const maxContentLength =
-          NUM_CHARS_PER_TOKEN * toolTokenLimitBeforeEvict -
-          truncationMsg.length;
-        formatted = formatted.substring(0, maxContentLength) + truncationMsg;
-      }
-
-      return [{ type: "text", text: formatted }];
+      return [{ type: "text", text: output }];
     },
     {
       name: "read_file",

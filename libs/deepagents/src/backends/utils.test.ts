@@ -4,6 +4,7 @@ import {
   validateFilePath,
   sanitizeToolCallId,
   formatContentWithLineNumbers,
+  formatContentWithLineNumbersAndBoundaries,
   updateFileData,
   fileDataToString,
   checkEmptyContent,
@@ -19,6 +20,7 @@ import {
   adaptSandboxProtocol,
   grepMatchesFromFiles,
   globSearchFiles,
+  normalizeReadPagination,
 } from "./utils.js";
 import type {
   BackendProtocol,
@@ -29,6 +31,13 @@ import type {
   SandboxBackendProtocolV2,
 } from "./protocol.js";
 import { isSandboxBackend } from "./protocol.js";
+
+describe("normalizeReadPagination", () => {
+  it("clamps pagination arguments to non-negative integers", () => {
+    expect(normalizeReadPagination(-1, 2.9)).toEqual({ offset: 0, limit: 2 });
+    expect(normalizeReadPagination(3.8, -5)).toEqual({ offset: 3, limit: 0 });
+  });
+});
 
 describe("validatePath", () => {
   it("should add leading slash if missing", () => {
@@ -184,6 +193,24 @@ describe("formatContentWithLineNumbers", () => {
     const result = formatContentWithLineNumbers("line1\nline2\n");
     const lines = result.split("\n");
     expect(lines.length).toBe(2);
+  });
+
+  it("should return structured boundaries for complete source lines", () => {
+    const result = formatContentWithLineNumbersAndBoundaries("one\ntwo", 10);
+
+    expect(result.sourceLineBoundaries).toEqual([
+      { sourceLine: 10, endOffset: result.text.indexOf("\n") },
+      { sourceLine: 11, endOffset: result.text.length },
+    ]);
+  });
+
+  it("should place a long source line boundary after all continuation rows", () => {
+    const result = formatContentWithLineNumbersAndBoundaries("x".repeat(5001));
+
+    expect(result.text).toContain("1.1\t");
+    expect(result.sourceLineBoundaries).toEqual([
+      { sourceLine: 1, endOffset: result.text.length },
+    ]);
   });
 });
 

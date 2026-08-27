@@ -147,6 +147,7 @@ export {
   type BackendFactory,
   type BackendRuntime,
   applyGrepMaxCount,
+  normalizeReadPagination,
   resolveBackend,
   type FileInfo,
   type GrepMatch,

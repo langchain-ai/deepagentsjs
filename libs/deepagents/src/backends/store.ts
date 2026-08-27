@@ -38,6 +38,7 @@ import {
   isFileDataV1,
   isTextMimeType,
   migrateToFileDataV2,
+  normalizeReadPagination,
   performStringReplacement,
   updateFileData,
 } from "./utils.js";
@@ -570,9 +571,34 @@ export class StoreBackend implements BackendProtocolV2 {
           error: `File '${filePath}' has binary content but text MIME type`,
         };
       }
+      const { offset: normalizedOffset, limit: normalizedLimit } =
+        normalizeReadPagination(offset, limit);
       const lines = fileDataV2.content.split("\n");
-      const selected = lines.slice(offset, offset + limit);
-      return { content: selected.join("\n"), mimeType: fileDataV2.mimeType };
+      const totalLines =
+        lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
+      const selected = lines.slice(
+        normalizedOffset,
+        normalizedOffset + normalizedLimit,
+      );
+      if (
+        selected.length === 0 ||
+        normalizedOffset >= totalLines ||
+        normalizedLimit === 0
+      ) {
+        return { content: selected.join("\n"), mimeType: fileDataV2.mimeType };
+      }
+      const endOffset = Math.min(
+        normalizedOffset + selected.length,
+        totalLines,
+      );
+      return {
+        content: selected.join("\n"),
+        mimeType: fileDataV2.mimeType,
+        totalLines,
+        startLine: normalizedOffset + 1,
+        endLine: endOffset,
+        nextOffset: endOffset < totalLines ? endOffset : undefined,
+      };
     } catch (e: any) {
       return { error: e.message };
     }
