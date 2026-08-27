@@ -217,6 +217,42 @@ describe("BaseSandbox", () => {
       expect(result.content).toContain("line2");
     });
 
+    it("should return pagination metadata emitted by the sandbox", async () => {
+      const sandbox = new MockSandbox();
+      sandbox.execute = vi.fn().mockResolvedValue({
+        output:
+          "     2\tline2\n     3\tline3\n__DEEPAGENTS_READ_METADATA__\t5\n",
+        exitCode: 0,
+        truncated: false,
+      });
+
+      const result = await sandbox.read("/test.txt", 1, 2);
+
+      expect(result.content).toBe("     2\tline2\n     3\tline3\n");
+      expect(result).toMatchObject({
+        totalLines: 5,
+        startLine: 2,
+        endLine: 3,
+        nextOffset: 3,
+      });
+    });
+
+    it("should strip sandbox metadata from truncated reads", async () => {
+      const sandbox = new MockSandbox();
+      sandbox.execute = vi.fn().mockResolvedValue({
+        output: "     2\tline2\n__DEEPAGENTS_READ_METADATA__\t5\n",
+        exitCode: 0,
+        truncated: true,
+      });
+
+      const result = await sandbox.read("/test.txt", 1, 2);
+
+      expect(result.content).toBe("     2\tline2\n");
+      expect(result.content).not.toContain("__DEEPAGENTS_READ_METADATA__");
+      expect(result.totalLines).toBeUndefined();
+      expect(result.nextOffset).toBeUndefined();
+    });
+
     it("should return error for non-existent file", async () => {
       const sandbox = new MockSandbox();
 

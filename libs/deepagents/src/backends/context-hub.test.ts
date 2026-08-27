@@ -124,6 +124,27 @@ describe("ContextHubBackend", () => {
     const result = await backend.read("/a.md", 1, 2);
     expect(result.error).toBeUndefined();
     expect(result.content).toBe("2\n3\n");
+    expect(result).toMatchObject({
+      totalLines: 5,
+      startLine: 2,
+      endLine: 3,
+      nextOffset: 3,
+    });
+  });
+
+  it("read paginates whitespace-only content", async () => {
+    const { backend } = makeBackend({
+      "blank.md": { type: "file", content: `${"\n".repeat(100)} ` },
+    });
+
+    const result = await backend.read("/blank.md", 0, 100);
+
+    expect(result).toMatchObject({
+      totalLines: 101,
+      startLine: 1,
+      endLine: 100,
+      nextOffset: 100,
+    });
   });
 
   it("read offset beyond file length returns an error", async () => {

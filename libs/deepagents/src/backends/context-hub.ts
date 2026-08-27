@@ -23,7 +23,7 @@ import type {
   WriteResult,
 } from "./protocol.js";
 import { applyGrepMaxCount } from "./protocol.js";
-import { performStringReplacement } from "./utils.js";
+import { normalizeReadPagination, performStringReplacement } from "./utils.js";
 
 const CONTEXT_URL_COMMIT_PATH_RE = /^\/context\/([^/]+)\/([0-9a-f]{8})$/;
 const LEGACY_URL_COMMIT_PATH_RE = /^\/hub\/([^/]+)\/([^/:]+):([0-9a-f]{8})$/;
@@ -183,8 +183,8 @@ function sliceReadContent(
   content: string,
   offset: number,
   limit: number,
-): { content?: string; error?: string } {
-  if (!content || content.trim() === "") {
+): ReadResult {
+  if (!content) {
     return { content };
   }
 
@@ -199,7 +199,17 @@ function sliceReadContent(
     };
   }
 
-  return { content: lines.slice(startIndex, endIndex).join("") };
+  const selected = lines.slice(startIndex, endIndex);
+  if (selected.length === 0 || offset < 0 || limit <= 0) {
+    return { content: selected.join("") };
+  }
+  return {
+    content: selected.join(""),
+    totalLines: lines.length,
+    startLine: startIndex + 1,
+    endLine: endIndex,
+    nextOffset: endIndex < lines.length ? endIndex : undefined,
+  };
 }
 
 function isLangSmithNotFoundError(error: unknown): boolean {
@@ -885,12 +895,18 @@ export class ContextHubBackend implements BackendProtocolV2 {
       return { error: `File '${filePath}' not found` };
     }
 
-    const sliced = sliceReadContent(content, offset, limit);
+    const { offset: normalizedOffset, limit: normalizedLimit } =
+      normalizeReadPagination(offset, limit);
+    const sliced = sliceReadContent(content, normalizedOffset, normalizedLimit);
     if (sliced.error) {
       return { error: sliced.error };
     }
 
-    return { content: sliced.content ?? "", mimeType: TEXT_MIME_TYPE };
+    return {
+      ...sliced,
+      content: sliced.content ?? "",
+      mimeType: TEXT_MIME_TYPE,
+    };
   }
 
   async readRaw(filePath: string): Promise<ReadRawResult> {
