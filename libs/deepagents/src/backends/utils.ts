@@ -34,6 +34,26 @@ export const TOOL_RESULT_TOKEN_LIMIT = 20000; // Same threshold as eviction
 export const TRUNCATION_GUIDANCE =
   "... [results truncated, try being more specific with your parameters]";
 
+/**
+ * Normalize model- or caller-supplied text pagination bounds.
+ *
+ * Every backend must slice content and calculate pagination metadata from the
+ * same normalized values. Otherwise a fractional or negative argument could
+ * return one window while advertising a different `nextOffset`.
+ *
+ * Binary reads do not use this helper because their backend contract ignores
+ * line-based offset and limit values.
+ */
+export function normalizeReadPagination(
+  offset: number,
+  limit: number,
+): { offset: number; limit: number } {
+  return {
+    offset: Number.isFinite(offset) ? Math.max(0, Math.floor(offset)) : 0,
+    limit: Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 0,
+  };
+}
+
 const MIME_TYPES: Record<string, string> = {
   // images
   ".png": "image/png",
@@ -160,19 +180,30 @@ export function sanitizeToolCallId(toolCallId: string): string {
   return toolCallId.replace(/\./g, "_").replace(/\//g, "_").replace(/\\/g, "_");
 }
 
+export interface FormattedContentWithLineNumbers {
+  /** Complete line-numbered display text. */
+  text: string;
+  /**
+   * Character offsets immediately after each complete source line.
+   *
+   * A long source line may span several display rows (`12`, `12.1`, ...),
+   * but contributes only one boundary after its final chunk.
+   */
+  sourceLineBoundaries: Array<{ sourceLine: number; endOffset: number }>;
+}
+
 /**
- * Format file content with line numbers (cat -n style).
+ * Format file content with line numbers and structured source-line boundaries.
  *
- * Chunks lines longer than MAX_LINE_LENGTH with continuation markers (e.g., 5.1, 5.2).
- *
- * @param content - File content as string or list of lines
- * @param startLine - Starting line number (default: 1)
- * @returns Formatted content with line numbers and continuation markers
+ * The boundaries let downstream size limiting truncate only after complete
+ * source lines without reparsing the rendered gutter. This keeps presentation
+ * details (padding, tab separators, and continuation labels) encapsulated in
+ * the formatter that creates them.
  */
-export function formatContentWithLineNumbers(
+export function formatContentWithLineNumbersAndBoundaries(
   content: string | string[],
   startLine: number = 1,
-): string {
+): FormattedContentWithLineNumbers {
   let lines: string[];
   if (typeof content === "string") {
     lines = content.split("\n");
@@ -184,38 +215,67 @@ export function formatContentWithLineNumbers(
   }
 
   const resultLines: string[] = [];
+  const sourceLineBoundaries: Array<{
+    sourceLine: number;
+    endOffset: number;
+  }> = [];
+  let renderedLength = 0;
+
+  const appendRow = (
+    row: string,
+    sourceLine: number,
+    completesSourceLine: boolean,
+  ) => {
+    if (resultLines.length > 0) renderedLength += 1; // Inter-row newline.
+    resultLines.push(row);
+    renderedLength += row.length;
+    if (completesSourceLine) {
+      sourceLineBoundaries.push({ sourceLine, endOffset: renderedLength });
+    }
+  };
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const lineNum = i + startLine;
 
     if (line.length <= MAX_LINE_LENGTH) {
-      resultLines.push(
+      appendRow(
         `${lineNum.toString().padStart(LINE_NUMBER_WIDTH)}\t${line}`,
+        lineNum,
+        true,
       );
-    } else {
-      // Split long line into chunks with continuation markers
-      const numChunks = Math.ceil(line.length / MAX_LINE_LENGTH);
-      for (let chunkIdx = 0; chunkIdx < numChunks; chunkIdx++) {
-        const start = chunkIdx * MAX_LINE_LENGTH;
-        const end = Math.min(start + MAX_LINE_LENGTH, line.length);
-        const chunk = line.substring(start, end);
-        if (chunkIdx === 0) {
-          // First chunk: use normal line number
-          resultLines.push(
-            `${lineNum.toString().padStart(LINE_NUMBER_WIDTH)}\t${chunk}`,
-          );
-        } else {
-          // Continuation chunks: use decimal notation (e.g., 5.1, 5.2)
-          const continuationMarker = `${lineNum}.${chunkIdx}`;
-          resultLines.push(
-            `${continuationMarker.padStart(LINE_NUMBER_WIDTH)}\t${chunk}`,
-          );
-        }
-      }
+      continue;
+    }
+
+    const numChunks = Math.ceil(line.length / MAX_LINE_LENGTH);
+    for (let chunkIdx = 0; chunkIdx < numChunks; chunkIdx++) {
+      const start = chunkIdx * MAX_LINE_LENGTH;
+      const end = Math.min(start + MAX_LINE_LENGTH, line.length);
+      const chunk = line.substring(start, end);
+      const marker = chunkIdx === 0 ? `${lineNum}` : `${lineNum}.${chunkIdx}`;
+      appendRow(
+        `${marker.padStart(LINE_NUMBER_WIDTH)}\t${chunk}`,
+        lineNum,
+        chunkIdx === numChunks - 1,
+      );
     }
   }
 
-  return resultLines.join("\n");
+  return { text: resultLines.join("\n"), sourceLineBoundaries };
+}
+
+/**
+ * Format file content with line numbers (cat -n style).
+ *
+ * Lines longer than `MAX_LINE_LENGTH` are split into continuation rows such as
+ * `5.1` and `5.2`. Use `formatContentWithLineNumbersAndBoundaries` when a
+ * caller also needs safe source-line truncation points.
+ */
+export function formatContentWithLineNumbers(
+  content: string | string[],
+  startLine: number = 1,
+): string {
+  return formatContentWithLineNumbersAndBoundaries(content, startLine).text;
 }
 
 /**
