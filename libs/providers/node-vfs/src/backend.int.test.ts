@@ -35,6 +35,24 @@ describe.skipIf(isWindows)("VfsBackend Integration", () => {
       expect(relative.content).toContain("Hello from VFS!");
     });
 
+    it("returns pagination metadata for partial text reads", async () => {
+      sandbox = await VfsBackend.create({
+        initialFiles: {
+          "/lines.txt": "one\ntwo\nthree\nfour",
+        },
+      });
+
+      const result = await sandbox.read("/lines.txt", 1, 2);
+
+      expect(result.content).toBe("two\nthree");
+      expect(result).toMatchObject({
+        totalLines: 4,
+        startLine: 2,
+        endLine: 3,
+        nextOffset: 3,
+      });
+    });
+
     it("supports ls for absolute and relative directory paths", async () => {
       sandbox = await VfsBackend.create({
         initialFiles: {
