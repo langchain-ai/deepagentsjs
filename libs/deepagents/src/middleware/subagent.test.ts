@@ -445,6 +445,51 @@ describe("ForkedSubAgent", () => {
     ).toThrow(/ForkedSubAgent 'worker' cannot set skills/);
   });
 
+  it.each([
+    { label: "no subagents", subagents: undefined, expected: false },
+    {
+      label: "isolated (handoff) subagent",
+      subagents: [
+        {
+          name: "worker",
+          description: "Starts fresh.",
+          systemPrompt: "You are a worker.",
+        },
+      ],
+      expected: false,
+    },
+    {
+      label: "declarative fork subagent",
+      subagents: [
+        {
+          name: "worker",
+          description: "Continues with context.",
+          mode: "fork" as const,
+        },
+      ],
+      expected: true,
+    },
+  ])(
+    "only installs parentSystemMessageMiddleware for a declarative fork ($label)",
+    ({ subagents, expected }) => {
+      createAgentMock.mockClear();
+      createDeepAgent({
+        model: new FakeListChatModel({ responses: ["Done"] }),
+        systemPrompt: "PARENT_PROMPT",
+        subagents,
+      });
+
+      const calls = createAgentMock.mock.calls;
+      const mainAgentCall = calls[calls.length - 1][0] as unknown as {
+        middleware: AgentMiddleware[];
+      };
+      const installed = mainAgentCall.middleware.some(
+        (m) => m.name === "parentSystemMessageMiddleware",
+      );
+      expect(installed).toBe(expected);
+    },
+  );
+
   it("should NOT include prior history for the default handoff mode", async () => {
     const model = new FakeListChatModel({
       responses: [

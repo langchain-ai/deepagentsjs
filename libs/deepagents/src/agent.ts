@@ -513,8 +513,14 @@ export function createDeepAgent<
     middleware = middleware.filter((entry) => !excluded.has(entry.name));
   }
 
+  // Capturing the system message costs a state write per model call, so only pay for it when a declarative fork will consume it.
+  const hasDeclarativeFork = inlineSubagents.some(
+    (item) => !("runnable" in item) && isForkedSubAgent(item),
+  );
   // Must run after everything that can mutate the system message, but before tool exclusion below (which must stay last).
-  middleware.push(createParentSystemMessageMiddleware());
+  if (hasDeclarativeFork) {
+    middleware.push(createParentSystemMessageMiddleware());
+  }
 
   // Apply profile tool exclusions via a filtering middleware that runs
   // after all tool-injecting middleware.
