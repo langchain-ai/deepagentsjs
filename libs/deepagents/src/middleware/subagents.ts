@@ -465,7 +465,7 @@ function stripInFlightAIMessage(messages: BaseMessage[]): BaseMessage[] {
 }
 
 const ParentSystemMessageStateSchema = z.object({
-  _deepagentsParentSystemMessage: z.instanceof(SystemMessage).optional(),
+  [PARENT_SYSTEM_MESSAGE_KEY]: z.instanceof(SystemMessage).optional(),
 });
 
 // Captures the parent's fully-resolved system message into state so a fork can replay it verbatim.
@@ -476,7 +476,7 @@ export function createParentSystemMessageMiddleware(): AgentMiddleware {
     wrapModelCall: async (request, handler) => {
       await handler(request);
       return new Command({
-        update: { _deepagentsParentSystemMessage: request.systemMessage },
+        update: { [PARENT_SYSTEM_MESSAGE_KEY]: request.systemMessage },
       });
     },
   });
@@ -488,7 +488,7 @@ function createForkSystemMessageMiddleware(): AgentMiddleware {
     name: "forkSystemMessageMiddleware",
     stateSchema: ParentSystemMessageStateSchema,
     wrapModelCall: async (request, handler) => {
-      const parentMessage = request.state._deepagentsParentSystemMessage;
+      const parentMessage = request.state[PARENT_SYSTEM_MESSAGE_KEY];
       if (parentMessage != null) {
         return handler({ ...request, systemMessage: parentMessage });
       }
@@ -498,7 +498,7 @@ function createForkSystemMessageMiddleware(): AgentMiddleware {
 }
 
 const ForkedContextStateSchema = z.object({
-  _deepagentsForkedContext: z.boolean().optional(),
+  [FORKED_CONTEXT_KEY]: z.boolean().optional(),
 });
 
 // Gives a fork a real (but recursion-refusing) `task` tool; must be a separate object from the parent's, and the flag must be set via `beforeAgent` — `getCurrentTaskInput()` won't see it if only seeded on the initial invoke() input.
@@ -509,7 +509,7 @@ function createForkTaskToolMiddleware(
     name: "forkTaskToolMiddleware",
     stateSchema: ForkedContextStateSchema,
     tools: [taskTool],
-    beforeAgent: () => ({ _deepagentsForkedContext: true }),
+    beforeAgent: () => ({ [FORKED_CONTEXT_KEY]: true }),
   });
 }
 
