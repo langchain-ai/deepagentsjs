@@ -36,6 +36,7 @@ import { mergeMiddlewareStack } from "./middleware/utils.js";
 import {
   GENERAL_PURPOSE_SUBAGENT,
   isForkedSubAgent,
+  createParentSystemMessageMiddleware,
   type CompiledSubAgent,
   type ForkedSubAgent,
 } from "./middleware/subagents.js";
@@ -334,7 +335,6 @@ export function createDeepAgent<
 
   const buildSubagentMiddleware = (
     input: SubAgent | ForkedSubAgent,
-    isForkable: boolean,
   ): AgentMiddleware[] => {
     const subagentProfile = resolveSubagentProfile(input.model);
     const subagentDefaultMiddleware = createSubagentDefaultMiddleware(
@@ -349,7 +349,6 @@ export function createDeepAgent<
         // Resolve profile middleware per stack so factories create fresh instances.
         ...resolveMiddleware(subagentProfile.extraMiddleware),
         ...cacheMiddleware,
-        ...(isForkable ? memoryMiddleware : []),
       ],
     );
 
@@ -372,7 +371,7 @@ export function createDeepAgent<
   const normalizeSubagentSpec = (input: SubAgent): SubAgent => ({
     ...input,
     tools: input.tools ?? [],
-    middleware: buildSubagentMiddleware(input, /* isForkable */ false),
+    middleware: buildSubagentMiddleware(input),
   });
 
   const normalizeForkedSubagentSpec = (
@@ -380,7 +379,7 @@ export function createDeepAgent<
   ): ForkedSubAgent => ({
     ...input,
     tools: input.tools ?? [],
-    middleware: buildSubagentMiddleware(input, /* isForkable */ true),
+    middleware: buildSubagentMiddleware(input),
   });
 
   const allSubagents = subagents as readonly AnySubAgent[];
@@ -513,6 +512,9 @@ export function createDeepAgent<
     const excluded = harnessProfile.excludedMiddleware;
     middleware = middleware.filter((entry) => !excluded.has(entry.name));
   }
+
+  // Must run after everything that can mutate the system message, but before tool exclusion below (which must stay last).
+  middleware.push(createParentSystemMessageMiddleware());
 
   // Apply profile tool exclusions via a filtering middleware that runs
   // after all tool-injecting middleware.

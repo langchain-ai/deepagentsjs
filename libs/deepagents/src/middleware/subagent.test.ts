@@ -65,6 +65,42 @@ function getAllSystemPromptsFromSpy(
   return systemPrompts;
 }
 
+// Works around FakeListChatModel always replaying its first response across a subagent's own multiple calls.
+class SequentialFakeChatModel extends FakeListChatModel {
+  private sharedCounter: { i: number };
+
+  constructor(params: {
+    responses: (string | AIMessage)[];
+    counter?: { i: number };
+  }) {
+    super({ responses: params.responses as unknown as string[] });
+    this.sharedCounter = params.counter ?? { i: 0 };
+  }
+
+  private currentResponse(): unknown {
+    return (this.responses as unknown[])[this.sharedCounter.i];
+  }
+
+  private incrementResponse(): void {
+    if (this.sharedCounter.i < this.responses.length - 1) {
+      this.sharedCounter.i += 1;
+    } else {
+      this.sharedCounter.i = 0;
+    }
+  }
+
+  override bindTools(tools: Parameters<FakeListChatModel["bindTools"]>[0]) {
+    const bound = super.bindTools(tools) as unknown as {
+      bound?: SequentialFakeChatModel;
+    } & SequentialFakeChatModel;
+    const inner = bound.bound ?? bound;
+    inner.sharedCounter = this.sharedCounter;
+    (inner as any)._currentResponse = this.currentResponse.bind(inner);
+    (inner as any)._incrementResponse = this.incrementResponse.bind(inner);
+    return bound;
+  }
+}
+
 const TEST_SKILL_MD = `---
 name: test-skill
 description: A test skill for subagent isolation tests
@@ -392,6 +428,23 @@ describe("ForkedSubAgent", () => {
     ).toThrow(/invalid mode 'dynamic'/);
   });
 
+  it("throws at construction when a ForkedSubAgent declares skills", () => {
+    // `as any` bypasses the `skills?: undefined` compile-time guard to exercise the runtime check.
+    expect(() =>
+      createDeepAgent({
+        model: new FakeListChatModel({ responses: ["Done"] }),
+        subagents: [
+          {
+            name: "worker",
+            description: "A worker agent",
+            mode: "fork",
+            skills: ["/skills/user/"],
+          } as any,
+        ],
+      }),
+    ).toThrow(/ForkedSubAgent 'worker' cannot set skills/);
+  });
+
   it("should NOT include prior history for the default handoff mode", async () => {
     const model = new FakeListChatModel({
       responses: [
@@ -497,9 +550,129 @@ describe("ForkedSubAgent", () => {
     const systemMessage = workerCall!.find(SystemMessage.isInstance);
     expect(systemMessage?.text).toContain("PARENT_ROOT_PROMPT_MARKER");
 
-    // No own systemPrompt to relocate — the trailing message is bare.
+    // The trailing message carries the fork identity preamble ahead of the bare task description.
     const lastMessage = workerCall![workerCall!.length - 1];
-    expect(lastMessage.content).toBe("UNIQUE_TASK_MARKER");
+    expect(lastMessage.content).toContain(
+      "you are that subagent, not the one being asked to delegate further",
+    );
+    expect(lastMessage.content).toMatch(/UNIQUE_TASK_MARKER$/);
+  });
+
+  it("replays the parent's just-computed skills-injected system message into a fork, not a stale static copy", async () => {
+    const taskToolCallId = `call_${Date.now()}`;
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: taskToolCallId,
+              name: "task",
+              args: {
+                description: "continue investigating",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Worker done",
+        "Done",
+      ],
+    });
+
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      skills: ["/skills/"],
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "Continues the investigation with full context",
+          mode: "fork",
+        },
+      ],
+    });
+
+    await agent.invoke(
+      {
+        messages: [new HumanMessage("Investigate this")],
+        files: {
+          "/skills/test-skill/SKILL.md": createFileData(TEST_SKILL_MD),
+        },
+      },
+      {
+        configurable: { thread_id: `test-fork-skills-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    const systemPrompts = getAllSystemPromptsFromSpy(invokeSpy);
+    expect(systemPrompts[0]).toContain("Skills System");
+
+    const forkPrompts = systemPrompts
+      .slice(1)
+      .filter((p) => p.includes("Skills System"));
+    expect(forkPrompts.length).toBeGreaterThan(0);
+    expect(forkPrompts[0]).toContain("test-skill");
+  });
+
+  it("refuses a fork's own attempt to delegate again, rather than recursing", async () => {
+    const parentModel = new SequentialFakeChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "call_worker",
+              name: "task",
+              args: { description: "continue", subagent_type: "worker" },
+            },
+          ],
+        }),
+        "parent done",
+      ],
+    });
+
+    const workerModel = new SequentialFakeChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "call_worker_2",
+              name: "task",
+              args: { description: "delegate again", subagent_type: "worker" },
+            },
+          ],
+        }),
+        "worker done after refusal",
+      ],
+    });
+
+    const agent = createDeepAgent({
+      model: parentModel,
+      subagents: [
+        {
+          name: "worker",
+          description: "Continues with context.",
+          model: workerModel,
+          mode: "fork",
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("start")] },
+      { recursionLimit: 10 },
+    );
+
+    const messages = result.messages as BaseMessage[];
+    const toolMessage = messages.find(ToolMessage.isInstance);
+    expect(toolMessage?.content).toBe("worker done after refusal");
+
+    const lastMessage = messages[messages.length - 1];
+    expect(lastMessage?.content).toBe("parent done");
   });
 
   it("should exclude the in-flight AIMessage, including a parallel sibling tool call", async () => {
