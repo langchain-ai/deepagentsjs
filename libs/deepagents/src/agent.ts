@@ -370,7 +370,8 @@ export function createDeepAgent<
 
   const normalizeSubagentSpec = (input: SubAgent): SubAgent => ({
     ...input,
-    tools: input.tools ?? [],
+    // Leave `tools` untouched when omitted — getSubagents() falls back to
+    // the parent's tools in that case; coercing to `[]` here would defeat that.
     middleware: buildSubagentMiddleware(input),
   });
 
@@ -378,7 +379,8 @@ export function createDeepAgent<
     input: ForkedSubAgent,
   ): ForkedSubAgent => ({
     ...input,
-    tools: input.tools ?? [],
+    // Leave `tools` untouched when omitted — getSubagents() falls back to
+    // the parent's tools in that case; coercing to `[]` here would defeat that.
     middleware: buildSubagentMiddleware(input),
   });
 

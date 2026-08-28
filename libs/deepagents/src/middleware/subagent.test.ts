@@ -1807,6 +1807,39 @@ describe("lc_agent_name propagation for subagents", () => {
   });
 });
 
+describe("Subagent tool inheritance", () => {
+  beforeEach(() => {
+    createAgentMock.mockClear();
+  });
+
+  it("inherits the parent's tools when a declarative subagent omits its own, for both handoff and fork", () => {
+    const parentTool = tool(async () => "logs", {
+      name: "read_logs",
+      description: "Read logs",
+      schema: z.object({}),
+    });
+
+    createDeepAgent({
+      model: new FakeListChatModel({ responses: ["ok"] }),
+      tools: [parentTool],
+      subagents: [
+        { name: "handoff-worker", description: "a worker" },
+        { name: "fork-worker", description: "a worker", mode: "fork" },
+      ],
+    });
+
+    const toolsByAgentName = new Map(
+      createAgentMock.mock.calls.map((call) => [
+        (call[0] as { name?: string }).name,
+        (call[0] as { tools?: unknown[] }).tools,
+      ]),
+    );
+
+    expect(toolsByAgentName.get("handoff-worker")).toEqual([parentTool]);
+    expect(toolsByAgentName.get("fork-worker")).toEqual([parentTool]);
+  });
+});
+
 describe("createSubAgent", () => {
   const fakeModel = new FakeListChatModel({ responses: ["hello"] });
 
