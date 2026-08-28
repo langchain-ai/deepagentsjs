@@ -91,17 +91,28 @@ function getTaskToolDescription(subagentDescriptions: string[]): string {
   `;
 }
 
-// Appended to a forked subagent's line so the model knows it can skip restating context.
+// Appended to a declarative forked subagent's line so the model knows it can skip restating context.
 const FORKED_SUBAGENT_TOOL_NOTE =
   " (inherits your full conversation and system prompt — no need to restate context here)";
+
+// A compiled fork's runnable bakes in its own system prompt (see CompiledSubAgent.mode),
+// so it only inherits conversation history — never claim system-prompt inheritance for it.
+const COMPILED_FORKED_SUBAGENT_TOOL_NOTE =
+  " (inherits your conversation history — its system prompt is fixed in its own runnable)";
 
 /** Render one subagent's listing line for the task tool description. */
 function describeSubagentForTool(
   name: string,
   description: string,
   forked: boolean,
+  compiled = false,
 ): string {
-  return `- ${name}: ${description}${forked ? FORKED_SUBAGENT_TOOL_NOTE : ""}`;
+  const suffix = forked
+    ? compiled
+      ? COMPILED_FORKED_SUBAGENT_TOOL_NOTE
+      : FORKED_SUBAGENT_TOOL_NOTE
+    : "";
+  return `- ${name}: ${description}${suffix}`;
 }
 
 // Marks the replayed delegation as already-happened, so the fork doesn't mistake it as a fresh request.
@@ -631,12 +642,14 @@ function getSubagents(options: {
     }
 
     const forked = isForkedSubAgent(agentParams);
+    const compiled = "runnable" in agentParams;
 
     subagentDescriptions.push(
       describeSubagentForTool(
         agentParams.name,
         agentParams.description,
         forked,
+        compiled,
       ),
     );
 
@@ -742,6 +755,7 @@ function createTaskTool(options: {
         spec.name,
         spec.description,
         isForkedSubAgent(spec),
+        "runnable" in spec,
       ),
     ),
   ];

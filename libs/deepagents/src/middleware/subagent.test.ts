@@ -42,7 +42,11 @@ import {
 import { mergeMiddleware } from "./utils.js";
 import { createFileData } from "../backends/utils.js";
 import { createMockBackend } from "./test.js";
-import { createSubAgent, filterStateForSubagent } from "./subagents.js";
+import {
+  createSubAgent,
+  createSubAgentMiddleware,
+  filterStateForSubagent,
+} from "./subagents.js";
 import { registerHarnessProfile } from "../profiles/index.js";
 
 const createAgentMock = vi.mocked(createAgent);
@@ -922,6 +926,41 @@ describe("ForkedSubAgent", () => {
       .join("\n");
     expect(text).toContain("BANANA42");
     expect(text).toContain("UNIQUE_TASK_MARKER");
+  });
+
+  it("tells the parent a compiled fork only inherits history, not system prompt", () => {
+    const compiledWorker = createAgent({
+      model: new FakeListChatModel({ responses: ["ok"] }),
+    });
+
+    const middleware = createSubAgentMiddleware({
+      defaultModel: new FakeListChatModel({ responses: ["ok"] }),
+      generalPurposeAgent: false,
+      subagents: [
+        {
+          name: "declarative-fork",
+          description: "Forks declaratively",
+          mode: "fork",
+        },
+        {
+          name: "compiled-fork",
+          description: "Forks via a compiled runnable",
+          runnable: compiledWorker,
+          mode: "fork",
+        },
+      ],
+    });
+
+    const taskTool = middleware.tools![0];
+    expect(taskTool.description).toContain(
+      "declarative-fork: Forks declaratively (inherits your full conversation and system prompt — no need to restate context here)",
+    );
+    expect(taskTool.description).toContain(
+      "compiled-fork: Forks via a compiled runnable (inherits your conversation history — its system prompt is fixed in its own runnable)",
+    );
+    expect(taskTool.description).not.toContain(
+      "compiled-fork: Forks via a compiled runnable (inherits your full conversation and system prompt",
+    );
   });
 
   it("should reconstruct the already-summarized effective view, not raw history, when forking", () => {
