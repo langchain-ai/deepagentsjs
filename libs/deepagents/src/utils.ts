@@ -114,7 +114,9 @@ export function isBedrockConverseModel(
  *
  * @internal
  */
-export function getModelProvider(model: BaseLanguageModel): string | undefined {
+export function getModelProvider(
+  model: BaseLanguageModel | RunnableInterface<unknown, unknown>,
+): string | undefined {
   if (model.getName() === "ConfigurableModel") {
     return (model as any)._defaultConfig?.modelProvider as string | undefined;
   }
@@ -136,7 +138,7 @@ export function getModelProvider(model: BaseLanguageModel): string | undefined {
  * @internal
  */
 export function getModelIdentifier(
-  model: BaseLanguageModel,
+  model: BaseLanguageModel | RunnableInterface<unknown, unknown>,
 ): string | undefined {
   const configurable =
     model.getName() === "ConfigurableModel"
