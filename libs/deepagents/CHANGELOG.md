@@ -1,5 +1,15 @@
 # deepagents
 
+## 1.13.2
+
+### Patch Changes
+
+- [#786](https://github.com/langchain-ai/deepagentsjs/pull/786) [`3ab66a7`](https://github.com/langchain-ai/deepagentsjs/commit/3ab66a7470248004da795f85c3eda2c0f6e20b23) Thanks [@hntrl](https://github.com/hntrl)! - feat(filesystem): report remaining lines for paginated file reads
+
+  Add optional read pagination metadata across built-in backends and append a model-facing continuation notice when more source lines remain. Size-based truncation now preserves complete source-line boundaries and recalculates the next offset so subsequent reads do not skip hidden content.
+
+- [#793](https://github.com/langchain-ai/deepagentsjs/pull/793) [`a78d727`](https://github.com/langchain-ai/deepagentsjs/commit/a78d72745a5b35cdebdad4986d28e7979057948e) Thanks [@ccurme](https://github.com/ccurme)! - Reject tool calls excluded by harness profiles instead of only hiding the tools from model requests.
+
 ## 1.13.1
 
 ### Patch Changes
