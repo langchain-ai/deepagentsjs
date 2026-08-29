@@ -31,7 +31,11 @@ import type {
   WriteResult,
 } from "./protocol.js";
 import { applyGrepMaxCount } from "./protocol.js";
-import { getMimeType, isTextMimeType } from "./utils.js";
+import {
+  getMimeType,
+  isTextMimeType,
+  normalizeReadPagination,
+} from "./utils.js";
 
 /**
  * Shell-quote a string using single quotes (POSIX).
@@ -232,6 +236,8 @@ function buildFindCommand(searchPath: string): string {
   return `{ ${listing}; } | head -n ${MAX_GLOB_FIND_LINES + 1}`;
 }
 
+const READ_METADATA_PREFIX = "__DEEPAGENTS_READ_METADATA__";
+
 /**
  * Pure POSIX shell command for reading file contents.
  * Uses awk for offset/limit — line numbering is applied by the read_file
@@ -259,6 +265,47 @@ function buildReadCommand(
     `if [ ! -s ${quotedPath} ]; then echo "System reminder: File exists but has empty contents"; exit 0; fi`,
     `awk 'NR >= ${start} && NR <= ${end} { printf "%s\\n", $0 }' ${quotedPath}`,
   ].join("; ");
+}
+
+function parseReadOutput(
+  output: string,
+  offset: number,
+  limit: number,
+): ReadResult {
+  const rows = output.split("\n");
+  let metadataIndex = -1;
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    if (rows[index].startsWith(`${READ_METADATA_PREFIX}\t`)) {
+      metadataIndex = index;
+      break;
+    }
+  }
+  if (metadataIndex === -1) {
+    return { content: output };
+  }
+
+  const totalLines = Number(
+    rows[metadataIndex].slice(READ_METADATA_PREFIX.length + 1),
+  );
+  if (!Number.isSafeInteger(totalLines) || totalLines < 0) {
+    return { content: output };
+  }
+
+  const contentRows = rows.slice(0, metadataIndex);
+  const content = contentRows.length > 0 ? `${contentRows.join("\n")}\n` : "";
+  const startOffset = Math.floor(offset);
+  const endOffset = Math.min(startOffset + Math.floor(limit), totalLines);
+  if (startOffset >= totalLines || endOffset <= startOffset) {
+    return { content };
+  }
+
+  return {
+    content,
+    totalLines,
+    startLine: startOffset + 1,
+    endLine: endOffset,
+    nextOffset: endOffset < totalLines ? endOffset : undefined,
+  };
 }
 
 /**
@@ -384,17 +431,32 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
       return { content: results[0].content, mimeType };
     }
 
-    // limit=0 means return nothing
-    if (limit === 0) return { content: "", mimeType };
+    const { offset: normalizedOffset, limit: normalizedLimit } =
+      normalizeReadPagination(offset, limit);
 
-    const command = buildReadCommand(filePath, offset, limit);
+    // limit=0 means return nothing
+    if (normalizedLimit === 0) return { content: "", mimeType };
+
+    const command = buildReadCommand(
+      filePath,
+      normalizedOffset,
+      normalizedLimit,
+    );
     const result = await this.execute(command);
 
     if (result.exitCode !== 0) {
       return { error: `File '${filePath}' not found` };
     }
 
-    return { content: result.output, mimeType };
+    const parsed = parseReadOutput(
+      result.output,
+      normalizedOffset,
+      normalizedLimit,
+    );
+    return {
+      ...(result.truncated ? { content: parsed.content } : parsed),
+      mimeType,
+    };
   }
 
   /**

@@ -94,11 +94,13 @@ export interface HarnessProfileOptions {
   toolDescriptionOverrides?: Record<string, string>;
 
   /**
-   * Tool names to remove from the agent's visible tool set.
+   * Tool names to remove from the agent's visible tool set and reject at the
+   * tool-call boundary.
    *
-   * Applied via a filtering middleware after all tool-injecting
-   * middleware have run, so it catches both user-provided and
-   * middleware-provided tools.
+   * Applied via middleware after all tool-injecting middleware have run, so it
+   * catches both user-provided and middleware-provided tools. Each declarative
+   * subagent uses the profile resolved for its own model. Exclusions are
+   * model-facing calibration, not a security boundary.
    *
    * @default [] (no tools excluded)
    */
@@ -179,11 +181,13 @@ export interface HarnessProfile {
   toolDescriptionOverrides: Record<string, string>;
 
   /**
-   * Tool names to remove from the agent's visible tool set.
+   * Tool names to remove from the agent's visible tool set and reject at the
+   * tool-call boundary.
    *
-   * Applied via a filtering middleware after all tool-injecting
-   * middleware have run, so it catches both user-provided and
-   * middleware-provided tools.
+   * Applied via middleware after all tool-injecting middleware have run, so it
+   * catches both user-provided and middleware-provided tools. Each declarative
+   * subagent uses the profile resolved for its own model. Exclusions are
+   * model-facing calibration, not a security boundary.
    */
   excludedTools: Set<string>;
 

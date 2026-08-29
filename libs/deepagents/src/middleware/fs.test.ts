@@ -8,6 +8,7 @@ import {
   TOOLS_EXCLUDED_FROM_EVICTION,
 } from "./fs.js";
 import type { FileData, BackendProtocolV2 } from "../backends/protocol.js";
+import { StateBackend } from "../backends/state.js";
 import {
   SystemMessage,
   HumanMessage,
@@ -1148,6 +1149,131 @@ describe("createFilesystemMiddleware", () => {
   });
 
   describe("tools", () => {
+    // Regression test for https://langchain.slack.com/archives/C08HM96QCHG/p1787476952535559
+    it("read_file reports when the default limit returns a partial file", async () => {
+      const lines = Array.from({ length: 1450 }, (_, i) => `line ${i + 1}`);
+      const backend = new StateBackend({
+        state: {
+          files: {
+            "/large.txt": {
+              content: lines,
+              created_at: "2024-01-01T00:00:00Z",
+              modified_at: "2024-01-01T00:00:00Z",
+            },
+          },
+        },
+      } as any);
+      const middleware = createFilesystemMiddleware({ backend });
+      const readFileTool = middleware.tools!.find(
+        (tool) => tool.name === "read_file",
+      );
+
+      const result = await readFileTool!.invoke({ file_path: "/large.txt" });
+
+      expect((result as any)[0].text).toContain(
+        "[Read 100 lines (lines 1-100 of 1450 total). 1350 lines remaining from offset 100.]",
+      );
+    });
+
+    it("read_file reports the source range for an offset read", async () => {
+      const backend = new StateBackend({
+        state: {
+          files: {
+            "/offset.txt": {
+              content: ["one", "two", "three", "four", "five"],
+              created_at: "2024-01-01T00:00:00Z",
+              modified_at: "2024-01-01T00:00:00Z",
+            },
+          },
+        },
+      } as any);
+      const middleware = createFilesystemMiddleware({ backend });
+      const readFileTool = middleware.tools!.find(
+        (tool) => tool.name === "read_file",
+      );
+
+      const result = await readFileTool!.invoke({
+        file_path: "/offset.txt",
+        offset: 2,
+        limit: 2,
+      });
+
+      expect((result as any)[0].text).toContain(
+        "[Read 2 lines (lines 3-4 of 5 total). 1 line remaining from offset 4.]",
+      );
+    });
+
+    it("read_file omits the pagination notice at end of file", async () => {
+      const backend = new StateBackend({
+        state: {
+          files: {
+            "/small.txt": {
+              content: ["one", "two", "three"],
+              created_at: "2024-01-01T00:00:00Z",
+              modified_at: "2024-01-01T00:00:00Z",
+            },
+          },
+        },
+      } as any);
+      const middleware = createFilesystemMiddleware({ backend });
+      const readFileTool = middleware.tools!.find(
+        (tool) => tool.name === "read_file",
+      );
+
+      const result = await readFileTool!.invoke({ file_path: "/small.txt" });
+
+      expect((result as any)[0].text).not.toContain("[Read ");
+    });
+
+    it("read_file remains compatible with backends without pagination metadata", async () => {
+      const backend = createMockBackend();
+      backend.read = vi.fn().mockResolvedValue({
+        content: "one\ntwo\nthree",
+        mimeType: "text/plain",
+      });
+      const middleware = createFilesystemMiddleware({ backend });
+      const readFileTool = middleware.tools!.find(
+        (tool) => tool.name === "read_file",
+      );
+
+      const result = await readFileTool!.invoke({ file_path: "/legacy.txt" });
+
+      expect((result as any)[0].text).not.toContain("[Read ");
+    });
+
+    it("read_file resumes after the last complete line when output is truncated", async () => {
+      const backend = createMockBackend();
+      backend.read = vi.fn().mockResolvedValue({
+        content: Array.from(
+          { length: 10 },
+          (_, i) => `line ${i + 1} ${"x".repeat(80)}`,
+        ).join("\n"),
+        mimeType: "text/plain",
+        totalLines: 20,
+        startLine: 1,
+        endLine: 10,
+        nextOffset: 10,
+      });
+      const middleware = createFilesystemMiddleware({
+        backend,
+        toolTokenLimitBeforeEvict: 150,
+      });
+      const readFileTool = middleware.tools!.find(
+        (tool) => tool.name === "read_file",
+      );
+
+      const result = await readFileTool!.invoke({ file_path: "/large.txt" });
+      const text = (result as any)[0].text as string;
+      const resumeMatch = text.match(/remaining from offset (\d+)\./);
+      const displayedLines = [...text.matchAll(/^\s*(\d+)\t/gm)].map((match) =>
+        Number(match[1]),
+      );
+
+      expect(resumeMatch).not.toBeNull();
+      expect(Number(resumeMatch![1])).toBe(Math.max(...displayedLines));
+      expect(Number(resumeMatch![1])).toBeLessThan(10);
+    });
+
     it("write_file schema should require content", () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),

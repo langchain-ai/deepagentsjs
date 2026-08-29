@@ -1,5 +1,16 @@
 # deepagents-acp
 
+## 0.1.28
+
+### Patch Changes
+
+- [#786](https://github.com/langchain-ai/deepagentsjs/pull/786) [`3ab66a7`](https://github.com/langchain-ai/deepagentsjs/commit/3ab66a7470248004da795f85c3eda2c0f6e20b23) Thanks [@hntrl](https://github.com/hntrl)! - fix(filesystem): preserve pagination metadata for ACP-backed reads
+
+  Return source ranges, total line counts, and continuation offsets when reading paginated editor buffers through ACP.
+
+- Updated dependencies [[`3ab66a7`](https://github.com/langchain-ai/deepagentsjs/commit/3ab66a7470248004da795f85c3eda2c0f6e20b23), [`a78d727`](https://github.com/langchain-ai/deepagentsjs/commit/a78d72745a5b35cdebdad4986d28e7979057948e)]:
+  - deepagents@1.13.2
+
 ## 0.1.27
 
 ### Patch Changes
