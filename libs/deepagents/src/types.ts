@@ -524,7 +524,10 @@ export interface CreateDeepAgentParams<
 > {
   /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
   model?: BaseLanguageModel | string;
-  /** Tools the agent should have access to */
+  /**
+   * Additional tools for the agent. Passing tools here does not remove built-in
+   * filesystem tools; customize `FilesystemMiddleware` to remove them entirely.
+   */
   tools?: TTools | StructuredTool[];
   /**
    * Custom system instructions. Structured configuration is deprecated and
