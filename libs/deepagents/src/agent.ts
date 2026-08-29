@@ -59,6 +59,7 @@ import {
   resolveHarnessProfile,
   applyProfilePrompt,
   resolveMiddleware,
+  type HarnessProfile,
 } from "./profiles/index.js";
 import {
   isAnthropicModel,
@@ -211,15 +212,31 @@ export function createDeepAgent<
           identifierHint: getModelIdentifier(model),
         });
 
-  const filesystemTools = FILESYSTEM_TOOL_NAMES.filter(
-    (toolName) => !harnessProfile.excludedTools.has(toolName),
-  );
-  const profileFilesystemTools: readonly FsToolName[] | undefined =
-    filesystemTools.length === FILESYSTEM_TOOL_NAMES.length
+  const computeProfileFilesystemTools = (
+    profile: HarnessProfile,
+  ): readonly FsToolName[] | undefined => {
+    const filesystemTools = FILESYSTEM_TOOL_NAMES.filter(
+      (toolName) => !profile.excludedTools.has(toolName),
+    );
+    return filesystemTools.length === FILESYSTEM_TOOL_NAMES.length
       ? undefined
       : filesystemTools.includes("read_file")
         ? filesystemTools
         : ["read_file", ...filesystemTools];
+  };
+  const profileFilesystemTools = computeProfileFilesystemTools(harnessProfile);
+
+  const resolveSubagentProfile = (
+    subagentModel: SubAgent["model"],
+  ): HarnessProfile => {
+    if (subagentModel == null || subagentModel === model) return harnessProfile;
+    return typeof subagentModel === "string"
+      ? resolveHarnessProfile({ spec: subagentModel })
+      : resolveHarnessProfile({
+          providerHint: getModelProvider(subagentModel),
+          identifierHint: getModelIdentifier(subagentModel),
+        });
+  };
 
   const toolOverrides = harnessProfile.toolDescriptionOverrides;
   const effectiveTools: StructuredTool[] =
@@ -288,6 +305,7 @@ export function createDeepAgent<
    */
   const createSubagentDefaultMiddleware = (
     input: SubAgent | ForkedSubAgent,
+    subagentProfile: HarnessProfile,
   ): AgentMiddleware[] => {
     const effectivePermissions = input.permissions ?? permissions;
 
@@ -299,7 +317,7 @@ export function createDeepAgent<
       createFilesystemMiddleware({
         backend,
         permissions: effectivePermissions,
-        tools: profileFilesystemTools,
+        tools: computeProfileFilesystemTools(subagentProfile),
       }),
       // Automatically summarizes conversation history when token limits are approached.
       // Uses createSummarizationMiddleware (deepagents version) with backend support
@@ -318,22 +336,33 @@ export function createDeepAgent<
     input: SubAgent | ForkedSubAgent,
     isForkable: boolean,
   ): AgentMiddleware[] => {
-    const subagentDefaultMiddleware = createSubagentDefaultMiddleware(input);
+    const subagentProfile = resolveSubagentProfile(input.model);
+    const subagentDefaultMiddleware = createSubagentDefaultMiddleware(
+      input,
+      subagentProfile,
+    );
 
     let subagentMiddleware = mergeMiddlewareStack(
       subagentDefaultMiddleware,
       input.middleware ?? [],
       [
         // Resolve profile middleware per stack so factories create fresh instances.
-        ...resolveMiddleware(harnessProfile.extraMiddleware),
+        ...resolveMiddleware(subagentProfile.extraMiddleware),
         ...cacheMiddleware,
         ...(isForkable ? memoryMiddleware : []),
       ],
     );
 
-    if (harnessProfile.excludedMiddleware.size > 0) {
+    if (subagentProfile.excludedMiddleware.size > 0) {
       subagentMiddleware = subagentMiddleware.filter(
-        (middleware) => !harnessProfile.excludedMiddleware.has(middleware.name),
+        (middleware) =>
+          !subagentProfile.excludedMiddleware.has(middleware.name),
+      );
+    }
+
+    if (subagentProfile.excludedTools.size > 0) {
+      subagentMiddleware.push(
+        createToolExclusionMiddleware(subagentProfile.excludedTools),
       );
     }
 
