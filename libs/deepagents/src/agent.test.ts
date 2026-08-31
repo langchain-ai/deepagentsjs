@@ -1,18 +1,23 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { createDeepAgent } from "./agent.js";
 import { isAnthropicModel } from "./utils.js";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
-import { todoListMiddleware } from "langchain";
+import { todoListMiddleware, tool } from "langchain";
 import {
+  AIMessage,
   HumanMessage,
   SystemMessage,
+  ToolMessage,
   type BaseMessage,
 } from "@langchain/core/messages";
 import { MemorySaver, StateSchema } from "@langchain/langgraph";
 import { createFileData } from "./backends/utils.js";
 import { ConfigurationError } from "./errors.js";
 import { assertAllDeepAgentQualities } from "./testing/utils.js";
-import { registerHarnessProfile } from "./profiles/harness/index.js";
+import {
+  _resetRegistryForTesting,
+  registerHarnessProfile,
+} from "./profiles/harness/index.js";
 import { z } from "zod/v4";
 
 describe("isAnthropicModel", () => {
@@ -227,6 +232,25 @@ describe("System prompt cache control breakpoints", () => {
 });
 
 describe("profile tool exclusions", () => {
+  afterEach(() => {
+    _resetRegistryForTesting();
+  });
+
+  const createTestTool = (name: string, handler: () => string) =>
+    tool(handler, {
+      name,
+      description: `${name} description`,
+      schema: z.object({}),
+    });
+
+  const setModelProfile = (
+    model: FakeListChatModel,
+    provider: string,
+  ): void => {
+    vi.spyOn(model, "getName").mockReturnValue("ConfigurableModel");
+    (model as any)._defaultConfig = { modelProvider: provider, model: "model" };
+  };
+
   it("removes excluded filesystem tools before agent construction", () => {
     registerHarnessProfile("fstoolstest", { excludedTools: ["execute"] });
 
@@ -236,6 +260,194 @@ describe("profile tool exclusions", () => {
 
     expect(toolNames).toContain("read_file");
     expect(toolNames).not.toContain("execute");
+  });
+
+  it("rejects excluded calls while executing allowed calls", async () => {
+    registerHarnessProfile("executiontest", {
+      excludedTools: ["excluded_tool"],
+    });
+    const excludedHandler = vi.fn(() => "excluded");
+    const excludedTool = createTestTool("excluded_tool", excludedHandler);
+    const allowedHandler = vi.fn(() => "allowed");
+    const allowedTool = createTestTool("allowed_tool", allowedHandler);
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            { name: "excluded_tool", args: {}, id: "excluded_call" },
+            { name: "allowed_tool", args: {}, id: "allowed_call" },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+    setModelProfile(model, "executiontest");
+
+    const result = await createDeepAgent({
+      model,
+      tools: [excludedTool, allowedTool],
+    }).invoke({ messages: [new HumanMessage("Run the tools")] });
+    const toolMessages = result.messages.filter(ToolMessage.isInstance);
+
+    expect(excludedHandler).not.toHaveBeenCalled();
+    expect(allowedHandler).toHaveBeenCalledOnce();
+    expect(toolMessages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "excluded_tool",
+          status: "error",
+          content: "Error: excluded_tool is not available.",
+        }),
+        expect.objectContaining({ name: "allowed_tool", content: "allowed" }),
+      ]),
+    );
+  });
+
+  it("rejects excluded calls inside custom subagents", async () => {
+    registerHarnessProfile("subagenttest", {
+      excludedTools: ["excluded_tool"],
+    });
+    const excludedHandler = vi.fn(() => "excluded");
+    const allowedHandler = vi.fn(() => "allowed");
+    const tools = [
+      createTestTool("excluded_tool", excludedHandler),
+      createTestTool("allowed_tool", allowedHandler),
+    ];
+    const subagentModel = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            { name: "excluded_tool", args: {}, id: "excluded_call" },
+            { name: "allowed_tool", args: {}, id: "allowed_call" },
+          ],
+        }) as unknown as string,
+        "Subagent done",
+      ],
+    });
+    setModelProfile(subagentModel, "subagenttest");
+    const mainModel = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              name: "task",
+              args: { description: "Run tools", subagent_type: "worker" },
+              id: "task_call",
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+
+    await createDeepAgent({
+      model: mainModel,
+      subagents: [
+        {
+          name: "worker",
+          description: "Runs tools",
+          systemPrompt: "Run the requested tools.",
+          model: subagentModel,
+          tools,
+        },
+      ],
+    }).invoke({ messages: [new HumanMessage("Delegate the work")] });
+
+    expect(excludedHandler).not.toHaveBeenCalled();
+    expect(allowedHandler).toHaveBeenCalledOnce();
+  });
+
+  it("resolves exclusions from each agent's model profile", async () => {
+    registerHarnessProfile("mainprofile", {
+      excludedTools: ["main_excluded"],
+    });
+    registerHarnessProfile("subprofile", {
+      excludedTools: ["subagent_excluded"],
+    });
+    const mainExcludedHandler = vi.fn(() => "main excluded tool result");
+    const subagentExcludedHandler = vi.fn(
+      () => "subagent excluded tool result",
+    );
+    const tools = [
+      createTestTool("main_excluded", mainExcludedHandler),
+      createTestTool("subagent_excluded", subagentExcludedHandler),
+    ];
+    const mainModel = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            { name: "main_excluded", args: {}, id: "main_excluded_call" },
+            {
+              name: "subagent_excluded",
+              args: {},
+              id: "main_allowed_call",
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+    setModelProfile(mainModel, "mainprofile");
+    await createDeepAgent({ model: mainModel, tools }).invoke({
+      messages: [new HumanMessage("Run the tools")],
+    });
+
+    expect(mainExcludedHandler).not.toHaveBeenCalled();
+    expect(subagentExcludedHandler).toHaveBeenCalledOnce();
+
+    const subagentModel = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            { name: "main_excluded", args: {}, id: "sub_allowed_call" },
+            {
+              name: "subagent_excluded",
+              args: {},
+              id: "sub_excluded_call",
+            },
+          ],
+        }) as unknown as string,
+        "Subagent done",
+      ],
+    });
+    setModelProfile(subagentModel, "subprofile");
+    const delegatingModel = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              name: "task",
+              args: { description: "Run tools", subagent_type: "worker" },
+              id: "task_call",
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+    setModelProfile(delegatingModel, "mainprofile");
+
+    await createDeepAgent({
+      model: delegatingModel,
+      subagents: [
+        {
+          name: "worker",
+          description: "Runs tools",
+          systemPrompt: "Run the requested tools.",
+          model: subagentModel,
+          tools,
+        },
+      ],
+    }).invoke({ messages: [new HumanMessage("Delegate the tools")] });
+
+    expect(mainExcludedHandler).toHaveBeenCalledOnce();
+    expect(subagentExcludedHandler).toHaveBeenCalledOnce();
   });
 });
 

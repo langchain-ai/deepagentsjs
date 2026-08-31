@@ -1,5 +1,13 @@
 # @langchain/node-vfs
 
+## 0.2.3
+
+### Patch Changes
+
+- [#786](https://github.com/langchain-ai/deepagentsjs/pull/786) [`3ab66a7`](https://github.com/langchain-ai/deepagentsjs/commit/3ab66a7470248004da795f85c3eda2c0f6e20b23) Thanks [@hntrl](https://github.com/hntrl)! - fix(filesystem): return pagination metadata for virtual file reads
+
+  Include source ranges, total line counts, and continuation offsets for paginated text reads from the Node VFS backend.
+
 ## 0.2.2
 
 ### Patch Changes
