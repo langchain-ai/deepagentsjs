@@ -5,7 +5,7 @@
  * if SPRITES_TOKEN is not set.
  *
  * To run these tests:
- *   1. Create a Sprites API token (https://sprites.dev/docs)
+ *   1. Create a Sprites API token (https://docs.sprites.dev)
  *   2. Set the environment variable:
  *      export SPRITES_TOKEN=your_token_here
  *   3. Run: pnpm test:int

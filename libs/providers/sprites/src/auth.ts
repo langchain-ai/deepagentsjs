@@ -69,7 +69,7 @@ export function getAuthToken(options?: SpritesSandboxOptions["auth"]): string {
   throw new Error(
     "Sprites authentication required. Provide a token using one of these methods:\n\n" +
       "1. Set the SPRITES_TOKEN environment variable:\n" +
-      "   Create a token with the Sprites CLI (https://sprites.dev/docs):\n" +
+      "   Create a token with the Sprites CLI (https://docs.sprites.dev):\n" +
       "   sprite tokens create\n" +
       "   export SPRITES_TOKEN=your_token_here\n\n" +
       "2. Pass the token directly in options:\n" +

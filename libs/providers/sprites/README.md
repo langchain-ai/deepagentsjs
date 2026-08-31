@@ -1,6 +1,6 @@
 # @langchain/sprites
 
-[Fly.io Sprites](https://sprites.dev) sandbox backend for [deepagents](https://www.npmjs.com/package/deepagents). This package provides a `SpritesSandbox` implementation of the `SandboxBackendProtocol`, enabling agents to execute commands, read/write files, and manage isolated sandbox environments using Fly.io's Sprites infrastructure.
+[Fly.io Sprites](https://fly.io/sprites) sandbox backend for [deepagents](https://www.npmjs.com/package/deepagents). This package provides a `SpritesSandbox` implementation of the `SandboxBackendProtocol`, enabling agents to execute commands, read/write files, and manage isolated sandbox environments using Fly.io's Sprites infrastructure.
 
 [![npm version](https://img.shields.io/npm/v/@langchain/sprites.svg)](https://www.npmjs.com/package/@langchain/sprites)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -34,7 +34,7 @@ The package requires a Sprites API token:
 
 ### Environment Variable (Recommended)
 
-1. Install the [Sprites CLI](https://sprites.dev/docs) and run `sprite login`
+1. Install the [Sprites CLI](https://docs.sprites.dev) and run `sprite login`
 2. Create an API token
 3. Set it as an environment variable:
 
