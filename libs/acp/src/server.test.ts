@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createDeepAgent } from "deepagents";
 import { DeepAgentsServer } from "./server.js";
+import { ACPFilesystemBackend } from "./acp-filesystem-backend.js";
 import type {
   DeepAgentConfig,
   DeepAgentsServerOptions,
@@ -417,14 +418,62 @@ describe("DeepAgentsServer handlers", () => {
       expect(serverAny.agents.has(first.sessionId)).toBe(true);
       expect(serverAny.agents.has(second.sessionId)).toBe(true);
 
-      const firstBackend = createAgentMock.mock.calls[callStart]![0]
-        .backend as unknown as {
+      const firstCallOptions = createAgentMock.mock.calls[callStart]?.[0];
+      const secondCallOptions = createAgentMock.mock.calls[callStart + 1]?.[0];
+      expect(firstCallOptions).toBeDefined();
+      expect(secondCallOptions).toBeDefined();
+      const firstBackend = firstCallOptions?.backend as unknown as {
         rootDir: string;
       };
-      const secondBackend = createAgentMock.mock.calls[callStart + 1]![0]
-        .backend as unknown as { rootDir: string };
+      const secondBackend = secondCallOptions?.backend as unknown as {
+        rootDir: string;
+      };
       expect(firstBackend.rootDir).toBe("/workspace/one");
       expect(secondBackend.rootDir).toBe("/workspace/two");
+    });
+
+    it("should create an ACP filesystem backend from the session cwd", async () => {
+      const server = new DeepAgentsServer({
+        agents: { name: "test-agent" },
+        workspaceRoot: "/default/workspace",
+      });
+
+      const mockConn = {
+        sessionUpdate: vi.fn().mockResolvedValue(undefined),
+        readTextFile: vi.fn().mockResolvedValue({ text: "" }),
+        writeTextFile: vi.fn().mockResolvedValue({}),
+      };
+      const serverAny = server as unknown as {
+        connection: typeof mockConn;
+        handleInitialize: (params: Record<string, unknown>) => Promise<unknown>;
+        handleNewSession: (
+          params: Record<string, unknown>,
+          conn: typeof mockConn,
+        ) => Promise<{ sessionId: string }>;
+        acpBackends: Map<string, ACPFilesystemBackend>;
+      };
+      serverAny.connection = mockConn;
+      await serverAny.handleInitialize({
+        clientCapabilities: {
+          fs: { readTextFile: true, writeTextFile: true },
+        },
+      });
+
+      const createAgentMock = vi.mocked(createDeepAgent);
+      const callStart = createAgentMock.mock.calls.length;
+      const { sessionId } = await serverAny.handleNewSession(
+        { cwd: "/session/workspace" },
+        mockConn,
+      );
+
+      const backend = serverAny.acpBackends.get(sessionId);
+      expect(backend).toBeInstanceOf(ACPFilesystemBackend);
+      expect((backend as unknown as { rootDir: string }).rootDir).toBe(
+        "/session/workspace",
+      );
+      const createAgentOptions = createAgentMock.mock.calls[callStart]?.[0];
+      expect(createAgentOptions).toBeDefined();
+      expect(createAgentOptions?.backend).toBe(backend);
     });
 
     it("should throw for unknown agent", async () => {

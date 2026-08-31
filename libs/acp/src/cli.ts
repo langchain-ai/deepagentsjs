@@ -20,7 +20,6 @@
  */
 
 import { DeepAgentsServer } from "./server.js";
-import { FilesystemBackend } from "deepagents";
 import path from "node:path";
 import fs from "node:fs";
 
@@ -307,7 +306,6 @@ async function main(): Promise<void> {
         name: options.name,
         description: options.description,
         model: options.model,
-        backend: new FilesystemBackend({ rootDir: workspaceRoot }),
         skills,
         memory,
       },
