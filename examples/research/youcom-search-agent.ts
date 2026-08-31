@@ -5,7 +5,7 @@ import { youcomSearch } from "./tools/youcom-search.js";
 
 /**
  * Simple You.com search agent example
- * 
+ *
  * This example demonstrates how to use the You.com search tool
  * with Deep Agents for web research capabilities.
  */
@@ -40,10 +40,10 @@ export const youcomAgent = createDeepAgent({
 //   const result = await youcomAgent.invoke({
 //     messages: [new HumanMessage("What are the latest developments in AI agents?")],
 //   });
-//   
+//
 //   console.log("Agent response:", result.messages[result.messages.length - 1].content);
 // }
-// 
+//
 // if (import.meta.url === `file://${process.argv[1]}`) {
 //   main().catch(console.error);
 // }
