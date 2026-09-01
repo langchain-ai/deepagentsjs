@@ -41,10 +41,7 @@ export const SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY =
 export const DEFAULT_SUBAGENT_PROMPT =
   "In order to complete the objective that the user asks of you, you have access to a number of standard tools.";
 
-// Carries the parent's post-middleware system message into a fork so it can replay it verbatim.
-const PARENT_SYSTEM_MESSAGE_KEY = "_deepagentsParentSystemMessage";
-
-// Set on a forked subagent's own initial state; lets the task tool refuse recursive delegation.
+// Marks a fork's own state so the task tool can refuse recursive delegation.
 const FORKED_CONTEXT_KEY = "_deepagentsForkedContext";
 
 const FORK_RECURSION_REFUSAL =
@@ -63,8 +60,19 @@ const EXCLUDED_STATE_KEYS = [
   "memoryContents",
   "_summarizationEvent",
   "_summarizationSessionId",
-  PARENT_SYSTEM_MESSAGE_KEY,
   FORKED_CONTEXT_KEY,
+] as const;
+
+/**
+ * State keys excluded when inheriting state into a declarative fork.
+ * Narrower than `EXCLUDED_STATE_KEYS`: a fork's mirrored middleware needs
+ * the parent's private channels (skills metadata, memory contents, etc.)
+ * to rebuild an equivalent prompt.
+ */
+const FORK_EXCLUDED_STATE_KEYS = [
+  "structuredResponse",
+  "_summarizationEvent",
+  "_summarizationSessionId",
 ] as const;
 
 /**
@@ -91,12 +99,10 @@ function getTaskToolDescription(subagentDescriptions: string[]): string {
   `;
 }
 
-// Appended to a declarative forked subagent's line so the model knows it can skip restating context.
 const FORKED_SUBAGENT_TOOL_NOTE =
   " (inherits your full conversation and system prompt — no need to restate context here)";
 
-// A compiled fork's runnable bakes in its own system prompt (see CompiledSubAgent.mode),
-// so it only inherits conversation history — never claim system-prompt inheritance for it.
+// A compiled fork's runnable owns its own system prompt (see CompiledSubAgent.mode).
 const COMPILED_FORKED_SUBAGENT_TOOL_NOTE =
   " (inherits your conversation history — its system prompt is fixed in its own runnable)";
 
@@ -115,7 +121,6 @@ function describeSubagentForTool(
   return `- ${name}: ${description}${suffix}`;
 }
 
-// Marks the replayed delegation as already-happened, so the fork doesn't mistake it as a fresh request.
 const FORK_TASK_PREAMBLE =
   "[The messages above are a prior conversation you are continuing as the " +
   "subagent that was just invoked. Any mention in them of delegating to a " +
@@ -299,13 +304,11 @@ export interface SubAgent extends SubAgentBase {
  * Specification for a subagent that inherits the parent's conversation
  * instead of starting from just the task description.
  *
- * Always forks: it inherits the parent's full message history and its exact
- * system prompt (there's no own prompt to fall back to). Mirrored middleware
- * is only added when its model matches the parent's, since that's the only
- * case with a cache benefit to protect. Deliberately has no `systemPrompt`
- * of its own: since its system slot always carries the parent's prompt,
- * there's nothing of its own to put there. If you need a subagent with a
- * distinguishing system prompt, use {@link SubAgent} without forking instead.
+ * Always forks: inherits the parent's full message history, static system
+ * prompt, and a mirrored copy of the parent's prompt-producing middleware
+ * (skills, memory, custom middleware) — reconstructing the parent's prompt
+ * so an Anthropic prompt cache can hit. Has no `systemPrompt` of its own;
+ * use {@link SubAgent} without forking if you need a distinct one.
  *
  * @example
  * ```typescript
@@ -400,6 +403,22 @@ export function filterStateForSubagent(
 }
 
 /**
+ * Filter state to exclude only summarization keys when inheriting into a
+ * declarative fork — see `FORK_EXCLUDED_STATE_KEYS`.
+ */
+export function filterStateForFork(
+  state: Record<string, unknown>,
+): Record<string, unknown> {
+  const filtered: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(state)) {
+    if (!FORK_EXCLUDED_STATE_KEYS.includes(key as never)) {
+      filtered[key] = value;
+    }
+  }
+  return filtered;
+}
+
+/**
  * Invalid tool message block types
  */
 const INVALID_TOOL_MESSAGE_BLOCK_TYPES = [
@@ -464,44 +483,12 @@ function stripInFlightAIMessage(messages: BaseMessage[]): BaseMessage[] {
   return hasPendingToolCalls ? messages.slice(0, -1) : messages;
 }
 
-const ParentSystemMessageStateSchema = z.object({
-  [PARENT_SYSTEM_MESSAGE_KEY]: z.instanceof(SystemMessage).optional(),
-});
-
-// Captures the parent's fully-resolved system message into state so a fork can replay it verbatim.
-export function createParentSystemMessageMiddleware(): AgentMiddleware {
-  return createMiddleware({
-    name: "parentSystemMessageMiddleware",
-    stateSchema: ParentSystemMessageStateSchema,
-    wrapModelCall: async (request, handler) => {
-      await handler(request);
-      return new Command({
-        update: { [PARENT_SYSTEM_MESSAGE_KEY]: request.systemMessage },
-      });
-    },
-  });
-}
-
-// Replays the parent's captured system message verbatim, required for Anthropic's cache to hit.
-function createForkSystemMessageMiddleware(): AgentMiddleware {
-  return createMiddleware({
-    name: "forkSystemMessageMiddleware",
-    stateSchema: ParentSystemMessageStateSchema,
-    wrapModelCall: async (request, handler) => {
-      const parentMessage = request.state[PARENT_SYSTEM_MESSAGE_KEY];
-      if (parentMessage != null) {
-        return handler({ ...request, systemMessage: parentMessage });
-      }
-      return handler(request);
-    },
-  });
-}
-
 const ForkedContextStateSchema = z.object({
   [FORKED_CONTEXT_KEY]: z.boolean().optional(),
 });
 
-// Gives a fork a real (but recursion-refusing) `task` tool; must be a separate object from the parent's, and the flag must be set via `beforeAgent` — `getCurrentTaskInput()` won't see it if only seeded on the initial invoke() input.
+// Flag must be set via beforeAgent, not the initial invoke() input —
+// getCurrentTaskInput() won't see it otherwise.
 function createForkTaskToolMiddleware(
   taskTool: StructuredTool,
 ): AgentMiddleware {
@@ -605,6 +592,19 @@ function getSubagents(options: {
   const subagentDescriptions: string[] = [];
   const forkModeNames = new Set<string>();
 
+  // Prevent a duplicate name from silently resolving to the last spec.
+  const seenNames = new Set<string>(
+    generalPurposeAgent ? ["general-purpose"] : [],
+  );
+  for (const agentParams of subagents) {
+    if (seenNames.has(agentParams.name)) {
+      throw new Error(
+        `Duplicate subagent name '${agentParams.name}'; each subagent must have a unique name.`,
+      );
+    }
+    seenNames.add(agentParams.name);
+  }
+
   if (generalPurposeAgent) {
     const generalPurposeMiddleware = [...generalPurposeMiddlewareBase];
     if (defaultInterruptOn) {
@@ -658,26 +658,44 @@ function getSubagents(options: {
       specsByName[agentParams.name] = agentParams;
       if (forked) forkModeNames.add(agentParams.name);
     } else if (forked) {
-      // Cast around the `skills?: undefined` type guard to check it at runtime too.
+      // Re-check at runtime — the type guards don't stop a plain-JS/`as any` caller.
       const rawSkills = (agentParams as { skills?: unknown }).skills;
       if (Array.isArray(rawSkills) && rawSkills.length > 0) {
         throw new Error(
           `ForkedSubAgent '${agentParams.name}' cannot set skills; the parent's system message would discard it.`,
         );
       }
-      // The static systemPrompt is just a construction-time baseline; forkSystemMessageMiddleware overrides it every call.
+      const rawSystemPrompt = (agentParams as { systemPrompt?: unknown })
+        .systemPrompt;
+      if (rawSystemPrompt != null) {
+        throw new Error(
+          `ForkedSubAgent '${agentParams.name}' cannot set systemPrompt; it always inherits the parent's.`,
+        );
+      }
+      // No replay needed: mirrored middleware (see buildSubagentMiddleware)
+      // reconstructs the parent's dynamic prompt additions on top of this
+      // static baseline.
+      const forkMiddleware = [
+        ...defaultSubagentMiddleware,
+        ...(agentParams.middleware ?? []),
+      ];
+      // Splice after Filesystem (always present) to match the parent's tool
+      // order for prompt-cache parity.
+      const fsIndex = forkMiddleware.findIndex(
+        (m) => m.name === "FilesystemMiddleware",
+      );
+      forkMiddleware.splice(
+        fsIndex + 1,
+        0,
+        createForkTaskToolMiddleware(mirroredTaskTool),
+      );
       const resolvedSpec: SubAgent = {
         ...agentParams,
         systemPrompt: parentSystemPrompt ?? "",
         mode: undefined,
         model: agentParams.model ?? defaultModel,
         tools: agentParams.tools ?? defaultTools,
-        middleware: [
-          ...defaultSubagentMiddleware,
-          ...(agentParams.middleware ?? []),
-          createForkSystemMessageMiddleware(),
-          createForkTaskToolMiddleware(mirroredTaskTool),
-        ],
+        middleware: forkMiddleware,
         interruptOn: agentParams.interruptOn ?? defaultInterruptOn ?? undefined,
       };
       agents[agentParams.name] = createSubAgent(resolvedSpec);
@@ -735,7 +753,6 @@ function createTaskTool(options: {
     parentSystemPrompt = null,
   } = options;
 
-  // Computed from raw specs so the mirrored task tool below shares this exact description string.
   const subagentNames = [
     ...(generalPurposeAgent ? ["general-purpose"] : []),
     ...subagents.map((spec) => spec.name),
@@ -814,7 +831,13 @@ function createTaskTool(options: {
 
     const subagent = selectSubagent(subagent_type, config);
 
-    const subagentState = filterStateForSubagent(currentState);
+    // Compiled runnables are opaque, so only declarative forks get the wider filter.
+    const spec = specsByName[subagent_type];
+    const isDeclarativeFork = shouldFork && !("runnable" in spec);
+
+    const subagentState = isDeclarativeFork
+      ? filterStateForFork(currentState)
+      : filterStateForSubagent(currentState);
 
     if (shouldFork) {
       const trimmed = stripInFlightAIMessage(
@@ -825,11 +848,6 @@ function createTaskTool(options: {
         ...effective,
         new HumanMessage({ content: FORK_TASK_PREAMBLE + description }),
       ];
-      const spec = specsByName[subagent_type];
-      const parentSystemMessage = currentState[PARENT_SYSTEM_MESSAGE_KEY];
-      if (parentSystemMessage != null && !("runnable" in spec)) {
-        subagentState[PARENT_SYSTEM_MESSAGE_KEY] = parentSystemMessage;
-      }
     } else {
       subagentState.messages = [new HumanMessage({ content: description })];
     }
@@ -895,7 +913,7 @@ function createTaskTool(options: {
     schema: taskToolSchema,
   });
 
-  // A separate wrapper around the same name/description/schema/function, not the same object — see createForkTaskToolMiddleware.
+  // Separate object, not the same tool instance — see createForkTaskToolMiddleware.
   const mirroredTaskTool = tool(runTask, {
     name: "task",
     description: finalTaskDescription,

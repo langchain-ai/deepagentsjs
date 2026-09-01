@@ -32,11 +32,10 @@ import type { SystemPromptConfig } from "./compat.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
 import { createToolExclusionMiddleware } from "./middleware/tool_exclusion.js";
-import { mergeMiddlewareStack } from "./middleware/utils.js";
+import { mergeMiddleware, mergeMiddlewareStack } from "./middleware/utils.js";
 import {
   GENERAL_PURPOSE_SUBAGENT,
   isForkedSubAgent,
-  createParentSystemMessageMiddleware,
   type CompiledSubAgent,
   type ForkedSubAgent,
 } from "./middleware/subagents.js";
@@ -337,18 +336,40 @@ export function createDeepAgent<
     input: SubAgent | ForkedSubAgent,
   ): AgentMiddleware[] => {
     const subagentProfile = resolveSubagentProfile(input.model);
+    const forked = isForkedSubAgent(input);
     const subagentDefaultMiddleware = createSubagentDefaultMiddleware(
       input,
       subagentProfile,
     );
+    // Forks mirror the parent's skills/memory/middleware to rebuild an
+    // equivalent prompt instead of replaying a captured one.
+    if (forked && skills != null && skills.length > 0) {
+      subagentDefaultMiddleware.unshift(
+        createSkillsMiddleware({ backend, sources: skills }),
+      );
+    }
+    // Fork's own middleware wins over the mirrored parent one by name.
+    const inputMiddleware =
+      forked && customMiddleware.length > 0
+        ? mergeMiddleware(customMiddleware, input.middleware ?? [])
+        : (input.middleware ?? []);
 
     let subagentMiddleware = mergeMiddlewareStack(
       subagentDefaultMiddleware,
-      input.middleware ?? [],
+      inputMiddleware,
       [
         // Resolve profile middleware per stack so factories create fresh instances.
         ...resolveMiddleware(subagentProfile.extraMiddleware),
         ...cacheMiddleware,
+        ...(forked && memory != null && memory.length > 0
+          ? [
+              createMemoryMiddleware({
+                backend,
+                sources: memory,
+                addCacheControl: anthropicModel,
+              }),
+            ]
+          : []),
       ],
     );
 
@@ -370,8 +391,7 @@ export function createDeepAgent<
 
   const normalizeSubagentSpec = (input: SubAgent): SubAgent => ({
     ...input,
-    // Leave `tools` untouched when omitted — getSubagents() falls back to
-    // the parent's tools in that case; coercing to `[]` here would defeat that.
+    // Omitting tools here lets getSubagents() fall back to the parent's.
     middleware: buildSubagentMiddleware(input),
   });
 
@@ -379,8 +399,7 @@ export function createDeepAgent<
     input: ForkedSubAgent,
   ): ForkedSubAgent => ({
     ...input,
-    // Leave `tools` untouched when omitted — getSubagents() falls back to
-    // the parent's tools in that case; coercing to `[]` here would defeat that.
+    // Omitting tools here lets getSubagents() fall back to the parent's.
     middleware: buildSubagentMiddleware(input),
   });
 
@@ -513,15 +532,6 @@ export function createDeepAgent<
   if (harnessProfile.excludedMiddleware.size > 0) {
     const excluded = harnessProfile.excludedMiddleware;
     middleware = middleware.filter((entry) => !excluded.has(entry.name));
-  }
-
-  // Capturing the system message costs a state write per model call, so only pay for it when a declarative fork will consume it.
-  const hasDeclarativeFork = inlineSubagents.some(
-    (item) => !("runnable" in item) && isForkedSubAgent(item),
-  );
-  // Must run after everything that can mutate the system message, but before tool exclusion below (which must stay last).
-  if (hasDeclarativeFork) {
-    middleware.push(createParentSystemMessageMiddleware());
   }
 
   // Apply profile tool exclusions via a filtering middleware that runs
