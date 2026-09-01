@@ -305,6 +305,7 @@ export function createDeepAgent<
   const createSubagentDefaultMiddleware = (
     input: SubAgent,
     subagentProfile: HarnessProfile,
+    forked: boolean,
   ): AgentMiddleware[] => {
     const effectivePermissions = input.permissions ?? permissions;
 
@@ -324,8 +325,11 @@ export function createDeepAgent<
       createSummarizationMiddleware({ backend }),
       // Patches tool calls to ensure compatibility across different model providers.
       createPatchToolCallsMiddleware(),
-      // Loads subagent-specific skills when configured.
-      ...(input.skills != null && input.skills.length > 0
+      // Loads subagent-specific skills when configured. Never for a fork: its
+      // own `skills` is rejected below, and the parent's are mirrored instead
+      // (see buildSubagentMiddleware) — building this here too would produce
+      // a second same-named SkillsMiddleware before that rejection even runs.
+      ...(!forked && input.skills != null && input.skills.length > 0
         ? [createSkillsMiddleware({ backend, sources: input.skills })]
         : []),
     ];
@@ -337,15 +341,13 @@ export function createDeepAgent<
     const subagentDefaultMiddleware = createSubagentDefaultMiddleware(
       input,
       subagentProfile,
+      forked,
     );
-    // Forks mirror the parent's skills/memory/middleware to rebuild an
-    // equivalent prompt instead of replaying a captured one.
     if (forked && skills != null && skills.length > 0) {
       subagentDefaultMiddleware.unshift(
         createSkillsMiddleware({ backend, sources: skills }),
       );
     }
-    // Fork's own middleware wins over the mirrored parent one by name.
     const inputMiddleware =
       forked && customMiddleware.length > 0
         ? mergeMiddleware(customMiddleware, input.middleware ?? [])

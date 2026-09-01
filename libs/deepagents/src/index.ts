@@ -101,6 +101,7 @@ export {
   type SubAgentMiddlewareOptions,
   type MemoryMiddlewareOptions,
   type SubAgent,
+  type ForkedSubAgent,
   type CompiledSubAgent,
   type AsyncSubAgentMiddlewareOptions,
   type AsyncSubAgent,

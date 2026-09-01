@@ -922,9 +922,8 @@ describe("Subagent Fork Cache Integration Tests", () => {
     "reuses the parent's Anthropic prompt-cache prefix on a forked subagent's first model call",
     { timeout: 90 * 1000 },
     async () => {
-      // Keyed by runId so a call's cache_read (only available on
-      // handleLLMEnd) can be attributed back to the lc_agent_name metadata
-      // that's only available on handleChatModelStart for that same run.
+      // Bridges lc_agent_name (only on handleChatModelStart) to cache_read
+      // (only on handleLLMEnd) by runId.
       const runAgentNames = new Map<string, string | undefined>();
       const workerCacheReadTokenCounts: number[] = [];
 
@@ -947,11 +946,9 @@ describe("Subagent Fork Cache Integration Tests", () => {
         }
 
         async handleLLMEnd(output: LLMResult, runId: string) {
-          // Only the worker's own calls matter here -- the parent's calls
-          // (including its own follow-up after the tool result) reuse the
-          // cache from the parent's own first call regardless of whether the
-          // fork correctly mirrored anything, so aggregating across every
-          // call in the run would let a genuinely cold fork call pass.
+          // Only the worker's calls count -- the parent's own follow-up call
+          // reuses its own cache regardless of whether the fork mirrored
+          // anything, which would let a cold fork call pass unnoticed.
           if (runAgentNames.get(runId) !== "worker") return;
           for (const generationBatch of output.generations) {
             for (const generation of generationBatch) {

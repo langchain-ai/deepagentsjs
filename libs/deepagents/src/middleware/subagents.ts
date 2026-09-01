@@ -292,6 +292,18 @@ export interface SubAgent {
 }
 
 /**
+ * A {@link SubAgent} with `mode: "fork"`.
+ *
+ * Kept as a named type for backward compatibility with code that imported
+ * `ForkedSubAgent` before it merged into `SubAgent` — not a distinct shape
+ * with its own constraints (a fork can now declare its own `systemPrompt`,
+ * same as any `SubAgent`). Prefer `SubAgent` with `mode: "fork"` in new code.
+ */
+export interface ForkedSubAgent extends SubAgent {
+  mode: "fork";
+}
+
+/**
  * Whether a declarative subagent spec has `mode: "fork"` set.
  *
  * A plain boolean, not a type predicate: `SubAgent` covers both `"fork"` and
@@ -347,15 +359,13 @@ export const GENERAL_PURPOSE_SUBAGENT = {
   mode: "handoff",
 } as const;
 
-/**
- * Filter state to exclude certain keys when passing to subagents
- */
-export function filterStateForSubagent(
+function filterState(
   state: Record<string, unknown>,
+  excludedKeys: readonly string[],
 ): Record<string, unknown> {
   const filtered: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(state)) {
-    if (!EXCLUDED_STATE_KEYS.includes(key as never)) {
+    if (!excludedKeys.includes(key)) {
       filtered[key] = value;
     }
   }
@@ -363,19 +373,23 @@ export function filterStateForSubagent(
 }
 
 /**
- * Filter state to exclude only summarization keys when inheriting into a
- * declarative fork — see `FORK_EXCLUDED_STATE_KEYS`.
+ * Filter state to exclude certain keys when passing to subagents
+ */
+export function filterStateForSubagent(
+  state: Record<string, unknown>,
+): Record<string, unknown> {
+  return filterState(state, EXCLUDED_STATE_KEYS);
+}
+
+/**
+ * Filter state to exclude only the keys a declarative fork must not resume
+ * (structured response, summarization event/session) — see
+ * `FORK_EXCLUDED_STATE_KEYS`.
  */
 export function filterStateForFork(
   state: Record<string, unknown>,
 ): Record<string, unknown> {
-  const filtered: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(state)) {
-    if (!FORK_EXCLUDED_STATE_KEYS.includes(key as never)) {
-      filtered[key] = value;
-    }
-  }
-  return filtered;
+  return filterState(state, FORK_EXCLUDED_STATE_KEYS);
 }
 
 /**
@@ -509,6 +523,26 @@ export function createSubAgent(
 }
 
 /**
+ * Resolve a fork's system prompt: the parent's inherited prompt, with the
+ * fork's own systemPrompt (if any) appended as an addendum rather than
+ * replacing it.
+ */
+function resolveForkSystemPrompt(
+  parentSystemPrompt: string | SystemMessage | null,
+  forkAddendum: string | SystemMessage | undefined,
+): string | SystemMessage {
+  if (!forkAddendum) return parentSystemPrompt ?? "";
+  const addendumText =
+    typeof forkAddendum === "string" ? forkAddendum : forkAddendum.text;
+  if (SystemMessage.isInstance(parentSystemPrompt)) {
+    return appendToSystemMessage(parentSystemPrompt, addendumText);
+  }
+  return parentSystemPrompt
+    ? `${parentSystemPrompt}\n\n${addendumText}`
+    : addendumText;
+}
+
+/**
  * Create subagent instances from specifications.
  *
  * Returns compiled agents, raw specs keyed by name (for on-demand
@@ -617,7 +651,15 @@ function getSubagents(options: {
       agents[agentParams.name] = agentParams.runnable;
       specsByName[agentParams.name] = agentParams;
       if (forked) forkModeNames.add(agentParams.name);
-    } else if (forked) {
+      continue;
+    }
+
+    const subagentMiddleware = [
+      ...defaultSubagentMiddleware,
+      ...(agentParams.middleware ?? []),
+    ];
+
+    if (forked) {
       // Re-check at runtime — the type guard doesn't stop a plain-JS/`as any` caller.
       const rawSkills = (agentParams as { skills?: unknown }).skills;
       if (Array.isArray(rawSkills) && rawSkills.length > 0) {
@@ -628,32 +670,16 @@ function getSubagents(options: {
       // The fork's own systemPrompt (if any) is an addendum appended to the
       // parent's inherited prompt, not a replacement — mirrors createDeepAgent's
       // main-loop merge logic for a declarative fork's own spec.
-      const forkAddendum = agentParams.systemPrompt;
-      const resolvedSystemPrompt = !forkAddendum
-        ? (parentSystemPrompt ?? "")
-        : SystemMessage.isInstance(parentSystemPrompt)
-          ? appendToSystemMessage(
-              parentSystemPrompt,
-              typeof forkAddendum === "string"
-                ? forkAddendum
-                : forkAddendum.text,
-            )
-          : parentSystemPrompt
-            ? `${parentSystemPrompt}\n\n${typeof forkAddendum === "string" ? forkAddendum : forkAddendum.text}`
-            : forkAddendum;
-      // No replay needed: mirrored middleware (see buildSubagentMiddleware)
-      // reconstructs the parent's dynamic prompt additions on top of this
-      // static baseline.
-      const forkMiddleware = [
-        ...defaultSubagentMiddleware,
-        ...(agentParams.middleware ?? []),
-      ];
+      const resolvedSystemPrompt = resolveForkSystemPrompt(
+        parentSystemPrompt,
+        agentParams.systemPrompt,
+      );
       // Splice after Filesystem (always present) to match the parent's tool
       // order for prompt-cache parity.
-      const fsIndex = forkMiddleware.findIndex(
+      const fsIndex = subagentMiddleware.findIndex(
         (m) => m.name === "FilesystemMiddleware",
       );
-      forkMiddleware.splice(
+      subagentMiddleware.splice(
         fsIndex + 1,
         0,
         createForkTaskToolMiddleware(mirroredTaskTool),
@@ -664,7 +690,7 @@ function getSubagents(options: {
         mode: undefined,
         model: agentParams.model ?? defaultModel,
         tools: agentParams.tools ?? defaultTools,
-        middleware: forkMiddleware,
+        middleware: subagentMiddleware,
         interruptOn: agentParams.interruptOn ?? defaultInterruptOn ?? undefined,
       };
       agents[agentParams.name] = createSubAgent(resolvedSpec);
@@ -677,10 +703,7 @@ function getSubagents(options: {
         mode: "handoff",
         model: agentParams.model ?? defaultModel,
         tools: agentParams.tools ?? defaultTools,
-        middleware: [
-          ...defaultSubagentMiddleware,
-          ...(agentParams.middleware ?? []),
-        ],
+        middleware: subagentMiddleware,
         interruptOn: agentParams.interruptOn ?? defaultInterruptOn ?? undefined,
       };
       agents[agentParams.name] = createSubAgent(resolvedSpec);
