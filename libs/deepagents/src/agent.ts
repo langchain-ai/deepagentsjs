@@ -37,7 +37,6 @@ import {
   GENERAL_PURPOSE_SUBAGENT,
   isForkedSubAgent,
   type CompiledSubAgent,
-  type ForkedSubAgent,
 } from "./middleware/subagents.js";
 import type { AsyncSubAgent } from "./middleware/async_subagents.js";
 import type {
@@ -304,7 +303,7 @@ export function createDeepAgent<
    * If a custom subagent needs skills, it must specify its own `skills` array.
    */
   const createSubagentDefaultMiddleware = (
-    input: SubAgent | ForkedSubAgent,
+    input: SubAgent,
     subagentProfile: HarnessProfile,
   ): AgentMiddleware[] => {
     const effectivePermissions = input.permissions ?? permissions;
@@ -332,9 +331,7 @@ export function createDeepAgent<
     ];
   };
 
-  const buildSubagentMiddleware = (
-    input: SubAgent | ForkedSubAgent,
-  ): AgentMiddleware[] => {
+  const buildSubagentMiddleware = (input: SubAgent): AgentMiddleware[] => {
     const subagentProfile = resolveSubagentProfile(input.model);
     const forked = isForkedSubAgent(input);
     const subagentDefaultMiddleware = createSubagentDefaultMiddleware(
@@ -395,14 +392,6 @@ export function createDeepAgent<
     middleware: buildSubagentMiddleware(input),
   });
 
-  const normalizeForkedSubagentSpec = (
-    input: ForkedSubAgent,
-  ): ForkedSubAgent => ({
-    ...input,
-    // Omitting tools here lets getSubagents() fall back to the parent's.
-    middleware: buildSubagentMiddleware(input),
-  });
-
   const allSubagents = subagents as readonly AnySubAgent[];
 
   // Split the unified subagents array into sync and async subagents.
@@ -414,19 +403,12 @@ export function createDeepAgent<
   // Process sync subagents:
   // - CompiledSubAgent: use as-is (already has its own middleware baked in)
   // - SubAgent: apply the default deep-agent subagent middleware stack
-  // - ForkedSubAgent: same stack, plus model-matched mirrored middleware
+  //   (a `mode: "fork"` spec gets the same treatment, plus mirrored middleware)
   const inlineSubagents = allSubagents
     .filter(
-      (item): item is SubAgent | CompiledSubAgent | ForkedSubAgent =>
-        !isAsyncSubAgent(item),
+      (item): item is SubAgent | CompiledSubAgent => !isAsyncSubAgent(item),
     )
-    .map((item) =>
-      "runnable" in item
-        ? item
-        : isForkedSubAgent(item)
-          ? normalizeForkedSubagentSpec(item)
-          : normalizeSubagentSpec(item),
-    );
+    .map((item) => ("runnable" in item ? item : normalizeSubagentSpec(item)));
 
   const gpConfig = harnessProfile.generalPurposeSubagent;
   const gpDisabled = gpConfig?.enabled === false;

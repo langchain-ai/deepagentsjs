@@ -382,7 +382,7 @@ describe("Subagent summarization state isolation", () => {
   });
 });
 
-describe("ForkedSubAgent", () => {
+describe("SubAgent mode: fork", () => {
   let invokeSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
@@ -434,7 +434,7 @@ describe("ForkedSubAgent", () => {
     ).toThrow(/invalid mode 'dynamic'/);
   });
 
-  it("throws at construction when a ForkedSubAgent declares skills", () => {
+  it("throws at construction when a fork declares skills", () => {
     expect(() =>
       createDeepAgent({
         model: new FakeListChatModel({ responses: ["Done"] }),
@@ -447,23 +447,49 @@ describe("ForkedSubAgent", () => {
           } as any,
         ],
       }),
-    ).toThrow(/ForkedSubAgent 'worker' cannot set skills/);
+    ).toThrow(/SubAgent 'worker' cannot set skills under mode: "fork"/);
   });
 
-  it("throws at construction when a ForkedSubAgent declares its own systemPrompt", () => {
-    expect(() =>
-      createDeepAgent({
-        model: new FakeListChatModel({ responses: ["Done"] }),
-        subagents: [
-          {
-            name: "worker",
-            description: "A worker agent",
-            mode: "fork",
-            systemPrompt: "You are a worker.",
-          } as any,
-        ],
-      }),
-    ).toThrow(/ForkedSubAgent 'worker' cannot set systemPrompt/);
+  it("appends a fork's own systemPrompt to the parent's inherited prompt, rather than replacing it", async () => {
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: `call_${Date.now()}`,
+              name: "task",
+              args: { description: "continue", subagent_type: "worker" },
+            },
+          ],
+        }) as unknown as string,
+        "Worker done",
+        "Done",
+      ],
+    });
+
+    const agent = createDeepAgent({
+      model,
+      systemPrompt: "PARENT_PROMPT",
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          mode: "fork",
+          systemPrompt: "FORK_EXTRA",
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: [new HumanMessage("start")] },
+      { recursionLimit: 25 },
+    );
+
+    const workerCall = findCallContaining(invokeSpy, "continue");
+    expect(workerCall).toBeDefined();
+    const systemMessage = workerCall!.find(SystemMessage.isInstance);
+    expect(systemMessage?.text).toBe("PARENT_PROMPT\n\nFORK_EXTRA");
   });
 
   it("throws at construction when two subagents share a name", () => {
@@ -532,7 +558,7 @@ describe("ForkedSubAgent", () => {
     expect(text).not.toContain("BANANA42");
   });
 
-  it("should include prior history and the parent's exact system prompt for a ForkedSubAgent", async () => {
+  it("should include prior history and the parent's exact system prompt for a fork", async () => {
     const model = new FakeListChatModel({
       responses: [
         new AIMessage({
@@ -859,7 +885,7 @@ describe("ForkedSubAgent", () => {
     expect(text).not.toContain("get_weather");
   });
 
-  it("should still inherit the parent's system prompt for a ForkedSubAgent even when its model differs", async () => {
+  it("should still inherit the parent's system prompt for a fork even when its model differs", async () => {
     const mainModel = new FakeListChatModel({
       responses: [
         new AIMessage({
@@ -915,8 +941,8 @@ describe("ForkedSubAgent", () => {
       .join("\n");
     expect(text).toContain("BANANA42");
 
-    // ...and the system prompt is still the parent's — a ForkedSubAgent has
-    // no own prompt to fall back to, so model mismatch only means no cache
+    // ...and the system prompt is still the parent's — this fork has no
+    // systemPrompt of its own, so model mismatch only means no cache
     // benefit, not a different prompt.
     const systemMessage = workerCall!.find(SystemMessage.isInstance);
     expect(systemMessage?.text).toContain("PARENT_ROOT_PROMPT_MARKER");
@@ -2092,7 +2118,7 @@ describe("middleware override by name", () => {
     expect(merged).toEqual([second]);
   });
 
-  it("mirrors the parent's custom middleware into a ForkedSubAgent when the parent has no system prompt", () => {
+  it("mirrors the parent's custom middleware into a fork when the parent has no system prompt", () => {
     const custom = namedMiddleware("MarkerMiddleware");
 
     createDeepAgent({
@@ -2114,7 +2140,7 @@ describe("middleware override by name", () => {
     );
   });
 
-  it("mirrors the parent's custom middleware into a ForkedSubAgent even when its model differs from the parent's", () => {
+  it("mirrors the parent's custom middleware into a fork even when its model differs from the parent's", () => {
     const custom = namedMiddleware("MarkerMiddleware");
     const workerModel = new FakeListChatModel({ responses: ["hello"] });
 
@@ -2139,7 +2165,7 @@ describe("middleware override by name", () => {
     );
   });
 
-  it("a ForkedSubAgent's own middleware entry wins over a same-named mirrored parent one", () => {
+  it("a fork's own middleware entry wins over a same-named mirrored parent one", () => {
     const parentEntry = namedMiddleware("MarkerMiddleware");
     const forkEntry = namedMiddleware("MarkerMiddleware");
 

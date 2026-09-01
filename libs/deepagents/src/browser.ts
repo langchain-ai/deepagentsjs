@@ -97,7 +97,6 @@ export {
   type MemoryMiddlewareOptions,
   type SubAgent,
   type CompiledSubAgent,
-  type ForkedSubAgent,
   type AsyncSubAgentMiddlewareOptions,
   type AsyncSubAgent,
   type AsyncTask,

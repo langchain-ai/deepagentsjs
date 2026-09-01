@@ -22,6 +22,7 @@ import type { Runnable } from "@langchain/core/runnables";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { FilesystemPermission } from "../permissions/types.js";
 import { getEffectiveMessages } from "./summarization.js";
+import { appendToSystemMessage } from "./utils.js";
 
 export type { AgentMiddleware };
 
@@ -159,11 +160,30 @@ export interface CompiledSubAgent<
 }
 
 /**
- * Fields shared by both {@link SubAgent} and {@link ForkedSubAgent}.
+ * Specification for a declarative subagent.
  *
- * @internal
+ * When using `createDeepAgent`, subagents automatically receive a default middleware
+ * stack (filesystemMiddleware, summarizationMiddleware, etc.) before any custom
+ * `middleware` specified in this spec. Add `todoListMiddleware` explicitly to opt in.
+ *
+ * By default the subagent is isolated — it only ever sees the delegated task
+ * description, never the parent's conversation. Setting `mode: "fork"` makes
+ * it continue the parent's conversation instead.
+ *
+ * @example
+ * ```typescript
+ * const researcher: SubAgent = {
+ *   name: "researcher",
+ *   description: "Research assistant for complex topics",
+ *   systemPrompt: "You are a research assistant.",
+ *   tools: [webSearchTool],
+ *   skills: ["/skills/research/"],
+ * };
+ * ```
+ *
+ * @experimental `mode: "fork"` is experimental and subject to change.
  */
-interface SubAgentBase {
+export interface SubAgent {
   /** Identifier used to select this subagent in the task tool */
   name: string;
 
@@ -171,15 +191,19 @@ interface SubAgentBase {
   description: string;
 
   /**
-   * The system prompt for the agent. Optional on {@link SubAgent} (falls
-   * back to an empty prompt if omitted); forbidden on {@link ForkedSubAgent},
-   * which always inherits the parent's instead.
+   * The system prompt for the agent. Falls back to an empty prompt if
+   * omitted. Under `mode: "fork"`, this is appended to the parent's
+   * inherited prompt rather than replacing it.
    */
   systemPrompt?: string | SystemMessage;
 
   /**
    * Context mode. `"handoff"` (default) is fully isolated. `"fork"` inherits
-   * the parent's conversation history and system prompt.
+   * the parent's conversation history and mirrors the parent's
+   * prompt-producing middleware (skills, memory, custom middleware) so it
+   * rebuilds an equivalent system prompt — the tradeoff is cache misses if
+   * this subagent's own `model` differs from the parent's. Cannot declare
+   * `skills` under `mode: "fork"`; the parent's skills are inherited instead.
    */
   mode?: "handoff" | "fork";
 
@@ -268,79 +292,15 @@ interface SubAgentBase {
 }
 
 /**
- * Specification for a subagent that can be dynamically created.
+ * Whether a declarative subagent spec has `mode: "fork"` set.
  *
- * When using `createDeepAgent`, subagents automatically receive a default middleware
- * stack (filesystemMiddleware, summarizationMiddleware, etc.) before any custom
- * `middleware` specified in this spec. Add `todoListMiddleware` explicitly to opt in.
- *
- * Always fully isolated — this subagent only ever sees the task description,
- * never the parent's conversation. Use {@link ForkedSubAgent} to inherit the
- * parent's history and system prompt instead.
- *
- * @example
- * ```typescript
- * const researcher: SubAgent = {
- *   name: "researcher",
- *   description: "Research assistant for complex topics",
- *   systemPrompt: "You are a research assistant.",
- *   tools: [webSearchTool],
- *   skills: ["/skills/research/"],
- * };
- * ```
+ * A plain boolean, not a type predicate: `SubAgent` covers both `"fork"` and
+ * `"handoff"`, so there's no distinct type left to narrow to.
  */
-export interface SubAgent extends SubAgentBase {
-  /** The system prompt to use for the agent */
-  systemPrompt?: string | SystemMessage;
-
-  /**
-   * Context mode. `"handoff"` (default) is fully isolated. `"fork"` inherits
-   * the parent's conversation history and system prompt.
-   */
-  mode?: "handoff";
-}
-
-/**
- * Specification for a subagent that inherits the parent's conversation
- * instead of starting from just the task description.
- *
- * Always forks: inherits the parent's full message history, static system
- * prompt, and a mirrored copy of the parent's prompt-producing middleware
- * (skills, memory, custom middleware) — reconstructing the parent's prompt
- * so an Anthropic prompt cache can hit. Has no `systemPrompt` of its own;
- * use {@link SubAgent} without forking if you need a distinct one.
- *
- * @example
- * ```typescript
- * const researcher: ForkedSubAgent = {
- *   name: "researcher",
- *   description: "Continues the current investigation with full context",
- *   mode: "fork",
- *   tools: [webSearchTool],
- * };
- * ```
- *
- * @experimental Forking subagents is experimental and subject to change
- */
-export interface ForkedSubAgent extends SubAgentBase {
-  /** A ForkedSubAgent never has its own system prompt — always the parent's. */
-  systemPrompt?: undefined;
-
-  /** A ForkedSubAgent cannot declare its own skills — the inherited system message would discard them. */
-  skills?: undefined;
-
-  /**
-   * Always `"fork"`. Required (not defaulted) so this can't structurally
-   * collapse into a plain `SubAgent` — see `isForkedSubAgent` below.
-   */
-  mode: "fork";
-}
-
-export function isForkedSubAgent(value: unknown): value is ForkedSubAgent {
+export function isForkedSubAgent(value: unknown): boolean {
   if (typeof value !== "object" || value == null) return false;
   if (!("mode" in value)) return false;
-  if (value.mode !== "fork") return false;
-  return true;
+  return value.mode === "fork";
 }
 
 /**
@@ -561,7 +521,7 @@ function getSubagents(options: {
   defaultMiddleware: AgentMiddleware[] | null;
   generalPurposeMiddleware: AgentMiddleware[] | null;
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
-  subagents: (SubAgent | CompiledSubAgent | ForkedSubAgent)[];
+  subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
   parentSystemPrompt?: string | SystemMessage | null;
   /** The exact tool instance forked subagents mirror — see `createTaskTool`. */
@@ -658,20 +618,29 @@ function getSubagents(options: {
       specsByName[agentParams.name] = agentParams;
       if (forked) forkModeNames.add(agentParams.name);
     } else if (forked) {
-      // Re-check at runtime — the type guards don't stop a plain-JS/`as any` caller.
+      // Re-check at runtime — the type guard doesn't stop a plain-JS/`as any` caller.
       const rawSkills = (agentParams as { skills?: unknown }).skills;
       if (Array.isArray(rawSkills) && rawSkills.length > 0) {
         throw new Error(
-          `ForkedSubAgent '${agentParams.name}' cannot set skills; the parent's system message would discard it.`,
+          `SubAgent '${agentParams.name}' cannot set skills under mode: "fork"; the parent's skills are inherited instead.`,
         );
       }
-      const rawSystemPrompt = (agentParams as { systemPrompt?: unknown })
-        .systemPrompt;
-      if (rawSystemPrompt != null) {
-        throw new Error(
-          `ForkedSubAgent '${agentParams.name}' cannot set systemPrompt; it always inherits the parent's.`,
-        );
-      }
+      // The fork's own systemPrompt (if any) is an addendum appended to the
+      // parent's inherited prompt, not a replacement — mirrors createDeepAgent's
+      // main-loop merge logic for a declarative fork's own spec.
+      const forkAddendum = agentParams.systemPrompt;
+      const resolvedSystemPrompt = !forkAddendum
+        ? (parentSystemPrompt ?? "")
+        : SystemMessage.isInstance(parentSystemPrompt)
+          ? appendToSystemMessage(
+              parentSystemPrompt,
+              typeof forkAddendum === "string"
+                ? forkAddendum
+                : forkAddendum.text,
+            )
+          : parentSystemPrompt
+            ? `${parentSystemPrompt}\n\n${typeof forkAddendum === "string" ? forkAddendum : forkAddendum.text}`
+            : forkAddendum;
       // No replay needed: mirrored middleware (see buildSubagentMiddleware)
       // reconstructs the parent's dynamic prompt additions on top of this
       // static baseline.
@@ -691,7 +660,7 @@ function getSubagents(options: {
       );
       const resolvedSpec: SubAgent = {
         ...agentParams,
-        systemPrompt: parentSystemPrompt ?? "",
+        systemPrompt: resolvedSystemPrompt,
         mode: undefined,
         model: agentParams.model ?? defaultModel,
         tools: agentParams.tools ?? defaultTools,
@@ -736,7 +705,7 @@ function createTaskTool(options: {
   defaultMiddleware: AgentMiddleware[] | null;
   generalPurposeMiddleware: AgentMiddleware[] | null;
   defaultInterruptOn: Record<string, boolean | InterruptOnConfig> | null;
-  subagents: (SubAgent | CompiledSubAgent | ForkedSubAgent)[];
+  subagents: (SubAgent | CompiledSubAgent)[];
   generalPurposeAgent: boolean;
   taskDescription: string | null;
   parentSystemPrompt?: string | SystemMessage | null;
@@ -961,14 +930,14 @@ export interface SubAgentMiddlewareOptions {
   /** The tool configs for the default general-purpose subagent */
   defaultInterruptOn?: Record<string, boolean | InterruptOnConfig> | null;
   /** A list of additional subagents to provide to the agent */
-  subagents?: (SubAgent | CompiledSubAgent | ForkedSubAgent)[];
+  subagents?: (SubAgent | CompiledSubAgent)[];
   /** Full system prompt override */
   systemPrompt?: string | null;
   /** Whether to include the general-purpose agent */
   generalPurposeAgent?: boolean;
   /** Custom description for the task tool */
   taskDescription?: string | null;
-  /** Inherited by `ForkedSubAgent`s and `mode: "fork"` compiled subagents */
+  /** Inherited by a `mode: "fork"` declarative or compiled subagent */
   parentSystemPrompt?: string | SystemMessage | null;
 }
 
