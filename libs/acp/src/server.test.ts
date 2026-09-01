@@ -420,12 +420,13 @@ describe("DeepAgentsServer handlers", () => {
 
       const firstCallOptions = createAgentMock.mock.calls[callStart]?.[0];
       const secondCallOptions = createAgentMock.mock.calls[callStart + 1]?.[0];
-      expect(firstCallOptions).toBeDefined();
-      expect(secondCallOptions).toBeDefined();
-      const firstBackend = firstCallOptions?.backend as unknown as {
+      if (!firstCallOptions || !secondCallOptions) {
+        throw new Error("Expected one agent to be created for each session");
+      }
+      const firstBackend = firstCallOptions.backend as unknown as {
         rootDir: string;
       };
-      const secondBackend = secondCallOptions?.backend as unknown as {
+      const secondBackend = secondCallOptions.backend as unknown as {
         rootDir: string;
       };
       expect(firstBackend.rootDir).toBe("/workspace/one");
