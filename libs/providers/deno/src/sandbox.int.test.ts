@@ -22,15 +22,38 @@ import {
   withRetry,
 } from "@langchain/sandbox-standard-tests/vitest";
 import { DenoSandbox } from "./sandbox.js";
+import { DenoSandboxError } from "./types.js";
 
 // Check if integration tests should run
 const DENO_TOKEN = process.env.DENO_DEPLOY_TOKEN;
 
 const TEST_TIMEOUT = 120_000; // 2 minutes
 
+// A valid token's org can still lack sandbox plan access
+// (VERIFICATION_REQUIRED_FOR_SANDBOXES); skip only for that specific error
+// so a real regression still fails the suite.
+async function checkSandboxAvailable(): Promise<boolean> {
+  if (!DENO_TOKEN) return false;
+  try {
+    const probe = await DenoSandbox.create({ memoryMb: 768 });
+    await probe.close();
+    return true;
+  } catch (error) {
+    if (
+      DenoSandboxError.isInstance(error) &&
+      error.message.includes("VERIFICATION_REQUIRED_FOR_SANDBOXES")
+    ) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+const SANDBOX_AVAILABLE = await checkSandboxAvailable();
+
 sandboxStandardTests({
   name: "DenoSandbox",
-  skip: !DENO_TOKEN,
+  skip: !SANDBOX_AVAILABLE,
   sequential: true,
   timeout: TEST_TIMEOUT,
   createSandbox: async (options) =>
@@ -44,7 +67,7 @@ sandboxStandardTests({
 });
 
 describe
-  .skipIf(!DENO_TOKEN)
+  .skipIf(!SANDBOX_AVAILABLE)
   .sequential("DenoSandbox Provider-Specific Tests", () => {
     let shared: DenoSandbox;
 
