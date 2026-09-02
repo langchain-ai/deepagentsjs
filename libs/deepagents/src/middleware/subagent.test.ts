@@ -427,12 +427,34 @@ describe("SubAgent mode: fork", () => {
             name: "worker",
             description: "A worker agent",
             systemPrompt: "You are a worker.",
-            mode: "dynamic" as unknown as "handoff",
+            mode: "dynamic" as unknown as "isolated",
           },
         ],
       }),
     ).toThrow(/invalid mode 'dynamic'/);
   });
+
+  it.each(["isolated", "handoff"] as const)(
+    "accepts mode: %s — 'handoff' is a legacy alias for 'isolated', neither forks",
+    (mode) => {
+      const middleware = createSubAgentMiddleware({
+        defaultModel: new FakeListChatModel({ responses: ["ok"] }),
+        generalPurposeAgent: false,
+        subagents: [
+          {
+            name: "worker",
+            description: "A worker agent",
+            mode: mode as unknown as "isolated",
+          },
+        ],
+      });
+
+      const taskTool = middleware.tools![0];
+      expect(taskTool.description).not.toContain(
+        "inherits your full conversation and system prompt",
+      );
+    },
+  );
 
   it("throws at construction when a fork declares skills", () => {
     expect(() =>
@@ -508,7 +530,7 @@ describe("SubAgent mode: fork", () => {
     ).toThrow(/Duplicate subagent name 'worker'/);
   });
 
-  it("should NOT include prior history for the default handoff mode", async () => {
+  it("should NOT include prior history for the default isolated mode", async () => {
     const model = new FakeListChatModel({
       responses: [
         new AIMessage({
@@ -545,7 +567,7 @@ describe("SubAgent mode: fork", () => {
     await agent.invoke(
       { messages: priorHistory },
       {
-        configurable: { thread_id: `test-mode-handoff-${Date.now()}` },
+        configurable: { thread_id: `test-mode-isolated-${Date.now()}` },
         recursionLimit: 50,
       },
     );
@@ -704,10 +726,10 @@ describe("SubAgent mode: fork", () => {
     ).toBe(true);
   });
 
-  it("gives a declarative fork the full parent state, unlike the narrow subagent-safe subset a handoff sees", () => {
+  it("gives a declarative fork the full parent state, unlike the narrow subagent-safe subset an isolated subagent sees", () => {
     const state = {
       messages: ["overwritten unconditionally by runTask either way"],
-      todos: ["excluded from a handoff, survives the fork filter"],
+      todos: ["excluded from an isolated subagent, survives the fork filter"],
       structuredResponse: {
         note: "excluded from both — a stale value must not be mistaken for the fork's own result",
       },
@@ -724,7 +746,7 @@ describe("SubAgent mode: fork", () => {
     const forSubagent = filterStateForSubagent(state);
     const forFork = filterStateForFork(state);
 
-    // Handoff/compiled path: only keys outside the wide EXCLUDED_STATE_KEYS list survive.
+    // Isolated/compiled path: only keys outside the wide EXCLUDED_STATE_KEYS list survive.
     expect(forSubagent).toEqual({
       customUserKey: "carried either way — not a special key",
     });
@@ -1911,7 +1933,7 @@ describe("Subagent tool inheritance", () => {
     createAgentMock.mockClear();
   });
 
-  it("inherits the parent's tools when a declarative subagent omits its own, for both handoff and fork", () => {
+  it("inherits the parent's tools when a declarative subagent omits its own, for both isolated and fork", () => {
     const parentTool = tool(async () => "logs", {
       name: "read_logs",
       description: "Read logs",
@@ -1922,7 +1944,7 @@ describe("Subagent tool inheritance", () => {
       model: new FakeListChatModel({ responses: ["ok"] }),
       tools: [parentTool],
       subagents: [
-        { name: "handoff-worker", description: "a worker" },
+        { name: "isolated-worker", description: "a worker" },
         { name: "fork-worker", description: "a worker", mode: "fork" },
       ],
     });
@@ -1934,7 +1956,7 @@ describe("Subagent tool inheritance", () => {
       ]),
     );
 
-    expect(toolsByAgentName.get("handoff-worker")).toEqual([parentTool]);
+    expect(toolsByAgentName.get("isolated-worker")).toEqual([parentTool]);
     expect(toolsByAgentName.get("fork-worker")).toEqual([parentTool]);
   });
 });

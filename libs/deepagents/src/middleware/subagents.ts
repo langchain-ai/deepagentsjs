@@ -154,9 +154,9 @@ export interface CompiledSubAgent<
   /**
    * Context mode. `"fork"` inherits the parent's conversation history
    * (but not its system prompt — that's baked into the runnable).
-   * `"handoff"` (default) is fully isolated.
+   * `"isolated"` (default) only sees the delegated task.
    */
-  mode?: "handoff" | "fork";
+  mode?: "isolated" | "fork";
 }
 
 /**
@@ -198,14 +198,15 @@ export interface SubAgent {
   systemPrompt?: string | SystemMessage;
 
   /**
-   * Context mode. `"handoff"` (default) is fully isolated. `"fork"` inherits
-   * the parent's conversation history and mirrors the parent's
-   * prompt-producing middleware (skills, memory, custom middleware) so it
-   * rebuilds an equivalent system prompt — the tradeoff is cache misses if
-   * this subagent's own `model` differs from the parent's. Cannot declare
-   * `skills` under `mode: "fork"`; the parent's skills are inherited instead.
+   * Context mode. `"isolated"` (default) only sees the delegated task.
+   * `"fork"` inherits the parent's conversation history and mirrors the
+   * parent's prompt-producing middleware (skills, memory, custom middleware)
+   * so it rebuilds an equivalent system prompt — the tradeoff is cache
+   * misses if this subagent's own `model` differs from the parent's. Cannot
+   * declare `skills` under `mode: "fork"`; the parent's skills are inherited
+   * instead.
    */
-  mode?: "handoff" | "fork";
+  mode?: "isolated" | "fork";
 
   /** The tools to use for the agent (tool instances, not names). Defaults to defaultTools */
   tools?: StructuredTool[];
@@ -307,7 +308,7 @@ export interface ForkedSubAgent extends SubAgent {
  * Whether a declarative subagent spec has `mode: "fork"` set.
  *
  * A plain boolean, not a type predicate: `SubAgent` covers both `"fork"` and
- * `"handoff"`, so there's no distinct type left to narrow to.
+ * `"isolated"`, so there's no distinct type left to narrow to.
  */
 export function isForkedSubAgent(value: unknown): boolean {
   if (typeof value !== "object" || value == null) return false;
@@ -356,7 +357,7 @@ export const GENERAL_PURPOSE_SUBAGENT = {
   name: "general-purpose",
   description: DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
   systemPrompt: DEFAULT_SUBAGENT_PROMPT,
-  mode: "handoff",
+  mode: "isolated",
 } as const;
 
 function filterState(
@@ -628,10 +629,17 @@ function getSubagents(options: {
   }
 
   for (const agentParams of subagents) {
-    const rawMode = agentParams.mode;
-    if (rawMode != null && rawMode !== "handoff" && rawMode !== "fork") {
+    // Widened to string: a plain-JS/`as any` caller can still pass the
+    // legacy "handoff" value, which no longer appears in the type itself.
+    const rawMode = agentParams.mode as string | undefined;
+    if (
+      rawMode != null &&
+      rawMode !== "isolated" &&
+      rawMode !== "fork" &&
+      rawMode !== "handoff" // legacy alias for "isolated"
+    ) {
       throw new Error(
-        `SubAgent '${agentParams.name}' has invalid mode '${rawMode}' — must be "handoff" or "fork".`,
+        `SubAgent '${agentParams.name}' has invalid mode '${rawMode}' — must be "isolated" or "fork".`,
       );
     }
 
@@ -700,7 +708,7 @@ function getSubagents(options: {
       // Plain SubAgent — never forks, keeps its own prompt untouched.
       const resolvedSpec: SubAgent = {
         ...agentParams,
-        mode: "handoff",
+        mode: "isolated",
         model: agentParams.model ?? defaultModel,
         tools: agentParams.tools ?? defaultTools,
         middleware: subagentMiddleware,
