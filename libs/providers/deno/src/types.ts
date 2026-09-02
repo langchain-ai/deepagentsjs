@@ -373,7 +373,7 @@ const DENO_SANDBOX_ERROR_SYMBOL = Symbol.for("deno.sandbox.error");
  * ```
  */
 export class DenoSandboxError extends SandboxError {
-  [DENO_SANDBOX_ERROR_SYMBOL]: true;
+  [DENO_SANDBOX_ERROR_SYMBOL] = true as const;
 
   /** Error name for instanceof checks and logging */
   override readonly name = "DenoSandboxError";
