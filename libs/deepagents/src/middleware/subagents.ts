@@ -295,7 +295,7 @@ export interface SubAgent {
 /**
  * A {@link SubAgent} with `mode: "fork"`.
  *
- * Kept as a named type for backward compatibility with code that imported
+ * @deprecated Kept as a named type for backward compatibility with code that imported
  * `ForkedSubAgent` before it merged into `SubAgent` — not a distinct shape
  * with its own constraints (a fork can now declare its own `systemPrompt`,
  * same as any `SubAgent`). Prefer `SubAgent` with `mode: "fork"` in new code.
