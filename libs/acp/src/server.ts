@@ -320,6 +320,8 @@ export class DeepAgentsServer {
     this.isRunning = false;
     this.connection = null;
     this.sessions.clear();
+    this.agents.clear();
+    this.acpBackends.clear();
     this.log("Server stopped");
 
     // Close the logger to flush any pending writes
@@ -451,6 +453,10 @@ export class DeepAgentsServer {
     const session: SessionState = {
       id: sessionId,
       agentName,
+      workspaceRoot:
+        typeof params.cwd === "string" && params.cwd
+          ? params.cwd
+          : this.workspaceRoot,
       threadId,
       messages: [],
       createdAt: new Date(),
@@ -460,11 +466,9 @@ export class DeepAgentsServer {
 
     this.sessions.set(sessionId, session);
 
-    if (!this.agents.has(agentName)) {
-      this.createAgent(agentName);
-    }
+    this.createAgent(session);
 
-    const acpBackend = this.acpBackends.get(agentName);
+    const acpBackend = this.acpBackends.get(sessionId);
     if (acpBackend) {
       acpBackend.setSessionId(sessionId);
     }
@@ -521,7 +525,7 @@ export class DeepAgentsServer {
     });
     session.lastActivityAt = new Date();
 
-    const acpBackend = this.acpBackends.get(session.agentName);
+    const acpBackend = this.acpBackends.get(sessionId);
     if (acpBackend) {
       acpBackend.setSessionId(sessionId);
     }
@@ -571,7 +575,7 @@ export class DeepAgentsServer {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    const agent = this.agents.get(session.agentName);
+    const agent = this.agents.get(sessionId);
 
     if (!agent) {
       this.log("Prompt failed: agent not found:", session.agentName);
@@ -955,7 +959,7 @@ export class DeepAgentsServer {
         sessionId: session.id,
         command: "/bin/bash",
         args: ["-c", command],
-        cwd: this.workspaceRoot,
+        cwd: session.workspaceRoot,
       } as any);
 
       await this.sendToolCallUpdate(session.id, conn, {
@@ -1222,7 +1226,7 @@ export class DeepAgentsServer {
     const locations = extractToolCallLocations(
       toolCall.name,
       toolCall.args,
-      this.workspaceRoot,
+      this.sessions.get(sessionId)?.workspaceRoot ?? this.workspaceRoot,
     );
 
     await conn.sessionUpdate({
@@ -1302,7 +1306,8 @@ export class DeepAgentsServer {
   /**
    * Create a DeepAgent instance for the given configuration
    */
-  private createAgent(agentName: string): void {
+  private createAgent(session: SessionState): void {
+    const { agentName, workspaceRoot, id: sessionId } = session;
     const config = this.agentConfigs.get(agentName);
 
     if (!config) {
@@ -1320,7 +1325,7 @@ export class DeepAgentsServer {
     });
 
     // Create backend - prefer ACP filesystem if client supports it
-    const backend = this.createBackend(config);
+    const backend = this.createBackend(config, sessionId, workspaceRoot);
 
     const agent = createDeepAgent({
       model: config.model,
@@ -1339,12 +1344,19 @@ export class DeepAgentsServer {
       name: config.name,
     });
 
-    this.agents.set(agentName, agent);
-    this.log("Agent created successfully:", agentName);
+    this.agents.set(sessionId, agent);
+    this.log(
+      "Agent created successfully:",
+      agentName,
+      "for session:",
+      sessionId,
+    );
   }
 
   private createBackend(
     config: DeepAgentConfig,
+    sessionId: string,
+    workspaceRoot: string,
   ): BackendProtocol | BackendFactory {
     if (config.backend) {
       this.log("Using custom backend for agent:", config.name);
@@ -1359,15 +1371,15 @@ export class DeepAgentsServer {
       this.log("Creating ACPFilesystemBackend for agent:", config.name);
       const backend = new ACPFilesystemBackend({
         conn: this.connection,
-        rootDir: this.workspaceRoot,
+        rootDir: workspaceRoot,
       });
-      this.acpBackends.set(config.name, backend);
+      this.acpBackends.set(sessionId, backend);
       return backend;
     }
 
-    this.log("Creating FilesystemBackend:", { rootDir: this.workspaceRoot });
+    this.log("Creating FilesystemBackend:", { rootDir: workspaceRoot });
     return new FilesystemBackend({
-      rootDir: this.workspaceRoot,
+      rootDir: workspaceRoot,
     });
   }
 

@@ -181,6 +181,11 @@ export interface SessionState {
   agentName: string;
 
   /**
+   * Workspace root for this session
+   */
+  workspaceRoot: string;
+
+  /**
    * LangGraph thread ID for state persistence
    */
   threadId: string;

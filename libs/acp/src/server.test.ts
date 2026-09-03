@@ -3,7 +3,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { createDeepAgent } from "deepagents";
 import { DeepAgentsServer } from "./server.js";
+import { ACPFilesystemBackend } from "./acp-filesystem-backend.js";
 import type {
   DeepAgentConfig,
   DeepAgentsServerOptions,
@@ -332,6 +334,147 @@ describe("DeepAgentsServer handlers", () => {
       expect(result.sessionId).toBeDefined();
       expect(result.sessionId).toMatch(/^sess_/);
       expect(serverAny.sessions.has(result.sessionId)).toBe(true);
+    });
+
+    it("should use the session cwd as its workspace root", async () => {
+      const server = new DeepAgentsServer({
+        agents: { name: "test-agent" },
+        workspaceRoot: "/default/workspace",
+      });
+
+      const serverAny = server as unknown as {
+        handleNewSession: (
+          params: Record<string, unknown>,
+          conn: unknown,
+        ) => Promise<{ sessionId: string }>;
+        sessions: Map<string, SessionState>;
+      };
+
+      const mockConn = { sessionUpdate: vi.fn().mockResolvedValue(undefined) };
+      const { sessionId } = await serverAny.handleNewSession(
+        { cwd: "/session/workspace" },
+        mockConn,
+      );
+
+      expect(serverAny.sessions.get(sessionId)?.workspaceRoot).toBe(
+        "/session/workspace",
+      );
+    });
+
+    it("should fall back to the server workspace for sessions without cwd", async () => {
+      const server = new DeepAgentsServer({
+        agents: { name: "test-agent" },
+        workspaceRoot: "/default/workspace",
+      });
+
+      const serverAny = server as unknown as {
+        handleNewSession: (
+          params: Record<string, unknown>,
+          conn: unknown,
+        ) => Promise<{ sessionId: string }>;
+        sessions: Map<string, SessionState>;
+      };
+
+      const mockConn = { sessionUpdate: vi.fn().mockResolvedValue(undefined) };
+      const { sessionId } = await serverAny.handleNewSession({}, mockConn);
+
+      expect(serverAny.sessions.get(sessionId)?.workspaceRoot).toBe(
+        "/default/workspace",
+      );
+    });
+
+    it("should keep workspace roots isolated across sessions", async () => {
+      const server = new DeepAgentsServer({
+        agents: { name: "test-agent" },
+      });
+
+      const serverAny = server as unknown as {
+        handleNewSession: (
+          params: Record<string, unknown>,
+          conn: unknown,
+        ) => Promise<{ sessionId: string }>;
+        sessions: Map<string, SessionState>;
+        agents: Map<string, unknown>;
+      };
+
+      const mockConn = { sessionUpdate: vi.fn().mockResolvedValue(undefined) };
+      const createAgentMock = vi.mocked(createDeepAgent);
+      const callStart = createAgentMock.mock.calls.length;
+      const first = await serverAny.handleNewSession(
+        { cwd: "/workspace/one" },
+        mockConn,
+      );
+      const second = await serverAny.handleNewSession(
+        { cwd: "/workspace/two" },
+        mockConn,
+      );
+
+      expect(serverAny.sessions.get(first.sessionId)?.workspaceRoot).toBe(
+        "/workspace/one",
+      );
+      expect(serverAny.sessions.get(second.sessionId)?.workspaceRoot).toBe(
+        "/workspace/two",
+      );
+      expect(serverAny.agents.has(first.sessionId)).toBe(true);
+      expect(serverAny.agents.has(second.sessionId)).toBe(true);
+
+      const firstCallOptions = createAgentMock.mock.calls[callStart]?.[0];
+      const secondCallOptions = createAgentMock.mock.calls[callStart + 1]?.[0];
+      if (!firstCallOptions || !secondCallOptions) {
+        throw new Error("Expected one agent to be created for each session");
+      }
+      const firstBackend = firstCallOptions.backend as unknown as {
+        rootDir: string;
+      };
+      const secondBackend = secondCallOptions.backend as unknown as {
+        rootDir: string;
+      };
+      expect(firstBackend.rootDir).toBe("/workspace/one");
+      expect(secondBackend.rootDir).toBe("/workspace/two");
+    });
+
+    it("should create an ACP filesystem backend from the session cwd", async () => {
+      const server = new DeepAgentsServer({
+        agents: { name: "test-agent" },
+        workspaceRoot: "/default/workspace",
+      });
+
+      const mockConn = {
+        sessionUpdate: vi.fn().mockResolvedValue(undefined),
+        readTextFile: vi.fn().mockResolvedValue({ text: "" }),
+        writeTextFile: vi.fn().mockResolvedValue({}),
+      };
+      const serverAny = server as unknown as {
+        connection: typeof mockConn;
+        handleInitialize: (params: Record<string, unknown>) => Promise<unknown>;
+        handleNewSession: (
+          params: Record<string, unknown>,
+          conn: typeof mockConn,
+        ) => Promise<{ sessionId: string }>;
+        acpBackends: Map<string, ACPFilesystemBackend>;
+      };
+      serverAny.connection = mockConn;
+      await serverAny.handleInitialize({
+        clientCapabilities: {
+          fs: { readTextFile: true, writeTextFile: true },
+        },
+      });
+
+      const createAgentMock = vi.mocked(createDeepAgent);
+      const callStart = createAgentMock.mock.calls.length;
+      const { sessionId } = await serverAny.handleNewSession(
+        { cwd: "/session/workspace" },
+        mockConn,
+      );
+
+      const backend = serverAny.acpBackends.get(sessionId);
+      expect(backend).toBeInstanceOf(ACPFilesystemBackend);
+      expect((backend as unknown as { rootDir: string }).rootDir).toBe(
+        "/session/workspace",
+      );
+      const createAgentOptions = createAgentMock.mock.calls[callStart]?.[0];
+      expect(createAgentOptions).toBeDefined();
+      expect(createAgentOptions?.backend).toBe(backend);
     });
 
     it("should throw for unknown agent", async () => {
@@ -1277,7 +1420,10 @@ describe("Terminal Integration", () => {
       createTerminal: vi.fn().mockResolvedValue(mockTerminal),
     };
 
-    const { sessionId } = await serverAny.handleNewSession({}, mockConn);
+    const { sessionId } = await serverAny.handleNewSession(
+      { cwd: "/session/project" },
+      mockConn,
+    );
     const session = serverAny.sessions.get(sessionId)!;
 
     await serverAny.executeWithTerminal(session, mockConn, {
@@ -1291,7 +1437,7 @@ describe("Terminal Integration", () => {
     expect(createParams.sessionId).toBe(sessionId);
     expect(createParams.command).toBe("/bin/bash");
     expect(createParams.args).toEqual(["-c", "ls -la"]);
-    expect(createParams.cwd).toBe("/project");
+    expect(createParams.cwd).toBe("/session/project");
   });
 
   it("should return error when no command specified", async () => {

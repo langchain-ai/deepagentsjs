@@ -411,6 +411,22 @@ describe("CLI Integration Tests", () => {
       );
     });
 
+    it("should create the CLI filesystem backend from the session cwd", async () => {
+      const sessionCwd = path.join(tempDir, "session-workspace");
+      fs.mkdirSync(sessionCwd);
+
+      const response = await helper.sendRequest("session/new", {
+        cwd: sessionCwd,
+        mcpServers: [],
+      });
+
+      expect(response.error).toBeUndefined();
+      const stderr = helper.getStderr().join("\n");
+      expect(stderr).toContain("Creating FilesystemBackend");
+      expect(stderr).toContain(sessionCwd);
+      expect(stderr).not.toContain("Using custom backend");
+    });
+
     it("should return available modes in new session", async () => {
       const response = await helper.sendRequest("session/new", {
         cwd: process.cwd(),
