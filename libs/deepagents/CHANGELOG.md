@@ -1,5 +1,15 @@
 # deepagents
 
+## 1.13.3
+
+### Patch Changes
+
+- [#797](https://github.com/langchain-ai/deepagentsjs/pull/797) [`b393223`](https://github.com/langchain-ai/deepagentsjs/commit/b393223f6f6f37716979ee23ed561338f7ea63fc) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - Enforce harness-profile tool exclusions inside declarative subagents using each subagent model's profile.
+
+- [#800](https://github.com/langchain-ai/deepagentsjs/pull/800) [`2cce30d`](https://github.com/langchain-ai/deepagentsjs/commit/2cce30d269f25d3b8836bdce73ea84c08f8e4fbb) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - Add experimental conversation forking for subagents (`mode: "fork"`), inheriting the parent's message history and system prompt for prompt-cache reuse.
+
+- [#810](https://github.com/langchain-ai/deepagentsjs/pull/810) [`5f69f35`](https://github.com/langchain-ai/deepagentsjs/commit/5f69f3510b4ecc7e9ad989c009e5ea16886ff812) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - Fix a declarative subagent silently getting no tools when it omitted its own `tools` field (now correctly falls back to the parent's tools, as documented), and make `createDeepAgent` throw at construction if two subagents share a name instead of silently letting the later one win. Also drop the separate `ForkedSubAgent` type — `mode: "fork"` is now just a value on `SubAgent` — and allow a fork to declare its own `systemPrompt`, appended to the parent's inherited prompt instead of being rejected.
+
 ## 1.13.2
 
 ### Patch Changes
