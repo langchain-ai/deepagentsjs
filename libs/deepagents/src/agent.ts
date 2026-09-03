@@ -32,13 +32,11 @@ import type { SystemPromptConfig } from "./compat.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
 import { createToolExclusionMiddleware } from "./middleware/tool_exclusion.js";
-import { mergeMiddlewareStack } from "./middleware/utils.js";
+import { mergeMiddleware, mergeMiddlewareStack } from "./middleware/utils.js";
 import {
   GENERAL_PURPOSE_SUBAGENT,
   isForkedSubAgent,
-  createParentSystemMessageMiddleware,
   type CompiledSubAgent,
-  type ForkedSubAgent,
 } from "./middleware/subagents.js";
 import type { AsyncSubAgent } from "./middleware/async_subagents.js";
 import type {
@@ -305,8 +303,9 @@ export function createDeepAgent<
    * If a custom subagent needs skills, it must specify its own `skills` array.
    */
   const createSubagentDefaultMiddleware = (
-    input: SubAgent | ForkedSubAgent,
+    input: SubAgent,
     subagentProfile: HarnessProfile,
+    forked: boolean,
   ): AgentMiddleware[] => {
     const effectivePermissions = input.permissions ?? permissions;
 
@@ -326,29 +325,50 @@ export function createDeepAgent<
       createSummarizationMiddleware({ backend }),
       // Patches tool calls to ensure compatibility across different model providers.
       createPatchToolCallsMiddleware(),
-      // Loads subagent-specific skills when configured.
-      ...(input.skills != null && input.skills.length > 0
+      // Loads subagent-specific skills when configured. Never for a fork: its
+      // own `skills` is rejected below, and the parent's are mirrored instead
+      // (see buildSubagentMiddleware) — building this here too would produce
+      // a second same-named SkillsMiddleware before that rejection even runs.
+      ...(!forked && input.skills != null && input.skills.length > 0
         ? [createSkillsMiddleware({ backend, sources: input.skills })]
         : []),
     ];
   };
 
-  const buildSubagentMiddleware = (
-    input: SubAgent | ForkedSubAgent,
-  ): AgentMiddleware[] => {
+  const buildSubagentMiddleware = (input: SubAgent): AgentMiddleware[] => {
     const subagentProfile = resolveSubagentProfile(input.model);
+    const forked = isForkedSubAgent(input);
     const subagentDefaultMiddleware = createSubagentDefaultMiddleware(
       input,
       subagentProfile,
+      forked,
     );
+    if (forked && skills != null && skills.length > 0) {
+      subagentDefaultMiddleware.unshift(
+        createSkillsMiddleware({ backend, sources: skills }),
+      );
+    }
+    const inputMiddleware =
+      forked && customMiddleware.length > 0
+        ? mergeMiddleware(customMiddleware, input.middleware ?? [])
+        : (input.middleware ?? []);
 
     let subagentMiddleware = mergeMiddlewareStack(
       subagentDefaultMiddleware,
-      input.middleware ?? [],
+      inputMiddleware,
       [
         // Resolve profile middleware per stack so factories create fresh instances.
         ...resolveMiddleware(subagentProfile.extraMiddleware),
         ...cacheMiddleware,
+        ...(forked && memory != null && memory.length > 0
+          ? [
+              createMemoryMiddleware({
+                backend,
+                sources: memory,
+                addCacheControl: anthropicModel,
+              }),
+            ]
+          : []),
       ],
     );
 
@@ -370,17 +390,7 @@ export function createDeepAgent<
 
   const normalizeSubagentSpec = (input: SubAgent): SubAgent => ({
     ...input,
-    // Leave `tools` untouched when omitted — getSubagents() falls back to
-    // the parent's tools in that case; coercing to `[]` here would defeat that.
-    middleware: buildSubagentMiddleware(input),
-  });
-
-  const normalizeForkedSubagentSpec = (
-    input: ForkedSubAgent,
-  ): ForkedSubAgent => ({
-    ...input,
-    // Leave `tools` untouched when omitted — getSubagents() falls back to
-    // the parent's tools in that case; coercing to `[]` here would defeat that.
+    // Omitting tools here lets getSubagents() fall back to the parent's.
     middleware: buildSubagentMiddleware(input),
   });
 
@@ -395,19 +405,12 @@ export function createDeepAgent<
   // Process sync subagents:
   // - CompiledSubAgent: use as-is (already has its own middleware baked in)
   // - SubAgent: apply the default deep-agent subagent middleware stack
-  // - ForkedSubAgent: same stack, plus model-matched mirrored middleware
+  //   (a `mode: "fork"` spec gets the same treatment, plus mirrored middleware)
   const inlineSubagents = allSubagents
     .filter(
-      (item): item is SubAgent | CompiledSubAgent | ForkedSubAgent =>
-        !isAsyncSubAgent(item),
+      (item): item is SubAgent | CompiledSubAgent => !isAsyncSubAgent(item),
     )
-    .map((item) =>
-      "runnable" in item
-        ? item
-        : isForkedSubAgent(item)
-          ? normalizeForkedSubagentSpec(item)
-          : normalizeSubagentSpec(item),
-    );
+    .map((item) => ("runnable" in item ? item : normalizeSubagentSpec(item)));
 
   const gpConfig = harnessProfile.generalPurposeSubagent;
   const gpDisabled = gpConfig?.enabled === false;
@@ -513,15 +516,6 @@ export function createDeepAgent<
   if (harnessProfile.excludedMiddleware.size > 0) {
     const excluded = harnessProfile.excludedMiddleware;
     middleware = middleware.filter((entry) => !excluded.has(entry.name));
-  }
-
-  // Capturing the system message costs a state write per model call, so only pay for it when a declarative fork will consume it.
-  const hasDeclarativeFork = inlineSubagents.some(
-    (item) => !("runnable" in item) && isForkedSubAgent(item),
-  );
-  // Must run after everything that can mutate the system message, but before tool exclusion below (which must stay last).
-  if (hasDeclarativeFork) {
-    middleware.push(createParentSystemMessageMiddleware());
   }
 
   // Apply profile tool exclusions via a filtering middleware that runs

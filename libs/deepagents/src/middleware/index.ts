@@ -12,8 +12,8 @@ export {
   createSubAgentMiddleware,
   type SubAgentMiddlewareOptions,
   type SubAgent,
-  type CompiledSubAgent,
   type ForkedSubAgent,
+  type CompiledSubAgent,
   // Constants for building custom subagent configurations
   GENERAL_PURPOSE_SUBAGENT,
   DEFAULT_GENERAL_PURPOSE_DESCRIPTION,

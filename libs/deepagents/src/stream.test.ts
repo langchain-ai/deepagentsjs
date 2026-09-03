@@ -517,6 +517,73 @@ describe("streamEvents", () => {
     expect(subagentNames).toEqual(["researcher"]);
   });
 
+  it("run.subagents streams a forked subagent's messages separately from the parent's projection", async () => {
+    const rootModel = fakeModel()
+      .respondWithTools([
+        {
+          name: "task",
+          id: "task-worker",
+          args: {
+            description: "Continue with ticket T-123",
+            subagent_type: "worker",
+          },
+        },
+      ])
+      .respond(new AIMessage("parent done"));
+
+    const workerModel = fakeModel().respond(
+      new AIMessage("FORK_PRIVATE_RESULT"),
+    );
+
+    const agent = createDeepAgent({
+      model: rootModel,
+      checkpointer: new MemorySaver(),
+      subagents: [
+        {
+          name: "worker",
+          description: "Continues the current conversation",
+          model: workerModel,
+          mode: "fork",
+        },
+      ],
+    });
+
+    const run = await agent.streamEvents(
+      { messages: [new HumanMessage("ticket is T-123")] },
+      {
+        version: "v3",
+        configurable: { thread_id: `test-fork-subagent-${Date.now()}` },
+        recursionLimit: 100,
+      },
+    );
+
+    // Iterating run.subagents below drives the stream, so collect concurrently.
+    const rootMessagesPromise = collectWithTimeout(run.messages);
+
+    const subagentNames: string[] = [];
+    const forkTexts: string[] = [];
+    for await (const sub of run.subagents) {
+      subagentNames.push(sub.name);
+      expect(sub.cause).toEqual({
+        type: "toolCall",
+        tool_call_id: "task-worker",
+      });
+
+      const msgs = await collectWithTimeout(sub.messages);
+      const texts = await Promise.all(msgs.map((m) => m.text));
+      forkTexts.push(...texts);
+    }
+
+    const rootMessages = await rootMessagesPromise;
+    const rootTexts = await Promise.all(rootMessages.map((m) => m.text));
+
+    expect(subagentNames).toEqual(["worker"]);
+    expect(forkTexts).toContain("FORK_PRIVATE_RESULT");
+    expect(rootTexts.some((t) => t.includes("FORK_PRIVATE_RESULT"))).toBe(
+      false,
+    );
+  });
+
   it("can iterate raw protocol events", async () => {
     const model = fakeModel().respond(new AIMessage("Hello world."));
     const agent = createDeepAgent({

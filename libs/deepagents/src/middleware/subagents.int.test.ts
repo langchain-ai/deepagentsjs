@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { createAgent, createMiddleware, ReactAgent, tool } from "langchain";
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
+import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
+import type { LLMResult } from "@langchain/core/outputs";
+import { ChatAnthropic } from "@langchain/anthropic";
 import { MemorySaver } from "@langchain/langgraph";
 import { z } from "zod/v4";
 import {
@@ -903,6 +906,111 @@ Use the write_file tool to save your code.`,
 
       // Verify the tool captured the correct agent name
       expect(capturedAgentName).toBe("weather-agent");
+    },
+  );
+});
+
+describe("Subagent Fork Cache Integration Tests", () => {
+  // Padded well past Anthropic's ~1024-token cache-eligibility minimum.
+  const LONG_SYSTEM_PROMPT = Array.from(
+    { length: 200 },
+    (_, i) =>
+      `Fact ${i}: the project's internal identifier for this scenario is ULTRAVIOLET-${i}-${i * 7}.`,
+  ).join("\n");
+
+  it.concurrent(
+    "reuses the parent's Anthropic prompt-cache prefix on a forked subagent's first model call",
+    { timeout: 90 * 1000 },
+    async () => {
+      // Bridges lc_agent_name (only on handleChatModelStart) to cache_read
+      // (only on handleLLMEnd) by runId.
+      const runAgentNames = new Map<string, string | undefined>();
+      const workerCacheReadTokenCounts: number[] = [];
+
+      class CacheUsageCaptureHandler extends BaseCallbackHandler {
+        name = `capture-cache-usage-${Date.now()}-${Math.random()}`;
+
+        override handleChatModelStart(
+          _llm: unknown,
+          _messages: unknown,
+          runId: string,
+          _parentRunId?: string,
+          _extraParams?: Record<string, unknown>,
+          _tags?: string[],
+          metadata?: Record<string, unknown>,
+        ) {
+          runAgentNames.set(
+            runId,
+            metadata?.lc_agent_name as string | undefined,
+          );
+        }
+
+        async handleLLMEnd(output: LLMResult, runId: string) {
+          // Only the worker's calls count -- the parent's own follow-up call
+          // reuses its own cache regardless of whether the fork mirrored
+          // anything, which would let a cold fork call pass unnoticed.
+          if (runAgentNames.get(runId) !== "worker") return;
+          for (const generationBatch of output.generations) {
+            for (const generation of generationBatch) {
+              const message = (generation as { message?: AIMessage }).message;
+              const usage = message?.usage_metadata as
+                | { input_token_details?: { cache_read?: number } }
+                | undefined;
+              const cacheRead = usage?.input_token_details?.cache_read;
+              if (typeof cacheRead === "number") {
+                workerCacheReadTokenCounts.push(cacheRead);
+              }
+            }
+          }
+        }
+      }
+
+      const handler = new CacheUsageCaptureHandler();
+
+      // Explicit instance, not a bare model string — isAnthropicModel() can't
+      // see through the ConfigurableModel wrapper a string resolves into,
+      // which would silently no-op the cache middleware (pre-existing gap,
+      // unrelated to forking).
+      const anthropicModel = new ChatAnthropic({
+        model: "claude-sonnet-4-5-20250929",
+      });
+
+      const agent = createDeepAgent({
+        model: anthropicModel,
+        systemPrompt: LONG_SYSTEM_PROMPT,
+        subagents: [
+          {
+            name: "worker",
+            description:
+              "Continues the current investigation with full context",
+            mode: "fork",
+          },
+        ],
+      });
+
+      const response = await agent.invoke(
+        {
+          messages: [
+            new HumanMessage(
+              "Delegate to the worker subagent to state fact 5 back to you.",
+            ),
+          ],
+        },
+        {
+          configurable: { thread_id: `test-fork-cache-${Date.now()}` },
+          recursionLimit: 50,
+          callbacks: [handler],
+        },
+      );
+
+      const toolCalls = extractAllToolCalls(response);
+      const taskCall = toolCalls.find((tc) => tc.name === "task");
+      expect(taskCall).toBeDefined();
+      expect(taskCall!.args.subagent_type).toBe("worker");
+
+      // The fork's first call should read from the parent's cache, not write cold.
+      expect(workerCacheReadTokenCounts.length).toBeGreaterThan(0);
+      expect(workerCacheReadTokenCounts[0]).toBeGreaterThan(0);
     },
   );
 });
