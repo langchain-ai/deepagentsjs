@@ -5,6 +5,7 @@ import { TavilySearch } from "@langchain/tavily";
 import { ChatAnthropic } from "@langchain/anthropic";
 
 import { createDeepAgent, type SubAgent } from "deepagents";
+import { youcomSearch } from "./tools/youcom-search.js";
 
 type Topic = "general" | "news" | "finance";
 
@@ -74,7 +75,7 @@ const researchSubAgent: SubAgent = {
   description:
     "Used to research more in depth questions. Only give this researcher one topic at a time. Do not pass multiple sub questions to this researcher. Instead, you should break down a large topic into the necessary components, and then call multiple research agents in parallel, one for each sub question.",
   systemPrompt: subResearchPrompt,
-  tools: [internetSearch],
+  tools: [internetSearch, youcomSearch],
 };
 
 const subCritiquePrompt = `You are a dedicated editor. You are being tasked to critique a report.
@@ -191,10 +192,13 @@ Format the report in clear markdown with proper structure and include source ref
 
 You have access to a few tools.
 
-## \`internet_search\`
+## internet_search
 
-Use this to run an internet search for a given query. You can specify the number of results, the topic, and whether raw content should be included.
-`;
+Use this to run an internet search for a given query using Tavily. You can specify the number of results, the topic, and whether raw content should be included.
+
+## youcom_search
+
+Use this to run an internet search for a given query using You.com's search API. Provides high-quality search results with source citations. You can specify the number of results. Requires YDC_API_KEY environment variable for authenticated access, but also works without it in keyless mode.`;
 
 // Create the agent
 export const agent = createDeepAgent({
@@ -203,7 +207,7 @@ export const agent = createDeepAgent({
     temperature: 0,
   }),
 
-  tools: [internetSearch],
+  tools: [internetSearch, youcomSearch],
   systemPrompt: researchInstructions,
   subagents: [critiqueSubAgent, researchSubAgent],
 });
@@ -219,16 +223,16 @@ export const agent = createDeepAgent({
 
 //   console.log("🎉 Finished!");
 //   console.log(
-//     `\n\nAgent ToDo List:\n${result.todos.map((todo) => ` - ${todo.content} (${todo.status})`).join("\n")}`
+//     "\\n\\nAgent ToDo List:\\n" + result.todos.map((todo) => " - " + todo.content + " (" + todo.status + ")").join("\\n")
 //   );
 //   console.log(
-//     `\n\nAgent Files:\n${Object.entries(result.files)
-//       .map(([key, value]) => ` - ${key}: ${value}`)
-//       .join("\n")}`
+//     "\\n\\nAgent Files:\\n" + Object.entries(result.files)
+//       .map(([key, value]) => " - " + key + ": " + value)
+//       .join("\\n")
 //   );
 // }
 
 // // Run if this file is executed directly
-// if (import.meta.url === `file://${process.argv[1]}`) {
+// if (import.meta.url === "file://" + process.argv[1]) {
 //   main();
 // }
