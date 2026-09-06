@@ -1,0 +1,17 @@
+{
+  "mode": "pre",
+  "tag": "rc",
+  "initialVersions": {
+    "@examples/async-subagents-parallel-research": null,
+    "@deepagents/evals": "0.0.28",
+    "deepagents-acp": "0.1.29",
+    "deepagents": "1.13.3",
+    "@langchain/daytona": "0.2.2",
+    "@langchain/deno": "0.2.3",
+    "@langchain/modal": "0.1.6",
+    "@langchain/node-vfs": "0.2.3",
+    "@langchain/quickjs": "0.6.2",
+    "@langchain/sandbox-standard-tests": "2.0.0"
+  },
+  "changesets": []
+}
