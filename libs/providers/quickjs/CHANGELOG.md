@@ -1,5 +1,16 @@
 # @langchain/quickjs
 
+## 0.6.3-rc.0
+
+### Patch Changes
+
+- [#837](https://github.com/langchain-ai/deepagentsjs/pull/837) [`22cc873`](https://github.com/langchain-ai/deepagentsjs/commit/22cc873c3d7f85cb523c3390c65f4d041557992c) Thanks [@hntrl](https://github.com/hntrl)! - fix(middleware): omit repeated conversation and state inputs from owned middleware lifecycle traces
+
+  Keep middleware spans and outputs, and preserve model/tool tracing and user-supplied middleware policies. Apply the defaults to standalone middleware, subagents, and QuickJS cleanup. Lifecycle chain events also receive the omitted inputs.
+
+- Updated dependencies [[`22cc873`](https://github.com/langchain-ai/deepagentsjs/commit/22cc873c3d7f85cb523c3390c65f4d041557992c)]:
+  - deepagents@1.13.4-rc.0
+
 ## 0.6.2
 
 ### Patch Changes

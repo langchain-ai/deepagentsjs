@@ -1,5 +1,12 @@
 # @langchain/node-vfs
 
+## 0.2.4-rc.0
+
+### Patch Changes
+
+- Updated dependencies [[`22cc873`](https://github.com/langchain-ai/deepagentsjs/commit/22cc873c3d7f85cb523c3390c65f4d041557992c)]:
+  - deepagents@1.13.4-rc.0
+
 ## 0.2.3
 
 ### Patch Changes
