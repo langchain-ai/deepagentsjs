@@ -2,6 +2,7 @@ import { Command, ReducedValue, StateSchema } from "@langchain/langgraph";
 import { Client, type DefaultValues, type Run } from "@langchain/langgraph-sdk";
 import {
   createMiddleware,
+  omitPayload,
   tool,
   ToolMessage,
   SystemMessage,
@@ -875,6 +876,7 @@ export function createAsyncSubAgentMiddleware(
 
   return createMiddleware({
     name: "asyncSubAgentMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: AsyncTaskStateSchema,
     tools,
     wrapModelCall: async (request, handler) => {

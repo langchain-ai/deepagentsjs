@@ -9,6 +9,7 @@
 
 import {
   createMiddleware,
+  omitPayload,
   tool,
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
@@ -523,6 +524,7 @@ export function createCodeInterpreterMiddleware(
 
   return createMiddleware({
     name: "CodeInterpreterMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     tools: [evalTool],
     wrapModelCall: async (request, handler) => {
       const agentTools = (request.tools || []) as StructuredToolInterface[];

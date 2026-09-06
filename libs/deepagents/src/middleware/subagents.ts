@@ -2,6 +2,7 @@ import { z } from "zod/v4";
 
 import {
   createMiddleware,
+  omitPayload,
   createAgent,
   AgentMiddleware,
   tool,
@@ -469,6 +470,7 @@ function createForkTaskToolMiddleware(
 ): AgentMiddleware {
   return createMiddleware({
     name: "forkTaskToolMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: ForkedContextStateSchema,
     tools: [taskTool],
     beforeAgent: () => ({ [FORKED_CONTEXT_KEY]: true }),
@@ -1003,6 +1005,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
 
   return createMiddleware({
     name: "subAgentMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     tools: [taskTool],
     wrapModelCall: async (request, handler) => {
       if (systemPrompt !== null) {

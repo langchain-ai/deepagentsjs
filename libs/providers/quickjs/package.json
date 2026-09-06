@@ -50,11 +50,12 @@
     "quickjs-emscripten-core": "^0.32.0"
   },
   "peerDependencies": {
-    "deepagents": ">=1.12.0-rc.0"
+    "deepagents": ">=1.12.0-rc.0",
+    "langchain": "^1.5.11-rc.0"
   },
   "devDependencies": {
     "@langchain/core": "^1.2.9",
-    "@langchain/langgraph": "^1.4.10",
+    "@langchain/langgraph": "^1.4.15-rc.0",
     "@tsconfig/recommended": "^1.0.13",
     "@types/dedent": "^0.7.2",
     "@types/estree": "^1.0.8",
@@ -62,7 +63,7 @@
     "@vitest/coverage-v8": "^4.0.18",
     "deepagents": "workspace:*",
     "dotenv": "^17.2.3",
-    "langchain": "^1.5.10",
+    "langchain": "^1.5.11-rc.0",
     "tsdown": "^0.22.1",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
