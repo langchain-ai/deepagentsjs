@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { createAgent, createMiddleware, ReactAgent, tool } from "langchain";
+import {
+  createAgent,
+  createMiddleware,
+  modelCallLimitMiddleware,
+  ReactAgent,
+  tool,
+} from "langchain";
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
 import type { LLMResult } from "@langchain/core/outputs";
@@ -116,6 +122,59 @@ describe("Subagent Middleware Integration Tests", () => {
 
       expect(taskCall).toBeDefined();
       expect(taskCall!.args.subagent_type).toBe("general-purpose");
+    },
+  );
+
+  it.concurrent(
+    "keeps the parent's model-call count free of its subagents' calls",
+    { timeout: 120 * 1000 }, // 120s
+    async () => {
+      const agent = createDeepAgent({
+        model: SAMPLE_MODEL,
+        systemPrompt:
+          "Delegate to the weather subagent for every city the user names. " +
+          "Issue the task calls for all cities in the same turn.",
+        middleware: [
+          modelCallLimitMiddleware({ threadLimit: 100, exitBehavior: "end" }),
+        ],
+        subagents: [
+          {
+            name: "weather",
+            description: "Gets the weather in a city.",
+            systemPrompt: "Use the get_weather tool, then report the result.",
+            tools: [getWeather],
+            model: SAMPLE_MODEL,
+            middleware: [
+              modelCallLimitMiddleware({
+                threadLimit: 50,
+                exitBehavior: "end",
+              }),
+            ],
+          },
+        ],
+      });
+
+      const response = await agent.invoke({
+        messages: [
+          new HumanMessage("What is the weather in Tokyo and in Paris?"),
+        ],
+      });
+
+      const delegations = extractAllToolCalls(response).filter(
+        (call) => call.name === "task",
+      );
+      expect(delegations.length).toBeGreaterThan(0);
+
+      // Holds whether the model delegated in parallel or serially: every
+      // parent model call appends exactly one AIMessage, so the parent's
+      // counter must equal that. Before the fix a subagent's count leaked
+      // upward and inflated it.
+      const parentModelCalls = response.messages.filter(
+        AIMessage.isInstance,
+      ).length;
+      expect(
+        (response as unknown as Record<string, unknown>).threadModelCallCount,
+      ).toBe(parentModelCalls);
     },
   );
 

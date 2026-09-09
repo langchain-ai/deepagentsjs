@@ -12,8 +12,11 @@ import { MemorySaver } from "@langchain/langgraph-checkpoint";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
 import {
   createAgent,
+  createMiddleware,
+  modelCallLimitMiddleware,
   todoListMiddleware,
   tool,
+  toolCallLimitMiddleware,
   type AgentMiddleware,
 } from "langchain";
 import {
@@ -2467,5 +2470,600 @@ describe("middleware override by name", () => {
     );
     expect(summarization).toHaveLength(1);
     expect(summarization[0]).toBe(custom);
+  });
+});
+
+describe("Subagent call-count state isolation", () => {
+  it("survives two parallel task calls when parent and subagent both cap model calls", async () => {
+    const agent = createDeepAgent({
+      model: new SequentialFakeChatModel({
+        responses: [
+          new AIMessage({
+            content: "",
+            tool_calls: [
+              {
+                id: "call_1",
+                name: "task",
+                args: { description: "find auth", subagent_type: "explorer" },
+              },
+              {
+                id: "call_2",
+                name: "task",
+                args: { description: "find prefs", subagent_type: "explorer" },
+              },
+            ],
+          }),
+          "parent done",
+        ],
+      }),
+      middleware: [
+        modelCallLimitMiddleware({ runLimit: 500, exitBehavior: "end" }),
+      ],
+      subagents: [
+        {
+          name: "explorer",
+          description: "Read-only investigator.",
+          systemPrompt: "Search and report findings.",
+          tools: [],
+          model: new SequentialFakeChatModel({ responses: ["subagent done"] }),
+          middleware: [
+            modelCallLimitMiddleware({ runLimit: 40, exitBehavior: "end" }),
+          ],
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("go")] },
+      { recursionLimit: 40 },
+    );
+
+    expect(result.messages.filter(ToolMessage.isInstance)).toHaveLength(2);
+  });
+
+  it("survives two parallel task calls to a fork when only the parent declares the middleware", async () => {
+    const agent = createDeepAgent({
+      model: new SequentialFakeChatModel({
+        responses: [
+          new AIMessage({
+            content: "",
+            tool_calls: [
+              {
+                id: "call_1",
+                name: "task",
+                args: { description: "one", subagent_type: "explorer" },
+              },
+              {
+                id: "call_2",
+                name: "task",
+                args: { description: "two", subagent_type: "explorer" },
+              },
+            ],
+          }),
+          "parent done",
+        ],
+      }),
+      middleware: [
+        modelCallLimitMiddleware({ runLimit: 500, exitBehavior: "end" }),
+      ],
+      subagents: [
+        {
+          name: "explorer",
+          description: "Continues the parent's conversation.",
+          mode: "fork",
+          model: new SequentialFakeChatModel({ responses: ["subagent done"] }),
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("go")] },
+      { recursionLimit: 40 },
+    );
+
+    expect(result.messages.filter(ToolMessage.isInstance)).toHaveLength(2);
+  });
+
+  it("survives two parallel task calls when parent and subagent both cap tool calls", async () => {
+    const agent = createDeepAgent({
+      model: new SequentialFakeChatModel({
+        responses: [
+          new AIMessage({
+            content: "",
+            tool_calls: [
+              {
+                id: "call_1",
+                name: "task",
+                args: { description: "one", subagent_type: "explorer" },
+              },
+              {
+                id: "call_2",
+                name: "task",
+                args: { description: "two", subagent_type: "explorer" },
+              },
+            ],
+          }),
+          "parent done",
+        ],
+      }),
+      middleware: [
+        toolCallLimitMiddleware({ threadLimit: 100, exitBehavior: "continue" }),
+      ],
+      subagents: [
+        {
+          name: "explorer",
+          description: "Read-only investigator.",
+          systemPrompt: "Search and report findings.",
+          tools: [],
+          model: new SequentialFakeChatModel({ responses: ["subagent done"] }),
+          middleware: [
+            toolCallLimitMiddleware({
+              threadLimit: 50,
+              exitBehavior: "continue",
+            }),
+          ],
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("go")] },
+      { recursionLimit: 40 },
+    );
+
+    expect(result.messages.filter(ToolMessage.isInstance)).toHaveLength(2);
+  });
+
+  it("survives one task call to each of two subagents declaring the same state key", async () => {
+    const agent = createDeepAgent({
+      model: new SequentialFakeChatModel({
+        responses: [
+          new AIMessage({
+            content: "",
+            tool_calls: [
+              {
+                id: "call_alpha",
+                name: "task",
+                args: { description: "one", subagent_type: "alpha" },
+              },
+              {
+                id: "call_beta",
+                name: "task",
+                args: { description: "two", subagent_type: "beta" },
+              },
+            ],
+          }),
+          "parent done",
+        ],
+      }),
+      middleware: [
+        modelCallLimitMiddleware({ runLimit: 500, exitBehavior: "end" }),
+      ],
+      subagents: [
+        {
+          name: "alpha",
+          description: "First investigator.",
+          systemPrompt: "Report findings.",
+          tools: [],
+          model: new SequentialFakeChatModel({ responses: ["alpha done"] }),
+          middleware: [
+            modelCallLimitMiddleware({ runLimit: 40, exitBehavior: "end" }),
+          ],
+        },
+        {
+          name: "beta",
+          description: "Second investigator.",
+          systemPrompt: "Report findings.",
+          tools: [],
+          model: new SequentialFakeChatModel({ responses: ["beta done"] }),
+          middleware: [
+            modelCallLimitMiddleware({ runLimit: 40, exitBehavior: "end" }),
+          ],
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("go")] },
+      { recursionLimit: 40 },
+    );
+
+    expect(result.messages.filter(ToolMessage.isInstance)).toHaveLength(2);
+  });
+
+  it("enforces the parent's run limit even though every turn delegates", async () => {
+    const counter = { i: 0 };
+    const agent = createDeepAgent({
+      model: new SequentialFakeChatModel({
+        counter,
+        responses: [1, 2, 3, 4, 5].map(
+          (n) =>
+            new AIMessage({
+              content: "",
+              tool_calls: [
+                {
+                  id: `call_${n}`,
+                  name: "task",
+                  args: { description: `step ${n}`, subagent_type: "explorer" },
+                },
+              ],
+            }),
+        ),
+      }),
+      middleware: [
+        modelCallLimitMiddleware({ runLimit: 3, exitBehavior: "end" }),
+      ],
+      subagents: [
+        {
+          name: "explorer",
+          description: "Read-only investigator.",
+          systemPrompt: "Report findings.",
+          tools: [],
+          model: new SequentialFakeChatModel({ responses: ["subagent done"] }),
+          middleware: [
+            modelCallLimitMiddleware({ runLimit: 40, exitBehavior: "end" }),
+          ],
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: [new HumanMessage("go")] },
+      { recursionLimit: 40 },
+    );
+
+    expect(counter.i).toBe(3);
+  });
+
+  it("counts only the parent's own model calls in the parent's thread counter", async () => {
+    const noop = tool(async () => "ok", {
+      name: "noop",
+      description: "Does nothing.",
+      schema: z.object({}),
+    });
+
+    const agent = createDeepAgent({
+      model: new SequentialFakeChatModel({
+        responses: [
+          new AIMessage({
+            content: "",
+            tool_calls: [
+              {
+                id: "call_1",
+                name: "task",
+                args: { description: "delegate", subagent_type: "explorer" },
+              },
+            ],
+          }),
+          "parent done",
+        ],
+      }),
+      middleware: [
+        modelCallLimitMiddleware({ threadLimit: 100, exitBehavior: "end" }),
+      ],
+      subagents: [
+        {
+          name: "explorer",
+          description: "Burns four model calls of its own.",
+          systemPrompt: "Report findings.",
+          tools: [noop],
+          model: new SequentialFakeChatModel({
+            responses: [
+              new AIMessage({
+                content: "",
+                tool_calls: [{ id: "n1", name: "noop", args: {} }],
+              }),
+              new AIMessage({
+                content: "",
+                tool_calls: [{ id: "n2", name: "noop", args: {} }],
+              }),
+              new AIMessage({
+                content: "",
+                tool_calls: [{ id: "n3", name: "noop", args: {} }],
+              }),
+              "subagent done",
+            ],
+          }),
+          middleware: [
+            modelCallLimitMiddleware({ threadLimit: 100, exitBehavior: "end" }),
+          ],
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("go")] },
+      { recursionLimit: 40 },
+    );
+
+    // The parent makes 2 calls; the subagent's 4 must not be added to them.
+    expect(result.threadModelCallCount).toBe(2);
+  });
+
+  it("gives a fresh subagent its own zeroed counters instead of the parent's", async () => {
+    const observed: Array<{ thread: unknown; run: unknown }> = [];
+
+    const agent = createDeepAgent({
+      model: new SequentialFakeChatModel({
+        responses: [
+          new AIMessage({
+            content: "",
+            tool_calls: [
+              {
+                id: "call_1",
+                name: "task",
+                args: { description: "one", subagent_type: "explorer" },
+              },
+            ],
+          }),
+          new AIMessage({
+            content: "",
+            tool_calls: [
+              {
+                id: "call_2",
+                name: "task",
+                args: { description: "two", subagent_type: "explorer" },
+              },
+            ],
+          }),
+          "parent done",
+        ],
+      }),
+      middleware: [
+        modelCallLimitMiddleware({ threadLimit: 100, exitBehavior: "end" }),
+      ],
+      subagents: [
+        {
+          name: "explorer",
+          description: "Read-only investigator.",
+          systemPrompt: "Report findings.",
+          tools: [],
+          model: new SequentialFakeChatModel({ responses: ["subagent done"] }),
+          middleware: [
+            modelCallLimitMiddleware({ threadLimit: 100, exitBehavior: "end" }),
+            createMiddleware({
+              name: "CounterProbeMiddleware",
+              stateSchema: z.object({
+                threadModelCallCount: z.number().default(0),
+                runModelCallCount: z.number().default(0),
+              }),
+              beforeModel: (state) => {
+                observed.push({
+                  thread: state.threadModelCallCount,
+                  run: state.runModelCallCount,
+                });
+                return undefined;
+              },
+            }),
+          ],
+        },
+      ],
+    });
+
+    await agent.invoke(
+      { messages: [new HumanMessage("go")] },
+      { recursionLimit: 40 },
+    );
+
+    expect(observed).toHaveLength(2);
+    expect(observed[0]).toEqual({ thread: 0, run: 0 });
+    expect(observed[1]).toEqual({ thread: 0, run: 0 });
+  });
+
+  it("still propagates files written by parallel subagents to the parent", async () => {
+    const agent = createDeepAgent({
+      model: new SequentialFakeChatModel({
+        responses: [
+          new AIMessage({
+            content: "",
+            tool_calls: [
+              {
+                id: "call_1",
+                name: "task",
+                args: { description: "write one", subagent_type: "writer_one" },
+              },
+              {
+                id: "call_2",
+                name: "task",
+                args: { description: "write two", subagent_type: "writer_two" },
+              },
+            ],
+          }),
+          "parent done",
+        ],
+      }),
+      subagents: [
+        {
+          name: "writer_one",
+          description: "Writes the first report.",
+          systemPrompt: "Write the file.",
+          model: new SequentialFakeChatModel({
+            responses: [
+              new AIMessage({
+                content: "",
+                tool_calls: [
+                  {
+                    id: "w1",
+                    name: "write_file",
+                    args: { file_path: "/report_one.txt", content: "one" },
+                  },
+                ],
+              }),
+              "wrote one",
+            ],
+          }),
+        },
+        {
+          name: "writer_two",
+          description: "Writes the second report.",
+          systemPrompt: "Write the file.",
+          model: new SequentialFakeChatModel({
+            responses: [
+              new AIMessage({
+                content: "",
+                tool_calls: [
+                  {
+                    id: "w2",
+                    name: "write_file",
+                    args: { file_path: "/report_two.txt", content: "two" },
+                  },
+                ],
+              }),
+              "wrote two",
+            ],
+          }),
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("go")] },
+      { recursionLimit: 40 },
+    );
+
+    expect(Object.keys(result.files ?? {}).sort()).toEqual([
+      "/report_one.txt",
+      "/report_two.txt",
+    ]);
+  });
+
+  it("keeps call-count bookkeeping out of both the inbound and outbound filters", () => {
+    const state = {
+      threadModelCallCount: 7,
+      runModelCallCount: 3,
+      threadToolCallCount: { __all__: 4 },
+      runToolCallCount: { __all__: 2 },
+      files: { "/kept.txt": "shared, reducer-backed" },
+      customUserKey: "kept",
+    };
+
+    for (const filtered of [
+      filterStateForSubagent(state),
+      filterStateForFork(state),
+    ]) {
+      expect(filtered).not.toHaveProperty("threadModelCallCount");
+      expect(filtered).not.toHaveProperty("runModelCallCount");
+      expect(filtered).not.toHaveProperty("threadToolCallCount");
+      expect(filtered).not.toHaveProperty("runToolCallCount");
+      expect(filtered.customUserKey).toBe("kept");
+    }
+
+    expect(filterStateForFork(state).files).toEqual(state.files);
+  });
+
+  /**
+   * The next two assert current broken behaviour, not desired behaviour.
+   * Excluding by key name misses other middleware with plain state; the
+   * schema-driven follow-up closes it. Flip both to resolve when it lands.
+   */
+  it("still leaks parent-declared middleware state into a fork", async () => {
+    const agent = createDeepAgent({
+      model: new SequentialFakeChatModel({
+        responses: [
+          new AIMessage({
+            content: "",
+            tool_calls: [
+              {
+                id: "call_1",
+                name: "task",
+                args: { description: "one", subagent_type: "explorer" },
+              },
+              {
+                id: "call_2",
+                name: "task",
+                args: { description: "two", subagent_type: "explorer" },
+              },
+            ],
+          }),
+          "parent done",
+        ],
+      }),
+      // Same shape as the opt-in createAgentMemoryMiddleware. A fork inherits
+      // the parent's middleware, so this needs no subagent-side config.
+      middleware: [
+        createMiddleware({
+          name: "MemoryLikeMiddleware",
+          stateSchema: z.object({ userMemory: z.string().optional() }),
+          beforeAgent: () => ({ userMemory: "user prefs" }),
+        }),
+      ],
+      subagents: [
+        {
+          name: "explorer",
+          description: "Continues the parent's conversation.",
+          mode: "fork",
+          model: new SequentialFakeChatModel({ responses: ["subagent done"] }),
+        },
+      ],
+    });
+
+    await expect(
+      agent.invoke(
+        { messages: [new HumanMessage("go")] },
+        { recursionLimit: 40 },
+      ),
+    ).rejects.toMatchObject({
+      lc_error_code: "INVALID_CONCURRENT_GRAPH_UPDATE",
+    });
+  });
+
+  it("still leaks arbitrary user middleware state", async () => {
+    const agent = createDeepAgent({
+      model: new SequentialFakeChatModel({
+        responses: [
+          new AIMessage({
+            content: "",
+            tool_calls: [
+              {
+                id: "call_1",
+                name: "task",
+                args: { description: "one", subagent_type: "explorer" },
+              },
+              {
+                id: "call_2",
+                name: "task",
+                args: { description: "two", subagent_type: "explorer" },
+              },
+            ],
+          }),
+          "parent done",
+        ],
+      }),
+      middleware: [
+        createMiddleware({
+          name: "ParentCounterMiddleware",
+          stateSchema: z.object({ isolationProbe: z.number().default(0) }),
+          afterModel: (state) => ({
+            isolationProbe: (state.isolationProbe ?? 0) + 1,
+          }),
+        }),
+      ],
+      subagents: [
+        {
+          name: "explorer",
+          description: "Read-only investigator.",
+          systemPrompt: "Report findings.",
+          tools: [],
+          model: new SequentialFakeChatModel({ responses: ["subagent done"] }),
+          // No hooks: the colliding value is the parent's own, copied in and
+          // handed back out.
+          middleware: [
+            createMiddleware({
+              name: "InertCounterMiddleware",
+              stateSchema: z.object({ isolationProbe: z.number().default(0) }),
+            }),
+          ],
+        },
+      ],
+    });
+
+    await expect(
+      agent.invoke(
+        { messages: [new HumanMessage("go")] },
+        { recursionLimit: 40 },
+      ),
+    ).rejects.toMatchObject({
+      lc_error_code: "INVALID_CONCURRENT_GRAPH_UPDATE",
+    });
   });
 });
