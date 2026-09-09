@@ -1,0 +1,30 @@
+node_modules/
+dist/
+lib/
+
+.env
+.env.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log
+.pnpm-debug.log*
+
+.idea/
+.zed/
+.vscode/
+
+.DS_Store
+*.swp
+*.swo
+
+.turbo
+.eslintcache
+
+coverage/
+
+# LangGraph API
+.langgraph_api
+
+# Build info
+*.tsbuildinfo

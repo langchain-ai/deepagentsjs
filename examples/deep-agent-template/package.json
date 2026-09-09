@@ -1,0 +1,42 @@
+{
+  "name": "deep-agent-template",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "langgraphjs dev",
+    "build": "langgraphjs build",
+    "start": "langgraphjs start",
+    "test": "vitest run",
+    "test:int": "vitest run --mode int",
+    "test:eval": "vitest run --mode eval",
+    "lint": "eslint src && prettier --check src",
+    "lint:fix": "eslint --fix src && prettier --write src",
+    "format": "prettier --write src"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.1.48",
+    "@langchain/anthropic": "^1.4.0",
+    "@langchain/langgraph": "^1.3.6",
+    "deepagents": "^1.10.2",
+    "langchain": "^1.2.26",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@langchain/langgraph-cli": "1.4.4",
+    "@types/node": "^26.2.0",
+    "dotenv": "^17.4.2",
+    "eslint": "^10.8.1",
+    "globals": "^17.11.0",
+    "jiti": "^2.7.0",
+    "langsmith": "^0.7.17",
+    "prettier": "^3.9.6",
+    "typescript-eslint": "^8.67.0",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
+  }
+}
