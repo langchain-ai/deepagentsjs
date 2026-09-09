@@ -50,6 +50,27 @@ const FORK_RECURSION_REFUSAL =
   "You are a subagent and cannot delegate to another subagent. Complete this task yourself instead of calling this tool again.";
 
 /**
+ * Per-graph call accounting owned by the upstream limit middlewares. Upstream
+ * declares these as plain values, so LangGraph gives them single-writer
+ * `LastValue` channels: forwarding them crashed parallel delegation and let a
+ * subagent's reset overwrite the parent's budget (#646). Each agent counts its
+ * own calls, so they cross the boundary in neither direction.
+ *
+ * Matching by name is targeted, not structural — other middleware declaring
+ * plain state still collide, notably in a fork. A later change should derive
+ * these keys from each subagent's middleware `stateSchema` and forward only
+ * mergeable (`ReducedValue`) channels. See subagents.state-isolation.test.ts.
+ */
+const CALL_COUNT_STATE_KEYS = [
+  // langchain modelCallLimitMiddleware
+  "threadModelCallCount",
+  "runModelCallCount",
+  // langchain toolCallLimitMiddleware
+  "threadToolCallCount",
+  "runToolCallCount",
+] as const;
+
+/**
  * State keys excluded when passing state to subagents and when returning
  * updates from subagents. Summarization keys are excluded because their
  * cutoffIndex is only valid against the message list it was computed from.
@@ -60,6 +81,7 @@ const EXCLUDED_STATE_KEYS = [
   "structuredResponse",
   "skillsMetadata",
   "memoryContents",
+  ...CALL_COUNT_STATE_KEYS,
   "_summarizationEvent",
   "_summarizationSessionId",
   FORKED_CONTEXT_KEY,
@@ -70,9 +92,13 @@ const EXCLUDED_STATE_KEYS = [
  * Narrower than `EXCLUDED_STATE_KEYS`: a fork's mirrored middleware needs
  * the parent's private channels (skills metadata, memory contents, etc.)
  * to rebuild an equivalent prompt.
+ *
+ * Call counts stay excluded: a fork inherits the parent's middleware, so
+ * sharing them collides on the parent's channel.
  */
 const FORK_EXCLUDED_STATE_KEYS = [
   "structuredResponse",
+  ...CALL_COUNT_STATE_KEYS,
   "_summarizationEvent",
   "_summarizationSessionId",
 ] as const;
