@@ -13,7 +13,5 @@
     "@langchain/quickjs": "0.6.2",
     "@langchain/sandbox-standard-tests": "2.0.0"
   },
-  "changesets": [
-    "omit-middleware-trace-inputs"
-  ]
+  "changesets": ["omit-middleware-trace-inputs"]
 }
