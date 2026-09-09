@@ -1,5 +1,7 @@
 # @langchain/sandbox-standard-tests
 
+## 2.0.1
+
 ## 2.0.1-rc.0
 
 ### Patch Changes

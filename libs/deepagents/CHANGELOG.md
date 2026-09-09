@@ -1,5 +1,13 @@
 # deepagents
 
+## 1.13.4
+
+### Patch Changes
+
+- [#842](https://github.com/langchain-ai/deepagentsjs/pull/842) [`eb859e8`](https://github.com/langchain-ai/deepagentsjs/commit/eb859e8b8e2ae533826c6857a2b0745fdd5e357b) Thanks [@byhow](https://github.com/byhow)! - fix(subagents): stop forwarding call-count bookkeeping across the subagent boundary
+
+  Counters owned by `modelCallLimitMiddleware` and `toolCallLimitMiddleware` used to cross the subagent boundary in both directions, so parallel delegation failed with `InvalidUpdateError` and serial delegation let a subagent's reset rewind the parent's budget, defeating `runLimit`. Each agent now counts only its own calls, and deliberately shared state such as `files` is unaffected. Middleware outside those two can still collide, most notably a `mode: "fork"` subagent combined with parent-side custom middleware.
+
 ## 1.13.4-rc.0
 
 ### Patch Changes
