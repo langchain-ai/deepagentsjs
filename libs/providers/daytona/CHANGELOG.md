@@ -1,5 +1,7 @@
 # @langchain/daytona
 
+## 0.2.3
+
 ## 0.2.3-rc.0
 
 ### Patch Changes

@@ -1,5 +1,7 @@
 # @langchain/modal
 
+## 0.1.7
+
 ## 0.1.7-rc.0
 
 ### Patch Changes
