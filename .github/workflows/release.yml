@@ -32,7 +32,8 @@ jobs:
           cache: "pnpm"
 
       - name: Upgrade npm for trusted publishing
-        run: npm install -g npm@latest
+        # npm 12 returns an array from `pnpm info --json`, which Changesets v3 cannot parse.
+        run: npm install -g npm@11.19.0
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
