@@ -1,6 +1,5 @@
 import {
   createMiddleware,
-  omitPayload,
   ToolMessage,
   AIMessage,
   /**
@@ -135,7 +134,6 @@ export function patchDanglingToolCalls(messages: BaseMessage[]): {
 export function createPatchToolCallsMiddleware() {
   return createMiddleware({
     name: "patchToolCallsMiddleware",
-    tracePolicy: { processInputs: omitPayload },
     beforeAgent: async (state) => {
       const messages = state.messages;
 

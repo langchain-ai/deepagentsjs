@@ -52,7 +52,6 @@ import { z } from "zod";
 import {
   context,
   createMiddleware,
-  omitPayload,
   SystemMessage,
   /**
    * required for type inference
@@ -288,7 +287,6 @@ export function createMemoryMiddleware(options: MemoryMiddlewareOptions) {
 
   return createMiddleware({
     name: "MemoryMiddleware",
-    tracePolicy: { processInputs: omitPayload },
     stateSchema: MemoryStateSchema,
 
     async beforeAgent(state) {
