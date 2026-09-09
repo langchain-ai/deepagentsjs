@@ -1,5 +1,7 @@
 # @langchain/node-vfs
 
+## 0.2.4
+
 ## 0.2.4-rc.0
 
 ### Patch Changes

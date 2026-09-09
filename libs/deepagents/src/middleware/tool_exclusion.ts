@@ -1,5 +1,5 @@
 import { ToolMessage } from "@langchain/core/messages";
-import { createMiddleware, omitPayload, type AgentMiddleware } from "langchain";
+import { createMiddleware, type AgentMiddleware } from "langchain";
 
 function hasToolName(tool: unknown): tool is { name: string } {
   return (
@@ -22,7 +22,6 @@ export function createToolExclusionMiddleware(
 ): AgentMiddleware {
   return createMiddleware({
     name: "_ToolExclusionMiddleware",
-    tracePolicy: { processInputs: omitPayload },
     wrapModelCall(request, handler) {
       return handler({
         ...request,

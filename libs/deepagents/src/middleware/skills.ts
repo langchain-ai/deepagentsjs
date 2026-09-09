@@ -45,7 +45,6 @@ import yaml from "yaml";
 import {
   context,
   createMiddleware,
-  omitPayload,
   /**
    * required for type inference
    */
@@ -821,7 +820,6 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
 
   return createMiddleware({
     name: "SkillsMiddleware",
-    tracePolicy: { processInputs: omitPayload },
     stateSchema: SkillsStateSchema,
 
     async beforeAgent(state) {
