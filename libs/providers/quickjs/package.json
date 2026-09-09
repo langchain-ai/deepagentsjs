@@ -43,7 +43,7 @@
     "acorn": "^8.16.0",
     "dedent": "^1.7.1",
     "estree-walker": "^3.0.3",
-    "json-schema-to-typescript": "^15.0.4",
+    "json-schema-to-typescript": "^16.0.0",
     "magic-string": "^1.0.0",
     "p-queue": "^9.3.0",
     "quickjs-emscripten": "^0.32.0",
