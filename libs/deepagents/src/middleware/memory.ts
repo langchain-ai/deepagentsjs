@@ -63,6 +63,7 @@ import {
 import type {
   AnyBackendProtocol,
   BackendFactory,
+  BackendProtocolV2,
 } from "../backends/protocol.js";
 import { resolveBackend } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
@@ -210,6 +211,21 @@ function formatMemoryContents(
   return sections.join("\n\n");
 }
 
+async function loadMemoryFromBackendByRead(
+  backend: BackendProtocolV2,
+  path: string,
+): Promise<string | null> {
+  const adaptedBackend = adaptBackendProtocol(backend);
+  const content = await adaptedBackend.read(path);
+  if (content.error) {
+    return null;
+  }
+  if (typeof content.content !== "string") {
+    return null;
+  }
+  return content.content;
+}
+
 /**
  * Load memory content from a backend path.
  *
@@ -225,14 +241,7 @@ async function loadMemoryFromBackend(
 
   // Use downloadFiles if available, otherwise fall back to read
   if (!adaptedBackend.downloadFiles) {
-    const content = await adaptedBackend.read(path);
-    if (content.error) {
-      return null;
-    }
-    if (typeof content.content !== "string") {
-      return null;
-    }
-    return content.content;
+    return loadMemoryFromBackendByRead(adaptedBackend, path);
   }
 
   const results = await adaptedBackend.downloadFiles([path]);
@@ -250,6 +259,10 @@ async function loadMemoryFromBackend(
     // and we skip silently to allow graceful degradation.
     if (response.error === "file_not_found") {
       return null;
+    }
+
+    if (response.error === "not_support_downloadFiles") {
+      return loadMemoryFromBackendByRead(adaptedBackend, path);
     }
     // Other errors should be raised
     throw new Error(`Failed to download ${path}: ${response.error}`);
