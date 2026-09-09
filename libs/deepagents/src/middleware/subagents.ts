@@ -53,13 +53,13 @@ const FORK_RECURSION_REFUSAL =
  * Per-graph call accounting owned by the upstream limit middlewares. Upstream
  * declares these as plain values, so LangGraph gives them single-writer
  * `LastValue` channels: forwarding them crashed parallel delegation and let a
- * subagent's reset overwrite the parent's budget (#646). Each agent counts its
- * own calls, so they cross the boundary in neither direction.
+ * subagent's reset overwrite the parent's budget. Each agent counts its own
+ * calls, so they never cross the boundary.
  *
  * Matching by name is targeted, not structural — other middleware declaring
  * plain state still collide, notably in a fork. A later change should derive
  * these keys from each subagent's middleware `stateSchema` and forward only
- * mergeable (`ReducedValue`) channels. See subagents.state-isolation.test.ts.
+ * mergeable (`ReducedValue`) channels.
  */
 const CALL_COUNT_STATE_KEYS = [
   // langchain modelCallLimitMiddleware
