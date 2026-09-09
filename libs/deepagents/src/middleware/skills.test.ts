@@ -5,7 +5,7 @@ import {
   SystemMessage,
   type BaseMessage,
 } from "@langchain/core/messages";
-import { MemorySaver } from "@langchain/langgraph";
+import { MemorySaver, InMemoryStore } from "@langchain/langgraph";
 
 import {
   createSkillsMiddleware,
@@ -23,7 +23,12 @@ import {
 import { createFileData } from "../backends/utils.js";
 import { createDeepAgent } from "../agent.js";
 import { createMockBackend } from "./test.js";
-import type { BackendProtocol } from "../backends/protocol.js";
+import { StoreBackend } from "../backends/store.js";
+import type {
+  BackendProtocol,
+  BackendProtocolV2,
+  BackendRuntime,
+} from "../backends/protocol.js";
 
 const VALID_SKILL_CONTENT = `---
 name: web-research
@@ -47,6 +52,19 @@ description: Systematic code review process with best practices
 1. Check for bugs
 2. Check for style
 `;
+
+/** Minimal valid SKILL.md whose frontmatter name matches its directory. */
+function skillMd(name: string): string {
+  return `---\nname: ${name}\ndescription: The ${name} skill\n---\n`;
+}
+
+/** Skill names from a state update or agent result, in load order. */
+function skillNames(value: unknown): string[] {
+  const entries =
+    (value as { skillsMetadata?: SkillMetadataEntry[] } | undefined)
+      ?.skillsMetadata ?? [];
+  return entries.map((entry) => entry.name);
+}
 
 describe("createSkillsMiddleware", () => {
   describe("beforeAgent", () => {
@@ -410,26 +428,58 @@ description: A skill with very large content
         },
       });
 
+      let listings = 0;
+      const countingBackend: BackendProtocolV2 = {
+        ...mockBackend,
+        ls: (path: string) => {
+          listings += 1;
+          return mockBackend.ls(path);
+        },
+      };
+
       const middleware = createSkillsMiddleware({
-        backend: mockBackend,
+        backend: countingBackend,
         sources: ["/skills/user/"],
       });
 
       // First call - should load skills
       // @ts-expect-error - typing issue in LangChain
       const result1 = await middleware.beforeAgent?.({});
-      expect(result1?.skillsMetadata).toHaveLength(1);
+      expect(skillNames(result1)).toEqual(["web-research"]);
+      expect(listings).toBe(1);
 
-      // Second call with empty state - should re-emit skills to state
-      // (new thread scenario: closure has skills but state doesn't)
+      // Second call with those skills in state - should skip the reload
+      // without going back to the backend.
       // @ts-expect-error - typing issue in LangChain
-      const result2 = await middleware.beforeAgent?.({});
-      expect(result2?.skillsMetadata).toHaveLength(1);
+      const result2 = await middleware.beforeAgent?.(result1);
+      expect(result2).toBeUndefined();
+      expect(listings).toBe(1);
+    });
 
-      // Third call with skills in state - should skip (both closure and state have skills)
+    it("should load skills per invocation rather than once per middleware instance", async () => {
+      // A backend resolved from the runtime models StateBackend, whose files
+      // live in per-thread graph state. One middleware instance serves every
+      // thread, so each invocation must load the skills its own state holds.
+      const backendForState = (runtime: BackendRuntime) => {
+        const name = (runtime.state as { skill?: string }).skill ?? "";
+        return createMockBackend({
+          files: { [`/skills/user/${name}/SKILL.md`]: skillMd(name) },
+          directories: { "/skills/user/": [{ name, type: "directory" }] },
+        });
+      };
+
+      const middleware = createSkillsMiddleware({
+        backend: backendForState,
+        sources: ["/skills/user/"],
+      });
+
       // @ts-expect-error - typing issue in LangChain
-      const result3 = await middleware.beforeAgent?.(result2);
-      expect(result3).toBeUndefined();
+      const threadA = await middleware.beforeAgent?.({ skill: "alpha" });
+      // @ts-expect-error - typing issue in LangChain
+      const threadB = await middleware.beforeAgent?.({ skill: "beta" });
+
+      expect(skillNames(threadA)).toEqual(["alpha"]);
+      expect(skillNames(threadB)).toEqual(["beta"]);
     });
 
     it("should skip reload when skillsMetadata exists in checkpoint state", async () => {
@@ -2454,5 +2504,51 @@ description: Project-level skill for team collaboration
     // Should still have a system prompt with the "no skills" message
     expect(systemPrompt).toContain("No skills available yet");
     invokeSpy.mockRestore();
+  });
+});
+
+/**
+ * Integration tests for StoreBackend with createDeepAgent.
+ *
+ * StoreBackend derives its namespace from the runnable config, so one agent
+ * instance can serve callers whose files live in different namespaces.
+ */
+describe("StoreBackend integration with createDeepAgent", () => {
+  it("should load skills from the namespace resolved for each invocation", async () => {
+    const store = new InMemoryStore();
+    const now = new Date().toISOString();
+    const seed = (namespace: string, name: string) =>
+      store.put([namespace, "skills"], `/skills/${name}/SKILL.md`, {
+        content: skillMd(name),
+        mimeType: "text/plain",
+        created_at: now,
+        modified_at: now,
+      });
+    await seed("ns-a", "alpha");
+    await seed("ns-b", "beta");
+
+    const agent = createDeepAgent({
+      model: new FakeListChatModel({ responses: ["ok", "ok"] }),
+      backend: new StoreBackend({
+        store,
+        namespace: ({ config }) => [
+          (config?.configurable?.namespace as string) ?? "unknown",
+          "skills",
+        ],
+      }),
+      skills: ["/skills/"],
+      store,
+    });
+
+    const hello = { messages: [new HumanMessage("hi")] };
+    const resultA = await agent.invoke(hello, {
+      configurable: { namespace: "ns-a" },
+    });
+    const resultB = await agent.invoke(hello, {
+      configurable: { namespace: "ns-b" },
+    });
+
+    expect(skillNames(resultA)).toEqual(["alpha"]);
+    expect(skillNames(resultB)).toEqual(["beta"]);
   });
 });
