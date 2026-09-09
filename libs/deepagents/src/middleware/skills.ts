@@ -75,6 +75,11 @@ export const MAX_SKILL_DESCRIPTION_LENGTH = 1024;
 export const MAX_SKILL_COMPATIBILITY_LENGTH = 500;
 
 /**
+ * Path for the skills index file on the backend.
+ */
+const SKILLS_INDEX_PATH = "/skills/.skills-index";
+
+/**
  * File extensions a skill module entrypoint may use.
  */
 export const SKILL_MODULE_EXTENSIONS = [
@@ -197,6 +202,17 @@ export interface SkillsMiddlewareOptions {
    * ```
    */
   sources: string[];
+
+  /**
+   * Maximum number of skills to inject into the system prompt.
+   *
+   * When the total skill count exceeds this threshold, the middleware writes
+   * a skills index file to the backend and injects a shorter prompt that
+   * directs the agent to grep the index for relevant skills.
+   *
+   * When not set, all skills are injected into the system prompt (current behavior).
+   */
+  skillCountThreshold?: number;
 }
 
 /**
@@ -265,9 +281,13 @@ const SkillsStateSchema = new StateSchema({
 });
 
 /**
- * Skills System Documentation prompt template.
+ * Skills System prompt template for eager discovery.
+ *
+ * Used when skill count is at or below the skill count threshold
+ * (or when no threshold is configured). Injects all skill names and
+ * descriptions directly into the system prompt.
  */
-const SKILLS_SYSTEM_PROMPT = context`
+const EAGER_SKILLS_SYSTEM_PROMPT = context`
   ## Skills System
 
   You have access to a skills library that provides specialized capabilities and domain knowledge.
@@ -309,6 +329,55 @@ const SKILLS_SYSTEM_PROMPT = context`
   4. Use any helper scripts with absolute paths
 
   Remember: Skills are tools to make you more capable and consistent. When in doubt, check if a skill exists for the task!
+`;
+
+/**
+ * Skills System prompt template for lazy discovery.
+ *
+ * Used when skill count exceeds the skill count threshold. Directs
+ * the agent to grep a skills index file instead of listing all
+ * skills inline.
+ */
+const LAZY_SKILLS_SYSTEM_PROMPT = context`
+  ## Skills System
+
+  You have access to a skills library that provides specialized capabilities and domain knowledge.
+
+  {skills_locations}
+
+  **Available Skills:**
+
+  There are {skill_count} skills available. A skills index is available at \`{index_path}\` containing one line per skill (name and description). Use \`grep\` on this file to find relevant skills.
+
+  **How to Use Skills (Progressive Disclosure):**
+
+  Skills follow a **progressive disclosure** pattern. Only search for skills when the task requires specialized knowledge or a structured workflow:
+
+  1. **Find relevant skills**: Use \`grep\` on \`{index_path}\` to search for skills matching the task
+  2. **Read the skill's full instructions**: Use \`read_file\` on the SKILL.md path shown in the grep result.
+     Pass \`limit=${DEFAULT_SKILL_READ_LINE_LIMIT}\` since the default of ${DEFAULT_READ_LINE_LIMIT} lines is too small for most skill files.
+  3. **Follow the skill's instructions**: SKILL.md contains step-by-step workflows, best practices, and examples
+  4. **Access supporting files**: Skills may include scripts, configs, or reference docs - use absolute paths
+
+  **When to Use Skills:**
+  - When the user's request matches a skill's domain (e.g., "process invoices" → grep for "invoice")
+  - When you need specialized knowledge or structured workflows
+  - When a skill provides proven patterns for complex tasks
+
+  **Executing Skill Scripts:**
+  Skills may contain scripts or other executable files. Always use absolute paths.
+
+  **Example Workflow:**
+
+  User: "Can you help me process these invoices?"
+
+  1. Search the skills index: \`grep("invoice", "{index_path}")\`
+  2. See "invoice-parser" in results → Read its SKILL.md for full instructions
+  3. Read the full skill file: \`read_file(path, limit=${DEFAULT_SKILL_READ_LINE_LIMIT})\`
+  4. Follow the skill's workflow
+  5. Use any helper scripts with absolute paths
+
+  Remember: Skills are tools to make you more capable and consistent. When in doubt, search the skills index for the task!
 `;
 
 /**
@@ -793,6 +862,45 @@ export function validateModulePath(raw: unknown): string | undefined {
 }
 
 /**
+ * Format skill metadata into an index file string.
+ *
+ * Each line contains the skill name, description, and path to its SKILL.md,
+ * formatted for grep-based discovery by the agent.
+ *
+ * @param skills - All discovered skill metadata.
+ * @returns Index file content with one skill per line.
+ */
+export function formatSkillsIndex(skills: SkillMetadata[]): string {
+  const lines = skills.map((s) => `${s.name}: ${s.description} → ${s.path}`);
+  return lines.join("\n");
+}
+
+/**
+ * Write the skills index file to the backend.
+ *
+ * The index is written to a fixed path (`/skills/.skills-index`) on the
+ * backend. The path is deterministic so the deferred prompt can reference
+ * it directly.
+ *
+ * @param backend - Resolved backend instance.
+ * @param skills - All discovered skill metadata.
+ * @returns The path of the written index file.
+ */
+async function writeSkillsIndex(
+  backend: AnyBackendProtocol,
+  skills: SkillMetadata[],
+): Promise<string> {
+  const adaptedBackend = adaptBackendProtocol(backend);
+  const content = formatSkillsIndex(skills);
+
+  const result = await adaptedBackend.write(SKILLS_INDEX_PATH, content);
+  if (result.error) {
+    throw new Error(result.error);
+  }
+  return SKILLS_INDEX_PATH;
+}
+
+/**
  * Create backend-agnostic middleware for loading and exposing agent skills.
  *
  * This middleware loads skills from configurable backend sources and injects
@@ -812,11 +920,12 @@ export function validateModulePath(raw: unknown): string | undefined {
  * ```
  */
 export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
-  const { backend, sources } = options;
+  const { backend, sources, skillCountThreshold } = options;
 
   // Closure variable to store loaded skills - wrapModelCall can access this
   // directly since beforeAgent state updates aren't immediately available
   let loadedSkills: SkillMetadata[] = [];
+  let indexPath: string | undefined;
 
   return createMiddleware({
     name: "SkillsMiddleware",
@@ -868,6 +977,22 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
       // Store in closure for immediate access by wrapModelCall
       loadedSkills = Array.from(allSkills.values());
 
+      if (
+        skillCountThreshold !== undefined &&
+        loadedSkills.length > skillCountThreshold
+      ) {
+        try {
+          const resolvedForIndex = await resolveBackend(backend, { state });
+          indexPath = await writeSkillsIndex(resolvedForIndex, loadedSkills);
+        } catch (error) {
+          console.debug(
+            `[SkillsMiddleware] Failed to write skills index:`,
+            error,
+          );
+          indexPath = undefined;
+        }
+      }
+
       return { skillsMetadata: loadedSkills };
     },
 
@@ -879,14 +1004,28 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
           ? loadedSkills
           : (request.state?.skillsMetadata as SkillMetadata[]) || [];
 
-      // Format skills section
       const skillsLocations = formatSkillsLocations(sources);
-      const skillsList = formatSkillsList(skillsMetadata, sources);
 
-      const skillsSection = SKILLS_SYSTEM_PROMPT.replace(
-        "{skills_locations}",
-        skillsLocations,
-      ).replace("{skills_list}", skillsList);
+      let skillsSection: string;
+
+      if (
+        indexPath !== undefined &&
+        skillCountThreshold !== undefined &&
+        skillsMetadata.length > skillCountThreshold
+      ) {
+        skillsSection = LAZY_SKILLS_SYSTEM_PROMPT.replace(
+          "{skills_locations}",
+          skillsLocations,
+        )
+          .replace(/\{skill_count\}/g, String(skillsMetadata.length))
+          .replace(/\{index_path\}/g, indexPath);
+      } else {
+        const skillsList = formatSkillsList(skillsMetadata, sources);
+        skillsSection = EAGER_SKILLS_SYSTEM_PROMPT.replace(
+          "{skills_locations}",
+          skillsLocations,
+        ).replace("{skills_list}", skillsList);
+      }
 
       // Combine with existing system message
       const newSystemMessage = request.systemMessage.concat(skillsSection);
