@@ -66,9 +66,10 @@ sandboxStandardTests({
   resolvePath: (name) => `/home/app/${name}`,
 });
 
-describe
-  .skipIf(!SANDBOX_AVAILABLE)
-  .sequential("DenoSandbox Provider-Specific Tests", () => {
+describe.skipIf(!SANDBOX_AVAILABLE)(
+  "DenoSandbox Provider-Specific Tests",
+  { concurrent: false },
+  () => {
     let shared: DenoSandbox;
 
     beforeAll(async () => {
@@ -200,4 +201,5 @@ console.log(\`User: \${user.name}, Age: \${user.age}\`);
         TEST_TIMEOUT,
       );
     });
-  });
+  },
+);
