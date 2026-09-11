@@ -814,10 +814,6 @@ export function validateModulePath(raw: unknown): string | undefined {
 export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
   const { backend, sources } = options;
 
-  // Closure variable to store loaded skills - wrapModelCall can access this
-  // directly since beforeAgent state updates aren't immediately available
-  let loadedSkills: SkillMetadata[] = [];
-
   return createMiddleware({
     name: "SkillsMiddleware",
     stateSchema: SkillsStateSchema,
@@ -828,16 +824,9 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
         Array.isArray(state.skillsMetadata) &&
         state.skillsMetadata.length > 0;
 
-      if (loadedSkills.length > 0) {
-        // Closure has skills from a prior thread — push to state if missing
-        // so getCurrentTaskInput() sees them in the tool node.
-        return stateHasSkills ? undefined : { skillsMetadata: loadedSkills };
-      }
-
-      // Check if skills were restored from checkpoint (non-empty array in state)
+      // Already loaded for this thread (same run, a later turn, or a
+      // restored checkpoint) - keep what state holds.
       if (stateHasSkills) {
-        // Restore from state (e.g., after checkpoint restore)
-        loadedSkills = state.skillsMetadata as SkillMetadata[];
         return undefined;
       }
 
@@ -865,19 +854,14 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
         }
       }
 
-      // Store in closure for immediate access by wrapModelCall
-      loadedSkills = Array.from(allSkills.values());
-
-      return { skillsMetadata: loadedSkills };
+      return { skillsMetadata: Array.from(allSkills.values()) };
     },
 
     wrapModelCall(request, handler) {
-      // Use closure variable which is populated by beforeAgent
-      // Fall back to state for checkpoint restore scenarios
+      // Populated by beforeAgent, which runs as its own graph node - its
+      // state update is committed before the model node reads it.
       const skillsMetadata: SkillMetadata[] =
-        loadedSkills.length > 0
-          ? loadedSkills
-          : (request.state?.skillsMetadata as SkillMetadata[]) || [];
+        (request.state?.skillsMetadata as SkillMetadata[]) || [];
 
       // Format skills section
       const skillsLocations = formatSkillsLocations(sources);
