@@ -545,3 +545,40 @@ describe("State schema propagation", () => {
     assertAllDeepAgentQualities(agent);
   });
 });
+
+describe("summarization option passthrough", () => {
+  const manyShortMessages = (): BaseMessage[] =>
+    Array.from({ length: 10 }, (_, i) => new HumanMessage(`Message ${i}`));
+
+  const lastMessageText = (result: unknown): string => {
+    const { messages } = result as { messages: BaseMessage[] };
+    const last = messages[messages.length - 1];
+    return typeof last.content === "string" ? last.content : "";
+  };
+
+  it("forwards summarization options to the built-in summarization middleware", async () => {
+    // With a 5-message trigger, the middleware summarizes before the model
+    // call, so the summarizer consumes the first fake response and the agent
+    // replies with the second one.
+    const agent = createDeepAgent({
+      model: new FakeListChatModel({ responses: ["summary", "Done"] }),
+      summarization: {
+        trigger: { type: "messages", value: 5 },
+        keep: { type: "messages", value: 2 },
+      },
+    });
+    const result = await agent.invoke({ messages: manyShortMessages() });
+    expect(lastMessageText(result)).toBe("Done");
+  });
+
+  it("keeps the default summarization behavior when the option is omitted", async () => {
+    // Without the option the default token trigger stays far above this tiny
+    // history, so no summarizer call happens and the agent replies with the
+    // first fake response.
+    const agent = createDeepAgent({
+      model: new FakeListChatModel({ responses: ["summary", "Done"] }),
+    });
+    const result = await agent.invoke({ messages: manyShortMessages() });
+    expect(lastMessageText(result)).toBe("summary");
+  });
+});
