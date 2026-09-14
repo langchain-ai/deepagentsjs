@@ -36,18 +36,15 @@ import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
 import {
   sanitizeToolCallId,
+  EMPTY_CONTENT_WARNING,
   formatContentWithLineNumbers,
-  formatContentWithLineNumbersAndBoundaries,
-  type FormattedContentWithLineNumbers,
+  formatSourceBlock,
   formatGrepMatches,
   truncateIfTooLong,
   getMimeType,
   isTextMimeType,
-  MAX_LINE_LENGTH,
   normalizeReadPagination,
 } from "../backends/utils.js";
-
-const INT_FORMATTER = new Intl.NumberFormat("en-US");
 
 /**
  * Normalizes tool input so that models sending `path` instead of `file_path`
@@ -151,51 +148,132 @@ const READ_FILE_TRUNCATION_MSG = `
 [Output was truncated due to size limits. The file content is very large. Consider reformatting the file to make it easier to navigate. For example, if this is JSON, use execute(command='jq . {file_path}') to pretty-print it with line breaks. For other formats, you can use appropriate formatting tools to split long lines.]`;
 
 /**
- * Render backend pagination metadata as guidance for the model.
+ * Describe the window a read returned, as status header fields.
  *
  * Backends own source-level pagination because only they know how much of the
- * file was read. The middleware owns presentation: it line-numbers the text
- * and turns optional metadata into a human-readable footer. Keeping the fields
- * optional preserves compatibility with custom backends that predate this
- * contract; those reads simply receive no pagination footer.
+ * file was read. The middleware owns presentation: it renders the source
+ * unmodified and turns optional metadata into a terse header. Keeping the
+ * fields optional preserves compatibility with custom backends that predate
+ * this contract — `prepareReadWindow` derives a range for those instead.
  *
- * `nextOffset` is the signal that the read is partial. A result at EOF omits it,
- * so complete reads retain their previous output shape.
+ * Returns the `lines A-B[ of T]` field, followed by `next offset N` when the
+ * window stopped short of the end of the file.
  */
-function remainingLinesNotice(readResult: ReadResult): string {
+function describeReadWindow(readResult: ReadResult): string[] {
   const { startLine, endLine, nextOffset, totalLines } = readResult;
   if (
     startLine === undefined ||
     endLine === undefined ||
-    nextOffset === undefined ||
     !Number.isSafeInteger(startLine) ||
     !Number.isSafeInteger(endLine) ||
-    !Number.isSafeInteger(nextOffset) ||
     startLine < 1 ||
     endLine < startLine ||
-    nextOffset !== endLine ||
     (totalLines !== undefined &&
       (!Number.isSafeInteger(totalLines) || totalLines < endLine))
   ) {
-    return "";
+    return [];
   }
 
-  const readCount = endLine - startLine + 1;
-  const readUnit = readCount === 1 ? "line" : "lines";
-  if (totalLines === undefined) {
-    return `\n\n[Read ${readCount} ${readUnit} (lines ${startLine}-${endLine}). More lines remain from offset ${nextOffset}.]`;
+  let span = `lines ${startLine}-${endLine}`;
+  if (totalLines !== undefined) {
+    span += ` of ${totalLines}`;
   }
-  if (endLine >= totalLines) {
-    return "";
+  const fields = [span];
+  if (
+    nextOffset !== undefined &&
+    (totalLines === undefined || endLine < totalLines)
+  ) {
+    fields.push(`next offset ${nextOffset}`);
   }
+  return fields;
+}
 
-  const remaining = totalLines - endLine;
-  const remainingUnit = remaining === 1 ? "line" : "lines";
-  return `\n\n[Read ${readCount} ${readUnit} (lines ${startLine}-${endLine} of ${totalLines} total). ${remaining} ${remainingUnit} remaining from offset ${nextOffset}.]`;
+/** Render the status header that sits above a text `read_file` result. */
+function readHeader(fields: readonly string[]): string {
+  return `@@ ${fields.join(" | ")} @@`;
+}
+
+/** Notice disclosing that a negative `offset` was reinterpreted as the start of the file, or `undefined` for a non-negative offset. */
+function clampedOffsetNotice(offset: number): string | undefined {
+  if (offset >= 0) {
+    return undefined;
+  }
+  return `[Requested offset ${offset} is before the start of the file; read from line 1 instead.]`;
 }
 
 /**
- * Fit a line-numbered read into the middleware's output budget without
+ * Compose a read result from its notices, status header, and source body.
+ *
+ * Notices sit above the header, so every line below it is unmodified file
+ * content and consumers (including `stripLineNumbers` in the quickjs
+ * provider) can tell the two apart by position.
+ */
+function assembleRead(
+  body: string,
+  options: { fields: readonly string[]; notices?: readonly string[] },
+): string {
+  const { fields, notices = [] } = options;
+  return [...notices, readHeader(fields), body].join("\n");
+}
+
+/** Derives a header range from `offset` when the backend left `startLine`/`endLine` unset. */
+function prepareReadWindow(
+  readResult: ReadResult,
+  content: string,
+  offset: number,
+): { readResult: ReadResult; body: string } {
+  const body = formatSourceBlock(content);
+  if (readResult.startLine !== undefined && readResult.endLine !== undefined) {
+    return { readResult, body };
+  }
+
+  // normalizeReadPagination already clamped `offset` to >= 0, so this stays 1-indexed.
+  const startLine = offset + 1;
+  const endLine = startLine + body.split("\n").length - 1;
+  return { readResult: { ...readResult, startLine, endLine }, body };
+}
+
+/**
+ * Assemble a read cut inside a single source line too long to fit.
+ *
+ * No offset reaches the remainder of such a line, so the header reports how
+ * much of it is shown in place of a resume point.
+ */
+function midlineTruncatedRead(
+  body: string,
+  readResult: ReadResult,
+  threshold: number,
+  notices: readonly string[],
+): string {
+  const newlineIdx = body.indexOf("\n");
+  const oversized = newlineIdx === -1 ? body.length : newlineIdx;
+  const clipped: ReadResult = {
+    totalLines: readResult.totalLines,
+    startLine: readResult.startLine,
+    endLine: readResult.startLine,
+    nextOffset: undefined,
+  };
+
+  const fieldsFor = (shown: number) => [
+    ...describeReadWindow(clipped),
+    "truncated mid-line",
+    `${shown} of ${oversized} chars`,
+  ];
+
+  // Budget for the widest count it could print; costs 0-2 shown chars, never overshoots.
+  const reserved = assembleRead("", {
+    fields: fieldsFor(oversized),
+    notices,
+  }).length;
+  const shown = Math.max(0, Math.min(oversized, threshold - reserved));
+  return assembleRead(body.slice(0, shown), {
+    fields: fieldsFor(shown),
+    notices,
+  });
+}
+
+/**
+ * Fit a paginated read into the middleware's output budget without
  * publishing a resume offset that skips content the model did not see.
  *
  * There are two independent forms of limiting:
@@ -206,67 +284,73 @@ function remainingLinesNotice(readResult: ReadResult): string {
  * If the backend returned lines 1-100 but the middleware only displayed lines
  * 1-30, forwarding the backend's original `nextOffset: 100` would silently skip
  * lines 31-100 on the next read. This function therefore truncates only after a
- * complete source line and rebuilds the remaining-lines notice using the last
- * line actually displayed.
- *
- * Long source lines may occupy several formatted rows (`12`, `12.1`, ...). The
- * formatter records a structured boundary only after the final chunk, so this
- * function does not need to inspect or understand the gutter representation.
- * If no complete source line can fit beside the truncation message, the function
- * falls back to character truncation and omits pagination guidance rather than
- * advertising an unsafe offset.
+ * complete source line and rebuilds the header from the last line actually
+ * displayed. If no complete source line fits alongside the truncation
+ * message, it falls back to `midlineTruncatedRead`, which reports exactly how
+ * much of the oversized line is shown rather than guessing at a resume point.
  */
 function truncatePaginatedRead(
-  formatted: FormattedContentWithLineNumbers,
-  filePath: string,
+  body: string,
   readResult: ReadResult,
-  tokenLimit: number | null,
+  options: {
+    filePath: string;
+    tokenLimit: number | null;
+    notices?: readonly string[];
+  },
 ): string {
-  const content = formatted.text;
-  const notice = remainingLinesNotice(readResult);
-  if (
-    !tokenLimit ||
-    content.length + notice.length < NUM_CHARS_PER_TOKEN * tokenLimit
-  ) {
-    return content + notice;
+  const { filePath, tokenLimit, notices = [] } = options;
+  const fields = describeReadWindow(readResult);
+  const result = assembleRead(body, { fields, notices });
+  if (!tokenLimit || result.length < NUM_CHARS_PER_TOKEN * tokenLimit) {
+    return result;
   }
 
   const truncationMsg = READ_FILE_TRUNCATION_MSG.replace(
     "{file_path}",
     filePath,
-  );
+  ).trim();
   const threshold = NUM_CHARS_PER_TOKEN * tokenLimit;
-  if (readResult.startLine !== undefined && readResult.endLine !== undefined) {
-    const finalSourceLine = readResult.endLine;
-    const boundaries = formatted.sourceLineBoundaries.filter(
-      (boundary) => boundary.sourceLine <= finalSourceLine,
-    );
 
-    // Prefer the latest complete source line that leaves room for both notices.
+  if (readResult.startLine !== undefined && readResult.endLine !== undefined) {
+    // One boundary per source line, so a cut never lands mid-line and understates what the header claims to show.
+    const rows = body.split("\n");
+    let position = 0;
+    const boundaries: Array<{ endOffset: number; endLine: number }> = [];
+    for (let index = 0; index < rows.length; index += 1) {
+      const sourceLine = readResult.startLine + index;
+      if (sourceLine > readResult.endLine) break;
+      position += rows[index].length;
+      boundaries.push({ endOffset: position, endLine: sourceLine });
+      position += 1; // Inter-row newline.
+    }
+
+    // Only advertise whole lines; the 0-indexed `nextOffset` after a 1-indexed `endLine` is numerically just `endLine`.
     for (let index = boundaries.length - 1; index >= 0; index -= 1) {
-      const boundary = boundaries[index];
+      const { endOffset, endLine } = boundaries[index];
       const adjustedResult: ReadResult = {
         totalLines: readResult.totalLines,
         startLine: readResult.startLine,
-        endLine: boundary.sourceLine,
-        nextOffset: boundary.sourceLine,
+        endLine,
+        nextOffset: endLine,
       };
-      const adjustedNotice = remainingLinesNotice(adjustedResult);
-      if (
-        boundary.endOffset + truncationMsg.length + adjustedNotice.length <=
-        threshold
-      ) {
-        return (
-          content.slice(0, boundary.endOffset) + truncationMsg + adjustedNotice
-        );
+      const candidate = assembleRead(body.slice(0, endOffset), {
+        fields: [
+          ...describeReadWindow(adjustedResult),
+          "truncated due to size",
+        ],
+        notices: [...notices, truncationMsg],
+      });
+      if (candidate.length <= threshold) {
+        return candidate;
       }
     }
   }
 
-  // Without a complete safe boundary, preserve the historical character-level
-  // truncation behavior but omit a pagination footer: guessing would risk skips.
-  const maxContentLength = Math.max(0, threshold - truncationMsg.length);
-  return content.substring(0, maxContentLength) + truncationMsg;
+  // No complete source line fits, so no offset reaches the remainder.
+  return midlineTruncatedRead(body, readResult, threshold, [
+    ...notices,
+    truncationMsg,
+  ]);
 }
 
 /**
@@ -925,8 +1009,7 @@ export const READ_FILE_TOOL_DESCRIPTION = context`
 
   Usage:
   - By default, it reads up to ${DEFAULT_READ_LINE_LIMIT} lines starting from the beginning of the file. Use \`offset\`/\`limit\` to page through large files instead of reading them whole.
-  - Results are returned with line numbers starting at \`offset\` + 1 (1 by default), then two spaces, then the source line. Never include these line-number prefixes when editing.
-  - Lines over ${INT_FORMATTER.format(MAX_LINE_LENGTH)} characters are split with continuation markers (e.g. 5.1, 5.2); \`limit\` counts source lines, so continuation rows do not consume the budget.
+  - A status header, \`@@ field | field | ... @@\`, sits above the file content, and every line after it is unmodified file content. When content is truncated, there may be an explanation before the header. Never include the header when editing.
   - Speculatively batch multiple \`read_file\` calls in one response when several files may be useful.
   - An empty file returns a system-reminder warning in place of contents.
   - Large tool results may be offloaded to a file; the tool message gives the path. Read that path here, paging with \`offset\`/\`limit\`.
@@ -948,7 +1031,7 @@ export const EDIT_FILE_TOOL_DESCRIPTION = context`
 
   Usage:
   - You must read the file before editing; this tool errors otherwise.
-  - Preserve the exact indentation from the read output, and never include line-number prefixes in old_string or new_string.
+  - Preserve the exact source indentation from the read output, and never include the read status header in old_string or new_string.
   - Prefer editing an existing file over creating a new one.
   - Only use emojis if the user explicitly requests it.
 `;
@@ -1185,6 +1268,10 @@ function createReadFileTool(
       let content =
         typeof readResult.content === "string" ? readResult.content : "";
 
+      if (content === EMPTY_CONTENT_WARNING) {
+        return [{ type: "text", text: content }];
+      }
+
       // Enforce line limit on result (in case backend returns more)
       const lines = content.split("\n");
       let paginationResult = readResult;
@@ -1208,16 +1295,17 @@ function createReadFileTool(
         }
       }
 
-      const formatted = formatContentWithLineNumbersAndBoundaries(
-        content,
-        paginationResult.startLine ?? offset + 1,
-      );
-      const output = truncatePaginatedRead(
-        formatted,
-        file_path,
+      const { readResult: preparedResult, body } = prepareReadWindow(
         paginationResult,
-        toolTokenLimitBeforeEvict,
+        content,
+        offset,
       );
+      const clampNotice = clampedOffsetNotice(requestedOffset);
+      const output = truncatePaginatedRead(body, preparedResult, {
+        filePath: file_path,
+        tokenLimit: toolTokenLimitBeforeEvict,
+        notices: clampNotice ? [clampNotice] : [],
+      });
 
       return [{ type: "text", text: output }];
     },

@@ -463,7 +463,7 @@ describe("read_file multimodal content blocks", () => {
     expect(result[0].data).toBe(Buffer.from(binaryData).toString("base64"));
   });
 
-  it("should return a text content block with line numbers for text files", async () => {
+  it("should return a text content block with a status header for text files", async () => {
     const files = { "/notes.txt": createFileData("hello\nworld") };
     const { stateAndStore } = setupStateWithFiles(files);
 
@@ -484,9 +484,8 @@ describe("read_file multimodal content blocks", () => {
     expect(result[0].type).toBe("text");
     expect(result[0].text).toContain("hello");
     expect(result[0].text).toContain("world");
-    // Line numbers should be present
-    expect(result[0].text).toMatch(/1\s+hello/);
-    expect(result[0].text).toMatch(/2\s+world/);
+    // A status header states the range once; the source lines are not modified.
+    expect(result[0].text).toBe("@@ lines 1-2 of 2 @@\nhello\nworld");
   });
 
   it("should return an error for binary files exceeding MAX_BINARY_READ_SIZE_BYTES", async () => {

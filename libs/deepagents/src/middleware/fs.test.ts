@@ -9,6 +9,7 @@ import {
 } from "./fs.js";
 import type { FileData, BackendProtocolV2 } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
+import { EMPTY_CONTENT_WARNING } from "../backends/utils.js";
 import {
   SystemMessage,
   HumanMessage,
@@ -1171,7 +1172,7 @@ describe("createFilesystemMiddleware", () => {
       const result = await readFileTool!.invoke({ file_path: "/large.txt" });
 
       expect((result as any)[0].text).toContain(
-        "[Read 100 lines (lines 1-100 of 1450 total). 1350 lines remaining from offset 100.]",
+        "@@ lines 1-100 of 1450 | next offset 100 @@",
       );
     });
 
@@ -1199,7 +1200,7 @@ describe("createFilesystemMiddleware", () => {
       });
 
       expect((result as any)[0].text).toContain(
-        "[Read 2 lines (lines 3-4 of 5 total). 1 line remaining from offset 4.]",
+        "@@ lines 3-4 of 5 | next offset 4 @@",
       );
     });
 
@@ -1222,7 +1223,10 @@ describe("createFilesystemMiddleware", () => {
 
       const result = await readFileTool!.invoke({ file_path: "/small.txt" });
 
-      expect((result as any)[0].text).not.toContain("[Read ");
+      expect((result as any)[0].text).toBe(
+        "@@ lines 1-3 of 3 @@\none\ntwo\nthree",
+      );
+      expect((result as any)[0].text).not.toContain("next offset");
     });
 
     it("read_file remains compatible with backends without pagination metadata", async () => {
@@ -1238,7 +1242,10 @@ describe("createFilesystemMiddleware", () => {
 
       const result = await readFileTool!.invoke({ file_path: "/legacy.txt" });
 
-      expect((result as any)[0].text).not.toContain("[Read ");
+      // No startLine/endLine from the backend, so the range is derived from
+      // the requested offset (0) rather than left out of the header entirely.
+      expect((result as any)[0].text).toBe("@@ lines 1-3 @@\none\ntwo\nthree");
+      expect((result as any)[0].text).not.toContain("next offset");
     });
 
     it("read_file resumes after the last complete line when output is truncated", async () => {
@@ -1264,14 +1271,193 @@ describe("createFilesystemMiddleware", () => {
 
       const result = await readFileTool!.invoke({ file_path: "/large.txt" });
       const text = (result as any)[0].text as string;
-      const resumeMatch = text.match(/remaining from offset (\d+)\./);
-      const displayedLines = [...text.matchAll(/^\s*(\d+)\t/gm)].map((match) =>
-        Number(match[1]),
+      const [notice, header, ...rows] = text.split("\n");
+
+      const resumeMatch = header.match(/next offset (\d+)/);
+      expect(resumeMatch).not.toBeNull();
+      const resumeOffset = Number(resumeMatch![1]);
+
+      expect(notice).toContain("Output was truncated due to size limits");
+      expect(header).toContain("truncated due to size");
+      // Every displayed row is a complete source line; the resume offset
+      // points at exactly one past the last row actually shown.
+      expect(rows.length).toBe(resumeOffset);
+      expect(resumeOffset).toBeLessThan(10);
+    });
+
+    it("read_file discloses how much of an oversized line it could show", async () => {
+      const backend = createMockBackend();
+      backend.read = vi.fn().mockResolvedValue({
+        content: "x".repeat(2000),
+        mimeType: "text/plain",
+        totalLines: 1,
+        startLine: 1,
+        endLine: 1,
+      });
+      const middleware = createFilesystemMiddleware({
+        backend,
+        toolTokenLimitBeforeEvict: 10, // 40-char budget, far under the 2000-char line
+      });
+      const readFileTool = middleware.tools!.find(
+        (tool) => tool.name === "read_file",
       );
 
-      expect(resumeMatch).not.toBeNull();
-      expect(Number(resumeMatch![1])).toBe(Math.max(...displayedLines));
-      expect(Number(resumeMatch![1])).toBeLessThan(10);
+      const result = await readFileTool!.invoke({
+        file_path: "/huge-line.txt",
+      });
+      const text = (result as any)[0].text as string;
+      const [notice, header, ...rows] = text.split("\n");
+
+      expect(notice).toContain("Output was truncated due to size limits");
+      const match = header.match(
+        /^@@ lines 1-1 of 1 \| truncated mid-line \| (\d+) of 2000 chars @@$/,
+      );
+      expect(match).not.toBeNull();
+      const shown = Number(match![1]);
+      // The body is exactly as many characters as the header discloses, and
+      // strictly less than the full oversized line.
+      expect(rows.join("\n").length).toBe(shown);
+      expect(shown).toBeLessThan(2000);
+    });
+
+    it("read_file discloses when a negative offset was clamped to the start of the file", async () => {
+      const backend = new StateBackend({
+        state: {
+          files: {
+            "/notes.txt": {
+              content: ["one", "two", "three"],
+              created_at: "2024-01-01T00:00:00Z",
+              modified_at: "2024-01-01T00:00:00Z",
+            },
+          },
+        },
+      } as any);
+      const middleware = createFilesystemMiddleware({ backend });
+      const readFileTool = middleware.tools!.find(
+        (tool) => tool.name === "read_file",
+      );
+
+      const result = await readFileTool!.invoke({
+        file_path: "/notes.txt",
+        offset: -1,
+      });
+
+      expect((result as any)[0].text).toBe(
+        "[Requested offset -1 is before the start of the file; read from line 1 instead.]\n@@ lines 1-3 of 3 @@\none\ntwo\nthree",
+      );
+    });
+
+    it("read_file omits the clamp notice for a non-negative offset", async () => {
+      const backend = new StateBackend({
+        state: {
+          files: {
+            "/notes.txt": {
+              content: ["one", "two", "three"],
+              created_at: "2024-01-01T00:00:00Z",
+              modified_at: "2024-01-01T00:00:00Z",
+            },
+          },
+        },
+      } as any);
+      const middleware = createFilesystemMiddleware({ backend });
+      const readFileTool = middleware.tools!.find(
+        (tool) => tool.name === "read_file",
+      );
+
+      const result = await readFileTool!.invoke({
+        file_path: "/notes.txt",
+        offset: 0,
+      });
+
+      expect((result as any)[0].text).toBe(
+        "@@ lines 1-3 of 3 @@\none\ntwo\nthree",
+      );
+    });
+
+    it("read_file returns the empty-file warning without a status header", async () => {
+      const backend = createMockBackend();
+      backend.read = vi.fn().mockResolvedValue({
+        content: EMPTY_CONTENT_WARNING,
+        mimeType: "text/plain",
+      });
+      const middleware = createFilesystemMiddleware({ backend });
+      const readFileTool = middleware.tools!.find(
+        (tool) => tool.name === "read_file",
+      );
+
+      const result = await readFileTool!.invoke({ file_path: "/empty.txt" });
+
+      expect((result as any)[0].text).toBe(EMPTY_CONTENT_WARNING);
+    });
+
+    it("read_file's status header matches the shape stripLineNumbers relies on", async () => {
+      // Guards against producer/consumer drift with the quickjs provider's
+      // READ_STATUS_HEADER_RE, which can't import this package's internals
+      // to check against directly (see libs/providers/quickjs/src/session.ts).
+      const strictHeaderRe = /^@@ lines (\d+)-(\d+)(?: of \d+)?(?: \| .*)? @@$/;
+
+      const backend = new StateBackend({
+        state: {
+          files: {
+            "/notes.txt": {
+              content: ["one", "two", "three", "four", "five"],
+              created_at: "2024-01-01T00:00:00Z",
+              modified_at: "2024-01-01T00:00:00Z",
+            },
+          },
+        },
+      } as any);
+      const middleware = createFilesystemMiddleware({ backend });
+      const readFileTool = middleware.tools!.find(
+        (tool) => tool.name === "read_file",
+      );
+
+      const full = await readFileTool!.invoke({ file_path: "/notes.txt" });
+      const partial = await readFileTool!.invoke({
+        file_path: "/notes.txt",
+        limit: 2,
+      });
+
+      const truncatingBackend = createMockBackend();
+      truncatingBackend.read = vi.fn().mockResolvedValue({
+        content: Array.from(
+          { length: 10 },
+          (_, i) => `line ${i + 1} ${"x".repeat(80)}`,
+        ).join("\n"),
+        mimeType: "text/plain",
+        totalLines: 20,
+        startLine: 1,
+        endLine: 10,
+        nextOffset: 10,
+      });
+      const truncated = await createFilesystemMiddleware({
+        backend: truncatingBackend,
+        toolTokenLimitBeforeEvict: 150,
+      })
+        .tools!.find((tool) => tool.name === "read_file")!
+        .invoke({ file_path: "/large.txt" });
+
+      const midlineBackend = createMockBackend();
+      midlineBackend.read = vi.fn().mockResolvedValue({
+        content: "x".repeat(2000),
+        mimeType: "text/plain",
+        totalLines: 1,
+        startLine: 1,
+        endLine: 1,
+      });
+      const midline = await createFilesystemMiddleware({
+        backend: midlineBackend,
+        toolTokenLimitBeforeEvict: 10,
+      })
+        .tools!.find((tool) => tool.name === "read_file")!
+        .invoke({ file_path: "/huge-line.txt" });
+
+      for (const result of [full, partial, truncated, midline]) {
+        const header = (result as any)[0].text
+          .split("\n")
+          .find((line: string) => line.startsWith("@@ "));
+        expect(header).toMatch(strictHeaderRe);
+      }
     });
 
     it("write_file schema should require content", () => {

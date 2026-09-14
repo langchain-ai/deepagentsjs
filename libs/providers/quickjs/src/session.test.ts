@@ -409,6 +409,48 @@ describe("REPL Engine", () => {
       expect(result.ok).toBe(true);
       expect(result.value).toBe("persisted");
     });
+
+    it("strips read_file's status header before handing content to sandboxed code", async () => {
+      const readTool = tool(
+        async () => '@@ lines 1-2 of 2 @@\n{"a":1}\n{"b":2}',
+        {
+          name: "read_file",
+          description: "Read a file",
+          schema: z.object({ path: z.string() }),
+        },
+      );
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [readTool],
+      });
+
+      const result = await session.eval(
+        'await tools.readFile({ path: "/data.json" })',
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe('{"a":1}\n{"b":2}');
+    });
+
+    it("does not mistake a diff hunk header for read_file's status header", async () => {
+      const readTool = tool(
+        async () => "@@ -1,3 +1,4 @@\ncontext\n-old\n+new",
+        {
+          name: "read_file",
+          description: "Read a file",
+          schema: z.object({ path: z.string() }),
+        },
+      );
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [readTool],
+      });
+
+      const result = await session.eval(
+        'await tools.readFile({ path: "/change.patch" })',
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("@@ -1,3 +1,4 @@\ncontext\n-old\n+new");
+    });
   });
 
   describe("PTC call budget", () => {
