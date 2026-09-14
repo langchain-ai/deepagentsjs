@@ -50,7 +50,7 @@ import {
    */
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
-import { StateSchema, ReducedValue } from "@langchain/langgraph";
+import { StateSchema } from "@langchain/langgraph";
 
 import type {
   AnyBackendProtocol,
@@ -219,48 +219,10 @@ export const SkillMetadataEntrySchema = z.object({
 export type SkillMetadataEntry = z.infer<typeof SkillMetadataEntrySchema>;
 
 /**
- * Reducer for skillsMetadata that merges arrays from parallel subagents.
- * Skills are deduplicated by name, with later values overriding earlier ones.
- *
- * @param current - The current skillsMetadata array (from state)
- * @param update - The new skillsMetadata array (from a subagent update)
- * @returns Merged array with duplicates resolved by name (later values win)
- */
-export function skillsMetadataReducer(
-  current: SkillMetadataEntry[] | undefined,
-  update: SkillMetadataEntry[] | undefined,
-): SkillMetadataEntry[] {
-  // If no update, return current (or empty array)
-  if (!update || update.length === 0) {
-    return current || [];
-  }
-  // If no current, return update
-  if (!current || current.length === 0) {
-    return update;
-  }
-  // Merge by skill name (later values override earlier ones)
-  const merged = new Map<string, SkillMetadataEntry>();
-  for (const skill of current) {
-    merged.set(skill.name, skill);
-  }
-  for (const skill of update) {
-    merged.set(skill.name, skill);
-  }
-  return Array.from(merged.values());
-}
-
-/**
  * State schema for skills middleware.
- * Uses ReducedValue for skillsMetadata to allow concurrent updates from parallel subagents.
  */
 const SkillsStateSchema = new StateSchema({
-  skillsMetadata: new ReducedValue(
-    z.array(SkillMetadataEntrySchema).default(() => []),
-    {
-      inputSchema: z.array(SkillMetadataEntrySchema).optional(),
-      reducer: skillsMetadataReducer,
-    },
-  ),
+  skillsMetadata: z.array(SkillMetadataEntrySchema).nullish(),
   files: filesValue,
 });
 
@@ -800,6 +762,16 @@ export function validateModulePath(raw: unknown): string | undefined {
  * pattern: skill names and descriptions are shown in the prompt, but the agent
  * reads full SKILL.md content only when needed.
  *
+ * Skills are loaded once per thread and stored in state. To pick up skills
+ * added, edited, or deleted since then, set `skillsMetadata` to `null` between
+ * runs; the next run reloads every source:
+ *
+ * ```ts
+ * await agent.updateState(config, { skillsMetadata: null });
+ * // or as part of the next run's input
+ * await agent.invoke({ messages, skillsMetadata: null }, config);
+ * ```
+ *
  * @param options - Configuration options
  * @returns AgentMiddleware for skills loading and injection
  *
@@ -819,14 +791,12 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
     stateSchema: SkillsStateSchema,
 
     async beforeAgent(state) {
-      const stateHasSkills =
-        "skillsMetadata" in state &&
-        Array.isArray(state.skillsMetadata) &&
-        state.skillsMetadata.length > 0;
-
-      // Already loaded for this thread (same run, a later turn, or a
-      // restored checkpoint) - keep what state holds.
-      if (stateHasSkills) {
+      // What state holds for this thread:
+      // - missing, `undefined` or `null`: not loaded, or the caller reset it
+      //   between runs. Load every source.
+      // - `[]`: loaded, and the sources contain no skills. Keep it.
+      // - a non-empty list: loaded. Keep it.
+      if (state.skillsMetadata != null) {
         return undefined;
       }
 
