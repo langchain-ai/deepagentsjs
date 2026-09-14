@@ -451,6 +451,29 @@ describe("REPL Engine", () => {
       expect(result.ok).toBe(true);
       expect(result.value).toBe("@@ -1,3 +1,4 @@\ncontext\n-old\n+new");
     });
+
+    it("does not strip a header-shaped line preceded by non-notice content from a custom read_file tool", async () => {
+      const readTool = tool(
+        async () => "Example output:\n@@ lines 1-2 of 2 @@\nhello\nworld",
+        {
+          name: "read_file",
+          description: "Read a file",
+          schema: z.object({ path: z.string() }),
+        },
+      );
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [readTool],
+      });
+
+      const result = await session.eval(
+        'await tools.readFile({ path: "/docs.md" })',
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe(
+        "Example output:\n@@ lines 1-2 of 2 @@\nhello\nworld",
+      );
+    });
   });
 
   describe("PTC call budget", () => {

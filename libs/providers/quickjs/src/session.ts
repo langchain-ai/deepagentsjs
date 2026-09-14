@@ -52,6 +52,9 @@ const LINE_NUMBER_RE = /^\s*\d+(?:\.\d+)?\t/;
 const READ_STATUS_HEADER_RE =
   /^@@ lines (\d+)-(\d+)(?: of \d+)?(?: \| .*)? @@$/;
 
+// A bracketed notice line, e.g. `[Output was truncated due to size limits...]`.
+const READ_NOTICE_RE = /^\[.*\]$/;
+
 // Bounds how far down the string `stripLineNumbers` looks for the header, so real content that merely looks like one isn't mistaken for it.
 const MAX_READ_NOTICE_LINES = 2;
 
@@ -159,7 +162,10 @@ function stripLineNumbers(text: string): string {
   const headerIndex = lines
     .slice(0, MAX_READ_NOTICE_LINES + 1)
     .findIndex((l) => READ_STATUS_HEADER_RE.test(l));
-  if (headerIndex !== -1) {
+  if (
+    headerIndex !== -1 &&
+    lines.slice(0, headerIndex).every((l) => READ_NOTICE_RE.test(l))
+  ) {
     return lines.slice(headerIndex + 1).join("\n");
   }
 
