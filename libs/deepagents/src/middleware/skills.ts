@@ -219,10 +219,38 @@ export const SkillMetadataEntrySchema = z.object({
 export type SkillMetadataEntry = z.infer<typeof SkillMetadataEntrySchema>;
 
 /**
+ * State value for a middleware's `skillsMetadata` field.
+ *
+ * A middleware can only read and write the fields declared on its own state
+ * schema. A middleware that needs `skillsMetadata` — to inspect the skills
+ * loaded for the thread, or to set the field to `null` and make the next run
+ * reload every source — declares it with this value.
+ *
+ * Treat the value as opaque: it is meant to be passed to `StateSchema`, and
+ * its concrete type is an implementation detail that may change. To type an
+ * individual entry, use {@link SkillMetadataEntry}.
+ *
+ * @example
+ * ```typescript
+ * import { createMiddleware } from "langchain";
+ * import { StateSchema } from "@langchain/langgraph";
+ * import { skillsMetadataValue } from "deepagents";
+ *
+ * const reloadEditedSkills = createMiddleware({
+ *   name: "ReloadEditedSkills",
+ *   stateSchema: new StateSchema({ skillsMetadata: skillsMetadataValue }),
+ *   afterAgent: (state) =>
+ *     agentEditedSkills(state) ? { skillsMetadata: null } : undefined,
+ * });
+ * ```
+ */
+export const skillsMetadataValue = z.array(SkillMetadataEntrySchema).nullish();
+
+/**
  * State schema for skills middleware.
  */
 const SkillsStateSchema = new StateSchema({
-  skillsMetadata: z.array(SkillMetadataEntrySchema).nullish(),
+  skillsMetadata: skillsMetadataValue,
   files: filesValue,
 });
 
