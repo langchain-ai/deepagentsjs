@@ -84,6 +84,7 @@ export {
   createSkillsMiddleware,
   type SkillsMiddlewareOptions,
   type SkillMetadata,
+  type SkillMetadataEntry,
   // Skills constants
   MAX_SKILL_FILE_SIZE,
   MAX_SKILL_NAME_LENGTH,

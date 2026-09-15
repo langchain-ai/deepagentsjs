@@ -31,8 +31,10 @@ export {
 // Skills middleware - backend-agnostic (matches Python's SkillsMiddleware interface)
 export {
   createSkillsMiddleware,
+  type SkillsMiddleware,
   type SkillsMiddlewareOptions,
   type SkillMetadata,
+  type SkillMetadataEntry,
   // Constants
   MAX_SKILL_FILE_SIZE,
   MAX_SKILL_NAME_LENGTH,

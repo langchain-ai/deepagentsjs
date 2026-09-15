@@ -196,7 +196,7 @@ export interface SkillsMiddlewareOptions {
    * ]
    * ```
    */
-  sources: string[];
+  sources: readonly string[];
 }
 
 /**
@@ -631,7 +631,7 @@ async function listSkillsFromBackend(
  * Format skills locations for display in system prompt.
  * Shows priority indicator for the last source (highest priority).
  */
-function formatSkillsLocations(sources: string[]): string {
+function formatSkillsLocations(sources: readonly string[]): string {
   if (sources.length === 0) {
     return "**Skills Sources:** None configured";
   }
@@ -660,7 +660,7 @@ function formatSkillsLocations(sources: string[]): string {
  */
 export function formatSkillsList(
   skills: SkillMetadata[],
-  sources: string[],
+  sources: readonly string[],
 ): string {
   if (skills.length === 0) {
     const paths = sources.map((s) => `\`${s}\``).join(" or ");
@@ -849,3 +849,12 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
     },
   });
 }
+
+/**
+ * The middleware value returned by {@link createSkillsMiddleware}.
+ *
+ * Exported so `createDeepAgent` can splice the skills state (`skillsMetadata`)
+ * into an agent's inferred state when the `skills` option is present, without
+ * the caller having to mount the middleware by hand.
+ */
+export type SkillsMiddleware = ReturnType<typeof createSkillsMiddleware>;
