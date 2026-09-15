@@ -52,8 +52,9 @@ const LINE_NUMBER_RE = /^\s*\d+(?:\.\d+)?\t/;
 const READ_STATUS_HEADER_RE =
   /^@@ lines (\d+)-(\d+)(?: of \d+)?(?: \| .*)? @@$/;
 
-// A bracketed notice line, e.g. `[Output was truncated due to size limits...]`.
-const READ_NOTICE_RE = /^\[.*\]$/;
+// Matches only fs.ts's two known notices, by opening clause (not full prose, to survive wording tweaks) — anything else bracketed is real content.
+const READ_NOTICE_RE =
+  /^\[(?:Output was truncated due to size limits|Requested offset -?\d+(?:\.\d+)? is before the start of the file)\b.*\]$/;
 
 // Bounds how far down the string `stripLineNumbers` looks for the header, so real content that merely looks like one isn't mistaken for it.
 const MAX_READ_NOTICE_LINES = 2;
