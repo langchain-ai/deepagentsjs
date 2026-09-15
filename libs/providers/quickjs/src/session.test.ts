@@ -409,6 +409,138 @@ describe("REPL Engine", () => {
       expect(result.ok).toBe(true);
       expect(result.value).toBe("persisted");
     });
+
+    it("strips read_file's status header before handing content to sandboxed code", async () => {
+      const readTool = tool(
+        async () => '@@ lines 1-2 of 2 @@\n{"a":1}\n{"b":2}',
+        {
+          name: "read_file",
+          description: "Read a file",
+          schema: z.object({ path: z.string() }),
+        },
+      );
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [readTool],
+      });
+
+      const result = await session.eval(
+        'await tools.readFile({ path: "/data.json" })',
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe('{"a":1}\n{"b":2}');
+    });
+
+    it("does not mistake a diff hunk header for read_file's status header", async () => {
+      const readTool = tool(
+        async () => "@@ -1,3 +1,4 @@\ncontext\n-old\n+new",
+        {
+          name: "read_file",
+          description: "Read a file",
+          schema: z.object({ path: z.string() }),
+        },
+      );
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [readTool],
+      });
+
+      const result = await session.eval(
+        'await tools.readFile({ path: "/change.patch" })',
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("@@ -1,3 +1,4 @@\ncontext\n-old\n+new");
+    });
+
+    it("does not strip a header-shaped line preceded by non-notice content from a custom read_file tool", async () => {
+      const readTool = tool(
+        async () => "Example output:\n@@ lines 1-2 of 2 @@\nhello\nworld",
+        {
+          name: "read_file",
+          description: "Read a file",
+          schema: z.object({ path: z.string() }),
+        },
+      );
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [readTool],
+      });
+
+      const result = await session.eval(
+        'await tools.readFile({ path: "/docs.md" })',
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe(
+        "Example output:\n@@ lines 1-2 of 2 @@\nhello\nworld",
+      );
+    });
+
+    it("does not treat an arbitrary bracketed line as a recognized notice", async () => {
+      const readTool = tool(
+        async () => "[example]\n@@ lines 1-2 of 2 @@\nhello\nworld",
+        {
+          name: "read_file",
+          description: "Read a file",
+          schema: z.object({ path: z.string() }),
+        },
+      );
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [readTool],
+      });
+
+      const result = await session.eval(
+        'await tools.readFile({ path: "/docs.md" })',
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe(
+        "[example]\n@@ lines 1-2 of 2 @@\nhello\nworld",
+      );
+    });
+
+    it("strips a real truncation notice together with the header", async () => {
+      const readTool = tool(
+        async () =>
+          "[Output was truncated due to size limits. The file content is very large.]\n@@ lines 1-2 of 100 | truncated due to size @@\nhello\nworld",
+        {
+          name: "read_file",
+          description: "Read a file",
+          schema: z.object({ path: z.string() }),
+        },
+      );
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [readTool],
+      });
+
+      const result = await session.eval(
+        'await tools.readFile({ path: "/large.txt" })',
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("hello\nworld");
+    });
+
+    it("strips a real offset-clamp notice together with the header", async () => {
+      const readTool = tool(
+        async () =>
+          "[Requested offset -1 is before the start of the file; read from line 1 instead.]\n@@ lines 1-2 of 2 @@\nhello\nworld",
+        {
+          name: "read_file",
+          description: "Read a file",
+          schema: z.object({ path: z.string() }),
+        },
+      );
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [readTool],
+      });
+
+      const result = await session.eval(
+        'await tools.readFile({ path: "/notes.txt" })',
+        TIMEOUT,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("hello\nworld");
+    });
   });
 
   describe("PTC call budget", () => {

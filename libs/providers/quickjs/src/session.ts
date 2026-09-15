@@ -49,6 +49,16 @@ export const DEFAULT_MAX_SUBAGENT_CONCURRENCY = 32;
 
 const LINE_NUMBER_RE = /^\s*\d+(?:\.\d+)?\t/;
 
+const READ_STATUS_HEADER_RE =
+  /^@@ lines (\d+)-(\d+)(?: of \d+)?(?: \| .*)? @@$/;
+
+// Matches only fs.ts's two known notices, by opening clause (not full prose, to survive wording tweaks) — anything else bracketed is real content.
+const READ_NOTICE_RE =
+  /^\[(?:Output was truncated due to size limits|Requested offset -?\d+(?:\.\d+)? is before the start of the file)\b.*\]$/;
+
+// Bounds how far down the string `stripLineNumbers` looks for the header, so real content that merely looks like one isn't mistaken for it.
+const MAX_READ_NOTICE_LINES = 2;
+
 const variantImport = import("@jitl/quickjs-ng-wasmfile-release-asyncify");
 
 /**
@@ -129,24 +139,35 @@ function extractToolText(result: unknown): string {
 }
 
 /**
- * Remove the `cat -n` line-number prefix from every line of a string.
+ * Remove the `cat -n` line-number prefix from every line of a string, or
+ * the newer `@@ lines A-B ... @@` status header `read_file` now uses instead.
  *
  * The filesystem backend formats file content with line numbers in the
  * form `"     N\t"` so human readers can navigate by line. That prefix
  * is useful for the agent but noise for QuickJS code that parses the
  * text programmatically (e.g. swarm reading `/context.txt`).
  *
- * The function is conservative: if any non-empty line lacks the prefix,
- * the text is returned unchanged so nothing is silently corrupted.
+ * The function is conservative: if neither format matches, the text is
+ * returned unchanged so nothing is silently corrupted.
  *
- * @param text - Raw file content, possibly line-number prefixed.
- * @returns Content with line-number prefixes stripped, or the original
- *          text if it doesn't match the expected format throughout.
+ * @param text - Raw file content, possibly line-number or header prefixed.
+ * @returns Content with the prefix or header stripped, or the original
+ *          text if it doesn't match either expected format.
  */
 function stripLineNumbers(text: string): string {
   const lines = text.split("\n");
   if (lines.length === 0) {
     return text;
+  }
+
+  const headerIndex = lines
+    .slice(0, MAX_READ_NOTICE_LINES + 1)
+    .findIndex((l) => READ_STATUS_HEADER_RE.test(l));
+  if (
+    headerIndex !== -1 &&
+    lines.slice(0, headerIndex).every((l) => READ_NOTICE_RE.test(l))
+  ) {
+    return lines.slice(headerIndex + 1).join("\n");
   }
 
   if (!lines.every((l) => l === "" || LINE_NUMBER_RE.test(l))) {
