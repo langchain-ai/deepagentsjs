@@ -24,7 +24,11 @@ import type {
 
 import type { AnyBackendProtocol } from "./backends/protocol.js";
 import type { SystemPromptConfig } from "./compat.js";
-import type { AsyncSubAgent, SubAgent } from "./middleware/index.js";
+import type {
+  AsyncSubAgent,
+  SkillsMiddleware,
+  SubAgent,
+} from "./middleware/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type {
   AnnotationRoot,
@@ -489,6 +493,29 @@ export type InferSubagentReactAgentType<
     : never;
 
 /**
+ * Middleware that `createDeepAgent` mounts only when the corresponding option
+ * is passed, expressed at the type level so the agent's state reflects it.
+ *
+ * `skills` mounts `SkillsMiddleware`, which contributes `skillsMetadata` to
+ * state. Callers therefore get `skillsMetadata` on `invoke`/`updateState`
+ * purely from `skills: [...]`, with no need to mount the middleware manually.
+ *
+ * Mirrors the runtime condition `skills != null && skills.length > 0`: an
+ * omitted option or an empty literal (`skills: []`) mounts nothing and
+ * contributes no state. A non-literal `string[]` has no statically known
+ * length, so it is treated as mounting the middleware.
+ *
+ * @typeParam TSkills - The `skills` option as passed (or `undefined` if omitted)
+ */
+export type InferOptionalMiddleware<
+  TSkills extends readonly string[] | undefined,
+> = [TSkills] extends [undefined]
+  ? readonly []
+  : [TSkills] extends [readonly []]
+    ? readonly []
+    : readonly [SkillsMiddleware];
+
+/**
  * Configuration parameters for creating a Deep Agent
  * Matches Python's create_deep_agent parameters
  *
@@ -499,6 +526,7 @@ export type InferSubagentReactAgentType<
  * @typeParam TTools - The tools array type
  * @typeParam TStreamTransformers - Custom stream transformer factories
  * @typeParam TStateSchema - The custom state schema type
+ * @typeParam TSkills - The `skills` option, used to infer skills-middleware state
  */
 export interface CreateDeepAgentParams<
   TResponse extends SupportedResponseFormat = SupportedResponseFormat,
@@ -514,6 +542,7 @@ export interface CreateDeepAgentParams<
     readonly [],
   TStateSchema extends AnyStateSchema | InteropZodObject | undefined =
     undefined,
+  TSkills extends readonly string[] | undefined = readonly string[] | undefined,
 > {
   /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
   model?: BaseLanguageModel | string;
@@ -622,7 +651,7 @@ export interface CreateDeepAgentParams<
    * });
    * ```
    */
-  skills?: string[];
+  skills?: TSkills;
   /**
    * Filesystem permission rules for this agent.
    *

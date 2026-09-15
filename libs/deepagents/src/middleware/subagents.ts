@@ -266,7 +266,7 @@ export interface SubAgent {
    * };
    * ```
    */
-  skills?: string[];
+  skills?: readonly string[];
 
   /**
    * Structured output response format for the subagent.

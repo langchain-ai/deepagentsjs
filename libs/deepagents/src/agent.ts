@@ -45,6 +45,7 @@ import type {
   DeepAgent,
   DeepAgentTypeConfig,
   FlattenSubAgentMiddleware,
+  InferOptionalMiddleware,
   InferStructuredResponse,
   SupportedResponseFormat,
 } from "./types.js";
@@ -152,6 +153,7 @@ export function createDeepAgent<
   > = readonly [],
   TStateSchema extends AnyStateSchema | InteropZodObject | undefined =
     undefined,
+  const TSkills extends readonly string[] | undefined = undefined,
 >(
   params: CreateDeepAgentParams<
     TResponse,
@@ -160,7 +162,8 @@ export function createDeepAgent<
     TSubagents,
     TTools,
     TStreamTransformers,
-    TStateSchema
+    TStateSchema,
+    TSkills
   > = {} as CreateDeepAgentParams<
     TResponse,
     ContextSchema,
@@ -168,7 +171,8 @@ export function createDeepAgent<
     TSubagents,
     TTools,
     TStreamTransformers,
-    TStateSchema
+    TStateSchema,
+    TSkills
   >,
 ) {
   const {
@@ -551,6 +555,9 @@ export function createDeepAgent<
    * This ensures InferMiddlewareStates captures state from both sources
    */
   type AllMiddleware = readonly [
+    // Middleware mounted only when its option is present (see the runtime
+    // `skillsMiddleware` spread above) — keeps state in sync with the options.
+    ...InferOptionalMiddleware<TSkills>,
     ...typeof builtInMiddleware,
     ...TMiddleware,
     ...FlattenSubAgentMiddleware<TSubagents>,
