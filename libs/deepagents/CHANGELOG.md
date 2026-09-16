@@ -1,5 +1,32 @@
 # deepagents
 
+## 1.13.5
+
+### Patch Changes
+
+- [#861](https://github.com/langchain-ai/deepagentsjs/pull/861) [`7f8d150`](https://github.com/langchain-ai/deepagentsjs/commit/7f8d150730a8c27b0dc852764406c9272967a440) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - feat(filesystem): replace read_file's line-number gutter with a status header
+  
+  Before:
+  ```
+       1	hello
+       2	world
+  ```
+  
+  After:
+  ```
+  @@ lines 1-2 of 2 @@
+  hello
+  world
+  ```
+  
+  `read_file` now states its line range once, in a `@@ lines A-B[ of T] | ... @@` header above unmodified source, instead of a per-line prefix. Truncation and a clamped negative `offset` are now disclosed as terse header fields instead of prose.
+  
+  The quickjs provider's `stripLineNumbers` is updated to strip the new header (with a fallback to the legacy format) so sandboxed code still gets clean file content.
+
+- [#847](https://github.com/langchain-ai/deepagentsjs/pull/847) [`9be2581`](https://github.com/langchain-ai/deepagentsjs/commit/9be2581ddae51f57ca6153e100d8b87ccf2c7c50) Thanks [@richardscarrott](https://github.com/richardscarrott)! - fix(deepagents): pin skills metadata on per-thread basis
+  
+  `createSkillsMiddleware` stored loaded skills in a `loadedSkills` closure, created once per middleware instance and reused for every invocation that instance serves. A single agent commonly serves many threads, so the first thread to load won for all of them: later threads were given the first thread's skills metadata and never saw their own. Skills are now loaded per invocation from graph state.
+
 ## 1.13.4
 
 ### Patch Changes
