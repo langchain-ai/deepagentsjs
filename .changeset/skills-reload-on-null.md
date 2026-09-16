@@ -6,7 +6,7 @@ feat(deepagents): reload skills when `skillsMetadata` is set to `null`
 
 Skills are loaded once per thread and kept in state, so a long-lived thread never saw skills added, edited or deleted after its first run. Setting `skillsMetadata` to `null` now makes the next model call re-read every source and replace the stored list. A thread whose sources hold no skills also counts as loaded, so it stops listing the backend on every run — including threads checkpointed by earlier versions, which store `[]` and need an explicit `null` to reload.
 
-Loading moved from `beforeAgent` to `beforeModel`, matching Python's `SkillsMiddleware`, so a reload is served by the next model call rather than the next run. Two consequences:
+Loading moved from `beforeAgent` to `beforeModel`, so a reload is served by the next model call rather than the next run. Two consequences:
 
 - A middleware of your own can invalidate mid-run, from `afterModel`, and the following model call sees the fresh list.
 - With a `StateBackend`, a load now sees `files` written during the run, so a `SKILL.md` the agent just wrote is picked up.
