@@ -829,7 +829,7 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
       //   Load every source.
       // - `[]`: loaded, and the sources contain no skills. Keep it.
       // - a non-empty list: loaded. Keep it.
-      if (state.skillsMetadata != null) {
+      if (state.skillsMetadata !== null && state.skillsMetadata !== undefined) {
         return undefined;
       }
 

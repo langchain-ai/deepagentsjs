@@ -11,7 +11,6 @@ Loading moved from `beforeAgent` to `beforeModel`, so a reload is served by the 
 - A middleware of your own can invalidate mid-run, from `afterModel`, and the following model call sees the fresh list.
 - With a `StateBackend`, a load now sees `files` written during the run, so a `SKILL.md` the agent just wrote is picked up.
 
-One gap remains: a `jumpTo: "model"` from an `afterModel` hook routes straight to the model node and bypasses `beforeModel`, so a reload pending at that moment is not served until the iteration after. `humanInTheLoopMiddleware` jumps this way when a tool call is rejected, so a reload requested during a review interrupt is skipped for that one model call.
 
 A fork inherits a pending invalidation: a fork spawned in the same iteration that set `skillsMetadata` to `null` reloads from its own sources rather than inheriting the parent's last loaded list.
 
