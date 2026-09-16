@@ -223,8 +223,8 @@ export type SkillMetadataEntry = z.infer<typeof SkillMetadataEntrySchema>;
  *
  * A middleware can only read and write the fields declared on its own state
  * schema. A middleware that needs `skillsMetadata` — to inspect the skills
- * loaded for the thread, or to set the field to `null` and make the next run
- * reload every source — declares it with this value.
+ * loaded for the thread, or to set the field to `null` and make the next model
+ * call reload every source — declares it with this value.
  *
  * Treat the value as opaque: it is meant to be passed to `StateSchema`, and
  * its concrete type is an implementation detail that may change. To type an
@@ -791,14 +791,19 @@ export function validateModulePath(raw: unknown): string | undefined {
  * reads full SKILL.md content only when needed.
  *
  * Skills are loaded once per thread and stored in state. To pick up skills
- * added, edited, or deleted since then, set `skillsMetadata` to `null` between
- * runs; the next run reloads every source:
+ * added, edited, or deleted since then, set `skillsMetadata` to `null`; the
+ * next model call reloads every source:
  *
  * ```ts
  * await agent.updateState(config, { skillsMetadata: null });
  * // or as part of the next run's input
  * await agent.invoke({ messages, skillsMetadata: null }, config);
  * ```
+ *
+ * Loading happens in `beforeModel`, so the reload is served by the next model
+ * call rather than the next run. A middleware of your own can therefore
+ * invalidate from any hook — including mid-run, from `afterModel` — and see
+ * the fresh list on the following call. See {@link skillsMetadataValue}.
  *
  * @param options - Configuration options
  * @returns AgentMiddleware for skills loading and injection
@@ -818,10 +823,10 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
     name: "SkillsMiddleware",
     stateSchema: SkillsStateSchema,
 
-    async beforeAgent(state) {
+    async beforeModel(state) {
       // What state holds for this thread:
-      // - missing, `undefined` or `null`: not loaded, or the caller reset it
-      //   between runs. Load every source.
+      // - missing, `undefined` or `null`: not loaded, or the caller reset it.
+      //   Load every source.
       // - `[]`: loaded, and the sources contain no skills. Keep it.
       // - a non-empty list: loaded. Keep it.
       if (state.skillsMetadata != null) {
@@ -856,7 +861,7 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
     },
 
     wrapModelCall(request, handler) {
-      // Populated by beforeAgent, which runs as its own graph node - its
+      // Populated by beforeModel, which runs as its own graph node - its
       // state update is committed before the model node reads it.
       const skillsMetadata: SkillMetadata[] =
         (request.state?.skillsMetadata as SkillMetadata[]) || [];
