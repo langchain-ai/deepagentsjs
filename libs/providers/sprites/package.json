@@ -1,0 +1,74 @@
+{
+  "name": "@langchain/sprites",
+  "version": "0.0.1",
+  "description": "Fly.io Sprites sandbox backend for deepagents",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsdown",
+    "clean": "rm -rf dist/ .tsdown/",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:int": "vitest run --mode int"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/langchain-ai/deepagentsjs.git"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "langgraph",
+    "langchain",
+    "typescript",
+    "llm",
+    "sprites",
+    "fly.io",
+    "sandbox"
+  ],
+  "author": "LangChain",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/langchain-ai/deepagentsjs/issues"
+  },
+  "homepage": "https://github.com/langchain-ai/deepagentsjs#readme",
+  "dependencies": {
+    "@fly/sprites": "^0.2.1"
+  },
+  "peerDependencies": {
+    "deepagents": ">=1.12.0-rc.0"
+  },
+  "devDependencies": {
+    "deepagents": "workspace:*",
+    "@langchain/sandbox-standard-tests": "workspace:*",
+    "@tsconfig/recommended": "^1.0.13",
+    "@types/node": "^26.1.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "dotenv": "^17.2.3",
+    "tsdown": "^0.22.1",
+    "tsx": "^4.21.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.0.18"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/**/*"
+  ]
+}
