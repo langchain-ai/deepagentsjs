@@ -279,6 +279,26 @@ export function formatContentWithLineNumbers(
 }
 
 /**
+ * Join file content into the unmodified source body of a `read_file` result.
+ *
+ * Source lines are emitted unchanged, with no numbering. A status header
+ * carries the line-range metadata separately, so nothing here needs to
+ * encode line numbers or escape anything.
+ */
+export function formatSourceBlock(content: string | string[]): string {
+  let lines: string[];
+  if (typeof content === "string") {
+    lines = content.split("\n");
+    if (lines.length > 0 && lines[lines.length - 1] === "") {
+      lines = lines.slice(0, -1);
+    }
+  } else {
+    lines = content;
+  }
+  return lines.join("\n");
+}
+
+/**
  * Check if content is empty and return warning message.
  *
  * @param content - Content to check
