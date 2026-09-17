@@ -1,0 +1,111 @@
+.github/workflows/openwiki-update.yml
+  s_c8d8c7b77154f8::t_39bd0e5fd1b285 1-77
+AGENTS.md
+  s_c8d8c7b77154f8::t_3e371886ec1dcd 10-22
+CLAUDE.md
+  s_c8d8c7b77154f8::t_faf70a4e8c94cc 1-7
+openwiki/.claims/architecture/agent-runtime.json
+  s_c8d8c7b77154f8::t_78a188d7816183 1-262
+openwiki/.claims/architecture/backend-storage.json
+  s_c8d8c7b77154f8::t_21ca2f3965d219 1-396
+openwiki/.claims/concepts/context-management.json
+  s_c8d8c7b77154f8::t_4f65ba72fe55a2 1-314
+openwiki/.claims/concepts/delegation.json
+  s_c8d8c7b77154f8::t_a593744b456740 1-394
+openwiki/.claims/concepts/filesystem-tools.json
+  s_c8d8c7b77154f8::t_b7a697c3aa29b2 1-394
+openwiki/.claims/concepts/model-profiles.json
+  s_c8d8c7b77154f8::t_c74dc54dbb2a46 1-218
+openwiki/.claims/integrations/acp.json
+  s_c8d8c7b77154f8::t_875dd0cf513144 1-358
+openwiki/.claims/integrations/quickjs.json
+  s_c8d8c7b77154f8::t_31348544638fcb 1-294
+openwiki/.claims/integrations/sandbox-providers.json
+  s_c8d8c7b77154f8::t_eca17c78c37559 1-362
+openwiki/.claims/operations/ci-release.json
+  s_c8d8c7b77154f8::t_a3803a282259e9 1-214
+openwiki/.claims/operations/configuration-security.json
+  s_c8d8c7b77154f8::t_3abf8251ec58b4 1-356
+openwiki/.claims/quickstart.json
+  s_c8d8c7b77154f8::t_ee0017ac83eafa 1-158
+openwiki/.claims/testing/evals.json
+  s_c8d8c7b77154f8::t_d0ae53b91fd6c6 1-308
+openwiki/.claims/testing/strategy.json
+  s_c8d8c7b77154f8::t_4dc08167c6666b 1-272
+openwiki/.claims/workflows/adding-backend-provider.json
+  s_c8d8c7b77154f8::t_1379dd86e5e07b 1-288
+openwiki/.claims/workflows/agent-run.json
+  s_c8d8c7b77154f8::t_c808eade787ce8 1-312
+openwiki/.claims/workflows/sandbox-backed-agent.json
+  s_c8d8c7b77154f8::t_d0f74f9952f58e 1-364
+openwiki/.last-update.json
+  s_c8d8c7b77154f8::t_65e3692986a669 1-8
+openwiki/.page-manifest.json
+  s_c8d8c7b77154f8::t_666a1c3cd3372b 1-124
+openwiki/INSTRUCTIONS.md
+  s_c8d8c7b77154f8::t_78772d9bde26bb 1
+openwiki/architecture/agent-runtime.md
+  s_c8d8c7b77154f8::t_6222695f133db0 1-195
+openwiki/architecture/backend-storage.md
+  s_c8d8c7b77154f8::t_d8eb3d45e7f895 1-180
+openwiki/architecture/index.md
+  s_c8d8c7b77154f8::t_a31a39c9017031 1-4
+openwiki/concepts/context-management.md
+  s_c8d8c7b77154f8::t_5b9b07da664008 1-173
+openwiki/concepts/delegation.md
+  s_c8d8c7b77154f8::t_bb41fff572a63a 1-253
+openwiki/concepts/filesystem-tools.md
+  s_c8d8c7b77154f8::t_719df9b2920a05 1-138
+openwiki/concepts/index.md
+  s_c8d8c7b77154f8::t_4680a107cbb8a3 1-6
+openwiki/concepts/model-profiles.md
+  s_c8d8c7b77154f8::t_9b7536813075a4 1-179
+openwiki/index.md
+  s_c8d8c7b77154f8::t_818c6db918449b 1-16
+openwiki/integrations/acp.md
+  s_c8d8c7b77154f8::t_f4b4d0c261d487 1-240
+openwiki/integrations/index.md
+  s_c8d8c7b77154f8::t_f1719162f14b9f 1-5
+openwiki/integrations/quickjs.md
+  s_c8d8c7b77154f8::t_b566b7ec5a0f12 1-205
+openwiki/integrations/sandbox-providers.md
+  s_c8d8c7b77154f8::t_e11b11abf04d59 1-191
+openwiki/operations/ci-release.md
+  s_c8d8c7b77154f8::t_fac8c629f61a60 1-196
+openwiki/operations/configuration-security.md
+  s_c8d8c7b77154f8::t_a9c3996d5bf9ef 1-202
+openwiki/operations/index.md
+  s_c8d8c7b77154f8::t_01ed670e2fec29 1-4
+openwiki/quickstart.md
+  s_c8d8c7b77154f8::t_33c306ec96907b 1-172
+openwiki/testing/evals.md
+  s_c8d8c7b77154f8::t_27c79a0c97785a 1-238
+openwiki/testing/index.md
+  s_c8d8c7b77154f8::t_10e5e93f87e0a3 1-4
+openwiki/testing/strategy.md
+  s_c8d8c7b77154f8::t_475f2018075d9e 1-187
+openwiki/workflows/adding-backend-provider.md
+  s_c8d8c7b77154f8::t_9f2ffc7e06b488 1-264
+openwiki/workflows/agent-run.md
+  s_c8d8c7b77154f8::t_610b4c10fff2fe 1-231
+openwiki/workflows/index.md
+  s_c8d8c7b77154f8::t_174633af3116b6 1-5
+openwiki/workflows/sandbox-backed-agent.md
+  s_c8d8c7b77154f8::t_3789975e0e7372 1-285
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "39d24e4cac682faab810c1882da0c7360b495be0",
+  "prompts": {},
+  "sessions": {
+    "s_c8d8c7b77154f8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a08ca1-2759-7491-9b6b-a48dc9f877ed",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Colin Francis <colin.francis@langchain.dev>"
+    }
+  }
+}
