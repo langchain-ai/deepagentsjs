@@ -24,7 +24,11 @@ import type {
 
 import type { AnyBackendProtocol } from "./backends/protocol.js";
 import type { SystemPromptConfig } from "./compat.js";
-import type { AsyncSubAgent, SubAgent } from "./middleware/index.js";
+import type {
+  AsyncSubAgent,
+  SubAgent,
+  SummarizationMiddlewareOptions,
+} from "./middleware/index.js";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import type {
   AnnotationRoot,
@@ -557,6 +561,13 @@ export interface CreateDeepAgentParams<
   stateSchema?: TStateSchema;
   /** Custom middleware to apply after standard middleware */
   middleware?: TMiddleware;
+  /**
+   * Options for the built-in summarization middleware, applied to the main
+   * agent and to every subagent. The middleware `backend` cannot be
+   * overridden here; it always follows the agent backend. When omitted, the
+   * middleware keeps its defaults (auto-computed from the model profile).
+   */
+  summarization?: Omit<SummarizationMiddlewareOptions, "backend">;
   /**
    * List of subagent specifications for task delegation.
    *
