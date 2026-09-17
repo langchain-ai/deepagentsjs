@@ -92,6 +92,11 @@ const EXCLUDED_STATE_KEYS = [
  * the parent's private channels (skills metadata, memory contents, etc.)
  * to rebuild an equivalent prompt.
  *
+ * A pending invalidation propagates: a fork spawned in the same iteration
+ * that set `skillsMetadata` to `null` inherits the `null`, so its mirrored
+ * skills middleware reloads from its own sources rather than seeing the
+ * parent's last loaded list.
+ *
  * Call counts stay excluded: a fork inherits the parent's middleware, so
  * sharing them collides on the parent's channel.
  */
@@ -266,7 +271,7 @@ export interface SubAgent {
    * };
    * ```
    */
-  skills?: string[];
+  skills?: readonly string[];
 
   /**
    * Structured output response format for the subagent.

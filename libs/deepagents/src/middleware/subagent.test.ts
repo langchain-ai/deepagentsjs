@@ -278,19 +278,37 @@ describe("Subagent skills isolation", () => {
     invokeSpy.mockRestore();
   });
 
-  it("should not include skillsMetadata in parent agent final state", async () => {
+  it("should not include subagent skillsMetadata in parent agent final state", async () => {
     /**
      * Test that skillsMetadata from subagent middleware doesn't bubble up to parent.
      *
      * This test verifies that:
      * 1. A subagent with SkillsMiddleware loads skills and populates skillsMetadata in its state
-     * 2. When the subagent completes, skillsMetadata is NOT included in the parent's state
+     * 2. When the subagent completes, the parent's skillsMetadata still holds the parent's own skills
      * 3. The EXCLUDED_STATE_KEYS correctly filters the field from subagent updates
      *
      * This works because skillsMetadata is in EXCLUDED_STATE_KEYS, which tells
      * the subagent middleware to exclude it from the returned state update.
      */
-    const model = new FakeListChatModel({ responses: ["Done"] });
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: `call_${Date.now()}`,
+              name: "task",
+              args: {
+                description: "Use your skills",
+                subagent_type: "skills-agent",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Subagent done",
+        "Done",
+      ],
+    });
 
     // Create subagent with SkillsMiddleware
     const skillsMiddleware = createSkillsMiddleware({
@@ -319,6 +337,7 @@ description: A skill for the subagent
     const checkpointer = new MemorySaver();
     const parentAgent = createDeepAgent({
       model,
+      skills: ["/skills/"],
       checkpointer,
       subagents: [
         {
@@ -332,6 +351,9 @@ description: A skill for the subagent
     const result = await parentAgent.invoke(
       {
         messages: [new HumanMessage("Hello")],
+        files: {
+          "/skills/test-skill/SKILL.md": createFileData(TEST_SKILL_MD),
+        },
       },
       {
         configurable: { thread_id: `test-skills-isolation-${Date.now()}` },
@@ -339,9 +361,75 @@ description: A skill for the subagent
       },
     );
 
-    // Verify skillsMetadata is NOT in the parent agent's final state
+    // Verify the subagent's skillsMetadata didn't replace the parent's
     // This confirms EXCLUDED_STATE_KEYS is working correctly
-    expect(result).not.toHaveProperty("skillsMetadata");
+    expect(result).toMatchObject({
+      skillsMetadata: [{ name: "test-skill" }],
+    });
+  });
+
+  it("should complete parallel task calls without changing the parent's skillsMetadata", async () => {
+    /**
+     * skillsMetadata is a plain state value with no reducer. If subagents
+     * handed it back, a general-purpose subagent and a fork finishing in the
+     * same step would both write it and the run would fail with
+     * INVALID_CONCURRENT_GRAPH_UPDATE. EXCLUDED_STATE_KEYS keeps it out of
+     * every subagent's returned update.
+     */
+    const model = new SequentialFakeChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "call_general_purpose",
+              name: "task",
+              args: { description: "one", subagent_type: "general-purpose" },
+            },
+            {
+              id: "call_fork",
+              name: "task",
+              args: { description: "two", subagent_type: "worker" },
+            },
+          ],
+        }),
+        "subagent done",
+        "subagent done",
+        "parent done",
+      ],
+    });
+
+    const agent = createDeepAgent({
+      model,
+      skills: ["/skills/"],
+      checkpointer: new MemorySaver(),
+      subagents: [
+        {
+          name: "worker",
+          description: "Continues the investigation with full context",
+          mode: "fork",
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      {
+        messages: [new HumanMessage("Investigate this")],
+        files: {
+          "/skills/test-skill/SKILL.md": createFileData(TEST_SKILL_MD),
+        },
+      },
+      {
+        configurable: { thread_id: `test-parallel-skills-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    expect(result).toMatchObject({
+      skillsMetadata: [
+        { name: "test-skill", path: "/skills/test-skill/SKILL.md" },
+      ],
+    });
   });
 });
 

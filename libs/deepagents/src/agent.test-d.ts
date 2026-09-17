@@ -31,6 +31,7 @@ import type {
   InferRegularSubagents,
 } from "./types.js";
 import type { FilesRecord } from "./middleware/fs.js";
+import type { SkillMetadataEntry } from "./middleware/skills.js";
 
 // Test middleware with research state
 const ResearchStateSchema = z.object({
@@ -358,6 +359,81 @@ describe("createDeepAgent types", () => {
 
       expectTypeOf(result.author).toEqualTypeOf<string>();
       expectTypeOf(result.research).toEqualTypeOf<string>();
+    });
+  });
+
+  describe("skills parameter", () => {
+    it("should expose skillsMetadata on the invoke result", async () => {
+      const agent = createDeepAgent({ skills: ["/skills/"] });
+      const result = await agent.invoke({ messages: [] });
+
+      expectTypeOf(result).toHaveProperty("skillsMetadata");
+      expectTypeOf(result.skillsMetadata).not.toBeAny();
+      expectTypeOf(result.skillsMetadata).toEqualTypeOf<
+        SkillMetadataEntry[] | null | undefined
+      >();
+    });
+
+    it("should accept skillsMetadata as an invoke input", async () => {
+      const agent = createDeepAgent({ skills: ["/skills/"] });
+
+      // Resetting skillsMetadata forces a reload on the next run.
+      await agent.invoke({ messages: [], skillsMetadata: null });
+    });
+
+    it("should accept skillsMetadata as a stream input", async () => {
+      const agent = createDeepAgent({ skills: ["/skills/"] });
+
+      await agent.stream({ messages: [], skillsMetadata: null });
+    });
+
+    // NOTE: `updateState` is deliberately untested here. LangGraph types its
+    // second parameter as `Record<string, unknown> | unknown`, which collapses
+    // to `unknown`, so it accepts any object regardless of the agent's state —
+    // an assertion there would pass whether or not this inference works.
+
+    it("should not expose skillsMetadata when skills is omitted", async () => {
+      const agent = createDeepAgent({});
+
+      // @ts-expect-error no skills middleware is mounted, so no skills state
+      await agent.invoke({ messages: [], skillsMetadata: null });
+
+      // @ts-expect-error ... and the same holds for `stream`
+      await agent.stream({ messages: [], skillsMetadata: null });
+    });
+
+    it("should not expose skillsMetadata for an empty skills array", async () => {
+      // Mirrors the runtime guard `skills != null && skills.length > 0`.
+      const agent = createDeepAgent({ skills: [] });
+
+      // @ts-expect-error `skills: []` mounts no skills middleware
+      await agent.invoke({ messages: [], skillsMetadata: null });
+    });
+
+    it("should expose skillsMetadata for a non-literal skills array", async () => {
+      // Length is not statically known, so the middleware is assumed mounted.
+      const sources: string[] = ["/skills/"];
+      const agent = createDeepAgent({ skills: sources });
+
+      await agent.invoke({ messages: [], skillsMetadata: null });
+    });
+
+    it("should merge skills state with middleware and stateSchema state", async () => {
+      const agent = createDeepAgent({
+        skills: ["/skills/"],
+        middleware: [ResearchMiddleware],
+        stateSchema: new StateSchema({ author: z.string() }),
+      });
+      const result = await agent.invoke({
+        messages: [],
+        skillsMetadata: null,
+        research: "findings",
+        author: "me",
+      });
+
+      expectTypeOf(result.author).toEqualTypeOf<string>();
+      expectTypeOf(result.research).toEqualTypeOf<string>();
+      expectTypeOf(result).toHaveProperty("skillsMetadata");
     });
   });
 });

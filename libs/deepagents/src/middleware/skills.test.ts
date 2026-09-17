@@ -1,15 +1,17 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { FakeListChatModel } from "@langchain/core/utils/testing";
 import {
+  AIMessage,
   HumanMessage,
   SystemMessage,
   type BaseMessage,
 } from "@langchain/core/messages";
-import { MemorySaver, InMemoryStore } from "@langchain/langgraph";
+import { MemorySaver, InMemoryStore, StateSchema } from "@langchain/langgraph";
+import { createMiddleware } from "langchain";
 
 import {
   createSkillsMiddleware,
-  skillsMetadataReducer,
+  skillsMetadataValue,
   MAX_SKILL_COMPATIBILITY_LENGTH,
   validateSkillName,
   validateModulePath,
@@ -66,8 +68,57 @@ function skillNames(value: unknown): string[] {
   return entries.map((entry) => entry.name);
 }
 
+/**
+ * Helper to extract the system prompt of every model call the spy recorded,
+ * in call order. The system message can have content as a string or as an
+ * array of content blocks; `.text` flattens both.
+ */
+function getSystemPromptsFromSpy(
+  invokeSpy: ReturnType<typeof vi.spyOn>,
+): string[] {
+  return invokeSpy.mock.calls.map((call: unknown[]) => {
+    const messages = call?.[0] as BaseMessage[] | undefined;
+    const systemMessage = messages?.find(SystemMessage.isInstance);
+    return systemMessage?.text ?? "";
+  });
+}
+
+/**
+ * Helper to extract system prompt content from the most recent model call.
+ */
+function getSystemPromptFromSpy(
+  invokeSpy: ReturnType<typeof vi.spyOn>,
+): string {
+  const prompts = getSystemPromptsFromSpy(invokeSpy);
+  return prompts[prompts.length - 1] ?? "";
+}
+
+/** Wraps a backend so a test can count how many directories it lists. */
+function countListings(backend: BackendProtocolV2) {
+  let listings = 0;
+  const countingBackend: BackendProtocolV2 = {
+    ...backend,
+    ls: (path: string) => {
+      listings += 1;
+      return backend.ls(path);
+    },
+  };
+  return { backend: countingBackend, listings: () => listings };
+}
+
+/** Writes a minimal SKILL.md for `name` into a StoreBackend namespace. */
+function putSkill(store: InMemoryStore, namespace: string[], name: string) {
+  const now = new Date().toISOString();
+  return store.put(namespace, `/skills/${name}/SKILL.md`, {
+    content: skillMd(name),
+    mimeType: "text/plain",
+    created_at: now,
+    modified_at: now,
+  });
+}
+
 describe("createSkillsMiddleware", () => {
-  describe("beforeAgent", () => {
+  describe("beforeModel", () => {
     it("should load skills from configured sources", async () => {
       const mockBackend = createMockBackend({
         files: {
@@ -84,7 +135,7 @@ describe("createSkillsMiddleware", () => {
       });
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       expect(result).toBeDefined();
       expect(result?.skillsMetadata).toHaveLength(1);
@@ -115,7 +166,7 @@ describe("createSkillsMiddleware", () => {
       });
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       expect(result).toBeDefined();
       expect(result?.skillsMetadata).toHaveLength(2);
@@ -155,7 +206,7 @@ description: Project version of web research
       });
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       expect(result).toBeDefined();
       expect(result?.skillsMetadata).toHaveLength(1);
@@ -178,7 +229,7 @@ description: Project version of web research
       });
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       expect(result).toBeDefined();
       expect(result?.skillsMetadata).toEqual([]);
@@ -200,7 +251,7 @@ description: Project version of web research
       });
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       expect(result?.skillsMetadata).toEqual([]);
     });
@@ -224,7 +275,7 @@ This skill has no valid frontmatter.`;
       });
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       expect(result?.skillsMetadata).toEqual([]);
     });
@@ -248,7 +299,7 @@ This skill has no valid frontmatter.`;
         { name: "cached", description: "cached skill" },
       ];
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({
+      const result = await middleware.beforeModel?.({
         skillsMetadata: existingMetadata,
       });
 
@@ -273,7 +324,7 @@ This skill has no valid frontmatter.`;
       });
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       expect(backendFactory).toHaveBeenCalled();
       expect(result?.skillsMetadata).toHaveLength(1);
@@ -307,7 +358,7 @@ description: A skill with very large content
         .mockImplementation(() => {});
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       // Should skip the large skill
       expect(result?.skillsMetadata).toEqual([]);
@@ -335,7 +386,7 @@ description: A skill with very large content
       });
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       // Should load from /skills/good/ even though /skills/bad/ failed
       expect(result?.skillsMetadata).toHaveLength(1);
@@ -376,7 +427,7 @@ description: A skill with very large content
       });
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       expect(result?.skillsMetadata).toHaveLength(1);
       expect(result?.skillsMetadata[0].name).toBe("web-research");
@@ -412,7 +463,7 @@ description: A skill with very large content
       });
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       // Should skip the skill that returned error
       expect(result?.skillsMetadata).toEqual([]);
@@ -428,14 +479,7 @@ description: A skill with very large content
         },
       });
 
-      let listings = 0;
-      const countingBackend: BackendProtocolV2 = {
-        ...mockBackend,
-        ls: (path: string) => {
-          listings += 1;
-          return mockBackend.ls(path);
-        },
-      };
+      const { backend: countingBackend, listings } = countListings(mockBackend);
 
       const middleware = createSkillsMiddleware({
         backend: countingBackend,
@@ -444,16 +488,64 @@ description: A skill with very large content
 
       // First call - should load skills
       // @ts-expect-error - typing issue in LangChain
-      const result1 = await middleware.beforeAgent?.({});
+      const result1 = await middleware.beforeModel?.({});
       expect(skillNames(result1)).toEqual(["web-research"]);
-      expect(listings).toBe(1);
+      expect(listings()).toBe(1);
 
       // Second call with those skills in state - should skip the reload
       // without going back to the backend.
       // @ts-expect-error - typing issue in LangChain
-      const result2 = await middleware.beforeAgent?.(result1);
+      const result2 = await middleware.beforeModel?.(result1);
       expect(result2).toBeUndefined();
-      expect(listings).toBe(1);
+      expect(listings()).toBe(1);
+    });
+
+    it.each([null, undefined])(
+      "should load skills when skillsMetadata is %s",
+      async (skillsMetadata) => {
+        const mockBackend = createMockBackend({
+          files: {
+            "/skills/user/web-research/SKILL.md": VALID_SKILL_CONTENT,
+          },
+          directories: {
+            "/skills/user/": [{ name: "web-research", type: "directory" }],
+          },
+        });
+
+        const middleware = createSkillsMiddleware({
+          backend: mockBackend,
+          sources: ["/skills/user/"],
+        });
+
+        // @ts-expect-error - typing issue in LangChain
+        const result = await middleware.beforeModel?.({ skillsMetadata });
+
+        expect(skillNames(result)).toEqual(["web-research"]);
+      },
+    );
+
+    it("should not reload when a previous load found no skills", async () => {
+      const mockBackend = createMockBackend({
+        files: {
+          "/skills/user/web-research/SKILL.md": VALID_SKILL_CONTENT,
+        },
+        directories: {
+          "/skills/user/": [{ name: "web-research", type: "directory" }],
+        },
+      });
+
+      const { backend: countingBackend, listings } = countListings(mockBackend);
+
+      const middleware = createSkillsMiddleware({
+        backend: countingBackend,
+        sources: ["/skills/user/"],
+      });
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeModel?.({ skillsMetadata: [] });
+
+      expect(result).toBeUndefined();
+      expect(listings()).toBe(0);
     });
 
     it("should load skills per invocation rather than once per middleware instance", async () => {
@@ -474,9 +566,9 @@ description: A skill with very large content
       });
 
       // @ts-expect-error - typing issue in LangChain
-      const threadA = await middleware.beforeAgent?.({ skill: "alpha" });
+      const threadA = await middleware.beforeModel?.({ skill: "alpha" });
       // @ts-expect-error - typing issue in LangChain
-      const threadB = await middleware.beforeAgent?.({ skill: "beta" });
+      const threadB = await middleware.beforeModel?.({ skill: "beta" });
 
       expect(skillNames(threadA)).toEqual(["alpha"]);
       expect(skillNames(threadB)).toEqual(["beta"]);
@@ -505,7 +597,7 @@ description: A skill with very large content
       };
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.(checkpointState);
+      const result = await middleware.beforeModel?.(checkpointState);
 
       // Should return undefined (not reload)
       expect(result).toBeUndefined();
@@ -539,7 +631,7 @@ description: ${longDescription}
         .mockImplementation(() => {});
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       // Should truncate to 1024 characters
       expect(result?.skillsMetadata).toHaveLength(1);
@@ -579,7 +671,7 @@ description: Skill with mismatched name
         .mockImplementation(() => {});
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       // Should still load the skill (warning only, backwards compatible)
       expect(result?.skillsMetadata).toHaveLength(1);
@@ -623,7 +715,7 @@ description: Skill with invalid name format
         .mockImplementation(() => {});
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       // Should still load the skill (warning only)
       expect(result?.skillsMetadata).toHaveLength(1);
@@ -662,7 +754,7 @@ compatibility: node >= 18
       });
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       expect(result?.skillsMetadata).toHaveLength(1);
       expect(result?.skillsMetadata[0].license).toBe("MIT");
@@ -693,7 +785,7 @@ allowed-tools: read_file write_file grep
       });
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       expect(result?.skillsMetadata).toHaveLength(1);
       expect(result?.skillsMetadata[0].allowedTools).toEqual([
@@ -730,7 +822,7 @@ description: [invalid yaml syntax: unclosed bracket
         .mockImplementation(() => {});
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       // Should skip the skill with YAML error
       expect(result?.skillsMetadata).toEqual([]);
@@ -759,7 +851,7 @@ description: [invalid yaml syntax: unclosed bracket
       });
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       // Should normalize path (adding trailing /) and load skill successfully
       expect(result?.skillsMetadata).toHaveLength(1);
@@ -785,7 +877,7 @@ description: [invalid yaml syntax: unclosed bracket
       });
 
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.({});
+      const result = await middleware.beforeModel?.({});
 
       // Should normalize path (adding trailing \) and load skill successfully
       expect(result?.skillsMetadata).toHaveLength(1);
@@ -813,7 +905,7 @@ description: [invalid yaml syntax: unclosed bracket
         });
 
         // @ts-expect-error - typing issue in LangChain
-        const result = await middleware.beforeAgent?.({});
+        const result = await middleware.beforeModel?.({});
 
         expect(result?.skillsMetadata).toHaveLength(1);
         expect(result?.skillsMetadata[0].name).toBe("web-research");
@@ -843,7 +935,7 @@ description: [invalid yaml syntax: unclosed bracket
         });
 
         // @ts-expect-error - typing issue in LangChain
-        const result = await middleware.beforeAgent?.({});
+        const result = await middleware.beforeModel?.({});
 
         expect(result?.skillsMetadata).toHaveLength(2);
         expect(result?.skillsMetadata.map((s: any) => s.name).sort()).toEqual([
@@ -870,7 +962,7 @@ description: [invalid yaml syntax: unclosed bracket
         });
 
         // @ts-expect-error - typing issue in LangChain
-        const result = await middleware.beforeAgent?.({});
+        const result = await middleware.beforeModel?.({});
 
         expect(result?.skillsMetadata).toHaveLength(2);
         expect(result?.skillsMetadata.map((s: any) => s.name).sort()).toEqual([
@@ -895,7 +987,7 @@ description: [invalid yaml syntax: unclosed bracket
         });
 
         // @ts-expect-error - typing issue in LangChain
-        const result = await middleware.beforeAgent?.({});
+        const result = await middleware.beforeModel?.({});
 
         // directoryName extracted from source path must match the skill name
         expect(result?.skillsMetadata[0].name).toBe("web-research");
@@ -923,7 +1015,7 @@ description: [invalid yaml syntax: unclosed bracket
           .mockImplementation(() => {});
 
         // @ts-expect-error - typing issue in LangChain
-        const result = await middleware.beforeAgent?.({});
+        const result = await middleware.beforeModel?.({});
 
         expect(result?.skillsMetadata).toEqual([]);
         consoleWarnSpy.mockRestore();
@@ -945,7 +1037,7 @@ description: [invalid yaml syntax: unclosed bracket
         });
 
         // @ts-expect-error - typing issue in LangChain
-        const result = await middleware.beforeAgent?.({});
+        const result = await middleware.beforeModel?.({});
 
         expect(result?.skillsMetadata).toHaveLength(1);
         expect(result?.skillsMetadata[0].name).toBe("web-research");
@@ -978,7 +1070,7 @@ description: [invalid yaml syntax: unclosed bracket
         });
 
         // @ts-expect-error - typing issue in LangChain
-        const result = await middleware.beforeAgent?.({});
+        const result = await middleware.beforeModel?.({});
 
         expect(result?.skillsMetadata).toHaveLength(1);
         expect(result?.skillsMetadata[0].name).toBe("web-research");
@@ -1009,7 +1101,7 @@ description: Overridden version of web research
         });
 
         // @ts-expect-error - typing issue in LangChain
-        const result = await middleware.beforeAgent?.({});
+        const result = await middleware.beforeModel?.({});
 
         expect(result?.skillsMetadata).toHaveLength(1);
         expect(result?.skillsMetadata[0].description).toBe(
@@ -1199,7 +1291,7 @@ description: Overridden version of web research
 
       // Step 1: Load skills
       // @ts-expect-error - typing issue in LangChain
-      const stateUpdate = await middleware.beforeAgent?.({});
+      const stateUpdate = await middleware.beforeModel?.({});
       expect(stateUpdate?.skillsMetadata).toHaveLength(2);
 
       // Step 2: Inject skills into prompt
@@ -1241,9 +1333,9 @@ description: Overridden version of web research
         ],
       };
 
-      // Step 1: beforeAgent should skip reload when skillsMetadata exists
+      // Step 1: beforeModel should skip reload when skillsMetadata exists
       // @ts-expect-error - typing issue in LangChain
-      const result = await middleware.beforeAgent?.(checkpointState);
+      const result = await middleware.beforeModel?.(checkpointState);
       expect(result).toBeUndefined();
 
       // Step 2: wrapModelCall should use the restored skills from state
@@ -1260,192 +1352,6 @@ description: Overridden version of web research
       expect(modifiedRequest.systemMessage.text).toContain(
         "Restored from checkpoint",
       );
-    });
-  });
-});
-
-describe("skillsMetadataReducer", () => {
-  // Helper to create a minimal valid skill metadata entry
-  function createSkill(
-    name: string,
-    description = "A test skill",
-  ): SkillMetadataEntry {
-    return {
-      name,
-      description,
-      path: `/skills/${name}/SKILL.md`,
-    };
-  }
-
-  describe("edge cases", () => {
-    it("should return empty array when both current and update are undefined", () => {
-      const result = skillsMetadataReducer(undefined, undefined);
-      expect(result).toEqual([]);
-    });
-
-    it("should return empty array when current is undefined and update is empty", () => {
-      const result = skillsMetadataReducer(undefined, []);
-      expect(result).toEqual([]);
-    });
-
-    it("should return current when update is undefined", () => {
-      const current = [createSkill("skill-a")];
-      const result = skillsMetadataReducer(current, undefined);
-      expect(result).toEqual(current);
-    });
-
-    it("should return current when update is empty array", () => {
-      const current = [createSkill("skill-a")];
-      const result = skillsMetadataReducer(current, []);
-      expect(result).toEqual(current);
-    });
-
-    it("should return update when current is undefined", () => {
-      const update = [createSkill("skill-a")];
-      const result = skillsMetadataReducer(undefined, update);
-      expect(result).toEqual(update);
-    });
-
-    it("should return update when current is empty array", () => {
-      const update = [createSkill("skill-a")];
-      const result = skillsMetadataReducer([], update);
-      expect(result).toEqual(update);
-    });
-  });
-
-  describe("merging behavior", () => {
-    it("should merge non-overlapping skills from current and update", () => {
-      const current = [createSkill("skill-a")];
-      const update = [createSkill("skill-b")];
-
-      const result = skillsMetadataReducer(current, update);
-
-      expect(result).toHaveLength(2);
-      expect(result.map((s) => s.name).sort()).toEqual(["skill-a", "skill-b"]);
-    });
-
-    it("should override current skill with update when names match", () => {
-      const current = [createSkill("skill-a", "Current description")];
-      const update = [createSkill("skill-a", "Updated description")];
-
-      const result = skillsMetadataReducer(current, update);
-
-      expect(result).toHaveLength(1);
-      expect(result[0].name).toBe("skill-a");
-      expect(result[0].description).toBe("Updated description");
-    });
-
-    it("should handle multiple overlapping skills (update wins)", () => {
-      const current = [
-        createSkill("skill-a", "Current A"),
-        createSkill("skill-b", "Current B"),
-        createSkill("skill-c", "Current C"),
-      ];
-      const update = [
-        createSkill("skill-a", "Updated A"),
-        createSkill("skill-c", "Updated C"),
-      ];
-
-      const result = skillsMetadataReducer(current, update);
-
-      expect(result).toHaveLength(3);
-
-      const skillA = result.find((s) => s.name === "skill-a");
-      const skillB = result.find((s) => s.name === "skill-b");
-      const skillC = result.find((s) => s.name === "skill-c");
-
-      expect(skillA?.description).toBe("Updated A");
-      expect(skillB?.description).toBe("Current B"); // Not updated
-      expect(skillC?.description).toBe("Updated C");
-    });
-
-    it("should preserve order: current skills first, then new skills from update", () => {
-      const current = [createSkill("skill-a"), createSkill("skill-b")];
-      const update = [createSkill("skill-c"), createSkill("skill-d")];
-
-      const result = skillsMetadataReducer(current, update);
-
-      expect(result.map((s) => s.name)).toEqual([
-        "skill-a",
-        "skill-b",
-        "skill-c",
-        "skill-d",
-      ]);
-    });
-  });
-
-  describe("parallel subagent simulation", () => {
-    it("should handle concurrent updates from multiple parallel subagents", () => {
-      // Simulate: main agent has loaded skills, two subagents run in parallel
-      const mainAgentSkills = [
-        createSkill("shared-skill", "Main agent version"),
-        createSkill("main-only", "Only in main"),
-      ];
-
-      // First subagent returns
-      const subagent1Update = [
-        createSkill("shared-skill", "Subagent 1 version"),
-        createSkill("subagent1-skill", "From subagent 1"),
-      ];
-
-      // Second subagent returns
-      const subagent2Update = [
-        createSkill("shared-skill", "Subagent 2 version"),
-        createSkill("subagent2-skill", "From subagent 2"),
-      ];
-
-      // Apply updates sequentially (as the reducer would be called)
-      const afterSubagent1 = skillsMetadataReducer(
-        mainAgentSkills,
-        subagent1Update,
-      );
-      const afterSubagent2 = skillsMetadataReducer(
-        afterSubagent1,
-        subagent2Update,
-      );
-
-      expect(afterSubagent2).toHaveLength(4);
-
-      const sharedSkill = afterSubagent2.find((s) => s.name === "shared-skill");
-      expect(sharedSkill?.description).toBe("Subagent 2 version"); // Last update wins
-
-      expect(afterSubagent2.map((s) => s.name).sort()).toEqual([
-        "main-only",
-        "shared-skill",
-        "subagent1-skill",
-        "subagent2-skill",
-      ]);
-    });
-
-    it("should preserve all metadata fields when merging", () => {
-      const current: SkillMetadataEntry[] = [
-        {
-          name: "full-skill",
-          description: "Current version",
-          path: "/skills/full-skill/SKILL.md",
-          license: "MIT",
-          compatibility: "node >= 18",
-          metadata: { author: "original" },
-          allowedTools: ["read_file"],
-        },
-      ];
-
-      const update: SkillMetadataEntry[] = [
-        {
-          name: "full-skill",
-          description: "Updated version",
-          path: "/skills/full-skill/SKILL.md",
-          license: "Apache-2.0",
-          compatibility: "node >= 20",
-          metadata: { author: "updated", version: "2.0" },
-          allowedTools: ["read_file", "write_file"],
-        },
-      ];
-
-      const result = skillsMetadataReducer(current, update);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual(update[0]); // Full replacement with update
     });
   });
 });
@@ -2242,22 +2148,6 @@ description: Another test skill
 # Another Skill
 `;
 
-  /**
-   * Helper to extract system prompt content from model invoke spy.
-   * The system message can have content as string or array of content blocks.
-   */
-  function getSystemPromptFromSpy(
-    invokeSpy: ReturnType<typeof vi.spyOn>,
-  ): string {
-    const lastCall = invokeSpy.mock.calls[invokeSpy.mock.calls.length - 1];
-    const messages = lastCall?.[0] as BaseMessage[] | undefined;
-    if (!messages) return "";
-    const systemMessage = messages.find(SystemMessage.isInstance);
-    if (!systemMessage) return "";
-
-    return systemMessage.text;
-  }
-
   it("should load skills from state.files and inject into system prompt", async () => {
     const invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
     const model = new FakeListChatModel({ responses: ["Done"] });
@@ -2516,16 +2406,8 @@ description: Project-level skill for team collaboration
 describe("StoreBackend integration with createDeepAgent", () => {
   it("should load skills from the namespace resolved for each invocation", async () => {
     const store = new InMemoryStore();
-    const now = new Date().toISOString();
-    const seed = (namespace: string, name: string) =>
-      store.put([namespace, "skills"], `/skills/${name}/SKILL.md`, {
-        content: skillMd(name),
-        mimeType: "text/plain",
-        created_at: now,
-        modified_at: now,
-      });
-    await seed("ns-a", "alpha");
-    await seed("ns-b", "beta");
+    await putSkill(store, ["ns-a", "skills"], "alpha");
+    await putSkill(store, ["ns-b", "skills"], "beta");
 
     const agent = createDeepAgent({
       model: new FakeListChatModel({ responses: ["ok", "ok"] }),
@@ -2550,5 +2432,146 @@ describe("StoreBackend integration with createDeepAgent", () => {
 
     expect(skillNames(resultA)).toEqual(["alpha"]);
     expect(skillNames(resultB)).toEqual(["beta"]);
+  });
+});
+
+/**
+ * Reload tests for createDeepAgent with a checkpointer.
+ */
+describe("Reloading skills with createDeepAgent", () => {
+  const namespace = ["skills"];
+  let invokeSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    invokeSpy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+  });
+
+  afterEach(() => {
+    invokeSpy.mockRestore();
+  });
+
+  /**
+   * Runs two turns on a new thread and replaces `old-skill` with `new-skill`
+   * in the store between them, so the thread's stored skills are stale.
+   */
+  async function createThreadWithStaleSkills(threadId: string) {
+    const store = new InMemoryStore();
+    await putSkill(store, namespace, "old-skill");
+    const backend = new StoreBackend({ store, namespace });
+    const agent = createDeepAgent({
+      model: new FakeListChatModel({ responses: ["ok"] }),
+      backend,
+      middleware: [createSkillsMiddleware({ backend, sources: ["/skills/"] })],
+      store,
+      checkpointer: new MemorySaver(),
+    });
+    const config = { configurable: { thread_id: threadId } };
+
+    await agent.invoke({ messages: [new HumanMessage("turn 1")] }, config);
+    expect(getSystemPromptFromSpy(invokeSpy)).toContain("old-skill");
+
+    await store.delete(namespace, "/skills/old-skill/SKILL.md");
+    await putSkill(store, namespace, "new-skill");
+
+    await agent.invoke({ messages: [new HumanMessage("turn 2")] }, config);
+    expect(getSystemPromptFromSpy(invokeSpy)).toContain("old-skill");
+    expect(getSystemPromptFromSpy(invokeSpy)).not.toContain("new-skill");
+
+    return { agent, config };
+  }
+
+  it("should reload skills on the next run after updateState sets skillsMetadata to null", async () => {
+    const { agent, config } = await createThreadWithStaleSkills(
+      "reload-via-update-state",
+    );
+
+    await agent.updateState(config, { skillsMetadata: null });
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("turn 3")] },
+      config,
+    );
+
+    const systemPrompt = getSystemPromptFromSpy(invokeSpy);
+    expect(systemPrompt).toContain("new-skill");
+    expect(systemPrompt).not.toContain("old-skill");
+    expect(result.messages.map((message) => message.text)).toContain("turn 1");
+  });
+
+  it("should reload skills when the next run's input sets skillsMetadata to null", async () => {
+    const { agent, config } =
+      await createThreadWithStaleSkills("reload-via-input");
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("turn 3")], skillsMetadata: null },
+      config,
+    );
+
+    const systemPrompt = getSystemPromptFromSpy(invokeSpy);
+    expect(systemPrompt).toContain("new-skill");
+    expect(systemPrompt).not.toContain("old-skill");
+    expect(result.messages.map((message) => message.text)).toContain("turn 1");
+  });
+
+  it("should reload skills on the next model call when a middleware nulls skillsMetadata mid-run", async () => {
+    const store = new InMemoryStore();
+    await putSkill(store, namespace, "old-skill");
+    const backend = new StoreBackend({ store, namespace });
+
+    // Nulls `skillsMetadata` whenever the model just asked for a tool, so a
+    // skill the tool wrote is picked up by the next model call of the same
+    // run. Loading in `beforeModel` is what makes this reachable: under
+    // `beforeAgent` the reload could not be served until the next run.
+    const invalidateAfterToolCalls = createMiddleware({
+      name: "InvalidateSkillsAfterToolCalls",
+      stateSchema: new StateSchema({ skillsMetadata: skillsMetadataValue }),
+      afterModel: (state) => {
+        const lastMessage = state.messages[state.messages.length - 1];
+        const calledTools =
+          AIMessage.isInstance(lastMessage) &&
+          (lastMessage.tool_calls?.length ?? 0) > 0;
+        return calledTools ? { skillsMetadata: null } : undefined;
+      },
+    });
+
+    const agent = createDeepAgent({
+      model: new FakeListChatModel({
+        responses: [
+          // Turn 1: write a second skill into the backend the sources cover.
+          new AIMessage({
+            content: "",
+            tool_calls: [
+              {
+                id: "call_write_new_skill",
+                name: "write_file",
+                args: {
+                  file_path: "/skills/new-skill/SKILL.md",
+                  content: skillMd("new-skill"),
+                },
+              },
+            ],
+          }) as unknown as string,
+          // Turn 2: no tool calls, so the run ends here.
+          "wrote it",
+        ],
+      }),
+      backend,
+      middleware: [
+        createSkillsMiddleware({ backend, sources: ["/skills/"] }),
+        invalidateAfterToolCalls,
+      ],
+      store,
+      checkpointer: new MemorySaver(),
+    });
+
+    await agent.invoke(
+      { messages: [new HumanMessage("add a skill")] },
+      { configurable: { thread_id: "reload-mid-run" } },
+    );
+
+    const [firstPrompt, secondPrompt] = getSystemPromptsFromSpy(invokeSpy);
+    expect(firstPrompt).toContain("old-skill");
+    expect(firstPrompt).not.toContain("new-skill");
+    expect(secondPrompt).toContain("old-skill");
+    expect(secondPrompt).toContain("new-skill");
   });
 });

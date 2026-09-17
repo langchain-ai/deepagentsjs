@@ -66,9 +66,9 @@ Use this skill when the user asks about integration testing.
         sources: [userSkillsDir, projectSkillsDir],
       });
 
-      // Step 4: Load skills via beforeAgent (now async)
+      // Step 4: Load skills via beforeModel (now async)
       // @ts-expect-error - typing issue in LangChain
-      const stateUpdate = await middleware.beforeAgent?.({});
+      const stateUpdate = await middleware.beforeModel?.({});
       expect(stateUpdate!.skillsMetadata).toHaveLength(1);
       expect(stateUpdate!.skillsMetadata[0].name).toBe("my-skill");
 
@@ -231,9 +231,9 @@ description: Test skill
         assistantId: "test-agent",
       });
 
-      // Run beforeAgent for both (skills is now async)
+      // Load both: skills in beforeModel (async), memory in beforeAgent
       // @ts-expect-error - typing issue in LangChain
-      const skillsState = await skillsMiddleware.beforeAgent?.({});
+      const skillsState = await skillsMiddleware.beforeModel?.({});
       // @ts-expect-error - typing issue in LangChain
       const memoryState = memoryMiddleware.beforeAgent?.({});
 

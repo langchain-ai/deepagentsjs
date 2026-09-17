@@ -50,7 +50,7 @@ import {
    */
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
-import { StateSchema, ReducedValue } from "@langchain/langgraph";
+import { StateSchema } from "@langchain/langgraph";
 
 import type {
   AnyBackendProtocol,
@@ -196,7 +196,7 @@ export interface SkillsMiddlewareOptions {
    * ]
    * ```
    */
-  sources: string[];
+  sources: readonly string[];
 }
 
 /**
@@ -219,48 +219,38 @@ export const SkillMetadataEntrySchema = z.object({
 export type SkillMetadataEntry = z.infer<typeof SkillMetadataEntrySchema>;
 
 /**
- * Reducer for skillsMetadata that merges arrays from parallel subagents.
- * Skills are deduplicated by name, with later values overriding earlier ones.
+ * State value for a middleware's `skillsMetadata` field.
  *
- * @param current - The current skillsMetadata array (from state)
- * @param update - The new skillsMetadata array (from a subagent update)
- * @returns Merged array with duplicates resolved by name (later values win)
+ * A middleware can only read and write the fields declared on its own state
+ * schema. A middleware that needs `skillsMetadata` — to inspect the skills
+ * loaded for the thread, or to set the field to `null` and make the next model
+ * call reload every source — declares it with this value.
+ *
+ * Treat the value as opaque: it is meant to be passed to `StateSchema`, and
+ * its concrete type is an implementation detail that may change. To type an
+ * individual entry, use {@link SkillMetadataEntry}.
+ *
+ * @example
+ * ```typescript
+ * import { createMiddleware } from "langchain";
+ * import { StateSchema } from "@langchain/langgraph";
+ * import { skillsMetadataValue } from "deepagents";
+ *
+ * const reloadEditedSkills = createMiddleware({
+ *   name: "ReloadEditedSkills",
+ *   stateSchema: new StateSchema({ skillsMetadata: skillsMetadataValue }),
+ *   afterAgent: (state) =>
+ *     agentEditedSkills(state) ? { skillsMetadata: null } : undefined,
+ * });
+ * ```
  */
-export function skillsMetadataReducer(
-  current: SkillMetadataEntry[] | undefined,
-  update: SkillMetadataEntry[] | undefined,
-): SkillMetadataEntry[] {
-  // If no update, return current (or empty array)
-  if (!update || update.length === 0) {
-    return current || [];
-  }
-  // If no current, return update
-  if (!current || current.length === 0) {
-    return update;
-  }
-  // Merge by skill name (later values override earlier ones)
-  const merged = new Map<string, SkillMetadataEntry>();
-  for (const skill of current) {
-    merged.set(skill.name, skill);
-  }
-  for (const skill of update) {
-    merged.set(skill.name, skill);
-  }
-  return Array.from(merged.values());
-}
+export const skillsMetadataValue = z.array(SkillMetadataEntrySchema).nullish();
 
 /**
  * State schema for skills middleware.
- * Uses ReducedValue for skillsMetadata to allow concurrent updates from parallel subagents.
  */
 const SkillsStateSchema = new StateSchema({
-  skillsMetadata: new ReducedValue(
-    z.array(SkillMetadataEntrySchema).default(() => []),
-    {
-      inputSchema: z.array(SkillMetadataEntrySchema).optional(),
-      reducer: skillsMetadataReducer,
-    },
-  ),
+  skillsMetadata: skillsMetadataValue,
   files: filesValue,
 });
 
@@ -669,7 +659,7 @@ async function listSkillsFromBackend(
  * Format skills locations for display in system prompt.
  * Shows priority indicator for the last source (highest priority).
  */
-function formatSkillsLocations(sources: string[]): string {
+function formatSkillsLocations(sources: readonly string[]): string {
   if (sources.length === 0) {
     return "**Skills Sources:** None configured";
   }
@@ -698,7 +688,7 @@ function formatSkillsLocations(sources: string[]): string {
  */
 export function formatSkillsList(
   skills: SkillMetadata[],
-  sources: string[],
+  sources: readonly string[],
 ): string {
   if (skills.length === 0) {
     const paths = sources.map((s) => `\`${s}\``).join(" or ");
@@ -800,6 +790,21 @@ export function validateModulePath(raw: unknown): string | undefined {
  * pattern: skill names and descriptions are shown in the prompt, but the agent
  * reads full SKILL.md content only when needed.
  *
+ * Skills are loaded once per thread and stored in state. To pick up skills
+ * added, edited, or deleted since then, set `skillsMetadata` to `null`; the
+ * next model call reloads every source:
+ *
+ * ```ts
+ * await agent.updateState(config, { skillsMetadata: null });
+ * // or as part of the next run's input
+ * await agent.invoke({ messages, skillsMetadata: null }, config);
+ * ```
+ *
+ * Loading happens in `beforeModel`, so the reload is served by the next model
+ * call rather than the next run. A middleware of your own can therefore
+ * invalidate from any hook — including mid-run, from `afterModel` — and see
+ * the fresh list on the following call. See {@link skillsMetadataValue}.
+ *
  * @param options - Configuration options
  * @returns AgentMiddleware for skills loading and injection
  *
@@ -818,15 +823,13 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
     name: "SkillsMiddleware",
     stateSchema: SkillsStateSchema,
 
-    async beforeAgent(state) {
-      const stateHasSkills =
-        "skillsMetadata" in state &&
-        Array.isArray(state.skillsMetadata) &&
-        state.skillsMetadata.length > 0;
-
-      // Already loaded for this thread (same run, a later turn, or a
-      // restored checkpoint) - keep what state holds.
-      if (stateHasSkills) {
+    async beforeModel(state) {
+      // What state holds for this thread:
+      // - missing, `undefined` or `null`: not loaded, or the caller reset it.
+      //   Load every source.
+      // - `[]`: loaded, and the sources contain no skills. Keep it.
+      // - a non-empty list: loaded. Keep it.
+      if (state.skillsMetadata !== null && state.skillsMetadata !== undefined) {
         return undefined;
       }
 
@@ -858,7 +861,7 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
     },
 
     wrapModelCall(request, handler) {
-      // Populated by beforeAgent, which runs as its own graph node - its
+      // Populated by beforeModel, which runs as its own graph node - its
       // state update is committed before the model node reads it.
       const skillsMetadata: SkillMetadata[] =
         (request.state?.skillsMetadata as SkillMetadata[]) || [];
@@ -879,3 +882,12 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
     },
   });
 }
+
+/**
+ * The middleware value returned by {@link createSkillsMiddleware}.
+ *
+ * Exported so `createDeepAgent` can splice the skills state (`skillsMetadata`)
+ * into an agent's inferred state when the `skills` option is present, without
+ * the caller having to mount the middleware by hand.
+ */
+export type SkillsMiddleware = ReturnType<typeof createSkillsMiddleware>;
