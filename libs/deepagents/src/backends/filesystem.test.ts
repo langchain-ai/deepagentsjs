@@ -166,6 +166,21 @@ describe("FilesystemBackend", () => {
     );
   });
 
+  it("should create the root directory on first write when it doesn't exist yet", async () => {
+    const root = path.join(tmpDir, "does-not-exist-yet");
+    const backend = new FilesystemBackend({
+      rootDir: root,
+      virtualMode: true,
+    });
+
+    const result = await backend.write("/new.txt", "hello");
+
+    expect(result.error).toBeUndefined();
+    expect(await fs.readFile(path.join(root, "new.txt"), "utf-8")).toBe(
+      "hello",
+    );
+  });
+
   it("should list nested directories correctly in virtual mode", async () => {
     const root = tmpDir;
 
@@ -678,6 +693,21 @@ describe("FilesystemBackend", () => {
       expect(result.error).toBeDefined();
       // The file itself must survive a failed delete of a bogus child path.
       await expect(fs.stat(filePath)).resolves.toBeDefined();
+    });
+
+    it("should not delete an unrelated ancestor when a parent directory is missing", async () => {
+      await writeFile(path.join(tmpDir, "important.txt"), "keep me");
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.delete("/missing/important.txt");
+
+      expect(result.error).toBeDefined();
+      await expect(
+        fs.stat(path.join(tmpDir, "important.txt")),
+      ).resolves.toBeDefined();
     });
   });
 

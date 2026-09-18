@@ -117,6 +117,13 @@ export class FilesystemBackend implements BackendProtocolV2 {
       return resolvedPath;
     }
 
+    let realRoot: string;
+    try {
+      realRoot = await fs.realpath(this.cwd);
+    } catch {
+      return resolvedPath;
+    }
+
     const relative = path.relative(this.cwd, resolvedPath);
     const segments = relative.split(path.sep).filter(Boolean);
     const checkedSegments = includeLeaf ? segments : segments.slice(0, -1);
@@ -126,13 +133,15 @@ export class FilesystemBackend implements BackendProtocolV2 {
       const next = path.join(current, segment);
       try {
         await fs.lstat(next);
-      } catch {
+      } catch (e) {
+        if (!includeLeaf) {
+          throw e;
+        }
         break;
       }
       current = next;
     }
 
-    const realRoot = await fs.realpath(this.cwd);
     const realAnchor = await fs.realpath(current);
     const realRelative = path.relative(realRoot, realAnchor);
     if (realRelative.startsWith("..") || path.isAbsolute(realRelative)) {
