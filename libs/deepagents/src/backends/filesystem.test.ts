@@ -1029,9 +1029,7 @@ describe("FilesystemBackend virtual-mode symlink escape (LC-587)", () => {
       const result = await backend.write("/link/newsubdir/new.txt", "evil");
 
       expect(result.error).toBeDefined();
-      expect(fsSync.existsSync(path.join(outsideDir, "newsubdir"))).toBe(
-        false,
-      );
+      expect(fsSync.existsSync(path.join(outsideDir, "newsubdir"))).toBe(false);
     },
   );
 
