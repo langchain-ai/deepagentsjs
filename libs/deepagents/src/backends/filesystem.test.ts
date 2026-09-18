@@ -578,7 +578,7 @@ describe("FilesystemBackend", () => {
       expect(result.error).toContain("Path traversal not allowed");
     });
 
-    it("should reject symlinked parent directories in virtual mode", async () => {
+    it("should reject a symlinked parent directory that escapes the virtual root", async () => {
       const outsideDir = await fs.mkdtemp(
         path.join(os.tmpdir(), "deepagents-outside-"),
       );
@@ -598,7 +598,7 @@ describe("FilesystemBackend", () => {
       const result = await backend.delete("/link/secret.txt");
 
       expect(result.path).toBeUndefined();
-      expect(result.error).toContain("Symlink parent not allowed");
+      expect(result.error).toContain("resolves outside root directory");
       await expect(fs.stat(outsideFile)).resolves.toBeDefined();
       await removeDir(outsideDir);
     });
@@ -918,6 +918,142 @@ describe("FilesystemBackend symlink cycle handling", () => {
       } finally {
         await removeDir(outside);
       }
+    },
+  );
+});
+
+/**
+ * LC-587: a symlink under the sandbox root pointing outside it passes
+ * resolvePath()'s lexical containment check, so the fs call that follows
+ * escapes the root.
+ */
+describe("FilesystemBackend virtual-mode symlink escape (LC-587)", () => {
+  let tmpDir: string;
+  let outsideDir: string;
+
+  beforeEach(() => {
+    tmpDir = createTempDir();
+    outsideDir = createTempDir();
+  });
+
+  afterEach(async () => {
+    await removeDir(tmpDir);
+    await removeDir(outsideDir);
+  });
+
+  it.skipIf(!CAN_SYMLINK)(
+    "read() must not follow an intermediate symlink out of the virtual root",
+    async () => {
+      await writeFile(path.join(outsideDir, "secret.txt"), "EXFIL_MARKER");
+      await fs.symlink(outsideDir, path.join(tmpDir, "link"));
+
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.read("/link/secret.txt");
+
+      expect(result.error).toBeDefined();
+      expect(result.content ?? "").not.toContain("EXFIL_MARKER");
+    },
+  );
+
+  it.skipIf(!CAN_SYMLINK)(
+    "write() must not create a new file outside the virtual root via an intermediate symlink",
+    async () => {
+      await fs.symlink(outsideDir, path.join(tmpDir, "link"));
+
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.write("/link/new.txt", "evil");
+
+      expect(result.error).toBeDefined();
+      expect(fsSync.existsSync(path.join(outsideDir, "new.txt"))).toBe(false);
+    },
+  );
+
+  it.skipIf(!CAN_SYMLINK)(
+    "edit() must not overwrite an existing file outside the virtual root via an intermediate symlink",
+    async () => {
+      const targetFile = path.join(outsideDir, "target.txt");
+      await writeFile(targetFile, "known content");
+      await fs.symlink(outsideDir, path.join(tmpDir, "link"));
+
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.edit(
+        "/link/target.txt",
+        "known content",
+        "PWNED",
+      );
+
+      expect(result.error).toBeDefined();
+      expect(await fs.readFile(targetFile, "utf-8")).toBe("known content");
+    },
+  );
+
+  it.skipIf(!CAN_SYMLINK)(
+    "ls() must not list a directory outside the virtual root when the entry itself is a symlink",
+    async () => {
+      await writeFile(path.join(outsideDir, "secret.txt"), "EXFIL_MARKER");
+      await fs.symlink(outsideDir, path.join(tmpDir, "link"));
+
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.ls("/link");
+
+      expect(result.files ?? []).toHaveLength(0);
+    },
+  );
+
+  it.skipIf(!CAN_SYMLINK)(
+    "write() must reject an escaping symlink even when the rest of the path doesn't exist yet",
+    async () => {
+      await fs.symlink(outsideDir, path.join(tmpDir, "link"));
+
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.write("/link/newsubdir/new.txt", "evil");
+
+      expect(result.error).toBeDefined();
+      expect(fsSync.existsSync(path.join(outsideDir, "newsubdir"))).toBe(
+        false,
+      );
+    },
+  );
+
+  it.skipIf(!CAN_SYMLINK)(
+    "read() must still follow a symlink that resolves inside the virtual root",
+    async () => {
+      await writeFile(path.join(tmpDir, "real", "real.txt"), "hello");
+      await fs.symlink(
+        path.join(tmpDir, "real"),
+        path.join(tmpDir, "alias"),
+        "dir",
+      );
+
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.read("/alias/real.txt");
+
+      expect(result.error).toBeUndefined();
+      expect(result.content).toContain("hello");
     },
   );
 });
