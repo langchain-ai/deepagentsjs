@@ -99,14 +99,11 @@ export class FilesystemBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Virtual-mode path containment in resolvePath() is lexical, so a symlink
-   * component (intermediate, or the leaf when includeLeaf) can alias a
-   * location outside the virtual root. Mirrors Python's `_resolve_path`
-   * (which uses `Path.resolve()`, following symlinks, before its containment
-   * check): resolve the deepest *existing* path segment for real and reject
-   * only if that escapes the root, so an in-root symlink still works.
-   * includeLeaf is false only for delete(), which may target a symlink
-   * itself without following it.
+   * resolvePath()'s containment check is lexical, so a symlink component
+   * (intermediate, or the leaf when includeLeaf) can alias a location
+   * outside the virtual root. Resolve the deepest existing segment for real
+   * and reject only if that escapes the root; includeLeaf is false only for
+   * delete(), which may target a symlink itself without following it.
    */
   private async assertRealPathWithinRoot(
     resolvedPath: string,
