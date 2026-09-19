@@ -1,0 +1,308 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:14e5c920bf9f435b2c5aa7b67b343d1c64dd16a337e61ebc327e7a801ae14271",
+  "claims": [
+    {
+      "id": "claim_12134d6ac09b486f8931e2c1c146634e",
+      "statement": "The eval workspace contains independent Vitest packages that invoke real agents against LLM APIs, assert on resulting trajectories, and stream results to LangSmith experiments.",
+      "evidence": [
+        {
+          "resource": "repo://evals/README.md#L1-L8",
+          "version": "repo-lines-v1:sha256:fbe0d72d7c9ba59f14a8d39e7c39479c4fa7a40482a7fa561ea332c872bd1a9a:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTBlMzUxNWJjYjc4MTQxYzM0M2RkMmVmZDQyZjY2N2QxNGM1NDc5ZTZiZGQ4MzM0ZGUyNDQ2ODcwMDU0ZTNiNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjdiYWQ1ZTkyODVjYzU2YjlkMGE4NjJjNjA3OTJkYzg5MzI0ZGU3YmQ4ZGFjOWEyNWE5YzhkZGQ1NTM3NTUwYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzUxNjA0MWRkZmU2NmRiNWMyZTc5NGQ4ZDM2ODlkNTA4YWZiNjQ3OTk5ZTk5ZDIyMjA4Y2VjZmNmZDM5YzQzMSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_b255f3156f7448f6af9f443054c46e34",
+      "statement": "The EvalRunner contract separates agent configuration from invocation: run accepts a query and optional string initialFiles, extend returns a configured runner, and a run returns ordered AgentStep records plus a final string file snapshot.",
+      "evidence": [
+        {
+          "resource": "repo://internal/eval-harness/README.md#L17-L58",
+          "version": "repo-lines-v1:sha256:76689b17614082991e6044d5f5c06607c1d6d9d001f7f7fec1d52046dd9d0676:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVjYzVhODVhZWIzNzE4MzY4ZjFkNTJiZGI0YmQwMTMzNTg1Y2M1MjU0ZmRkZTU0YjZkMWYxYmMxZTcxNmUwNTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAzMTA1ZWFiM2I5ZGNlNWQwOGJmZWE2MDVhNzA5MjAxOTc3Yzc3MjBmM2Y2MDIwODFhYzQwMjA1YjU4ODRhMjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjczOTczOWZmNTgzY2MzZjk3ZWNmNzQ0MDY3OTQzODMyNjRjMWMyMjk5MDgyYzNhODAyYWE0MzM0ZDIyYTVlMzYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRmY2E5MmMwZGQyZDJjZWQ4ZjRkMTM5Y2Q0YjY5Y2VkNWM0OTE0YjVmYTM4OTQxNDVlMDY1ZTZhMDE1MTQ1YmUifQ"
+        },
+        {
+          "resource": "repo://internal/eval-harness/src/matchers.ts#L49-L62",
+          "version": "repo-lines-v1:sha256:28fbcac0477867a5361dfc49a3111ecfd4ff0391412e85b2465e229077b956c9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1ODZhODQzOGFhOTQ3MTAxZDQxNzZjYTE3MWU0ZDYzNGYxYzE4OWEzMDRiODk0MjQ0N2U3YjVjNGFkYTQzN2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEzY2E0ZGQyMGNhOTI2NzBlNTliN2UwNGFkNGM5MzQwOTBmNmMwMjNjMmViNWRjMjZhNGFlZDhhOWFmMTIwMTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY5M2QxOGU5MjBiZDk0YTAzMmY3OGZkOWY4NWUzZDJkMzJhNzAzYzllODk5ZTVjMmQ0MDJjYTE5MTJmYjAyOTYifQ"
+        },
+        {
+          "resource": "repo://internal/eval-harness/src/matchers.ts#L9-L40",
+          "version": "repo-lines-v1:sha256:068d0fd161180bb788cb56ebfe5d3993eebbcc78a7c8fabad21b098bac214432:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA5MWUxMmZiY2E1YjFlNmRhNTc3M2VhNjNmMzAwMGYxMWQyYjIyZWY0YTJlODIxZGM4YjAyZWI4NzExMTdkNDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgxZTNjZjMyMTNjMWNiNDg5M2Y1ZmNlOWFlYWU0YTI1ODk4Y2MwYzE1ZGY5OGU0NGFiMjUxMWZmNmVmOTA5NDUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdiZTk4NmQ4YTY1ODg2ZmZiYzVjYWVhMGUwM2FlYjVmNmU1NDg1MjUyYzMwYjk2MDMzNjg3MDNjN2E1MmZiMDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2b46e5d5a3f541e9a46562db24f22f73",
+      "statement": "DeepAgentEvalRunner converts seed file strings into timestamped line-array file state, creates a unique UUID thread_id for every invocation, rejects non-object invoke results, and parses the result into a trajectory and normalized files map.",
+      "evidence": [
+        {
+          "resource": "repo://internal/eval-harness/src/deepagent.ts#L36-L69",
+          "version": "repo-lines-v1:sha256:511dff41951b9e082fdd7e3ae1704840788408e7bf6027ea68177d44547a870e:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzNzFhMTI4NjRkNDQzNDc1YmRmZTUwNGVmZjllNjI4ZDAxNjlmMzE0Mzg3OGQ0NDgzZmU4ZDllMjMwZWYwMTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0ZTQyMDhjZDZmZmI4YzRhMzU0N2IyZjU0YWRhMTk5NzhjM2YzNjVlNzhmOTUwMmVmNTE0NWNkZDJhYTg1NDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgzYmVhYzUwYmZjZDg3ZGI1MjJmNzdkNzMzYWY5NzYzZWFmMzY1NjBiMzlkZjljODQyNWY2YzIxNGJkYWJhNWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiNTgwZTk2NGY4M2E0NzNmNDNkNDQzODQ2Mjk0OWQ2OGI1NjAwZmRhNzg3ZjE2Mzc0NWQwMGRlODljYmYzNmEifQ"
+        },
+        {
+          "resource": "repo://internal/eval-harness/src/matchers.ts#L113-L183",
+          "version": "repo-lines-v1:sha256:d18cef1aba5656cd7c7527a0de3306ef8d1a510baf18eb224936581c5d9a20ea:eyJzZWxlY3RlZExpbmVDb3VudCI6NzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNmZTY2NGQ5NzUxNDE5ZTkwMDAzMjJjMDY5YjAyZWZjMDU4NzhlYmY3NDRiNDFkNjZmODhkZWVhZGM5NWM1YzQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBlZDg5NjhhZDkzZGM3YjJhYjgyMTFjMzhiMzkzZjFiNDJjMmY5ZTA4ZGYzNmFmNjc3M2I1ZjhmZmY0NTMzZjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjljNzJjNDE4YWUyMGY0OTQ1Njg2NjQ1ZWI1MmRmMmNiYTBkYWI5MDdlZDA1NjgwMmRiYjhjMWRjYmU4YzljNjgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a9b503a25a524c46ad87268814d7fff1",
+      "statement": "The trajectory parser skips the initial human message, starts a step at each AIMessage, attaches following ToolMessages to that step, and raises TypeError for malformed file representations rather than silently coercing them.",
+      "evidence": [
+        {
+          "resource": "repo://internal/eval-harness/src/matchers.ts#L113-L183",
+          "version": "repo-lines-v1:sha256:d18cef1aba5656cd7c7527a0de3306ef8d1a510baf18eb224936581c5d9a20ea:eyJzZWxlY3RlZExpbmVDb3VudCI6NzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNmZTY2NGQ5NzUxNDE5ZTkwMDAzMjJjMDY5YjAyZWZjMDU4NzhlYmY3NDRiNDFkNjZmODhkZWVhZGM5NWM1YzQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBlZDg5NjhhZDkzZGM3YjJhYjgyMTFjMzhiMzkzZjFiNDJjMmY5ZTA4ZGYzNmFmNjc3M2I1ZjhmZmY0NTMzZjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjljNzJjNDE4YWUyMGY0OTQ1Njg2NjQ1ZWI1MmRmMmNiYTBkYWI5MDdlZDA1NjgwMmRiYjhjMWRjYmU4YzljNjgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4a89e79672be4550829e43ef9908ae7e",
+      "statement": "A default DeepAgentEvalRunner constructs its agent at runner construction, while extend creates a separate runner with the supplied overrides and therefore isolates derived configuration from the shared default runner.",
+      "evidence": [
+        {
+          "resource": "repo://internal/eval-harness/src/deepagent.ts#L12-L34",
+          "version": "repo-lines-v1:sha256:b432248cbf9d48e4c5f35ae390dd980429afa90aa31dcd9dc3024934e24393f5:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdjMTgzZWUwMDhjZGFjMDJmODJiOGU1YTJmYTc2NGEzNDg2MjNmNzU5N2ViZGU4YzM1NTMwOTY1OWE1NDRjNzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU0ODI5YmU5MDgxN2JlYTgwZjhhNWJhNWFhZGY3ODdmNTk1MTAyNjEyMTJkNTRhZTcwMmQwYWU4YjJiMzcyYzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY0OTYzMGQyYzM1MWMxYjE3ODY1MmRmNTZjMjQ3ZDVlY2FlMzAwNmZjNTk1ZmEyNzA5NTc3MTYxZDU5MTcyNTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_214976b9f7374cbf8d6890ab6e53c84c",
+      "statement": "The harness registry is populated by the built-in Anthropic and OpenAI model registrations, getDefaultRunner resolves and caches the runner named by EVAL_RUNNER, and missing or unknown names fail with an available-runner error.",
+      "evidence": [
+        {
+          "resource": "repo://internal/eval-harness/src/index.ts#L1-L6",
+          "version": "repo-lines-v1:sha256:eeafad769eb5c5de4ea99ce6aec1264da4c215af2425695f06ba2511b8f58e98:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjY3NjhhZjc2MDJlZGQ4MDkzOTVhNjEyOTA2NDM2ZGE3Nzc2ZGE3YWRlNDRjZDUyNGMxZjAyZjQ5N2I1ZjEyNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNmJlNmE3N2UxZDlkNTFhZjNhM2JmMzE3MDFhY2JlMzBiYTI3MGY1ZThjMWUxZjYzMWZkMWU5ZmUzZDFkMGVkMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        },
+        {
+          "resource": "repo://internal/eval-harness/src/matchers.ts#L64-L110",
+          "version": "repo-lines-v1:sha256:e550c02a19c9349bc45121599a3cfdb3f8af0d4d9e2b51d3394cd10baffed21d:eyJzZWxlY3RlZExpbmVDb3VudCI6NDcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU4NDM0M2Y1YTIwOGQxMzgxZjgxMzYyMzkzN2ExNmZiZjJiM2FmNWZhOGQ0NThlNzZjNDNjM2I2M2FkNTY3MWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAzMmM2ZWJmNGU2NjVlODgzNWI4MzExNzllZmVhN2JlNDg3ZDRmNjljNDMxOWQwY2I4MWNlM2VjN2M5MTJjYWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM5MDBiMjVkOTBjOTk5YmUxYmZlN2YxNzk4NmFiNjI1ZTM5OGQ0ZTA4NGRlZDY4YzMzNDhhODI0MzAxZGRlOTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgifQ"
+        },
+        {
+          "resource": "repo://internal/eval-harness/src/runners.ts#L1-L50",
+          "version": "repo-lines-v1:sha256:b690f5990813ea283df8dac115dd2f9fcb18598511e14f2eca915b872350a428:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY4MThiODkyYTdjYWQwNzM5ZGY1NDUzNDBhZWM5MDg4NDQ1MzQyN2ExOWI1NDA5MzI2MzgzNDc4NTc2ZmVjNmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5OTY3ZWMxZWQzODM2ZjhlYjE3YWZmMTcyYjViZmVmN2RlNjA0ODVhNDM5YzZjYTExYzU5MWUxNzU1NzM5YWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e3ee0f6194c5499a90c415f2e698a659",
+      "statement": "The Deep Agents runtime composes filesystem, subagent, and backend-aware summarization middleware by default, with skills, memory, human-in-the-loop, and async-subagent middleware enabled by corresponding configuration.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/agent.ts#L114-L123",
+          "version": "repo-lines-v1:sha256:d79b531886a8cb87812a385ac4447306a4d7c4a0c95fb62d53a06caa71ea37bf:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMDhiZWZiOGZjNzcyNDE1ZjhkMjIyNmNlOTkxODkxMDgzMmUyMDg0NWI2YmEwMGU3MDUxZmRmYjRlM2YyYTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMxNzM2Y2I4N2MxYzQyNDhlZGUwYmNjYmE1ZTJmYTUzZDlhMzE0Mjk0NTY2ZjRhZDUzY2YyNTIwN2Q1YjAwNTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc1NGJmYjcyYzYxNmEyMzM2MGE4MmM1YTRhZTQ4MjM4MDE2ZDZkNTMwMjIzZTllNzQ0YzgwNWVjOTljYjM2ODYifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/agent.ts#L450-L510",
+          "version": "repo-lines-v1:sha256:03a90cec15ca68b741a935f3faacf90fa38393923aa16d142b192d22d03ee38b:eyJzZWxlY3RlZExpbmVDb3VudCI6NjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA4MjM1MGI0YmI1OWU5NTQ3NzQ4OWZjNWE3ODg0NmFiYzc1YTJlMDdhOWQzNGU0ZjVhMWMzMzM2OTQyNTY1ZmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg2ZDQ2NTdkYTg0YzQ1YzdiOGFiOGRiOGZlYWZjNmZhNzVmYjI2MTExODllNmE0OTNkZjIwOGYwMDE4NDFkOGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg1Y2VjYWU1NzBiY2EzYjJkNTNiNDk1OTI2NmYwMTQ4ODhhMmNjMDkyMDlhOTBkODc2YTBhNDBhMTk5MTcxYTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRiODI5YTc5MmI2ZDgwODE3MWVjZDk2NDViNGU4ZTBhZTlmZGI3ODg3MmQxMjk3MmJmNTYxYmNlMmFjNzUxMTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_efd06156dacb4becb2b1dddfca6efd2c",
+      "statement": "Eval suites use the Node Vitest configuration with the @deepagents/evals/setup side-effect import and langsmith/vitest/reporter, and suite descriptions set the LangSmith project name to the selected runner name with upsert enabled.",
+      "evidence": [
+        {
+          "resource": "repo://evals/basic/eval.test.ts#L1-L13",
+          "version": "repo-lines-v1:sha256:431b563c963b0cf397905fb58830070a1ba4e8aabfe467ce302a5f7b1bbfb7a1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkYzMxYzYxMGYwMGQwMDMxNTI3N2JjODQzYWRiYzEyM2U5ZjBlNTQxMWE2NTg0N2JlNjA4NGQ2ODBkMDY1ZjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5OTY3ZWMxZWQzODM2ZjhlYjE3YWZmMTcyYjViZmVmN2RlNjA0ODVhNDM5YzZjYTExYzU5MWUxNzU1NzM5YWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://evals/basic/vitest.config.ts#L1-L13",
+          "version": "repo-lines-v1:sha256:909347da387e6091efbd29d70dec78e11ea68707dc47a3676093f8abbe17dc41:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgxNzRlOWU5MDAzOGViM2EwZGQzNGQzMTMzZjg4OGZhMmVlNTEzZDIyN2NmOTkzZTM2ZTNjNTc1ZDVlOThkYzMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkNWNkMmZiNGYzZGY4ODQ1MTUyNTViMzk1MjNmMmY4YjU0NzJiZWVhOWY1NjZmZmNhMjA0ZGI4MDI1NjEwNDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8cda2bcc06084d52b9a5dc64ee2fb023",
+      "statement": "The harness matchers are hard assertions; toHaveAgentSteps and toHaveToolCallRequests log actual, expected, and match feedback, while tool-call-in-step matching is 1-based with strict shallow argsContains checks or JSON-stringified argsEquals checks, and final-text matching inspects the last step with optional case folding.",
+      "evidence": [
+        {
+          "resource": "repo://internal/eval-harness/src/matchers.ts#L226-L306",
+          "version": "repo-lines-v1:sha256:cd0c2fecbde93129ac215c62ea0126894381bc3254368e429e2c2180ca263d13:eyJzZWxlY3RlZExpbmVDb3VudCI6ODEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY2YmEyYjU5OTY3MzJlNzEzOTBkM2UwY2M1YjliZmRmZTU4YWUzZDZkMzgzY2VhYTMyNzRiMzc1OTY1NWRlYmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkNWNkMmZiNGYzZGY4ODQ1MTUyNTViMzk1MjNmMmY4YjU0NzJiZWVhOWY1NjZmZmNhMjA0ZGI4MDI1NjEwNDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA5NGZjMGMxNzNkMWVjM2ZjNTAxZDdkZmE5Mjg1NTAxYzUyN2NmYjQ3MTI1ODNkYTNjYzM2MTgwNTY2YjRiZTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFkOTRhMmE4ZGRmNjM5ZmRiY2E2YWE5MGExZGJlYjYxZjcyMzM3MmVlZmI1MDk1N2Y5YjJjYzU2OTk4NDhkN2MifQ"
+        },
+        {
+          "resource": "repo://internal/eval-harness/src/matchers.ts#L308-L386",
+          "version": "repo-lines-v1:sha256:fd0da201ecaa8e707663a52ea11dc4827afef09cd133632515955b3f1fcc3d50:eyJzZWxlY3RlZExpbmVDb3VudCI6NzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjViOWRmMDE1ZDBiYmI5MGZjYjQyNjE2NDFmODgxZDQxZGZmZTRiZTBiMmU3MDdlNDY5MmU0NWY2NjU5NzE2N2QiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkNWNkMmZiNGYzZGY4ODQ1MTUyNTViMzk1MjNmMmY4YjU0NzJiZWVhOWY1NjZmZmNhMjA0ZGI4MDI1NjEwNDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY4MzQ0MGEzMWU1M2M2MGJjNTczZjZjZWVhMDdmZWJmYmNhNTQ4Y2ViZmZiZDhkMDNkNjZjNzMwZTY3NmM0NWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a8fa6efa7d7b4ea2b14e7b00f063f217",
+      "statement": "Running the evals requires EVAL_RUNNER, LANGSMITH_API_KEY, and the provider credential matching the selected model, namely ANTHROPIC_API_KEY for Anthropic runners or OPENAI_API_KEY for OpenAI runners.",
+      "evidence": [
+        {
+          "resource": "repo://evals/README.md#L31-L52",
+          "version": "repo-lines-v1:sha256:173b357ea7b45557fdcb0d8404245685578da257265882df46c55c4e2c79c25b:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkOTIyNzFjOWFjZWNkMTM2MmRkOTJkN2RhMTAyNzk1OTZiMGQ4MmVlMWExNGNhNjdmYmU2NDQ4YWQ2MmZhMjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU3YmVlMzI3NDU3OGViMTdlYzNhNTkxZDMxMjAxNmY4YTAzYTlhY2I5NmQwYjdkYzM0NWNlMWJhZGE4NTYzYjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg2ZjRmNWY0MjdiMTU4ZTdhNDM4MDU0NTZkY2VhYTdlNDNmOGRmNDkzYWE4MjJiZmMyOGMzNDY1OGQ3OGRlNTAifQ"
+        },
+        {
+          "resource": "repo://internal/eval-harness/src/matchers.ts#L92-L110",
+          "version": "repo-lines-v1:sha256:032254dd4d21181fbde98bd5303e8cedff10e6b37d93d95f5877fce0c34011f7:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAzMmM2ZWJmNGU2NjVlODgzNWI4MzExNzllZmVhN2JlNDg3ZDRmNjljNDMxOWQwY2I4MWNlM2VjN2M5MTJjYWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjczMTYyMWY2Y2I4NTkxYmUzNWYzYjExOTQ4ZjFlM2M5ZDg4ZWEwZGZiZWRhOWE2Y2VlOTI5NDgyNzY1Nzk3M2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgifQ"
+        },
+        {
+          "resource": "repo://internal/eval-harness/src/runners.ts#L1-L50",
+          "version": "repo-lines-v1:sha256:b690f5990813ea283df8dac115dd2f9fcb18598511e14f2eca915b872350a428:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY4MThiODkyYTdjYWQwNzM5ZGY1NDUzNDBhZWM5MDg4NDQ1MzQyN2ExOWI1NDA5MzI2MzgzNDc4NTc2ZmVjNmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5OTY3ZWMxZWQzODM2ZjhlYjE3YWZmMTcyYjViZmVmN2RlNjA0ODVhNDM5YzZjYTExYzU5MWUxNzU1NzM5YWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e11be069ddae491b8939f59d6f28de24",
+      "statement": "A new focused suite is added as an evals workspace package with an index suite function, package script, standard Vitest configuration, and eval.test.ts that obtains getDefaultRunner and registers a LangSmith describe; the suite must also be imported into evals/all/eval.test.ts to join the aggregate run.",
+      "evidence": [
+        {
+          "resource": "repo://evals/README.md#L54-L122",
+          "version": "repo-lines-v1:sha256:5378fc5ebe9b2084bf03948b1903e386b972d56d9728e62c62646a37a2eb9055:eyJzZWxlY3RlZExpbmVDb3VudCI6NjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFiMWYwZjU1OTY5YjVmZDQ5Yjc0ODBiOTI5N2NiOGQ3ZmI0YzFhMGMzY2RhZDIxNWFiMzRiZGU3OTI1OWVjYzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY1N2YyODI5MTQ5MThiNjgxMjE1ZDM5ZWI2NTRhYjc3Njg2NjI1YmI0YmRlNzM1OGVkYTM0OGY5NzZmYzliZjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU3OGMwZjZkNGI1YzljYjgxOWQ5NWE1NjQxMWRkMDI0ZWVkODgzYTBmMGJlZDVmMmQ2YzVmN2NhNjA2ZWI4ZGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFkYmExMjIxYWI2MjJlNTRkNjc0NGZlOTFlMjY4YjhlZDJiYjhjNGQ4NGNmOGMzZDI4NTU1MDFhMjcwZDY0YTYifQ"
+        },
+        {
+          "resource": "repo://evals/all/eval.test.ts#L1-L60",
+          "version": "repo-lines-v1:sha256:f8abbc10caec3dc786af684ce7967d6af80d3642110db2b48ae0d52c84f32fca:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkYzMxYzYxMGYwMGQwMDMxNTI3N2JjODQzYWRiYzEyM2U5ZjBlNTQxMWE2NTg0N2JlNjA4NGQ2ODBkMDY1ZjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM1NjhhYmZjMzliNGZlMzBhOWU5ZWE1MDczMTBmZTVhYjUxZjg2NjMzODk0NTg5ZTAxMjYzOGQ2N2E5NWEzYjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ5OTY3ZWMxZWQzODM2ZjhlYjE3YWZmMTcyYjViZmVmN2RlNjA0ODVhNDM5YzZjYTExYzU5MWUxNzU1NzM5YWUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4140d2270efc404aa5c8f4fd19243e02",
+      "statement": "The files suite evaluates seeded reads, overwrites, targeted edits, file and recursive directory deletion, ls, grep, glob, parallel I/O, deep nesting, pagination or truncation recovery, empty files, and derived output by asserting trajectory, final text, and final file snapshots.",
+      "evidence": [
+        {
+          "resource": "repo://evals/files/index.ts#L120-L210",
+          "version": "repo-lines-v1:sha256:b83b055cd33118a3c64fb6744423378f36066410975d5926956875210f71dfe7:eyJzZWxlY3RlZExpbmVDb3VudCI6OTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI4MThhN2RlOTVmZGU3NDJiNGIyZWY2YmI3OWU2MDdlMjY5M2QxMjAwYWE5OTkwYzgwODFhZWJjNTA3ODg1MTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk1ZWYwMWJjMDhkYmMzYjYzZTRlNzVlYTNkMjZhNWI5NDE4OTE4NzdlMjdhZDg5MTMyOWM4NDExZDdkOGRjNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEzMGM1OGE5MTcwNWFhODYzZTdmZDIzOTJkZGE0ZGNhYzM0YjQwODQ0ZjQ2NzgxZGNjOWI2M2VlYTM3ZmRjMmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNjNzE2YWUyZDg2YmVkMzkyMTdhN2YxMzNiM2RlNTk2ZDNkZmRlMTQ3Mjg5NjIxZGZjMWNmZGU2N2M4YzU4MzIifQ"
+        },
+        {
+          "resource": "repo://evals/files/index.ts#L212-L334",
+          "version": "repo-lines-v1:sha256:1e6346bfcc4102573506231e521ef5006c2bf2f8975495c9bc031fc74a2d0a95:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIzLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJiODE4YTdkZTk1ZmRlNzQyYjRiMmVmNmJiNzllNjA3ZTI2OTNkMTIwMGFhOTk5MGM4MDgxYWViYzUwNzg4NTE0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI5NWVmMDFiYzA4ZGJjM2I2M2U0ZTc1ZWEzZDI2YTViOTQxODkxODc3ZTI3YWQ4OTEzMjljODQxMWQ3ZDhkYzRkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJhMzBjNThhOTE3MDVhYTg2M2U3ZmQyMzkyZGRhNGRjYWMzNGI0MDg0NGY0Njc4MWRjYzliNjNlZWEzN2ZkYzJlIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhNjM1M2I1OGFhZTNhNjJkOWRmMzUzM2Q3ZGQ3YTNjM2QxZjU0YmE5MjY5ZTAyZjAyZTBmM2EwNzQ2MTc3Y2E0In0"
+        },
+        {
+          "resource": "repo://evals/files/index.ts#L336-L464",
+          "version": "repo-lines-v1:sha256:3eed8fb3f573c4df84a1aa315c15314ce6890b6999dbb4bdcdf1c59375cf00e9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI5LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJiODE4YTdkZTk1ZmRlNzQyYjRiMmVmNmJiNzllNjA3ZTI2OTNkMTIwMGFhOTk5MGM4MDgxYWViYzUwNzg4NTE0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI5NWVmMDFiYzA4ZGJjM2I2M2U0ZTc1ZWEzZDI2YTViOTQxODkxODc3ZTI3YWQ4OTEzMjljODQxMWQ3ZDhkYzRkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJhMzBjNThhOTE3MDVhYTg2M2U3ZmQyMzkyZGRhNGRjYWMzNGI0MDg0NGY0Njc4MWRjYzliNjNlZWEzN2ZkYzJlIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI2MjYyMGY5YmM3NDA1OTU4MzI4NDc2MGM3MmI1ZDJhZTBmMjA1NDVjZTY4NDdhZGM1ZWZlYmZiNjA5NzkyYmRlIn0"
+        },
+        {
+          "resource": "repo://evals/files/index.ts#L5-L118",
+          "version": "repo-lines-v1:sha256:483952b81d314595f460154808fe00e33ee80c1617f50fe5486cf317937a877c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE0LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJjMTJhOTM4YWUwZDljMTViOWJhYzA0NTExODE4ZmVhNTljYmRlMWZjYjIyMzNjMjc5NzUxNDI5NTExYTA0YmFiIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI5NWVmMDFiYzA4ZGJjM2I2M2U0ZTc1ZWEzZDI2YTViOTQxODkxODc3ZTI3YWQ4OTEzMjljODQxMWQ3ZDhkYzRkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI4NGI0ZGU4ODIxOTEwODU5MmMxYzI2YzJiNzJhNmI4OTliMjJhMDY2N2NkZTBiOTU3YTc1YmQ2ZmM1MzgzNjc3IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIzNjU5Nzg2NmQ4NjY0NzM5MTczYzIyNDRiZjM3YmU3Mzg4NGY3NWVjMWZkODI2MTk0ZTczOWUwMjU4OGRkZGRhIn0"
+        },
+        {
+          "resource": "repo://evals/files/index.ts#L541-L588",
+          "version": "repo-lines-v1:sha256:957a76b067ef86fb3fa99b3386cd26eb078ae9b74f8396b6c35bdb26ff8fe256:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI4MThhN2RlOTVmZGU3NDJiNGIyZWY2YmI3OWU2MDdlMjY5M2QxMjAwYWE5OTkwYzgwODFhZWJjNTA3ODg1MTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk1ZWYwMWJjMDhkYmMzYjYzZTRlNzVlYTNkMjZhNWI5NDE4OTE4NzdlMjdhZDg5MTMyOWM4NDExZDdkOGRjNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEzMGM1OGE5MTcwNWFhODYzZTdmZDIzOTJkZGE0ZGNhYzM0YjQwODQ0ZjQ2NzgxZGNjOWI2M2VlYTM3ZmRjMmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_bdc49165bb1c4668bf22e8f2016af507",
+      "statement": "The memory suite injects one or more AGENTS.md paths through runner configuration and tests recall, memory-guided naming and code style, multi-source composition, missing-file fallback, avoiding redundant reads, transient-information filtering, and updating a stable preference.",
+      "evidence": [
+        {
+          "resource": "repo://evals/memory/index.ts#L117-L242",
+          "version": "repo-lines-v1:sha256:89ce548a445ef159e327e425c8eb030ea3dd4208fd7cc6c2ddaeab95e409f0d5:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJiODE4YTdkZTk1ZmRlNzQyYjRiMmVmNmJiNzllNjA3ZTI2OTNkMTIwMGFhOTk5MGM4MDgxYWViYzUwNzg4NTE0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI5NWVmMDFiYzA4ZGJjM2I2M2U0ZTc1ZWEzZDI2YTViOTQxODkxODc3ZTI3YWQ4OTEzMjljODQxMWQ3ZDhkYzRkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJhMzBjNThhOTE3MDVhYTg2M2U3ZmQyMzkyZGRhNGRjYWMzNGI0MDg0NGY0Njc4MWRjYzliNjNlZWEzN2ZkYzJlIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJjZDM2MjM5NGNhODdmOTViMmM5Njc4MjBkZDZiMTE1ZGUyNjQxMTI2ZGMzYTk4YmIxMTdjNGZjYTI3NjlhMTExIn0"
+        },
+        {
+          "resource": "repo://evals/memory/index.ts#L244-L270",
+          "version": "repo-lines-v1:sha256:79f2126d0ae51a631f40c7d7342946347508c24bde769af9873684cf45e97beb:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI4MThhN2RlOTVmZGU3NDJiNGIyZWY2YmI3OWU2MDdlMjY5M2QxMjAwYWE5OTkwYzgwODFhZWJjNTA3ODg1MTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEzMGM1OGE5MTcwNWFhODYzZTdmZDIzOTJkZGE0ZGNhYzM0YjQwODQ0ZjQ2NzgxZGNjOWI2M2VlYTM3ZmRjMmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://evals/memory/index.ts#L5-L115",
+          "version": "repo-lines-v1:sha256:4b165aeb4109f48fe35674bce077eb24a564ce38ae56ad2a27c1b80d04696103:eyJzZWxlY3RlZExpbmVDb3VudCI6MTExLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJjMGVhMzkwMWZiMTExODFlMGViODJkNjIyOGQwMzFiZWMxODQyM2MzYzk4OTkzN2FmYjhiMWU0MDUwZDA3MzgzIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI5NWVmMDFiYzA4ZGJjM2I2M2U0ZTc1ZWEzZDI2YTViOTQxODkxODc3ZTI3YWQ4OTEzMjljODQxMWQ3ZDhkYzRkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI4NGI0ZGU4ODIxOTEwODU5MmMxYzI2YzJiNzJhNmI4OTliMjJhMDY2N2NkZTBiOTU3YTc1YmQ2ZmM1MzgzNjc3IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI0ZGM1NWZjYmNjMjIwZjJmMjEzNzI2NTZiMzBhZGYwMDExZGI3YzZjZWQzNDcxZjllZGJiZWYxMzhkNGIzNGU1In0"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/types.ts#L618-L623",
+          "version": "repo-lines-v1:sha256:b29570853c17f1b334e43da7e8f0233fcc9339d97faa6a28b6a38584041a4e79:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTZkNGM3NDQzMTJkOWVhODg5ZWIzOTljOWNiOGUwNDQ2OGVmYmQ2MzNiOWI4NzI0M2YzY2FkMmQzMDBmOGZjZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDk1NjFiZTI0N2Q0Nzk3N2NkYzlkMGFkYzM2MzA4MjRjZmIyZjk5N2Y2ZTIzYzFkMDZlNWMyNzY2MzJhOGEyNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNWZhMDZlMTU2ZTQ0Mjg3N2NhNDFkZjhkMmMxOGRlODUzYjAzNjNmZDllMzhjZjEwNTZhMTIwYTJjYzI4ZjdiMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiN2ZhNmQxMzU3NzYzMjlhZDAxNDUzMjNkNjVkYmFjMzNiNmM0NWY3MDcyYmI2ODM3YWRlYmU3MzZmOGUxMzVkNyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_b710ed7834544e51849759407f71893c",
+      "statement": "The HITL suite directly constructs a checkpointer-backed agent, verifies configured tools pause in one interrupt with the expected action requests and review decisions, then resumes the same thread with Command decisions and checks approved tool results; it also covers HITL behavior inside general-purpose and named subagents.",
+      "evidence": [
+        {
+          "resource": "repo://evals/hitl/index.ts#L130-L204",
+          "version": "repo-lines-v1:sha256:fdb1b9d34e87d39198f349083ad7c18d4505362cdafd47ffab9de418d7f596bc:eyJzZWxlY3RlZExpbmVDb3VudCI6NzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI4MThhN2RlOTVmZGU3NDJiNGIyZWY2YmI3OWU2MDdlMjY5M2QxMjAwYWE5OTkwYzgwODFhZWJjNTA3ODg1MTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk1ZWYwMWJjMDhkYmMzYjYzZTRlNzVlYTNkMjZhNWI5NDE4OTE4NzdlMjdhZDg5MTMyOWM4NDExZDdkOGRjNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEzMGM1OGE5MTcwNWFhODYzZTdmZDIzOTJkZGE0ZGNhYzM0YjQwODQ0ZjQ2NzgxZGNjOWI2M2VlYTM3ZmRjMmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkzZTU1ZTE4YWQzYWFiMWQ1MWFjNTg2YjlkMzYxODM1MWEzNjU1MmM0ZmYyNTE5MTBhOGFjNmM3ZWZiODM3NjYifQ"
+        },
+        {
+          "resource": "repo://evals/hitl/index.ts#L206-L277",
+          "version": "repo-lines-v1:sha256:4b7a498a98a9903475a1f7d4e6540aefb313f72eeef675822fbb4046189a3596:eyJzZWxlY3RlZExpbmVDb3VudCI6NzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI4MThhN2RlOTVmZGU3NDJiNGIyZWY2YmI3OWU2MDdlMjY5M2QxMjAwYWE5OTkwYzgwODFhZWJjNTA3ODg1MTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk1ZWYwMWJjMDhkYmMzYjYzZTRlNzVlYTNkMjZhNWI5NDE4OTE4NzdlMjdhZDg5MTMyOWM4NDExZDdkOGRjNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEzMGM1OGE5MTcwNWFhODYzZTdmZDIzOTJkZGE0ZGNhYzM0YjQwODQ0ZjQ2NzgxZGNjOWI2M2VlYTM3ZmRjMmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://evals/hitl/index.ts#L35-L127",
+          "version": "repo-lines-v1:sha256:d8921e730439ad9fb6b45e069aae18ee54d656c685f2b2022645067ea0c2e029:eyJzZWxlY3RlZExpbmVDb3VudCI6OTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1NDVmYjA5NjJlOTlhODk3MjViYjZjMGVjOTU1OGRiZDg5NWM1NTdjZWEzMjgxYzQzNWNjZjJlMWQ4YWIxNzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmMGNkYjk3MmE3YmZiN2VkMjQ2ZjlmZjY3MjM4NWU1NWY0OTY4ZmMxMTA0M2RjNWI2ODRkNTFkZmEzMWRiY2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMwYWE2MTVkMDkwNGZlOTQ2NTlkNjk1MTMzNWY3MTFkNTBlODQ1MmNiMDRlOGExZjI5ZDZiYWQ4MWY1ZTllZGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY1N2YzNjBlNDBjMjAxYTc1N2YzM2M4MjczZWMxYmZlYzJkMGYxZDEwNWViNzE0MjlkOGMxMjk5NjIwNjEyMTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_75f964bb23e74229a4f8b22a4c152023",
+      "statement": "The delegation suite covers task routing to both a named weather_agent and the built-in general-purpose subagent using a fake weather tool, while the subagent contract defaults to isolated delegated-task context unless fork mode is selected.",
+      "evidence": [
+        {
+          "resource": "repo://evals/subagents/index.ts#L20-L70",
+          "version": "repo-lines-v1:sha256:4852bf05e5ecebc2492223903390607342158fd21dbea35833387dc3ddcdc4e2:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJiNjc0MmM5Y2I2ZmEyZmUzZDM2MGMzNjhhMjlkNWRjNzQ2YjZkYzgyZDYwNTY2NDI5MzY2MGE0NGQ1YzEyYjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk1ZWYwMWJjMDhkYmMzYjYzZTRlNzVlYTNkMjZhNWI5NDE4OTE4NzdlMjdhZDg5MTMyOWM4NDExZDdkOGRjNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMwYWE2MTVkMDkwNGZlOTQ2NTlkNjk1MTMzNWY3MTFkNTBlODQ1MmNiMDRlOGExZjI5ZDZiYWQ4MWY1ZTllZGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/middleware/subagents.ts#L193-L202",
+          "version": "repo-lines-v1:sha256:e963059a0f402b32d599a970197c232f7421fe327923135afc7f58d95e2ddd01:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUzNjI3MzI4NjE0ZmQ0OWVhNTNkODE5OGVjZjc5NjBiMmYwOGM5MDc3ZmU5MjRkZmQzOWRlYjVlNzlhN2M3OTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJkZWRhZDJiZGIyMzUzZTk3NGYzM2ZmODE3NWE0MDlhMmExNGQ1YTllZTQ0MmY2NWU4Y2ZmNjA1OTE5MDE1MGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiMjJmM2FhM2FkODgwMDI2ZTkxODFhYzA5NzJmYjE0MGI4NmE4ZTM2OTU5N2U2ZmE2YzY1NWFkMGFhNTIwYzYifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/middleware/subagents.ts#L217-L243",
+          "version": "repo-lines-v1:sha256:d7e4db986549856c2b2063853fbeb20efe050f1b542dec649c423c87fc4d446d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1YTQ4MDYzODlmZDM5ZmNhMmEyNTI5OTUwZTdjZGMxZTE1YjQ5YTc4YzBlNWU0MTU1MzMxYWU4ZTRkZDkzZjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlYWQzZjJkNTJiZmY1MjE2OTQwN2QyOTI4ZWQ0YmEwZGE1ZDhlOGUwMzM2YjFkN2Y2ZDgzYjY1MzMyZjE2ODciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZjYmU5Yzk5ZWEwMzk0NzVkMmEwMTEyYjljZjQ0ZjBhN2I1NmNmODZmODAwNjg2MDYzODVkZTQyZWIwMDZkZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFmMWVkMDdlNGY5NTllNThmZGQ2MmQzZWU1MGM2N2M1ZTE4MDI2OGMzNGMwZmFmZWJiNGJhMDhlYjExYzY4YTIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2fcc744cd3f143629d747a4a042f1ef7",
+      "statement": "The summarization suite uses a large generated file to test chunked reading, preservation of a terminal marker and follow-up answerability, and observable conversation-history offloading; the production middleware offloads old messages, summarizes them, and retains recent context.",
+      "evidence": [
+        {
+          "resource": "repo://evals/summarization/index.ts#L6-L95",
+          "version": "repo-lines-v1:sha256:fdbd5d5085b27680866f2a1ee6bf6838df1dbe878dcbe3f6800d1e728346a01e:eyJzZWxlY3RlZExpbmVDb3VudCI6OTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJjMThiM2Q5ZWYzMmQ1ZTY2Nzg1NGI5YjI4YzQ2ZDIwZThiZDAxZGRkZTJkNTVkNThkYmVmY2E4NzJhN2M5MjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMyZThlZDBmMzIxN2E3ZmI0ZGViOTJkOTMyZjg3NmVkMDgxMzZmNjAzYmJiNjNmMWQ3NDBkYjNmYzc1MDUzNjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/middleware/summarization.ts#L25-L40",
+          "version": "repo-lines-v1:sha256:c76ad53726bf7d2af88529fe9abe52ccc5960d228e7af5f11d73e2d2ddaa02ff:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgxMjg1NjNjNTRkOTM2NGYxODBjYzg1MGRhNGQzZDNmNGJlMWJhNmYwNmYzZDkwZmJjY2Y0N2I4MzM2MTQyMzAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBkNGVkNmQzMjdlOGU2MmNhNmY0YTk1YTVjZDZkYzRlZGIwZGVjMGYwOWQwNGNmODMxNjgzY2UxYjZhMGEyZGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY1YWRkMjRmZGVmMGQ0MTI1YmIwODliNTQxMWEzNzZjOGUxMGZhZWQ0MjE3NjdiNzRlMWEyYmQ5YmIyMGYzMjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjExZmRjNjRiNDYzNWM5ZjhlZDk4NzcyZTE1MDA3ZDUyZDQ2NTZhMWQ3YzNkMDBkODIyMGI1MDIyNjUwNDk1YjUifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/middleware/summarization.ts#L310-L316",
+          "version": "repo-lines-v1:sha256:d29b570fa1daa2baf89fe58cd18c8ca31728bf9aac46ad534d0a331d6873c47d:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjIzY2I0YzEzZDY3NzU5ZDU0Zjc2NzFkNDQwMzQ5NzJkMDkwM2EzOWQwOGFmYWU3M2JiOTgxZWI5YWIwZGNmMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjIzY2I0YzEzZDY3NzU5ZDU0Zjc2NzFkNDQwMzQ5NzJkMDkwM2EzOWQwOGFmYWU3M2JiOTgxZWI5YWIwZGNmMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNWM1YWU0NGI4YWU4ODRmZDE4NTU1NGIxNTE5N2QyY2M0ZjcwMmU1ZDAwNTYzMTg4YTIxMWIxNzViNGJhZDk4MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDAyMjllM2ZlYmVhZjlhMWEyMTBlNjBiMjg5ZWFkYzY1OTc1YjVmODgyM2Q4ODQzMWI2N2E0MDhjNTMzYjZjOSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_da12b69a61654405855b683eb2c0c3e4",
+      "statement": "The skills suite tests SKILL.md discovery from configured POSIX source paths, full reading, selection, combining skills, direct and read-before-edit updates, correct source targeting, and exclusion of unselected skill content; later skill sources override earlier duplicate names.",
+      "evidence": [
+        {
+          "resource": "repo://evals/skills/index.ts#L6-L70",
+          "version": "repo-lines-v1:sha256:067845069435c13ce11599d6a7c1e123fc19246b4532f93acf6f770dca6a6aec:eyJzZWxlY3RlZExpbmVDb3VudCI6NjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg1NWIyZGNkNDIwZjAxMjM2ZTQ4MzZlNGM5NWE2ZDAyZDIyOTQyODllYmVlZWFlMmJhMWVhNGUyODM4ZDRlMWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk1ZWYwMWJjMDhkYmMzYjYzZTRlNzVlYTNkMjZhNWI5NDE4OTE4NzdlMjdhZDg5MTMyOWM4NDExZDdkOGRjNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMyZThlZDBmMzIxN2E3ZmI0ZGViOTJkOTMyZjg3NmVkMDgxMzZmNjAzYmJiNjNmMWQ3NDBkYjNmYzc1MDUzNjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhhZWU5NWY3ZjY2NTYzMzg0OTFmZDljMDE4MmVkM2Y5ZTBjODRiMTI2YmVlMzFjODgwNWEyNjAwMTQ4MGI0YWEifQ"
+        },
+        {
+          "resource": "repo://evals/skills/index.ts#L72-L211",
+          "version": "repo-lines-v1:sha256:9ed8cba2da9731c91a9faa1d7f8630b2aa55b1b95e48d551d203e1a34c5e0d76:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJiODE4YTdkZTk1ZmRlNzQyYjRiMmVmNmJiNzllNjA3ZTI2OTNkMTIwMGFhOTk5MGM4MDgxYWViYzUwNzg4NTE0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI5NWVmMDFiYzA4ZGJjM2I2M2U0ZTc1ZWEzZDI2YTViOTQxODkxODc3ZTI3YWQ4OTEzMjljODQxMWQ3ZDhkYzRkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJhMzBjNThhOTE3MDVhYTg2M2U3ZmQyMzkyZGRhNGRjYWMzNGI0MDg0NGY0Njc4MWRjYzliNjNlZWEzN2ZkYzJlIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MSwiZm9sbG93aW5nQ29udGV4dEhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIn0"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/types.ts#L625-L654",
+          "version": "repo-lines-v1:sha256:97c06c6528918f988fe9bbb82a511b2a9d4019026c2badfd7eee32085d1c64df:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEyM2Y5M2U1N2Q3OTg3ZGNhZDg4M2ZhMTNjZjgwMmYyZTdlMDhkZjMzYTg3ZmE1N2U1NjVkOWY1OWZlY2VhZDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ0YmViYTFhMmQ1ZTA0NjI3OWM2MzA5YTlmMjQyZjQ0MzYxZjc3MmY1ZjVhYmMwNmRhNTM5MDkwYTkwNWVlMDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU5NWFlMTJhNGZmZGFmMzJlNGI2MDA0OGYzNTNhN2M3ZGZlMzFhMDhhZDY1ODZkYTAzZTMxY2FiMDJmN2M4OTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ0N2UxOTljNjczMzYzMzc4NTgxMTQzNjNjYzllNDI3OTU1Y2RiYzczMmI1ODE5Y2FmNTc5OTQzZjBiOGE4ZWIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_70e566316b93475ea345ed588e3a5e34",
+      "statement": "The tool-selection suite uses spied mock Slack, GitHub, Linear, Gmail, calendar, and web-search tools to evaluate direct intent routing, indirect requests, multiple actions, and multi-step chains without external service side effects.",
+      "evidence": [
+        {
+          "resource": "repo://evals/tool-selection/index.ts#L119-L267",
+          "version": "repo-lines-v1:sha256:dc9860a91b5058dc4e98fea120efe2eb0066d1017e91bfd31907c7e4eb904ce3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQ5LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIwYjRjZjRlOGE3NDE3NmEzMzE4ODZkY2E5Yzc2ZDBhOTdkYTRjOWJhNDU3OTUzNWI1MzM5MDdjNjZjODE0NWViIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI5NWVmMDFiYzA4ZGJjM2I2M2U0ZTc1ZWEzZDI2YTViOTQxODkxODc3ZTI3YWQ4OTEzMjljODQxMWQ3ZDhkYzRkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIyYTFkM2Y4MmVhNWI3Y2FjYWNhMTBjYzliY2Y3MWRmNjMyMThhMjlmNjg1NTM2ODQwNjVlMWY4YTUwYjdkYmQ5IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MSwiZm9sbG93aW5nQ29udGV4dEhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIn0"
+        },
+        {
+          "resource": "repo://evals/tool-selection/index.ts#L7-L117",
+          "version": "repo-lines-v1:sha256:8630a9ff51e388b7f9d3e61adee8d6fa583acf308e5c4edec45e31789644dc8d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTExLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI2ODlmOTk1YjBlYmYzMDY2ZmIyZDA5MWJiZTdmOTJmMTQzNzAzMjg1NDNjMDhmNWM0N2UyMTRjNjFhNTdlZDUxIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJmNmY1YjQwYjE1ODQ1N2QxNzg2NGYyMTc5MDc4NmRkNWEyZWNkYjY0YjY2YTY1MWY3ODhkNGUyNWNkMzMwM2QyIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJlZWVlYzI2YmU2MTVjOGIyYTJhYmQxNWYyZTYwODkyNTgyZmFiNjQ4YmQzZWM5NjI5MDhjZjg3Y2NlMGFhOGVkIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlMWQ1Mzk4ZDMyMjZjNTI2MWZmZDE4NTJkYjcyZmUyMzhlZmJiOWNiYzZiZjkyMWQ0NDZmZjdiOGEwYjgwMGQ0In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_d3e06919667343ffbb886db1d707c015",
+      "statement": "The aggregate eval package currently invokes the enabled basic, benchmark, files, follow-up-quality, HITL, memory, memory-agent-bench, memory-multiturn, skills, subagents, summarization, Tau2-airline, todos, tool-selection, and relational tool-usage suites, while Oolong dataset suites remain commented out.",
+      "evidence": [
+        {
+          "resource": "repo://evals/all/eval.test.ts#L1-L60",
+          "version": "repo-lines-v1:sha256:f8abbc10caec3dc786af684ce7967d6af80d3642110db2b48ae0d52c84f32fca:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkYzMxYzYxMGYwMGQwMDMxNTI3N2JjODQzYWRiYzEyM2U5ZjBlNTQxMWE2NTg0N2JlNjA4NGQ2ODBkMDY1ZjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM1NjhhYmZjMzliNGZlMzBhOWU5ZWE1MDczMTBmZTVhYjUxZjg2NjMzODk0NTg5ZTAxMjYzOGQ2N2E5NWEzYjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ5OTY3ZWMxZWQzODM2ZjhlYjE3YWZmMTcyYjViZmVmN2RlNjA0ODVhNDM5YzZjYTExYzU5MWUxNzU1NzM5YWUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.2",
+    "at": "2026-09-17T22:06:29.984Z"
+  }
+}
