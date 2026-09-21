@@ -953,7 +953,7 @@ describe("FilesystemBackend symlink cycle handling", () => {
 });
 
 /**
- * LC-587: a symlink under the sandbox root pointing outside it passes
+ * a symlink under the sandbox root pointing outside it passes
  * resolvePath()'s lexical containment check, so the fs call that follows
  * escapes the root.
  */
