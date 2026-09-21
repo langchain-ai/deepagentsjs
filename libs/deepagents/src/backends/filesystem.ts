@@ -99,40 +99,68 @@ export class FilesystemBackend implements BackendProtocolV2 {
   }
 
   /**
-   * Resolve the concrete path to unlink for a virtual delete operation.
-   *
-   * Virtual-mode path containment is lexical in resolvePath(), so deleting via
-   * that path could follow a symlinked parent outside the virtual root. Resolve
-   * and validate the real parent, then unlink through that real parent path so a
-   * replacement of the original lexical parent cannot redirect the unlink.
+   * resolvePath()'s containment check is lexical, so a symlink component
+   * (intermediate, or the leaf when includeLeaf) can alias a location
+   * outside the virtual root. Resolve the deepest existing segment for real
+   * and reject only if that escapes the root; includeLeaf is false only for
+   * delete(), which may target a symlink itself without following it.
    */
-  private async resolveDeletePath(
+  private async assertRealPathWithinRoot(
     resolvedPath: string,
     filePath: string,
+    { includeLeaf }: { includeLeaf: boolean },
   ): Promise<string> {
     if (!this.virtualMode) {
       return resolvedPath;
     }
 
-    const relative = path.relative(this.cwd, resolvedPath);
-    const segments = relative.split(path.sep).filter(Boolean);
-    let current = this.cwd;
-    for (const segment of segments.slice(0, -1)) {
-      current = path.join(current, segment);
-      const stat = await fs.lstat(current);
-      if (stat.isSymbolicLink()) {
-        throw new Error(`Symlink parent not allowed: ${filePath}`);
-      }
+    let realRoot: string;
+    try {
+      realRoot = await fs.realpath(this.cwd);
+    } catch {
+      return resolvedPath;
     }
 
-    const realRoot = await fs.realpath(this.cwd);
-    const realParent = await fs.realpath(path.dirname(resolvedPath));
-    const realRelative = path.relative(realRoot, realParent);
+    const relative = path.relative(this.cwd, resolvedPath);
+    const segments = relative.split(path.sep).filter(Boolean);
+    const checkedSegments = includeLeaf ? segments : segments.slice(0, -1);
+
+    let current = this.cwd;
+    for (const segment of checkedSegments) {
+      const next = path.join(current, segment);
+      try {
+        await fs.lstat(next);
+      } catch (e) {
+        if (!includeLeaf) {
+          throw e;
+        }
+        break;
+      }
+      current = next;
+    }
+
+    const realAnchor = await fs.realpath(current);
+    const realRelative = path.relative(realRoot, realAnchor);
     if (realRelative.startsWith("..") || path.isAbsolute(realRelative)) {
       throw new Error(`Path '${filePath}' resolves outside root directory`);
     }
 
-    return path.join(realParent, path.basename(resolvedPath));
+    if (!includeLeaf) {
+      return path.join(realAnchor, path.basename(resolvedPath));
+    }
+    return current === resolvedPath ? realAnchor : resolvedPath;
+  }
+
+  /**
+   * Resolve the concrete path to unlink for a virtual delete operation.
+   */
+  private async resolveDeletePath(
+    resolvedPath: string,
+    filePath: string,
+  ): Promise<string> {
+    return this.assertRealPathWithinRoot(resolvedPath, filePath, {
+      includeLeaf: false,
+    });
   }
 
   /**
@@ -145,6 +173,9 @@ export class FilesystemBackend implements BackendProtocolV2 {
   async ls(dirPath: string): Promise<LsResult> {
     try {
       const resolvedPath = this.resolvePath(dirPath);
+      await this.assertRealPathWithinRoot(resolvedPath, dirPath, {
+        includeLeaf: true,
+      });
       const stat = await fs.stat(resolvedPath);
 
       if (!stat.isDirectory()) {
@@ -242,6 +273,9 @@ export class FilesystemBackend implements BackendProtocolV2 {
   ): Promise<ReadResult> {
     try {
       const resolvedPath = this.resolvePath(filePath);
+      await this.assertRealPathWithinRoot(resolvedPath, filePath, {
+        includeLeaf: true,
+      });
 
       const mimeType = getMimeType(filePath);
       const isBinary = !isTextMimeType(mimeType);
@@ -327,6 +361,9 @@ export class FilesystemBackend implements BackendProtocolV2 {
    */
   async readRaw(filePath: string): Promise<ReadRawResult> {
     const resolvedPath = this.resolvePath(filePath);
+    await this.assertRealPathWithinRoot(resolvedPath, filePath, {
+      includeLeaf: true,
+    });
 
     const mimeType = getMimeType(filePath);
     const isBinary = !isTextMimeType(mimeType);
@@ -398,6 +435,9 @@ export class FilesystemBackend implements BackendProtocolV2 {
   async write(filePath: string, content: string): Promise<WriteResult> {
     try {
       const resolvedPath = this.resolvePath(filePath);
+      await this.assertRealPathWithinRoot(resolvedPath, filePath, {
+        includeLeaf: true,
+      });
 
       const mimeType = getMimeType(filePath);
       const isBinary = !isTextMimeType(mimeType);
@@ -511,6 +551,9 @@ export class FilesystemBackend implements BackendProtocolV2 {
   ): Promise<EditResult> {
     try {
       const resolvedPath = this.resolvePath(filePath);
+      await this.assertRealPathWithinRoot(resolvedPath, filePath, {
+        includeLeaf: true,
+      });
 
       let content: string;
 
@@ -598,6 +641,9 @@ export class FilesystemBackend implements BackendProtocolV2 {
     let baseFull: string;
     try {
       baseFull = this.resolvePath(dirPath || ".");
+      await this.assertRealPathWithinRoot(baseFull, dirPath, {
+        includeLeaf: true,
+      });
     } catch {
       return { matches: [] };
     }
@@ -807,8 +853,16 @@ export class FilesystemBackend implements BackendProtocolV2 {
       pattern = pattern.substring(1);
     }
 
-    const resolvedSearchPath =
-      searchPath === "/" ? this.cwd : this.resolvePath(searchPath);
+    let resolvedSearchPath: string;
+    try {
+      resolvedSearchPath =
+        searchPath === "/" ? this.cwd : this.resolvePath(searchPath);
+      await this.assertRealPathWithinRoot(resolvedSearchPath, searchPath, {
+        includeLeaf: true,
+      });
+    } catch {
+      return { files: [] };
+    }
 
     try {
       const stat = await fs.stat(resolvedSearchPath);
@@ -907,6 +961,9 @@ export class FilesystemBackend implements BackendProtocolV2 {
     for (const [filePath, content] of files) {
       try {
         const resolvedPath = this.resolvePath(filePath);
+        await this.assertRealPathWithinRoot(resolvedPath, filePath, {
+          includeLeaf: true,
+        });
 
         // Ensure parent directory exists
         await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
@@ -942,6 +999,9 @@ export class FilesystemBackend implements BackendProtocolV2 {
     for (const filePath of paths) {
       try {
         const resolvedPath = this.resolvePath(filePath);
+        await this.assertRealPathWithinRoot(resolvedPath, filePath, {
+          includeLeaf: true,
+        });
         const content = await fs.readFile(resolvedPath);
         responses.push({ path: filePath, content, error: null });
       } catch (e: any) {
