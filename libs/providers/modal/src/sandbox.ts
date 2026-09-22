@@ -20,7 +20,7 @@ import {
   type FileUploadResponse,
 } from "deepagents";
 
-import { getAuthCredentials } from "./auth.js";
+import { getAuthCredentials, type ModalCredentials } from "./auth.js";
 import { ModalSandboxError, type ModalSandboxOptions } from "./types.js";
 
 /**
@@ -199,9 +199,10 @@ export class ModalSandbox extends BaseSandbox {
       );
     }
 
-    // Validate authentication credentials exist
+    // Validate and resolve authentication credentials
+    let credentials: ModalCredentials;
     try {
-      getAuthCredentials(this.#options.auth);
+      credentials = getAuthCredentials(this.#options.auth);
     } catch (error) {
       throw new ModalSandboxError(
         "Failed to authenticate with Modal. Check your token configuration.",
@@ -212,7 +213,10 @@ export class ModalSandbox extends BaseSandbox {
 
     try {
       // Create Modal client
-      this.#client = new ModalClient();
+      this.#client = new ModalClient({
+        tokenId: credentials.tokenId,
+        tokenSecret: credentials.tokenSecret,
+      });
 
       // Get or create the app
       this.#app = await this.#client.apps.fromName(
@@ -636,9 +640,10 @@ export class ModalSandbox extends BaseSandbox {
     sandboxId: string,
     options?: Pick<ModalSandboxOptions, "auth">,
   ): Promise<ModalSandbox> {
-    // Validate authentication credentials exist
+    // Validate and resolve authentication credentials
+    let credentials: ModalCredentials;
     try {
-      getAuthCredentials(options?.auth);
+      credentials = getAuthCredentials(options?.auth);
     } catch (error) {
       throw new ModalSandboxError(
         "Failed to authenticate with Modal. Check your token configuration.",
@@ -648,7 +653,10 @@ export class ModalSandbox extends BaseSandbox {
     }
 
     try {
-      const client = new ModalClient();
+      const client = new ModalClient({
+        tokenId: credentials.tokenId,
+        tokenSecret: credentials.tokenSecret,
+      });
       const existingSandbox = await client.sandboxes.fromId(sandboxId);
 
       const modalSandbox = new ModalSandbox(options);
@@ -683,9 +691,10 @@ export class ModalSandbox extends BaseSandbox {
     sandboxName: string,
     options?: Pick<ModalSandboxOptions, "auth">,
   ): Promise<ModalSandbox> {
-    // Validate authentication credentials exist
+    // Validate and resolve authentication credentials
+    let credentials: ModalCredentials;
     try {
-      getAuthCredentials(options?.auth);
+      credentials = getAuthCredentials(options?.auth);
     } catch (error) {
       throw new ModalSandboxError(
         "Failed to authenticate with Modal. Check your token configuration.",
@@ -695,7 +704,10 @@ export class ModalSandbox extends BaseSandbox {
     }
 
     try {
-      const client = new ModalClient();
+      const client = new ModalClient({
+        tokenId: credentials.tokenId,
+        tokenSecret: credentials.tokenSecret,
+      });
       const existingSandbox = await client.sandboxes.fromName(
         appName,
         sandboxName,
