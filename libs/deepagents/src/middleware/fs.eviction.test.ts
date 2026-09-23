@@ -564,6 +564,54 @@ describe("evicted tool result readback", () => {
     vi.clearAllMocks();
   });
 
+  it("should save results with long tool-call IDs at short readable paths", async () => {
+    const state: { messages: unknown[]; files: Record<string, FileData> } = {
+      messages: [],
+      files: {},
+    };
+    vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+    const middleware = createFilesystemMiddleware({
+      backend: () => new StateBackend({ state, store: undefined }),
+      toolTokenLimitBeforeEvict: 100,
+    });
+    const toolCallId = `call_${"thought_signature".repeat(300)}`;
+    const largeContent = "large result\n".repeat(500);
+    const wrapped = await (middleware as any).wrapToolCall(
+      {
+        toolCall: { id: toolCallId, name: "external_tool", args: {} },
+        state,
+        runtime: {},
+      },
+      async () =>
+        new ToolMessage({
+          content: largeContent,
+          tool_call_id: toolCallId,
+          name: "external_tool",
+        }),
+    );
+
+    expect(isCommand(wrapped)).toBe(true);
+    const update = (wrapped as any).update;
+    const [path] = Object.keys(update.files);
+    expect(path).toMatch(/^\/large_tool_results\/call-[\da-f-]+\.txt$/);
+    expect(path.length).toBeLessThan(128);
+    expect(update.messages[0].tool_call_id).toBe(toolCallId);
+    expect(update.messages[0].content).toContain(path);
+    expect(update.messages[0].content).toContain(
+      `${toolCallId.slice(0, 32)}...`,
+    );
+    expect(update.messages[0].content).not.toContain(toolCallId);
+    Object.assign(state.files, update.files);
+    const readFileTool = (middleware as any).tools.find(
+      (t: any) => t.name === "read_file",
+    );
+    const readResult = await readFileTool.invoke(
+      { file_path: path, limit: 5 },
+      { store: undefined },
+    );
+    expect(readResult[0].text).toContain("large result");
+  });
+
   it("should save large plain-text tool results with a text extension", async () => {
     const state: { messages: unknown[]; files: Record<string, FileData> } = {
       messages: [],

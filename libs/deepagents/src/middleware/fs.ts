@@ -2076,14 +2076,23 @@ export function createFilesystemMiddleware(
     const sanitizedId = sanitizeToolCallId(
       fallbackToolCallId || msg.tool_call_id,
     );
-    const evictPath = `/large_tool_results/${sanitizedId}.txt`;
+    const fileId =
+      new TextEncoder().encode(sanitizedId).length > 128
+        ? `call-${crypto.randomUUID()}`
+        : sanitizedId;
+    const evictPath = `/large_tool_results/${fileId}.txt`;
 
     const writeResult = await resolvedBackend.write(evictPath, textContent);
 
     const contentSample = createContentPreview(textContent);
     const replacementText = writeResult.error
       ? `Tool result too large, but the result could not be saved to the filesystem: ${writeResult.error}`
-      : TOO_LARGE_TOOL_MSG.replace("{tool_call_id}", msg.tool_call_id)
+      : TOO_LARGE_TOOL_MSG.replace(
+          "{tool_call_id}",
+          msg.tool_call_id.length > 32
+            ? `${msg.tool_call_id.slice(0, 32)}...`
+            : msg.tool_call_id,
+        )
           .replace("{file_path}", evictPath)
           .replace("{content_sample}", contentSample);
 
