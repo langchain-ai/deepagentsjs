@@ -2076,7 +2076,11 @@ export function createFilesystemMiddleware(
     const sanitizedId = sanitizeToolCallId(
       fallbackToolCallId || msg.tool_call_id,
     );
-    const evictPath = `/large_tool_results/${sanitizedId}.txt`;
+    const fileId =
+      new TextEncoder().encode(sanitizedId).length > 128
+        ? `call-${crypto.randomUUID()}`
+        : sanitizedId;
+    const evictPath = `/large_tool_results/${fileId}.txt`;
 
     const writeResult = await resolvedBackend.write(evictPath, textContent);
 
