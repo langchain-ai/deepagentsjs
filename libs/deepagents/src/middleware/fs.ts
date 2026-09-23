@@ -2087,7 +2087,12 @@ export function createFilesystemMiddleware(
     const contentSample = createContentPreview(textContent);
     const replacementText = writeResult.error
       ? `Tool result too large, but the result could not be saved to the filesystem: ${writeResult.error}`
-      : TOO_LARGE_TOOL_MSG.replace("{tool_call_id}", msg.tool_call_id)
+      : TOO_LARGE_TOOL_MSG.replace(
+          "{tool_call_id}",
+          msg.tool_call_id.length > 32
+            ? `${msg.tool_call_id.slice(0, 32)}...`
+            : msg.tool_call_id,
+        )
           .replace("{file_path}", evictPath)
           .replace("{content_sample}", contentSample);
 

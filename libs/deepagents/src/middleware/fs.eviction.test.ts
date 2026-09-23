@@ -597,6 +597,10 @@ describe("evicted tool result readback", () => {
     expect(path.length).toBeLessThan(128);
     expect(update.messages[0].tool_call_id).toBe(toolCallId);
     expect(update.messages[0].content).toContain(path);
+    expect(update.messages[0].content).toContain(
+      `${toolCallId.slice(0, 32)}...`,
+    );
+    expect(update.messages[0].content).not.toContain(toolCallId);
     Object.assign(state.files, update.files);
     const readFileTool = (middleware as any).tools.find(
       (t: any) => t.name === "read_file",
