@@ -546,6 +546,7 @@ import {
   validatePermissionPaths,
 } from "../permissions/enforce.js";
 import { CompositeBackend } from "../backends/composite.js";
+import { scrubUnsupportedMultimodalContent } from "./multimodal.js";
 
 /**
  * Zod schema for legacy FileDataV1 (content as line array).
@@ -2222,6 +2223,10 @@ export function createFilesystemMiddleware(
             return msg;
           });
         }
+      }
+
+      if (messages) {
+        messages = scrubUnsupportedMultimodalContent(messages, request.model);
       }
 
       return handler({

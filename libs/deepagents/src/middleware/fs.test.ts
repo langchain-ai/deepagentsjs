@@ -428,6 +428,35 @@ describe("createFilesystemMiddleware", () => {
   });
 
   describe("wrapModelCall", () => {
+    it("replaces unsupported file blocks in the request only", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+      });
+      const toolMessage = new ToolMessage({
+        tool_call_id: "call_1",
+        name: "read_file",
+        content: [
+          { type: "file", mimeType: "application/zip", data: "AAA" } as never,
+        ],
+      });
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      const request = {
+        systemMessage: new SystemMessage("Base prompt"),
+        messages: [toolMessage],
+        model: { _llmType: () => "anthropic", profile: {} },
+        state: {},
+        config: {},
+        tools: middleware.tools || [],
+      };
+
+      await middleware.wrapModelCall!(request as any, mockHandler);
+
+      const sent = mockHandler.mock.calls[0][0].messages[0];
+      expect(sent.content[0].type).toBe("text");
+      expect(sent.content[0].text).toContain("application/zip");
+      expect(toolMessage.content[0]).toMatchObject({ type: "file" });
+    });
+
     it("should not add redundant filesystem guidance by default", async () => {
       const middleware = createFilesystemMiddleware({
         backend: createMockBackend(),
