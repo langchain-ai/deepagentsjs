@@ -1150,6 +1150,24 @@ describe("createFilesystemMiddleware", () => {
   });
 
   describe("tools", () => {
+    it("read_file description links to the published multimodal docs", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockBackend(),
+      });
+      const readFileTool = middleware.tools!.find(
+        (tool) => tool.name === "read_file",
+      );
+
+      // https://github.com/langchain-ai/deepagentsjs/issues/867
+      // The old path without /oss/ returns 404. This string is sent to the model.
+      expect(readFileTool?.description).toContain(
+        "https://docs.langchain.com/oss/javascript/langchain/messages#multimodal",
+      );
+      expect(readFileTool?.description).not.toContain(
+        "https://docs.langchain.com/javascript/langchain/messages",
+      );
+    });
+
     // Regression test for https://langchain.slack.com/archives/C08HM96QCHG/p1787476952535559
     it("read_file reports when the default limit returns a partial file", async () => {
       const lines = Array.from({ length: 1450 }, (_, i) => `line ${i + 1}`);
