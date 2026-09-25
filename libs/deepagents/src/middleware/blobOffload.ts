@@ -7,6 +7,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { Command } from "@langchain/langgraph";
 import { HumanMessage, ToolMessage } from "langchain";
 import type {
   AnyBackendProtocol,
@@ -209,10 +210,10 @@ export async function offloadToolResult(
       prefix,
       cache,
     );
-    return {
+    return new Command({
       ...(result as Record<string, unknown>),
       update: { ...update, messages },
-    };
+    });
   }
   return result;
 }
@@ -293,6 +294,7 @@ function withContent(message: unknown, content: unknown): unknown {
       status: message.status,
       additional_kwargs: message.additional_kwargs,
       response_metadata: message.response_metadata,
+      metadata: message.metadata,
     });
   }
   if (HumanMessage.isInstance(message)) {

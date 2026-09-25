@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { Command } from "@langchain/langgraph";
 import { HumanMessage, ToolMessage } from "langchain";
 import { createHash } from "node:crypto";
 
@@ -232,6 +233,55 @@ describe("offloadToolResult", () => {
       { type: "image", mimeType: "image/png", [BLOB_REF_KEY]: PNG_DIGEST },
     ]);
     expect(result.update.files).toEqual({ foo: "bar" });
+  });
+
+  it("preserves Command class identity when offloading its update", async () => {
+    const backend = fakeBackend();
+    const message = toolResult({
+      type: "image",
+      mimeType: "image/png",
+      data: PNG_BASE64,
+    });
+    const command = new Command({
+      update: { messages: [message], files: { foo: "bar" } },
+    });
+
+    const result = await offloadToolResult(
+      command,
+      backend,
+      "/blobs",
+      new BlobCache(),
+    );
+
+    expect(result).toBeInstanceOf(Command);
+    expect((result as Command)._updateAsTuples()).toEqual([
+      [
+        "messages",
+        [expect.objectContaining({ tool_call_id: message.tool_call_id })],
+      ],
+      ["files", { foo: "bar" }],
+    ]);
+  });
+
+  it("preserves ToolMessage metadata", async () => {
+    const backend = fakeBackend();
+    const message = new ToolMessage({
+      tool_call_id: "call_42",
+      name: "read_file",
+      content: [
+        { type: "image", mimeType: "image/png", data: PNG_BASE64 } as never,
+      ],
+      metadata: { channel: "artifacts" },
+    });
+
+    const result = (await offloadToolResult(
+      message,
+      backend,
+      "/blobs",
+      new BlobCache(),
+    )) as ToolMessage;
+
+    expect(result.metadata).toEqual({ channel: "artifacts" });
   });
 });
 
