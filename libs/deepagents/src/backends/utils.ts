@@ -1089,13 +1089,36 @@ export function adaptBackendProtocol(
     },
   };
 
-  // Preserve `routePrefixes` so `CompositeBackend.isInstance` still detects
-  // composites after adaptation and the execute-tool permission guard stays
-  // correct; without it, scoped filesystem permissions wrongly disable execute.
-  const routePrefixes = (backend as { routePrefixes?: unknown }).routePrefixes;
-  if (Array.isArray(routePrefixes)) {
-    Object.defineProperty(adapted, "routePrefixes", {
-      value: routePrefixes,
+  // Adaptation only copies the standard protocol methods, so identity markers
+  // that callers duck-type on elsewhere (`CompositeBackend.isInstance`,
+  // `StateBackend.isInstance`) would otherwise be silently lost.
+  const identityMarkers: Array<
+    [key: string, isValid: (value: unknown) => boolean]
+  > = [
+    ["routePrefixes", Array.isArray],
+    ["backendKind", (value) => typeof value === "string"],
+  ];
+  for (const [key, isValid] of identityMarkers) {
+    const value = (backend as unknown as Record<string, unknown>)[key];
+    if (isValid(value)) {
+      Object.defineProperty(adapted, key, {
+        value,
+        enumerable: true,
+        configurable: true,
+      });
+    }
+  }
+
+  // `resolveBackendForPath` (CompositeBackend only) needs a closure rather
+  // than a plain copy, since it relies on private state on `backend`.
+  const resolveBackendForPath = (
+    backend as {
+      resolveBackendForPath?: (path: string) => [BackendProtocolV2, string];
+    }
+  ).resolveBackendForPath;
+  if (typeof resolveBackendForPath === "function") {
+    Object.defineProperty(adapted, "resolveBackendForPath", {
+      value: (path: string) => resolveBackendForPath.call(backend, path),
       enumerable: true,
       configurable: true,
     });

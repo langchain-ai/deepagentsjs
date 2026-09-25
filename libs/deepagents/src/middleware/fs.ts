@@ -35,6 +35,11 @@ import type {
 import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
 import {
+  BlobCache,
+  hydrateMessages,
+  offloadToolResult,
+} from "./blobOffload.js";
+import {
   sanitizeToolCallId,
   EMPTY_CONTENT_WARNING,
   formatContentWithLineNumbers,
@@ -366,6 +371,9 @@ export const GREP_TRUNCATION_NOTE =
  * Set to null to disable the cap.
  */
 export const DEFAULT_GREP_MAX_COUNT = 1000;
+
+/** Path prefix offloaded binary `read_file` blobs are written under. */
+const BLOBS_PREFIX = "/blobs";
 
 /**
  * Message template for evicted tool results.
@@ -1877,6 +1885,17 @@ export interface FilesystemMiddlewareOptions {
    * argument overrides this default. Set to `null` to disable the cap.
    */
   grepMaxCount?: number | null;
+  /**
+   * Keep binary `read_file` content out of message history (default: `false`).
+   *
+   * Payloads are written to `/blobs` on the backend and state keeps a
+   * content-addressed reference instead; model requests are rehydrated from
+   * the backend. Useful with sandbox backends. Has no effect when `/blobs`
+   * routes to a `StateBackend`, since that backend stores files as part of
+   * graph state — offloading there would just relocate the bytes to a
+   * different key within the same checkpoint, not out of it.
+   */
+  offloadBinaryReads?: boolean;
 }
 
 /**
@@ -1924,6 +1943,18 @@ function allPathsScopedToRoutes(
   );
 }
 
+/** Whether `path` resolves to a `StateBackend`, recursing through composite routing. */
+function routesToStateBackend(
+  backend: AnyBackendProtocol,
+  path: string,
+): boolean {
+  if (CompositeBackend.isInstance(backend)) {
+    const [routed, routedPath] = backend.resolveBackendForPath(path);
+    return routesToStateBackend(routed, routedPath);
+  }
+  return StateBackend.isInstance(backend);
+}
+
 /**
  * Create middleware that provides built-in filesystem tools and optional custom
  * prompt guidance.
@@ -1961,7 +1992,9 @@ export function createFilesystemMiddleware(
     permissions = [],
     tools: filesystemTools = null,
     grepMaxCount = DEFAULT_GREP_MAX_COUNT,
+    offloadBinaryReads = false,
   } = options;
+  const blobCache = offloadBinaryReads ? new BlobCache() : null;
   const enabledFilesystemTools = normalizeFilesystemTools(filesystemTools);
   const executeToolEnabled =
     enabledFilesystemTools == null || enabledFilesystemTools.has("execute");
@@ -2224,6 +2257,18 @@ export function createFilesystemMiddleware(
         }
       }
 
+      if (blobCache) {
+        // No routing check here, unlike the offload side: this only resolves
+        // references that already exist, and offload is what's responsible
+        // for never creating one that can't be usefully resolved later.
+        messages = (await hydrateMessages(
+          messages,
+          resolvedBackend,
+          BLOBS_PREFIX,
+          blobCache,
+        )) as typeof messages;
+      }
+
       return handler({
         ...request,
         tools,
@@ -2232,23 +2277,34 @@ export function createFilesystemMiddleware(
       });
     },
     wrapToolCall: async (request, handler) => {
-      // Return early if eviction is disabled
-      if (!toolTokenLimitBeforeEvict) {
-        return handler(request);
-      }
-
-      // Check if this tool is excluded from eviction
       const toolName = request.toolCall?.name;
-      if (
-        toolName &&
-        TOOLS_EXCLUDED_FROM_EVICTION.includes(
-          toolName as (typeof TOOLS_EXCLUDED_FROM_EVICTION)[number],
-        )
-      ) {
-        return handler(request);
+      let result = await handler(request);
+
+      if (blobCache && toolName === "read_file") {
+        const resolvedBackend = await resolveBackend(backend, {
+          ...request.runtime,
+          state: request.state,
+        });
+        // Offloading here would just relocate bytes to a different checkpoint key, not out of it.
+        if (!routesToStateBackend(resolvedBackend, `${BLOBS_PREFIX}/`)) {
+          result = (await offloadToolResult(
+            result,
+            resolvedBackend,
+            BLOBS_PREFIX,
+            blobCache,
+          )) as typeof result;
+        }
       }
 
-      const result = await handler(request);
+      if (
+        !toolTokenLimitBeforeEvict ||
+        (toolName &&
+          TOOLS_EXCLUDED_FROM_EVICTION.includes(
+            toolName as (typeof TOOLS_EXCLUDED_FROM_EVICTION)[number],
+          ))
+      ) {
+        return result;
+      }
 
       if (ToolMessage.isInstance(result)) {
         const processed = await processToolMessage(
