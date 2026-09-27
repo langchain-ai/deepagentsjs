@@ -1013,7 +1013,7 @@ export const READ_FILE_TOOL_DESCRIPTION = context`
   - Speculatively batch multiple \`read_file\` calls in one response when several files may be useful.
   - An empty file returns a system-reminder warning in place of contents.
   - Large tool results may be offloaded to a file; the tool message gives the path. Read that path here, paging with \`offset\`/\`limit\`.
-  - Images (\`.png\`, \`.jpg\`, etc.), audio, video, and PDFs return multimodal content blocks (https://docs.langchain.com/javascript/langchain/messages#multimodal).
+  - Images (\`.png\`, \`.jpg\`, etc.), audio, video, and PDFs return multimodal content blocks (https://docs.langchain.com/oss/javascript/langchain/messages#multimodal).
   - For images and PDFs, pagination via \`offset\`/\`limit\` is text-only - supply \`file_path\` only.
   - Always read a file before editing it.
 `;
