@@ -1,0 +1,22 @@
+# Source files
+src/
+*.ts
+!*.d.ts
+
+# Test files
+**/*.test.ts
+**/*.int.test.ts
+vitest.config.ts
+
+# Config
+tsconfig.json
+tsdown.config.ts
+.tsdown/
+
+# Development
+.env
+.env.*
+
+# Editor
+.vscode/
+.idea/
