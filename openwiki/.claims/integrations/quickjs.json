@@ -1,0 +1,294 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:34667171c1d5680ecdb77bfd195c263567385abb1a6619e0940fd1dff25e39f8",
+  "claims": [
+    {
+      "id": "claim_b9736c3b67b1417a9c7f13236f6abf96",
+      "statement": "CodeInterpreterMiddleware adds one model-facing eval tool that evaluates code in a QuickJS WASM REPL, and its eval calls are scoped by thread ID plus a middleware instance ID before cleanup in afterAgent.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/quickjs/src/middleware.ts#L385-L412",
+          "version": "repo-lines-v1:sha256:cf8a230cdc44443aa3db9381e0933f6dd046df33983e2cbc3421b4611f710124:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRhN2RkZGY5NWIyNGZhM2FkNDEyMzBiZjA1NTg2YTY2M2ZlMDg5ZTgwN2YzODkzOTZlOTg3M2Y5ZGQ4MzI3MTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJkMGYyZDNhM2FhZGEyNzU4NjQ1NzhkMGE0MzkxNTYzOGQ1NDNmZWNhMmM5NDg1OGRiOTQxMjExZTg2Y2VmMmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYxODM4MTRjNjIyMDNlZDI1NTgyYWQzZjAxMzdiYmYxMzNmMzcxNDIwYmJmNWEyMWNkZTkzZjYwNmI0YTJmM2YifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/middleware.ts#L477-L505",
+          "version": "repo-lines-v1:sha256:6f514539f55c23bb03ecee4ddfadfbee85b3842dc3b3f923c65ba2ff3aaa1878:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiYjQ4NDc3ODA5YjkwYzkyOWU5ZGQwNTk1MDNjMzZkNzgzYzgxOTk1Y2ExZDY5MGY4N2RmODg3YzJjZGI5MDIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmMGNkYjk3MmE3YmZiN2VkMjQ2ZjlmZjY3MjM4NWU1NWY0OTY4ZmMxMTA0M2RjNWI2ODRkNTFkZmEzMWRiY2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJlZWVmZGQ1MTEzZDk5MDU2ZjFlMTlkZTFiN2Q1YmVkZTZlMGEzMDFmOWU4ZjdiZTRlYWQzZjhmOGRhODY2YzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFjZWNkZjU4OGY0ZGRlYjVjZWFlMWVjZjI0ZTIyZjhlNjdhZjNmYmE0ZDc3NTMyZWYwNjllZjE4YWMwZWE4NjYifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/middleware.ts#L524-L563",
+          "version": "repo-lines-v1:sha256:1160f0241b8fb7dcc6e8a3d26f150bb4dc43fdb598ae13e2bccba9ced6862c83:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwZTU5OGRlZGY4ODdhYTFiMTdkMDczZWMwOGY1NDM1YWI5OTZhYmVlMmY4ZTBkNjYzN2I4Mjk0OTBjNTM1MmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmMGNkYjk3MmE3YmZiN2VkMjQ2ZjlmZjY3MjM4NWU1NWY0OTY4ZmMxMTA0M2RjNWI2ODRkNTFkZmEzMWRiY2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEzMGM1OGE5MTcwNWFhODYzZTdmZDIzOTJkZGE0ZGNhYzM0YjQwODQ0ZjQ2NzgxZGNjOWI2M2VlYTM3ZmRjMmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEwMWJmMmE1NjhkYmY2MmM0ZTQ4MGNiMTliOGZjM2QxNTNjMzIzMmRjYjc1ZWQ1ZDE5MWIwZGMxODE4YzY3MzIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_abf5ef58b1974c7c98bdf7edb5458ae5",
+      "statement": "Each ReplSession owns an isolated QuickJS runtime and context on a shared compiled WASM module; the shared module and Emscripten infrastructure are shared, but guest globals, heap, and stack are not shared between sessions.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.ts#L286-L327",
+          "version": "repo-lines-v1:sha256:d183c4a37982a1d87fb9a08fc97241f5d08bb42615a53a4efeb61c1d4081d2d8:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJkMTZiYzcxODE2YjI0NzRmODFiNjgyMWJiNWM1OGRkY2Y1YTI3ZGEwZjRhZDc2ZDZjMzdiOGMxNTE5MjMzZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU5YzcwZjZkMjQxNWFiODYxYWU3NzY2ZWY1YzFkOWE2ZGNlMjJkN2Q5YjhhNGYwZDIwOTYzZTkwM2E1NGNkNTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQxZDA0YWQ0NDVhNGNhZDdhZmVhNmNkOGVhMmMwOTc2N2IwYzYwNDJkMTRmZGJiNmI3MDg2ODcxNmRmMjQ3MjYifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.ts#L64-L99",
+          "version": "repo-lines-v1:sha256:99795737f79c32ee45efbc3e9bdb10efb3fb4f46d6835021706985f5f5a3b535:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNiZDFkMmEyMDZmNzVhOWE0MDExMGY0NGE3OWEyMzk1NDhhYzM1MTExYTM2MmM1OGY5ZjQxOWY2NGJmNmNiYWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJkOTcxZDU1MjE4YzdhOWFiZTBhYzg2ZmE4ZTZiZjU2MmNhNDJjNGE3MTY0NTJhYzY5YzM3Y2ExNDg3NzU4ZmYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1dde6529ddd64044b61440901abb5335",
+      "statement": "ReplSession starts its runtime lazily, deduplicates live sessions by ID, serializes only the session ID, and disposes the runtime and removes the cache entry when deleted; JSON serialization does not contain the guest heap.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.test.ts#L798-L856",
+          "version": "repo-lines-v1:sha256:3e62b813a18396a254e273cba6273275ace50be87759438904f7750f8afb6edc:eyJzZWxlY3RlZExpbmVDb3VudCI6NTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4M2Y0YWI2ZmVlZjVlMmNjMGZkNDY5OGQwZDEwOWJjNjliMzBhMjczMWE3M2VmZjdhYzZmZThkYWY3M2Y0MmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyZDExY2FmNDNlOTdlZjM2OWU2YmVlZDFhMjY4YmQwNTgzOGYyOWI5ZGQyNTRiZjY5YmE2NDg4NDE0NzIzNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxNjQ4YmMyYWEyODlkNmM2YzcwZmQ2ZjIxMmY1OGQwMDU5YmYzMjUzMWU0YTQ1M2RlNzc2NjMyOTZmZDE1MzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJlOWVkMDUwYWQwNmQyOGIyZTFjYTFhNTRhNDg1NzFmNTc2YzY1MmY3ZmVhNGRhODNhMTA3MTQyZjQ1NjIzZDkifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.ts#L233-L251",
+          "version": "repo-lines-v1:sha256:8fd7f3d40ab28871bf72ac167f052cd6cd7b4bd894ddb62303b0c034c96da8bd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0Mjk2YWIwNzU0YjM2MWRlMDcxOGQ0MmI1OGE0MDJjYTFkZGEzNGMxNmE1YTE5OTExZmY5MDFiODZhODBkODIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZiNTgwZTk2NGY4M2E0NzNmNDNkNDQzODQ2Mjk0OWQ2OGI1NjAwZmRhNzg3ZjE2Mzc0NWQwMGRlODljYmYzNmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI3YTgyMGUzNWYyMWM1MGE5YjhhZmE0MjZjYjUxNTgyZTI5ZDc2MmZiMzU3ZmQxMDVkYTllMjk2ZGIyMGViNDMifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.ts#L360-L385",
+          "version": "repo-lines-v1:sha256:12656d26f68bb42e14f9a4c60c0e9fe7bc3c9e8a1c192d278b626d067c712304:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlkZWI4MmJkMjkyOWFmZWRhZmE0NzVmMmQ3YzFhYWI0MzRmYWRkMmJlMzAxMjAyZGRmZDcyNjcxNDU2Yjg4NmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVhOTI5M2ZkODA1NGI2ZTQ3MjQ4MzczZjM5ZjRkZDc3ODAwMTA1ZWI3NTgzNDg2ODcyNTQyODVjZDEyODJiNzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNkNTRiN2U4MmQ3OGQ4ODI4OTg4NmUyNGJhZjE4OWNhZDFiMTdjZDViZWRjYTg1YTI0MzU3MmVkYzRjYWUxNjQifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.ts#L402-L410",
+          "version": "repo-lines-v1:sha256:737fbd986ad86d76aecf8d71241b4970798b5412d3032ce8bec7f7e3647581c0:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGYyYTJmOTk2ZjA4ZTY4MGJkMjkyMTM1YTZmYTQ5NzhiZGEyNmU2MDJkODRmMzNjYjFkNTk0Nzc1ZDQzMDRiNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjdlNTc4OGQ1ZDlkNzNkMjRhODFkYmMwYTVhNzRiZmE4MmM5YzNiM2FmOTllNTJhZjc5NmU5MGI0NjhhOGEzZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzYwNzE1ZjY1ZWE5MzcxMDExNzUwYzg4ODQ0MzYyOWJhZWIzNmM3NjllNDA0ZDQ5YzQyM2ZkNWJmM2M1Nzc2NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjFlZjRiN2EyYjY2MzcxYmYwODAyZDRlZmFhNWRiNDBiMzFkZmJhNWRiYjJiMzU3YTcxZTgwYzMxZTQzZDkzMCJ9"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.ts#L507-L540",
+          "version": "repo-lines-v1:sha256:4163107f32f0f85d1421a03d07d7277a96c024fcd0c8bcce23e7edb2770a29fb:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0NGQ1N2I0NjE0MTYwMGQ0NDI2ZTYyZTIzNDczNWE0YTM2MDBiMmM3ZjM4YTQ0ZDZjNzIyM2UzM2UyMGRmZGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM4M2RhN2QyYjUwYTQ0M2UwMTgxMzEwZjQ2ZjY1OGVjMWVhNjZmODMxYWYzMjk2ZmM0ZDUyMWVkYzgyZTY4YjEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_05645d147a0540b98912ed0f06aa14c1",
+      "statement": "The evaluation transform strips TypeScript syntax, removes module import and export declarations, hoists top-level variables and named functions or classes to globalThis for cross-eval persistence, auto-returns a final expression, and wraps code in an async IIFE for top-level await.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/quickjs/src/transform.test.ts#L23-L155",
+          "version": "repo-lines-v1:sha256:aee5ff30d4f12a1ede4e9055bcd6c53745c53cf1ede10e6b70b1963e1af544e8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMzLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI0MzE5NDgzYWQ5ZjdhNjJlYjNkOWFlZDFlYmIyNGEzMDE3MzMyOWYyOTMzMGIxZjU2YzRiMmQ1YmRjNGRmNDhmIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzYTNlNDZmOTQyNzZiNmY2ZjRlZDFmMDJhZjc4YmVmNmEyZWUxYzQzOWRkNTU4NGI5NzM5NDgzMTMyMTRkMmI3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiMTY0OGJjMmFhMjg5ZDZjNmM3MGZkNmYyMTJmNThkMDA1OWJmMzI1MzFlNGE0NTNkZTc3NjYzMjk2ZmQxNTMwIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI4YWE5NDRiNzA1Njc2YzcwMTJhM2FiNTFjN2M0N2IyNjQzYWY0MjlmZDY4NjU1ZDhiZDU2NWVkZWRmMTkyZDNiIn0"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/transform.ts#L1-L12",
+          "version": "repo-lines-v1:sha256:492bbed766192fa65a3792cbf64551100d001d0b527c9bb66db29992c82750b6:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3MmE0MjkzODJiMmUxNDcxOGUwZTM3YjA1NzBhOGExNzAyOTkxZmNkODQ5OGNkODQwNjBhOGJmNGYwNTAxN2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRhMjQwMTY0NWFiM2Y5MTVlZWE3ZGI4Yjc4N2I4Mjc3N2NhZTU3MWE3YTdmYWUzNGI4NzNhOWZjNGIwNTBmMzYifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/transform.ts#L52-L143",
+          "version": "repo-lines-v1:sha256:1d6a32a3d9edb44fa9750dbe6028f37a47df3592f72d828ebe50641c3b4f859e:eyJzZWxlY3RlZExpbmVDb3VudCI6OTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY0NmI0YmJkNzA3NDIwOGNkNzIyZmM2Y2JlYzUzYmY0ZjdlNzgzYzE2YTZmNTk1Y2EzMTI4MGZhMWM2NWI0ZjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMwMjgxZTBiNDkyM2VhMWE3MmRmMjFlMWU3NjdmODcyMzdhMGFmNTdlMjk0YmRkNWMyM2ZiMjUxM2IxYjVmYzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU2NDhiMDUxYmJmNzA0NzU0ZTFiNTA5NDQ1NjY3YzEyMWZmMWQxZjJlN2I0Zjc1OTE0MTA0MGM1MjVlMzc2NmIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4db9561c18b24d0181108f869925eb6f",
+      "statement": "All session evalCodeAsync entrypoints use a process-global AsyncEvalQueue because the asyncify QuickJS module permits only one concurrent async call per module, while guest code may still issue concurrent host promises with Promise.all.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/quickjs/src/eval-queue.ts#L1-L31",
+          "version": "repo-lines-v1:sha256:b5ee18d5a2a10fa392b6b7e380bfca65b565d3263ae820be532821fe2cf0e62b:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyZDExY2FmNDNlOTdlZjM2OWU2YmVlZDFhMjY4YmQwNTgzOGYyOWI5ZGQyNTRiZjY5YmE2NDg4NDE0NzIzNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRmNzM5YTA2YzFjYmIxMjQ0ZTMzNjNkMzhiY2Y5ZmE1MGNlODRmZWQzOTljMjE5M2EzYzdmMDhkNTk5MThiMmEifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.test.ts#L749-L771",
+          "version": "repo-lines-v1:sha256:d7ba9cec68b0efb644184b5650b3238dc287174d951971b041d2dbf1496ffbcd:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1NWU5ZDcwMzBlODJmOTA1MzkxN2QxZDkwYWQwZjcxZGM3OTFiZTk2NTA4NjBiODQzMTFmZDYzYmI3ODQ4NTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyZDExY2FmNDNlOTdlZjM2OWU2YmVlZDFhMjY4YmQwNTgzOGYyOWI5ZGQyNTRiZjY5YmE2NDg4NDE0NzIzNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFiNGQ2YjUzZTNjMGVlY2Y1YzBhMDVmNmNiNDU5MmQ1MWIyY2MzODAwMzJjNGQ3YTA5MmQ1YmUzOTIzYmY5OTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI3MjU2NWEyNzZhNDAzNDE2MjkzZjA5MjUwMzJhNjkwNjE4MDllNzYyNWQwYmNmMjM3MjAwZTUxMWYwZWZkMmMifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.ts#L444-L493",
+          "version": "repo-lines-v1:sha256:be4244706e9315699eb04506f9672246b14ac1b1dbbcce8fa946c68756f9a41f:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFmNDM4ZTI2ODgzYzE3Njc3OWE2ZjhlYzUzN2IyMzllNjJhYzFlNDFiYWIzYTExYjY3ZTIwYmZkMjQ5N2M4NWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNiOWVlZWUwNmNmZWIzZTM2ZTcxN2NkMjI3OGM4ZWU0YjRkMTlmMjI3M2I5M2JhMDlhODQ2ZWU3NGE0OGY3NTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRlNzk0ZjcwZGIxYWU0YmNhYWE2ZmY5Nzg1MGYzZTYyOTNjMjRiZTBiMTJhMDUxODNkNjRhYThlOTI4YzQ5NDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUwMzM0NWQxNzYyYjFjMGFmNDdhYWZiYmE4NmFhYjJiNzAzMzBmMTJjOGFiMWRmNTU5NGYzNWM0NzMyYmViMmIifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.ts#L62-L85",
+          "version": "repo-lines-v1:sha256:5c2ec3180a134ba969d41e8dd0359a46b1420923ae67d758aabc01f26343f7a5:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRkMzI1NWFlZDBjMjhmZmFhNmMyY2U5NjRlZjg0YWUzZmRjNTM0ODVmZDIxNzIwMzM3ZTMyNzExNzY0YTA3YTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJlNTYwNzkxNDg5ODgwY2M1NTgwODQ5N2U5ZGFkYjI3YWFmNGQwYzVmMzkzMDVhZWVjOWM0MzIxOWQ4NWNjOWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZhODc0ZTQyNzFkZGZlNDYwODMwYTRjMTVkODdmNDViY2JiNTJkMDA4MjAyZGY1Y2IzODFlMzc0ZDE2NjJmNWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU1OTEzYWIzOTg2NDM4Yzk1MWMyMTA0ZThmODY3MTRhZmJhNDJkZDA0MTEwYjM5MDQ1MWVhYTJmYjMxY2IzOTMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9bc34ac42ab24af4ad83a6b5c054b234",
+      "statement": "The default execution safeguards are a 64 MiB memory limit, 320 KiB stack limit, five-second per-evaluation timeout, 256 per-evaluation PTC calls, and 4,000 characters of console capture; the timeout and limits are configurable, and null maxPtcCalls disables the PTC budget.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.test.ts#L546-L660",
+          "version": "repo-lines-v1:sha256:e3a84e0bce6553f2194c2a0d22f22148cccc8b7795b232485dcdd28db5112b3f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIwNmEyYjgzNDdjZTE4N2UyOWQyM2RiMzNmYjFhMDg5NjkxZWQ4ZDA5ZjhmNjhlNjI0YTM0MWVkYmM1ZGQ1MmE2IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzYTNlNDZmOTQyNzZiNmY2ZjRlZDFmMDJhZjc4YmVmNmEyZWUxYzQzOWRkNTU4NGI5NzM5NDgzMTMyMTRkMmI3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiMTY0OGJjMmFhMjg5ZDZjNmM3MGZkNmYyMTJmNThkMDA1OWJmMzI1MzFlNGE0NTNkZTc3NjYzMjk2ZmQxNTMwIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJmYzVmZmUzMDZjZDIxZDgwNTUwMTQ4ODkyYzc3YmU2Y2RlYjA5YzVlN2Q0MmEzNmY4Njk3NjA4ZGUzYzY1Nzk1In0"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.ts#L286-L306",
+          "version": "repo-lines-v1:sha256:b1d35f72f03cc672db840b3410457bec18944ee07154ec2fa5dc7e14cdd35e4a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJkMTZiYzcxODE2YjI0NzRmODFiNjgyMWJiNWM1OGRkY2Y1YTI3ZGEwZjRhZDc2ZDZjMzdiOGMxNTE5MjMzZjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBhOThkZWJjNmUyMjI5YzgwYWI1ZDZiYjA0MWRlYjhmNzZjNGZlMjVmMTFiNGRkMDI3ZWZhNDQ3MGUzMmM3NzYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU5YzcwZjZkMjQxNWFiODYxYWU3NzY2ZWY1YzFkOWE2ZGNlMjJkN2Q5YjhhNGYwZDIwOTYzZTkwM2E1NGNkNTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM5ZDBlNjkwNjRiMWI1OWY0ZTZjMTZkMWE1NWIyNjA1ZTYzZjM4MzFjODY5OWE2MWZjNjZmYTM1MjIxN2UyZTMifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.ts#L332-L357",
+          "version": "repo-lines-v1:sha256:3f7fa497a2dc66f4c5cf140a26ec1497424bef5b185aa0b06c22806d628e7083:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU3ODgwY2M4MzRmOTkxNjQwY2ZlMWVhMmNhNTBhMDU5MzY2YWEzZmI0MjMxY2Y1MGY4ZGQ5NTc4MGU5YWZjYmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc1YjAyODc1MzVlNTc4ZWZhYjY3YTZhZjEyNDY1NWRlNzM2YjQ4OWQwZjQ1ZDdiNDg4N2IwNDAwOGI1MDJmMTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYwNmNhNWRkOTAwNjA0MWY4ZTRlMWNlYWNlYzJjYWU5Mzk2ZjMyMmNkYWNjOTAwOGMyY2YyMTQzYTQxZmM0YzUifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.ts#L42-L48",
+          "version": "repo-lines-v1:sha256:d6a7f681250700b9f7a5dd1195eea8c23122ab9bc9deb320ab13ae2a8a17fc38:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzQ4ZDk1ODJlM2YzOGRhMTIzMDQ4MDFmMTQwN2Y1M2U1YjEyMzA2YmE4NDBmYzM4Mzk0ODc0ZmI5OTdlZjIxNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDcyYjhlZjNjYzI5ZDQ5OGM1YzE1ODkyNTBjZTVmNzE1OTFmMzhmMmYwZDA0NTJkMjk3YzgwYzZiYmRjMjM0OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjllOTc0ZGY3OTY5Y2M1YjM3MWM0OWM2MTVmOTQ5ZmI0MjQ2ODJiNWJlY2FlMmFiNTIxMGM2Njc2MzA1N2I1ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDc4NjMyZmE0MTY2ZTQ2Y2VhM2U1YjNkMjY4NmZkODg4MWMwMWVjNzMzNDc1ODZjNjQyZjdhOWNlZjQ2NGIxMyJ9"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/types.ts#L15-L64",
+          "version": "repo-lines-v1:sha256:b6293cadc6215c7b34fdb14077d8b118883206bb7ba4819aa98060cf78272cf1:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZmNhMTc1NDMzYmUyNTAyNjM2OGRiNDVmNmZmMzEzNThlOTQyODg3MWI3YjM5OGE4OTA0MDBlMTcxZTk3ZjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFhMGJjZGRiODliZmUzMWUzMWMyNDNjYzgyOWEyM2M0Zjg4Njk3YzNjMDU0YmY5YmFjOWM5YTY0Y2VlMjVkNjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzMWU3YTA4YTQzZThhNmJkZjdhOTkzNjI2MjZiMzAzNjY4NWIwMWRkODc2OTNkMDY0ODI5MmQ1ZTFjMmQzZjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRjYTgwYmY0MjI2NjZkNzExODllYmQ1YmE4Nzc1NThiYWRlYzI2YTVhOWU3ZWVhZTE3YmJmMDAxMTUyMzllNjcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_13219a403bdb4a2da01fc64f06d32056",
+      "statement": "ReplSession evaluates transformed code, settles fulfilled or rejected promises while executing pending QuickJS jobs, converts guest and host failures or deadline expiry into ReplResult errors, and drains console output after both successful and failed evaluations.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.test.ts#L226-L301",
+          "version": "repo-lines-v1:sha256:0c6d315654405ba0d30e22197691870ce618b666892b542583d6d2eafdce5bd0:eyJzZWxlY3RlZExpbmVDb3VudCI6NzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI4NGNlMTY1ZmMwZGU2YTI0OGZmYmRkNzhmY2RkMDUxMWRiNWFmMTU3MzU4NDdiYWMxZmI1MWVlZDBmZTYxZTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxNjQ4YmMyYWEyODlkNmM2YzcwZmQ2ZjIxMmY1OGQwMDU5YmYzMjUzMWU0YTQ1M2RlNzc2NjMyOTZmZDE1MzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiM2ExOWE2MTM2M2Y2MTZmZmVlMjkyOTJjMTBmNjJlZGNjNGU2YjQ5MWM1YTRmYmRiNTFiOTA4OWYyODQxMmUifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.ts#L412-L505",
+          "version": "repo-lines-v1:sha256:06476a704b820346b3b7ff14615833bcce7d5227b8c90874bbd5168e11d027d5:eyJzZWxlY3RlZExpbmVDb3VudCI6OTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI3ODQ1MmFkNTM4ZjcwZmVkYmFlNGQ3N2JmZGRiMjVmNDBiNDVkM2FhNzAyNGU1ODNmMTcxODQwYTg3ZWJmOTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_69d9b0c7a6f14b3a8a0942ef4bb09c01",
+      "statement": "PTC is opt-in: configured agent-tool names are resolved at model-call time and tool instances can be injected directly, while the eval tool is excluded and the task tool is reserved for the separate task global.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/quickjs/src/middleware.test.ts#L94-L175",
+          "version": "repo-lines-v1:sha256:57551e95cf6da36c2ceaa4191e52899e17bf6b4cbb60306273f8e6f08b99aec1:eyJzZWxlY3RlZExpbmVDb3VudCI6ODIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM4YTExNmM5YWJlOTBiMWM3NGJlODBhZGZlNGQ5MDVlOTEyYWVhNmY2Zjc2OTE3YjNmN2ExZDU1MzVhZTNlYjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxNjQ4YmMyYWEyODlkNmM2YzcwZmQ2ZjIxMmY1OGQwMDU5YmYzMjUzMWU0YTQ1M2RlNzc2NjMyOTZmZDE1MzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJiZTJhNmY4MmRhOGE3ZGY2NzkwNGI1MDYwYWRiZmE3ZTU3YjYyOTg2N2I5MzJhOTdlZTQ4OGUzNjEzOTJkMDUifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/middleware.ts#L352-L383",
+          "version": "repo-lines-v1:sha256:a3c85c9f25eac6f376252fbc330104be1379372f18c33b9bad8125654e71d78d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdiMmQyNGI3NTgzZTFkZGU0OWVmMjUyYjYxNDUxNWEzZWRiYWYwNTQ0ODU0MTM2MmIyMzg5ZWNiZjg3NDY1MjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3NDBjY2RmNTljYTU2ZjlkMzQ3MDhhMmNmMjBlODU5YzViYzRiYzU3MmI2ODMyNmFmODU1MjE4OTlhNjY3ZjMifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/middleware.ts#L418-L431",
+          "version": "repo-lines-v1:sha256:d7134ef0194e364b69cfd46452c9e0c79131131a23910fd17ff0f5f767764b10:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJiYmI1OGI0MDZhZmM0NWQ3ZjQ5NDI2YjAxMjc4ODZjNTc0MWJlOTliZTFjMjhlMGNhMGEwMWIxNWU4M2MxOGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFjYzUzNzhhZWZhZWY1YmIzZTZjMjg3YWJlZmMyOGYyMzQyMTk2MTVlODkzYjdjOTM2YmI1Zjg0ODM1ZTA0ODEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjlmZTYwYzEzZDQ1OGNjODM4OThkMWQzNzM5YmQ4Y2RlNjRmNzc0YjFkMGIyM2VmNTUyNjY1MjExOGViYzAxMzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU0NzFiZGUyZDRiMGQyNjJmZTc2ZWYwY2JjYzBlNjBkNDNhOGQwMjg0YjMxMDVkZTdkZDY1Mjk0N2Q1ZTU1NzUifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/types.ts#L6-L16",
+          "version": "repo-lines-v1:sha256:9836d818a68d4d611b80842cc01c78476b758dc262808619d46f90388fce6d33:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI4NWZlOWNkODNmZThjOTRhMTIwMzNlZTE3Mzk1OGZkYzEyYWViMjM5OGU4ZmFlYmJkZWM2YWI2ZTRjMjc0Y2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI3NjFiOTZkMmRlN2FjMmU2MmE3NTg1ZmZhZjdhZjhmOGNjNGYyOTAzM2Y5MjRmNDMxYjVmNDc2NDZhMmVhY2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE2YzZkNjQyY2E1ODAxOGI4MGFjZDIzMzRhMTQwOGI5NGM3ZWUxMTUwZWUyNDYxYmFmOWQ2YzUwMjZmOTBiMzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2710b9da7fde42d7be3394e6078a75dc",
+      "statement": "PTC functions are installed under a camelCase tools namespace and return guest promises; tool results are unwrapped from LangChain envelopes, text blocks are joined, non-text values are JSON-serialized, read_file status prefixes are stripped, and tool failures reject the guest promise.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/quickjs/src/coerce.ts#L35-L69",
+          "version": "repo-lines-v1:sha256:c614142fae438388bd0e0ea5f65e6619453cbe4e864e1a3353ed3ab4d035c2e9:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImViZmYzYWYyNTg0Nzc0MWI4ZDBlMjcwNWUwM2U5NzhiNTZhNzVkZDdlNTM2YzYwMzM0NmY5NDA4MjlhMjFiYTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU5ODJkMGQ3ODU3NTQ0NGQ4ZmYxM2ZkYWU3Y2JiZWUyNjFlN2NkZjAwMTRhNTg3ZTVmY2M1Zjk4YzRjMTlmZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.test.ts#L350-L543",
+          "version": "repo-lines-v1:sha256:7e6c06137e9cb0639da5c6926b105b494b821a4bd25e6ce751367c144d8e5983:eyJzZWxlY3RlZExpbmVDb3VudCI6MTk0LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJiOTc4ZWRmOTYwMDczYjc2ZGY3ODE1ZTVlYjFjZGNmYThiOTNlYzFiMzZiYWU2MWQwY2IxNWRiNGJiNTFkMmZhIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyMmQxMWNhZjQzZTk3ZWYzNjllNmJlZWQxYTI2OGJkMDU4MzhmMjliOWRkMjU0YmY2OWJhNjQ4ODQxNDcyMzRhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiMTY0OGJjMmFhMjg5ZDZjNmM3MGZkNmYyMTJmNThkMDA1OWJmMzI1MzFlNGE0NTNkZTc3NjYzMjk2ZmQxNTMwIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIxZDRiZTY0OGRjOGJkMjI1NmU5NjM0ZjUyNjk1Mjg5MjUyYjZhYzI0ZmQ0ODhmOTFlZjJjMWUxNTg1NDE1N2ZjIn0"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.test.ts#L662-L795",
+          "version": "repo-lines-v1:sha256:5b3e0b1bf3669eb3f2415ff63e8c52e52f73bb1e518428770d533e1f36769509:eyJzZWxlY3RlZExpbmVDb3VudCI6MTM0LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzNDZlYWFiZjJmNzFkMmI5ODg0OTgwMDg0NDA4OWI5MGQ3NmJiYjgyOTRhNmNlNTdjNjM4OGRmYjNiOTYyOTdmIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyMmQxMWNhZjQzZTk3ZWYzNjllNmJlZWQxYTI2OGJkMDU4MzhmMjliOWRkMjU0YmY2OWJhNjQ4ODQxNDcyMzRhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiMTY0OGJjMmFhMjg5ZDZjNmM3MGZkNmYyMTJmNThkMDA1OWJmMzI1MzFlNGE0NTNkZTc3NjYzMjk2ZmQxNTMwIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJiNzc4NTMzNzdhMDc2YzM5ZjNlODAwYzllNTlmN2VhMDJjNTI1YTRmMWNjZDVlMTIwMmMxMTcyZTQyNTM4ZjUzIn0"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.ts#L101-L139",
+          "version": "repo-lines-v1:sha256:d34216e668a3a183f90e444481d0f899b0e06d55ca62477915c1d93e8ceb8f89:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE4N2U0NGVhZDVkN2UwZjA0OWE4OWQzNTM2OWMzYzNhZjMwMTEyOTI1N2M0ZjEyMzk1NzE3ZTAyZDVlNzQxZGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ0ODFjZjEwOGZjOGFkYjU3NzkzZmQ5MTNhODc0NWFmYmRhYzhkMmY4Y2RkZmI1YmIyMWQyOGQ4YWU5MTdmNWQifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.ts#L571-L615",
+          "version": "repo-lines-v1:sha256:55fafd041f95d13945801641d33834c591b71fe121fd696f7c2aad390b5f57c9:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhYzQ4MDNhMGVmMDg5YzZiOTA0MGRjYTVlNTk0ZDI1ZTAxZGEzNTZkYmM4MWEwYWQ3ZGYxYzc1OTM2ZTM5MWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ1MzNlZTBiMWMwNzIyNzA1MGQ5MmEyYzQ5MmQzMjNkYjQ1Y2U5YmIwM2VhMTZlOTQxNDQzYjAwM2YxMjg3NjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIwMDQ2NmY4ODlmYWFlMTUyZGNhMGFjMDQzZmM1ODBkNmFmNGU1Y2RiNDJmMjU0NjZmNDU1ZmE5YzZhZWI2NjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_25e16f86511a4bfaafff41329cce2858",
+      "statement": "When a configured task tool and subagent specs are available, the session exposes a frozen task global whose calls are validated, dispatched through a per-session concurrency queue, and returned as strings or native structured QuickJS values; the default middleware concurrency cap is 32.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/quickjs/src/middleware.ts#L391-L406",
+          "version": "repo-lines-v1:sha256:5bb25913c166562afdc24a80cb4b19bf775d3498e0bfa2e0ba8b46ccc8209c58:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwNDlmY2NmZDBiNDc4MjAyNDhlMWFlMDIxZmY4NTcyMjZmOTdlNGRjMDcwNDQwYThmNzZhMTJhMDk1Y2JhNzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFhMWY4ZmY4OTJiYWFmZjQwZDU2ZDcwZmU3OGM3OWRlMTJiNmJjZWFmZjZjY2UxYTk5NDBiMWNkODA3Yjg2OGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgzODA3NWMyNzQ4MzE1YTQ4ZTMxMzg1OWJlODA1N2NhY2MzMjQ1Yjg1MzQyODE1ZjY0YmE0MDI2NTk3ODhhNGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRkM2E2MTRhMmE3MjRjMWY1YjNjYmI2Y2IwNzZkOTdiNzBhYjRjZjc1ZjgzNjcxZjI3OTQwNzgxNWZiNzM0MWQifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.test.ts#L872-L1082",
+          "version": "repo-lines-v1:sha256:aa318c198f72982f7e1a47382edb3100f3c8133eae1b41e0b0ff5da3166e5feb:eyJzZWxlY3RlZExpbmVDb3VudCI6MjExLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIyZGU0MGEyNDE5MWQ0NmNlM2EzNWEyNTUzNjgyZWE2NDA5N2ZlYzlkMWIwNjZjODM2ZTUyOTQ1MWZhZmNjMzA3IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyMmQxMWNhZjQzZTk3ZWYzNjllNmJlZWQxYTI2OGJkMDU4MzhmMjliOWRkMjU0YmY2OWJhNjQ4ODQxNDcyMzRhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiMTY0OGJjMmFhMjg5ZDZjNmM3MGZkNmYyMTJmNThkMDA1OWJmMzI1MzFlNGE0NTNkZTc3NjYzMjk2ZmQxNTMwIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MiwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJkODE3ZmJiNzNjOTJiMzZkNWU0ODk2ZmY1MWMxYjU4ZWVjMzMwYmJlOTYxYmEwNWZjNjIwNWY4NjdlYTFiY2Y2In0"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.ts#L617-L756",
+          "version": "repo-lines-v1:sha256:5a8131041628834537debf19582989b311684881dd0368b0fba577d39f540fdd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI0ZjJhMmY5OTZmMDhlNjgwYmQyOTIxMzVhNmZhNDk3OGJkYTI2ZTYwMmQ4NGYzM2NiMWQ1OTQ3NzVkNDMwNGI1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI4NGU0MjA4Y2Q2ZmZiOGM0YTM1NDdiMmY1NGFkYTE5OTc4YzNmMzY1ZTc4Zjk1MDJlZjUxNDVjZGQyYWE4NTQzIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI2NGU3OGIyMmE0MmNiZmQ3YWE5YTY0NWUwZGVhOTEzYmI4OTFjOTg5NGQ3YzcwZmQ1NWNmMzY0NWE5NDY4YTI4IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MiwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJkZjczOWEwNmMxY2JiMTI0NGUzMzYzZDM4YmNmOWZhNTBjZTg0ZmVkMzk5YzIxOTNhM2M3ZjA4ZDU5OTE4YjJhIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_3445ba487168419392399ea1230f0b72",
+      "statement": "Guest task dispatch accepts description, subagentType, and optional responseSchema with snake_case aliases, rejects unknown or malformed input, and forwards a validated response schema through the subagent task configuration.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/quickjs/src/middleware.ts#L434-L474",
+          "version": "repo-lines-v1:sha256:03535c6462f5c09fa130a8e1b3e514d69838dd640c3d1663985a41013326f60d:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5NDU2OTk3NWFkOWQ0MGU4MGJjMDhiMTVkODkzNzZlZWYyYzIyYjhiZGVhOWZmNzEzOTk1OGFlZTM1OTk3NjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkOWUxMjU0NjQyNTU3NmQzZGVhZThjOWI5ZGJmMTI4ZDVkNmRkYWY1ZDdmZTg1NzkzNDkyN2RlZmZhM2I5ZGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYzMzFhZWFhMGRkYzczMWVmNjk3MmI4NmVlODA2MWRkMmZhNzg3MWJhYjlmNDBhZGM5NzY5YWI0YmE2ZmU1Y2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJjNDhkNzdiZDNmYWZlOTVmYzZkNjkxN2UzZDM3M2I3MTIzNTExYWNhNWY1NjdkZTZmMmJlNGY1MDRjOWM5MDkifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.ts#L647-L713",
+          "version": "repo-lines-v1:sha256:68792978c624096f5538f15568d75074215b6bf339ec3f258b68084cbd503dfd:eyJzZWxlY3RlZExpbmVDb3VudCI6NjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc2ZDEyZWNmMzI1YzM4ZTgyZDUxNjJhZTVlMDRjNzExZWE1NTMzM2YxMzE3ZDllZDBmNGMxNGI1Yzg0NzI1ZmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFmNmMwYzEyMTBhZjM4NWVkNWYxMjBiMmQ1ZDg5ZmIyZjg1ODkzZGIzMDg4ZjY0NmRhN2Q0ZDc2YzBhODJkMWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY5OTdmYzYwZTM2OWI3YjcyNDJjOWYxYjEzZmY4YmVhNGMxOTRkODZiOGZjNGJjNWEzNmM2MTJjZjUyYzRmYjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjExODQ2YzVhYjY1MjBkNmFhYzhkNGM2Nzk0NTZkNmE4NzdlM2RmNDQ1Nzk4YzhjMTUwZmE5NWJiMWFmMTQ2MGYifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/subagent-dispatch.test.ts#L4-L77",
+          "version": "repo-lines-v1:sha256:50960275f966c66f474a0bfc777275032a0ef7bd425f0091ad037c6bf40b48a5:eyJzZWxlY3RlZExpbmVDb3VudCI6NzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmNjBjYTE1Y2NjZWQxY2UxODRjOWYzMjc0OTdhOTgzNzFlNzYwMGE0NTY0ZWQwM2UyNzk1NmJkMWE5ZGMzYjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdhYWM2NGI4ZGZiMWQ1ZTU1ZjQ3Y2JiODc1NGFhM2ZiMmM3MTJmZWQ3NDFkMDk3MzI4OTY3ZjJiMjlhZWE4NmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/subagent-dispatch.ts#L1-L55",
+          "version": "repo-lines-v1:sha256:e8eb99aaee3b8eb20089c509bb6cb3fac3adc1ab7520ad8ca46807ffd9e1b149:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE3Mzc0MmNhNzg3ODE0YjgwNTc2ZWM0NmFiZmJlNDJjNGMzZDZkMzQxMGZlYjYzMTZmN2VhZGQ4NjJkMTU4N2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4f0c5ee8c1e14dbfbe9dce0433eb483c",
+      "statement": "The task bridge runs from inside the eval call rather than through the parent ToolNode path, so it does not independently trigger parent-level interrupt_on or HITL approval, although approval configured inside a declarative child still applies.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/quickjs/src/middleware.test.ts#L342-L386",
+          "version": "repo-lines-v1:sha256:141ca04e2b14d116018e8cd274ff904914c1cf4094de50d717f6d64ce069c36e:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk5YjUwZDM0ZDZlOWU1NDM2Y2NkYzkxMGEwZDNiMDFiYjAzZDdlNDBmOThiZTU2YTFkOTE1ZjQ1NTQ3MzYzZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyZDExY2FmNDNlOTdlZjM2OWU2YmVlZDFhMjY4YmQwNTgzOGYyOWI5ZGQyNTRiZjY5YmE2NDg4NDE0NzIzNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxNjQ4YmMyYWEyODlkNmM2YzcwZmQ2ZjIxMmY1OGQwMDU5YmYzMjUzMWU0YTQ1M2RlNzc2NjMyOTZmZDE1MzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJhZDExYmVkOTQ1OTkzZDgwYjk4ZDRmMjk0MDM2ZDliY2MxNzI1YjgyOTJkY2EyNDFkMzJhNTczY2Q3YTgwNGYifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/middleware.ts#L56-L112",
+          "version": "repo-lines-v1:sha256:a9615dfc6093782141c24d1a8b9141d07bf9efcc37c48bb3896c58f49ce6929c:eyJzZWxlY3RlZExpbmVDb3VudCI6NTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdhN2RiMTRmMDUyNmY2YzlkZWQ0MDUwY2U5YWFiZTczNTE5NDUzY2FhMDBiZWIyN2M1MDBkYWJhZmYwODdiOTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjlmN2JkOTljODRiNmFiZTM4NDQzZjYwNTRiMzJiYWIwNTUyM2I2ODFmMWQzZGNjMGIxMTQ1Y2UyNjA3OGFkZGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY3MmY1ZWRlNGM2YzU1Y2FjNDk4MTQwZWM2ZmRjOTcyNGYxMGViOWEyNTAyNGY2MmQwOGU5Nzc0NGQyNDg3ZmIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d34b23d7841f4734bca7dcb64c5a358f",
+      "statement": "formatReplResult emits captured logs first, appends a truncation marker when console output overflowed, prefixes defined values with an arrow, serializes non-string values as formatted JSON, reports error names messages and stacks, and returns no output for an undefined value without logs.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/quickjs/src/utils.test.ts#L5-L43",
+          "version": "repo-lines-v1:sha256:e5077fe7251cdb1b4255e3466fc3f0b3dd94c83476f73f280d5c1a3642b17523:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFjM2ZlYmI3OTQ5MjgyZjhkNDdlN2UwODZhMzMzMjYyOWY1NjFjYWZjYTU0NzNlNjkzOWE1N2NjNTYyNWI0OTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZhNjFlOTQ0NDE5N2M1NzQ4ZjM1NWI3MWE4OTZjMzM5NTU5MDA1YjA1OTEwMmRkZDdlOWVmNGZlODU0MTFhNWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc4MDI5NjUxMjcwYjdhYTJhZmI3YjRiZGNiYThlNzkxNjlmZjRlODFlZjM5NzljMTgyODkwZTU0NmIxYWMzMDQifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/utils.ts#L31-L63",
+          "version": "repo-lines-v1:sha256:96796d7a64db016cc8b85fbfc4353cf0e4ae8a5023adcc5c35f545b391e7a212:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRhNDYxNjgxNzhiYzEwNzAxMzY4NjEwOTBlOTc1ZjBkMzU5ZDdmYzdiMTMxNzQ4NGNlNzVhYzM1ZGU1MTAyMjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUyMTQ4MDNhMzgzOTQzMjAzN2NkMDQ2OGJiZWU4Y2Q4Yjk2MDU2YmEyMTAwMzg3MGJiYWRhZjBjMTg5YjU2MmYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4c9c324d748b4f7799ddbd5e5c10ed88",
+      "statement": "The focused QuickJS tests cover persistence and isolation, PTC budgets and coercion, session serialization and cleanup, subagent validation and concurrency, AST transformation, async evaluation ordering, middleware prompt and tool registration, and integration-level reuse of variables across eval calls.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/quickjs/src/eval-queue.test.ts#L4-L76",
+          "version": "repo-lines-v1:sha256:40bd759696d93b29875ab1d7cce8f5d94160ba071d0175bb07aa1b53f1c7d30f:eyJzZWxlY3RlZExpbmVDb3VudCI6NzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjljM2I1M2JmODhhOTRmNjk1MmQ0ZWQzZWMyOWZkZmYxOWUwZWU0YTRjMDQxNzg0ZmU0ZjdlMjA2ZjkzNTk2NTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMyY2U4MWY2YjAyNWRiNDMxYmE5Njk0MDBhYTNhYzAwZmJiZTgwMmEyODQwMzI1NjQ0MTc3MTI1OGZiMzNlMTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/middleware.int.test.ts#L14-L110",
+          "version": "repo-lines-v1:sha256:e1394fd3b3de04b303f6697aa22c7f1107739580efa998109ebc328fec2c4ba1:eyJzZWxlY3RlZExpbmVDb3VudCI6OTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4ODg3NGYxOTdiZDg3MzIzOTgyNjc4OGFhNTNhMjBkZDA4MzQzOGZhYjJjYWZjYWMyNjUzODNhY2UyYzhkMTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk1ZWYwMWJjMDhkYmMzYjYzZTRlNzVlYTNkMjZhNWI5NDE4OTE4NzdlMjdhZDg5MTMyOWM4NDExZDdkOGRjNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcxNzBmYTA2Mzc5ZDA5MWNiMjI3ODQ0MDg4MzcxM2ZkZWMyNmZlZDdjNjM5MWM4OGY3MDYwMmI4ZjhlYzI1MDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/middleware.test.ts#L18-L92",
+          "version": "repo-lines-v1:sha256:8ec72c641ad23276c24ac8eb4f3f7e02e56faad1e3ce76308e33d7972f78f008:eyJzZWxlY3RlZExpbmVDb3VudCI6NzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU5ODQ5MGJhYjI2ZmVmNTcyMTkzZDZmOGYyZjliYjAxMDkxNDU4YWM1OTlhZWQxMGMzMjYxY2ZlMTY0ZmExMjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRjMWJhZDAyODgyNmI1NjMyNDIyYjE2OTQ3ZjE0MGM5MmZiYmEzODU4NWE2ODhjYjM2OWE5MDFjYWZlMGVhODYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUzNTY5NDgwMGNiYTFhYWE1NjJiZjY0YWJiMTYwMDYyZjM2NDZjZDhlMzViNzMzYjM0Y2E0OGI4MGVmOTQ2MDAifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.test.ts#L294-L348",
+          "version": "repo-lines-v1:sha256:c88d01d5540eb9a45b4f6481e7a3e2f5d04559bd21fd9cb2334c74ce622b5a37:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5ODI1MzdlNWRhOGJlYThlMGE4Njc2MzU5NGFlYTgxN2UyNjhjOGQ0ZTE0OTA4ZjVjMjQ3YzlkZGViNDNlZWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxNjQ4YmMyYWEyODlkNmM2YzcwZmQ2ZjIxMmY1OGQwMDU5YmYzMjUzMWU0YTQ1M2RlNzc2NjMyOTZmZDE1MzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAxNmU2OTViYzg0NDIzYWQ4OGVjY2Q0ZDQ1ZTc4M2VhYzgwYjA2MDcxNDY5ODRmNDc4YTQ5OTI2MGFiMTBkYzAifQ"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.test.ts#L546-L660",
+          "version": "repo-lines-v1:sha256:e3a84e0bce6553f2194c2a0d22f22148cccc8b7795b232485dcdd28db5112b3f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIwNmEyYjgzNDdjZTE4N2UyOWQyM2RiMzNmYjFhMDg5NjkxZWQ4ZDA5ZjhmNjhlNjI0YTM0MWVkYmM1ZGQ1MmE2IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzYTNlNDZmOTQyNzZiNmY2ZjRlZDFmMDJhZjc4YmVmNmEyZWUxYzQzOWRkNTU4NGI5NzM5NDgzMTMyMTRkMmI3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiMTY0OGJjMmFhMjg5ZDZjNmM3MGZkNmYyMTJmNThkMDA1OWJmMzI1MzFlNGE0NTNkZTc3NjYzMjk2ZmQxNTMwIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJmYzVmZmUzMDZjZDIxZDgwNTUwMTQ4ODkyYzc3YmU2Y2RlYjA5YzVlN2Q0MmEzNmY4Njk3NjA4ZGUzYzY1Nzk1In0"
+        },
+        {
+          "resource": "repo://libs/providers/quickjs/src/session.test.ts#L84-L140",
+          "version": "repo-lines-v1:sha256:33455d69e839040afddbed1e0af55cc3ceef7e474d884e69d23b4b579d833a92:eyJzZWxlY3RlZExpbmVDb3VudCI6NTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjViMjQyYWVhOTUzMDdkY2EwMThjYjhkM2JjYjc3YzdmOGRkYmE2NTVmMjVmNzNjYjg3MGM5MTBkZWI0YjM0ZTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxNjQ4YmMyYWEyODlkNmM2YzcwZmQ2ZjIxMmY1OGQwMDU5YmYzMjUzMWU0YTQ1M2RlNzc2NjMyOTZmZDE1MzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFkM2YxY2JjZDdhZTQ5OWQxY2JlOTU4OTZlYjM2YWY2M2FmMDA3NzRhNDU1Y2EyMTQ3NDQ2MzA3ZGZkMjU0MDEifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.2",
+    "at": "2026-09-17T22:06:29.984Z"
+  }
+}
