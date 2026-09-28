@@ -2133,8 +2133,9 @@ describe("createSubAgent", () => {
 
     const call = createAgentMock.mock.calls[0][0];
     const middleware = call.middleware as AgentMiddleware[];
-    expect(middleware.length).toBe(1);
+    expect(middleware.length).toBe(2);
     expect(middleware[0]).toHaveProperty("name");
+    expect(middleware[1].name).toBe("UnsupportedContentMiddleware");
   });
 
   it("forwards responseFormat when specified", () => {
@@ -2378,7 +2379,7 @@ describe("middleware override by name", () => {
     ).toBe(false);
   });
 
-  it("keeps tool exclusion middleware last", () => {
+  it("keeps tool exclusion middleware before UnsupportedContentMiddleware, which runs last of all", () => {
     registerHarnessProfile("tool-exclusion-test:model", {
       excludedTools: ["write_file"],
     });
@@ -2392,8 +2393,28 @@ describe("middleware override by name", () => {
 
     const middleware = getMiddlewareStack("main");
     expect(middleware[middleware.length - 1]?.name).toBe(
+      "UnsupportedContentMiddleware",
+    );
+    expect(middleware[middleware.length - 2]?.name).toBe(
       "_ToolExclusionMiddleware",
     );
+  });
+
+  it("does not add a second UnsupportedContentMiddleware when the caller already supplied one", () => {
+    const custom = namedMiddleware("UnsupportedContentMiddleware");
+
+    createDeepAgent({
+      model: new FakeListChatModel({ responses: ["hello"] }),
+      name: "main",
+      middleware: [custom],
+    });
+
+    const middleware = getMiddlewareStack("main");
+    const matches = middleware.filter(
+      (m) => m.name === "UnsupportedContentMiddleware",
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toBe(custom);
   });
 
   it("passes main-agent default overrides to the general-purpose subagent", () => {
