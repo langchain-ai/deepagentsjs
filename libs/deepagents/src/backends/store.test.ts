@@ -653,6 +653,88 @@ describe("StoreBackend", () => {
     expect(userBItems).toHaveLength(1);
   });
 
+  it("should isolate listing, search, and delete across sibling namespaces", async () => {
+    const { store } = makeConfig();
+    const runtime = {
+      state: { files: {}, messages: [] },
+      store,
+    };
+    const acmeBackend = new StoreBackend(runtime, {
+      namespace: ["tenant", "acme"],
+    });
+    const acmeCorpBackend = new StoreBackend(runtime, {
+      namespace: ["tenant", "acme-corp"],
+    });
+
+    await acmeBackend.write("/own.md", "acme document");
+    await acmeCorpBackend.write(
+      "/secret.md",
+      "acme-corp CONFIDENTIAL revenue figures",
+    );
+
+    const listing = await acmeBackend.ls("/");
+    expect(listing.files!.map((file) => file.path)).toEqual(["/own.md"]);
+
+    const glob = await acmeBackend.glob("**/*", "/");
+    expect(glob.files!.map((file) => file.path)).toEqual(["/own.md"]);
+
+    const grep = await acmeBackend.grep("CONFIDENTIAL", "/");
+    expect(grep.matches).toEqual([]);
+
+    const deleteResult = await acmeBackend.delete("/secret.md");
+    expect(deleteResult.error).toContain("not found");
+    expect((await acmeCorpBackend.read("/secret.md")).content).toContain(
+      "CONFIDENTIAL",
+    );
+  });
+
+  it("should continue paginating when a page contains only sibling namespaces", async () => {
+    const { store } = makeConfig();
+    const runtime = {
+      state: { files: {}, messages: [] },
+      store,
+    };
+    const namespace = ["tenant", "acme"];
+    const backend = new StoreBackend(runtime, { namespace });
+
+    await backend.write("/first.md", "first");
+    await backend.write("/last.md", "last");
+    for (let index = 0; index < 100; index++) {
+      await store.put(["tenant", "acme-corp"], `/sibling-${index}.md`, {
+        content: `sibling ${index}`,
+      });
+    }
+
+    const items = await store.search(["tenant"], { limit: 200 });
+    const firstItem = items.find(
+      (item) => item.key === "/first.md" && item.namespace[1] === "acme",
+    )!;
+    const lastItem = items.find(
+      (item) => item.key === "/last.md" && item.namespace[1] === "acme",
+    )!;
+    const siblingItems = items.filter(
+      (item) => item.namespace[1] === "acme-corp",
+    );
+    vi.spyOn(store, "search").mockImplementation(
+      async (_namespace, options) => {
+        if (options?.offset === 0) {
+          return [firstItem, ...siblingItems.slice(0, 99)];
+        }
+        if (options?.offset === 100) {
+          return [lastItem];
+        }
+        return [];
+      },
+    );
+
+    const listing = await backend.ls("/");
+    expect(listing.files!.map((file) => file.path)).toEqual([
+      "/first.md",
+      "/last.md",
+    ]);
+    expect(store.search).toHaveBeenCalledTimes(2);
+  });
+
   it("should validate namespace components", async () => {
     const { store } = makeConfig();
     const runtime = {
