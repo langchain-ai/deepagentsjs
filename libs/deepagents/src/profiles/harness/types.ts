@@ -6,11 +6,11 @@ import type { AgentMiddleware } from "langchain";
  *
  * - `FilesystemMiddleware` backs all built-in file tools and enforces
  *   filesystem permissions.
- * - `SubAgentMiddleware` backs the `task` tool for subagent delegation.
+ * - `subAgentMiddleware` backs the `task` tool for subagent delegation.
  */
 export const REQUIRED_MIDDLEWARE_NAMES = new Set([
   "FilesystemMiddleware",
-  "SubAgentMiddleware",
+  "subAgentMiddleware",
 ]);
 
 /**
@@ -111,7 +111,7 @@ export interface HarnessProfileOptions {
    *
    * Matched against each middleware's `.name` property. Cannot include
    * required scaffolding names (`FilesystemMiddleware`,
-   * `SubAgentMiddleware`) — attempting to do so throws at construction
+   * `subAgentMiddleware`) — attempting to do so throws at construction
    * time.
    *
    * @default [] (no middleware excluded)
@@ -196,7 +196,7 @@ export interface HarnessProfile {
    *
    * Matched against each middleware's `.name` property. Cannot include
    * required scaffolding names (`FilesystemMiddleware`,
-   * `SubAgentMiddleware`) — attempting to do so throws at construction
+   * `subAgentMiddleware`) — attempting to do so throws at construction
    * time.
    */
   excludedMiddleware: Set<string>;
