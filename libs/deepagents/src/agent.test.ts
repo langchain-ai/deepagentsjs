@@ -251,6 +251,26 @@ describe("profile tool exclusions", () => {
     (model as any)._defaultConfig = { modelProvider: provider, model: "model" };
   };
 
+  it("keeps task delegation when a profile excludes optional middleware", () => {
+    registerHarnessProfile("tasktest", {
+      excludedMiddleware: ["SummarizationMiddleware"],
+    });
+
+    const agent = createDeepAgent({ model: "tasktest:model" });
+    const tools = (agent as any).graph?.nodes?.tools?.bound?.tools ?? [];
+    const toolNames = tools.map((tool: { name: string }) => tool.name);
+
+    expect(toolNames).toContain("task");
+  });
+
+  it("rejects task middleware exclusion before agent assembly", () => {
+    expect(() =>
+      registerHarnessProfile("tasktest", {
+        excludedMiddleware: ["subAgentMiddleware"],
+      }),
+    ).toThrow('Cannot exclude required middleware "subAgentMiddleware"');
+  });
+
   it("removes excluded filesystem tools before agent construction", () => {
     registerHarnessProfile("fstoolstest", { excludedTools: ["execute"] });
 
