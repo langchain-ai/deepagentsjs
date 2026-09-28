@@ -390,6 +390,15 @@ export function createDeepAgent<
       );
     }
 
+    if (
+      !subagentProfile.excludedMiddleware.has("UnsupportedContentMiddleware") &&
+      !subagentMiddleware.some(
+        (middleware) => middleware.name === "UnsupportedContentMiddleware",
+      )
+    ) {
+      subagentMiddleware.push(createUnsupportedContentMiddleware());
+    }
+
     return subagentMiddleware;
   };
 

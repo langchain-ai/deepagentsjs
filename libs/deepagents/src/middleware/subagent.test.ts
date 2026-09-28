@@ -2417,6 +2417,25 @@ describe("middleware override by name", () => {
     expect(matches[0]).toBe(custom);
   });
 
+  it("adds UnsupportedContentMiddleware to a custom declarative subagent's own stack", () => {
+    createDeepAgent({
+      model: fakeModel,
+      name: "main",
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          systemPrompt: "Work.",
+        },
+      ],
+    });
+
+    const middleware = getMiddlewareStack("worker");
+    expect(
+      middleware.some((entry) => entry.name === "UnsupportedContentMiddleware"),
+    ).toBe(true);
+  });
+
   it("passes main-agent default overrides to the general-purpose subagent", () => {
     const custom = createCustomSummarizationMiddleware();
 
