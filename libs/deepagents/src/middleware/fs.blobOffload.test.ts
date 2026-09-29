@@ -220,8 +220,18 @@ describe("wrapModelCall + offloadBinaryContent", () => {
       async () => structuredResult,
     );
 
-    // Must be returned unchanged, not replaced by a bare Command carrying
-    // only the offload's own state update.
-    expect(result).toBe(structuredResult);
+    // Both must survive: the structured response, and the offloaded
+    // HumanMessage replacement folded into the same shape's `messages`.
+    expect((result as typeof structuredResult).structuredResponse).toEqual({
+      answer: "ok",
+    });
+    const resultMessages = (result as typeof structuredResult)
+      .messages as unknown[];
+    const replacement = resultMessages.find(
+      (m) => (m as HumanMessage).id === "h1",
+    ) as unknown as HumanMessage;
+    expect(replacement.content).toEqual([
+      { type: "image", mimeType: "image/png", [BLOB_REF_KEY]: PNG_DIGEST },
+    ]);
   });
 });

@@ -13,6 +13,7 @@ import {
   HumanMessage,
   ToolMessage,
   type AgentMiddleware as _AgentMiddleware,
+  type AIMessage,
   type ToolRuntime,
 } from "langchain";
 import {
@@ -2283,7 +2284,7 @@ export function createFilesystemMiddleware(
         }
       }
 
-      let stateUpdate: Record<string, unknown> | null = null;
+      let offloadedHuman: unknown[] = [];
       // Offloading here would just relocate bytes to a different checkpoint
       // key, not out of it — so hydrating them back would be pointless too;
       // gate the whole block on one check, same as the read_file offload side.
@@ -2291,15 +2292,12 @@ export function createFilesystemMiddleware(
         blobCache &&
         !routesToStateBackend(resolvedBackend, `${BLOBS_PREFIX}/`)
       ) {
-        const offloadedHuman = await offloadHumanMessages(
+        offloadedHuman = await offloadHumanMessages(
           { stateMessages: request.state.messages ?? [], pending: [] },
           resolvedBackend,
           BLOBS_PREFIX,
           blobCache,
         );
-        if (offloadedHuman.length > 0) {
-          stateUpdate = { messages: offloadedHuman };
-        }
 
         messages = (await hydrateMessages(
           messages,
@@ -2315,9 +2313,18 @@ export function createFilesystemMiddleware(
         messages,
         systemMessage: newSystemMessage,
       });
-      return stateUpdate && !hasStructuredResponse(response)
-        ? new Command({ update: stateUpdate })
-        : response;
+      if (offloadedHuman.length === 0) return response;
+      // The `messages` reducer upserts by id, so folding our replacement into
+      // the response's own `messages` array overwrites the original in state
+      // instead of duplicating it. The plain-AIMessage branch's Command
+      // doesn't need to include `response` itself, since `lastAiMessage`
+      // already tracks it independently.
+      return hasStructuredResponse(response)
+        ? ({
+            ...response,
+            messages: [...offloadedHuman, ...response.messages],
+          } as unknown as AIMessage)
+        : new Command({ update: { messages: offloadedHuman } });
     },
     wrapToolCall: async (request, handler) => {
       const toolName = request.toolCall?.name;
