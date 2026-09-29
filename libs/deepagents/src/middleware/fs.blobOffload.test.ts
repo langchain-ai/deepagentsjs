@@ -152,13 +152,11 @@ describe("wrapModelCall + offloadBinaryContent", () => {
     expect(result).toBeInstanceOf(Command);
     const update = (result as Command).update as {
       messages: HumanMessage[];
-      blobPayloads: Record<string, string>;
     };
     expect(update.messages).toHaveLength(1);
     expect(update.messages[0].content).toEqual([
       { type: "image", mimeType: "image/png", [BLOB_REF_KEY]: PNG_DIGEST },
     ]);
-    expect(update.blobPayloads).toEqual({ [PNG_DIGEST]: PNG_BASE64 });
     // The original HumanMessage in state is untouched; only the returned
     // Command's replacement carries the stubbed content.
     expect(humanImage.content).toEqual([
@@ -187,5 +185,43 @@ describe("wrapModelCall + offloadBinaryContent", () => {
     );
 
     expect(result).toBe(modelResponse);
+  });
+
+  it("preserves a structured response even when a HumanMessage also gets offloaded", async () => {
+    const humanImage = new HumanMessage({
+      id: "h1",
+      content: [
+        { type: "image", mimeType: "image/png", data: PNG_BASE64 } as never,
+      ],
+    });
+    const state = {
+      messages: [new AIMessage({ content: "hi" }), humanImage],
+      files: {},
+    };
+    const middleware = createFilesystemMiddleware({
+      backend: () =>
+        new FilesystemBackend({ rootDir: root, virtualMode: true }),
+      offloadBinaryContent: true,
+    });
+
+    // The provider-strategy structured-output shape: not a plain AIMessage.
+    const structuredResult = {
+      structuredResponse: { answer: "ok" },
+      messages: [new AIMessage({ content: "ok" })],
+    };
+    const result = await (middleware as any).wrapModelCall(
+      {
+        state,
+        runtime: {},
+        tools: [],
+        messages: state.messages,
+        systemMessage: new SystemMessage(""),
+      },
+      async () => structuredResult,
+    );
+
+    // Must be returned unchanged, not replaced by a bare Command carrying
+    // only the offload's own state update.
+    expect(result).toBe(structuredResult);
   });
 });

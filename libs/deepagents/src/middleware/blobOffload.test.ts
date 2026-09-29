@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 
 import {
   BLOB_REF_KEY,
+  BlobCache,
   hydrateMessages,
   offloadHumanMessages,
   offloadMessages,
@@ -47,6 +48,40 @@ function fakeBackend(
     ...overrides,
   } as AnyBackendProtocol;
 }
+
+describe("BlobCache", () => {
+  it("returns undefined for an unknown digest", () => {
+    expect(new BlobCache().get("nope")).toBeUndefined();
+  });
+
+  it("round-trips a stored payload", () => {
+    const cache = new BlobCache();
+    cache.set("abc", "payload");
+    expect(cache.get("abc")).toBe("payload");
+  });
+
+  it("evicts least-recently-used entries once the size bound is exceeded", () => {
+    const cache = new BlobCache(10);
+    cache.set("a", "12345");
+    cache.set("b", "12345");
+    // "a" is now oldest; this set pushes total size over the bound and should evict it.
+    cache.set("c", "12345");
+    expect(cache.get("a")).toBeUndefined();
+    expect(cache.get("b")).toBe("12345");
+    expect(cache.get("c")).toBe("12345");
+  });
+
+  it("does not evict entries a get just marked as most-recently-used", () => {
+    const cache = new BlobCache(10);
+    cache.set("a", "12345");
+    cache.set("b", "12345");
+    cache.get("a"); // "a" is now most-recently-used; "b" is oldest.
+    cache.set("c", "12345");
+    expect(cache.get("b")).toBeUndefined();
+    expect(cache.get("a")).toBe("12345");
+    expect(cache.get("c")).toBe("12345");
+  });
+});
 
 describe("offloadMessages", () => {
   it("replaces an inline base64 block with a blob reference", async () => {

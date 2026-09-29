@@ -41,6 +41,55 @@ function sha256Hex(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+const DEFAULT_BLOB_CACHE_BYTES = 256 * 1024 * 1024;
+
+/**
+ * Content-addressed cache of base64 payloads, bounded by total payload size
+ * (LRU-evicted past the bound). Safe to share across threads — every key is
+ * a SHA-256 digest of its own value, so a hit is only reachable by a caller
+ * who already has that exact reference, and an eviction just forces a
+ * re-fetch from the backend, never a wrong result.
+ */
+export class BlobCache extends Map<string, string> {
+  private readonly maxBytes: number;
+
+  private totalBytes = 0;
+
+  constructor(maxBytes: number = DEFAULT_BLOB_CACHE_BYTES) {
+    super();
+    this.maxBytes = maxBytes;
+  }
+
+  /** Returns the cached payload for `digest`, marking it most recently used. */
+  override get(digest: string): string | undefined {
+    const payload = super.get(digest);
+    if (payload === undefined) return undefined;
+    super.delete(digest);
+    super.set(digest, payload);
+    return payload;
+  }
+
+  /** Caches `payload`, evicting least-recently-used entries past the size bound. */
+  override set(digest: string, payload: string): this {
+    if (payload.length > this.maxBytes) return this;
+    const previous = super.get(digest);
+    if (previous !== undefined) {
+      this.totalBytes -= previous.length;
+      super.delete(digest);
+    }
+    super.set(digest, payload);
+    this.totalBytes += payload.length;
+    while (this.totalBytes > this.maxBytes) {
+      const oldestDigest = this.keys().next().value;
+      if (oldestDigest === undefined) break;
+      const oldest = super.get(oldestDigest);
+      super.delete(oldestDigest);
+      this.totalBytes -= oldest?.length ?? 0;
+    }
+    return this;
+  }
+}
+
 function blobPath(prefix: string, digest: string): string {
   return `${prefix}/${digest}`;
 }

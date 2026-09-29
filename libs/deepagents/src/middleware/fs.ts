@@ -20,7 +20,6 @@ import {
   isCommand,
   StateSchema,
   ReducedValue,
-  UntrackedValue,
 } from "@langchain/langgraph";
 import { z } from "zod/v4";
 import type {
@@ -36,6 +35,7 @@ import type {
 import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
 import {
+  BlobCache,
   hydrateMessages,
   offloadHumanMessages,
   offloadToolResult,
@@ -376,9 +376,6 @@ export const DEFAULT_GREP_MAX_COUNT = 1000;
 /** Path prefix offloaded binary content blobs are written under. */
 const BLOBS_PREFIX = "/blobs";
 
-/** State key for the per-run, uncheck pointed digest-to-base64 cache backing `offloadBinaryContent`. */
-const BLOB_PAYLOADS_KEY = "blobPayloads";
-
 /**
  * Message template for evicted tool results.
  */
@@ -653,22 +650,6 @@ const FilesystemStateSchema = new StateSchema({
       reducer: fileDataReducer,
     },
   ),
-});
-
-/**
- * `FilesystemStateSchema` plus a per-run cache of offloaded blob payloads.
- * No Zod schema on `UntrackedValue`, so the field is left out of the
- * compiled agent's generated input/output JSON schema.
- */
-const FilesystemBlobPayloadStateSchema = new StateSchema({
-  files: new ReducedValue(
-    z.record(z.string(), FileDataSchema).default(() => ({})),
-    {
-      inputSchema: z.record(z.string(), FileDataSchema.nullable()).optional(),
-      reducer: fileDataReducer,
-    },
-  ),
-  [BLOB_PAYLOADS_KEY]: new UntrackedValue<Record<string, string>>(),
 });
 
 /** Extract a message string from an unknown thrown value without `instanceof`. */
@@ -1980,6 +1961,24 @@ function routesToStateBackend(
 }
 
 /**
+ * Whether `response` is the `{ structuredResponse, messages }` shape a
+ * provider-strategy structured-output call can return instead of a plain
+ * `AIMessage`. The agent framework only recognizes this shape at the
+ * outermost `wrapModelCall` return value — returning a `Command` instead
+ * discards `structuredResponse` with no way to carry it through the Command.
+ */
+function hasStructuredResponse(
+  response: unknown,
+): response is { structuredResponse: unknown; messages: unknown[] } {
+  return (
+    typeof response === "object" &&
+    response !== null &&
+    "structuredResponse" in response &&
+    "messages" in response
+  );
+}
+
+/**
  * Create middleware that provides built-in filesystem tools and optional custom
  * prompt guidance.
  *
@@ -2018,15 +2017,10 @@ export function createFilesystemMiddleware(
     grepMaxCount = DEFAULT_GREP_MAX_COUNT,
     offloadBinaryContent = false,
   } = options;
-  // Composite routing needs the backend adapted first (async, and not always
-  // possible for a factory `backend`), so only the simple, always-safe case —
-  // `backend` passed directly as a `StateBackend` — skips the extended schema
-  // here; a `StateBackend` reached through composite routing still gets it,
-  // just with no effect since the per-call routing check disables offload.
-  const filesystemStateSchema =
-    offloadBinaryContent && !StateBackend.isInstance(backend)
-      ? FilesystemBlobPayloadStateSchema
-      : FilesystemStateSchema;
+  // Shared across every call/thread this middleware instance serves — safe
+  // since every key is a SHA-256 digest of its own value, so a hit is only
+  // reachable by a caller who already has that exact reference.
+  const blobCache = offloadBinaryContent ? new BlobCache() : null;
   const enabledFilesystemTools = normalizeFilesystemTools(filesystemTools);
   const executeToolEnabled =
     enabledFilesystemTools == null || enabledFilesystemTools.has("execute");
@@ -2181,7 +2175,7 @@ export function createFilesystemMiddleware(
 
   return createMiddleware({
     name: "FilesystemMiddleware",
-    stateSchema: filesystemStateSchema,
+    stateSchema: FilesystemStateSchema,
     tools: allTools,
     async beforeAgent(state) {
       if (!humanMessageTokenLimitBeforeEvict) {
@@ -2294,20 +2288,14 @@ export function createFilesystemMiddleware(
       // key, not out of it — so hydrating them back would be pointless too;
       // gate the whole block on one check, same as the read_file offload side.
       if (
-        offloadBinaryContent &&
+        blobCache &&
         !routesToStateBackend(resolvedBackend, `${BLOBS_PREFIX}/`)
       ) {
-        const cachedPayloads =
-          ((request.state as Record<string, unknown>)[BLOB_PAYLOADS_KEY] as
-            | Record<string, string>
-            | undefined) ?? {};
-        const payloads = new Map(Object.entries(cachedPayloads));
-
         const offloadedHuman = await offloadHumanMessages(
           { stateMessages: request.state.messages ?? [], pending: [] },
           resolvedBackend,
           BLOBS_PREFIX,
-          payloads,
+          blobCache,
         );
         if (offloadedHuman.length > 0) {
           stateUpdate = { messages: offloadedHuman };
@@ -2317,15 +2305,8 @@ export function createFilesystemMiddleware(
           messages,
           resolvedBackend,
           BLOBS_PREFIX,
-          payloads,
+          blobCache,
         )) as typeof messages;
-
-        if (payloads.size !== Object.keys(cachedPayloads).length) {
-          stateUpdate = {
-            ...(stateUpdate ?? {}),
-            [BLOB_PAYLOADS_KEY]: Object.fromEntries(payloads),
-          };
-        }
       }
 
       const response = await handler({
@@ -2334,13 +2315,15 @@ export function createFilesystemMiddleware(
         messages,
         systemMessage: newSystemMessage,
       });
-      return stateUpdate ? new Command({ update: stateUpdate }) : response;
+      return stateUpdate && !hasStructuredResponse(response)
+        ? new Command({ update: stateUpdate })
+        : response;
     },
     wrapToolCall: async (request, handler) => {
       const toolName = request.toolCall?.name;
       let result = await handler(request);
 
-      if (offloadBinaryContent && toolName === "read_file") {
+      if (blobCache && toolName === "read_file") {
         const resolvedBackend = await resolveBackend(backend, {
           ...request.runtime,
           state: request.state,
