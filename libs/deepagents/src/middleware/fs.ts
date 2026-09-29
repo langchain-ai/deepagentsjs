@@ -20,6 +20,7 @@ import {
   isCommand,
   StateSchema,
   ReducedValue,
+  UntrackedValue,
 } from "@langchain/langgraph";
 import { z } from "zod/v4";
 import type {
@@ -35,8 +36,8 @@ import type {
 import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
 import {
-  BlobCache,
   hydrateMessages,
+  offloadHumanMessages,
   offloadToolResult,
 } from "./blobOffload.js";
 import {
@@ -372,8 +373,11 @@ export const GREP_TRUNCATION_NOTE =
  */
 export const DEFAULT_GREP_MAX_COUNT = 1000;
 
-/** Path prefix offloaded binary `read_file` blobs are written under. */
+/** Path prefix offloaded binary content blobs are written under. */
 const BLOBS_PREFIX = "/blobs";
+
+/** State key for the per-run, uncheck pointed digest-to-base64 cache backing `offloadBinaryContent`. */
+const BLOB_PAYLOADS_KEY = "blobPayloads";
 
 /**
  * Message template for evicted tool results.
@@ -649,6 +653,22 @@ const FilesystemStateSchema = new StateSchema({
       reducer: fileDataReducer,
     },
   ),
+});
+
+/**
+ * `FilesystemStateSchema` plus a per-run cache of offloaded blob payloads.
+ * No Zod schema on `UntrackedValue`, so the field is left out of the
+ * compiled agent's generated input/output JSON schema.
+ */
+const FilesystemBlobPayloadStateSchema = new StateSchema({
+  files: new ReducedValue(
+    z.record(z.string(), FileDataSchema).default(() => ({})),
+    {
+      inputSchema: z.record(z.string(), FileDataSchema.nullable()).optional(),
+      reducer: fileDataReducer,
+    },
+  ),
+  [BLOB_PAYLOADS_KEY]: new UntrackedValue<Record<string, string>>(),
 });
 
 /** Extract a message string from an unknown thrown value without `instanceof`. */
@@ -1886,16 +1906,20 @@ export interface FilesystemMiddlewareOptions {
    */
   grepMaxCount?: number | null;
   /**
-   * Keep binary `read_file` content out of message history (default: `false`).
+   * Keep binary `read_file` content and inline `HumanMessage` media out of
+   * message history (default: `false`).
    *
    * Payloads are written to `/blobs` on the backend and state keeps a
    * content-addressed reference instead; model requests are rehydrated from
-   * the backend. Useful with sandbox backends. Has no effect when `/blobs`
-   * routes to a `StateBackend`, since that backend stores files as part of
-   * graph state — offloading there would just relocate the bytes to a
-   * different key within the same checkpoint, not out of it.
+   * the backend. `HumanMessage` payloads added since the last model response
+   * are replaced starting at the next model call, so the original input
+   * write still lands in checkpoint history for that turn. Useful with
+   * sandbox backends. Has no effect when `/blobs` routes to a `StateBackend`,
+   * since that backend stores files as part of graph state — offloading
+   * there would just relocate the bytes to a different key within the same
+   * checkpoint, not out of it.
    */
-  offloadBinaryReads?: boolean;
+  offloadBinaryContent?: boolean;
 }
 
 /**
@@ -1992,9 +2016,17 @@ export function createFilesystemMiddleware(
     permissions = [],
     tools: filesystemTools = null,
     grepMaxCount = DEFAULT_GREP_MAX_COUNT,
-    offloadBinaryReads = false,
+    offloadBinaryContent = false,
   } = options;
-  const blobCache = offloadBinaryReads ? new BlobCache() : null;
+  // Composite routing needs the backend adapted first (async, and not always
+  // possible for a factory `backend`), so only the simple, always-safe case —
+  // `backend` passed directly as a `StateBackend` — skips the extended schema
+  // here; a `StateBackend` reached through composite routing still gets it,
+  // just with no effect since the per-call routing check disables offload.
+  const filesystemStateSchema =
+    offloadBinaryContent && !StateBackend.isInstance(backend)
+      ? FilesystemBlobPayloadStateSchema
+      : FilesystemStateSchema;
   const enabledFilesystemTools = normalizeFilesystemTools(filesystemTools);
   const executeToolEnabled =
     enabledFilesystemTools == null || enabledFilesystemTools.has("execute");
@@ -2149,7 +2181,7 @@ export function createFilesystemMiddleware(
 
   return createMiddleware({
     name: "FilesystemMiddleware",
-    stateSchema: FilesystemStateSchema,
+    stateSchema: filesystemStateSchema,
     tools: allTools,
     async beforeAgent(state) {
       if (!humanMessageTokenLimitBeforeEvict) {
@@ -2257,30 +2289,58 @@ export function createFilesystemMiddleware(
         }
       }
 
-      if (blobCache) {
-        // No routing check here, unlike the offload side: this only resolves
-        // references that already exist, and offload is what's responsible
-        // for never creating one that can't be usefully resolved later.
+      let stateUpdate: Record<string, unknown> | null = null;
+      // Offloading here would just relocate bytes to a different checkpoint
+      // key, not out of it — so hydrating them back would be pointless too;
+      // gate the whole block on one check, same as the read_file offload side.
+      if (
+        offloadBinaryContent &&
+        !routesToStateBackend(resolvedBackend, `${BLOBS_PREFIX}/`)
+      ) {
+        const cachedPayloads =
+          ((request.state as Record<string, unknown>)[BLOB_PAYLOADS_KEY] as
+            | Record<string, string>
+            | undefined) ?? {};
+        const payloads = new Map(Object.entries(cachedPayloads));
+
+        const offloadedHuman = await offloadHumanMessages(
+          { stateMessages: request.state.messages ?? [], pending: [] },
+          resolvedBackend,
+          BLOBS_PREFIX,
+          payloads,
+        );
+        if (offloadedHuman.length > 0) {
+          stateUpdate = { messages: offloadedHuman };
+        }
+
         messages = (await hydrateMessages(
           messages,
           resolvedBackend,
           BLOBS_PREFIX,
-          blobCache,
+          payloads,
         )) as typeof messages;
+
+        if (payloads.size !== Object.keys(cachedPayloads).length) {
+          stateUpdate = {
+            ...(stateUpdate ?? {}),
+            [BLOB_PAYLOADS_KEY]: Object.fromEntries(payloads),
+          };
+        }
       }
 
-      return handler({
+      const response = await handler({
         ...request,
         tools,
         messages,
         systemMessage: newSystemMessage,
       });
+      return stateUpdate ? new Command({ update: stateUpdate }) : response;
     },
     wrapToolCall: async (request, handler) => {
       const toolName = request.toolCall?.name;
       let result = await handler(request);
 
-      if (blobCache && toolName === "read_file") {
+      if (offloadBinaryContent && toolName === "read_file") {
         const resolvedBackend = await resolveBackend(backend, {
           ...request.runtime,
           state: request.state,
@@ -2291,7 +2351,7 @@ export function createFilesystemMiddleware(
             result,
             resolvedBackend,
             BLOBS_PREFIX,
-            blobCache,
+            new Map(),
           )) as typeof result;
         }
       }

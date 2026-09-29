@@ -1,14 +1,15 @@
 /**
- * Content-addressed offload of binary `read_file` blocks to the backend.
+ * Content-addressed offload of binary `read_file` and inline `HumanMessage`
+ * blocks to the backend.
  *
  * Binary blocks are written to `/blobs/<sha256>` and replaced in state with a
  * `deepagents_blob` reference. Model requests are rehydrated from the backend
- * (or an in-process cache), so checkpoints never carry the base64 payload.
+ * (or a per-run cache), so checkpoints never carry the base64 payload.
  */
 
 import { createHash } from "node:crypto";
 import { Command } from "@langchain/langgraph";
-import { HumanMessage, ToolMessage } from "langchain";
+import { AIMessage, HumanMessage, ToolMessage } from "langchain";
 import type {
   AnyBackendProtocol,
   FileDownloadResponse,
@@ -20,8 +21,6 @@ export const BLOB_REF_KEY = "deepagents_blob";
 
 const MISSING_BLOB_TEXT =
   "[Binary content from an earlier read_file call is no longer available. Re-read the file if you still need it.]";
-
-const DEFAULT_BLOB_CACHE_BYTES = 256 * 1024 * 1024;
 
 const DIGEST_RE = /^[0-9a-f]{64}$/;
 
@@ -40,47 +39,6 @@ function isValidBase64(value: string): boolean {
 
 function sha256Hex(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
-}
-
-/** Bounded, in-process cache of base64 payloads keyed by digest, LRU-evicted by total payload size. */
-export class BlobCache {
-  private readonly maxBytes: number;
-
-  private size = 0;
-
-  private readonly entries = new Map<string, string>();
-
-  constructor(maxBytes: number = DEFAULT_BLOB_CACHE_BYTES) {
-    this.maxBytes = maxBytes;
-  }
-
-  /** Return the cached payload for `digest`, marking it most recently used. */
-  get(digest: string): string | undefined {
-    const payload = this.entries.get(digest);
-    if (payload === undefined) return undefined;
-    this.entries.delete(digest);
-    this.entries.set(digest, payload);
-    return payload;
-  }
-
-  /** Cache `payload`, evicting least-recently-used entries past the size bound. */
-  put(digest: string, payload: string): void {
-    if (payload.length > this.maxBytes) return;
-    const previous = this.entries.get(digest);
-    if (previous !== undefined) {
-      this.size -= previous.length;
-      this.entries.delete(digest);
-    }
-    this.entries.set(digest, payload);
-    this.size += payload.length;
-    while (this.size > this.maxBytes) {
-      const oldestKey = this.entries.keys().next().value as string | undefined;
-      if (oldestKey === undefined) break;
-      const oldest = this.entries.get(oldestKey);
-      this.entries.delete(oldestKey);
-      this.size -= oldest?.length ?? 0;
-    }
-  }
 }
 
 function blobPath(prefix: string, digest: string): string {
@@ -153,7 +111,7 @@ export async function offloadMessages(
   messages: readonly unknown[],
   backend: AnyBackendProtocol,
   prefix: string,
-  cache: BlobCache,
+  cache: Map<string, string>,
 ): Promise<unknown[]> {
   const pending = pendingBlobs(messages);
   if (pending.size === 0) return [...messages];
@@ -184,7 +142,7 @@ export async function offloadMessages(
   entries.forEach(([payload, { digest }], index) => {
     if (responses[index]?.error == null) {
       digests.set(payload, digest);
-      cache.put(digest, payload);
+      cache.set(digest, payload);
     }
   });
   return stubMessages(messages, digests);
@@ -195,7 +153,7 @@ export async function offloadToolResult(
   result: unknown,
   backend: AnyBackendProtocol,
   prefix: string,
-  cache: BlobCache,
+  cache: Map<string, string>,
 ): Promise<unknown> {
   if (ToolMessage.isInstance(result)) {
     return (await offloadMessages([result], backend, prefix, cache))[0];
@@ -218,6 +176,73 @@ export async function offloadToolResult(
   return result;
 }
 
+/** Return `HumanMessage`s with ids after the last `AIMessage`, preferring a version already queued in `pending`. */
+function humanCandidates({
+  stateMessages,
+  pending,
+}: {
+  stateMessages: readonly unknown[];
+  pending: readonly unknown[];
+}): unknown[] {
+  let lastAiIndex = -1;
+  stateMessages.forEach((message, index) => {
+    if (AIMessage.isInstance(message)) lastAiIndex = index;
+  });
+
+  const queued = new Map<string, unknown>();
+  for (const message of pending) {
+    const id = (message as { id?: unknown } | null)?.id;
+    if (typeof id === "string") queued.set(id, message);
+  }
+
+  const candidates: unknown[] = [];
+  for (const message of stateMessages.slice(lastAiIndex + 1)) {
+    if (!HumanMessage.isInstance(message) || typeof message.id !== "string")
+      continue;
+    candidates.push(queued.get(message.id) ?? message);
+  }
+  return candidates;
+}
+
+function mergeReplacements({
+  pending,
+  offloaded,
+  candidates,
+}: {
+  pending: readonly unknown[];
+  offloaded: readonly unknown[];
+  candidates: readonly unknown[];
+}): unknown[] {
+  const replaced = offloaded.filter(
+    (next, index) => next !== candidates[index],
+  );
+  const replacedIds = new Set(
+    replaced.map((message) => (message as { id?: unknown } | null)?.id),
+  );
+  return [
+    ...pending.filter(
+      (message) => !replacedIds.has((message as { id?: unknown } | null)?.id),
+    ),
+    ...replaced,
+  ];
+}
+
+/** Return `pending` plus stubbed replacements for `HumanMessage`s in state carrying inline media. */
+export async function offloadHumanMessages(
+  {
+    stateMessages,
+    pending,
+  }: { stateMessages: readonly unknown[]; pending: readonly unknown[] },
+  backend: AnyBackendProtocol,
+  prefix: string,
+  cache: Map<string, string>,
+): Promise<unknown[]> {
+  const candidates = humanCandidates({ stateMessages, pending });
+  if (candidates.length === 0) return [...pending];
+  const offloaded = await offloadMessages(candidates, backend, prefix, cache);
+  return mergeReplacements({ pending, offloaded, candidates });
+}
+
 /** Collect every well-formed `deepagents_blob` digest referenced in `messages`, deduplicated. */
 function referencedDigests(messages: readonly unknown[]): string[] {
   const digests = new Set<string>();
@@ -234,7 +259,7 @@ function referencedDigests(messages: readonly unknown[]): string[] {
 
 function cachedPayloads(
   digests: readonly string[],
-  cache: BlobCache,
+  cache: Map<string, string>,
 ): { payloads: Map<string, string>; missing: string[] } {
   const payloads = new Map<string, string>();
   const missing: string[] = [];
@@ -254,14 +279,14 @@ function acceptDownloads(
   missing: readonly string[],
   responses: readonly FileDownloadResponse[],
   payloads: Map<string, string>,
-  cache: BlobCache,
+  cache: Map<string, string>,
 ): void {
   missing.forEach((digest, index) => {
     const response = responses[index];
     if (!response || response.error != null || response.content == null) return;
     if (sha256Hex(response.content) !== digest) return;
     const payload = Buffer.from(response.content).toString("base64");
-    cache.put(digest, payload);
+    cache.set(digest, payload);
     payloads.set(digest, payload);
   });
 }
@@ -352,7 +377,7 @@ export async function hydrateMessages(
   messages: readonly unknown[],
   backend: AnyBackendProtocol,
   prefix: string,
-  cache: BlobCache,
+  cache: Map<string, string>,
 ): Promise<unknown[]> {
   if (!messages.some(messageHasRefs)) return [...messages];
 

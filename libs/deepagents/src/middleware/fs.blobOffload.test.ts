@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fsSync from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { ToolMessage } from "langchain";
+import { createHash } from "node:crypto";
+import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from "langchain";
+import { Command } from "@langchain/langgraph";
 
 import { createFilesystemMiddleware } from "./fs.js";
 import { BLOB_REF_KEY } from "./blobOffload.js";
@@ -14,6 +16,9 @@ import type { FileData } from "../backends/protocol.js";
 const PNG_BASE64 = Buffer.from("not a real png, just some bytes").toString(
   "base64",
 );
+const PNG_DIGEST = createHash("sha256")
+  .update(Buffer.from(PNG_BASE64, "base64"))
+  .digest("hex");
 
 async function offloadReadFile(middleware: unknown, state: unknown) {
   return (middleware as any).wrapToolCall(
@@ -33,7 +38,7 @@ async function offloadReadFile(middleware: unknown, state: unknown) {
   );
 }
 
-describe("offloadBinaryReads + StateBackend routing", () => {
+describe("offloadBinaryContent + StateBackend routing", () => {
   let root: string;
 
   beforeEach(() => {
@@ -51,7 +56,7 @@ describe("offloadBinaryReads + StateBackend routing", () => {
     };
     const middleware = createFilesystemMiddleware({
       backend: () => new StateBackend({ state, store: undefined }),
-      offloadBinaryReads: true,
+      offloadBinaryContent: true,
     });
 
     const result = (await offloadReadFile(middleware, state)) as ToolMessage;
@@ -72,7 +77,7 @@ describe("offloadBinaryReads + StateBackend routing", () => {
           new FilesystemBackend({ rootDir: root, virtualMode: true }),
           { "/blobs": new StateBackend({ state, store: undefined }) },
         ),
-      offloadBinaryReads: true,
+      offloadBinaryContent: true,
     });
 
     const result = (await offloadReadFile(middleware, state)) as ToolMessage;
@@ -93,7 +98,7 @@ describe("offloadBinaryReads + StateBackend routing", () => {
           new FilesystemBackend({ rootDir: root, virtualMode: true }),
           { "/memories": new StateBackend({ state, store: undefined }) },
         ),
-      offloadBinaryReads: true,
+      offloadBinaryContent: true,
     });
 
     const result = (await offloadReadFile(middleware, state)) as ToolMessage;
@@ -101,5 +106,86 @@ describe("offloadBinaryReads + StateBackend routing", () => {
     const [block] = result.content as Array<Record<string, unknown>>;
     expect(block.data).toBeUndefined();
     expect(typeof block[BLOB_REF_KEY]).toBe("string");
+  });
+});
+
+describe("wrapModelCall + offloadBinaryContent", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = fsSync.mkdtempSync(path.join(os.tmpdir(), "deepagents-blob-"));
+  });
+
+  afterEach(() => {
+    fsSync.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("offloads a new HumanMessage's media and persists it via a Command update", async () => {
+    const humanImage = new HumanMessage({
+      id: "h1",
+      content: [
+        { type: "image", mimeType: "image/png", data: PNG_BASE64 } as never,
+      ],
+    });
+    const state = {
+      messages: [new AIMessage({ content: "hi" }), humanImage],
+      files: {},
+    };
+    const middleware = createFilesystemMiddleware({
+      backend: () =>
+        new FilesystemBackend({ rootDir: root, virtualMode: true }),
+      offloadBinaryContent: true,
+    });
+
+    const modelResponse = new AIMessage({ content: "ok" });
+    const result = await (middleware as any).wrapModelCall(
+      {
+        state,
+        runtime: {},
+        tools: [],
+        messages: state.messages,
+        systemMessage: new SystemMessage(""),
+      },
+      async () => modelResponse,
+    );
+
+    expect(result).toBeInstanceOf(Command);
+    const update = (result as Command).update as {
+      messages: HumanMessage[];
+      blobPayloads: Record<string, string>;
+    };
+    expect(update.messages).toHaveLength(1);
+    expect(update.messages[0].content).toEqual([
+      { type: "image", mimeType: "image/png", [BLOB_REF_KEY]: PNG_DIGEST },
+    ]);
+    expect(update.blobPayloads).toEqual({ [PNG_DIGEST]: PNG_BASE64 });
+    // The original HumanMessage in state is untouched; only the returned
+    // Command's replacement carries the stubbed content.
+    expect(humanImage.content).toEqual([
+      { type: "image", mimeType: "image/png", data: PNG_BASE64 },
+    ]);
+  });
+
+  it("returns the plain response when there is nothing new to offload", async () => {
+    const state = { messages: [new AIMessage({ content: "hi" })], files: {} };
+    const middleware = createFilesystemMiddleware({
+      backend: () =>
+        new FilesystemBackend({ rootDir: root, virtualMode: true }),
+      offloadBinaryContent: true,
+    });
+
+    const modelResponse = new AIMessage({ content: "ok" });
+    const result = await (middleware as any).wrapModelCall(
+      {
+        state,
+        runtime: {},
+        tools: [],
+        messages: state.messages,
+        systemMessage: new SystemMessage(""),
+      },
+      async () => modelResponse,
+    );
+
+    expect(result).toBe(modelResponse);
   });
 });
