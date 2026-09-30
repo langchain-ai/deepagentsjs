@@ -84,6 +84,32 @@ describe("scrubUnsupportedMultimodalContent", () => {
     );
   });
 
+  it("prefers profile.fileMimeTypes over the OpenAI allowlist when present", () => {
+    const block = {
+      type: "file",
+      mimeType: "application/x-my-format",
+      data: "AAA",
+    };
+
+    expect(
+      scrubbedContent(
+        block,
+        otherModel({ fileMimeTypes: ["application/x-my-format"] }),
+      ),
+    ).toEqual([block]);
+    expect(
+      scrubbedContent(block, otherModel({ fileMimeTypes: ["text/plain"] })),
+    ).toEqual(placeholder("file", "application/x-my-format"));
+    // A profile.fileMimeTypes present but not covering an otherwise-allowlisted
+    // OpenAI type still wins over the fallback allowlist.
+    expect(
+      scrubbedContent(
+        { type: "file", mimeType: PPTX, data: "AAA" },
+        openAIModel(true, { fileMimeTypes: [] }),
+      ),
+    ).toEqual(placeholder("file", PPTX));
+  });
+
   it("detects OpenAI Responses models built from a model string", () => {
     const block = { type: "file", mimeType: PPTX, data: "AAA" };
     const configurable = {
@@ -157,6 +183,34 @@ describe("scrubUnsupportedMultimodalContent", () => {
 
     const human = new HumanMessage({ content: [block as never] });
     expect(scrubUnsupportedMultimodalContent([human], model)[0]).toBe(human);
+  });
+
+  it("accepts an image in a tool message when imageToolMessage is true even if imageInputs is false", () => {
+    // e.g. gpt-4/o1-mini/o3-mini: can't take an image as direct user input,
+    // but do accept one arriving in a tool result.
+    const block = { type: "image", mimeType: "image/png", data: "AAA" };
+    const model = otherModel({ imageInputs: false, imageToolMessage: true });
+
+    expect(scrubbedContent(block, model)).toEqual([block]);
+
+    const human = new HumanMessage({ content: [block as never] });
+    expect(scrubUnsupportedMultimodalContent([human], model)[0]).toEqual(
+      new HumanMessage({
+        content: [
+          {
+            type: "text",
+            text: "[read_file: the requested file was not attached because this model does not support image content (image/png).]",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("accepts a PDF in a tool message when pdfToolMessage is true even if pdfInputs is false", () => {
+    const block = { type: "file", mimeType: "application/pdf", data: "AAA" };
+    const model = otherModel({ pdfInputs: false, pdfToolMessage: true });
+
+    expect(scrubbedContent(block, model)).toEqual([block]);
   });
 
   it("gates media types on the model profile", () => {

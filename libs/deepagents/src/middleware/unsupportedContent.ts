@@ -3,7 +3,9 @@ import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
 
 /**
- * File MIME types OpenAI accepts as `input_file` on the Responses API.
+ * Fallback for when `model.profile.fileMimeTypes` isn't available (not every
+ * `ModelProfile` reports it yet). File MIME types OpenAI accepts as
+ * `input_file` on the Responses API.
  *
  * Source: https://developers.openai.com/api/docs/guides/file-inputs
  */
@@ -205,16 +207,19 @@ function fileBlockSupported(
   }
   const mimeType = blockMimeType(block);
   if (mimeType === PDF_MIME_TYPE) {
-    if (inToolMessage && profile.pdfToolMessage === false) {
-      return false;
+    if (inToolMessage && profile.pdfToolMessage !== undefined) {
+      return profile.pdfToolMessage !== false;
     }
     return profile.pdfInputs !== false;
   }
-  return (
-    mimeType != null &&
-    OPENAI_FILE_MIME_TYPES.has(mimeType) &&
-    isOpenAIResponsesModel(model)
-  );
+  if (mimeType == null) {
+    return false;
+  }
+  const { fileMimeTypes } = profile;
+  if (Array.isArray(fileMimeTypes)) {
+    return fileMimeTypes.includes(mimeType);
+  }
+  return OPENAI_FILE_MIME_TYPES.has(mimeType) && isOpenAIResponsesModel(model);
 }
 
 /**
@@ -238,8 +243,8 @@ export function multimodalBlockSupported(
   }
   if (inToolMessage) {
     const toolField = TOOL_MESSAGE_FIELD_BY_BLOCK_TYPE[block.type];
-    if (toolField != null && profile[toolField] === false) {
-      return false;
+    if (toolField != null && profile[toolField] !== undefined) {
+      return profile[toolField] !== false;
     }
   }
   return profile[field] !== false;
