@@ -214,6 +214,25 @@ describe("LocalShellBackend", () => {
       }
     });
 
+    it.each([0, 1, 10, 35, 36, 37])(
+      "keeps the output within a %i-byte budget even when the notice does not fit",
+      async (maxOutputBytes) => {
+        const backend = new LocalShellBackend({
+          rootDir: tmpDir,
+          maxOutputBytes,
+          inheritEnv: true,
+        });
+        const result = await backend.execute(
+          `node -e "process.stdout.write('x'.repeat(100))"`,
+        );
+        expect(result.exitCode).toBe(0);
+        expect(result.truncated).toBe(true);
+        expect(Buffer.byteLength(result.output, "utf8")).toBeLessThanOrEqual(
+          maxOutputBytes,
+        );
+      },
+    );
+
     it("should prefix stderr lines with [stderr]", async () => {
       const backend = new LocalShellBackend({
         rootDir: tmpDir,

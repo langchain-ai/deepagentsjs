@@ -429,7 +429,13 @@ export class LocalShellBackend
         // exceed the cap by up to 3x, the appended notice was never counted,
         // and the cut could land between a surrogate pair.
         if (Buffer.byteLength(output, "utf8") > this.#maxOutputBytes) {
-          const notice = `\n\n... Output truncated at ${this.#maxOutputBytes} bytes.`;
+          const fullNotice = `\n\n... Output truncated at ${this.#maxOutputBytes} bytes.`;
+          // For tiny budgets, report truncation through the flag and spend
+          // the available bytes on content instead of exceeding the cap.
+          const notice =
+            Buffer.byteLength(fullNotice, "utf8") <= this.#maxOutputBytes
+              ? fullNotice
+              : "";
           const budget = Math.max(
             0,
             this.#maxOutputBytes - Buffer.byteLength(notice, "utf8"),
