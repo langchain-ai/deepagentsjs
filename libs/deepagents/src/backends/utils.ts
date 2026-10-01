@@ -170,7 +170,7 @@ function basename(filePath: string): string {
  *
  * Falls back to stripping the leading slash when the file does not sit under
  * `normalizedPath` (e.g. when `path` named the file itself), so a caller
- * always gets a separator-free-relative form to match against.
+ * always gets a relative form to match against.
  */
 function relativeToSearchPath(
   filePath: string,
@@ -867,12 +867,12 @@ export function grepSearchFiles(
         // matching the basename anywhere below `path`, which is how this
         // filter has always behaved — so `*.py` still finds nested files
         // while `src/*.py` now scopes to one directory.
-        return (
-          micromatch.isMatch(relativeToSearchPath(fp, normalizedPath), glob, {
-            dot: true,
-            nobrace: false,
-          }) ||
-          micromatch.isMatch(basename(fp), glob, { dot: true, nobrace: false })
+        return micromatch.isMatch(
+          glob.includes("/")
+            ? relativeToSearchPath(fp, normalizedPath)
+            : basename(fp),
+          glob,
+          { dot: true, nobrace: false },
         );
       }),
     );
@@ -939,12 +939,12 @@ export function grepMatchesFromFiles(
         // matching the basename anywhere below `path`, which is how this
         // filter has always behaved — so `*.py` still finds nested files
         // while `src/*.py` now scopes to one directory.
-        return (
-          micromatch.isMatch(relativeToSearchPath(fp, normalizedPath), glob, {
-            dot: true,
-            nobrace: false,
-          }) ||
-          micromatch.isMatch(basename(fp), glob, { dot: true, nobrace: false })
+        return micromatch.isMatch(
+          glob.includes("/")
+            ? relativeToSearchPath(fp, normalizedPath)
+            : basename(fp),
+          glob,
+          { dot: true, nobrace: false },
         );
       }),
     );
