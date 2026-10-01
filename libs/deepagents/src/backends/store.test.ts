@@ -750,6 +750,35 @@ describe("StoreBackend", () => {
     },
   );
 
+  it("keeps recursive deletes in the exact namespace when keys collide", async () => {
+    const { store } = makeConfig();
+    const own = new StoreBackend({ store, namespace: ["tenant", "acme"] });
+    const sibling = new StoreBackend({
+      store,
+      namespace: ["tenant", "acme-corp"],
+    });
+    const child = new StoreBackend({
+      store,
+      namespace: ["tenant", "acme", "child"],
+    });
+    for (const backend of [own, sibling, child]) {
+      await backend.write("/docs/shared.txt", "keep namespace isolated");
+    }
+    await sibling.write("/private/only.txt", "sibling only");
+    expect((await own.delete("/private")).error).toContain("not found");
+    expect((await own.delete("/docs")).error).toBeUndefined();
+    expect((await own.read("/docs/shared.txt")).error).toContain("not found");
+    expect((await sibling.read("/docs/shared.txt")).content).toBe(
+      "keep namespace isolated",
+    );
+    expect((await child.read("/docs/shared.txt")).content).toBe(
+      "keep namespace isolated",
+    );
+    expect((await sibling.read("/private/only.txt")).content).toBe(
+      "sibling only",
+    );
+  });
+
   it("should validate namespace components", async () => {
     const { store } = makeConfig();
     const runtime = {
