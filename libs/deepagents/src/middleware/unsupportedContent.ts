@@ -8,6 +8,10 @@ import type { BaseMessage } from "@langchain/core/messages";
  * `input_file` on the Responses API.
  *
  * Source: https://developers.openai.com/api/docs/guides/file-inputs
+ *
+ * TODO: remove once our minimum supported `@langchain/core`/`@langchain/openai`
+ * versions guarantee `fileMimeTypes` (added in @langchain/core@1.2.14 /
+ * @langchain/openai@1.6.1).
  */
 export const OPENAI_FILE_MIME_TYPES: ReadonlySet<string> = new Set([
   "application/msword",
