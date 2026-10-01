@@ -962,3 +962,16 @@ it("still returns the full first page for an in-range offset", () => {
   expect(res.content).toBe("line1\nline2\n");
   expect(res.totalLines).toBe(2);
 });
+
+it.each([0, 500])("rejects an offset exactly at EOF with limit %i", (limit) => {
+  const { state, runtime } = makeConfig();
+  const backend = new StateBackend(runtime);
+  Object.assign(
+    state.files,
+    backend.write("/a.txt", "line1\nline2\n").filesUpdate,
+  );
+  expect(backend.read("/a.txt", 2, limit).error).toBe(
+    "Line offset 2 exceeds file length (2 lines)",
+  );
+  expect(backend.read("/a.txt", 0, 0).content).toBe("");
+});
