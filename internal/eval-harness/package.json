@@ -39,14 +39,14 @@
     "@langchain/core": "^1.1.42",
     "@langchain/openai": "^1.4.1",
     "deepagents": "workspace:*",
-    "langsmith": "^0.8.7",
+    "langsmith": "^0.10.5",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.13",
     "@types/node": "^26.1.0",
     "@types/uuid": "^11.0.0",
-    "tsdown": "^0.22.1",
+    "tsdown": "^0.23.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"
   }
