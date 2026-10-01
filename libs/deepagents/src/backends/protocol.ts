@@ -320,7 +320,13 @@ export type FileOperationError =
   | "file_not_found"
   | "permission_denied"
   | "is_directory"
-  | "invalid_path";
+  | "invalid_path"
+  /**
+   * The backing store itself failed (quota, connectivity, serialisation).
+   * Distinct from `invalid_path` and `file_not_found` so a caller can tell a
+   * transient or infrastructure failure from one it can correct or retry.
+   */
+  | "storage_error";
 
 /**
  * Result of a single file download operation.

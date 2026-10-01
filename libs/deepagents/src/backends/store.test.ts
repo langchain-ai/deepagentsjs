@@ -1067,3 +1067,50 @@ describe("StoreBackend", () => {
     });
   });
 });
+
+it("reports a failing upload write as storage_error, not invalid_path", async () => {
+  const failing = Object.assign(Object.create(InMemoryStore.prototype), {
+    put: async () => {
+      throw new Error("disk quota exceeded");
+    },
+  });
+
+  const backend = new StoreBackend({
+    store: failing as any,
+    namespace: ["repro"],
+  });
+
+  // Regression: every failure collapsed to "invalid_path", including a
+  // storage fault the caller might have retried.
+  const res = await backend.uploadFiles([
+    ["/notes.txt", new TextEncoder().encode("hello")],
+  ]);
+  expect(res[0].error).toBe("storage_error");
+});
+
+it("reports a failing download read as storage_error, not file_not_found", async () => {
+  const failing = Object.assign(Object.create(InMemoryStore.prototype), {
+    get: async () => {
+      throw new Error("connection reset");
+    },
+  });
+
+  const backend = new StoreBackend({
+    store: failing as any,
+    namespace: ["repro"],
+  });
+
+  // Regression: a transient read failure was indistinguishable from a
+  // missing file, so callers never retried.
+  const res = await backend.downloadFiles(["/notes.txt"]);
+  expect(res[0].error).toBe("storage_error");
+  expect(res[0].content).toBeNull();
+});
+
+it("still reports a genuinely missing download as file_not_found", async () => {
+  const { runtime } = makeConfig();
+  const backend = new StoreBackend(runtime);
+
+  const res = await backend.downloadFiles(["/absent.txt"]);
+  expect(res[0].error).toBe("file_not_found");
+});
