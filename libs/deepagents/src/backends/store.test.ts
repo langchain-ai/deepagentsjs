@@ -291,7 +291,12 @@ describe("StoreBackend", () => {
     await backend.write("/empty.txt", "");
 
     const readRes = await backend.read("/empty.txt");
-    expect(readRes.content).toBe("");
+    // Matches FilesystemBackend, which reports EMPTY_CONTENT_WARNING here.
+    // The previous assertion pinned "" while the test name promised the
+    // warning.
+    expect(readRes.content).toBe(
+      "System reminder: File exists but has empty contents",
+    );
   });
 
   it("should delete a subtree in one batch while preserving siblings", async () => {

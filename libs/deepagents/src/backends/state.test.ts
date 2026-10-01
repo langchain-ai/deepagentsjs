@@ -464,7 +464,12 @@ describe("StateBackend", () => {
     Object.assign(state.files, writeRes.filesUpdate!);
 
     const readRes = backend.read("/empty.txt");
-    expect(readRes.content).toBe("");
+    // Matches FilesystemBackend, which reports EMPTY_CONTENT_WARNING here.
+    // The previous assertion pinned "" while the test name promised the
+    // warning.
+    expect(readRes.content).toBe(
+      "System reminder: File exists but has empty contents",
+    );
   });
 
   describe("uploadFiles", () => {
