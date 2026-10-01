@@ -299,6 +299,22 @@ describe("StoreBackend", () => {
     );
   });
 
+  it("warns on whitespace-only reads while preserving raw and downloaded data", async () => {
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
+    const content = " \n\t ";
+    await backend.write("/blank.txt", content);
+    expect((await backend.read("/blank.txt")).content).toBe(
+      "System reminder: File exists but has empty contents",
+    );
+    expect((await backend.readRaw("/blank.txt")).data?.content).toBe(content);
+    expect(
+      new TextDecoder().decode(
+        (await backend.downloadFiles(["/blank.txt"]))[0].content!,
+      ),
+    ).toBe(content);
+  });
+
   it("should delete a subtree in one batch while preserving siblings", async () => {
     const { runtime, store } = makeConfig();
     const backend = new StoreBackend(runtime);

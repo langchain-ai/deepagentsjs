@@ -472,6 +472,25 @@ describe("StateBackend", () => {
     );
   });
 
+  it("warns on whitespace-only reads while preserving raw and downloaded data", () => {
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime);
+    const content = " \n\t ";
+    Object.assign(
+      state.files,
+      backend.write("/blank.txt", content).filesUpdate,
+    );
+    expect(backend.read("/blank.txt").content).toBe(
+      "System reminder: File exists but has empty contents",
+    );
+    expect(backend.readRaw("/blank.txt").data?.content).toBe(content);
+    expect(
+      new TextDecoder().decode(
+        backend.downloadFiles(["/blank.txt"])[0].content!,
+      ),
+    ).toBe(content);
+  });
+
   describe("uploadFiles", () => {
     it("should upload files and return filesUpdate", () => {
       const { runtime } = makeConfig();
