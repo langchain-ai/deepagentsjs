@@ -424,9 +424,38 @@ export class LocalShellBackend
           outputParts.length > 0 ? outputParts.join("\n") : "<no output>";
 
         let truncated = false;
-        if (output.length > this.#maxOutputBytes) {
-          output = output.slice(0, this.#maxOutputBytes);
-          output += `\n\n... Output truncated at ${this.#maxOutputBytes} bytes.`;
+        // The cap is denominated in bytes, but `output` is a JS string: slicing
+        // on `.length` counts UTF-16 code units, so multi-byte output could
+        // exceed the cap by up to 3x, the appended notice was never counted,
+        // and the cut could land between a surrogate pair.
+        if (Buffer.byteLength(output, "utf8") > this.#maxOutputBytes) {
+          const notice = `\n\n... Output truncated at ${this.#maxOutputBytes} bytes.`;
+          const budget = Math.max(
+            0,
+            this.#maxOutputBytes - Buffer.byteLength(notice, "utf8"),
+          );
+
+          // Longest prefix whose UTF-8 encoding fits the remaining budget.
+          let lo = 0;
+          let hi = output.length;
+          while (lo < hi) {
+            const mid = Math.ceil((lo + hi) / 2);
+            if (Buffer.byteLength(output.slice(0, mid), "utf8") <= budget) {
+              lo = mid;
+            } else {
+              hi = mid - 1;
+            }
+          }
+
+          // Step back rather than split a surrogate pair in half.
+          if (lo > 0) {
+            const last = output.charCodeAt(lo - 1);
+            if (last >= 0xd800 && last <= 0xdbff) {
+              lo -= 1;
+            }
+          }
+
+          output = output.slice(0, lo) + notice;
           truncated = true;
         }
 
