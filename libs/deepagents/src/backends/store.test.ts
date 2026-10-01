@@ -653,7 +653,7 @@ describe("StoreBackend", () => {
     expect(userBItems).toHaveLength(1);
   });
 
-  it("should isolate listing, search, and delete across sibling namespaces", async () => {
+  it("should isolate listing, search, and delete across sibling and descendant namespaces", async () => {
     const { store } = makeConfig();
     const runtime = {
       state: { files: {}, messages: [] },
@@ -665,12 +665,16 @@ describe("StoreBackend", () => {
     const acmeCorpBackend = new StoreBackend(runtime, {
       namespace: ["tenant", "acme-corp"],
     });
+    const childBackend = new StoreBackend(runtime, {
+      namespace: ["tenant", "acme", "child"],
+    });
 
     await acmeBackend.write("/own.md", "acme document");
     await acmeCorpBackend.write(
       "/secret.md",
       "acme-corp CONFIDENTIAL revenue figures",
     );
+    await childBackend.write("/child.md", "child CONFIDENTIAL document");
 
     const listing = await acmeBackend.ls("/");
     expect(listing.files!.map((file) => file.path)).toEqual(["/own.md"]);
@@ -686,54 +690,65 @@ describe("StoreBackend", () => {
     expect((await acmeCorpBackend.read("/secret.md")).content).toContain(
       "CONFIDENTIAL",
     );
+    expect((await acmeBackend.delete("/child.md")).error).toContain(
+      "not found",
+    );
+    expect((await childBackend.read("/child.md")).content).toContain(
+      "CONFIDENTIAL",
+    );
   });
 
-  it("should continue paginating when a page contains only sibling namespaces", async () => {
-    const { store } = makeConfig();
-    const runtime = {
-      state: { files: {}, messages: [] },
-      store,
-    };
-    const namespace = ["tenant", "acme"];
-    const backend = new StoreBackend(runtime, { namespace });
+  it.each(["mixed", "sibling-only"])(
+    "should continue paginating after a full %s namespace page",
+    async (firstPage) => {
+      const { store } = makeConfig();
+      const runtime = {
+        state: { files: {}, messages: [] },
+        store,
+      };
+      const namespace = ["tenant", "acme"];
+      const backend = new StoreBackend(runtime, { namespace });
 
-    await backend.write("/first.md", "first");
-    await backend.write("/last.md", "last");
-    for (let index = 0; index < 100; index++) {
-      await store.put(["tenant", "acme-corp"], `/sibling-${index}.md`, {
-        content: `sibling ${index}`,
-      });
-    }
+      await backend.write("/first.md", "first");
+      await backend.write("/last.md", "last");
+      for (let index = 0; index < 100; index++) {
+        await store.put(["tenant", "acme-corp"], `/sibling-${index}.md`, {
+          content: `sibling ${index}`,
+        });
+      }
 
-    const items = await store.search(["tenant"], { limit: 200 });
-    const firstItem = items.find(
-      (item) => item.key === "/first.md" && item.namespace[1] === "acme",
-    )!;
-    const lastItem = items.find(
-      (item) => item.key === "/last.md" && item.namespace[1] === "acme",
-    )!;
-    const siblingItems = items.filter(
-      (item) => item.namespace[1] === "acme-corp",
-    );
-    vi.spyOn(store, "search").mockImplementation(
-      async (_namespace, options) => {
-        if (options?.offset === 0) {
-          return [firstItem, ...siblingItems.slice(0, 99)];
-        }
-        if (options?.offset === 100) {
-          return [lastItem];
-        }
-        return [];
-      },
-    );
+      const items = await store.search(["tenant"], { limit: 200 });
+      const firstItem = items.find(
+        (item) => item.key === "/first.md" && item.namespace[1] === "acme",
+      )!;
+      const lastItem = items.find(
+        (item) => item.key === "/last.md" && item.namespace[1] === "acme",
+      )!;
+      const siblingItems = items.filter(
+        (item) => item.namespace[1] === "acme-corp",
+      );
+      vi.spyOn(store, "search").mockImplementation(
+        async (_namespace, options) => {
+          if (options?.offset === 0) {
+            return firstPage === "mixed"
+              ? [firstItem, ...siblingItems.slice(0, 99)]
+              : siblingItems;
+          }
+          if (options?.offset === 100) {
+            return firstPage === "mixed" ? [lastItem] : [firstItem, lastItem];
+          }
+          return [];
+        },
+      );
 
-    const listing = await backend.ls("/");
-    expect(listing.files!.map((file) => file.path)).toEqual([
-      "/first.md",
-      "/last.md",
-    ]);
-    expect(store.search).toHaveBeenCalledTimes(2);
-  });
+      const listing = await backend.ls("/");
+      expect(listing.files!.map((file) => file.path)).toEqual([
+        "/first.md",
+        "/last.md",
+      ]);
+      expect(store.search).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it("should validate namespace components", async () => {
     const { store } = makeConfig();
