@@ -810,8 +810,11 @@ export class StoreBackend implements BackendProtocolV2 {
     const responses: FileUploadResponse[] = [];
 
     for (const [rawPath, content] of files) {
+      // Canonicalise before entering the `try` so the catch branch can still
+      // report the offending key. `normalizePath` is total (it only rewrites
+      // separators) so it cannot itself raise.
+      const path = normalizePath(rawPath);
       try {
-        const path = normalizePath(rawPath);
         const mimeType = getMimeType(path);
         const isBinary = this.fileFormat === "v2" && !isTextMimeType(mimeType);
 
@@ -851,8 +854,11 @@ export class StoreBackend implements BackendProtocolV2 {
     const responses: FileDownloadResponse[] = [];
 
     for (const rawPath of paths) {
+      // Canonicalise before entering the `try` so the catch branch can still
+      // report the offending key. `normalizePath` is total (it only rewrites
+      // separators) so it cannot itself raise.
+      const path = normalizePath(rawPath);
       try {
-        const path = normalizePath(rawPath);
         const item = await store.get(namespace, path);
         if (!item) {
           responses.push({ path, content: null, error: "file_not_found" });

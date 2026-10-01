@@ -1077,10 +1077,10 @@ it("should store a relative write path under a canonical key", async () => {
   // still found it.
   await backend.write("notes.txt", "hello");
 
-  expect((await backend.ls("/")).files.map((f) => f.path)).toEqual([
+  expect((await backend.ls("/")).files!.map((f) => f.path)).toEqual([
     "/notes.txt",
   ]);
-  expect((await backend.glob("**/*", "/")).files.map((f) => f.path)).toEqual([
+  expect((await backend.glob("**/*", "/")).files!.map((f) => f.path)).toEqual([
     "/notes.txt",
   ]);
   expect((await backend.read("notes.txt")).content).toBe("hello");

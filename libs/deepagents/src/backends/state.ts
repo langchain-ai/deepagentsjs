@@ -449,8 +449,11 @@ export class StateBackend implements BackendProtocolV2 {
     const updates: Record<string, FileData> = {};
 
     for (const [rawPath, content] of files) {
+      // Canonicalise before entering the `try` so the catch branch can still
+      // report the offending key. `normalizePath` is total (it only rewrites
+      // separators) so it cannot itself raise.
+      const path = normalizePath(rawPath);
       try {
-        const path = normalizePath(rawPath);
         const mimeType = getMimeType(path);
 
         if (this.fileFormat === "v2" && !isTextMimeType(mimeType)) {

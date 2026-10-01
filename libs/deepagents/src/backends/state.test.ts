@@ -947,8 +947,8 @@ it("should store a relative write path under a canonical key", () => {
   Object.assign(state.files, writeRes.filesUpdate ?? {});
 
   expect(Object.keys(state.files)).toContain("/notes.txt");
-  expect(backend.ls("/").files.map((f) => f.path)).toEqual(["/notes.txt"]);
-  expect(backend.glob("**/*", "/").files.map((f) => f.path)).toEqual([
+  expect(backend.ls("/").files!.map((f) => f.path)).toEqual(["/notes.txt"]);
+  expect(backend.glob("**/*", "/").files!.map((f) => f.path)).toEqual([
     "/notes.txt",
   ]);
   expect(backend.read("notes.txt").content).toBe("hello");
