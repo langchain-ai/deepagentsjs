@@ -248,6 +248,12 @@ export class CompositeBackend implements BackendProtocolV2 {
     glob: string | null = null,
     maxCount: number | null = null,
   ): Promise<GrepResult> {
+    // Normalize before splitting the budget or forwarding it to a route,
+    // using the same policy as applyGrepMaxCount.
+    maxCount =
+      maxCount == null || !Number.isFinite(maxCount)
+        ? null
+        : Math.max(0, Math.floor(maxCount));
     const searchPath = path || "/";
 
     // If path targets a specific route, search only that backend
