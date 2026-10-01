@@ -95,16 +95,25 @@ export function applyGrepMaxCount(params: {
   maxCount: number | null | undefined;
 }): GrepResult {
   const { result, maxCount } = params;
-  if (
-    maxCount == null ||
-    result.matches == null ||
-    result.matches.length <= maxCount
-  ) {
+  if (maxCount == null || result.matches == null) {
+    return result;
+  }
+
+  // A negative or fractional limit is invalid input, not a request to drop
+  // matches from the end — `slice(0, -1)` would silently discard the last
+  // match and still report `truncated`. Clamp instead, and treat a non-finite
+  // limit as "no limit" so `Infinity`/`NaN` cannot empty the result set.
+  if (!Number.isFinite(maxCount)) {
+    return result;
+  }
+  const limit = Math.max(0, Math.floor(maxCount));
+
+  if (result.matches.length <= limit) {
     return result;
   }
   return {
     error: result.error,
-    matches: result.matches.slice(0, maxCount),
+    matches: result.matches.slice(0, limit),
     truncated: true,
   };
 }
