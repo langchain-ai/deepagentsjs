@@ -705,13 +705,13 @@ function filterFilesByPath(
   files: Record<string, FileData>,
   path: string | null | undefined,
 ): Record<string, FileData> | null {
-  const exactPath = path ? (path.startsWith("/") ? path : "/" + path) : "/";
-  if (Object.prototype.hasOwnProperty.call(files, exactPath)) {
-    return { [exactPath]: files[exactPath] };
-  }
-
   try {
     const normalizedPath = validatePath(path);
+    const exactPath =
+      normalizedPath === "/" ? "/" : normalizedPath.slice(0, -1);
+    if (Object.prototype.hasOwnProperty.call(files, exactPath)) {
+      return { [exactPath]: files[exactPath] };
+    }
     return Object.fromEntries(
       Object.entries(files).filter(([fp]) => fp.startsWith(normalizedPath)),
     );

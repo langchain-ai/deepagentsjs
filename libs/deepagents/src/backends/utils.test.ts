@@ -820,4 +820,23 @@ describe("validatePath normalization", () => {
     expect(globSearchFiles(files, "*.txt", "../etc")).toBe("No files found");
     expect(globSearchFiles(files, "*.txt", "/")).toBe("/a.txt");
   });
+
+  it("validates scopes before matching exact stored keys", () => {
+    const files = { "/workspace/../secret.txt": createFileData("secret") };
+    expect(
+      grepMatchesFromFiles(files, "secret", "/workspace/../secret.txt"),
+    ).toEqual([]);
+  });
+
+  it("normalizes an exact file scope before looking it up", () => {
+    const files = { "/src/main.py": createFileData("needle") };
+    expect(
+      grepMatchesFromFiles(files, "needle", "/./src//main.py").map(
+        (match) => match.path,
+      ),
+    ).toEqual(["/src/main.py"]);
+    expect(globSearchFiles(files, "*.py", "/./src//main.py")).toBe(
+      "/src/main.py",
+    );
+  });
 });
