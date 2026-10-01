@@ -1114,3 +1114,49 @@ it("still reports a genuinely missing download as file_not_found", async () => {
   const res = await backend.downloadFiles(["/absent.txt"]);
   expect(res[0].error).toBe("file_not_found");
 });
+
+it("reports corrupt stored data separately from missing data", async () => {
+  const { store } = makeConfig();
+  const namespace = ["transfer-errors"];
+  const backend = new StoreBackend({ store, namespace });
+  await store.put(namespace, "/corrupt.txt", { content: 42 });
+  const results = await backend.downloadFiles(["/corrupt.txt", "/missing.txt"]);
+  expect(results).toEqual([
+    { path: "/corrupt.txt", content: null, error: "storage_error" },
+    { path: "/missing.txt", content: null, error: "file_not_found" },
+  ]);
+});
+
+it("continues a transfer batch after individual storage failures", async () => {
+  const { store } = makeConfig();
+  const namespace = ["transfer-errors"];
+  const backend = new StoreBackend({ store, namespace });
+  const originalPut = store.put.bind(store);
+  vi.spyOn(store, "put").mockImplementation(async (ns, key, value) => {
+    if (key === "/fail.txt") throw new Error("quota exceeded");
+    return originalPut(ns, key, value);
+  });
+  const bytes = new TextEncoder().encode("hello");
+  expect(
+    await backend.uploadFiles([
+      ["/fail.txt", bytes],
+      ["/ok.txt", bytes],
+    ]),
+  ).toEqual([
+    { path: "/fail.txt", error: "storage_error" },
+    { path: "/ok.txt", error: null },
+  ]);
+  const originalGet = store.get.bind(store);
+  vi.spyOn(store, "get").mockImplementation(async (ns, key) => {
+    if (key === "/fail.txt") throw new Error("connection reset");
+    return originalGet(ns, key);
+  });
+  const downloaded = await backend.downloadFiles(["/fail.txt", "/ok.txt"]);
+  expect(downloaded[0]).toEqual({
+    path: "/fail.txt",
+    content: null,
+    error: "storage_error",
+  });
+  expect(downloaded[1].error).toBeNull();
+  expect(new TextDecoder().decode(downloaded[1].content!)).toBe("hello");
+});
