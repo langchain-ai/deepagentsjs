@@ -38,6 +38,7 @@ import {
   isFileDataV1,
   isTextMimeType,
   migrateToFileDataV2,
+  normalizePath,
   normalizeReadPagination,
   performStringReplacement,
   updateFileData,
@@ -543,7 +544,7 @@ export class StoreBackend implements BackendProtocolV2 {
     limit: number = 500,
   ): Promise<ReadResult> {
     try {
-      const readRawResult = await this.readRaw(filePath);
+      const readRawResult = await this.readRaw(normalizePath(filePath));
       if (readRawResult.error || !readRawResult.data) {
         return { error: readRawResult.error || "File data not found" };
       }
@@ -602,7 +603,8 @@ export class StoreBackend implements BackendProtocolV2 {
   async readRaw(filePath: string): Promise<ReadRawResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
-    const item = await store.get(namespace, filePath);
+    const key = normalizePath(filePath);
+    const item = await store.get(namespace, key);
 
     if (!item) {
       return { error: `File '${filePath}' not found` };
@@ -618,20 +620,21 @@ export class StoreBackend implements BackendProtocolV2 {
     const store = this.getStore();
     const namespace = this.getNamespace();
 
-    const existing = await store.get(namespace, filePath);
+    const key = normalizePath(filePath);
+    const existing = await store.get(namespace, key);
     const existingFileData = existing
       ? this.convertStoreItemToFileData(existing)
       : undefined;
 
     const fileData = createWriteFileData(
-      filePath,
+      key,
       content,
       this.fileFormat,
       existingFileData,
     );
     const storeValue = this.convertFileDataToStoreValue(fileData);
-    await store.put(namespace, filePath, storeValue);
-    return { path: filePath, filesUpdate: null };
+    await store.put(namespace, key, storeValue);
+    return { path: key, filesUpdate: null };
   }
 
   /**
@@ -643,7 +646,7 @@ export class StoreBackend implements BackendProtocolV2 {
     const store = this.getStore();
     const namespace = this.getNamespace();
     const items = await this.searchStorePaginated(store, namespace);
-    const base = trimTrailingSlashes(filePath) || "/";
+    const base = trimTrailingSlashes(normalizePath(filePath)) || "/";
     const prefix = base === "/" ? "/" : `${base}/`;
     const keys = items
       .map((item) => String(item.key))
@@ -689,7 +692,8 @@ export class StoreBackend implements BackendProtocolV2 {
     const namespace = this.getNamespace();
 
     // Get existing file
-    const item = await store.get(namespace, filePath);
+    const key = normalizePath(filePath);
+    const item = await store.get(namespace, key);
     if (!item) {
       return { error: `Error: File '${filePath}' not found` };
     }
@@ -713,8 +717,8 @@ export class StoreBackend implements BackendProtocolV2 {
 
       // Update file in store
       const storeValue = this.convertFileDataToStoreValue(newFileData);
-      await store.put(namespace, filePath, storeValue);
-      return { path: filePath, filesUpdate: null, occurrences: occurrences };
+      await store.put(namespace, key, storeValue);
+      return { path: key, filesUpdate: null, occurrences: occurrences };
     } catch (e: any) {
       return { error: `Error: ${e.message}` };
     }
@@ -805,8 +809,9 @@ export class StoreBackend implements BackendProtocolV2 {
     const namespace = this.getNamespace();
     const responses: FileUploadResponse[] = [];
 
-    for (const [path, content] of files) {
+    for (const [rawPath, content] of files) {
       try {
+        const path = normalizePath(rawPath);
         const mimeType = getMimeType(path);
         const isBinary = this.fileFormat === "v2" && !isTextMimeType(mimeType);
 
@@ -845,8 +850,9 @@ export class StoreBackend implements BackendProtocolV2 {
     const namespace = this.getNamespace();
     const responses: FileDownloadResponse[] = [];
 
-    for (const path of paths) {
+    for (const rawPath of paths) {
       try {
+        const path = normalizePath(rawPath);
         const item = await store.get(namespace, path);
         if (!item) {
           responses.push({ path, content: null, error: "file_not_found" });

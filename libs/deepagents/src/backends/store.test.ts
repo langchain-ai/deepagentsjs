@@ -1067,3 +1067,21 @@ describe("StoreBackend", () => {
     });
   });
 });
+
+it("should store a relative write path under a canonical key", async () => {
+  const { runtime } = makeConfig();
+  const backend = new StoreBackend(runtime);
+
+  // Regression: write("notes.txt") stored the key verbatim, so ls("/") and
+  // glob("**/*", "/") could never see the file while read("notes.txt")
+  // still found it.
+  await backend.write("notes.txt", "hello");
+
+  expect((await backend.ls("/")).files.map((f) => f.path)).toEqual([
+    "/notes.txt",
+  ]);
+  expect((await backend.glob("**/*", "/")).files.map((f) => f.path)).toEqual([
+    "/notes.txt",
+  ]);
+  expect((await backend.read("notes.txt")).content).toBe("hello");
+});

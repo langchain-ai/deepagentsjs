@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  normalizePath,
   validatePath,
   validateFilePath,
   sanitizeToolCallId,
@@ -784,5 +785,22 @@ describe("adaptBackendProtocol", () => {
       const adapted = adaptBackendProtocol(createV1Backend());
       expect(adapted.downloadFiles).toBeUndefined();
     });
+  });
+});
+
+describe("normalizePath", () => {
+  it("adds a leading slash to relative paths", () => {
+    expect(normalizePath("notes.txt")).toBe("/notes.txt");
+    expect(normalizePath("src/main.py")).toBe("/src/main.py");
+  });
+
+  it("collapses duplicate separators and dot segments", () => {
+    expect(normalizePath("/./src//main.py")).toBe("/src/main.py");
+    expect(normalizePath("//a//b//")).toBe("/a/b");
+  });
+
+  it("leaves already-canonical paths unchanged", () => {
+    expect(normalizePath("/a/b.txt")).toBe("/a/b.txt");
+    expect(normalizePath("/")).toBe("/");
   });
 });

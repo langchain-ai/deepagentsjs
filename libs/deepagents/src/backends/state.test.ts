@@ -935,3 +935,21 @@ describe("StateBackend", () => {
     });
   });
 });
+
+it("should store a relative write path under a canonical key", () => {
+  const { state, runtime } = makeConfig();
+  const backend = new StateBackend(runtime);
+
+  // Regression: write("notes.txt") stored the key verbatim, so ls("/"),
+  // glob("**/*", "/") and grep(..., "/") could never see the file while
+  // read("notes.txt") still found it.
+  const writeRes = backend.write("notes.txt", "hello");
+  Object.assign(state.files, writeRes.filesUpdate ?? {});
+
+  expect(Object.keys(state.files)).toContain("/notes.txt");
+  expect(backend.ls("/").files.map((f) => f.path)).toEqual(["/notes.txt"]);
+  expect(backend.glob("**/*", "/").files.map((f) => f.path)).toEqual([
+    "/notes.txt",
+  ]);
+  expect(backend.read("notes.txt").content).toBe("hello");
+});

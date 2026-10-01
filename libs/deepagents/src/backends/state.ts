@@ -31,6 +31,7 @@ import {
   isFileDataV1,
   isTextMimeType,
   migrateToFileDataV2,
+  normalizePath,
   normalizeReadPagination,
   performStringReplacement,
   updateFileData,
@@ -217,13 +218,14 @@ export class StateBackend implements BackendProtocolV2 {
    */
   read(filePath: string, offset: number = 0, limit: number = 500): ReadResult {
     const files = this.files;
-    const fileData = files[filePath];
+    const key = normalizePath(filePath);
+    const fileData = files[key];
 
     if (!fileData) {
       return { error: `File '${filePath}' not found` };
     }
 
-    const fileDataV2 = migrateToFileDataV2(fileData, filePath);
+    const fileDataV2 = migrateToFileDataV2(fileData, key);
 
     // ignore pagination for binary data, return full content
     if (!isTextMimeType(fileDataV2.mimeType)) {
@@ -271,7 +273,8 @@ export class StateBackend implements BackendProtocolV2 {
    */
   readRaw(filePath: string): ReadRawResult {
     const files = this.files;
-    const fileData = files[filePath];
+    const key = normalizePath(filePath);
+    const fileData = files[key];
 
     if (!fileData) {
       return { error: `File '${filePath}' not found` };
@@ -285,25 +288,26 @@ export class StateBackend implements BackendProtocolV2 {
    */
   write(filePath: string, content: string): WriteResult {
     const files = this.files;
-    const existing = files[filePath];
+    const key = normalizePath(filePath);
+    const existing = files[key];
 
     const newFileData = createWriteFileData(
-      filePath,
+      key,
       content,
       this.fileFormat,
       existing,
     );
 
-    const update = { [filePath]: newFileData };
+    const update = { [key]: newFileData };
 
     if (!this.isLegacy) {
       this.sendFilesUpdate(update);
-      return { path: filePath };
+      return { path: key };
     }
 
     return {
-      path: filePath,
-      filesUpdate: { [filePath]: newFileData },
+      path: key,
+      filesUpdate: { [key]: newFileData },
     };
   }
 
@@ -314,7 +318,7 @@ export class StateBackend implements BackendProtocolV2 {
    */
   delete(filePath: string): DeleteResult {
     const files = this.files;
-    const base = trimTrailingSlashes(filePath) || "/";
+    const base = trimTrailingSlashes(normalizePath(filePath)) || "/";
     const prefix = base === "/" ? "/" : `${base}/`;
     const paths = Object.keys(files).filter(
       (path) => path === base || path.startsWith(prefix),
@@ -347,7 +351,8 @@ export class StateBackend implements BackendProtocolV2 {
     replaceAll: boolean = false,
   ): EditResult {
     const files = this.files;
-    const fileData = files[filePath];
+    const key = normalizePath(filePath);
+    const fileData = files[key];
 
     if (!fileData) {
       return { error: `Error: File '${filePath}' not found` };
@@ -367,16 +372,16 @@ export class StateBackend implements BackendProtocolV2 {
 
     const [newContent, occurrences] = result;
     const newFileData = updateFileData(fileData, newContent);
-    const update = { [filePath]: newFileData };
+    const update = { [key]: newFileData };
 
     if (!this.isLegacy) {
       this.sendFilesUpdate(update);
-      return { path: filePath, occurrences };
+      return { path: key, occurrences };
     }
 
     return {
-      path: filePath,
-      filesUpdate: { [filePath]: newFileData },
+      path: key,
+      filesUpdate: { [key]: newFileData },
       occurrences: occurrences,
     };
   }
@@ -443,8 +448,9 @@ export class StateBackend implements BackendProtocolV2 {
     const responses: FileUploadResponse[] = [];
     const updates: Record<string, FileData> = {};
 
-    for (const [path, content] of files) {
+    for (const [rawPath, content] of files) {
       try {
+        const path = normalizePath(rawPath);
         const mimeType = getMimeType(path);
 
         if (this.fileFormat === "v2" && !isTextMimeType(mimeType)) {
@@ -493,7 +499,8 @@ export class StateBackend implements BackendProtocolV2 {
     const files = this.files;
     const responses: FileDownloadResponse[] = [];
 
-    for (const path of paths) {
+    for (const rawPath of paths) {
+      const path = normalizePath(rawPath);
       const fileData = files[path];
       if (!fileData) {
         responses.push({ path, content: null, error: "file_not_found" });
