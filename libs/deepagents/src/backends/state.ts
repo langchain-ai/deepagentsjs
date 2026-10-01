@@ -245,11 +245,16 @@ export class StateBackend implements BackendProtocolV2 {
       normalizedOffset,
       normalizedOffset + normalizedLimit,
     );
-    if (
-      selected.length === 0 ||
-      normalizedOffset >= totalLines ||
-      normalizedLimit === 0
-    ) {
+    // Mirror FilesystemBackend: an offset past the last line is an error, not
+    // an empty body the caller cannot distinguish from an empty file. A
+    // zero-length file has no valid offset, so it keeps returning "".
+    if (totalLines > 0 && normalizedOffset >= totalLines) {
+      return {
+        error: `Line offset ${normalizedOffset} exceeds file length (${totalLines} lines)`,
+      };
+    }
+
+    if (selected.length === 0 || normalizedLimit === 0) {
       return { content: selected.join("\n"), mimeType: fileDataV2.mimeType };
     }
     const endOffset = Math.min(normalizedOffset + selected.length, totalLines);
