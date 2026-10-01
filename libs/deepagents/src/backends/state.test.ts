@@ -935,3 +935,22 @@ describe("StateBackend", () => {
     });
   });
 });
+
+it("should return an error result instead of throwing when editing binary content", () => {
+  const { state, runtime } = makeConfig();
+  const backend = new StateBackend(runtime);
+
+  // 8 PNG magic bytes as base64 — write() stores them as a Uint8Array.
+  const writeRes = backend.write("/logo.png", "iVBORw0KGgo=");
+  Object.assign(state.files, writeRes.filesUpdate ?? {});
+
+  // Regression: this used to throw `Cannot convert binary FileData to string`
+  // because StateBackend.edit did not guard fileDataToString, while
+  // StoreBackend.edit returned an error result for the same input.
+  expect(() => backend.edit("/logo.png", "x", "y")).not.toThrow();
+
+  const editRes = backend.edit("/logo.png", "x", "y");
+  expect(editRes.error).toContain("Cannot convert binary FileData to string");
+  expect(editRes.filesUpdate).toBeUndefined();
+  expect(editRes.path).toBeUndefined();
+});
