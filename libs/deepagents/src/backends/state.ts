@@ -158,7 +158,8 @@ export class StateBackend implements BackendProtocolV2 {
     const subdirs = new Set<string>();
 
     // Normalize path to have trailing slash for proper prefix matching
-    const normalizedPath = path.endsWith("/") ? path : path + "/";
+    const directory = normalizePath(path);
+    const normalizedPath = directory === "/" ? "/" : directory + "/";
 
     for (const [k, fd] of Object.entries(files)) {
       // Check if file is in the specified directory or a subdirectory
@@ -218,7 +219,9 @@ export class StateBackend implements BackendProtocolV2 {
    */
   read(filePath: string, offset: number = 0, limit: number = 500): ReadResult {
     const files = this.files;
-    const key = normalizePath(filePath);
+    const key = Object.hasOwn(files, filePath)
+      ? filePath
+      : normalizePath(filePath);
     const fileData = files[key];
 
     if (!fileData) {
@@ -273,7 +276,9 @@ export class StateBackend implements BackendProtocolV2 {
    */
   readRaw(filePath: string): ReadRawResult {
     const files = this.files;
-    const key = normalizePath(filePath);
+    const key = Object.hasOwn(files, filePath)
+      ? filePath
+      : normalizePath(filePath);
     const fileData = files[key];
 
     if (!fileData) {
@@ -288,7 +293,9 @@ export class StateBackend implements BackendProtocolV2 {
    */
   write(filePath: string, content: string): WriteResult {
     const files = this.files;
-    const key = normalizePath(filePath);
+    const key = Object.hasOwn(files, filePath)
+      ? filePath
+      : normalizePath(filePath);
     const existing = files[key];
 
     const newFileData = createWriteFileData(
@@ -318,7 +325,14 @@ export class StateBackend implements BackendProtocolV2 {
    */
   delete(filePath: string): DeleteResult {
     const files = this.files;
-    const base = trimTrailingSlashes(normalizePath(filePath)) || "/";
+    const rawBase = trimTrailingSlashes(filePath) || "/";
+    const rawPrefix = rawBase === "/" ? "/" : `${rawBase}/`;
+    const hasLegacyTarget = Object.keys(files).some(
+      (path) => path === rawBase || path.startsWith(rawPrefix),
+    );
+    const base = hasLegacyTarget
+      ? rawBase
+      : trimTrailingSlashes(normalizePath(filePath)) || "/";
     const prefix = base === "/" ? "/" : `${base}/`;
     const paths = Object.keys(files).filter(
       (path) => path === base || path.startsWith(prefix),
@@ -351,7 +365,9 @@ export class StateBackend implements BackendProtocolV2 {
     replaceAll: boolean = false,
   ): EditResult {
     const files = this.files;
-    const key = normalizePath(filePath);
+    const key = Object.hasOwn(files, filePath)
+      ? filePath
+      : normalizePath(filePath);
     const fileData = files[key];
 
     if (!fileData) {
@@ -449,10 +465,9 @@ export class StateBackend implements BackendProtocolV2 {
     const updates: Record<string, FileData> = {};
 
     for (const [rawPath, content] of files) {
-      // Canonicalise before entering the `try` so the catch branch can still
-      // report the offending key. `normalizePath` is total (it only rewrites
-      // separators) so it cannot itself raise.
-      const path = normalizePath(rawPath);
+      const path = Object.hasOwn(this.files, rawPath)
+        ? rawPath
+        : normalizePath(rawPath);
       try {
         const mimeType = getMimeType(path);
 
@@ -468,9 +483,9 @@ export class StateBackend implements BackendProtocolV2 {
           );
         }
 
-        responses.push({ path, error: null });
+        responses.push({ path: rawPath, error: null });
       } catch {
-        responses.push({ path, error: "invalid_path" });
+        responses.push({ path: rawPath, error: "invalid_path" });
       }
     }
 
@@ -503,10 +518,16 @@ export class StateBackend implements BackendProtocolV2 {
     const responses: FileDownloadResponse[] = [];
 
     for (const rawPath of paths) {
-      const path = normalizePath(rawPath);
+      const path = Object.hasOwn(files, rawPath)
+        ? rawPath
+        : normalizePath(rawPath);
       const fileData = files[path];
       if (!fileData) {
-        responses.push({ path, content: null, error: "file_not_found" });
+        responses.push({
+          path: rawPath,
+          content: null,
+          error: "file_not_found",
+        });
         continue;
       }
 
@@ -514,9 +535,13 @@ export class StateBackend implements BackendProtocolV2 {
 
       if (typeof fileDataV2.content === "string") {
         const content = new TextEncoder().encode(fileDataV2.content);
-        responses.push({ path, content, error: null });
+        responses.push({ path: rawPath, content, error: null });
       } else {
-        responses.push({ path, content: fileDataV2.content, error: null });
+        responses.push({
+          path: rawPath,
+          content: fileDataV2.content,
+          error: null,
+        });
       }
     }
 

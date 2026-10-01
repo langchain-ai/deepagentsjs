@@ -953,3 +953,69 @@ it("should store a relative write path under a canonical key", () => {
   ]);
   expect(backend.read("notes.txt").content).toBe("hello");
 });
+
+it.each(["notes.txt", "/./notes//file.txt"])(
+  "preserves access to an existing noncanonical state key %s",
+  (legacyPath) => {
+    const seed = makeConfig();
+    const seedBackend = new StateBackend(seed.runtime);
+    const data = seedBackend.write("/seed.txt", "old").filesUpdate![
+      "/seed.txt"
+    ];
+    const { state, runtime } = makeConfig({ [legacyPath]: data });
+    const backend = new StateBackend(runtime);
+    expect(backend.read(legacyPath).content).toBe("old");
+    expect(backend.readRaw(legacyPath).data).toEqual(data);
+    expect(
+      new TextDecoder().decode(backend.downloadFiles([legacyPath])[0].content!),
+    ).toBe("old");
+    const edited = backend.edit(legacyPath, "old", "edited");
+    Object.assign(state.files, edited.filesUpdate);
+    expect(backend.read(legacyPath).content).toBe("edited");
+    const written = backend.write(legacyPath, "written");
+    Object.assign(state.files, written.filesUpdate);
+    expect(backend.read(legacyPath).content).toBe("written");
+    const uploaded = backend.uploadFiles([
+      [legacyPath, new TextEncoder().encode("uploaded")],
+    ]);
+    Object.assign(state.files, uploaded.filesUpdate);
+    expect(backend.read(legacyPath).content).toBe("uploaded");
+    expect(backend.delete(legacyPath).filesUpdate).toEqual({
+      [legacyPath]: null,
+    });
+    expect(Object.keys(state.files)).toEqual([legacyPath]);
+  },
+);
+
+it("normalizes directory listings after a noncanonical write", () => {
+  const { state, runtime } = makeConfig();
+  const backend = new StateBackend(runtime);
+  Object.assign(
+    state.files,
+    backend.write("./src//a.txt", "hello").filesUpdate,
+  );
+  expect(backend.ls("./src//").files?.map((file) => file.path)).toEqual([
+    "/src/a.txt",
+  ]);
+});
+
+it("keeps canonical relative paths usable through edit, transfer, and delete", () => {
+  const { state, runtime } = makeConfig();
+  const backend = new StateBackend(runtime);
+  Object.assign(state.files, backend.write("notes.txt", "hello").filesUpdate);
+  expect(backend.grep("hello", "/").matches?.[0].path).toBe("/notes.txt");
+  Object.assign(
+    state.files,
+    backend.edit("notes.txt", "hello", "hi").filesUpdate,
+  );
+  const uploaded = backend.uploadFiles([
+    ["notes.txt", new TextEncoder().encode("updated")],
+  ]);
+  Object.assign(state.files, uploaded.filesUpdate);
+  const [downloaded] = backend.downloadFiles(["notes.txt"]);
+  expect(downloaded.path).toBe("notes.txt");
+  expect(new TextDecoder().decode(downloaded.content!)).toBe("updated");
+  expect(backend.delete("notes.txt").filesUpdate).toEqual({
+    "/notes.txt": null,
+  });
+});

@@ -1085,3 +1085,66 @@ it("should store a relative write path under a canonical key", async () => {
   ]);
   expect((await backend.read("notes.txt")).content).toBe("hello");
 });
+
+it.each(["notes.txt", "/./notes//file.txt"])(
+  "preserves access to an existing noncanonical store key %s",
+  async (legacyPath) => {
+    const { store } = makeConfig();
+    const namespace = ["legacy-files"];
+    const backend = new StoreBackend({ store, namespace });
+    await backend.write("/seed.txt", "old");
+    const data = (await store.get(namespace, "/seed.txt"))!.value;
+    await store.delete(namespace, "/seed.txt");
+    await store.put(namespace, legacyPath, data);
+    expect((await backend.read(legacyPath)).content).toBe("old");
+    expect((await backend.readRaw(legacyPath)).data).toBeDefined();
+    expect(
+      new TextDecoder().decode(
+        (await backend.downloadFiles([legacyPath]))[0].content!,
+      ),
+    ).toBe("old");
+    expect(
+      (await backend.edit(legacyPath, "old", "edited")).error,
+    ).toBeUndefined();
+    expect((await backend.read(legacyPath)).content).toBe("edited");
+    await backend.write(legacyPath, "written");
+    expect((await backend.read(legacyPath)).content).toBe("written");
+    await backend.uploadFiles([
+      [legacyPath, new TextEncoder().encode("uploaded")],
+    ]);
+    expect((await backend.read(legacyPath)).content).toBe("uploaded");
+    expect((await store.search(namespace)).map((item) => item.key)).toEqual([
+      legacyPath,
+    ]);
+    expect((await backend.delete(legacyPath)).error).toBeUndefined();
+    expect(await store.get(namespace, legacyPath)).toBeNull();
+  },
+);
+
+it("normalizes directory listings after a noncanonical write", async () => {
+  const { runtime } = makeConfig();
+  const backend = new StoreBackend(runtime);
+  await backend.write("./src//a.txt", "hello");
+  expect((await backend.ls("./src//")).files?.map((file) => file.path)).toEqual(
+    ["/src/a.txt"],
+  );
+});
+
+it("keeps canonical relative paths usable through edit, transfer, and delete", async () => {
+  const { runtime } = makeConfig();
+  const backend = new StoreBackend(runtime);
+  await backend.write("notes.txt", "hello");
+  expect((await backend.grep("hello", "/")).matches?.[0].path).toBe(
+    "/notes.txt",
+  );
+  await backend.edit("notes.txt", "hello", "hi");
+  const [uploaded] = await backend.uploadFiles([
+    ["notes.txt", new TextEncoder().encode("updated")],
+  ]);
+  expect(uploaded.path).toBe("notes.txt");
+  const [downloaded] = await backend.downloadFiles(["notes.txt"]);
+  expect(downloaded.path).toBe("notes.txt");
+  expect(new TextDecoder().decode(downloaded.content!)).toBe("updated");
+  expect((await backend.delete("notes.txt")).error).toBeUndefined();
+  expect((await backend.read("notes.txt")).error).toContain("not found");
+});
