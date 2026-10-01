@@ -2,147 +2,6 @@ import { createMiddleware } from "langchain";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
 
-/**
- * Fallback for when `model.profile.fileMimeTypes` isn't available (not every
- * `ModelProfile` reports it yet). File MIME types OpenAI accepts as
- * `input_file` on the Responses API.
- *
- * Source: https://developers.openai.com/api/docs/guides/file-inputs
- *
- * TODO: remove once our minimum supported `@langchain/core`/`@langchain/openai`
- * versions guarantee `fileMimeTypes` (added in @langchain/core@1.2.14 /
- * @langchain/openai@1.6.1).
- */
-export const OPENAI_FILE_MIME_TYPES: ReadonlySet<string> = new Set([
-  "application/msword",
-  "application/vnd.apple.iwork",
-  "application/vnd.apple.keynote",
-  "application/vnd.apple.pages",
-  "application/vnd.google-apps.document",
-  "application/vnd.google-apps.presentation",
-  "application/vnd.google-apps.spreadsheet",
-  "application/vnd.ms-excel",
-  "application/vnd.ms-powerpoint",
-  "application/vnd.oasis.opendocument.text",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  // Allows non-UTF-8 text files to be mapped to OpenAI as `"type": "file"` binaries.
-  "application/csv",
-  "application/graphql",
-  "application/javascript",
-  "application/json",
-  "application/json5",
-  "application/rtf",
-  "application/toml",
-  "application/typescript",
-  "application/x-awk",
-  "application/x-bash",
-  "application/x-graphql",
-  "application/x-httpd-php",
-  "application/x-httpd-php-source",
-  "application/x-iif",
-  "application/x-json5",
-  "application/x-ndjson",
-  "application/x-patch",
-  "application/x-php",
-  "application/x-powershell",
-  "application/x-protobuf",
-  "application/x-rust",
-  "application/x-scala",
-  "application/x-sql",
-  "application/x-subrip",
-  "application/x-terraform",
-  "application/x-toml",
-  "application/x-yaml",
-  "application/yaml",
-  "message/rfc822",
-  "text/calendar",
-  "text/css",
-  "text/csv",
-  "text/html",
-  "text/javascript",
-  "text/jsx",
-  "text/markdown",
-  "text/plain",
-  "text/rtf",
-  "text/srt",
-  "text/tsv",
-  "text/tsx",
-  "text/vbscript",
-  "text/vtt",
-  "text/x-R",
-  "text/x-asm",
-  "text/x-astro",
-  "text/x-awk",
-  "text/x-bash",
-  "text/x-c",
-  "text/x-c++",
-  "text/x-clojure",
-  "text/x-cmake",
-  "text/x-csharp",
-  "text/x-dart",
-  "text/x-diff",
-  "text/x-dockerfile",
-  "text/x-ejs",
-  "text/x-elixir",
-  "text/x-erb",
-  "text/x-erlang",
-  "text/x-go",
-  "text/x-golang",
-  "text/x-gradle",
-  "text/x-graphql",
-  "text/x-groovy",
-  "text/x-handlebars",
-  "text/x-haskell",
-  "text/x-hcl",
-  "text/x-iif",
-  "text/x-ini",
-  "text/x-jade",
-  "text/x-java",
-  "text/x-jinja2",
-  "text/x-julia",
-  "text/x-kotlin",
-  "text/x-less",
-  "text/x-liquid",
-  "text/x-lisp",
-  "text/x-lua",
-  "text/x-makefile",
-  "text/x-mustache",
-  "text/x-objectivec",
-  "text/x-objectivec++",
-  "text/x-patch",
-  "text/x-perl",
-  "text/x-php",
-  "text/x-properties",
-  "text/x-protobuf",
-  "text/x-pug",
-  "text/x-python",
-  "text/x-r",
-  "text/x-rst",
-  "text/x-ruby",
-  "text/x-rust",
-  "text/x-sass",
-  "text/x-scala",
-  "text/x-script.python",
-  "text/x-scss",
-  "text/x-sh",
-  "text/x-shellscript",
-  "text/x-sql",
-  "text/x-subrip",
-  "text/x-swift",
-  "text/x-terraform",
-  "text/x-tex",
-  "text/x-tmpl",
-  "text/x-toml",
-  "text/x-twig",
-  "text/x-typescript",
-  "text/x-vcard",
-  "text/x-yaml",
-  "text/x-zsh",
-  "text/xml",
-]);
-
 const PDF_MIME_TYPE = "application/pdf";
 
 /** Content block types `read_file` may emit that require multimodal model support. */
@@ -166,31 +25,6 @@ const TOOL_MESSAGE_FIELD_BY_BLOCK_TYPE: Record<string, string> = {
 type Profile = Record<string, unknown>;
 type Block = Record<string, unknown> & { type: string };
 
-/** Whether `model` is an OpenAI or Azure OpenAI chat model using the Responses API. */
-function isOpenAIResponsesModel(model: unknown): boolean {
-  if (model == null || typeof model !== "object") {
-    return false;
-  }
-  const m = model as {
-    _llmType?: () => string;
-    useResponsesApi?: boolean;
-    _defaultConfig?: Record<string, unknown>;
-  };
-  const config = m._defaultConfig;
-  if (config != null) {
-    return (
-      (config.modelProvider === "openai" ||
-        config.modelProvider === "azure_openai") &&
-      config.useResponsesApi === true
-    );
-  }
-  const llmType = typeof m._llmType === "function" ? m._llmType() : undefined;
-  return (
-    (llmType === "openai" || llmType === "azure_openai") &&
-    m.useResponsesApi === true
-  );
-}
-
 function hasInlineData(block: Block): boolean {
   return block.data != null || block.source_type === "base64";
 }
@@ -200,9 +34,14 @@ function blockMimeType(block: Block): string | undefined {
   return typeof mimeType === "string" ? mimeType : undefined;
 }
 
+/**
+ * Unlike the other block types, a missing `fileMimeTypes` defaults to
+ * unsupported rather than supported: generic file support varies far more
+ * across models than image/audio/video, so there's no safe assumption to
+ * fall back on absent real profile data.
+ */
 function fileBlockSupported(
   block: Block,
-  model: unknown,
   profile: Profile,
   inToolMessage: boolean,
 ): boolean {
@@ -220,26 +59,23 @@ function fileBlockSupported(
     return false;
   }
   const { fileMimeTypes } = profile;
-  if (Array.isArray(fileMimeTypes)) {
-    return fileMimeTypes.includes(mimeType);
-  }
-  return OPENAI_FILE_MIME_TYPES.has(mimeType) && isOpenAIResponsesModel(model);
+  return Array.isArray(fileMimeTypes) && fileMimeTypes.includes(mimeType);
 }
 
 /**
  * Whether the model accepts a multimodal block.
  *
  * Missing profile fields default to supported, since profile coverage is
- * incomplete. Only an explicit `false` rejects a block type.
+ * incomplete — except `file` blocks, where a missing `fileMimeTypes`
+ * defaults to unsupported (see `fileBlockSupported`).
  */
 export function multimodalBlockSupported(
   block: Block,
-  model: unknown,
   profile: Profile,
   inToolMessage: boolean,
 ): boolean {
   if (block.type === "file") {
-    return fileBlockSupported(block, model, profile, inToolMessage);
+    return fileBlockSupported(block, profile, inToolMessage);
   }
   const field = PROFILE_FIELD_BY_BLOCK_TYPE[block.type];
   if (field == null) {
@@ -307,7 +143,7 @@ export function scrubUnsupportedMultimodalContent(
         block == null ||
         typeof block !== "object" ||
         !MULTIMODAL_BLOCK_TYPES.has(block.type) ||
-        multimodalBlockSupported(block, model, profile, isTool)
+        multimodalBlockSupported(block, profile, isTool)
       ) {
         return block;
       }

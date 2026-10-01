@@ -80,6 +80,5 @@ export {
   createUnsupportedContentMiddleware,
   scrubUnsupportedMultimodalContent,
   multimodalBlockSupported,
-  OPENAI_FILE_MIME_TYPES,
   MULTIMODAL_BLOCK_TYPES,
 } from "./unsupportedContent.js";

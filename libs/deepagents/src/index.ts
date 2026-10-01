@@ -102,7 +102,6 @@ export {
   createUnsupportedContentMiddleware,
   scrubUnsupportedMultimodalContent,
   multimodalBlockSupported,
-  OPENAI_FILE_MIME_TYPES,
   MULTIMODAL_BLOCK_TYPES,
   // Other middleware types
   type FilesystemMiddlewareOptions,

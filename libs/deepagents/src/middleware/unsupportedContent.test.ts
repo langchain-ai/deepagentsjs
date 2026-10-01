@@ -8,12 +8,6 @@ import {
 const PPTX =
   "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 
-const openAIModel = (useResponsesApi: boolean, profile = {}) => ({
-  _llmType: () => "openai",
-  useResponsesApi,
-  profile,
-});
-
 const otherModel = (profile = {}) => ({
   _llmType: () => "anthropic",
   profile,
@@ -52,39 +46,27 @@ const placeholder = (type: string, mimeType: string) => [
 ];
 
 describe("scrubUnsupportedMultimodalContent", () => {
-  it("replaces an unsupported file block with a placeholder", () => {
-    const block = { type: "file", mimeType: "application/zip", data: "AAA" };
+  it("replaces a file block when profile.fileMimeTypes is absent", () => {
+    const block = { type: "file", mimeType: PPTX, data: "AAA" };
 
-    expect(scrubbedContent(block, openAIModel(true))).toEqual(
-      placeholder("file", "application/zip"),
+    expect(scrubbedContent(block, otherModel())).toEqual(
+      placeholder("file", PPTX),
     );
   });
 
-  it("replaces octet-stream file blocks for non-OpenAI models", () => {
+  it("replaces a file block whose MIME type isn't in profile.fileMimeTypes", () => {
     const block = {
       type: "file",
       mimeType: "application/octet-stream",
       data: "AAA",
     };
 
-    expect(scrubbedContent(block, otherModel())).toEqual(
-      placeholder("file", "application/octet-stream"),
-    );
+    expect(
+      scrubbedContent(block, otherModel({ fileMimeTypes: [PPTX] })),
+    ).toEqual(placeholder("file", "application/octet-stream"));
   });
 
-  it("keeps allowlisted files only for OpenAI on the Responses API", () => {
-    const block = { type: "file", mimeType: PPTX, data: "AAA" };
-
-    expect(scrubbedContent(block, openAIModel(true))).toEqual([block]);
-    expect(scrubbedContent(block, openAIModel(false))).toEqual(
-      placeholder("file", PPTX),
-    );
-    expect(scrubbedContent(block, otherModel())).toEqual(
-      placeholder("file", PPTX),
-    );
-  });
-
-  it("prefers profile.fileMimeTypes over the OpenAI allowlist when present", () => {
+  it("keeps a file block whose MIME type is in profile.fileMimeTypes", () => {
     const block = {
       type: "file",
       mimeType: "application/x-my-format",
@@ -97,27 +79,6 @@ describe("scrubUnsupportedMultimodalContent", () => {
         otherModel({ fileMimeTypes: ["application/x-my-format"] }),
       ),
     ).toEqual([block]);
-    expect(
-      scrubbedContent(block, otherModel({ fileMimeTypes: ["text/plain"] })),
-    ).toEqual(placeholder("file", "application/x-my-format"));
-    // A profile.fileMimeTypes present but not covering an otherwise-allowlisted
-    // OpenAI type still wins over the fallback allowlist.
-    expect(
-      scrubbedContent(
-        { type: "file", mimeType: PPTX, data: "AAA" },
-        openAIModel(true, { fileMimeTypes: [] }),
-      ),
-    ).toEqual(placeholder("file", PPTX));
-  });
-
-  it("detects OpenAI Responses models built from a model string", () => {
-    const block = { type: "file", mimeType: PPTX, data: "AAA" };
-    const configurable = {
-      _defaultConfig: { modelProvider: "openai", useResponsesApi: true },
-      profile: {},
-    };
-
-    expect(scrubbedContent(block, configurable)).toEqual([block]);
   });
 
   it("gates PDFs on the model profile", () => {
