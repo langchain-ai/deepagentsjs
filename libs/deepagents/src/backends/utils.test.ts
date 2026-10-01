@@ -786,3 +786,38 @@ describe("adaptBackendProtocol", () => {
     });
   });
 });
+
+describe("validatePath normalization", () => {
+  it("collapses dot segments and duplicate separators", () => {
+    // Documented as returning "/foo/bar/", previously returned "/./foo//bar/".
+    expect(validatePath("/./foo//bar")).toBe("/foo/bar/");
+    expect(validatePath("foo//bar")).toBe("/foo/bar/");
+    expect(validatePath("//a//b//")).toBe("/a/b/");
+  });
+
+  it("rejects traversal", () => {
+    expect(() => validatePath("../etc/passwd")).toThrow(/traversal/i);
+    expect(() => validatePath("/workspace/../etc")).toThrow(/traversal/i);
+  });
+
+  it("rejects Windows absolute paths", () => {
+    expect(() => validatePath("C://Users//file")).toThrow(
+      /Windows absolute paths/i,
+    );
+    expect(() => validatePath("D:/data")).toThrow(/Windows absolute paths/i);
+  });
+
+  it("still accepts the canonical forms", () => {
+    expect(validatePath("foo/bar")).toBe("/foo/bar/");
+    expect(validatePath("/foo/bar")).toBe("/foo/bar/");
+    expect(validatePath("/")).toBe("/");
+    expect(validatePath(null)).toBe("/");
+    expect(validatePath(undefined)).toBe("/");
+  });
+
+  it("does not let globSearchFiles throw on an unmatchable scope", () => {
+    const files = { "/a.txt": createFileData("x") };
+    expect(globSearchFiles(files, "*.txt", "../etc")).toBe("No files found");
+    expect(globSearchFiles(files, "*.txt", "/")).toBe("/a.txt");
+  });
+});
