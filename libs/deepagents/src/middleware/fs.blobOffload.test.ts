@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fsSync from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -47,6 +47,23 @@ describe("offloadBinaryContent + StateBackend routing", () => {
 
   afterEach(() => {
     fsSync.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("warns when the backend is a StateBackend instance (not a factory)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    createFilesystemMiddleware({
+      backend: new StateBackend({
+        state: { messages: [], files: {} },
+        store: undefined,
+      }),
+      offloadBinaryContent: true,
+    });
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("offloadBinaryContent has no effect"),
+    );
+    warn.mockRestore();
   });
 
   it("is skipped when the backend is a plain StateBackend", async () => {

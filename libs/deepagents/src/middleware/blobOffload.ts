@@ -197,7 +197,7 @@ export async function offloadMessages(
   return stubMessages(messages, digests);
 }
 
-/** Apply `offloadMessages` to a `read_file` tool result (a `ToolMessage`, or a `Command`-shaped update). */
+/** Apply `offloadMessages` to a tool result (a `ToolMessage`, or a `Command`-shaped update). */
 export async function offloadToolResult(
   result: unknown,
   backend: AnyBackendProtocol,

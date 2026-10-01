@@ -2018,10 +2018,21 @@ export function createFilesystemMiddleware(
     grepMaxCount = DEFAULT_GREP_MAX_COUNT,
     offloadBinaryContent = false,
   } = options;
+  // Routing through a CompositeBackend can't be checked safely here (needs
+  // the backend adapted first, which isn't possible synchronously for a
+  // factory `backend`); this only catches the direct case.
+  const backendIsStateBackend = StateBackend.isInstance(backend);
+  if (offloadBinaryContent && backendIsStateBackend) {
+    // oxlint-disable-next-line no-console
+    console.warn(
+      "offloadBinaryContent has no effect: the backend is a StateBackend, which keeps files as part of checkpointed state.",
+    );
+  }
   // Shared across every call/thread this middleware instance serves — safe
   // since every key is a SHA-256 digest of its own value, so a hit is only
   // reachable by a caller who already has that exact reference.
-  const blobCache = offloadBinaryContent ? new BlobCache() : null;
+  const blobCache =
+    offloadBinaryContent && !backendIsStateBackend ? new BlobCache() : null;
   const enabledFilesystemTools = normalizeFilesystemTools(filesystemTools);
   const executeToolEnabled =
     enabledFilesystemTools == null || enabledFilesystemTools.has("execute");
