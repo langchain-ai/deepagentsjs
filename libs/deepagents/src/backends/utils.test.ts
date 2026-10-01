@@ -786,3 +786,40 @@ describe("adaptBackendProtocol", () => {
     });
   });
 });
+
+describe("grep glob filter scope", () => {
+  const files = {
+    "/src/main.py": createFileData("needle"),
+    "/src/util/helper.py": createFileData("needle"),
+    "/top.py": createFileData("needle"),
+  };
+
+  it("still matches a bare pattern against the basename", () => {
+    const matches = grepMatchesFromFiles(files, "needle", "/", "*.py");
+    expect(matches.map((m) => m.path).sort()).toEqual([
+      "/src/main.py",
+      "/src/util/helper.py",
+      "/top.py",
+    ]);
+  });
+
+  it("matches a directory-qualified pattern relative to the search path", () => {
+    // Regression: a basename-only filter made "src/*.py" match nothing while
+    // glob() matched the same pattern.
+    const matches = grepMatchesFromFiles(files, "needle", "/", "src/*.py");
+    expect(matches.map((m) => m.path)).toEqual(["/src/main.py"]);
+  });
+
+  it("supports src/** style patterns", () => {
+    const matches = grepMatchesFromFiles(files, "needle", "/", "src/**");
+    expect(matches.map((m) => m.path).sort()).toEqual([
+      "/src/main.py",
+      "/src/util/helper.py",
+    ]);
+  });
+
+  it("scopes relative patterns to the given path", () => {
+    const matches = grepMatchesFromFiles(files, "needle", "/src", "util/*.py");
+    expect(matches.map((m) => m.path)).toEqual(["/src/util/helper.py"]);
+  });
+});
