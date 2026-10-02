@@ -23,6 +23,7 @@ import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { FilesystemPermission } from "../permissions/types.js";
 import { getEffectiveMessages } from "./summarization.js";
 import { appendToSystemMessage } from "./utils.js";
+import { createUnsupportedContentMiddleware } from "./unsupportedContent.js";
 
 export type { AgentMiddleware };
 
@@ -538,6 +539,10 @@ export function createSubAgent(
     middleware.push(
       humanInTheLoopMiddleware({ interruptOn: spec.interruptOn }),
     );
+  }
+
+  if (!middleware.some((m) => m.name === "UnsupportedContentMiddleware")) {
+    middleware.push(createUnsupportedContentMiddleware());
   }
 
   const selectedResponseFormat = options?.responseFormat ?? spec.responseFormat;

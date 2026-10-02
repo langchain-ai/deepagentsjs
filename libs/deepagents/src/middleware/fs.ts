@@ -10,12 +10,15 @@ import {
   context,
   createMiddleware,
   tool,
+  AIMessage,
   HumanMessage,
   ToolMessage,
   type AgentMiddleware as _AgentMiddleware,
   type AIMessage,
   type ToolRuntime,
 } from "langchain";
+import type { BaseMessage } from "@langchain/core/messages";
+import { ContextOverflowError } from "@langchain/core/errors";
 import {
   Command,
   isCommand,
@@ -52,6 +55,7 @@ import {
   isTextMimeType,
   normalizeReadPagination,
 } from "../backends/utils.js";
+import { MULTIMODAL_BLOCK_TYPES } from "./unsupportedContent.js";
 
 /**
  * Normalizes tool input so that models sending `path` instead of `file_path`
@@ -1979,6 +1983,75 @@ function hasStructuredResponse(
   );
 }
 
+const REJECTED_FILE_CONTENT_TEXT =
+  "Unsupported content. The file may be invalid, too large, or of an unsupported mime-type.";
+
+/**
+ * No LangChain error class captures "the provider rejected this request"
+ * generically, so this checks the raw HTTP status providers' client SDKs set
+ * on their errors instead. `ContextOverflowError` is excluded because it's a
+ * different, already-handled problem, and retrying it with stripped file
+ * content wouldn't fix an oversized prompt.
+ */
+function isRejectedRequestError(error: unknown): boolean {
+  if (ContextOverflowError.isInstance(error)) {
+    return false;
+  }
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    (error as { status: unknown }).status === 400
+  );
+}
+
+/**
+ * Only messages carrying multimodal blocks after the last `AIMessage` are
+ * candidates for replacement, since anything earlier was already accepted by
+ * the model in a prior turn. Returns `messages` unchanged if nothing
+ * matched, so the caller can tell there was nothing to blame for the
+ * rejection.
+ */
+function replaceRejectedFileContent(
+  messages: readonly BaseMessage[],
+): BaseMessage[] {
+  let lastResponseIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (AIMessage.isInstance(messages[i])) {
+      lastResponseIndex = i;
+      break;
+    }
+  }
+
+  let changed = false;
+  const result = messages.map((message, index) => {
+    if (
+      index <= lastResponseIndex ||
+      !ToolMessage.isInstance(message) ||
+      message.name !== "read_file"
+    ) {
+      return message;
+    }
+    const blocks = message.contentBlocks as Array<{ type: string }>;
+    if (!blocks.some((block) => MULTIMODAL_BLOCK_TYPES.has(block.type))) {
+      return message;
+    }
+    changed = true;
+    return new ToolMessage({
+      content: REJECTED_FILE_CONTENT_TEXT,
+      tool_call_id: message.tool_call_id,
+      name: message.name,
+      id: message.id,
+      artifact: message.artifact,
+      status: message.status,
+      metadata: message.metadata,
+      additional_kwargs: message.additional_kwargs,
+      response_metadata: message.response_metadata,
+    });
+  });
+  return changed ? result : (messages as BaseMessage[]);
+}
+
 /**
  * Create middleware that provides built-in filesystem tools and optional custom
  * prompt guidance.
@@ -2318,24 +2391,57 @@ export function createFilesystemMiddleware(
         )) as typeof messages;
       }
 
-      const response = await handler({
+      const finalRequest = {
         ...request,
         tools,
         messages,
         systemMessage: newSystemMessage,
-      });
-      if (offloadedHuman.length === 0) return response;
+      };
+
       // The `messages` reducer upserts by id, so folding our replacement into
-      // the response's own `messages` array overwrites the original in state
+      // a response's own `messages` array overwrites the original in state
       // instead of duplicating it. The plain-AIMessage branch's Command
       // doesn't need to include `response` itself, since `lastAiMessage`
-      // already tracks it independently.
-      return hasStructuredResponse(response)
-        ? ({
+      // already tracks it independently — unlike `extra` (unsupported-content
+      // replacements), which only ever lives in the Command we build here.
+      const foldOffload = (response: unknown, extra: unknown[] = []) => {
+        if (offloadedHuman.length === 0 && extra.length === 0) return response;
+        if (hasStructuredResponse(response)) {
+          return {
             ...response,
-            messages: [...offloadedHuman, ...response.messages],
-          } as unknown as AIMessage)
-        : new Command({ update: { messages: offloadedHuman } });
+            messages: [...extra, ...offloadedHuman, ...response.messages],
+          } as unknown as AIMessage;
+        }
+        return new Command({
+          update: {
+            messages:
+              extra.length === 0
+                ? offloadedHuman
+                : [...extra, ...offloadedHuman, response],
+          },
+        });
+      };
+
+      try {
+        const response = await handler(finalRequest);
+        return foldOffload(response);
+      } catch (error) {
+        if (!isRejectedRequestError(error)) {
+          throw error;
+        }
+        const replaced = replaceRejectedFileContent(finalRequest.messages);
+        if (replaced === finalRequest.messages) {
+          throw error;
+        }
+        const retryResponse = await handler({
+          ...finalRequest,
+          messages: replaced,
+        });
+        const replacements = replaced.filter(
+          (msg, i) => msg !== finalRequest.messages[i],
+        );
+        return foldOffload(retryResponse, replacements);
+      }
     },
     wrapToolCall: async (request, handler) => {
       const toolName = request.toolCall?.name;

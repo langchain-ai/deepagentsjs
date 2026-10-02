@@ -599,6 +599,171 @@ describe("createFilesystemMiddleware", () => {
         "Filesystem Tools",
       );
     });
+
+    describe("rejected file content recovery", () => {
+      function rejectedRequestError(): Error & { status: number } {
+        return Object.assign(new Error("400 tool_use blocks rejected"), {
+          status: 400,
+        });
+      }
+
+      function readFileResult(block: Record<string, unknown>) {
+        return new ToolMessage({
+          tool_call_id: "call_1",
+          name: "read_file",
+          content: [block as never],
+        });
+      }
+
+      it("retries with rejected read_file content replaced and persists the swap", async () => {
+        const middleware = createFilesystemMiddleware({
+          backend: createMockBackend(),
+        });
+        const readFileCall = new AIMessage({
+          content: "",
+          tool_calls: [
+            { id: "call_1", name: "read_file", args: { file_path: "/a.zip" } },
+          ],
+        });
+        const rejectedMessage = readFileResult({
+          type: "file",
+          mimeType: "application/zip",
+          data: "AAA",
+        });
+        const messages = [readFileCall, rejectedMessage];
+        const retryResponse = new AIMessage({ content: "ok" });
+
+        let callCount = 0;
+        const mockHandler = vi.fn().mockImplementation(async () => {
+          callCount += 1;
+          if (callCount === 1) {
+            throw rejectedRequestError();
+          }
+          return retryResponse;
+        });
+
+        const request = {
+          systemMessage: new SystemMessage("Base prompt"),
+          messages,
+          state: {},
+          config: {},
+          tools: middleware.tools || [],
+        };
+
+        const result = await middleware.wrapModelCall!(
+          request as any,
+          mockHandler,
+        );
+
+        expect(mockHandler).toHaveBeenCalledTimes(2);
+        expect(isCommand(result)).toBe(true);
+        const update = (result as Command).update as {
+          messages: unknown[];
+        };
+        expect(update.messages).toHaveLength(2);
+        const [replaced, response] = update.messages as [
+          ToolMessage,
+          AIMessage,
+        ];
+        expect(replaced.id).toBe(rejectedMessage.id);
+        expect(replaced.content).toBe(
+          "Unsupported content. The file may be invalid, too large, or of an unsupported mime-type.",
+        );
+        expect(response).toBe(retryResponse);
+
+        // The retried call's messages should carry the replacement, not the
+        // original rejected content.
+        const retriedMessages = mockHandler.mock.calls[1][0].messages;
+        expect(retriedMessages[1].content).toBe(replaced.content);
+      });
+
+      it("re-raises without retrying when nothing multimodal can be blamed", async () => {
+        const middleware = createFilesystemMiddleware({
+          backend: createMockBackend(),
+        });
+        const messages = [
+          new AIMessage({ content: "" }),
+          readFileResult({ type: "text", text: "hello" }),
+        ];
+        const error = rejectedRequestError();
+        const mockHandler = vi.fn().mockRejectedValue(error);
+
+        const request = {
+          systemMessage: new SystemMessage("Base prompt"),
+          messages,
+          state: {},
+          config: {},
+          tools: middleware.tools || [],
+        };
+
+        await expect(
+          middleware.wrapModelCall!(request as any, mockHandler),
+        ).rejects.toBe(error);
+        expect(mockHandler).toHaveBeenCalledTimes(1);
+      });
+
+      it("re-raises a non-400 error without attempting recovery", async () => {
+        const middleware = createFilesystemMiddleware({
+          backend: createMockBackend(),
+        });
+        const messages = [
+          new AIMessage({ content: "" }),
+          readFileResult({
+            type: "file",
+            mimeType: "application/zip",
+            data: "AAA",
+          }),
+        ];
+        const error = new Error("network error");
+        const mockHandler = vi.fn().mockRejectedValue(error);
+
+        const request = {
+          systemMessage: new SystemMessage("Base prompt"),
+          messages,
+          state: {},
+          config: {},
+          tools: middleware.tools || [],
+        };
+
+        await expect(
+          middleware.wrapModelCall!(request as any, mockHandler),
+        ).rejects.toBe(error);
+        expect(mockHandler).toHaveBeenCalledTimes(1);
+      });
+
+      it("does not touch multimodal read_file content from before the last model response", async () => {
+        const middleware = createFilesystemMiddleware({
+          backend: createMockBackend(),
+        });
+        const priorRejected = readFileResult({
+          type: "file",
+          mimeType: "application/zip",
+          data: "AAA",
+        });
+        const messages = [
+          priorRejected,
+          new AIMessage({ content: "acknowledged" }),
+          readFileResult({ type: "text", text: "hello" }),
+        ];
+        const error = rejectedRequestError();
+        const mockHandler = vi.fn().mockRejectedValue(error);
+
+        const request = {
+          systemMessage: new SystemMessage("Base prompt"),
+          messages,
+          state: {},
+          config: {},
+          tools: middleware.tools || [],
+        };
+
+        // Nothing since the last AIMessage is a multimodal read_file result,
+        // so the error propagates even though earlier history has one.
+        await expect(
+          middleware.wrapModelCall!(request as any, mockHandler),
+        ).rejects.toBe(error);
+        expect(mockHandler).toHaveBeenCalledTimes(1);
+      });
+    });
   });
 
   describe("wrapToolCall", () => {

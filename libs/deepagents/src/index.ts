@@ -98,6 +98,11 @@ export {
   // Completion callback middleware for async subagents
   createCompletionCallbackMiddleware,
   type CompletionCallbackOptions,
+  // Unsupported content middleware
+  createUnsupportedContentMiddleware,
+  scrubUnsupportedMultimodalContent,
+  multimodalBlockSupported,
+  MULTIMODAL_BLOCK_TYPES,
   // Other middleware types
   type FilesystemMiddlewareOptions,
   type FsToolName,
