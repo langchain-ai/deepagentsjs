@@ -49,10 +49,10 @@ export class CompositeBackend implements BackendProtocolV2 {
       ? adaptSandboxProtocol(defaultBackend)
       : adaptBackendProtocol(defaultBackend);
 
-    // Adapt route backends (check each one for sandbox properties)
+    // Adapt route backends, normalizing prefixes to a trailing slash so matching is on path-segment boundaries ("/foo" must not capture "/foobar.txt").
     this.routes = Object.fromEntries(
       Object.entries(routes).map(([k, v]) => [
-        k,
+        k.endsWith("/") ? k : `${k}/`,
         isSandboxProtocol(v)
           ? adaptSandboxProtocol(v)
           : adaptBackendProtocol(v),
@@ -70,7 +70,7 @@ export class CompositeBackend implements BackendProtocolV2 {
     return isSandboxBackend(this.default) ? this.default.id : "";
   }
 
-  /** Route prefixes registered on this backend (e.g. `["/workspace"]`). */
+  /** Route prefixes registered on this backend, normalized to a trailing slash (e.g. `["/workspace/"]`). */
   get routePrefixes(): string[] {
     return Object.keys(this.routes);
   }
@@ -89,7 +89,10 @@ export class CompositeBackend implements BackendProtocolV2 {
     );
   }
 
-  /** Returns the backend for `path`, with the matched prefix stripped from the returned path. */
+  /**
+   * Returns the backend for `path`, with the matched prefix stripped (`/foo` → `/`).
+   * Routes match on path-segment boundaries: `/foo` matches `/foo/bar` but not `/foobar`.
+   */
   resolveBackendForPath(path: string): [BackendProtocolV2, string] {
     return this.getBackendAndKey(path);
   }
