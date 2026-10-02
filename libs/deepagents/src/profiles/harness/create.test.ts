@@ -99,6 +99,12 @@ describe("createHarnessProfile", () => {
     ).toThrow('cannot start with "_"');
   });
 
+  it("protects the actual task-delegation middleware name", () => {
+    expect(() =>
+      createHarnessProfile({ excludedMiddleware: ["subAgentMiddleware"] }),
+    ).toThrow('Cannot exclude required middleware "subAgentMiddleware"');
+  });
+
   it("throws when excluding a required middleware name", () => {
     for (const name of REQUIRED_MIDDLEWARE_NAMES) {
       expect(() =>
