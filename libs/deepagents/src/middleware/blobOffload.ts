@@ -9,7 +9,7 @@
 
 import { createHash } from "node:crypto";
 import { Command } from "@langchain/langgraph";
-import { AIMessage, HumanMessage, ToolMessage } from "langchain";
+import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from "langchain";
 import type {
   AnyBackendProtocol,
   FileDownloadResponse,
@@ -351,12 +351,6 @@ function messageHasRefs(message: unknown): boolean {
   );
 }
 
-/**
- * Return a copy of `message` with `content` substituted in, preserving the
- * fields each message type needs. Falls back to the message's own
- * constructor for a type this module doesn't special-case, so a reference on
- * an unexpected message type still gets resolved instead of silently kept.
- */
 function withContent(message: unknown, content: unknown): unknown {
   if (ToolMessage.isInstance(message)) {
     return new ToolMessage({
@@ -379,15 +373,30 @@ function withContent(message: unknown, content: unknown): unknown {
       response_metadata: message.response_metadata,
     });
   }
-  const Ctor = (
-    message as { constructor: new (fields: Record<string, unknown>) => unknown }
-  )?.constructor;
-  if (typeof Ctor !== "function") return message;
+  if (AIMessage.isInstance(message)) {
+    return new AIMessage({
+      content: content as never,
+      id: message.id,
+      tool_calls: message.tool_calls,
+      invalid_tool_calls: message.invalid_tool_calls,
+      usage_metadata: message.usage_metadata,
+      additional_kwargs: message.additional_kwargs,
+      response_metadata: message.response_metadata,
+    });
+  }
+  if (SystemMessage.isInstance(message)) {
+    return new SystemMessage({
+      content: content as never,
+      id: message.id,
+      additional_kwargs: message.additional_kwargs,
+      response_metadata: message.response_metadata,
+    });
+  }
   // oxlint-disable-next-line no-console
   console.warn(
-    `blobOffload: reconstructing an unrecognized message type (${Ctor.name}) to resolve a blob reference`,
+    `blobOffload: left a blob reference unresolved on an unsupported message type (${(message as { constructor?: { name?: string } })?.constructor?.name})`,
   );
-  return new Ctor({ ...(message as Record<string, unknown>), content });
+  return message;
 }
 
 /** Restore base64 payloads for blob references; a reference with no matching payload becomes a text notice. */
