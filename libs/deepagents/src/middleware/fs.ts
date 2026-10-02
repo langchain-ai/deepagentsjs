@@ -14,7 +14,6 @@ import {
   HumanMessage,
   ToolMessage,
   type AgentMiddleware as _AgentMiddleware,
-  type AIMessage,
   type ToolRuntime,
 } from "langchain";
 import type { BaseMessage } from "@langchain/core/messages";
@@ -2404,8 +2403,13 @@ export function createFilesystemMiddleware(
       // doesn't need to include `response` itself, since `lastAiMessage`
       // already tracks it independently — unlike `extra` (unsupported-content
       // replacements), which only ever lives in the Command we build here.
-      const foldOffload = (response: unknown, extra: unknown[] = []) => {
-        if (offloadedHuman.length === 0 && extra.length === 0) return response;
+      const foldOffload = (
+        response: unknown,
+        extra: unknown[] = [],
+      ): AIMessage | Command => {
+        if (offloadedHuman.length === 0 && extra.length === 0) {
+          return response as AIMessage;
+        }
         if (hasStructuredResponse(response)) {
           return {
             ...response,
