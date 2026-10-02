@@ -38,6 +38,12 @@ import type {
 import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
 import {
+  BlobCache,
+  hydrateMessages,
+  offloadHumanMessages,
+  offloadToolResult,
+} from "./blobOffload.js";
+import {
   sanitizeToolCallId,
   EMPTY_CONTENT_WARNING,
   formatContentWithLineNumbers,
@@ -370,6 +376,9 @@ export const GREP_TRUNCATION_NOTE =
  * Set to null to disable the cap.
  */
 export const DEFAULT_GREP_MAX_COUNT = 1000;
+
+/** Path prefix offloaded binary content blobs are written under. */
+const BLOBS_PREFIX = "/blobs";
 
 /**
  * Message template for evicted tool results.
@@ -1881,6 +1890,21 @@ export interface FilesystemMiddlewareOptions {
    * argument overrides this default. Set to `null` to disable the cap.
    */
   grepMaxCount?: number | null;
+  /**
+   * Keep binary `read_file` content and inline `HumanMessage` media out of
+   * message history (default: `false`).
+   *
+   * Payloads are written to `/blobs` on the backend and state keeps a
+   * content-addressed reference instead; model requests are rehydrated from
+   * the backend. `HumanMessage` payloads added since the last model response
+   * are replaced starting at the next model call, so the original input
+   * write still lands in checkpoint history for that turn. Useful with
+   * sandbox backends. Has no effect when `/blobs` routes to a `StateBackend`,
+   * since that backend stores files as part of graph state — offloading
+   * there would just relocate the bytes to a different key within the same
+   * checkpoint, not out of it.
+   */
+  offloadBinaryContent?: boolean;
 }
 
 /**
@@ -1925,6 +1949,36 @@ function allPathsScopedToRoutes(
         return path === routeRoot || path.startsWith(normalizedRoute);
       }),
     ),
+  );
+}
+
+/** Whether `path` resolves to a `StateBackend`, recursing through composite routing. */
+function routesToStateBackend(
+  backend: AnyBackendProtocol,
+  path: string,
+): boolean {
+  if (CompositeBackend.isInstance(backend)) {
+    const [routed, routedPath] = backend.resolveBackendForPath(path);
+    return routesToStateBackend(routed, routedPath);
+  }
+  return StateBackend.isInstance(backend);
+}
+
+/**
+ * Whether `response` is the `{ structuredResponse, messages }` shape a
+ * provider-strategy structured-output call can return instead of a plain
+ * `AIMessage`. The agent framework only recognizes this shape at the
+ * outermost `wrapModelCall` return value — returning a `Command` instead
+ * discards `structuredResponse` with no way to carry it through the Command.
+ */
+function hasStructuredResponse(
+  response: unknown,
+): response is { structuredResponse: unknown; messages: unknown[] } {
+  return (
+    typeof response === "object" &&
+    response !== null &&
+    "structuredResponse" in response &&
+    "messages" in response
   );
 }
 
@@ -2034,7 +2088,23 @@ export function createFilesystemMiddleware(
     permissions = [],
     tools: filesystemTools = null,
     grepMaxCount = DEFAULT_GREP_MAX_COUNT,
+    offloadBinaryContent = false,
   } = options;
+  // Routing through a CompositeBackend can't be checked safely here (needs
+  // the backend adapted first, which isn't possible synchronously for a
+  // factory `backend`); this only catches the direct case.
+  const backendIsStateBackend = StateBackend.isInstance(backend);
+  if (offloadBinaryContent && backendIsStateBackend) {
+    // oxlint-disable-next-line no-console
+    console.warn(
+      "offloadBinaryContent has no effect: the backend is a StateBackend, which keeps files as part of checkpointed state.",
+    );
+  }
+  // Shared across every call/thread this middleware instance serves — safe
+  // since every key is a SHA-256 digest of its own value, so a hit is only
+  // reachable by a caller who already has that exact reference.
+  const blobCache =
+    offloadBinaryContent && !backendIsStateBackend ? new BlobCache() : null;
   const enabledFilesystemTools = normalizeFilesystemTools(filesystemTools);
   const executeToolEnabled =
     enabledFilesystemTools == null || enabledFilesystemTools.has("execute");
@@ -2297,6 +2367,29 @@ export function createFilesystemMiddleware(
         }
       }
 
+      let offloadedHuman: unknown[] = [];
+      // Offloading here would just relocate bytes to a different checkpoint
+      // key, not out of it — so hydrating them back would be pointless too;
+      // gate the whole block on one check, same as the read_file offload side.
+      if (
+        blobCache &&
+        !routesToStateBackend(resolvedBackend, `${BLOBS_PREFIX}/`)
+      ) {
+        offloadedHuman = await offloadHumanMessages(
+          { stateMessages: request.state.messages ?? [], pending: [] },
+          resolvedBackend,
+          BLOBS_PREFIX,
+          blobCache,
+        );
+
+        messages = (await hydrateMessages(
+          messages,
+          resolvedBackend,
+          BLOBS_PREFIX,
+          blobCache,
+        )) as typeof messages;
+      }
+
       const finalRequest = {
         ...request,
         tools,
@@ -2304,8 +2397,38 @@ export function createFilesystemMiddleware(
         systemMessage: newSystemMessage,
       };
 
+      // The `messages` reducer upserts by id, so folding our replacement into
+      // a response's own `messages` array overwrites the original in state
+      // instead of duplicating it. The plain-AIMessage branch's Command
+      // doesn't need to include `response` itself, since `lastAiMessage`
+      // already tracks it independently — unlike `extra` (unsupported-content
+      // replacements), which only ever lives in the Command we build here.
+      const foldOffload = (
+        response: unknown,
+        extra: unknown[] = [],
+      ): AIMessage | Command => {
+        if (offloadedHuman.length === 0 && extra.length === 0) {
+          return response as AIMessage;
+        }
+        if (hasStructuredResponse(response)) {
+          return {
+            ...response,
+            messages: [...extra, ...offloadedHuman, ...response.messages],
+          } as unknown as AIMessage;
+        }
+        return new Command({
+          update: {
+            messages:
+              extra.length === 0
+                ? offloadedHuman
+                : [...extra, ...offloadedHuman, response],
+          },
+        });
+      };
+
       try {
-        return await handler(finalRequest);
+        const response = await handler(finalRequest);
+        return foldOffload(response);
       } catch (error) {
         if (!isRejectedRequestError(error)) {
           throw error;
@@ -2321,29 +2444,38 @@ export function createFilesystemMiddleware(
         const replacements = replaced.filter(
           (msg, i) => msg !== finalRequest.messages[i],
         );
-        return new Command({
-          update: { messages: [...replacements, retryResponse] },
-        });
+        return foldOffload(retryResponse, replacements);
       }
     },
     wrapToolCall: async (request, handler) => {
-      // Return early if eviction is disabled
-      if (!toolTokenLimitBeforeEvict) {
-        return handler(request);
-      }
-
-      // Check if this tool is excluded from eviction
       const toolName = request.toolCall?.name;
-      if (
-        toolName &&
-        TOOLS_EXCLUDED_FROM_EVICTION.includes(
-          toolName as (typeof TOOLS_EXCLUDED_FROM_EVICTION)[number],
-        )
-      ) {
-        return handler(request);
+      let result = await handler(request);
+
+      if (blobCache && toolName === "read_file") {
+        const resolvedBackend = await resolveBackend(backend, {
+          ...request.runtime,
+          state: request.state,
+        });
+        // Offloading here would just relocate bytes to a different checkpoint key, not out of it.
+        if (!routesToStateBackend(resolvedBackend, `${BLOBS_PREFIX}/`)) {
+          result = (await offloadToolResult(
+            result,
+            resolvedBackend,
+            BLOBS_PREFIX,
+            new Map(),
+          )) as typeof result;
+        }
       }
 
-      const result = await handler(request);
+      if (
+        !toolTokenLimitBeforeEvict ||
+        (toolName &&
+          TOOLS_EXCLUDED_FROM_EVICTION.includes(
+            toolName as (typeof TOOLS_EXCLUDED_FROM_EVICTION)[number],
+          ))
+      ) {
+        return result;
+      }
 
       if (ToolMessage.isInstance(result)) {
         const processed = await processToolMessage(

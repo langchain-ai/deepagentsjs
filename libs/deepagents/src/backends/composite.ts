@@ -89,6 +89,11 @@ export class CompositeBackend implements BackendProtocolV2 {
     );
   }
 
+  /** Returns the backend for `path`, with the matched prefix stripped from the returned path. */
+  resolveBackendForPath(path: string): [BackendProtocolV2, string] {
+    return this.getBackendAndKey(path);
+  }
+
   /**
    * Determine which backend handles this key and strip prefix.
    *

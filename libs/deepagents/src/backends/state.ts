@@ -58,8 +58,20 @@ const PREGEL_READ_KEY = "__pregel_read";
  * for the middleware to apply via Command.
  */
 export class StateBackend implements BackendProtocolV2 {
+  /** Class identity discriminant for {@link StateBackend.isInstance}. */
+  readonly backendKind = "state" as const;
+
   private runtime: BackendRuntime | undefined;
   private fileFormat: "v1" | "v2";
+
+  /** Duck-typed so this survives the plain-object copies `adaptBackendProtocol` makes — a class check wouldn't. */
+  static isInstance(backend: unknown): backend is StateBackend {
+    return (
+      typeof backend === "object" &&
+      backend !== null &&
+      (backend as Record<string, unknown>).backendKind === "state"
+    );
+  }
 
   constructor(options?: BackendOptions);
   /**

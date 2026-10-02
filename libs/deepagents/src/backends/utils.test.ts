@@ -31,6 +31,8 @@ import type {
   SandboxBackendProtocolV2,
 } from "./protocol.js";
 import { isSandboxBackend } from "./protocol.js";
+import { StateBackend } from "./state.js";
+import { CompositeBackend } from "./composite.js";
 
 describe("normalizeReadPagination", () => {
   it("clamps pagination arguments to non-negative integers", () => {
@@ -755,6 +757,31 @@ describe("adaptBackendProtocol", () => {
     it("should not add routePrefixes for a non-composite backend", () => {
       const adapted = adaptBackendProtocol(createV2Backend()) as any;
       expect(adapted.routePrefixes).toBeUndefined();
+    });
+  });
+
+  describe("identity marker preservation", () => {
+    it("should keep StateBackend.isInstance true after adaptation", () => {
+      const adapted = adaptBackendProtocol(new StateBackend());
+      expect(StateBackend.isInstance(adapted)).toBe(true);
+    });
+
+    it("should keep resolveBackendForPath callable after adaptation", () => {
+      const composite = new CompositeBackend(new StateBackend(), {
+        "/blobs": new StateBackend(),
+      });
+      const adapted = adaptBackendProtocol(
+        composite,
+      ) as unknown as CompositeBackend;
+
+      const [routed] = adapted.resolveBackendForPath("/blobs/abc");
+
+      expect(StateBackend.isInstance(routed)).toBe(true);
+    });
+
+    it("should not add backendKind for a backend that isn't a StateBackend", () => {
+      const adapted = adaptBackendProtocol(createV2Backend()) as any;
+      expect(adapted.backendKind).toBeUndefined();
     });
   });
 
