@@ -1188,6 +1188,34 @@ describe("CompositeBackend", () => {
       };
     }
 
+    it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+      "treats %s as unlimited across default and routed backends",
+      async (maxCount) => {
+        const defaultBackend = makeGrepBackend([
+          { path: "/a.txt", line: 1, text: "hit" },
+        ]);
+        const routedBackend = makeGrepBackend([
+          { path: "/b.txt", line: 1, text: "hit" },
+        ]);
+        const composite = new CompositeBackend(defaultBackend, {
+          "/memories/": routedBackend,
+        });
+        const result = await composite.grep("hit", "/", null, maxCount);
+        expect(result.matches?.map((match) => match.path)).toEqual([
+          "/a.txt",
+          "/memories/b.txt",
+        ]);
+        expect(result.truncated).toBe(false);
+        expect(defaultBackend.grep).toHaveBeenCalledWith(
+          "hit",
+          "/",
+          null,
+          null,
+        );
+        expect(routedBackend.grep).toHaveBeenCalledWith("hit", "/", null, null);
+      },
+    );
+
     it("caps matches and flags truncated when the default backend exceeds maxCount", async () => {
       const matches = Array.from({ length: 10 }, (_, i) => ({
         path: `/f${i}.txt`,
