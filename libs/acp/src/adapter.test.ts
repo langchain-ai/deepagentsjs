@@ -502,13 +502,13 @@ describe("formatToolCallTitle", () => {
 });
 
 describe("extractToolCallLocations", () => {
-  it("should extract location for read_file with absolute path", () => {
+  it("should resolve a virtual absolute path under the workspace root", () => {
     const result = extractToolCallLocations(
       "read_file",
       { path: "/src/index.ts" },
       "/workspace",
     );
-    expect(result).toEqual([{ path: "/src/index.ts" }]);
+    expect(result).toEqual([{ path: "/workspace/src/index.ts" }]);
   });
 
   it("should resolve relative path using workspace root", () => {
@@ -526,7 +526,7 @@ describe("extractToolCallLocations", () => {
       { path: "/src/file.ts", line: 42 },
       "/workspace",
     );
-    expect(result).toEqual([{ path: "/src/file.ts", line: 42 }]);
+    expect(result).toEqual([{ path: "/workspace/src/file.ts", line: 42 }]);
   });
 
   it("should include startLine as line when present", () => {
@@ -535,7 +535,7 @@ describe("extractToolCallLocations", () => {
       { path: "/src/file.ts", startLine: 10 },
       "/workspace",
     );
-    expect(result).toEqual([{ path: "/src/file.ts", line: 10 }]);
+    expect(result).toEqual([{ path: "/workspace/src/file.ts", line: 10 }]);
   });
 
   it("should return undefined for tools without path arg", () => {
@@ -572,7 +572,7 @@ describe("extractToolCallLocations", () => {
         "/ws",
       );
       expect(result).toBeDefined();
-      expect(result![0].path).toBe("/test.txt");
+      expect(result![0].path).toBe("/ws/test.txt");
     }
   });
 
