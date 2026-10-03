@@ -597,13 +597,26 @@ export function validatePath(path: string | null | undefined): string {
     throw new Error("Path cannot be empty");
   }
 
-  let normalized = pathStr.startsWith("/") ? pathStr : "/" + pathStr;
-
-  if (!normalized.endsWith("/")) {
-    normalized += "/";
+  // Reject Windows absolute paths (e.g. C:\..., D:/...) to keep virtual
+  // filesystem paths unambiguous.
+  if (/^[a-zA-Z]:/.test(pathStr)) {
+    throw new Error(
+      `Windows absolute paths are not supported: ${pathStr}. Please use virtual paths starting with / (e.g. /workspace/)`,
+    );
   }
 
-  return normalized;
+  const segments: string[] = [];
+  for (const part of pathStr.replace(/\\/g, "/").split("/")) {
+    if (part === "." || part === "") {
+      continue;
+    }
+    if (part === "..") {
+      throw new Error(`Path traversal not allowed: ${pathStr}`);
+    }
+    segments.push(part);
+  }
+
+  return segments.length === 0 ? "/" : "/" + segments.join("/") + "/";
 }
 
 /**
@@ -692,13 +705,13 @@ function filterFilesByPath(
   files: Record<string, FileData>,
   path: string | null | undefined,
 ): Record<string, FileData> | null {
-  const exactPath = path ? (path.startsWith("/") ? path : "/" + path) : "/";
-  if (Object.prototype.hasOwnProperty.call(files, exactPath)) {
-    return { [exactPath]: files[exactPath] };
-  }
-
   try {
     const normalizedPath = validatePath(path);
+    const exactPath =
+      normalizedPath === "/" ? "/" : normalizedPath.slice(0, -1);
+    if (Object.prototype.hasOwnProperty.call(files, exactPath)) {
+      return { [exactPath]: files[exactPath] };
+    }
     return Object.fromEntries(
       Object.entries(files).filter(([fp]) => fp.startsWith(normalizedPath)),
     );
@@ -733,7 +746,14 @@ export function globSearchFiles(
   if (filtered === null) {
     return "No files found";
   }
-  const normalizedPath = validatePath(path);
+  // `validatePath` rejects traversal and Windows paths; an unmatchable scope
+  // is still just "no files found", so degrade rather than propagate.
+  let normalizedPath: string;
+  try {
+    normalizedPath = validatePath(path);
+  } catch {
+    return "No files found";
+  }
 
   // Respect standard glob semantics:
   // - Patterns without path separators (e.g., "*.py") match only in the current
