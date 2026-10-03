@@ -806,6 +806,10 @@ export class StoreBackend implements BackendProtocolV2 {
     const responses: FileUploadResponse[] = [];
 
     for (const [path, content] of files) {
+      // Encoding and path handling are caller-correctable problems; a failing
+      // `store.put` is not. Keep them on distinct error codes instead of
+      // collapsing both into "invalid_path".
+      let storeValue: Record<string, any>;
       try {
         const mimeType = getMimeType(path);
         const isBinary = this.fileFormat === "v2" && !isTextMimeType(mimeType);
@@ -823,11 +827,17 @@ export class StoreBackend implements BackendProtocolV2 {
           );
         }
 
-        const storeValue = this.convertFileDataToStoreValue(fileData);
+        storeValue = this.convertFileDataToStoreValue(fileData);
+      } catch {
+        responses.push({ path, error: "invalid_path" });
+        continue;
+      }
+
+      try {
         await store.put(namespace, path, storeValue);
         responses.push({ path, error: null });
       } catch {
-        responses.push({ path, error: "invalid_path" });
+        responses.push({ path, error: "storage_error" });
       }
     }
 
@@ -846,13 +856,23 @@ export class StoreBackend implements BackendProtocolV2 {
     const responses: FileDownloadResponse[] = [];
 
     for (const path of paths) {
+      // A read that fails is not the same as a file that is absent. Report the
+      // infrastructure failure as "storage_error" so a caller can retry
+      // instead of concluding the file does not exist.
+      let item: Item | null | undefined;
       try {
-        const item = await store.get(namespace, path);
-        if (!item) {
-          responses.push({ path, content: null, error: "file_not_found" });
-          continue;
-        }
+        item = await store.get(namespace, path);
+      } catch {
+        responses.push({ path, content: null, error: "storage_error" });
+        continue;
+      }
 
+      if (!item) {
+        responses.push({ path, content: null, error: "file_not_found" });
+        continue;
+      }
+
+      try {
         const fileData = this.convertStoreItemToFileData(item);
         const fileDataV2 = migrateToFileDataV2(fileData, path);
 
@@ -863,7 +883,7 @@ export class StoreBackend implements BackendProtocolV2 {
           responses.push({ path, content: fileDataV2.content, error: null });
         }
       } catch {
-        responses.push({ path, content: null, error: "file_not_found" });
+        responses.push({ path, content: null, error: "storage_error" });
       }
     }
 
