@@ -412,7 +412,7 @@ export class StoreBackend implements BackendProtocolV2 {
    * Search store with automatic pagination to retrieve all results.
    *
    * @param store - The store to search
-   * @param namespace - Hierarchical path prefix to search within
+   * @param namespace - Exact namespace to include from the prefix search
    * @param options - Optional query, filter, and page_size
    * @returns List of all items matching the search criteria
    */
@@ -441,7 +441,15 @@ export class StoreBackend implements BackendProtocolV2 {
         break;
       }
 
-      allItems.push(...pageItems);
+      allItems.push(
+        ...pageItems.filter(
+          (item: Item) =>
+            item.namespace.length === namespace.length &&
+            item.namespace.every(
+              (part: string, index: number) => part === namespace[index],
+            ),
+        ),
+      );
 
       if (pageItems.length < pageSize) {
         break;
