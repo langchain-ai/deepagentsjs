@@ -569,6 +569,29 @@ export function truncateIfTooLong(
 }
 
 /**
+ * Normalize a caller-supplied path for key-addressed backends.
+ *
+ * `StateBackend` and `StoreBackend` address files by exact map/store key, and
+ * every listing and search scope is `/`-prefixed. A path written without a
+ * leading `/` therefore creates a file that `ls()`, `glob()`, and `grep()` can
+ * never see, even though `read()` still finds it. Normalizing on the way in
+ * keeps the stored key canonical.
+ *
+ * Duplicate separators and `.` segments are collapsed. `..` is preserved as a
+ * literal segment — rejecting traversal is {@link validateFilePath}'s job.
+ */
+export function normalizePath(path: string): string {
+  const parts: string[] = [];
+  for (const part of path.replace(/\\/g, "/").split("/")) {
+    if (part === "." || part === "") {
+      continue;
+    }
+    parts.push(part);
+  }
+  return "/" + parts.join("/");
+}
+
+/**
  * Validate and normalize a directory path.
  *
  * Ensures paths are safe to use by preventing directory traversal attacks
