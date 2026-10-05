@@ -13,7 +13,6 @@ import fsSync from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
-import picomatch from "picomatch";
 import type {
   BackendProtocolV2,
   DeleteResult,
@@ -31,6 +30,7 @@ import type {
 } from "./protocol.js";
 import { applyGrepMaxCount } from "./protocol.js";
 import { glob } from "./glob.js";
+import { isGlobMatch, validateGlobPattern } from "./glob-pattern.js";
 import {
   checkEmptyContent,
   getMimeType,
@@ -637,6 +637,11 @@ export class FilesystemBackend implements BackendProtocolV2 {
     glob: string | null = null,
     maxCount: number | null = null,
   ): Promise<GrepResult> {
+    const globError = glob ? validateGlobPattern(glob) : undefined;
+    if (globError) {
+      return { error: globError };
+    }
+
     // Resolve base path
     let baseFull: string;
     try {
@@ -794,7 +799,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
         }
 
         // Filter by glob if provided
-        if (includeGlob && !picomatch.isMatch(path.basename(fp), includeGlob)) {
+        if (includeGlob && !isGlobMatch(path.basename(fp), includeGlob)) {
           continue;
         }
 
@@ -845,6 +850,11 @@ export class FilesystemBackend implements BackendProtocolV2 {
    * Structured glob matching returning FileInfo objects.
    */
   async glob(pattern: string, searchPath: string = "/"): Promise<GlobResult> {
+    const patternError = validateGlobPattern(pattern);
+    if (patternError) {
+      return { error: patternError };
+    }
+
     if (pattern.startsWith("/")) {
       pattern = pattern.substring(1);
     }

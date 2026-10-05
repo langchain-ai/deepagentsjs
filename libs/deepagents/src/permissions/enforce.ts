@@ -1,4 +1,6 @@
 import picomatch from "picomatch";
+
+import { validateGlobPattern } from "../backends/glob-pattern.js";
 import type {
   FilesystemOperation,
   FilesystemPermission,
@@ -7,7 +9,7 @@ import type {
 
 /**
  * Validate permission rule paths at setup time. Throws if any path is
- * relative, contains `..`, or contains `~`.
+ * relative, contains `..`, contains `~`, or exceeds the glob pattern limits.
  */
 export function validatePermissionPaths(
   permissions: FilesystemPermission[],
@@ -15,6 +17,10 @@ export function validatePermissionPaths(
   for (const permission of permissions) {
     for (const path of permission.paths) {
       validatePath(path);
+      const patternError = validateGlobPattern(path);
+      if (patternError) {
+        throw new Error(`${patternError}: ${JSON.stringify(path)}`);
+      }
     }
   }
 }

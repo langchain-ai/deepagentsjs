@@ -6,7 +6,7 @@
  * enable composition without fragile string parsing.
  */
 
-import picomatch from "picomatch";
+import { isGlobMatch } from "./glob-pattern.js";
 import {
   AnyBackendProtocol,
   AnySandboxProtocol,
@@ -753,7 +753,7 @@ export function globSearchFiles(
     }
 
     if (
-      picomatch.isMatch(relative, effectivePattern, {
+      isGlobMatch(relative, effectivePattern, {
         dot: true,
         nobrace: false,
       })
@@ -839,7 +839,7 @@ export function grepSearchFiles(
   if (glob) {
     filtered = Object.fromEntries(
       Object.entries(filtered).filter(([fp]) =>
-        picomatch.isMatch(basename(fp), glob, { dot: true, nobrace: false }),
+        isGlobMatch(basename(fp), glob, { dot: true, nobrace: false }),
       ),
     );
   }
@@ -894,7 +894,7 @@ export function grepMatchesFromFiles(
   if (glob) {
     filtered = Object.fromEntries(
       Object.entries(filtered).filter(([fp]) =>
-        picomatch.isMatch(basename(fp), glob, { dot: true, nobrace: false }),
+        isGlobMatch(basename(fp), glob, { dot: true, nobrace: false }),
       ),
     );
   }

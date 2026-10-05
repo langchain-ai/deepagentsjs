@@ -29,6 +29,8 @@ import path from "node:path";
 import { fdir } from "fdir";
 import picomatch from "picomatch";
 
+import { validateGlobPattern } from "./glob-pattern.js";
+
 export interface GlobOptions {
   /** Directory to search from. */
   cwd: string;
@@ -53,12 +55,16 @@ function patternDepth(pattern: string): number | undefined {
 
 /**
  * Find filesystem entries under `cwd` matching `pattern`.
+ *
+ * @throws If `pattern` exceeds the limits in {@link validateGlobPattern}.
  */
 export async function glob(
   pattern: string,
   options: GlobOptions,
 ): Promise<string[]> {
   const { cwd, absolute = false, onlyFiles = true, dot = false } = options;
+  const patternError = validateGlobPattern(pattern);
+  if (patternError) throw new Error(patternError);
   const normalizedPattern = pattern.replace(/^(\.\/)+/, "");
   const prefix = normalizedPattern === pattern ? "" : "./";
 

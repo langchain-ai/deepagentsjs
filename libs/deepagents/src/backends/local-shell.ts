@@ -14,6 +14,7 @@ import path from "node:path";
 
 import { FilesystemBackend } from "./filesystem.js";
 import { glob } from "./glob.js";
+import { validateGlobPattern } from "./glob-pattern.js";
 import type {
   EditResult,
   ExecuteResponse,
@@ -281,6 +282,11 @@ export class LocalShellBackend
     pattern: string,
     searchPath: string = "/",
   ): Promise<GlobResult> {
+    const patternError = validateGlobPattern(pattern);
+    if (patternError) {
+      return { error: patternError };
+    }
+
     if (pattern.startsWith("/")) {
       pattern = pattern.substring(1);
     }

@@ -37,6 +37,7 @@ import type {
 } from "../backends/protocol.js";
 import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
+import { validateGlobPattern } from "../backends/glob-pattern.js";
 import {
   BlobCache,
   hydrateMessages,
@@ -1602,6 +1603,11 @@ function createGlobTool(
         return toolError(runtime, "glob", permissionError);
       }
 
+      const patternError = validateGlobPattern(input.pattern);
+      if (patternError !== undefined) {
+        return toolError(runtime, "glob", patternError);
+      }
+
       const resolvedBackend = await resolveBackend(backend, runtime);
       const { pattern, path } = input;
       const globResult = await resolvedBackend.glob(pattern, path);
@@ -1672,6 +1678,13 @@ function createGrepTool(
       );
       if (permissionError !== undefined) {
         return toolError(runtime, "grep", permissionError);
+      }
+
+      const globError = input.glob
+        ? validateGlobPattern(input.glob)
+        : undefined;
+      if (globError !== undefined) {
+        return toolError(runtime, "grep", globError);
       }
 
       const resolvedBackend = await resolveBackend(backend, runtime);
