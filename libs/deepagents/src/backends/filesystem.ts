@@ -13,8 +13,7 @@ import fsSync from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
-import fg from "fast-glob";
-import micromatch from "micromatch";
+import picomatch from "picomatch";
 import type {
   BackendProtocolV2,
   DeleteResult,
@@ -31,6 +30,7 @@ import type {
   WriteResult,
 } from "./protocol.js";
 import { applyGrepMaxCount } from "./protocol.js";
+import { glob } from "./glob.js";
 import {
   checkEmptyContent,
   getMimeType,
@@ -778,12 +778,11 @@ export class FilesystemBackend implements BackendProtocolV2 {
     // bypass the O_NOFOLLOW protection used by read()/write()/edit() and escape
     // the search root). This matches ripgrep's default no-follow behavior, so
     // the fallback and primary grep paths return the same files.
-    const files = await fg("**/*", {
+    const files = await glob("**/*", {
       cwd: root,
       absolute: true,
       onlyFiles: true,
       dot: true,
-      followSymbolicLinks: false,
     });
 
     for (const fp of files) {
@@ -795,10 +794,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
         }
 
         // Filter by glob if provided
-        if (
-          includeGlob &&
-          !micromatch.isMatch(path.basename(fp), includeGlob)
-        ) {
+        if (includeGlob && !picomatch.isMatch(path.basename(fp), includeGlob)) {
           continue;
         }
 
@@ -876,20 +872,18 @@ export class FilesystemBackend implements BackendProtocolV2 {
     const results: FileInfo[] = [];
 
     try {
-      // `followSymbolicLinks: false` stops fast-glob from descending into
-      // symlinked directories, which otherwise loop forever on a self-
-      // referential symlink (e.g. `sub/sub -> .`) until the OS throws ELOOP.
-      // `onlyFiles: false` (rather than `true`) is deliberate: fast-glob's
-      // `onlyFiles` filter uses lstat and would drop symlinks-to-files entirely,
-      // regressing results like `alias.ts -> real.ts`. The `stat().isFile()`
-      // check below follows each link to re-include those files while excluding
-      // directories.
-      const matches = await fg(pattern, {
+      // `glob` never descends into symlinked directories, which otherwise
+      // loop forever on a self-referential symlink (e.g. `sub/sub -> .`) until
+      // the OS throws ELOOP. `onlyFiles: false` (rather than `true`) is
+      // deliberate: `onlyFiles` drops symlink entries, which would drop
+      // symlinks-to-files entirely, regressing results like
+      // `alias.ts -> real.ts`. The `stat().isFile()` check below follows each
+      // link to re-include those files while excluding directories.
+      const matches = await glob(pattern, {
         cwd: resolvedSearchPath,
         absolute: true,
         onlyFiles: false,
         dot: true,
-        followSymbolicLinks: false,
       });
 
       for (const matchedPath of matches) {
@@ -897,8 +891,8 @@ export class FilesystemBackend implements BackendProtocolV2 {
           const stat = await fs.stat(matchedPath);
           if (!stat.isFile()) continue;
 
-          // Normalize fast-glob paths to platform separators
-          // fast-glob returns forward slashes on all platforms, but we need
+          // Normalize glob paths to platform separators
+          // glob returns forward slashes on all platforms, but we need
           // platform-native separators for path comparisons on Windows
           const normalizedPath = matchedPath.split("/").join(path.sep);
 

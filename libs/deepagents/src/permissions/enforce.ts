@@ -1,4 +1,4 @@
-import micromatch from "micromatch";
+import picomatch from "picomatch";
 import type {
   FilesystemOperation,
   FilesystemPermission,
@@ -57,10 +57,10 @@ export function validatePath(raw: string): string {
  * - `*` — within a single path segment
  * - `{a,b}` — brace expansion
  *
- * Uses `micromatch` with `dot: true` so dotfiles are matched by default.
+ * Uses `picomatch` with `dot: true` so dotfiles are matched by default.
  */
 export function globMatch(path: string, pattern: string): boolean {
-  return micromatch.isMatch(path, pattern, { dot: true });
+  return picomatch.isMatch(path, pattern, { dot: true });
 }
 
 /**

@@ -12,9 +12,8 @@ import cp from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import fg from "fast-glob";
-
 import { FilesystemBackend } from "./filesystem.js";
+import { glob } from "./glob.js";
 import type {
   EditResult,
   ExecuteResponse,
@@ -302,12 +301,11 @@ export class LocalShellBackend
 
     const formatPath = (rel: string) => (this.virtualMode ? `/${rel}` : rel);
 
-    const matches = await fg(pattern, {
+    const matches = await glob(pattern, {
       cwd: resolvedSearchPath,
       absolute: false,
       dot: true,
       onlyFiles: false,
-      followSymbolicLinks: false,
     });
 
     const classify = async (match: string): Promise<FileInfo | null> => {
