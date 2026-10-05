@@ -165,6 +165,23 @@ function basename(filePath: string): string {
   return slashIdx === -1 ? normalized : normalized.slice(slashIdx + 1);
 }
 
+/**
+ * Express `filePath` relative to a search root, for glob matching.
+ *
+ * Falls back to stripping the leading slash when the file does not sit under
+ * `normalizedPath` (e.g. when `path` named the file itself), so a caller
+ * always gets a relative form to match against.
+ */
+function relativeToSearchPath(
+  filePath: string,
+  normalizedPath: string,
+): string {
+  const relative = filePath.startsWith(normalizedPath)
+    ? filePath.substring(normalizedPath.length)
+    : filePath.replace(/^\//, "");
+  return relative.startsWith("/") ? relative.substring(1) : relative;
+}
+
 function extname(filePath: string): string {
   const name = basename(filePath);
   const dotIdx = name.lastIndexOf(".");
@@ -837,10 +854,27 @@ export function grepSearchFiles(
   }
 
   if (glob) {
+    let normalizedPath: string;
+    try {
+      normalizedPath = validatePath(path);
+    } catch {
+      normalizedPath = "/";
+    }
     filtered = Object.fromEntries(
-      Object.entries(filtered).filter(([fp]) =>
-        micromatch.isMatch(basename(fp), glob, { dot: true, nobrace: false }),
-      ),
+      Object.entries(filtered).filter(([fp]) => {
+        // A pattern containing a separator is matched against the path
+        // relative to `path`, consistent with glob(). A bare pattern keeps
+        // matching the basename anywhere below `path`, which is how this
+        // filter has always behaved — so `*.py` still finds nested files
+        // while `src/*.py` now scopes to one directory.
+        return micromatch.isMatch(
+          glob.includes("/")
+            ? relativeToSearchPath(fp, normalizedPath)
+            : basename(fp),
+          glob,
+          { dot: true, nobrace: false },
+        );
+      }),
     );
   }
 
@@ -892,10 +926,27 @@ export function grepMatchesFromFiles(
   }
 
   if (glob) {
+    let normalizedPath: string;
+    try {
+      normalizedPath = validatePath(path);
+    } catch {
+      normalizedPath = "/";
+    }
     filtered = Object.fromEntries(
-      Object.entries(filtered).filter(([fp]) =>
-        micromatch.isMatch(basename(fp), glob, { dot: true, nobrace: false }),
-      ),
+      Object.entries(filtered).filter(([fp]) => {
+        // A pattern containing a separator is matched against the path
+        // relative to `path`, consistent with glob(). A bare pattern keeps
+        // matching the basename anywhere below `path`, which is how this
+        // filter has always behaved — so `*.py` still finds nested files
+        // while `src/*.py` now scopes to one directory.
+        return micromatch.isMatch(
+          glob.includes("/")
+            ? relativeToSearchPath(fp, normalizedPath)
+            : basename(fp),
+          glob,
+          { dot: true, nobrace: false },
+        );
+      }),
     );
   }
 
