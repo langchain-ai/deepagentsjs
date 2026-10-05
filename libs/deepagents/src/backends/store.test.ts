@@ -1067,3 +1067,41 @@ describe("StoreBackend", () => {
     });
   });
 });
+
+it("returns an error when the read offset is past the end of the file", async () => {
+  const { runtime } = makeConfig();
+  const backend = new StoreBackend(runtime);
+
+  await backend.write("/a.txt", "line1\nline2\n");
+
+  // Regression: returned { content: "" } with no totalLines and no error,
+  // while FilesystemBackend reported the out-of-range offset.
+  const res = await backend.read("/a.txt", 99, 500);
+  expect(res.error).toContain("Line offset 99 exceeds file length (2 lines)");
+  expect(res.content).toBeUndefined();
+});
+
+it("still returns the full first page for an in-range offset", async () => {
+  const { runtime } = makeConfig();
+  const backend = new StoreBackend(runtime);
+
+  await backend.write("/a.txt", "line1\nline2\n");
+
+  const res = await backend.read("/a.txt", 0, 500);
+  expect(res.error).toBeUndefined();
+  expect(res.content).toBe("line1\nline2\n");
+  expect(res.totalLines).toBe(2);
+});
+
+it.each([0, 500])(
+  "rejects an offset exactly at EOF with limit %i",
+  async (limit) => {
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
+    await backend.write("/a.txt", "line1\nline2\n");
+    expect((await backend.read("/a.txt", 2, limit)).error).toBe(
+      "Line offset 2 exceeds file length (2 lines)",
+    );
+    expect((await backend.read("/a.txt", 0, 0)).content).toBe("");
+  },
+);
