@@ -35,7 +35,10 @@ Available runners are registered in
 [`internal/eval-harness/src/setup.ts`](../internal/eval-harness/src/setup.ts):
 
 You also need `LANGSMITH_API_KEY` set for result tracking (and the appropriate
-`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` for the model you choose).
+`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` for the model you choose). The
+`orcarouter` runner instead reads `ORCAROUTER_API_KEY` and routes every eval
+through the [OrcaRouter](https://www.orcarouter.ai) OpenAI-compatible gateway
+using its adaptive `orcarouter/fusion` model.
 
 ```bash
 # Run all eval suites with Sonnet 4.5
@@ -49,6 +52,9 @@ EVAL_RUNNER=sonnet-4-5 pnpm --filter @deepagents/eval-all test:eval
 
 # Run with a different model
 EVAL_RUNNER=gpt-4.1 pnpm --filter @deepagents/eval-files test:eval
+
+# Run through the OrcaRouter gateway
+EVAL_RUNNER=orcarouter pnpm --filter @deepagents/eval-files test:eval
 ```
 
 ## Writing a new eval
