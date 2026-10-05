@@ -11,6 +11,7 @@ import {
   type BaseMessage,
 } from "@langchain/core/messages";
 import { MemorySaver, StateSchema } from "@langchain/langgraph";
+import { createMiddleware, toolStrategy } from "langchain";
 import { createFileData } from "./backends/utils.js";
 import { ConfigurationError } from "./errors.js";
 import { assertAllDeepAgentQualities } from "./testing/utils.js";
@@ -19,6 +20,50 @@ import {
   registerHarnessProfile,
 } from "./profiles/harness/index.js";
 import { z } from "zod/v4";
+
+class FakeListToolCallingChatModel extends FakeListChatModel {
+  get profile() {
+    return {
+      toolCalling: true,
+      structuredOutput: true,
+    };
+  }
+
+  bindTools(_tools: unknown[]) {
+    return this;
+  }
+
+  _formatGeneration(response: string) {
+    try {
+      const payload = JSON.parse(response) as {
+        content?: string;
+        tool_calls?: Array<{
+          name: string;
+          args: Record<string, unknown>;
+          id?: string;
+        }>;
+      };
+
+      if (Array.isArray(payload.tool_calls)) {
+        return {
+          message: new AIMessage({
+            content: payload.content ?? "",
+            tool_calls: payload.tool_calls.map((toolCall, index) => ({
+              ...toolCall,
+              id: toolCall.id ?? `call_${index + 1}`,
+              type: "tool_call",
+            })),
+          }),
+          text: payload.content ?? "",
+        };
+      }
+    } catch {
+      // Fall back to plain text responses.
+    }
+
+    return super._formatGeneration(response);
+  }
+}
 
 describe("isAnthropicModel", () => {
   it("should detect claude model strings", () => {
@@ -543,5 +588,57 @@ describe("State schema propagation", () => {
     const channelNames = Object.keys(agent.graph?.channels ?? {});
     expect(channelNames).toContain("foo");
     assertAllDeepAgentQualities(agent);
+  });
+});
+
+describe("Structured output middleware regression", () => {
+  it("does not throw concurrent jumpTo updates during structured output retry with no-op afterModel middleware", async () => {
+    const responseFormat = toolStrategy(z.object({ answer: z.string() }));
+    const toolName = responseFormat[0].name;
+    const model = new FakeListToolCallingChatModel({
+      responses: [
+        JSON.stringify({
+          content: "",
+          tool_calls: [{ name: toolName, args: { wrong: 123 }, id: "call_1" }],
+        }),
+        JSON.stringify({
+          content: "",
+          tool_calls: [
+            { name: toolName, args: { answer: "correct" }, id: "call_2" },
+          ],
+        }),
+      ],
+    });
+
+    const noopAfterModelA = createMiddleware({
+      name: "NoopAfterModelA",
+      afterModel: async () => undefined,
+    });
+    const noopAfterModelB = createMiddleware({
+      name: "NoopAfterModelB",
+      afterModel: async () => undefined,
+    });
+
+    const agent = createDeepAgent({
+      model,
+      tools: [],
+      subagents: [],
+      responseFormat,
+      middleware: [noopAfterModelA, noopAfterModelB],
+    });
+
+    const result = await agent.invoke({
+      messages: [{ role: "user", content: "test" }],
+    });
+
+    expect(result.structuredResponse).toEqual({ answer: "correct" });
+    expect(
+      result.messages.some(
+        (message: BaseMessage) =>
+          ToolMessage.isInstance(message) &&
+          typeof message.content === "string" &&
+          message.content.includes("Failed to parse structured output"),
+      ),
+    ).toBe(true);
   });
 });
