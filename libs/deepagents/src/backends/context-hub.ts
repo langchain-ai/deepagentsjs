@@ -2,7 +2,7 @@
  * ContextHubBackend: Store files in a LangSmith Hub agent repo (persistent).
  */
 
-import micromatch from "micromatch";
+import { isGlobMatch } from "./glob-pattern.js";
 import { Client } from "langsmith";
 import type { AgentContext, Entry } from "langsmith/schemas";
 import { Deferred } from "../utils.js";
@@ -951,7 +951,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
       if (prefix && !filePath.startsWith(prefix)) {
         continue;
       }
-      if (glob && !micromatch.isMatch(filePath, glob, FNMATCH_OPTIONS)) {
+      if (glob && !isGlobMatch(filePath, glob, FNMATCH_OPTIONS)) {
         continue;
       }
 
@@ -981,8 +981,8 @@ export class ContextHubBackend implements BackendProtocolV2 {
     const files: FileInfo[] = [];
     for (const filePath of Object.keys(cache)) {
       if (
-        micromatch.isMatch(`/${filePath}`, pattern, FNMATCH_OPTIONS) ||
-        micromatch.isMatch(filePath, pattern, FNMATCH_OPTIONS)
+        isGlobMatch(`/${filePath}`, pattern, FNMATCH_OPTIONS) ||
+        isGlobMatch(filePath, pattern, FNMATCH_OPTIONS)
       ) {
         files.push({ path: `/${filePath}`, is_dir: false });
       }

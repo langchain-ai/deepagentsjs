@@ -12,9 +12,9 @@ import cp from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import fg from "fast-glob";
-
 import { FilesystemBackend } from "./filesystem.js";
+import { glob } from "./glob.js";
+import { validateGlobPattern } from "./glob-pattern.js";
 import type {
   EditResult,
   ExecuteResponse,
@@ -282,6 +282,11 @@ export class LocalShellBackend
     pattern: string,
     searchPath: string = "/",
   ): Promise<GlobResult> {
+    const patternError = validateGlobPattern(pattern);
+    if (patternError) {
+      return { error: patternError };
+    }
+
     if (pattern.startsWith("/")) {
       pattern = pattern.substring(1);
     }
@@ -302,12 +307,11 @@ export class LocalShellBackend
 
     const formatPath = (rel: string) => (this.virtualMode ? `/${rel}` : rel);
 
-    const matches = await fg(pattern, {
+    const matches = await glob(pattern, {
       cwd: resolvedSearchPath,
       absolute: false,
       dot: true,
       onlyFiles: false,
-      followSymbolicLinks: false,
     });
 
     const classify = async (match: string): Promise<FileInfo | null> => {

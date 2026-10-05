@@ -186,6 +186,20 @@ describe("fs tool permissions", () => {
       ).toThrow(/~/);
     });
 
+    it("throws at construction when a permission pattern nests too deeply", () => {
+      expect(() =>
+        createFilesystemMiddleware({
+          backend: createMockBackend(),
+          permissions: [
+            {
+              operations: ["read"] as const,
+              paths: [`/${"{a,".repeat(40)}b${"}".repeat(40)}`],
+            },
+          ],
+        }),
+      ).toThrow(/too deeply/);
+    });
+
     it("accepts valid glob patterns", () => {
       expect(() =>
         createFilesystemMiddleware({
@@ -198,6 +212,48 @@ describe("fs tool permissions", () => {
           ],
         }),
       ).not.toThrow();
+    });
+  });
+
+  describe("glob pattern limits", () => {
+    // ~32 KB of nested alternation: aborts the process (uncatchable V8
+    // RegExp-compiler OOM) if it ever reaches picomatch.
+    const hostilePattern = `${"{a,".repeat(8000)}b${"}".repeat(8000)}`;
+
+    it("glob tool rejects an over-long pattern without calling the backend", async () => {
+      const backend = createMockBackend();
+      const middleware = createFilesystemMiddleware({ backend });
+      const result = await getTool(middleware, "glob").invoke({
+        pattern: hostilePattern,
+      });
+      expect(resultText(result)).toMatch(/too long/);
+      expect(resultStatus(result)).toBe("error");
+      expect(backend.glob).not.toHaveBeenCalled();
+    });
+
+    it("grep tool rejects a deeply nested glob filter without calling the backend", async () => {
+      const backend = createMockBackend();
+      const middleware = createFilesystemMiddleware({ backend });
+      const result = await getTool(middleware, "grep").invoke({
+        pattern: "needle",
+        glob: `${"@(a|".repeat(40)}b${")".repeat(40)}`,
+      });
+      expect(resultText(result)).toMatch(/too deeply/);
+      expect(resultStatus(result)).toBe("error");
+      expect(backend.grep).not.toHaveBeenCalled();
+    });
+
+    it("FilesystemBackend.glob returns an error instead of crashing", async () => {
+      const root = fsSync.mkdtempSync(path.join(os.tmpdir(), "deepagents-"));
+      try {
+        const backend = new FilesystemBackend({ rootDir: root });
+        const result = await backend.glob(hostilePattern);
+        expect(result.error).toMatch(/too long/);
+        const grepResult = await backend.grep("x", "/", hostilePattern);
+        expect(grepResult.error).toMatch(/too long/);
+      } finally {
+        await fs.rm(root, { recursive: true, force: true });
+      }
     });
   });
 
