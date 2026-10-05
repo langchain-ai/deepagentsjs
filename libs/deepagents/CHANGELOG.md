@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.14.3
+
+### Patch Changes
+
+- [#919](https://github.com/langchain-ai/deepagentsjs/pull/919) [`b448f22`](https://github.com/langchain-ai/deepagentsjs/commit/b448f220866bbb5d41924dfdbb1e0079c3b11838) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - Fix `CompositeBackend` matching routes by bare string prefix: a route `/foo` no longer captures `/foobar.txt`. Route prefixes are now normalized to a trailing slash, so `routePrefixes` returns `/foo/`, and `/foo` and `/foo/` register as the same route.
+
 ## 1.14.2
 
 ### Patch Changes
