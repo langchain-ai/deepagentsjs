@@ -1647,26 +1647,21 @@ export function createSkillsMiddleware<TContext = unknown>(
         return response;
       }
       // A structured response comes back as a state update rather than an
-      // AIMessage. Returning a Command keeps only the model's AIMessage, its
-      // first message, so carry the rest: the structured response and, for a
-      // tool strategy, the tool result and closing AIMessage that follow it.
-      const structured =
+      // AIMessage, and normally ends the run. Return it as built: a Command
+      // would keep only the model's AIMessage, and a retry within the step
+      // would write the structured response twice. The record keeps its
+      // previous value, which no tool call reads after the run ends.
+      if (
         typeof response === "object" &&
         response !== null &&
-        "structuredResponse" in response &&
-        "messages" in response;
-      // Otherwise written on every call, `{}` included, so the tool-time gate admits
-      // exactly the skill tools this call was shown, and a record left by an
-      // earlier build never outlives the next model call.
-      return new Command({
-        update: {
-          _skillToolsDisclosed: record,
-          ...(structured && {
-            structuredResponse: response.structuredResponse,
-            messages: (response.messages as BaseMessage[]).slice(1),
-          }),
-        },
-      });
+        "structuredResponse" in response
+      ) {
+        return response;
+      }
+      // Otherwise written on every call, `{}` included, so the tool-time gate
+      // admits exactly the skill tools this call was shown, and a record left
+      // by an earlier build never outlives the next model call.
+      return new Command({ update: { _skillToolsDisclosed: record } });
     },
 
     async wrapToolCall(request, handler) {

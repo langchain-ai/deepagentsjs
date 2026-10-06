@@ -562,6 +562,29 @@ describe("disclosure", () => {
     vi.restoreAllMocks();
   });
 
+  /**
+   * Middleware that fails the first model call after the model has answered,
+   * and retries it within the same step.
+   */
+  function retriesAfterTheModelOnce(): AgentMiddleware[] {
+    let failed = false;
+    const failsOnce = createMiddleware({
+      name: "FailsOnce",
+      wrapModelCall: async (request, handler) => {
+        const response = await handler(request);
+        if (!failed) {
+          failed = true;
+          throw new Error("transient");
+        }
+        return response;
+      },
+    });
+    return [
+      modelRetryMiddleware({ maxRetries: 1, initialDelayMs: 0 }),
+      failsOnce,
+    ] as AgentMiddleware[];
+  }
+
   describe("the gate", () => {
     it("binds a skill tool only after its skill is read", async () => {
       const model = new RecordingChatModel(
@@ -794,28 +817,10 @@ describe("disclosure", () => {
     });
 
     it("survives a model call retried in the same step", async () => {
-      let failed = false;
-      const failsOnce = createMiddleware({
-        name: "FailsOnce",
-        wrapModelCall: async (request, handler) => {
-          const response = await handler(request);
-          if (!failed) {
-            failed = true;
-            throw new Error("transient");
-          }
-          return response;
-        },
-      });
       const model = new RecordingChatModel("discarded", "done");
 
       const result = await skillsAgent(model, {
-        middleware: [
-          modelRetryMiddleware({
-            maxRetries: 1,
-            initialDelayMs: 0,
-          }) as AgentMiddleware,
-          failsOnce,
-        ],
+        middleware: retriesAfterTheModelOnce(),
       }).invoke(skillsInput({ crm: "create_customer_request" }));
 
       expect(result.messages.at(-1)?.text).toBe("done");
@@ -1203,6 +1208,20 @@ describe("disclosure", () => {
       expect(result.messages.at(-1)?.text).toBe(
         'Returning structured response: {"answer":"42"}',
       );
+    });
+
+    it("survives a structured model call retried in the same step", async () => {
+      const model = new RecordingChatModel(
+        '{"answer":"discarded"}',
+        '{"answer":"42"}',
+      );
+
+      const result = await skillsAgent(model, {
+        responseFormat: providerStrategy(z.object({ answer: z.string() })),
+        middleware: retriesAfterTheModelOnce(),
+      }).invoke(skillsInput({ crm: "create_customer_request" }));
+
+      expect(result.structuredResponse).toEqual({ answer: "42" });
     });
   });
 
