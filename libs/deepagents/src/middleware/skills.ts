@@ -1062,8 +1062,7 @@ function findSkillReads(
 }
 
 /**
- * Normalize `path` as the Python SDK's `validate_path` does, or return
- * `undefined` if it is invalid.
+ * Normalize `path`, or return `undefined` if it is invalid.
  *
  * Backslashes become slashes, empty and `.` segments are dropped, and a
  * relative path is made absolute. A `..` segment, a leading `~` or a Windows
@@ -1127,7 +1126,7 @@ async function discloseSkillTools<TRequest extends ModelRequest<any, any>>(
   reads: readonly SkillRead[],
   resolver: UncheckedResolver,
 ): Promise<{ request: TRequest; record: Record<string, string> }> {
-  // The last of a repeated name wins, as in the Python SDK.
+  // The last of a repeated name wins.
   const requestTools = new Map<string, RequestTool>();
   for (const tool of request.tools) {
     const name = toolName(tool);
