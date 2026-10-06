@@ -50,7 +50,8 @@ import {
    */
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
-import { StateSchema } from "@langchain/langgraph";
+import { Command, StateSchema } from "@langchain/langgraph";
+import type { ClientTool } from "@langchain/core/tools";
 
 import type {
   AnyBackendProtocol,
@@ -63,6 +64,16 @@ import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import { filesValue } from "../values.js";
 import { adaptBackendProtocol } from "../backends/utils.js";
 import { DEFAULT_READ_LINE_LIMIT } from "./fs.js";
+import {
+  INCLUDE_TOOLS_KEY,
+  callSkillToolResolver,
+  discloseSkillTools,
+  findSkillReads,
+  toSkillToolResolver,
+  type SkillToolResolver,
+} from "./skill_tools.js";
+
+export type { SkillToolResolver } from "./skill_tools.js";
 
 // Security: Maximum size for SKILL.md files to prevent DoS attacks (10MB)
 export const MAX_SKILL_FILE_SIZE = 10 * 1024 * 1024;
@@ -162,8 +173,11 @@ export interface SkillMetadata {
 
 /**
  * Options for the skills middleware.
+ *
+ * @typeParam TContext - The agent's context type, as a `tools` resolver
+ *   receives it on `runtime.context`.
  */
-export interface SkillsMiddlewareOptions {
+export interface SkillsMiddlewareOptions<TContext = unknown> {
   /**
    * Backend instance or factory function for file operations.
    * Use a factory for StateBackend since it requires runtime state.
@@ -197,6 +211,17 @@ export interface SkillsMiddlewareOptions {
    * ```
    */
   sources: readonly string[];
+
+  /**
+   * Tools the model sees only after it reads a skill that lists them in its
+   * `SKILL.md` frontmatter, as a space-separated `metadata.include_tools`.
+   *
+   * Pass an array of tools, or a {@link SkillToolResolver} that looks up the
+   * tools one `include_tools` name stands for when a skill is read. Unlike
+   * other middleware's tools, these are never registered with the agent: see
+   * {@link createSkillsMiddleware} for how they are disclosed and gated.
+   */
+  tools?: readonly ClientTool[] | SkillToolResolver<TContext>;
 }
 
 /**
@@ -252,6 +277,12 @@ export const skillsMetadataValue = z.array(SkillMetadataEntrySchema).nullish();
 const SkillsStateSchema = new StateSchema({
   skillsMetadata: skillsMetadataValue,
   files: filesValue,
+  /**
+   * The skill tools disclosed to the latest model call, each mapped to the
+   * include name that produced it, for the tool-time gate. Written on every
+   * model call.
+   */
+  _skillToolsDisclosed: z.record(z.string(), z.string()).optional(),
 });
 
 /**
@@ -358,7 +389,8 @@ export function validateSkillName(
  *
  * YAML parsing can return any type for the `metadata` key. This ensures the
  * value in {@link SkillMetadata} is always a `Record<string, string>` by
- * coercing via `String()` and rejecting non-object inputs.
+ * coercing via `String()` and rejecting non-object inputs. It also warns when
+ * `include_tools` isn't a space-separated string of tool names.
  *
  * @param raw - Raw value from `frontmatterData.metadata`.
  * @param skillPath - Path to the `SKILL.md` file (for warning messages).
@@ -375,6 +407,16 @@ export function validateMetadata(
       );
     }
     return {};
+  }
+  const includeTools = (raw as Record<string, unknown>)[INCLUDE_TOOLS_KEY];
+  // A YAML list would be coerced to `"a,b"`, whose names never match a tool.
+  if (
+    Array.isArray(includeTools) ||
+    (typeof includeTools === "string" && includeTools.includes(","))
+  ) {
+    console.warn(
+      `metadata.include_tools in ${skillPath} should be a space-separated string of tool names; got ${JSON.stringify(includeTools)}`,
+    );
   }
   const result: Record<string, string> = {};
   for (const [k, v] of Object.entries(raw)) {
@@ -805,8 +847,96 @@ export function validateModulePath(raw: unknown): string | undefined {
  * invalidate from any hook — including mid-run, from `afterModel` — and see
  * the fresh list on the following call. See {@link skillsMetadataValue}.
  *
+ * ## Skill tools
+ *
+ * A skill can list the tools its instructions use, separated by spaces, under
+ * `metadata.include_tools` in its `SKILL.md` frontmatter:
+ *
+ * ```yaml
+ * metadata:
+ *   include_tools: create_customer_request list_customer_requests
+ * ```
+ *
+ * Pass those tools as `tools`, either as an array or as a
+ * {@link SkillToolResolver} that looks them up by name when a skill is read,
+ * so one name can stand for a family of tools whose real names are only known
+ * at runtime. The model sees a skill tool only after it reads, with
+ * `read_file`, a skill that lists it, and only while that read stays in the
+ * conversation it is sent; compaction that drops the read withdraws the tool.
+ * Until then, calling the tool fails with the standard invalid-tool error and
+ * the tool doesn't run. This controls what is in the model's context; it is
+ * not a security boundary, since the model can read any `SKILL.md` at any
+ * time.
+ *
+ * `include_tools` can also name a tool passed to the agent rather than to this
+ * middleware. That tool wins over a skill tool of the same name. If it is
+ * deferred
+ * (`extras: { defer_loading: true }`), reading the skill discloses it early,
+ * and it stays deferred and searchable; if it is bound, nothing changes.
+ *
+ * How a tool is disclosed depends on the model actually called:
+ *
+ * - **Models that accept tool definitions mid-conversation** — Anthropic
+ *   inline tool definitions on the Claude API, and OpenAI `additional_tools`
+ *   on the Responses API (`useResponsesApi: true`). The tool's definition is
+ *   sent in a system message inserted right after the read's tool result, at
+ *   the same position with the same bytes on every call, so the prompt cache
+ *   survives.
+ * - **Every other model** — the disclosed tools are appended to the request's
+ *   `tools` instead. The gate is identical; only the cache cost differs.
+ *
+ * A tool whose root input schema uses `oneOf`, `anyOf` or `allOf` is never
+ * disclosed to an Anthropic model, which would reject the whole request; a
+ * warning names it.
+ *
+ * Inline disclosure needs `@langchain/anthropic` 1.5.12 or `@langchain/openai`
+ * 1.6.2 or later. On an older Anthropic package every model call after a read
+ * fails: with a 400 from the API, or, on packages older still, with "System
+ * messages are only permitted as the first passed message". On an older
+ * OpenAI package the tool never appears.
+ *
+ * Known gaps: only loads through `read_file` disclose tools; a resolver never
+ * sees tools another middleware adds to the request; disclosed skill tools
+ * can't be called from a code interpreter's REPL, and passing a skill tool to
+ * a code interpreter's `ptc` allowlist bypasses the gate. On a model without
+ * mid-conversation tool definitions, disclosing the only deferred tool leaves
+ * `providerToolSearchMiddleware`'s search tool with nothing to search, which
+ * OpenAI rejects. Skill tools aren't filtered by a harness profile's excluded
+ * tools: a call to an excluded one is still rejected, but on a model that
+ * accepts tool definitions mid-conversation its schema can be shown once its
+ * skill is read.
+ *
+ * ## Placement
+ *
+ * `createDeepAgent` places this middleware for you. When composing
+ * `createAgent` by hand, include `createFilesystemMiddleware`, whose
+ * `read_file` the model uses to read skills. Put this middleware after
+ * summarization and any model fallback or routing middleware, so it sees the
+ * compacted conversation and the model actually called, and before prompt
+ * caching. Never pass skill tools in `createAgent`'s `tools`, which would make
+ * them callable without their skill:
+ *
+ * ```typescript
+ * createAgent({
+ *   model,
+ *   tools: [...],
+ *   middleware: [
+ *     createFilesystemMiddleware({ backend }),
+ *     // ...
+ *     createSummarizationMiddleware({ backend }),
+ *     modelFallbackMiddleware(fallbackModel),
+ *     createSkillsMiddleware({ backend, sources: ["/skills/"], tools: [...] }),
+ *     anthropicPromptCachingMiddleware(),
+ *   ],
+ * });
+ * ```
+ *
  * @param options - Configuration options
  * @returns AgentMiddleware for skills loading and injection
+ * @throws {ConfigurationError} If `tools` is neither an array nor a
+ *   function (`SKILL_TOOLS_UNSUPPORTED_TYPE`), an entry isn't a client tool
+ *   (`SKILL_TOOLS_UNSUPPORTED_TYPE`), or two entries share a name
+ *   (`SKILL_TOOLS_DUPLICATE_NAME`).
  *
  * @example
  * ```typescript
@@ -816,8 +946,11 @@ export function validateModulePath(raw: unknown): string | undefined {
  * });
  * ```
  */
-export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
+export function createSkillsMiddleware<TContext = unknown>(
+  options: SkillsMiddlewareOptions<TContext>,
+) {
   const { backend, sources } = options;
+  const skillToolResolver = toSkillToolResolver(options.tools);
 
   return createMiddleware({
     name: "SkillsMiddleware",
@@ -860,7 +993,7 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
       return { skillsMetadata: Array.from(allSkills.values()) };
     },
 
-    wrapModelCall(request, handler) {
+    async wrapModelCall(request, handler) {
       // Populated by beforeModel, which runs as its own graph node - its
       // state update is committed before the model node reads it.
       const skillsMetadata: SkillMetadata[] =
@@ -878,7 +1011,58 @@ export function createSkillsMiddleware(options: SkillsMiddlewareOptions) {
       // Combine with existing system message
       const newSystemMessage = request.systemMessage.concat(skillsSection);
 
-      return handler({ ...request, systemMessage: newSystemMessage });
+      const prompted = { ...request, systemMessage: newSystemMessage };
+      const reads = findSkillReads(request.messages, skillsMetadata);
+      // No read of a skill naming tools: nothing to resolve or disclose.
+      const { request: disclosed, record } =
+        reads.length === 0
+          ? { request: prompted, record: {} }
+          : await discloseSkillTools(prompted, reads, skillToolResolver);
+      const response: unknown = await handler(disclosed);
+      // A native structured-output response comes back as a state update
+      // rather than an AIMessage; carry it, or returning a Command drops it.
+      const structured =
+        typeof response === "object" &&
+        response !== null &&
+        "structuredResponse" in response &&
+        "messages" in response;
+      // Written on every call, `{}` included, so the tool-time gate admits
+      // exactly the skill tools this call was shown, and a record left by an
+      // earlier build never outlives the next model call.
+      return new Command({
+        update: {
+          _skillToolsDisclosed: record,
+          ...(structured && {
+            structuredResponse: response.structuredResponse,
+          }),
+        },
+      });
+    },
+
+    async wrapToolCall(request, handler) {
+      // A registered tool, or one an outer middleware supplied: not ours.
+      if (request.tool !== undefined) return handler(request);
+      const name = request.toolCall.name;
+      const record = request.state._skillToolsDisclosed ?? {};
+      const includeName = Object.hasOwn(record, name)
+        ? record[name]
+        : undefined;
+      // Not shown to the latest model call: the tool node answers with its
+      // standard invalid-tool error, which lists only registered tools.
+      if (includeName === undefined) return handler(request);
+      const tools = await callSkillToolResolver(
+        skillToolResolver,
+        includeName,
+        request.runtime,
+      );
+      const tool = tools.find((candidate) => candidate.name === name);
+      if (tool === undefined) {
+        console.warn(
+          `Skill tool '${name}' was disclosed via '${includeName}', but the resolver no longer returns it`,
+        );
+        return handler(request);
+      }
+      return handler({ ...request, tool });
     },
   });
 }

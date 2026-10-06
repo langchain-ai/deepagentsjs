@@ -2559,6 +2559,343 @@ describe("middleware override by name", () => {
     expect(summarization).toHaveLength(1);
     expect(summarization[0]).toBe(custom);
   });
+
+  describe("SkillsMiddleware placement", () => {
+    function names(agentName: string): string[] {
+      return getMiddlewareStack(agentName).map((entry) => entry.name);
+    }
+
+    it("sits immediately before prompt caching, after novel middleware, in every stack", () => {
+      const anthropicModel = new FakeListChatModel({ responses: ["hello"] });
+      vi.spyOn(anthropicModel, "getName").mockReturnValue("ChatAnthropic");
+
+      createDeepAgent({
+        model: anthropicModel,
+        name: "main",
+        skills: ["/skills/"],
+        middleware: [namedMiddleware("Novel")],
+        subagents: [
+          {
+            name: "helper",
+            description: "Helps with work",
+            systemPrompt: "Help.",
+            skills: ["/skills/helper/"],
+            middleware: [namedMiddleware("HelperNovel")],
+          },
+          { name: "forker", description: "Continues", mode: "fork" },
+        ],
+      });
+
+      for (const [agentName, novel] of [
+        ["main", "Novel"],
+        ["general-purpose", undefined],
+        ["helper", "HelperNovel"],
+        // A fork inherits the parent's custom middleware.
+        ["forker", "Novel"],
+      ] as const) {
+        const stack = names(agentName);
+        const skills = stack.indexOf("SkillsMiddleware");
+        expect(stack.filter((n) => n === "SkillsMiddleware")).toHaveLength(1);
+        expect(stack.slice(skills + 1, skills + 3)).toEqual([
+          "PromptCachingMiddleware",
+          "CacheBreakpointMiddleware",
+        ]);
+        expect(skills).toBeGreaterThan(
+          stack.indexOf("PatchToolCallsMiddleware"),
+        );
+        if (novel !== undefined) {
+          expect(stack.indexOf(novel)).toBeGreaterThan(-1);
+          expect(stack.indexOf(novel)).toBeLessThan(skills);
+        }
+      }
+    });
+
+    it("sits after harness profile middleware", () => {
+      registerHarnessProfile("skills-order:model", {
+        extraMiddleware: () => [namedMiddleware("ProfileExtra")],
+      });
+
+      createDeepAgent({
+        model: "skills-order:model",
+        name: "main",
+        skills: ["/skills/"],
+        subagents: [
+          {
+            name: "helper",
+            description: "Helps with work",
+            systemPrompt: "Help.",
+            skills: ["/skills/helper/"],
+          },
+          { name: "forker", description: "Continues", mode: "fork" },
+        ],
+      });
+
+      for (const agentName of ["main", "general-purpose", "helper", "forker"]) {
+        const stack = names(agentName);
+        expect(stack.indexOf("ProfileExtra")).toBeGreaterThan(-1);
+        expect(stack.indexOf("ProfileExtra")).toBeLessThan(
+          stack.indexOf("SkillsMiddleware"),
+        );
+      }
+    });
+
+    it("takes its slot from a skills middleware passed without skills", () => {
+      const anthropicModel = new FakeListChatModel({ responses: ["hello"] });
+      vi.spyOn(anthropicModel, "getName").mockReturnValue("ChatAnthropic");
+      const custom = createSkillsMiddleware({
+        backend: new StateBackend(),
+        sources: ["/skills/"],
+      });
+
+      createDeepAgent({
+        model: anthropicModel,
+        name: "main",
+        middleware: [custom],
+        subagents: [{ name: "forker", description: "Continues", mode: "fork" }],
+      });
+
+      for (const agentName of ["main", "general-purpose", "forker"]) {
+        const stack = getMiddlewareStack(agentName);
+        const skills = stack.filter(
+          (entry) => entry.name === "SkillsMiddleware",
+        );
+        expect(skills).toEqual([custom]);
+        expect(stack[stack.indexOf(custom) + 1]?.name).toBe(
+          "PromptCachingMiddleware",
+        );
+      }
+    });
+
+    it("is replaced in place by a same-name user middleware", () => {
+      const anthropicModel = new FakeListChatModel({ responses: ["hello"] });
+      vi.spyOn(anthropicModel, "getName").mockReturnValue("ChatAnthropic");
+      const custom = namedMiddleware("SkillsMiddleware");
+
+      createDeepAgent({
+        model: anthropicModel,
+        name: "main",
+        skills: ["/skills/"],
+        middleware: [custom],
+      });
+
+      for (const agentName of ["main", "general-purpose"]) {
+        const stack = getMiddlewareStack(agentName);
+        const skills = stack.filter(
+          (entry) => entry.name === "SkillsMiddleware",
+        );
+        expect(skills).toEqual([custom]);
+        expect(stack[stack.indexOf(custom) + 1]?.name).toBe(
+          "PromptCachingMiddleware",
+        );
+      }
+    });
+
+    it("takes a subagent's slot from its own skills middleware passed without skills", () => {
+      const anthropicModel = new FakeListChatModel({ responses: ["hello"] });
+      vi.spyOn(anthropicModel, "getName").mockReturnValue("ChatAnthropic");
+      const own = createSkillsMiddleware({
+        backend: new StateBackend(),
+        sources: ["/skills/helper/"],
+      });
+
+      createDeepAgent({
+        model: anthropicModel,
+        name: "main",
+        subagents: [
+          {
+            name: "helper",
+            description: "Helps with work",
+            systemPrompt: "Help.",
+            middleware: [own, namedMiddleware("Fallback")],
+          },
+        ],
+      });
+
+      const stack = getMiddlewareStack("helper");
+      expect(
+        stack.filter((entry) => entry.name === "SkillsMiddleware"),
+      ).toEqual([own]);
+      expect(names("helper").slice(-4)).toEqual([
+        "Fallback",
+        "SkillsMiddleware",
+        "PromptCachingMiddleware",
+        "CacheBreakpointMiddleware",
+      ]);
+      for (const agentName of ["main", "general-purpose"]) {
+        expect(names(agentName)).not.toContain("SkillsMiddleware");
+      }
+    });
+
+    it("takes a fork's slot from its own skills middleware when the parent has no skills", () => {
+      const anthropicModel = new FakeListChatModel({ responses: ["hello"] });
+      vi.spyOn(anthropicModel, "getName").mockReturnValue("ChatAnthropic");
+      const own = createSkillsMiddleware({
+        backend: new StateBackend(),
+        sources: ["/skills/forker/"],
+      });
+
+      createDeepAgent({
+        model: anthropicModel,
+        name: "main",
+        subagents: [
+          {
+            name: "forker",
+            description: "Continues",
+            mode: "fork",
+            middleware: [own, namedMiddleware("Fallback")],
+          },
+        ],
+      });
+
+      const stack = getMiddlewareStack("forker");
+      expect(
+        stack.filter((entry) => entry.name === "SkillsMiddleware"),
+      ).toEqual([own]);
+      expect(names("forker").slice(-4)).toEqual([
+        "Fallback",
+        "SkillsMiddleware",
+        "PromptCachingMiddleware",
+        "CacheBreakpointMiddleware",
+      ]);
+      for (const agentName of ["main", "general-purpose"]) {
+        expect(names(agentName)).not.toContain("SkillsMiddleware");
+      }
+    });
+
+    it("replaces a fork's inherited skills with its own in the slot", () => {
+      const anthropicModel = new FakeListChatModel({ responses: ["hello"] });
+      vi.spyOn(anthropicModel, "getName").mockReturnValue("ChatAnthropic");
+      const own = createSkillsMiddleware({
+        backend: new StateBackend(),
+        sources: ["/skills/forker/"],
+      });
+
+      createDeepAgent({
+        model: anthropicModel,
+        name: "main",
+        skills: ["/skills/"],
+        subagents: [
+          {
+            name: "forker",
+            description: "Continues",
+            mode: "fork",
+            middleware: [own, namedMiddleware("Fallback")],
+          },
+        ],
+      });
+
+      const stack = getMiddlewareStack("forker");
+      expect(
+        stack.filter((entry) => entry.name === "SkillsMiddleware"),
+      ).toEqual([own]);
+      expect(names("forker").slice(-4)).toEqual([
+        "Fallback",
+        "SkillsMiddleware",
+        "PromptCachingMiddleware",
+        "CacheBreakpointMiddleware",
+      ]);
+    });
+
+    it("gives a subagent the same stack whether or not skills accompanies its own skills middleware", () => {
+      const anthropicModel = new FakeListChatModel({ responses: ["hello"] });
+      vi.spyOn(anthropicModel, "getName").mockReturnValue("ChatAnthropic");
+      const subagent = (name: string, skills?: string[]) => ({
+        name,
+        description: "Helps with work",
+        systemPrompt: "Help.",
+        ...(skills && { skills }),
+        middleware: [
+          createSkillsMiddleware({
+            backend: new StateBackend(),
+            sources: ["/skills/helper/"],
+          }),
+          namedMiddleware("Fallback"),
+        ],
+      });
+
+      const without = subagent("without");
+      const withSkills = subagent("with", ["/skills/helper/"]);
+
+      createDeepAgent({
+        model: anthropicModel,
+        name: "main",
+        subagents: [without, withSkills],
+      });
+
+      expect(names("without")).toEqual(names("with"));
+      for (const spec of [without, withSkills]) {
+        expect(
+          getMiddlewareStack(spec.name).filter(
+            (entry) => entry.name === "SkillsMiddleware",
+          ),
+        ).toEqual([spec.middleware[0]]);
+      }
+    });
+
+    it("keeps the last of a subagent's own skills middleware", () => {
+      const anthropicModel = new FakeListChatModel({ responses: ["hello"] });
+      vi.spyOn(anthropicModel, "getName").mockReturnValue("ChatAnthropic");
+      const first = createSkillsMiddleware({
+        backend: new StateBackend(),
+        sources: ["/skills/first/"],
+      });
+      const last = createSkillsMiddleware({
+        backend: new StateBackend(),
+        sources: ["/skills/last/"],
+      });
+
+      createDeepAgent({
+        model: anthropicModel,
+        name: "main",
+        subagents: [
+          {
+            name: "helper",
+            description: "Helps with work",
+            systemPrompt: "Help.",
+            middleware: [first, namedMiddleware("Fallback"), last],
+          },
+        ],
+      });
+
+      const stack = getMiddlewareStack("helper");
+      expect(
+        stack.filter((entry) => entry.name === "SkillsMiddleware"),
+      ).toEqual([last]);
+      expect(stack[stack.indexOf(last) + 1]?.name).toBe(
+        "PromptCachingMiddleware",
+      );
+    });
+
+    it("sits a subagent's own skills middleware after harness profile middleware", () => {
+      registerHarnessProfile("own-skills-order:model", {
+        extraMiddleware: () => [namedMiddleware("ProfileExtra")],
+      });
+      const own = createSkillsMiddleware({
+        backend: new StateBackend(),
+        sources: ["/skills/helper/"],
+      });
+
+      createDeepAgent({
+        model: "own-skills-order:model",
+        name: "main",
+        subagents: [
+          {
+            name: "helper",
+            description: "Helps with work",
+            systemPrompt: "Help.",
+            middleware: [own],
+          },
+        ],
+      });
+
+      const stack = getMiddlewareStack("helper");
+      expect(stack.indexOf(own)).toBeGreaterThan(-1);
+      expect(names("helper").indexOf("ProfileExtra")).toBeGreaterThan(-1);
+      expect(names("helper").indexOf("ProfileExtra")).toBeLessThan(
+        stack.indexOf(own),
+      );
+    });
+  });
 });
 
 describe("Subagent call-count state isolation", () => {

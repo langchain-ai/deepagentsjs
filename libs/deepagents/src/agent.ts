@@ -300,20 +300,15 @@ export function createDeepAgent<
   ]);
 
   /**
-   * Process subagents to add SkillsMiddleware for those with their own skills.
-   *
-   * Custom subagents do NOT inherit skills from the main agent by default.
-   * Only the general-purpose subagent inherits the main agent's skills.
-   * If a custom subagent needs skills, it must specify its own `skills` array.
+   * Build the default head of a declarative subagent's middleware stack.
+   * Skills go in the tail instead (see buildSubagentMiddleware).
    */
   const createSubagentDefaultMiddleware = (
     input: SubAgent,
     subagentProfile: HarnessProfile,
-    forked: boolean,
   ): AgentMiddleware[] => {
     const effectivePermissions = input.permissions ?? permissions;
 
-    // Middleware for custom subagents (does NOT include skills from main agent).
     // Uses createSummarizationMiddleware (deepagents version) with backend support
     // and auto-computed defaults from model profile.
     return [
@@ -329,33 +324,52 @@ export function createDeepAgent<
       createSummarizationMiddleware({ backend }),
       // Patches tool calls to ensure compatibility across different model providers.
       createPatchToolCallsMiddleware(),
-      // Loads subagent-specific skills when configured. Never for a fork: its
-      // own `skills` is rejected below, and the parent's are mirrored instead
-      // (see buildSubagentMiddleware) — building this here too would produce
-      // a second same-named SkillsMiddleware before that rejection even runs.
-      ...(!forked && input.skills != null && input.skills.length > 0
-        ? [createSkillsMiddleware({ backend, sources: input.skills })]
-        : []),
     ];
   };
 
-  const buildSubagentMiddleware = (input: SubAgent): AgentMiddleware[] => {
+  /**
+   * The skills middleware for a stack: the last `SkillsMiddleware` among its
+   * custom middleware, else one built from `sources`, else none. A custom one
+   * is picked here rather than left to replace the default by name, because
+   * without `sources` there is no default to replace and it would run with
+   * the novel middleware instead.
+   */
+  const resolveSkillsMiddleware = (
+    sources: readonly string[] | undefined,
+    custom: readonly AgentMiddleware[],
+  ): AgentMiddleware[] => {
+    const passed = custom.findLast(
+      (entry) => entry.name === "SkillsMiddleware",
+    );
+    if (passed !== undefined) return [passed];
+    return sources != null && sources.length > 0
+      ? [createSkillsMiddleware({ backend, sources })]
+      : [];
+  };
+
+  const buildSubagentMiddleware = (
+    input: SubAgent,
+    generalPurpose = false,
+  ): AgentMiddleware[] => {
     const subagentProfile = resolveSubagentProfile(input.model);
     const forked = isForkedSubAgent(input);
     const subagentDefaultMiddleware = createSubagentDefaultMiddleware(
       input,
       subagentProfile,
-      forked,
     );
-    if (forked && skills != null && skills.length > 0) {
-      subagentDefaultMiddleware.unshift(
-        createSkillsMiddleware({ backend, sources: skills }),
-      );
-    }
     const inputMiddleware =
       forked && customMiddleware.length > 0
         ? mergeMiddleware(customMiddleware, input.middleware ?? [])
         : (input.middleware ?? []);
+    // The general-purpose subagent and forks take the main agent's skills. A
+    // fork may bring its own skills middleware instead, but its own `skills`
+    // are rejected by the subagent middleware.
+    const subagentSkillsMiddleware = generalPurpose
+      ? resolveSkillsMiddleware(skills, customMiddleware)
+      : resolveSkillsMiddleware(
+          forked ? skills : input.skills,
+          inputMiddleware,
+        );
 
     let subagentMiddleware = mergeMiddlewareStack(
       subagentDefaultMiddleware,
@@ -363,6 +377,10 @@ export function createDeepAgent<
       [
         // Resolve profile middleware per stack so factories create fresh instances.
         ...resolveMiddleware(subagentProfile.extraMiddleware),
+        // Innermost before caching, after the spec's own middleware, so skill
+        // tool disclosure sees the compacted conversation and the model
+        // actually called.
+        ...subagentSkillsMiddleware,
         ...cacheMiddleware,
         ...(forked && memory != null && memory.length > 0
           ? [
@@ -392,10 +410,13 @@ export function createDeepAgent<
     return subagentMiddleware;
   };
 
-  const normalizeSubagentSpec = (input: SubAgent): SubAgent => ({
+  const normalizeSubagentSpec = (
+    input: SubAgent,
+    generalPurpose = false,
+  ): SubAgent => ({
     ...input,
     // Omitting tools here lets getSubagents() fall back to the parent's.
-    middleware: buildSubagentMiddleware(input),
+    middleware: buildSubagentMiddleware(input, generalPurpose),
   });
 
   const allSubagents = subagents as readonly AnySubAgent[];
@@ -429,15 +450,17 @@ export function createDeepAgent<
       gpConfig?.systemPrompt ??
       applyProfilePrompt(harnessProfile, GENERAL_PURPOSE_SUBAGENT.systemPrompt);
 
-    const generalPurposeSpec = normalizeSubagentSpec({
-      ...GENERAL_PURPOSE_SUBAGENT,
-      description:
-        gpConfig?.description ?? GENERAL_PURPOSE_SUBAGENT.description,
-      systemPrompt: gpSystemPrompt,
-      model,
-      skills,
-      tools: effectiveTools,
-    });
+    const generalPurposeSpec = normalizeSubagentSpec(
+      {
+        ...GENERAL_PURPOSE_SUBAGENT,
+        description:
+          gpConfig?.description ?? GENERAL_PURPOSE_SUBAGENT.description,
+        systemPrompt: gpSystemPrompt,
+        model,
+        tools: effectiveTools,
+      },
+      true,
+    );
     generalPurposeSpec.middleware = mergeMiddlewareStack(
       generalPurposeSpec.middleware ?? [],
       customMiddleware,
@@ -447,10 +470,7 @@ export function createDeepAgent<
     inlineSubagents.unshift(generalPurposeSpec);
   }
 
-  const skillsMiddleware =
-    skills != null && skills.length > 0
-      ? [createSkillsMiddleware({ backend, sources: skills })]
-      : [];
+  const skillsMiddleware = resolveSkillsMiddleware(skills, customMiddleware);
 
   // Built-in middleware array - core middleware with known types.
   // This tuple is typed without conditional spreads to preserve tuple inference.
@@ -488,8 +508,6 @@ export function createDeepAgent<
 
   // Runtime middleware array: combine core middleware, custom overrides, and tail middleware.
   const coreMiddleware: AgentMiddleware[] = [
-    // Optional root-level skills.
-    ...skillsMiddleware,
     fsMiddleware,
     subagentMiddleware,
     summarizationMiddleware,
@@ -502,6 +520,11 @@ export function createDeepAgent<
   const tailMiddleware: AgentMiddleware[] = [
     // Profile middleware runs before cache middleware so it participates in prompt caching.
     ...resolveMiddleware(harnessProfile.extraMiddleware),
+    // Optional root-level skills. Innermost before caching, after novel user
+    // middleware (spliced in ahead of the tail), so skill tool disclosure sees
+    // the compacted conversation and the model actually called, after any
+    // fallback or routing middleware.
+    ...skillsMiddleware,
     // Optional Anthropic cache controls.
     ...cacheMiddleware,
     // Optional memory support.

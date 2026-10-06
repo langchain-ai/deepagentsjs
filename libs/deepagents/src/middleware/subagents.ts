@@ -73,6 +73,8 @@ const CALL_COUNT_STATE_KEYS = [
  * State keys excluded when passing state to subagents and when returning
  * updates from subagents. Summarization keys are excluded because their
  * cutoffIndex is only valid against the message list it was computed from.
+ * The disclosed skill tools describe one agent's latest model call; each agent
+ * records its own.
  */
 const EXCLUDED_STATE_KEYS = [
   "messages",
@@ -83,6 +85,7 @@ const EXCLUDED_STATE_KEYS = [
   ...CALL_COUNT_STATE_KEYS,
   "_summarizationEvent",
   "_summarizationSessionId",
+  "_skillToolsDisclosed",
   FORKED_CONTEXT_KEY,
 ] as const;
 
@@ -98,13 +101,15 @@ const EXCLUDED_STATE_KEYS = [
  * parent's last loaded list.
  *
  * Call counts stay excluded: a fork inherits the parent's middleware, so
- * sharing them collides on the parent's channel.
+ * sharing them collides on the parent's channel. The disclosed skill tools
+ * describe the parent's last model call; the fork records its own.
  */
 const FORK_EXCLUDED_STATE_KEYS = [
   "structuredResponse",
   ...CALL_COUNT_STATE_KEYS,
   "_summarizationEvent",
   "_summarizationSessionId",
+  "_skillToolsDisclosed",
 ] as const;
 
 /**
@@ -260,6 +265,10 @@ export interface SubAgent {
    *
    * Note: Custom subagents do NOT inherit skills from the main agent by default.
    * Only the general-purpose subagent inherits the main agent's skills.
+   *
+   * Not needed when you pass a `createSkillsMiddleware` in `middleware`, for
+   * example to give the subagent skill `tools`: that middleware takes the
+   * same slot on its own.
    *
    * @example
    * ```typescript

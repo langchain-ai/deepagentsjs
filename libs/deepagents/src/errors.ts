@@ -4,7 +4,10 @@
  * Each code represents a distinct misconfiguration that can be detected at
  * agent-construction time. Add new codes here as new validations are added.
  */
-export type ConfigurationErrorCode = "TOOL_NAME_COLLISION";
+export type ConfigurationErrorCode =
+  | "TOOL_NAME_COLLISION"
+  | "SKILL_TOOLS_DUPLICATE_NAME"
+  | "SKILL_TOOLS_UNSUPPORTED_TYPE";
 
 const CONFIGURATION_ERROR_SYMBOL = Symbol.for("deepagents.configuration_error");
 
