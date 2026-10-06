@@ -1613,7 +1613,10 @@ describe("permissions with a non-virtual FilesystemBackend", () => {
   let file: string;
 
   beforeEach(async () => {
-    root = fsSync.mkdtempSync(path.join(os.tmpdir(), "deepagents-nonvirt-"));
+    // Drive-less tool paths resolve on the current drive, so stay on it.
+    const base = path.join(process.cwd(), "node_modules", ".tmp");
+    fsSync.mkdirSync(base, { recursive: true });
+    root = fsSync.mkdtempSync(path.join(base, "deepagents-nonvirt-"));
     file = path.join(root, "a.txt");
     await fs.writeFile(file, "hello");
   });
@@ -1630,22 +1633,25 @@ describe("permissions with a non-virtual FilesystemBackend", () => {
       .split(path.sep)
       .join("/");
 
-  it("reads an allowed file when realpath returns native Windows paths", async () => {
-    // Simulate win32 `fs.realpath` output (`C:\\...`).
-    vi.spyOn(fsPromises, "realpath").mockImplementation(
-      async (p) => `C:${String(p).split("/").join("\\")}`,
-    );
-    const middleware = createFilesystemMiddleware({
-      backend: new FilesystemBackend({ rootDir: root }),
-      permissions: [denyRead(["/nothing/**"])],
-    });
+  it.skipIf(process.platform === "win32")(
+    "reads an allowed file when realpath returns native Windows paths",
+    async () => {
+      // Simulate win32 `fs.realpath` output (`C:\\...`).
+      vi.spyOn(fsPromises, "realpath").mockImplementation(
+        async (p) => `C:${String(p).split("/").join("\\")}`,
+      );
+      const middleware = createFilesystemMiddleware({
+        backend: new FilesystemBackend({ rootDir: root }),
+        permissions: [denyRead(["/nothing/**"])],
+      });
 
-    const result = await getTool(middleware, "read_file").invoke({
-      file_path: modelPath(file),
-    });
+      const result = await getTool(middleware, "read_file").invoke({
+        file_path: modelPath(file),
+      });
 
-    expect(resultText(result)).toContain("hello");
-  });
+      expect(resultText(result)).toContain("hello");
+    },
+  );
 
   it.runIf(process.platform === "win32")(
     "reads an allowed file on Windows",

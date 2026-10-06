@@ -1206,7 +1206,7 @@ describe("FilesystemBackend realpath hook", () => {
       const backend = new FilesystemBackend({ rootDir: rootLink });
       expect(
         await realpathOf(backend)(path.join(rootLink, "secret", "key")),
-      ).toBe(path.join(rootLink, "secret", "key"));
+      ).toBe(toSlashRootedPath(path.join(rootLink, "secret", "key")));
     },
   );
 });
