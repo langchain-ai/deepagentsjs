@@ -900,8 +900,8 @@ const ANTHROPIC_INLINE_TOOL_MODELS = [
   "claude-opus-4-8",
 ];
 
-/** Model ID prefixes whose Responses API accepts an `additional_tools` input item. */
-const OPENAI_INLINE_TOOL_MODELS = ["gpt-6-", "gpt-5.6-"];
+/** Models whose Responses API accepts an `additional_tools` input item, matched with or without a `-` suffix such as a snapshot date. */
+const OPENAI_INLINE_TOOL_MODELS = ["gpt-6", "gpt-5.6"];
 
 /** Root `input_schema` keys the Anthropic API rejects, failing the whole request. */
 const ANTHROPIC_ROOT_COMBINATORS = ["oneOf", "anyOf", "allOf"] as const;
@@ -1395,7 +1395,9 @@ function inlineBlockBuilder(chatModel: unknown): BlockBuilder | undefined {
   if (
     type === "openai" &&
     useResponsesApi === true &&
-    OPENAI_INLINE_TOOL_MODELS.some((prefix) => name.startsWith(prefix))
+    OPENAI_INLINE_TOOL_MODELS.some(
+      (model) => name === model || name.startsWith(`${model}-`),
+    )
   ) {
     return openaiAdditionalTools;
   }

@@ -2032,6 +2032,23 @@ describe("provider payloads", () => {
       );
     });
 
+    it.each(["gpt-6", "gpt-5.6"])(
+      "discloses inline for the undated %s alias",
+      async (alias) => {
+        const { model, stub } = stubOpenAI([[read("r1")], "done"], {
+          model: alias,
+        });
+
+        await skillsAgent(model).invoke(
+          skillsInput({ crm: "create_customer_request" }),
+        );
+
+        expect(disclosedNames("openai", stub.bodies[1])).toEqual([
+          "create_customer_request",
+        ]);
+      },
+    );
+
     it("discloses inline for a string model", async () => {
       const stub = new ProviderStub(anthropicMessage, [[read("r1")], "done"]);
       vi.stubGlobal("fetch", stub.fetch);
