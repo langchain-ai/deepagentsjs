@@ -14,6 +14,16 @@ describe("validatePath", () => {
     expect(validatePath("/foo//bar")).toBe("/foo/bar");
   });
 
+  it("drops single-dot segments", () => {
+    expect(validatePath("/secret/./key")).toBe("/secret/key");
+    expect(validatePath("/./secret/.")).toBe("/secret");
+    expect(validatePath("/.")).toBe("/");
+  });
+
+  it("keeps dotfile segments", () => {
+    expect(validatePath("/a/.env")).toBe("/a/.env");
+  });
+
   it("normalizes root path", () => {
     expect(validatePath("/")).toBe("/");
   });

@@ -38,8 +38,35 @@ import {
   normalizeReadPagination,
   performStringReplacement,
 } from "./utils.js";
+import { setRealpath } from "./realpath.js";
 
 const SUPPORTS_NOFOLLOW = fsSync.constants.O_NOFOLLOW !== undefined;
+
+/** A Windows drive root (`C:\`) or network-share root (`\\server\share\`). */
+const WIN32_VOLUME_ROOT =
+  /^(?:[A-Za-z]:[\\/]|[\\/]{2}(?![?.][\\/])[^\\/]+[\\/][^\\/]+[\\/]?)$/;
+
+/**
+ * Convert a native absolute path to the `/`-rooted form tool paths use. POSIX
+ * paths are returned unchanged; Windows paths drop their drive or share root
+ * and use `/`. Throws for any other form (e.g. `\\?\` device paths).
+ *
+ * @internal Exported for tests.
+ */
+export function toSlashRootedPath(nativePath: string): string {
+  if (nativePath.startsWith("/")) {
+    return nativePath;
+  }
+  const { root } = path.win32.parse(nativePath);
+  if (!WIN32_VOLUME_ROOT.test(root)) {
+    throw new Error(`Cannot map '${nativePath}' to a tool path`);
+  }
+  const segments = nativePath.slice(root.length).split(/[\\/]/);
+  return `/${segments.filter(Boolean).join("/")}`;
+}
+
+/** Matches Linux's MAXSYMLINKS, bounding symlink cycles when resolving real paths. */
+const MAX_SYMLINK_HOPS = 40;
 
 /**
  * Backend that reads and writes files directly from the filesystem.
@@ -64,6 +91,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
     this.cwd = rootDir ? path.resolve(rootDir) : process.cwd();
     this.virtualMode = virtualMode;
     this.maxFileSizeBytes = maxFileSizeMb * 1024 * 1024;
+    setRealpath(this, (key) => this.resolveRealPath(key));
   }
 
   /**
@@ -149,6 +177,70 @@ export class FilesystemBackend implements BackendProtocolV2 {
       return path.join(realAnchor, path.basename(resolvedPath));
     }
     return current === resolvedPath ? realAnchor : resolvedPath;
+  }
+
+  /**
+   * Resolve `key` to the path an operation would actually touch, following
+   * symlinks in every existing segment (including dangling ones). Missing
+   * trailing segments are kept as given.
+   *
+   * Paths inside the root keep the root's configured form. In virtual mode the
+   * result is a virtual path, and a target outside the root throws.
+   */
+  private async resolveRealPath(key: string): Promise<string> {
+    const missing: string[] = [];
+    let anchor = this.resolvePath(key);
+    let realAnchor: string;
+    let hops = 0;
+    while (true) {
+      if (hops > MAX_SYMLINK_HOPS) {
+        throw new Error(`Too many symlinks resolving '${key}'`);
+      }
+      try {
+        realAnchor = await fs.realpath(anchor);
+        break;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== "ENOENT" && code !== "ENOTDIR") {
+          throw error;
+        }
+        const link = await fs.readlink(anchor).catch(() => null);
+        if (link !== null) {
+          hops += 1;
+          anchor = path.resolve(path.dirname(anchor), link);
+          continue;
+        }
+        const parent = path.dirname(anchor);
+        if (parent === anchor) {
+          throw error;
+        }
+        missing.unshift(path.basename(anchor));
+        anchor = parent;
+      }
+    }
+    const realPath = path.join(realAnchor, ...missing);
+
+    let realRoot: string;
+    try {
+      realRoot = await fs.realpath(this.cwd);
+    } catch {
+      realRoot = this.cwd;
+    }
+    const relative = path.relative(realRoot, realPath);
+    const insideRoot =
+      relative !== ".." &&
+      !relative.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relative);
+
+    if (this.virtualMode) {
+      if (!insideRoot) {
+        throw new Error(`Path '${key}' resolves outside root directory`);
+      }
+      return `/${relative.split(path.sep).filter(Boolean).join("/")}`;
+    }
+    return toSlashRootedPath(
+      insideRoot ? path.join(this.cwd, relative) : realPath,
+    );
   }
 
   /**

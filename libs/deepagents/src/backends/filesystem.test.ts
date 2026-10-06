@@ -3,7 +3,11 @@ import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import * as path from "path";
 import * as os from "os";
-import { FilesystemBackend } from "./filesystem.js";
+import { FilesystemBackend, toSlashRootedPath } from "./filesystem.js";
+import { getRealpath } from "./realpath.js";
+
+/** The internal realpath hook, asserted present. */
+const realpathOf = (backend: object) => getRealpath(backend)!;
 
 /**
  * Helper to write a file with automatic parent directory creation
@@ -1082,6 +1086,149 @@ describe("FilesystemBackend virtual-mode symlink escape (LC-587)", () => {
 
       expect(result.error).toBeUndefined();
       expect(result.content).toContain("hello");
+    },
+  );
+});
+
+describe("FilesystemBackend realpath hook", () => {
+  let tmpDir: string;
+  let outsideDir: string;
+
+  beforeEach(async () => {
+    tmpDir = createTempDir();
+    outsideDir = createTempDir();
+    await fs.mkdir(path.join(tmpDir, "secret"));
+    await fs.writeFile(path.join(tmpDir, "secret", "key"), "k");
+  });
+
+  afterEach(async () => {
+    await removeDir(tmpDir);
+    await removeDir(outsideDir);
+  });
+
+  it("returns plain virtual paths unchanged and collapses dot segments", async () => {
+    const backend = new FilesystemBackend({
+      rootDir: tmpDir,
+      virtualMode: true,
+    });
+    expect(await realpathOf(backend)("/secret/key")).toBe("/secret/key");
+    expect(await realpathOf(backend)("/secret/./key")).toBe("/secret/key");
+    expect(await realpathOf(backend)("/")).toBe("/");
+  });
+
+  it("keeps missing trailing segments as given", async () => {
+    const backend = new FilesystemBackend({
+      rootDir: tmpDir,
+      virtualMode: true,
+    });
+    expect(await realpathOf(backend)("/secret/new/file.txt")).toBe(
+      "/secret/new/file.txt",
+    );
+    expect(await realpathOf(backend)("/secret/key/child")).toBe(
+      "/secret/key/child",
+    );
+  });
+
+  it.skipIf(!CAN_SYMLINK)(
+    "follows an intermediate directory symlink",
+    async () => {
+      await fs.symlink("secret", path.join(tmpDir, "link"));
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+      expect(await realpathOf(backend)("/link/key")).toBe("/secret/key");
+      expect(await realpathOf(backend)("/link/missing.txt")).toBe(
+        "/secret/missing.txt",
+      );
+    },
+  );
+
+  it.skipIf(!CAN_SYMLINK)("follows a symlinked leaf file", async () => {
+    await fs.symlink(
+      path.join("secret", "key"),
+      path.join(tmpDir, "alias.txt"),
+    );
+    const backend = new FilesystemBackend({
+      rootDir: tmpDir,
+      virtualMode: true,
+    });
+    expect(await realpathOf(backend)("/alias.txt")).toBe("/secret/key");
+  });
+
+  it.skipIf(!CAN_SYMLINK)(
+    "follows a dangling symlink to the target it would create",
+    async () => {
+      await fs.symlink(
+        path.join("secret", "future"),
+        path.join(tmpDir, "dangling"),
+      );
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+      expect(await realpathOf(backend)("/dangling")).toBe("/secret/future");
+      expect(await realpathOf(backend)("/dangling/x.txt")).toBe(
+        "/secret/future/x.txt",
+      );
+    },
+  );
+
+  it.skipIf(!CAN_SYMLINK)(
+    "throws when a symlink resolves outside the virtual root",
+    async () => {
+      await fs.symlink(outsideDir, path.join(tmpDir, "escape"));
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+      await expect(realpathOf(backend)("/escape/x")).rejects.toThrow(
+        /outside root/,
+      );
+    },
+  );
+
+  it.skipIf(!CAN_SYMLINK)("throws on a symlink cycle", async () => {
+    await fs.symlink("b", path.join(tmpDir, "a"));
+    await fs.symlink("a", path.join(tmpDir, "b"));
+    const backend = new FilesystemBackend({
+      rootDir: tmpDir,
+      virtualMode: true,
+    });
+    await expect(realpathOf(backend)("/a/x")).rejects.toThrow();
+  });
+
+  it.skipIf(!CAN_SYMLINK)(
+    "keeps the configured root form when the root itself is a symlink",
+    async () => {
+      const rootLink = path.join(outsideDir, "root-link");
+      await fs.symlink(tmpDir, rootLink);
+      const backend = new FilesystemBackend({ rootDir: rootLink });
+      expect(
+        await realpathOf(backend)(path.join(rootLink, "secret", "key")),
+      ).toBe(toSlashRootedPath(path.join(rootLink, "secret", "key")));
+    },
+  );
+});
+
+describe("toSlashRootedPath", () => {
+  it.each([
+    ["/a/b", "/a/b"],
+    ["/a/C:\\x/b", "/a/C:\\x/b"],
+    ["/a/back\\slash", "/a/back\\slash"],
+    ["C:\\proj\\foo", "/proj/foo"],
+    ["c:/proj/foo", "/proj/foo"],
+    ["C:\\", "/"],
+    ["\\\\server\\share\\dir\\f", "/dir/f"],
+    ["\\\\server\\share", "/"],
+  ])("maps %j to %j", (input, expected) => {
+    expect(toSlashRootedPath(input)).toBe(expected);
+  });
+
+  it.each(["\\\\?\\C:\\x", "\\\\.\\pipe\\x", "C:foo", "\\x", "relative\\x"])(
+    "throws for %j",
+    (input) => {
+      expect(() => toSlashRootedPath(input)).toThrow(/Cannot map/);
     },
   );
 });
