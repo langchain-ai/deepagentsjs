@@ -2133,8 +2133,9 @@ describe("createSubAgent", () => {
 
     const call = createAgentMock.mock.calls[0][0];
     const middleware = call.middleware as AgentMiddleware[];
-    expect(middleware.length).toBe(1);
+    expect(middleware.length).toBe(2);
     expect(middleware[0]).toHaveProperty("name");
+    expect(middleware[1].name).toBe("UnsupportedContentMiddleware");
   });
 
   it("forwards responseFormat when specified", () => {
@@ -2378,7 +2379,7 @@ describe("middleware override by name", () => {
     ).toBe(false);
   });
 
-  it("keeps tool exclusion middleware last", () => {
+  it("keeps tool exclusion middleware before UnsupportedContentMiddleware, which runs last of all", () => {
     registerHarnessProfile("tool-exclusion-test:model", {
       excludedTools: ["write_file"],
     });
@@ -2392,8 +2393,47 @@ describe("middleware override by name", () => {
 
     const middleware = getMiddlewareStack("main");
     expect(middleware[middleware.length - 1]?.name).toBe(
+      "UnsupportedContentMiddleware",
+    );
+    expect(middleware[middleware.length - 2]?.name).toBe(
       "_ToolExclusionMiddleware",
     );
+  });
+
+  it("does not add a second UnsupportedContentMiddleware when the caller already supplied one", () => {
+    const custom = namedMiddleware("UnsupportedContentMiddleware");
+
+    createDeepAgent({
+      model: new FakeListChatModel({ responses: ["hello"] }),
+      name: "main",
+      middleware: [custom],
+    });
+
+    const middleware = getMiddlewareStack("main");
+    const matches = middleware.filter(
+      (m) => m.name === "UnsupportedContentMiddleware",
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toBe(custom);
+  });
+
+  it("adds UnsupportedContentMiddleware to a custom declarative subagent's own stack", () => {
+    createDeepAgent({
+      model: fakeModel,
+      name: "main",
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          systemPrompt: "Work.",
+        },
+      ],
+    });
+
+    const middleware = getMiddlewareStack("worker");
+    expect(
+      middleware.some((entry) => entry.name === "UnsupportedContentMiddleware"),
+    ).toBe(true);
   });
 
   it("passes main-agent default overrides to the general-purpose subagent", () => {
@@ -2715,11 +2755,12 @@ describe("middleware override by name", () => {
       expect(
         stack.filter((entry) => entry.name === "SkillsMiddleware"),
       ).toEqual([own]);
-      expect(names("helper").slice(-4)).toEqual([
+      expect(names("helper").slice(-5)).toEqual([
         "Fallback",
         "SkillsMiddleware",
         "PromptCachingMiddleware",
         "CacheBreakpointMiddleware",
+        "UnsupportedContentMiddleware",
       ]);
       for (const agentName of ["main", "general-purpose"]) {
         expect(names(agentName)).not.toContain("SkillsMiddleware");
@@ -2751,11 +2792,12 @@ describe("middleware override by name", () => {
       expect(
         stack.filter((entry) => entry.name === "SkillsMiddleware"),
       ).toEqual([own]);
-      expect(names("forker").slice(-4)).toEqual([
+      expect(names("forker").slice(-5)).toEqual([
         "Fallback",
         "SkillsMiddleware",
         "PromptCachingMiddleware",
         "CacheBreakpointMiddleware",
+        "UnsupportedContentMiddleware",
       ]);
       for (const agentName of ["main", "general-purpose"]) {
         expect(names(agentName)).not.toContain("SkillsMiddleware");
@@ -2788,11 +2830,12 @@ describe("middleware override by name", () => {
       expect(
         stack.filter((entry) => entry.name === "SkillsMiddleware"),
       ).toEqual([own]);
-      expect(names("forker").slice(-4)).toEqual([
+      expect(names("forker").slice(-5)).toEqual([
         "Fallback",
         "SkillsMiddleware",
         "PromptCachingMiddleware",
         "CacheBreakpointMiddleware",
+        "UnsupportedContentMiddleware",
       ]);
     });
 

@@ -10,11 +10,14 @@ import {
   context,
   createMiddleware,
   tool,
+  AIMessage,
   HumanMessage,
   ToolMessage,
   type AgentMiddleware as _AgentMiddleware,
   type ToolRuntime,
 } from "langchain";
+import type { BaseMessage } from "@langchain/core/messages";
+import { ContextOverflowError } from "@langchain/core/errors";
 import {
   Command,
   isCommand,
@@ -35,6 +38,12 @@ import type {
 import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
 import {
+  BlobCache,
+  hydrateMessages,
+  offloadHumanMessages,
+  offloadToolResult,
+} from "./blobOffload.js";
+import {
   sanitizeToolCallId,
   EMPTY_CONTENT_WARNING,
   formatContentWithLineNumbers,
@@ -45,6 +54,7 @@ import {
   isTextMimeType,
   normalizeReadPagination,
 } from "../backends/utils.js";
+import { MULTIMODAL_BLOCK_TYPES } from "./unsupportedContent.js";
 
 /**
  * Normalizes tool input so that models sending `path` instead of `file_path`
@@ -366,6 +376,9 @@ export const GREP_TRUNCATION_NOTE =
  * Set to null to disable the cap.
  */
 export const DEFAULT_GREP_MAX_COUNT = 1000;
+
+/** Path prefix offloaded binary content blobs are written under. */
+const BLOBS_PREFIX = "/blobs";
 
 /**
  * Message template for evicted tool results.
@@ -1877,6 +1890,21 @@ export interface FilesystemMiddlewareOptions {
    * argument overrides this default. Set to `null` to disable the cap.
    */
   grepMaxCount?: number | null;
+  /**
+   * Keep binary `read_file` content and inline `HumanMessage` media out of
+   * message history (default: `false`).
+   *
+   * Payloads are written to `/blobs` on the backend and state keeps a
+   * content-addressed reference instead; model requests are rehydrated from
+   * the backend. `HumanMessage` payloads added since the last model response
+   * are replaced starting at the next model call, so the original input
+   * write still lands in checkpoint history for that turn. Useful with
+   * sandbox backends. Has no effect when `/blobs` routes to a `StateBackend`,
+   * since that backend stores files as part of graph state — offloading
+   * there would just relocate the bytes to a different key within the same
+   * checkpoint, not out of it.
+   */
+  offloadBinaryContent?: boolean;
 }
 
 /**
@@ -1924,6 +1952,105 @@ function allPathsScopedToRoutes(
   );
 }
 
+/** Whether `path` resolves to a `StateBackend`, recursing through composite routing. */
+function routesToStateBackend(
+  backend: AnyBackendProtocol,
+  path: string,
+): boolean {
+  if (CompositeBackend.isInstance(backend)) {
+    const [routed, routedPath] = backend.resolveBackendForPath(path);
+    return routesToStateBackend(routed, routedPath);
+  }
+  return StateBackend.isInstance(backend);
+}
+
+/**
+ * Whether `response` is the `{ structuredResponse, messages }` shape a
+ * provider-strategy structured-output call can return instead of a plain
+ * `AIMessage`. The agent framework only recognizes this shape at the
+ * outermost `wrapModelCall` return value — returning a `Command` instead
+ * discards `structuredResponse` with no way to carry it through the Command.
+ */
+function hasStructuredResponse(
+  response: unknown,
+): response is { structuredResponse: unknown; messages: unknown[] } {
+  return (
+    typeof response === "object" &&
+    response !== null &&
+    "structuredResponse" in response &&
+    "messages" in response
+  );
+}
+
+const REJECTED_FILE_CONTENT_TEXT =
+  "Unsupported content. The file may be invalid, too large, or of an unsupported mime-type.";
+
+/**
+ * No LangChain error class captures "the provider rejected this request"
+ * generically, so this checks the raw HTTP status providers' client SDKs set
+ * on their errors instead. `ContextOverflowError` is excluded because it's a
+ * different, already-handled problem, and retrying it with stripped file
+ * content wouldn't fix an oversized prompt.
+ */
+function isRejectedRequestError(error: unknown): boolean {
+  if (ContextOverflowError.isInstance(error)) {
+    return false;
+  }
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    (error as { status: unknown }).status === 400
+  );
+}
+
+/**
+ * Only messages carrying multimodal blocks after the last `AIMessage` are
+ * candidates for replacement, since anything earlier was already accepted by
+ * the model in a prior turn. Returns `messages` unchanged if nothing
+ * matched, so the caller can tell there was nothing to blame for the
+ * rejection.
+ */
+function replaceRejectedFileContent(
+  messages: readonly BaseMessage[],
+): BaseMessage[] {
+  let lastResponseIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (AIMessage.isInstance(messages[i])) {
+      lastResponseIndex = i;
+      break;
+    }
+  }
+
+  let changed = false;
+  const result = messages.map((message, index) => {
+    if (
+      index <= lastResponseIndex ||
+      !ToolMessage.isInstance(message) ||
+      message.name !== "read_file"
+    ) {
+      return message;
+    }
+    const blocks = message.contentBlocks as Array<{ type: string }>;
+    if (!blocks.some((block) => MULTIMODAL_BLOCK_TYPES.has(block.type))) {
+      return message;
+    }
+    changed = true;
+    return new ToolMessage({
+      content: REJECTED_FILE_CONTENT_TEXT,
+      tool_call_id: message.tool_call_id,
+      name: message.name,
+      id: message.id,
+      artifact: message.artifact,
+      status: message.status,
+      metadata: message.metadata,
+      additional_kwargs: message.additional_kwargs,
+      response_metadata: message.response_metadata,
+    });
+  });
+  return changed ? result : (messages as BaseMessage[]);
+}
+
 /**
  * Create middleware that provides built-in filesystem tools and optional custom
  * prompt guidance.
@@ -1961,7 +2088,23 @@ export function createFilesystemMiddleware(
     permissions = [],
     tools: filesystemTools = null,
     grepMaxCount = DEFAULT_GREP_MAX_COUNT,
+    offloadBinaryContent = false,
   } = options;
+  // Routing through a CompositeBackend can't be checked safely here (needs
+  // the backend adapted first, which isn't possible synchronously for a
+  // factory `backend`); this only catches the direct case.
+  const backendIsStateBackend = StateBackend.isInstance(backend);
+  if (offloadBinaryContent && backendIsStateBackend) {
+    // oxlint-disable-next-line no-console
+    console.warn(
+      "offloadBinaryContent has no effect: the backend is a StateBackend, which keeps files as part of checkpointed state.",
+    );
+  }
+  // Shared across every call/thread this middleware instance serves — safe
+  // since every key is a SHA-256 digest of its own value, so a hit is only
+  // reachable by a caller who already has that exact reference.
+  const blobCache =
+    offloadBinaryContent && !backendIsStateBackend ? new BlobCache() : null;
   const enabledFilesystemTools = normalizeFilesystemTools(filesystemTools);
   const executeToolEnabled =
     enabledFilesystemTools == null || enabledFilesystemTools.has("execute");
@@ -2224,31 +2367,115 @@ export function createFilesystemMiddleware(
         }
       }
 
-      return handler({
+      let offloadedHuman: unknown[] = [];
+      // Offloading here would just relocate bytes to a different checkpoint
+      // key, not out of it — so hydrating them back would be pointless too;
+      // gate the whole block on one check, same as the read_file offload side.
+      if (
+        blobCache &&
+        !routesToStateBackend(resolvedBackend, `${BLOBS_PREFIX}/`)
+      ) {
+        offloadedHuman = await offloadHumanMessages(
+          { stateMessages: request.state.messages ?? [], pending: [] },
+          resolvedBackend,
+          BLOBS_PREFIX,
+          blobCache,
+        );
+
+        messages = (await hydrateMessages(
+          messages,
+          resolvedBackend,
+          BLOBS_PREFIX,
+          blobCache,
+        )) as typeof messages;
+      }
+
+      const finalRequest = {
         ...request,
         tools,
         messages,
         systemMessage: newSystemMessage,
-      });
+      };
+
+      // The `messages` reducer upserts by id, so folding our replacement into
+      // a response's own `messages` array overwrites the original in state
+      // instead of duplicating it. The plain-AIMessage branch's Command
+      // doesn't need to include `response` itself, since `lastAiMessage`
+      // already tracks it independently — unlike `extra` (unsupported-content
+      // replacements), which only ever lives in the Command we build here.
+      const foldOffload = (
+        response: unknown,
+        extra: unknown[] = [],
+      ): AIMessage | Command => {
+        if (offloadedHuman.length === 0 && extra.length === 0) {
+          return response as AIMessage;
+        }
+        if (hasStructuredResponse(response)) {
+          return {
+            ...response,
+            messages: [...extra, ...offloadedHuman, ...response.messages],
+          } as unknown as AIMessage;
+        }
+        return new Command({
+          update: {
+            messages:
+              extra.length === 0
+                ? offloadedHuman
+                : [...extra, ...offloadedHuman, response],
+          },
+        });
+      };
+
+      try {
+        const response = await handler(finalRequest);
+        return foldOffload(response);
+      } catch (error) {
+        if (!isRejectedRequestError(error)) {
+          throw error;
+        }
+        const replaced = replaceRejectedFileContent(finalRequest.messages);
+        if (replaced === finalRequest.messages) {
+          throw error;
+        }
+        const retryResponse = await handler({
+          ...finalRequest,
+          messages: replaced,
+        });
+        const replacements = replaced.filter(
+          (msg, i) => msg !== finalRequest.messages[i],
+        );
+        return foldOffload(retryResponse, replacements);
+      }
     },
     wrapToolCall: async (request, handler) => {
-      // Return early if eviction is disabled
-      if (!toolTokenLimitBeforeEvict) {
-        return handler(request);
-      }
-
-      // Check if this tool is excluded from eviction
       const toolName = request.toolCall?.name;
-      if (
-        toolName &&
-        TOOLS_EXCLUDED_FROM_EVICTION.includes(
-          toolName as (typeof TOOLS_EXCLUDED_FROM_EVICTION)[number],
-        )
-      ) {
-        return handler(request);
+      let result = await handler(request);
+
+      if (blobCache && toolName === "read_file") {
+        const resolvedBackend = await resolveBackend(backend, {
+          ...request.runtime,
+          state: request.state,
+        });
+        // Offloading here would just relocate bytes to a different checkpoint key, not out of it.
+        if (!routesToStateBackend(resolvedBackend, `${BLOBS_PREFIX}/`)) {
+          result = (await offloadToolResult(
+            result,
+            resolvedBackend,
+            BLOBS_PREFIX,
+            new Map(),
+          )) as typeof result;
+        }
       }
 
-      const result = await handler(request);
+      if (
+        !toolTokenLimitBeforeEvict ||
+        (toolName &&
+          TOOLS_EXCLUDED_FROM_EVICTION.includes(
+            toolName as (typeof TOOLS_EXCLUDED_FROM_EVICTION)[number],
+          ))
+      ) {
+        return result;
+      }
 
       if (ToolMessage.isInstance(result)) {
         const processed = await processToolMessage(

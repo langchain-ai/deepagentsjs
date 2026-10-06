@@ -25,6 +25,7 @@ import {
   type SubAgent,
   createAsyncSubAgentMiddleware,
   isAsyncSubAgent,
+  createUnsupportedContentMiddleware,
 } from "./middleware/index.js";
 import { StateBackend } from "./backends/state.js";
 import { ConfigurationError } from "./errors.js";
@@ -407,6 +408,15 @@ export function createDeepAgent<
       );
     }
 
+    if (
+      !subagentProfile.excludedMiddleware.has("UnsupportedContentMiddleware") &&
+      !subagentMiddleware.some(
+        (middleware) => middleware.name === "UnsupportedContentMiddleware",
+      )
+    ) {
+      subagentMiddleware.push(createUnsupportedContentMiddleware());
+    }
+
     return subagentMiddleware;
   };
 
@@ -551,6 +561,13 @@ export function createDeepAgent<
     middleware.push(
       createToolExclusionMiddleware(harnessProfile.excludedTools),
     );
+  }
+
+  if (
+    !harnessProfile.excludedMiddleware.has("UnsupportedContentMiddleware") &&
+    !middleware.some((m) => m.name === "UnsupportedContentMiddleware")
+  ) {
+    middleware.push(createUnsupportedContentMiddleware());
   }
 
   const agent = createAgent({

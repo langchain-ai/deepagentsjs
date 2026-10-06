@@ -1265,4 +1265,84 @@ describe("CompositeBackend", () => {
       expect(result.truncated).toBe(false);
     });
   });
+
+  describe("route prefix matching", () => {
+    it("should not route a sibling path that only shares a string prefix with a route", async () => {
+      const { state, runtime } = makeConfig();
+      const store = new StoreBackend(runtime);
+      const composite = new CompositeBackend(new StateBackend(runtime), {
+        "/foo": store,
+      });
+
+      // "/foobar.txt" is not under "/foo", so it belongs to the default backend
+      const res = await composite.write("/foobar.txt", "sibling");
+      expect(res.error).toBeUndefined();
+      expect(res.filesUpdate).toBeDefined();
+      expect(res.filesUpdate).not.toBeNull();
+      expect(Object.keys(res.filesUpdate!)).toEqual(["/foobar.txt"]);
+      Object.assign(state.files, res.filesUpdate!);
+
+      // The "/foo" backend must not have received a mangled "/bar.txt" key
+      expect((await store.read("/bar.txt")).error).toContain("not found");
+      expect((await composite.read("/foobar.txt")).content).toContain(
+        "sibling",
+      );
+    });
+
+    it.each(["read", "readRaw", "write", "edit", "delete"] as const)(
+      "%s should send a sibling path to the default backend, not the prefix route",
+      async (op) => {
+        const { runtime } = makeConfig();
+        const defaultBackend = new StateBackend(runtime);
+        const routed = new StoreBackend(runtime);
+        const defaultSpy = vi.spyOn(defaultBackend, op);
+        const routedSpy = vi.spyOn(routed, op);
+        const composite = new CompositeBackend(defaultBackend, {
+          "/foo": routed,
+        });
+
+        const callers = {
+          read: () => composite.read("/foobar.txt"),
+          readRaw: () => composite.readRaw("/foobar.txt"),
+          write: () => composite.write("/foobar.txt", "x"),
+          edit: () => composite.edit("/foobar.txt", "a", "b"),
+          delete: () => composite.delete("/foobar.txt"),
+        };
+        await callers[op]();
+
+        expect(routedSpy).not.toHaveBeenCalled();
+        expect(defaultSpy).toHaveBeenCalledOnce();
+        expect(defaultSpy.mock.calls[0][0]).toBe("/foobar.txt");
+      },
+    );
+
+    it("should resolve the exact route root to '/' on the routed backend", async () => {
+      const { runtime } = makeConfig();
+      const routed = new StoreBackend(runtime);
+      const composite = new CompositeBackend(new StateBackend(runtime), {
+        "/foo": routed,
+      });
+
+      const [, key] = composite.resolveBackendForPath("/foo");
+      expect(key).toBe("/");
+
+      await composite.write("/foo/a.txt", "a");
+      const result = await composite.delete("/foo");
+      expect(result.error).toBeUndefined();
+      expect((await routed.read("/a.txt")).error).toContain("not found");
+    });
+
+    it("should route paths under a route registered without a trailing slash", async () => {
+      const { runtime } = makeConfig();
+      const store = new StoreBackend(runtime);
+      const composite = new CompositeBackend(new StateBackend(runtime), {
+        "/foo": store,
+      });
+
+      const res = await composite.write("/foo/notes.txt", "routed");
+      expect(res.error).toBeUndefined();
+      expect(res.filesUpdate).toBeNull();
+      expect((await store.read("/notes.txt")).content).toContain("routed");
+    });
+  });
 });

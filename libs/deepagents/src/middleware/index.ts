@@ -75,3 +75,10 @@ export {
   type AsyncTaskStatus,
   ASYNC_TASK_TOOL_NAMES,
 } from "./async_subagents.js";
+
+export {
+  createUnsupportedContentMiddleware,
+  scrubUnsupportedMultimodalContent,
+  multimodalBlockSupported,
+  MULTIMODAL_BLOCK_TYPES,
+} from "./unsupportedContent.js";

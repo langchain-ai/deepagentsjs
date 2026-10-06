@@ -1,5 +1,15 @@
 # deepagents
 
+## 1.14.2
+
+### Patch Changes
+
+- [#877](https://github.com/langchain-ai/deepagentsjs/pull/877) [`9189214`](https://github.com/langchain-ai/deepagentsjs/commit/91892146d1c25647ccb338096cde7c04edccedcc) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - feat(deepagents): add `offloadBinaryContent` option to `FilesystemMiddleware` to keep binary `read_file` content and inline `HumanMessage` media out of checkpointed message history. When enabled, payloads are written to the backend under `/blobs` and replaced in state with a small reference; model requests are rehydrated from a per-run cache or the backend.
+
+- [#881](https://github.com/langchain-ai/deepagentsjs/pull/881) [`188c2b5`](https://github.com/langchain-ai/deepagentsjs/commit/188c2b5e4ef48b1c2fabba9a62a042b0d77f83ed) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - Add `UnsupportedContentMiddleware`, which replaces input content the active model can't accept with a text placeholder before each model call, so a provider rejection doesn't fail every later turn too. `createDeepAgent` and subagents add it automatically, last in the middleware stack. File support is read from `model.profile.fileMimeTypes` (requires `@langchain/core@^1.2.14`, and `@langchain/openai@^1.6.1` for OpenAI/Azure models).
+  
+  `FilesystemMiddleware` also now recovers from a rejected `read_file` result that filtering missed: it retries once with the content replaced, and persists the swap to state.
+
 ## 1.14.1
 
 ### Patch Changes
