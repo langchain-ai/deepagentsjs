@@ -33,8 +33,10 @@ import {
   createAgent,
   createMiddleware,
   modelFallbackMiddleware,
+  modelRetryMiddleware,
   providerStrategy,
   providerToolSearchMiddleware,
+  toolStrategy,
   type AgentMiddleware,
 } from "langchain";
 import { MODEL_PROVIDER_CONFIG } from "langchain/chat_models/universal";
@@ -775,6 +777,50 @@ describe("disclosure", () => {
       expect(again).not.toHaveProperty("_skillToolsDisclosed");
     });
 
+    it("is never written by a skills middleware without skill tools", async () => {
+      const agent = skillsAgent(new RecordingChatModel(ai(read("r1"))), {
+        skillTools: undefined,
+        checkpointer: new MemorySaver(),
+      });
+      const config = { configurable: { thread_id: "no-skill-tools" } };
+
+      await agent.invoke(
+        skillsInput({ crm: "create_customer_request" }),
+        config,
+      );
+
+      const state = await agent.graph.getState(config);
+      expect(state.values).not.toHaveProperty("_skillToolsDisclosed");
+    });
+
+    it("survives a model call retried in the same step", async () => {
+      let failed = false;
+      const failsOnce = createMiddleware({
+        name: "FailsOnce",
+        wrapModelCall: async (request, handler) => {
+          const response = await handler(request);
+          if (!failed) {
+            failed = true;
+            throw new Error("transient");
+          }
+          return response;
+        },
+      });
+      const model = new RecordingChatModel("discarded", "done");
+
+      const result = await skillsAgent(model, {
+        middleware: [
+          modelRetryMiddleware({
+            maxRetries: 1,
+            initialDelayMs: 0,
+          }) as AgentMiddleware,
+          failsOnce,
+        ],
+      }).invoke(skillsInput({ crm: "create_customer_request" }));
+
+      expect(result.messages.at(-1)?.text).toBe("done");
+    });
+
     it("is cleared by a rebuild without skill tools, so a checkpointed record admits nothing", async () => {
       const checkpointer = new MemorySaver();
       const config = { configurable: { thread_id: "rebuild" } };
@@ -1121,6 +1167,26 @@ describe("disclosure", () => {
       }).invoke(skillsInput({ crm: "create_customer_request" }));
 
       expect(result.structuredResponse).toEqual({ answer: "42" });
+    });
+
+    it("keeps a tool-strategy structured response's messages through the record write", async () => {
+      const model = new RecordingChatModel(
+        ai(call("answer", "s1", { answer: "42" })),
+      );
+
+      const result = await skillsAgent(model, {
+        responseFormat: toolStrategy(
+          z.object({ answer: z.string() }).meta({ title: "answer" }),
+        ),
+      }).invoke(skillsInput({ crm: "create_customer_request" }));
+
+      expect(result.structuredResponse).toEqual({ answer: "42" });
+      const [extracted] = toolMessages(result, "answer");
+      expect(extracted.tool_call_id).toBe("s1");
+      expect(extracted.content).toBe('{"answer":"42"}');
+      expect(result.messages.at(-1)?.text).toBe(
+        'Returning structured response: {"answer":"42"}',
+      );
     });
   });
 

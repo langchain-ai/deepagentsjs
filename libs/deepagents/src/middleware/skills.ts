@@ -52,7 +52,7 @@ import {
    */
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
-import { Command, StateSchema } from "@langchain/langgraph";
+import { Command, ReducedValue, StateSchema } from "@langchain/langgraph";
 import {
   AIMessage,
   HumanMessage,
@@ -326,9 +326,13 @@ const SkillsStateSchema = new StateSchema({
   /**
    * The skill tools disclosed to the latest model call, each mapped to the
    * include name that produced it, for the tool-time gate. Written on every
-   * model call.
+   * model call of a skills middleware with skill tools. The last write wins,
+   * so a model call retried within one step can write it again.
    */
-  _skillToolsDisclosed: z.record(z.string(), z.string()).optional(),
+  _skillToolsDisclosed: new ReducedValue(
+    z.record(z.string(), z.string()).optional(),
+    { reducer: (_previous, next) => next },
+  ),
 });
 
 /**
@@ -1559,6 +1563,10 @@ export function createSkillsMiddleware<TContext = unknown>(
 ) {
   const { backend, sources } = options;
   const skillToolResolver = toSkillToolResolver(options.tools);
+  // Without skill tools no model call is shown one, so the record stays empty.
+  const hasSkillTools =
+    typeof options.tools === "function" ||
+    (Array.isArray(options.tools) && options.tools.length > 0);
 
   return createMiddleware({
     name: "SkillsMiddleware",
@@ -1626,15 +1634,23 @@ export function createSkillsMiddleware<TContext = unknown>(
         reads.length === 0
           ? { request: prompted, record: {} }
           : await discloseSkillTools(prompted, reads, skillToolResolver);
-      const response: unknown = await handler(disclosed);
-      // A native structured-output response comes back as a state update
-      // rather than an AIMessage; carry it, or returning a Command drops it.
+      const response = await handler(disclosed);
+      // Without skill tools the record is always empty, so write it only to
+      // clear one an earlier build with skill tools left.
+      const stored = request.state._skillToolsDisclosed;
+      if (!hasSkillTools && Object.keys(stored ?? {}).length === 0) {
+        return response;
+      }
+      // A structured response comes back as a state update rather than an
+      // AIMessage. Returning a Command keeps only the model's AIMessage, its
+      // first message, so carry the rest: the structured response and, for a
+      // tool strategy, the tool result and closing AIMessage that follow it.
       const structured =
         typeof response === "object" &&
         response !== null &&
         "structuredResponse" in response &&
         "messages" in response;
-      // Written on every call, `{}` included, so the tool-time gate admits
+      // Otherwise written on every call, `{}` included, so the tool-time gate admits
       // exactly the skill tools this call was shown, and a record left by an
       // earlier build never outlives the next model call.
       return new Command({
@@ -1642,6 +1658,7 @@ export function createSkillsMiddleware<TContext = unknown>(
           _skillToolsDisclosed: record,
           ...(structured && {
             structuredResponse: response.structuredResponse,
+            messages: (response.messages as BaseMessage[]).slice(1),
           }),
         },
       });
