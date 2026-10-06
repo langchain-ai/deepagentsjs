@@ -1182,7 +1182,7 @@ describe("disclosure", () => {
       expectConfigurationError(
         () => skillsMiddleware(createCustomerRequest),
         "SKILL_TOOLS_UNSUPPORTED_TYPE",
-        "tools must be an array of tools or a resolver function, got DynamicStructuredTool; wrap a single tool in an array",
+        "tools must be an array of tools or a resolver function, got object; wrap a single tool in an array",
       );
     });
 
@@ -1748,12 +1748,12 @@ describe("resolvers", () => {
       [
         "a non-tool item",
         [{ name: "x" }],
-        "skill tool resolver returned a plain object for 'linear'; expected tool instances",
+        "skill tool resolver returned a non-tool object for 'linear'; expected tool instances",
       ],
       [
         "a bare tool",
         listIssues,
-        "skill tool resolver must return an array of tools for 'linear', got DynamicStructuredTool",
+        "skill tool resolver must return an array of tools for 'linear', got object",
       ],
     ])("throws a TypeError for %s", async (_label, output, message) => {
       const agent = skillsAgent(

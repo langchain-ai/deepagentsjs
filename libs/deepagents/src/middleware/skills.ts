@@ -923,7 +923,7 @@ function toSkillToolResolver(tools: unknown): UncheckedResolver {
   if (tools != null && !Array.isArray(tools)) {
     if (typeof tools !== "function") {
       throw new ConfigurationError(
-        `tools must be an array of tools or a resolver function, got ${describeType(tools)}; wrap a single tool in an array`,
+        `tools must be an array of tools or a resolver function, got ${typeof tools}; wrap a single tool in an array`,
         "SKILL_TOOLS_UNSUPPORTED_TYPE",
       );
     }
@@ -969,31 +969,19 @@ async function callSkillToolResolver(
   const result = await resolver(includeName, runtime);
   if (!Array.isArray(result)) {
     throw new TypeError(
-      `skill tool resolver must return an array of tools for '${includeName}', got ${describeType(result)}`,
+      `skill tool resolver must return an array of tools for '${includeName}', got ${typeof result}`,
     );
   }
   const tools = new Map<string, ClientTool>();
   for (const item of result) {
     if (!isClientTool(item)) {
       throw new TypeError(
-        `skill tool resolver returned a ${describeType(item)} for '${includeName}'; expected tool instances`,
+        `skill tool resolver returned a non-tool ${typeof item} for '${includeName}'; expected tool instances`,
       );
     }
     if (!tools.has(item.name)) tools.set(item.name, item);
   }
   return [...tools.values()];
-}
-
-/** Describe `value`'s type for an error message: its class name, or `typeof` for anything plainer. */
-function describeType(value: unknown): string {
-  if (value === null) return "null";
-  if (Array.isArray(value)) return "array";
-  if (typeof value !== "object") return typeof value;
-  const ctor = (value as { constructor?: { name?: unknown } }).constructor
-    ?.name;
-  return typeof ctor === "string" && ctor !== "" && ctor !== "Object"
-    ? ctor
-    : "plain object";
 }
 
 /** A successful `read_file` of a `SKILL.md` that lists tools. */
