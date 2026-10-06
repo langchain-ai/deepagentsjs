@@ -932,6 +932,16 @@ describe("disclosure", () => {
         { content: [{ type: "text", text: "Error: file not found" }] },
         false,
       ],
+      [
+        "a cancelled read whose result has lost its name",
+        read("r1"),
+        {
+          name: undefined,
+          content:
+            "Tool call read_file with id r1 was cancelled - another message came in before it could be completed.",
+        },
+        false,
+      ],
       ["a read of another file", read("r1", "/skills/crm/notes.md"), {}, false],
       [
         "a path with a .. segment",

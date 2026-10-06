@@ -1004,7 +1004,8 @@ interface SkillRead {
  * message order.
  *
  * Any `offset` or `limit` counts, and so does a result whose content was later
- * truncated or compacted, since only the call and the result's status are read.
+ * truncated or compacted. A result doesn't count if it has an error status, is
+ * `Error: …` text, or stands in for a read cancelled before it ran.
  */
 function findSkillReads(
   messages: readonly BaseMessage[],
@@ -1039,19 +1040,20 @@ function findSkillReads(
   }
   const reads: SkillRead[] = [];
   messages.forEach((message, index) => {
-    // A backend read error comes back as `Error: …` text, and a read cancelled
-    // before it ran as a stand-in result, both without an error status.
+    // A backend read error comes back as `Error: …` text, without an error status.
     if (
       !ToolMessage.isInstance(message) ||
       message.status === "error" ||
-      message.text.startsWith("Error:") ||
-      isCancelledToolCall(message)
+      message.text.startsWith("Error:")
     ) {
       return;
     }
     const path = normalizePath(readPaths.get(message.tool_call_id));
     const skill = path === undefined ? undefined : skillsByPath.get(path);
-    if (skill !== undefined) reads.push({ index, ...skill });
+    // A read cancelled before it ran gets a stand-in result, also without one.
+    if (skill !== undefined && !isCancelledToolCall(message, "read_file")) {
+      reads.push({ index, ...skill });
+    }
   });
   return reads;
 }

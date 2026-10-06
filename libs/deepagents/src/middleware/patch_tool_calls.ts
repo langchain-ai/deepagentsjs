@@ -15,11 +15,13 @@ function cancelledToolCallContent(name: string, id: string): string {
   return `Tool call ${name} with id ${id} was cancelled - another message came in before it could be completed.`;
 }
 
-/** Whether `message` stands in for a tool call cancelled before it ran. */
-export function isCancelledToolCall(message: ToolMessage): boolean {
+/** Whether `message` stands in for a call to `toolName` cancelled before it ran. */
+export function isCancelledToolCall(
+  message: ToolMessage,
+  toolName: string,
+): boolean {
   return (
-    message.text ===
-    cancelledToolCallContent(message.name ?? "", message.tool_call_id)
+    message.text === cancelledToolCallContent(toolName, message.tool_call_id)
   );
 }
 
