@@ -10,6 +10,19 @@ import {
 import { RemoveMessage, type BaseMessage } from "@langchain/core/messages";
 import { REMOVE_ALL_MESSAGES } from "@langchain/langgraph";
 
+/** The content of the `ToolMessage` that stands in for a tool call cancelled before it ran. */
+function cancelledToolCallContent(name: string, id: string): string {
+  return `Tool call ${name} with id ${id} was cancelled - another message came in before it could be completed.`;
+}
+
+/** Whether `message` stands in for a tool call cancelled before it ran. */
+export function isCancelledToolCall(message: ToolMessage): boolean {
+  return (
+    message.text ===
+    cancelledToolCallContent(message.name ?? "", message.tool_call_id)
+  );
+}
+
 /**
  * Patch tool call / tool response parity in a messages array.
  *
@@ -82,7 +95,7 @@ export function patchDanglingToolCalls(messages: BaseMessage[]): {
         if (!correspondingToolMsg) {
           // We have a dangling tool call which needs a ToolMessage
           needsPatch = true;
-          const toolMsg = `Tool call ${toolCall.name} with id ${toolCall.id} was cancelled - another message came in before it could be completed.`;
+          const toolMsg = cancelledToolCallContent(toolCall.name, toolCall.id!);
           patchedMessages.push(
             new ToolMessage({
               content: toolMsg,

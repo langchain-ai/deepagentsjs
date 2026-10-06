@@ -78,6 +78,7 @@ import { filesValue } from "../values.js";
 import { adaptBackendProtocol } from "../backends/utils.js";
 import { ConfigurationError } from "../errors.js";
 import { DEFAULT_READ_LINE_LIMIT } from "./fs.js";
+import { isCancelledToolCall } from "./patch_tool_calls.js";
 // Security: Maximum size for SKILL.md files to prevent DoS attacks (10MB)
 export const MAX_SKILL_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -1038,11 +1039,13 @@ function findSkillReads(
   }
   const reads: SkillRead[] = [];
   messages.forEach((message, index) => {
-    // A backend read error comes back as `Error: …` text, without an error status.
+    // A backend read error comes back as `Error: …` text, and a read cancelled
+    // before it ran as a stand-in result, both without an error status.
     if (
       !ToolMessage.isInstance(message) ||
       message.status === "error" ||
-      message.text.startsWith("Error:")
+      message.text.startsWith("Error:") ||
+      isCancelledToolCall(message)
     ) {
       return;
     }

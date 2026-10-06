@@ -944,6 +944,22 @@ describe("disclosure", () => {
       expect(await disclosesAfter(readCall, result)).toBe(expected);
     });
 
+    it("ignores a read cancelled before it ran", async () => {
+      const model = new RecordingChatModel();
+
+      await skillsAgent(model).invoke(
+        skillsInput({ crm: "create_customer_request" }, [
+          new HumanMessage("go"),
+          ai(read("r1")),
+          new HumanMessage("never mind"),
+        ]),
+      );
+
+      expect(boundToolNames(model.calls[0])).not.toContain(
+        "create_customer_request",
+      );
+    });
+
     it("counts a read whose result was compacted after a context overflow", async () => {
       const body = Array.from(
         { length: 60 },
