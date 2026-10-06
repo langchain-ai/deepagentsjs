@@ -3,7 +3,7 @@ import * as fsSync from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { InMemoryStore } from "@langchain/langgraph-checkpoint";
 import { getCurrentTaskInput } from "@langchain/langgraph";
 
@@ -27,6 +27,9 @@ import type {
   EditResult,
 } from "./protocol.js";
 import { isSandboxBackend } from "./protocol.js";
+import { getRealpath } from "./realpath.js";
+/** The internal realpath hook, asserted present. */
+const realpathOf = (backend: object) => getRealpath(backend)!;
 
 /**
  * Mock sandbox backend for testing execute delegation
@@ -1346,3 +1349,47 @@ describe("CompositeBackend", () => {
     });
   });
 });
+
+describe.skipIf(process.platform === "win32")(
+  "CompositeBackend realpath hook",
+  () => {
+    let root: string;
+
+    beforeEach(async () => {
+      root = fsSync.mkdtempSync(
+        path.join(os.tmpdir(), "deepagents-comp-real-"),
+      );
+      await fs.mkdir(path.join(root, "secret"));
+      await fs.symlink("secret", path.join(root, "link"));
+    });
+
+    afterEach(async () => {
+      await fs.rm(root, { recursive: true, force: true });
+    });
+
+    it("resolves through a routed backend and re-adds the route prefix", async () => {
+      const composite = new CompositeBackend(new StateBackend(), {
+        "/disk/": new FilesystemBackend({ rootDir: root, virtualMode: true }),
+      });
+      expect(await realpathOf(composite)("/disk/link/key")).toBe(
+        "/disk/secret/key",
+      );
+      expect(await realpathOf(composite)("/disk")).toBe("/disk/");
+    });
+
+    it("resolves through the default backend", async () => {
+      const composite = new CompositeBackend(
+        new FilesystemBackend({ rootDir: root, virtualMode: true }),
+        { "/mem/": new StateBackend() },
+      );
+      expect(await realpathOf(composite)("/link/key")).toBe("/secret/key");
+    });
+
+    it("returns the path unchanged when the owning backend has no realpath hook", async () => {
+      const composite = new CompositeBackend(new StateBackend(), {
+        "/disk/": new FilesystemBackend({ rootDir: root, virtualMode: true }),
+      });
+      expect(await realpathOf(composite)("/other/./x")).toBe("/other/./x");
+    });
+  },
+);

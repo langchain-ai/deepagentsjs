@@ -27,6 +27,8 @@ export function validatePermissionPaths(
  * - Non-absolute paths (must start with `/`)
  * - Paths containing `..`
  * - Paths containing `~`
+ *
+ * Empty and `.` segments are dropped (`/a/./b` and `/a//b` become `/a/b`).
  */
 export function validatePath(raw: string): string {
   if (typeof raw !== "string" || raw.length === 0) {
@@ -37,7 +39,7 @@ export function validatePath(raw: string): string {
     throw new Error(`path must be absolute: ${JSON.stringify(raw)}`);
   }
 
-  const segments = raw.split("/").filter((s) => s.length > 0);
+  const segments = raw.split("/").filter((s) => s.length > 0 && s !== ".");
   if (segments.includes("..")) {
     throw new Error(`path must not contain "..": ${JSON.stringify(raw)}`);
   }

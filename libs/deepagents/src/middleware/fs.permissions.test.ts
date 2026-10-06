@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createFilesystemMiddleware, findDeleteDenyPatterns } from "./fs.js";
 import type { BackendProtocolV2 } from "../backends/protocol.js";
 import { FilesystemBackend } from "../backends/filesystem.js";
+import type { FilesystemPermission } from "../permissions/types.js";
 import * as fs from "node:fs/promises";
 import * as fsSync from "node:fs";
 import * as os from "node:os";
@@ -1424,3 +1425,184 @@ describe("delete permissions against a real FilesystemBackend", () => {
     ).resolves.toBeDefined();
   });
 });
+
+describe.skipIf(process.platform === "win32")(
+  "permissions are checked on the resolved target",
+  () => {
+    let root: string;
+
+    beforeEach(async () => {
+      root = fsSync.mkdtempSync(
+        path.join(os.tmpdir(), "deepagents-real-perm-"),
+      );
+      await fs.mkdir(path.join(root, "secret"));
+      await fs.mkdir(path.join(root, "work"));
+      await fs.writeFile(path.join(root, "secret", "key"), "TOPSECRET");
+      await fs.writeFile(path.join(root, "work", "notes.txt"), "TOPSECRET too");
+      await fs.symlink(
+        path.join("..", "secret"),
+        path.join(root, "work", "link"),
+      );
+      await fs.symlink(
+        path.join("..", "secret", "key"),
+        path.join(root, "work", "alias.txt"),
+      );
+    });
+
+    afterEach(async () => {
+      await fs.rm(root, { recursive: true, force: true });
+    });
+
+    function middlewareWith(permissions: FilesystemPermission[]) {
+      return createFilesystemMiddleware({
+        backend: new FilesystemBackend({ rootDir: root, virtualMode: true }),
+        permissions,
+      });
+    }
+
+    it("blocks read_file through a dot segment", async () => {
+      const result = await getTool(
+        middlewareWith([denyRead(["/secret/**"])]),
+        "read_file",
+      ).invoke({ file_path: "/secret/./key" });
+      expect(resultText(result)).toContain("permission denied for read");
+      expect(resultText(result)).not.toContain("TOPSECRET");
+    });
+
+    it("blocks read_file through an intermediate directory symlink", async () => {
+      const result = await getTool(
+        middlewareWith([denyRead(["/secret/**"])]),
+        "read_file",
+      ).invoke({ file_path: "/work/link/key" });
+      expect(resultStatus(result)).toBe("error");
+      expect(resultText(result)).toContain("resolves to /secret/key");
+      expect(resultText(result)).not.toContain("TOPSECRET");
+    });
+
+    it("blocks read_file through a symlinked leaf", async () => {
+      const result = await getTool(
+        middlewareWith([denyRead(["/secret/**"])]),
+        "read_file",
+      ).invoke({ file_path: "/work/alias.txt" });
+      expect(resultText(result)).toContain("permission denied for read");
+    });
+
+    it("blocks write_file and edit_file through a symlink", async () => {
+      const middleware = middlewareWith([denyWrite(["/secret/**"])]);
+      const write = await getTool(middleware, "write_file").invoke({
+        file_path: "/work/link/new.txt",
+        content: "x",
+      });
+      expect(resultText(write)).toContain("permission denied for write");
+      await expect(
+        fs.stat(path.join(root, "secret", "new.txt")),
+      ).rejects.toThrow();
+
+      const edit = await getTool(middleware, "edit_file").invoke({
+        file_path: "/work/link/key",
+        old_string: "TOP",
+        new_string: "NOT",
+      });
+      expect(resultText(edit)).toContain("permission denied for write");
+      expect(await fs.readFile(path.join(root, "secret", "key"), "utf8")).toBe(
+        "TOPSECRET",
+      );
+    });
+
+    it("blocks ls, glob, and grep scoped to a symlinked directory", async () => {
+      const middleware = middlewareWith([denyRead(["/secret/**"])]);
+      for (const [name, input] of [
+        ["ls", { path: "/work/link" }],
+        ["glob", { pattern: "*", path: "/work/link" }],
+        ["grep", { pattern: "TOPSECRET", path: "/work/link" }],
+      ] as const) {
+        const result = await getTool(middleware, name).invoke(input);
+        expect(resultText(result)).toContain("permission denied for read");
+      }
+    });
+
+    it("filters listed and matched entries that resolve to a denied target", async () => {
+      const middleware = middlewareWith([denyRead(["/secret/**"])]);
+      const ls = resultText(
+        await getTool(middleware, "ls").invoke({ path: "/work" }),
+      );
+      expect(ls).toContain("/work/notes.txt");
+      expect(ls).not.toContain("/work/alias.txt");
+      expect(ls).not.toContain("/work/link");
+
+      const glob = resultText(
+        await getTool(middleware, "glob").invoke({
+          pattern: "*",
+          path: "/work",
+        }),
+      );
+      expect(glob).toContain("/work/notes.txt");
+      expect(glob).not.toContain("/work/alias.txt");
+    });
+
+    it("allows a symlink into an allowed directory", async () => {
+      const result = await getTool(
+        middlewareWith([denyRead(["/other/**"])]),
+        "read_file",
+      ).invoke({ file_path: "/work/link/key" });
+      expect(resultText(result)).toContain("TOPSECRET");
+    });
+
+    it("applies allow-list rules to the resolved target", async () => {
+      const result = await getTool(
+        middlewareWith([
+          {
+            operations: ["read"],
+            paths: ["/work/**"],
+            mode: "allow",
+          },
+          denyRead(["/**"]),
+        ]),
+        "read_file",
+      ).invoke({ file_path: "/work/link/key" });
+      expect(resultText(result)).toContain("permission denied for read");
+    });
+
+    it("blocks delete through a symlinked ancestor", async () => {
+      const result = await getTool(
+        middlewareWith([denyWrite(["/secret/**"])]),
+        "delete",
+      ).invoke({ file_path: "/work/link/key" });
+      expect(resultText(result)).toContain("permission denied for write");
+      await expect(
+        fs.stat(path.join(root, "secret", "key")),
+      ).resolves.toBeDefined();
+    });
+
+    it("allows deleting a symlink leaf that points into a denied directory", async () => {
+      const result = await getTool(
+        middlewareWith([denyWrite(["/secret/**"])]),
+        "delete",
+      ).invoke({ file_path: "/work/alias.txt" });
+      expect(resultText(result)).toContain("Deleted");
+      await expect(
+        fs.lstat(path.join(root, "work", "alias.txt")),
+      ).rejects.toThrow();
+      await expect(
+        fs.stat(path.join(root, "secret", "key")),
+      ).resolves.toBeDefined();
+    });
+
+    it("blocks a symlink that resolves outside the virtual root", async () => {
+      const outside = fsSync.mkdtempSync(
+        path.join(os.tmpdir(), "deepagents-real-perm-out-"),
+      );
+      try {
+        await fs.symlink(outside, path.join(root, "work", "escape"));
+        const result = await getTool(
+          middlewareWith([denyRead(["/secret/**"])]),
+          "read_file",
+        ).invoke({ file_path: "/work/escape/x" });
+        expect(resultStatus(result)).toBe("error");
+        expect(resultText(result)).toContain("outside root");
+      } finally {
+        await fs.rm(outside, { recursive: true, force: true });
+      }
+    });
+  },
+);
