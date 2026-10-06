@@ -3,7 +3,7 @@ import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import * as path from "path";
 import * as os from "os";
-import { FilesystemBackend } from "./filesystem.js";
+import { FilesystemBackend, toSlashRootedPath } from "./filesystem.js";
 import { getRealpath } from "./realpath.js";
 
 /** The internal realpath hook, asserted present. */
@@ -1207,6 +1207,28 @@ describe("FilesystemBackend realpath hook", () => {
       expect(
         await realpathOf(backend)(path.join(rootLink, "secret", "key")),
       ).toBe(path.join(rootLink, "secret", "key"));
+    },
+  );
+});
+
+describe("toSlashRootedPath", () => {
+  it.each([
+    ["/a/b", "/a/b"],
+    ["/a/C:\\x/b", "/a/C:\\x/b"],
+    ["/a/back\\slash", "/a/back\\slash"],
+    ["C:\\proj\\foo", "/proj/foo"],
+    ["c:/proj/foo", "/proj/foo"],
+    ["C:\\", "/"],
+    ["\\\\server\\share\\dir\\f", "/dir/f"],
+    ["\\\\server\\share", "/"],
+  ])("maps %j to %j", (input, expected) => {
+    expect(toSlashRootedPath(input)).toBe(expected);
+  });
+
+  it.each(["\\\\?\\C:\\x", "\\\\.\\pipe\\x", "C:foo", "\\x", "relative\\x"])(
+    "throws for %j",
+    (input) => {
+      expect(() => toSlashRootedPath(input)).toThrow(/Cannot map/);
     },
   );
 });

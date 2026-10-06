@@ -42,6 +42,29 @@ import { setRealpath } from "./realpath.js";
 
 const SUPPORTS_NOFOLLOW = fsSync.constants.O_NOFOLLOW !== undefined;
 
+/** A Windows drive root (`C:\`) or network-share root (`\\server\share\`). */
+const WIN32_VOLUME_ROOT =
+  /^(?:[A-Za-z]:[\\/]|[\\/]{2}(?![?.][\\/])[^\\/]+[\\/][^\\/]+[\\/]?)$/;
+
+/**
+ * Convert a native absolute path to the `/`-rooted form tool paths use. POSIX
+ * paths are returned unchanged; Windows paths drop their drive or share root
+ * and use `/`. Throws for any other form (e.g. `\\?\` device paths).
+ *
+ * @internal Exported for tests.
+ */
+export function toSlashRootedPath(nativePath: string): string {
+  if (nativePath.startsWith("/")) {
+    return nativePath;
+  }
+  const { root } = path.win32.parse(nativePath);
+  if (!WIN32_VOLUME_ROOT.test(root)) {
+    throw new Error(`Cannot map '${nativePath}' to a tool path`);
+  }
+  const segments = nativePath.slice(root.length).split(/[\\/]/);
+  return `/${segments.filter(Boolean).join("/")}`;
+}
+
 /** Matches Linux's MAXSYMLINKS, bounding symlink cycles when resolving real paths. */
 const MAX_SYMLINK_HOPS = 40;
 
@@ -215,7 +238,9 @@ export class FilesystemBackend implements BackendProtocolV2 {
       }
       return `/${relative.split(path.sep).filter(Boolean).join("/")}`;
     }
-    return insideRoot ? path.join(this.cwd, relative) : realPath;
+    return toSlashRootedPath(
+      insideRoot ? path.join(this.cwd, relative) : realPath,
+    );
   }
 
   /**

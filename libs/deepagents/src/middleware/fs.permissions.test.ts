@@ -4,6 +4,7 @@ import type { BackendProtocolV2 } from "../backends/protocol.js";
 import { FilesystemBackend } from "../backends/filesystem.js";
 import type { FilesystemPermission } from "../permissions/types.js";
 import * as fs from "node:fs/promises";
+import fsPromises from "node:fs/promises";
 import * as fsSync from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -1606,3 +1607,59 @@ describe.skipIf(process.platform === "win32")(
     });
   },
 );
+
+describe("permissions with a non-virtual FilesystemBackend", () => {
+  let root: string;
+  let file: string;
+
+  beforeEach(async () => {
+    root = fsSync.mkdtempSync(path.join(os.tmpdir(), "deepagents-nonvirt-"));
+    file = path.join(root, "a.txt");
+    await fs.writeFile(file, "hello");
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await fs.rm(root, { recursive: true, force: true });
+  });
+
+  /** The `/`-rooted path a model would use for `p` (drive dropped on Windows). */
+  const modelPath = (p: string) =>
+    p
+      .slice(path.parse(p).root.length - 1)
+      .split(path.sep)
+      .join("/");
+
+  it("reads an allowed file when realpath returns native Windows paths", async () => {
+    // Simulate win32 `fs.realpath` output (`C:\\...`).
+    vi.spyOn(fsPromises, "realpath").mockImplementation(
+      async (p) => `C:${String(p).split("/").join("\\")}`,
+    );
+    const middleware = createFilesystemMiddleware({
+      backend: new FilesystemBackend({ rootDir: root }),
+      permissions: [denyRead(["/nothing/**"])],
+    });
+
+    const result = await getTool(middleware, "read_file").invoke({
+      file_path: modelPath(file),
+    });
+
+    expect(resultText(result)).toContain("hello");
+  });
+
+  it.runIf(process.platform === "win32")(
+    "reads an allowed file on Windows",
+    async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: new FilesystemBackend({ rootDir: root }),
+        permissions: [denyRead(["/nothing/**"])],
+      });
+
+      const result = await getTool(middleware, "read_file").invoke({
+        file_path: modelPath(file),
+      });
+
+      expect(resultText(result)).toContain("hello");
+    },
+  );
+});
