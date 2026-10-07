@@ -74,8 +74,6 @@ const CALL_COUNT_STATE_KEYS = [
  * State keys excluded when passing state to subagents and when returning
  * updates from subagents. Summarization keys are excluded because their
  * cutoffIndex is only valid against the message list it was computed from.
- * The disclosed skill tools describe one agent's latest model call; each agent
- * records its own.
  */
 const EXCLUDED_STATE_KEYS = [
   "messages",
@@ -102,8 +100,7 @@ const EXCLUDED_STATE_KEYS = [
  * parent's last loaded list.
  *
  * Call counts stay excluded: a fork inherits the parent's middleware, so
- * sharing them collides on the parent's channel. The disclosed skill tools
- * describe the parent's last model call; the fork records its own.
+ * sharing them collides on the parent's channel.
  */
 const FORK_EXCLUDED_STATE_KEYS = [
   "structuredResponse",
