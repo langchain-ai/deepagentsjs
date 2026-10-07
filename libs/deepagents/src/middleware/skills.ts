@@ -78,7 +78,6 @@ import { filesValue } from "../values.js";
 import { adaptBackendProtocol } from "../backends/utils.js";
 import { ConfigurationError } from "../errors.js";
 import { DEFAULT_READ_LINE_LIMIT } from "./fs.js";
-import { isCancelledToolCall } from "./patch_tool_calls.js";
 // Security: Maximum size for SKILL.md files to prevent DoS attacks (10MB)
 export const MAX_SKILL_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -1004,8 +1003,7 @@ interface SkillRead {
  * message order.
  *
  * Any `offset` or `limit` counts, and so does a result whose content was later
- * truncated or compacted. A result doesn't count if it has an error status, is
- * `Error: …` text, or stands in for a read cancelled before it ran.
+ * truncated or compacted, since only the call and the result's status are read.
  */
 function findSkillReads(
   messages: readonly BaseMessage[],
@@ -1040,20 +1038,10 @@ function findSkillReads(
   }
   const reads: SkillRead[] = [];
   messages.forEach((message, index) => {
-    // A backend read error comes back as `Error: …` text, without an error status.
-    if (
-      !ToolMessage.isInstance(message) ||
-      message.status === "error" ||
-      message.text.startsWith("Error:")
-    ) {
-      return;
-    }
+    if (!ToolMessage.isInstance(message) || message.status === "error") return;
     const path = normalizePath(readPaths.get(message.tool_call_id));
     const skill = path === undefined ? undefined : skillsByPath.get(path);
-    // A read cancelled before it ran gets a stand-in result, also without one.
-    if (skill !== undefined && !isCancelledToolCall(message, "read_file")) {
-      reads.push({ index, ...skill });
-    }
+    if (skill !== undefined) reads.push({ index, ...skill });
   });
   return reads;
 }

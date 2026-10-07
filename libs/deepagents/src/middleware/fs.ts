@@ -1225,7 +1225,7 @@ function createReadFileTool(
 
       const readResult = await resolvedBackend.read(file_path, offset, limit);
       if (readResult.error) {
-        return [{ type: "text", text: `Error: ${readResult.error}` }];
+        return toolError(runtime, "read_file", `Error: ${readResult.error}`);
       }
 
       const mimeType = readResult.mimeType ?? getMimeType(file_path);
@@ -1233,12 +1233,11 @@ function createReadFileTool(
       if (!isTextMimeType(mimeType)) {
         const binaryContent = readResult.content;
         if (!binaryContent) {
-          return [
-            {
-              type: "text",
-              text: `Error: expected binary content for '${file_path}'`,
-            },
-          ];
+          return toolError(
+            runtime,
+            "read_file",
+            `Error: expected binary content for '${file_path}'`,
+          );
         }
 
         // Content may arrive as:
@@ -1258,12 +1257,11 @@ function createReadFileTool(
         const sizeBytes = Math.ceil((base64Data.length * 3) / 4);
 
         if (sizeBytes > MAX_BINARY_READ_SIZE_BYTES) {
-          return [
-            {
-              type: "text",
-              text: `Error: file too large to read (${Math.round(sizeBytes / (1024 * 1024))}MB exceeds ${MAX_BINARY_READ_SIZE_BYTES / (1024 * 1024)}MB limit for binary files)`,
-            },
-          ];
+          return toolError(
+            runtime,
+            "read_file",
+            `Error: file too large to read (${Math.round(sizeBytes / (1024 * 1024))}MB exceeds ${MAX_BINARY_READ_SIZE_BYTES / (1024 * 1024)}MB limit for binary files)`,
+          );
         }
 
         if (mimeType.startsWith("image/")) {

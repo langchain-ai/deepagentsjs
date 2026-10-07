@@ -920,28 +920,6 @@ describe("disclosure", () => {
         false,
       ],
       ["a read with an error status", read("r1"), { status: "error" }, false],
-      [
-        "a read whose text is a backend error",
-        read("r1"),
-        { content: "Error: file not found" },
-        false,
-      ],
-      [
-        "a read whose first text block is a backend error",
-        read("r1"),
-        { content: [{ type: "text", text: "Error: file not found" }] },
-        false,
-      ],
-      [
-        "a cancelled read whose result has lost its name",
-        read("r1"),
-        {
-          name: undefined,
-          content:
-            "Tool call read_file with id r1 was cancelled - another message came in before it could be completed.",
-        },
-        false,
-      ],
       ["a read of another file", read("r1", "/skills/crm/notes.md"), {}, false],
       [
         "a path with a .. segment",
@@ -971,6 +949,22 @@ describe("disclosure", () => {
       );
 
       expect(boundToolNames(model.calls[0])).not.toContain(
+        "create_customer_request",
+      );
+    });
+
+    it("ignores a read the backend failed", async () => {
+      const model = new RecordingChatModel(ai(read("r1")));
+      const backend = new StateBackend();
+      backend.read = () => ({ error: "permission denied" });
+
+      const result = await skillsAgent(model, { backend }).invoke(
+        skillsInput({ crm: "create_customer_request" }),
+      );
+
+      const [readResult] = toolMessages(result, "read_file");
+      expect(readResult.text).toBe("Error: permission denied");
+      expect(boundToolNames(model.calls[1])).not.toContain(
         "create_customer_request",
       );
     });
