@@ -801,6 +801,7 @@ export function createSummarizationMiddleware(
       const msg = messages[i];
 
       if (i < cutoffIndex && AIMessage.isInstance(msg) && msg.tool_calls) {
+        const truncatedArgsById = new Map<string, Record<string, unknown>>();
         const truncatedToolCalls = msg.tool_calls.map((toolCall) => {
           const args = toolCall.args || {};
           const truncatedArgs: Record<string, unknown> = {};
@@ -821,16 +822,41 @@ export function createSummarizationMiddleware(
 
           if (toolModified) {
             modified = true;
+            truncatedArgsById.set(toolCall.id ?? "", truncatedArgs);
             return { ...toolCall, args: truncatedArgs };
           }
           return toolCall;
         });
 
-        if (modified) {
+        if (truncatedArgsById.size > 0) {
+          // OpenAI Responses replays `response_metadata.output` verbatim, so
+          // its function_call items must carry the truncated arguments too.
+          const output = msg.response_metadata?.output;
+          const responseMetadata = Array.isArray(output)
+            ? {
+                ...msg.response_metadata,
+                output: output.map((item) =>
+                  item?.type === "function_call" &&
+                  truncatedArgsById.has(item.call_id)
+                    ? {
+                        ...item,
+                        arguments: JSON.stringify(
+                          truncatedArgsById.get(item.call_id),
+                        ),
+                      }
+                    : item,
+                ),
+              }
+            : msg.response_metadata;
           const truncatedMsg = new AIMessage({
             content: msg.content,
+            id: msg.id,
+            name: msg.name,
             tool_calls: truncatedToolCalls,
+            invalid_tool_calls: msg.invalid_tool_calls,
+            usage_metadata: msg.usage_metadata,
             additional_kwargs: msg.additional_kwargs,
+            response_metadata: responseMetadata,
           });
           truncatedMessages.push(truncatedMsg);
         } else {

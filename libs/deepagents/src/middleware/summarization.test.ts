@@ -623,6 +623,142 @@ describe("createSummarizationMiddleware", () => {
         );
       }
     });
+
+    it("should preserve message fields when truncating tool call arguments", async () => {
+      const middleware = createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: createMockBackend(),
+        trigger: { type: "messages", value: 20 },
+        truncateArgsSettings: {
+          trigger: { type: "messages", value: 3 },
+          keep: { type: "messages", value: 1 },
+          maxLength: 50,
+          truncationText: "...(truncated)",
+        },
+      });
+
+      // A Responses-API assistant turn carries the raw output items used to
+      // replay reasoning (e.g. encrypted_content) on the next request.
+      const largeArgs = { path: "/test.txt", content: "x".repeat(100) };
+      const reasoningItems = [
+        { type: "reasoning", id: "rs_1", encrypted_content: "enc1" },
+        { type: "reasoning", id: "rs_2", encrypted_content: "enc2" },
+      ];
+      const responseMetadata = {
+        model_name: "o4-mini",
+        output: [
+          ...reasoningItems,
+          {
+            type: "function_call",
+            call_id: "call_1",
+            name: "write_file",
+            arguments: JSON.stringify(largeArgs),
+          },
+        ],
+      };
+      const usageMetadata = {
+        input_tokens: 10,
+        output_tokens: 20,
+        total_tokens: 30,
+      };
+      const messages = [
+        new HumanMessage({ content: "Write a file" }),
+        new AIMessage({
+          content: "",
+          id: "msg-ai-1",
+          name: "assistant",
+          tool_calls: [
+            {
+              id: "call_1",
+              name: "write_file",
+              args: largeArgs,
+            },
+          ],
+          usage_metadata: usageMetadata,
+          response_metadata: responseMetadata,
+        }),
+        new ToolMessage({ content: "ok", tool_call_id: "call_1" }),
+        new HumanMessage({ content: "Recent message" }),
+      ];
+
+      const { capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
+
+      const aiMessage = capturedRequest!.messages[1] as InstanceType<
+        typeof AIMessage
+      >;
+      expect(AIMessage.isInstance(aiMessage)).toBe(true);
+      expect(aiMessage.tool_calls![0].args.content).toContain("...(truncated)");
+      expect(aiMessage.id).toBe("msg-ai-1");
+      expect(aiMessage.name).toBe("assistant");
+      expect(aiMessage.usage_metadata).toEqual(usageMetadata);
+      // Reasoning items survive, and the replayed function_call carries the
+      // truncated arguments rather than the original ones.
+      expect(aiMessage.response_metadata.model_name).toBe("o4-mini");
+      expect(aiMessage.response_metadata.output).toEqual([
+        ...reasoningItems,
+        {
+          type: "function_call",
+          call_id: "call_1",
+          name: "write_file",
+          arguments: JSON.stringify(aiMessage.tool_calls![0].args),
+        },
+      ]);
+    });
+
+    it("should not rebuild tool-call messages whose arguments were unchanged", async () => {
+      const middleware = createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: createMockBackend(),
+        trigger: { type: "messages", value: 20 },
+        truncateArgsSettings: {
+          trigger: { type: "messages", value: 3 },
+          keep: { type: "messages", value: 1 },
+          maxLength: 50,
+          truncationText: "...(truncated)",
+        },
+      });
+
+      const unchangedMessage = new AIMessage({
+        content: "",
+        id: "msg-ai-2",
+        tool_calls: [
+          {
+            id: "call_2",
+            name: "write_todos",
+            args: { todos: "short" },
+          },
+        ],
+        response_metadata: { output: [{ type: "reasoning", id: "rs_9" }] },
+      });
+      const messages = [
+        new HumanMessage({ content: "Write a file" }),
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "call_1",
+              name: "write_file",
+              args: { path: "/test.txt", content: "x".repeat(100) },
+            },
+          ],
+        }),
+        new ToolMessage({ content: "ok", tool_call_id: "call_1" }),
+        unchangedMessage,
+        new ToolMessage({ content: "ok", tool_call_id: "call_2" }),
+        new HumanMessage({ content: "Recent message" }),
+      ];
+
+      const { capturedRequest } = await callWrapModelCall(middleware, {
+        messages,
+      });
+
+      // The first AI message was rebuilt with truncated args; the second must
+      // pass through untouched instead of inheriting the shared flag.
+      expect(capturedRequest!.messages[3]).toBe(unchangedMessage);
+      expect(capturedRequest!.messages[3].id).toBe("msg-ai-2");
+    });
   });
 
   describe("multiple triggers", () => {
