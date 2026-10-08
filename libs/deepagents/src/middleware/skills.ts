@@ -1002,8 +1002,10 @@ interface SkillRead {
  * Return every successful `read_file` of a `SKILL.md` that lists tools, in
  * message order.
  *
- * Any `offset` or `limit` counts, and so does a result whose content was later
- * truncated or compacted, since only the call and the result's status are read.
+ * The read's path must equal the skill's path exactly, as the skills listing
+ * shows it. Any `offset` or `limit` counts, and so does a result whose content
+ * was later truncated or compacted, since only the call and the result's status
+ * are read.
  */
 function findSkillReads(
   messages: readonly BaseMessage[],
@@ -1018,9 +1020,8 @@ function findSkillReads(
     const value = skill.metadata?.[INCLUDE_TOOLS_KEY];
     const includeNames =
       typeof value === "string" ? value.split(/\s+/).filter(Boolean) : [];
-    const path = normalizePath(skill.path);
-    if (path !== undefined && includeNames.length > 0) {
-      skillsByPath.set(path, { skillName: skill.name, includeNames });
+    if (includeNames.length > 0) {
+      skillsByPath.set(skill.path, { skillName: skill.name, includeNames });
     }
   }
   if (skillsByPath.size === 0) return [];
@@ -1039,31 +1040,11 @@ function findSkillReads(
   const reads: SkillRead[] = [];
   messages.forEach((message, index) => {
     if (!ToolMessage.isInstance(message) || message.status === "error") return;
-    const path = normalizePath(readPaths.get(message.tool_call_id));
-    const skill = path === undefined ? undefined : skillsByPath.get(path);
+    const path = readPaths.get(message.tool_call_id);
+    const skill = typeof path === "string" ? skillsByPath.get(path) : undefined;
     if (skill !== undefined) reads.push({ index, ...skill });
   });
   return reads;
-}
-
-/**
- * Normalize `path`, or return `undefined` if it is invalid.
- *
- * Backslashes become slashes, empty and `.` segments are dropped, and a
- * relative path is made absolute. A `..` segment, a leading `~` or a Windows
- * drive makes the path invalid.
- */
-function normalizePath(path: unknown): string | undefined {
-  if (typeof path !== "string") return undefined;
-  const segments = path.replaceAll("\\", "/").split("/");
-  if (
-    segments.includes("..") ||
-    path.startsWith("~") ||
-    /^[a-zA-Z]:/.test(path)
-  ) {
-    return undefined;
-  }
-  return `/${segments.filter((s) => s !== "" && s !== ".").join("/")}`;
 }
 
 /** A tool as it appears in `request.tools`: a tool instance, or a plain or provider-native object. */

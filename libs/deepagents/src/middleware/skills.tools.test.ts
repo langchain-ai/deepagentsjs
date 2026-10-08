@@ -907,26 +907,14 @@ describe("disclosure", () => {
         true,
       ],
       [
-        "a path that normalizes to the skill's",
+        "a path equivalent to the skill's but written differently",
         read("r1", "/skills//crm/./SKILL.md"),
         {},
-        true,
-      ],
-      ["a relative path", read("r1", "skills/crm/SKILL.md"), {}, true],
-      [
-        "a path starting with ~",
-        read("r1", "~/skills/crm/SKILL.md"),
-        {},
         false,
       ],
+      ["a relative path", read("r1", "skills/crm/SKILL.md"), {}, false],
       ["a read with an error status", read("r1"), { status: "error" }, false],
       ["a read of another file", read("r1", "/skills/crm/notes.md"), {}, false],
-      [
-        "a path with a .. segment",
-        read("r1", "/skills/../skills/crm/SKILL.md"),
-        {},
-        false,
-      ],
       [
         "a call other than read_file",
         call("ls", "r1", { path: CRM_PATH }),
