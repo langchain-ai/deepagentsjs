@@ -61,8 +61,14 @@ import {
   type BaseMessage,
 } from "@langchain/core/messages";
 import { Runnable, RunnableBinding } from "@langchain/core/runnables";
-import type { ClientTool, ServerTool } from "@langchain/core/tools";
-import { convertToOpenAITool } from "@langchain/core/utils/function_calling";
+import {
+  isLangChainTool,
+  type ClientTool,
+  type ServerTool,
+  type StructuredToolParams,
+} from "@langchain/core/tools";
+import { isOpenAITool } from "@langchain/core/language_models/base";
+import { convertToOpenAIFunction } from "@langchain/core/utils/function_calling";
 import { toJsonSchema } from "@langchain/core/utils/json_schema";
 import { isInteropZodSchema } from "@langchain/core/utils/types";
 
@@ -1048,18 +1054,13 @@ function findSkillReads(
 /** A tool as it appears in `request.tools`: a tool instance, or a plain or provider-native object. */
 type RequestTool = ClientTool | ServerTool;
 
-/** A tool whose definition a disclosure can carry: a tool instance, or tool search's plain stand-in. */
-type DisclosableTool = {
-  name: string;
-  description?: string;
-  schema?: unknown;
-  extras?: Record<string, unknown>;
-};
+/** A request tool a disclosure can carry: a tool instance, or a plain LangChain definition such as tool search's stand-in. */
+type DisclosableTool = RequestTool & StructuredToolParams;
 
 /** A tool one model call discloses. */
 interface DisclosedTool {
   /** The request's own entry for a deferred request tool, otherwise the skill tool. */
-  tool: RequestTool;
+  tool: DisclosableTool;
   /** Index of the earliest skill read producing the tool; the disclosure is placed after it. */
   anchor: number;
   /**
@@ -1071,12 +1072,8 @@ interface DisclosedTool {
 
 /** Return a request tool's name, whether it is a tool instance or a provider object. */
 function toolName(tool: RequestTool): string | undefined {
-  const { name, function: fn } = tool as {
-    name?: unknown;
-    function?: { name?: unknown };
-  };
-  if (typeof name === "string") return name;
-  return typeof fn?.name === "string" ? fn.name : undefined;
+  if (isOpenAITool(tool)) return tool.function.name;
+  return typeof tool.name === "string" ? tool.name : undefined;
 }
 
 /**
@@ -1159,22 +1156,29 @@ function planDisclosure(
   resolved: ReadonlyMap<string, readonly ClientTool[]>,
 ): Map<string, DisclosedTool> {
   const disclosed = new Map<string, DisclosedTool>();
+  const discloseIfDeferred = (name: string, anchor: number) => {
+    const entry = requestTools.get(name);
+    if (
+      !disclosed.has(name) &&
+      isLangChainTool(entry) &&
+      entry.extras?.[DEFER_LOADING] === true
+    ) {
+      disclosed.set(name, { tool: entry, anchor });
+    }
+  };
   for (const { index, includeNames } of reads) {
     for (const includeName of includeNames) {
-      const claimed = requestTools.get(includeName);
-      const produced =
-        claimed !== undefined ? [claimed] : (resolved.get(includeName) ?? []);
+      if (requestTools.has(includeName)) {
+        discloseIfDeferred(includeName, index);
+        continue;
+      }
       // Consider logging an include name that produces no tools once we have a proper logging solution
-      for (const tool of produced) {
-        const name = toolName(tool);
-        if (name === undefined || disclosed.has(name)) continue;
-        const entry = requestTools.get(name);
-        if (entry === undefined) {
-          disclosed.set(name, { tool, anchor: index, includeName });
-        } else if (
-          (entry as DisclosableTool).extras?.[DEFER_LOADING] === true
-        ) {
-          disclosed.set(name, { tool: entry, anchor: index });
+      for (const tool of resolved.get(includeName) ?? []) {
+        if (disclosed.has(tool.name)) continue;
+        if (requestTools.has(tool.name)) {
+          discloseIfDeferred(tool.name, index);
+        } else {
+          disclosed.set(tool.name, { tool, anchor: index, includeName });
         }
       }
     }
@@ -1192,7 +1196,7 @@ function withholdRootCombinatorTools(
   disclosed: Map<string, DisclosedTool>,
 ): void {
   for (const [name, { tool }] of disclosed) {
-    const schema = anthropicDefinition(tool as DisclosableTool).input_schema;
+    const schema = anthropicDefinition(tool).input_schema;
     const keys = ANTHROPIC_ROOT_COMBINATORS.filter(
       (key) =>
         typeof schema === "object" &&
@@ -1251,7 +1255,7 @@ function discloseInMessages(
     const blocks = namesByIndex
       .get(index)!
       .sort()
-      .map((name) => build(disclosed.get(name)!.tool as DisclosableTool));
+      .map((name) => build(disclosed.get(name)!.tool));
     // Authored in `content`: the standard-content path drops provider-native blocks.
     result.splice(index, 0, new SystemMessage({ content: blocks as never }));
   }
@@ -1275,7 +1279,7 @@ function discloseInTools(
     const name = toolName(tool);
     const entry = name === undefined ? undefined : disclosed.get(name);
     if (entry?.tool !== tool || entry.includeName !== undefined) return tool;
-    const { description, schema, extras = {} } = tool as DisclosableTool;
+    const { description, schema, extras = {} } = entry.tool;
     const { [DEFER_LOADING]: _deferLoading, ...rest } = extras;
     return { name, description, schema, extras: rest };
   });
@@ -1328,7 +1332,7 @@ function llmType(model: unknown): string | undefined {
 }
 
 /** Builds the provider-native block that makes one tool callable from its position on. */
-type BlockBuilder = (tool: DisclosableTool) => Record<string, unknown>;
+type BlockBuilder = (tool: StructuredToolParams) => Record<string, unknown>;
 
 /**
  * Return how `chatModel` is given a tool mid-conversation, or `undefined` if
@@ -1371,7 +1375,9 @@ function inlineBlockBuilder(chatModel: unknown): BlockBuilder | undefined {
  * `defer_loading` (a deferred definition would stay withheld) or
  * `cache_control` (a stray marker uses up a breakpoint).
  */
-function anthropicDefinition(tool: DisclosableTool): Record<string, unknown> {
+function anthropicDefinition(
+  tool: StructuredToolParams,
+): Record<string, unknown> {
   const definition: Record<string, unknown> = {
     name: tool.name,
     description: tool.description,
@@ -1386,7 +1392,9 @@ function anthropicDefinition(tool: DisclosableTool): Record<string, unknown> {
 }
 
 /** Build the Anthropic `tool_addition` block carrying `tool`'s full definition. */
-function anthropicToolAddition(tool: DisclosableTool): Record<string, unknown> {
+function anthropicToolAddition(
+  tool: StructuredToolParams,
+): Record<string, unknown> {
   return {
     type: "tool_addition",
     tool: { type: "tool_definition", definition: anthropicDefinition(tool) },
@@ -1394,13 +1402,14 @@ function anthropicToolAddition(tool: DisclosableTool): Record<string, unknown> {
 }
 
 /** Build the OpenAI Responses `additional_tools` item carrying `tool`'s function schema. */
-function openaiAdditionalTools(tool: DisclosableTool): Record<string, unknown> {
-  const { function: fn } = convertToOpenAITool(tool as never);
-  const { [DEFER_LOADING]: _deferLoading, ...definition } = {
-    type: "function",
-    ...fn,
-  } as Record<string, unknown>;
-  return { type: "additional_tools", role: "developer", tools: [definition] };
+function openaiAdditionalTools(
+  tool: StructuredToolParams,
+): Record<string, unknown> {
+  return {
+    type: "additional_tools",
+    role: "developer",
+    tools: [{ type: "function", ...convertToOpenAIFunction(tool) }],
+  };
 }
 
 /**
