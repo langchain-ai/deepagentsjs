@@ -986,6 +986,49 @@ describe("disclosure", () => {
       const [ran] = toolMessages(result, "create_customer_request");
       expect(ran.content).toBe("created x (c1)");
     });
+
+    it("counts a pinned skill", async () => {
+      const model = new RecordingChatModel(
+        ai(call("create_customer_request", "c1", { title: "x" })),
+      );
+
+      const result = await skillsAgent(model).invoke({
+        ...skillsInput({ crm: "create_customer_request" }),
+        pinnedSkills: ["crm"],
+      });
+
+      expect(boundToolNames(model.calls[0])).toContain(
+        "create_customer_request",
+      );
+      const [ran] = toolMessages(result, "create_customer_request");
+      expect(ran.content).toBe("created x (c1)");
+    });
+
+    it("withdraws a pinned skill's tool when compaction drops the pin", async () => {
+      const model = new RecordingChatModel(
+        ai(call("create_customer_request", "c1", { title: "a" })),
+        // Six messages: compaction keeps only the c2 exchange, dropping the pin.
+        ai(call("create_customer_request", "c2", { title: "b" })),
+        "summary",
+      );
+
+      const result = await skillsAgent(model, {
+        middleware: [compacting(5, 2)],
+      }).invoke({
+        ...skillsInput({ crm: "create_customer_request" }),
+        pinnedSkills: ["crm"],
+      });
+
+      expect(boundToolNames(model.calls[1])).toContain(
+        "create_customer_request",
+      );
+      expect(boundToolNames(model.calls[3])).not.toContain(
+        "create_customer_request",
+      );
+      const [first, second] = toolMessages(result, "create_customer_request");
+      expect(first.content).toBe("created a (c1)");
+      expect(second.content).toBe("created b (c2)");
+    });
   });
 
   describe("precedence", () => {

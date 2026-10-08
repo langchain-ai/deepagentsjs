@@ -52,7 +52,12 @@ import {
    */
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
-import { Command, ReducedValue, StateSchema } from "@langchain/langgraph";
+import {
+  Command,
+  Overwrite,
+  ReducedValue,
+  StateSchema,
+} from "@langchain/langgraph";
 import {
   AIMessage,
   HumanMessage,
@@ -110,6 +115,9 @@ export const SKILL_MODULE_EXTENSIONS = [
 
 /** `SKILL.md` frontmatter `metadata` key listing the skill's include names, space-separated. */
 const INCLUDE_TOOLS_KEY = "include_tools";
+
+/** YAML frontmatter between `---` delimiters at the start of a `SKILL.md`. */
+const FRONTMATTER_PATTERN = /^---\s*\n([\s\S]*?)\n---\s*\n/;
 
 /**
  * Metadata for a skill per Agent Skills specification.
@@ -189,9 +197,9 @@ export interface SkillMetadata {
  * A resolver lets a skill list tools whose real names are only known at
  * runtime, such as generated MCP tool names, and lets one name stand for a
  * family of tools. It's called with the name and the agent's `runtime`, on
- * every model call while a read of a skill listing that name stays in context,
- * and again before one of its tools runs. It may return the tools or a
- * promise of them.
+ * every model call while a read or pin of a skill listing that name stays in
+ * context, and again before one of its tools runs. It may return the tools or
+ * a promise of them.
  *
  * - Return the same tools for the same name within a thread, or the prompt
  *   cache breaks: a change moves bytes at a position that has already been
@@ -265,13 +273,15 @@ export interface SkillsMiddlewareOptions<TContext = unknown> {
   sources: readonly string[];
 
   /**
-   * Tools the model sees only after it reads a skill that lists them in its
-   * `SKILL.md` frontmatter, as a space-separated `metadata.include_tools`.
+   * Tools the model sees only after a skill that lists them in its `SKILL.md`
+   * frontmatter, as a space-separated `metadata.include_tools`, is read or
+   * pinned.
    *
    * Pass an array of tools, or a {@link SkillToolResolver} that looks up the
-   * tools one `include_tools` name stands for when a skill is read. Unlike
-   * other middleware's tools, these are never registered with the agent: see
-   * {@link createSkillsMiddleware} for how they are disclosed and gated.
+   * tools one `include_tools` name stands for when a skill is read or pinned.
+   * Unlike other middleware's tools, these are never registered with the
+   * agent: see {@link createSkillsMiddleware} for how they are disclosed and
+   * gated.
    */
   tools?: readonly ClientTool[] | SkillToolResolver<TContext>;
 }
@@ -324,10 +334,50 @@ export type SkillMetadataEntry = z.infer<typeof SkillMetadataEntrySchema>;
 export const skillsMetadataValue = z.array(SkillMetadataEntrySchema).nullish();
 
 /**
+ * State value for a middleware's `pinnedSkills` field: the names of skills to
+ * pin.
+ *
+ * The next time the skills middleware's `beforeModel` runs, before a model
+ * call, each named skill's `SKILL.md`, without its frontmatter, is appended to
+ * the conversation as its own `HumanMessage`, in the order named. The message
+ * is a snapshot: editing the file later doesn't change it, and naming the
+ * skill again appends a new copy.
+ *
+ * Names only, matched exactly against the loaded skills. A name that isn't
+ * loaded, or whose `SKILL.md` can't be read, is skipped without an error. The
+ * key is cleared once consumed, so a later run pins nothing unless it names
+ * skills again. Writes in the same step add up, so parallel tool calls can
+ * each pin skills by returning a `Command`.
+ *
+ * Like {@link skillsMetadataValue}, treat the value as opaque. A middleware
+ * declares it on its state schema to set `pinnedSkills` from its own hooks.
+ *
+ * @example
+ * ```typescript
+ * import { createMiddleware } from "langchain";
+ * import { StateSchema } from "@langchain/langgraph";
+ * import { pinnedSkillsValue } from "deepagents";
+ *
+ * const routeSkills = createMiddleware({
+ *   name: "RouteSkills",
+ *   stateSchema: new StateSchema({ pinnedSkills: pinnedSkillsValue }),
+ *   beforeAgent: (state) => ({ pinnedSkills: skillsFor(state.messages) }),
+ * });
+ * ```
+ */
+export const pinnedSkillsValue = new ReducedValue(
+  z.array(z.string()).default(() => []),
+  {
+    reducer: (stored, written) => [...(stored ?? []), ...(written ?? [])],
+  },
+);
+
+/**
  * State schema for skills middleware.
  */
 const SkillsStateSchema = new StateSchema({
   skillsMetadata: skillsMetadataValue,
+  pinnedSkills: pinnedSkillsValue,
   files: filesValue,
   /**
    * The skill tools disclosed to the latest model call, each mapped to the
@@ -526,9 +576,7 @@ export function parseSkillMetadataFromContent(
     return null;
   }
 
-  // Match YAML frontmatter between --- delimiters
-  const frontmatterPattern = /^---\s*\n([\s\S]*?)\n---\s*\n/;
-  const match = content.match(frontmatterPattern);
+  const match = content.match(FRONTMATTER_PATTERN);
 
   if (!match) {
     console.warn(`Skipping ${skillPath}: no valid YAML frontmatter found`);
@@ -751,6 +799,99 @@ async function listSkillsFromBackend(
   }
 
   return skills;
+}
+
+/**
+ * Load the skills in every source, in order. A later source's skill replaces
+ * an earlier one of the same name.
+ */
+async function loadSkills(
+  backend: AnyBackendProtocol,
+  sources: readonly string[],
+): Promise<SkillMetadata[]> {
+  const allSkills: Map<string, SkillMetadata> = new Map();
+
+  // Load skills from each source in order (later sources override earlier)
+  for (const sourcePath of sources) {
+    try {
+      const skills = await listSkillsFromBackend(backend, sourcePath);
+      for (const skill of skills) {
+        allSkills.set(skill.name, skill);
+      }
+    } catch (error) {
+      // Log but continue - individual source failures shouldn't break everything
+      console.debug(
+        `[BackendSkillsMiddleware] Failed to load skills from ${sourcePath}:`,
+        error,
+      );
+    }
+  }
+
+  return Array.from(allSkills.values());
+}
+
+/**
+ * Return a message pinning each skill `names` refers to, in first-seen order.
+ *
+ * Skips a name that isn't in `skills`, and a skill whose `SKILL.md` is
+ * missing, unreadable, empty, or larger than {@link MAX_SKILL_FILE_SIZE}.
+ */
+async function buildPinnedSkillMessages(
+  backend: AnyBackendProtocol,
+  names: readonly string[],
+  skills: readonly SkillMetadata[],
+): Promise<HumanMessage[]> {
+  const adaptedBackend = adaptBackendProtocol(backend);
+  const skillsByName = new Map(skills.map((skill) => [skill.name, skill]));
+  // Consider logging a skipped pin once we have a proper logging solution
+  const skillsToPin = [...new Set(names)].flatMap((name) => {
+    const skill = skillsByName.get(name);
+    return skill === undefined ? [] : [skill];
+  });
+  // A backend that throws rather than returning an error is skipped too, so a
+  // failed read never fails the run and leaves the pin pending.
+  const contents = await Promise.all(
+    skillsToPin.map((skill) =>
+      readFileFromBackend(adaptedBackend, skill.path).catch(() => null),
+    ),
+  );
+  return skillsToPin.flatMap((skill, i) => {
+    const content = contents[i];
+    // Consider logging a skipped pin once we have a proper logging solution
+    if (!content || content.length > MAX_SKILL_FILE_SIZE) return [];
+    return [buildPinnedSkillMessage(skill, content)];
+  });
+}
+
+/** Return the message pinning `skill`, carrying its `SKILL.md` `content` without frontmatter. */
+function buildPinnedSkillMessage(
+  skill: SkillMetadata,
+  content: string,
+): HumanMessage {
+  const body = content.replace(FRONTMATTER_PATTERN, "").trimEnd();
+  const name = escapeXmlAttribute(skill.name);
+  const path = escapeXmlAttribute(skill.path);
+  return new HumanMessage({
+    content: `<skill name="${name}" path="${path}">\n${body}\n</skill>`,
+    additional_kwargs: {
+      lc_source: "pinned_skill",
+      skill: {
+        name: skill.name,
+        path: skill.path,
+        description: skill.description,
+      },
+    },
+  });
+}
+
+/** Escape `value` for a double-quoted XML attribute. */
+function escapeXmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
 /**
@@ -994,22 +1135,22 @@ async function callSkillToolResolver(
   return [...tools.values()];
 }
 
-/** A successful `read_file` of a `SKILL.md` that lists tools. */
+/** A successful `read_file` or a pin of a `SKILL.md` that lists tools. */
 interface SkillRead {
-  /** Index of the read's tool result in the request's messages. */
+  /** Index of the read's tool result or pinned skill message in the request's messages. */
   index: number;
   /** The entries of the skill's `metadata.include_tools`, in frontmatter order. */
   includeNames: string[];
 }
 
 /**
- * Return every successful `read_file` of a `SKILL.md` that lists tools, in
- * message order.
+ * Return every successful `read_file` or pin of a `SKILL.md` that lists
+ * tools, in message order.
  *
- * The read's path must equal the skill's path exactly, as the skills listing
- * shows it. Any `offset` or `limit` counts, and so does a result whose content
- * was later truncated or compacted, since only the call and the result's status
- * are read.
+ * The read's or pin's path must equal the skill's path exactly, as the skills
+ * listing shows it. Any `offset` or `limit` counts, and so does a result whose
+ * content was later truncated or compacted, since only the call and the
+ * result's status are read.
  */
 function findSkillReads(
   messages: readonly BaseMessage[],
@@ -1043,8 +1184,20 @@ function findSkillReads(
   }
   const reads: SkillRead[] = [];
   messages.forEach((message, index) => {
-    if (!ToolMessage.isInstance(message) || message.status === "error") return;
-    const path = readPaths.get(message.tool_call_id);
+    // A tool result's path is on the `read_file` call it answers; a pinned
+    // skill message carries its own.
+    let path: unknown;
+    if (ToolMessage.isInstance(message) && message.status !== "error") {
+      path = readPaths.get(message.tool_call_id);
+    } else if (
+      HumanMessage.isInstance(message) &&
+      message.additional_kwargs?.lc_source === "pinned_skill"
+    ) {
+      path = (message.additional_kwargs.skill as { path?: unknown } | undefined)
+        ?.path;
+    } else {
+      return;
+    }
     const skill = typeof path === "string" ? skillsByPath.get(path) : undefined;
     if (skill !== undefined) reads.push({ index, ...skill });
   });
@@ -1435,6 +1588,27 @@ function openaiAdditionalTools(
  * invalidate from any hook — including mid-run, from `afterModel` — and see
  * the fresh list on the following call. See {@link skillsMetadataValue}.
  *
+ * To guarantee the model gets a skill's instructions, for example when the
+ * user names it, pass its name in `pinnedSkills`. Before the next model call,
+ * each named skill's `SKILL.md`, without its frontmatter, is appended to the
+ * conversation as its own `HumanMessage`, with `additional_kwargs.lc_source`
+ * set to `"pinned_skill"` and the skill's `name`, `path` and `description`
+ * under `additional_kwargs.skill`:
+ *
+ * ```ts
+ * await agent.invoke(
+ *   {
+ *     messages: [new HumanMessage("/write-tests /house-style for auth.py")],
+ *     pinnedSkills: ["write-tests", "house-style"],
+ *   },
+ *   config,
+ * );
+ * ```
+ *
+ * Pins resolve against the skills loaded for the thread, so reset
+ * `skillsMetadata` in the same input to pin a skill added since. See
+ * {@link pinnedSkillsValue}.
+ *
  * ## Skill tools
  *
  * A skill can list the tools its instructions use, separated by spaces, under
@@ -1446,11 +1620,12 @@ function openaiAdditionalTools(
  * ```
  *
  * Pass those tools as `tools`, either as an array or as a
- * {@link SkillToolResolver} that looks them up by name when a skill is read,
- * so one name can stand for a family of tools whose real names are only known
- * at runtime. The model sees a skill tool only after it reads, with
- * `read_file`, a skill that lists it, and only while that read stays in the
- * conversation it is sent; compaction that drops the read withdraws the tool.
+ * {@link SkillToolResolver} that looks them up by name when a skill is read
+ * or pinned, so one name can stand for a family of tools whose real names are
+ * only known at runtime. The model sees a skill tool only after it reads, with
+ * `read_file`, a skill that lists it, or the skill is pinned, and only while
+ * that read or pin stays in the conversation it is sent; compaction that drops
+ * the read or pin withdraws the tool.
  * Until then, calling the tool fails with the standard invalid-tool error and
  * the tool doesn't run. This controls what is in the model's context; it is
  * not a security boundary, since the model can read any `SKILL.md` at any
@@ -1458,18 +1633,18 @@ function openaiAdditionalTools(
  *
  * `include_tools` can also name a tool passed to the agent rather than to this
  * middleware. That tool wins over a skill tool of the same name. If it is
- * deferred
- * (`extras: { defer_loading: true }`), reading the skill discloses it early,
- * and it stays deferred and searchable; if it is bound, nothing changes.
+ * deferred (`extras: { defer_loading: true }`), reading or pinning the skill
+ * discloses it early, and it stays deferred and searchable; if it is bound,
+ * nothing changes.
  *
  * How a tool is disclosed depends on the model actually called:
  *
  * - **Models that accept tool definitions mid-conversation** — Anthropic
  *   inline tool definitions on the Claude API, and OpenAI `additional_tools`
  *   on the Responses API (`useResponsesApi: true`). The tool's definition is
- *   sent in a system message inserted right after the read's tool result, at
- *   the same position with the same bytes on every call, so the prompt cache
- *   survives.
+ *   sent in a system message inserted right after the read's tool result or
+ *   the pinned skill message, at the same position with the same bytes on
+ *   every call, so the prompt cache survives.
  * - **Every other model** — the disclosed tools are appended to the request's
  *   `tools` instead. The gate is identical; only the cache cost differs.
  *
@@ -1483,11 +1658,12 @@ function openaiAdditionalTools(
  * messages are only permitted as the first passed message". On an older
  * OpenAI package the tool never appears.
  *
- * Known gaps: only loads through `read_file` disclose tools; a resolver never
- * sees tools another middleware adds to the request; disclosed skill tools
- * can't be called from a code interpreter's REPL, and passing a skill tool to
- * a code interpreter's `ptc` allowlist bypasses the gate. On a model without
- * mid-conversation tool definitions, disclosing the only deferred tool leaves
+ * Known gaps: a skill loaded other than through `read_file` or a pin
+ * discloses no tools; a resolver never sees tools another middleware adds to
+ * the request; disclosed skill tools can't be called from a code
+ * interpreter's REPL, and passing a skill tool to a code interpreter's `ptc`
+ * allowlist bypasses the gate. On a model without mid-conversation tool
+ * definitions, disclosing the only deferred tool leaves
  * `providerToolSearchMiddleware`'s search tool with nothing to search, which
  * OpenAI rejects. Skill tools aren't filtered by a harness profile's excluded
  * tools: a call to an excluded one is still rejected, but on a model that
@@ -1554,35 +1730,33 @@ export function createSkillsMiddleware<TContext = unknown>(
       //   Load every source.
       // - `[]`: loaded, and the sources contain no skills. Keep it.
       // - a non-empty list: loaded. Keep it.
-      if (state.skillsMetadata !== null && state.skillsMetadata !== undefined) {
+      const needsLoad =
+        state.skillsMetadata === null || state.skillsMetadata === undefined;
+      const pinnedNames = state.pinnedSkills ?? [];
+      if (!needsLoad && pinnedNames.length === 0) {
         return undefined;
       }
 
       const resolvedBackend = await resolveBackend(backend, {
         state,
       });
-      const allSkills: Map<string, SkillMetadata> = new Map();
-
-      // Load skills from each source in order (later sources override earlier)
-      for (const sourcePath of sources) {
-        try {
-          const skills = await listSkillsFromBackend(
-            resolvedBackend,
-            sourcePath,
-          );
-          for (const skill of skills) {
-            allSkills.set(skill.name, skill);
-          }
-        } catch (error) {
-          // Log but continue - individual source failures shouldn't break everything
-          console.debug(
-            `[BackendSkillsMiddleware] Failed to load skills from ${sourcePath}:`,
-            error,
-          );
-        }
+      const skillsMetadata =
+        state.skillsMetadata ?? (await loadSkills(resolvedBackend, sources));
+      if (pinnedNames.length === 0) {
+        return { skillsMetadata };
       }
 
-      return { skillsMetadata: Array.from(allSkills.values()) };
+      // Pins resolve against the list this call just loaded, if it loaded one.
+      const messages = await buildPinnedSkillMessages(
+        resolvedBackend,
+        pinnedNames,
+        skillsMetadata,
+      );
+      return {
+        ...(needsLoad && { skillsMetadata }),
+        ...(messages.length > 0 && { messages }),
+        pinnedSkills: new Overwrite([]),
+      };
     },
 
     async wrapModelCall(request, handler) {
