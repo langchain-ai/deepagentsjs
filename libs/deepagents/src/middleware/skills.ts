@@ -992,8 +992,6 @@ async function callSkillToolResolver(
 interface SkillRead {
   /** Index of the read's tool result in the request's messages. */
   index: number;
-  /** The skill's name. */
-  skillName: string;
   /** The entries of the skill's `metadata.include_tools`, in frontmatter order. */
   includeNames: string[];
 }
@@ -1021,7 +1019,7 @@ function findSkillReads(
     const includeNames =
       typeof value === "string" ? value.split(/\s+/).filter(Boolean) : [];
     if (includeNames.length > 0) {
-      skillsByPath.set(skill.path, { skillName: skill.name, includeNames });
+      skillsByPath.set(skill.path, { includeNames });
     }
   }
   if (skillsByPath.size === 0) return [];
@@ -1161,19 +1159,12 @@ function planDisclosure(
   resolved: ReadonlyMap<string, readonly ClientTool[]>,
 ): Map<string, DisclosedTool> {
   const disclosed = new Map<string, DisclosedTool>();
-  const unresolved = new Set<string>();
-  for (const { index, skillName, includeNames } of reads) {
+  for (const { index, includeNames } of reads) {
     for (const includeName of includeNames) {
       const claimed = requestTools.get(includeName);
       const produced =
         claimed !== undefined ? [claimed] : (resolved.get(includeName) ?? []);
-      if (produced.length === 0 && !unresolved.has(includeName)) {
-        unresolved.add(includeName);
-        // oxlint-disable-next-line no-console
-        console.debug(
-          `Skill '${skillName}' names tool '${includeName}', which is not available in this request`,
-        );
-      }
+      // Consider logging an include name that produces no tools once we have a proper logging solution
       for (const tool of produced) {
         const name = toolName(tool);
         if (name === undefined || disclosed.has(name)) continue;

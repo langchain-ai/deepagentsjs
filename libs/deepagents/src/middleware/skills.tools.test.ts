@@ -1070,23 +1070,16 @@ describe("disclosure", () => {
       expect(ran.content).toBe("registered x");
     });
 
-    it("logs a name that resolves to nothing at debug level only", async () => {
-      const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    it("skips a name that resolves to nothing and discloses the rest", async () => {
       const model = new RecordingChatModel(ai(read("r1")));
 
       await skillsAgent(model).invoke(
         skillsInput({ crm: "create_customer_request missing_tool" }),
       );
 
-      expect(debug).toHaveBeenCalledWith(
-        "Skill 'crm' names tool 'missing_tool', which is not available in this request",
-      );
-      expect(
-        warn.mock.calls
-          .flat()
-          .some((arg) => String(arg).includes("missing_tool")),
-      ).toBe(false);
+      const names = boundToolNames(model.calls[1]);
+      expect(names).toContain("create_customer_request");
+      expect(names).not.toContain("missing_tool");
     });
   });
 
