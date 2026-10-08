@@ -801,6 +801,7 @@ export function createSummarizationMiddleware(
       const msg = messages[i];
 
       if (i < cutoffIndex && AIMessage.isInstance(msg) && msg.tool_calls) {
+        let msgModified = false;
         const truncatedToolCalls = msg.tool_calls.map((toolCall) => {
           const args = toolCall.args || {};
           const truncatedArgs: Record<string, unknown> = {};
@@ -821,16 +822,22 @@ export function createSummarizationMiddleware(
 
           if (toolModified) {
             modified = true;
+            msgModified = true;
             return { ...toolCall, args: truncatedArgs };
           }
           return toolCall;
         });
 
-        if (modified) {
+        if (msgModified) {
           const truncatedMsg = new AIMessage({
             content: msg.content,
+            id: msg.id,
+            name: msg.name,
             tool_calls: truncatedToolCalls,
+            invalid_tool_calls: msg.invalid_tool_calls,
+            usage_metadata: msg.usage_metadata,
             additional_kwargs: msg.additional_kwargs,
+            response_metadata: msg.response_metadata,
           });
           truncatedMessages.push(truncatedMsg);
         } else {
