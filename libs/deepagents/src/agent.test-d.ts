@@ -387,6 +387,12 @@ describe("createDeepAgent types", () => {
       await agent.stream({ messages: [], skillsMetadata: null });
     });
 
+    it("should accept pinnedSkills as an invoke input", async () => {
+      const agent = createDeepAgent({ skills: ["/skills/"] });
+
+      await agent.invoke({ messages: [], pinnedSkills: ["a"] });
+    });
+
     // NOTE: `updateState` is deliberately untested here. LangGraph types its
     // second parameter as `Record<string, unknown> | unknown`, which collapses
     // to `unknown`, so it accepts any object regardless of the agent's state —
