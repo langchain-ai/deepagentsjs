@@ -639,12 +639,21 @@ describe("createSummarizationMiddleware", () => {
 
       // A Responses-API assistant turn carries the raw output items used to
       // replay reasoning (e.g. encrypted_content) on the next request.
+      const largeArgs = { path: "/test.txt", content: "x".repeat(100) };
+      const reasoningItems = [
+        { type: "reasoning", id: "rs_1", encrypted_content: "enc1" },
+        { type: "reasoning", id: "rs_2", encrypted_content: "enc2" },
+      ];
       const responseMetadata = {
         model_name: "o4-mini",
         output: [
-          { type: "reasoning", id: "rs_1", encrypted_content: "enc1" },
-          { type: "reasoning", id: "rs_2", encrypted_content: "enc2" },
-          { type: "function_call", name: "write_file" },
+          ...reasoningItems,
+          {
+            type: "function_call",
+            call_id: "call_1",
+            name: "write_file",
+            arguments: JSON.stringify(largeArgs),
+          },
         ],
       };
       const usageMetadata = {
@@ -662,7 +671,7 @@ describe("createSummarizationMiddleware", () => {
             {
               id: "call_1",
               name: "write_file",
-              args: { path: "/test.txt", content: "x".repeat(100) },
+              args: largeArgs,
             },
           ],
           usage_metadata: usageMetadata,
@@ -683,8 +692,19 @@ describe("createSummarizationMiddleware", () => {
       expect(aiMessage.tool_calls![0].args.content).toContain("...(truncated)");
       expect(aiMessage.id).toBe("msg-ai-1");
       expect(aiMessage.name).toBe("assistant");
-      expect(aiMessage.response_metadata).toEqual(responseMetadata);
       expect(aiMessage.usage_metadata).toEqual(usageMetadata);
+      // Reasoning items survive, and the replayed function_call carries the
+      // truncated arguments rather than the original ones.
+      expect(aiMessage.response_metadata.model_name).toBe("o4-mini");
+      expect(aiMessage.response_metadata.output).toEqual([
+        ...reasoningItems,
+        {
+          type: "function_call",
+          call_id: "call_1",
+          name: "write_file",
+          arguments: JSON.stringify(aiMessage.tool_calls![0].args),
+        },
+      ]);
     });
 
     it("should not rebuild tool-call messages whose arguments were unchanged", async () => {
