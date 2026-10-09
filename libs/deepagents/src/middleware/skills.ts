@@ -880,15 +880,6 @@ export function validateModulePath(raw: unknown): string | undefined {
   return normalized;
 }
 
-// Skill tools: the tools a skill names in `metadata.include_tools`, disclosed
-// once its `SKILL.md` has been read. The helpers below cover which reads of a
-// `SKILL.md` count, how the include names a skill lists resolve to tools and
-// which of those are disclosed, where the disclosure goes in the conversation,
-// and the provider-native blocks that carry each tool's definition.
-//
-// An include name is one entry in a skill's `metadata.include_tools`: a tool's
-// exact name, or a name a resolver maps to tools.
-
 /** Tool `extras` key (and provider field) that withholds a tool's schema until searched for. */
 const DEFER_LOADING = "defer_loading";
 
@@ -1462,62 +1453,6 @@ function openaiAdditionalTools(
  * (`extras: { defer_loading: true }`), reading the skill discloses it early,
  * and it stays deferred and searchable; if it is bound, nothing changes.
  *
- * How a tool is disclosed depends on the model actually called:
- *
- * - **Models that accept tool definitions mid-conversation** — Anthropic
- *   inline tool definitions on the Claude API, and OpenAI `additional_tools`
- *   on the Responses API (`useResponsesApi: true`). The tool's definition is
- *   sent in a system message inserted right after the read's tool result, at
- *   the same position with the same bytes on every call, so the prompt cache
- *   survives.
- * - **Every other model** — the disclosed tools are appended to the request's
- *   `tools` instead. The gate is identical; only the cache cost differs.
- *
- * A tool whose root input schema uses `oneOf`, `anyOf` or `allOf` is never
- * disclosed to an Anthropic model, which would reject the whole request; a
- * warning names it.
- *
- * Inline disclosure needs `@langchain/anthropic` 1.5.12 or `@langchain/openai`
- * 1.6.2 or later. On an older Anthropic package every model call after a read
- * fails: with a 400 from the API, or, on packages older still, with "System
- * messages are only permitted as the first passed message". On an older
- * OpenAI package the tool never appears.
- *
- * Known gaps: only loads through `read_file` disclose tools; a resolver never
- * sees tools another middleware adds to the request; disclosed skill tools
- * can't be called from a code interpreter's REPL, and passing a skill tool to
- * a code interpreter's `ptc` allowlist bypasses the gate. On a model without
- * mid-conversation tool definitions, disclosing the only deferred tool leaves
- * `providerToolSearchMiddleware`'s search tool with nothing to search, which
- * OpenAI rejects. Skill tools aren't filtered by a harness profile's excluded
- * tools: a call to an excluded one is still rejected, but on a model that
- * accepts tool definitions mid-conversation its schema can be shown once its
- * skill is read.
- *
- * ## Placement
- *
- * `createDeepAgent` places this middleware for you. When composing
- * `createAgent` by hand, include `createFilesystemMiddleware`, whose
- * `read_file` the model uses to read skills. Put this middleware after
- * summarization and any model fallback or routing middleware, so it sees the
- * compacted conversation and the model actually called, and before prompt
- * caching. Never pass skill tools in `createAgent`'s `tools`, which would make
- * them callable without their skill:
- *
- * ```typescript
- * createAgent({
- *   model,
- *   tools: [...],
- *   middleware: [
- *     createFilesystemMiddleware({ backend }),
- *     // ...
- *     createSummarizationMiddleware({ backend }),
- *     modelFallbackMiddleware(fallbackModel),
- *     createSkillsMiddleware({ backend, sources: ["/skills/"], tools: [...] }),
- *     anthropicPromptCachingMiddleware(),
- *   ],
- * });
- * ```
  *
  * @param options - Configuration options
  * @returns AgentMiddleware for skills loading and injection
