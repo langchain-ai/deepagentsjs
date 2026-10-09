@@ -506,11 +506,11 @@ describe("read_file multimodal content blocks", () => {
       { store: undefined },
     );
 
-    expect(Array.isArray(result)).toBe(true);
-    expect(result[0].type).toBe("text");
-    expect(result[0].text).toContain("Error");
-    expect(result[0].text).toContain("too large");
-    expect(result[0].text).toContain(
+    expect(ToolMessage.isInstance(result)).toBe(true);
+    expect(result.status).toBe("error");
+    expect(result.content).toContain("Error");
+    expect(result.content).toContain("too large");
+    expect(result.content).toContain(
       `${MAX_BINARY_READ_SIZE_BYTES / (1024 * 1024)}MB`,
     );
   });
@@ -537,7 +537,30 @@ describe("read_file multimodal content blocks", () => {
     expect(typeof result[0].data).toBe("string");
   });
 
-  it("should return an error text content block for missing files", async () => {
+  it("should return an error ToolMessage for a binary read with no content", async () => {
+    const { stateAndStore } = setupStateWithFiles({});
+    const backend = new StateBackend(stateAndStore);
+    backend.read = () => ({ mimeType: "image/png" });
+
+    const middleware = createFilesystemMiddleware({ backend: () => backend });
+
+    const readFileTool = (middleware as any).tools.find(
+      (t: any) => t.name === "read_file",
+    );
+
+    const result = await readFileTool.invoke(
+      { file_path: "/empty.png" },
+      { store: undefined },
+    );
+
+    expect(ToolMessage.isInstance(result)).toBe(true);
+    expect(result.status).toBe("error");
+    expect(result.content).toBe(
+      "Error: expected binary content for '/empty.png'",
+    );
+  });
+
+  it("should return an error ToolMessage for missing files", async () => {
     const { stateAndStore } = setupStateWithFiles({});
 
     const middleware = createFilesystemMiddleware({
@@ -553,9 +576,9 @@ describe("read_file multimodal content blocks", () => {
       { store: undefined },
     );
 
-    expect(Array.isArray(result)).toBe(true);
-    expect(result[0].type).toBe("text");
-    expect(result[0].text).toContain("not found");
+    expect(ToolMessage.isInstance(result)).toBe(true);
+    expect(result.status).toBe("error");
+    expect(result.content).toBe("Error: File '/nonexistent.txt' not found");
   });
 });
 
