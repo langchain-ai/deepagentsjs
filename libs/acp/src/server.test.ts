@@ -12,7 +12,8 @@ import type {
 } from "./types.js";
 
 // Mock the deepagents module
-vi.mock("deepagents", () => {
+vi.mock("deepagents", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("deepagents")>();
   // Define MockFilesystemBackend inside the factory to avoid hoisting issues
   class MockFilesystemBackend {
     rootDir: string;
@@ -30,6 +31,7 @@ vi.mock("deepagents", () => {
   }
 
   return {
+    ...actual,
     createDeepAgent: vi.fn().mockReturnValue({
       stream: vi.fn().mockReturnValue({
         [Symbol.asyncIterator]: async function* () {
@@ -442,7 +444,8 @@ describe("DeepAgentsServer handlers", () => {
           conn: unknown,
         ) => Promise<{ sessionId: string }>;
         handleCancel: (params: Record<string, unknown>) => Promise<void>;
-        currentPromptAbortController: AbortController | null;
+        sessions: Map<string, SessionState>;
+        permissionContexts: Map<string, { controller: AbortController }>;
       };
 
       const mockConn = { sessionUpdate: vi.fn().mockResolvedValue(undefined) };
@@ -450,7 +453,10 @@ describe("DeepAgentsServer handlers", () => {
 
       // Set up an active prompt abort controller
       const controller = new AbortController();
-      serverAny.currentPromptAbortController = controller;
+      serverAny.permissionContexts.set(
+        serverAny.sessions.get(sessionId)!.threadId,
+        { controller },
+      );
 
       // Cancel should abort
       await serverAny.handleCancel({ sessionId });
@@ -1113,7 +1119,7 @@ describe("Human-in-the-Loop (Permission Requests)", () => {
     expect(result).toBe("cancelled");
   });
 
-  it("should fall back to allow on permission request error", async () => {
+  it("should reject on permission request error", async () => {
     const { serverAny } = createServerWithSession();
     const mockConn = {
       sessionUpdate: vi.fn().mockResolvedValue(undefined),
@@ -1131,7 +1137,7 @@ describe("Human-in-the-Loop (Permission Requests)", () => {
       sampleToolCall,
     );
 
-    expect(result).toBe("allow");
+    expect(result).toBe("reject");
   });
 
   it("should send correct options in permission request", async () => {
