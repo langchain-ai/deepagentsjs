@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { Machine } from "smolmachines";
+import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
+import { FakeListChatModel } from "@langchain/core/utils/testing";
+import { createDeepAgent } from "deepagents";
 import { sandboxStandardTests } from "@langchain/sandbox-standard-tests/vitest";
 import { SmolSandbox } from "./sandbox.js";
 
@@ -93,6 +96,56 @@ describe.skipIf(!LOCAL_AVAILABLE)("native Smol branch", () => {
       } finally {
         await child?.delete();
         await parent.close();
+      }
+    },
+    TIMEOUT,
+  );
+});
+
+describe.skipIf(!LOCAL_AVAILABLE)("Deep Agents tool integration", () => {
+  it(
+    "executes an agent-requested shell command in the Smol VM",
+    async () => {
+      const sandbox = await SmolSandbox.create({
+        image: "node:22-alpine",
+        resources: { cpus: 1, memoryMb: 1024 },
+      });
+      try {
+        const model = new FakeListChatModel({
+          responses: [
+            new AIMessage({
+              content: "",
+              tool_calls: [
+                {
+                  name: "execute",
+                  args: {
+                    command: "printf agent-route > /workspace/agent-output.txt",
+                  },
+                  id: "smol-exec-1",
+                },
+              ],
+            }) as unknown as string,
+            "Finished",
+          ],
+        });
+        const agent = createDeepAgent({ model, backend: sandbox });
+        const result = await agent.invoke({
+          messages: [new HumanMessage("Write an output file in the sandbox")],
+        });
+        expect(
+          result.messages
+            .filter(ToolMessage.isInstance)
+            .some(
+              (message) =>
+                message.name === "execute" &&
+                String(message.content).includes("exit code 0"),
+            ),
+        ).toBe(true);
+        expect(
+          (await sandbox.downloadFiles(["agent-output.txt"]))[0].content,
+        ).toEqual(new TextEncoder().encode("agent-route"));
+      } finally {
+        await sandbox.close();
       }
     },
     TIMEOUT,

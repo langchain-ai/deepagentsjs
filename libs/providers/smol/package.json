@@ -45,11 +45,12 @@
     "deepagents": ">=1.13.4-rc.0"
   },
   "devDependencies": {
-    "deepagents": "workspace:*",
+    "@langchain/core": "^1.2.14",
     "@langchain/sandbox-standard-tests": "workspace:*",
     "@tsconfig/recommended": "^1.0.13",
     "@types/node": "^26.1.0",
     "@vitest/coverage-v8": "^5.0.2",
+    "deepagents": "workspace:*",
     "dotenv": "^18.0.4",
     "tsdown": "^0.22.1",
     "tsx": "^4.21.0",
