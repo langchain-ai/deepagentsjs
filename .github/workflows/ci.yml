@@ -134,6 +134,8 @@ jobs:
         run: tar -xzf build-artifacts.tar.gz
       - name: Run Unit Tests
         run: pnpm test
+      - name: Run Smol provider unit tests
+        run: pnpm --filter @langchain/smol test:unit
 
   test-int:
     name: Integration Tests
