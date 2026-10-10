@@ -31,16 +31,20 @@ const WORKDIR = "/workspace";
 function filePath(path: string, target: "local" | "cloud"): string {
   if (!path || path.includes("\0"))
     throw new SandboxError("Invalid file path", "INVALID_PATH");
-  // Cloud currently strips URL-encoded control characters between the API
-  // and the node. Until that deployment is fixed, refuse ambiguous paths.
+  // The Cloud forwarding layer currently strips controls and interprets
+  // decoded URL syntax (#, ?, %) before sending paths to the node. Until the
+  // forwarding fix is deployed, reject paths that could address another file.
   if (
     target === "cloud" &&
     Array.from(path).some(
-      (char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127,
+      (char) =>
+        char.charCodeAt(0) < 32 ||
+        char.charCodeAt(0) === 127 ||
+        "#?%".includes(char),
     )
   ) {
     throw new SandboxError(
-      "Cloud file paths cannot contain control characters",
+      "Cloud file paths cannot contain URL control or reserved characters",
       "INVALID_PATH",
     );
   }

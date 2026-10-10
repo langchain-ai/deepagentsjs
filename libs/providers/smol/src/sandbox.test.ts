@@ -120,6 +120,11 @@ describe("SmolSandbox", () => {
     expect(await sandbox.downloadFiles(["odd\nname"])).toEqual([
       { path: "odd\nname", content: null, error: "invalid_path" },
     ]);
+    for (const unsafe of ["odd#name", "odd?name", "odd%20name"]) {
+      expect(
+        await sandbox.uploadFiles([[unsafe, new Uint8Array([1])]]),
+      ).toEqual([{ path: unsafe, error: "invalid_path" }]);
+    }
     expect(mock.writeFile).not.toHaveBeenCalled();
     expect(mock.readFile).not.toHaveBeenCalled();
     await sandbox.close();
