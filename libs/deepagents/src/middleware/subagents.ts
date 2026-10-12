@@ -80,6 +80,7 @@ const EXCLUDED_STATE_KEYS = [
   "todos",
   "structuredResponse",
   "skillsMetadata",
+  "pinnedSkills",
   "memoryContents",
   ...CALL_COUNT_STATE_KEYS,
   "_summarizationEvent",
@@ -104,6 +105,7 @@ const EXCLUDED_STATE_KEYS = [
  */
 const FORK_EXCLUDED_STATE_KEYS = [
   "structuredResponse",
+  "pinnedSkills",
   ...CALL_COUNT_STATE_KEYS,
   "_summarizationEvent",
   "_summarizationSessionId",

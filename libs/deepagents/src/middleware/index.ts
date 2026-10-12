@@ -36,6 +36,7 @@ export {
   type SkillMetadata,
   type SkillMetadataEntry,
   skillsMetadataValue,
+  pinnedSkillsValue,
   type SkillToolResolver,
   // Constants
   MAX_SKILL_FILE_SIZE,
