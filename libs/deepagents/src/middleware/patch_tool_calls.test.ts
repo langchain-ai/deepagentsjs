@@ -133,6 +133,32 @@ describe("createPatchToolCallsMiddleware", () => {
       expect(toolMessage?.name).toBe("read_file");
     });
 
+    it("should mark the synthetic ToolMessage as an error", async () => {
+      const middleware = createPatchToolCallsMiddleware();
+      const messages = [
+        new HumanMessage({ content: "Read a file" }),
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "call_123",
+              name: "read_file",
+              args: { path: "/test.txt" },
+            },
+          ],
+        }),
+        new HumanMessage({ content: "Never mind" }),
+      ];
+
+      // @ts-expect-error - typing issue in LangChain
+      const result = await middleware.beforeAgent?.({ messages });
+
+      const toolMessage = result?.messages.find(
+        (m: any) => ToolMessage.isInstance(m) && m.tool_call_id === "call_123",
+      );
+      expect((toolMessage as ToolMessage).status).toBe("error");
+    });
+
     it("should patch multiple dangling tool calls in a single AI message", async () => {
       const middleware = createPatchToolCallsMiddleware();
       const messages = [

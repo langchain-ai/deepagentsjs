@@ -88,6 +88,7 @@ export function patchDanglingToolCalls(messages: BaseMessage[]): {
               content: toolMsg,
               name: toolCall.name,
               tool_call_id: toolCall.id!,
+              status: "error",
             }),
           );
         }

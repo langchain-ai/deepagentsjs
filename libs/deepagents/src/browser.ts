@@ -80,8 +80,8 @@ export {
   type SkillsMiddlewareOptions,
   type SkillMetadata,
   type SkillMetadataEntry,
-  // Skills state value, for declaring `skillsMetadata` on a custom middleware
   skillsMetadataValue,
+  type SkillToolResolver,
   // Skills constants
   MAX_SKILL_FILE_SIZE,
   MAX_SKILL_NAME_LENGTH,

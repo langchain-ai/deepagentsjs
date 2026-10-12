@@ -435,5 +435,12 @@ describe("createDeepAgent types", () => {
       expectTypeOf(result.research).toEqualTypeOf<string>();
       expectTypeOf(result).toHaveProperty("skillsMetadata");
     });
+
+    it("should keep the disclosed skill tools record out of the agent's state", async () => {
+      const agent = createDeepAgent({ skills: ["/skills/"] });
+      const result = await agent.invoke({ messages: [] });
+
+      expectTypeOf(result).not.toHaveProperty("_skillToolsDisclosed");
+    });
   });
 });

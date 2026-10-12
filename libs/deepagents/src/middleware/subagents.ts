@@ -84,6 +84,7 @@ const EXCLUDED_STATE_KEYS = [
   ...CALL_COUNT_STATE_KEYS,
   "_summarizationEvent",
   "_summarizationSessionId",
+  "_skillToolsDisclosed",
   FORKED_CONTEXT_KEY,
 ] as const;
 
@@ -106,6 +107,7 @@ const FORK_EXCLUDED_STATE_KEYS = [
   ...CALL_COUNT_STATE_KEYS,
   "_summarizationEvent",
   "_summarizationSessionId",
+  "_skillToolsDisclosed",
 ] as const;
 
 /**
@@ -261,6 +263,10 @@ export interface SubAgent {
    *
    * Note: Custom subagents do NOT inherit skills from the main agent by default.
    * Only the general-purpose subagent inherits the main agent's skills.
+   *
+   * Not needed when you pass a `createSkillsMiddleware` in `middleware`, for
+   * example to give the subagent skill `tools`: that middleware takes the
+   * same slot on its own.
    *
    * @example
    * ```typescript
