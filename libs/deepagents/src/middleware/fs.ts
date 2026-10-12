@@ -430,12 +430,33 @@ function extractTextFromMessage(message: {
   return String(message.content);
 }
 
+/**
+ * Image, audio and video blocks a tool returns (e.g. an MCP screenshot). They
+ * are kept on an evicted tool message and do not count toward its size, since
+ * their base64 payload is not text the model could page through.
+ */
+const TOOL_MEDIA_BLOCK_TYPES: ReadonlySet<unknown> = new Set([
+  "image",
+  "image_url",
+  "audio",
+  "video",
+]);
+
+function isToolMediaBlock(block: unknown): boolean {
+  return (
+    typeof block === "object" &&
+    block !== null &&
+    TOOL_MEDIA_BLOCK_TYPES.has((block as { type?: unknown }).type)
+  );
+}
+
 function stringifyToolContent(content: unknown): string {
   if (typeof content === "string") {
     return content;
   }
   if (Array.isArray(content)) {
     return content
+      .filter((block) => !isToolMediaBlock(block))
       .map((block) => {
         if (
           typeof block === "object" &&
@@ -2237,8 +2258,14 @@ export function createFilesystemMiddleware(
           .replace("{file_path}", evictPath)
           .replace("{content_sample}", contentSample);
 
+    const mediaBlocks = Array.isArray(msg.content)
+      ? msg.content.filter(isToolMediaBlock)
+      : [];
     const truncatedMessage = new ToolMessage({
-      content: replacementText,
+      content:
+        mediaBlocks.length > 0
+          ? [{ type: "text", text: replacementText }, ...mediaBlocks]
+          : replacementText,
       tool_call_id: msg.tool_call_id,
       name: msg.name,
       id: msg.id,

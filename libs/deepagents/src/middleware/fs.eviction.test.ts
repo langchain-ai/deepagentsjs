@@ -684,3 +684,73 @@ describe("evicted tool result readback", () => {
     expect(readResult[0].text).toContain("large plain text result");
   });
 });
+
+describe("tool result eviction with media blocks", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const screenshot = {
+    type: "image_url",
+    image_url: { url: `data:image/png;base64,${"A".repeat(200_000)}` },
+  };
+
+  async function wrapToolResult(content: ToolMessage["content"]) {
+    const state: { messages: unknown[]; files: Record<string, FileData> } = {
+      messages: [],
+      files: {},
+    };
+    vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+    const middleware = createFilesystemMiddleware({
+      backend: () => new StateBackend({ state, store: undefined }),
+      toolTokenLimitBeforeEvict: 1000,
+    });
+    return (middleware as any).wrapToolCall(
+      {
+        toolCall: { id: "call_screenshot", name: "browser_take_screenshot" },
+        state,
+        runtime: {},
+      },
+      async () =>
+        new ToolMessage({
+          content,
+          tool_call_id: "call_screenshot",
+          name: "browser_take_screenshot",
+        }),
+    );
+  }
+
+  it("should not count image blocks toward the eviction threshold", async () => {
+    const result = await wrapToolResult([
+      { type: "text", text: "Screenshot" },
+      screenshot,
+    ]);
+
+    expect(isCommand(result)).toBe(false);
+    expect(result.content.map((b: any) => b.type)).toEqual([
+      "text",
+      "image_url",
+    ]);
+  });
+
+  it("should keep image blocks when large text is evicted", async () => {
+    const largeText = "page text\n".repeat(1000);
+    const result = await wrapToolResult([
+      { type: "text", text: largeText },
+      screenshot,
+    ]);
+
+    expect(isCommand(result)).toBe(true);
+    const update = (result as any).update;
+    const evictedPath = "/large_tool_results/call_screenshot.txt";
+    expect(update.files[evictedPath]).toBeDefined();
+    expect(JSON.stringify(update.files[evictedPath]).includes("base64")).toBe(
+      false,
+    );
+    const content = update.messages[0].content;
+    expect(Array.isArray(content)).toBe(true);
+    expect(content.map((b: any) => b.type)).toEqual(["text", "image_url"]);
+    expect(content[0].text).toContain(evictedPath);
+    expect(content[1].image_url.url).toBe(screenshot.image_url.url);
+  });
+});
