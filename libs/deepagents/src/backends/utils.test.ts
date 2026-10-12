@@ -33,6 +33,7 @@ import type {
 import { isSandboxBackend } from "./protocol.js";
 import { StateBackend } from "./state.js";
 import { CompositeBackend } from "./composite.js";
+import { getRealpath, setRealpath } from "./realpath.js";
 
 describe("normalizeReadPagination", () => {
   it("clamps pagination arguments to non-negative integers", () => {
@@ -619,6 +620,33 @@ describe("adaptBackendProtocol", () => {
       edit: () => ({ path: "/file.txt", filesUpdate: null, occurrences: 1 }),
     };
   }
+
+  describe("realpath hook", () => {
+    it("carries the hook over, still bound to the original backend", async () => {
+      const v2 = { ...createV2Backend(), prefix: "/real" };
+      setRealpath(v2, (path) => `${v2.prefix}${path}`);
+      const adapted = adaptBackendProtocol(v2);
+      expect(await getRealpath(adapted)!("/link")).toBe("/real/link");
+    });
+
+    it("carries the hook over from a v1 backend", async () => {
+      const v1 = createV1Backend();
+      setRealpath(v1, async (path) => `/resolved${path}`);
+      const adapted = adaptBackendProtocol(v1);
+      expect(await getRealpath(adapted)!("/link")).toBe("/resolved/link");
+    });
+
+    it("leaves the hook absent when the backend has none", () => {
+      expect(
+        getRealpath(adaptBackendProtocol(createV2Backend())),
+      ).toBeUndefined();
+    });
+
+    it("ignores a public method named realpath", () => {
+      const v2 = { ...createV2Backend(), realpath: async (p: string) => p };
+      expect(getRealpath(adaptBackendProtocol(v2))).toBeUndefined();
+    });
+  });
 
   describe("adapting a v1 backend", () => {
     it("should wrap read() string return in ReadResult", async () => {

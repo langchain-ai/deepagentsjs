@@ -24,6 +24,7 @@ import {
   ReadResult,
   SandboxBackendProtocolV2,
 } from "./protocol.js";
+import { getRealpath, setRealpath } from "./realpath.js";
 
 // Constants
 export const EMPTY_CONTENT_WARNING =
@@ -1107,6 +1108,12 @@ export function adaptBackendProtocol(
         configurable: true,
       });
     }
+  }
+
+  // Carry over the internal realpath hook.
+  const realpath = getRealpath(backend);
+  if (realpath !== undefined) {
+    setRealpath(adapted, realpath);
   }
 
   // `resolveBackendForPath` (CompositeBackend only) needs a closure rather
