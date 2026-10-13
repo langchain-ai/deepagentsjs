@@ -25,6 +25,7 @@ import {
   isSandboxProtocol,
 } from "./protocol.js";
 import { adaptBackendProtocol, adaptSandboxProtocol } from "./utils.js";
+import { getRealpath, setRealpath } from "./realpath.js";
 
 /**
  * Backend that routes file operations to different backends based on path prefix.
@@ -63,6 +64,8 @@ export class CompositeBackend implements BackendProtocolV2 {
     this.sortedRoutes = Object.entries(this.routes).sort(
       (a, b) => b[0].length - a[0].length,
     );
+
+    setRealpath(this, (path) => this.resolveRealPath(path));
   }
 
   /** Delegates to default backend's id if it is a sandbox, otherwise empty string. */
@@ -95,6 +98,26 @@ export class CompositeBackend implements BackendProtocolV2 {
    */
   resolveBackendForPath(path: string): [BackendProtocolV2, string] {
     return this.getBackendAndKey(path);
+  }
+
+  /**
+   * Resolve symlinks via the backend that owns `path`, re-adding the route
+   * prefix. Returns `path` unchanged when that backend has no realpath hook.
+   */
+  private async resolveRealPath(path: string): Promise<string> {
+    for (const [routePrefix, backend] of this.sortedRoutes) {
+      if (this.isPathWithinRoute(path, routePrefix)) {
+        const realpath = getRealpath(backend);
+        if (realpath === undefined) {
+          return path;
+        }
+        const suffix = path.substring(routePrefix.length);
+        const resolved = await realpath(suffix ? "/" + suffix : "/");
+        return routePrefix.slice(0, -1) + resolved;
+      }
+    }
+    const realpath = getRealpath(this.default);
+    return realpath === undefined ? path : await realpath(path);
   }
 
   /**
