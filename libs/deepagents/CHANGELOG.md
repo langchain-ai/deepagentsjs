@@ -1,5 +1,27 @@
 # deepagents
 
+## 1.15.0
+
+### Minor Changes
+
+- [#932](https://github.com/langchain-ai/deepagentsjs/pull/932) [`389e8da`](https://github.com/langchain-ai/deepagentsjs/commit/389e8da2325cd726171a32f6f1ce9103c8789119) Thanks [@richardscarrott](https://github.com/richardscarrott)! - feat(deepagents): pin skills by name via `pinnedSkills`
+  
+  Pass skill names in `pinnedSkills` to guarantee the model gets those skills' instructions, for example when a user names a skill with a `/skill:` command or a picker. Before the next model call, the skills middleware appends each named skill's `SKILL.md`, without its frontmatter, as its own `HumanMessage` marked with `additional_kwargs.lc_source: "pinned_skill"` and the skill's `name`, `path` and `description`. The middleware clears the key once it uses it, and skips an unknown or unreadable skill. A tool can pin skills by returning `Command({ update: { pinnedSkills } })`, and a pinned skill discloses its `metadata.include_tools` the same way reading it does. A custom middleware can declare the key on its state schema with the exported `pinnedSkillsValue`.
+
+- [#929](https://github.com/langchain-ai/deepagentsjs/pull/929) [`9333679`](https://github.com/langchain-ai/deepagentsjs/commit/9333679d3b5a5e4fb4d5e0104bf0630213c3ffff) Thanks [@richardscarrott](https://github.com/richardscarrott)! - feat(deepagents): load a skill's tools only when the skill is read
+  
+  Skills can list tools in `metadata.include_tools`. Pass those tools to `createSkillsMiddleware` as `tools` (an array or a resolver), and pass that middleware to `createDeepAgent`. The model can't see or call a skill tool until it reads a skill that lists it. On models that accept tool definitions mid-conversation this keeps the prompt cache intact, and needs `@langchain/anthropic` >= 1.5.12 or `@langchain/openai` >= 1.6.2.
+  
+  The skills middleware now sits just before prompt caching, after custom and harness-profile middleware.
+
+### Patch Changes
+
+- [#919](https://github.com/langchain-ai/deepagentsjs/pull/919) [`b448f22`](https://github.com/langchain-ai/deepagentsjs/commit/b448f220866bbb5d41924dfdbb1e0079c3b11838) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - Fix `CompositeBackend` matching routes by bare string prefix: a route `/foo` no longer captures `/foobar.txt`. Route prefixes are now normalized to a trailing slash, so `routePrefixes` returns `/foo/`, and `/foo` and `/foo/` register as the same route.
+
+- [#928](https://github.com/langchain-ai/deepagentsjs/pull/928) [`5f42f2d`](https://github.com/langchain-ai/deepagentsjs/commit/5f42f2df3c814bebbac445c759a34f96c10bc036) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - Check filesystem permissions against the path an operation actually touches: rule matching drops `.` segments, and with `FilesystemBackend` (directly or behind a `CompositeBackend` route) rules are also checked on the symlink-resolved target. A deny on either path blocks the call, so allow rules must cover a symlink's target (including OS-level links like macOS `/tmp` → `/private/tmp` in non-virtual mode).
+
+- [#929](https://github.com/langchain-ai/deepagentsjs/pull/929) [`9333679`](https://github.com/langchain-ai/deepagentsjs/commit/9333679d3b5a5e4fb4d5e0104bf0630213c3ffff) Thanks [@richardscarrott](https://github.com/richardscarrott)! - Mark failed tool results with `status: "error"`. `read_file` returns a backend failure, such as a missing file, as an error `ToolMessage` instead of plain `Error: …` text. The patch tool calls middleware also marks the result it inserts for a tool call that never ran as an error.
+
 ## 1.14.2
 
 ### Patch Changes
