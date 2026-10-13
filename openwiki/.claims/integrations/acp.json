@@ -1,0 +1,358 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:7c3358ffa9b480d4932c9dc94334ce2765a52f1dec1c74f0aea72c7dafd71afe",
+  "claims": [
+    {
+      "id": "claim_5e6685eba021421581ad98cc4caa1b77",
+      "statement": "DeepAgentsServer exposes ACP over newline-delimited JSON on stdin and stdout by wrapping the streams with ndJsonStream and AgentSideConnection; start waits for the connection and reserves protocol traffic for stdout.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/logger.ts#L1-L6",
+          "version": "repo-lines-v1:sha256:83ae64bcb8f7aced13cc7a7c068128f0e5747c5582692b7383ad18ed5b444ed6:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWFmMjJjZjA3MzI1OTJjMjQ3MTQxY2JlNjFlZmExMTAxMjYxMmY1YTMxMjJiOWFmOWJiYWY1MmY1NzI0ZDE5NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOTcyYTQyOTM4MmIyZTE0NzE4ZTBlMzdiMDU3MGE4YTE3MDI5OTFmY2Q4NDk4Y2Q4NDA2MGE4YmY0ZjA1MDE3YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOWZlZjIwMzE4NWUzNTNkYmMyZjM2NWRjNzRjOGViMmUxMmQ2YTA4NjU1MTliMzNhZTMwYjI2ODA0ODE2NzZmZCJ9"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L186-L301",
+          "version": "repo-lines-v1:sha256:178d8b495a5da20a0beec85fbc50efb9215e292b44013730dcf2512d58aff6d3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE2LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI0ZjJhMmY5OTZmMDhlNjgwYmQyOTIxMzVhNmZhNDk3OGJkYTI2ZTYwMmQ4NGYzM2NiMWQ1OTQ3NzVkNDMwNGI1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJiMzBmMTliZWQxZDRhMjMxNWExMWY0MjY0Y2NiYmIwNjZlN2RhYTE5YjM5OTRiYjA0NzE2MGU2NjNlNGI2NTA4IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5N2Q4NjMyZTU0ZTkyOThhYmI5NTg3MjdlMmQ1MTQwOGFiYWYxMzY2MDM1Mzc5MTAxNDBhYmY2NWIzMGFiNjEzIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJmOGRjYzdkZTY5MTkyMWYyNTY1ZWZhMTdlYzYwZDE0MWIyNGVmNDc4ZmJkZDE4N2ZmZWQ5OWVjMTMwMmM5MzU0In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_d59a523db98548edbb8a34ca8d56ebf3",
+      "statement": "The initialize handler negotiates the requested protocol version, returns server identity and capabilities for session loading, images, embedded context, modes, and commands, records client filesystem and terminal capabilities, and advertises configured or default authentication methods.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/server.test.ts#L195-L297",
+          "version": "repo-lines-v1:sha256:0917623bcd9eec414a41f8fe28b878533482387abaf1f9349ae5c2e84627af97:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAzLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI5NjA0MjNiYWMyNWM0NGJmY2FiODQwOGFlMTYwYTljNWYzMWMzMDcwODBiMDlkZDUzNzRiMjMzZmFhYmJjZGU3IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyMmQxMWNhZjQzZTk3ZWYzNjllNmJlZWQxYTI2OGJkMDU4MzhmMjliOWRkMjU0YmY2OWJhNjQ4ODQxNDcyMzRhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJmNDQ1ODFjNDNkYThmMTc5MDhhYTU2MmY1NjNjMzRlNmM4ZDQ1ZWY4ODhmYTAxNTVhYWE5NDhkNmZiNWI0ZGQxIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIwNGQzMmUzNTA1ZTgzYzhkODllOGY4N2E0MTVjZmYyZmVkMTFlNDA5MTRlOWE2ZDNjMWIxYWUwODM5N2ViMWM0In0"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L352-L418",
+          "version": "repo-lines-v1:sha256:2142d35bb58ba0ad3d70f44c52c7c65cf11899fd1d587728a699d5d146bc4f27:eyJzZWxlY3RlZExpbmVDb3VudCI6NjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRiMTViNjI2M2FjNjJmZjQwNDI1NTI4MGY1ZjQ2NDNhNmMxNDM0MjJlYTVkYjU0YTk4NDFkMTJmN2IxYzA0MTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI4Yzg3OTFhYzM0OGQwMjY5NDg4ZDhlOThiOWExMDU2ZDc2MjQ1YWFjZjFkODAxNjg1ZGMzYjQyZDM5YzUwMTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUyM2ZjOTAxZDFmYjMyZTZmMTcxNmFlMTA4ZmI3ZDEwYTQ0ZjgzZWY4YTA3YzUyMDMyNmMxZjdmOTA5MmJiZjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhOTI5M2ZkODA1NGI2ZTQ3MjQ4MzczZjM5ZjRkZDc3ODAwMTA1ZWI3NTgzNDg2ODcyNTQyODVjZDEyODJiNzgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2c90dd5293d744588c9be712047d6a88",
+      "statement": "Each session/new request creates a sess_-prefixed session ID and a separate LangGraph thread ID, selects the requested configOptions.agent or the first configured agent, rejects unknown agents, stores session metadata, lazily creates the selected agent, and advertises built-in plus agent-specific commands.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/server.int.test.ts#L217-L265",
+          "version": "repo-lines-v1:sha256:6ce76ae6199f7dc9e6fa3c3a939a6ea3903795f3347c626325a15db9767fe064:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU4N2Y1MDZkMGQ5MWY3NjFhM2UwYjU4OTRiNzU2MjgzZjUwMzkwMzVhN2QxODM5ZmU4YTJmNGVhYmNlYTA4Y2QiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyZDExY2FmNDNlOTdlZjM2OWU2YmVlZDFhMjY4YmQwNTgzOGYyOWI5ZGQyNTRiZjY5YmE2NDg4NDE0NzIzNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxNjQ4YmMyYWEyODlkNmM2YzcwZmQ2ZjIxMmY1OGQwMDU5YmYzMjUzMWU0YTQ1M2RlNzc2NjMyOTZmZDE1MzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJjNWE5MjhjNDY3Y2UxOTVlY2E4NmFhZTg4ZWE2MDE3MGQ2ZGU1YjJhNWQ1OWM2NDY2NmYzNWIxYTJhZDY5Y2MifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L1302-L1344",
+          "version": "repo-lines-v1:sha256:a07145e22985ef69afefc714b48f60f62eaad170f806cfceff41e6041538f07b:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFkNGUzMjg0NWYwYWYxMTIxY2M4YmQ2ZmYwYmIwNDE3ZTg1NzgzMDcxOWQ0OTRkNTc3YjRjYjczODQ2NDQ4MWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhkYTlhYWU1MWU5MDQxYWNmYWM4YWE2ZDUwYTVhMjdiYjA0MjdhM2ExYzc5ZDI5OTRmMWY3Y2IxMzZkOWI3NzQifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L434-L499",
+          "version": "repo-lines-v1:sha256:12774be65f8f749143e30689b68900ac74a23bc2d555c34f79110553b8279fed:eyJzZWxlY3RlZExpbmVDb3VudCI6NjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJkMGJhOWNlMzczNzE1NWU2YzViZTIxMTJiMWJiNmJmYzliZDBiODJkYTk0NTc1ZWVmOTFhM2NlYjgyZDlmNGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI4Yzg3OTFhYzM0OGQwMjY5NDg4ZDhlOThiOWExMDU2ZDc2MjQ1YWFjZjFkODAxNjg1ZGMzYjQyZDM5YzUwMTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI4MTA4M2U5MzVkZjVlN2M2ODFjMDAxODYxOGQ5YjlmM2E5MzQ4YjQ2YWJhZjNhYWJjMTcwODhkYzg5ZDNlMGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhOTI5M2ZkODA1NGI2ZTQ3MjQ4MzczZjM5ZjRkZDc3ODAwMTA1ZWI3NTgzNDg2ODcyNTQyODVjZDEyODJiNzgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_01dfc0c8279c464f9ba8bd34bc41ee25",
+      "statement": "ACP prompts are converted into LangChain HumanMessage content, streamed through the selected DeepAgent with configurable thread_id and an abort signal, and translated from graph message updates into agent message chunks, thought chunks, and tool completion updates.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/adapter.ts#L14-L100",
+          "version": "repo-lines-v1:sha256:cdc4395428e88b18e9b32374ad55402003d778880471ae34b6c501301886551e:eyJzZWxlY3RlZExpbmVDb3VudCI6ODcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4ZGFmNzlkY2IyYjI3MzBhNmMyODE0NWQ1MWRhMTdmYzdiNTRiM2RlNmUzYzczMmNlODI1OGRiOTI5OTVhM2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhOTlmMjY5Mzg0ZDE4Yjg3NmNhMGQxY2I5MzE5MmI1YmMxN2UyNDJjNjkxZTE2MWVlNTBmZDU5Yjk1ZTc4ODEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZjZDE3MDFhNzc1YThlNTViM2M0MGIxYmM3MjVmM2Q2MDkzYjRjOThhMzg5MTQ5MjM2MWI4N2ZhMzZjNmMyMDcifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L562-L626",
+          "version": "repo-lines-v1:sha256:72878696b07a93f31602f654f80d4540171be440d775299333884cbece468e68:eyJzZWxlY3RlZExpbmVDb3VudCI6NjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJlZTc3OTNmNmRkNDYwMDc3YWE2ZmIyYmVhNTU3M2QyNGE1OGU1ZDdjYTE2ZjVjMjUzZGIwMjIzOGNjZjYxNTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3NmQzYTEzYWVhZTZhMGQzOWM0NTgxZTQxNGEyMTFjY2NhZGQ4NzYyYTM2ZWU1MmJmNzZmOGQxNzNiOWRmN2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhOTI5M2ZkODA1NGI2ZTQ3MjQ4MzczZjM5ZjRkZDc3ODAwMTA1ZWI3NTgzNDg2ODcyNTQyODVjZDEyODJiNzgifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L676-L803",
+          "version": "repo-lines-v1:sha256:06485de240a6327b18706a86b1575d6fdf325726ed5d828acb3c068416463dbb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIwOTZjZjk5YjdmNDM0Yzc5MjhkZWIxNGM5NzllOWE0MmVjOTE3NTA4YjA1NzY5NGMwNzBiMjljNTBmNjEzNzE5IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyN2U1Nzg4ZDVkOWQ3M2QyNGE4MWRiYzBhNWE3NGJmYTgyYzljM2IzYWY5OWU1MmFmNzk2ZTkwYjQ2OGE4YTNkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJhMTk3ODc5MWU3OWU4NjlkNmFlOTNmYTYzMjlkNWQ1YzYzYjg3YWY3NWVhOTQxMjUwZjdmZDQ5ZGMzZTUwNWU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIzZDYzZWVhYjY1NGI2NWEyNDBhMWNjNDgyNTgxNTVjZTFmMjVjM2E4ZmMwNTExYWQ4YWVhMTU0OGQwYjI4NjgxIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_d95444ba955b49d4aa9ce395e9d401be",
+      "statement": "Tool-call notifications classify built-in tools by ACP kind, include raw input, formatted titles, and follow-along file locations for path-bearing tools; completed tool updates include textual content and output.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/adapter.ts#L172-L255",
+          "version": "repo-lines-v1:sha256:6a2717864776d71cf63a88a1e3812662f831b5b616d335134a37a6daca91c21a:eyJzZWxlY3RlZExpbmVDb3VudCI6ODQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNjZjJhMzFlOGQyYTFjNTU3NTA4ZWIxMDBkYWQ0MjZmYTEyMWQ5MmU3OGY5NDYzYzNmNjAxMTQ0Nzk5Nzk2ZjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkZmExYjY2ZTJkNGZjYTIzNWVmNmQyYzFkZDBjMzIwOTM5ZDY3MWJiOWNmYzA4MjgwOGQzMzUwN2EyMThkN2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.test.ts#L842-L963",
+          "version": "repo-lines-v1:sha256:70fd7dc102fa1678212499fd3711160e1fd90fdb9fd79f1a30d083d60b66a84f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIyLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIwYzViODg0YzZjZWU0ZDM2MGY2ZmJkMjM4MDAyMDdiNTFiYWY3ODdhNzI0MTdmYjMyNGUwYmEwNDg5Y2JkYjMzIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzYTNlNDZmOTQyNzZiNmY2ZjRlZDFmMDJhZjc4YmVmNmEyZWUxYzQzOWRkNTU4NGI5NzM5NDgzMTMyMTRkMmI3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiNzc5ZDExOGQ2ZTNjYmY0NTA1Mzk3NDhkZWU3YTQzMDdhY2JlNjQ0NmNiYTI5N2YyNzYwZmE1ZDBiYmExYmMyIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJjMWJkYmZiZjljOGQ0MDNiMzY3MGYyYWNlMDJiODU2MWY5MWU5ZGUyNGM2YzU0MTdmN2VjMzc5N2ZlMTIwZjVlIn0"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L1214-L1279",
+          "version": "repo-lines-v1:sha256:118cef1f06ef39350117f2ac6ec3a9267ae16bac473f5dbbc65d6ac67a0a56f7:eyJzZWxlY3RlZExpbmVDb3VudCI6NjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdhM2Q5OTc4NWYwMzg0MjkwNjk3NDhjZTA1MTlhMGE3ZWE4NDQ0YzQzM2NjNGE2NjI0ODQwNzdkZWUzNzk5MzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVjODAyMmQ5ZDEwZDBiZjBmNTkxNGUzOGM3NmFmY2U5MDFiMzBmMDRiYjgyMDNkNGZmMzZjNDYwMjk5YzYzNzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8bdeb599333342ab9c9be0856adc5a1f",
+      "statement": "Todo events from the agent are translated into ACP plan updates with medium as the default priority and cancelled todo status mapped to skipped.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/adapter.ts#L116-L134",
+          "version": "repo-lines-v1:sha256:57d07cc1d79e14e1ba7e9866181f4035f257c8ae7f35cf9a9744fe66ad2bd640:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlkOTgzNTQ5OWU1YmE5MWY4NzI2N2M5NTJiNzhlYWVkZDZjNDY2Zjk1YjY4ODFiMDdiNDZjY2FlYzBjZGYxNDYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU2ODQ3OTdkMTQ3MGE4YmZmN2JkNWE2YTAyMTRlOTViOWYzMzMwNzg4MWU2NmMzNWZmNzAwNTgxYzcyMDhiZGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.test.ts#L570-L601",
+          "version": "repo-lines-v1:sha256:166ba11679a90126eb7b427332535245860f46f4935a4a1f35af35b69a9f9458:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYzNzAxNjAzNjZlMTg4YmEwZDNjYTQyOTU3NDFmZWRhYmQ0Zjk2NTg0Y2NjYjAyODc2MGNmNDZkMWQ5YzhhNWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE3Y2EyY2MzMzE4OTdkOWNhZTQ3M2IzNjFmYWRhOGQxZWY1ZDdmNjQ2ZmE1OTAyNGQyNTg4NGYwYzg1M2UxNTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ4YTI5YTJjM2FhMTIzOWQ1MGE0OGRkMzRiZTA1MWNjZGVmZGMwNWU3ZDgzZGM1OTM4ZmNkYjg3NTA2NzBjMDgifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L786-L794",
+          "version": "repo-lines-v1:sha256:741224a3024fbad913a35ded369157caec84bb85f7d1b6af1bbbd1fbdef0e7bc:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWFlYzM1YmU0ODVjYzg2ZGRhNDcyYTVhOThkNWU0N2U0NDEwMzI2Njg2MWFhNGNmMDdiZWI5NTQwZTlkZGMwOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWI2MmY2MGQ4NTkwYTU3OWNmNDZmOGQ2NzM3OGM0YzU3MmI5NjJjZWNjZGI5MGM3YTVmN2I0MmI5NjA3ODJhNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDEzNDFkMGM1ODgyZTkxYTY2YzYwY2I4NjAyMGIyNDdmMGFmYzMzNmNkZjc2YzBhZTE4YmNkMjBhYzhmZTFkNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzg2OTBjNGYzMTI3NjAwZjFkMWM3MThmZDRjYmVjZGNkNTUwOTljMjk4ZjFmZDY4ZWQwNzNhZDlkNjEwY2Y3YyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_25de2f49d41440aebab549b6356c7db2",
+      "statement": "The ACP server requests client permission for every observed AI tool call, offers allow-once, allow-always, reject-once, and reject-always options, caches only always decisions per session and tool name, and allows the tool when the permission RPC fails.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/server.test.ts#L995-L1135",
+          "version": "repo-lines-v1:sha256:899605dc34d4dec946b9015329857d1e74173b7c9da25592b3f6c5cff0213d7c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQxLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI3MDgzM2E5MmZmMGEyNzgyMmU2ZWQ1YmRmZWMwZWI5OGNmMTAyNjZlZDg2MDM1ZGVhYzczZjZhNmQ3M2E0YTBiIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzYTNlNDZmOTQyNzZiNmY2ZjRlZDFmMDJhZjc4YmVmNmEyZWUxYzQzOWRkNTU4NGI5NzM5NDgzMTMyMTRkMmI3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI0MjU0MWY1MTEyMzM3OGE2OWUzM2Q2NmUzOTc3MGY3YWYxMWY2OWViMmE2N2E3MmQyNjdlYmNmNjBjOGJiNTc4IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlODczOTI5MGE1MTEzNzU5ZGYzMDhjZjZkMzJiNDQ5ZGFjNzQ0YTUwNjZmNWQ2NjE0OThhOGM2YTEwYjM3ZTg3In0"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L837-L892",
+          "version": "repo-lines-v1:sha256:83e55d86053655fdf4824df0a6e44557ef215da60988a62f41d1a7606cb294d5:eyJzZWxlY3RlZExpbmVDb3VudCI6NTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM1ODQzNmZiMTMxYWJiMTE5ZjJiZWRkZjQ3OGRmOWU4OWFkMTdhZmNlZTIxZDg0MGUxODFhNzIzYzhiZjVhN2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA0YjlhMGIxNmI5OTEwYmFhNWQwYTRkY2FmZjhhNjBjNDI5NjMzYmYyYWUzY2JhY2M4MjAyOTA3NTgwZDEwY2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhOTI5M2ZkODA1NGI2ZTQ3MjQ4MzczZjM5ZjRkZDc3ODAwMTA1ZWI3NTgzNDg2ODcyNTQyODVjZDEyODJiNzgifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L983-L1053",
+          "version": "repo-lines-v1:sha256:45f1ef6d188de1d58ed054d82f0a9e7444da0bf15d3800974b60413b7c6a2385:eyJzZWxlY3RlZExpbmVDb3VudCI6NzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM3OTlhODkwZGZkZmQ3OWE5Mzg4Mjk1YTBiNjBmOTRmY2JiY2QxYWY2MTU4ZGE2NWJjZmM4Yjg1NGUzYWQ5YmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIxYmI5Mzg3OTBjMzM3MWY5NzA3MWFjNjcyZjFhZGYwYTg4OTAxMzZjMzBiZjdkMzRlODhiYjc0MWM0MGU5ZmUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_eb7cf15f832e45d98053e586989854fb",
+      "statement": "When both client filesystem capabilities are advertised and no custom backend is configured, the server uses ACPFilesystemBackend for reads and writes; individual ACP failures fall back to local filesystem operations, while ls, glob, and grep remain local.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/acp-filesystem-backend.test.ts#L127-L249",
+          "version": "repo-lines-v1:sha256:f9c7539e35d2d507e0eee60d8e00a37af360d82fe8de0df74432d411878732b9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIzLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJkZDI4MzZmZGNlMDM3ZDZjNTZhNTFlZTBjNGZhNzI0NjhjODhmYTI5NjBiZGI5NDc3MzBiZWQ5ODg3Njg3Y2VjIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyMmQxMWNhZjQzZTk3ZWYzNjllNmJlZWQxYTI2OGJkMDU4MzhmMjliOWRkMjU0YmY2OWJhNjQ4ODQxNDcyMzRhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiMTY0OGJjMmFhMjg5ZDZjNmM3MGZkNmYyMTJmNThkMDA1OWJmMzI1MzFlNGE0NTNkZTc3NjYzMjk2ZmQxNTMwIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MiwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJkODE3ZmJiNzNjOTJiMzZkNWU0ODk2ZmY1MWMxYjU4ZWVjMzMwYmJlOTYxYmEwNWZjNjIwNWY4NjdlYTFiY2Y2In0"
+        },
+        {
+          "resource": "repo://libs/acp/src/acp-filesystem-backend.ts#L18-L118",
+          "version": "repo-lines-v1:sha256:e238c1ecf1ba93010b7549f2639a278c5cb63700a2cdf95e7436ed8e6c32802d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAxLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJlYWYyMmNmMDczMjU5MmMyNDcxNDFjYmU2MWVmYTExMDEyNjEyZjVhMzEyMmI5YWY5YmJhZjUyZjU3MjRkMTk0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyN2U1Nzg4ZDVkOWQ3M2QyNGE4MWRiYzBhNWE3NGJmYTgyYzljM2IzYWY5OWU1MmFmNzk2ZTkwYjQ2OGE4YTNkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiMTk2M2IxMjFiNmM3YTFhMzNhZTA1ZmNhMjQwMjAzMWI5YWJkZmY2YWNlZDQ5YmYwYzA2ZDBlOWY5MjNiMzg2IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MSwiZm9sbG93aW5nQ29udGV4dEhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIn0"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L1346-L1372",
+          "version": "repo-lines-v1:sha256:d4f628dee54a06ab1ccabb102cc53ca3f4d93ddb9ada059be015e3eb72bd49d6:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI5NzIzNWU1M2M5ZWZkY2JiZTJmYzMzMTZkNTcxMTYyNmJhZjM2ODMzZDk2ODZkYzIwYThmNzYwMjQ5MjRmYTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI5ZDQ2NDUxNjcyMWQ4YTFlOTM5NWNhZmEwMjg4ZjZlZjE4NzQ4MGQ2M2I5ZTlhMjJjMjM5NjAxM2EyOWUzY2MiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM0MWIwOTE5MDU5OWNlNzk4NjA4YTIzMDg1NWZjNWFiNTJlNGIzZTljZGFmZjU1ZDY2NDIwNzU0ODZmODFlYWIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_57b8d8a9ffa54838bb7e5915044bff61",
+      "statement": "ACPFilesystemBackend passes the current session ID and absolute workspace-rooted paths to client file operations, preserves paginated read metadata, and caches one mutable backend per agent rather than one backend per session.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/acp-filesystem-backend.ts#L22-L95",
+          "version": "repo-lines-v1:sha256:a33e23c2623af11dc690c28fb4b87c43ea3b89a1b8a61c9eabc68b8537953f3a:eyJzZWxlY3RlZExpbmVDb3VudCI6NzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzNDcyZmY2Y2JmYjNmNDQwN2Y3MzllMzMyZjY1ZWExMjgxZWZkZWIxZmNhMjEyZDU3NzUzMWM4N2M0YWM3OTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgyZWVkODE0NWE0MWM2OGExZTlmNTRhNzk2ZDEzNjg0MjExNWMxMDE2NjkzYTlmNDBhMGEyZGYwZGJjNTg3MDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhOTI5M2ZkODA1NGI2ZTQ3MjQ4MzczZjM5ZjRkZDc3ODAwMTA1ZWI3NTgzNDg2ODcyNTQyODVjZDEyODJiNzgifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/acp-filesystem-backend.ts#L98-L118",
+          "version": "repo-lines-v1:sha256:c83b9533e1675ca65560a00e73131aeeb489a482a8de943380c7b6c77e0b0112:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L1354-L1365",
+          "version": "repo-lines-v1:sha256:7bd2ccb17918f092c4a7de396d5c871cb5849a61a4ff1273a381e61e8557b254:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZmOGRkNDEyMzBjNTdkMzhjMTNkMjZiMTBiMDcxNzAxMmMyNmViMmE2NDk4NDI2MzcxMDBhYzdjZmQwYjQ4NWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM3Mzc3NjFhNGRkNmJkYWMyZjcwNWZjMThlMTcxYjJkOTRiOTFlM2VlMTI2ZjRhZWQ2Y2Y4ZDU5NzA2N2Y0ZGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA4MjQxYTM4OTEzMjQyNTNhODBjMzkxMzk1OWM0ZmU1NWFlZTc4NDZmMmI2ZGUxNzBkOWRjMmNiZWJmNGVjNGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjEyYzQ3NGIwMDg5ZmIxYmNjZGZiZDc2MjY0ZjY2ZWFkYmY1OTRlN2UzNzcyZGE2ZTUxNDZkNmM5OWExZDVkYjIifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L461-L470",
+          "version": "repo-lines-v1:sha256:ba8de9abc44792b96e9f9f2dd1c02920f155c4aa79ce857963d473ef4e3e92e7:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxMzU5NmIyMzI5ZjU1Y2NmYjg5M2Q5N2FiMmZiNzgyOTEwY2RmNzZlOWRlZmYwYTllNTg5MGY2NzdlZGFlYjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdlYmI1YjQ3Zjc4YjUxYTU5ZGUwNWI2OTkwMWEyZjRhMzI1NDU3NWVmMmY5ODU0NjA5NjAyNGM3YjA0OTFmMGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU2NzQ4MDgyZGU2YTM3ZDc2YjlkMGYwNzQ0MDIxN2ZiMTU3NTBhNGM3N2IzNjNlNzU1YzIyNTkzMjI2MjczZTUifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L524-L527",
+          "version": "repo-lines-v1:sha256:7c5cfd6dcf6422b9be6790c3d6cefecb0c2e75dc8f92d53dc5b42d0b9f440d6b:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMGIxYjY3NzNkZTE5ZDMzZjhkYjZiMTQ4MjIyZTEyMzNiOGE4ZmU4MzUxOTg2YzMwMWExYWUzOGM3ZTVlNTE1ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDg5M2Y0MGUzNzgxZWI4OTZjODJkMDQ2YTA4MDY3YTExZTM1Y2RmMmYxZGZhZjI2ZmVhOTBiOGRiNjY3NjQxMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzU2OGVjYzA2Mjk5ZDEyYjVlNWE3OGI1M2IyNWI1NDM0NGUxOTlhYmVlOTRhYjM3ODgwY2UxOTMwZDg5M2U1OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjc1ZDRhZmI2ODQ5YmFkMDc0MzZmMzYyNzNiZGQyMzdhMTBlNDNhMWRlODFmODI1NjNiNzc3Nzc0Zjk4YTA2OSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_217f93c7b5f14897ae5ed110033c69a1",
+      "statement": "The server has an executeWithTerminal helper that creates /bin/bash -c in the client terminal, waits for exit, collects output, releases the terminal, and returns an error result on terminal failure, but the normal streamAgentResponse path does not dispatch execute calls through it.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/server.test.ts#L1204-L1401",
+          "version": "repo-lines-v1:sha256:b1d35087b1c05c761b2b1fce9e8ac1d51d98719d65ebab76ab0a7472b86a36ad:eyJzZWxlY3RlZExpbmVDb3VudCI6MTk4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJlNjM2ZDg0YjdiNTNjY2YxYWYyOGYzNTU5ZDE2NTI3MjNhOWI5OWE4NThjNDExNzZiNjJkODY0OWYzYjNlNmY5IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzYTNlNDZmOTQyNzZiNmY2ZjRlZDFmMDJhZjc4YmVmNmEyZWUxYzQzOWRkNTU4NGI5NzM5NDgzMTMyMTRkMmI3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiNzc5ZDExOGQ2ZTNjYmY0NTA1Mzk3NDhkZWU3YTQzMDdhY2JlNjQ0NmNiYTI5N2YyNzYwZmE1ZDBiYmExYmMyIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJhNDMwMjI4ZTIyOTU1ZTI3NmFlYzdkYTAyMDM3ZDE1Y2U3ZmUxYTA5NjMzY2NjMjgyN2MyMjhmMzBiYzMxMjM4In0"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L676-L803",
+          "version": "repo-lines-v1:sha256:06485de240a6327b18706a86b1575d6fdf325726ed5d828acb3c068416463dbb:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI4LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIwOTZjZjk5YjdmNDM0Yzc5MjhkZWIxNGM5NzllOWE0MmVjOTE3NTA4YjA1NzY5NGMwNzBiMjljNTBmNjEzNzE5IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyN2U1Nzg4ZDVkOWQ3M2QyNGE4MWRiYzBhNWE3NGJmYTgyYzljM2IzYWY5OWU1MmFmNzk2ZTkwYjQ2OGE4YTNkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJhMTk3ODc5MWU3OWU4NjlkNmFlOTNmYTYzMjlkNWQ1YzYzYjg3YWY3NWVhOTQxMjUwZjdmZDQ5ZGMzZTUwNWU1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIzZDYzZWVhYjY1NGI2NWEyNDBhMWNjNDgyNTgxNTVjZTFmMjVjM2E4ZmMwNTExYWQ4YWVhMTU0OGQwYjI4NjgxIn0"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L943-L981",
+          "version": "repo-lines-v1:sha256:b021bd6ad0731a6c53d37f10a6687900b315d35aa2b46aa656a98b7bb81890bc:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIwOTRlZmFlMzdmNmNiMGE3NWI1MTAxMTgzYjRjMDFkMjczODViMzdmOTBiNzA0YjRmZmExMjI4YjQyYmNlNTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNkYWQ5ODA5ZjY5NTdjZGVhYTg3ZjRkYTMyMTdmNmFjOTJhMTBhYzExYmU5ZjhkNWU5NzhhOWYyMDE2MWZlNWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQwODRlNjExMjMzNzQ0Yjc4MGYzOTQ0MGQwY2QwZWY1YTU1YWUyMWIyMjgxODlmNDJmNDAyOTQwYzU2ZDBjZGQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c4f83e961f5848db9ba0fe26d02a9bb1",
+      "statement": "All configured agents share a server-created in-memory MemorySaver, and prompts use each session's thread_id; session/load reads checkpoint channel_values.messages and replays user messages, string agent messages, and completed tool calls.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/server.ts#L1116-L1178",
+          "version": "repo-lines-v1:sha256:40243fe1c48b043c9d9157ea4a2ec2f2f2c35c68dcc41e8a43105845fce90667:eyJzZWxlY3RlZExpbmVDb3VudCI6NjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRjNjNhMzljZTI5MDk5YmQwMTQ0OGRkZmZmNTk3MjBiYzQ1OTdhNzFkYTczNTIxMzM5YTFiNThlYWM0ZDdjODAifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L1322-L1340",
+          "version": "repo-lines-v1:sha256:0a3a94c031059e389c40f5cba1776a112ccc026ae50b92ed3d1e49e79906a96c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjExOWQ3MWUzZTg5N2QxYWMyZGJjM2JhNDM4NmE5YTVmMTIzNDQxMWNjYjk4YWM3NTZlOGMzNzcyMGI1MTdiNDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyZDExY2FmNDNlOTdlZjM2OWU2YmVlZDFhMjY4YmQwNTgzOGYyOWI5ZGQyNTRiZjY5YmE2NDg4NDE0NzIzNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg1NTBhYmVlZjA2MjEwZDg2ZTRjYzYzZjgxNmQ0ZDQyZjQ2NDEyNDI5ZDhjNzZhZDdmNmJhOTVjMmFiYzcwNTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZmY2FkNWE5YWRkOTRhOWMxNjQ5ZmRhNWEzMjJiN2Q0MGNkZmE2OWY3YjY3YzI3OTE0YTQwZmMxZmFhZmVlMWQifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L135-L168",
+          "version": "repo-lines-v1:sha256:ec91c52ff7f2691e7970170dc729030c77ff63e6c78500cad906513718a1c99c:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2NzMwNjc3NTg5ODAyZmNkNTA3ZWM1MTAxNzdmMjA0NzEzOWJlYzA0ODYxY2I4ODZhZmU1ZTE4YTcwMDgxYmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY3YTU1ZTk3MzlmOWI5NTI1MDVmMjU4ZjFiOGJlNGZjN2RmOWJiMmEzOGMyZmEzNTQyZTQxYzRmOWI4NTA3NTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI4OWI3ZjQyYTk3MDM3YWY2MzcwYWZjNjlhYzU4NDgyN2Y2MTYyOWU0MDg0Y2YwZDE0ZmRkY2NjNmU0NTAyODAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY1ZTZkYjc5YWIxMjYwNmIyZDZkN2EwNmEzZWUzMmM1M2FjODdkYjBkMTk4YTJjYjU1M2U0MWUxODE3YTI4MDkifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L505-L555",
+          "version": "repo-lines-v1:sha256:85100b1a7d95e8e492dcaa1e2c23729649731b54bd464e28663beb027c6723f3:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVkYTJiMmM4OGVjMzA0ZGYyNjcxZGJiNWZlMThjMDk0Yzc1ODBlNDM1MDU0YzNjMmUxMjY5NWU2ZTdmODkzMjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBhOTRmNjU1YzQ2NzFmYmQ4MGYyY2M2MjNmMzFkMTlkNjMxZGRjNTZmN2M1Y2FiNTQzM2IwYjUwMDdjMGU1MWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU3ZjgyZjZjMmFkOTU3Y2EwMTI2NDc5Y2ZmMmE2YTg4OTMxOTcyODFjYThmMGIwZWVhMDdlNDMwYzNkMzExY2YifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0a83083a370c4d07bb177e19d65292ce",
+      "statement": "Session persistence is process-local: session/load first requires the session to exist in the in-memory sessions map, stop clears that map, and the default MemorySaver is not durable across process restart; /clear replaces the thread ID to start a fresh checkpoint thread.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/server.ts#L1056-L1095",
+          "version": "repo-lines-v1:sha256:4833603c8c956ea713687db0c0e522ed6eb4b7f1d66c0f4e4fe3335418ef8ed3:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFhNWJiNzAzMDJiMzk5MmM5Nzk2YzFjZjUzNjVlNjZhNDA1MmRlMWY1OTYyYmU5MDI1ZTY3MDVhMDFmMmUyOTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjliNjJmNjBkODU5MGE1NzljZjQ2ZjhkNjczNzhjNGM1NzJiOTYyY2VjY2RiOTBjN2E1ZjdiNDJiOTYwNzgyYTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNmMDYzNzhjYmIyNDIzYmM2ZTIwNzY0Y2I5YmMwYTdkYjk2ZjIwNGVlZDBjOTk3MGViMTU1NzNiMzRlNmZjMDUifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L1123-L1149",
+          "version": "repo-lines-v1:sha256:a516642705c700aa969ecffd81a309775e4de3aadbd41580d144af12af9a782b:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk0NjRkOTRlYTcwN2E1MTZhYjI2MTA1MWE3ZDk2ODhjZjBkZjg4YmQ0OWFiMTc0MzllMjE5YWU3ZTc5ZTM1ZTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI4ZmFiZDg3N2RjNDc4ODM2ZDQ5OTgzYzEwZjU2YjdmYTA2N2E5NzY1ZDE3OGFjZmJmYmExMDRlNTEzNDQzYjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVmZTc4MDA1OTJiZjc2ZWRjYzExMDZlMDNkNWIyNjc3NWNiMWQ2MjkwNzMzMmNlOTAwOWUzZDlkZjA1M2E3YTMifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L315-L327",
+          "version": "repo-lines-v1:sha256:8b5c7a34e707d33ea32a0ca778bd2686f8d6baedfe93d902b00a21e6fe8cdb71:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyZGQzNTZhYmEwZjJlY2U2NDA1ZTdhZWM2YWRjNzM3ZTY0NTM1NjJlZmQxMjgxZTZmZWFlZjQ4MDQ0YjEyNTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA2YzMxNjNmMzQyYTFlMWZiY2NhYTE4ZmExMDk1MWUwOGNhMmRmZmI2YjE4NmI0MzNkMWZhNzc4NzU0ZjkxMjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhZDczMGQ5YzNjMTc0NDk0MTYyZjVjZjQxNTA1YjRhMGVmY2Q3ODE5YmM2MGFkMmU2NWUxNGEzNzk4MDkzOGIifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L505-L515",
+          "version": "repo-lines-v1:sha256:41e00927e6c49616e906b50dbf3796c353213e80551e53f4d06c4be0ac971f00:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVkYTJiMmM4OGVjMzA0ZGYyNjcxZGJiNWZlMThjMDk0Yzc1ODBlNDM1MDU0YzNjMmUxMjY5NWU2ZTdmODkzMjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBhOTRmNjU1YzQ2NzFmYmQ4MGYyY2M2MjNmMzFkMTlkNjMxZGRjNTZmN2M1Y2FiNTQzM2IwYjUwMDdjMGU1MWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBkMjk3MTBkYWM2ZTA5ZTFmOWNhZDczMWU1NzhiYWI1NzE4NzhiYzdiNTBkZTgzOTczODhhNjk3YjA5NzYyYTYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2a344eaf559c4d47bd3878faca1900f9",
+      "statement": "Cancellation is controlled by one server-level AbortController: session/cancel aborts the current prompt without matching the notification session ID, and the stream marks active tool calls cancelled before returning a cancelled stop reason.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/server.int.test.ts#L268-L296",
+          "version": "repo-lines-v1:sha256:bd38e675be25fb06a512519eb27209d042b7f96eb78e45374ee0ef8fcc6cf7fc:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1ZTNhN2RlOTZiODQxYWE1YjhiMTU1NDJmNGNjYjAxMDUwMjVhMWEzZTc3ZjhkMTU0MzFmNjdmYzRjOTYzYTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyZDExY2FmNDNlOTdlZjM2OWU2YmVlZDFhMjY4YmQwNTgzOGYyOWI5ZGQyNTRiZjY5YmE2NDg4NDE0NzIzNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxNjQ4YmMyYWEyODlkNmM2YzcwZmQ2ZjIxMmY1OGQwMDU5YmYzMjUzMWU0YTQ1M2RlNzc2NjMyOTZmZDE1MzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYwODhlOGIyYjA0MDFjZWY0MWU0NzRkYzc3YjJmZTM0MGU0NjczMWQ4YmM3ODY1MTllMjU3YTA1MWIyNTVjNWMifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L583-L626",
+          "version": "repo-lines-v1:sha256:1bbb20115508a2628211fc5a101f0e870cedfb8af72d4d7709b8a1b6405d3db7:eyJzZWxlY3RlZExpbmVDb3VudCI6NDQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA5NTBlZDJjOTIzYTVkYjQxMjMyNWE3YWU2NDVhYzcwMTgxYWYyZmY0MWEwOTQ4YjY5ZTljYjUwZWQ4OGU1ZDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjlmM2M2ZDQ4ODE0NTllMGUxNzU3OTNiZmU3ZmY4NTczODE3MDlhYzAxNzRhYzYzZTJiZWEwZjM5NTg3MTVhNDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhOTI5M2ZkODA1NGI2ZTQ3MjQ4MzczZjM5ZjRkZDc3ODAwMTA1ZWI3NTgzNDg2ODcyNTQyODVjZDEyODJiNzgifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L642-L650",
+          "version": "repo-lines-v1:sha256:e8cd2b7d1f35221353bebd81161b9c531a9a4ebaa3619a417c058476af7ddc3b:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzY3Y2I2MWRiMDg5ZjMwODExZWJhMDQzMDYwYzMyZjZhYzlmMmMwODE0OGIyNDc0ZDE5YmQyMjhjYzRlZjdhOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjdlNTc4OGQ1ZDlkNzNkMjRhODFkYmMwYTVhNzRiZmE4MmM5YzNiM2FmOTllNTJhZjc5NmU5MGI0NjhhOGEzZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNWE5MjkzZmQ4MDU0YjZlNDcyNDgzNzNmMzlmNGRkNzc4MDAxMDVlYjc1ODM0ODY4NzI1NDI4NWNkMTI4MmI3OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDMzYWE0ZmZiYzRlNTkzZGM5ZjVlYzg1ZTg1OGYyYTZhMjA4MDkzMGZmNzE2Mzg1YjU4ZGZjMmM3ZmYyN2E4NyJ9"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L700-L720",
+          "version": "repo-lines-v1:sha256:fb3220d5574fbe1408bb8d65410e5dd04875796cf325509e1dadd0c454cdd168:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0MjUyYjU2YzY3ODJhYTU3N2JjZmU4ZGRhNjNkMzgwYTM2M2NlYTg0OTgzYmZkMDRjYTQxYzhjNjVlMTUxN2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjliNjJmNjBkODU5MGE1NzljZjQ2ZjhkNjczNzhjNGM1NzJiOTYyY2VjY2RiOTBjN2E1ZjdiNDJiOTYwNzgyYTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdkNDE0M2EyZDVkMzRkMmI4YTM1MGE3MWQ0YTkxYWRjOTg2ZTQxYzBmNDFlMTFlMjg5MDU3MjFlMWM2YWZlODQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIxMWE5NTI2MDFkZTJhZDE4MGU4NDhiNmRkNGJlNmU3OTdmM2Y3MGUyY2ZkOGZiZTM1NWJmYzg1Y2U2MGUwMzgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1cfcd24cca1d453db0bd2a83aa7736da",
+      "statement": "The server exposes agent, plan, and ask modes and supports set_mode plus slash-command updates, but the current implementation stores the mode without passing it into agent.stream or enforcing read-only tool behavior.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/server.ts#L1056-L1114",
+          "version": "repo-lines-v1:sha256:e9e50b7565b0d2e73855a0a2d765b1d9a9ee3869f81b26bae1cb2661dd692081:eyJzZWxlY3RlZExpbmVDb3VudCI6NTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFhNWJiNzAzMDJiMzk5MmM5Nzk2YzFjZjUzNjVlNjZhNDA1MmRlMWY1OTYyYmU5MDI1ZTY3MDVhMDFmMmUyOTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUyNTc4NGU3MTdhYzQwYmI3NzI2YzYxNTgwNjRmYWNlNTdhN2Y3NWFiNTc1MzgyZTViZTMzOTVjN2Y0MTQ3ZDYifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L652-L670",
+          "version": "repo-lines-v1:sha256:c0ec97bb30e0d43e0dd94bcad9bfeae2b9634f80b71a1c35a06ea203057e4e1f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjljNWUzYmZhMjNkNDdkODExOTVjMTIxMGIyZDFhNDBmNGEyMmU0MDY2NTc5YTczZmYwYzNmMmZhYTZjMjExZjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhOTI5M2ZkODA1NGI2ZTQ3MjQ4MzczZjM5ZjRkZDc3ODAwMTA1ZWI3NTgzNDg2ODcyNTQyODVjZDEyODJiNzgifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L97-L112",
+          "version": "repo-lines-v1:sha256:c45116bc67b8a44af5423e6696a159ae530ec6e4d3ce45c2c17be65305d94078:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcxYjBjNzZhNDFjZjE1YTM2NWQ3Y2NlZWZkZGNmNGYyZDI4NWNhY2QwMTc5ODYzNDk0NGFjODdjYjkzZWJlNWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwMmQyYzBkNmRjNWU3NGQ5MmZhMTRiOTFkYmVhMjY0MDkwYmViMzVmZGI5MTg4ZDliMzQxMTgxZGNlOWY0Y2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE4YTkxNzU5NzJmZTE1ZTJhOTY0MWFiMTMxZjU3MWU2YzdjYWJjYTA2ODM3NjJlYmE1ZjIzNTNlNDgzYzNkNTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI2ZWI0YmJmZTkxMzRhOTA5NjJjMjNhN2ZkODgxMGU4NjU1ODI1NWNkYzQ5NDg5NmE1OTcxYjc3ODgxMTYxMmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_56e0bf844ac9455d913348a7fc6ebcc5",
+      "statement": "Authentication is advertisement-only: initialize returns default Anthropic and OpenAI env-var methods plus a generic setup method unless authMethods is supplied, while authenticate is a no-op and does not validate credentials.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/server.test.ts#L224-L263",
+          "version": "repo-lines-v1:sha256:7e4d9ad567c8b281808d4413b3a7b0c1d25d7a21f5c441f145a2bb9e56e5df4a:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5NzU1ZjIzYzg5NWVjYTE0MzRlY2UyMjRhMDcyNDVmOGMwMjJkYTE4MThlZDk3ZTk2NDcxMTg1NjZkOGJkMzciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyZDExY2FmNDNlOTdlZjM2OWU2YmVlZDFhMjY4YmQwNTgzOGYyOWI5ZGQyNTRiZjY5YmE2NDg4NDE0NzIzNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc0M2RiZTI2ZWEwODhmOWUzZjc5NjEwOWQ3YzY3ODlmODk0NTM5Nzg2ZmZhZDUwY2JkZjJmZGZmMDMwODA0YTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRiMmZjYzk4MjFjNzI5NWQ0MzFkZTg0MTUyOGM2NzA5MWFkYzlhNmQzMDk3MmZjZGNiMDFiODdlYmRkMWE5MTcifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L421-L429",
+          "version": "repo-lines-v1:sha256:ea02a2d7815a91bb564dc99a313b7b453b815a0a50b0cf27488cdae7424827a7:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGYyYTJmOTk2ZjA4ZTY4MGJkMjkyMTM1YTZmYTQ5NzhiZGEyNmU2MDJkODRmMzNjYjFkNTk0Nzc1ZDQzMDRiNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjdlNTc4OGQ1ZDlkNzNkMjRhODFkYmMwYTVhNzRiZmE4MmM5YzNiM2FmOTllNTJhZjc5NmU5MGI0NjhhOGEzZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTNhMjJhNjIyOTQyNzI4MTgzODgyNzI0YTM3MDVjOTRlNGVjYjM5Nzg0MmEzNGI4YzQ5OWZlODRkZmIxYjFlOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZmE4N2MyYzhhYThkMDY4ZGE2OTkzMTg1MGE3ZmFlMjY2OTU1MmUzZjg1ZjhkYWUwOTQwYzc1MTU2MTFmZDVlYSJ9"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L75-L95",
+          "version": "repo-lines-v1:sha256:c1e4325b689ba504b72998de7280fa02222a38e730c6376103a2dd9040b7c484:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMwOGZlZGYwN2EzNjUxNmZkY2U5OWE4ZmU1MDE2ZGM0YjAyOTE4ZTdkMmVkYWQ0NmRhYzRiMDI1MGE4MjVkNDkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwMmQyYzBkNmRjNWU3NGQ5MmZhMTRiOTFkYmVhMjY0MDkwYmViMzVmZGI5MTg4ZDliMzQxMTgxZGNlOWY0Y2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI5OTNhYjU4YzJmZDYwZDBmNjNkZTQ2OWU5ODFlOTdjNTMxOTcyZTFhNjljODEyODE4YTE1NmVlNDA4ZDUzNjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjEwZjFkYWVhN2JmODYyOWFjOTRhMzY0YjI2ZTAwMWZlZTlkOWNkMTkwNzZkYTlkZGU5ZmFjOWVjOGI4ZWE3ZDMifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/types.ts#L123-L166",
+          "version": "repo-lines-v1:sha256:9c3303f914f08dea1a74a32c68765c0044666c06c3cc1d1af12973117be98f04:eyJzZWxlY3RlZExpbmVDb3VudCI6NDQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiZmNkMGYwMmY4NDU0NjBmYTY1Mjg4ZGYwZmNmOTg3M2QzNTQ1NWY5YTM3Yzc0MTVkNjc2Y2MzZWFmMWY0MTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRkNjM5MTQyY2RhZDZkMGU3MzE5NGRmNDY4MWIzOGEwZjE4NzlmNTczOWM4Njg2MGQ2NjJlMGI4M2JmZmJmNjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_61e78999c54b451e83e6fad9f97e3430",
+      "statement": "The logger writes diagnostics to stderr and optional timestamped file output, never normal logs to stdout, preserving stdout for ACP protocol traffic; the CLI supports debug and file logging through flags and environment variables.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/cli.int.test.ts#L306-L316",
+          "version": "repo-lines-v1:sha256:bd590dd138b677ed50634d44efe178f4fcd5a8973374ba418231ea55b5af48f6:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJlMTlkZmQyZDNmZTFjOWM3MTZiOTk2OGExYjVjNTg5NDE4ZTY0YjJlYTFmYjBlNTdkN2U0NzcxYjI5Njg1ZmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyZDExY2FmNDNlOTdlZjM2OWU2YmVlZDFhMjY4YmQwNTgzOGYyOWI5ZGQyNTRiZjY5YmE2NDg4NDE0NzIzNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMyMDA1NDBmNzQ2YjY3ODQ0ZDFhYmQyYWNiMGJlYjExYjAxM2ZjM2I3YjQzOTQ0NjAzZWUzOGJmNGEwYWI4MGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBiNTU3MGRkYmM1Y2E4Y2E5NTcwYmE5OTVjYmMyYzc2MDljNjkwNGFiMjM3ZWZhZWM3MTQ1NjQ5MTY5YzYyOTcifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/cli.int.test.ts#L522-L555",
+          "version": "repo-lines-v1:sha256:1751f1aa26d23261d2b594dc62468fc6e0f65f3e7e621429d8035080f70b89e6:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhZDQ1Zjk2YThhMDY0MDJiNGM5NTliN2M0MTdlNWIyOWQzZGUyYTgxYjA1OTg0MTljZjhjZTYxY2Y2ZDQ3NjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyZDExY2FmNDNlOTdlZjM2OWU2YmVlZDFhMjY4YmQwNTgzOGYyOWI5ZGQyNTRiZjY5YmE2NDg4NDE0NzIzNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxNjQ4YmMyYWEyODlkNmM2YzcwZmQ2ZjIxMmY1OGQwMDU5YmYzMjUzMWU0YTQ1M2RlNzc2NjMyOTZmZDE1MzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZiZDg1MTM2ZGJhMGExYWIxMjIyNDQyMWE2YWQ0YmZkMTlhODllMmMxNDE4M2U1Y2IyODQzODEyMGQ3ZTU0ODcifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/cli.ts#L287-L318",
+          "version": "repo-lines-v1:sha256:27a28c41c780e48bee7b5b002da170716d16a19781072a60ba06f79f89c5f03f:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZlMWRhZjBlMDNjYjllNTAwNGM3Yjk2MTk5ZjI4YzI2M2UyZGY1MGRmMWNhNzJmYjA2NGI2NzQ2ZGQyM2Q4ZGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyZDExY2FmNDNlOTdlZjM2OWU2YmVlZDFhMjY4YmQwNTgzOGYyOWI5ZGQyNTRiZjY5YmE2NDg4NDE0NzIzNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRiYTliYzU1NGI4NmNiYzYxZWIyYjQ2NDdmYTAxOWM1ZDkyMDA4YmRjNzhmZjU2Yzk1YWQ2NGRlYjZiYjA0YjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU3OGY3OWI0ZGU4YmJjMjEwY2ViZGY2OTQ3NTljYmE1MDA5M2MwNzIxMzc5MjYwYjI2MTQxNTk2N2JmM2EyMmQifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/logger.ts#L145-L175",
+          "version": "repo-lines-v1:sha256:5dbf0315ee14670cf6f465bd2d765772da4f59a9bab9ed486aa42304c6877232:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcyZmFlZDhmYWJmODllNGRjNzQ2ODhlY2E1MzUzZDgyYzA3MTUxYjI2OWFmOGI0MTkwMjA2YjI1MGIyYWJmZTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImViYWI1YWYwNzg3YWQ2MWFmZDAwYzk2ZTk3ZTY3ZDhjYjhkOTVkZjgwOWUwNDE4NzZiZWY4YmVkZjI3ODEwYTcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d58fc331a88c4c09a604ad2a094296ed",
+      "statement": "start rejects duplicate starts, installs SIGINT and SIGTERM shutdown handlers, handles connection closure and process errors, while stop drops the connection, clears sessions, and closes the logger.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/server.test.ts#L131-L151",
+          "version": "repo-lines-v1:sha256:5d9e6f5855b884879742926306481d145472e5ca124da21dd48f7c0ed01954c7:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhNWZiYmM0ZmYzZWFlMzJhYTgyY2M0Y2RlNzZkNmUzZGM4MjcyNzdjODI2ZWM0MzFkMDQ5ZDlhMWE3ODQ2MmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyZDExY2FmNDNlOTdlZjM2OWU2YmVlZDFhMjY4YmQwNTgzOGYyOWI5ZGQyNTRiZjY5YmE2NDg4NDE0NzIzNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxNjQ4YmMyYWEyODlkNmM2YzcwZmQ2ZjIxMmY1OGQwMDU5YmYzMjUzMWU0YTQ1M2RlNzc2NjMyOTZmZDE1MzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU0NDc1N2I1MTc1NzY1ZjQ2NTlmNmFmMjRkNzc1NjE2OTY0NDA0MzM2OGE1ODY3YzkzYjk3MmE0ZjlmMzE5NWMifQ"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.ts#L191-L327",
+          "version": "repo-lines-v1:sha256:4df5610b2371d09754d402182687a9d242d5a42585d7731deaea4957a1de42e3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTM3LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI0ZjYwNTlmNjExMjgzMTc1YjYxMGU2N2MwN2M3YWQzZjQyOGQzYmIwY2UzYjY1YmRiNjU3ZWY0MmIwZmUxYjdlIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyN2U1Nzg4ZDVkOWQ3M2QyNGE4MWRiYzBhNWE3NGJmYTgyYzljM2IzYWY5OWU1MmFmNzk2ZTkwYjQ2OGE4YTNkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI3YzFmMjc0NWZlZDQzZWRmODU3YmU0MjE4YjNkOGRkYjU3Y2E2OWUyZWNhOWM5NGYwZmYxMWE1OTM3YjU5MjdmIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI1YWQ3MzBkOWMzYzE3NDQ5NDE2MmY1Y2Y0MTUwNWI0YTBlZmNkNzgxOWJjNjBhZDJlNjVlMTRhMzc5ODA5MzhiIn0"
+        }
+      ]
+    },
+    {
+      "id": "claim_a73d0c12856342d5bd8f686447586363",
+      "statement": "The focused ACP tests exercise real stdio CLI protocol behavior, session and mode routing, cancellation, auth and command responses, message and tool translation, permission decisions, terminal helper behavior, filesystem fallbacks, and adapter conversions.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/src/acp-filesystem-backend.test.ts#L39-L249",
+          "version": "repo-lines-v1:sha256:a426f7ac780ef859ccc70282f2892e18a4e2224f5a71d60820ae8d14121957c8:eyJzZWxlY3RlZExpbmVDb3VudCI6MjExLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI4YTA5ZThlYmE3ZWM4YzVmNTMxYzUyOTk0ZGQyYWRmMGM1NzgyNzhjMzYwY2JmMTNiMmNkOGY4NWEyMzBhMGFhIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyMmQxMWNhZjQzZTk3ZWYzNjllNmJlZWQxYTI2OGJkMDU4MzhmMjliOWRkMjU0YmY2OWJhNjQ4ODQxNDcyMzRhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiMTY0OGJjMmFhMjg5ZDZjNmM3MGZkNmYyMTJmNThkMDA1OWJmMzI1MzFlNGE0NTNkZTc3NjYzMjk2ZmQxNTMwIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MiwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJkODE3ZmJiNzNjOTJiMzZkNWU0ODk2ZmY1MWMxYjU4ZWVjMzMwYmJlOTYxYmEwNWZjNjIwNWY4NjdlYTFiY2Y2In0"
+        },
+        {
+          "resource": "repo://libs/acp/src/adapter.test.ts#L25-L583",
+          "version": "repo-lines-v1:sha256:be2798352d870acab67c591e23e4b91f79c3bd35716065ff1da111d70bc65389:eyJzZWxlY3RlZExpbmVDb3VudCI6NTU5LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzOTdhMjE4Yjc0MzRkN2VlZmM4OTA1NzdjYTM2MGNhNzIzZGJjZjRjOTYwMDRjODhlNmZlNDBiMWIyMDYwMzEwIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJmNmY1YjQwYjE1ODQ1N2QxNzg2NGYyMTc5MDc4NmRkNWEyZWNkYjY0YjY2YTY1MWY3ODhkNGUyNWNkMzMwM2QyIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJjNzllMmZlODk5NWUwODA3MWViNTAyMDAwNWE4OTQ4YjZmMmM4NWZjMDU1OTUwZTg1YjVjYjQzYzljODM4ZWY1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        },
+        {
+          "resource": "repo://libs/acp/src/cli.int.test.ts#L262-L585",
+          "version": "repo-lines-v1:sha256:07bd95a46eae57508eed736333306fec4e577814c25f4fd14e389f02e1dea7d9:eyJzZWxlY3RlZExpbmVDb3VudCI6MzI0LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJjZTk1NGRjMDNjMDQ2NTRlNTZlYjUzODU1ZWM4MWMwNThiYzIzNzA0OTgyNWY5MTk3NjhkNzg5NTdkOTkxN2Q1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzYTNlNDZmOTQyNzZiNmY2ZjRlZDFmMDJhZjc4YmVmNmEyZWUxYzQzOWRkNTU4NGI5NzM5NDgzMTMyMTRkMmI3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJmYjU4MGU5NjRmODNhNDczZjQzZDQ0Mzg0NjI5NDlkNjhiNTYwMGZkYTc4N2YxNjM3NDVkMDBkZTg5Y2JmMzZhIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIwMjU1MTBmMjNkZjQ2OWRiZGUxZDFhZTViNWE1YmVlZjkwN2RhN2NlZTBkMmQ4MGE3MmM1YzU0Y2I4ZDdjZTE0In0"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.int.test.ts#L36-L296",
+          "version": "repo-lines-v1:sha256:77b5f7415fa8a324e64ca2c8c3b51248d5169650ea97847ced018509557595a0:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYxLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiJjM2FjY2UzOWNiMGQ4NjM3ZGY5NmY4YTczNmM5MjIzMjgwMThhOWY1ZGViYjYwMzBmNjI2NjI3ODNiNWRmMDZlIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyMmQxMWNhZjQzZTk3ZWYzNjllNmJlZWQxYTI2OGJkMDU4MzhmMjliOWRkMjU0YmY2OWJhNjQ4ODQxNDcyMzRhIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI3MjBmYzllNjdkYjA3ZWQyMzliYjNhZDIzMTJlYWFiOWE3MGUxZjZmYmEwMTI4OGIwYmE2ZTYxZDdmOGVlNzg4IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJmMDg4ZThiMmIwNDAxY2VmNDFlNDc0ZGM3N2IyZmUzNDBlNDY3MzFkOGJjNzg2NTE5ZTI1N2EwNTFiMjU1YzVjIn0"
+        },
+        {
+          "resource": "repo://libs/acp/src/server.test.ts#L621-L1457",
+          "version": "repo-lines-v1:sha256:79f7d80631a17dfb7564b35a2f374c1cf0733084d08192b69f69463c076c86c1:eyJzZWxlY3RlZExpbmVDb3VudCI6ODM3LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzYzQ3YjZlNWI3MDFmY2M0NmM1NjhlNGU5N2ZhNmQ5Y2RhZjRiZTFkYmNiZDI4ZDkxNjZlYmE4MzIyZjQxZDQ2IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJmNmY1YjQwYjE1ODQ1N2QxNzg2NGYyMTc5MDc4NmRkNWEyZWNkYjY0YjY2YTY1MWY3ODhkNGUyNWNkMzMwM2QyIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiNzc5ZDExOGQ2ZTNjYmY0NTA1Mzk3NDhkZWU3YTQzMDdhY2JlNjQ0NmNiYTI5N2YyNzYwZmE1ZDBiYmExYmMyIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MCwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJlM2IwYzQ0Mjk4ZmMxYzE0OWFmYmY0Yzg5OTZmYjkyNDI3YWU0MWU0NjQ5YjkzNGNhNDk1OTkxYjc4NTJiODU1In0"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.2",
+    "at": "2026-09-17T22:06:29.984Z"
+  }
+}
