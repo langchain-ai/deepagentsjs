@@ -9,7 +9,7 @@
  * @packageDocumentation
  */
 
-import { Daytona, type Sandbox } from "@daytona/sdk";
+import { Daytona, DaytonaNotFoundError, type Sandbox } from "@daytona/sdk";
 import {
   BaseSandbox,
   type ExecuteResponse,
@@ -627,16 +627,27 @@ export class DaytonaSandbox extends BaseSandbox {
    * @returns A standardized error code
    */
   #mapError(error: unknown): FileOperationError {
+    // The Daytona SDK maps a 404 to a typed DaytonaNotFoundError, so classify
+    // missing paths directly instead of relying on the error message wording
+    // (mirrors the modal provider's SandboxFilesystemNotFoundError check).
+    if (error instanceof DaytonaNotFoundError) {
+      return "file_not_found";
+    }
     if (error instanceof Error) {
       const msg = error.message.toLowerCase();
 
-      if (msg.includes("not found") || msg.includes("enoent")) {
+      // Check for "no such file or directory" first (contains both "file" and "directory")
+      if (
+        msg.includes("not found") ||
+        msg.includes("enoent") ||
+        msg.includes("no such file")
+      ) {
         return "file_not_found";
       }
       if (msg.includes("permission") || msg.includes("eacces")) {
         return "permission_denied";
       }
-      if (msg.includes("directory") || msg.includes("eisdir")) {
+      if (msg.includes("is a directory") || msg.includes("eisdir")) {
         return "is_directory";
       }
     }
